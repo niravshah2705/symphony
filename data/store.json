@@ -1,0 +1,524 @@
+{
+  "settings": {
+    "linearApiKey": "lin_api_h3hIFBNFLCFwJoJEHABjA3kGOZtK7Ob1ITYf4aHt",
+    "llmProvider": "claude",
+    "ollamaHost": "http://localhost:11434",
+    "ollamaModel": "",
+    "ollamaContextWindow": 8192,
+    "ollamaNumTokens": 4096,
+    "codexModel": "",
+    "codexMaxTokens": 4096,
+    "codexTokens": null,
+    "claudeModel": "",
+    "claudeMaxTokens": 16000,
+    "claudeTokens": {
+      "accessToken": "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",
+      "refreshToken": "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",
+      "tokenType": "Bearer",
+      "scope": "user:inference user:profile",
+      "expiresAt": 1783248065687,
+      "obtainedAt": 1783219265687
+    },
+    "langsmithApiKey": "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",
+    "langsmithProject": "lovable",
+    "langsmithEndpoint": "https://apac.api.smith.langchain.com",
+    "langsmithTracing": true
+  },
+  "businesses": [
+    {
+      "id": "ota",
+      "name": "OTA",
+      "description": "Online Travel Agency — initial business.",
+      "projectId": null,
+      "createdAt": "2026-07-01T00:00:00.000Z"
+    },
+    {
+      "id": "sride",
+      "name": "sride",
+      "description": "a ride sharing application",
+      "projectId": "32d3c8a4-652c-4410-979e-aa5aef9544fb",
+      "createdAt": "2026-07-03T09:15:13.839Z"
+    }
+  ],
+  "assumedRole": {
+    "id": "e30f12e2-e4cb-4cbd-8bab-70a0fc36740c",
+    "name": "niravshah2705",
+    "email": "niravshah2705@gmail.com"
+  },
+  "agentConfig": {
+    "parallelProcessing": 2,
+    "scheduleEnabled": true,
+    "autoAssignLead": true,
+    "createIssues": true,
+    "addDependencies": true,
+    "maxProjectsPerRun": 5,
+    "maxMilestones": 6,
+    "maxIssuesPerMilestone": 5,
+    "enrichLabels": [
+      "AI"
+    ],
+    "intervalMinutes": 5
+  },
+  "jobs": [
+    {
+      "id": "bd959a15-c9da-472c-b087-88d11779aa71",
+      "projectId": "32d3c8a4-652c-4410-979e-aa5aef9544fb",
+      "projectName": "sride",
+      "status": "done",
+      "assumedRole": {
+        "id": "e30f12e2-e4cb-4cbd-8bab-70a0fc36740c",
+        "name": "niravshah2705"
+      },
+      "createdAt": "2026-07-03T09:31:25.267Z",
+      "updatedAt": "2026-07-03T09:33:53.068Z",
+      "startedAt": "2026-07-03T09:31:25.269Z",
+      "finishedAt": "2026-07-03T09:33:53.067Z",
+      "error": null,
+      "traceUrl": "https://apac.smith.langchain.com/o/795137c5-f718-4638-9ef6-fa2f10082ef6/projects/p/0c1ddabf-36b0-45d6-802a-b3dff14b9332/r/375bbd2e-8ed0-438a-830f-efa03218135b?trace_id=375bbd2e-8ed0-438a-830f-efa03218135b&start_time=2026-07-03T09:31:30.713001",
+      "traced": true,
+      "summary": {
+        "milestonesCreated": 6,
+        "issuesCreated": 30,
+        "dependenciesCreated": 14,
+        "warnings": []
+      },
+      "steps": [
+        {
+          "ts": "2026-07-03T09:31:25.270Z",
+          "level": "info",
+          "message": "Enrichment started."
+        },
+        {
+          "ts": "2026-07-03T09:31:26.170Z",
+          "level": "info",
+          "message": "Tracing enabled; provider claude, model claude-opus-4-8"
+        },
+        {
+          "ts": "2026-07-03T09:31:26.173Z",
+          "level": "info",
+          "message": "Assessing business viability (web research)…"
+        },
+        {
+          "ts": "2026-07-03T09:31:26.287Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application business model software product viability market\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:31:30.594Z",
+          "level": "info",
+          "message": "Viable: Ride-sharing is a proven software-driven business model (Uber, Lyft, BlaBlaCar) where the core value—matching riders with drivers, routing, payments, and trust/"
+        },
+        {
+          "ts": "2026-07-03T09:31:30.596Z",
+          "level": "info",
+          "message": "Researching business milestones in parallel (MVB, metrics, branding)…"
+        },
+        {
+          "ts": "2026-07-03T09:31:30.692Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application minimal viable product essential features to launch\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:31:30.694Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application key business metrics KPIs to track startup\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:31:30.695Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application branding checklist new product launch\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:31:30.697Z",
+          "level": "info",
+          "message": "Drafting business plan (deep agent)…"
+        },
+        {
+          "ts": "2026-07-03T09:31:34.441Z",
+          "level": "info",
+          "message": "🔎 agent web search (5 queries in parallel)"
+        },
+        {
+          "ts": "2026-07-03T09:32:26.621Z",
+          "level": "info",
+          "message": "Deep agent draft ready (9184 chars)."
+        },
+        {
+          "ts": "2026-07-03T09:32:26.622Z",
+          "level": "info",
+          "message": "Requesting structured business plan (format=json)…"
+        },
+        {
+          "ts": "2026-07-03T09:33:19.228Z",
+          "level": "info",
+          "message": "Plan ready: 6 milestones, 30 tasks, 14 dependencies."
+        },
+        {
+          "ts": "2026-07-03T09:33:20.086Z",
+          "level": "info",
+          "message": "Applying plan to Linear (team NIR)."
+        },
+        {
+          "ts": "2026-07-03T09:33:20.605Z",
+          "level": "info",
+          "message": "Assigned lead: niravshah2705."
+        },
+        {
+          "ts": "2026-07-03T09:33:21.095Z",
+          "level": "info",
+          "message": "Updated project description."
+        },
+        {
+          "ts": "2026-07-03T09:33:21.597Z",
+          "level": "info",
+          "message": "Created milestone: MVB — Minimal Viable Business (2026-07-03 → 2026-09-15)."
+        },
+        {
+          "ts": "2026-07-03T09:33:25.486Z",
+          "level": "info",
+          "message": "Created 5 issue(s) under \"MVB — Minimal Viable Business\"."
+        },
+        {
+          "ts": "2026-07-03T09:33:26.612Z",
+          "level": "info",
+          "message": "Created milestone: Business Metrics (2026-09-16 → 2026-11-15)."
+        },
+        {
+          "ts": "2026-07-03T09:33:30.252Z",
+          "level": "info",
+          "message": "Created 5 issue(s) under \"Business Metrics\"."
+        },
+        {
+          "ts": "2026-07-03T09:33:30.741Z",
+          "level": "info",
+          "message": "Created milestone: Branding (2026-11-16 → 2027-01-15)."
+        },
+        {
+          "ts": "2026-07-03T09:33:33.485Z",
+          "level": "info",
+          "message": "Created 5 issue(s) under \"Branding\"."
+        },
+        {
+          "ts": "2026-07-03T09:33:34.014Z",
+          "level": "info",
+          "message": "Created milestone: Go-to-Market / Launch (2027-01-16 → 2027-03-31)."
+        },
+        {
+          "ts": "2026-07-03T09:33:37.022Z",
+          "level": "info",
+          "message": "Created 5 issue(s) under \"Go-to-Market / Launch\"."
+        },
+        {
+          "ts": "2026-07-03T09:33:37.516Z",
+          "level": "info",
+          "message": "Created milestone: Monetization (2027-04-01 → 2027-06-15)."
+        },
+        {
+          "ts": "2026-07-03T09:33:40.969Z",
+          "level": "info",
+          "message": "Created 5 issue(s) under \"Monetization\"."
+        },
+        {
+          "ts": "2026-07-03T09:33:41.515Z",
+          "level": "info",
+          "message": "Created milestone: Growth / Expansion (2027-06-16 → 2027-09-30)."
+        },
+        {
+          "ts": "2026-07-03T09:33:44.335Z",
+          "level": "info",
+          "message": "Created 5 issue(s) under \"Growth / Expansion\"."
+        },
+        {
+          "ts": "2026-07-03T09:33:52.100Z",
+          "level": "info",
+          "message": "Created 14 dependency link(s)."
+        },
+        {
+          "ts": "2026-07-03T09:33:53.064Z",
+          "level": "info",
+          "message": "Set project label to \"aidone\"."
+        },
+        {
+          "ts": "2026-07-03T09:33:53.066Z",
+          "level": "info",
+          "message": "Done: 6 milestones, 30 issues, 14 deps."
+        }
+      ]
+    },
+    {
+      "id": "ea352c12-3f73-4d84-93b9-adae4ccbb83b",
+      "projectId": "32d3c8a4-652c-4410-979e-aa5aef9544fb",
+      "projectName": "sride",
+      "status": "error",
+      "assumedRole": {
+        "id": "e30f12e2-e4cb-4cbd-8bab-70a0fc36740c",
+        "name": "niravshah2705"
+      },
+      "createdAt": "2026-07-03T09:28:30.848Z",
+      "updatedAt": "2026-07-03T09:30:20.686Z",
+      "startedAt": "2026-07-03T09:28:30.849Z",
+      "finishedAt": "2026-07-03T09:30:20.685Z",
+      "error": "The model did not return a valid plan: Expected ',' or ']' after array element in JSON at position 11812",
+      "traceUrl": null,
+      "traced": false,
+      "summary": null,
+      "steps": [
+        {
+          "ts": "2026-07-03T09:28:30.849Z",
+          "level": "info",
+          "message": "Enrichment started."
+        },
+        {
+          "ts": "2026-07-03T09:28:31.746Z",
+          "level": "info",
+          "message": "Tracing enabled; provider claude, model claude-opus-4-8"
+        },
+        {
+          "ts": "2026-07-03T09:28:31.861Z",
+          "level": "info",
+          "message": "Assessing business viability (web research)…"
+        },
+        {
+          "ts": "2026-07-03T09:28:31.950Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application business model software product viability market\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:28:36.952Z",
+          "level": "info",
+          "message": "Viable: A ride-sharing application is a well-established, software-driven business model (e.g., Uber, Lyft, BlaBlaCar) where the core value—matching riders with drivers"
+        },
+        {
+          "ts": "2026-07-03T09:28:36.953Z",
+          "level": "info",
+          "message": "Researching business milestones in parallel (MVB, metrics, branding)…"
+        },
+        {
+          "ts": "2026-07-03T09:28:37.048Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application minimal viable product essential features to launch\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:28:37.049Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application key business metrics KPIs to track startup\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:28:37.050Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application branding checklist new product launch\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:28:37.051Z",
+          "level": "info",
+          "message": "Drafting business plan (deep agent)…"
+        },
+        {
+          "ts": "2026-07-03T09:28:41.714Z",
+          "level": "info",
+          "message": "🔎 agent web search (3 queries in parallel)"
+        },
+        {
+          "ts": "2026-07-03T09:28:41.717Z",
+          "level": "info",
+          "message": "🔎 agent web search (2 queries in parallel)"
+        },
+        {
+          "ts": "2026-07-03T09:29:42.308Z",
+          "level": "info",
+          "message": "Deep agent draft ready (10987 chars)."
+        },
+        {
+          "ts": "2026-07-03T09:29:42.309Z",
+          "level": "info",
+          "message": "Requesting structured business plan (format=json)…"
+        },
+        {
+          "ts": "2026-07-03T09:30:20.684Z",
+          "level": "error",
+          "message": "Failed: The model did not return a valid plan: Expected ',' or ']' after array element in JSON at position 11812"
+        }
+      ]
+    },
+    {
+      "id": "d917746e-3f9f-439b-9014-9c95e06f18e7",
+      "projectId": "32d3c8a4-652c-4410-979e-aa5aef9544fb",
+      "projectName": "sride",
+      "status": "error",
+      "assumedRole": {
+        "id": "e30f12e2-e4cb-4cbd-8bab-70a0fc36740c",
+        "name": "niravshah2705"
+      },
+      "createdAt": "2026-07-03T09:24:08.797Z",
+      "updatedAt": "2026-07-03T09:25:46.445Z",
+      "startedAt": "2026-07-03T09:24:08.800Z",
+      "finishedAt": "2026-07-03T09:25:46.445Z",
+      "error": "The model did not return a valid plan: Expected ',' or '}' after property value in JSON at position 12139",
+      "traceUrl": null,
+      "traced": false,
+      "summary": null,
+      "steps": [
+        {
+          "ts": "2026-07-03T09:24:08.801Z",
+          "level": "info",
+          "message": "Enrichment started."
+        },
+        {
+          "ts": "2026-07-03T09:24:09.725Z",
+          "level": "info",
+          "message": "Tracing enabled; provider claude, model claude-opus-4-8"
+        },
+        {
+          "ts": "2026-07-03T09:24:09.728Z",
+          "level": "info",
+          "message": "Assessing business viability (web research)…"
+        },
+        {
+          "ts": "2026-07-03T09:24:09.845Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application business model software product viability market\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:24:15.315Z",
+          "level": "info",
+          "message": "Viable: Ride sharing is a proven software-driven business model (Uber, Lyft, BlaBlaCar) where an app connects riders and drivers, handles matching, routing, payments, a"
+        },
+        {
+          "ts": "2026-07-03T09:24:15.317Z",
+          "level": "info",
+          "message": "Researching business milestones in parallel (MVB, metrics, branding)…"
+        },
+        {
+          "ts": "2026-07-03T09:24:15.415Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application minimal viable product essential features to launch\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:24:15.416Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application key business metrics KPIs to track startup\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:24:15.417Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application branding checklist new product launch\" (0 results)"
+        },
+        {
+          "ts": "2026-07-03T09:24:15.419Z",
+          "level": "info",
+          "message": "Drafting business plan (deep agent)…"
+        },
+        {
+          "ts": "2026-07-03T09:24:19.281Z",
+          "level": "info",
+          "message": "🔎 agent web search (5 queries in parallel)"
+        },
+        {
+          "ts": "2026-07-03T09:25:08.685Z",
+          "level": "info",
+          "message": "Deep agent draft ready (9040 chars)."
+        },
+        {
+          "ts": "2026-07-03T09:25:08.686Z",
+          "level": "info",
+          "message": "Requesting structured business plan (format=json)…"
+        },
+        {
+          "ts": "2026-07-03T09:25:46.443Z",
+          "level": "error",
+          "message": "Failed: The model did not return a valid plan: Expected ',' or '}' after property value in JSON at position 12139"
+        }
+      ]
+    },
+    {
+      "id": "27a8a269-4a38-443c-ba24-32bfd07c719b",
+      "projectId": "32d3c8a4-652c-4410-979e-aa5aef9544fb",
+      "projectName": "sride",
+      "status": "error",
+      "assumedRole": {
+        "id": "e30f12e2-e4cb-4cbd-8bab-70a0fc36740c",
+        "name": "niravshah2705"
+      },
+      "createdAt": "2026-07-03T09:17:11.386Z",
+      "updatedAt": "2026-07-03T09:19:08.117Z",
+      "startedAt": "2026-07-03T09:17:11.393Z",
+      "finishedAt": "2026-07-03T09:19:08.116Z",
+      "error": "The model did not return a valid plan: Expected ',' or ']' after array element in JSON at position 11689",
+      "traceUrl": null,
+      "traced": false,
+      "summary": null,
+      "steps": [
+        {
+          "ts": "2026-07-03T09:17:11.393Z",
+          "level": "info",
+          "message": "Enrichment started."
+        },
+        {
+          "ts": "2026-07-03T09:17:12.295Z",
+          "level": "info",
+          "message": "Tracing enabled; provider claude, model claude-opus-4-8"
+        },
+        {
+          "ts": "2026-07-03T09:17:12.467Z",
+          "level": "info",
+          "message": "Assessing business viability (web research)…"
+        },
+        {
+          "ts": "2026-07-03T09:17:13.417Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application business model software product viability market\" (5 results)"
+        },
+        {
+          "ts": "2026-07-03T09:17:17.705Z",
+          "level": "info",
+          "message": "Viable: A ride-sharing application is a proven software-driven business model (Uber, Lyft, etc.) where an app/platform delivers the core value by matching riders with d"
+        },
+        {
+          "ts": "2026-07-03T09:17:17.706Z",
+          "level": "info",
+          "message": "Researching business milestones in parallel (MVB, metrics, branding)…"
+        },
+        {
+          "ts": "2026-07-03T09:17:18.820Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application minimal viable product essential features to launch\" (4 results)"
+        },
+        {
+          "ts": "2026-07-03T09:17:18.821Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application key business metrics KPIs to track startup\" (4 results)"
+        },
+        {
+          "ts": "2026-07-03T09:17:18.825Z",
+          "level": "info",
+          "message": "🔎 web search: \"sride a ride sharing application branding checklist new product launch\" (4 results)"
+        },
+        {
+          "ts": "2026-07-03T09:17:18.828Z",
+          "level": "info",
+          "message": "Drafting business plan (deep agent)…"
+        },
+        {
+          "ts": "2026-07-03T09:17:22.686Z",
+          "level": "info",
+          "message": "🔎 agent web search (5 queries in parallel)"
+        },
+        {
+          "ts": "2026-07-03T09:18:24.470Z",
+          "level": "info",
+          "message": "Deep agent draft ready (11025 chars)."
+        },
+        {
+          "ts": "2026-07-03T09:18:24.470Z",
+          "level": "info",
+          "message": "Requesting structured business plan (format=json)…"
+        },
+        {
+          "ts": "2026-07-03T09:19:08.116Z",
+          "level": "error",
+          "message": "Failed: The model did not return a valid plan: Expected ',' or ']' after array element in JSON at position 11689"
+        }
+      ]
+    }
+  ]
+}
