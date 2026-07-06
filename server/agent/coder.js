@@ -155,7 +155,7 @@ function isCoderLlmUsable(llm) {
   if (!llm || !llm.model) return false;
   if (llm.provider === 'claude') return Boolean(llm.accessToken);
   if (llm.provider === 'codex') return Boolean(llm.accessToken && llm.baseUrl);
-  return Boolean(llm.host);
+  return Boolean(llm.host); // ollama / lmstudio (local, host-based)
 }
 
 /** Build the code-writer deep agent rooted at an isolated workspace. */

@@ -7,10 +7,12 @@ const oauth = require('./oauth');
 const claudeOauth = require('./claude-oauth');
 
 /**
- * Deep-agent LLM provider factory. Three providers are supported:
- *   - 'ollama'  — local inference (ChatOllama), no credentials.
- *   - 'codex'   — OpenAI via OAuth (ChatOpenAI) with a Bearer access token.
- *   - 'claude'  — Anthropic via OAuth (ChatAnthropic) with a Bearer access token.
+ * Deep-agent LLM provider factory. Four providers are supported:
+ *   - 'ollama'   — local inference (ChatOllama), no credentials.
+ *   - 'lmstudio' — local inference via LM Studio's OpenAI-compatible API
+ *                  (ChatOpenAI against http://localhost:1234/v1), no credentials.
+ *   - 'codex'    — OpenAI via OAuth (ChatOpenAI) with a Bearer access token.
+ *   - 'claude'   — Anthropic via OAuth (ChatAnthropic) with a Bearer access token.
  *
  * plan.js is provider-agnostic: it builds a provider `llm` descriptor (via
  * resolveLlm) and asks this factory for a chat model. Tokens never leave the
@@ -25,6 +27,29 @@ const claudeOauth = require('./claude-oauth');
  * as `role:"system"` and 400. Normalizing every system message to a generic
  * `developer` ChatMessage makes BOTH converter paths emit `developer` (accepted).
  */
+/**
+ * Map an LM Studio JSON mode to the `modelKwargs` for the OpenAI-compatible call.
+ * Returns null when no request-level constraint should be sent (prompt-driven).
+ *   - 'json_object' — classic OpenAI JSON mode (rejected by some engines, e.g. ornith)
+ *   - 'json_schema' — structured output constrained to a permissive JSON object;
+ *     the planner's prompts already pin the exact shape, so a generic object schema
+ *     (strict:false) is enough to force valid JSON without over-constraining.
+ *   - anything else (incl. 'text') — no response_format; rely on the prompt +
+ *     parseJsonLoose (identical to how the Claude provider handles JSON).
+ */
+function lmstudioJsonKwargs(mode) {
+  if (mode === 'json_object') return { response_format: { type: 'json_object' } };
+  if (mode === 'json_schema') {
+    return {
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'response', strict: false, schema: { type: 'object', additionalProperties: true } },
+      },
+    };
+  }
+  return null;
+}
+
 function systemToDeveloper(messages) {
   const { ChatMessage } = require('@langchain/core/messages');
   return messages.map((m) =>
@@ -193,6 +218,27 @@ function createChatModel(llm, { json = false } = {}) {
     if (json) opts.modelKwargs = { response_format: { type: 'json_object' } };
     return new ChatOpenAI(opts);
   }
+  if (llm.provider === 'lmstudio') {
+    // LM Studio serves an OpenAI-compatible API, so ChatOpenAI targets it directly.
+    // No real key is needed (LM Studio ignores it), but the SDK requires a non-empty
+    // apiKey, so we pass a placeholder. Context length is fixed when the model is
+    // loaded in LM Studio, so only max_tokens is sent from here.
+    const { ChatOpenAI } = require('@langchain/openai');
+    const opts = {
+      model: llm.model,
+      apiKey: 'lm-studio',
+      temperature: 0,
+      maxTokens: llm.numTokens,
+      configuration: { baseURL: llm.baseUrl },
+    };
+    // Constrained JSON output — the accepted format varies by model/engine, so the
+    // mode is operator-selectable ('text' sends nothing and relies on the prompt).
+    if (json) {
+      const kwargs = lmstudioJsonKwargs(llm.jsonMode);
+      if (kwargs) opts.modelKwargs = kwargs;
+    }
+    return new ChatOpenAI(opts);
+  }
   // Default: local Ollama.
   const { ChatOllama } = require('@langchain/ollama');
   const opts = {
@@ -202,7 +248,8 @@ function createChatModel(llm, { json = false } = {}) {
     numPredict: llm.numTokens,
     temperature: 0,
   };
-  if (json) opts.format = 'json';
+  // 'json' uses Ollama's native constrained mode; 'text' relies on the prompt.
+  if (json && llm.jsonMode !== 'text') opts.format = 'json';
   return new ChatOllama(opts);
 }
 
@@ -285,12 +332,25 @@ async function resolveLlm(settings) {
       numTokens: settings.codexMaxTokens || 4096,
     };
   }
+  if (settings.llmProvider === 'lmstudio') {
+    const host = String(settings.lmstudioHost || CONFIG.LMSTUDIO.defaultHost).replace(/\/$/, '');
+    return {
+      provider: 'lmstudio',
+      host,
+      // OpenAI-compatible endpoint the ChatOpenAI client targets.
+      baseUrl: `${host}${CONFIG.LMSTUDIO.apiPath}`,
+      model: settings.lmstudioModel,
+      numTokens: settings.lmstudioNumTokens,
+      jsonMode: settings.lmstudioJsonMode || 'text',
+    };
+  }
   return {
     provider: 'ollama',
     host: settings.ollamaHost,
     model: settings.ollamaModel,
     contextWindow: settings.ollamaContextWindow,
     numTokens: settings.ollamaNumTokens,
+    jsonMode: settings.ollamaJsonMode || 'json',
   };
 }
 
@@ -308,6 +368,9 @@ function llmReady(settings) {
     const hasModel = Boolean(settings.codexModel || CONFIG.OAUTH.defaultModel);
     return hasToken && hasModel;
   }
+  if (settings.llmProvider === 'lmstudio') {
+    return Boolean(settings.lmstudioHost && settings.lmstudioModel);
+  }
   return Boolean(settings.ollamaHost && settings.ollamaModel);
 }
 
@@ -318,6 +381,9 @@ function notReadyReason(settings) {
   }
   if (settings.llmProvider === 'codex') {
     return 'Sign in with Codex (OpenAI) in Settings → LLM to enable enrichment.';
+  }
+  if (settings.llmProvider === 'lmstudio') {
+    return 'Set the LM Studio host and model in Settings → LLM to enable enrichment.';
   }
   return 'Set the Ollama host and model in Settings → LLM to enable enrichment.';
 }

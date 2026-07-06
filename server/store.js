@@ -16,6 +16,7 @@ const DEFAULT_AGENT_CONFIG = Object.freeze({
   parallelProcessing: 2, // concurrent projects per scheduler tick
   scheduleEnabled: true, // run the 5-minute scheduler
   autoAssignLead: true, // assign the assumed role as project lead on enrich
+  autoLabelNewProjects: true, // attach the enrichLabels to a project created for a new business
   createIssues: true, // create issues per milestone
   addDependencies: true, // create issue dependencies via LLM decisions
   maxProjectsPerRun: 5, // hard cap of projects processed per tick
@@ -28,12 +29,21 @@ const DEFAULT_AGENT_CONFIG = Object.freeze({
 const DEFAULT_STORE = Object.freeze({
   settings: {
     linearApiKey: '',
-    // Deep agent LLM provider: 'ollama' (local) or 'codex' (OpenAI via OAuth).
+    // Deep agent LLM provider: 'ollama' / 'lmstudio' (local) or 'codex' / 'claude' (OAuth).
     llmProvider: 'ollama',
     ollamaHost: 'http://localhost:11434',
     ollamaModel: '', // e.g. "llama3.1" — must support tool-calling; user selects
     ollamaContextWindow: 8192, // num_ctx
     ollamaNumTokens: 4096, // num_predict (output token budget)
+    ollamaJsonMode: 'json', // JSON constraint: 'json' (format:'json') | 'text' (prompt-driven)
+    // LM Studio (local, OpenAI-compatible API) — an alternative local provider for
+    // models not available in Ollama. No credentials; the browser chooses host + model.
+    lmstudioHost: 'http://localhost:1234',
+    lmstudioModel: '', // e.g. "qwen2.5-7b-instruct" — must support tool-calling; user selects
+    lmstudioNumTokens: 4096, // max_tokens (output token budget); context length is set in LM Studio
+    // JSON constraint: 'text' (prompt-driven; most compatible) | 'json_object' | 'json_schema'.
+    // Some engines (e.g. the ornith runtime) reject 'json_object', so 'text' is the safe default.
+    lmstudioJsonMode: 'text',
     // Codex (OpenAI) provider — endpoints/client come from CONFIG.OAUTH (trusted),
     // the browser only chooses the model. Tokens live server-side only.
     codexModel: '', // e.g. "gpt-5-codex"; falls back to CONFIG.OAUTH.defaultModel

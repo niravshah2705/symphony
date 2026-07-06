@@ -281,12 +281,15 @@ function summarize(text) {
   return `${s.slice(0, PROJECT_DESCRIPTION_MAX - 1).trimEnd()}…`;
 }
 
-async function createProject(apiKey, { name, description, teamId }) {
+async function createProject(apiKey, { name, description, teamId, labelIds }) {
   const input = { name, teamIds: [teamId] };
   if (description) {
     input.description = summarize(description); // stay within Linear's cap
     input.content = String(description); // full text in the markdown body
   }
+  // Attach labels atomically at creation (ProjectCreateInput.labelIds) so a new
+  // project never briefly exists unlabeled.
+  if (Array.isArray(labelIds) && labelIds.length) input.labelIds = labelIds;
   const data = await linearRequest(apiKey, PROJECT_CREATE_MUTATION, { input });
   if (!data.projectCreate || !data.projectCreate.success) {
     throw new LinearError('Failed to create the Linear project.', 400);
@@ -432,17 +435,50 @@ async function createIssueRelation(apiKey, { issueId, relatedIssueId, type = 'bl
   return data.issueRelationCreate.issueRelation;
 }
 
-/** Find a project label by name (case-insensitive), creating it if absent. */
-async function getOrCreateProjectLabel(apiKey, name) {
+/** Fetch existing project labels as a Map keyed by lowercased name. */
+async function fetchProjectLabelsByLower(apiKey) {
   const data = await linearRequest(apiKey, PROJECT_LABELS_QUERY, { first: CONFIG.PAGE_SIZE });
-  const wanted = String(name).trim().toLowerCase();
-  const existing = data.projectLabels.nodes.find((l) => (l.name || '').toLowerCase() === wanted);
+  return new Map(data.projectLabels.nodes.map((l) => [(l.name || '').toLowerCase(), l]));
+}
+
+/** Return the existing label for `name`, or create it (given a prefetched map). */
+async function resolveOrCreateLabel(apiKey, name, existingByLower) {
+  const existing = existingByLower.get(String(name).trim().toLowerCase());
   if (existing) return existing;
   const created = await linearRequest(apiKey, PROJECT_LABEL_CREATE_MUTATION, { input: { name } });
   if (!created.projectLabelCreate || !created.projectLabelCreate.success) {
     throw new LinearError(`Failed to create project label "${name}".`, 400);
   }
   return created.projectLabelCreate.projectLabel;
+}
+
+/** Find a project label by name (case-insensitive), creating it if absent. */
+async function getOrCreateProjectLabel(apiKey, name) {
+  return resolveOrCreateLabel(apiKey, name, await fetchProjectLabelsByLower(apiKey));
+}
+
+/**
+ * Resolve a list of label names to label objects (with ids), creating any that
+ * don't exist. Names are de-duplicated case-insensitively; a single label fetch
+ * backs the whole batch. Returns [] for an empty/blank list.
+ */
+async function getOrCreateProjectLabels(apiKey, names) {
+  const seen = new Set();
+  const cleaned = [];
+  for (const raw of Array.isArray(names) ? names : []) {
+    const name = String(raw || '').trim();
+    const lower = name.toLowerCase();
+    if (!name || seen.has(lower)) continue;
+    seen.add(lower);
+    cleaned.push(name);
+  }
+  if (!cleaned.length) return [];
+  const existingByLower = await fetchProjectLabelsByLower(apiKey);
+  const labels = [];
+  for (const name of cleaned) {
+    labels.push(await resolveOrCreateLabel(apiKey, name, existingByLower));
+  }
+  return labels;
 }
 
 /** Replace a project's labels with the given label ids. */
@@ -489,5 +525,6 @@ module.exports = {
   createIssue,
   createIssueRelation,
   getOrCreateProjectLabel,
+  getOrCreateProjectLabels,
   setProjectLabels,
 };

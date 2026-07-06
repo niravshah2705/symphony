@@ -2,8 +2,8 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const { readStore, writeStore, getApiKey } = require('../store');
-const { getProjects, createProject } = require('../linear');
+const { readStore, writeStore, getApiKey, getAgentConfig } = require('../store');
+const { getProjects, createProject, getOrCreateProjectLabels } = require('../linear');
 const { asyncHandler } = require('../util');
 
 const router = express.Router();
@@ -59,10 +59,20 @@ router.post(
       if (!teamId) {
         return res.status(400).json({ error: 'A team is required to create a new project.' });
       }
+      // Auto-attach the configured enrich labels (default ["AI"]) so the new
+      // project is immediately picked up by the enrichment scheduler. Gated by the
+      // autoLabelNewProjects config toggle.
+      const config = getAgentConfig();
+      let labelIds = [];
+      if (config.autoLabelNewProjects) {
+        const labels = await getOrCreateProjectLabels(getApiKey(), config.enrichLabels);
+        labelIds = labels.map((l) => l.id);
+      }
       const project = await createProject(getApiKey(), {
         name: body.projectName ? String(body.projectName) : name,
         description,
         teamId,
+        labelIds,
       });
       projectId = project.id;
     }

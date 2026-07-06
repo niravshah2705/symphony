@@ -91,6 +91,23 @@ const CLAUDE = Object.freeze({
 });
 
 /**
+ * LM Studio (local, OpenAI-compatible) provider configuration.
+ *
+ * LM Studio serves an OpenAI-compatible API (default http://localhost:1234/v1),
+ * so — like Ollama — it needs no credentials and is meant for a local, single-user
+ * deployment. It exists alongside Ollama because some models are only available in
+ * LM Studio's catalog. The operator-supplied host is stored server-side; the
+ * browser only chooses the host + model.
+ *
+ * `defaultHost` is env-overridable (LMSTUDIO_HOST). `apiPath` is the OpenAI-compatible
+ * mount LM Studio exposes; access tokens/models are used against `${host}${apiPath}`.
+ */
+const LMSTUDIO = Object.freeze({
+  defaultHost: process.env.LMSTUDIO_HOST || 'http://localhost:1234',
+  apiPath: process.env.LMSTUDIO_API_PATH || '/v1',
+});
+
+/**
  * Code-writer deep agent + workflow config (an equivalent of OpenAI Symphony's
  * WORKFLOW.md frontmatter). The agent works a Linear ticket end-to-end in an
  * isolated git workspace, driving it through the ticket state machine while
@@ -131,9 +148,21 @@ const CONFIG = Object.freeze({
   // Allowed scheduler cadences (minutes).
   INTERVAL_OPTIONS: [5, 10, 15],
   // Deep-agent LLM providers.
-  LLM_PROVIDERS: ['ollama', 'codex', 'claude'],
+  LLM_PROVIDERS: ['ollama', 'lmstudio', 'codex', 'claude'],
+  // How each local provider constrains JSON output for the planner's structured
+  // calls. Not every model/engine accepts the same format (e.g. some LM Studio
+  // engines reject `json_object` and require `json_schema` or `text`), so the
+  // operator can pick a compatible mode per provider.
+  //   ollama:   'json'        → Ollama `format: 'json'` (native constrained mode)
+  //             'text'        → prompt-driven only (parsed loosely)
+  //   lmstudio: 'text'        → prompt-driven only; most compatible (default)
+  //             'json_object' → OpenAI-style `response_format: json_object`
+  //             'json_schema' → OpenAI-style structured output (permissive object)
+  OLLAMA_JSON_MODES: ['json', 'text'],
+  LMSTUDIO_JSON_MODES: ['text', 'json_object', 'json_schema'],
   OAUTH,
   CLAUDE,
+  LMSTUDIO,
   CODER,
 });
 

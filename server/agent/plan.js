@@ -196,7 +196,7 @@ function isLlmUsable(llm) {
   if (!llm || !llm.model) return false;
   if (llm.provider === 'codex') return Boolean(llm.accessToken && llm.baseUrl);
   if (llm.provider === 'claude') return Boolean(llm.accessToken);
-  return Boolean(llm.host); // ollama
+  return Boolean(llm.host); // ollama / lmstudio (local, host-based)
 }
 
 /** One constrained JSON call to the active provider; returns the parsed object (throws on bad JSON). */

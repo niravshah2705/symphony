@@ -14,12 +14,18 @@ function publicSettings() {
   return {
     hasKey: Boolean(s.linearApiKey),
     maskedKey: maskKey(s.linearApiKey),
-    // Active deep-agent provider: 'ollama' (local) or 'codex' (OpenAI via OAuth).
+    // Active deep-agent provider: 'ollama' / 'lmstudio' (local) or 'codex' / 'claude' (OAuth).
     llmProvider: s.llmProvider || 'ollama',
     ollamaHost: s.ollamaHost,
     ollamaModel: s.ollamaModel,
     ollamaContextWindow: s.ollamaContextWindow,
     ollamaNumTokens: s.ollamaNumTokens,
+    ollamaJsonMode: s.ollamaJsonMode || 'json',
+    // LM Studio (local, OpenAI-compatible) — an alternative local provider.
+    lmstudioHost: s.lmstudioHost,
+    lmstudioModel: s.lmstudioModel,
+    lmstudioNumTokens: s.lmstudioNumTokens,
+    lmstudioJsonMode: s.lmstudioJsonMode || 'text',
     hasLangsmithKey: Boolean(s.langsmithApiKey),
     maskedLangsmithKey: maskKey(s.langsmithApiKey),
     langsmithProject: s.langsmithProject,
@@ -29,12 +35,12 @@ function publicSettings() {
 }
 
 /**
- * Validate an operator-supplied Ollama host. This is a local single-user tool,
- * so localhost is the intended target (unlike a public SSRF sink). We only
- * enforce a well-formed http/https URL; the host is stored server-side and is
- * never taken from a request parameter at call time.
+ * Validate an operator-supplied local inference host (Ollama or LM Studio). This
+ * is a local single-user tool, so localhost is the intended target (unlike a
+ * public SSRF sink). We only enforce a well-formed http/https URL; the host is
+ * stored server-side and is never taken from a request parameter at call time.
  */
-function normalizeOllamaHost(value, fallback) {
+function normalizeHost(value, fallback) {
   const raw = String(value || '').trim();
   if (!raw) return fallback;
   try {
@@ -50,6 +56,11 @@ function clampInt(value, min, max, fallback) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+/** Keep `value` only if it is one of `allowed`, else fall back. */
+function oneOf(value, allowed, fallback) {
+  return allowed.includes(value) ? value : fallback;
 }
 
 // GET /api/settings
@@ -78,11 +89,29 @@ router.put('/llm', (req, res) => {
   const b = req.body || {};
   const current = getSettings();
   const patch = {
-    ollamaHost: normalizeOllamaHost(b.ollamaHost, current.ollamaHost),
+    ollamaHost: normalizeHost(b.ollamaHost, current.ollamaHost),
     ollamaContextWindow: clampInt(b.ollamaContextWindow, 512, 131072, current.ollamaContextWindow),
     ollamaNumTokens: clampInt(b.ollamaNumTokens, 128, 32768, current.ollamaNumTokens),
+    ollamaJsonMode: oneOf(b.ollamaJsonMode, CONFIG.OLLAMA_JSON_MODES, current.ollamaJsonMode || 'json'),
   };
   if (b.ollamaModel !== undefined) patch.ollamaModel = String(b.ollamaModel).trim();
+  patchSettings(patch);
+  res.json(publicSettings());
+});
+
+// PUT /api/settings/lmstudio — save the local LM Studio configuration for the deep
+// agent. Like Ollama, this is a local provider; provider selection stays separate
+// (PUT /api/settings/provider), so saving LM Studio settings does not switch the
+// active provider.
+router.put('/lmstudio', (req, res) => {
+  const b = req.body || {};
+  const current = getSettings();
+  const patch = {
+    lmstudioHost: normalizeHost(b.lmstudioHost, current.lmstudioHost),
+    lmstudioNumTokens: clampInt(b.lmstudioNumTokens, 128, 32768, current.lmstudioNumTokens),
+    lmstudioJsonMode: oneOf(b.lmstudioJsonMode, CONFIG.LMSTUDIO_JSON_MODES, current.lmstudioJsonMode || 'text'),
+  };
+  if (b.lmstudioModel !== undefined) patch.lmstudioModel = String(b.lmstudioModel).trim();
   patchSettings(patch);
   res.json(publicSettings());
 });

@@ -4,7 +4,7 @@ import { el, clear, toast, loading } from '../dom.js';
 export async function renderSettings(view) {
   view.append(loading('Loading settings…'));
 
-  const [settings, configRes, modelsRes, labelsRes, membersRes, roleRes, ollamaRes, codexRes, claudeRes] = await Promise.all([
+  const [settings, configRes, modelsRes, labelsRes, membersRes, roleRes, ollamaRes, lmstudioRes, codexRes, claudeRes] = await Promise.all([
     api.getSettings(),
     api.getAgentConfig(),
     api.getAgentModels(),
@@ -12,6 +12,7 @@ export async function renderSettings(view) {
     api.getMembers().catch(() => ({ members: [] })),
     api.getAssumedRole().catch(() => ({ assumedRole: null })),
     api.getOllamaModels().catch(() => ({ models: [], reachable: false })),
+    api.getLmstudioModels().catch(() => ({ models: [], reachable: false })),
     api.getCodexStatus().catch(() => ({ connected: false })),
     api.getClaudeStatus().catch(() => ({ connected: false })),
   ]);
@@ -19,7 +20,16 @@ export async function renderSettings(view) {
   clear(view).append(
     el('div', { class: 'page-head' }, [el('h1', {}, 'Settings')]),
     keysSection(settings),
-    llmSection({ settings, ollamaModels: ollamaRes.models || [], reachable: ollamaRes.reachable, codex: codexRes, claude: claudeRes, view }),
+    llmSection({
+      settings,
+      ollamaModels: ollamaRes.models || [],
+      reachable: ollamaRes.reachable,
+      lmstudioModels: lmstudioRes.models || [],
+      lmstudioReachable: lmstudioRes.reachable,
+      codex: codexRes,
+      claude: claudeRes,
+      view,
+    }),
     roleSection({ members: membersRes.members || [], assumedRole: roleRes.assumedRole, view }),
     agentSection({
       config: configRes.config,
@@ -146,12 +156,13 @@ function keysSection(settings) {
 
 /* ------------------------------- Deep Agent LLM ------------------------- */
 
-function llmSection({ settings, ollamaModels, reachable, codex, claude, view }) {
+function llmSection({ settings, ollamaModels, reachable, lmstudioModels, lmstudioReachable, codex, claude, view }) {
   const provider = settings.llmProvider || 'ollama';
 
   // Provider selector — switches which provider the deep agent uses.
   const providerSelect = el('select', {}, [
     el('option', { value: 'ollama', selected: provider === 'ollama' }, 'Ollama (local)'),
+    el('option', { value: 'lmstudio', selected: provider === 'lmstudio' }, 'LM Studio (local)'),
     el('option', { value: 'codex', selected: provider === 'codex' }, 'Codex (OpenAI · OAuth)'),
     el('option', { value: 'claude', selected: provider === 'claude' }, 'Claude (Anthropic · OAuth)'),
   ]);
@@ -169,18 +180,22 @@ function llmSection({ settings, ollamaModels, reachable, codex, claude, view }) 
   let subtitle;
   if (provider === 'codex') subtitle = `Codex · ${codex && codex.model ? codex.model : 'not signed in'}`;
   else if (provider === 'claude') subtitle = `Claude · ${claude && claude.connected ? claude.model : 'not signed in'}`;
+  else if (provider === 'lmstudio') subtitle = settings.lmstudioModel ? `LM Studio · ${settings.lmstudioModel}` : 'LM Studio · not set';
   else subtitle = settings.ollamaModel || 'Ollama · not set';
 
   let incomplete;
   if (provider === 'codex') incomplete = Boolean(!codex.connected);
   else if (provider === 'claude') incomplete = Boolean(!claude.connected);
+  else if (provider === 'lmstudio') incomplete = !settings.lmstudioModel;
   else incomplete = !settings.ollamaModel;
 
   return section('Deep Agent LLM', subtitle, incomplete, [
-    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Choose which model backs the business-owner deep agent. Ollama runs fully local; Codex and Claude use "Sign in with ChatGPT / Claude" OAuth flows (no API key pasted — tokens stay server-side).'),
+    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Choose which model backs the business-owner deep agent. Ollama and LM Studio run fully local; Codex and Claude use "Sign in with ChatGPT / Claude" OAuth flows (no API key pasted — tokens stay server-side).'),
     field('Active provider', providerSelect),
     el('div', { class: 'subhead' }, 'Ollama (local)'),
     ...ollamaFields({ settings, ollamaModels, reachable }),
+    el('div', { class: 'subhead' }, 'LM Studio (local)'),
+    ...lmstudioFields({ settings, lmstudioModels, reachable: lmstudioReachable }),
     el('div', { class: 'subhead' }, 'Codex (OpenAI · OAuth)'),
     codexBlock({ codex, view }),
     el('div', { class: 'subhead' }, 'Claude (Anthropic · OAuth)'),
@@ -202,6 +217,13 @@ function ollamaFields({ settings, ollamaModels, reachable }) {
 
   const ctxInput = el('input', { type: 'number', min: '512', max: '131072', value: String(settings.ollamaContextWindow || 8192) });
   const tokInput = el('input', { type: 'number', min: '128', max: '32768', value: String(settings.ollamaNumTokens || 4096) });
+  const jsonSelect = jsonModeSelect(
+    [
+      ['json', 'Constrained (format: json)'],
+      ['text', 'Prompt-only (text)'],
+    ],
+    settings.ollamaJsonMode || 'json'
+  );
   const info = el('div', { class: 'muted', style: 'margin-top:10px;font-size:13px' });
 
   const save = async () => {
@@ -211,6 +233,7 @@ function ollamaFields({ settings, ollamaModels, reachable }) {
         ollamaModel: modelControl.value.trim(),
         ollamaContextWindow: Number(ctxInput.value),
         ollamaNumTokens: Number(tokInput.value),
+        ollamaJsonMode: jsonSelect.value,
       });
       hostInput.value = res.ollamaHost;
       info.textContent = res.ollamaModel
@@ -235,7 +258,74 @@ function ollamaFields({ settings, ollamaModels, reachable }) {
       field('Context window (num_ctx)', ctxInput),
       field('Num tokens (num_predict)', tokInput),
     ]),
+    field('JSON output mode', jsonSelect, 'How structured plans are constrained. Use "Prompt-only" if a model rejects constrained JSON.'),
     el('div', { class: 'row' }, [el('button', { class: 'primary', onclick: save }, 'Save Ollama settings')]),
+    info,
+  ];
+}
+
+/** A <select> of [value, label] JSON-mode options with `current` pre-selected. */
+function jsonModeSelect(options, current) {
+  return el(
+    'select',
+    {},
+    options.map(([value, label]) => el('option', { value, selected: value === current }, label))
+  );
+}
+
+/** LM Studio configuration controls (returns an array of field elements). */
+function lmstudioFields({ settings, lmstudioModels, reachable }) {
+  const hostInput = el('input', { value: settings.lmstudioHost || '', placeholder: 'http://localhost:1234' });
+
+  // Model: dropdown of detected models (+ the current value), else free text.
+  const detected = [...new Set([...(lmstudioModels || []), ...(settings.lmstudioModel ? [settings.lmstudioModel] : [])])];
+  const modelControl = detected.length
+    ? el('select', {}, [el('option', { value: '' }, '— select a model —')].concat(
+        detected.map((m) => el('option', { value: m, selected: m === settings.lmstudioModel }, m))
+      ))
+    : el('input', { value: settings.lmstudioModel || '', placeholder: 'e.g. qwen2.5-7b-instruct' });
+
+  const tokInput = el('input', { type: 'number', min: '128', max: '32768', value: String(settings.lmstudioNumTokens || 4096) });
+  const jsonSelect = jsonModeSelect(
+    [
+      ['text', 'Prompt-only (text) — most compatible'],
+      ['json_object', 'OpenAI json_object'],
+      ['json_schema', 'Structured (json_schema)'],
+    ],
+    settings.lmstudioJsonMode || 'text'
+  );
+  const info = el('div', { class: 'muted', style: 'margin-top:10px;font-size:13px' });
+
+  const save = async () => {
+    try {
+      const res = await api.saveLmstudio({
+        lmstudioHost: hostInput.value.trim(),
+        lmstudioModel: modelControl.value.trim(),
+        lmstudioNumTokens: Number(tokInput.value),
+        lmstudioJsonMode: jsonSelect.value,
+      });
+      hostInput.value = res.lmstudioHost;
+      info.textContent = res.lmstudioModel
+        ? `Saved. Using ${res.lmstudioModel} at ${res.lmstudioHost}.`
+        : 'Saved. Select a model to enable enrichment.';
+      info.style.color = 'var(--green)';
+      toast('LM Studio settings saved.', 'ok');
+    } catch (err) {
+      toast(err.message, 'err');
+    }
+  };
+
+  const reachNote = reachable
+    ? `Detected ${lmstudioModels.length} model(s).`
+    : 'LM Studio not reachable at this host — start the LM Studio server or fix the host, then reload.';
+
+  return [
+    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Local inference via LM Studio\'s OpenAI-compatible server. Load a tool-capable model in LM Studio and start its server (Developer → Start Server). Use this for models not available in Ollama. No API key needed.'),
+    field('LM Studio Host', hostInput, 'Local endpoint, e.g. http://localhost:1234.'),
+    field('Model', modelControl, reachNote),
+    field('Num tokens (max_tokens)', tokInput, 'Output budget. Context length is set when you load the model in LM Studio.'),
+    field('JSON output mode', jsonSelect, 'Some engines reject json_object — switch to "Structured" or "Prompt-only" if plans fail with a response_format error.'),
+    el('div', { class: 'row' }, [el('button', { class: 'primary', onclick: save }, 'Save LM Studio settings')]),
     info,
   ];
 }
@@ -547,6 +637,7 @@ function agentSection({ config, intervals, labels, view }) {
       maxIssuesPerMilestone: inputs.maxIssuesPerMilestone(),
       scheduleEnabled: inputs.scheduleEnabled(),
       autoAssignLead: inputs.autoAssignLead(),
+      autoLabelNewProjects: inputs.autoLabelNewProjects(),
       createIssues: inputs.createIssues(),
       addDependencies: inputs.addDependencies(),
     };
@@ -570,6 +661,7 @@ function agentSection({ config, intervals, labels, view }) {
     el('div', { style: 'margin:6px 0 12px' }, [
       toggle('scheduleEnabled', 'Run scheduler'),
       toggle('autoAssignLead', 'Assign assumed role as project lead'),
+      toggle('autoLabelNewProjects', 'Auto-attach enrich labels to new projects'),
       toggle('createIssues', 'Create issues per milestone'),
       toggle('addDependencies', 'Add issue dependencies (LLM)'),
     ]),

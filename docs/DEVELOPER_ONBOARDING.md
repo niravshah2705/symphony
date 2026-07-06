@@ -20,9 +20,10 @@ explains what the software does, and points you at the code you'll be working in
 | ----------- | ----- |
 | **Node.js ≥ 18** | Repo is developed on Node 20. Check with `node -v`. |
 | **A Linear account + personal API key** | Create one at <https://linear.app/settings/api>. Required for every feature. |
-| **An LLM provider** (for the agents only) | Pick **one**: Ollama (local), Codex (OpenAI via OAuth), or Claude (Anthropic via OAuth). Not needed just to browse projects/board. |
+| **An LLM provider** (for the agents only) | Pick **one**: Ollama (local), LM Studio (local), Codex (OpenAI via OAuth), or Claude (Anthropic via OAuth). Not needed just to browse projects/board. |
 | **git** | Required by the **code-writer** agent (it clones and pushes). |
-| **Ollama** (optional) | Only if you use the local provider. Install from <https://ollama.com>, then `ollama pull llama3.1` (must be a **tool-capable** model). |
+| **Ollama** (optional) | Only if you use the Ollama local provider. Install from <https://ollama.com>, then `ollama pull llama3.1` (must be a **tool-capable** model). |
+| **LM Studio** (optional) | Only if you use the LM Studio local provider (handy for models not in Ollama's catalog). Install from <https://lmstudio.ai>, load a **tool-capable** model, then start its server (Developer → Start Server, default `http://localhost:1234`). |
 
 No database, no build step, no framework — the frontend is plain ES modules
 served straight from `public/`.
@@ -72,6 +73,9 @@ required for normal use. Secrets are validated and stored **server-side** in
 2. **Deep Agent LLM** → choose the active provider for the agents:
    - **Ollama (local)** — set the host (default `http://localhost:11434`) and pick
      a tool-capable model from the dropdown. No key needed.
+   - **LM Studio (local)** — set the host (default `http://localhost:1234`) and pick
+     a tool-capable model from the dropdown (LM Studio serves an OpenAI-compatible
+     API). No key needed. Use this for models Ollama doesn't provide.
    - **Codex (OpenAI · OAuth)** — **Sign in with ChatGPT** (Authorization Code +
      PKCE). Register the shown redirect URI (`http://localhost:4000/auth/callback`)
      with your OAuth client.
@@ -81,7 +85,9 @@ required for normal use. Secrets are validated and stored **server-side** in
    endpoints are **403 until a role is assumed** (server-enforced). The assumed
    member shows in the top toolbar.
 4. **Deep Agent** → choose **enrich labels** (default `AI`), scheduler cadence
-   (5/10/15 min), parallelism, and caps.
+   (5/10/15 min), parallelism, and caps. **Auto-attach enrich labels to new
+   projects** (on by default) stamps those labels on any Linear project created for
+   a new business, so it's immediately picked up by the enrichment scheduler.
 
 ---
 
@@ -148,7 +154,7 @@ server/
   agent/
     plan.js schema.js apply.js scheduler.js search.js   ← business-owner planner
     coder.js coder-orchestrator.js workspace.js skills/  ← code-writer
-    llm.js                provider factory (ollama | codex | claude)
+    llm.js                provider factory (ollama | lmstudio | codex | claude)
     oauth.js pkce.js      Codex OAuth (+ .test.js)
     claude-oauth.js       Claude OAuth (+ .test.js)
 public/
@@ -212,6 +218,9 @@ The full table lives in the root `README.md` (§ *API*). Most-used endpoints:
   assumed, the Linear key is set, and an LLM provider is fully configured.
 - **Ollama model has no tool support** → pick a tool-capable model (`llama3.1`,
   `qwen2.5`, `gpt-oss`); local inference is slow (tens of seconds/project).
+- **LM Studio "not reachable" / empty model list** → start its server (Developer →
+  Start Server) and load a **tool-capable** model; the host must match (default
+  `http://localhost:1234`). Reload Settings after starting it.
 - **Code-writer does nothing** → set `CODER_REPO_URL`, and start the monitor
   (`POST /api/coder/monitor {"action":"start"}`) or run a single ticket.
 - **`data/` is git-ignored** — it holds your secrets, config, and jobs. Don't commit it.

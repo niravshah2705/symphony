@@ -43,11 +43,13 @@ export const api = {
     request(`/businesses/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteBusiness: (id) => request(`/businesses/${id}`, { method: 'DELETE' }),
 
-  // LLM (Ollama) / LangSmith settings
+  // LLM (Ollama / LM Studio) / LangSmith settings
   saveLlm: (payload) => request('/settings/llm', { method: 'PUT', body: JSON.stringify(payload) }),
+  saveLmstudio: (payload) => request('/settings/lmstudio', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLangsmith: (payload) =>
     request('/settings/langsmith', { method: 'PUT', body: JSON.stringify(payload) }),
   getOllamaModels: () => request('/agent/ollama-models'),
+  getLmstudioModels: () => request('/agent/lmstudio-models'),
 
   // Deep-agent provider selection + Codex (OpenAI via OAuth)
   setProvider: (llmProvider) =>

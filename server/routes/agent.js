@@ -39,6 +39,14 @@ function clampInt(value, min, max, fallback) {
   return Math.min(max, Math.max(min, Math.round(n)));
 }
 
+/** Configured model name for the active provider (for status display). */
+function activeModelFor(provider, settings) {
+  if (provider === 'claude') return settings.claudeModel || CONFIG.CLAUDE.defaultModel;
+  if (provider === 'codex') return settings.codexModel || CONFIG.OAUTH.defaultModel;
+  if (provider === 'lmstudio') return settings.lmstudioModel;
+  return settings.ollamaModel;
+}
+
 function sanitizeLabels(value, fallback) {
   if (!Array.isArray(value)) return fallback;
   const cleaned = [...new Set(value.map((l) => String(l || '').trim()).filter(Boolean))];
@@ -60,6 +68,8 @@ function sanitizeConfig(body, current) {
     enrichLabels: b.enrichLabels !== undefined ? sanitizeLabels(b.enrichLabels, current.enrichLabels) : current.enrichLabels,
     scheduleEnabled: typeof b.scheduleEnabled === 'boolean' ? b.scheduleEnabled : current.scheduleEnabled,
     autoAssignLead: typeof b.autoAssignLead === 'boolean' ? b.autoAssignLead : current.autoAssignLead,
+    autoLabelNewProjects:
+      typeof b.autoLabelNewProjects === 'boolean' ? b.autoLabelNewProjects : current.autoLabelNewProjects,
     createIssues: typeof b.createIssues === 'boolean' ? b.createIssues : current.createIssues,
     addDependencies: typeof b.addDependencies === 'boolean' ? b.addDependencies : current.addDependencies,
   };
@@ -93,6 +103,25 @@ router.get(
   })
 );
 
+// GET /api/agent/lmstudio-models — models available on the configured LM Studio
+// host. LM Studio exposes an OpenAI-compatible list at `/v1/models`. Best-effort:
+// returns an empty list if LM Studio is unreachable.
+router.get(
+  '/lmstudio-models',
+  asyncHandler(async (req, res) => {
+    const host = getSettings().lmstudioHost;
+    try {
+      const resp = await fetch(`${host}/v1/models`, { signal: AbortSignal.timeout(4000) });
+      if (!resp.ok) return res.json({ models: [], reachable: false });
+      const data = await resp.json();
+      const models = (data.data || []).map((m) => m.id).filter(Boolean).sort();
+      res.json({ models, reachable: true });
+    } catch (_) {
+      res.json({ models: [], reachable: false });
+    }
+  })
+);
+
 // GET /api/agent/labels — distinct Linear project labels (for the dropdown).
 router.get(
   '/labels',
@@ -114,12 +143,16 @@ router.get('/status', (req, res) => {
   const settings = getSettings();
   const config = getAgentConfig();
   const codexTokens = settings.codexTokens;
+  const provider = settings.llmProvider || 'ollama';
   res.json({
     ...scheduler.getStatus(),
     assumedRole: getAssumedRole(),
     llmConfigured: llmReady(settings),
-    llmProvider: settings.llmProvider || 'ollama',
+    llmProvider: provider,
+    // Model for the active provider — used for the dashboard's LLM pill.
+    activeModel: activeModelFor(provider, settings),
     ollamaModel: settings.ollamaModel,
+    lmstudioModel: settings.lmstudioModel,
     codexModel: settings.codexModel || CONFIG.OAUTH.defaultModel,
     codexConnected: Boolean(codexTokens && (codexTokens.accessToken || codexTokens.refreshToken)),
     tracingEnabled: Boolean(settings.langsmithApiKey && settings.langsmithTracing),

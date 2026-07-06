@@ -58,7 +58,7 @@ function renderStatusBar(host, status) {
       pill(status.scheduleEnabled ? '⏱ Scheduler on' : '⏸ Scheduler off', status.scheduleEnabled ? 'ok' : ''),
       pill(`Every ${status.intervalMinutes}m`, ''),
       pill(`Labels: ${(status.enrichLabels || []).join(', ') || 'any'}`, ''),
-      pill(status.llmConfigured ? `🧠 ${status.ollamaModel}` : '🧠 LLM not set', status.llmConfigured ? 'ok' : 'bad'),
+      pill(status.llmConfigured ? `🧠 ${status.activeModel || status.ollamaModel}` : '🧠 LLM not set', status.llmConfigured ? 'ok' : 'bad'),
       pill(status.tracingEnabled ? '🔎 Tracing on' : '🔎 Tracing off', status.tracingEnabled ? 'ok' : ''),
       el('span', { class: 'spacer' }),
       pill(`pending ${c.pending || 0}`, ''),
