@@ -1,0 +1,10 @@
+# Dependencies
+node_modules/
+
+# Local runtime data — secrets (API keys, OAuth tokens), config, jobs, logs.
+# Never commit; see docs/DEVELOPER_ONBOARDING.md.
+data/
+
+# OS / editor cruft
+.DS_Store
+*.log
