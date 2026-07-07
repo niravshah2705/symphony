@@ -151,10 +151,24 @@ function contentToText(content) {
   return '';
 }
 
+/**
+ * Text of a chat message, tolerant of REASONING models. Some models (e.g. LM
+ * Studio's ornith) emit their answer as reasoning tokens and leave `content`
+ * empty, putting the visible text in `additional_kwargs.reasoning_content`. When
+ * `content` is blank we fall back to that so downstream parsing still sees the
+ * answer, regardless of the JSON mode.
+ */
+function messageText(msg) {
+  if (!msg) return '';
+  const primary = contentToText(msg.content);
+  if (primary && primary.trim()) return primary;
+  const ak = msg.additional_kwargs || {};
+  return contentToText(ak.reasoning_content || ak.reasoning || '');
+}
+
 function lastText(result) {
   const messages = (result && result.messages) || [];
-  const msg = messages[messages.length - 1];
-  return contentToText(msg && msg.content);
+  return messageText(messages[messages.length - 1]);
 }
 
 module.exports = {
@@ -165,6 +179,7 @@ module.exports = {
   buildAgent,
   runWorkflow,
   contentToText,
+  messageText,
   lastText,
   SKILLS_DEST_DIRNAME,
 };

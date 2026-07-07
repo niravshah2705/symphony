@@ -142,7 +142,7 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-const { contentToText, lastText } = framework;
+const { contentToText, messageText, lastText } = framework;
 
 /**
  * Parse model JSON output, tolerating markdown fences and surrounding prose —
@@ -175,7 +175,17 @@ async function jsonCall(llm, prompt, runName, runId) {
   const config = { runName: runName.slice(0, 60), tags: ['enrich', 'linear-manager'] };
   if (runId) config.runId = runId;
   const msg = await model.invoke(prompt, config);
-  return parseJsonLoose(contentToText(msg.content));
+  // Reasoning-model-aware: falls back to reasoning_content when content is empty.
+  const text = messageText(msg);
+  if (!text || !text.trim()) {
+    const usage = (msg.response_metadata && msg.response_metadata.usage) || {};
+    const reasoning = (usage.completion_tokens_details && usage.completion_tokens_details.reasoning_tokens) || 0;
+    throw new Error(
+      `model returned empty output${reasoning ? ` (${reasoning} reasoning tokens, no answer content)` : ''}` +
+        ' — if this is a reasoning model, set the LM Studio JSON output mode to "Prompt-only (text)"'
+    );
+  }
+  return parseJsonLoose(text);
 }
 
 function buildResumePrompt({ project, milestones, config, research }) {
