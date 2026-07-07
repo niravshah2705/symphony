@@ -26,6 +26,8 @@ function publicSettings() {
     lmstudioModel: s.lmstudioModel,
     lmstudioNumTokens: s.lmstudioNumTokens,
     lmstudioJsonMode: s.lmstudioJsonMode || 'text',
+    hasGithubToken: Boolean(s.githubToken),
+    maskedGithubToken: maskKey(s.githubToken),
     hasLangsmithKey: Boolean(s.langsmithApiKey),
     maskedLangsmithKey: maskKey(s.langsmithApiKey),
     langsmithProject: s.langsmithProject,
@@ -123,6 +125,16 @@ router.put('/provider', (req, res) => {
     return res.status(400).json({ error: `Provider must be one of: ${CONFIG.LLM_PROVIDERS.join(', ')}.` });
   }
   patchSettings({ llmProvider: requested });
+  res.json(publicSettings());
+});
+
+// PUT /api/settings/github — save the GitHub token for the code-writer's git ops.
+// Stored server-side only; never returned raw or logged. Empty string clears it.
+router.put('/github', (req, res) => {
+  const b = req.body || {};
+  if (b.githubToken !== undefined) {
+    patchSettings({ githubToken: String(b.githubToken).trim() });
+  }
   res.json(publicSettings());
 });
 

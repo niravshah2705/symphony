@@ -5,7 +5,7 @@ const store = require('../store');
 const linear = require('../linear');
 const log = require('../logger');
 const { generatePlan, generateIssuesForMilestones } = require('./plan');
-const { applyPlan, applyIssuesForMilestones, applyAidone, applyAifail } = require('./apply');
+const { applyPlan, applyIssuesForMilestones, applyAiplanned, applyAifail } = require('./apply');
 const { llmReady, notReadyReason, resolveLlm } = require('./llm');
 
 const { CONFIG } = require('../config');
@@ -89,12 +89,12 @@ async function runJob(job, { apiKey, keys, llm, config }) {
       if (missing.length && config.createIssues) {
         const gen = await generateIssuesForMilestones({ project, milestones: missing, config, llm, keys, onStep: step });
         summary = await applyIssuesForMilestones(apiKey, { project, milestones: missing, generated: gen.milestones, config, onStep: step });
-        await applyAidone(apiKey, { project, onStep: step });
-        step(`Resumed: created ${summary.issuesCreated} task(s); marked aidone.`);
+        await applyAiplanned(apiKey, { project, onStep: step });
+        step(`Resumed: created ${summary.issuesCreated} task(s); marked aiplanned.`);
         finish({ traceUrl: gen.traceUrl, traced: gen.traced, summary });
       } else {
-        await applyAidone(apiKey, { project, onStep: step });
-        step('All milestones already have issues; marked aidone.');
+        await applyAiplanned(apiKey, { project, onStep: step });
+        step('All milestones already have issues; marked aiplanned.');
         finish({ summary });
       }
       return;
@@ -111,9 +111,10 @@ async function runJob(job, { apiKey, keys, llm, config }) {
     }
 
     const summary = await applyPlan(apiKey, { project, plan: result.plan, assumedRole: job.assumedRole, config, onStep: step });
-    // Mark aidone once issues exist (or when issue creation is disabled).
+    // Mark aiplanned once issues exist (or when issue creation is disabled) — the
+    // project is now planned and ready for the coding flow to work its tasks.
     if (summary.issuesCreated > 0 || !config.createIssues) {
-      await applyAidone(apiKey, { project, onStep: step });
+      await applyAiplanned(apiKey, { project, onStep: step });
     }
     step(`Done: ${summary.milestonesCreated} milestones, ${summary.issuesCreated} issues, ${summary.dependenciesCreated} deps${summary.warnings.length ? `, ${summary.warnings.length} warning(s)` : ''}.`);
     finish({ traceUrl: result.traceUrl, traced: result.traced, summary });

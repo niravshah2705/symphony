@@ -119,6 +119,11 @@ const LMSTUDIO = Object.freeze({
 const CODER = Object.freeze({
   repoUrl: process.env.CODER_REPO_URL || '',
   workspaceRoot: process.env.CODER_WORKSPACE_ROOT || path.join(require('os').homedir(), 'code', 'techmavins-workspaces'),
+  // Monorepo workspace root for the aiplanned flow: one clone per project at
+  // <plannedWorkspaceRoot>/<project-slug>/, a branch per task. Default ~/git/workspace.
+  plannedWorkspaceRoot: process.env.CODER_PLANNED_WORKSPACE_ROOT || path.join(require('os').homedir(), 'git', 'workspace'),
+  // Project label that signals "planned — ready to code" (set by the planner).
+  plannedLabel: process.env.CODER_PLANNED_LABEL || 'aiplanned',
   // Ticket states the workflow acts on vs. leaves alone (from Symphony's tracker config).
   activeStates: (process.env.CODER_ACTIVE_STATES || 'Todo,In Progress,Merging,Rework').split(',').map((s) => s.trim()),
   terminalStates: (process.env.CODER_TERMINAL_STATES || 'Done,Closed,Cancelled,Canceled,Duplicate').split(',').map((s) => s.trim()),

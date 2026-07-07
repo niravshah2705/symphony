@@ -67,6 +67,7 @@ function keysSection(settings) {
   const status = el('div', { class: 'muted', style: 'font-size:13px;margin-top:6px' });
 
   const linearInput = pwd(settings.hasKey ? `Saved: ${settings.maskedKey}` : 'lin_api_…');
+  const githubInput = pwd(settings.hasGithubToken ? `Saved: ${settings.maskedGithubToken}` : 'github_pat_… / ghp_…');
   const langsmithInput = pwd(settings.hasLangsmithKey ? `Saved: ${settings.maskedLangsmithKey}` : 'lsv2_…');
   const hostInput = el('input', { value: settings.langsmithEndpoint || '', placeholder: 'https://api.smith.langchain.com' });
   const projectInput = el('input', { value: settings.langsmithProject || '', placeholder: 'linear-manager' });
@@ -81,6 +82,11 @@ function keysSection(settings) {
         const r = await api.saveKey(linearInput.value.trim());
         linearInput.value = '';
         linearInput.placeholder = `Saved: ${r.maskedKey}`;
+      }
+      if (githubInput.value.trim()) {
+        const gr = await api.saveGithubToken(githubInput.value.trim());
+        githubInput.value = '';
+        githubInput.placeholder = gr.hasGithubToken ? `Saved: ${gr.maskedGithubToken}` : 'github_pat_… / ghp_…';
       }
       const lsPayload = {
         langsmithProject: projectInput.value.trim() || 'linear-manager',
@@ -142,6 +148,10 @@ function keysSection(settings) {
       'Personal key from ',
       el('a', { href: 'https://linear.app/settings/api', target: '_blank', style: 'color:var(--accent-2)' }, 'linear.app/settings/api'),
       '.',
+    ]),
+    el('div', { class: 'subhead' }, 'GitHub (code-writer)'),
+    field('GitHub Token', githubInput, [
+      'Fine-grained PAT with Contents + Pull requests write on the code repo. Used by the code-writer to clone/push; stored server-side, never returned.',
     ]),
     el('div', { class: 'subhead' }, 'LangSmith Tracing'),
     field('LangSmith API Key', langsmithInput),
@@ -216,7 +226,7 @@ function ollamaFields({ settings, ollamaModels, reachable }) {
     : el('input', { value: settings.ollamaModel || '', placeholder: 'e.g. llama3.1' });
 
   const ctxInput = el('input', { type: 'number', min: '512', max: '131072', value: String(settings.ollamaContextWindow || 8192) });
-  const tokInput = el('input', { type: 'number', min: '128', max: '32768', value: String(settings.ollamaNumTokens || 4096) });
+  const tokInput = el('input', { type: 'number', min: '128', max: '32768', value: String(settings.ollamaNumTokens || 8192) });
   const jsonSelect = jsonModeSelect(
     [
       ['json', 'Constrained (format: json)'],
@@ -285,7 +295,7 @@ function lmstudioFields({ settings, lmstudioModels, reachable }) {
       ))
     : el('input', { value: settings.lmstudioModel || '', placeholder: 'e.g. qwen2.5-7b-instruct' });
 
-  const tokInput = el('input', { type: 'number', min: '128', max: '32768', value: String(settings.lmstudioNumTokens || 4096) });
+  const tokInput = el('input', { type: 'number', min: '128', max: '32768', value: String(settings.lmstudioNumTokens || 16000) });
   const jsonSelect = jsonModeSelect(
     [
       ['text', 'Prompt-only (text) — most compatible'],

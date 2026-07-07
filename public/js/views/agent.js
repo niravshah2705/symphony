@@ -23,6 +23,7 @@ export async function renderAgent(view) {
   clear(view).append(
     el('div', { class: 'page-head' }, [
       el('h1', {}, 'Agent'),
+      activeToggle(status, view),
       el('a', { class: 'btn', href: '#/settings' }, '⚙ Configure in Settings'),
     ])
   );
@@ -47,6 +48,30 @@ export async function renderAgent(view) {
       /* transient */
     }
   }, 4000);
+}
+
+/* ------------------------- Active / inactive toggle --------------------- */
+
+/**
+ * Agent Active/Inactive switch. "Active" = the scheduler runs on its cadence;
+ * toggling flips `scheduleEnabled` in the agent config and re-renders.
+ */
+function activeToggle(status, view) {
+  const active = Boolean(status.scheduleEnabled);
+  const btn = el('button', { class: active ? 'primary' : 'danger' }, active ? '● Active' : '○ Inactive');
+  btn.title = active ? 'Agent is active — click to deactivate' : 'Agent is inactive — click to activate';
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      await api.saveAgentConfig({ scheduleEnabled: !active });
+      toast(active ? 'Agent deactivated.' : 'Agent activated.', 'ok');
+      renderAgent(clear(view));
+    } catch (err) {
+      toast(err.message, 'err');
+      btn.disabled = false;
+    }
+  });
+  return btn;
 }
 
 /* ------------------------------ Status bar ------------------------------ */
