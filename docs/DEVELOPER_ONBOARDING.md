@@ -107,31 +107,57 @@ The SPA (`public/js/app.js`) hash-routes between five views:
 
 ## 5. The two deep agents (developer mental model)
 
-Both agents live under `server/agent/` and share the LLM provider factory
-(`llm.js` → `resolveLlm`), so switching provider in Settings affects both.
+Both agents live under `server/agent/` and are the SAME **workflow-driven
+framework** (`framework.js`) configured by a declarative *workflow file*
+(`workflows/*.workflow.js`). A workflow declares its **skills**, **tools**,
+backend, and system prompt; the framework installs the skills, builds the
+`deepagents` agent (FilesystemBackend for the planner, LocalShellBackend for the
+coder), and runs it. Both share the LLM provider factory (`llm.js` →
+`resolveLlm`), so switching provider in Settings affects both.
 
-### 5.1 Business-owner planner (auto-runs on a schedule)
-- **Files:** `plan.js` (LLM plan + tracing), `schema.js` (Zod plan schema),
-  `apply.js` (deterministic Linear writes), `scheduler.js` (5/10/15-min queue),
+- **Skills** (`skills/<name>/SKILL.md`) = instructions loaded on demand:
+  `software-planning`, `web-research` (planner); `linear`, `commit`, `push`,
+  `pull`, `land` (coder).
+- **Tools** (`tools.js`) = `web_search`, `linear_graphql`. Optionally, **MCP tool
+  groups** (`mcp.js`) — Linear MCP + GitHub MCP — attach when enabled
+  (`LINEAR_MCP_ENABLED`, `GITHUB_MCP_TOKEN`); off by default.
+
+The 3-step pipeline: **idea → project (+labels)** (businesses route, deterministic)
+→ **software-design issues (AI-labeled)** (planner) → **coding on unblocked AI
+tickets** (coder, scheduled + parallel).
+
+### 5.1 Software-design planner (auto-runs on a schedule)
+- **Files:** `workflows/planning.workflow.js` + `skills/software-planning`,
+  `plan.js` (feasibility + framework draft + structured extraction + tracing),
+  `schema.js` (Zod plan schema), `apply.js` (deterministic Linear writes; stamps
+  each issue with the **AI** label), `scheduler.js` (5/10/15-min queue),
   `search.js` (keyless web search).
-- **Flow:** discovers open projects carrying an enrich label → viability gate
-  (web research; unfit projects get relabelled `aifail`) → drafts business
-  milestones (MVB → metrics → branding → …) → **the server** applies the plan to
-  Linear (creates milestones/issues/dependencies) → relabels the project `aidone`.
-- **Guardrail:** the LLM only *proposes*; all Linear writes are done deterministically
+- **Flow:** discovers open projects carrying an enrich label → feasibility gate
+  (buildable software? unfit → `aifail`) → the **planning workflow** drafts a
+  SOFTWARE DESIGN plan (engineering milestones: Architecture → Data Model → Core
+  Features → APIs → Quality; **no** go-to-market/business tasks) → **the server**
+  applies it to Linear (milestones + AI-labeled issues + dependencies) → relabels
+  the project `aidone`.
+- **Guardrail:** the LLM only *proposes*; all Linear writes are deterministic
   server-side after Zod validation + clamping. Interrupted runs resume on restart.
 - **Trigger it:** Agent tab → **Run now**, or `POST /api/agent/run-now`.
 
-### 5.2 Code-writer (works a Linear ticket into a PR)
-- **Files:** `coder.js` (one attempt / AgentRunner), `coder-orchestrator.js` (board
-  monitor: poll active-state tickets, dispatch up to `maxConcurrent`),
-  `workspace.js` (isolated git clone), `skills/` (linear, commit, push, pull, land).
-- **Flow:** for a ticket in an active state, it clones the repo into an isolated
-  workspace, uses filesystem/shell tools + skills to implement the change, keeps a
-  single **"## Workpad"** Linear comment as the source of truth, and drives the
-  ticket through its state machine to a PR (stamped with `CODER_PR_LABEL`).
-- **Config:** all `CODER_*` env vars in `server/config.js` — most importantly
-  `CODER_REPO_URL` (repo to clone) and `CODER_WORKSPACE_ROOT` (where clones live).
+### 5.2 Code-writer (works an AI-labeled Linear ticket into a PR)
+- **Files:** `workflows/coding.workflow.js` + `skills/` (linear, commit, push,
+  pull, land), `coder.js` (one attempt; picks the execution backend),
+  `coder-orchestrator.js` (board monitor), `workspace.js` (isolated git clone),
+  `openswe.js` (Open SWE backend adapter).
+- **Flow:** the monitor polls active-state tickets **carrying the `AI` label** and
+  **not blocked by an unfinished dependency**, and dispatches up to `maxConcurrent`
+  in parallel. Each ticket runs on the selected backend:
+  - `CODER_BACKEND=local` (default) — framework coding workflow: a deepagents agent
+    on a LocalShellBackend rooted at an isolated clone (the local sandbox). Keeps a
+    single **"## Workpad"** Linear comment and drives the ticket to a PR.
+  - `CODER_BACKEND=openswe` — dispatches to a running **Open SWE** LangGraph server
+    (see [OPENSWE_SETUP.md](./OPENSWE_SETUP.md)); Open SWE runs the coding loop in
+    its (optionally local) sandbox and opens the PR.
+- **Config:** `CODER_*` env vars in `server/config.js` — `CODER_REPO_URL`,
+  `CODER_WORKSPACE_ROOT`, `CODER_TASK_LABEL` (default `AI`), `CODER_BACKEND`.
 - **Trigger it:**
   - one ticket → `POST /api/coder/run` with `{ "issueId": "..." }`
   - start/stop the board monitor → `POST /api/coder/monitor` with `{ "action": "start" | "stop" }`
@@ -152,8 +178,12 @@ server/
   routes/               settings · projects · issues · businesses · roles
                         · agent · coder · codex(OAuth) · claude(OAuth)
   agent/
-    plan.js schema.js apply.js scheduler.js search.js   ← business-owner planner
-    coder.js coder-orchestrator.js workspace.js skills/  ← code-writer
+    framework.js          workflow-driven deep-agent runner (skills + tools + backend)
+    workflows/            planning.workflow.js · coding.workflow.js (declarative)
+    tools.js mcp.js       tool registry (web_search, linear_graphql) + optional MCP
+    skills/               SKILL.md dirs: software-planning, web-research, linear, commit, push, pull, land
+    plan.js schema.js apply.js scheduler.js search.js   ← software-design planner
+    coder.js coder-orchestrator.js workspace.js openswe.js  ← code-writer (+ Open SWE)
     llm.js                provider factory (ollama | lmstudio | codex | claude)
     oauth.js pkce.js      Codex OAuth (+ .test.js)
     claude-oauth.js       Claude OAuth (+ .test.js)

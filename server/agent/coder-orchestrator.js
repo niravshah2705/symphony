@@ -26,21 +26,45 @@ const running = new Map();
 let timer = null;
 let started = false;
 
+// Active-state issues carrying the AI task label (Step 3). inverseRelations of
+// type `blocks` are the issues that block THIS one (see apply.js: a dependency is
+// created as from `blocks` to, so the `to` issue is blocked until `from` is Done).
 const ACTIVE_ISSUES_QUERY = `
-  query ActiveIssues($states: [String!], $first: Int!) {
-    issues(first: $first, filter: { state: { name: { in: $states } } }) {
+  query ActiveIssues($states: [String!], $labels: [String!], $first: Int!) {
+    issues(first: $first, filter: {
+      state: { name: { in: $states } },
+      labels: { name: { in: $labels } }
+    }) {
       nodes {
         id identifier title url
         state { name }
         labels { nodes { name } }
+        inverseRelations(first: 25) {
+          nodes { type issue { id identifier state { type name } } }
+        }
       }
     }
   }`;
 
-/** Fetch tracker issues currently in an active state. */
+/** A blocker is satisfied once it is completed or canceled. */
+function isDoneState(state) {
+  const t = state && state.type;
+  return t === 'completed' || t === 'canceled';
+}
+
+/** True when the issue is blocked by another issue that is not yet Done. */
+function blockedBy(node) {
+  const inv = (node.inverseRelations && node.inverseRelations.nodes) || [];
+  return inv
+    .filter((r) => r.type === 'blocks' && r.issue && !isDoneState(r.issue.state))
+    .map((r) => r.issue.identifier || r.issue.id);
+}
+
+/** Fetch active-state, AI-labeled issues; annotate each with its unmet blockers. */
 async function fetchActiveIssues(apiKey) {
   const data = await linear.linearRequest(apiKey, ACTIVE_ISSUES_QUERY, {
     states: CONFIG.CODER.activeStates,
+    labels: [CONFIG.CODER.taskLabel],
     first: 50,
   });
   const nodes = (data && data.issues && data.issues.nodes) || [];
@@ -51,6 +75,7 @@ async function fetchActiveIssues(apiKey) {
     url: n.url,
     state: n.state && n.state.name,
     labels: ((n.labels && n.labels.nodes) || []).map((l) => l.name),
+    blockers: blockedBy(n),
   }));
 }
 
@@ -100,7 +125,12 @@ async function pollOnce() {
   for (const issue of issues) {
     if (running.size >= CONFIG.CODER.maxConcurrent) break; // global cap
     if (running.has(issue.id)) continue; // already claimed (single-writer)
-    log.info(`Dispatching code-writer for ${issue.identifier} (${issue.state}).`);
+    // Dependency avoidance: never start an issue still blocked by a non-Done issue.
+    if (issue.blockers && issue.blockers.length) {
+      log.info(`Skipping ${issue.identifier}: blocked by ${issue.blockers.join(', ')}.`);
+      continue;
+    }
+    log.info(`Dispatching code-writer for ${issue.identifier} (${issue.state}) via ${CONFIG.CODER.backend} backend.`);
     dispatch(issue, llm, settings.linearApiKey, keys);
   }
 }
@@ -132,6 +162,8 @@ function status() {
   return {
     running: started,
     activeStates: CONFIG.CODER.activeStates,
+    taskLabel: CONFIG.CODER.taskLabel,
+    backend: CONFIG.CODER.backend,
     maxConcurrent: CONFIG.CODER.maxConcurrent,
     inFlight: [...running.values()].map((r) => ({ identifier: r.identifier, startedAt: r.startedAt })),
   };

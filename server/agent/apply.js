@@ -1,6 +1,23 @@
 'use strict';
 
 const linear = require('../linear');
+const { CONFIG } = require('../config');
+
+/**
+ * Resolve the AI task-label id once per apply run so every created issue can be
+ * stamped with it (Step 2: software-design issues are marked with the AI label,
+ * which the coder board monitor picks up in Step 3). Best-effort: on failure we
+ * return null and issues are created unlabeled rather than aborting the plan.
+ */
+async function resolveTaskLabelId(apiKey, step) {
+  try {
+    const label = await linear.getOrCreateIssueLabel(apiKey, CONFIG.CODER.taskLabel);
+    return label.id;
+  } catch (err) {
+    step(`Could not resolve "${CONFIG.CODER.taskLabel}" issue label: ${errMsg(err)}`, 'warn');
+    return null;
+  }
+}
 
 /** Append a labelled criteria block to a description (no-op if empty). */
 function withCriteria(base, label, criteria) {
@@ -25,6 +42,7 @@ async function applyPlan(apiKey, { project, plan, assumedRole, config, onStep })
 
   const { team } = await linear.getProjectTeam(apiKey, project.id);
   step(`Applying plan to Linear (team ${team.key || team.name}).`);
+  const taskLabelId = config.createIssues ? await resolveTaskLabelId(apiKey, step) : null;
 
   // 1. Assign the assumed role as project lead (claims the open project).
   if (config.autoAssignLead && assumedRole && assumedRole.id) {
@@ -83,6 +101,7 @@ async function applyPlan(apiKey, { project, plan, assumedRole, config, onStep })
             title: issue.title,
             description: withCriteria(issue.description, 'Acceptance criteria', issue.evaluationCriteria),
             priority: issue.priority,
+            labelIds: taskLabelId ? [taskLabelId] : undefined,
           });
           issueIds.push(created.id);
           summary.issuesCreated += 1;
@@ -136,6 +155,7 @@ async function applyIssuesForMilestones(apiKey, { project, milestones, generated
 
   const { team } = await linear.getProjectTeam(apiKey, project.id);
   step(`Creating tasks for ${milestones.length} milestone(s) (team ${team.key || team.name}).`);
+  const taskLabelId = await resolveTaskLabelId(apiKey, step);
 
   for (let i = 0; i < milestones.length; i += 1) {
     const milestone = milestones[i];
@@ -165,6 +185,7 @@ async function applyIssuesForMilestones(apiKey, { project, milestones, generated
           title: issue.title,
           description: withCriteria(issue.description, 'Acceptance criteria', issue.evaluationCriteria),
           priority: issue.priority,
+          labelIds: taskLabelId ? [taskLabelId] : undefined,
         });
         created += 1;
         summary.issuesCreated += 1;

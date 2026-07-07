@@ -132,6 +132,45 @@ const CODER = Object.freeze({
   shellTimeoutSec: Number(process.env.CODER_SHELL_TIMEOUT_SEC) || 600,
   // PR label the agent stamps on its pull requests.
   prLabel: process.env.CODER_PR_LABEL || 'techmavins',
+  // Execution backend: 'local' (framework deepagents sandbox, default) or 'openswe'
+  // (dispatch to a running Open SWE LangGraph server — see agent/openswe.js).
+  backend: (process.env.CODER_BACKEND || 'local').toLowerCase() === 'openswe' ? 'openswe' : 'local',
+  // The issue label the coder board monitor picks up (Step 3: AI-labeled tasks).
+  taskLabel: process.env.CODER_TASK_LABEL || 'AI',
+  // Open SWE integration (used only when backend === 'openswe').
+  openswe: Object.freeze({
+    // Base URL of the locally-running Open SWE LangGraph server (`langgraph dev`).
+    url: process.env.OPENSWE_URL || 'http://localhost:2024',
+    // The graph/assistant id to run (Open SWE's coding graph).
+    assistant: process.env.OPENSWE_ASSISTANT || 'agent',
+    // GitHub repo the coding agent operates on, "owner/name" (defaults to the coder repo).
+    repo: process.env.OPENSWE_REPO || '',
+    // Max seconds to wait for a run to finish before returning (poll timeout).
+    runTimeoutSec: Number(process.env.OPENSWE_RUN_TIMEOUT_SEC) || 1800,
+  }),
+});
+
+/**
+ * Optional MCP tool servers the agent framework can attach as tools (in addition
+ * to the built-in web_search / linear_graphql tools) — "use a good mix of tools
+ * along with skills to avoid rewriting code". Both are OFF by default so the
+ * standard flow is unchanged; enable per env and the framework loads their tools
+ * via @langchain/mcp-adapters when a workflow declares `mcp: [...]`.
+ *   - Linear MCP  (hosted, streamable HTTP): authenticated with the stored Linear
+ *     API key as a Bearer token. Enable with LINEAR_MCP_ENABLED=true.
+ *   - GitHub MCP  (hosted/Docker): authenticated with a PAT. Enable by setting
+ *     GITHUB_MCP_TOKEN (a fine-grained PAT).
+ */
+const MCP = Object.freeze({
+  linear: Object.freeze({
+    enabled: (process.env.LINEAR_MCP_ENABLED || 'false').toLowerCase() === 'true',
+    url: process.env.LINEAR_MCP_URL || 'https://mcp.linear.app/mcp',
+  }),
+  github: Object.freeze({
+    enabled: Boolean(process.env.GITHUB_MCP_TOKEN),
+    url: process.env.GITHUB_MCP_URL || 'https://api.githubcopilot.com/mcp/',
+    token: process.env.GITHUB_MCP_TOKEN || '',
+  }),
 });
 
 /** Server configuration and shared constants. */
@@ -164,6 +203,7 @@ const CONFIG = Object.freeze({
   CLAUDE,
   LMSTUDIO,
   CODER,
+  MCP,
 });
 
 module.exports = { CONFIG };

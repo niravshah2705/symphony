@@ -226,6 +226,22 @@ const PROJECT_LABEL_CREATE_MUTATION = `
   }
 `;
 
+// Issue labels are a distinct entity from project labels in Linear.
+const ISSUE_LABELS_QUERY = `
+  query IssueLabels($first: Int!) {
+    issueLabels(first: $first) { nodes { id name } }
+  }
+`;
+
+const ISSUE_LABEL_CREATE_MUTATION = `
+  mutation IssueLabelCreate($input: IssueLabelCreateInput!) {
+    issueLabelCreate(input: $input) {
+      success
+      issueLabel { id name }
+    }
+  }
+`;
+
 /* --------------------------- Public helpers ----------------------------- */
 
 async function getViewer(apiKey) {
@@ -413,11 +429,12 @@ async function updateMilestone(apiKey, { id, description }) {
   return data.projectMilestoneUpdate.projectMilestone;
 }
 
-async function createIssue(apiKey, { teamId, projectId, projectMilestoneId, title, description, priority }) {
+async function createIssue(apiKey, { teamId, projectId, projectMilestoneId, title, description, priority, labelIds }) {
   const input = { teamId, projectId, title };
   if (projectMilestoneId) input.projectMilestoneId = projectMilestoneId;
   if (description) input.description = description;
   if (typeof priority === 'number') input.priority = priority;
+  if (Array.isArray(labelIds) && labelIds.length) input.labelIds = labelIds;
   const data = await linearRequest(apiKey, ISSUE_CREATE_MUTATION, { input });
   if (!data.issueCreate || !data.issueCreate.success) {
     throw new LinearError(`Failed to create issue "${title}".`, 400);
@@ -481,6 +498,19 @@ async function getOrCreateProjectLabels(apiKey, names) {
   return labels;
 }
 
+/** Find an ISSUE label by name (case-insensitive), creating it if absent. */
+async function getOrCreateIssueLabel(apiKey, name) {
+  const data = await linearRequest(apiKey, ISSUE_LABELS_QUERY, { first: CONFIG.PAGE_SIZE });
+  const wanted = String(name).trim().toLowerCase();
+  const existing = (data.issueLabels.nodes || []).find((l) => (l.name || '').toLowerCase() === wanted);
+  if (existing) return existing;
+  const created = await linearRequest(apiKey, ISSUE_LABEL_CREATE_MUTATION, { input: { name } });
+  if (!created.issueLabelCreate || !created.issueLabelCreate.success) {
+    throw new LinearError(`Failed to create issue label "${name}".`, 400);
+  }
+  return created.issueLabelCreate.issueLabel;
+}
+
 /** Replace a project's labels with the given label ids. */
 async function setProjectLabels(apiKey, projectId, labelIds) {
   const data = await linearRequest(apiKey, PROJECT_UPDATE_MUTATION, {
@@ -526,5 +556,6 @@ module.exports = {
   createIssueRelation,
   getOrCreateProjectLabel,
   getOrCreateProjectLabels,
+  getOrCreateIssueLabel,
   setProjectLabels,
 };

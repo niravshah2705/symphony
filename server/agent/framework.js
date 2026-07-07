@@ -1,0 +1,170 @@
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
+const { createChatModel } = require('./llm');
+const toolRegistry = require('./tools');
+
+/**
+ * Workflow-driven deep-agent framework.
+ *
+ * Both the planning and coding agents are the SAME machine configured by a
+ * declarative *workflow file* (server/agent/workflows/<name>.workflow.js). A
+ * workflow declares which SKILLS to load, which TOOLS to attach, the backend
+ * kind, the system prompt, and run limits. This module turns that descriptor
+ * into a live `deepagents` agent and runs it, so the deepagents wiring lives in
+ * one place instead of being copy-pasted per agent.
+ *
+ * Backends:
+ *   - 'filesystem' — FilesystemBackend (read/write files, NO shell). Used by the
+ *     planner: it only needs its skills on disk + the web_search tool, so denying
+ *     shell removes an unnecessary capability (ai-prompt-injection: least tools).
+ *   - 'shell'      — LocalShellBackend (fs + shell). Used by the coder, rooted at
+ *     an isolated git workspace.
+ *
+ * Workflow shape:
+ *   { name, description, backend: 'filesystem'|'shell', skills: string[],
+ *     tools: string[], systemPrompt: string | (ctx)=>string,
+ *     recursionLimit?: number, tags?: string[], shellTimeoutSec?: number }
+ */
+
+const SKILLS_SRC = path.join(__dirname, 'skills');
+const SKILLS_DEST_DIRNAME = '.agent-skills';
+const WORKFLOWS_DIR = path.join(__dirname, 'workflows');
+
+/**
+ * Copy the named skills from server/agent/skills/ into `destRoot/.agent-skills/`
+ * and return their backend-relative paths (e.g. `/.agent-skills/software-planning/`).
+ * With no names, installs every available skill (back-compat with the coder's
+ * previous "install all" behavior).
+ */
+function installSkills(destRoot, skillNames) {
+  const dest = path.join(destRoot, SKILLS_DEST_DIRNAME);
+  const available = fs.readdirSync(SKILLS_SRC).filter((n) => isDir(path.join(SKILLS_SRC, n)));
+  const names = Array.isArray(skillNames) && skillNames.length ? skillNames : available;
+  const paths = [];
+  for (const name of names) {
+    const from = path.join(SKILLS_SRC, name);
+    if (!isDir(from)) continue; // skip unknown skill names rather than throw
+    const to = path.join(dest, name);
+    fs.rmSync(to, { recursive: true, force: true });
+    fs.cpSync(from, to, { recursive: true });
+    paths.push(`/${SKILLS_DEST_DIRNAME}/${name}/`);
+  }
+  return paths;
+}
+
+function isDir(p) {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch (_) {
+    return false;
+  }
+}
+
+/** Build the backend for a workflow kind, rooted at `rootDir`. */
+function buildBackend(kind, rootDir, opts = {}) {
+  const { FilesystemBackend, LocalShellBackend } = require('deepagents');
+  if (kind === 'shell') {
+    return new LocalShellBackend({ rootDir, inheritEnv: true, timeout: opts.timeout || 600 });
+  }
+  return new FilesystemBackend({ rootDir });
+}
+
+/** Load a workflow descriptor by name from workflows/<name>.workflow.js. */
+function loadWorkflow(name) {
+  const file = path.join(WORKFLOWS_DIR, `${name}.workflow.js`);
+  if (!fs.existsSync(file)) {
+    throw new Error(`Unknown workflow "${name}" (expected ${file}).`);
+  }
+  return require(file);
+}
+
+/**
+ * Prepare an isolated scratch directory for a workflow that has no repo of its
+ * own (e.g. the planner). Installs the workflow's skills there so a
+ * FilesystemBackend rooted at the dir can load them. Returns a cleanup fn.
+ */
+function prepareScratch(workflow) {
+  const rootDir = path.join(os.tmpdir(), 'techsym-agent', `${workflow.name}-${crypto.randomUUID().slice(0, 8)}`);
+  fs.mkdirSync(rootDir, { recursive: true });
+  const skillPaths = installSkills(rootDir, workflow.skills);
+  const cleanup = () => fs.rmSync(rootDir, { recursive: true, force: true });
+  return { rootDir, skillPaths, cleanup };
+}
+
+/**
+ * Build a deep agent from a workflow. Callers either pass a prepared
+ * `{ backend, skillPaths }` (the coder, rooted at its git workspace) or a
+ * `rootDir` for the framework to root a fresh backend + install skills into.
+ */
+function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, extraTools = [] }) {
+  const { createDeepAgent } = require('deepagents');
+  let skills = skillPaths;
+  let be = backend;
+  if (!be) {
+    if (!rootDir) throw new Error('buildAgent needs a backend or a rootDir.');
+    skills = skills || installSkills(rootDir, workflow.skills);
+    be = buildBackend(workflow.backend, rootDir, { timeout: workflow.shellTimeoutSec });
+  }
+  const tools = [...toolRegistry.buildMany(workflow.tools, ctx), ...(extraTools || [])];
+  const systemPrompt = typeof workflow.systemPrompt === 'function' ? workflow.systemPrompt(ctx) : workflow.systemPrompt;
+  const agent = createDeepAgent({ model: createChatModel(llm), backend: be, skills, tools, systemPrompt });
+  return { agent, backend: be, skillPaths: skills, tools };
+}
+
+/**
+ * Run a workflow agent to completion on a single user message and return the
+ * result plus the final assistant text. For repo-less workflows (no backend
+ * provided) a scratch dir is created and cleaned up automatically.
+ * @returns {Promise<{ result:object, messages:object[], finalText:string }>}
+ */
+async function runWorkflow({ workflow, llm, userMessage, backend, skillPaths, rootDir, ctx = {}, invokeConfig = {} }) {
+  let scratch = null;
+  if (!backend && !rootDir) {
+    scratch = prepareScratch(workflow);
+    rootDir = scratch.rootDir;
+    skillPaths = scratch.skillPaths;
+  }
+  try {
+    const extraTools = await require('./mcp').loadMcpTools(workflow.mcp, ctx);
+    const { agent } = buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx, extraTools });
+    const config = {
+      recursionLimit: workflow.recursionLimit || 24,
+      tags: workflow.tags || [],
+      ...invokeConfig,
+    };
+    const result = await agent.invoke({ messages: [{ role: 'user', content: userMessage }] }, config);
+    const messages = (result && result.messages) || [];
+    return { result, messages, finalText: lastText(result) };
+  } finally {
+    if (scratch) scratch.cleanup();
+  }
+}
+
+/** Normalize message content (string or content-block array) to plain text. */
+function contentToText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.map((c) => (typeof c === 'string' ? c : c.text || '')).join('');
+  return '';
+}
+
+function lastText(result) {
+  const messages = (result && result.messages) || [];
+  const msg = messages[messages.length - 1];
+  return contentToText(msg && msg.content);
+}
+
+module.exports = {
+  installSkills,
+  buildBackend,
+  loadWorkflow,
+  prepareScratch,
+  buildAgent,
+  runWorkflow,
+  contentToText,
+  lastText,
+  SKILLS_DEST_DIRNAME,
+};
