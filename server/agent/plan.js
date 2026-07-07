@@ -92,7 +92,8 @@ function buildDraftPrompt({ project, today, config }) {
     'sensible architecture and tech choices, then STOP calling tools and write the SOFTWARE',
     'DESIGN plan as text: engineering milestones (Architecture & Foundations, Data Model,',
     'Core Features, APIs & Integration, Quality & Hardening) with buildable issues and their',
-    'acceptance criteria. Do NOT include go-to-market, marketing, branding, or business tasks.',
+    'acceptance criteria. Do NOT include go-to-market, marketing, branding, or business tasks,',
+    'and do NOT include CI/CD, deployment, release, DevOps, or infrastructure/provisioning tasks.',
     '',
     projectContextBlock(project),
   ].join('\n');
@@ -121,7 +122,8 @@ function buildExtractPrompt({ project, today, config, draft, research }) {
     'Milestones must be engineering phases (e.g. "Architecture & Foundations", "Data Model &',
     'Persistence", "Core Features", "APIs & Integration", "Quality & Hardening"). Every issue',
     'is a buildable engineering task with concrete acceptance criteria. NEVER include',
-    'marketing, branding, sales, pricing, growth, or business-metric tasks.',
+    'marketing, branding, sales, pricing, growth, or business-metric tasks, and NEVER',
+    'include CI/CD, deployment, release, DevOps, or infrastructure/provisioning tasks.',
     'Use "dependencies" to link an issue to any issue that must land before it (acyclic).',
     `Constraints: at most ${config.maxMilestones} milestones and ${config.maxIssuesPerMilestone} issues each.`,
     `Dates valid YYYY-MM-DD, targetDate on/after startDate, start on/after ${today}.`,
@@ -174,7 +176,20 @@ async function jsonCall(llm, prompt, runName, runId) {
   const model = createChatModel(llm, { json: true });
   const config = { runName: runName.slice(0, 60), tags: ['enrich', 'linear-manager'] };
   if (runId) config.runId = runId;
-  const msg = await model.invoke(prompt, config);
+  let msg;
+  try {
+    msg = await model.invoke(prompt, config);
+  } catch (err) {
+    // Output hit the token budget (finish_reason: length) — the JSON is truncated.
+    const m = err && err.message ? err.message : String(err);
+    if (/length limit|max_tokens|finish_reason.*length/i.test(m)) {
+      throw new Error(
+        `output was truncated at the ${llm.numTokens}-token budget — raise "Num tokens" in Settings → LLM ` +
+          '(reasoning models need extra headroom)'
+      );
+    }
+    throw err;
+  }
   // Reasoning-model-aware: falls back to reasoning_content when content is empty.
   const text = messageText(msg);
   if (!text || !text.trim()) {

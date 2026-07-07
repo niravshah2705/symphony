@@ -34,13 +34,17 @@ const DEFAULT_STORE = Object.freeze({
     ollamaHost: 'http://localhost:11434',
     ollamaModel: '', // e.g. "llama3.1" — must support tool-calling; user selects
     ollamaContextWindow: 8192, // num_ctx
-    ollamaNumTokens: 4096, // num_predict (output token budget)
+    ollamaNumTokens: 8192, // num_predict (output budget; the software-design plan JSON is large)
     ollamaJsonMode: 'json', // JSON constraint: 'json' (format:'json') | 'text' (prompt-driven)
     // LM Studio (local, OpenAI-compatible API) — an alternative local provider for
     // models not available in Ollama. No credentials; the browser chooses host + model.
     lmstudioHost: 'http://localhost:1234',
     lmstudioModel: '', // e.g. "qwen2.5-7b-instruct" — must support tool-calling; user selects
-    lmstudioNumTokens: 4096, // max_tokens (output token budget); context length is set in LM Studio
+    // max_tokens (output budget). The plan JSON is large and REASONING models (e.g.
+    // ornith) spend extra tokens thinking, so 4096 truncates it -> "length limit
+    // reached". 16000 matches the Claude ceiling. Configurable in Settings → LLM;
+    // context length itself is set when loading the model in LM Studio.
+    lmstudioNumTokens: 16000,
     // JSON constraint: 'text' (prompt-driven; most compatible) | 'json_object' | 'json_schema'.
     // Some engines (e.g. the ornith runtime) reject 'json_object', so 'text' is the safe default.
     lmstudioJsonMode: 'text',
@@ -57,6 +61,9 @@ const DEFAULT_STORE = Object.freeze({
     // safe ceiling (the model stops at end_turn when done, so headroom is free).
     claudeMaxTokens: 16000,
     claudeTokens: null, // OAuth token set — never sent to the browser
+    // GitHub token (fine-grained PAT) for the code-writer's git clone/push against
+    // the configured repo. Stored server-side only; masked in responses, never logged.
+    githubToken: '',
     langsmithApiKey: '', // LangSmith tracing key
     langsmithProject: 'linear-manager',
     langsmithEndpoint: 'https://api.smith.langchain.com',
@@ -150,6 +157,21 @@ function getSettings() {
 function patchSettings(patch) {
   const current = readStore();
   return writeStore({ ...current, settings: { ...current.settings, ...patch } });
+}
+
+/** Find a business by its linked Linear project id (for repo resolution). */
+function getBusinessByProjectId(projectId) {
+  if (!projectId) return null;
+  return readStore().businesses.find((b) => b.projectId === projectId) || null;
+}
+
+/** Server-side GitHub token (never returned raw to the browser). */
+function getGithubToken() {
+  return readStore().settings.githubToken || '';
+}
+
+function setGithubToken(githubToken) {
+  return patchSettings({ githubToken: String(githubToken || '') });
 }
 
 /* --------------------------- Codex OAuth tokens ------------------------- */
@@ -294,6 +316,9 @@ module.exports = {
   setApiKey,
   getSettings,
   patchSettings,
+  getGithubToken,
+  setGithubToken,
+  getBusinessByProjectId,
   getCodexTokens,
   setCodexTokens,
   clearCodexTokens,

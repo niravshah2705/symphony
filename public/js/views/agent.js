@@ -23,6 +23,7 @@ export async function renderAgent(view) {
   clear(view).append(
     el('div', { class: 'page-head' }, [
       el('h1', {}, 'Agent'),
+      activeToggle(status, view),
       el('a', { class: 'btn', href: '#/settings' }, '⚙ Configure in Settings'),
     ])
   );
@@ -47,6 +48,30 @@ export async function renderAgent(view) {
       /* transient */
     }
   }, 4000);
+}
+
+/* ------------------------- Active / inactive toggle --------------------- */
+
+/**
+ * Agent Active/Inactive switch. "Active" = the scheduler runs on its cadence;
+ * toggling flips `scheduleEnabled` in the agent config and re-renders.
+ */
+function activeToggle(status, view) {
+  const active = Boolean(status.scheduleEnabled);
+  const btn = el('button', { class: active ? 'primary' : 'danger' }, active ? '● Active' : '○ Inactive');
+  btn.title = active ? 'Agent is active — click to deactivate' : 'Agent is inactive — click to activate';
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      await api.saveAgentConfig({ scheduleEnabled: !active });
+      toast(active ? 'Agent deactivated.' : 'Agent activated.', 'ok');
+      renderAgent(clear(view));
+    } catch (err) {
+      toast(err.message, 'err');
+      btn.disabled = false;
+    }
+  });
+  return btn;
 }
 
 /* ------------------------------ Status bar ------------------------------ */
@@ -103,14 +128,33 @@ async function renderEnrichCard(host, { assumedRole, labels }) {
   }
 
   card.append(
-    el('p', { class: 'muted', style: 'font-size:13px' }, [
-      'Projects labeled ',
-      el('strong', {}, labelText),
-      ' are picked up automatically on the schedule: unfit ones are marked ',
-      el('strong', {}, 'aifail'),
-      ', and completed ones (issues created) become ',
-      el('strong', {}, 'aidone'),
-      '. Interrupted projects resume on restart. Change labels & cadence in ',
+    el('p', { class: 'muted', style: 'font-size:13px;margin-bottom:4px' }, 'Two jobs run automatically:'),
+    el('ul', { class: 'muted', style: 'font-size:13px;margin:0 0 10px;padding-left:18px' }, [
+      el('li', {}, [
+        el('strong', {}, '1. Planning'),
+        ' — projects labeled ',
+        el('strong', {}, labelText),
+        ' are planned into software-design issues, then relabeled ',
+        el('strong', {}, 'aiplanned'),
+        ' (unfit projects become ',
+        el('strong', {}, 'aifail'),
+        '). Run it on the schedule or with ',
+        el('strong', {}, 'Run now'),
+        ' below.',
+      ]),
+      el('li', {}, [
+        el('strong', {}, '2. Coding'),
+        ' — the code-writer monitor takes ',
+        el('strong', {}, 'aiplanned'),
+        " projects and works each milestone's issues in creation order (skipping dependency-blocked ones), moving every issue to ",
+        el('strong', {}, 'Done'),
+        ' by merging its PR. A fully coded project becomes ',
+        el('strong', {}, 'aidone'),
+        '.',
+      ]),
+    ]),
+    el('p', { class: 'muted', style: 'font-size:13px;margin:0' }, [
+      'Interrupted work resumes on restart. Change labels & cadence in ',
       el('a', { href: '#/settings', style: 'color:var(--accent-2)' }, 'Settings'),
       '.',
     ])

@@ -212,6 +212,22 @@ async function applyAidone(apiKey, { project, onStep }) {
 }
 
 /**
+ * Mark a project as PLANNED: switch its label to `aiplanned` (replacing the enrich
+ * label). This both drops the project out of the planning set and signals the
+ * coding flow to start working its tasks in dependency order.
+ */
+async function applyAiplanned(apiKey, { project, onStep }) {
+  const step = typeof onStep === 'function' ? onStep : () => {};
+  try {
+    const label = await linear.getOrCreateProjectLabel(apiKey, 'aiplanned');
+    await linear.setProjectLabels(apiKey, project.id, [label.id]);
+    step('Set project label to "aiplanned".');
+  } catch (err) {
+    step(`aiplanned label failed: ${errMsg(err)}`, 'warn');
+  }
+}
+
+/**
  * Handle a project the business-owner agent judged NOT viable: append a note to
  * the project description and switch its label to `aifail` (replacing existing
  * labels so it leaves the enrichment set and is not retried).
@@ -247,4 +263,4 @@ function errMsg(err) {
   return err && err.message ? err.message : String(err);
 }
 
-module.exports = { applyPlan, applyIssuesForMilestones, applyAidone, applyAifail };
+module.exports = { applyPlan, applyIssuesForMilestones, applyAidone, applyAiplanned, applyAifail };

@@ -5,78 +5,97 @@ const store = require('../store');
 const log = require('../logger');
 const linear = require('../linear');
 const { resolveLlm } = require('./llm');
-const { runCoder } = require('./coder');
+const { runPlannedCoder } = require('./coder');
+const { applyAidone } = require('./apply');
 
 /**
- * Board monitor for the code-writer agent — a focused equivalent of Symphony's
- * Orchestrator. On a fixed cadence it polls the tracker for active-state tickets
- * and dispatches a code-writer run per ticket, up to a global concurrency cap.
+ * Board monitor for the code-writer — the AIPLANNED flow.
  *
- * Single-writer model: all scheduling state lives in this module's `running`
- * map and is only mutated from the (serialized) poll tick + run callbacks, so a
- * ticket is never dispatched twice concurrently. State is in-memory only and
- * re-derived from the tracker on restart (no DB), matching Symphony's design.
+ * On a fixed cadence it finds projects labelled `aiplanned` (set by the planner)
+ * and works their tasks (issues) in CREATION ORDER, honoring dependencies:
+ *   - a task blocked by a not-yet-Done issue is skipped until the blocker lands,
+ *   - at most ONE task per project runs at a time (they share the project's
+ *     monorepo workspace at ~/git/workspace/<project>/, each on its own branch),
+ *   - across different projects, up to `maxConcurrent` run in parallel,
+ *   - when a project has no open tasks left, it is marked `aidone`.
  *
- * The full Symphony retry/backoff, per-state caps, stall detection, and SSH
- * fan-out are intentionally omitted from this reference monitor.
+ * Single-writer model: `running` is only mutated from the serialized poll tick +
+ * run callbacks, so a task is never dispatched twice. State is in-memory only.
  */
 
-// issueId -> { identifier, startedAt }
+// issueId -> { identifier, projectId, startedAt }
 const running = new Map();
 let timer = null;
 let started = false;
 
-// Active-state issues carrying the AI task label (Step 3). inverseRelations of
-// type `blocks` are the issues that block THIS one (see apply.js: a dependency is
-// created as from `blocks` to, so the `to` issue is blocked until `from` is Done).
-const ACTIVE_ISSUES_QUERY = `
-  query ActiveIssues($states: [String!], $labels: [String!], $first: Int!) {
+const PLANNED_PROJECTS_QUERY = `
+  query PlannedProjects($label: String!, $first: Int!) {
+    projects(first: $first, filter: { labels: { name: { eq: $label } } }) {
+      nodes { id name }
+    }
+  }`;
+
+// Open (non-terminal) issues for aiplanned projects, with their blockers.
+const PLANNED_TASKS_QUERY = `
+  query PlannedTasks($label: String!, $first: Int!) {
     issues(first: $first, filter: {
-      state: { name: { in: $states } },
-      labels: { name: { in: $labels } }
+      project: { labels: { name: { eq: $label } } },
+      state: { type: { nin: ["completed", "canceled"] } }
     }) {
       nodes {
-        id identifier title url
-        state { name }
-        labels { nodes { name } }
-        inverseRelations(first: 25) {
-          nodes { type issue { id identifier state { type name } } }
-        }
+        id identifier title description url createdAt
+        state { name type }
+        project { id name }
+        inverseRelations(first: 25) { nodes { type issue { id identifier state { type } } } }
       }
     }
   }`;
 
-/** A blocker is satisfied once it is completed or canceled. */
 function isDoneState(state) {
   const t = state && state.type;
   return t === 'completed' || t === 'canceled';
 }
 
-/** True when the issue is blocked by another issue that is not yet Done. */
-function blockedBy(node) {
+/** Identifiers of not-yet-Done issues that block this task. */
+function blockers(node) {
   const inv = (node.inverseRelations && node.inverseRelations.nodes) || [];
   return inv
     .filter((r) => r.type === 'blocks' && r.issue && !isDoneState(r.issue.state))
     .map((r) => r.issue.identifier || r.issue.id);
 }
 
-/** Fetch active-state, AI-labeled issues; annotate each with its unmet blockers. */
-async function fetchActiveIssues(apiKey) {
-  const data = await linear.linearRequest(apiKey, ACTIVE_ISSUES_QUERY, {
-    states: CONFIG.CODER.activeStates,
-    labels: [CONFIG.CODER.taskLabel],
-    first: 50,
-  });
+async function fetchPlannedProjects(apiKey) {
+  const data = await linear.linearRequest(apiKey, PLANNED_PROJECTS_QUERY, { label: CONFIG.CODER.plannedLabel, first: CONFIG.PAGE_SIZE });
+  return (data && data.projects && data.projects.nodes) || [];
+}
+
+/** Open tasks across aiplanned projects, grouped by project, each sorted by createdAt asc. */
+async function fetchPlannedTasks(apiKey) {
+  const data = await linear.linearRequest(apiKey, PLANNED_TASKS_QUERY, { label: CONFIG.CODER.plannedLabel, first: 250 });
   const nodes = (data && data.issues && data.issues.nodes) || [];
-  return nodes.map((n) => ({
-    id: n.id,
-    identifier: n.identifier,
-    title: n.title,
-    url: n.url,
-    state: n.state && n.state.name,
-    labels: ((n.labels && n.labels.nodes) || []).map((l) => l.name),
-    blockers: blockedBy(n),
-  }));
+  const byProject = new Map();
+  for (const n of nodes) {
+    const pid = n.project && n.project.id;
+    if (!pid) continue;
+    const task = {
+      id: n.id,
+      identifier: n.identifier,
+      title: n.title,
+      description: n.description,
+      url: n.url,
+      createdAt: n.createdAt,
+      state: n.state && n.state.name,
+      project: { id: pid, name: n.project.name },
+      blockers: blockers(n),
+    };
+    if (!byProject.has(pid)) byProject.set(pid, []);
+    byProject.get(pid).push(task);
+  }
+  // Creation order within each project.
+  for (const tasks of byProject.values()) {
+    tasks.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  }
+  return byProject;
 }
 
 function buildKeys(settings) {
@@ -89,15 +108,21 @@ function buildKeys(settings) {
   };
 }
 
-/** Dispatch a single ticket run (fire-and-forget; releases its slot on completion). */
-function dispatch(issue, llm, apiKey, keys) {
-  running.set(issue.id, { identifier: issue.identifier, startedAt: Date.now() });
-  const step = (m) => log.info(`[coder ${issue.identifier}] ${m}`);
+/** Dispatch one planned task (fire-and-forget; releases its slot on completion). */
+function dispatch(task, ctx) {
+  running.set(task.id, { identifier: task.identifier, projectId: task.project.id, startedAt: Date.now() });
+  const step = (m) => log.info(`[coder ${task.identifier}] ${m}`);
   Promise.resolve()
-    .then(() => runCoder({ issue, llm, apiKey, keys, onStep: step }))
-    .then((r) => log.info(`[coder ${issue.identifier}] done: ${String(r.finalText || '').slice(0, 160)}`))
-    .catch((err) => log.error(`[coder ${issue.identifier}] failed: ${err && err.message ? err.message : err}`))
-    .finally(() => running.delete(issue.id));
+    .then(() => runPlannedCoder({ issue: task, project: task.project, llm: ctx.llm, apiKey: ctx.apiKey, keys: ctx.keys, githubToken: ctx.githubToken, onStep: step }))
+    .then((r) => log.info(`[coder ${task.identifier}] done: ${String(r.finalText || '').slice(0, 160)}`))
+    .catch((err) => log.error(`[coder ${task.identifier}] failed: ${err && err.message ? err.message : err}`))
+    .finally(() => running.delete(task.id));
+}
+
+/** True when this project already has a task in flight (monorepo workspace is shared). */
+function projectBusy(projectId) {
+  for (const r of running.values()) if (r.projectId === projectId) return true;
+  return false;
 }
 
 /** One poll+dispatch cycle. Serialized (never overlaps itself). */
@@ -114,24 +139,42 @@ async function pollOnce() {
     log.warn(`Coder poll skipped: ${err && err.message ? err.message : err}`);
     return;
   }
-  let issues;
+
+  let projects;
+  let tasksByProject;
   try {
-    issues = await fetchActiveIssues(settings.linearApiKey);
+    projects = await fetchPlannedProjects(settings.linearApiKey);
+    tasksByProject = await fetchPlannedTasks(settings.linearApiKey);
   } catch (err) {
-    log.warn(`Coder poll: issue fetch failed: ${err && err.message ? err.message : err}`);
+    log.warn(`Coder poll: fetch failed: ${err && err.message ? err.message : err}`);
     return;
   }
-  const keys = buildKeys(settings);
-  for (const issue of issues) {
-    if (running.size >= CONFIG.CODER.maxConcurrent) break; // global cap
-    if (running.has(issue.id)) continue; // already claimed (single-writer)
-    // Dependency avoidance: never start an issue still blocked by a non-Done issue.
-    if (issue.blockers && issue.blockers.length) {
-      log.info(`Skipping ${issue.identifier}: blocked by ${issue.blockers.join(', ')}.`);
+
+  const ctx = { llm, apiKey: settings.linearApiKey, keys: buildKeys(settings), githubToken: store.getGithubToken() };
+
+  for (const project of projects) {
+    const tasks = tasksByProject.get(project.id) || [];
+    // No open tasks left → the project is fully coded; mark it aidone (once).
+    if (!tasks.length) {
+      if (!projectBusy(project.id)) {
+        applyAidone(settings.linearApiKey, { project, onStep: (m) => log.info(`[coder ${project.name}] ${m}`) })
+          .then(() => log.info(`Project "${project.name}" fully coded → aidone.`))
+          .catch((err) => log.warn(`aidone for "${project.name}" failed: ${err && err.message ? err.message : err}`));
+      }
       continue;
     }
-    log.info(`Dispatching code-writer for ${issue.identifier} (${issue.state}) via ${CONFIG.CODER.backend} backend.`);
-    dispatch(issue, llm, settings.linearApiKey, keys);
+    if (running.size >= CONFIG.CODER.maxConcurrent) break; // global cap
+    if (projectBusy(project.id)) continue; // one task per project (shared monorepo workspace)
+
+    // Next unblocked, not-already-running task in creation order.
+    const next = tasks.find((t) => !running.has(t.id) && (!t.blockers || t.blockers.length === 0));
+    if (!next) {
+      const head = tasks.find((t) => t.blockers && t.blockers.length);
+      if (head) log.info(`Project "${project.name}": next task ${head.identifier} blocked by ${head.blockers.join(', ')}.`);
+      continue;
+    }
+    log.info(`Dispatching ${next.identifier} ("${project.name}", created ${next.createdAt}) via ${CONFIG.CODER.backend} backend.`);
+    dispatch(next, ctx);
   }
 }
 
@@ -145,7 +188,7 @@ function start() {
     });
   };
   tick();
-  log.info(`Code-writer board monitor started (every ${CONFIG.CODER.pollIntervalMs} ms, max ${CONFIG.CODER.maxConcurrent} concurrent).`);
+  log.info(`Code-writer monitor started (aiplanned flow, every ${CONFIG.CODER.pollIntervalMs} ms, max ${CONFIG.CODER.maxConcurrent} concurrent).`);
   return { started: true };
 }
 
@@ -153,7 +196,7 @@ function stop() {
   started = false;
   if (timer) clearTimeout(timer);
   timer = null;
-  log.info('Code-writer board monitor stopped.');
+  log.info('Code-writer monitor stopped.');
   return { started: false };
 }
 
@@ -161,12 +204,11 @@ function stop() {
 function status() {
   return {
     running: started,
-    activeStates: CONFIG.CODER.activeStates,
-    taskLabel: CONFIG.CODER.taskLabel,
+    plannedLabel: CONFIG.CODER.plannedLabel,
     backend: CONFIG.CODER.backend,
     maxConcurrent: CONFIG.CODER.maxConcurrent,
     inFlight: [...running.values()].map((r) => ({ identifier: r.identifier, startedAt: r.startedAt })),
   };
 }
 
-module.exports = { start, stop, status, pollOnce, fetchActiveIssues };
+module.exports = { start, stop, status, pollOnce, fetchPlannedProjects, fetchPlannedTasks };

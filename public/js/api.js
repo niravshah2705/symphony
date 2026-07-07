@@ -48,6 +48,8 @@ export const api = {
   saveLmstudio: (payload) => request('/settings/lmstudio', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLangsmith: (payload) =>
     request('/settings/langsmith', { method: 'PUT', body: JSON.stringify(payload) }),
+  saveGithubToken: (githubToken) =>
+    request('/settings/github', { method: 'PUT', body: JSON.stringify({ githubToken }) }),
   getOllamaModels: () => request('/agent/ollama-models'),
   getLmstudioModels: () => request('/agent/lmstudio-models'),
 

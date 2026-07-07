@@ -68,6 +68,11 @@ function isDir(p) {
 function buildBackend(kind, rootDir, opts = {}) {
   const { FilesystemBackend, LocalShellBackend } = require('deepagents');
   if (kind === 'shell') {
+    // When an explicit env is supplied (e.g. GH_TOKEN for the credential helper),
+    // pass the full env and disable inheritEnv so it isn't clobbered.
+    if (opts.env) {
+      return new LocalShellBackend({ rootDir, env: opts.env, inheritEnv: false, timeout: opts.timeout || 600 });
+    }
     return new LocalShellBackend({ rootDir, inheritEnv: true, timeout: opts.timeout || 600 });
   }
   return new FilesystemBackend({ rootDir });
@@ -100,14 +105,14 @@ function prepareScratch(workflow) {
  * `{ backend, skillPaths }` (the coder, rooted at its git workspace) or a
  * `rootDir` for the framework to root a fresh backend + install skills into.
  */
-function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, extraTools = [] }) {
+function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, extraTools = [], env }) {
   const { createDeepAgent } = require('deepagents');
   let skills = skillPaths;
   let be = backend;
   if (!be) {
     if (!rootDir) throw new Error('buildAgent needs a backend or a rootDir.');
     skills = skills || installSkills(rootDir, workflow.skills);
-    be = buildBackend(workflow.backend, rootDir, { timeout: workflow.shellTimeoutSec });
+    be = buildBackend(workflow.backend, rootDir, { timeout: workflow.shellTimeoutSec, env });
   }
   const tools = [...toolRegistry.buildMany(workflow.tools, ctx), ...(extraTools || [])];
   const systemPrompt = typeof workflow.systemPrompt === 'function' ? workflow.systemPrompt(ctx) : workflow.systemPrompt;
