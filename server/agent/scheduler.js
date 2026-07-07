@@ -39,13 +39,14 @@ const runtime = {
 
 /** Queue a project for enrichment, skipping duplicates already in flight. */
 function enqueue({ projectId, projectName, assumedRole }) {
-  const active = store.listJobs().some(
+  const active = store.listJobs('enrichment').some(
     (j) => j.projectId === projectId && (j.status === 'pending' || j.status === 'running')
   );
   if (active) return null;
 
   const job = {
     id: crypto.randomUUID(),
+    kind: 'enrichment',
     projectId,
     projectName: projectName || projectId,
     status: 'pending',
@@ -140,7 +141,7 @@ async function discover({ apiKey, assumedRole, config }) {
   const candidates = await linear.getProjectsWithLabels(apiKey, config.enrichLabels);
   const inFlight = new Set(
     store
-      .listJobs()
+      .listJobs('enrichment')
       .filter((j) => j.status === 'pending' || j.status === 'running')
       .map((j) => j.projectId)
   );
@@ -210,7 +211,7 @@ async function processPending() {
     }
 
     // 2. Process the pending queue, bounded by config.
-    const pending = store.listJobs().filter((j) => j.status === 'pending');
+    const pending = store.listJobs('enrichment').filter((j) => j.status === 'pending');
     const batch = pending.slice(0, Math.max(1, config.maxProjectsPerRun));
     const concurrency = Math.max(1, Math.min(config.parallelProcessing || 1, batch.length || 1));
 
@@ -277,7 +278,7 @@ function startScheduler() {
 
 function getStatus() {
   const config = store.getAgentConfig();
-  const jobs = store.listJobs();
+  const jobs = store.listJobs('enrichment');
   return {
     intervalMinutes: CONFIG.INTERVAL_OPTIONS.includes(Number(config.intervalMinutes))
       ? Number(config.intervalMinutes)

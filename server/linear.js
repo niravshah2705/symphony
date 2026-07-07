@@ -137,6 +137,49 @@ const ISSUE_UPDATE_STATE_MUTATION = `
   }
 `;
 
+// General issue update — state and/or labels in one mutation (labelIds REPLACES
+// the full set, so callers append to the issue's existing labels).
+const ISSUE_UPDATE_MUTATION = `
+  mutation IssueUpdateFull($id: String!, $input: IssueUpdateInput!) {
+    issueUpdate(id: $id, input: $input) {
+      success
+      issue { id identifier state { id name type } labels { nodes { id name } } }
+    }
+  }
+`;
+
+// A team's workflow states (id + Linear `type`: backlog|unstarted|started|completed|canceled).
+const TEAM_STATES_QUERY = `
+  query TeamStates($id: String!) {
+    team(id: $id) {
+      id
+      states(first: 50) { nodes { id name type position } }
+    }
+  }
+`;
+
+// Issue detail needed to drive state/label transitions (team + current labels/state).
+const ISSUE_DETAIL_QUERY = `
+  query IssueDetail($id: String!) {
+    issue(id: $id) {
+      id
+      identifier
+      state { id name type }
+      team { id name key }
+      labels { nodes { id name } }
+    }
+  }
+`;
+
+const COMMENT_CREATE_MUTATION = `
+  mutation CommentCreate($input: CommentCreateInput!) {
+    commentCreate(input: $input) {
+      success
+      comment { id url }
+    }
+  }
+`;
+
 const PROJECT_CREATE_MUTATION = `
   mutation ProjectCreate($input: ProjectCreateInput!) {
     projectCreate(input: $input) {
@@ -285,6 +328,54 @@ async function updateIssueState(apiKey, issueId, stateId) {
     throw new LinearError('Failed to move the issue.', 400);
   }
   return data.issueUpdate.issue;
+}
+
+/** Update an issue's state and/or labels (input passed straight to IssueUpdateInput). */
+async function updateIssue(apiKey, issueId, input) {
+  const data = await linearRequest(apiKey, ISSUE_UPDATE_MUTATION, { id: issueId, input });
+  if (!data.issueUpdate || !data.issueUpdate.success) {
+    throw new LinearError('Failed to update the issue.', 400);
+  }
+  return data.issueUpdate.issue;
+}
+
+/** Workflow states for a team (each carries a Linear `type`). */
+async function getTeamStates(apiKey, teamId) {
+  const data = await linearRequest(apiKey, TEAM_STATES_QUERY, { id: teamId });
+  if (!data.team) throw new LinearError('Team not found.', 404);
+  return (data.team.states && data.team.states.nodes) || [];
+}
+
+/** Issue detail (team + current state + labels) used to drive transitions. */
+async function getIssueDetail(apiKey, issueId) {
+  const data = await linearRequest(apiKey, ISSUE_DETAIL_QUERY, { id: issueId });
+  if (!data.issue) throw new LinearError('Issue not found.', 404);
+  return data.issue;
+}
+
+/**
+ * Pick a workflow state by Linear `type` (backlog|unstarted|started|completed|
+ * canceled), preferring one whose name matches `preferName`, else the lowest
+ * `position` of that type. Returns null when no state of that type exists.
+ */
+function pickStateByType(states, type, preferName) {
+  const ofType = (states || [])
+    .filter((s) => s.type === type)
+    .sort((a, b) => (a.position || 0) - (b.position || 0));
+  if (preferName) {
+    const named = ofType.find((s) => (s.name || '').toLowerCase() === String(preferName).toLowerCase());
+    if (named) return named;
+  }
+  return ofType[0] || null;
+}
+
+/** Post a comment on an issue. */
+async function createComment(apiKey, { issueId, body }) {
+  const data = await linearRequest(apiKey, COMMENT_CREATE_MUTATION, { input: { issueId, body } });
+  if (!data.commentCreate || !data.commentCreate.success) {
+    throw new LinearError('Failed to create comment.', 400);
+  }
+  return data.commentCreate.comment;
 }
 
 // Linear's project `description` (short summary) is capped; the long body goes
@@ -541,6 +632,11 @@ module.exports = {
   getProjectMilestones,
   getProjectIssues,
   updateIssueState,
+  updateIssue,
+  getTeamStates,
+  getIssueDetail,
+  pickStateByType,
+  createComment,
   createProject,
   getUsers,
   getOpenProjects,

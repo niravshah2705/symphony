@@ -255,6 +255,70 @@ async function applyAifail(apiKey, { project, reason, onStep }) {
   return { aifail: true, reason, milestonesCreated: 0, issuesCreated: 0, dependenciesCreated: 0, warnings: [] };
 }
 
+/* --------------------- Coder issue state transitions -------------------- */
+
+/**
+ * Move a coder task to "In Progress" (a `started` state) before the agent runs.
+ * Idempotent: an issue already started/completed is left as-is. Returns the
+ * resulting state (or null if the team has no started state).
+ */
+async function startIssue(apiKey, { issueId, onStep }) {
+  const step = typeof onStep === 'function' ? onStep : () => {};
+  const detail = await linear.getIssueDetail(apiKey, issueId);
+  const type = detail.state && detail.state.type;
+  if (type === 'started' || type === 'completed' || type === 'canceled') {
+    return detail.state || null; // already in/after progress — nothing to do
+  }
+  const target = linear.pickStateByType(await linear.getTeamStates(apiKey, detail.team.id), 'started', 'In Progress');
+  if (!target) {
+    step('No "In Progress" workflow state on this team; leaving state unchanged.', 'warn');
+    return detail.state || null;
+  }
+  await linear.updateIssue(apiKey, issueId, { stateId: target.id });
+  step(`Moved issue to "${target.name}".`);
+  return target;
+}
+
+/**
+ * Finish a coder task per the agent's verdict: move it to Done (a `completed`
+ * state) and stamp the outcome label on the ISSUE — `aidone` when completed,
+ * `aifail` when insufficient — creating the label if missing and appending it to
+ * the issue's existing labels. An insufficient reason is posted as a comment.
+ */
+async function finishIssue(apiKey, { issueId, outcome, reason, onStep }) {
+  const step = typeof onStep === 'function' ? onStep : () => {};
+  const labelName = outcome === 'completed' ? 'aidone' : 'aifail';
+  const detail = await linear.getIssueDetail(apiKey, issueId);
+
+  // Resolve (create-if-missing) the outcome label, appended to existing labels.
+  let labelIds;
+  try {
+    const label = await linear.getOrCreateIssueLabel(apiKey, labelName);
+    const current = (detail.labels && detail.labels.nodes ? detail.labels.nodes : []).map((l) => l.id);
+    labelIds = [...new Set([...current, label.id])];
+  } catch (err) {
+    step(`Could not resolve "${labelName}" issue label: ${errMsg(err)}`, 'warn');
+  }
+
+  const done = linear.pickStateByType(await linear.getTeamStates(apiKey, detail.team.id), 'completed', 'Done');
+  const input = {};
+  if (done) input.stateId = done.id;
+  if (labelIds) input.labelIds = labelIds;
+  if (Object.keys(input).length) await linear.updateIssue(apiKey, issueId, input);
+  step(`Marked issue ${done ? `"${done.name}"` : '(no Done state found)'} + label "${labelName}".`);
+
+  // Record the reason a task was judged insufficient (for the human triaging it).
+  if (outcome !== 'completed' && reason) {
+    try {
+      await linear.createComment(apiKey, { issueId, body: `**AI coder — insufficient to complete.**\n\n${reason}` });
+      step('Posted insufficiency reason as a comment.');
+    } catch (err) {
+      step(`Comment failed: ${errMsg(err)}`, 'warn');
+    }
+  }
+  return { labelName, done: Boolean(done) };
+}
+
 function safeAt(matrix, i, j) {
   return matrix[i] && matrix[i][j] ? matrix[i][j] : null;
 }
@@ -263,4 +327,4 @@ function errMsg(err) {
   return err && err.message ? err.message : String(err);
 }
 
-module.exports = { applyPlan, applyIssuesForMilestones, applyAidone, applyAiplanned, applyAifail };
+module.exports = { applyPlan, applyIssuesForMilestones, applyAidone, applyAiplanned, applyAifail, startIssue, finishIssue };

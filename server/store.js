@@ -228,8 +228,14 @@ function setAgentConfig(patch) {
 
 /* --------------------------- Jobs --------------------------------------- */
 
-function listJobs() {
-  return readStore().jobs;
+/**
+ * All jobs, or — when `kind` is given — only jobs of that kind. Legacy jobs
+ * without a `kind` are treated as 'enrichment' (the original job type).
+ */
+function listJobs(kind) {
+  const jobs = readStore().jobs;
+  if (!kind) return jobs;
+  return jobs.filter((j) => (j.kind || 'enrichment') === kind);
 }
 
 function addJob(job) {

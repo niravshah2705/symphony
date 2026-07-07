@@ -16,6 +16,7 @@ const coderRoutes = require('./routes/coder');
 const { router: codexRoutes, callback: codexCallback } = require('./routes/codex');
 const { router: claudeRoutes } = require('./routes/claude');
 const scheduler = require('./agent/scheduler');
+const coderMonitor = require('./agent/coder-orchestrator');
 
 const app = express();
 
@@ -53,6 +54,10 @@ app.listen(CONFIG.PORT, () => {
   log.info(`AI Fleet running at http://localhost:${CONFIG.PORT}`);
   // Start the enrichment scheduler (reconciles interrupted jobs on boot).
   scheduler.startScheduler();
+  // Start the code-writer board monitor so that once the planner marks a project
+  // `aiplanned`, its coding tasks are picked up automatically (no manual
+  // /api/coder/monitor start). Idempotent; each poll self-guards on missing keys.
+  coderMonitor.start();
 });
 
 module.exports = app;

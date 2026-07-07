@@ -212,12 +212,33 @@ async function renderEnrichCard(host, { assumedRole, labels }) {
 
 function renderJobs(host, jobs) {
   clear(host);
+  const all = jobs || [];
+  const enrichment = all.filter((j) => (j.kind || 'enrichment') === 'enrichment');
+  const coding = all.filter((j) => j.kind === 'coding');
+  host.append(
+    jobsCard(host, {
+      title: 'Enrichment Jobs',
+      jobs: enrichment,
+      empty: 'No jobs yet. Matching projects are enriched automatically on the schedule.',
+      showClear: all.length > 0,
+    }),
+    jobsCard(host, {
+      title: 'Coding Jobs',
+      jobs: coding,
+      empty: 'No coding jobs yet. aiplanned projects are coded automatically.',
+      showClear: false,
+    })
+  );
+}
+
+/** One card listing jobs of a single kind (enrichment or coding). */
+function jobsCard(host, { title, jobs, empty, showClear }) {
   const card = el('div', { class: 'card', style: 'margin-top:16px' });
   card.append(
     el('div', { class: 'row' }, [
-      el('h3', { style: 'margin:0' }, 'Enrichment Jobs'),
+      el('h3', { style: 'margin:0' }, title),
       el('span', { class: 'spacer' }),
-      jobs.length
+      showClear
         ? el('button', {
             onclick: async () => {
               await api.clearFinishedJobs();
@@ -231,26 +252,48 @@ function renderJobs(host, jobs) {
   );
 
   if (!jobs.length) {
-    card.append(el('div', { class: 'muted', style: 'padding:12px 0' }, 'No jobs yet. Matching projects are enriched automatically on the schedule.'));
-    host.append(card);
-    return;
+    card.append(el('div', { class: 'muted', style: 'padding:12px 0' }, empty));
+    return card;
   }
 
   const rows = jobs.map((job) => jobRow(job, host));
   card.append(el('div', { style: 'margin-top:10px;display:grid;gap:8px' }, rows));
-  host.append(card);
+  return card;
 }
 
-function jobRow(job, host) {
+/** Human-readable one-line summary for an enrichment job. */
+function enrichmentSummary(job) {
   const s = job.summary;
-  const steps = job.steps || [];
-  const summaryText = s && s.aifail
+  return s && s.aifail
     ? `⚠ aifail — ${s.reason || 'not a fit for a software-driven solution'}`
     : s && s.resumed
     ? `↻ resumed · ${s.issuesCreated} tasks created → aidone`
     : s
     ? `${s.milestonesCreated} milestones · ${s.issuesCreated} issues · ${s.dependenciesCreated} deps${s.warnings && s.warnings.length ? ` · ${s.warnings.length} warning(s)` : ''} → aidone`
     : job.error || (job.status === 'pending' ? 'Waiting for next scheduler tick…' : job.status === 'running' ? 'Enriching…' : '');
+}
+
+/** Human-readable one-line summary for a coding job. */
+function codingSummary(job) {
+  const s = job.summary;
+  if (s && s.coding) {
+    const outcome = s.outcome === 'completed' ? '✓ aidone' : s.outcome === 'insufficient' ? '⚠ aifail' : '';
+    const merged = s.pr ? ' · PR merged' : '';
+    const branch = s.branch ? ` · branch ${s.branch}` : '';
+    const tail = s.reason || (s.finalText || '').slice(0, 140);
+    return `${outcome}${merged}${branch}${tail ? ` · ${tail}` : ''}`.trim() || 'done';
+  }
+  return job.error || (job.status === 'running' ? 'Coding…' : job.status === 'pending' ? 'Queued…' : '');
+}
+
+function jobRow(job, host) {
+  const steps = job.steps || [];
+  const coding = job.kind === 'coding';
+  const heading = coding ? `${job.taskIdentifier || 'task'}${job.taskTitle ? ` · ${job.taskTitle}` : ''}` : job.projectName;
+  const summaryText = coding ? `${job.projectName} — ${codingSummary(job)}` : enrichmentSummary(job);
+  const linkBtn = coding
+    ? job.taskUrl && el('a', { class: 'btn', href: job.taskUrl, target: '_blank' }, '↗ Ticket')
+    : job.traceUrl && el('a', { class: 'btn', href: job.traceUrl, target: '_blank' }, '🔎 Trace');
 
   const stepsPanel = el(
     'div',
@@ -274,13 +317,13 @@ function jobRow(job, host) {
   const topRow = el('div', { class: 'biz-row', style: 'margin:0' }, [
     statusBadge(job.status),
     el('div', {}, [
-      el('div', { style: 'font-weight:600' }, job.projectName),
+      el('div', { style: 'font-weight:600' }, heading),
       el('div', { class: 'muted', style: 'font-size:12px' }, summaryText),
     ]),
     el('div', { class: 'actions' }, [
       job.assumedRole ? el('span', { class: 'muted', style: 'font-size:12px;align-self:center' }, `as ${job.assumedRole.name}`) : null,
       stepsToggle,
-      job.traceUrl ? el('a', { class: 'btn', href: job.traceUrl, target: '_blank' }, '🔎 Trace') : null,
+      linkBtn || null,
       el('button', {
         class: 'danger',
         onclick: async () => {
