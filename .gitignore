@@ -5,6 +5,11 @@ node_modules/
 # Never commit; see docs/DEVELOPER_ONBOARDING.md.
 data/
 
+# Environment / secrets — kept locally for the next run, never pushed.
+.env
+.env.*
+!.env.example
+
 # OS / editor cruft
 .DS_Store
 *.log
