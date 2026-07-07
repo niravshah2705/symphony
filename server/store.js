@@ -159,6 +159,12 @@ function patchSettings(patch) {
   return writeStore({ ...current, settings: { ...current.settings, ...patch } });
 }
 
+/** Find a business by its linked Linear project id (for repo resolution). */
+function getBusinessByProjectId(projectId) {
+  if (!projectId) return null;
+  return readStore().businesses.find((b) => b.projectId === projectId) || null;
+}
+
 /** Server-side GitHub token (never returned raw to the browser). */
 function getGithubToken() {
   return readStore().settings.githubToken || '';
@@ -312,6 +318,7 @@ module.exports = {
   patchSettings,
   getGithubToken,
   setGithubToken,
+  getBusinessByProjectId,
   getCodexTokens,
   setCodexTokens,
   clearCodexTokens,

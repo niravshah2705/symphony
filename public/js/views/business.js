@@ -86,6 +86,7 @@ function openBusinessModal(view, { business = null, projects = [] }) {
 
   const nameInput = el('input', { value: business ? business.name : '', placeholder: 'e.g. OTA' });
   const descInput = el('textarea', { rows: '2', placeholder: 'Optional description' }, business ? business.description || '' : '');
+  const repoInput = el('input', { value: business ? business.repo || '' : '', placeholder: 'owner/name (e.g. my-org/hotel-app)' });
 
   // Link mode: existing project, create new project, or none.
   const linkSelect = el('select', {}, [
@@ -135,7 +136,7 @@ function openBusinessModal(view, { business = null, projects = [] }) {
     const name = nameInput.value.trim();
     if (!name) return toast('Name is required.', 'err');
     const mode = linkSelect.value;
-    const payload = { name, description: descInput.value };
+    const payload = { name, description: descInput.value, repo: repoInput.value.trim() };
 
     if (mode === 'existing') payload.projectId = projectSelect.value || null;
     if (mode === 'new') {
@@ -166,6 +167,11 @@ function openBusinessModal(view, { business = null, projects = [] }) {
       el('div', { class: 'modal-body' }, [
         el('div', { class: 'field' }, [el('label', {}, 'Business name'), nameInput]),
         el('div', { class: 'field' }, [el('label', {}, 'Description'), descInput]),
+        el('div', { class: 'field' }, [
+          el('label', {}, 'Repository (for code generation)'),
+          repoInput,
+          el('p', { class: 'muted', style: 'margin:6px 0 0;font-size:12px' }, 'GitHub owner/name the code-writer will clone for this project. Uses the GitHub token from Settings.'),
+        ]),
         el('div', { class: 'field' }, [el('label', {}, 'Project link'), linkSelect]),
         existingWrap,
         newWrap,

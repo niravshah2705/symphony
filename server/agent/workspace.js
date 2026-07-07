@@ -59,11 +59,21 @@ function sanitizeBranch(name) {
   return b || 'task';
 }
 
-/** Parse a GitHub repo URL (ssh or https) into owner/name + a tokenless https URL. */
+/**
+ * Parse a GitHub repo reference into owner/name + a tokenless https URL. Accepts a
+ * bare `owner/name`, an https URL, or an ssh URL — all resolved to a github.com
+ * https URL (so an operator-supplied repo can't point clones at an arbitrary host).
+ */
 function repoParts(repoUrl) {
-  const m = String(repoUrl || '').match(/[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
-  if (!m) return null;
-  return { owner: m[1], name: m[2], https: `https://github.com/${m[1]}/${m[2]}.git` };
+  const s = String(repoUrl || '').trim();
+  const SEG = '[A-Za-z0-9_.-]+';
+  // Bare "owner/name".
+  let m = s.match(new RegExp(`^(${SEG})/(${SEG}?)(?:\\.git)?$`));
+  if (m) return { owner: m[1], name: m[2], https: `https://github.com/${m[1]}/${m[2]}.git` };
+  // https:// or git@ URL.
+  m = s.match(/[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?$/);
+  if (m) return { owner: m[1], name: m[2], https: `https://github.com/${m[1]}/${m[2]}.git` };
+  return null;
 }
 
 function scrub(text, secret) {

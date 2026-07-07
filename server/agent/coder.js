@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { CONFIG } = require('../config');
+const store = require('../store');
 const { configureTracing } = require('./plan');
 const { prepareWorkspace, preparePlannedWorkspace } = require('./workspace');
 const framework = require('./framework');
@@ -149,12 +150,19 @@ async function runPlannedCoderLocal({ issue, project, llm, apiKey, keys = {}, gi
   const traced = configureTracing(keys);
   const runId = crypto.randomUUID();
 
-  step(`Preparing monorepo workspace for ${project.name || project.id} / ${issue.identifier || issue.id}…`);
+  // Resolve the repo for THIS project (set at project creation), else the global
+  // default. The GitHub token comes from Settings (store), never from the request.
+  const business = store.getBusinessByProjectId(project.id);
+  const repoRef = (business && business.repo) || CONFIG.CODER.repoUrl;
+  const token = githubToken || store.getGithubToken();
+  if (!repoRef) step('No repository configured for this project (set one on the business); using an empty workspace.', 'warn');
+
+  step(`Preparing monorepo workspace for ${project.name || project.id} / ${issue.identifier || issue.id}${repoRef ? ` (repo ${repoRef})` : ''}…`);
   const { workDir, branch, slug, env } = await preparePlannedWorkspace({
-    repoUrl: CONFIG.CODER.repoUrl,
+    repoUrl: repoRef,
     projectSlug: project.name || project.id,
     taskBranch: issue.identifier || issue.id,
-    githubToken,
+    githubToken: token,
     onStep: step,
   });
 

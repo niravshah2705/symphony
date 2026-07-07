@@ -16,6 +16,22 @@ function slugify(name) {
     .replace(/^-+|-+$/g, '') || `biz-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+/**
+ * Normalize an operator-supplied repository reference to a canonical `owner/name`,
+ * accepting a bare `owner/name`, an https GitHub URL, or an ssh GitHub URL. Returns
+ * '' when absent/invalid. Restricting to a GitHub owner/name (allowlist chars) keeps
+ * a project's repo config from becoming an arbitrary-host clone target (SSRF/injection).
+ */
+function normalizeRepo(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const SEG = '[A-Za-z0-9_.-]+';
+  let m = raw.match(new RegExp(`^(${SEG})/(${SEG}?)(?:\\.git)?$`));
+  if (!m) m = raw.match(/github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?$/);
+  if (!m) return '';
+  return `${m[1]}/${m[2]}`;
+}
+
 /** Attach the linked Linear project (name/state) to each business, if any. */
 async function withProjects(businesses) {
   const linkedIds = businesses.map((b) => b.projectId).filter(Boolean);
@@ -83,6 +99,9 @@ router.post(
       name,
       description,
       projectId,
+      // Repository (owner/name) for future code generation — the coding flow clones
+      // this per project. Validated + normalized; '' when not provided.
+      repo: normalizeRepo(body.repo),
       createdAt: new Date().toISOString(),
     };
     if (store.businesses.some((b) => b.id === business.id)) {
@@ -114,6 +133,7 @@ router.put(
         body.projectId !== undefined
           ? (body.projectId ? String(body.projectId) : null)
           : current.projectId,
+      repo: body.repo !== undefined ? normalizeRepo(body.repo) : (current.repo || ''),
     };
 
     const businesses = store.businesses.map((b, i) => (i === index ? updated : b));

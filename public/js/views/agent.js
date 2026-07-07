@@ -128,14 +128,33 @@ async function renderEnrichCard(host, { assumedRole, labels }) {
   }
 
   card.append(
-    el('p', { class: 'muted', style: 'font-size:13px' }, [
-      'Projects labeled ',
-      el('strong', {}, labelText),
-      ' are picked up automatically on the schedule: unfit ones are marked ',
-      el('strong', {}, 'aifail'),
-      ', and completed ones (issues created) become ',
-      el('strong', {}, 'aidone'),
-      '. Interrupted projects resume on restart. Change labels & cadence in ',
+    el('p', { class: 'muted', style: 'font-size:13px;margin-bottom:4px' }, 'Two jobs run automatically:'),
+    el('ul', { class: 'muted', style: 'font-size:13px;margin:0 0 10px;padding-left:18px' }, [
+      el('li', {}, [
+        el('strong', {}, '1. Planning'),
+        ' — projects labeled ',
+        el('strong', {}, labelText),
+        ' are planned into software-design issues, then relabeled ',
+        el('strong', {}, 'aiplanned'),
+        ' (unfit projects become ',
+        el('strong', {}, 'aifail'),
+        '). Run it on the schedule or with ',
+        el('strong', {}, 'Run now'),
+        ' below.',
+      ]),
+      el('li', {}, [
+        el('strong', {}, '2. Coding'),
+        ' — the code-writer monitor takes ',
+        el('strong', {}, 'aiplanned'),
+        " projects and works each milestone's issues in creation order (skipping dependency-blocked ones), moving every issue to ",
+        el('strong', {}, 'Done'),
+        ' by merging its PR. A fully coded project becomes ',
+        el('strong', {}, 'aidone'),
+        '.',
+      ]),
+    ]),
+    el('p', { class: 'muted', style: 'font-size:13px;margin:0' }, [
+      'Interrupted work resumes on restart. Change labels & cadence in ',
       el('a', { href: '#/settings', style: 'color:var(--accent-2)' }, 'Settings'),
       '.',
     ])
