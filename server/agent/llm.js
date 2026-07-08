@@ -89,6 +89,24 @@ function lmstudioPromptBudget(llm) {
   return Math.max(0, budget);
 }
 
+// Dedup key for the "loaded < configured" warning so resolveLlm (called on every
+// scheduler/monitor tick) logs it once per distinct situation, not every tick.
+let lastCtxMismatchWarning = null;
+
+/**
+ * Warn (at most once per distinct model/loaded/declared combination) when LM Studio
+ * loaded a smaller context window than the operator configured.
+ */
+function warnContextMismatch(model, loaded, declared) {
+  if (!(loaded && declared && loaded < declared)) return;
+  const key = `${model}:${loaded}:${declared}`;
+  if (key === lastCtxMismatchWarning) return;
+  lastCtxMismatchWarning = key;
+  logger.warn(
+    `LM Studio: model "${model}" is loaded with only ${loaded} context tokens, but the app is configured for ${declared}. Using ${loaded}. Reload the model in LM Studio with a larger context window (it must exceed the coder's initial prompt, ~10–20k tokens) to run the coder.`
+  );
+}
+
 /**
  * Reconcile the operator-declared context window with the value LM Studio actually
  * loaded the model with. LM Studio fixes n_ctx at load time and may load a model
@@ -516,11 +534,7 @@ async function resolveLlm(settings) {
     const declaredCtx = Number(settings.lmstudioContextWindow) || 0;
     const loadedCtx = await fetchLmstudioLoadedContext(host, settings.lmstudioModel);
     const contextWindow = clampContextWindow(declaredCtx, loadedCtx);
-    if (loadedCtx && declaredCtx && loadedCtx < declaredCtx) {
-      logger.warn(
-        `LM Studio: model "${settings.lmstudioModel}" is loaded with only ${loadedCtx} context tokens, but the app is configured for ${declaredCtx}. Using ${loadedCtx}. Reload the model in LM Studio with a larger context window (and it must exceed the coder's initial prompt, ~10–20k tokens) to run the coder.`
-      );
-    }
+    warnContextMismatch(settings.lmstudioModel, loadedCtx, declaredCtx);
     return {
       provider: 'lmstudio',
       host,
