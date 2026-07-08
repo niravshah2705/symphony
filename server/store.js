@@ -40,10 +40,16 @@ const DEFAULT_STORE = Object.freeze({
     // models not available in Ollama. No credentials; the browser chooses host + model.
     lmstudioHost: 'http://localhost:1234',
     lmstudioModel: '', // e.g. "qwen2.5-7b-instruct" — must support tool-calling; user selects
+    // The context length the model is loaded with in LM Studio (n_ctx). LM Studio
+    // fixes this at load time and does not accept it per-request, so the operator
+    // sets it here to MATCH the loaded context. It bounds max_tokens (below) so we
+    // never request more output than the window holds; the deep-agent prompt is
+    // large (~10k tokens), so load the model with a generous context (>= 16384).
+    lmstudioContextWindow: 8192,
     // max_tokens (output budget). The plan JSON is large and REASONING models (e.g.
     // ornith) spend extra tokens thinking, so 4096 truncates it -> "length limit
     // reached". 16000 matches the Claude ceiling. Configurable in Settings → LLM;
-    // context length itself is set when loading the model in LM Studio.
+    // capped to fit lmstudioContextWindow at request time.
     lmstudioNumTokens: 16000,
     // JSON constraint: 'text' (prompt-driven; most compatible) | 'json_object' | 'json_schema'.
     // Some engines (e.g. the ornith runtime) reject 'json_object', so 'text' is the safe default.

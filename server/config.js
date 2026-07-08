@@ -105,6 +105,25 @@ const CLAUDE = Object.freeze({
 const LMSTUDIO = Object.freeze({
   defaultHost: process.env.LMSTUDIO_HOST || 'http://localhost:1234',
   apiPath: process.env.LMSTUDIO_API_PATH || '/v1',
+  // Per-request timeout for LM Studio calls. The OpenAI SDK default is 600000ms
+  // (10 min); a large local reasoning model (e.g. a 35B) can spend longer than
+  // that on a single coder turn and hit "Request timed out." Default 30 min,
+  // env-overridable. Pair with a small retry count so a genuine timeout isn't
+  // retried 2× (the SDK default), which would triple the wait.
+  requestTimeoutMs: Number(process.env.LMSTUDIO_REQUEST_TIMEOUT_MS) || 30 * 60 * 1000,
+  maxRetries: Number.isFinite(Number(process.env.LMSTUDIO_MAX_RETRIES)) ? Number(process.env.LMSTUDIO_MAX_RETRIES) : 1,
+  // Prompt-budget trimming. The deep agent re-sends its whole (growing) history
+  // each turn; LM Studio's loaded context window is fixed, so an unbounded history
+  // eventually overflows it ("...tokens to keep from the initial prompt is greater
+  // than the context length"). We trim the oldest turns to fit a token budget.
+  //   charsPerToken     — chars→tokens estimate used for the (model-agnostic) budget.
+  //                       Deliberately low (code is token-dense) so we over-estimate
+  //                       tokens and trim conservatively rather than under-count and
+  //                       overflow. Raise for prose-heavy workloads.
+  //   promptMarginTokens — fixed headroom left under the window for chat-template
+  //                       framing the char estimate doesn't see.
+  charsPerToken: Number(process.env.LMSTUDIO_CHARS_PER_TOKEN) || 3,
+  promptMarginTokens: Number(process.env.LMSTUDIO_PROMPT_MARGIN_TOKENS) || 1024,
 });
 
 /**

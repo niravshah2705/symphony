@@ -50,6 +50,111 @@ function lmstudioJsonKwargs(mode) {
   return null;
 }
 
+/**
+ * Output-token budget for LM Studio, bounded by the loaded context window. LM
+ * Studio can't resize n_ctx per request, so the prompt + output must fit the
+ * loaded window. We reserve roughly half the window for the (large) deep-agent
+ * prompt and cap max_tokens at the rest, so a request never asks for more output
+ * than the context can hold (which triggers "n_keep >= n_ctx" 400s).
+ */
+function lmstudioMaxTokens(llm) {
+  const ctx = Number(llm.contextWindow) || 8192;
+  const want = Number(llm.numTokens) || 4096;
+  return Math.max(256, Math.min(want, Math.floor(ctx / 2)));
+}
+
+// Flat per-message allowance for role/formatting tokens the char estimate misses.
+const LMSTUDIO_MESSAGE_TOKEN_OVERHEAD = 4;
+
+/** LangChain message type ('system'|'human'|'ai'|'tool'|…), tolerant of plain role objects. */
+function messageType(message) {
+  if (message && typeof message._getType === 'function') return message._getType();
+  const role = message && message.role;
+  if (role === 'user') return 'human';
+  if (role === 'assistant') return 'ai';
+  return role || 'generic';
+}
+
+/** Approximate character length of a message's content + any tool-call payload. */
+function messageCharLength(message) {
+  if (!message) return 0;
+  let chars = 0;
+  const content = message.content;
+  if (typeof content === 'string') {
+    chars += content.length;
+  } else if (Array.isArray(content)) {
+    for (const block of content) {
+      if (typeof block === 'string') chars += block.length;
+      else if (block && typeof block.text === 'string') chars += block.text.length;
+      else chars += JSON.stringify(block == null ? '' : block).length;
+    }
+  } else if (content != null) {
+    chars += JSON.stringify(content).length;
+  }
+  const toolCalls = message.tool_calls || (message.additional_kwargs && message.additional_kwargs.tool_calls);
+  if (Array.isArray(toolCalls) && toolCalls.length) chars += JSON.stringify(toolCalls).length;
+  return chars;
+}
+
+/** Model-agnostic token estimate for a single chat message (over-estimates by design). */
+function estimateMessageTokens(message, charsPerToken = CONFIG.LMSTUDIO.charsPerToken) {
+  const cpt = Number(charsPerToken) || CONFIG.LMSTUDIO.charsPerToken;
+  return Math.ceil(messageCharLength(message) / cpt) + LMSTUDIO_MESSAGE_TOKEN_OVERHEAD;
+}
+
+/**
+ * Max prompt tokens for LM Studio: the operator-declared context window minus the
+ * reserved output budget (the max_tokens we send) and a safety margin. Returns 0
+ * when no context window is known (→ trimming disabled). Uses the declared window,
+ * which should be ≤ the model's loaded window, so the estimate stays conservative.
+ */
+function lmstudioPromptBudget(llm) {
+  const ctx = Number(llm && llm.contextWindow) || 0;
+  if (ctx <= 0) return 0;
+  const budget = ctx - lmstudioMaxTokens(llm) - CONFIG.LMSTUDIO.promptMarginTokens;
+  return Math.max(0, budget);
+}
+
+/**
+ * Trim a growing chat history to fit a token budget for LM Studio (whose loaded
+ * context window is fixed and small relative to a long deep-agent run). The deep
+ * agent re-sends the entire accumulating history each turn; without trimming the
+ * prompt eventually exceeds the window and LM Studio 400s ("...tokens to keep from
+ * the initial prompt is greater than the context length").
+ *
+ * Strategy: keep the head (leading system prompt(s) + the first human message — the
+ * task) plus as many of the MOST RECENT messages as fit, dropping the middle. A
+ * leading tool result is never kept: its assistant tool_call would have been trimmed
+ * away, and OpenAI-compatible APIs reject a tool message that doesn't follow its
+ * tool_calls. budgetTokens <= 0 (or a history that already fits) is a pass-through.
+ */
+function trimMessagesForBudget(messages, budgetTokens, charsPerToken = CONFIG.LMSTUDIO.charsPerToken) {
+  if (!Array.isArray(messages) || !(budgetTokens > 0)) return messages;
+  const cost = (m) => estimateMessageTokens(m, charsPerToken);
+  const total = messages.reduce((sum, m) => sum + cost(m), 0);
+  if (total <= budgetTokens) return messages;
+
+  // Preserve leading system message(s) + the first human message (the task).
+  const head = [];
+  let i = 0;
+  while (i < messages.length && messageType(messages[i]) === 'system') head.push(messages[i++]);
+  if (i < messages.length && messageType(messages[i]) === 'human') head.push(messages[i++]);
+
+  // Keep the most recent messages that still fit after the head.
+  let remaining = budgetTokens - head.reduce((sum, m) => sum + cost(m), 0);
+  const tail = [];
+  for (let j = messages.length - 1; j >= i; j--) {
+    const c = cost(messages[j]);
+    if (c > remaining) break;
+    tail.unshift(messages[j]);
+    remaining -= c;
+  }
+  // Drop any orphaned tool result(s) now leading the tail.
+  while (tail.length && messageType(tail[0]) === 'tool') tail.shift();
+
+  return [...head, ...tail];
+}
+
 function systemToDeveloper(messages) {
   const { ChatMessage } = require('@langchain/core/messages');
   return messages.map((m) =>
@@ -198,6 +303,44 @@ function createClaudeModel(llm /* , json */) {
   });
 }
 
+// Lazily built + cached so @langchain/openai stays off the Ollama/Claude paths.
+// Subclasses ChatOpenAI to trim the (unbounded, re-sent-every-turn) deep-agent
+// history down to `promptBudget` tokens before each call, so a long run can't
+// overflow LM Studio's fixed context window. Mirrors the Codex wrapper's shape,
+// including the withConfig override that otherwise rebuilds a base ChatOpenAI and
+// would drop the trimming (bindTools wraps `this`, so it needs no override).
+let LmStudioChatModelClass = null;
+function getLmStudioChatModelClass() {
+  if (LmStudioChatModelClass) return LmStudioChatModelClass;
+  const { ChatOpenAI } = require('@langchain/openai');
+  LmStudioChatModelClass = class LmStudioChatModel extends ChatOpenAI {
+    constructor(fields) {
+      super(fields);
+      // 0/undefined → trimming disabled (pass-through).
+      this.promptBudget = Number(fields && fields.promptBudget) || 0;
+      this.charsPerToken = Number(fields && fields.charsPerToken) || CONFIG.LMSTUDIO.charsPerToken;
+    }
+    _trim(messages) {
+      return trimMessagesForBudget(messages, this.promptBudget, this.charsPerToken);
+    }
+    async _generate(messages, options, runManager) {
+      return super._generate(this._trim(messages), options, runManager);
+    }
+    async *_streamResponseChunks(messages, options, runManager) {
+      yield* super._streamResponseChunks(this._trim(messages), options, runManager);
+    }
+    async *_streamChatModelEvents(messages, options, runManager) {
+      yield* super._streamChatModelEvents(this._trim(messages), options, runManager);
+    }
+    withConfig(config) {
+      const next = new LmStudioChatModel({ ...this.fields, promptBudget: this.promptBudget, charsPerToken: this.charsPerToken });
+      next.defaultOptions = { ...this.defaultOptions, ...config };
+      return next;
+    }
+  };
+  return LmStudioChatModelClass;
+}
+
 /** Build a LangChain chat model for the given provider descriptor. */
 function createChatModel(llm, { json = false } = {}) {
   if (llm.provider === 'claude') {
@@ -222,14 +365,26 @@ function createChatModel(llm, { json = false } = {}) {
     // LM Studio serves an OpenAI-compatible API, so ChatOpenAI targets it directly.
     // No real key is needed (LM Studio ignores it), but the SDK requires a non-empty
     // apiKey, so we pass a placeholder. Context length is fixed when the model is
-    // loaded in LM Studio, so only max_tokens is sent from here.
-    const { ChatOpenAI } = require('@langchain/openai');
+    // loaded in LM Studio and cannot be set per-request, so we cap the OUTPUT budget
+    // (max_tokens) to fit the operator-declared context window, reserving room for
+    // the (large) deep-agent prompt. Without this, sending max_tokens > n_ctx (e.g.
+    // 16000 in an 8192 window) yields LM Studio 400s like "n_keep >= n_ctx".
+    const LmStudioChatModel = getLmStudioChatModelClass();
     const opts = {
       model: llm.model,
       apiKey: 'lm-studio',
       temperature: 0,
-      maxTokens: llm.numTokens,
+      maxTokens: lmstudioMaxTokens(llm),
+      // Slow local reasoning models can exceed the OpenAI SDK's 10-min default per
+      // turn; use a generous, env-configurable timeout and few retries so a genuine
+      // timeout fails once instead of being retried into a much longer wait.
+      timeout: CONFIG.LMSTUDIO.requestTimeoutMs,
+      maxRetries: CONFIG.LMSTUDIO.maxRetries,
       configuration: { baseURL: llm.baseUrl },
+      // Trim the growing deep-agent history to fit the loaded context window, so a
+      // long run can't overflow it (the max_tokens cap only bounds OUTPUT, not the
+      // re-sent input). 0 when no context window is declared → no trimming.
+      promptBudget: lmstudioPromptBudget(llm),
     };
     // Constrained JSON output — the accepted format varies by model/engine, so the
     // mode is operator-selectable ('text' sends nothing and relies on the prompt).
@@ -237,7 +392,7 @@ function createChatModel(llm, { json = false } = {}) {
       const kwargs = lmstudioJsonKwargs(llm.jsonMode);
       if (kwargs) opts.modelKwargs = kwargs;
     }
-    return new ChatOpenAI(opts);
+    return new LmStudioChatModel(opts);
   }
   // Default: local Ollama.
   const { ChatOllama } = require('@langchain/ollama');
@@ -340,6 +495,7 @@ async function resolveLlm(settings) {
       // OpenAI-compatible endpoint the ChatOpenAI client targets.
       baseUrl: `${host}${CONFIG.LMSTUDIO.apiPath}`,
       model: settings.lmstudioModel,
+      contextWindow: settings.lmstudioContextWindow,
       numTokens: settings.lmstudioNumTokens,
       jsonMode: settings.lmstudioJsonMode || 'text',
     };
@@ -395,4 +551,8 @@ module.exports = {
   resolveLlm,
   llmReady,
   notReadyReason,
+  lmstudioMaxTokens,
+  lmstudioPromptBudget,
+  trimMessagesForBudget,
+  estimateMessageTokens,
 };

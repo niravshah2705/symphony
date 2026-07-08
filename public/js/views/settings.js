@@ -295,6 +295,7 @@ function lmstudioFields({ settings, lmstudioModels, reachable }) {
       ))
     : el('input', { value: settings.lmstudioModel || '', placeholder: 'e.g. qwen2.5-7b-instruct' });
 
+  const ctxInput = el('input', { type: 'number', min: '512', max: '131072', value: String(settings.lmstudioContextWindow || 8192) });
   const tokInput = el('input', { type: 'number', min: '128', max: '32768', value: String(settings.lmstudioNumTokens || 16000) });
   const jsonSelect = jsonModeSelect(
     [
@@ -311,6 +312,7 @@ function lmstudioFields({ settings, lmstudioModels, reachable }) {
       const res = await api.saveLmstudio({
         lmstudioHost: hostInput.value.trim(),
         lmstudioModel: modelControl.value.trim(),
+        lmstudioContextWindow: Number(ctxInput.value),
         lmstudioNumTokens: Number(tokInput.value),
         lmstudioJsonMode: jsonSelect.value,
       });
@@ -333,7 +335,8 @@ function lmstudioFields({ settings, lmstudioModels, reachable }) {
     el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Local inference via LM Studio\'s OpenAI-compatible server. Load a tool-capable model in LM Studio and start its server (Developer → Start Server). Use this for models not available in Ollama. No API key needed.'),
     field('LM Studio Host', hostInput, 'Local endpoint, e.g. http://localhost:1234.'),
     field('Model', modelControl, reachNote),
-    field('Num tokens (max_tokens)', tokInput, 'Output budget. Context length is set when you load the model in LM Studio.'),
+    field('Context length (n_ctx)', ctxInput, 'MUST match the context length you loaded the model with in LM Studio. The coder prompt is large (~10k tokens) — load the model with ≥ 16384 or runs fail with "n_keep >= n_ctx".'),
+    field('Num tokens (max_tokens)', tokInput, 'Output budget. Capped at half the context length above so prompt + output fit the window.'),
     field('JSON output mode', jsonSelect, 'Some engines reject json_object — switch to "Structured" or "Prompt-only" if plans fail with a response_format error.'),
     el('div', { class: 'row' }, [el('button', { class: 'primary', onclick: save }, 'Save LM Studio settings')]),
     info,
