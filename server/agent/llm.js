@@ -412,6 +412,13 @@ function createChatModel(llm, { json = false } = {}) {
       apiKey: 'lm-studio',
       temperature: 0,
       maxTokens: lmstudioMaxTokens(llm),
+      // Stream responses. A slow local model can take minutes per turn; a
+      // NON-streaming request holds the socket until the whole answer is ready, so
+      // Node's undici HTTP client aborts it at its default 5-min headers timeout
+      // (which the SDK's `timeout` below does NOT override) — killing a generation
+      // that is actually still progressing. Streaming sends headers immediately and
+      // tokens incrementally, so the 5-min cutoff never fires on a live generation.
+      streaming: true,
       // Slow local reasoning models can exceed the OpenAI SDK's 10-min default per
       // turn; use a generous, env-configurable timeout and few retries so a genuine
       // timeout fails once instead of being retried into a much longer wait.
