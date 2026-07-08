@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { CONFIG } = require('../config');
 const store = require('../store');
+const logger = require('../logger');
 const oauth = require('./oauth');
 const claudeOauth = require('./claude-oauth');
 
@@ -86,6 +87,46 @@ function lmstudioPromptBudget(llm) {
   if (ctx <= 0) return 0;
   const budget = ctx - lmstudioMaxTokens(llm) - CONFIG.LMSTUDIO.promptMarginTokens;
   return Math.max(0, budget);
+}
+
+/**
+ * Reconcile the operator-declared context window with the value LM Studio actually
+ * loaded the model with. LM Studio fixes n_ctx at load time and may load a model
+ * with a SMALLER window than configured (e.g. reduced to fit memory). Keying the
+ * prompt budget to a too-large window sends prompts the model can't hold → instant
+ * "tokens to keep from the initial prompt is greater than the context length" 400s.
+ * Prefer the smaller of the two (and fall back to whichever is known).
+ */
+function clampContextWindow(declared, loaded) {
+  const d = Number(declared) || 0;
+  const l = Number(loaded) || 0;
+  if (d > 0 && l > 0) return Math.min(d, l);
+  return l > 0 ? l : d;
+}
+
+/**
+ * Read the actually-loaded context length for `model` from LM Studio's native REST
+ * API (/api/v0/models exposes `loaded_context_length`). Returns null when it can't
+ * be determined (old LM Studio, model not loaded, endpoint unreachable) so callers
+ * fall back to the operator setting. Short timeout so a run never hangs on it.
+ */
+async function fetchLmstudioLoadedContext(host, model) {
+  const url = `${String(host || '').replace(/\/$/, '')}/api/v0/models`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const models = (body && (body.data || body.models)) || [];
+    const found = Array.isArray(models) ? models.find((m) => m && m.id === model) : null;
+    const n = found && Number(found.loaded_context_length);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function systemToDeveloper(messages) {
@@ -470,13 +511,23 @@ async function resolveLlm(settings) {
   }
   if (settings.llmProvider === 'lmstudio') {
     const host = String(settings.lmstudioHost || CONFIG.LMSTUDIO.defaultHost).replace(/\/$/, '');
+    // Key the prompt budget to the window the model is ACTUALLY loaded with (LM
+    // Studio may load it smaller than configured), not just the operator setting.
+    const declaredCtx = Number(settings.lmstudioContextWindow) || 0;
+    const loadedCtx = await fetchLmstudioLoadedContext(host, settings.lmstudioModel);
+    const contextWindow = clampContextWindow(declaredCtx, loadedCtx);
+    if (loadedCtx && declaredCtx && loadedCtx < declaredCtx) {
+      logger.warn(
+        `LM Studio: model "${settings.lmstudioModel}" is loaded with only ${loadedCtx} context tokens, but the app is configured for ${declaredCtx}. Using ${loadedCtx}. Reload the model in LM Studio with a larger context window (and it must exceed the coder's initial prompt, ~10–20k tokens) to run the coder.`
+      );
+    }
     return {
       provider: 'lmstudio',
       host,
       // OpenAI-compatible endpoint the ChatOpenAI client targets.
       baseUrl: `${host}${CONFIG.LMSTUDIO.apiPath}`,
       model: settings.lmstudioModel,
-      contextWindow: settings.lmstudioContextWindow,
+      contextWindow,
       numTokens: settings.lmstudioNumTokens,
       jsonMode: settings.lmstudioJsonMode || 'text',
       // How to keep the prompt within the loaded window: trim | summarize | none.
@@ -536,6 +587,7 @@ module.exports = {
   notReadyReason,
   lmstudioMaxTokens,
   lmstudioPromptBudget,
+  clampContextWindow,
   trimMessagesForBudget,
   estimateMessageTokens,
 };

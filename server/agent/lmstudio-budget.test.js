@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { lmstudioMaxTokens, resolveLlm, lmstudioPromptBudget, trimMessagesForBudget, estimateMessageTokens } = require('./llm');
+const { lmstudioMaxTokens, resolveLlm, lmstudioPromptBudget, clampContextWindow, trimMessagesForBudget, estimateMessageTokens } = require('./llm');
 const { SystemMessage, HumanMessage, AIMessage, ToolMessage } = require('@langchain/core/messages');
 
 /* --------------------------- lmstudioMaxTokens -------------------------- */
@@ -55,6 +55,25 @@ test('lmstudioPromptBudget returns 0 (trimming disabled) when no window is known
 test('lmstudioPromptBudget never goes negative on a tiny window', () => {
   // 512 window, output cap 256, 1024 margin → clamped to 0.
   assert.strictEqual(lmstudioPromptBudget({ contextWindow: 512, numTokens: 16000 }), 0);
+});
+
+/* ---------------------------- clampContextWindow ------------------------ */
+
+test('clampContextWindow uses the loaded window when it is smaller than configured', () => {
+  // The real bug: configured 129536 but model loaded at 8192.
+  assert.strictEqual(clampContextWindow(129536, 8192), 8192);
+});
+
+test('clampContextWindow respects a configured window smaller than the loaded one', () => {
+  assert.strictEqual(clampContextWindow(4096, 8192), 4096);
+});
+
+test('clampContextWindow falls back to configured when the loaded window is unknown', () => {
+  assert.strictEqual(clampContextWindow(129536, null), 129536);
+});
+
+test('clampContextWindow uses the loaded window when nothing is configured', () => {
+  assert.strictEqual(clampContextWindow(0, 8192), 8192);
 });
 
 /* ------------------------- trimMessagesForBudget ------------------------ */
