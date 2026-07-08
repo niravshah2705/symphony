@@ -124,6 +124,9 @@ const LMSTUDIO = Object.freeze({
   //                       framing the char estimate doesn't see.
   charsPerToken: Number(process.env.LMSTUDIO_CHARS_PER_TOKEN) || 3,
   promptMarginTokens: Number(process.env.LMSTUDIO_PROMPT_MARGIN_TOKENS) || 1024,
+  // Output budget for the summarization sub-call ('summarize' context mode): the
+  // condensed history note is capped to this many tokens so it stays compact.
+  summaryMaxTokens: Number(process.env.LMSTUDIO_SUMMARY_MAX_TOKENS) || 1024,
 });
 
 /**
@@ -223,6 +226,10 @@ const CONFIG = Object.freeze({
   //             'json_schema' → OpenAI-style structured output (permissive object)
   OLLAMA_JSON_MODES: ['json', 'text'],
   LMSTUDIO_JSON_MODES: ['text', 'json_object', 'json_schema'],
+  // How the LM Studio provider keeps the deep-agent prompt within the loaded window
+  // (only acts when the prompt exceeds it): summarize old turns, trim (drop) them,
+  // or none (send as-is — may overflow). 'summarize' preserves the most context.
+  LMSTUDIO_CONTEXT_MODES: ['summarize', 'trim', 'none'],
   OAUTH,
   CLAUDE,
   LMSTUDIO,

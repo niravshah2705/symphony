@@ -54,6 +54,12 @@ const DEFAULT_STORE = Object.freeze({
     // JSON constraint: 'text' (prompt-driven; most compatible) | 'json_object' | 'json_schema'.
     // Some engines (e.g. the ornith runtime) reject 'json_object', so 'text' is the safe default.
     lmstudioJsonMode: 'text',
+    // Context-window management for long coder runs (the deep agent re-sends its
+    // whole growing history each turn; a fixed window eventually overflows). Only
+    // acts when the prompt exceeds the window. 'summarize' condenses old turns into
+    // a note and keeps recent turns verbatim; 'trim' drops old turns; 'none' sends
+    // as-is. 'summarize' preserves the most context (at the cost of extra LLM calls).
+    lmstudioContextMode: 'summarize',
     // Codex (OpenAI) provider — endpoints/client come from CONFIG.OAUTH (trusted),
     // the browser only chooses the model. Tokens live server-side only.
     codexModel: '', // e.g. "gpt-5-codex"; falls back to CONFIG.OAUTH.defaultModel

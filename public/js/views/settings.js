@@ -305,6 +305,14 @@ function lmstudioFields({ settings, lmstudioModels, reachable }) {
     ],
     settings.lmstudioJsonMode || 'text'
   );
+  const ctxModeSelect = jsonModeSelect(
+    [
+      ['summarize', 'Summarize old turns (keep recent verbatim)'],
+      ['trim', 'Trim old turns (drop them)'],
+      ['none', 'None (send as-is — may overflow)'],
+    ],
+    settings.lmstudioContextMode || 'summarize'
+  );
   const info = el('div', { class: 'muted', style: 'margin-top:10px;font-size:13px' });
 
   const save = async () => {
@@ -315,6 +323,7 @@ function lmstudioFields({ settings, lmstudioModels, reachable }) {
         lmstudioContextWindow: Number(ctxInput.value),
         lmstudioNumTokens: Number(tokInput.value),
         lmstudioJsonMode: jsonSelect.value,
+        lmstudioContextMode: ctxModeSelect.value,
       });
       hostInput.value = res.lmstudioHost;
       info.textContent = res.lmstudioModel
@@ -338,6 +347,7 @@ function lmstudioFields({ settings, lmstudioModels, reachable }) {
     field('Context length (n_ctx)', ctxInput, 'MUST match the context length you loaded the model with in LM Studio. The coder prompt is large (~10k tokens) — load the model with ≥ 16384 or runs fail with "n_keep >= n_ctx".'),
     field('Num tokens (max_tokens)', tokInput, 'Output budget. Capped at half the context length above so prompt + output fit the window.'),
     field('JSON output mode', jsonSelect, 'Some engines reject json_object — switch to "Structured" or "Prompt-only" if plans fail with a response_format error.'),
+    field('Context overflow', ctxModeSelect, 'What to do when a long coder run outgrows the context window above. "Summarize" condenses older turns into a note and keeps recent turns verbatim (extra LLM calls); "Trim" drops older turns; "None" sends as-is and may fail with "n_keep >= n_ctx".'),
     el('div', { class: 'row' }, [el('button', { class: 'primary', onclick: save }, 'Save LM Studio settings')]),
     info,
   ];

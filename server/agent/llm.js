@@ -63,96 +63,29 @@ function lmstudioMaxTokens(llm) {
   return Math.max(256, Math.min(want, Math.floor(ctx / 2)));
 }
 
-// Flat per-message allowance for role/formatting tokens the char estimate misses.
-const LMSTUDIO_MESSAGE_TOKEN_OVERHEAD = 4;
-
-/** LangChain message type ('system'|'human'|'ai'|'tool'|…), tolerant of plain role objects. */
-function messageType(message) {
-  if (message && typeof message._getType === 'function') return message._getType();
-  const role = message && message.role;
-  if (role === 'user') return 'human';
-  if (role === 'assistant') return 'ai';
-  return role || 'generic';
-}
-
-/** Approximate character length of a message's content + any tool-call payload. */
-function messageCharLength(message) {
-  if (!message) return 0;
-  let chars = 0;
-  const content = message.content;
-  if (typeof content === 'string') {
-    chars += content.length;
-  } else if (Array.isArray(content)) {
-    for (const block of content) {
-      if (typeof block === 'string') chars += block.length;
-      else if (block && typeof block.text === 'string') chars += block.text.length;
-      else chars += JSON.stringify(block == null ? '' : block).length;
-    }
-  } else if (content != null) {
-    chars += JSON.stringify(content).length;
-  }
-  const toolCalls = message.tool_calls || (message.additional_kwargs && message.additional_kwargs.tool_calls);
-  if (Array.isArray(toolCalls) && toolCalls.length) chars += JSON.stringify(toolCalls).length;
-  return chars;
-}
-
-/** Model-agnostic token estimate for a single chat message (over-estimates by design). */
-function estimateMessageTokens(message, charsPerToken = CONFIG.LMSTUDIO.charsPerToken) {
-  const cpt = Number(charsPerToken) || CONFIG.LMSTUDIO.charsPerToken;
-  return Math.ceil(messageCharLength(message) / cpt) + LMSTUDIO_MESSAGE_TOKEN_OVERHEAD;
-}
+// Context-window management (trim / summarize) lives in its own module; it is
+// provider-agnostic and LLM-client-free (summarization is injected), so it stays
+// pure and testable. See lmstudio-context.js.
+const {
+  prepareMessages,
+  trimMessagesForBudget,
+  estimateMessageTokens,
+  SUMMARY_SYSTEM_PROMPT,
+  contentToText,
+} = require('./lmstudio-context');
 
 /**
  * Max prompt tokens for LM Studio: the operator-declared context window minus the
  * reserved output budget (the max_tokens we send) and a safety margin. Returns 0
- * when no context window is known (→ trimming disabled). Uses the declared window,
- * which should be ≤ the model's loaded window, so the estimate stays conservative.
+ * when no context window is known (→ context management disabled). Uses the declared
+ * window, which should be ≤ the model's loaded window, so the estimate stays
+ * conservative.
  */
 function lmstudioPromptBudget(llm) {
   const ctx = Number(llm && llm.contextWindow) || 0;
   if (ctx <= 0) return 0;
   const budget = ctx - lmstudioMaxTokens(llm) - CONFIG.LMSTUDIO.promptMarginTokens;
   return Math.max(0, budget);
-}
-
-/**
- * Trim a growing chat history to fit a token budget for LM Studio (whose loaded
- * context window is fixed and small relative to a long deep-agent run). The deep
- * agent re-sends the entire accumulating history each turn; without trimming the
- * prompt eventually exceeds the window and LM Studio 400s ("...tokens to keep from
- * the initial prompt is greater than the context length").
- *
- * Strategy: keep the head (leading system prompt(s) + the first human message — the
- * task) plus as many of the MOST RECENT messages as fit, dropping the middle. A
- * leading tool result is never kept: its assistant tool_call would have been trimmed
- * away, and OpenAI-compatible APIs reject a tool message that doesn't follow its
- * tool_calls. budgetTokens <= 0 (or a history that already fits) is a pass-through.
- */
-function trimMessagesForBudget(messages, budgetTokens, charsPerToken = CONFIG.LMSTUDIO.charsPerToken) {
-  if (!Array.isArray(messages) || !(budgetTokens > 0)) return messages;
-  const cost = (m) => estimateMessageTokens(m, charsPerToken);
-  const total = messages.reduce((sum, m) => sum + cost(m), 0);
-  if (total <= budgetTokens) return messages;
-
-  // Preserve leading system message(s) + the first human message (the task).
-  const head = [];
-  let i = 0;
-  while (i < messages.length && messageType(messages[i]) === 'system') head.push(messages[i++]);
-  if (i < messages.length && messageType(messages[i]) === 'human') head.push(messages[i++]);
-
-  // Keep the most recent messages that still fit after the head.
-  let remaining = budgetTokens - head.reduce((sum, m) => sum + cost(m), 0);
-  const tail = [];
-  for (let j = messages.length - 1; j >= i; j--) {
-    const c = cost(messages[j]);
-    if (c > remaining) break;
-    tail.unshift(messages[j]);
-    remaining -= c;
-  }
-  // Drop any orphaned tool result(s) now leading the tail.
-  while (tail.length && messageType(tail[0]) === 'tool') tail.shift();
-
-  return [...head, ...tail];
 }
 
 function systemToDeveloper(messages) {
@@ -304,11 +237,12 @@ function createClaudeModel(llm /* , json */) {
 }
 
 // Lazily built + cached so @langchain/openai stays off the Ollama/Claude paths.
-// Subclasses ChatOpenAI to trim the (unbounded, re-sent-every-turn) deep-agent
-// history down to `promptBudget` tokens before each call, so a long run can't
-// overflow LM Studio's fixed context window. Mirrors the Codex wrapper's shape,
-// including the withConfig override that otherwise rebuilds a base ChatOpenAI and
-// would drop the trimming (bindTools wraps `this`, so it needs no override).
+// Subclasses ChatOpenAI to bound the (unbounded, re-sent-every-turn) deep-agent
+// history to `promptBudget` tokens before each call — via the configured strategy
+// (trim | summarize | none) and ONLY when the prompt actually exceeds the budget —
+// so a long run can't overflow LM Studio's fixed context window. Mirrors the Codex
+// wrapper's shape, including the withConfig override that otherwise rebuilds a base
+// ChatOpenAI and would drop the behavior (bindTools wraps `this`, so no override).
 let LmStudioChatModelClass = null;
 function getLmStudioChatModelClass() {
   if (LmStudioChatModelClass) return LmStudioChatModelClass;
@@ -316,24 +250,68 @@ function getLmStudioChatModelClass() {
   LmStudioChatModelClass = class LmStudioChatModel extends ChatOpenAI {
     constructor(fields) {
       super(fields);
-      // 0/undefined → trimming disabled (pass-through).
+      // 0/undefined budget → context management disabled (pass-through).
       this.promptBudget = Number(fields && fields.promptBudget) || 0;
       this.charsPerToken = Number(fields && fields.charsPerToken) || CONFIG.LMSTUDIO.charsPerToken;
+      this.contextMode = (fields && fields.contextMode) || 'trim';
+      this.summaryMaxTokens = Number(fields && fields.summaryMaxTokens) || CONFIG.LMSTUDIO.summaryMaxTokens;
+      // Captured for the (separate, tool-free) summarizer sub-model.
+      this._summaryCfg = {
+        model: fields && fields.model,
+        baseURL: fields && fields.configuration && fields.configuration.baseURL,
+        timeout: fields && fields.timeout,
+        maxRetries: fields && fields.maxRetries,
+      };
+      this._summaryModel = null;
     }
-    _trim(messages) {
-      return trimMessagesForBudget(messages, this.promptBudget, this.charsPerToken);
+    // A plain ChatOpenAI (no tools, small output) reused for summarization calls, so
+    // they never re-enter _prepareMessages and never carry the agent's bound tools.
+    _summarizer() {
+      if (this._summaryModel) return this._summaryModel;
+      this._summaryModel = new ChatOpenAI({
+        model: this._summaryCfg.model,
+        apiKey: 'lm-studio',
+        temperature: 0,
+        maxTokens: this.summaryMaxTokens,
+        timeout: this._summaryCfg.timeout,
+        maxRetries: this._summaryCfg.maxRetries,
+        configuration: { baseURL: this._summaryCfg.baseURL },
+      });
+      return this._summaryModel;
+    }
+    _summarize(text) {
+      const { SystemMessage, HumanMessage } = require('@langchain/core/messages');
+      return this._summarizer()
+        .invoke([new SystemMessage(SUMMARY_SYSTEM_PROMPT), new HumanMessage(text)])
+        .then((res) => contentToText(res && res.content));
+    }
+    _prepareMessages(messages) {
+      return prepareMessages({
+        messages,
+        mode: this.contextMode,
+        budget: this.promptBudget,
+        charsPerToken: this.charsPerToken,
+        summaryMaxTokens: this.summaryMaxTokens,
+        summarize: (text) => this._summarize(text),
+      });
     }
     async _generate(messages, options, runManager) {
-      return super._generate(this._trim(messages), options, runManager);
+      return super._generate(await this._prepareMessages(messages), options, runManager);
     }
     async *_streamResponseChunks(messages, options, runManager) {
-      yield* super._streamResponseChunks(this._trim(messages), options, runManager);
+      yield* super._streamResponseChunks(await this._prepareMessages(messages), options, runManager);
     }
     async *_streamChatModelEvents(messages, options, runManager) {
-      yield* super._streamChatModelEvents(this._trim(messages), options, runManager);
+      yield* super._streamChatModelEvents(await this._prepareMessages(messages), options, runManager);
     }
     withConfig(config) {
-      const next = new LmStudioChatModel({ ...this.fields, promptBudget: this.promptBudget, charsPerToken: this.charsPerToken });
+      const next = new LmStudioChatModel({
+        ...this.fields,
+        promptBudget: this.promptBudget,
+        charsPerToken: this.charsPerToken,
+        contextMode: this.contextMode,
+        summaryMaxTokens: this.summaryMaxTokens,
+      });
       next.defaultOptions = { ...this.defaultOptions, ...config };
       return next;
     }
@@ -381,10 +359,13 @@ function createChatModel(llm, { json = false } = {}) {
       timeout: CONFIG.LMSTUDIO.requestTimeoutMs,
       maxRetries: CONFIG.LMSTUDIO.maxRetries,
       configuration: { baseURL: llm.baseUrl },
-      // Trim the growing deep-agent history to fit the loaded context window, so a
+      // Bound the growing deep-agent history to fit the loaded context window, so a
       // long run can't overflow it (the max_tokens cap only bounds OUTPUT, not the
-      // re-sent input). 0 when no context window is declared → no trimming.
+      // re-sent input). `contextMode` picks the strategy (trim | summarize | none);
+      // `promptBudget` is 0 when no context window is declared → management disabled.
       promptBudget: lmstudioPromptBudget(llm),
+      contextMode: llm.contextMode,
+      summaryMaxTokens: CONFIG.LMSTUDIO.summaryMaxTokens,
     };
     // Constrained JSON output — the accepted format varies by model/engine, so the
     // mode is operator-selectable ('text' sends nothing and relies on the prompt).
@@ -498,6 +479,8 @@ async function resolveLlm(settings) {
       contextWindow: settings.lmstudioContextWindow,
       numTokens: settings.lmstudioNumTokens,
       jsonMode: settings.lmstudioJsonMode || 'text',
+      // How to keep the prompt within the loaded window: trim | summarize | none.
+      contextMode: settings.lmstudioContextMode || 'summarize',
     };
   }
   return {
