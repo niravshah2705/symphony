@@ -28,14 +28,28 @@ async function git(args, cwd, env) {
   return stdout;
 }
 
+const GIT_TOKEN_ENV = 'TECHSYMPHONY_GIT_TOKEN';
+
 /**
- * Git credential helper that supplies the token from the GH_TOKEN env var at
- * call time. Persisted into the repo config so the coding agent's own git ops
- * (push/pull) authenticate too — WITHOUT ever writing the token into .git/config
- * (secret-leakage checklist: never store credentials in repo config/URLs).
+ * Git credential helper that supplies the stored GitHub token from a private env
+ * var at call time. Persisted into the repo config so the coding agent's own git
+ * ops (push/pull) authenticate too — WITHOUT ever writing the token into
+ * .git/config or exporting it as GH_TOKEN/GITHUB_TOKEN. The GitHub CLI treats
+ * GH_TOKEN/GITHUB_TOKEN as API credentials, and a clone/push-only token can make
+ * PR creation fail before gh falls back to its normal keyring auth.
  */
 const GIT_CREDENTIAL_HELPER =
-  "!f() { test \"$1\" = get && printf 'username=x-access-token\\npassword=%s\\n' \"$GH_TOKEN\"; }; f";
+  `!f() { test "$1" = get && test -n "$${GIT_TOKEN_ENV}" && printf 'username=x-access-token\\npassword=%s\\n' "$${GIT_TOKEN_ENV}"; }; f`;
+
+function buildGitAuthEnv(baseEnv = process.env, githubToken = '') {
+  const env = { ...baseEnv };
+  if (githubToken) {
+    delete env.GH_TOKEN;
+    delete env.GITHUB_TOKEN;
+    env[GIT_TOKEN_ENV] = githubToken;
+  }
+  return env;
+}
 
 /** Slug for a filesystem dir — lowercased, alnum + hyphen only (no path traversal). */
 function sanitizeSlug(name) {
@@ -84,8 +98,9 @@ function scrub(text, secret) {
 /**
  * Prepare the MONOREPO workspace for a planned task: one clone per project at
  * <plannedWorkspaceRoot>/<project-slug>/ (reused across the project's tasks), then
- * create/checkout a per-task branch off the default branch. Token auth is via the
- * env-based credential helper; the token is never written to config/URLs/logs.
+ * create/checkout a per-task branch off the default branch. Git token auth is
+ * via the env-based credential helper; the token is never written to
+ * config/URLs/logs and is not exposed as GH_TOKEN/GITHUB_TOKEN to `gh`.
  * @returns {Promise<{ workDir:string, branch:string, slug:string, cloned:boolean, env:object }>}
  */
 async function preparePlannedWorkspace({ repoUrl, projectSlug, taskBranch, githubToken, onStep }) {
@@ -95,8 +110,7 @@ async function preparePlannedWorkspace({ repoUrl, projectSlug, taskBranch, githu
   const root = CONFIG.CODER.plannedWorkspaceRoot;
   const workDir = path.join(root, slug);
   const parts = repoParts(repoUrl);
-  const env = { ...process.env };
-  if (githubToken) env.GH_TOKEN = githubToken;
+  const env = buildGitAuthEnv(process.env, githubToken);
 
   const hasGit = fs.existsSync(path.join(workDir, '.git'));
   let cloned = false;
@@ -118,6 +132,11 @@ async function preparePlannedWorkspace({ repoUrl, projectSlug, taskBranch, githu
     }
 
     if (fs.existsSync(path.join(workDir, '.git'))) {
+      if (githubToken) {
+        // Reused project workspaces may still have the legacy GH_TOKEN-based
+        // helper. Refresh it every run so git auth and gh auth stay separated.
+        await git(['-C', workDir, 'config', 'credential.helper', GIT_CREDENTIAL_HELPER], root, env).catch(() => {});
+      }
       await git(['-C', workDir, 'fetch', 'origin', '--prune'], root, env).catch(() => {});
       const headRef = await git(['-C', workDir, 'symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'], root, env).catch(() => '');
       const base = (headRef.trim().replace(/^origin\//, '')) || 'main';
@@ -166,4 +185,13 @@ async function prepareWorkspace({ repoUrl, identifier, onStep }) {
   return { workDir, cloned, reused };
 }
 
-module.exports = { prepareWorkspace, preparePlannedWorkspace, sanitizeSlug, sanitizeBranch, repoParts };
+module.exports = {
+  prepareWorkspace,
+  preparePlannedWorkspace,
+  sanitizeSlug,
+  sanitizeBranch,
+  repoParts,
+  buildGitAuthEnv,
+  GIT_CREDENTIAL_HELPER,
+  GIT_TOKEN_ENV,
+};

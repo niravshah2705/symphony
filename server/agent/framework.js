@@ -68,7 +68,7 @@ function isDir(p) {
 function buildBackend(kind, rootDir, opts = {}) {
   const { FilesystemBackend, LocalShellBackend } = require('deepagents');
   if (kind === 'shell') {
-    // When an explicit env is supplied (e.g. GH_TOKEN for the credential helper),
+    // When an explicit env is supplied (e.g. git credential-helper variables),
     // pass the full env and disable inheritEnv so it isn't clobbered.
     if (opts.env) {
       return new LocalShellBackend({ rootDir, env: opts.env, inheritEnv: false, timeout: opts.timeout || 600 });
