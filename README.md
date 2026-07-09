@@ -122,6 +122,10 @@ Progress is reported to the server logs (`data/app.log`) and to the ticket's
 
 ## Architecture
 
+- See [Architecture Diagram](docs/ARCHITECTURE_DIAGRAM.md) for the visual system
+  map covering local Ollama/LM Studio inference, Linear ticket management,
+  DeepAgent skills, and Linear/GitHub integrations.
+
 - **Backend** (`server/`) — Express server that proxies the Linear GraphQL API (`https://api.linear.app/graphql`) so the API key stays on the server. Local settings + the business→project mapping are stored in `data/store.json`.
 - **Frontend** (`public/`) — a dependency-free vanilla-JS single-page app (ES modules) served by Express. Hash-based routing between the five views.
 
@@ -141,7 +145,7 @@ server/
     apply.js          deterministic Linear writes
     scheduler.js      enrichment queue (5/10/15-min cadence)
     search.js         keyless parallel web search
-    llm.js            LLM provider factory (ollama · codex · claude)
+    llm.js            LLM provider factory (ollama · lmstudio · codex · claude)
     oauth.js pkce.js  Codex OAuth + PKCE (+ oauth.test.js)
     claude-oauth.js   Claude OAuth (+ claude-oauth.test.js)
     coder.js          code-writer agent — single ticket, isolated clone
