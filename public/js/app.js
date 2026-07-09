@@ -8,6 +8,7 @@ import { renderBoard } from './views/board.js';
 import { renderBusiness } from './views/business.js';
 import { renderAgent } from './views/agent.js';
 import { renderSettings } from './views/settings.js';
+import { initThemeToggle } from './theme.js';
 
 const routes = {
   projects: renderProjects,
@@ -96,6 +97,7 @@ async function render() {
 
 window.addEventListener('hashchange', render);
 window.addEventListener('DOMContentLoaded', async () => {
+  initThemeToggle(document.getElementById('theme-toggle'));
   await Promise.all([refreshConnection(), refreshRole()]);
   await render();
 });

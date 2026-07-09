@@ -17,26 +17,34 @@ export async function renderSettings(view) {
     api.getClaudeStatus().catch(() => ({ connected: false })),
   ]);
 
+  // Two-column layout: keys + LLM on the left, role + agent config on the right.
+  // Collapses to a single column on narrow screens (see .settings-grid).
   clear(view).append(
     el('div', { class: 'page-head' }, [el('h1', {}, 'Settings')]),
-    keysSection(settings),
-    llmSection({
-      settings,
-      ollamaModels: ollamaRes.models || [],
-      reachable: ollamaRes.reachable,
-      lmstudioModels: lmstudioRes.models || [],
-      lmstudioReachable: lmstudioRes.reachable,
-      codex: codexRes,
-      claude: claudeRes,
-      view,
-    }),
-    roleSection({ members: membersRes.members || [], assumedRole: roleRes.assumedRole, view }),
-    agentSection({
-      config: configRes.config,
-      intervals: modelsRes.intervals || [5, 10, 15],
-      labels: labelsRes.labels || [],
-      view,
-    })
+    el('div', { class: 'settings-grid' }, [
+      el('div', { class: 'settings-col' }, [
+        keysSection(settings),
+        llmSection({
+          settings,
+          ollamaModels: ollamaRes.models || [],
+          reachable: ollamaRes.reachable,
+          lmstudioModels: lmstudioRes.models || [],
+          lmstudioReachable: lmstudioRes.reachable,
+          codex: codexRes,
+          claude: claudeRes,
+          view,
+        }),
+      ]),
+      el('div', { class: 'settings-col' }, [
+        roleSection({ members: membersRes.members || [], assumedRole: roleRes.assumedRole, view }),
+        agentSection({
+          config: configRes.config,
+          intervals: modelsRes.intervals || [5, 10, 15],
+          labels: labelsRes.labels || [],
+          view,
+        }),
+      ]),
+    ])
   );
 }
 
@@ -166,9 +174,30 @@ function keysSection(settings) {
 
 /* ------------------------------- Deep Agent LLM ------------------------- */
 
-function llmSection({ settings, ollamaModels, reachable, lmstudioModels, lmstudioReachable, codex, claude, view }) {
-  const provider = settings.llmProvider || 'ollama';
+function llmSection(ctx) {
+  // A stable wrapper so switching the active provider re-renders ONLY this section
+  // in place — no full-page reload and no re-fetch of the already-loaded data.
+  const container = el('div', { class: 'llm-section' });
+  let provider = ctx.settings.llmProvider || 'ollama';
 
+  const onProviderChange = async (value) => {
+    try {
+      await api.setProvider(value);
+      provider = value; // update local UI state only; no network re-fetch, no full render
+      toast(`Active provider: ${value}.`, 'ok');
+      rebuild();
+    } catch (err) {
+      toast(err.message, 'err');
+    }
+  };
+
+  const rebuild = () => clear(container).append(buildLlmSection(ctx, provider, onProviderChange));
+
+  rebuild();
+  return container;
+}
+
+function buildLlmSection({ settings, ollamaModels, reachable, lmstudioModels, lmstudioReachable, codex, claude, view }, provider, onProviderChange) {
   // Provider selector — switches which provider the deep agent uses.
   const providerSelect = el('select', {}, [
     el('option', { value: 'ollama', selected: provider === 'ollama' }, 'Ollama (local)'),
@@ -176,16 +205,7 @@ function llmSection({ settings, ollamaModels, reachable, lmstudioModels, lmstudi
     el('option', { value: 'codex', selected: provider === 'codex' }, 'Codex (OpenAI · OAuth)'),
     el('option', { value: 'claude', selected: provider === 'claude' }, 'Claude (Anthropic · OAuth)'),
   ]);
-  providerSelect.addEventListener('change', async () => {
-    try {
-      await api.setProvider(providerSelect.value);
-      toast(`Active provider: ${providerSelect.value}.`, 'ok');
-      window.dispatchEvent(new Event('lm:connection-changed'));
-      renderSettings(clear(view));
-    } catch (err) {
-      toast(err.message, 'err');
-    }
-  });
+  providerSelect.addEventListener('change', () => onProviderChange(providerSelect.value));
 
   let subtitle;
   if (provider === 'codex') subtitle = `Codex · ${codex && codex.model ? codex.model : 'not signed in'}`;
