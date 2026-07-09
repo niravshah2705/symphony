@@ -14,8 +14,11 @@ function publicSettings() {
   return {
     hasKey: Boolean(s.linearApiKey),
     maskedKey: maskKey(s.linearApiKey),
-    // Active deep-agent provider: 'ollama' / 'lmstudio' (local) or 'codex' / 'claude' (OAuth).
+    // Deep-agent provider slots. `llmProvider` = GLOBAL (hosted) slot (planner +
+    // coder's hosted/unlabeled route); `localLlmProvider` = LOCAL slot (coder's
+    // "local"/XS route). Each is 'ollama'/'lmstudio' (local) or 'codex'/'claude' (OAuth).
     llmProvider: s.llmProvider || 'ollama',
+    localLlmProvider: s.localLlmProvider || 'lmstudio',
     ollamaHost: s.ollamaHost,
     ollamaModel: s.ollamaModel,
     ollamaContextWindow: s.ollamaContextWindow,
@@ -122,13 +125,17 @@ router.put('/lmstudio', (req, res) => {
   res.json(publicSettings());
 });
 
-// PUT /api/settings/provider — choose the active deep-agent LLM provider.
+// PUT /api/settings/provider — choose a deep-agent LLM provider for a role.
+// Body: { llmProvider|provider: <name>, role?: 'global'|'local' }. Defaults to the
+// global (hosted) slot; role:'local' targets the local slot.
 router.put('/provider', (req, res) => {
-  const requested = String((req.body && req.body.llmProvider) || '').trim();
+  const b = req.body || {};
+  const role = b.role === 'local' ? 'local' : 'global';
+  const requested = String(b.llmProvider || b.provider || '').trim();
   if (!CONFIG.LLM_PROVIDERS.includes(requested)) {
     return res.status(400).json({ error: `Provider must be one of: ${CONFIG.LLM_PROVIDERS.join(', ')}.` });
   }
-  patchSettings({ llmProvider: requested });
+  patchSettings(role === 'local' ? { localLlmProvider: requested } : { llmProvider: requested });
   res.json(publicSettings());
 });
 

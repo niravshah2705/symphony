@@ -54,8 +54,8 @@ export const api = {
   getLmstudioModels: () => request('/agent/lmstudio-models'),
 
   // Deep-agent provider selection + Codex (OpenAI via OAuth)
-  setProvider: (llmProvider) =>
-    request('/settings/provider', { method: 'PUT', body: JSON.stringify({ llmProvider }) }),
+  setProvider: (llmProvider, role = 'global') =>
+    request('/settings/provider', { method: 'PUT', body: JSON.stringify({ llmProvider, role }) }),
   getCodexStatus: () => request('/settings/codex'),
   startCodexLogin: () => request('/settings/codex/login'),
   saveCodex: (payload) => request('/settings/codex', { method: 'POST', body: JSON.stringify(payload) }),

@@ -29,8 +29,14 @@ const DEFAULT_AGENT_CONFIG = Object.freeze({
 const DEFAULT_STORE = Object.freeze({
   settings: {
     linearApiKey: '',
-    // Deep agent LLM provider: 'ollama' / 'lmstudio' (local) or 'codex' / 'claude' (OAuth).
+    // Deep-agent LLM providers. Two role slots, each choosing one of the four
+    // providers ('ollama' / 'lmstudio' (local) or 'codex' / 'claude' (OAuth)):
+    //   llmProvider      — GLOBAL (hosted) slot: used by the planner and by the
+    //                      coder for hosted-labeled (and unlabeled) issues.
+    //   localLlmProvider — LOCAL slot: used by the coder for "local"-labeled (XS)
+    //                      issues only.
     llmProvider: 'ollama',
+    localLlmProvider: 'lmstudio',
     ollamaHost: 'http://localhost:11434',
     ollamaModel: '', // e.g. "llama3.1" — must support tool-calling; user selects
     ollamaContextWindow: 8192, // num_ctx

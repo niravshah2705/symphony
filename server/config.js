@@ -164,6 +164,15 @@ const CODER = Object.freeze({
   backend: (process.env.CODER_BACKEND || 'local').toLowerCase() === 'openswe' ? 'openswe' : 'local',
   // The issue label the coder board monitor picks up (Step 3: AI-labeled tasks).
   taskLabel: process.env.CODER_TASK_LABEL || 'AI',
+  // T-shirt sizes the planner assigns per issue (smallest → largest).
+  tshirtSizes: (process.env.CODER_TSHIRT_SIZES || 'XS,S,M,L,XL').split(',').map((s) => s.trim()).filter(Boolean),
+  // Model-routing labels stamped on each issue by size and read by the coder: XS
+  // routes to the LOCAL deep-agent LLM, every larger size to the HOSTED (global)
+  // one. An issue with no model label defaults to hosted.
+  localModelLabel: process.env.CODER_LOCAL_MODEL_LABEL || 'local',
+  hostedModelLabel: process.env.CODER_HOSTED_MODEL_LABEL || 'hosted',
+  // Only this size runs on the local agent; all others run hosted.
+  localSize: process.env.CODER_LOCAL_SIZE || 'XS',
   // Open SWE integration (used only when backend === 'openswe').
   openswe: Object.freeze({
     // Base URL of the locally-running Open SWE LangGraph server (`langgraph dev`).

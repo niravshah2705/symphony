@@ -175,53 +175,69 @@ function keysSection(settings) {
 /* ------------------------------- Deep Agent LLM ------------------------- */
 
 function llmSection(ctx) {
-  // A stable wrapper so switching the active provider re-renders ONLY this section
-  // in place — no full-page reload and no re-fetch of the already-loaded data.
+  // A stable wrapper so switching a provider slot re-renders ONLY this section in
+  // place — no full-page reload and no re-fetch of the already-loaded data.
   const container = el('div', { class: 'llm-section' });
-  let provider = ctx.settings.llmProvider || 'ollama';
+  const providers = {
+    global: ctx.settings.llmProvider || 'ollama',
+    local: ctx.settings.localLlmProvider || 'lmstudio',
+  };
 
-  const onProviderChange = async (value) => {
+  const onProviderChange = async (role, value) => {
     try {
-      await api.setProvider(value);
-      provider = value; // update local UI state only; no network re-fetch, no full render
-      toast(`Active provider: ${value}.`, 'ok');
+      await api.setProvider(value, role);
+      providers[role] = value; // update local UI state only; no full render
+      toast(`${role === 'local' ? 'Local' : 'Global'} deep-agent provider: ${value}.`, 'ok');
       rebuild();
     } catch (err) {
       toast(err.message, 'err');
     }
   };
 
-  const rebuild = () => clear(container).append(buildLlmSection(ctx, provider, onProviderChange));
+  const rebuild = () => clear(container).append(buildLlmSection(ctx, providers, onProviderChange));
 
   rebuild();
   return container;
 }
 
-function buildLlmSection({ settings, ollamaModels, reachable, lmstudioModels, lmstudioReachable, codex, claude, view }, provider, onProviderChange) {
-  // Provider selector — switches which provider the deep agent uses.
-  const providerSelect = el('select', {}, [
-    el('option', { value: 'ollama', selected: provider === 'ollama' }, 'Ollama (local)'),
-    el('option', { value: 'lmstudio', selected: provider === 'lmstudio' }, 'LM Studio (local)'),
-    el('option', { value: 'codex', selected: provider === 'codex' }, 'Codex (OpenAI · OAuth)'),
-    el('option', { value: 'claude', selected: provider === 'claude' }, 'Claude (Anthropic · OAuth)'),
+/** A provider <select> (the 4 supported providers) with `selected` pre-chosen. */
+function providerSelect(selected) {
+  return el('select', {}, [
+    el('option', { value: 'ollama', selected: selected === 'ollama' }, 'Ollama (local)'),
+    el('option', { value: 'lmstudio', selected: selected === 'lmstudio' }, 'LM Studio (local)'),
+    el('option', { value: 'codex', selected: selected === 'codex' }, 'Codex (OpenAI · OAuth)'),
+    el('option', { value: 'claude', selected: selected === 'claude' }, 'Claude (Anthropic · OAuth)'),
   ]);
-  providerSelect.addEventListener('change', () => onProviderChange(providerSelect.value));
+}
 
-  let subtitle;
-  if (provider === 'codex') subtitle = `Codex · ${codex && codex.model ? codex.model : 'not signed in'}`;
-  else if (provider === 'claude') subtitle = `Claude · ${claude && claude.connected ? claude.model : 'not signed in'}`;
-  else if (provider === 'lmstudio') subtitle = settings.lmstudioModel ? `LM Studio · ${settings.lmstudioModel}` : 'LM Studio · not set';
-  else subtitle = settings.ollamaModel || 'Ollama · not set';
+/** Whether a chosen provider still needs setup (drives the section's open state). */
+function providerIncomplete(provider, { settings, codex, claude }) {
+  if (provider === 'codex') return Boolean(!codex.connected);
+  if (provider === 'claude') return Boolean(!claude.connected);
+  if (provider === 'lmstudio') return !settings.lmstudioModel;
+  return !settings.ollamaModel;
+}
 
-  let incomplete;
-  if (provider === 'codex') incomplete = Boolean(!codex.connected);
-  else if (provider === 'claude') incomplete = Boolean(!claude.connected);
-  else if (provider === 'lmstudio') incomplete = !settings.lmstudioModel;
-  else incomplete = !settings.ollamaModel;
+function buildLlmSection({ settings, ollamaModels, reachable, lmstudioModels, lmstudioReachable, codex, claude, view }, providers, onProviderChange) {
+  // Two role slots: LOCAL (coder's XS / "local"-labeled issues) and GLOBAL/hosted
+  // (the planner + the coder's larger / "hosted"/unlabeled issues).
+  const localSelect = providerSelect(providers.local);
+  localSelect.addEventListener('change', () => onProviderChange('local', localSelect.value));
+  const globalSelect = providerSelect(providers.global);
+  globalSelect.addEventListener('change', () => onProviderChange('global', globalSelect.value));
+
+  const subtitle = `Local: ${providers.local} · Global: ${providers.global}`;
+  // Nudge open when either slot still needs setup.
+  const incomplete =
+    providerIncomplete(providers.local, { settings, codex, claude }) ||
+    providerIncomplete(providers.global, { settings, codex, claude });
 
   return section('Deep Agent LLM', subtitle, incomplete, [
-    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Choose which model backs the business-owner deep agent. Ollama and LM Studio run fully local; Codex and Claude use "Sign in with ChatGPT / Claude" OAuth flows (no API key pasted — tokens stay server-side).'),
-    field('Active provider', providerSelect),
+    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Two deep-agent slots. The coder routes each issue by its model label: XS issues (label "local") go to the Local slot; everything larger (label "hosted", or no label) goes to the Global slot. The planner always uses the Global slot. Ollama and LM Studio run fully local; Codex and Claude use OAuth (tokens stay server-side).'),
+    el('div', { class: 'grid', style: 'grid-template-columns:1fr 1fr' }, [
+      field('Local Deep Agent LLM', localSelect, 'Coder route for XS / "local"-labeled issues.'),
+      field('Global Deep Agent LLM (hosted)', globalSelect, 'Planner + coder route for larger / "hosted" / unlabeled issues.'),
+    ]),
     el('div', { class: 'subhead' }, 'Ollama (local)'),
     ...ollamaFields({ settings, ollamaModels, reachable }),
     el('div', { class: 'subhead' }, 'LM Studio (local)'),

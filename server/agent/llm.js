@@ -492,11 +492,26 @@ async function ensureFreshClaudeTokens() {
 }
 
 /**
- * Resolve the active provider's descriptor from settings. For 'codex'/'claude'
- * this refreshes the access token if needed (async, may hit the token endpoint).
+ * Which provider name backs a given deep-agent role:
+ *   'global' (default) — the hosted slot (settings.llmProvider); used by the
+ *     planner and by the coder for hosted/unlabeled issues.
+ *   'local' — the local slot (settings.localLlmProvider); used by the coder for
+ *     "local"-labeled (XS) issues. Falls back to the global slot when unset.
  */
-async function resolveLlm(settings) {
-  if (settings.llmProvider === 'claude') {
+function providerForRole(settings, role) {
+  if (role === 'local') return settings.localLlmProvider || settings.llmProvider || 'ollama';
+  return settings.llmProvider || 'ollama';
+}
+
+/**
+ * Resolve a provider descriptor from settings for the given role ('global' by
+ * default, or 'local'). For 'codex'/'claude' this refreshes the access token if
+ * needed (async, may hit the token endpoint). The per-provider config (model,
+ * host, tokens) is shared across roles; only WHICH provider differs by role.
+ */
+async function resolveLlm(settings, role = 'global') {
+  const provider = providerForRole(settings, role);
+  if (provider === 'claude') {
     const tokens = await ensureFreshClaudeTokens();
     return {
       provider: 'claude',
@@ -506,7 +521,7 @@ async function resolveLlm(settings) {
       numTokens: settings.claudeMaxTokens || 16000,
     };
   }
-  if (settings.llmProvider === 'codex') {
+  if (provider === 'codex') {
     const tokens = await ensureFreshCodexTokens();
     if (CONFIG.OAUTH.backend === 'chatgpt') {
       const accountId = oauth.accountIdFromIdToken(tokens.idToken);
@@ -534,7 +549,7 @@ async function resolveLlm(settings) {
       numTokens: settings.codexMaxTokens || 4096,
     };
   }
-  if (settings.llmProvider === 'lmstudio') {
+  if (provider === 'lmstudio') {
     const host = String(settings.lmstudioHost || CONFIG.LMSTUDIO.defaultHost).replace(/\/$/, '');
     // Key the prompt budget to the window the model is ACTUALLY loaded with (LM
     // Studio may load it smaller than configured), not just the operator setting.
@@ -604,6 +619,7 @@ module.exports = {
   ensureFreshCodexTokens,
   ensureFreshClaudeTokens,
   resolveLlm,
+  providerForRole,
   llmReady,
   notReadyReason,
   lmstudioMaxTokens,

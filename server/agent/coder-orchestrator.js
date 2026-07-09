@@ -46,6 +46,7 @@ const PLANNED_TASKS_QUERY = `
       nodes {
         id identifier title description url createdAt
         state { name type }
+        labels(first: 20) { nodes { name } }
         project { id name }
         inverseRelations(first: 25) { nodes { type issue { id identifier state { type } } } }
       }
@@ -55,6 +56,18 @@ const PLANNED_TASKS_QUERY = `
 function isDoneState(state) {
   const t = state && state.type;
   return t === 'completed' || t === 'canceled';
+}
+
+/**
+ * Which deep-agent role a task routes to, from its model-routing label:
+ *   - a "local" label → 'local' (the local LLM slot),
+ *   - a "hosted" label OR no model label → 'global' (the hosted slot; the default).
+ * The planner stamps "local" on XS issues and "hosted" on everything larger.
+ */
+function modelRoleForTask(task) {
+  const names = (task.labels || []).map((n) => String(n).toLowerCase());
+  if (names.includes(String(CONFIG.CODER.localModelLabel).toLowerCase())) return 'local';
+  return 'global';
 }
 
 /** Identifiers of not-yet-Done issues that block this task. */
@@ -86,6 +99,7 @@ async function fetchPlannedTasks(apiKey) {
       url: n.url,
       createdAt: n.createdAt,
       state: n.state && n.state.name,
+      labels: ((n.labels && n.labels.nodes) || []).map((l) => l.name),
       project: { id: pid, name: n.project.name },
       blockers: blockers(n),
     };
@@ -232,14 +246,6 @@ async function pollOnce() {
     log.warn('Coder poll skipped: add a Linear API key in Settings.');
     return;
   }
-  let llm;
-  try {
-    llm = await resolveLlm(settings);
-  } catch (err) {
-    log.warn(`Coder poll skipped: ${err && err.message ? err.message : err}`);
-    return;
-  }
-
   let projects;
   let tasksByProject;
   try {
@@ -250,7 +256,16 @@ async function pollOnce() {
     return;
   }
 
-  const ctx = { llm, apiKey: settings.linearApiKey, keys: buildKeys(settings), githubToken: store.getGithubToken() };
+  const ctx = { apiKey: settings.linearApiKey, keys: buildKeys(settings), githubToken: store.getGithubToken() };
+  // Resolve each role's provider at most once per tick, on demand — a task routes
+  // to 'local' or 'global' by its model label. Resolution can throw (e.g. an
+  // OAuth provider not signed in); we cache the promise and skip only the tasks
+  // that need an unavailable role rather than failing the whole poll.
+  const roleLlm = new Map();
+  const resolveRole = (role) => {
+    if (!roleLlm.has(role)) roleLlm.set(role, resolveLlm(settings, role));
+    return roleLlm.get(role);
+  };
 
   for (const project of projects) {
     const tasks = tasksByProject.get(project.id) || [];
@@ -273,8 +288,17 @@ async function pollOnce() {
       if (head) log.info(`Project "${project.name}": next task ${head.identifier} blocked by ${head.blockers.join(', ')}.`);
       continue;
     }
-    log.info(`Dispatching ${next.identifier} ("${project.name}", created ${next.createdAt}) via ${CONFIG.CODER.backend} backend.`);
-    dispatch(next, ctx);
+    // Route to the local or hosted deep-agent slot by the task's model label.
+    const role = modelRoleForTask(next);
+    let llm;
+    try {
+      llm = await resolveRole(role);
+    } catch (err) {
+      log.warn(`Coder poll: ${role} LLM not ready for ${next.identifier}: ${err && err.message ? err.message : err}; skipping.`);
+      continue;
+    }
+    log.info(`Dispatching ${next.identifier} ("${project.name}", created ${next.createdAt}, ${role} agent → ${llm.provider}) via ${CONFIG.CODER.backend} backend.`);
+    dispatch(next, { ...ctx, llm });
   }
 }
 
@@ -311,4 +335,4 @@ function status() {
   };
 }
 
-module.exports = { start, stop, status, pollOnce, fetchPlannedProjects, fetchPlannedTasks, parseVerdict };
+module.exports = { start, stop, status, pollOnce, fetchPlannedProjects, fetchPlannedTasks, parseVerdict, modelRoleForTask };
