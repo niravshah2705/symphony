@@ -14,13 +14,26 @@ const { z } = require('zod');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+const TSHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL'];
+
+/** Clamp a model-provided size to a valid T-shirt size (uppercase); default 'M'. */
+function normalizeTshirtSize(size) {
+  const s = String(size || '').trim().toUpperCase();
+  return TSHIRT_SIZES.includes(s) ? s : 'M';
+}
+
 const IssueSchema = z.object({
   title: z.string().min(2).max(200),
-  description: z.string().max(4000).default(''),
+  description: z.string().max(8000).default(''),
   priority: z.number().int().min(0).max(4).default(3),
   // Acceptance / definition-of-done for this feature/issue.
-  evaluationCriteria: z.string().max(1200).default(''),
+  evaluationCriteria: z.string().max(2400).default(''),
   estimateDays: z.number().int().min(1).max(90).optional(),
+  // Relative effort/complexity; drives model routing at code time (XS → local
+  // agent, larger → hosted). Kept a plain string here (tolerant of messy local-model
+  // output and JSON-Schema-representable); clamped to a valid size at write time via
+  // normalizeTshirtSize.
+  tshirtSize: z.string().max(20).default('M'),
 });
 
 const MilestoneSchema = z.object({
@@ -111,4 +124,6 @@ module.exports = {
   ResumeSchema,
   planJsonSchema,
   normalizePlan,
+  normalizeTshirtSize,
+  TSHIRT_SIZES,
 };
