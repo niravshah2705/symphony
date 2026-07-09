@@ -24,8 +24,10 @@ function publicSettings() {
     // LM Studio (local, OpenAI-compatible) — an alternative local provider.
     lmstudioHost: s.lmstudioHost,
     lmstudioModel: s.lmstudioModel,
+    lmstudioContextWindow: s.lmstudioContextWindow,
     lmstudioNumTokens: s.lmstudioNumTokens,
     lmstudioJsonMode: s.lmstudioJsonMode || 'text',
+    lmstudioContextMode: s.lmstudioContextMode || 'summarize',
     hasGithubToken: Boolean(s.githubToken),
     maskedGithubToken: maskKey(s.githubToken),
     hasLangsmithKey: Boolean(s.langsmithApiKey),
@@ -110,8 +112,10 @@ router.put('/lmstudio', (req, res) => {
   const current = getSettings();
   const patch = {
     lmstudioHost: normalizeHost(b.lmstudioHost, current.lmstudioHost),
+    lmstudioContextWindow: clampInt(b.lmstudioContextWindow, 512, 131072, current.lmstudioContextWindow),
     lmstudioNumTokens: clampInt(b.lmstudioNumTokens, 128, 32768, current.lmstudioNumTokens),
     lmstudioJsonMode: oneOf(b.lmstudioJsonMode, CONFIG.LMSTUDIO_JSON_MODES, current.lmstudioJsonMode || 'text'),
+    lmstudioContextMode: oneOf(b.lmstudioContextMode, CONFIG.LMSTUDIO_CONTEXT_MODES, current.lmstudioContextMode || 'summarize'),
   };
   if (b.lmstudioModel !== undefined) patch.lmstudioModel = String(b.lmstudioModel).trim();
   patchSettings(patch);

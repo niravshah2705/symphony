@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { CONFIG } = require('../config');
 const store = require('../store');
+const logger = require('../logger');
 const oauth = require('./oauth');
 const claudeOauth = require('./claude-oauth');
 
@@ -48,6 +49,102 @@ function lmstudioJsonKwargs(mode) {
     };
   }
   return null;
+}
+
+/**
+ * Output-token budget for LM Studio, bounded by the loaded context window. LM
+ * Studio can't resize n_ctx per request, so the prompt + output must fit the
+ * loaded window. We reserve roughly half the window for the (large) deep-agent
+ * prompt and cap max_tokens at the rest, so a request never asks for more output
+ * than the context can hold (which triggers "n_keep >= n_ctx" 400s).
+ */
+function lmstudioMaxTokens(llm) {
+  const ctx = Number(llm.contextWindow) || 8192;
+  const want = Number(llm.numTokens) || 4096;
+  return Math.max(256, Math.min(want, Math.floor(ctx / 2)));
+}
+
+// Context-window management (trim / summarize) lives in its own module; it is
+// provider-agnostic and LLM-client-free (summarization is injected), so it stays
+// pure and testable. See lmstudio-context.js.
+const {
+  prepareMessages,
+  trimMessagesForBudget,
+  estimateMessageTokens,
+  SUMMARY_SYSTEM_PROMPT,
+  contentToText,
+} = require('./lmstudio-context');
+
+/**
+ * Max prompt tokens for LM Studio: the operator-declared context window minus the
+ * reserved output budget (the max_tokens we send) and a safety margin. Returns 0
+ * when no context window is known (→ context management disabled). Uses the declared
+ * window, which should be ≤ the model's loaded window, so the estimate stays
+ * conservative.
+ */
+function lmstudioPromptBudget(llm) {
+  const ctx = Number(llm && llm.contextWindow) || 0;
+  if (ctx <= 0) return 0;
+  const budget = ctx - lmstudioMaxTokens(llm) - CONFIG.LMSTUDIO.promptMarginTokens;
+  return Math.max(0, budget);
+}
+
+// Dedup key for the "loaded < configured" warning so resolveLlm (called on every
+// scheduler/monitor tick) logs it once per distinct situation, not every tick.
+let lastCtxMismatchWarning = null;
+
+/**
+ * Warn (at most once per distinct model/loaded/declared combination) when LM Studio
+ * loaded a smaller context window than the operator configured.
+ */
+function warnContextMismatch(model, loaded, declared) {
+  if (!(loaded && declared && loaded < declared)) return;
+  const key = `${model}:${loaded}:${declared}`;
+  if (key === lastCtxMismatchWarning) return;
+  lastCtxMismatchWarning = key;
+  logger.warn(
+    `LM Studio: model "${model}" is loaded with only ${loaded} context tokens, but the app is configured for ${declared}. Using ${loaded}. Reload the model in LM Studio with a larger context window (it must exceed the coder's initial prompt, ~10–20k tokens) to run the coder.`
+  );
+}
+
+/**
+ * Reconcile the operator-declared context window with the value LM Studio actually
+ * loaded the model with. LM Studio fixes n_ctx at load time and may load a model
+ * with a SMALLER window than configured (e.g. reduced to fit memory). Keying the
+ * prompt budget to a too-large window sends prompts the model can't hold → instant
+ * "tokens to keep from the initial prompt is greater than the context length" 400s.
+ * Prefer the smaller of the two (and fall back to whichever is known).
+ */
+function clampContextWindow(declared, loaded) {
+  const d = Number(declared) || 0;
+  const l = Number(loaded) || 0;
+  if (d > 0 && l > 0) return Math.min(d, l);
+  return l > 0 ? l : d;
+}
+
+/**
+ * Read the actually-loaded context length for `model` from LM Studio's native REST
+ * API (/api/v0/models exposes `loaded_context_length`). Returns null when it can't
+ * be determined (old LM Studio, model not loaded, endpoint unreachable) so callers
+ * fall back to the operator setting. Short timeout so a run never hangs on it.
+ */
+async function fetchLmstudioLoadedContext(host, model) {
+  const url = `${String(host || '').replace(/\/$/, '')}/api/v0/models`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const models = (body && (body.data || body.models)) || [];
+    const found = Array.isArray(models) ? models.find((m) => m && m.id === model) : null;
+    const n = found && Number(found.loaded_context_length);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function systemToDeveloper(messages) {
@@ -198,6 +295,89 @@ function createClaudeModel(llm /* , json */) {
   });
 }
 
+// Lazily built + cached so @langchain/openai stays off the Ollama/Claude paths.
+// Subclasses ChatOpenAI to bound the (unbounded, re-sent-every-turn) deep-agent
+// history to `promptBudget` tokens before each call — via the configured strategy
+// (trim | summarize | none) and ONLY when the prompt actually exceeds the budget —
+// so a long run can't overflow LM Studio's fixed context window. Mirrors the Codex
+// wrapper's shape, including the withConfig override that otherwise rebuilds a base
+// ChatOpenAI and would drop the behavior (bindTools wraps `this`, so no override).
+let LmStudioChatModelClass = null;
+function getLmStudioChatModelClass() {
+  if (LmStudioChatModelClass) return LmStudioChatModelClass;
+  const { ChatOpenAI } = require('@langchain/openai');
+  LmStudioChatModelClass = class LmStudioChatModel extends ChatOpenAI {
+    constructor(fields) {
+      super(fields);
+      // 0/undefined budget → context management disabled (pass-through).
+      this.promptBudget = Number(fields && fields.promptBudget) || 0;
+      this.charsPerToken = Number(fields && fields.charsPerToken) || CONFIG.LMSTUDIO.charsPerToken;
+      this.contextMode = (fields && fields.contextMode) || 'trim';
+      this.summaryMaxTokens = Number(fields && fields.summaryMaxTokens) || CONFIG.LMSTUDIO.summaryMaxTokens;
+      // Captured for the (separate, tool-free) summarizer sub-model.
+      this._summaryCfg = {
+        model: fields && fields.model,
+        baseURL: fields && fields.configuration && fields.configuration.baseURL,
+        timeout: fields && fields.timeout,
+        maxRetries: fields && fields.maxRetries,
+      };
+      this._summaryModel = null;
+    }
+    // A plain ChatOpenAI (no tools, small output) reused for summarization calls, so
+    // they never re-enter _prepareMessages and never carry the agent's bound tools.
+    _summarizer() {
+      if (this._summaryModel) return this._summaryModel;
+      this._summaryModel = new ChatOpenAI({
+        model: this._summaryCfg.model,
+        apiKey: 'lm-studio',
+        temperature: 0,
+        maxTokens: this.summaryMaxTokens,
+        timeout: this._summaryCfg.timeout,
+        maxRetries: this._summaryCfg.maxRetries,
+        configuration: { baseURL: this._summaryCfg.baseURL },
+      });
+      return this._summaryModel;
+    }
+    _summarize(text) {
+      const { SystemMessage, HumanMessage } = require('@langchain/core/messages');
+      return this._summarizer()
+        .invoke([new SystemMessage(SUMMARY_SYSTEM_PROMPT), new HumanMessage(text)])
+        .then((res) => contentToText(res && res.content));
+    }
+    _prepareMessages(messages) {
+      return prepareMessages({
+        messages,
+        mode: this.contextMode,
+        budget: this.promptBudget,
+        charsPerToken: this.charsPerToken,
+        summaryMaxTokens: this.summaryMaxTokens,
+        summarize: (text) => this._summarize(text),
+      });
+    }
+    async _generate(messages, options, runManager) {
+      return super._generate(await this._prepareMessages(messages), options, runManager);
+    }
+    async *_streamResponseChunks(messages, options, runManager) {
+      yield* super._streamResponseChunks(await this._prepareMessages(messages), options, runManager);
+    }
+    async *_streamChatModelEvents(messages, options, runManager) {
+      yield* super._streamChatModelEvents(await this._prepareMessages(messages), options, runManager);
+    }
+    withConfig(config) {
+      const next = new LmStudioChatModel({
+        ...this.fields,
+        promptBudget: this.promptBudget,
+        charsPerToken: this.charsPerToken,
+        contextMode: this.contextMode,
+        summaryMaxTokens: this.summaryMaxTokens,
+      });
+      next.defaultOptions = { ...this.defaultOptions, ...config };
+      return next;
+    }
+  };
+  return LmStudioChatModelClass;
+}
+
 /** Build a LangChain chat model for the given provider descriptor. */
 function createChatModel(llm, { json = false } = {}) {
   if (llm.provider === 'claude') {
@@ -222,14 +402,36 @@ function createChatModel(llm, { json = false } = {}) {
     // LM Studio serves an OpenAI-compatible API, so ChatOpenAI targets it directly.
     // No real key is needed (LM Studio ignores it), but the SDK requires a non-empty
     // apiKey, so we pass a placeholder. Context length is fixed when the model is
-    // loaded in LM Studio, so only max_tokens is sent from here.
-    const { ChatOpenAI } = require('@langchain/openai');
+    // loaded in LM Studio and cannot be set per-request, so we cap the OUTPUT budget
+    // (max_tokens) to fit the operator-declared context window, reserving room for
+    // the (large) deep-agent prompt. Without this, sending max_tokens > n_ctx (e.g.
+    // 16000 in an 8192 window) yields LM Studio 400s like "n_keep >= n_ctx".
+    const LmStudioChatModel = getLmStudioChatModelClass();
     const opts = {
       model: llm.model,
       apiKey: 'lm-studio',
       temperature: 0,
-      maxTokens: llm.numTokens,
+      maxTokens: lmstudioMaxTokens(llm),
+      // Stream responses. A slow local model can take minutes per turn; a
+      // NON-streaming request holds the socket until the whole answer is ready, so
+      // Node's undici HTTP client aborts it at its default 5-min headers timeout
+      // (which the SDK's `timeout` below does NOT override) — killing a generation
+      // that is actually still progressing. Streaming sends headers immediately and
+      // tokens incrementally, so the 5-min cutoff never fires on a live generation.
+      streaming: true,
+      // Slow local reasoning models can exceed the OpenAI SDK's 10-min default per
+      // turn; use a generous, env-configurable timeout and few retries so a genuine
+      // timeout fails once instead of being retried into a much longer wait.
+      timeout: CONFIG.LMSTUDIO.requestTimeoutMs,
+      maxRetries: CONFIG.LMSTUDIO.maxRetries,
       configuration: { baseURL: llm.baseUrl },
+      // Bound the growing deep-agent history to fit the loaded context window, so a
+      // long run can't overflow it (the max_tokens cap only bounds OUTPUT, not the
+      // re-sent input). `contextMode` picks the strategy (trim | summarize | none);
+      // `promptBudget` is 0 when no context window is declared → management disabled.
+      promptBudget: lmstudioPromptBudget(llm),
+      contextMode: llm.contextMode,
+      summaryMaxTokens: CONFIG.LMSTUDIO.summaryMaxTokens,
     };
     // Constrained JSON output — the accepted format varies by model/engine, so the
     // mode is operator-selectable ('text' sends nothing and relies on the prompt).
@@ -237,7 +439,7 @@ function createChatModel(llm, { json = false } = {}) {
       const kwargs = lmstudioJsonKwargs(llm.jsonMode);
       if (kwargs) opts.modelKwargs = kwargs;
     }
-    return new ChatOpenAI(opts);
+    return new LmStudioChatModel(opts);
   }
   // Default: local Ollama.
   const { ChatOllama } = require('@langchain/ollama');
@@ -334,14 +536,23 @@ async function resolveLlm(settings) {
   }
   if (settings.llmProvider === 'lmstudio') {
     const host = String(settings.lmstudioHost || CONFIG.LMSTUDIO.defaultHost).replace(/\/$/, '');
+    // Key the prompt budget to the window the model is ACTUALLY loaded with (LM
+    // Studio may load it smaller than configured), not just the operator setting.
+    const declaredCtx = Number(settings.lmstudioContextWindow) || 0;
+    const loadedCtx = await fetchLmstudioLoadedContext(host, settings.lmstudioModel);
+    const contextWindow = clampContextWindow(declaredCtx, loadedCtx);
+    warnContextMismatch(settings.lmstudioModel, loadedCtx, declaredCtx);
     return {
       provider: 'lmstudio',
       host,
       // OpenAI-compatible endpoint the ChatOpenAI client targets.
       baseUrl: `${host}${CONFIG.LMSTUDIO.apiPath}`,
       model: settings.lmstudioModel,
+      contextWindow,
       numTokens: settings.lmstudioNumTokens,
       jsonMode: settings.lmstudioJsonMode || 'text',
+      // How to keep the prompt within the loaded window: trim | summarize | none.
+      contextMode: settings.lmstudioContextMode || 'summarize',
     };
   }
   return {
@@ -395,4 +606,9 @@ module.exports = {
   resolveLlm,
   llmReady,
   notReadyReason,
+  lmstudioMaxTokens,
+  lmstudioPromptBudget,
+  clampContextWindow,
+  trimMessagesForBudget,
+  estimateMessageTokens,
 };
