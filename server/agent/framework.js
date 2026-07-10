@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { createChatModel } = require('./llm');
 const toolRegistry = require('./tools');
+const { installSafeRead } = require('./safe-read');
 
 /**
  * Workflow-driven deep-agent framework.
@@ -114,6 +115,9 @@ function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, ext
     skills = skills || installSkills(rootDir, workflow.skills);
     be = buildBackend(workflow.backend, rootDir, { timeout: workflow.shellTimeoutSec, env });
   }
+  // Guard read_file against Anthropic's content-block rules: unrecognized/binary
+  // files must not be sent as non-PDF `document` blocks (invalid_request_error).
+  be = installSafeRead(be);
   const tools = [...toolRegistry.buildMany(workflow.tools, ctx), ...(extraTools || [])];
   const systemPrompt = typeof workflow.systemPrompt === 'function' ? workflow.systemPrompt(ctx) : workflow.systemPrompt;
   const agent = createDeepAgent({ model: createChatModel(llm), backend: be, skills, tools, systemPrompt });
