@@ -42,7 +42,10 @@ function clampInt(value, min, max, fallback) {
 /** Configured model name for the active provider (for status display). */
 function activeModelFor(provider, settings) {
   if (provider === 'claude') return settings.claudeModel || CONFIG.CLAUDE.defaultModel;
-  if (provider === 'codex') return settings.codexModel || CONFIG.OAUTH.defaultModel;
+  if (provider === 'codex') {
+    const fallback = CONFIG.OAUTH.backend === 'chatgpt' ? CONFIG.OAUTH.chatgptModel : CONFIG.OAUTH.defaultModel;
+    return settings.codexModel || fallback;
+  }
   if (provider === 'lmstudio') return settings.lmstudioModel;
   return settings.ollamaModel;
 }

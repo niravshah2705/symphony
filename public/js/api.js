@@ -44,6 +44,9 @@ export const api = {
   deleteBusiness: (id) => request(`/businesses/${id}`, { method: 'DELETE' }),
 
   // LLM (Ollama / LM Studio) / LangSmith settings
+  getLlmPresets: () => request('/settings/llm-presets'),
+  applyLlmPreset: (payload) =>
+    request('/settings/llm-preset', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLlm: (payload) => request('/settings/llm', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLmstudio: (payload) => request('/settings/lmstudio', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLangsmith: (payload) =>

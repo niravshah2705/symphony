@@ -1,0 +1,297 @@
+{
+  "version": 1,
+  "updatedAt": "2026-07-10",
+  "defaults": {
+    "local": "ollama-gpt-oss-20b",
+    "hosted": "claude-opus-4-8"
+  },
+  "presets": [
+    {
+      "id": "ollama-gpt-oss-20b",
+      "label": "GPT-OSS 20B",
+      "deployment": "local",
+      "provider": "ollama",
+      "model": "gpt-oss:20b",
+      "sourceUrl": "https://ollama.com/library/gpt-oss",
+      "modelPatterns": ["gpt-oss:20b", "gpt-oss-20b"],
+      "recommended": true,
+      "description": "Best practical local default for reasoning, tools, and structured coding work on a 16 GB+ machine.",
+      "requirements": "About 16 GB of memory; more memory is needed for a large context window.",
+      "limits": {
+        "contextWindow": 131072,
+        "maxOutputTokens": 131072
+      },
+      "requestLimits": {
+        "maxOutputContextFraction": 1
+      },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": true,
+        "reasoningAdapter": "ollama-think-effort",
+        "reasoningEfforts": ["low", "medium", "high"]
+      },
+      "parameters": {
+        "contextWindow": 65536,
+        "maxOutputTokens": 16384,
+        "temperature": 1,
+        "topP": 1,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": {
+          "effort": "medium",
+          "parameter": "think"
+        },
+        "jsonMode": "json",
+        "contextMode": null
+      }
+    },
+    {
+      "id": "ollama-qwen3-coder-30b",
+      "label": "Qwen3 Coder 30B",
+      "deployment": "local",
+      "provider": "ollama",
+      "model": "qwen3-coder:30b",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "modelPatterns": ["qwen3-coder:30b", "qwen3-coder-30b"],
+      "recommended": false,
+      "description": "Fast mixture-of-experts coding model with strong agentic tool use and repository-scale context.",
+      "requirements": "The model is about 19 GB and a 131K context needs additional memory; reduce toward 32,768 if memory pressure is high.",
+      "limits": {
+        "contextWindow": 262144,
+        "maxOutputTokens": 65536
+      },
+      "requestLimits": {
+        "maxOutputContextFraction": 1
+      },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": true,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 131072,
+        "maxOutputTokens": 65536,
+        "temperature": 0.7,
+        "topP": 0.8,
+        "topK": 20,
+        "repeatPenalty": 1.05,
+        "reasoning": {
+          "effort": "none",
+          "parameter": null
+        },
+        "jsonMode": "json",
+        "contextMode": null
+      }
+    },
+    {
+      "id": "ollama-gpt-oss-120b",
+      "label": "GPT-OSS 120B",
+      "deployment": "local",
+      "provider": "ollama",
+      "model": "gpt-oss:120b",
+      "sourceUrl": "https://ollama.com/library/gpt-oss",
+      "modelPatterns": ["gpt-oss:120b", "gpt-oss-120b"],
+      "recommended": false,
+      "description": "Highest-quality open-weight option in the catalog for workstations with very large unified or GPU memory.",
+      "requirements": "About 80 GB of memory.",
+      "limits": {
+        "contextWindow": 131072,
+        "maxOutputTokens": 131072
+      },
+      "requestLimits": {
+        "maxOutputContextFraction": 1
+      },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": true,
+        "reasoningAdapter": "ollama-think-effort",
+        "reasoningEfforts": ["low", "medium", "high"]
+      },
+      "parameters": {
+        "contextWindow": 65536,
+        "maxOutputTokens": 16384,
+        "temperature": 1,
+        "topP": 1,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": {
+          "effort": "medium",
+          "parameter": "think"
+        },
+        "jsonMode": "json",
+        "contextMode": null
+      }
+    },
+    {
+      "id": "lmstudio-gpt-oss-20b",
+      "label": "GPT-OSS 20B",
+      "deployment": "local",
+      "provider": "lmstudio",
+      "model": "openai/gpt-oss-20b",
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-oss-20b",
+      "modelPatterns": ["gpt-oss-20b", "gpt_oss-20b"],
+      "recommended": true,
+      "description": "LM Studio preset for GPT-OSS with OpenAI-compatible reasoning effort and conservative JSON handling.",
+      "requirements": "Load the model in LM Studio with at least the configured 65,536-token context.",
+      "limits": {
+        "contextWindow": 131072,
+        "maxOutputTokens": 131072
+      },
+      "requestLimits": {
+        "maxOutputContextFraction": 0.5
+      },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": true,
+        "reasoningAdapter": "openai-compatible",
+        "reasoningEfforts": ["low", "medium", "high"]
+      },
+      "parameters": {
+        "contextWindow": 65536,
+        "maxOutputTokens": 16384,
+        "temperature": 1,
+        "topP": 1,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": {
+          "effort": "medium",
+          "parameter": "reasoning_effort"
+        },
+        "jsonMode": "text",
+        "contextMode": "summarize"
+      }
+    },
+    {
+      "id": "lmstudio-qwen3-coder-30b",
+      "label": "Qwen3 Coder 30B",
+      "deployment": "local",
+      "provider": "lmstudio",
+      "model": "qwen3-coder-30b",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "modelPatterns": ["qwen3-coder-30b", "qwen3_coder-30b"],
+      "recommended": false,
+      "description": "LM Studio preset for the efficient Qwen3 coding model; prompt-driven JSON is the most portable runtime mode.",
+      "requirements": "Load the model in LM Studio with the configured 131,072-token context, or lower both context and output together if memory is limited.",
+      "limits": {
+        "contextWindow": 262144,
+        "maxOutputTokens": 65536
+      },
+      "requestLimits": {
+        "maxOutputContextFraction": 0.5
+      },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": true,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 131072,
+        "maxOutputTokens": 65536,
+        "temperature": 0.7,
+        "topP": 0.8,
+        "topK": 20,
+        "repeatPenalty": 1.05,
+        "reasoning": {
+          "effort": "none",
+          "parameter": null
+        },
+        "jsonMode": "text",
+        "contextMode": "summarize"
+      }
+    },
+    {
+      "id": "codex-gpt-5-5",
+      "label": "OpenAI GPT-5.5",
+      "deployment": "hosted",
+      "provider": "codex",
+      "model": "gpt-5.5",
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.5",
+      "modelPatterns": ["gpt-5.5"],
+      "recommended": true,
+      "description": "Hosted coding and planning through the app's ChatGPT/Codex OAuth backend.",
+      "requirements": "Sign in with ChatGPT. The subscription backend manages the output ceiling and ignores the saved token cap.",
+      "limits": {
+        "contextWindow": 1050000,
+        "maxOutputTokens": 128000
+      },
+      "requestLimits": {
+        "maxOutputContextFraction": null
+      },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "openai",
+        "reasoningEfforts": ["none", "low", "medium", "high", "xhigh"]
+      },
+      "parameters": {
+        "contextWindow": 1050000,
+        "maxOutputTokens": 65536,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": {
+          "effort": "high",
+          "parameter": "reasoning.effort"
+        },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "claude-opus-4-8",
+      "label": "Claude Opus 4.8",
+      "deployment": "hosted",
+      "provider": "claude",
+      "model": "claude-opus-4-8",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-8",
+      "modelPatterns": ["claude-opus-4-8"],
+      "recommended": true,
+      "description": "Frontier hosted model for long-horizon agentic coding, with adaptive thinking enabled.",
+      "requirements": "Sign in with Claude. Sampling parameters are intentionally omitted for this model.",
+      "limits": {
+        "contextWindow": 1000000,
+        "maxOutputTokens": 128000
+      },
+      "requestLimits": {
+        "maxOutputContextFraction": null
+      },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": false,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "anthropic-adaptive",
+        "reasoningEfforts": ["none", "low", "medium", "high", "xhigh", "max"]
+      },
+      "parameters": {
+        "contextWindow": 1000000,
+        "maxOutputTokens": 65536,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": {
+          "effort": "xhigh",
+          "parameter": "thinking.type=adaptive + output_config.effort"
+        },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    }
+  ]
+}

@@ -2,6 +2,60 @@
 
 const fs = require('fs');
 const { CONFIG } = require('./config');
+const { getPreset, settingsPatchForPreset, publicCatalog, modelMatchesPreset } = require('./agent/model-presets');
+
+const PRESET_CATALOG = publicCatalog();
+const DEFAULT_LOCAL_PRESET = getPreset(PRESET_CATALOG.defaults.local);
+const DEFAULT_HOSTED_PRESET = getPreset(PRESET_CATALOG.defaults.hosted);
+
+function recommendedPreset(provider) {
+  return PRESET_CATALOG.presets.find((preset) => preset.provider === provider && preset.recommended)
+    || PRESET_CATALOG.presets.find((preset) => preset.provider === provider);
+}
+
+function configuredModel(provider) {
+  if (provider === 'codex') {
+    return CONFIG.OAUTH.backend === 'chatgpt' ? CONFIG.OAUTH.chatgptModel : CONFIG.OAUTH.defaultModel;
+  }
+  if (provider === 'claude') return CONFIG.CLAUDE.defaultModel;
+  return recommendedPreset(provider).model;
+}
+
+/** Keep model-specific adapters only when an environment model matches the preset. */
+function settingsForConfiguredModel(preset, model = configuredModel(preset.provider)) {
+  const patch = settingsPatchForPreset(preset, { model });
+  if (modelMatchesPreset(preset, model)) return patch;
+  if (preset.provider === 'codex') {
+    return {
+      ...patch,
+      codexModel: model,
+      codexContextWindow: 128000,
+      codexMaxTokens: 4096,
+      codexTemperature: null,
+      codexReasoningEffort: 'none',
+      codexReasoningAdapter: 'none',
+    };
+  }
+  return {
+    ...patch,
+    claudeModel: model,
+    claudeContextWindow: 200000,
+    claudeMaxTokens: 4096,
+    claudeTemperature: null,
+    claudeReasoningEffort: 'none',
+    claudeReasoningAdapter: 'none',
+  };
+}
+
+const DEFAULT_OLLAMA_SETTINGS = settingsPatchForPreset(recommendedPreset('ollama'));
+const DEFAULT_LMSTUDIO_SETTINGS = settingsPatchForPreset(recommendedPreset('lmstudio'));
+const DEFAULT_CODEX_SETTINGS = settingsForConfiguredModel(recommendedPreset('codex'));
+const DEFAULT_CLAUDE_SETTINGS = settingsForConfiguredModel(recommendedPreset('claude'));
+// The exact catalog defaults win over a same-provider recommended preset. This
+// keeps changing `defaults.local/hosted` in JSON sufficient to change new installs.
+const DEFAULT_ACTIVE_LOCAL_SETTINGS = settingsPatchForPreset(DEFAULT_LOCAL_PRESET);
+const DEFAULT_ACTIVE_HOSTED_SETTINGS = settingsForConfiguredModel(DEFAULT_HOSTED_PRESET);
+const DEFAULT_HOSTED_MODEL = configuredModel(DEFAULT_HOSTED_PRESET.provider);
 
 /**
  * Tiny JSON-file backed store for local settings, the business -> project
@@ -35,49 +89,47 @@ const DEFAULT_STORE = Object.freeze({
     //                      coder for hosted-labeled (and unlabeled) issues.
     //   localLlmProvider — LOCAL slot: used by the coder for "local"-labeled (XS)
     //                      issues only.
-    llmProvider: 'ollama',
-    localLlmProvider: 'lmstudio',
+    // New installs start with one useful local preset and one hosted preset. An
+    // existing store is migrated to "custom" below so its hand-tuned values are
+    // never silently replaced by a catalog recommendation.
+    llmProvider: DEFAULT_HOSTED_PRESET.provider,
+    localLlmProvider: DEFAULT_LOCAL_PRESET.provider,
+    hostedLlmPresetId: modelMatchesPreset(DEFAULT_HOSTED_PRESET, DEFAULT_HOSTED_MODEL) ? DEFAULT_HOSTED_PRESET.id : 'custom',
+    localLlmPresetId: DEFAULT_LOCAL_PRESET.id,
     ollamaHost: 'http://localhost:11434',
-    ollamaModel: '', // e.g. "llama3.1" — must support tool-calling; user selects
-    ollamaContextWindow: 8192, // num_ctx
-    ollamaNumTokens: 8192, // num_predict (output budget; the software-design plan JSON is large)
-    ollamaJsonMode: 'json', // JSON constraint: 'json' (format:'json') | 'text' (prompt-driven)
+    ...DEFAULT_OLLAMA_SETTINGS,
     // LM Studio (local, OpenAI-compatible API) — an alternative local provider for
     // models not available in Ollama. No credentials; the browser chooses host + model.
     lmstudioHost: 'http://localhost:1234',
-    lmstudioModel: '', // e.g. "qwen2.5-7b-instruct" — must support tool-calling; user selects
     // The context length the model is loaded with in LM Studio (n_ctx). LM Studio
     // fixes this at load time and does not accept it per-request, so the operator
     // sets it here to MATCH the loaded context. It bounds max_tokens (below) so we
     // never request more output than the window holds; the deep-agent prompt is
     // large (~10k tokens), so load the model with a generous context (>= 16384).
-    lmstudioContextWindow: 8192,
-    // max_tokens (output budget). The plan JSON is large and REASONING models (e.g.
-    // ornith) spend extra tokens thinking, so 4096 truncates it -> "length limit
-    // reached". 16000 matches the Claude ceiling. Configurable in Settings → LLM;
-    // capped to fit lmstudioContextWindow at request time.
-    lmstudioNumTokens: 16000,
+    // max_tokens (output budget). The plan JSON is large and reasoning models
+    // spend additional tokens thinking, so small generic defaults can truncate it.
+    // The selected preset supplies this value; it is capped against the declared
+    // LM Studio context at save and request time.
     // JSON constraint: 'text' (prompt-driven; most compatible) | 'json_object' | 'json_schema'.
     // Some engines (e.g. the ornith runtime) reject 'json_object', so 'text' is the safe default.
-    lmstudioJsonMode: 'text',
     // Context-window management for long coder runs (the deep agent re-sends its
     // whole growing history each turn; a fixed window eventually overflows). Only
     // acts when the prompt exceeds the window. 'summarize' condenses old turns into
     // a note and keeps recent turns verbatim; 'trim' drops old turns; 'none' sends
     // as-is. 'summarize' preserves the most context (at the cost of extra LLM calls).
-    lmstudioContextMode: 'summarize',
+    ...DEFAULT_LMSTUDIO_SETTINGS,
     // Codex (OpenAI) provider — endpoints/client come from CONFIG.OAUTH (trusted),
     // the browser only chooses the model. Tokens live server-side only.
-    codexModel: '', // e.g. "gpt-5-codex"; falls back to CONFIG.OAUTH.defaultModel
-    codexMaxTokens: 4096, // output token budget for the OpenAI call
+    ...DEFAULT_CODEX_SETTINGS,
     codexTokens: null, // OAuth token set { accessToken, refreshToken, ... } — never sent to the browser
     // Claude (Anthropic) provider — "Sign in with Claude" OAuth. Endpoints/client
     // come from CONFIG.CLAUDE (trusted); the browser only chooses the model.
-    claudeModel: '', // e.g. "claude-opus-4-8"; falls back to CONFIG.CLAUDE.defaultModel
     // Output token budget. The business-plan JSON is large (milestones + issues +
-    // per-item criteria); 4096 truncates it mid-array. 16000 is the non-streaming
-    // safe ceiling (the model stops at end_turn when done, so headroom is free).
-    claudeMaxTokens: 16000,
+    // per-item criteria), so the selected preset supplies enough headroom while
+    // the model still stops naturally at end_turn.
+    ...DEFAULT_CLAUDE_SETTINGS,
+    ...DEFAULT_ACTIVE_LOCAL_SETTINGS,
+    ...DEFAULT_ACTIVE_HOSTED_SETTINGS,
     claudeTokens: null, // OAuth token set — never sent to the browser
     // GitHub token (fine-grained PAT) for the code-writer's git clone/push against
     // the configured repo. Stored server-side only; masked in responses, never logged.
@@ -122,10 +174,40 @@ function readStore() {
     const raw = fs.readFileSync(CONFIG.STORE_FILE, 'utf8');
     const parsed = JSON.parse(raw);
     const base = cloneDefault();
+    const storedSettings = parsed.settings || {};
+    const settings = { ...base.settings, ...storedSettings };
+    // Preset ids did not exist before catalog v1. Treat legacy settings as
+    // customized instead of claiming they match (and possibly later reapplying)
+    // a new default preset.
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'localLlmPresetId')) {
+      settings.localLlmPresetId = 'custom';
+    }
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'hostedLlmPresetId')) {
+      settings.hostedLlmPresetId = 'custom';
+    }
+    // Preserve the request shape of hand-configured legacy providers. Reasoning
+    // controls are opt-in until the operator chooses a preset.
+    for (const prefix of ['ollama', 'lmstudio', 'codex', 'claude']) {
+      const effortKey = `${prefix}ReasoningEffort`;
+      const adapterKey = `${prefix}ReasoningAdapter`;
+      if (!Object.prototype.hasOwnProperty.call(storedSettings, effortKey)) settings[effortKey] = null;
+      if (!Object.prototype.hasOwnProperty.call(storedSettings, adapterKey)) settings[adapterKey] = 'none';
+    }
+    // Sampling fields were previously hard-coded in the provider factory. Keep
+    // those request shapes for legacy custom settings until a preset is chosen.
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'ollamaTemperature')) settings.ollamaTemperature = 0;
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'lmstudioTemperature')) settings.lmstudioTemperature = 0;
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'codexTemperature')) settings.codexTemperature = 0;
+    for (const prefix of ['ollama', 'lmstudio']) {
+      for (const suffix of ['TopP', 'TopK', 'RepeatPenalty']) {
+        const key = `${prefix}${suffix}`;
+        if (!Object.prototype.hasOwnProperty.call(storedSettings, key)) settings[key] = null;
+      }
+    }
     return {
       ...base,
       ...parsed,
-      settings: { ...base.settings, ...(parsed.settings || {}) },
+      settings,
       businesses: Array.isArray(parsed.businesses) ? parsed.businesses : base.businesses,
       assumedRole: parsed.assumedRole || null,
       agentConfig: migrateAgentConfig({ ...base.agentConfig, ...(parsed.agentConfig || {}) }),
@@ -334,6 +416,7 @@ function pruneJobs(keep = 100) {
 module.exports = {
   DEFAULT_STORE,
   DEFAULT_AGENT_CONFIG,
+  settingsForConfiguredModel,
   readStore,
   writeStore,
   getApiKey,

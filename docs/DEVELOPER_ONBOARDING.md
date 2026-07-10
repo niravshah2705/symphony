@@ -20,9 +20,9 @@ explains what the software does, and points you at the code you'll be working in
 | ----------- | ----- |
 | **Node.js ≥ 18** | Repo is developed on Node 20. Check with `node -v`. |
 | **A Linear account + personal API key** | Create one at <https://linear.app/settings/api>. Required for every feature. |
-| **An LLM provider** (for the agents only) | Pick **one**: Ollama (local), LM Studio (local), Codex (OpenAI via OAuth), or Claude (Anthropic via OAuth). Not needed just to browse projects/board. |
+| **LLM routes** (for the agents only) | For full routing, configure one local preset (Ollama or LM Studio) and one hosted preset (OpenAI or Claude OAuth). Not needed just to browse projects/board. |
 | **git** | Required by the **code-writer** agent (it clones and pushes). |
-| **Ollama** (optional) | Only if you use the Ollama local provider. Install from <https://ollama.com>, then `ollama pull llama3.1` (must be a **tool-capable** model). |
+| **Ollama** (optional) | Only if you use the Ollama local route. Install from <https://ollama.com>, then `ollama pull gpt-oss:20b` (or another model offered by the preset dropdown). |
 | **LM Studio** (optional) | Only if you use the LM Studio local provider (handy for models not in Ollama's catalog). Install from <https://lmstudio.ai>, load a **tool-capable** model, then start its server (Developer → Start Server, default `http://localhost:1234`). |
 
 No database, no build step, no framework — the frontend is plain ES modules
@@ -70,17 +70,17 @@ required for normal use. Secrets are validated and stored **server-side** in
 1. **API Keys & Connection** → paste your **Linear personal API key**. It is
    validated against Linear on save; the header shows connection status.
    (Optional: add a **LangSmith** key + host to trace agent runs.)
-2. **Deep Agent LLM** → choose the active provider for the agents:
-   - **Ollama (local)** — set the host (default `http://localhost:11434`) and pick
-     a tool-capable model from the dropdown. No key needed.
-   - **LM Studio (local)** — set the host (default `http://localhost:1234`) and pick
-     a tool-capable model from the dropdown (LM Studio serves an OpenAI-compatible
-     API). No key needed. Use this for models Ollama doesn't provide.
-   - **Codex (OpenAI · OAuth)** — **Sign in with ChatGPT** (Authorization Code +
-     PKCE). Register the shown redirect URI (`http://localhost:4000/auth/callback`)
-     with your OAuth client.
-   - **Claude (Anthropic · OAuth)** — **Sign in with Claude** (PKCE); paste back the
-     `code#state` Anthropic gives you. Uses a Claude Pro/Max or Console account.
+2. **Deep Agent LLM** → choose one preset in each dropdown. Selecting a preset
+   applies its model, context/output budgets, sampling, JSON mode, and native
+   reasoning control together. Expand **Customize parameters** only for an
+   override; **Reset to recommended** restores the JSON catalog values.
+   - **Local / XS tasks** — choose an Ollama or LM Studio preset. No key is
+     required. Detected compatible model ids can be mapped from the status row;
+     expand customization to change the host (defaults: Ollama `:11434`, LM
+     Studio `:1234`). LM Studio's context must match the loaded model context.
+   - **Hosted / planner + larger tasks** — choose OpenAI GPT-5.5 or Claude Opus
+     4.8. For OpenAI, click **Sign in with ChatGPT**. For Claude, click **Sign in
+     with Claude** and paste back the `code#state` Anthropic gives you.
 3. **Assume Role** → pick a workspace member. The business-owner agent's enrich
    endpoints are **403 until a role is assumed** (server-enforced). The assumed
    member shows in the top toolbar.
@@ -113,7 +113,8 @@ framework** (`framework.js`) configured by a declarative *workflow file*
 backend, and system prompt; the framework installs the skills, builds the
 `deepagents` agent (FilesystemBackend for the planner, LocalShellBackend for the
 coder), and runs it. Both share the LLM provider factory (`llm.js` →
-`resolveLlm`), so switching provider in Settings affects both.
+`resolveLlm`). The planner uses the hosted route; the coder uses the local route
+for `local`/XS tickets and the hosted route for larger or unlabeled tickets.
 
 - **Skills** (`skills/<name>/SKILL.md`) = instructions loaded on demand:
   `software-planning`, `web-research` (planner); `linear`, `commit`, `push`,
@@ -185,6 +186,8 @@ server/
     plan.js schema.js apply.js scheduler.js search.js   ← software-design planner
     coder.js coder-orchestrator.js workspace.js openswe.js  ← code-writer (+ Open SWE)
     llm.js                provider factory (ollama | lmstudio | codex | claude)
+    llm-presets.json      shared model limits + recommended request parameters
+    model-presets.js      preset validation, normalization, settings mapping
     oauth.js pkce.js      Codex OAuth (+ .test.js)
     claude-oauth.js       Claude OAuth (+ .test.js)
 public/
@@ -229,6 +232,8 @@ The full table lives in the root `README.md` (§ *API*). Most-used endpoints:
 | Method | Path | Purpose |
 | ------ | ---- | ------- |
 | PUT | `/api/settings` | Validate + save Linear key |
+| GET | `/api/settings/llm-presets` | Read the shared local + hosted preset catalog |
+| PUT | `/api/settings/llm-preset` | Apply a route preset with safe optional overrides |
 | GET | `/api/projects` | List Linear projects |
 | GET | `/api/issues/board/:projectId` | Board columns for a project |
 | PATCH | `/api/issues/:id/state` | Move an issue between states |
@@ -246,8 +251,9 @@ The full table lives in the root `README.md` (§ *API*). Most-used endpoints:
 - **Agent tab returns 403** → assume a role in **Settings** (server-enforced).
 - **Enrichment never runs** → the scheduler only processes projects once a role is
   assumed, the Linear key is set, and an LLM provider is fully configured.
-- **Ollama model has no tool support** → pick a tool-capable model (`llama3.1`,
-  `qwen2.5`, `gpt-oss`); local inference is slow (tens of seconds/project).
+- **Ollama model is missing/incompatible** → install the model named by the
+  preset (`gpt-oss:20b` is the practical default) or use the compatible-model
+  action shown in Settings. Local inference speed depends heavily on hardware.
 - **LM Studio "not reachable" / empty model list** → start its server (Developer →
   Start Server) and load a **tool-capable** model; the host must match (default
   `http://localhost:1234`). Reload Settings after starting it.

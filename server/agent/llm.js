@@ -213,6 +213,9 @@ function createCodexChatgptModel(llm, json) {
       },
     },
   };
+  if (llm.reasoningAdapter === 'openai' && ['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(llm.reasoningEffort)) {
+    opts.reasoning = { effort: llm.reasoningEffort };
+  }
   if (json) opts.modelKwargs = { text: { format: { type: 'json_object' } } };
   return new CodexChatModel(opts);
 }
@@ -280,7 +283,7 @@ function createClaudeModel(llm /* , json */) {
   const { Anthropic } = require('@anthropic-ai/sdk');
   const baseURL = String(llm.baseUrl || CONFIG.CLAUDE.baseUrl).replace(/\/$/, '');
   const betaHeader = CONFIG.CLAUDE.betaHeader;
-  return new ClaudeChatModel({
+  const opts = {
     model: llm.model,
     maxTokens: llm.numTokens,
     // No apiKey — createClient supplies OAuth Bearer auth, so x-api-key is never sent.
@@ -292,7 +295,14 @@ function createClaudeModel(llm /* , json */) {
         baseURL,
         defaultHeaders: { ...(options.defaultHeaders || {}), 'anthropic-beta': betaHeader },
       }),
-  });
+  };
+  // Opus 4.8 supports adaptive thinking only; fixed budget_tokens and sampling
+  // parameters are rejected. Effort is the supported depth control.
+  if (llm.reasoningAdapter === 'anthropic-adaptive' && ['low', 'medium', 'high', 'xhigh', 'max'].includes(llm.reasoningEffort)) {
+    opts.thinking = { type: 'adaptive' };
+    opts.outputConfig = { effort: llm.reasoningEffort };
+  }
+  return new ClaudeChatModel(opts);
 }
 
 // Lazily built + cached so @langchain/openai stays off the Ollama/Claude paths.
@@ -390,10 +400,17 @@ function createChatModel(llm, { json = false } = {}) {
     const opts = {
       model: llm.model,
       apiKey: llm.accessToken,
-      temperature: 0,
       maxTokens: llm.numTokens,
       configuration: { baseURL: llm.baseUrl },
     };
+    if (llm.reasoningAdapter === 'openai' && ['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(llm.reasoningEffort)) {
+      opts.reasoning = { effort: llm.reasoningEffort };
+    }
+    // Current reasoning models reject sampling controls. A custom non-reasoning
+    // model can still opt into a numeric temperature by setting effort to none.
+    if ((llm.reasoningAdapter !== 'openai' || llm.reasoningEffort === 'none') && typeof llm.temperature === 'number' && Number.isFinite(llm.temperature)) {
+      opts.temperature = llm.temperature;
+    }
     // Constrained JSON output (equivalent to Ollama's format:'json').
     if (json) opts.modelKwargs = { response_format: { type: 'json_object' } };
     return new ChatOpenAI(opts);
@@ -410,7 +427,6 @@ function createChatModel(llm, { json = false } = {}) {
     const opts = {
       model: llm.model,
       apiKey: 'lm-studio',
-      temperature: 0,
       maxTokens: lmstudioMaxTokens(llm),
       // Stream responses. A slow local model can take minutes per turn; a
       // NON-streaming request holds the socket until the whole answer is ready, so
@@ -433,12 +449,25 @@ function createChatModel(llm, { json = false } = {}) {
       contextMode: llm.contextMode,
       summaryMaxTokens: CONFIG.LMSTUDIO.summaryMaxTokens,
     };
+    if (typeof llm.temperature === 'number' && Number.isFinite(llm.temperature)) {
+      opts.temperature = llm.temperature;
+    }
+    if (typeof llm.topP === 'number' && Number.isFinite(llm.topP)) opts.topP = llm.topP;
+    const modelKwargs = {};
+    if (typeof llm.topK === 'number' && Number.isFinite(llm.topK)) modelKwargs.top_k = llm.topK;
+    if (typeof llm.repeatPenalty === 'number' && Number.isFinite(llm.repeatPenalty)) {
+      modelKwargs.repeat_penalty = llm.repeatPenalty;
+    }
+    if (llm.reasoningAdapter === 'openai-compatible' && ['low', 'medium', 'high'].includes(llm.reasoningEffort)) {
+      modelKwargs.reasoning_effort = llm.reasoningEffort;
+    }
     // Constrained JSON output — the accepted format varies by model/engine, so the
     // mode is operator-selectable ('text' sends nothing and relies on the prompt).
     if (json) {
       const kwargs = lmstudioJsonKwargs(llm.jsonMode);
-      if (kwargs) opts.modelKwargs = kwargs;
+      if (kwargs) Object.assign(modelKwargs, kwargs);
     }
+    if (Object.keys(modelKwargs).length) opts.modelKwargs = modelKwargs;
     return new LmStudioChatModel(opts);
   }
   // Default: local Ollama.
@@ -448,8 +477,20 @@ function createChatModel(llm, { json = false } = {}) {
     model: llm.model,
     numCtx: llm.contextWindow,
     numPredict: llm.numTokens,
-    temperature: 0,
   };
+  if (typeof llm.temperature === 'number' && Number.isFinite(llm.temperature)) {
+    opts.temperature = llm.temperature;
+  }
+  if (typeof llm.topP === 'number' && Number.isFinite(llm.topP)) opts.topP = llm.topP;
+  if (typeof llm.topK === 'number' && Number.isFinite(llm.topK)) opts.topK = llm.topK;
+  if (typeof llm.repeatPenalty === 'number' && Number.isFinite(llm.repeatPenalty)) {
+    opts.repeatPenalty = llm.repeatPenalty;
+  }
+  if (llm.reasoningAdapter === 'ollama-think-effort' && ['low', 'medium', 'high'].includes(llm.reasoningEffort)) {
+    opts.think = llm.reasoningEffort;
+  } else if (llm.reasoningAdapter === 'ollama-think-toggle') {
+    opts.think = llm.reasoningEffort !== 'none';
+  }
   // 'json' uses Ollama's native constrained mode; 'text' relies on the prompt.
   if (json && llm.jsonMode !== 'text') opts.format = 'json';
   return new ChatOllama(opts);
@@ -518,7 +559,10 @@ async function resolveLlm(settings, role = 'global') {
       model: settings.claudeModel || CONFIG.CLAUDE.defaultModel,
       baseUrl: CONFIG.CLAUDE.baseUrl,
       accessToken: tokens.accessToken,
-      numTokens: settings.claudeMaxTokens || 16000,
+      numTokens: settings.claudeMaxTokens || 65536,
+      temperature: settings.claudeTemperature ?? null,
+      reasoningEffort: settings.claudeReasoningEffort ?? null,
+      reasoningAdapter: settings.claudeReasoningAdapter || 'none',
     };
   }
   if (provider === 'codex') {
@@ -537,7 +581,10 @@ async function resolveLlm(settings, role = 'global') {
         baseUrl: CONFIG.OAUTH.chatgptBaseUrl,
         accessToken: tokens.accessToken,
         accountId,
-        numTokens: settings.codexMaxTokens || 4096,
+        numTokens: settings.codexMaxTokens || 65536,
+        temperature: settings.codexTemperature ?? null,
+        reasoningEffort: settings.codexReasoningEffort ?? null,
+        reasoningAdapter: settings.codexReasoningAdapter || 'none',
       };
     }
     return {
@@ -546,7 +593,10 @@ async function resolveLlm(settings, role = 'global') {
       model: settings.codexModel || CONFIG.OAUTH.defaultModel,
       baseUrl: CONFIG.OAUTH.baseUrl,
       accessToken: tokens.accessToken,
-      numTokens: settings.codexMaxTokens || 4096,
+      numTokens: settings.codexMaxTokens || 65536,
+      temperature: settings.codexTemperature ?? null,
+      reasoningEffort: settings.codexReasoningEffort ?? null,
+      reasoningAdapter: settings.codexReasoningAdapter || 'none',
     };
   }
   if (provider === 'lmstudio') {
@@ -565,6 +615,12 @@ async function resolveLlm(settings, role = 'global') {
       model: settings.lmstudioModel,
       contextWindow,
       numTokens: settings.lmstudioNumTokens,
+      temperature: settings.lmstudioTemperature ?? null,
+      topP: settings.lmstudioTopP ?? null,
+      topK: settings.lmstudioTopK ?? null,
+      repeatPenalty: settings.lmstudioRepeatPenalty ?? null,
+      reasoningEffort: settings.lmstudioReasoningEffort || 'none',
+      reasoningAdapter: settings.lmstudioReasoningAdapter || 'none',
       jsonMode: settings.lmstudioJsonMode || 'text',
       // How to keep the prompt within the loaded window: trim | summarize | none.
       contextMode: settings.lmstudioContextMode || 'summarize',
@@ -576,6 +632,12 @@ async function resolveLlm(settings, role = 'global') {
     model: settings.ollamaModel,
     contextWindow: settings.ollamaContextWindow,
     numTokens: settings.ollamaNumTokens,
+    temperature: settings.ollamaTemperature ?? null,
+    topP: settings.ollamaTopP ?? null,
+    topK: settings.ollamaTopK ?? null,
+    repeatPenalty: settings.ollamaRepeatPenalty ?? null,
+    reasoningEffort: settings.ollamaReasoningEffort || 'none',
+    reasoningAdapter: settings.ollamaReasoningAdapter || 'none',
     jsonMode: settings.ollamaJsonMode || 'json',
   };
 }
