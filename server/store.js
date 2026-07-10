@@ -2,7 +2,13 @@
 
 const fs = require('fs');
 const { CONFIG } = require('./config');
-const { getPreset, settingsPatchForPreset, publicCatalog, modelMatchesPreset } = require('./agent/model-presets');
+const {
+  getPreset,
+  presetForModel,
+  settingsPatchForPreset,
+  publicCatalog,
+  modelMatchesPreset,
+} = require('./agent/model-presets');
 
 const PRESET_CATALOG = publicCatalog();
 const DEFAULT_LOCAL_PRESET = getPreset(PRESET_CATALOG.defaults.local);
@@ -19,6 +25,22 @@ function configuredModel(provider) {
   }
   if (provider === 'claude') return CONFIG.CLAUDE.defaultModel;
   return recommendedPreset(provider).model;
+}
+
+function applyLegacyHostedReasoningDefaults(settings, storedSettings) {
+  for (const provider of ['codex', 'claude']) {
+    const effortKey = `${provider}ReasoningEffort`;
+    const adapterKey = `${provider}ReasoningAdapter`;
+    const missingReasoning = !Object.prototype.hasOwnProperty.call(storedSettings, effortKey) &&
+      !Object.prototype.hasOwnProperty.call(storedSettings, adapterKey);
+    const model = storedSettings[`${provider}Model`] || configuredModel(provider);
+    const preset = missingReasoning ? presetForModel(provider, model) : null;
+    if (preset) {
+      settings[effortKey] = preset.parameters.reasoning.effort;
+      settings[adapterKey] = preset.capabilities.reasoningAdapter;
+    }
+  }
+  return settings;
 }
 
 /** Keep model-specific adapters only when an environment model matches the preset. */
@@ -185,14 +207,17 @@ function readStore() {
     if (!Object.prototype.hasOwnProperty.call(storedSettings, 'hostedLlmPresetId')) {
       settings.hostedLlmPresetId = 'custom';
     }
-    // Preserve the request shape of hand-configured legacy providers. Reasoning
-    // controls are opt-in until the operator chooses a preset.
+    // Preserve explicitly configured legacy request shapes. When both hosted
+    // reasoning fields are absent, however, activate the reviewed default for
+    // the effective known model. This keeps the visible model-aware default and
+    // the actual runtime request in sync without overwriting an explicit Off.
     for (const prefix of ['ollama', 'lmstudio', 'codex', 'claude']) {
       const effortKey = `${prefix}ReasoningEffort`;
       const adapterKey = `${prefix}ReasoningAdapter`;
       if (!Object.prototype.hasOwnProperty.call(storedSettings, effortKey)) settings[effortKey] = null;
       if (!Object.prototype.hasOwnProperty.call(storedSettings, adapterKey)) settings[adapterKey] = 'none';
     }
+    applyLegacyHostedReasoningDefaults(settings, storedSettings);
     // Sampling fields were previously hard-coded in the provider factory. Keep
     // those request shapes for legacy custom settings until a preset is chosen.
     if (!Object.prototype.hasOwnProperty.call(storedSettings, 'ollamaTemperature')) settings.ollamaTemperature = 0;
@@ -417,6 +442,7 @@ module.exports = {
   DEFAULT_STORE,
   DEFAULT_AGENT_CONFIG,
   settingsForConfiguredModel,
+  applyLegacyHostedReasoningDefaults,
   readStore,
   writeStore,
   getApiKey,

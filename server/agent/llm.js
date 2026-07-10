@@ -213,7 +213,9 @@ function createCodexChatgptModel(llm, json) {
       },
     },
   };
-  if (llm.reasoningAdapter === 'openai' && ['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(llm.reasoningEffort)) {
+  // `ultra` is advertised by the Codex subscription model catalog. It is not a
+  // public Responses API effort, so it is accepted only on this ChatGPT path.
+  if (llm.reasoningAdapter === 'openai' && ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(llm.reasoningEffort)) {
     opts.reasoning = { effort: llm.reasoningEffort };
   }
   if (json) opts.modelKwargs = { text: { format: { type: 'json_object' } } };
@@ -300,6 +302,11 @@ function createClaudeModel(llm /* , json */) {
   // parameters are rejected. Effort is the supported depth control.
   if (llm.reasoningAdapter === 'anthropic-adaptive' && ['low', 'medium', 'high', 'xhigh', 'max'].includes(llm.reasoningEffort)) {
     opts.thinking = { type: 'adaptive' };
+    opts.outputConfig = { effort: llm.reasoningEffort };
+  } else if (llm.reasoningAdapter === 'anthropic-effort' && ['low', 'medium', 'high', 'xhigh', 'max'].includes(llm.reasoningEffort)) {
+    // Older effort-capable Claude models may not support adaptive thinking.
+    // Effort still controls the response without inventing an unsupported
+    // `thinking.type` request field.
     opts.outputConfig = { effort: llm.reasoningEffort };
   }
   return new ClaudeChatModel(opts);

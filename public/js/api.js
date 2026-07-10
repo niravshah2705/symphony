@@ -47,6 +47,8 @@ export const api = {
   getLlmPresets: () => request('/settings/llm-presets'),
   applyLlmPreset: (payload) =>
     request('/settings/llm-preset', { method: 'PUT', body: JSON.stringify(payload) }),
+  applyLlmSelection: (payload) =>
+    request('/settings/llm-selection', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLlm: (payload) => request('/settings/llm', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLmstudio: (payload) => request('/settings/lmstudio', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLangsmith: (payload) =>
@@ -55,6 +57,15 @@ export const api = {
     request('/settings/github', { method: 'PUT', body: JSON.stringify({ githubToken }) }),
   getOllamaModels: () => request('/agent/ollama-models'),
   getLmstudioModels: () => request('/agent/lmstudio-models'),
+  getProviderModels: (provider, refresh = false) => {
+    const suffix = `?refresh=${refresh ? '1' : '0'}`;
+    if (provider === 'ollama') return request(`/agent/ollama-models${suffix}`);
+    if (provider === 'lmstudio') return request(`/agent/lmstudio-models${suffix}`);
+    if (provider === 'codex' || provider === 'claude') {
+      return request(`/settings/${provider}/models${suffix}`);
+    }
+    return Promise.reject(new Error(`Unsupported LLM provider: ${provider}`));
+  },
 
   // Deep-agent provider selection + Codex (OpenAI via OAuth)
   setProvider: (llmProvider, role = 'global') =>

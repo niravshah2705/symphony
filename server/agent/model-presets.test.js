@@ -11,10 +11,17 @@ const {
   presetForModel,
   modelMatchesPreset,
   settingsPatchForPreset,
+  settingsPatchForReasoning,
   customPresetForSettings,
+  runtimePresetForProfile,
+  neutralLocalPreset,
 } = require('./model-presets');
 const { createChatModel } = require('./llm');
-const { DEFAULT_STORE, settingsForConfiguredModel } = require('../store');
+const {
+  DEFAULT_STORE,
+  settingsForConfiguredModel,
+  applyLegacyHostedReasoningDefaults,
+} = require('../store');
 
 test('LLM preset catalog has valid, unique local and hosted defaults', () => {
   const catalog = publicCatalog();
@@ -29,6 +36,28 @@ test('catalog validation rejects defaults that violate an effective context frac
   const lmstudio = invalid.presets.find((preset) => preset.id === 'lmstudio-gpt-oss-20b');
   lmstudio.parameters.maxOutputTokens = 40000;
   assert.throws(() => validateCatalog(invalid), /effective context rule/);
+});
+
+test('hosted catalog exposes current models and shared reasoning labels', () => {
+  const catalog = publicCatalog();
+  assert.equal(catalog.reasoningEfforts.xhigh.label, 'Extra high');
+  assert.match(catalog.reasoningEfforts.ultra.description, /delegation/i);
+
+  const sol = getPreset('codex-gpt-5-6-sol');
+  assert.equal(sol.model, 'gpt-5.6-sol');
+  assert.equal(sol.limits.contextWindow, 372000);
+  assert.deepEqual(sol.capabilities.reasoningEfforts, ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+  assert.equal(sol.parameters.reasoning.effort, 'xhigh');
+  assert.equal(getPreset('codex-gpt-5-6-terra').model, 'gpt-5.6-terra');
+  assert.equal(getPreset('codex-gpt-5-6-luna').parameters.reasoning.effort, 'xhigh');
+  assert.equal(getPreset('codex-gpt-5-5').parameters.reasoning.effort, 'xhigh');
+  assert.equal(getPreset('codex-gpt-5-4').parameters.reasoning.effort, 'medium');
+  assert.equal(getPreset('codex-gpt-5-4-mini').parameters.reasoning.effort, 'medium');
+
+  assert.equal(getPreset('claude-fable-5').parameters.reasoning.effort, 'high');
+  assert.equal(getPreset('claude-opus-4-8').parameters.reasoning.effort, 'high');
+  assert.equal(getPreset('claude-sonnet-5').parameters.reasoning.effort, 'high');
+  assert.deepEqual(getPreset('claude-haiku-4-5').capabilities.reasoningEfforts, ['none']);
 });
 
 test('fresh-store active settings come from the exact catalog defaults', () => {
@@ -63,6 +92,22 @@ test('an environment model outside a hosted preset family gets neutral custom pa
   assert.equal(codex.codexTemperature, null);
   assert.equal(codex.codexReasoningEffort, 'none');
   assert.equal(codex.codexReasoningAdapter, 'none');
+});
+
+test('legacy known hosted models receive their real reasoning default but explicit Off is preserved', () => {
+  const migrated = applyLegacyHostedReasoningDefaults(
+    { codexReasoningEffort: null, codexReasoningAdapter: 'none' },
+    { codexModel: 'gpt-5.6-sol' }
+  );
+  assert.equal(migrated.codexReasoningEffort, 'xhigh');
+  assert.equal(migrated.codexReasoningAdapter, 'openai');
+
+  const explicit = applyLegacyHostedReasoningDefaults(
+    { codexReasoningEffort: 'none', codexReasoningAdapter: 'none' },
+    { codexModel: 'gpt-5.6-sol', codexReasoningEffort: 'none', codexReasoningAdapter: 'none' }
+  );
+  assert.equal(explicit.codexReasoningEffort, 'none');
+  assert.equal(explicit.codexReasoningAdapter, 'none');
 });
 
 test('presetForRole prevents a local preset from entering the hosted slot and vice versa', () => {
@@ -133,8 +178,82 @@ test('preset overrides are allowlisted and clamped to model capabilities', () =>
   assert.equal(patch.claudeContextWindow, 1000000, 'hosted context is informational, not request-configurable');
   assert.equal(patch.claudeMaxTokens, 128000);
   assert.equal(patch.claudeTemperature, null, 'unsupported sampling parameters are omitted');
-  assert.equal(patch.claudeReasoningEffort, 'xhigh');
+  assert.equal(patch.claudeReasoningEffort, 'high');
   assert.ok(!Object.values(patch).includes('must not escape'));
+});
+
+test('discovered hosted profiles are converted to a closed, safe runtime preset', () => {
+  const codex = runtimePresetForProfile('codex', {
+    id: 'gpt-future-safe',
+    label: 'Future model',
+    description: 'Discovered at runtime',
+    contextWindow: 500000,
+    maxOutputTokens: 128000,
+    reasoningAdapter: 'openai',
+    reasoningEfforts: [
+      { value: 'low' },
+      { value: 'high' },
+      { value: 'ultra' },
+      { value: 'not-an-api-parameter' },
+    ],
+    defaultReasoningEffort: 'ultra',
+  });
+  assert.equal(codex.model, 'gpt-future-safe');
+  assert.deepEqual(codex.capabilities.reasoningEfforts, ['low', 'high', 'ultra']);
+  assert.equal(codex.parameters.reasoning.effort, 'ultra');
+  assert.equal(settingsPatchForPreset(codex).codexContextWindow, 500000);
+
+  const claude = runtimePresetForProfile('claude', {
+    id: 'claude-future-safe',
+    contextWindow: 1000000,
+    maxOutputTokens: 128000,
+    reasoningAdapter: 'anthropic-adaptive',
+    reasoningEfforts: [{ value: 'high' }, { value: 'max' }, { value: 'ultra' }],
+    defaultReasoningEffort: 'ultra',
+  });
+  assert.deepEqual(claude.capabilities.reasoningEfforts, ['high', 'max']);
+  assert.equal(claude.parameters.reasoning.effort, 'high');
+
+  const effortOnly = runtimePresetForProfile('claude', {
+    id: 'claude-manual-thinking',
+    reasoningAdapter: 'anthropic-effort',
+    reasoningEfforts: [{ value: 'low' }, { value: 'high' }],
+    defaultReasoningEffort: 'high',
+  });
+  assert.equal(effortOnly.capabilities.reasoningAdapter, 'anthropic-effort');
+  assert.equal(effortOnly.parameters.reasoning.parameter, 'output_config.effort');
+
+  const untrusted = runtimePresetForProfile('codex', {
+    id: 'bad id with spaces',
+    reasoningAdapter: 'openai',
+    reasoningEfforts: [{ value: 'high' }],
+  });
+  assert.equal(untrusted, null);
+});
+
+test('unknown local models start neutral and reasoning-only patches preserve numeric settings', () => {
+  const neutral = neutralLocalPreset('ollama', 'my-local-model:latest');
+  const defaults = settingsPatchForPreset(neutral);
+  assert.equal(defaults.ollamaModel, 'my-local-model:latest');
+  assert.equal(defaults.ollamaContextWindow, 8192);
+  assert.equal(defaults.ollamaNumTokens, 4096);
+  assert.equal(defaults.ollamaReasoningAdapter, 'none');
+  assert.equal(settingsPatchForReasoning(neutral, 'high'), null);
+
+  const localAlias = settingsPatchForReasoning(
+    getPreset('ollama-gpt-oss-20b'),
+    'high',
+    'hf.co/openai/gpt-oss-20b-Q4_K_M'
+  );
+  assert.equal(localAlias.ollamaModel, 'hf.co/openai/gpt-oss-20b-Q4_K_M');
+
+  const reasoning = settingsPatchForReasoning(getPreset('codex-gpt-5-6-sol'), 'ultra');
+  assert.deepEqual(reasoning, {
+    codexModel: 'gpt-5.6-sol',
+    codexReasoningEffort: 'ultra',
+    codexReasoningAdapter: 'openai',
+  });
+  assert.equal(settingsPatchForReasoning(getPreset('codex-gpt-5-5'), 'ultra'), null);
 });
 
 test('LM Studio reasoning adapter is opt-in per preset', () => {
@@ -207,4 +326,12 @@ test('provider clients receive native reasoning parameters and safe temperatures
   assert.deepEqual(claude.thinking, { type: 'adaptive' });
   assert.deepEqual(claude.outputConfig, { effort: 'xhigh' });
   assert.equal(claude.temperature, undefined);
+
+  const claudeEffortOnly = createChatModel({
+    provider: 'claude', baseUrl: 'http://localhost', model: 'claude-opus-4-5',
+    accessToken: 'test', numTokens: 65536, temperature: null,
+    reasoningEffort: 'high', reasoningAdapter: 'anthropic-effort',
+  });
+  assert.notDeepEqual(claudeEffortOnly.thinking, { type: 'adaptive' });
+  assert.deepEqual(claudeEffortOnly.outputConfig, { effort: 'high' });
 });

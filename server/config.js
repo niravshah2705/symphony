@@ -41,8 +41,11 @@ const OAUTH = Object.freeze({
    */
   backend: (process.env.CODEX_BACKEND || 'chatgpt').toLowerCase() === 'api' ? 'api' : 'chatgpt',
   chatgptBaseUrl: process.env.CODEX_CHATGPT_BASE_URL || 'https://chatgpt.com/backend-api/codex',
-  // Only 'gpt-5.5' is currently served for ChatGPT-account Codex auth.
-  chatgptModel: process.env.CODEX_CHATGPT_MODEL || 'gpt-5.5',
+  // The Codex models endpoint filters its response by client version. Keep this
+  // overrideable so a newer server rollout can be adopted without a code change.
+  clientVersion: process.env.CODEX_CLIENT_VERSION || '0.144.1',
+  // Fallback used only when live model discovery is unavailable.
+  chatgptModel: process.env.CODEX_CHATGPT_MODEL || 'gpt-5.6-sol',
   // Served by this server; must match the client's registered redirect exactly.
   redirectUri: `http://localhost:${PORT}/auth/callback`,
   // A login attempt (state + PKCE verifier) is valid for this long.

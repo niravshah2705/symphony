@@ -10,17 +10,17 @@ A simple Node.js UI (branded **AI Fleet**) to manage Linear projects:
 - **Business** — a Business tab where each business is backed by a Linear project in the background. **OTA** is pre-seeded as the initial business.
 - **Agent** — a **business-owner planning deep agent** (Ollama, LM Studio, Codex, or Claude + web search) enriches projects **carrying any of the chosen labels** (default `AI`): it checks business viability (unfit → `aifail`), writes a business plan — **MVB** (Minimal Viable Business) first, then business metrics, branding, and beyond — creates milestones, tasks, and dependencies, and marks the project **`aidone`** once issues exist. Interrupted projects **resume on restart** (missing issues get created). Projects are **discovered and processed on a configurable 5/10/15-minute schedule**.
 - **Code-writer agent** — a second deep agent that works a **single Linear ticket end-to-end** inside an **isolated git clone**: it implements the change, keeps one **`## Workpad`** comment as the source of truth, and drives the ticket through its state machine to a **pull request** (stamped with a configurable label). A board monitor polls active-state tickets and dispatches runs up to a concurrency cap. See [Code-writer agent](#code-writer-agent) below.
-- **Settings** — a tidy page of **collapsible sections**: **API Keys & Connection** (Linear + LangSmith key/host/project/tracing), **Deep Agent LLM** (one preset dropdown for the local route and one for the hosted route, with collapsed parameter customization), **Assume Role**, and **Deep Agent** (enrich labels, schedule cadence, parallelism, caps, toggles). All secrets are validated/stored **server-side** (never exposed to the browser).
+- **Settings** — a tidy page of **collapsible sections**: **API Keys & Connection** (Linear + LangSmith key/host/project/tracing), **Deep Agent LLM** (provider, model, and model-aware reasoning dropdowns for each route, with collapsed parameter customization), **Assume Role**, and **Deep Agent** (enrich labels, schedule cadence, parallelism, caps, toggles). All secrets are validated/stored **server-side** (never exposed to the browser).
 
 ## Settings
 
 Collapsible sections:
 
 1. **API Keys & Connection** — the Linear and LangSmith keys together, plus the LangSmith **host/endpoint**, project, and tracing toggle. One **Save keys** button; the Linear key is validated on save and connection status is shown.
-2. **Deep Agent LLM** — choose a complete preset for each route. The **Local / XS** route offers Ollama and LM Studio models; the **Hosted / planner + larger tasks** route offers Codex and Claude. A preset atomically applies the model, context and output budgets, sampling policy, output mode where supported, and provider-native reasoning control. Expand **Customize parameters** to change any supported value or reset it to the recommendation.
-   - **Ollama / LM Studio (local)** — no API key is required. Detected models are matched to catalog entries automatically; hosts and compatible loaded model ids remain customizable. LM Studio's configured context must match the context used when loading the model, and its output budget is capped at half that context so prompt and output fit together.
-   - **Codex (OpenAI · OAuth)** — **Sign in with ChatGPT** using OAuth 2.0 Authorization Code + PKCE. The current subscription backend uses GPT-5.5 and provider-managed sampling/output behavior; reasoning effort is sent with the Responses request. Tokens stay server-side and refresh automatically.
-   - **Claude (Anthropic · OAuth)** — **Sign in with Claude**, approve in the opened tab, then paste the returned `code#state`. The Claude Opus 4.8 preset uses adaptive thinking plus effort and intentionally omits temperature, which that model does not accept.
+2. **Deep Agent LLM** — choose **Provider**, **Model**, and **Reasoning** for each route. The **Local / XS** route offers Ollama and LM Studio; the **Hosted / planner + larger tasks** route offers OpenAI and Anthropic. Selecting a model atomically applies its recommended context, output, sampling, and provider-native reasoning defaults. Expand **Customize parameters** to change supported numeric values later.
+   - **Ollama / LM Studio (local)** — no API key is required. The page renders immediately, discovers loaded models asynchronously, and offers a refresh action. LM Studio's configured context must match the context used when loading the model, and its output budget is capped at half that context so prompt and output fit together.
+   - **OpenAI / Codex OAuth** — **Sign in with ChatGPT** using OAuth 2.0 Authorization Code + PKCE. The model list is refreshed from the signed-in Codex account with a bundled current fallback. Reasoning choices are model-specific: for example, GPT-5.6 Sol and Terra expose Low through Ultra, while GPT-5.5 exposes Low through Extra high. `ultra` is sent only to the ChatGPT/Codex backend.
+   - **Anthropic / Claude OAuth** — **Sign in with Claude**, approve in the opened tab, then paste the returned `code#state`. Available models are queried from Anthropic with bundled fallbacks, and only each model's advertised adaptive-thinking effort values are shown.
 
 The committed source of truth is [`server/agent/llm-presets.json`](server/agent/llm-presets.json). It separates model limits from request defaults and records the exact reasoning adapter used by each provider.
 3. **Assume Role** — pick a workspace member (validated server-side). The assumed role owns enriched projects and is shown in the **top toolbar**.
@@ -150,6 +150,7 @@ server/
     llm.js            LLM provider factory (ollama · lmstudio · codex · claude)
     llm-presets.json  shared local + hosted model preset catalog
     model-presets.js  catalog validation, normalization, and settings mapping
+    model-discovery.js cached OpenAI/Anthropic model discovery with safe fallbacks
     oauth.js pkce.js  Codex OAuth + PKCE (+ oauth.test.js)
     claude-oauth.js   Claude OAuth (+ claude-oauth.test.js)
     coder.js          code-writer agent — single ticket, isolated clone
@@ -228,6 +229,9 @@ rather than stuck in "running".
 | DELETE | `/api/settings` | Remove key |
 | GET | `/api/settings/llm-presets` | Shared local + hosted LLM preset JSON catalog |
 | PUT | `/api/settings/llm-preset` | Atomically apply a role preset plus safe optional overrides |
+| PUT | `/api/settings/llm-selection` | Select a provider/model or change only its validated reasoning effort |
+| GET | `/api/settings/codex/models` | Discover signed-in Codex models (`?refresh=1` bypasses cache) |
+| GET | `/api/settings/claude/models` | Discover signed-in Anthropic models (`?refresh=1` bypasses cache) |
 | GET | `/api/projects` | List Linear projects |
 | GET | `/api/projects/teams` | List teams (for new projects) |
 | GET | `/api/projects/:id/milestones` | Milestone planning data |

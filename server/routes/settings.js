@@ -9,9 +9,13 @@ const {
   publicCatalog,
   presetForRole,
   settingsPatchForPreset,
+  settingsPatchForReasoning,
   customPresetForSettings,
   modelMatchesPreset,
   presetForModel,
+  sanitizeModelId,
+  runtimePresetForProfile,
+  neutralLocalPreset,
 } = require('../agent/model-presets');
 
 const router = express.Router();
@@ -60,13 +64,13 @@ function publicSettings() {
     codexMaxTokens: s.codexMaxTokens,
     codexTemperature: s.codexTemperature ?? null,
     codexReasoningEffort: s.codexReasoningEffort || 'none',
-    codexReasoningAdapter: s.codexReasoningAdapter || 'openai',
+    codexReasoningAdapter: s.codexReasoningAdapter || 'none',
     claudeModel: s.claudeModel,
     claudeContextWindow: s.claudeContextWindow,
     claudeMaxTokens: s.claudeMaxTokens,
     claudeTemperature: s.claudeTemperature ?? null,
     claudeReasoningEffort: s.claudeReasoningEffort || 'none',
-    claudeReasoningAdapter: s.claudeReasoningAdapter || 'anthropic-adaptive',
+    claudeReasoningAdapter: s.claudeReasoningAdapter || 'none',
     hasGithubToken: Boolean(s.githubToken),
     maskedGithubToken: maskKey(s.githubToken),
     hasLangsmithKey: Boolean(s.langsmithApiKey),
@@ -111,6 +115,42 @@ function clampNumber(value, min, max, fallback) {
 /** Keep `value` only if it is one of `allowed`, else fall back. */
 function oneOf(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
+}
+
+function discoveryProfileFrom(result, model) {
+  const models = Array.isArray(result) ? result : result && Array.isArray(result.models) ? result.models : [];
+  return models.find((profile) => profile && profile.id === model) || null;
+}
+
+/** Resolve only models that are either in the reviewed catalog or live discovery. */
+async function selectionPreset(provider, model) {
+  const preset = presetForModel(provider, model);
+  // The JSON catalog describes the default ChatGPT/Codex subscription backend.
+  // Metered OpenAI has different context/default-effort metadata and never accepts
+  // the Codex-only `ultra` level, so resolve even known models through its
+  // backend-specific discovery fallback below.
+  if (preset && !(provider === 'codex' && CONFIG.OAUTH.backend === 'api')) return preset;
+  if (provider === 'ollama' || provider === 'lmstudio') return neutralLocalPreset(provider, model);
+
+  // Lazy import keeps the static catalog usable if discovery is temporarily
+  // unavailable during startup or an installation upgrade.
+  let discovery;
+  try {
+    discovery = require('../agent/model-discovery');
+  } catch (_) {
+    return null;
+  }
+  let profile = typeof discovery.getCachedModel === 'function'
+    ? await discovery.getCachedModel(provider, model)
+    : null;
+  if (!profile && typeof discovery.discoverModels === 'function') {
+    const result = await discovery.discoverModels(provider);
+    profile = discoveryProfileFrom(result, model);
+    if (!profile && typeof discovery.getCachedModel === 'function') {
+      profile = await discovery.getCachedModel(provider, model);
+    }
+  }
+  return runtimePresetForProfile(provider, profile) || preset;
 }
 
 // GET /api/settings
@@ -168,6 +208,62 @@ router.put('/llm-preset', (req, res) => {
   patchSettings(patch);
   res.json(publicSettings());
 });
+
+// PUT /api/settings/llm-selection — model-driven settings for the two LLM
+// slots. `mode:model` resets the selected model to its reviewed defaults;
+// `mode:reasoning` changes only model/provider/adapter/effort so any advanced
+// numeric customization remains untouched.
+router.put('/llm-selection', asyncHandler(async (req, res) => {
+  const b = req.body || {};
+  const role = b.role === 'local' ? 'local' : b.role === 'global' || b.role === 'hosted' ? 'global' : null;
+  if (!role) return res.status(400).json({ error: 'Role must be "local" or "global".' });
+  const mode = b.mode === 'model' || b.mode === 'reasoning' ? b.mode : null;
+  if (!mode) return res.status(400).json({ error: 'Mode must be "model" or "reasoning".' });
+
+  const provider = String(b.provider || '').trim();
+  const allowedProviders = role === 'local' ? ['ollama', 'lmstudio'] : ['codex', 'claude'];
+  if (!allowedProviders.includes(provider)) {
+    return res.status(400).json({
+      error: `${role === 'local' ? 'Local' : 'Hosted'} provider must be one of: ${allowedProviders.join(', ')}.`,
+    });
+  }
+  const model = sanitizeModelId(b.model);
+  if (!model) return res.status(400).json({ error: 'A valid model id is required.' });
+
+  let preset;
+  try {
+    preset = await selectionPreset(provider, model);
+  } catch (_) {
+    return res.status(502).json({ error: `Could not refresh the ${provider} model list. Try again.` });
+  }
+  if (!preset) {
+    return res.status(400).json({ error: `Model "${model}" is not available for ${provider}. Refresh the model list and try again.` });
+  }
+
+  let patch;
+  if (mode === 'model') {
+    patch = settingsPatchForPreset(preset, { model });
+  } else {
+    const reasoningEffort = String(b.reasoningEffort || '').trim();
+    patch = settingsPatchForReasoning(preset, reasoningEffort, model);
+    if (!patch) {
+      return res.status(400).json({
+        error: `Reasoning must be one of: ${preset.capabilities.reasoningEfforts.join(', ')}.`,
+      });
+    }
+  }
+
+  const presetId = preset.id === 'custom' || preset.id.startsWith('dynamic-') ? 'custom' : preset.id;
+  if (role === 'local') {
+    patch.localLlmProvider = provider;
+    if (mode === 'model') patch.localLlmPresetId = presetId;
+  } else {
+    patch.llmProvider = provider;
+    if (mode === 'model') patch.hostedLlmPresetId = presetId;
+  }
+  patchSettings(patch);
+  res.json(publicSettings());
+}));
 
 // PUT /api/settings — validate the Linear key against Linear, then persist.
 router.put(

@@ -16,8 +16,9 @@ const REASONING_ADAPTERS = new Set([
   'openai-compatible',
   'openai',
   'anthropic-adaptive',
+  'anthropic-effort',
 ]);
-const REASONING_EFFORTS = new Set(['none', 'low', 'medium', 'high', 'xhigh', 'max']);
+const REASONING_EFFORTS = new Set(['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 const JSON_MODES = Object.freeze({
   ollama: new Set(['json', 'text']),
   lmstudio: new Set(['text', 'json_object', 'json_schema']),
@@ -32,6 +33,12 @@ function validateCatalog(value) {
   assert(value && Number.isInteger(value.version) && value.version > 0, 'version must be a positive integer');
   assert(/^\d{4}-\d{2}-\d{2}$/.test(value.updatedAt || ''), 'updatedAt must be YYYY-MM-DD');
   assert(value.defaults && typeof value.defaults === 'object', 'defaults are required');
+  assert(value.reasoningEfforts && typeof value.reasoningEfforts === 'object', 'reasoning effort definitions are required');
+  for (const effort of REASONING_EFFORTS) {
+    const definition = value.reasoningEfforts[effort];
+    assert(definition && typeof definition.label === 'string' && definition.label.trim(), `${effort}: reasoning label is required`);
+    assert(typeof definition.description === 'string' && definition.description.trim(), `${effort}: reasoning description is required`);
+  }
   assert(Array.isArray(value.presets) && value.presets.length > 0, 'presets must be a non-empty array');
 
   const ids = new Set();
@@ -283,6 +290,146 @@ function settingsPatchForPreset(preset, overrides = {}) {
   };
 }
 
+/** Return a request-safe model id, or an empty string for malformed input. */
+function sanitizeModelId(value) {
+  return cleanModel(value, '');
+}
+
+function effortValuesFromProfile(profile) {
+  if (!profile || !Array.isArray(profile.reasoningEfforts)) return [];
+  const values = profile.reasoningEfforts
+    .map((entry) => typeof entry === 'string' ? entry : entry && entry.value)
+    .filter((value) => REASONING_EFFORTS.has(value));
+  return [...new Set(values)];
+}
+
+/**
+ * Convert a model-discovery profile into the same closed preset shape used by
+ * the settings materializer. Discovery data is never copied through directly:
+ * ids, limits, adapters, and effort values are independently allowlisted.
+ */
+function runtimePresetForProfile(provider, profile) {
+  if (!['codex', 'claude'].includes(provider) || !profile || typeof profile !== 'object') return null;
+  const model = sanitizeModelId(profile.id);
+  if (!model) return null;
+
+  const allowedAdapters = provider === 'codex'
+    ? ['openai']
+    : ['anthropic-adaptive', 'anthropic-effort'];
+  let adapter = allowedAdapters.includes(profile.reasoningAdapter) ? profile.reasoningAdapter : 'none';
+  let efforts = effortValuesFromProfile(profile);
+  if (provider === 'claude') efforts = efforts.filter((effort) => effort !== 'ultra');
+  if (adapter === 'none' || !efforts.some((effort) => effort !== 'none')) {
+    adapter = 'none';
+    efforts = ['none'];
+  }
+  const preferredEffort = String(profile.defaultReasoningEffort || '');
+  const defaultEffort = efforts.includes(preferredEffort)
+    ? preferredEffort
+    : efforts.includes('high') ? 'high' : efforts[0];
+  const contextWindow = clampInt(profile.contextWindow, 512, 4000000, provider === 'codex' ? 272000 : 200000);
+  const maxOutputLimit = Math.min(contextWindow, 1000000);
+  const maxOutputTokens = clampInt(profile.maxOutputTokens, 128, maxOutputLimit, Math.min(65536, maxOutputLimit));
+  const suffix = normalizedModel(model).slice(0, 54) || 'model';
+
+  return {
+    id: `dynamic-${provider}-${suffix}`.slice(0, 80),
+    label: String(profile.label || model).trim().slice(0, 120) || model,
+    deployment: 'hosted',
+    provider,
+    model,
+    sourceUrl: provider === 'codex'
+      ? 'https://developers.openai.com/api/docs/models'
+      : 'https://platform.claude.com/docs/en/about-claude/models/overview',
+    modelPatterns: [model],
+    recommended: false,
+    description: String(profile.description || `Discovered ${provider} model.`).trim().slice(0, 500),
+    requirements: `Sign in with ${provider === 'codex' ? 'ChatGPT' : 'Claude'}.`,
+    limits: { contextWindow, maxOutputTokens },
+    requestLimits: { maxOutputContextFraction: null },
+    capabilities: {
+      toolCalling: true,
+      structuredOutput: provider === 'codex',
+      temperature: false,
+      contextWindowConfigurable: false,
+      reasoningAdapter: adapter,
+      reasoningEfforts: efforts,
+    },
+    parameters: {
+      contextWindow,
+      maxOutputTokens: Math.min(65536, maxOutputTokens),
+      temperature: null,
+      topP: null,
+      topK: null,
+      repeatPenalty: null,
+      reasoning: {
+        effort: defaultEffort,
+        parameter: adapter === 'openai'
+          ? 'reasoning.effort'
+          : adapter === 'anthropic-adaptive'
+            ? 'thinking.type=adaptive + output_config.effort'
+            : adapter === 'anthropic-effort' ? 'output_config.effort' : null,
+      },
+      jsonMode: null,
+      contextMode: null,
+    },
+  };
+}
+
+/**
+ * Unknown local model names are valid, but their capabilities are unknowable.
+ * Start them from a deliberately neutral profile instead of inheriting a
+ * model-specific reasoning adapter from the previously selected model.
+ */
+function neutralLocalPreset(provider, value) {
+  if (!['ollama', 'lmstudio'].includes(provider)) return null;
+  const model = sanitizeModelId(value);
+  if (!model) return null;
+  const lmstudio = provider === 'lmstudio';
+  return {
+    id: 'custom',
+    label: model,
+    deployment: 'local',
+    provider,
+    model,
+    limits: { contextWindow: 262144, maxOutputTokens: 128000 },
+    requestLimits: { maxOutputContextFraction: lmstudio ? 0.5 : 1 },
+    capabilities: {
+      toolCalling: true,
+      structuredOutput: true,
+      temperature: true,
+      contextWindowConfigurable: true,
+      reasoningAdapter: 'none',
+      reasoningEfforts: ['none'],
+    },
+    parameters: {
+      contextWindow: 8192,
+      maxOutputTokens: 4096,
+      temperature: 0,
+      topP: null,
+      topK: null,
+      repeatPenalty: null,
+      reasoning: { effort: 'none', parameter: null },
+      jsonMode: lmstudio ? 'text' : 'json',
+      contextMode: lmstudio ? 'summarize' : null,
+    },
+  };
+}
+
+/** Materialize only fields that a reasoning dropdown is allowed to change. */
+function settingsPatchForReasoning(preset, reasoningEffort, model = preset && preset.model) {
+  if (!preset || !preset.capabilities.reasoningEfforts.includes(reasoningEffort)) return null;
+  const params = normalizeParameters(preset, { model, reasoningEffort });
+  const prefix = preset.provider === 'ollama'
+    ? 'ollama'
+    : preset.provider === 'lmstudio' ? 'lmstudio' : preset.provider;
+  return {
+    [`${prefix}Model`]: params.model,
+    [`${prefix}ReasoningEffort`]: params.reasoningEffort,
+    [`${prefix}ReasoningAdapter`]: params.reasoningAdapter,
+  };
+}
+
 /** Build a safe editable profile for settings created before preset catalog v1. */
 function customPresetForSettings(provider, settings) {
   if (!PROVIDER_DEPLOYMENT[provider]) return null;
@@ -337,39 +484,64 @@ function customPresetForSettings(provider, settings) {
   }
   if (provider === 'codex') {
     const adapter = settings.codexReasoningAdapter === 'openai' ? 'openai' : 'none';
+    const knownPreset = presetForModel('codex', settings.codexModel);
+    const efforts = adapter === 'openai'
+      ? knownPreset
+        ? knownPreset.capabilities.reasoningEfforts
+        : ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']
+      : ['none'];
+    const defaultEffort = efforts.includes(settings.codexReasoningEffort)
+      ? settings.codexReasoningEffort
+      : knownPreset ? knownPreset.parameters.reasoning.effort : efforts[0];
     return {
-      id: 'custom', provider, deployment: 'hosted', model: settings.codexModel || 'gpt-5.5',
+      id: 'custom', provider, deployment: 'hosted', model: settings.codexModel || 'gpt-5.6-sol',
       limits: { contextWindow: 1050000, maxOutputTokens: 128000 },
       requestLimits: { maxOutputContextFraction: null },
       capabilities: {
         temperature: adapter === 'none', contextWindowConfigurable: false, reasoningAdapter: adapter,
-        reasoningEfforts: adapter === 'openai' ? ['none', 'low', 'medium', 'high', 'xhigh'] : ['none'],
+        reasoningEfforts: efforts,
       },
       parameters: {
         contextWindow: settings.codexContextWindow || 1000000,
         maxOutputTokens: settings.codexMaxTokens || 4096,
         temperature: adapter === 'none' ? settings.codexTemperature ?? 0 : null,
         topP: null, topK: null, repeatPenalty: null,
-        reasoning: { effort: settings.codexReasoningEffort || 'none', parameter: adapter === 'openai' ? 'reasoning.effort' : null },
+        reasoning: { effort: defaultEffort, parameter: adapter === 'openai' ? 'reasoning.effort' : null },
         jsonMode: null, contextMode: null,
       },
     };
   }
-  const adapter = settings.claudeReasoningAdapter === 'anthropic-adaptive' ? 'anthropic-adaptive' : 'none';
+  const adapter = ['anthropic-adaptive', 'anthropic-effort'].includes(settings.claudeReasoningAdapter)
+    ? settings.claudeReasoningAdapter
+    : 'none';
+  const knownPreset = presetForModel('claude', settings.claudeModel);
+  const efforts = adapter === 'anthropic-adaptive' || adapter === 'anthropic-effort'
+    ? knownPreset
+      ? knownPreset.capabilities.reasoningEfforts
+      : ['none', 'low', 'medium', 'high', 'xhigh', 'max']
+    : ['none'];
+  const defaultEffort = efforts.includes(settings.claudeReasoningEffort)
+    ? settings.claudeReasoningEffort
+    : knownPreset ? knownPreset.parameters.reasoning.effort : efforts[0];
   return {
     id: 'custom', provider, deployment: 'hosted', model: settings.claudeModel || 'claude-opus-4-8',
     limits: { contextWindow: 1000000, maxOutputTokens: 128000 },
     requestLimits: { maxOutputContextFraction: null },
     capabilities: {
       temperature: false, contextWindowConfigurable: false, reasoningAdapter: adapter,
-      reasoningEfforts: adapter === 'anthropic-adaptive' ? ['none', 'low', 'medium', 'high', 'xhigh', 'max'] : ['none'],
+      reasoningEfforts: efforts,
     },
     parameters: {
       contextWindow: settings.claudeContextWindow || 1000000,
       maxOutputTokens: settings.claudeMaxTokens || 16000,
       temperature: null,
       topP: null, topK: null, repeatPenalty: null,
-      reasoning: { effort: settings.claudeReasoningEffort || 'none', parameter: adapter === 'anthropic-adaptive' ? 'thinking.type=adaptive + output_config.effort' : null },
+      reasoning: {
+        effort: defaultEffort,
+        parameter: adapter === 'anthropic-adaptive'
+          ? 'thinking.type=adaptive + output_config.effort'
+          : adapter === 'anthropic-effort' ? 'output_config.effort' : null,
+      },
       jsonMode: null, contextMode: null,
     },
   };
@@ -389,7 +561,11 @@ module.exports = {
   presetsForRole,
   normalizeParameters,
   modelMatchesPreset,
+  sanitizeModelId,
   settingsPatchForPreset,
+  settingsPatchForReasoning,
   customPresetForSettings,
+  runtimePresetForProfile,
+  neutralLocalPreset,
   publicCatalog,
 };

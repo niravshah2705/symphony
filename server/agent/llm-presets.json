@@ -1,9 +1,39 @@
 {
-  "version": 1,
+  "version": 2,
   "updatedAt": "2026-07-10",
   "defaults": {
     "local": "ollama-gpt-oss-20b",
     "hosted": "claude-opus-4-8"
+  },
+  "reasoningEfforts": {
+    "none": {
+      "label": "Off",
+      "description": "Disable model reasoning when the selected model supports a direct-response mode."
+    },
+    "low": {
+      "label": "Low",
+      "description": "Fast responses with lighter reasoning."
+    },
+    "medium": {
+      "label": "Medium",
+      "description": "Balances speed and reasoning depth for everyday tasks."
+    },
+    "high": {
+      "label": "High",
+      "description": "Greater reasoning depth for complex problems."
+    },
+    "xhigh": {
+      "label": "Extra high",
+      "description": "Extra high reasoning depth for complex problems."
+    },
+    "max": {
+      "label": "Max",
+      "description": "Maximum reasoning depth for the hardest problems."
+    },
+    "ultra": {
+      "label": "Ultra",
+      "description": "Maximum reasoning with automatic task delegation."
+    }
   },
   "presets": [
     {
@@ -212,42 +242,232 @@
       }
     },
     {
-      "id": "codex-gpt-5-5",
-      "label": "OpenAI GPT-5.5",
+      "id": "codex-gpt-5-6-sol",
+      "label": "GPT-5.6 SOL",
       "deployment": "hosted",
       "provider": "codex",
-      "model": "gpt-5.5",
-      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.5",
-      "modelPatterns": ["gpt-5.5"],
+      "model": "gpt-5.6-sol",
+      "sourceUrl": "https://developers.openai.com/api/docs/models",
+      "modelPatterns": ["gpt-5.6-sol"],
       "recommended": true,
-      "description": "Hosted coding and planning through the app's ChatGPT/Codex OAuth backend.",
-      "requirements": "Sign in with ChatGPT. The subscription backend manages the output ceiling and ignores the saved token cap.",
-      "limits": {
-        "contextWindow": 1050000,
-        "maxOutputTokens": 128000
-      },
-      "requestLimits": {
-        "maxOutputContextFraction": null
-      },
+      "description": "Best ChatGPT/Codex subscription default for demanding coding, planning, and delegated agent work.",
+      "requirements": "Sign in with ChatGPT. Context reflects the Codex product window rather than the public API window.",
+      "limits": { "contextWindow": 372000, "maxOutputTokens": 128000 },
+      "requestLimits": { "maxOutputContextFraction": null },
       "capabilities": {
         "toolCalling": true,
         "structuredOutput": true,
         "temperature": false,
         "contextWindowConfigurable": false,
         "reasoningAdapter": "openai",
-        "reasoningEfforts": ["none", "low", "medium", "high", "xhigh"]
+        "reasoningEfforts": ["low", "medium", "high", "xhigh", "max", "ultra"]
       },
       "parameters": {
-        "contextWindow": 1050000,
+        "contextWindow": 372000,
         "maxOutputTokens": 65536,
         "temperature": null,
         "topP": null,
         "topK": null,
         "repeatPenalty": null,
-        "reasoning": {
-          "effort": "high",
-          "parameter": "reasoning.effort"
-        },
+        "reasoning": { "effort": "xhigh", "parameter": "reasoning.effort" },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "codex-gpt-5-6-terra",
+      "label": "GPT-5.6 Terra",
+      "deployment": "hosted",
+      "provider": "codex",
+      "model": "gpt-5.6-terra",
+      "sourceUrl": "https://developers.openai.com/api/docs/models",
+      "modelPatterns": ["gpt-5.6-terra"],
+      "recommended": false,
+      "description": "High-capability Codex subscription model with the full delegated reasoning range.",
+      "requirements": "Sign in with ChatGPT. Context reflects the Codex product window rather than the public API window.",
+      "limits": { "contextWindow": 372000, "maxOutputTokens": 128000 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "openai",
+        "reasoningEfforts": ["low", "medium", "high", "xhigh", "max", "ultra"]
+      },
+      "parameters": {
+        "contextWindow": 372000,
+        "maxOutputTokens": 65536,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "xhigh", "parameter": "reasoning.effort" },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "codex-gpt-5-6-luna",
+      "label": "GPT-5.6 Luna",
+      "deployment": "hosted",
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "sourceUrl": "https://developers.openai.com/api/docs/models",
+      "modelPatterns": ["gpt-5.6-luna"],
+      "recommended": false,
+      "description": "Codex subscription model for complex work without the Ultra delegation mode.",
+      "requirements": "Sign in with ChatGPT. Context reflects the Codex product window rather than the public API window.",
+      "limits": { "contextWindow": 372000, "maxOutputTokens": 128000 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "openai",
+        "reasoningEfforts": ["low", "medium", "high", "xhigh", "max"]
+      },
+      "parameters": {
+        "contextWindow": 372000,
+        "maxOutputTokens": 65536,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "xhigh", "parameter": "reasoning.effort" },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "codex-gpt-5-5",
+      "label": "GPT-5.5",
+      "deployment": "hosted",
+      "provider": "codex",
+      "model": "gpt-5.5",
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.5",
+      "modelPatterns": ["gpt-5.5"],
+      "recommended": false,
+      "description": "Previous-generation hosted coding and planning model through ChatGPT/Codex OAuth.",
+      "requirements": "Sign in with ChatGPT. Context reflects the Codex product window rather than the public API window.",
+      "limits": { "contextWindow": 272000, "maxOutputTokens": 128000 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "openai",
+        "reasoningEfforts": ["low", "medium", "high", "xhigh"]
+      },
+      "parameters": {
+        "contextWindow": 272000,
+        "maxOutputTokens": 65536,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "xhigh", "parameter": "reasoning.effort" },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "codex-gpt-5-4",
+      "label": "GPT-5.4",
+      "deployment": "hosted",
+      "provider": "codex",
+      "model": "gpt-5.4",
+      "sourceUrl": "https://developers.openai.com/api/docs/models",
+      "modelPatterns": ["gpt-5.4"],
+      "recommended": false,
+      "description": "Stable Codex subscription model with adjustable reasoning through Extra high.",
+      "requirements": "Sign in with ChatGPT. Context reflects the Codex product window rather than the public API window.",
+      "limits": { "contextWindow": 272000, "maxOutputTokens": 128000 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "openai",
+        "reasoningEfforts": ["low", "medium", "high", "xhigh"]
+      },
+      "parameters": {
+        "contextWindow": 272000,
+        "maxOutputTokens": 65536,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "medium", "parameter": "reasoning.effort" },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "codex-gpt-5-4-mini",
+      "label": "GPT-5.4 mini",
+      "deployment": "hosted",
+      "provider": "codex",
+      "model": "gpt-5.4-mini",
+      "sourceUrl": "https://developers.openai.com/api/docs/models",
+      "modelPatterns": ["gpt-5.4-mini"],
+      "recommended": false,
+      "description": "Faster Codex subscription model for routine coding and lower-latency work.",
+      "requirements": "Sign in with ChatGPT. Context reflects the Codex product window rather than the public API window.",
+      "limits": { "contextWindow": 272000, "maxOutputTokens": 128000 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "openai",
+        "reasoningEfforts": ["low", "medium", "high", "xhigh"]
+      },
+      "parameters": {
+        "contextWindow": 272000,
+        "maxOutputTokens": 65536,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "medium", "parameter": "reasoning.effort" },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "claude-fable-5",
+      "label": "Claude Fable 5",
+      "deployment": "hosted",
+      "provider": "claude",
+      "model": "claude-fable-5",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/overview",
+      "modelPatterns": ["claude-fable-5"],
+      "recommended": false,
+      "description": "Anthropic's highest-capability generally available model for long-running agents.",
+      "requirements": "Sign in with Claude. Adaptive thinking is always on for this model.",
+      "limits": { "contextWindow": 1000000, "maxOutputTokens": 128000 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": false,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "anthropic-adaptive",
+        "reasoningEfforts": ["low", "medium", "high", "xhigh", "max"]
+      },
+      "parameters": {
+        "contextWindow": 1000000,
+        "maxOutputTokens": 65536,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "high", "parameter": "thinking.type=adaptive + output_config.effort" },
         "jsonMode": null,
         "contextMode": null
       }
@@ -258,25 +478,20 @@
       "deployment": "hosted",
       "provider": "claude",
       "model": "claude-opus-4-8",
-      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-8",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/overview",
       "modelPatterns": ["claude-opus-4-8"],
       "recommended": true,
       "description": "Frontier hosted model for long-horizon agentic coding, with adaptive thinking enabled.",
       "requirements": "Sign in with Claude. Sampling parameters are intentionally omitted for this model.",
-      "limits": {
-        "contextWindow": 1000000,
-        "maxOutputTokens": 128000
-      },
-      "requestLimits": {
-        "maxOutputContextFraction": null
-      },
+      "limits": { "contextWindow": 1000000, "maxOutputTokens": 128000 },
+      "requestLimits": { "maxOutputContextFraction": null },
       "capabilities": {
         "toolCalling": true,
         "structuredOutput": false,
         "temperature": false,
         "contextWindowConfigurable": false,
         "reasoningAdapter": "anthropic-adaptive",
-        "reasoningEfforts": ["none", "low", "medium", "high", "xhigh", "max"]
+        "reasoningEfforts": ["low", "medium", "high", "xhigh", "max"]
       },
       "parameters": {
         "contextWindow": 1000000,
@@ -285,10 +500,73 @@
         "topP": null,
         "topK": null,
         "repeatPenalty": null,
-        "reasoning": {
-          "effort": "xhigh",
-          "parameter": "thinking.type=adaptive + output_config.effort"
-        },
+        "reasoning": { "effort": "high", "parameter": "thinking.type=adaptive + output_config.effort" },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "deployment": "hosted",
+      "provider": "claude",
+      "model": "claude-sonnet-5",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/overview",
+      "modelPatterns": ["claude-sonnet-5"],
+      "recommended": false,
+      "description": "Anthropic's fast, balanced model for coding, planning, and agentic workflows.",
+      "requirements": "Sign in with Claude. Adaptive thinking is enabled by default for this model.",
+      "limits": { "contextWindow": 1000000, "maxOutputTokens": 128000 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": false,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "anthropic-adaptive",
+        "reasoningEfforts": ["low", "medium", "high", "xhigh", "max"]
+      },
+      "parameters": {
+        "contextWindow": 1000000,
+        "maxOutputTokens": 65536,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "high", "parameter": "thinking.type=adaptive + output_config.effort" },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "label": "Claude Haiku 4.5",
+      "deployment": "hosted",
+      "provider": "claude",
+      "model": "claude-haiku-4-5-20251001",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/overview",
+      "modelPatterns": ["claude-haiku-4-5-20251001", "claude-haiku-4-5"],
+      "recommended": false,
+      "description": "Anthropic's fastest current model for routine and latency-sensitive work.",
+      "requirements": "Sign in with Claude. Adaptive effort is not supported, so reasoning remains off in this UI.",
+      "limits": { "contextWindow": 200000, "maxOutputTokens": 64000 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": false,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 200000,
+        "maxOutputTokens": 64000,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "none", "parameter": null },
         "jsonMode": null,
         "contextMode": null
       }

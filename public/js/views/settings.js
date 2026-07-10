@@ -4,7 +4,7 @@ import { el, clear, toast, loading } from '../dom.js';
 export async function renderSettings(view) {
   view.append(loading('Loading settings…'));
 
-  const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, ollamaRes, lmstudioRes, codexRes, claudeRes] = await Promise.all([
+  const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes] = await Promise.all([
     api.getSettings(),
     api.getLlmPresets(),
     api.getAgentConfig(),
@@ -12,11 +12,16 @@ export async function renderSettings(view) {
     api.getAgentLabels().catch(() => ({ labels: [] })),
     api.getMembers().catch(() => ({ members: [] })),
     api.getAssumedRole().catch(() => ({ assumedRole: null })),
-    api.getOllamaModels().catch(() => ({ models: [], reachable: false })),
-    api.getLmstudioModels().catch(() => ({ models: [], reachable: false })),
     api.getCodexStatus().catch(() => ({ connected: false })),
     api.getClaudeStatus().catch(() => ({ connected: false })),
   ]);
+
+  // Older stores intentionally kept hosted model ids blank and relied on the
+  // provider defaults. Seed those effective ids into the in-memory public view
+  // so the dropdown reflects today's provider default rather than a stale UI
+  // fallback. Nothing is persisted until the operator changes a selection.
+  if (!settings.codexModel) settings.codexModel = codexRes.model || codexRes.defaultModel || 'gpt-5.6-sol';
+  if (!settings.claudeModel) settings.claudeModel = claudeRes.model || claudeRes.defaultModel || 'claude-opus-4-8';
 
   // Two-column layout: keys + LLM on the left, role + agent config on the right.
   // Collapses to a single column on narrow screens (see .settings-grid).
@@ -28,10 +33,8 @@ export async function renderSettings(view) {
         llmSection({
           settings,
           presets,
-          ollamaModels: ollamaRes.models || [],
-          reachable: ollamaRes.reachable,
-          lmstudioModels: lmstudioRes.models || [],
-          lmstudioReachable: lmstudioRes.reachable,
+          discovery: Object.create(null),
+          selectionPending: Object.create(null),
           codex: codexRes,
           claude: claudeRes,
           view,
@@ -187,19 +190,47 @@ function llmSection(ctx) {
   const rebuild = () => {
     const previous = container.firstElementChild;
     const wasOpen = previous && previous.tagName === 'DETAILS' ? previous.open : null;
+    const customOpen = new Set(
+      [...container.querySelectorAll('.preset-card')]
+        .filter((card) => card.querySelector('.preset-customize[open]'))
+        .map((card) => card.dataset.role)
+    );
     clear(container).append(buildLlmSection(ctx, rebuild));
     if (wasOpen === true && container.firstElementChild) container.firstElementChild.open = true;
+    for (const role of customOpen) {
+      const details = container.querySelector(`.preset-card[data-role="${role}"] .preset-customize`);
+      if (details) details.open = true;
+    }
   };
 
   rebuild();
+  queueMicrotask(() => {
+    void discoverProviderModels(ctx, 'local', roleProvider(ctx.settings, 'local'), false, rebuild);
+    void discoverProviderModels(ctx, 'hosted', roleProvider(ctx.settings, 'hosted'), false, rebuild);
+  });
   return container;
 }
 
 const PROVIDER_LABELS = Object.freeze({
   ollama: 'Ollama',
   lmstudio: 'LM Studio',
-  codex: 'OpenAI · ChatGPT OAuth',
-  claude: 'Anthropic · Claude OAuth',
+  codex: 'OpenAI',
+  claude: 'Anthropic',
+});
+
+const ROLE_PROVIDERS = Object.freeze({
+  local: ['ollama', 'lmstudio'],
+  hosted: ['codex', 'claude'],
+});
+
+const REASONING_META = Object.freeze({
+  none: { label: 'Off', description: 'Do not request additional reasoning from this model.' },
+  low: { label: 'Low', description: 'Fast responses with lighter reasoning.' },
+  medium: { label: 'Medium', description: 'Balances speed and reasoning depth for everyday tasks.' },
+  high: { label: 'High', description: 'Greater reasoning depth for complex problems.' },
+  xhigh: { label: 'Extra high', description: 'Extra high reasoning depth for complex problems.' },
+  max: { label: 'Max', description: 'Maximum reasoning depth for the hardest problems.' },
+  ultra: { label: 'Ultra', description: 'Maximum reasoning with automatic task delegation.' },
 });
 
 function buildLlmSection(ctx, rebuild) {
@@ -207,15 +238,15 @@ function buildLlmSection(ctx, rebuild) {
   const hostedPreset = findPreset(ctx, ctx.settings.hostedLlmPresetId, 'hosted');
   const localProvider = localPreset ? localPreset.provider : ctx.settings.localLlmProvider;
   const hostedProvider = hostedPreset ? hostedPreset.provider : ctx.settings.llmProvider;
-  const localName = localPreset ? localPreset.label : `Custom ${PROVIDER_LABELS[ctx.settings.localLlmProvider] || ''}`;
-  const hostedName = hostedPreset ? hostedPreset.label : `Custom ${PROVIDER_LABELS[ctx.settings.llmProvider] || ''}`;
+  const localName = `${PROVIDER_LABELS[localProvider] || localProvider} · ${currentParameters(ctx.settings, localProvider).model || 'Choose model'}`;
+  const hostedName = `${PROVIDER_LABELS[hostedProvider] || hostedProvider} · ${currentParameters(ctx.settings, hostedProvider).model || 'Choose model'}`;
   const incomplete = !currentParameters(ctx.settings, localProvider).model ||
     !currentParameters(ctx.settings, hostedProvider).model ||
     !providerConnected(ctx, localProvider) ||
     !providerConnected(ctx, hostedProvider);
 
   return section('Deep Agent LLM', `Local: ${localName} · Hosted: ${hostedName}`, incomplete, [
-    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Pick one recommended preset per route. Context, output, sampling, JSON, and reasoning values are applied together. Open “Customize parameters” only when you want to override them.'),
+    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Choose a provider, model, and model-supported reasoning level. Recommended context, output, and sampling values are applied automatically; advanced values remain customizable.'),
     el('div', { class: 'preset-stack' }, [
       presetSlot(ctx, 'local', rebuild),
       presetSlot(ctx, 'hosted', rebuild),
@@ -243,30 +274,121 @@ function providerConnected(ctx, provider) {
 
 function presetSlot(ctx, role, rebuild) {
   const deployment = role === 'local' ? 'local' : 'hosted';
-  const presets = (ctx.presets.presets || []).filter((preset) => preset.deployment === deployment);
   const preset = findPreset(ctx, selectedPresetId(ctx.settings, role), deployment);
   const provider = preset ? preset.provider : roleProvider(ctx.settings, role);
   const params = currentParameters(ctx.settings, provider);
   const customized = Boolean(preset && presetCustomized(preset, params));
-  const select = presetSelect(presets, preset ? preset.id : 'custom');
+  const pending = Boolean(ctx.selectionPending[role]);
+  const modelEntries = modelsForProvider(ctx, provider);
+  const selectedModel = modelEntries.find((entry) => entry.id === params.model) || null;
+  const profilePreset = preset || findPresetForModel(ctx, provider, params.model);
+  const reasoningOptions = reasoningOptionsFor(selectedModel, profilePreset);
+  const modelDefaultReasoning = defaultReasoningFor(selectedModel, profilePreset);
+  const profileAdapter = selectedModel && selectedModel.reasoningAdapter ||
+    profilePreset && profilePreset.capabilities && profilePreset.capabilities.reasoningAdapter || 'none';
+  const currentAdapter = configuredReasoningAdapter(ctx.settings, provider);
+  const adapterActive = currentAdapter === profileAdapter;
+  const currentReasoning = adapterActive && reasoningOptions.some((option) => option.value === params.reasoningEffort)
+    ? params.reasoningEffort
+    : '';
 
-  select.addEventListener('change', async () => {
-    const chosen = presets.find((item) => item.id === select.value);
-    if (!chosen) return;
-    select.disabled = true;
+  const applySelection = async ({ nextProvider, model, reasoningEffort, mode }) => {
+    ctx.selectionPending[role] = true;
+    rebuild();
     try {
-      const detected = detectedModels(ctx, chosen.provider);
-      const installedMatch = findDetectedModel(chosen, detected);
-      const overrides = installedMatch && installedMatch !== chosen.model ? { model: installedMatch } : undefined;
-      const next = await api.applyLlmPreset({ role: role === 'local' ? 'local' : 'global', presetId: chosen.id, overrides });
-      Object.assign(ctx.settings, next);
-      toast(`${role === 'local' ? 'Local' : 'Hosted'} preset applied: ${chosen.label}.`, 'ok');
-      rebuild();
+      const response = await api.applyLlmSelection({
+        role,
+        provider: nextProvider,
+        model,
+        reasoningEffort,
+        mode,
+      });
+      Object.assign(ctx.settings, response && response.settings ? response.settings : response);
+      toast(
+        mode === 'reasoning'
+          ? `Reasoning set to ${reasoningLabel(reasoningEffort)}.`
+          : `${PROVIDER_LABELS[nextProvider] || nextProvider} model set to ${model}.`,
+        'ok'
+      );
     } catch (err) {
-      select.disabled = false;
-      select.value = preset ? preset.id : 'custom';
       toast(err.message, 'err');
+    } finally {
+      ctx.selectionPending[role] = false;
+      rebuild();
     }
+  };
+
+  const providerSelect = optionSelect(
+    ROLE_PROVIDERS[role].map((value) => [value, PROVIDER_LABELS[value] || value]),
+    provider
+  );
+  providerSelect.className = 'llm-provider-select';
+  providerSelect.disabled = pending;
+  providerSelect.addEventListener('change', () => {
+    const nextProvider = providerSelect.value;
+    void (async () => {
+      ctx.selectionPending[role] = true;
+      rebuild();
+      try {
+        await discoverProviderModels(ctx, role, nextProvider, false, rebuild);
+        const recommended = recommendedModelEntry(ctx, nextProvider);
+        if (!recommended) {
+          ctx.selectionPending[role] = false;
+          rebuild();
+          return toast(`No models are configured for ${PROVIDER_LABELS[nextProvider] || nextProvider}.`, 'err');
+        }
+        await applySelection({
+          nextProvider,
+          model: recommended.id,
+          reasoningEffort: defaultReasoningFor(recommended, recommended.preset),
+          mode: 'model',
+        });
+      } catch (err) {
+        ctx.selectionPending[role] = false;
+        rebuild();
+        toast(err.message, 'err');
+      }
+    })();
+  });
+
+  const modelSelect = modelSelectControl(modelEntries, params.model);
+  modelSelect.disabled = pending || !modelEntries.length;
+  modelSelect.addEventListener('change', () => {
+    const selected = modelEntries.find((entry) => entry.id === modelSelect.value);
+    if (!selected) return;
+    void applySelection({
+      nextProvider: provider,
+      model: selected.id,
+      reasoningEffort: defaultReasoningFor(selected, selected.preset),
+      mode: 'model',
+    });
+  });
+
+  const reasoningSelect = optionSelect(
+    [
+      ...(!currentReasoning && reasoningOptions.length
+        ? [['', `Apply ${reasoningLabel(modelDefaultReasoning)} default…`]]
+        : []),
+      ...reasoningOptions.map((option) => [
+        option.value,
+        `${option.label}${option.value === modelDefaultReasoning ? ' (default)' : ''}`,
+      ]),
+    ],
+    currentReasoning
+  );
+  reasoningSelect.className = 'llm-reasoning-select';
+  reasoningSelect.disabled = pending || !reasoningOptions.length;
+  const reasoningHint = el('span', {}, reasoningDescription(reasoningOptions, currentReasoning));
+  reasoningSelect.addEventListener('change', () => {
+    const chosen = reasoningOptions.find((option) => option.value === reasoningSelect.value);
+    reasoningHint.textContent = chosen ? chosen.description : '';
+    if (!chosen) return;
+    void applySelection({
+      nextProvider: provider,
+      model: params.model,
+      reasoningEffort: chosen.value,
+      mode: 'reasoning',
+    });
   });
 
   const heading = role === 'local' ? 'Local / XS tasks' : 'Hosted / planner + larger tasks';
@@ -277,31 +399,36 @@ function presetSlot(ctx, role, rebuild) {
     : provider === 'codex' || provider === 'claude'
       ? 'Used by planning and every hosted or unlabeled coding task.'
       : 'Legacy custom planner route using a local inference server.';
-  const status = presetAvailability(ctx, preset, provider, params.model, role, rebuild);
+  const status = modelDiscoveryStatus(ctx, role, provider, params.model, rebuild);
   const children = [
     el('div', { class: 'preset-card-head' }, [
       el('div', {}, [el('div', { class: 'preset-title' }, heading), el('div', { class: 'muted preset-route' }, description)]),
-      customized ? el('span', { class: 'badge preset-custom-badge' }, 'Customized') : null,
+      customized || !preset ? el('span', { class: 'badge preset-custom-badge' }, 'Customized') : null,
     ]),
-    field('Model preset', select),
+    el('div', { class: 'llm-primary-grid' }, [
+      field('Provider', providerSelect),
+      field('Model', modelSelect, modelEntries.length ? `${modelEntries.length} model${modelEntries.length === 1 ? '' : 's'} available in this list.` : 'No models found yet.'),
+      field('Reasoning', reasoningSelect, reasoningHint),
+    ]),
   ];
 
-  if (preset) {
+  if (preset || selectedModel) {
+    const descriptionText = (selectedModel && selectedModel.description) || (preset && preset.description);
     children.push(
-      el('p', { class: 'preset-description' }, preset.description),
-      parameterSummary(params),
+      descriptionText ? el('p', { class: 'preset-description' }, descriptionText) : null,
+      parameterSummary(params, reasoningOptions, currentReasoning),
       status,
-      preset.requirements ? el('p', { class: 'muted preset-requirement' }, [
-        preset.requirements,
-        preset.sourceUrl ? ' ' : null,
-        preset.sourceUrl ? el('a', { href: preset.sourceUrl, target: '_blank', rel: 'noopener', class: 'preset-doc-link' }, 'Model docs ↗') : null,
+      profilePreset && profilePreset.requirements ? el('p', { class: 'muted preset-requirement' }, [
+        profilePreset.requirements,
+        profilePreset.sourceUrl ? ' ' : null,
+        profilePreset.sourceUrl ? el('a', { href: profilePreset.sourceUrl, target: '_blank', rel: 'noopener', class: 'preset-doc-link' }, 'Model docs ↗') : null,
       ]) : null
     );
   } else {
     children.push(
       el('div', { class: 'preset-legacy-note' }, [
         el('strong', {}, `Custom ${PROVIDER_LABELS[provider] || provider} configuration`),
-        el('span', {}, ' Choose a preset above to apply a complete recommended parameter set; your current values remain untouched until then.'),
+        el('span', {}, ' This discovered model has no catalog profile, so provider-specific reasoning overrides remain disabled.'),
       ]),
       status
     );
@@ -313,7 +440,7 @@ function presetSlot(ctx, role, rebuild) {
   const editorPreset = preset || customEditorPreset(provider, params, ctx.settings, deployment);
   if (editorPreset) children.push(parameterEditor(ctx, role, editorPreset, params, rebuild));
 
-  return el('div', { class: `preset-card preset-card-${deployment}` }, children);
+  return el('div', { class: `preset-card preset-card-${deployment}`, dataset: { role } }, children);
 }
 
 function customEditorPreset(provider, params, settings, deployment) {
@@ -326,21 +453,27 @@ function customEditorPreset(provider, params, settings, deployment) {
       ? settings.lmstudioReasoningAdapter === 'openai-compatible' ? 'openai-compatible' : 'none'
       : isCodex
         ? settings.codexReasoningAdapter === 'openai' ? 'openai' : 'none'
-        : settings.claudeReasoningAdapter === 'anthropic-adaptive' ? 'anthropic-adaptive' : 'none';
+        : ['anthropic-adaptive', 'anthropic-effort'].includes(settings.claudeReasoningAdapter)
+          ? settings.claudeReasoningAdapter
+          : 'none';
   const efforts = isOllama
     ? adapter === 'ollama-think-effort' ? ['low', 'medium', 'high'] : adapter === 'ollama-think-toggle' ? ['none', 'medium'] : ['none']
     : isLmstudio
       ? adapter === 'openai-compatible' ? ['none', 'low', 'medium', 'high'] : ['none']
       : isCodex
         ? adapter === 'openai' ? ['none', 'low', 'medium', 'high', 'xhigh'] : ['none']
-        : adapter === 'anthropic-adaptive' ? ['none', 'low', 'medium', 'high', 'xhigh', 'max'] : ['none'];
+      : adapter === 'anthropic-adaptive' || adapter === 'anthropic-effort'
+        ? ['none', 'low', 'medium', 'high', 'xhigh', 'max']
+        : ['none'];
   const parameter = adapter === 'ollama-think-effort' || adapter === 'ollama-think-toggle'
     ? 'think'
     : adapter === 'openai-compatible'
       ? 'reasoning_effort'
       : adapter === 'openai'
         ? 'reasoning.effort'
-        : adapter === 'anthropic-adaptive' ? 'thinking.type=adaptive + output_config.effort' : null;
+        : adapter === 'anthropic-adaptive'
+          ? 'thinking.type=adaptive + output_config.effort'
+          : adapter === 'anthropic-effort' ? 'output_config.effort' : null;
   return {
     id: 'custom',
     provider,
@@ -372,73 +505,248 @@ function customEditorPreset(provider, params, settings, deployment) {
   };
 }
 
-function presetSelect(presets, selected) {
-  const providers = [...new Set(presets.map((preset) => preset.provider))];
-  const groups = providers.map((provider) =>
-    el('optgroup', { label: PROVIDER_LABELS[provider] || provider }, presets
-      .filter((preset) => preset.provider === provider)
-      .map((preset) => el('option', { value: preset.id, selected: preset.id === selected }, `${preset.recommended ? '★ ' : ''}${preset.label}`)))
-  );
-  if (selected === 'custom') groups.unshift(el('option', { value: 'custom', selected: true }, 'Custom (current settings)'));
-  return el('select', { class: 'preset-select' }, groups);
-}
-
-function detectedModels(ctx, provider) {
-  if (provider === 'ollama') return ctx.ollamaModels || [];
-  if (provider === 'lmstudio') return ctx.lmstudioModels || [];
-  return [];
-}
-
 function normalizedModel(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
 function modelMatchesPreset(preset, model) {
   const actual = normalizedModel(model);
-  return [preset.model, ...(preset.modelPatterns || [])].some((pattern) => actual.includes(normalizedModel(pattern)));
+  const patterns = [preset.model, ...(preset.modelPatterns || [])].map(normalizedModel).filter(Boolean);
+  return preset.deployment === 'hosted'
+    ? patterns.includes(actual)
+    : patterns.some((pattern) => actual.includes(pattern));
 }
 
-function findDetectedModel(preset, models) {
-  return (models || []).find((model) => modelMatchesPreset(preset, model)) || null;
+function findPresetForModel(ctx, provider, model) {
+  return (ctx.presets.presets || []).find((preset) => preset.provider === provider && modelMatchesPreset(preset, model)) || null;
 }
 
-function presetAvailability(ctx, preset, provider, model, role, rebuild) {
-  if (provider !== 'ollama' && provider !== 'lmstudio') return null;
-  const reachable = provider === 'ollama' ? ctx.reachable : ctx.lmstudioReachable;
-  const models = detectedModels(ctx, provider);
-  if (!reachable) {
-    return el('div', { class: 'preset-status warn' }, `${PROVIDER_LABELS[provider]} is not reachable. Start its server, then reload Settings.`);
+function discoveryState(ctx, provider) {
+  if (!ctx.discovery[provider]) {
+    ctx.discovery[provider] = {
+      models: [], loading: false, loaded: false, reachable: null,
+      source: 'catalog', error: '', requestId: 0,
+    };
   }
-  const installed = models.includes(model);
-  const compatible = !installed && preset ? findDetectedModel(preset, models) : null;
-  if (installed) return el('div', { class: 'preset-status ok' }, `Ready · ${model} detected`);
-  if (compatible) {
-    const useModel = el('button', { class: 'preset-inline-action' }, `Use ${compatible}`);
-    useModel.addEventListener('click', async () => {
-      useModel.disabled = true;
-      try {
-        const current = currentParameters(ctx.settings, provider);
-        const next = await api.applyLlmPreset({
-          role: role === 'local' ? 'local' : 'global',
-          presetId: preset.id,
-          // This action changes only the compatible model alias; keep any
-          // advanced values the operator already customized on this preset.
-          overrides: { ...current, model: compatible },
-        });
-        Object.assign(ctx.settings, next);
-        toast(`Mapped ${preset.label} to ${compatible}.`, 'ok');
-        rebuild();
-      } catch (err) {
-        useModel.disabled = false;
-        toast(err.message, 'err');
-      }
+  return ctx.discovery[provider];
+}
+
+function modelEntryFromPreset(preset) {
+  return {
+    id: preset.model,
+    label: preset.label || preset.model,
+    description: preset.description || '',
+    contextWindow: preset.limits && preset.limits.contextWindow,
+    maxOutputTokens: preset.limits && preset.limits.maxOutputTokens,
+    reasoningAdapter: preset.capabilities && preset.capabilities.reasoningAdapter,
+    reasoningEfforts: preset.capabilities && preset.capabilities.reasoningEfforts,
+    defaultReasoningEffort: preset.parameters && preset.parameters.reasoning && preset.parameters.reasoning.effort,
+    source: 'catalog',
+    recommended: Boolean(preset.recommended),
+    preset,
+  };
+}
+
+function discoveredModelEntry(ctx, provider, raw, source) {
+  const value = typeof raw === 'string' ? { id: raw } : raw || {};
+  const id = String(value.id || value.model || '').trim();
+  if (!id) return null;
+  const preset = findPresetForModel(ctx, provider, id);
+  const catalog = preset ? modelEntryFromPreset(preset) : {};
+  const modelSource = value.source || source || 'provider';
+  return {
+    ...catalog,
+    ...value,
+    id,
+    label: value.label || catalog.label || id,
+    description: value.description || catalog.description || '',
+    reasoningAdapter: value.reasoningAdapter || catalog.reasoningAdapter || 'none',
+    reasoningEfforts: Array.isArray(value.reasoningEfforts) ? value.reasoningEfforts : catalog.reasoningEfforts || [],
+    defaultReasoningEffort: value.defaultReasoningEffort || catalog.defaultReasoningEffort || 'none',
+    source: modelSource,
+    available: ['live', 'local', 'provider'].includes(modelSource),
+    recommended: value.recommended === undefined ? Boolean(catalog.recommended) : Boolean(value.recommended),
+    preset: preset || null,
+  };
+}
+
+function modelsForProvider(ctx, provider) {
+  const entries = new Map();
+  for (const preset of (ctx.presets.presets || []).filter((item) => item.provider === provider)) {
+    const entry = modelEntryFromPreset(preset);
+    entries.set(entry.id, entry);
+  }
+  const state = discoveryState(ctx, provider);
+  for (const entry of state.models) {
+    const current = entries.get(entry.id);
+    entries.set(entry.id, current ? { ...current, ...entry, preset: entry.preset || current.preset } : entry);
+  }
+  const configured = currentParameters(ctx.settings, provider).model;
+  if (configured && !entries.has(configured)) {
+    const preset = findPresetForModel(ctx, provider, configured);
+    entries.set(configured, {
+      ...(preset ? modelEntryFromPreset(preset) : {}),
+      id: configured,
+      label: configured,
+      source: 'current',
+      available: state.models.some((entry) => entry.id === configured),
+      preset,
     });
-    return el('div', { class: 'preset-status warn' }, [
-      el('span', {}, `${model} is not loaded; a compatible model is available.`),
-      useModel,
+  }
+  const values = [...entries.values()].map((entry) => {
+    if (provider !== 'codex' || !ctx.codex || ctx.codex.backend !== 'api') return entry;
+    const efforts = normalizeReasoningOptions(entry.reasoningEfforts)
+      .filter((effort) => effort.value !== 'ultra');
+    return {
+      ...entry,
+      reasoningEfforts: efforts,
+      defaultReasoningEffort: efforts.some((effort) => effort.value === entry.defaultReasoningEffort)
+        ? entry.defaultReasoningEffort
+        : efforts.some((effort) => effort.value === 'medium') ? 'medium' : efforts[0] && efforts[0].value,
+    };
+  });
+  return values.sort((a, b) => {
+    if (a.recommended !== b.recommended) return a.recommended ? -1 : 1;
+    if (Boolean(a.available) !== Boolean(b.available)) return a.available ? -1 : 1;
+    return String(a.label || a.id).localeCompare(String(b.label || b.id));
+  });
+}
+
+function recommendedModelEntry(ctx, provider) {
+  const entries = modelsForProvider(ctx, provider);
+  const recommendedPreset = (ctx.presets.presets || []).find((preset) => preset.provider === provider && preset.recommended);
+  const availableAlias = recommendedPreset && entries.find((entry) => entry.available && modelMatchesPreset(recommendedPreset, entry.id));
+  return availableAlias || entries.find((entry) => entry.available) ||
+    entries.find((entry) => entry.recommended) || entries[0] || null;
+}
+
+function modelSelectControl(entries, current) {
+  const option = (entry) => el('option', { value: entry.id, selected: entry.id === current },
+    `${entry.recommended ? '★ ' : ''}${entry.label}${entry.label !== entry.id ? ` — ${entry.id}` : ''}`);
+  const recommended = entries.filter((entry) => entry.recommended);
+  const available = entries.filter((entry) => !entry.recommended && entry.available);
+  const other = entries.filter((entry) => !entry.recommended && !entry.available);
+  const groups = [];
+  if (recommended.length) groups.push(el('optgroup', { label: 'Recommended' }, recommended.map(option)));
+  if (available.length) groups.push(el('optgroup', { label: 'Available' }, available.map(option)));
+  if (other.length) groups.push(el('optgroup', { label: 'Catalog / current' }, other.map(option)));
+  return el('select', { class: 'llm-model-select' }, groups);
+}
+
+function normalizeReasoningOptions(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  return raw.map((item) => {
+    const value = typeof item === 'string' ? item : item && item.value;
+    if (!value || seen.has(value)) return null;
+    seen.add(value);
+    const fallback = REASONING_META[value] || {
+      label: value[0].toUpperCase() + value.slice(1),
+      description: '',
+    };
+    return {
+      value,
+      label: typeof item === 'object' && item.label ? item.label : fallback.label,
+      description: value === 'ultra'
+        ? REASONING_META.ultra.description
+        : typeof item === 'object' && item.description ? item.description : fallback.description,
+    };
+  }).filter(Boolean);
+}
+
+function reasoningOptionsFor(entry, preset) {
+  if (entry && Array.isArray(entry.reasoningEfforts) && entry.reasoningEfforts.length) {
+    return normalizeReasoningOptions(entry.reasoningEfforts);
+  }
+  return normalizeReasoningOptions(preset && preset.capabilities && preset.capabilities.reasoningEfforts);
+}
+
+function defaultReasoningFor(entry, preset) {
+  const options = reasoningOptionsFor(entry, preset);
+  const preferred = entry && entry.defaultReasoningEffort ||
+    preset && preset.parameters && preset.parameters.reasoning && preset.parameters.reasoning.effort;
+  return options.some((option) => option.value === preferred)
+    ? preferred
+    : options[0] ? options[0].value : 'none';
+}
+
+function reasoningLabel(value) {
+  return (REASONING_META[value] && REASONING_META[value].label) || value || 'Provider default';
+}
+
+function reasoningDescription(options, current) {
+  const selected = options.find((option) => option.value === current);
+  if (selected) return selected.description;
+  return options.length
+    ? 'Reasoning is not active for the saved configuration; choose a supported level to apply it.'
+    : 'This model has no configurable reasoning profile.';
+}
+
+async function discoverProviderModels(ctx, role, provider, refresh, rebuild) {
+  if (!provider || !ROLE_PROVIDERS[role].includes(provider)) return;
+  const state = discoveryState(ctx, provider);
+  const requestId = ++state.requestId;
+  state.loading = true;
+  state.error = '';
+  rebuild();
+  try {
+    const response = await api.getProviderModels(provider, refresh);
+    if (requestId !== state.requestId) return;
+    const source = response.source || (provider === 'ollama' || provider === 'lmstudio' ? 'local' : 'provider');
+    state.models = (response.models || [])
+      .map((model) => discoveredModelEntry(ctx, provider, model, source))
+      .filter(Boolean);
+    state.reachable = response.reachable !== false;
+    state.source = source;
+    state.loaded = true;
+  } catch (err) {
+    if (requestId !== state.requestId) return;
+    state.models = [];
+    state.reachable = false;
+    state.loaded = true;
+    state.error = err.message || 'Model discovery failed.';
+  } finally {
+    if (requestId !== state.requestId) return;
+    state.loading = false;
+    if (roleProvider(ctx.settings, role) === provider) rebuild();
+  }
+}
+
+function modelDiscoveryStatus(ctx, role, provider, model, rebuild) {
+  const state = discoveryState(ctx, provider);
+  const refresh = el('button', {
+    class: 'preset-inline-action llm-refresh-models',
+    disabled: state.loading ? 'disabled' : null,
+    onclick: () => void discoverProviderModels(ctx, role, provider, true, rebuild),
+  }, state.loading ? 'Refreshing…' : 'Refresh models');
+  if (state.loading && !state.loaded) {
+    return el('div', { class: 'preset-status busy', role: 'status', 'aria-live': 'polite' }, [
+      el('span', {}, `Discovering ${PROVIDER_LABELS[provider] || provider} models…`), refresh,
     ]);
   }
-  return el('div', { class: 'preset-status warn' }, `${model || 'Model'} is not detected. Install/load it, or customize the compatible model id below.`);
+  if (!state.loaded) {
+    return el('div', { class: 'preset-status busy', role: 'status', 'aria-live': 'polite' }, [
+      el('span', {}, 'Model catalog is ready; checking live availability…'), refresh,
+    ]);
+  }
+  if (state.reachable === false) {
+    return el('div', { class: 'preset-status warn', role: 'status', 'aria-live': 'polite' }, [
+      el('span', {}, `${state.error || `${PROVIDER_LABELS[provider] || provider} is not reachable.`} Showing catalog and current models.`),
+      refresh,
+    ]);
+  }
+  const exact = state.models.some((entry) => entry.id === model);
+  const count = state.models.length;
+  const sourceLabel = state.source === 'fallback' || state.source === 'catalog' ? 'the catalog' : state.source || 'the provider';
+  const message = provider === 'ollama' || provider === 'lmstudio'
+    ? exact ? `Ready · ${model} detected` : `${count} local model${count === 1 ? '' : 's'} detected; ${model || 'the selected model'} is not currently loaded.`
+    : `${count} ${PROVIDER_LABELS[provider] || provider} model${count === 1 ? '' : 's'} loaded from ${sourceLabel}.`;
+  const healthy = provider === 'ollama' || provider === 'lmstudio'
+    ? exact
+    : state.source === 'live';
+  return el('div', { class: `preset-status ${healthy ? 'ok' : 'warn'}`, role: 'status', 'aria-live': 'polite' }, [
+    el('span', {}, message), refresh,
+  ]);
 }
 
 function currentParameters(settings, provider) {
@@ -490,6 +798,13 @@ function currentParameters(settings, provider) {
   };
 }
 
+function configuredReasoningAdapter(settings, provider) {
+  if (provider === 'ollama') return settings.ollamaReasoningAdapter || 'none';
+  if (provider === 'lmstudio') return settings.lmstudioReasoningAdapter || 'none';
+  if (provider === 'codex') return settings.codexReasoningAdapter || 'none';
+  return settings.claudeReasoningAdapter || 'none';
+}
+
 function presetCustomized(preset, params) {
   const defaults = preset.parameters;
   return !modelMatchesPreset(preset, params.model) ||
@@ -512,12 +827,15 @@ function compactTokens(value) {
   return String(n);
 }
 
-function parameterSummary(params) {
+function parameterSummary(params, reasoningOptions = [], effectiveReasoning = params.reasoningEffort) {
   const temperature = typeof params.temperature === 'number' ? params.temperature : 'managed';
+  const reasoning = reasoningOptions.some((option) => option.value === effectiveReasoning)
+    ? reasoningLabel(effectiveReasoning)
+    : 'Not selected';
   return el('div', { class: 'preset-params' }, [
     el('span', { class: 'param-chip' }, `Context ${compactTokens(params.contextWindow)}`),
     el('span', { class: 'param-chip' }, `Output ${compactTokens(params.maxOutputTokens)}`),
-    el('span', { class: 'param-chip' }, `Reasoning ${params.reasoningEffort}`),
+    el('span', { class: 'param-chip' }, `Reasoning ${reasoning}`),
     el('span', { class: 'param-chip' }, `Temperature ${temperature}`),
   ]);
 }
@@ -527,14 +845,6 @@ function optionSelect(options, current) {
 }
 
 function parameterEditor(ctx, role, preset, params, rebuild) {
-  const models = detectedModels(ctx, preset.provider);
-  const listId = `models-${role}-${preset.provider}`;
-  const hostedPresetModel = preset.id !== 'custom' && (preset.provider === 'codex' || preset.provider === 'claude');
-  const modelInput = el('input', {
-    value: params.model || preset.model, list: listId, autocomplete: 'off',
-    ...(hostedPresetModel ? { disabled: 'disabled' } : {}),
-  });
-  const modelControl = el('div', {}, [modelInput, el('datalist', { id: listId }, models.map((model) => el('option', { value: model }))) ]);
   const contextInput = el('input', {
     type: 'number', min: '512', max: String(preset.limits.contextWindow), value: String(params.contextWindow),
     ...(preset.capabilities.contextWindowConfigurable ? {} : { disabled: 'disabled' }),
@@ -555,10 +865,6 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
   const repeatPenaltyInput = preset.parameters.repeatPenalty !== null
     ? el('input', { type: 'number', min: '0', max: '2', step: '0.01', value: String(params.repeatPenalty ?? preset.parameters.repeatPenalty) })
     : null;
-  const effortInput = optionSelect(
-    preset.capabilities.reasoningEfforts.map((effort) => [effort, effort === 'none' ? 'Off' : effort === 'medium' && preset.capabilities.reasoningAdapter === 'ollama-think-toggle' ? 'On' : effort[0].toUpperCase() + effort.slice(1)]),
-    params.reasoningEffort
-  );
   const hostInput = params.host ? el('input', { value: params.host }) : null;
   const jsonInput = preset.provider === 'ollama'
     ? optionSelect([['json', 'Constrained JSON'], ['text', 'Prompt-only text']], params.jsonMode)
@@ -585,25 +891,21 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
   const save = async (reset = false) => {
     const numericInputs = [contextInput, outputInput, temperatureInput, topPInput, topKInput, repeatPenaltyInput]
       .filter((input) => input && !input.disabled);
-    if (!reset && (!modelInput.value.trim() || numericInputs.some((input) => input.value === '' || !input.checkValidity()))) {
+    if (!reset && numericInputs.some((input) => input.value === '' || !input.checkValidity())) {
       const invalid = numericInputs.find((input) => input.value === '' || !input.checkValidity());
       if (invalid) invalid.reportValidity();
-      toast(!modelInput.value.trim() ? 'Model id is required.' : 'Check the highlighted parameter value.', 'err');
-      return;
-    }
-    if (!reset && preset.id !== 'custom' && !modelMatchesPreset(preset, modelInput.value)) {
-      toast(`Model id must stay in the ${preset.label} family. Choose its matching preset first.`, 'err');
+      toast('Check the highlighted parameter value.', 'err');
       return;
     }
     const overrides = reset ? undefined : {
-      model: modelInput.value.trim(),
+      model: params.model,
       contextWindow: Number(contextInput.value),
       maxOutputTokens: Number(outputInput.value),
       temperature: preset.capabilities.temperature ? Number(temperatureInput.value) : null,
       topP: topPInput ? Number(topPInput.value) : null,
       topK: topKInput ? Number(topKInput.value) : null,
       repeatPenalty: repeatPenaltyInput ? Number(repeatPenaltyInput.value) : null,
-      reasoningEffort: effortInput.value,
+      reasoningEffort: params.reasoningEffort,
       jsonMode: jsonInput ? jsonInput.value : null,
       contextMode: contextModeInput ? contextModeInput.value : null,
       ...(hostInput ? { host: hostInput.value.trim() } : {}),
@@ -630,7 +932,6 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
 
   const fields = [
     hostInput ? field(`${PROVIDER_LABELS[preset.provider]} host`, hostInput) : null,
-    field('Model id', modelControl, hostedPresetModel ? 'Model id is fixed because the reasoning and sampling capabilities are model-specific.' : models.length ? `${models.length} detected model(s) are available as suggestions.` : null),
     field('Context window', contextInput, preset.capabilities.contextWindowConfigurable ? 'For LM Studio, this must match the context used when loading the model.' : 'Model capability; hosted providers do not change it per request.'),
     field('Max output tokens', outputInput,
       preset.provider === 'codex'
@@ -644,7 +945,6 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
     topPInput ? field('Top P', topPInput) : null,
     topKInput ? field('Top K', topKInput) : null,
     repeatPenaltyInput ? field('Repeat penalty', repeatPenaltyInput) : null,
-    field('Reasoning effort', effortInput, `Sent as ${preset.parameters.reasoning.parameter || 'provider default'}.`),
     jsonInput ? field('JSON output mode', jsonInput) : null,
     contextModeInput ? field('Context overflow', contextModeInput) : null,
   ];

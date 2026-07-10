@@ -7,6 +7,7 @@ const { asyncHandler, maskKey } = require('../util');
 const claudeOauth = require('../agent/claude-oauth');
 const { ensureFreshClaudeTokens, resolveLlm, createChatModel } = require('../agent/llm');
 const { presetForModel } = require('../agent/model-presets');
+const { discoverModels } = require('../agent/model-discovery');
 const log = require('../logger');
 
 /**
@@ -60,6 +61,14 @@ router.get('/', (req, res) => {
   res.json(claudePublic());
 });
 
+// GET /api/settings/claude/models — live account catalog with static fallback.
+router.get(
+  '/models',
+  asyncHandler(async (req, res) => {
+    res.json(await discoverModels('claude', { refresh: req.query.refresh === '1' }));
+  })
+);
+
 // GET /api/settings/claude/login — begin OAuth; returns the authorize URL to open.
 router.get('/login', (req, res) => {
   const { authorizeUrl } = claudeOauth.createLogin();
@@ -84,9 +93,11 @@ router.post('/', (req, res) => {
   const reasoningAdapter = matchedPreset
     ? matchedPreset.capabilities.reasoningAdapter
     : modelChanged ? 'none' : current.claudeReasoningAdapter || 'none';
-  const reasoningEfforts = reasoningAdapter === 'anthropic-adaptive'
-    ? ['none', 'low', 'medium', 'high', 'xhigh', 'max']
-    : ['none'];
+  const reasoningEfforts = matchedPreset
+    ? matchedPreset.capabilities.reasoningEfforts
+    : reasoningAdapter === 'anthropic-adaptive' || reasoningAdapter === 'anthropic-effort'
+      ? ['none', 'low', 'medium', 'high', 'xhigh', 'max']
+      : ['none'];
   const defaultEffort = !modelFamilyChanged && reasoningEfforts.includes(current.claudeReasoningEffort)
     ? current.claudeReasoningEffort
     : matchedPreset ? matchedPreset.parameters.reasoning.effort : 'none';

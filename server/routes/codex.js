@@ -7,6 +7,7 @@ const { asyncHandler, maskKey } = require('../util');
 const { createLogin, consumeLogin, exchangeCodeForTokens } = require('../agent/oauth');
 const { ensureFreshCodexTokens } = require('../agent/llm');
 const { presetForModel } = require('../agent/model-presets');
+const { discoverModels } = require('../agent/model-discovery');
 const oauthLib = require('../agent/oauth');
 const log = require('../logger');
 
@@ -77,6 +78,14 @@ router.get('/', (req, res) => {
   res.json(codexPublic());
 });
 
+// GET /api/settings/codex/models — live account catalog with static fallback.
+router.get(
+  '/models',
+  asyncHandler(async (req, res) => {
+    res.json(await discoverModels('codex', { refresh: req.query.refresh === '1' }));
+  })
+);
+
 // GET /api/settings/codex/login — begin OAuth; returns the authorize URL to navigate to.
 router.get('/login', (req, res) => {
   const { authorizeUrl } = createLogin();
@@ -101,9 +110,15 @@ router.post('/', (req, res) => {
   const reasoningAdapter = matchedPreset
     ? matchedPreset.capabilities.reasoningAdapter
     : modelChanged ? 'none' : current.codexReasoningAdapter || 'none';
-  const reasoningEfforts = reasoningAdapter === 'openai'
-    ? ['none', 'low', 'medium', 'high', 'xhigh']
-    : ['none'];
+  const reasoningEfforts = matchedPreset
+    ? matchedPreset.capabilities.reasoningEfforts.filter(
+      (effort) => CONFIG.OAUTH.backend === 'chatgpt' || effort !== 'ultra'
+    )
+    : reasoningAdapter === 'openai'
+      ? CONFIG.OAUTH.backend === 'chatgpt'
+        ? ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']
+        : ['none', 'low', 'medium', 'high', 'xhigh', 'max']
+      : ['none'];
   const defaultEffort = !modelFamilyChanged && reasoningEfforts.includes(current.codexReasoningEffort)
     ? current.codexReasoningEffort
     : matchedPreset ? matchedPreset.parameters.reasoning.effort : 'none';
@@ -135,7 +150,8 @@ router.delete('/', (req, res) => {
 router.post(
   '/test',
   asyncHandler(async (req, res) => {
-    // ChatGPT backend: no /models endpoint — exercise the real path with a tiny call.
+    // Exercise the real generation path so auth, model selection, and Responses
+    // request compatibility are validated together.
     if (CONFIG.OAUTH.backend === 'chatgpt') {
       const { resolveLlm, createChatModel } = require('../agent/llm');
       const llm = await resolveLlm({ ...getSettings(), llmProvider: 'codex' });
