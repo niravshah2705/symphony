@@ -6,6 +6,8 @@ const { getSettings, patchSettings, getCodexTokens, setCodexTokens, clearCodexTo
 const { asyncHandler, maskKey } = require('../util');
 const { createLogin, consumeLogin, exchangeCodeForTokens } = require('../agent/oauth');
 const { ensureFreshCodexTokens } = require('../agent/llm');
+const { presetForModel } = require('../agent/model-presets');
+const { discoverModels } = require('../agent/model-discovery');
 const oauthLib = require('../agent/oauth');
 const log = require('../logger');
 
@@ -46,7 +48,10 @@ function codexPublic() {
     model: s.codexModel || defaultModel,
     configuredModel: s.codexModel || '',
     defaultModel,
-    maxTokens: s.codexMaxTokens || 4096,
+    contextWindow: s.codexContextWindow || 1000000,
+    maxTokens: s.codexMaxTokens || 65536,
+    temperature: s.codexTemperature ?? null,
+    reasoningEffort: s.codexReasoningEffort || 'none',
     baseUrl,
     redirectUri: CONFIG.OAUTH.redirectUri,
     maskedToken: connected ? maskKey(t.accessToken || '') : '',
@@ -61,10 +66,25 @@ function clampInt(value, min, max, fallback) {
   return Math.min(max, Math.max(min, Math.round(n)));
 }
 
+function clampNumber(value, min, max, fallback) {
+  if (value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 // GET /api/settings/codex — masked status for the Settings page.
 router.get('/', (req, res) => {
   res.json(codexPublic());
 });
+
+// GET /api/settings/codex/models — live account catalog with static fallback.
+router.get(
+  '/models',
+  asyncHandler(async (req, res) => {
+    res.json(await discoverModels('codex', { refresh: req.query.refresh === '1' }));
+  })
+);
 
 // GET /api/settings/codex/login — begin OAuth; returns the authorize URL to navigate to.
 router.get('/login', (req, res) => {
@@ -76,16 +96,46 @@ router.get('/login', (req, res) => {
 router.post('/', (req, res) => {
   const b = req.body || {};
   const current = getSettings();
-  const patch = { codexMaxTokens: clampInt(b.codexMaxTokens, 128, 32768, current.codexMaxTokens || 4096) };
-  if (b.codexModel !== undefined) {
-    const model = String(b.codexModel).trim();
-    // Allow real model ids (incl. namespaced "openai/x" and fine-tuned "ft:...:id")
-    // but reject URL-shaped input ("//") and anything outside the id charset.
-    if (model && (!/^[\w.:\-/]{1,100}$/.test(model) || model.includes('//'))) {
-      return res.status(400).json({ error: 'Invalid model name.' });
-    }
-    patch.codexModel = model;
+  const hasModelOverride = b.codexModel !== undefined;
+  const model = hasModelOverride ? String(b.codexModel).trim() : current.codexModel;
+  if (hasModelOverride && model && (!/^[\w.:\-/]{1,100}$/.test(model) || model.includes('//'))) {
+    return res.status(400).json({ error: 'Invalid model name.' });
   }
+  const matchedPreset = presetForModel('codex', model);
+  const modelChanged = hasModelOverride && model !== current.codexModel;
+  const currentPreset = presetForModel('codex', current.codexModel);
+  const modelFamilyChanged = hasModelOverride && (matchedPreset
+    ? !currentPreset || currentPreset.id !== matchedPreset.id
+    : modelChanged);
+  const reasoningAdapter = matchedPreset
+    ? matchedPreset.capabilities.reasoningAdapter
+    : modelChanged ? 'none' : current.codexReasoningAdapter || 'none';
+  const reasoningEfforts = matchedPreset
+    ? matchedPreset.capabilities.reasoningEfforts.filter(
+      (effort) => CONFIG.OAUTH.backend === 'chatgpt' || effort !== 'ultra'
+    )
+    : reasoningAdapter === 'openai'
+      ? CONFIG.OAUTH.backend === 'chatgpt'
+        ? ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']
+        : ['none', 'low', 'medium', 'high', 'xhigh', 'max']
+      : ['none'];
+  const defaultEffort = !modelFamilyChanged && reasoningEfforts.includes(current.codexReasoningEffort)
+    ? current.codexReasoningEffort
+    : matchedPreset ? matchedPreset.parameters.reasoning.effort : 'none';
+  const defaultMaxTokens = matchedPreset && modelFamilyChanged
+    ? matchedPreset.parameters.maxOutputTokens
+    : modelFamilyChanged ? 4096 : current.codexMaxTokens || 65536;
+  const patch = {
+    codexMaxTokens: clampInt(b.codexMaxTokens, 128, 128000, defaultMaxTokens),
+    codexTemperature: reasoningAdapter === 'none'
+      ? clampNumber(b.codexTemperature, 0, 2, current.codexTemperature ?? null)
+      : null,
+    codexReasoningEffort: reasoningEfforts.includes(b.codexReasoningEffort) ? b.codexReasoningEffort : defaultEffort,
+    codexReasoningAdapter: reasoningAdapter,
+  };
+  if (modelFamilyChanged) patch.codexContextWindow = matchedPreset ? matchedPreset.parameters.contextWindow : 128000;
+  if (current.llmProvider === 'codex') patch.hostedLlmPresetId = 'custom';
+  if (hasModelOverride) patch.codexModel = model;
   patchSettings(patch);
   res.json(codexPublic());
 });
@@ -100,7 +150,8 @@ router.delete('/', (req, res) => {
 router.post(
   '/test',
   asyncHandler(async (req, res) => {
-    // ChatGPT backend: no /models endpoint — exercise the real path with a tiny call.
+    // Exercise the real generation path so auth, model selection, and Responses
+    // request compatibility are validated together.
     if (CONFIG.OAUTH.backend === 'chatgpt') {
       const { resolveLlm, createChatModel } = require('../agent/llm');
       const llm = await resolveLlm({ ...getSettings(), llmProvider: 'codex' });

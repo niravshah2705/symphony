@@ -4,18 +4,24 @@ import { el, clear, toast, loading } from '../dom.js';
 export async function renderSettings(view) {
   view.append(loading('Loading settings…'));
 
-  const [settings, configRes, modelsRes, labelsRes, membersRes, roleRes, ollamaRes, lmstudioRes, codexRes, claudeRes] = await Promise.all([
+  const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes] = await Promise.all([
     api.getSettings(),
+    api.getLlmPresets(),
     api.getAgentConfig(),
     api.getAgentModels(),
     api.getAgentLabels().catch(() => ({ labels: [] })),
     api.getMembers().catch(() => ({ members: [] })),
     api.getAssumedRole().catch(() => ({ assumedRole: null })),
-    api.getOllamaModels().catch(() => ({ models: [], reachable: false })),
-    api.getLmstudioModels().catch(() => ({ models: [], reachable: false })),
     api.getCodexStatus().catch(() => ({ connected: false })),
     api.getClaudeStatus().catch(() => ({ connected: false })),
   ]);
+
+  // Older stores intentionally kept hosted model ids blank and relied on the
+  // provider defaults. Seed those effective ids into the in-memory public view
+  // so the dropdown reflects today's provider default rather than a stale UI
+  // fallback. Nothing is persisted until the operator changes a selection.
+  if (!settings.codexModel) settings.codexModel = codexRes.model || codexRes.defaultModel || 'gpt-5.6-sol';
+  if (!settings.claudeModel) settings.claudeModel = claudeRes.model || claudeRes.defaultModel || 'claude-opus-4-8';
 
   // Two-column layout: keys + LLM on the left, role + agent config on the right.
   // Collapses to a single column on narrow screens (see .settings-grid).
@@ -26,10 +32,9 @@ export async function renderSettings(view) {
         keysSection(settings),
         llmSection({
           settings,
-          ollamaModels: ollamaRes.models || [],
-          reachable: ollamaRes.reachable,
-          lmstudioModels: lmstudioRes.models || [],
-          lmstudioReachable: lmstudioRes.reachable,
+          presets,
+          discovery: Object.create(null),
+          selectionPending: Object.create(null),
           codex: codexRes,
           claude: claudeRes,
           view,
@@ -60,12 +65,18 @@ function section(title, subtitle, open, children) {
   ]);
 }
 
-const field = (label, control, hint) =>
-  el('div', { class: 'field' }, [
-    el('label', {}, label),
+let fieldSequence = 0;
+const field = (label, control, hint) => {
+  const target = control.matches && control.matches('input, select, textarea')
+    ? control
+    : control.querySelector && control.querySelector('input, select, textarea');
+  if (target && !target.id) target.id = `settings-field-${++fieldSequence}`;
+  return el('div', { class: 'field' }, [
+    el('label', target ? { for: target.id } : {}, label),
     control,
     hint ? el('p', { class: 'muted', style: 'margin:6px 0 0;font-size:12px' }, hint) : null,
   ]);
+};
 
 const pwd = (placeholder) => el('input', { type: 'password', autocomplete: 'off', placeholder });
 
@@ -175,401 +186,862 @@ function keysSection(settings) {
 /* ------------------------------- Deep Agent LLM ------------------------- */
 
 function llmSection(ctx) {
-  // A stable wrapper so switching a provider slot re-renders ONLY this section in
-  // place — no full-page reload and no re-fetch of the already-loaded data.
   const container = el('div', { class: 'llm-section' });
-  const providers = {
-    global: ctx.settings.llmProvider || 'ollama',
-    local: ctx.settings.localLlmProvider || 'lmstudio',
-  };
-
-  const onProviderChange = async (role, value) => {
-    try {
-      await api.setProvider(value, role);
-      providers[role] = value; // update local UI state only; no full render
-      toast(`${role === 'local' ? 'Local' : 'Global'} deep-agent provider: ${value}.`, 'ok');
-      rebuild();
-    } catch (err) {
-      toast(err.message, 'err');
+  const rebuild = () => {
+    const previous = container.firstElementChild;
+    const wasOpen = previous && previous.tagName === 'DETAILS' ? previous.open : null;
+    const customOpen = new Set(
+      [...container.querySelectorAll('.preset-card')]
+        .filter((card) => card.querySelector('.preset-customize[open]'))
+        .map((card) => card.dataset.role)
+    );
+    clear(container).append(buildLlmSection(ctx, rebuild));
+    if (wasOpen === true && container.firstElementChild) container.firstElementChild.open = true;
+    for (const role of customOpen) {
+      const details = container.querySelector(`.preset-card[data-role="${role}"] .preset-customize`);
+      if (details) details.open = true;
     }
   };
 
-  const rebuild = () => clear(container).append(buildLlmSection(ctx, providers, onProviderChange));
-
   rebuild();
+  queueMicrotask(() => {
+    void discoverProviderModels(ctx, 'local', roleProvider(ctx.settings, 'local'), false, rebuild);
+    void discoverProviderModels(ctx, 'hosted', roleProvider(ctx.settings, 'hosted'), false, rebuild);
+  });
   return container;
 }
 
-/** A provider <select> (the 4 supported providers) with `selected` pre-chosen. */
-function providerSelect(selected) {
-  return el('select', {}, [
-    el('option', { value: 'ollama', selected: selected === 'ollama' }, 'Ollama (local)'),
-    el('option', { value: 'lmstudio', selected: selected === 'lmstudio' }, 'LM Studio (local)'),
-    el('option', { value: 'codex', selected: selected === 'codex' }, 'Codex (OpenAI · OAuth)'),
-    el('option', { value: 'claude', selected: selected === 'claude' }, 'Claude (Anthropic · OAuth)'),
-  ]);
-}
+const PROVIDER_LABELS = Object.freeze({
+  ollama: 'Ollama',
+  lmstudio: 'LM Studio',
+  codex: 'OpenAI',
+  claude: 'Anthropic',
+});
 
-/** Whether a chosen provider still needs setup (drives the section's open state). */
-function providerIncomplete(provider, { settings, codex, claude }) {
-  if (provider === 'codex') return Boolean(!codex.connected);
-  if (provider === 'claude') return Boolean(!claude.connected);
-  if (provider === 'lmstudio') return !settings.lmstudioModel;
-  return !settings.ollamaModel;
-}
+const ROLE_PROVIDERS = Object.freeze({
+  local: ['ollama', 'lmstudio'],
+  hosted: ['codex', 'claude'],
+});
 
-function buildLlmSection({ settings, ollamaModels, reachable, lmstudioModels, lmstudioReachable, codex, claude, view }, providers, onProviderChange) {
-  // Two role slots: LOCAL (coder's XS / "local"-labeled issues) and GLOBAL/hosted
-  // (the planner + the coder's larger / "hosted"/unlabeled issues).
-  const localSelect = providerSelect(providers.local);
-  localSelect.addEventListener('change', () => onProviderChange('local', localSelect.value));
-  const globalSelect = providerSelect(providers.global);
-  globalSelect.addEventListener('change', () => onProviderChange('global', globalSelect.value));
+const REASONING_META = Object.freeze({
+  none: { label: 'Off', description: 'Do not request additional reasoning from this model.' },
+  low: { label: 'Low', description: 'Fast responses with lighter reasoning.' },
+  medium: { label: 'Medium', description: 'Balances speed and reasoning depth for everyday tasks.' },
+  high: { label: 'High', description: 'Greater reasoning depth for complex problems.' },
+  xhigh: { label: 'Extra high', description: 'Extra high reasoning depth for complex problems.' },
+  max: { label: 'Max', description: 'Maximum reasoning depth for the hardest problems.' },
+  ultra: { label: 'Ultra', description: 'Maximum reasoning with automatic task delegation.' },
+});
 
-  const subtitle = `Local: ${providers.local} · Global: ${providers.global}`;
-  // Nudge open when either slot still needs setup.
-  const incomplete =
-    providerIncomplete(providers.local, { settings, codex, claude }) ||
-    providerIncomplete(providers.global, { settings, codex, claude });
+function buildLlmSection(ctx, rebuild) {
+  const localPreset = findPreset(ctx, ctx.settings.localLlmPresetId, 'local');
+  const hostedPreset = findPreset(ctx, ctx.settings.hostedLlmPresetId, 'hosted');
+  const localProvider = localPreset ? localPreset.provider : ctx.settings.localLlmProvider;
+  const hostedProvider = hostedPreset ? hostedPreset.provider : ctx.settings.llmProvider;
+  const localName = `${PROVIDER_LABELS[localProvider] || localProvider} · ${currentParameters(ctx.settings, localProvider).model || 'Choose model'}`;
+  const hostedName = `${PROVIDER_LABELS[hostedProvider] || hostedProvider} · ${currentParameters(ctx.settings, hostedProvider).model || 'Choose model'}`;
+  const incomplete = !currentParameters(ctx.settings, localProvider).model ||
+    !currentParameters(ctx.settings, hostedProvider).model ||
+    !providerConnected(ctx, localProvider) ||
+    !providerConnected(ctx, hostedProvider);
 
-  return section('Deep Agent LLM', subtitle, incomplete, [
-    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Two deep-agent slots. The coder routes each issue by its model label: XS issues (label "local") go to the Local slot; everything larger (label "hosted", or no label) goes to the Global slot. The planner always uses the Global slot. Ollama and LM Studio run fully local; Codex and Claude use OAuth (tokens stay server-side).'),
-    el('div', { class: 'grid', style: 'grid-template-columns:1fr 1fr' }, [
-      field('Local Deep Agent LLM', localSelect, 'Coder route for XS / "local"-labeled issues.'),
-      field('Global Deep Agent LLM (hosted)', globalSelect, 'Planner + coder route for larger / "hosted" / unlabeled issues.'),
+  return section('Deep Agent LLM', `Local: ${localName} · Hosted: ${hostedName}`, incomplete, [
+    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Choose a provider, model, and model-supported reasoning level. Recommended context, output, and sampling values are applied automatically; advanced values remain customizable.'),
+    el('div', { class: 'preset-stack' }, [
+      presetSlot(ctx, 'local', rebuild),
+      presetSlot(ctx, 'hosted', rebuild),
     ]),
-    el('div', { class: 'subhead' }, 'Ollama (local)'),
-    ...ollamaFields({ settings, ollamaModels, reachable }),
-    el('div', { class: 'subhead' }, 'LM Studio (local)'),
-    ...lmstudioFields({ settings, lmstudioModels, reachable: lmstudioReachable }),
-    el('div', { class: 'subhead' }, 'Codex (OpenAI · OAuth)'),
-    codexBlock({ codex, view }),
-    el('div', { class: 'subhead' }, 'Claude (Anthropic · OAuth)'),
-    claudeBlock({ claude, view }),
   ]);
 }
 
-/** Ollama configuration controls (returns an array of field elements). */
-function ollamaFields({ settings, ollamaModels, reachable }) {
-  const hostInput = el('input', { value: settings.ollamaHost || '', placeholder: 'http://localhost:11434' });
+function findPreset(ctx, id, deployment) {
+  return (ctx.presets.presets || []).find((preset) => preset.id === id && preset.deployment === deployment) || null;
+}
 
-  // Model: dropdown of detected models (+ the current value), else free text.
-  const detected = [...new Set([...(ollamaModels || []), ...(settings.ollamaModel ? [settings.ollamaModel] : [])])];
-  const modelControl = detected.length
-    ? el('select', {}, [el('option', { value: '' }, '— select a model —')].concat(
-        detected.map((m) => el('option', { value: m, selected: m === settings.ollamaModel }, m))
-      ))
-    : el('input', { value: settings.ollamaModel || '', placeholder: 'e.g. llama3.1' });
+function roleProvider(settings, role) {
+  return role === 'local' ? settings.localLlmProvider : settings.llmProvider;
+}
 
-  const ctxInput = el('input', { type: 'number', min: '512', max: '131072', value: String(settings.ollamaContextWindow || 8192) });
-  const tokInput = el('input', { type: 'number', min: '128', max: '32768', value: String(settings.ollamaNumTokens || 8192) });
-  const jsonSelect = jsonModeSelect(
-    [
-      ['json', 'Constrained (format: json)'],
-      ['text', 'Prompt-only (text)'],
-    ],
-    settings.ollamaJsonMode || 'json'
-  );
-  const info = el('div', { class: 'muted', style: 'margin-top:10px;font-size:13px' });
+function selectedPresetId(settings, role) {
+  return role === 'local' ? settings.localLlmPresetId : settings.hostedLlmPresetId;
+}
 
-  const save = async () => {
+function providerConnected(ctx, provider) {
+  if (provider === 'codex') return Boolean(ctx.codex && ctx.codex.connected);
+  if (provider === 'claude') return Boolean(ctx.claude && ctx.claude.connected);
+  return true;
+}
+
+function presetSlot(ctx, role, rebuild) {
+  const deployment = role === 'local' ? 'local' : 'hosted';
+  const preset = findPreset(ctx, selectedPresetId(ctx.settings, role), deployment);
+  const provider = preset ? preset.provider : roleProvider(ctx.settings, role);
+  const params = currentParameters(ctx.settings, provider);
+  const customized = Boolean(preset && presetCustomized(preset, params));
+  const pending = Boolean(ctx.selectionPending[role]);
+  const modelEntries = modelsForProvider(ctx, provider);
+  const selectedModel = modelEntries.find((entry) => entry.id === params.model) || null;
+  const profilePreset = preset || findPresetForModel(ctx, provider, params.model);
+  const reasoningOptions = reasoningOptionsFor(selectedModel, profilePreset);
+  const modelDefaultReasoning = defaultReasoningFor(selectedModel, profilePreset);
+  const profileAdapter = selectedModel && selectedModel.reasoningAdapter ||
+    profilePreset && profilePreset.capabilities && profilePreset.capabilities.reasoningAdapter || 'none';
+  const currentAdapter = configuredReasoningAdapter(ctx.settings, provider);
+  const adapterActive = currentAdapter === profileAdapter;
+  const currentReasoning = adapterActive && reasoningOptions.some((option) => option.value === params.reasoningEffort)
+    ? params.reasoningEffort
+    : '';
+
+  const applySelection = async ({ nextProvider, model, reasoningEffort, mode }) => {
+    ctx.selectionPending[role] = true;
+    rebuild();
     try {
-      const res = await api.saveLlm({
-        ollamaHost: hostInput.value.trim(),
-        ollamaModel: modelControl.value.trim(),
-        ollamaContextWindow: Number(ctxInput.value),
-        ollamaNumTokens: Number(tokInput.value),
-        ollamaJsonMode: jsonSelect.value,
+      const response = await api.applyLlmSelection({
+        role,
+        provider: nextProvider,
+        model,
+        reasoningEffort,
+        mode,
       });
-      hostInput.value = res.ollamaHost;
-      info.textContent = res.ollamaModel
-        ? `Saved. Using ${res.ollamaModel} at ${res.ollamaHost}.`
-        : 'Saved. Select a model to enable enrichment.';
-      info.style.color = 'var(--green)';
-      toast('LLM settings saved.', 'ok');
+      Object.assign(ctx.settings, response && response.settings ? response.settings : response);
+      toast(
+        mode === 'reasoning'
+          ? `Reasoning set to ${reasoningLabel(reasoningEffort)}.`
+          : `${PROVIDER_LABELS[nextProvider] || nextProvider} model set to ${model}.`,
+        'ok'
+      );
     } catch (err) {
+      toast(err.message, 'err');
+    } finally {
+      ctx.selectionPending[role] = false;
+      rebuild();
+    }
+  };
+
+  const providerSelect = optionSelect(
+    ROLE_PROVIDERS[role].map((value) => [value, PROVIDER_LABELS[value] || value]),
+    provider
+  );
+  providerSelect.className = 'llm-provider-select';
+  providerSelect.disabled = pending;
+  providerSelect.addEventListener('change', () => {
+    const nextProvider = providerSelect.value;
+    void (async () => {
+      ctx.selectionPending[role] = true;
+      rebuild();
+      try {
+        await discoverProviderModels(ctx, role, nextProvider, false, rebuild);
+        const recommended = recommendedModelEntry(ctx, nextProvider);
+        if (!recommended) {
+          ctx.selectionPending[role] = false;
+          rebuild();
+          return toast(`No models are configured for ${PROVIDER_LABELS[nextProvider] || nextProvider}.`, 'err');
+        }
+        await applySelection({
+          nextProvider,
+          model: recommended.id,
+          reasoningEffort: defaultReasoningFor(recommended, recommended.preset),
+          mode: 'model',
+        });
+      } catch (err) {
+        ctx.selectionPending[role] = false;
+        rebuild();
+        toast(err.message, 'err');
+      }
+    })();
+  });
+
+  const modelSelect = modelSelectControl(modelEntries, params.model);
+  modelSelect.disabled = pending || !modelEntries.length;
+  modelSelect.addEventListener('change', () => {
+    const selected = modelEntries.find((entry) => entry.id === modelSelect.value);
+    if (!selected) return;
+    void applySelection({
+      nextProvider: provider,
+      model: selected.id,
+      reasoningEffort: defaultReasoningFor(selected, selected.preset),
+      mode: 'model',
+    });
+  });
+
+  const reasoningSelect = optionSelect(
+    [
+      ...(!currentReasoning && reasoningOptions.length
+        ? [['', `Apply ${reasoningLabel(modelDefaultReasoning)} default…`]]
+        : []),
+      ...reasoningOptions.map((option) => [
+        option.value,
+        `${option.label}${option.value === modelDefaultReasoning ? ' (default)' : ''}`,
+      ]),
+    ],
+    currentReasoning
+  );
+  reasoningSelect.className = 'llm-reasoning-select';
+  reasoningSelect.disabled = pending || !reasoningOptions.length;
+  const reasoningHint = el('span', {}, reasoningDescription(reasoningOptions, currentReasoning));
+  reasoningSelect.addEventListener('change', () => {
+    const chosen = reasoningOptions.find((option) => option.value === reasoningSelect.value);
+    reasoningHint.textContent = chosen ? chosen.description : '';
+    if (!chosen) return;
+    void applySelection({
+      nextProvider: provider,
+      model: params.model,
+      reasoningEffort: chosen.value,
+      mode: 'reasoning',
+    });
+  });
+
+  const heading = role === 'local' ? 'Local / XS tasks' : 'Hosted / planner + larger tasks';
+  const description = role === 'local'
+    ? provider === 'ollama' || provider === 'lmstudio'
+      ? 'Runs fully on this machine through Ollama or LM Studio.'
+      : 'Legacy custom route for XS tasks using a hosted OAuth provider.'
+    : provider === 'codex' || provider === 'claude'
+      ? 'Used by planning and every hosted or unlabeled coding task.'
+      : 'Legacy custom planner route using a local inference server.';
+  const status = modelDiscoveryStatus(ctx, role, provider, params.model, rebuild);
+  const children = [
+    el('div', { class: 'preset-card-head' }, [
+      el('div', {}, [el('div', { class: 'preset-title' }, heading), el('div', { class: 'muted preset-route' }, description)]),
+      customized || !preset ? el('span', { class: 'badge preset-custom-badge' }, 'Customized') : null,
+    ]),
+    el('div', { class: 'llm-primary-grid' }, [
+      field('Provider', providerSelect),
+      field('Model', modelSelect, modelEntries.length ? `${modelEntries.length} model${modelEntries.length === 1 ? '' : 's'} available in this list.` : 'No models found yet.'),
+      field('Reasoning', reasoningSelect, reasoningHint),
+    ]),
+  ];
+
+  if (preset || selectedModel) {
+    const descriptionText = (selectedModel && selectedModel.description) || (preset && preset.description);
+    children.push(
+      descriptionText ? el('p', { class: 'preset-description' }, descriptionText) : null,
+      parameterSummary(params, reasoningOptions, currentReasoning),
+      status,
+      profilePreset && profilePreset.requirements ? el('p', { class: 'muted preset-requirement' }, [
+        profilePreset.requirements,
+        profilePreset.sourceUrl ? ' ' : null,
+        profilePreset.sourceUrl ? el('a', { href: profilePreset.sourceUrl, target: '_blank', rel: 'noopener', class: 'preset-doc-link' }, 'Model docs ↗') : null,
+      ]) : null
+    );
+  } else {
+    children.push(
+      el('div', { class: 'preset-legacy-note' }, [
+        el('strong', {}, `Custom ${PROVIDER_LABELS[provider] || provider} configuration`),
+        el('span', {}, ' This discovered model has no catalog profile, so provider-specific reasoning overrides remain disabled.'),
+      ]),
+      status
+    );
+  }
+
+  if (provider === 'codex' || provider === 'claude') {
+    children.push(hostedConnection(ctx, provider));
+  }
+  const editorPreset = preset || customEditorPreset(provider, params, ctx.settings, deployment);
+  if (editorPreset) children.push(parameterEditor(ctx, role, editorPreset, params, rebuild));
+
+  return el('div', { class: `preset-card preset-card-${deployment}`, dataset: { role } }, children);
+}
+
+function customEditorPreset(provider, params, settings, deployment) {
+  const isOllama = provider === 'ollama';
+  const isLmstudio = provider === 'lmstudio';
+  const isCodex = provider === 'codex';
+  const adapter = isOllama
+    ? ['ollama-think-effort', 'ollama-think-toggle'].includes(settings.ollamaReasoningAdapter) ? settings.ollamaReasoningAdapter : 'none'
+    : isLmstudio
+      ? settings.lmstudioReasoningAdapter === 'openai-compatible' ? 'openai-compatible' : 'none'
+      : isCodex
+        ? settings.codexReasoningAdapter === 'openai' ? 'openai' : 'none'
+        : ['anthropic-adaptive', 'anthropic-effort'].includes(settings.claudeReasoningAdapter)
+          ? settings.claudeReasoningAdapter
+          : 'none';
+  const efforts = isOllama
+    ? adapter === 'ollama-think-effort' ? ['low', 'medium', 'high'] : adapter === 'ollama-think-toggle' ? ['none', 'medium'] : ['none']
+    : isLmstudio
+      ? adapter === 'openai-compatible' ? ['none', 'low', 'medium', 'high'] : ['none']
+      : isCodex
+        ? adapter === 'openai' ? ['none', 'low', 'medium', 'high', 'xhigh'] : ['none']
+      : adapter === 'anthropic-adaptive' || adapter === 'anthropic-effort'
+        ? ['none', 'low', 'medium', 'high', 'xhigh', 'max']
+        : ['none'];
+  const parameter = adapter === 'ollama-think-effort' || adapter === 'ollama-think-toggle'
+    ? 'think'
+    : adapter === 'openai-compatible'
+      ? 'reasoning_effort'
+      : adapter === 'openai'
+        ? 'reasoning.effort'
+        : adapter === 'anthropic-adaptive'
+          ? 'thinking.type=adaptive + output_config.effort'
+          : adapter === 'anthropic-effort' ? 'output_config.effort' : null;
+  return {
+    id: 'custom',
+    provider,
+    model: params.model,
+    limits: {
+      contextWindow: isOllama || isLmstudio ? 262144 : isCodex ? 1050000 : 1000000,
+      maxOutputTokens: 128000,
+    },
+    requestLimits: {
+      maxOutputContextFraction: isLmstudio ? 0.5 : isOllama ? 1 : null,
+    },
+    capabilities: {
+      temperature: isOllama || isLmstudio || (isCodex && adapter === 'none'),
+      contextWindowConfigurable: isOllama || isLmstudio,
+      reasoningAdapter: adapter,
+      reasoningEfforts: efforts,
+    },
+    parameters: {
+      contextWindow: params.contextWindow,
+      maxOutputTokens: params.maxOutputTokens,
+      temperature: params.temperature,
+      topP: params.topP,
+      topK: params.topK,
+      repeatPenalty: params.repeatPenalty,
+      reasoning: { effort: params.reasoningEffort, parameter },
+      jsonMode: params.jsonMode,
+      contextMode: params.contextMode,
+    },
+  };
+}
+
+function normalizedModel(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function modelMatchesPreset(preset, model) {
+  const actual = normalizedModel(model);
+  const patterns = [preset.model, ...(preset.modelPatterns || [])].map(normalizedModel).filter(Boolean);
+  return preset.deployment === 'hosted'
+    ? patterns.includes(actual)
+    : patterns.some((pattern) => actual.includes(pattern));
+}
+
+function findPresetForModel(ctx, provider, model) {
+  return (ctx.presets.presets || []).find((preset) => preset.provider === provider && modelMatchesPreset(preset, model)) || null;
+}
+
+function discoveryState(ctx, provider) {
+  if (!ctx.discovery[provider]) {
+    ctx.discovery[provider] = {
+      models: [], loading: false, loaded: false, reachable: null,
+      source: 'catalog', error: '', requestId: 0,
+    };
+  }
+  return ctx.discovery[provider];
+}
+
+function modelEntryFromPreset(preset) {
+  return {
+    id: preset.model,
+    label: preset.label || preset.model,
+    description: preset.description || '',
+    contextWindow: preset.limits && preset.limits.contextWindow,
+    maxOutputTokens: preset.limits && preset.limits.maxOutputTokens,
+    reasoningAdapter: preset.capabilities && preset.capabilities.reasoningAdapter,
+    reasoningEfforts: preset.capabilities && preset.capabilities.reasoningEfforts,
+    defaultReasoningEffort: preset.parameters && preset.parameters.reasoning && preset.parameters.reasoning.effort,
+    source: 'catalog',
+    recommended: Boolean(preset.recommended),
+    preset,
+  };
+}
+
+function discoveredModelEntry(ctx, provider, raw, source) {
+  const value = typeof raw === 'string' ? { id: raw } : raw || {};
+  const id = String(value.id || value.model || '').trim();
+  if (!id) return null;
+  const preset = findPresetForModel(ctx, provider, id);
+  const catalog = preset ? modelEntryFromPreset(preset) : {};
+  const modelSource = value.source || source || 'provider';
+  return {
+    ...catalog,
+    ...value,
+    id,
+    label: value.label || catalog.label || id,
+    description: value.description || catalog.description || '',
+    reasoningAdapter: value.reasoningAdapter || catalog.reasoningAdapter || 'none',
+    reasoningEfforts: Array.isArray(value.reasoningEfforts) ? value.reasoningEfforts : catalog.reasoningEfforts || [],
+    defaultReasoningEffort: value.defaultReasoningEffort || catalog.defaultReasoningEffort || 'none',
+    source: modelSource,
+    available: ['live', 'local', 'provider'].includes(modelSource),
+    recommended: value.recommended === undefined ? Boolean(catalog.recommended) : Boolean(value.recommended),
+    preset: preset || null,
+  };
+}
+
+function modelsForProvider(ctx, provider) {
+  const entries = new Map();
+  for (const preset of (ctx.presets.presets || []).filter((item) => item.provider === provider)) {
+    const entry = modelEntryFromPreset(preset);
+    entries.set(entry.id, entry);
+  }
+  const state = discoveryState(ctx, provider);
+  for (const entry of state.models) {
+    const current = entries.get(entry.id);
+    entries.set(entry.id, current ? { ...current, ...entry, preset: entry.preset || current.preset } : entry);
+  }
+  const configured = currentParameters(ctx.settings, provider).model;
+  if (configured && !entries.has(configured)) {
+    const preset = findPresetForModel(ctx, provider, configured);
+    entries.set(configured, {
+      ...(preset ? modelEntryFromPreset(preset) : {}),
+      id: configured,
+      label: configured,
+      source: 'current',
+      available: state.models.some((entry) => entry.id === configured),
+      preset,
+    });
+  }
+  const values = [...entries.values()].map((entry) => {
+    if (provider !== 'codex' || !ctx.codex || ctx.codex.backend !== 'api') return entry;
+    const efforts = normalizeReasoningOptions(entry.reasoningEfforts)
+      .filter((effort) => effort.value !== 'ultra');
+    return {
+      ...entry,
+      reasoningEfforts: efforts,
+      defaultReasoningEffort: efforts.some((effort) => effort.value === entry.defaultReasoningEffort)
+        ? entry.defaultReasoningEffort
+        : efforts.some((effort) => effort.value === 'medium') ? 'medium' : efforts[0] && efforts[0].value,
+    };
+  });
+  return values.sort((a, b) => {
+    if (a.recommended !== b.recommended) return a.recommended ? -1 : 1;
+    if (Boolean(a.available) !== Boolean(b.available)) return a.available ? -1 : 1;
+    return String(a.label || a.id).localeCompare(String(b.label || b.id));
+  });
+}
+
+function recommendedModelEntry(ctx, provider) {
+  const entries = modelsForProvider(ctx, provider);
+  const recommendedPreset = (ctx.presets.presets || []).find((preset) => preset.provider === provider && preset.recommended);
+  const availableAlias = recommendedPreset && entries.find((entry) => entry.available && modelMatchesPreset(recommendedPreset, entry.id));
+  return availableAlias || entries.find((entry) => entry.available) ||
+    entries.find((entry) => entry.recommended) || entries[0] || null;
+}
+
+function modelSelectControl(entries, current) {
+  const option = (entry) => el('option', { value: entry.id, selected: entry.id === current },
+    `${entry.recommended ? '★ ' : ''}${entry.label}${entry.label !== entry.id ? ` — ${entry.id}` : ''}`);
+  const recommended = entries.filter((entry) => entry.recommended);
+  const available = entries.filter((entry) => !entry.recommended && entry.available);
+  const other = entries.filter((entry) => !entry.recommended && !entry.available);
+  const groups = [];
+  if (recommended.length) groups.push(el('optgroup', { label: 'Recommended' }, recommended.map(option)));
+  if (available.length) groups.push(el('optgroup', { label: 'Available' }, available.map(option)));
+  if (other.length) groups.push(el('optgroup', { label: 'Catalog / current' }, other.map(option)));
+  return el('select', { class: 'llm-model-select' }, groups);
+}
+
+function normalizeReasoningOptions(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  return raw.map((item) => {
+    const value = typeof item === 'string' ? item : item && item.value;
+    if (!value || seen.has(value)) return null;
+    seen.add(value);
+    const fallback = REASONING_META[value] || {
+      label: value[0].toUpperCase() + value.slice(1),
+      description: '',
+    };
+    return {
+      value,
+      label: typeof item === 'object' && item.label ? item.label : fallback.label,
+      description: value === 'ultra'
+        ? REASONING_META.ultra.description
+        : typeof item === 'object' && item.description ? item.description : fallback.description,
+    };
+  }).filter(Boolean);
+}
+
+function reasoningOptionsFor(entry, preset) {
+  if (entry && Array.isArray(entry.reasoningEfforts) && entry.reasoningEfforts.length) {
+    return normalizeReasoningOptions(entry.reasoningEfforts);
+  }
+  return normalizeReasoningOptions(preset && preset.capabilities && preset.capabilities.reasoningEfforts);
+}
+
+function defaultReasoningFor(entry, preset) {
+  const options = reasoningOptionsFor(entry, preset);
+  const preferred = entry && entry.defaultReasoningEffort ||
+    preset && preset.parameters && preset.parameters.reasoning && preset.parameters.reasoning.effort;
+  return options.some((option) => option.value === preferred)
+    ? preferred
+    : options[0] ? options[0].value : 'none';
+}
+
+function reasoningLabel(value) {
+  return (REASONING_META[value] && REASONING_META[value].label) || value || 'Provider default';
+}
+
+function reasoningDescription(options, current) {
+  const selected = options.find((option) => option.value === current);
+  if (selected) return selected.description;
+  return options.length
+    ? 'Reasoning is not active for the saved configuration; choose a supported level to apply it.'
+    : 'This model has no configurable reasoning profile.';
+}
+
+async function discoverProviderModels(ctx, role, provider, refresh, rebuild) {
+  if (!provider || !ROLE_PROVIDERS[role].includes(provider)) return;
+  const state = discoveryState(ctx, provider);
+  const requestId = ++state.requestId;
+  state.loading = true;
+  state.error = '';
+  rebuild();
+  try {
+    const response = await api.getProviderModels(provider, refresh);
+    if (requestId !== state.requestId) return;
+    const source = response.source || (provider === 'ollama' || provider === 'lmstudio' ? 'local' : 'provider');
+    state.models = (response.models || [])
+      .map((model) => discoveredModelEntry(ctx, provider, model, source))
+      .filter(Boolean);
+    state.reachable = response.reachable !== false;
+    state.source = source;
+    state.loaded = true;
+  } catch (err) {
+    if (requestId !== state.requestId) return;
+    state.models = [];
+    state.reachable = false;
+    state.loaded = true;
+    state.error = err.message || 'Model discovery failed.';
+  } finally {
+    if (requestId !== state.requestId) return;
+    state.loading = false;
+    if (roleProvider(ctx.settings, role) === provider) rebuild();
+  }
+}
+
+function modelDiscoveryStatus(ctx, role, provider, model, rebuild) {
+  const state = discoveryState(ctx, provider);
+  const refresh = el('button', {
+    class: 'preset-inline-action llm-refresh-models',
+    disabled: state.loading ? 'disabled' : null,
+    onclick: () => void discoverProviderModels(ctx, role, provider, true, rebuild),
+  }, state.loading ? 'Refreshing…' : 'Refresh models');
+  if (state.loading && !state.loaded) {
+    return el('div', { class: 'preset-status busy', role: 'status', 'aria-live': 'polite' }, [
+      el('span', {}, `Discovering ${PROVIDER_LABELS[provider] || provider} models…`), refresh,
+    ]);
+  }
+  if (!state.loaded) {
+    return el('div', { class: 'preset-status busy', role: 'status', 'aria-live': 'polite' }, [
+      el('span', {}, 'Model catalog is ready; checking live availability…'), refresh,
+    ]);
+  }
+  if (state.reachable === false) {
+    return el('div', { class: 'preset-status warn', role: 'status', 'aria-live': 'polite' }, [
+      el('span', {}, `${state.error || `${PROVIDER_LABELS[provider] || provider} is not reachable.`} Showing catalog and current models.`),
+      refresh,
+    ]);
+  }
+  const exact = state.models.some((entry) => entry.id === model);
+  const count = state.models.length;
+  const sourceLabel = state.source === 'fallback' || state.source === 'catalog' ? 'the catalog' : state.source || 'the provider';
+  const message = provider === 'ollama' || provider === 'lmstudio'
+    ? exact ? `Ready · ${model} detected` : `${count} local model${count === 1 ? '' : 's'} detected; ${model || 'the selected model'} is not currently loaded.`
+    : `${count} ${PROVIDER_LABELS[provider] || provider} model${count === 1 ? '' : 's'} loaded from ${sourceLabel}.`;
+  const healthy = provider === 'ollama' || provider === 'lmstudio'
+    ? exact
+    : state.source === 'live';
+  return el('div', { class: `preset-status ${healthy ? 'ok' : 'warn'}`, role: 'status', 'aria-live': 'polite' }, [
+    el('span', {}, message), refresh,
+  ]);
+}
+
+function currentParameters(settings, provider) {
+  if (provider === 'ollama') return {
+    host: settings.ollamaHost,
+    model: settings.ollamaModel,
+    contextWindow: settings.ollamaContextWindow,
+    maxOutputTokens: settings.ollamaNumTokens,
+    temperature: settings.ollamaTemperature,
+    topP: settings.ollamaTopP,
+    topK: settings.ollamaTopK,
+    repeatPenalty: settings.ollamaRepeatPenalty,
+    reasoningEffort: settings.ollamaReasoningEffort || 'none',
+    jsonMode: settings.ollamaJsonMode || 'json',
+    contextMode: null,
+  };
+  if (provider === 'lmstudio') return {
+    host: settings.lmstudioHost,
+    model: settings.lmstudioModel,
+    contextWindow: settings.lmstudioContextWindow,
+    maxOutputTokens: settings.lmstudioNumTokens,
+    temperature: settings.lmstudioTemperature,
+    topP: settings.lmstudioTopP,
+    topK: settings.lmstudioTopK,
+    repeatPenalty: settings.lmstudioRepeatPenalty,
+    reasoningEffort: settings.lmstudioReasoningEffort || 'none',
+    jsonMode: settings.lmstudioJsonMode || 'text',
+    contextMode: settings.lmstudioContextMode || 'summarize',
+  };
+  if (provider === 'codex') return {
+    model: settings.codexModel || 'gpt-5.5',
+    contextWindow: settings.codexContextWindow || 1050000,
+    maxOutputTokens: settings.codexMaxTokens || 65536,
+    temperature: settings.codexTemperature,
+    topP: null, topK: null, repeatPenalty: null,
+    reasoningEffort: settings.codexReasoningEffort || 'high',
+    jsonMode: null,
+    contextMode: null,
+  };
+  return {
+    model: settings.claudeModel || 'claude-opus-4-8',
+    contextWindow: settings.claudeContextWindow || 1000000,
+    maxOutputTokens: settings.claudeMaxTokens || 65536,
+    temperature: settings.claudeTemperature,
+    topP: null, topK: null, repeatPenalty: null,
+    reasoningEffort: settings.claudeReasoningEffort || 'xhigh',
+    jsonMode: null,
+    contextMode: null,
+  };
+}
+
+function configuredReasoningAdapter(settings, provider) {
+  if (provider === 'ollama') return settings.ollamaReasoningAdapter || 'none';
+  if (provider === 'lmstudio') return settings.lmstudioReasoningAdapter || 'none';
+  if (provider === 'codex') return settings.codexReasoningAdapter || 'none';
+  return settings.claudeReasoningAdapter || 'none';
+}
+
+function presetCustomized(preset, params) {
+  const defaults = preset.parameters;
+  return !modelMatchesPreset(preset, params.model) ||
+    Number(params.contextWindow) !== Number(defaults.contextWindow) ||
+    Number(params.maxOutputTokens) !== Number(defaults.maxOutputTokens) ||
+    (params.temperature ?? null) !== (defaults.temperature ?? null) ||
+    (params.topP ?? null) !== (defaults.topP ?? null) ||
+    (params.topK ?? null) !== (defaults.topK ?? null) ||
+    (params.repeatPenalty ?? null) !== (defaults.repeatPenalty ?? null) ||
+    params.reasoningEffort !== defaults.reasoning.effort ||
+    params.jsonMode !== defaults.jsonMode ||
+    params.contextMode !== defaults.contextMode;
+}
+
+function compactTokens(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  if (n >= 1000000) return `${Number((n / 1000000).toFixed(2))}M`;
+  if (n >= 1000) return `${Number((n / 1000).toFixed(1))}K`;
+  return String(n);
+}
+
+function parameterSummary(params, reasoningOptions = [], effectiveReasoning = params.reasoningEffort) {
+  const temperature = typeof params.temperature === 'number' ? params.temperature : 'managed';
+  const reasoning = reasoningOptions.some((option) => option.value === effectiveReasoning)
+    ? reasoningLabel(effectiveReasoning)
+    : 'Not selected';
+  return el('div', { class: 'preset-params' }, [
+    el('span', { class: 'param-chip' }, `Context ${compactTokens(params.contextWindow)}`),
+    el('span', { class: 'param-chip' }, `Output ${compactTokens(params.maxOutputTokens)}`),
+    el('span', { class: 'param-chip' }, `Reasoning ${reasoning}`),
+    el('span', { class: 'param-chip' }, `Temperature ${temperature}`),
+  ]);
+}
+
+function optionSelect(options, current) {
+  return el('select', {}, options.map(([value, label]) => el('option', { value, selected: value === current }, label)));
+}
+
+function parameterEditor(ctx, role, preset, params, rebuild) {
+  const contextInput = el('input', {
+    type: 'number', min: '512', max: String(preset.limits.contextWindow), value: String(params.contextWindow),
+    ...(preset.capabilities.contextWindowConfigurable ? {} : { disabled: 'disabled' }),
+  });
+  const outputInput = el('input', {
+    type: 'number', min: preset.provider === 'lmstudio' ? '256' : '128',
+    max: String(preset.limits.maxOutputTokens), value: String(params.maxOutputTokens),
+  });
+  const temperatureInput = preset.capabilities.temperature
+    ? el('input', { type: 'number', min: '0', max: '2', step: '0.1', value: String(params.temperature ?? 0) })
+    : el('input', { value: 'Provider managed', disabled: 'disabled' });
+  const topPInput = preset.parameters.topP !== null
+    ? el('input', { type: 'number', min: '0', max: '1', step: '0.05', value: String(params.topP ?? preset.parameters.topP) })
+    : null;
+  const topKInput = preset.parameters.topK !== null
+    ? el('input', { type: 'number', min: '1', max: '1000', step: '1', value: String(params.topK ?? preset.parameters.topK) })
+    : null;
+  const repeatPenaltyInput = preset.parameters.repeatPenalty !== null
+    ? el('input', { type: 'number', min: '0', max: '2', step: '0.01', value: String(params.repeatPenalty ?? preset.parameters.repeatPenalty) })
+    : null;
+  const hostInput = params.host ? el('input', { value: params.host }) : null;
+  const jsonInput = preset.provider === 'ollama'
+    ? optionSelect([['json', 'Constrained JSON'], ['text', 'Prompt-only text']], params.jsonMode)
+    : preset.provider === 'lmstudio'
+      ? optionSelect([['text', 'Prompt-only text'], ['json_object', 'OpenAI json_object'], ['json_schema', 'Structured json_schema']], params.jsonMode)
+      : null;
+  const contextModeInput = preset.provider === 'lmstudio'
+    ? optionSelect([['summarize', 'Summarize old turns'], ['trim', 'Trim old turns'], ['none', 'None']], params.contextMode)
+    : null;
+  const info = el('div', { class: 'muted preset-save-info', role: 'status', 'aria-live': 'polite' });
+
+  const syncLocalOutputLimit = () => {
+    const fraction = preset.requestLimits && preset.requestLimits.maxOutputContextFraction;
+    if (!Number.isFinite(fraction)) return;
+    const minimum = preset.provider === 'lmstudio' ? 256 : 128;
+    const contextCap = Math.max(minimum, Math.floor(Number(contextInput.value) * fraction));
+    const cap = Math.min(preset.limits.maxOutputTokens, contextCap);
+    outputInput.max = String(cap);
+    if (Number(outputInput.value) > cap) outputInput.value = String(cap);
+  };
+  contextInput.addEventListener('input', syncLocalOutputLimit);
+  syncLocalOutputLimit();
+
+  const save = async (reset = false) => {
+    const numericInputs = [contextInput, outputInput, temperatureInput, topPInput, topKInput, repeatPenaltyInput]
+      .filter((input) => input && !input.disabled);
+    if (!reset && numericInputs.some((input) => input.value === '' || !input.checkValidity())) {
+      const invalid = numericInputs.find((input) => input.value === '' || !input.checkValidity());
+      if (invalid) invalid.reportValidity();
+      toast('Check the highlighted parameter value.', 'err');
+      return;
+    }
+    const overrides = reset ? undefined : {
+      model: params.model,
+      contextWindow: Number(contextInput.value),
+      maxOutputTokens: Number(outputInput.value),
+      temperature: preset.capabilities.temperature ? Number(temperatureInput.value) : null,
+      topP: topPInput ? Number(topPInput.value) : null,
+      topK: topKInput ? Number(topKInput.value) : null,
+      repeatPenalty: repeatPenaltyInput ? Number(repeatPenaltyInput.value) : null,
+      reasoningEffort: params.reasoningEffort,
+      jsonMode: jsonInput ? jsonInput.value : null,
+      contextMode: contextModeInput ? contextModeInput.value : null,
+      ...(hostInput ? { host: hostInput.value.trim() } : {}),
+    };
+    const hostChanged = Boolean(hostInput && hostInput.value.trim().replace(/\/$/, '') !== String(params.host || '').replace(/\/$/, ''));
+    info.textContent = 'Saving…';
+    try {
+      const next = await api.applyLlmPreset({
+        role: role === 'local' ? 'local' : 'global',
+        presetId: preset.id,
+        provider: preset.provider,
+        overrides,
+      });
+      Object.assign(ctx.settings, next);
+      toast(reset ? 'Recommended parameters restored.' : 'Custom LLM parameters saved.', 'ok');
+      if (hostChanged) await renderSettings(clear(ctx.view));
+      else rebuild();
+    } catch (err) {
+      info.textContent = err.message;
+      info.style.color = 'var(--red)';
       toast(err.message, 'err');
     }
   };
 
-  const reachNote = reachable
-    ? `Detected ${ollamaModels.length} local model(s).`
-    : 'Ollama not reachable at this host — start Ollama or fix the host, then reload.';
+  const fields = [
+    hostInput ? field(`${PROVIDER_LABELS[preset.provider]} host`, hostInput) : null,
+    field('Context window', contextInput, preset.capabilities.contextWindowConfigurable ? 'For LM Studio, this must match the context used when loading the model.' : 'Model capability; hosted providers do not change it per request.'),
+    field('Max output tokens', outputInput,
+      preset.provider === 'codex'
+        ? 'Saved for API mode; the ChatGPT subscription backend manages this limit.'
+        : preset.requestLimits && preset.requestLimits.maxOutputContextFraction === 0.5
+          ? 'Capped at half the loaded context so prompt and output fit together.'
+          : preset.requestLimits && preset.requestLimits.maxOutputContextFraction === 1
+            ? 'Cannot exceed the configured context window.'
+            : null),
+    field('Temperature', temperatureInput, preset.capabilities.temperature ? null : 'Omitted because this model/provider does not accept sampling overrides.'),
+    topPInput ? field('Top P', topPInput) : null,
+    topKInput ? field('Top K', topKInput) : null,
+    repeatPenaltyInput ? field('Repeat penalty', repeatPenaltyInput) : null,
+    jsonInput ? field('JSON output mode', jsonInput) : null,
+    contextModeInput ? field('Context overflow', contextModeInput) : null,
+  ];
 
-  return [
-    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Local inference — choose a model that supports tool-calling (e.g. llama3.1, qwen2.5, gpt-oss). No API key needed.'),
-    field('Ollama Host', hostInput, 'Local endpoint, e.g. http://localhost:11434.'),
-    field('Model', modelControl, reachNote),
-    el('div', { class: 'grid', style: 'grid-template-columns:1fr 1fr' }, [
-      field('Context window (num_ctx)', ctxInput),
-      field('Num tokens (num_predict)', tokInput),
+  return el('details', { class: 'preset-customize' }, [
+    el('summary', {}, 'Customize parameters'),
+    el('div', { class: 'preset-customize-body' }, [
+      el('div', { class: 'preset-param-grid' }, fields),
+      el('div', { class: 'row' }, [
+        el('button', { class: 'primary', onclick: () => save(false) }, 'Save customization'),
+        preset.id !== 'custom' ? el('button', { onclick: () => save(true) }, 'Reset to recommended') : null,
+      ]),
+      info,
     ]),
-    field('JSON output mode', jsonSelect, 'How structured plans are constrained. Use "Prompt-only" if a model rejects constrained JSON.'),
-    el('div', { class: 'row' }, [el('button', { class: 'primary', onclick: save }, 'Save Ollama settings')]),
-    info,
-  ];
+  ]);
 }
 
-/** A <select> of [value, label] JSON-mode options with `current` pre-selected. */
-function jsonModeSelect(options, current) {
-  return el(
-    'select',
-    {},
-    options.map(([value, label]) => el('option', { value, selected: value === current }, label))
-  );
+function hostedConnection(ctx, provider) {
+  return provider === 'codex' ? codexConnection(ctx) : claudeConnection(ctx);
 }
 
-/** LM Studio configuration controls (returns an array of field elements). */
-function lmstudioFields({ settings, lmstudioModels, reachable }) {
-  const hostInput = el('input', { value: settings.lmstudioHost || '', placeholder: 'http://localhost:1234' });
-
-  // Model: dropdown of detected models (+ the current value), else free text.
-  const detected = [...new Set([...(lmstudioModels || []), ...(settings.lmstudioModel ? [settings.lmstudioModel] : [])])];
-  const modelControl = detected.length
-    ? el('select', {}, [el('option', { value: '' }, '— select a model —')].concat(
-        detected.map((m) => el('option', { value: m, selected: m === settings.lmstudioModel }, m))
-      ))
-    : el('input', { value: settings.lmstudioModel || '', placeholder: 'e.g. qwen2.5-7b-instruct' });
-
-  const ctxInput = el('input', { type: 'number', min: '512', max: '131072', value: String(settings.lmstudioContextWindow || 8192) });
-  const tokInput = el('input', { type: 'number', min: '128', max: '32768', value: String(settings.lmstudioNumTokens || 16000) });
-  const jsonSelect = jsonModeSelect(
-    [
-      ['text', 'Prompt-only (text) — most compatible'],
-      ['json_object', 'OpenAI json_object'],
-      ['json_schema', 'Structured (json_schema)'],
-    ],
-    settings.lmstudioJsonMode || 'text'
-  );
-  const ctxModeSelect = jsonModeSelect(
-    [
-      ['summarize', 'Summarize old turns (keep recent verbatim)'],
-      ['trim', 'Trim old turns (drop them)'],
-      ['none', 'None (send as-is — may overflow)'],
-    ],
-    settings.lmstudioContextMode || 'summarize'
-  );
-  const info = el('div', { class: 'muted', style: 'margin-top:10px;font-size:13px' });
-
-  const save = async () => {
+function codexConnection(ctx) {
+  const c = ctx.codex || { connected: false };
+  const info = el('div', { class: 'muted preset-save-info', role: 'status', 'aria-live': 'polite' });
+  const status = c.connected
+    ? `Connected · token ${c.maskedToken || '••••'}${c.expiresAt ? ` · expires ${new Date(c.expiresAt).toLocaleString()}` : ''}`
+    : 'Not connected. Sign in to use this hosted preset.';
+  const signIn = el('button', { class: 'primary', onclick: async () => {
     try {
-      const res = await api.saveLmstudio({
-        lmstudioHost: hostInput.value.trim(),
-        lmstudioModel: modelControl.value.trim(),
-        lmstudioContextWindow: Number(ctxInput.value),
-        lmstudioNumTokens: Number(tokInput.value),
-        lmstudioJsonMode: jsonSelect.value,
-        lmstudioContextMode: ctxModeSelect.value,
-      });
-      hostInput.value = res.lmstudioHost;
-      info.textContent = res.lmstudioModel
-        ? `Saved. Using ${res.lmstudioModel} at ${res.lmstudioHost}.`
-        : 'Saved. Select a model to enable enrichment.';
-      info.style.color = 'var(--green)';
-      toast('LM Studio settings saved.', 'ok');
-    } catch (err) {
-      toast(err.message, 'err');
-    }
-  };
-
-  const reachNote = reachable
-    ? `Detected ${lmstudioModels.length} model(s).`
-    : 'LM Studio not reachable at this host — start the LM Studio server or fix the host, then reload.';
-
-  return [
-    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Local inference via LM Studio\'s OpenAI-compatible server. Load a tool-capable model in LM Studio and start its server (Developer → Start Server). Use this for models not available in Ollama. No API key needed.'),
-    field('LM Studio Host', hostInput, 'Local endpoint, e.g. http://localhost:1234.'),
-    field('Model', modelControl, reachNote),
-    field('Context length (n_ctx)', ctxInput, 'MUST match the context length you loaded the model with in LM Studio. The coder prompt is large (~10k tokens) — load the model with ≥ 16384 or runs fail with "n_keep >= n_ctx".'),
-    field('Num tokens (max_tokens)', tokInput, 'Output budget. Capped at half the context length above so prompt + output fit the window.'),
-    field('JSON output mode', jsonSelect, 'Some engines reject json_object — switch to "Structured" or "Prompt-only" if plans fail with a response_format error.'),
-    field('Context overflow', ctxModeSelect, 'What to do when a long coder run outgrows the context window above. "Summarize" condenses older turns into a note and keeps recent turns verbatim (extra LLM calls); "Trim" drops older turns; "None" sends as-is and may fail with "n_keep >= n_ctx".'),
-    el('div', { class: 'row' }, [el('button', { class: 'primary', onclick: save }, 'Save LM Studio settings')]),
-    info,
-  ];
-}
-
-/** Codex (OpenAI · OAuth) block. */
-function codexBlock({ codex, view }) {
-  const c = codex || { connected: false };
-  const info = el('div', { class: 'muted', style: 'margin-top:10px;font-size:13px' });
-
-  const modelInput = el('input', { value: c.configuredModel || '', placeholder: c.defaultModel || 'gpt-5-codex' });
-  const tokInput = el('input', { type: 'number', min: '128', max: '32768', value: String(c.maxTokens || 4096) });
-
-  const saveBtn = el('button', {
-    onclick: async () => {
-      try {
-        await api.saveCodex({ codexModel: modelInput.value.trim(), codexMaxTokens: Number(tokInput.value) });
-        toast('Codex settings saved.', 'ok');
-        window.dispatchEvent(new Event('lm:connection-changed'));
-      } catch (err) {
-        toast(err.message, 'err');
-      }
-    },
-  }, 'Save Codex settings');
-
-  const signInBtn = el('button', {
-    class: 'primary',
-    onclick: async () => {
-      try {
-        const { authorizeUrl } = await api.startCodexLogin();
-        // Top-level navigation to the provider's authorize page.
-        window.location.href = authorizeUrl;
-      } catch (err) {
-        toast(err.message, 'err');
-      }
-    },
-  }, c.connected ? 'Re-authenticate' : 'Sign in with ChatGPT');
-
-  const testBtn = el('button', {
-    onclick: async () => {
-      info.textContent = 'Testing…';
-      try {
-        const r = await api.testCodex();
-        info.textContent = `Token OK${typeof r.models === 'number' ? ` — ${r.models} model(s) visible.` : '.'}`;
-        info.style.color = 'var(--green)';
-      } catch (err) {
-        info.textContent = err.message;
-        info.style.color = 'var(--red)';
-      }
-    },
-  }, 'Test connection');
-
-  const signOutBtn = el('button', {
-    class: 'danger',
-    onclick: async () => {
-      try {
-        await api.logoutCodex();
-        toast('Signed out of Codex.');
-        window.dispatchEvent(new Event('lm:connection-changed'));
-        renderSettings(clear(view));
-      } catch (err) {
-        toast(err.message, 'err');
-      }
-    },
-  }, 'Sign out');
-
-  const status = el('div', { class: 'muted', style: 'font-size:13px;margin:2px 0 10px' });
+      const { authorizeUrl } = await api.startCodexLogin();
+      window.location.href = authorizeUrl;
+    } catch (err) { toast(err.message, 'err'); }
+  } }, c.connected ? 'Re-authenticate' : 'Sign in with ChatGPT');
+  const buttons = [signIn];
   if (c.connected) {
-    const exp = c.expiresAt ? new Date(c.expiresAt).toLocaleString() : 'unknown';
-    status.textContent = `Signed in (token ${c.maskedToken || '••••'}, expires ${exp}). Model: ${c.model}.`;
-    status.style.color = 'var(--green)';
-  } else {
-    status.textContent = 'Not signed in. Uses OpenAI via OAuth (Authorization Code + PKCE); tokens are stored server-side only.';
+    buttons.push(
+      el('button', { onclick: async () => {
+        info.textContent = 'Testing…';
+        try { const r = await api.testCodex(); info.textContent = `Connection OK · ${r.model || c.model}`; info.style.color = 'var(--green)'; }
+        catch (err) { info.textContent = err.message; info.style.color = 'var(--red)'; }
+      } }, 'Test connection'),
+      el('button', { class: 'danger', onclick: async () => {
+        try { await api.logoutCodex(); toast('Signed out of Codex.'); renderSettings(clear(ctx.view)); }
+        catch (err) { toast(err.message, 'err'); }
+      } }, 'Sign out')
+    );
   }
-
-  const buttons = c.connected ? [signInBtn, testBtn, saveBtn, signOutBtn] : [signInBtn, saveBtn];
-
-  return el('div', {}, [
-    status,
-    field('Model', modelInput, `OpenAI model id. Default: ${c.defaultModel || 'gpt-5-codex'}.`),
-    field('Num tokens (max_tokens)', tokInput),
-    el('p', { class: 'muted', style: 'font-size:12px;margin:6px 0 0' }, `Redirect URI (must be registered with the OAuth client): ${c.redirectUri || ''}`),
-    el('div', { class: 'row', style: 'margin-top:10px' }, buttons),
+  return el('div', { class: 'preset-connection' }, [
+    el('div', { class: `preset-status ${c.connected ? 'ok' : 'warn'}` }, status),
+    el('div', { class: 'row' }, buttons),
     info,
   ]);
 }
 
-function claudeBlock({ claude, view }) {
-  const c = claude || { connected: false };
-  const info = el('div', { class: 'muted', style: 'margin-top:10px;font-size:13px' });
-
-  const modelInput = el('input', { value: c.configuredModel || '', placeholder: c.defaultModel || 'claude-opus-4-8' });
-  const tokInput = el('input', { type: 'number', min: '128', max: '32768', value: String(c.maxTokens || 4096) });
-  // Paste-code flow: after approving, Anthropic shows a `code#state` value to paste back.
-  const codeInput = el('input', { placeholder: 'Paste the code#state value from Anthropic', style: 'flex:1' });
-
-  const saveBtn = el('button', {
-    onclick: async () => {
-      try {
-        await api.saveClaude({ claudeModel: modelInput.value.trim(), claudeMaxTokens: Number(tokInput.value) });
-        toast('Claude settings saved.', 'ok');
-        window.dispatchEvent(new Event('lm:connection-changed'));
-      } catch (err) {
-        toast(err.message, 'err');
-      }
-    },
-  }, 'Save Claude settings');
-
-  const signInBtn = el('button', {
-    class: 'primary',
-    onclick: async () => {
-      try {
-        const { authorizeUrl } = await api.startClaudeLogin();
-        // Open the provider's authorize page in a new tab; the operator pastes the code back here.
-        window.open(authorizeUrl, '_blank', 'noopener');
-        info.textContent = 'Approve in the opened tab, then paste the code Anthropic shows below and click "Complete sign-in".';
-        info.style.color = '';
-      } catch (err) {
-        toast(err.message, 'err');
-      }
-    },
-  }, c.connected ? 'Re-authenticate' : 'Sign in with Claude');
-
-  const exchangeBtn = el('button', {
-    onclick: async () => {
-      const code = codeInput.value.trim();
-      if (!code) return toast('Paste the code first.', 'err');
-      info.textContent = 'Completing sign-in…';
-      try {
-        await api.exchangeClaude(code);
-        codeInput.value = '';
-        toast('Signed in to Claude.', 'ok');
-        window.dispatchEvent(new Event('lm:connection-changed'));
-        renderSettings(clear(view));
-      } catch (err) {
-        info.textContent = err.message;
-        info.style.color = 'var(--red)';
-      }
-    },
-  }, 'Complete sign-in');
-
-  const testBtn = el('button', {
-    onclick: async () => {
-      info.textContent = 'Testing…';
-      try {
-        const r = await api.testClaude();
-        info.textContent = `Token OK — ${r.model}.`;
-        info.style.color = 'var(--green)';
-      } catch (err) {
-        info.textContent = err.message;
-        info.style.color = 'var(--red)';
-      }
-    },
-  }, 'Test connection');
-
-  const signOutBtn = el('button', {
-    class: 'danger',
-    onclick: async () => {
-      try {
-        await api.logoutClaude();
-        toast('Signed out of Claude.');
-        window.dispatchEvent(new Event('lm:connection-changed'));
-        renderSettings(clear(view));
-      } catch (err) {
-        toast(err.message, 'err');
-      }
-    },
-  }, 'Sign out');
-
-  const status = el('div', { class: 'muted', style: 'font-size:13px;margin:2px 0 10px' });
+function claudeConnection(ctx) {
+  const c = ctx.claude || { connected: false };
+  const info = el('div', { class: 'muted preset-save-info', role: 'status', 'aria-live': 'polite' });
+  const codeInput = el('input', { placeholder: 'Paste code#state from Anthropic', style: 'flex:1;min-width:200px' });
+  const status = c.connected
+    ? `Connected · token ${c.maskedToken || '••••'}${c.expiresAt ? ` · expires ${new Date(c.expiresAt).toLocaleString()}` : ''}`
+    : 'Not connected. Sign in to use this hosted preset.';
+  const signIn = el('button', { class: 'primary', onclick: async () => {
+    const popup = window.open('about:blank', '_blank');
+    if (!popup) return toast('Popup blocked. Allow popups for this app and try again.', 'err');
+    popup.opener = null;
+    try {
+      const { authorizeUrl } = await api.startClaudeLogin();
+      popup.location.href = authorizeUrl;
+      info.textContent = 'Approve in the opened tab, then paste the returned code below.';
+    } catch (err) { popup.close(); toast(err.message, 'err'); }
+  } }, c.connected ? 'Re-authenticate' : 'Sign in with Claude');
+  const buttons = [signIn];
   if (c.connected) {
-    const exp = c.expiresAt ? new Date(c.expiresAt).toLocaleString() : 'unknown';
-    status.textContent = `Signed in (token ${c.maskedToken || '••••'}, expires ${exp}). Model: ${c.model}.`;
-    status.style.color = 'var(--green)';
-  } else {
-    status.textContent = 'Not signed in. Uses your Claude subscription via OAuth (Authorization Code + PKCE); tokens are stored server-side only.';
+    buttons.push(
+      el('button', { onclick: async () => {
+        info.textContent = 'Testing…';
+        try { const r = await api.testClaude(); info.textContent = `Connection OK · ${r.model}`; info.style.color = 'var(--green)'; }
+        catch (err) { info.textContent = err.message; info.style.color = 'var(--red)'; }
+      } }, 'Test connection'),
+      el('button', { class: 'danger', onclick: async () => {
+        try { await api.logoutClaude(); toast('Signed out of Claude.'); renderSettings(clear(ctx.view)); }
+        catch (err) { toast(err.message, 'err'); }
+      } }, 'Sign out')
+    );
   }
-
-  const buttons = c.connected ? [signInBtn, testBtn, saveBtn, signOutBtn] : [signInBtn, saveBtn];
-
-  return el('div', {}, [
-    status,
-    field('Model', modelInput, `Anthropic model id. Default: ${c.defaultModel || 'claude-opus-4-8'}.`),
-    field('Num tokens (max_tokens)', tokInput),
-    el('div', { class: 'row', style: 'margin-top:10px' }, [codeInput, exchangeBtn]),
-    el('div', { class: 'row', style: 'margin-top:10px' }, buttons),
+  return el('div', { class: 'preset-connection' }, [
+    el('div', { class: `preset-status ${c.connected ? 'ok' : 'warn'}` }, status),
+    el('div', { class: 'row' }, buttons),
+    el('div', { class: 'row claude-code-row' }, [
+      codeInput,
+      el('button', { onclick: async () => {
+        if (!codeInput.value.trim()) return toast('Paste the code first.', 'err');
+        info.textContent = 'Completing sign-in…';
+        try { await api.exchangeClaude(codeInput.value.trim()); toast('Signed in to Claude.', 'ok'); renderSettings(clear(ctx.view)); }
+        catch (err) { info.textContent = err.message; info.style.color = 'var(--red)'; }
+      } }, 'Complete sign-in'),
+    ]),
     info,
   ]);
 }

@@ -6,6 +6,8 @@ const { getSettings, patchSettings, getClaudeTokens, setClaudeTokens, clearClaud
 const { asyncHandler, maskKey } = require('../util');
 const claudeOauth = require('../agent/claude-oauth');
 const { ensureFreshClaudeTokens, resolveLlm, createChatModel } = require('../agent/llm');
+const { presetForModel } = require('../agent/model-presets');
+const { discoverModels } = require('../agent/model-discovery');
 const log = require('../logger');
 
 /**
@@ -37,7 +39,10 @@ function claudePublic() {
     model: s.claudeModel || CONFIG.CLAUDE.defaultModel,
     configuredModel: s.claudeModel || '',
     defaultModel: CONFIG.CLAUDE.defaultModel,
-    maxTokens: s.claudeMaxTokens || 16000,
+    contextWindow: s.claudeContextWindow || 1000000,
+    maxTokens: s.claudeMaxTokens || 65536,
+    temperature: s.claudeTemperature ?? null,
+    reasoningEffort: s.claudeReasoningEffort || 'none',
     baseUrl: CONFIG.CLAUDE.baseUrl,
     maskedToken: connected ? maskKey(t.accessToken || '') : '',
     expiresAt: connected ? t.expiresAt || null : null,
@@ -56,6 +61,14 @@ router.get('/', (req, res) => {
   res.json(claudePublic());
 });
 
+// GET /api/settings/claude/models — live account catalog with static fallback.
+router.get(
+  '/models',
+  asyncHandler(async (req, res) => {
+    res.json(await discoverModels('claude', { refresh: req.query.refresh === '1' }));
+  })
+);
+
 // GET /api/settings/claude/login — begin OAuth; returns the authorize URL to open.
 router.get('/login', (req, res) => {
   const { authorizeUrl } = claudeOauth.createLogin();
@@ -66,16 +79,42 @@ router.get('/login', (req, res) => {
 router.post('/', (req, res) => {
   const b = req.body || {};
   const current = getSettings();
-  const patch = { claudeMaxTokens: clampInt(b.claudeMaxTokens, 128, 32768, current.claudeMaxTokens || 16000) };
-  if (b.claudeModel !== undefined) {
-    const model = String(b.claudeModel).trim();
-    // Allow real model ids but reject URL-shaped input ("//") and anything
-    // outside the id charset.
-    if (model && (!/^[\w.:\-/]{1,100}$/.test(model) || model.includes('//'))) {
-      return res.status(400).json({ error: 'Invalid model name.' });
-    }
-    patch.claudeModel = model;
+  const hasModelOverride = b.claudeModel !== undefined;
+  const model = hasModelOverride ? String(b.claudeModel).trim() : current.claudeModel;
+  if (hasModelOverride && model && (!/^[\w.:\-/]{1,100}$/.test(model) || model.includes('//'))) {
+    return res.status(400).json({ error: 'Invalid model name.' });
   }
+  const matchedPreset = presetForModel('claude', model);
+  const modelChanged = hasModelOverride && model !== current.claudeModel;
+  const currentPreset = presetForModel('claude', current.claudeModel);
+  const modelFamilyChanged = hasModelOverride && (matchedPreset
+    ? !currentPreset || currentPreset.id !== matchedPreset.id
+    : modelChanged);
+  const reasoningAdapter = matchedPreset
+    ? matchedPreset.capabilities.reasoningAdapter
+    : modelChanged ? 'none' : current.claudeReasoningAdapter || 'none';
+  const reasoningEfforts = matchedPreset
+    ? matchedPreset.capabilities.reasoningEfforts
+    : reasoningAdapter === 'anthropic-adaptive' || reasoningAdapter === 'anthropic-effort'
+      ? ['none', 'low', 'medium', 'high', 'xhigh', 'max']
+      : ['none'];
+  const defaultEffort = !modelFamilyChanged && reasoningEfforts.includes(current.claudeReasoningEffort)
+    ? current.claudeReasoningEffort
+    : matchedPreset ? matchedPreset.parameters.reasoning.effort : 'none';
+  const defaultMaxTokens = matchedPreset && modelFamilyChanged
+    ? matchedPreset.parameters.maxOutputTokens
+    : modelFamilyChanged ? 4096 : current.claudeMaxTokens || 65536;
+  const patch = {
+    claudeMaxTokens: clampInt(b.claudeMaxTokens, 128, 128000, defaultMaxTokens),
+    // Opus 4.8 rejects non-default sampling parameters; keep this explicit so a
+    // generic UI never accidentally starts sending temperature.
+    claudeTemperature: null,
+    claudeReasoningEffort: reasoningEfforts.includes(b.claudeReasoningEffort) ? b.claudeReasoningEffort : defaultEffort,
+    claudeReasoningAdapter: reasoningAdapter,
+  };
+  if (modelFamilyChanged) patch.claudeContextWindow = matchedPreset ? matchedPreset.parameters.contextWindow : 200000;
+  if (current.llmProvider === 'claude') patch.hostedLlmPresetId = 'custom';
+  if (hasModelOverride) patch.claudeModel = model;
   patchSettings(patch);
   res.json(claudePublic());
 });
