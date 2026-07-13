@@ -12,6 +12,16 @@ A simple Node.js UI (branded **AI Fleet**) to manage Linear projects:
 - **Code-writer agent** — a second deep agent that works a **single Linear ticket end-to-end** inside an **isolated git clone**: it implements the change, keeps one **`## Workpad`** comment as the source of truth, and drives the ticket through its state machine to a **pull request** (stamped with a configurable label). A board monitor polls active-state tickets and dispatches runs up to a concurrency cap. See [Code-writer agent](#code-writer-agent) below.
 - **Settings** — a tidy page of **collapsible sections**: **API Keys & Connection** (Linear + LangSmith key/host/project/tracing), **Deep Agent LLM** (provider, model, and model-aware reasoning dropdowns for each route, with collapsed parameter customization), **Assume Role**, and **Deep Agent** (enrich labels, schedule cadence, parallelism, caps, toggles). All secrets are validated/stored **server-side** (never exposed to the browser).
 
+## Demo
+
+A short walkthrough of AI Fleet in action:
+
+https://github.com/niravshah2705/symphony/raw/main/Opensource_Symphony_video.mp4
+
+<video src="https://github.com/niravshah2705/symphony/raw/main/Opensource_Symphony_video.mp4" controls muted width="100%"></video>
+
+> If the player doesn't load, [download the demo video](Opensource_Symphony_video.mp4).
+
 ## Settings
 
 Collapsible sections:
