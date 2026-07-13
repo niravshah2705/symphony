@@ -14,9 +14,23 @@ A simple Node.js UI (branded **AI Fleet**) to manage Linear projects:
 
 ## Demo
 
-A short walkthrough of AI Fleet in action (▶ 3m38s) — click to play:
+AI Fleet in action — from creating a business to shipping merged PRs:
 
-[![Watch the AI Fleet demo](docs/demo-poster.png)](Opensource_Symphony_video.mp4)
+**1. Create a business** — each business is backed by a Linear project.
+
+![Create a business](docs/demo-1-create-business.gif)
+
+**2. The planning deep agent runs** — viability check and web research, then milestones, tasks, and dependencies.
+
+![Planning agent enriches the project](docs/demo-2-agent-plan.gif)
+
+**3. Issues land on the board** — AI-generated issues grouped by workflow state.
+
+![Issues board](docs/demo-3-issues-board.gif)
+
+**4. The code-writer agent ships PRs** — each ticket driven end-to-end to a merged pull request.
+
+![Merged pull requests](docs/demo-4-merged-prs.gif)
 
 ## Settings
 
