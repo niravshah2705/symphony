@@ -14,13 +14,9 @@ A simple Node.js UI (branded **AI Fleet**) to manage Linear projects:
 
 ## Demo
 
-A short walkthrough of AI Fleet in action:
+A short walkthrough of AI Fleet in action (▶ 3m38s) — click to play:
 
-https://github.com/niravshah2705/symphony/raw/main/Opensource_Symphony_video.mp4
-
-<video src="https://github.com/niravshah2705/symphony/raw/main/Opensource_Symphony_video.mp4" controls muted width="100%"></video>
-
-> If the player doesn't load, [download the demo video](Opensource_Symphony_video.mp4).
+[![Watch the AI Fleet demo](docs/demo-poster.png)](Opensource_Symphony_video.mp4)
 
 ## Settings
 
