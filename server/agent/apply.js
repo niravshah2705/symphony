@@ -54,10 +54,41 @@ function makeLabelResolver(apiKey, step) {
   };
 }
 
+/**
+ * Memoized resolver for the model-routing label (local/hosted), resolved as a
+ * member of the "Models" label group so Linear shows it as a single-select
+ * dropdown on the issue. Best-effort: on failure it falls back to an ungrouped
+ * label, then to null, so a labelling hiccup never aborts issue creation.
+ */
+function makeModelLabelResolver(apiKey, step) {
+  const cache = new Map();
+  const groupName = CONFIG.CODER.modelLabelGroup;
+  return async (name) => {
+    if (!name) return null;
+    if (cache.has(name)) return cache.get(name);
+    let id = null;
+    try {
+      id = (await linear.getOrCreateGroupedIssueLabel(apiKey, groupName, name)).id;
+    } catch (err) {
+      step(`Could not group "${name}" under "${groupName}": ${errMsg(err)}`, 'warn');
+      try {
+        id = (await linear.getOrCreateIssueLabel(apiKey, name)).id;
+      } catch (err2) {
+        step(`Could not resolve "${name}" issue label: ${errMsg(err2)}`, 'warn');
+      }
+    }
+    cache.set(name, id);
+    return id;
+  };
+}
+
 /** Label ids to stamp on an issue: task label + T-shirt size + model-routing label. */
-async function issueLabelIds(resolveLabel, taskLabelId, size) {
+async function issueLabelIds(resolveLabel, resolveModelLabel, taskLabelId, size) {
   const sizeName = normalizeTshirtSize(size); // always a valid XS|S|M|L|XL
-  const [sizeId, modelId] = await Promise.all([resolveLabel(sizeName), resolveLabel(modelLabelForSize(sizeName))]);
+  const [sizeId, modelId] = await Promise.all([
+    resolveLabel(sizeName),
+    resolveModelLabel(modelLabelForSize(sizeName)),
+  ]);
   return [taskLabelId, sizeId, modelId].filter(Boolean);
 }
 
@@ -79,6 +110,7 @@ async function applyPlan(apiKey, { project, plan, assumedRole, config, onStep })
   step(`Applying plan to Linear (team ${team.key || team.name}).`);
   const taskLabelId = config.createIssues ? await resolveTaskLabelId(apiKey, step) : null;
   const resolveLabel = makeLabelResolver(apiKey, step);
+  const resolveModelLabel = makeModelLabelResolver(apiKey, step);
 
   // 1. Assign the assumed role as project lead (claims the open project).
   if (config.autoAssignLead && assumedRole && assumedRole.id) {
@@ -130,7 +162,7 @@ async function applyPlan(apiKey, { project, plan, assumedRole, config, onStep })
     if (config.createIssues) {
       for (const issue of milestone.issues) {
         try {
-          const labelIds = await issueLabelIds(resolveLabel, taskLabelId, issue.tshirtSize);
+          const labelIds = await issueLabelIds(resolveLabel, resolveModelLabel, taskLabelId, issue.tshirtSize);
           const created = await linear.createIssue(apiKey, {
             teamId: team.id,
             projectId: project.id,
@@ -194,6 +226,7 @@ async function applyIssuesForMilestones(apiKey, { project, milestones, generated
   step(`Creating tasks for ${milestones.length} milestone(s) (team ${team.key || team.name}).`);
   const taskLabelId = await resolveTaskLabelId(apiKey, step);
   const resolveLabel = makeLabelResolver(apiKey, step);
+  const resolveModelLabel = makeModelLabelResolver(apiKey, step);
 
   for (let i = 0; i < milestones.length; i += 1) {
     const milestone = milestones[i];
@@ -216,7 +249,7 @@ async function applyIssuesForMilestones(apiKey, { project, milestones, generated
     let created = 0;
     for (const issue of issues) {
       try {
-        const labelIds = await issueLabelIds(resolveLabel, taskLabelId, issue.tshirtSize);
+        const labelIds = await issueLabelIds(resolveLabel, resolveModelLabel, taskLabelId, issue.tshirtSize);
         await linear.createIssue(apiKey, {
           teamId: team.id,
           projectId: project.id,
