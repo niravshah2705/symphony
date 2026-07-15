@@ -174,6 +174,10 @@ const CODER = Object.freeze({
   // one. An issue with no model label defaults to hosted.
   localModelLabel: process.env.CODER_LOCAL_MODEL_LABEL || 'local',
   hostedModelLabel: process.env.CODER_HOSTED_MODEL_LABEL || 'hosted',
+  // Parent label the model-routing labels are grouped under. Linear renders a
+  // group's members as a single-select dropdown on issues, so "local"/"hosted"
+  // become mutually-exclusive options of a "Models" dropdown.
+  modelLabelGroup: process.env.CODER_MODEL_LABEL_GROUP || 'Models',
   // Only this size runs on the local agent; all others run hosted.
   localSize: process.env.CODER_LOCAL_SIZE || 'XS',
   // Open SWE integration (used only when backend === 'openswe').

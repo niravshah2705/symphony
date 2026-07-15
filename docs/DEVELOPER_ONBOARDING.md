@@ -114,7 +114,11 @@ backend, and system prompt; the framework installs the skills, builds the
 `deepagents` agent (FilesystemBackend for the planner, LocalShellBackend for the
 coder), and runs it. Both share the LLM provider factory (`llm.js` →
 `resolveLlm`). The planner uses the hosted route; the coder uses the local route
-for `local`/XS tickets and the hosted route for larger or unlabeled tickets.
+for `local`/XS tickets and the hosted route for larger or unlabeled tickets. The
+`local`/`hosted` routing labels are created under a **`Models` issue-label group**
+(`CONFIG.CODER.modelLabelGroup`), so Linear renders them as a single-select
+dropdown on issues. Run `node scripts/models-label-group.js` once to create the
+group and pull any pre-existing flat `local`/`hosted` labels into it.
 
 - **Skills** (`skills/<name>/SKILL.md`) = instructions loaded on demand:
   `software-planning`, `web-research` (planner); `linear`, `commit`, `push`,

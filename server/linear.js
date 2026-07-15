@@ -269,10 +269,11 @@ const PROJECT_LABEL_CREATE_MUTATION = `
   }
 `;
 
-// Issue labels are a distinct entity from project labels in Linear.
+// Issue labels are a distinct entity from project labels in Linear. `isGroup`
+// marks a parent (group) label; `parent.id` links a child to its group.
 const ISSUE_LABELS_QUERY = `
   query IssueLabels($first: Int!) {
-    issueLabels(first: $first) { nodes { id name } }
+    issueLabels(first: $first) { nodes { id name isGroup parent { id } } }
   }
 `;
 
@@ -280,7 +281,16 @@ const ISSUE_LABEL_CREATE_MUTATION = `
   mutation IssueLabelCreate($input: IssueLabelCreateInput!) {
     issueLabelCreate(input: $input) {
       success
-      issueLabel { id name }
+      issueLabel { id name isGroup parent { id } }
+    }
+  }
+`;
+
+const ISSUE_LABEL_UPDATE_MUTATION = `
+  mutation IssueLabelUpdate($id: String!, $input: IssueLabelUpdateInput!) {
+    issueLabelUpdate(id: $id, input: $input) {
+      success
+      issueLabel { id name isGroup parent { id } }
     }
   }
 `;
@@ -589,17 +599,71 @@ async function getOrCreateProjectLabels(apiKey, names) {
   return labels;
 }
 
-/** Find an ISSUE label by name (case-insensitive), creating it if absent. */
-async function getOrCreateIssueLabel(apiKey, name) {
+/** All issue labels in the workspace (id, name, isGroup, parent.id). */
+async function fetchIssueLabelNodes(apiKey) {
   const data = await linearRequest(apiKey, ISSUE_LABELS_QUERY, { first: CONFIG.PAGE_SIZE });
+  return (data.issueLabels && data.issueLabels.nodes) || [];
+}
+
+/**
+ * Find an issue label by name (case-insensitive) in a prefetched node list.
+ * Pass `group: true|false` to require/exclude group (parent) labels; omit to
+ * match either. Pure — no network. Returns the node or null.
+ */
+function findIssueLabel(nodes, name, { group } = {}) {
   const wanted = String(name).trim().toLowerCase();
-  const existing = (data.issueLabels.nodes || []).find((l) => (l.name || '').toLowerCase() === wanted);
-  if (existing) return existing;
-  const created = await linearRequest(apiKey, ISSUE_LABEL_CREATE_MUTATION, { input: { name } });
+  return (
+    (nodes || []).find(
+      (l) => (l.name || '').toLowerCase() === wanted && (group === undefined || Boolean(l.isGroup) === group)
+    ) || null
+  );
+}
+
+/** Create an issue label from an IssueLabelCreateInput; throws on failure. */
+async function createIssueLabel(apiKey, input) {
+  const created = await linearRequest(apiKey, ISSUE_LABEL_CREATE_MUTATION, { input });
   if (!created.issueLabelCreate || !created.issueLabelCreate.success) {
-    throw new LinearError(`Failed to create issue label "${name}".`, 400);
+    throw new LinearError(`Failed to create issue label "${input.name}".`, 400);
   }
   return created.issueLabelCreate.issueLabel;
+}
+
+/** Find an ISSUE label by name (case-insensitive), creating it if absent. */
+async function getOrCreateIssueLabel(apiKey, name) {
+  const existing = findIssueLabel(await fetchIssueLabelNodes(apiKey), name);
+  return existing || createIssueLabel(apiKey, { name });
+}
+
+/**
+ * Find the ISSUE label group (parent, isGroup) named `name`, creating it if
+ * absent. Linear renders a group's members as a single-select dropdown on issues.
+ */
+async function getOrCreateIssueLabelGroup(apiKey, name) {
+  const existing = findIssueLabel(await fetchIssueLabelNodes(apiKey), name, { group: true });
+  return existing || createIssueLabel(apiKey, { name, isGroup: true });
+}
+
+/**
+ * Resolve an issue label `childName` as a member of the `groupName` label group,
+ * so it appears as an option of that dropdown in Linear. Creates the group and/or
+ * the child as needed, and re-parents an existing flat label into the group.
+ */
+async function getOrCreateGroupedIssueLabel(apiKey, groupName, childName) {
+  const group = await getOrCreateIssueLabelGroup(apiKey, groupName);
+  // Re-fetch: the group may have just been created, and we need the child's
+  // current parent to decide between reuse / re-parent / create.
+  const nodes = await fetchIssueLabelNodes(apiKey);
+  const existing = findIssueLabel(nodes, childName, { group: false });
+  if (!existing) return createIssueLabel(apiKey, { name: childName, parentId: group.id });
+  if (existing.parent && existing.parent.id === group.id) return existing;
+  const updated = await linearRequest(apiKey, ISSUE_LABEL_UPDATE_MUTATION, {
+    id: existing.id,
+    input: { parentId: group.id },
+  });
+  if (!updated.issueLabelUpdate || !updated.issueLabelUpdate.success) {
+    throw new LinearError(`Failed to move issue label "${childName}" into "${groupName}".`, 400);
+  }
+  return updated.issueLabelUpdate.issueLabel;
 }
 
 /** Replace a project's labels with the given label ids. */
@@ -653,5 +717,8 @@ module.exports = {
   getOrCreateProjectLabel,
   getOrCreateProjectLabels,
   getOrCreateIssueLabel,
+  findIssueLabel,
+  getOrCreateIssueLabelGroup,
+  getOrCreateGroupedIssueLabel,
   setProjectLabels,
 };
