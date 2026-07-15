@@ -7,6 +7,7 @@ const { configureTracing } = require('./plan');
 const { prepareWorkspace, preparePlannedWorkspace } = require('./workspace');
 const framework = require('./framework');
 const tools = require('./tools');
+const { withAnnotations } = require('./trace-annotations');
 const codingWorkflow = require('./workflows/coding.workflow');
 
 /**
@@ -113,7 +114,10 @@ async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep }) {
 
   const result = await agent.invoke(
     { messages: [{ role: 'user', content: buildTicketPrompt({ issue }) }] },
-    { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id } }
+    withAnnotations(
+      { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id } },
+      { project: issue.projectName, taskId: issue.identifier || issue.id, session: runId }
+    )
   );
 
   const finalText = framework.lastText(result);
@@ -179,7 +183,10 @@ async function runPlannedCoderLocal({ issue, project, llm, apiKey, keys = {}, gi
 
   const result = await agent.invoke(
     { messages: [{ role: 'user', content: buildTicketPrompt({ issue, branch }) }] },
-    { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id, projectId: project.id, branch } }
+    withAnnotations(
+      { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id, projectId: project.id, branch } },
+      { project: project.name || project.id, taskId: issue.identifier || issue.id, session: runId }
+    )
   );
 
   const finalText = framework.lastText(result);

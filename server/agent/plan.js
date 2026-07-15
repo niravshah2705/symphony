@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { PlanSchema, ViabilitySchema, ResumeSchema, normalizePlan } = require('./schema');
 const { webSearch, webSearchMany, formatResults } = require('./search');
 const { createChatModel } = require('./llm');
+const { withAnnotations } = require('./trace-annotations');
 const framework = require('./framework');
 
 /**
@@ -198,11 +199,17 @@ function isLlmUsable(llm) {
   return Boolean(llm.host); // ollama / lmstudio (local, host-based)
 }
 
-/** One constrained JSON call to the active provider; returns the parsed object (throws on bad JSON). */
-async function jsonCall(llm, prompt, runName, runId) {
+/**
+ * One constrained JSON call to the active provider; returns the parsed object
+ * (throws on bad JSON). `opts.runId` sets the LangSmith run id; `opts.business`
+ * ({ project, taskId, session }) stamps the standard project/task-id/session
+ * annotation onto the trace.
+ */
+async function jsonCall(llm, prompt, runName, { runId, business } = {}) {
   const model = createChatModel(llm, { json: true });
-  const config = { runName: runName.slice(0, 60), tags: ['enrich', 'linear-manager'] };
+  let config = { runName: runName.slice(0, 60), tags: ['enrich', 'linear-manager'] };
   if (runId) config.runId = runId;
+  config = withAnnotations(config, business);
   let msg;
   try {
     msg = await model.invoke(prompt, config);
@@ -291,7 +298,10 @@ async function generateIssuesForMilestones({ project, milestones, config, llm, k
   step('Requesting tasks for existing milestones (format=json)…');
   let raw;
   try {
-    raw = await jsonCall(llm, buildResumePrompt({ project, milestones, config, research }), `resume-json:${project.name}`, runId);
+    raw = await jsonCall(llm, buildResumePrompt({ project, milestones, config, research }), `resume-json:${project.name}`, {
+      runId,
+      business: { project: project.name, session: runId },
+    });
   } catch (err) {
     throw new AgentError(`The model did not return valid tasks: ${err && err.message ? err.message : err}`, 502);
   }
@@ -324,11 +334,14 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep })
   const today = todayIso();
   const topic = researchTopic(project);
   const runId = crypto.randomUUID();
-  const traceMeta = {
-    runName: `enrich:${project.name}`.slice(0, 60),
-    tags: ['enrich', 'linear-manager'],
-    metadata: { projectId: project.id, assumedRole: assumedRole ? assumedRole.id : null },
-  };
+  const traceMeta = withAnnotations(
+    {
+      runName: `enrich:${project.name}`.slice(0, 60),
+      tags: ['enrich', 'linear-manager'],
+      metadata: { projectId: project.id, assumedRole: assumedRole ? assumedRole.id : null },
+    },
+    { project: project.name, session: runId }
+  );
   const finishTrace = async () => (traced ? resolveTraceUrl(runId, keys).catch(() => null) : null);
 
   // ---- Step 1: feasibility (web research + verdict) ----
@@ -340,7 +353,9 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep })
   let viable = true;
   let reason = 'Feasibility check inconclusive; proceeding.';
   try {
-    const raw = await jsonCall(llm, buildFeasibilityPrompt({ project, today, searchText: formatResults(feasResults) }), `feasibility:${project.name}`);
+    const raw = await jsonCall(llm, buildFeasibilityPrompt({ project, today, searchText: formatResults(feasResults) }), `feasibility:${project.name}`, {
+      business: { project: project.name, session: runId },
+    });
     const parsed = ViabilitySchema.safeParse(raw);
     if (parsed.success) {
       viable = parsed.data.viable;
@@ -396,7 +411,9 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep })
   step('Requesting structured software-design plan (format=json)…');
   let raw;
   try {
-    raw = await jsonCall(llm, buildExtractPrompt({ project, today, config, draft, research }), `enrich-json:${project.name}`);
+    raw = await jsonCall(llm, buildExtractPrompt({ project, today, config, draft, research }), `enrich-json:${project.name}`, {
+      business: { project: project.name, session: runId },
+    });
   } catch (err) {
     throw new AgentError(`The model did not return a valid plan: ${err && err.message ? err.message : err}`, 502);
   }
