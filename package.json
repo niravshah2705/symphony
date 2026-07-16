@@ -14,7 +14,12 @@
     "start:gateway": "npm start -w @ai-fleet/gateway",
     "start:planner": "npm start -w @ai-fleet/planner",
     "start:coder": "npm start -w @ai-fleet/coder",
-    "test": "node --test"
+    "test": "node --test",
+    "test:e2e": "playwright test",
+    "test:e2e:debug": "PWDEBUG=1 playwright test --project=chrome"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
   },
   "engines": {
     "node": ">=18"

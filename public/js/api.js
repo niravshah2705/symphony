@@ -1,9 +1,36 @@
 // Thin fetch wrapper around the backend API.
 
+let accessTokenProvider = null;
+
+export function setAccessTokenProvider(provider) {
+  accessTokenProvider = typeof provider === 'function' ? provider : null;
+}
+
+function notifyAuthenticationRequired(error) {
+  window.dispatchEvent(new CustomEvent('ai-fleet:auth-required', {
+    detail: { message: error?.message || 'Authentication required' },
+  }));
+}
+
 async function request(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (accessTokenProvider) {
+    try {
+      const token = await accessTokenProvider();
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+    } catch (cause) {
+      const error = new Error('Your session has expired. Sign in again to continue.');
+      error.code = 'authentication_required';
+      error.cause = cause;
+      notifyAuthenticationRequired(error);
+      throw error;
+    }
+  }
+
   const res = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   });
   let data = {};
   try {
@@ -12,17 +39,29 @@ async function request(path, options = {}) {
     /* empty body */
   }
   if (!res.ok) {
-    throw new Error(data.error || `Request failed (${res.status})`);
+    const error = new Error(data.error || `Request failed (${res.status})`);
+    error.status = res.status;
+    error.code = data.code || '';
+    // Connected tools can also return 401. Lock the whole workspace only when
+    // the gateway identified an application-auth failure (or while confirming
+    // the current application identity), not for an unrelated provider key.
+    if (res.status === 401 && (error.code === 'authentication_required' || path === '/auth/me')) {
+      notifyAuthenticationRequired(error);
+    }
+    throw error;
   }
   return data;
 }
 
 export const api = {
+  // Authentication
+  getCurrentUser: () => request('/auth/me'),
+
   // Settings
-  getSettings: () => request('/settings'),
+  getSettings: (options = {}) => request('/settings', options),
   saveKey: (linearApiKey) =>
     request('/settings', { method: 'PUT', body: JSON.stringify({ linearApiKey }) }),
-  validate: () => request('/settings/validate'),
+  validate: (options = {}) => request('/settings/validate', options),
   clearKey: () => request('/settings', { method: 'DELETE' }),
 
   // Projects

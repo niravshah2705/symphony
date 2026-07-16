@@ -16,6 +16,7 @@ const localizationRoutes = require('./routes/localization');
 const { router: codexRoutes, callback: codexCallback } = require('./routes/codex');
 const { router: claudeRoutes } = require('./routes/claude');
 const { createProxy } = require('./proxy');
+const { createAuthenticationMiddleware, publicAuthConfig } = require('./auth');
 
 /**
  * Gateway service — the single browser-facing origin. It serves the SPA, owns
@@ -30,6 +31,30 @@ const { createProxy } = require('./proxy');
 const app = express();
 
 app.use(express.json({ limit: '1mb' }));
+
+// Public liveness and browser bootstrap. Auth0's SPA client must learn its
+// non-secret tenant/client/audience settings before it can obtain an access
+// token. No other API route is mounted ahead of the authentication boundary.
+app.get('/healthz', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/auth/config', (req, res) => {
+  res.set('Cache-Control', 'no-store').json(publicAuthConfig());
+});
+
+// Serve the pinned Auth0 SDK from this origin rather than executing a mutable
+// third-party CDN script in the authenticated application.
+const auth0SdkPath = path.join(
+  path.dirname(require.resolve('@auth0/auth0-spa-js/package.json')),
+  'dist',
+  'auth0-spa-js.production.esm.js'
+);
+app.get('/vendor/auth0-spa-js.js', (req, res) => res.sendFile(auth0SdkPath));
+
+// In local development this middleware is a no-op. AUTH_MODE=istio fails
+// closed unless Envoy supplied a verified Auth0 payload for every API call.
+app.use('/api', createAuthenticationMiddleware());
+app.get('/api/auth/me', (req, res) => {
+  res.set('Cache-Control', 'no-store').json(req.auth);
+});
 
 // User-facing API routes (owned by the gateway).
 app.use('/api/settings', settingsRoutes);

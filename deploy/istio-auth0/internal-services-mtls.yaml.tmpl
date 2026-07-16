@@ -1,0 +1,65 @@
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: ai-fleet-planner-strict-mtls
+  namespace: ${AI_FLEET_NAMESPACE}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-fleet-planner
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: ai-fleet-planner-gateway-only
+  namespace: ${AI_FLEET_NAMESPACE}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-fleet-planner
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            serviceAccounts:
+              - ${AI_FLEET_GATEWAY_NAMESPACE}/${AI_FLEET_GATEWAY_SERVICE_ACCOUNT}
+      to:
+        - operation:
+            paths:
+              - /api/agent
+              - /api/agent/*
+---
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: ai-fleet-coder-strict-mtls
+  namespace: ${AI_FLEET_NAMESPACE}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-fleet-coder
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: ai-fleet-coder-gateway-only
+  namespace: ${AI_FLEET_NAMESPACE}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-fleet-coder
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            serviceAccounts:
+              - ${AI_FLEET_GATEWAY_NAMESPACE}/${AI_FLEET_GATEWAY_SERVICE_ACCOUNT}
+      to:
+        - operation:
+            paths:
+              - /api/coder
+              - /api/coder/*

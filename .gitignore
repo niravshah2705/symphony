@@ -13,3 +13,7 @@ data/
 # OS / editor cruft
 .DS_Store
 *.log
+
+# Playwright browser-test artifacts
+playwright-report/
+test-results/

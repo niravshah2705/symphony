@@ -8,9 +8,16 @@ import {
   setSidebarOpen,
   setSidebarCollapsed,
 } from './state.js';
-import { el } from './dom.js';
+import { el, initials } from './dom.js';
 import { hydrateIcons } from './icons.js';
 import { initializeI18n, localize, t } from './i18n.js';
+import {
+  expireAuthentication,
+  getAuthenticationState,
+  initializeAuthentication,
+  signIn,
+  signOut,
+} from './auth.js';
 import { renderProjects } from './views/projects.js';
 import { renderBoard } from './views/board.js';
 import { renderBusiness } from './views/business.js';
@@ -51,6 +58,7 @@ const routeMeta = {
 
 // These existing surfaces depend on the configured project-management connection.
 const connectionRoutes = new Set(['business', 'projects', 'board']);
+const CONNECTION_TIMEOUT_MS = 8_000;
 
 function currentRoute() {
   const hash = window.location.hash.replace(/^#\//, '');
@@ -173,8 +181,10 @@ function initShellInteractions() {
 async function refreshConnection() {
   const conn = document.getElementById('conn');
   const text = document.getElementById('conn-text');
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), CONNECTION_TIMEOUT_MS);
   try {
-    const settings = await api.getSettings();
+    const settings = await api.getSettings({ signal: controller.signal });
     // Existing live Projects/Board/Business APIs remain Linear-backed. The
     // additional Jira/Asana connector choices are stored for planning-tool
     // routing, while local Agent/Calls/Traces never require any tracker key.
@@ -189,7 +199,9 @@ async function refreshConnection() {
     }
     // The legacy validation endpoint is Linear-specific. Other planning
     // providers are already represented by the normalized settings status.
-    if (!settings.planningProvider || settings.planningProvider === 'linear') await api.validate();
+    if (!settings.planningProvider || settings.planningProvider === 'linear') {
+      await api.validate({ signal: controller.signal });
+    }
     conn.className = 'conn ok';
     if (settings.planningProvider) {
       delete text.dataset.i18n;
@@ -202,6 +214,8 @@ async function refreshConnection() {
     conn.className = 'conn bad';
     text.dataset.i18n = 'needsAttention';
     text.textContent = t('needsAttention');
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
@@ -238,7 +252,138 @@ function freshView() {
   return view;
 }
 
+function setAuthenticationLocked(locked) {
+  document.body.classList.toggle('auth-locked', locked);
+  const sidebar = document.getElementById('app-sidebar');
+  const toggle = document.getElementById('sidebar-toggle');
+  if (sidebar) sidebar.inert = locked;
+  if (toggle) toggle.disabled = locked;
+  if (!locked) syncSidebar(false);
+}
+
+async function beginSignIn() {
+  try {
+    await signIn();
+  } catch (error) {
+    expireAuthentication(error.message);
+    renderAuthControl();
+    renderAuthenticationGate({ error: error.message });
+  }
+}
+
+async function beginSignOut() {
+  try {
+    await signOut();
+  } catch (error) {
+    expireAuthentication(error.message);
+    renderAuthControl();
+    renderAuthenticationGate({ error: error.message });
+  }
+}
+
+function renderAuthControl() {
+  const host = document.getElementById('auth-control');
+  if (!host) return;
+  const session = getAuthenticationState();
+  host.replaceChildren();
+  host.hidden = !session.enabled;
+  if (!session.enabled) return;
+
+  if (!session.authenticated || !session.user) {
+    host.append(el('button', {
+      class: 'auth-sign-in',
+      type: 'button',
+      onclick: beginSignIn,
+      dataset: { i18n: 'signIn' },
+    }, t('signIn')));
+    return;
+  }
+
+  const label = session.user.name || session.user.email || t('signedInUser');
+  const secondary = session.user.email && session.user.email !== label ? session.user.email : t('auth0Account');
+  host.append(
+    el('div', { class: 'auth-user', title: label, dataset: { userContent: 'true' } }, [
+      el('span', { class: 'avatar sm', 'aria-hidden': 'true' }, initials(label)),
+      el('span', { class: 'auth-user-copy' }, [
+        el('strong', {}, label),
+        el('small', {}, secondary),
+      ]),
+    ]),
+    el('button', {
+      class: 'auth-sign-out',
+      type: 'button',
+      title: t('signOut'),
+      'aria-label': t('signOut'),
+      onclick: beginSignOut,
+      dataset: { i18n: 'signOut', i18nAttr: 'aria-label' },
+    }, t('signOut'))
+  );
+}
+
+function renderAuthenticationGate({ loading = false, error = '' } = {}) {
+  const session = getAuthenticationState();
+  const view = freshView();
+  setAuthenticationLocked(true);
+  document.body.dataset.route = 'authentication';
+  document.title = `AI Fleet — ${t('authentication')}`;
+  view.className = 'view view-standard auth-view';
+  view.setAttribute('aria-label', t('authentication'));
+  view.setAttribute('aria-busy', String(loading));
+
+  const routeEyebrow = document.getElementById('route-eyebrow');
+  const routeTitle = document.getElementById('route-title');
+  routeEyebrow.dataset.i18n = 'security';
+  routeTitle.dataset.i18n = 'authentication';
+  routeEyebrow.textContent = t('security');
+  routeTitle.textContent = t('authentication');
+
+  const actions = [];
+  if (loading) {
+    actions.push(el('div', { class: 'auth-progress', role: 'status' }, [
+      el('span', { class: 'auth-spinner', 'aria-hidden': 'true' }),
+      el('span', { dataset: { i18n: 'authLoading' } }, t('authLoading')),
+    ]));
+  } else {
+    const configurationFailed = Boolean(error && !session.enabled);
+    actions.push(el('button', {
+      class: 'primary auth-continue',
+      type: 'button',
+      onclick: configurationFailed ? () => window.location.reload() : beginSignIn,
+      dataset: { i18n: configurationFailed ? 'retry' : 'continueWithAuth0' },
+    }, t(configurationFailed ? 'retry' : 'continueWithAuth0')));
+  }
+
+  const details = el('details', { class: 'auth-details' }, [
+    el('summary', { dataset: { i18n: 'whySignIn' } }, t('whySignIn')),
+    el('p', { dataset: { i18n: 'authDetails' } }, t('authDetails')),
+  ]);
+  if (error) {
+    details.append(
+      el('p', { class: 'auth-technical-label', dataset: { i18n: 'details' } }, t('details')),
+      el('code', { dataset: { i18nSkip: 'true', userContent: 'true' } }, error)
+    );
+  }
+
+  view.append(el('section', { class: 'auth-card', 'aria-labelledby': 'auth-title' }, [
+    el('span', { class: 'auth-badge', dataset: { i18n: 'protectedWorkspace' } }, t('protectedWorkspace')),
+    el('h1', { id: 'auth-title', dataset: { i18n: loading ? 'authLoadingTitle' : 'authTitle' } },
+      t(loading ? 'authLoadingTitle' : 'authTitle')),
+    el('p', { class: 'auth-copy', dataset: { i18n: 'authDescription' } }, t('authDescription')),
+    error ? el('div', { class: 'error-banner', role: 'alert', dataset: { i18n: 'authenticationFailed' } },
+      t('authenticationFailed')) : null,
+    el('div', { class: 'auth-actions' }, actions),
+    details,
+  ]));
+  localize(view);
+}
+
 async function render({ focus = false } = {}) {
+  const session = getAuthenticationState();
+  if (!session.authenticated) {
+    renderAuthenticationGate({ error: session.error });
+    return;
+  }
+  setAuthenticationLocked(false);
   const epoch = ++renderEpoch;
   const name = currentRoute();
   const view = freshView();
@@ -269,7 +414,7 @@ async function render({ focus = false } = {}) {
     await routes[name](view);
   } catch (err) {
     if (epoch === renderEpoch && view.isConnected) {
-      view.append(el('div', { class: 'error-banner' }, err.message || 'This view could not be loaded.'));
+      view.replaceChildren(el('div', { class: 'error-banner' }, err.message || 'This view could not be loaded.'));
     }
   } finally {
     if (epoch !== renderEpoch || !view.isConnected) return;
@@ -284,18 +429,53 @@ function capitalize(value) {
   return text ? `${text[0].toUpperCase()}${text.slice(1)}` : '';
 }
 
-window.addEventListener('hashchange', () => render({ focus: true }));
+window.addEventListener('hashchange', () => {
+  const session = getAuthenticationState();
+  if (session.authenticated) render({ focus: true });
+  else renderAuthenticationGate({ error: session.error });
+});
 window.addEventListener('DOMContentLoaded', async () => {
   hydrateIcons();
   initThemeToggle(document.getElementById('theme-toggle'));
   initShellInteractions();
   syncSidebarCollapsed();
-  await initializeI18n();
-  await Promise.all([refreshConnection(), refreshRole()]);
+
+  // Authentication is the only network dependency allowed to gate the
+  // workspace. Paint a useful status immediately while Auth0 restores its
+  // in-memory session or processes the PKCE callback.
+  renderAuthenticationGate({ loading: true });
+  let session;
+  try {
+    session = await initializeAuthentication();
+  } catch (error) {
+    session = expireAuthentication(error.message);
+  }
+  await initializeI18n({ discover: session.authenticated });
+  renderAuthControl();
+  if (!session.authenticated) {
+    renderAuthenticationGate({ error: session.error });
+    return;
+  }
+
+  // Optional network discovery and integration validation must never gate the
+  // first useful paint. Start them together, render immediately, then refresh
+  // a connection-backed route once the bounded checks settle.
+  const readiness = Promise.allSettled([
+    refreshConnection(),
+    refreshRole(),
+  ]);
   await render();
+  await readiness;
+  if (connectionRoutes.has(currentRoute())) await render();
 });
 
 window.addEventListener('ai-fleet:locale-changed', async () => {
+  const session = getAuthenticationState();
+  renderAuthControl();
+  if (!session.authenticated) {
+    renderAuthenticationGate({ error: session.error });
+    return;
+  }
   const view = document.getElementById('view');
   syncShell(currentRoute(), view);
   syncSidebarCollapsed();
@@ -303,11 +483,24 @@ window.addEventListener('ai-fleet:locale-changed', async () => {
   localize(document);
 });
 
+window.addEventListener('ai-fleet:auth-required', (event) => {
+  const session = getAuthenticationState();
+  // A connected tool can legitimately return 401 in local mode; only an
+  // enabled application-auth session should lock the entire workspace.
+  if (!session.enabled) return;
+  expireAuthentication(event.detail?.message || t('sessionExpired'));
+  renderAuthControl();
+  renderAuthenticationGate({ error: t('sessionExpired') });
+});
+
 // Allow views to request a connection re-check (e.g. after saving a key).
 window.addEventListener('lm:connection-changed', async () => {
+  if (!getAuthenticationState().authenticated) return;
   await refreshConnection();
   await render();
 });
 
 // Update the toolbar when the assumed role changes.
-window.addEventListener('lm:role-changed', refreshRole);
+window.addEventListener('lm:role-changed', () => {
+  if (getAuthenticationState().authenticated) refreshRole();
+});
