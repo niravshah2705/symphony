@@ -11,6 +11,8 @@ const projectsRoutes = require('./routes/projects');
 const issuesRoutes = require('./routes/issues');
 const businessesRoutes = require('./routes/businesses');
 const rolesRoutes = require('./routes/roles');
+const observabilityRoutes = require('./routes/observability');
+const localizationRoutes = require('./routes/localization');
 const { router: codexRoutes, callback: codexCallback } = require('./routes/codex');
 const { router: claudeRoutes } = require('./routes/claude');
 const { createProxy } = require('./proxy');
@@ -37,6 +39,8 @@ app.use('/api/projects', projectsRoutes);
 app.use('/api/issues', issuesRoutes);
 app.use('/api/businesses', businessesRoutes);
 app.use('/api/roles', rolesRoutes);
+app.use('/api/observability', observabilityRoutes);
+app.use('/api/locale', localizationRoutes);
 
 // Agent surfaces are proxied to their isolated services.
 app.use('/api/agent', createProxy(CONFIG.SERVICES.plannerUrl));

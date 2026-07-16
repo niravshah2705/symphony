@@ -15,6 +15,9 @@ A simple Node.js UI (branded **AI Fleet**) to manage Linear projects:
 - **Agentic call recorder** — record a shared screen or camera with microphone audio, review/download the recording locally, and use the configured local model to organize typed call notes. Recording media never leaves the browser.
 - **Local trace analysis** — paste logs or a structured agent trace and get a concise explanation, evidence, bottlenecks, and next actions from the configured Ollama or LM Studio model.
 - **Tool integrations** — choose **GitHub or GitLab** as the repository host and save a default repository/token; choose **Linear, Jira, or Asana** as the planning connector in Settings. A server-side repository broker owns authenticated clone/fetch/push and PR/MR/check/merge calls through the providers' official APIs. Existing live project/board automation remains Linear-backed while the additional planning credentials provide the configuration surface for connector routing.
+- **Multilingual workspace** — the gateway uses coarse IP location plus the browser's BCP 47 language preferences to suggest at most five useful languages. English and Gujarati remain available. Menu text has immediate built-in English/Gujarati/Hindi copy; the configured local Ollama or LM Studio model translates the rest of the UI, including internal status text and visible attributes, without sending it to a hosted provider.
+- **Runtime and workflow controls** — choose DeepAgent, the official Codex SDK, or the Claude Agent SDK, plus sequential, fan-out, evaluator, or supervisor guidance for new compatible runs. Every effective runtime receives a LangSmith root trace when tracing is enabled.
+- **Operations** — Analytics shows per-change trace cost, tokens, latency, and failures from LangSmith without treating missing telemetry as zero. Troubleshooting performs secret-free readiness checks for services, local inference, integrations, SDK packages, and tracing. The desktop navigation collapses to an accessible icon rail.
 
 ## Demo
 
@@ -48,8 +51,19 @@ Collapsible sections:
    - **Anthropic / Claude OAuth** — **Sign in with Claude**, approve in the opened tab, then paste the returned `code#state`. Available models are queried from Anthropic with bundled fallbacks, and only each model's advertised adaptive-thinking effort values are shown.
 
 The committed source of truth is [`packages/shared/src/agent/llm-presets.json`](packages/shared/src/agent/llm-presets.json). It separates model limits from request defaults and records the exact reasoning adapter used by each provider.
-4. **Assume Role** — pick a workspace member (validated server-side). The assumed role owns enriched projects and is shown in the **top toolbar**.
-5. **Deep Agent** — **enrich labels** (multi-select dropdown of your Linear project labels), **scheduler cadence** (5 / 10 / 15 minutes), parallelism, and per-run/milestone/issue caps, plus toggles.
+4. **Agent runtime & workflow** — select **DeepAgent**, **Codex SDK**, or **Claude Agent SDK**, and choose bounded sequential/fan-out/evaluator/supervisor guidance. DeepAgent remains the full brokered Linear + GitHub/GitLab lifecycle. SDK runtimes operate only with a compatible hosted provider and do not receive application-owned tracker or repository credentials; locally routed work stays on DeepAgent.
+5. **Assume Role** — pick a workspace member (validated server-side). The assumed role owns enriched projects and is shown in the **top toolbar**.
+6. **Deep Agent** — **enrich labels** (multi-select dropdown of your Linear project labels), **scheduler cadence** (5 / 10 / 15 minutes), parallelism, and per-run/milestone/issue caps, plus toggles.
+
+The top-bar language picker intentionally shows a small suggestion set rather than a complete language catalog. Location lookup retains only country code and region; no IP address is returned to the browser or persisted. If the local translator is unavailable, the UI shows a warning and retries with bounded backoff instead of silently treating English fallback text as translated.
+
+## Agent SDKs, workflows, and tracing
+
+- **DeepAgent** is the default and the only runtime that receives the private Linear MCP and provider-neutral repository broker tools required for the unattended ticket-to-merged-review lifecycle.
+- **Codex SDK** runs official server-side Codex threads in the prepared workspace. ChatGPT OAuth is staged in a per-run private home and removed after the run; model-initiated shells do not inherit the credential.
+- **Claude Agent SDK** runs the official Claude loop with persistent sessions disabled. Its built-in Bash tool is withheld when OAuth is present so the credential cannot leak into model-initiated commands.
+- **Workflow patterns** are bounded orchestration guidance applied to one runtime session. Capable SDKs may delegate independent investigation, but the setting does not promise concurrent workers, automatic evaluator retries, or brokered handoffs.
+- **LangSmith tracing** wraps each effective runtime at the root and records provider/model/runtime/pattern plus available token usage. Claude-reported cost is attached directly; otherwise LangSmith can calculate cost when it has matching model pricing. Unknown cost remains unavailable (`—`), never synthetic `$0.00`.
 
 ## Local workspace scenarios
 
@@ -199,6 +213,9 @@ packages/shared/
     logger.js  util.js  stdout + data/app.log logger · asyncHandler/JSON error/maskKey
     agent/
       framework.js        workflow-driven deep-agent runner (skills + tools + backend)
+      runtimes.js         DeepAgent / Codex SDK / Claude Agent SDK adapters + root traces
+      localization.js     BCP 47 suggestions, coarse IP location, local UI translation
+      analytics.js diagnostics.js workflow-patterns.js  ← operations
       workflows/          planning.workflow.js · coding.workflow.js (declarative)
       schema.js plan.js apply.js scheduler.js search.js   ← planner
       coder.js coder-orchestrator.js workspace.js repository-broker.js openswe.js  ← code-writer
@@ -306,6 +323,13 @@ rather than stuck in "running".
 | PUT | `/api/settings/langsmith` | Save LangSmith config (key masked) |
 | GET/POST/DELETE | `/api/settings/codex[...]` | Codex provider status / model / sign-out (`/login`, `/exchange` for OAuth) |
 | GET/POST/DELETE | `/api/settings/claude[...]` | Claude provider status / model / sign-out (`/login`, `/exchange`, `/test` for OAuth) |
+| PUT | `/api/settings/runtime` | Select the agent SDK and workflow guidance pattern |
+| GET | `/api/locale/suggestions` | Return at most five BCP 47 language suggestions from browser/coarse location signals |
+| POST | `/api/locale/translate` | Translate bounded UI strings with the configured local model |
+| GET | `/api/observability/analytics` | Bounded LangSmith cost/token/latency/error summary and per-change rows |
+| GET | `/api/observability/troubleshooting` | Secret-free service, local-model, integration, SDK, and tracing checks |
+| GET | `/api/observability/workflows` | Supported workflow-guidance catalog |
+| POST | `/api/observability/workflows/validate` | Validate a bounded declarative workflow definition |
 | GET | `/api/agent/ollama-models` | Models installed on the configured Ollama host |
 | GET | `/api/agent/lmstudio-models` | Models exposed by the configured LM Studio server |
 | GET | `/api/roles/members` | Assumable workspace members |

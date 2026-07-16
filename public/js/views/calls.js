@@ -738,7 +738,9 @@ function createCallSession(view) {
   }
 
   function chatMessage(role, text, meta = '') {
-    const bubble = el('div', { class: 'scenario-chat-bubble' }, [el('p', {}, text)]);
+    const bubble = el('div', { class: 'scenario-chat-bubble' }, [
+      el('p', role === 'user' ? { dataset: { userContent: 'true' } } : {}, text),
+    ]);
     if (meta) bubble.append(el('span', { class: 'scenario-chat-meta muted' }, meta));
     const children = role === 'assistant'
       ? [el('span', { class: 'scenario-chat-avatar', 'aria-hidden': 'true' }, '✦'), bubble]

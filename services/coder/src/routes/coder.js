@@ -46,6 +46,8 @@ function buildKeys(s) {
     langsmithTracing: s.langsmithTracing,
     langsmithProject: s.langsmithProject,
     langsmithEndpoint: s.langsmithEndpoint,
+    agentRuntime: s.agentRuntime,
+    workflowPattern: s.workflowPattern,
   };
 }
 

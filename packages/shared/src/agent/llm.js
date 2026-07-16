@@ -587,6 +587,11 @@ async function resolveLlm(settings, role = 'global') {
         model: settings.codexModel || CONFIG.OAUTH.chatgptModel,
         baseUrl: CONFIG.OAUTH.chatgptBaseUrl,
         accessToken: tokens.accessToken,
+        // The official Codex SDK consumes ChatGPT-managed credentials from
+        // auth.json, not through its `apiKey` option. Keep this internal token
+        // bundle on the per-run descriptor so the runtime can materialize an
+        // isolated auth cache without re-reading stale store state.
+        authTokens: { ...tokens },
         accountId,
         numTokens: settings.codexMaxTokens || 65536,
         temperature: settings.codexTemperature ?? null,
@@ -600,6 +605,7 @@ async function resolveLlm(settings, role = 'global') {
       model: settings.codexModel || CONFIG.OAUTH.defaultModel,
       baseUrl: CONFIG.OAUTH.baseUrl,
       accessToken: tokens.accessToken,
+      authTokens: { ...tokens },
       numTokens: settings.codexMaxTokens || 65536,
       temperature: settings.codexTemperature ?? null,
       reasoningEffort: settings.codexReasoningEffort ?? null,

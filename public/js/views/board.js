@@ -21,7 +21,7 @@ export async function renderBoard(view) {
   const selector = el(
     'select',
     { style: 'max-width:280px' },
-    projects.map((p) => el('option', { value: p.id, selected: p.id === selectedId }, p.name))
+    projects.map((p) => el('option', { value: p.id, selected: p.id === selectedId, dataset: { userContent: 'true' } }, p.name))
   );
 
   const boardHost = el('div', {});
@@ -111,12 +111,12 @@ function columnNode(col, reload) {
 
 function issueCard(issue) {
   const card = el('div', { class: 'issue-card', draggable: 'true' }, [
-    el('div', { class: 'title' }, issue.title),
+    el('div', { class: 'title', dataset: { userContent: 'true' } }, issue.title),
     el('div', { class: 'meta' }, [
-      el('span', {}, issue.identifier || ''),
+      el('span', { dataset: { userContent: 'true' } }, issue.identifier || ''),
       issue.priority ? el('span', { class: `prio prio-${issue.priority}` }, issue.priorityLabel || `P${issue.priority}`) : null,
       el('span', { class: 'spacer' }),
-      issue.assignee ? el('span', {}, issue.assignee.displayName || issue.assignee.name) : null,
+      issue.assignee ? el('span', { dataset: { userContent: 'true' } }, issue.assignee.displayName || issue.assignee.name) : null,
     ]),
   ]);
 

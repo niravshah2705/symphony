@@ -57,6 +57,8 @@ export const api = {
     request('/settings/github', { method: 'PUT', body: JSON.stringify({ githubToken }) }),
   saveIntegrations: (payload) =>
     request('/settings/integrations', { method: 'PUT', body: JSON.stringify(payload) }),
+  saveAgentRuntime: (payload) =>
+    request('/settings/runtime', { method: 'PUT', body: JSON.stringify(payload) }),
   getOllamaModels: () => request('/agent/ollama-models'),
   getLmstudioModels: () => request('/agent/lmstudio-models'),
   getProviderModels: (provider, refresh = false) => {
@@ -108,4 +110,18 @@ export const api = {
     request('/agent/analyze-trace', { method: 'POST', body: JSON.stringify(payload) }),
   clearFinishedJobs: () => request('/agent/jobs', { method: 'DELETE' }),
   deleteJob: (id) => request(`/agent/jobs/${id}`, { method: 'DELETE' }),
+
+  // Locale suggestions use browser language hints plus best-effort server IP
+  // geolocation. Translation always runs through the configured local model.
+  getLocaleSuggestions: (languages = []) => {
+    const query = new URLSearchParams({ languages: languages.join(',') });
+    return request(`/locale/suggestions?${query}`);
+  },
+  translateUi: (payload) =>
+    request('/locale/translate', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // Operational views backed by bounded LangSmith and local health queries.
+  getAnalytics: () => request('/observability/analytics'),
+  getTroubleshooting: () => request('/observability/troubleshooting'),
+  getWorkflowPatterns: () => request('/observability/workflows'),
 };

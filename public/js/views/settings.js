@@ -42,6 +42,7 @@ export async function renderSettings(view) {
         }),
       ]),
       el('div', { class: 'settings-col' }, [
+        runtimeSection({ settings, codex: codexRes, claude: claudeRes }),
         roleSection({ members: membersRes.members || [], assumedRole: roleRes.assumedRole, view }),
         agentSection({
           config: configRes.config,
@@ -52,6 +53,83 @@ export async function renderSettings(view) {
       ]),
     ])
   );
+}
+
+/* ---------------------- Runtime & workflow pattern --------------------- */
+
+function runtimeSection({ settings, codex, claude }) {
+  const codexReady = codex.connected && settings.llmProvider === 'codex';
+  const claudeReady = claude.connected && settings.llmProvider === 'claude';
+  const runtimes = [
+    ['deepagent', 'DeepAgent SDK'],
+    ['codex-sdk', 'Codex SDK'],
+    ['claude-agent-sdk', 'Claude Agent SDK'],
+  ];
+  const patterns = [
+    ['sequential', 'Sequential'],
+    ['parallel', 'Parallel / fan-out'],
+    ['evaluator', 'Evaluator / retry'],
+    ['supervisor', 'Supervisor / handoff'],
+  ];
+  const runtime = el('select', {}, runtimes.map(([value, label]) =>
+    el('option', { value, ...(settings.agentRuntime === value ? { selected: 'selected' } : {}) }, label)
+  ));
+  const pattern = el('select', {}, patterns.map(([value, label]) =>
+    el('option', { value, ...((settings.workflowPattern || 'sequential') === value ? { selected: 'selected' } : {}) }, label)
+  ));
+  const status = el('span', { class: 'muted', role: 'status', style: 'font-size:11px' });
+  const save = el('button', { class: 'primary', type: 'button' }, 'Save runtime');
+  const readiness = el('div', { class: 'runtime-readiness' }, [
+    el('span', {}, [el('strong', {}, 'DeepAgent'), el('small', {}, 'Ready')]),
+    el('span', {}, [el('strong', {}, 'Codex SDK'), el('small', {}, codexReady ? 'Ready' : codex.connected ? 'Select Codex hosted slot' : 'Sign-in needed')]),
+    el('span', {}, [el('strong', {}, 'Claude SDK'), el('small', {}, claudeReady ? 'Ready' : claude.connected ? 'Select Claude hosted slot' : 'Sign-in needed')]),
+  ]);
+
+  const updateHint = () => {
+    if (runtime.value === 'codex-sdk') {
+      status.textContent = codexReady
+        ? 'Uses the hosted Codex slot for compatible planning runs; brokered coding stays on DeepAgent.'
+        : 'Choose Codex in the Hosted model slot and sign in; until then runs safely use DeepAgent.';
+    } else if (runtime.value === 'claude-agent-sdk') {
+      status.textContent = claudeReady
+        ? 'Uses the hosted Claude slot for compatible planning runs; brokered coding stays on DeepAgent.'
+        : 'Choose Claude in the Hosted model slot and sign in; until then runs safely use DeepAgent.';
+    } else {
+      status.textContent = 'Uses the existing skills-and-tools DeepAgent runtime.';
+    }
+  };
+  runtime.addEventListener('change', updateHint);
+  updateHint();
+
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    save.textContent = 'Saving…';
+    try {
+      const next = await api.saveAgentRuntime({
+        agentRuntime: runtime.value,
+        workflowPattern: pattern.value,
+      });
+      status.textContent = `Saved ${next.agentRuntime} with the ${next.workflowPattern} pattern. New runs will use this setup.`;
+      toast('Agent runtime saved.', 'ok');
+    } catch (err) {
+      status.textContent = err.message;
+      toast(err.message, 'err');
+    } finally {
+      save.disabled = false;
+      save.textContent = 'Save runtime';
+    }
+  });
+
+  const runtimeLabel = runtimes.find(([id]) => id === (settings.agentRuntime || 'deepagent'))?.[1] || 'DeepAgent SDK';
+  const patternLabel = patterns.find(([id]) => id === (settings.workflowPattern || 'sequential'))?.[1] || 'Sequential';
+  return section('Agent runtime & workflow', `${runtimeLabel} · ${patternLabel}`, true, [
+    el('p', { class: 'muted', style: 'font-size:12px;margin-top:0' }, 'Select the SDK for compatible planning work. Credential-brokered coding runs use DeepAgent. Every effective runtime creates a LangSmith root trace when tracing is enabled.'),
+    readiness,
+    field('Agent SDK', runtime),
+    field('Workflow pattern', pattern, 'Patterns are bounded orchestration guidance: sequential, fan-out, evaluator/retry, or supervisor/handoff.'),
+    el('div', { class: 'row' }, [save, status]),
+    el('a', { class: 'detail-link', href: '#/workflows' }, 'Compare workflow patterns'),
+  ]);
 }
 
 /* --------------------------- Collapsible box ---------------------------- */
@@ -1201,7 +1279,7 @@ function roleSection({ members, assumedRole, view }) {
     'select',
     {},
     [el('option', { value: '' }, '— select a member —')].concat(
-      members.map((m) => el('option', { value: m.id, selected: assumedRole && assumedRole.id === m.id }, `${m.name} (${m.email})`))
+      members.map((m) => el('option', { value: m.id, selected: assumedRole && assumedRole.id === m.id, dataset: { userContent: 'true' } }, `${m.name} (${m.email})`))
     )
   );
 
@@ -1236,7 +1314,7 @@ function roleSection({ members, assumedRole, view }) {
     assumedRole
       ? el('div', { class: 'row', style: 'margin-bottom:12px' }, [
           el('span', { class: 'avatar' }, (assumedRole.name || '?').slice(0, 2).toUpperCase()),
-          el('div', {}, [el('div', { style: 'font-weight:600' }, assumedRole.name), el('div', { class: 'muted', style: 'font-size:12px' }, assumedRole.email || '')]),
+          el('div', { dataset: { userContent: 'true' } }, [el('div', { style: 'font-weight:600' }, assumedRole.name), el('div', { class: 'muted', style: 'font-size:12px' }, assumedRole.email || '')]),
         ])
       : null,
     field('Member', select),

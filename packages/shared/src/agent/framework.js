@@ -9,6 +9,7 @@ const { createChatModel } = require('./llm');
 const toolRegistry = require('./tools');
 const { installSafeRead } = require('./safe-read');
 const { buildSafeAgentEnv } = require('./repository-broker');
+const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = require('./runtimes');
 
 /**
  * Workflow-driven deep-agent framework.
@@ -239,7 +240,19 @@ function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, ext
  * provided) a scratch dir is created and cleaned up automatically.
  * @returns {Promise<{ result:object, messages:object[], finalText:string }>}
  */
-async function runWorkflow({ workflow, llm, userMessage, backend, skillPaths, rootDir, ctx = {}, invokeConfig = {} }) {
+async function runWorkflow({
+  workflow,
+  llm,
+  userMessage,
+  backend,
+  skillPaths,
+  rootDir,
+  ctx = {},
+  invokeConfig = {},
+  runtime = 'deepagent',
+  workflowPattern = 'sequential',
+  env,
+}) {
   let scratch = null;
   if (!backend && !rootDir) {
     scratch = prepareScratch(workflow);
@@ -247,16 +260,45 @@ async function runWorkflow({ workflow, llm, userMessage, backend, skillPaths, ro
     skillPaths = scratch.skillPaths;
   }
   try {
-    const extraTools = await require('./mcp').loadMcpTools(workflow.mcp, ctx);
-    const { agent } = buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx, extraTools });
+    const requestedRuntime = normalizeAgentRuntime(runtime, { strict: true });
+    const runtimeId = effectiveAgentRuntime(requestedRuntime, llm, {
+      strict: true,
+      workflow: workflow.name,
+    });
     const config = {
       recursionLimit: workflow.recursionLimit || 24,
       tags: workflow.tags || [],
       ...invokeConfig,
     };
-    const result = await agent.invoke({ messages: [{ role: 'user', content: userMessage }] }, config);
-    const messages = (result && result.messages) || [];
-    return { result, messages, finalText: lastText(result) };
+    let deepAgentInvoke;
+    if (runtimeId === 'deepagent') {
+      const extraTools = await require('./mcp').loadMcpTools(workflow.mcp, ctx);
+      const { agent } = buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx, extraTools, env });
+      deepAgentInvoke = (prompt, tracedConfig) => {
+        // The runtime wrapper owns the LangSmith root run id. Passing the same
+        // id into the nested LangGraph invocation would create a duplicate run.
+        const childConfig = { ...tracedConfig };
+        delete childConfig.runId;
+        return agent.invoke({ messages: [{ role: 'user', content: prompt }] }, childConfig);
+      };
+    }
+    return executeAgentRuntime({
+      runtime: requestedRuntime,
+      workflowPattern,
+      prompt: userMessage,
+      workflow: workflow.name,
+      llm,
+      rootDir,
+      backendKind: workflow.backend,
+      systemPrompt: workflow.systemPrompt,
+      maxTurns: workflow.recursionLimit || 24,
+      ctx,
+      env,
+      invokeConfig: config,
+      tags: workflow.tags || [],
+      deepAgentInvoke,
+      lastText,
+    });
   } finally {
     if (scratch) scratch.cleanup();
   }

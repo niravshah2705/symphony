@@ -120,6 +120,8 @@ function buildKeys(settings) {
     langsmithTracing: settings.langsmithTracing,
     langsmithProject: settings.langsmithProject,
     langsmithEndpoint: settings.langsmithEndpoint,
+    agentRuntime: settings.agentRuntime,
+    workflowPattern: settings.workflowPattern,
   };
 }
 

@@ -8,6 +8,7 @@ const { prepareWorkspace, preparePlannedWorkspace } = require('./workspace');
 const framework = require('./framework');
 const tools = require('./tools');
 const { withAnnotations } = require('./trace-annotations');
+const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = require('./runtimes');
 const codingWorkflow = require('./workflows/coding.workflow');
 
 /**
@@ -133,13 +134,94 @@ function resolvePlannedRepository({
 }
 
 /**
+ * Prepare and execute the coding workflow through the selected agent runtime.
+ * DeepAgent receives the existing private tools. Official SDKs run in the same
+ * prepared workspace but never receive Linear/repository credentials.
+ */
+async function executeCodingRuntime({
+  llm,
+  keys,
+  apiKey,
+  step,
+  workDir,
+  env,
+  repositoryProvider,
+  repositoryBroker,
+  prompt,
+  invokeConfig,
+}) {
+  const requestedRuntime = normalizeAgentRuntime(keys.agentRuntime || 'deepagent', { strict: true });
+  const runtime = effectiveAgentRuntime(requestedRuntime, llm, {
+    strict: true,
+    workflow: codingWorkflow.name,
+  });
+  const skillPaths = framework.installSkills(workDir, codingWorkflow.skills);
+  let deepAgentInvoke;
+
+  if (runtime !== requestedRuntime) {
+    step(
+      `The brokered coding lifecycle keeps Linear and repository credentials on DeepAgent; ` +
+      `using DeepAgent instead of ${requestedRuntime} for this run.`
+    );
+  }
+
+  if (runtime === 'deepagent') {
+    // The Linear key stays behind linear_graphql. Repository auth stays behind
+    // one branch/repo-scoped broker tool; neither secret enters ctx or shell env.
+    const extraTools = await require('./mcp').loadMcpTools(codingWorkflow.mcp, {
+      apiKey,
+      step,
+      repositoryProvider,
+      repositoryBroker: Boolean(repositoryBroker),
+    });
+    if (repositoryBroker) extraTools.push(repositoryBroker.createTool());
+    const { agent } = framework.buildAgent({
+      workflow: codingWorkflow,
+      llm,
+      rootDir: workDir,
+      skillPaths,
+      ctx: { apiKey, step },
+      extraTools,
+      env,
+    });
+    deepAgentInvoke = (runtimePrompt, tracedConfig) => {
+      const childConfig = { ...tracedConfig };
+      delete childConfig.runId;
+      return agent.invoke({ messages: [{ role: 'user', content: runtimePrompt }] }, childConfig);
+    };
+  }
+
+  step(
+    `Running code-writer (runtime ${runtime}, pattern ${keys.workflowPattern || 'sequential'}, ` +
+    `provider ${llm.provider}, model ${llm.model}, ${skillPaths.length} skills, max ${CONFIG.CODER.maxTurns} turns)…`
+  );
+  return executeAgentRuntime({
+    runtime: requestedRuntime,
+    workflowPattern: keys.workflowPattern || 'sequential',
+    prompt,
+    workflow: codingWorkflow.name,
+    llm,
+    rootDir: workDir,
+    backendKind: codingWorkflow.backend,
+    systemPrompt: codingWorkflow.systemPrompt,
+    maxTurns: CONFIG.CODER.maxTurns,
+    ctx: { apiKey, step },
+    env,
+    invokeConfig,
+    tags: codingWorkflow.tags,
+    deepAgentInvoke,
+    lastText: framework.lastText,
+  });
+}
+
+/**
  * Run one code-writer attempt on a ticket. Prepares an isolated workspace, builds
  * the coding-workflow agent rooted there via the framework, and invokes it.
  * @returns {Promise<{ workDir, finalText, messages, traced }>}
  */
 async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep }) {
   const step = typeof onStep === 'function' ? onStep : () => {};
-  if (!isCoderLlmUsable(llm)) throw new CoderError('Configure the deep-agent LLM in Settings → LLM.', 400);
+  if (!isCoderLlmUsable(llm)) throw new CoderError('Configure the agent model in Settings → LLM.', 400);
   if (!apiKey) throw new CoderError('A Linear API key is required for the code-writer agent.', 400);
 
   const traced = configureTracing(keys);
@@ -156,38 +238,25 @@ async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep }) {
   });
   step(`Workspace ${reused ? 'reused' : 'ready'} at ${workDir}.`);
   try {
-    // The Linear key stays behind linear_graphql. Repository auth stays behind
-    // one branch/repo-scoped broker tool; neither secret enters ctx or shell env.
-    const extraTools = await require('./mcp').loadMcpTools(codingWorkflow.mcp, {
+    const execution = await executeCodingRuntime({
+      llm,
+      keys,
       apiKey,
       step,
-      repositoryProvider: repository.provider,
-      repositoryBroker: Boolean(repositoryBroker),
-    });
-    if (repositoryBroker) extraTools.push(repositoryBroker.createTool());
-    const { agent, skillPaths } = framework.buildAgent({
-      workflow: codingWorkflow,
-      llm,
-      rootDir: workDir,
-      ctx: { apiKey, step },
-      extraTools,
+      workDir,
       env,
-    });
-    step(`Running code-writer (provider ${llm.provider}, model ${llm.model}, ${skillPaths.length} skills, max ${CONFIG.CODER.maxTurns} turns)…`);
-
-    const result = await agent.invoke(
-      { messages: [{ role: 'user', content: buildTicketPrompt({ issue, branch: repositoryBroker ? branch : null }) }] },
-      withAnnotations(
+      repositoryProvider: repository.provider,
+      repositoryBroker,
+      prompt: buildTicketPrompt({ issue, branch: repositoryBroker ? branch : null }),
+      invokeConfig: withAnnotations(
         { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id } },
         { project: issue.projectName, taskId: issue.identifier || issue.id, session: runId }
-      )
-    );
+      ),
+    });
 
-    const finalText = framework.lastText(result);
-    const messages = (result && result.messages) || [];
     const finalBranch = activeRepositoryBranch(branch, repositoryBroker);
-    step(`Code-writer finished (${messages.length} messages).`);
-    return { workDir, branch: finalBranch, finalText, messages, traced };
+    step(`Code-writer finished (${execution.messages.length} messages).`);
+    return { workDir, branch: finalBranch, ...execution, traced };
   } finally {
     if (repositoryBroker) repositoryBroker.dispose();
   }
@@ -227,7 +296,7 @@ async function runPlannedCoderLocal({
   onStep,
 }) {
   const step = typeof onStep === 'function' ? onStep : () => {};
-  if (!isCoderLlmUsable(llm)) throw new CoderError('Configure the deep-agent LLM in Settings → LLM.', 400);
+  if (!isCoderLlmUsable(llm)) throw new CoderError('Configure the agent model in Settings → LLM.', 400);
   if (!apiKey) throw new CoderError('A Linear API key is required for the code-writer agent.', 400);
 
   const traced = configureTracing(keys);
@@ -261,36 +330,25 @@ async function runPlannedCoderLocal({
     onStep: step,
   });
   try {
-    const extraTools = await require('./mcp').loadMcpTools(codingWorkflow.mcp, {
+    const execution = await executeCodingRuntime({
+      llm,
+      keys,
       apiKey,
       step,
-      repositoryProvider: provider,
-      repositoryBroker: Boolean(repositoryBroker),
-    });
-    if (repositoryBroker) extraTools.push(repositoryBroker.createTool());
-    const { agent, skillPaths } = framework.buildAgent({
-      workflow: codingWorkflow,
-      llm,
-      rootDir: workDir,
-      ctx: { apiKey, step },
-      extraTools,
+      workDir,
       env,
-    });
-    step(`Running planned coder on branch ${branch} (monorepo ${slug}, ${skillPaths.length} skills)…`);
-
-    const result = await agent.invoke(
-      { messages: [{ role: 'user', content: buildTicketPrompt({ issue, branch: repositoryBroker ? branch : null }) }] },
-      withAnnotations(
+      repositoryProvider: provider,
+      repositoryBroker,
+      prompt: buildTicketPrompt({ issue, branch: repositoryBroker ? branch : null }),
+      invokeConfig: withAnnotations(
         { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id, projectId: project.id, branch } },
         { project: project.name || project.id, taskId: issue.identifier || issue.id, session: runId }
-      )
-    );
+      ),
+    });
 
-    const finalText = framework.lastText(result);
-    const messages = (result && result.messages) || [];
     const finalBranch = activeRepositoryBranch(branch, repositoryBroker);
-    step(`Planned coder finished on ${finalBranch} (${messages.length} messages).`);
-    return { workDir, branch: finalBranch, finalText, messages, traced };
+    step(`Planned coder finished on ${finalBranch} (${execution.messages.length} messages, monorepo ${slug}).`);
+    return { workDir, branch: finalBranch, ...execution, traced };
   } finally {
     if (repositoryBroker) repositoryBroker.dispose();
   }
@@ -327,6 +385,7 @@ module.exports = {
   assertOpenSweRepositoryProvider,
   activeRepositoryBranch,
   resolvePlannedRepository,
+  executeCodingRuntime,
   buildTicketPrompt,
   // Back-compat re-exports (moved into the workflow / tool registry).
   buildWorkflowPrompt: codingWorkflow.buildWorkflowPrompt,

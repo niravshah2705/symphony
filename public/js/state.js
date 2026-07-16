@@ -2,6 +2,7 @@
 
 const KEY_PROJECT = 'lm.currentProjectId';
 const KEY_WORKSPACE_ROUTE = 'lm.lastWorkspaceRoute';
+const KEY_SIDEBAR_COLLAPSED = 'lm.sidebarCollapsed';
 
 export const IMMERSIVE_ROUTES = Object.freeze(['agent', 'calls', 'traces']);
 
@@ -12,6 +13,7 @@ export const state = {
   currentProjectId: localStorage.getItem(KEY_PROJECT) || '',
   activeRoute: '',
   sidebarOpen: false,
+  sidebarCollapsed: localStorage.getItem(KEY_SIDEBAR_COLLAPSED) === 'true',
   lastWorkspaceRoute: localStorage.getItem(KEY_WORKSPACE_ROUTE) || 'agent',
 };
 
@@ -39,4 +41,13 @@ export function setActiveRoute(route) {
 
 export function setSidebarOpen(open) {
   state.sidebarOpen = Boolean(open);
+}
+
+export function setSidebarCollapsed(collapsed) {
+  state.sidebarCollapsed = Boolean(collapsed);
+  try {
+    localStorage.setItem(KEY_SIDEBAR_COLLAPSED, String(state.sidebarCollapsed));
+  } catch (_) {
+    // In-memory state still provides a usable collapse control.
+  }
 }

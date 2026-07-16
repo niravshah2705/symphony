@@ -399,6 +399,8 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep })
       userMessage: buildDraftPrompt({ project, today, config }),
       ctx: { step },
       invokeConfig: { runId, ...traceMeta },
+      runtime: keys.agentRuntime || 'deepagent',
+      workflowPattern: keys.workflowPattern || 'sequential',
     });
     draft = finalText;
     step(`Planning workflow draft ready (${draft.length} chars).`);

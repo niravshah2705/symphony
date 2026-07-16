@@ -172,6 +172,10 @@ const DEFAULT_STORE = Object.freeze({
     langsmithProject: 'linear-manager',
     langsmithEndpoint: 'https://api.smith.langchain.com',
     langsmithTracing: true,
+    // Provider-neutral execution engine and bounded orchestration pattern.
+    // Existing installations inherit these values through the store merge.
+    agentRuntime: 'deepagent',
+    workflowPattern: 'sequential',
   },
   businesses: [
     {

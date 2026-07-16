@@ -1,0 +1,556 @@
+import { api } from './api.js';
+
+const STORAGE_KEY = 'ai-fleet.locale';
+const DEFAULT_LOCALE = 'en';
+const MAX_SUGGESTIONS = 5;
+const RTL_LANGUAGES = new Set(['ar', 'fa', 'he', 'ur']);
+const TRANSLATABLE_ATTRIBUTES = Object.freeze(['placeholder', 'title', 'aria-label', 'aria-description', 'alt']);
+
+const FALLBACK_LOCALES = Object.freeze([
+  { tag: 'en', label: 'English', nativeLabel: 'English' },
+  { tag: 'gu-IN', label: 'Gujarati', nativeLabel: 'ગુજરાતી' },
+  { tag: 'hi-IN', label: 'Hindi', nativeLabel: 'हिन्दी' },
+]);
+
+const MESSAGES = Object.freeze({
+  en: {
+    language: 'Language',
+    skipWorkspace: 'Skip to workspace',
+    openNavigation: 'Open navigation',
+    closeNavigation: 'Close navigation',
+    collapseNavigation: 'Collapse navigation',
+    expandNavigation: 'Expand navigation',
+    primaryNavigation: 'Primary navigation',
+    application: 'Application',
+    workspace: 'Workspace',
+    agentOperations: 'Agent operations',
+    workspaceSection: 'Workspace',
+    agentWorkspace: 'Agent workspace',
+    agentWorkspaceSub: 'Plan and run work',
+    callRecorder: 'Call recorder',
+    callRecorderSub: 'Capture agent sessions',
+    traceAnalysis: 'Trace analysis',
+    traceAnalysisSub: 'Understand what happened',
+    planning: 'Planning',
+    business: 'Business',
+    businessSub: 'Contexts and roles',
+    projects: 'Projects',
+    projectsSub: 'Plans and milestones',
+    board: 'Board',
+    boardSub: 'Issues in motion',
+    insights: 'Insights',
+    analytics: 'Analytics',
+    analyticsSub: 'Cost and performance',
+    workflows: 'Workflows',
+    workflowsSub: 'Patterns and orchestration',
+    system: 'System',
+    troubleshooting: 'Troubleshooting',
+    troubleshootingSub: 'Diagnose connections',
+    settings: 'Settings',
+    settingsSub: 'Models and connections',
+    workspaceReady: 'Workspace ready',
+    localTools: 'Local models and connected tools',
+    checking: 'Checking…',
+    setupNeeded: 'Setup needed',
+    needsAttention: 'Needs attention',
+    connected: 'Connected',
+    translationUnavailable: 'Local translation is temporarily unavailable',
+    actingAs: 'Acting as {name}',
+  },
+  gu: {
+    language: 'ભાષા',
+    skipWorkspace: 'કાર્યસ્થળ પર જાઓ',
+    openNavigation: 'નેવિગેશન ખોલો',
+    closeNavigation: 'નેવિગેશન બંધ કરો',
+    collapseNavigation: 'નેવિગેશન સંકોચો',
+    expandNavigation: 'નેવિગેશન વિસ્તારો',
+    primaryNavigation: 'મુખ્ય નેવિગેશન',
+    application: 'એપ્લિકેશન',
+    workspace: 'કાર્યસ્થળ',
+    agentOperations: 'એજન્ટ કામગીરી',
+    workspaceSection: 'કાર્યસ્થળ',
+    agentWorkspace: 'એજન્ટ કાર્યસ્થળ',
+    agentWorkspaceSub: 'કાર્યની યોજના બનાવો અને ચલાવો',
+    callRecorder: 'કૉલ રેકોર્ડર',
+    callRecorderSub: 'એજન્ટ સત્રો રેકોર્ડ કરો',
+    traceAnalysis: 'ટ્રેસ વિશ્લેષણ',
+    traceAnalysisSub: 'શું થયું તે સમજો',
+    planning: 'આયોજન',
+    business: 'વ્યવસાય',
+    businessSub: 'સંદર્ભો અને ભૂમિકાઓ',
+    projects: 'પ્રોજેક્ટ્સ',
+    projectsSub: 'યોજનાઓ અને માઇલસ્ટોન્સ',
+    board: 'બોર્ડ',
+    boardSub: 'પ્રગતિમાં રહેલા મુદ્દાઓ',
+    insights: 'આંતરદૃષ્ટિ',
+    analytics: 'વિશ્લેષણ',
+    analyticsSub: 'ખર્ચ અને કામગીરી',
+    workflows: 'કાર્યપ્રવાહો',
+    workflowsSub: 'પેટર્ન અને સંકલન',
+    system: 'સિસ્ટમ',
+    troubleshooting: 'સમસ્યા નિવારણ',
+    troubleshootingSub: 'જોડાણોનું નિદાન',
+    settings: 'સેટિંગ્સ',
+    settingsSub: 'મોડેલો અને જોડાણો',
+    workspaceReady: 'કાર્યસ્થળ તૈયાર છે',
+    localTools: 'સ્થાનિક મોડેલો અને જોડાયેલા સાધનો',
+    checking: 'તપાસી રહ્યું છે…',
+    setupNeeded: 'સેટઅપ જરૂરી છે',
+    needsAttention: 'ધ્યાન આપવું જરૂરી છે',
+    connected: 'જોડાયેલ છે',
+    translationUnavailable: 'સ્થાનિક અનુવાદ હાલમાં ઉપલબ્ધ નથી',
+    actingAs: '{name} તરીકે કાર્યરત',
+  },
+  hi: {
+    language: 'भाषा',
+    skipWorkspace: 'कार्यक्षेत्र पर जाएँ',
+    openNavigation: 'नेविगेशन खोलें',
+    closeNavigation: 'नेविगेशन बंद करें',
+    collapseNavigation: 'नेविगेशन संक्षिप्त करें',
+    expandNavigation: 'नेविगेशन विस्तृत करें',
+    primaryNavigation: 'मुख्य नेविगेशन',
+    application: 'एप्लिकेशन',
+    workspace: 'कार्यक्षेत्र',
+    agentOperations: 'एजेंट संचालन',
+    workspaceSection: 'कार्यक्षेत्र',
+    agentWorkspace: 'एजेंट कार्यक्षेत्र',
+    agentWorkspaceSub: 'काम की योजना बनाएँ और चलाएँ',
+    callRecorder: 'कॉल रिकॉर्डर',
+    callRecorderSub: 'एजेंट सत्र रिकॉर्ड करें',
+    traceAnalysis: 'ट्रेस विश्लेषण',
+    traceAnalysisSub: 'समझें कि क्या हुआ',
+    planning: 'योजना',
+    business: 'व्यवसाय',
+    businessSub: 'संदर्भ और भूमिकाएँ',
+    projects: 'प्रोजेक्ट',
+    projectsSub: 'योजनाएँ और माइलस्टोन',
+    board: 'बोर्ड',
+    boardSub: 'प्रगति में मुद्दे',
+    insights: 'अंतर्दृष्टि',
+    analytics: 'विश्लेषण',
+    analyticsSub: 'लागत और प्रदर्शन',
+    workflows: 'कार्यप्रवाह',
+    workflowsSub: 'पैटर्न और ऑर्केस्ट्रेशन',
+    system: 'सिस्टम',
+    troubleshooting: 'समस्या निवारण',
+    troubleshootingSub: 'कनेक्शन का निदान',
+    settings: 'सेटिंग्स',
+    settingsSub: 'मॉडल और कनेक्शन',
+    workspaceReady: 'कार्यक्षेत्र तैयार है',
+    localTools: 'स्थानीय मॉडल और जुड़े उपकरण',
+    checking: 'जाँच हो रही है…',
+    setupNeeded: 'सेटअप आवश्यक है',
+    needsAttention: 'ध्यान देने की आवश्यकता है',
+    connected: 'कनेक्टेड',
+    translationUnavailable: 'स्थानीय अनुवाद अभी उपलब्ध नहीं है',
+    actingAs: '{name} के रूप में कार्यरत',
+  },
+});
+
+let locale = normalizeLocale(readSavedLocale()) || DEFAULT_LOCALE;
+let suggestions = [...FALLBACK_LOCALES];
+let observer = null;
+let translationTimer = null;
+let translationGeneration = 0;
+let localizationPasses = 0;
+let fallbackRetryTimer = null;
+let fallbackRetryAttempts = 0;
+let translationDegraded = false;
+const textSources = new WeakMap();
+const textLocales = new WeakMap();
+const attributeSources = new WeakMap();
+const attributeLocales = new WeakMap();
+const translationCache = new Map();
+
+function readSavedLocale() {
+  try {
+    return localStorage.getItem(STORAGE_KEY) || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+export function normalizeLocale(value) {
+  try {
+    const [canonical] = Intl.getCanonicalLocales(String(value || '').trim());
+    if (!canonical) return '';
+    const language = new Intl.Locale(canonical).language;
+    return ({ en: 'en', gu: 'gu-IN', hi: 'hi-IN', es: 'es', fr: 'fr', de: 'de', pt: 'pt-BR', ja: 'ja-JP', ar: 'ar' })[language] || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function languageOf(value = locale) {
+  try {
+    return new Intl.Locale(value).language;
+  } catch (_) {
+    return 'en';
+  }
+}
+
+export function getLocale() {
+  return locale;
+}
+
+export function t(key, fallback = key, replacements = {}) {
+  const language = languageOf();
+  const template = (MESSAGES[language] && MESSAGES[language][key]) || MESSAGES.en[key] || fallback;
+  return String(template).replace(/\{([A-Za-z0-9_]+)\}/g, (_, name) =>
+    Object.prototype.hasOwnProperty.call(replacements, name) ? String(replacements[name]) : `{${name}}`
+  );
+}
+
+export function formatNumber(value, options = {}) {
+  return new Intl.NumberFormat(locale, options).format(Number(value) || 0);
+}
+
+export function formatDate(value, options = { dateStyle: 'medium' }) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || '');
+  return new Intl.DateTimeFormat(locale, options).format(date);
+}
+
+function applyDocumentLocale() {
+  const language = languageOf();
+  document.documentElement.lang = locale;
+  document.documentElement.dir = RTL_LANGUAGES.has(language) ? 'rtl' : 'ltr';
+  document.body.dataset.locale = locale;
+}
+
+function applyStaticTranslations(root = document) {
+  const nodes = [];
+  if (root.nodeType === Node.ELEMENT_NODE && root.matches('[data-i18n]')) nodes.push(root);
+  root.querySelectorAll?.('[data-i18n]').forEach((node) => nodes.push(node));
+  for (const node of nodes) {
+    const key = node.dataset.i18n;
+    const value = t(key, node.dataset.i18nFallback || node.textContent);
+    const attribute = node.dataset.i18nAttr;
+    if (attribute) {
+      if (node.getAttribute(attribute) !== value) node.setAttribute(attribute, value);
+    } else if (node.textContent !== value) {
+      node.textContent = value;
+    }
+  }
+  document.querySelectorAll('#tabs a[data-route]').forEach((link) => {
+    const strong = link.querySelector('.nav-link-copy strong');
+    const label = strong?.textContent || '';
+    link.title = label;
+    link.setAttribute('aria-label', label);
+  });
+}
+
+function looksTranslatable(value) {
+  value = String(value || '').trim();
+  if (!value || value.length < 2 || value.length > 1600) return false;
+  if (/^(?:https?:\/\/|mailto:|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,})/i.test(value)) return false;
+  if (/^[\d\s.,:;/%$€£₹+\-–—()[\]{}<>|]+$/.test(value)) return false;
+  if (/^(?:[a-z0-9_.-]+\/){1,}[a-z0-9_.-]+$/i.test(value)) return false;
+  return /\p{L}/u.test(value);
+}
+
+function shouldTranslateText(node) {
+  const parent = node.parentElement;
+  if (!parent) return false;
+  if (parent.closest('script, style, code, pre, kbd, samp, textarea, input, [data-i18n], [data-i18n-skip], [data-user-content], .trace-raw')) return false;
+  return looksTranslatable(node.nodeValue);
+}
+
+function collectTextNodes(root) {
+  const nodes = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    if (shouldTranslateText(node)) nodes.push(node);
+    node = walker.nextNode();
+  }
+  return nodes;
+}
+
+function shouldTranslateAttribute(element, name) {
+  if (!element.hasAttribute(name) || element.hasAttribute('data-i18n')) return false;
+  if (element.closest('[data-i18n-skip], [data-user-content], .trace-raw')) return false;
+  // Collapsed navigation titles are copied from the already-localized menu
+  // label, so sending them through the model again would double-translate.
+  if (name === 'title' && element.matches('#tabs a[data-route]')) return false;
+  return looksTranslatable(element.getAttribute(name));
+}
+
+function collectAttributeTargets(root) {
+  const elements = [];
+  if (root.nodeType === Node.ELEMENT_NODE) elements.push(root);
+  root.querySelectorAll?.('*').forEach((element) => elements.push(element));
+  const targets = [];
+  for (const element of elements) {
+    for (const name of TRANSLATABLE_ATTRIBUTES) {
+      if (shouldTranslateAttribute(element, name)) targets.push({ element, name });
+    }
+  }
+  return targets;
+}
+
+function sourceText(node) {
+  if (!textSources.has(node)) textSources.set(node, node.nodeValue);
+  return textSources.get(node);
+}
+
+function weakAttributeMap(store, element) {
+  if (!store.has(element)) store.set(element, new Map());
+  return store.get(element);
+}
+
+function sourceAttribute(element, name) {
+  const sources = weakAttributeMap(attributeSources, element);
+  if (!sources.has(name)) sources.set(name, element.getAttribute(name));
+  return sources.get(name);
+}
+
+function localeForTarget(target) {
+  if (target.node) return textLocales.get(target.node);
+  return weakAttributeMap(attributeLocales, target.element).get(target.name);
+}
+
+function applyTarget(target, value, targetLanguage) {
+  if (target.node) {
+    if (!target.node.isConnected) return;
+    if (target.node.nodeValue !== value) target.node.nodeValue = value;
+    textLocales.set(target.node, targetLanguage);
+    return;
+  }
+  if (!target.element.isConnected) return;
+  if (target.element.getAttribute(target.name) !== value) target.element.setAttribute(target.name, value);
+  weakAttributeMap(attributeLocales, target.element).set(target.name, targetLanguage);
+}
+
+function restoreEnglish(root) {
+  for (const node of collectTextNodes(root)) {
+    if (textSources.has(node) && node.nodeValue !== textSources.get(node)) node.nodeValue = textSources.get(node);
+    textLocales.set(node, 'en');
+  }
+  for (const { element, name } of collectAttributeTargets(root)) {
+    const sources = attributeSources.get(element);
+    if (sources?.has(name) && element.getAttribute(name) !== sources.get(name)) {
+      element.setAttribute(name, sources.get(name));
+    }
+    weakAttributeMap(attributeLocales, element).set(name, 'en');
+  }
+}
+
+function cachedTranslation(targetLocale, source) {
+  return translationCache.get(`${targetLocale}\u0000${source}`);
+}
+
+async function translateDynamicText(root = document.body) {
+  localizationPasses += 1;
+  try {
+    const targetLocale = locale;
+    const language = languageOf(targetLocale);
+    const generation = ++translationGeneration;
+    if (language === 'en') {
+      restoreEnglish(root);
+      return;
+    }
+
+    const targets = [
+      ...collectTextNodes(root).map((node) => ({ node })),
+      ...collectAttributeTargets(root),
+    ].filter((target) => localeForTarget(target) !== targetLocale);
+    const bySource = new Map();
+    for (const target of targets) {
+      const source = target.node
+        ? sourceText(target.node)
+        : sourceAttribute(target.element, target.name);
+      const cached = cachedTranslation(targetLocale, source);
+      if (cached) {
+        applyTarget(target, cached, targetLocale);
+        continue;
+      }
+      if (!bySource.has(source)) bySource.set(source, []);
+      bySource.get(source).push(target);
+    }
+
+    const entries = [...bySource.entries()];
+    let usedFallback = false;
+    for (let index = 0; index < entries.length; index += 40) {
+      if (generation !== translationGeneration || locale !== targetLocale) return;
+      const batch = entries.slice(index, index + 40);
+      const sources = batch.map(([source]) => source);
+      let response;
+      try {
+        response = await api.translateUi({ locale: targetLocale, texts: sources });
+      } catch (_) {
+        markTranslationDegraded();
+        return;
+      }
+      const translated = Array.isArray(response.translations) ? response.translations : [];
+      const fallback = response.fallback === true;
+      if (fallback) usedFallback = true;
+      for (let offset = 0; offset < batch.length; offset += 1) {
+        const [source, sourceTargets] = batch[offset];
+        const value = String(translated[offset] || source);
+        if (!fallback) translationCache.set(`${targetLocale}\u0000${source}`, value);
+        for (const target of sourceTargets) {
+          if (locale !== targetLocale) continue;
+          // A local-model outage must not make English sticky under a Gujarati
+          // locale. Keep these targets eligible for the bounded retry below.
+          applyTarget(target, value, fallback ? 'fallback' : targetLocale);
+        }
+      }
+      if (fallback) break;
+    }
+    if (usedFallback) {
+      markTranslationDegraded();
+    } else if (root === document || root === document.body) {
+      markTranslationHealthy();
+    }
+  } finally {
+    localizationPasses -= 1;
+    // Translation mutates text and attributes by design. Discard those records
+    // so the observer only reacts to application content, not to our own pass.
+    if (localizationPasses === 0) observer?.takeRecords();
+  }
+}
+
+function markTranslationHealthy() {
+  const changed = translationDegraded;
+  translationDegraded = false;
+  fallbackRetryAttempts = 0;
+  window.clearTimeout(fallbackRetryTimer);
+  fallbackRetryTimer = null;
+  if (changed) renderLanguageControl();
+}
+
+function markTranslationDegraded() {
+  if (!translationDegraded) {
+    translationDegraded = true;
+    renderLanguageControl();
+  }
+  if (fallbackRetryAttempts >= 4 || fallbackRetryTimer) return;
+  const delay = Math.min(60_000, 16_000 * (2 ** fallbackRetryAttempts));
+  fallbackRetryAttempts += 1;
+  fallbackRetryTimer = window.setTimeout(() => {
+    fallbackRetryTimer = null;
+    translateDynamicText(document.body).catch(() => {});
+  }, delay);
+}
+
+export function localize(root = document) {
+  applyStaticTranslations(root);
+  window.clearTimeout(translationTimer);
+  translationTimer = window.setTimeout(() => translateDynamicText(root).catch(() => {}), 30);
+}
+
+function renderLanguageControl() {
+  const host = document.getElementById('language-control');
+  if (!host) return;
+  host.dataset.i18nSkip = 'true';
+  const select = document.createElement('select');
+  select.id = 'language-select';
+  select.className = 'language-select';
+  select.setAttribute('aria-label', t('language'));
+
+  const normalized = [];
+  const seen = new Set();
+  const saved = normalizeLocale(locale);
+  const candidates = [...(suggestions.length ? suggestions : FALLBACK_LOCALES)];
+  if (saved && !candidates.some((item) => normalizeLocale(item.tag) === saved)) {
+    candidates.unshift({ tag: saved, label: saved, nativeLabel: saved });
+  }
+  for (const item of candidates) {
+    const tag = normalizeLocale(item.tag);
+    if (!tag || seen.has(tag) || normalized.length >= MAX_SUGGESTIONS) continue;
+    seen.add(tag);
+    normalized.push({ ...item, tag });
+  }
+
+  for (const item of normalized) {
+    const option = document.createElement('option');
+    option.value = item.tag;
+    option.textContent = item.nativeLabel || item.label || item.tag;
+    option.title = item.label || item.tag;
+    option.selected = item.tag === locale;
+    select.append(option);
+  }
+  select.addEventListener('change', () => setLocale(select.value));
+  const warning = translationDegraded
+    ? document.createElement('span')
+    : null;
+  if (warning) {
+    warning.className = 'language-warning';
+    warning.dataset.i18nSkip = 'true';
+    warning.textContent = '⚠';
+    warning.title = t('translationUnavailable');
+    warning.setAttribute('aria-label', t('translationUnavailable'));
+  }
+  host.replaceChildren(select, ...(warning ? [warning] : []));
+  host.title = t('language');
+}
+
+export async function setLocale(value, { persist = true } = {}) {
+  const next = normalizeLocale(value) || DEFAULT_LOCALE;
+  if (next === locale && document.documentElement.lang === next) return;
+  locale = next;
+  markTranslationHealthy();
+  if (persist) {
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch (_) {
+      // The in-memory selection remains active when browser storage is blocked.
+    }
+  }
+  applyDocumentLocale();
+  renderLanguageControl();
+  localize(document);
+  window.dispatchEvent(new CustomEvent('ai-fleet:locale-changed', { detail: { locale } }));
+}
+
+async function loadSuggestions() {
+  try {
+    const response = await api.getLocaleSuggestions(navigator.languages || [navigator.language]);
+    if (Array.isArray(response.suggestions) && response.suggestions.length) {
+      suggestions = response.suggestions.slice(0, MAX_SUGGESTIONS);
+    }
+    if (!normalizeLocale(readSavedLocale()) && response.locale) {
+      locale = normalizeLocale(response.locale) || locale;
+    }
+  } catch (_) {
+    suggestions = [...FALLBACK_LOCALES];
+  }
+}
+
+function watchDynamicContent() {
+  if (observer) observer.disconnect();
+  observer = new MutationObserver((records) => {
+    if (localizationPasses > 0) return;
+    if (!records.some((record) => record.addedNodes.length || record.type === 'characterData' || record.type === 'attributes')) return;
+    for (const record of records) {
+      if (record.type === 'characterData') {
+        // Application-owned updates are new English source copy. Translation
+        // writes never reach this branch because owned records are discarded.
+        textSources.delete(record.target);
+        textLocales.delete(record.target);
+      } else if (record.type === 'attributes' && record.attributeName) {
+        attributeSources.get(record.target)?.delete(record.attributeName);
+        attributeLocales.get(record.target)?.delete(record.attributeName);
+      }
+    }
+    localize(document.body);
+  });
+  observer.observe(document.body, {
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: TRANSLATABLE_ATTRIBUTES,
+    subtree: true,
+  });
+}
+
+export async function initializeI18n() {
+  applyDocumentLocale();
+  await loadSuggestions();
+  applyDocumentLocale();
+  renderLanguageControl();
+  localize(document);
+  watchDynamicContent();
+  return { locale, suggestions: [...suggestions] };
+}
