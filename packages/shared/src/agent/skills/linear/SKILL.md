@@ -1,6 +1,6 @@
 ---
 name: linear
-description: Interact with Linear — read the issue, manage the single Workpad comment, and transition ticket state — using the injected linear_graphql tool. Use for every Linear read/write.
+description: Interact with Linear — read the issue and manage its single Workpad comment — using the injected linear_graphql tool. Use for every Linear read/write.
 ---
 
 # linear
@@ -30,19 +30,9 @@ query($id: String!) {
 - Update it in place as work progresses: `commentUpdate(id: $cid, input: { body: $body })`.
 - Never post separate "done"/summary comments — keep all progress in the Workpad.
 
-## Transition ticket state
-
-Resolve state ids from the issue's team, then update:
-
-```graphql
-query($id: String!) { issue(id: $id) { team { states { nodes { id name } } } } }
-mutation($id: String!, $stateId: String!) {
-  issueUpdate(id: $id, input: { stateId: $stateId }) { success }
-}
-```
-
 ## Rules
 
-- Move state only when the matching quality bar is met.
+- Never move the issue state or add/remove issue labels. The orchestrator owns
+  that lifecycle and applies the final outcome after the coding run.
 - Never edit the issue description for planning/progress — use the Workpad.
 - Keep issue text concise, specific, and reviewer-oriented.

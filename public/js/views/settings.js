@@ -30,6 +30,7 @@ export async function renderSettings(view) {
     el('div', { class: 'settings-grid' }, [
       el('div', { class: 'settings-col' }, [
         keysSection(settings),
+        integrationsSection(settings),
         llmSection({
           settings,
           presets,
@@ -86,7 +87,6 @@ function keysSection(settings) {
   const status = el('div', { class: 'muted', style: 'font-size:13px;margin-top:6px' });
 
   const linearInput = pwd(settings.hasKey ? `Saved: ${settings.maskedKey}` : 'lin_api_…');
-  const githubInput = pwd(settings.hasGithubToken ? `Saved: ${settings.maskedGithubToken}` : 'github_pat_… / ghp_…');
   const langsmithInput = pwd(settings.hasLangsmithKey ? `Saved: ${settings.maskedLangsmithKey}` : 'lsv2_…');
   const hostInput = el('input', { value: settings.langsmithEndpoint || '', placeholder: 'https://api.smith.langchain.com' });
   const projectInput = el('input', { value: settings.langsmithProject || '', placeholder: 'linear-manager' });
@@ -101,11 +101,6 @@ function keysSection(settings) {
         const r = await api.saveKey(linearInput.value.trim());
         linearInput.value = '';
         linearInput.placeholder = `Saved: ${r.maskedKey}`;
-      }
-      if (githubInput.value.trim()) {
-        const gr = await api.saveGithubToken(githubInput.value.trim());
-        githubInput.value = '';
-        githubInput.placeholder = gr.hasGithubToken ? `Saved: ${gr.maskedGithubToken}` : 'github_pat_… / ghp_…';
       }
       const lsPayload = {
         langsmithProject: projectInput.value.trim() || 'linear-manager',
@@ -168,10 +163,6 @@ function keysSection(settings) {
       el('a', { href: 'https://linear.app/settings/api', target: '_blank', style: 'color:var(--accent-2)' }, 'linear.app/settings/api'),
       '.',
     ]),
-    el('div', { class: 'subhead' }, 'GitHub (code-writer)'),
-    field('GitHub Token', githubInput, [
-      'Fine-grained PAT with Contents + Pull requests write on the code repo. Used by the code-writer to clone/push; stored server-side, never returned.',
-    ]),
     el('div', { class: 'subhead' }, 'LangSmith Tracing'),
     field('LangSmith API Key', langsmithInput),
     field('Host / Endpoint', hostInput),
@@ -180,6 +171,163 @@ function keysSection(settings) {
     el('div', { class: 'row' }, [saveBtn, settings.hasKey ? removeLinear : null]),
     status,
     el('p', { class: 'muted', style: 'font-size:12px' }, 'All keys are stored server-side and never returned to the browser.'),
+  ]);
+}
+
+/* ------------------------ Tool integrations ---------------------------- */
+
+function integrationsSection(settings) {
+  const planningProvider = el('select', {}, [
+    el('option', { value: 'linear', selected: settings.planningProvider === 'linear' }, 'Linear'),
+    el('option', { value: 'jira', selected: settings.planningProvider === 'jira' }, 'Jira'),
+    el('option', { value: 'asana', selected: settings.planningProvider === 'asana' }, 'Asana'),
+  ]);
+  const repositoryProvider = el('select', {}, [
+    el('option', { value: 'github', selected: settings.repositoryProvider !== 'gitlab' }, 'GitHub'),
+    el('option', { value: 'gitlab', selected: settings.repositoryProvider === 'gitlab' }, 'GitLab'),
+  ]);
+
+  const repositoryUrl = el('input', {
+    value: settings.repositoryUrl || '',
+    placeholder: settings.repositoryProvider === 'gitlab' ? 'group/project' : 'owner/repository',
+  });
+  const githubToken = pwd(settings.hasGithubToken ? `Saved: ${settings.maskedGithubToken}` : 'github_pat_… / ghp_…');
+  const gitlabToken = pwd(settings.hasGitlabToken ? `Saved: ${settings.maskedGitlabToken}` : 'glpat-…');
+  const jiraBaseUrl = el('input', { value: settings.jiraBaseUrl || '', placeholder: 'https://company.atlassian.net' });
+  const jiraEmail = el('input', { value: settings.jiraEmail || '', type: 'email', placeholder: 'you@company.com' });
+  const jiraToken = pwd(settings.hasJiraToken ? `Saved: ${settings.maskedJiraToken}` : 'Jira API token');
+  const asanaWorkspaceId = el('input', { value: settings.asanaWorkspaceId || '', placeholder: 'Workspace GID' });
+  const asanaToken = pwd(settings.hasAsanaToken ? `Saved: ${settings.maskedAsanaToken}` : 'Asana personal access token');
+  const status = el('div', { class: 'muted', style: 'font-size:12px;min-height:18px' });
+
+  const removalControl = (saved, label, tokenInput) => {
+    const checkbox = el('input', { type: 'checkbox', style: 'width:auto' });
+    const row = el('label', { class: 'row connector-remove', style: 'gap:8px;cursor:pointer' }, [
+      checkbox,
+      el('span', {}, label),
+    ]);
+    row.hidden = !saved;
+    checkbox.addEventListener('change', () => {
+      tokenInput.disabled = checkbox.checked;
+      if (checkbox.checked) tokenInput.value = '';
+    });
+    return { checkbox, row, tokenInput };
+  };
+  const clearGithub = removalControl(settings.hasGithubToken, 'Remove saved GitHub token', githubToken);
+  const clearGitlab = removalControl(settings.hasGitlabToken, 'Remove saved GitLab token', gitlabToken);
+  const clearJira = removalControl(settings.hasJiraToken, 'Remove saved Jira token', jiraToken);
+  const clearAsana = removalControl(settings.hasAsanaToken, 'Remove saved Asana token', asanaToken);
+
+  const linearFields = el('div', {}, [
+    el('div', { class: 'connector-note' }, [
+      el('strong', {}, settings.hasKey ? 'Linear is connected.' : 'Linear needs a key.'),
+      el('span', {}, settings.hasKey
+        ? ' Projects, planning, and agent updates use the Linear key saved above.'
+        : ' Save a Linear key in API Keys & Connection to use project automation.'),
+    ]),
+  ]);
+  const jiraFields = el('div', {}, [
+    field('Jira site', jiraBaseUrl),
+    field('Account email', jiraEmail),
+    field('API token', jiraToken, 'Saved server-side. The token is never returned to this page.'),
+    clearJira.row,
+  ]);
+  const asanaFields = el('div', {}, [
+    field('Workspace ID', asanaWorkspaceId),
+    field('Personal access token', asanaToken, 'Saved server-side. The token is never returned to this page.'),
+    clearAsana.row,
+  ]);
+  const githubFields = el('div', {}, [
+    field('GitHub token', githubToken, 'Fine-grained token with repository contents and pull-request access.'),
+    clearGithub.row,
+  ]);
+  const gitlabFields = el('div', {}, [
+    field('GitLab token', gitlabToken, 'Project token or personal token with repository write access.'),
+    clearGitlab.row,
+  ]);
+
+  const syncVisibility = () => {
+    linearFields.hidden = planningProvider.value !== 'linear';
+    jiraFields.hidden = planningProvider.value !== 'jira';
+    asanaFields.hidden = planningProvider.value !== 'asana';
+    githubFields.hidden = repositoryProvider.value !== 'github';
+    gitlabFields.hidden = repositoryProvider.value !== 'gitlab';
+    repositoryUrl.placeholder = repositoryProvider.value === 'gitlab' ? 'group/project' : 'owner/repository';
+  };
+  planningProvider.addEventListener('change', syncVisibility);
+  repositoryProvider.addEventListener('change', syncVisibility);
+  syncVisibility();
+
+  const save = el('button', { class: 'primary' }, 'Save integrations');
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    save.textContent = 'Saving…';
+    status.textContent = '';
+    const payload = {
+      planningProvider: planningProvider.value,
+      repositoryProvider: repositoryProvider.value,
+      repositoryUrl: repositoryUrl.value.trim(),
+      jiraBaseUrl: jiraBaseUrl.value.trim(),
+      jiraEmail: jiraEmail.value.trim(),
+      asanaWorkspaceId: asanaWorkspaceId.value.trim(),
+      clearGithubToken: clearGithub.checkbox.checked,
+      clearGitlabToken: clearGitlab.checkbox.checked,
+      clearJiraToken: clearJira.checkbox.checked,
+      clearAsanaToken: clearAsana.checkbox.checked,
+    };
+    if (githubToken.value.trim()) payload.githubToken = githubToken.value.trim();
+    if (gitlabToken.value.trim()) payload.gitlabToken = gitlabToken.value.trim();
+    if (jiraToken.value.trim()) payload.jiraApiToken = jiraToken.value.trim();
+    if (asanaToken.value.trim()) payload.asanaAccessToken = asanaToken.value.trim();
+    try {
+      const next = await api.saveIntegrations(payload);
+      githubToken.value = '';
+      gitlabToken.value = '';
+      jiraToken.value = '';
+      asanaToken.value = '';
+      githubToken.placeholder = next.hasGithubToken ? `Saved: ${next.maskedGithubToken}` : 'github_pat_… / ghp_…';
+      gitlabToken.placeholder = next.hasGitlabToken ? `Saved: ${next.maskedGitlabToken}` : 'glpat-…';
+      jiraToken.placeholder = next.hasJiraToken ? `Saved: ${next.maskedJiraToken}` : 'Jira API token';
+      asanaToken.placeholder = next.hasAsanaToken ? `Saved: ${next.maskedAsanaToken}` : 'Asana personal access token';
+      for (const [control, saved] of [
+        [clearGithub, next.hasGithubToken],
+        [clearGitlab, next.hasGitlabToken],
+        [clearJira, next.hasJiraToken],
+        [clearAsana, next.hasAsanaToken],
+      ]) {
+        control.checkbox.checked = false;
+        control.tokenInput.disabled = false;
+        control.row.hidden = !saved;
+      }
+      status.textContent = 'Integration choices saved.';
+      status.style.color = 'var(--green)';
+      toast('Integrations saved.', 'ok');
+      window.dispatchEvent(new Event('lm:connection-changed'));
+    } catch (err) {
+      status.textContent = err.message;
+      status.style.color = 'var(--red)';
+      toast(err.message, 'err');
+    } finally {
+      save.disabled = false;
+      save.textContent = 'Save integrations';
+    }
+  });
+
+  const repoName = settings.repositoryProvider === 'gitlab' ? 'GitLab' : 'GitHub';
+  const planName = ({ linear: 'Linear', jira: 'Jira', asana: 'Asana' })[settings.planningProvider] || 'Linear';
+  return section('Tool integrations', `${planName} · ${repoName}`, true, [
+    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Save planning-connector and repository credentials on this server. Live project views and scheduled planning remain Linear-backed; Jira and Asana are ready as stored connector choices for routing extensions.'),
+    el('div', { class: 'subhead' }, 'Project planning'),
+    field('Planning tool', planningProvider),
+    linearFields,
+    jiraFields,
+    asanaFields,
+    el('div', { class: 'subhead' }, 'Code repository'),
+    field('Repository host', repositoryProvider),
+    field('Default repository', repositoryUrl, 'Use owner/name, group/project, or a GitHub/GitLab Git URL.'),
+    githubFields,
+    gitlabFields,
+    el('div', { class: 'row' }, [save, status]),
   ]);
 }
 

@@ -2,54 +2,16 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
+const crypto = require('crypto');
 const { CONFIG } = require('../config');
-
-const execFileP = promisify(execFile);
-
-/**
- * Isolated per-ticket git workspace lifecycle for the code-writer agent
- * (equivalent to Symphony's workspace root + after_create clone hook). Each
- * ticket gets its own clone under CONFIG.CODER.workspaceRoot so runs never
- * touch each other or the user's repos.
- *
- * Skills are installed into the workspace by the agent framework (which knows
- * the coding workflow's skill list), not here.
- */
-
-async function run(cmd, args, cwd) {
-  const { stdout } = await execFileP(cmd, args, { cwd, maxBuffer: 16 * 1024 * 1024 });
-  return stdout;
-}
-
-async function git(args, cwd, env) {
-  const { stdout } = await execFileP('git', args, { cwd, env, maxBuffer: 16 * 1024 * 1024 });
-  return stdout;
-}
-
-const GIT_TOKEN_ENV = 'TECHSYMPHONY_GIT_TOKEN';
+const { RepositoryBroker, buildSafeAgentEnv } = require('./repository-broker');
 
 /**
- * Git credential helper that supplies the stored GitHub token from a private env
- * var at call time. Persisted into the repo config so the coding agent's own git
- * ops (push/pull) authenticate too — WITHOUT ever writing the token into
- * .git/config or exporting it as GH_TOKEN/GITHUB_TOKEN. The GitHub CLI treats
- * GH_TOKEN/GITHUB_TOKEN as API credentials, and a clone/push-only token can make
- * PR creation fail before gh falls back to its normal keyring auth.
+ * Per-ticket/per-project workspaces for the code-writer agent. Credentialed
+ * repository operations are delegated to RepositoryBroker; the checkout only
+ * contains a canonical, tokenless origin and the shell receives a small
+ * allowlisted environment.
  */
-const GIT_CREDENTIAL_HELPER =
-  `!f() { test "$1" = get && test -n "$${GIT_TOKEN_ENV}" && printf 'username=x-access-token\\npassword=%s\\n' "$${GIT_TOKEN_ENV}"; }; f`;
-
-function buildGitAuthEnv(baseEnv = process.env, githubToken = '') {
-  const env = { ...baseEnv };
-  if (githubToken) {
-    delete env.GH_TOKEN;
-    delete env.GITHUB_TOKEN;
-    env[GIT_TOKEN_ENV] = githubToken;
-  }
-  return env;
-}
 
 /** Slug for a filesystem dir — lowercased, alnum + hyphen only (no path traversal). */
 function sanitizeSlug(name) {
@@ -73,125 +35,183 @@ function sanitizeBranch(name) {
   return b || 'task';
 }
 
+/** Stable project workspace name; the id digest prevents same-name collisions. */
+function scopedProjectSlug(name, id) {
+  const slug = sanitizeSlug(name || id);
+  const stableId = String(id || name || 'project');
+  const digest = crypto.createHash('sha256').update(stableId).digest('hex').slice(0, 10);
+  return `${slug}-${digest}`;
+}
+
 /**
- * Parse a GitHub repo reference into owner/name + a tokenless https URL. Accepts a
- * bare `owner/name`, an https URL, or an ssh URL — all resolved to a github.com
- * https URL (so an operator-supplied repo can't point clones at an arbitrary host).
+ * Parse a GitHub/GitLab repo reference into a display name + tokenless HTTPS URL.
+ * Bare namespace/repo values use the selected provider. Explicit URLs are
+ * restricted to the selected official host; GitHub has exactly owner/repo while
+ * GitLab may contain nested groups.
  */
-function repoParts(repoUrl) {
+function repoParts(repoUrl, selectedProvider = 'github') {
   const s = String(repoUrl || '').trim();
-  const SEG = '[A-Za-z0-9_.-]+';
-  // Bare "owner/name".
-  let m = s.match(new RegExp(`^(${SEG})/(${SEG}?)(?:\\.git)?$`));
-  if (m) return { owner: m[1], name: m[2], https: `https://github.com/${m[1]}/${m[2]}.git` };
-  // https:// or git@ URL.
-  m = s.match(/[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?$/);
-  if (m) return { owner: m[1], name: m[2], https: `https://github.com/${m[1]}/${m[2]}.git` };
+  const provider = String(selectedProvider || '').toLowerCase();
+  if (provider !== 'github' && provider !== 'gitlab') return null;
+  const expectedHost = provider === 'gitlab' ? 'gitlab.com' : 'github.com';
+  const cleanPath = (value) => String(value || '').replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '');
+  const fromPath = (host, value) => {
+    const repoPath = cleanPath(value);
+    const segments = repoPath.split('/').filter(Boolean);
+    if (host !== expectedHost) return null;
+    if (
+      segments.length < 2 ||
+      (provider === 'github' && segments.length !== 2) ||
+      segments.some((segment) => segment === '.' || segment === '..' || !/^[A-Za-z0-9_.-]+$/.test(segment))
+    ) {
+      return null;
+    }
+    const name = segments[segments.length - 1];
+    const owner = segments.slice(0, -1).join('/');
+    return {
+      provider,
+      owner,
+      name,
+      fullName: `${owner}/${name}`,
+      https: `https://${expectedHost}/${owner}/${name}.git`,
+    };
+  };
+
+  // Bare namespace/repo (GitLab may include nested groups).
+  if (/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+(?:\.git)?$/.test(s)) return fromPath(expectedHost, s);
+
+  let match = s.match(/^https:\/\/(github\.com|gitlab\.com)\/(.+)$/i);
+  if (match) return fromPath(match[1].toLowerCase(), match[2]);
+  match = s.match(/^git@(github\.com|gitlab\.com):(.+)$/i);
+  if (match) return fromPath(match[1].toLowerCase(), match[2]);
   return null;
 }
 
-function scrub(text, secret) {
-  const s = String(text || '');
-  return secret ? s.split(secret).join('***') : s;
+function createBroker({ root, workDir, branch, parts, repositoryToken, onStep }) {
+  return new RepositoryBroker({
+    provider: parts.provider,
+    repository: parts,
+    token: repositoryToken,
+    workspaceRoot: root,
+    workDir,
+    branch,
+    label: CONFIG.CODER.prLabel,
+    step: onStep,
+  });
 }
 
 /**
- * Prepare the MONOREPO workspace for a planned task: one clone per project at
- * <plannedWorkspaceRoot>/<project-slug>/ (reused across the project's tasks), then
- * create/checkout a per-task branch off the default branch. Git token auth is
- * via the env-based credential helper; the token is never written to
- * config/URLs/logs and is not exposed as GH_TOKEN/GITHUB_TOKEN to `gh`.
- * @returns {Promise<{ workDir:string, branch:string, slug:string, cloned:boolean, env:object }>}
+ * Prepare the MONOREPO workspace for a planned task: one checkout per project at
+ * <plannedWorkspaceRoot>/<project-slug>/, reused across tasks, with a server-
+ * scoped repository broker controlling the current task branch.
  */
-async function preparePlannedWorkspace({ repoUrl, projectSlug, taskBranch, githubToken, onStep }) {
+async function preparePlannedWorkspace({
+  repoUrl,
+  repositoryProvider = 'github',
+  projectSlug,
+  projectId,
+  taskBranch,
+  repositoryToken = '',
+  onStep,
+}) {
   const step = typeof onStep === 'function' ? onStep : () => {};
-  const slug = sanitizeSlug(projectSlug);
+  const slug = scopedProjectSlug(projectSlug, projectId);
   const branch = sanitizeBranch(taskBranch);
   const root = CONFIG.CODER.plannedWorkspaceRoot;
   const workDir = path.join(root, slug);
-  const parts = repoParts(repoUrl);
-  const env = buildGitAuthEnv(process.env, githubToken);
+  const env = buildSafeAgentEnv(process.env, workDir);
+  const reused = fs.existsSync(path.join(workDir, '.git'));
 
-  const hasGit = fs.existsSync(path.join(workDir, '.git'));
-  let cloned = false;
-  try {
-    if (!hasGit) {
-      fs.mkdirSync(root, { recursive: true });
-      if (!parts) {
-        step('No valid CODER_REPO_URL; using an empty monorepo workspace.');
-        fs.mkdirSync(workDir, { recursive: true });
-      } else {
-        step(`Cloning ${parts.owner}/${parts.name} into monorepo workspace ${workDir}…`);
-        await git(['-c', `credential.helper=${GIT_CREDENTIAL_HELPER}`, 'clone', parts.https, workDir], root, env);
-        // Persist the helper (NOT the token) so the agent's push/pull authenticate.
-        await git(['-C', workDir, 'config', 'credential.helper', GIT_CREDENTIAL_HELPER], root, env);
-        cloned = true;
-      }
-    } else {
-      step(`Reusing monorepo workspace ${workDir}.`);
-    }
-
-    if (fs.existsSync(path.join(workDir, '.git'))) {
-      if (githubToken) {
-        // Reused project workspaces may still have the legacy GH_TOKEN-based
-        // helper. Refresh it every run so git auth and gh auth stay separated.
-        await git(['-C', workDir, 'config', 'credential.helper', GIT_CREDENTIAL_HELPER], root, env).catch(() => {});
-      }
-      await git(['-C', workDir, 'fetch', 'origin', '--prune'], root, env).catch(() => {});
-      const headRef = await git(['-C', workDir, 'symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'], root, env).catch(() => '');
-      const base = (headRef.trim().replace(/^origin\//, '')) || 'main';
-      await git(['-C', workDir, 'checkout', base], root, env).catch(() => {});
-      await git(['-C', workDir, 'pull', '--ff-only', 'origin', base], root, env).catch(() => {});
-      const exists = await git(['-C', workDir, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], root, env).then(() => true).catch(() => false);
-      if (exists) {
-        await git(['-C', workDir, 'checkout', branch], root, env);
-      } else {
-        await git(['-C', workDir, 'checkout', '-b', branch, base], root, env);
-      }
-      step(`On branch ${branch} (monorepo ${slug}).`);
-    }
-  } catch (err) {
-    step(`Monorepo workspace setup issue: ${scrub(err && err.message, githubToken)}`, 'warn');
+  if (!repoUrl) {
+    step('No repository configured; using an empty monorepo workspace.');
+    fs.mkdirSync(workDir, { recursive: true });
+    return { workDir, branch, slug, cloned: false, reused, env, repositoryBroker: null, baseBranch: null };
   }
 
-  return { workDir, branch, slug, cloned, env };
+  const parts = repoParts(repoUrl, repositoryProvider);
+  if (!parts) throw new Error('Repository must match the selected GitHub or GitLab provider.');
+  const repositoryBroker = createBroker({
+    root,
+    workDir,
+    branch,
+    parts,
+    repositoryToken,
+    onStep: step,
+  });
+  try {
+    step(`${reused ? 'Refreshing' : 'Cloning'} ${parts.fullName} through the secure repository broker…`);
+    const info = await repositoryBroker.prepare({ shallow: false });
+    return {
+      workDir,
+      branch,
+      slug,
+      cloned: !reused,
+      reused,
+      env,
+      repositoryBroker,
+      baseBranch: info.baseBranch,
+    };
+  } catch (error) {
+    repositoryBroker.dispose();
+    throw error;
+  }
 }
 
-/**
- * Prepare an isolated workspace for a ticket. Clones repoUrl (shallow) on first
- * use, reuses the existing dir on continuation.
- * @returns {Promise<{workDir:string, cloned:boolean, reused:boolean}>}
- */
-async function prepareWorkspace({ repoUrl, identifier, onStep }) {
+/** Prepare an isolated workspace and scoped branch for one ticket. */
+async function prepareWorkspace({
+  repoUrl,
+  repositoryProvider = 'github',
+  repositoryToken = '',
+  identifier,
+  onStep,
+}) {
   const step = typeof onStep === 'function' ? onStep : () => {};
-  const safe = String(identifier || 'ticket').replace(/[^A-Za-z0-9._-]/g, '-');
-  const workDir = path.join(CONFIG.CODER.workspaceRoot, safe);
-  const reused = fs.existsSync(workDir);
-  let cloned = false;
+  const safe = sanitizeSlug(identifier || 'ticket');
+  const branch = sanitizeBranch(identifier || 'ticket');
+  const root = CONFIG.CODER.workspaceRoot;
+  const workDir = path.join(root, safe);
+  const env = buildSafeAgentEnv(process.env, workDir);
+  const reused = fs.existsSync(path.join(workDir, '.git'));
 
-  if (!reused) {
+  if (!repoUrl) {
+    step('No repository configured; using an empty workspace.');
     fs.mkdirSync(workDir, { recursive: true });
-    if (repoUrl) {
-      step(`Cloning ${repoUrl} into an isolated workspace…`);
-      await run('git', ['clone', '--depth', '1', repoUrl, '.'], workDir);
-      cloned = true;
-    } else {
-      step('No CODER_REPO_URL configured; using an empty workspace.');
-    }
-  } else {
-    step(`Reusing existing workspace at ${workDir}.`);
+    return { workDir, branch, cloned: false, reused, env, repositoryBroker: null, baseBranch: null };
   }
 
-  return { workDir, cloned, reused };
+  const parts = repoParts(repoUrl, repositoryProvider);
+  if (!parts) throw new Error('Repository must match the selected GitHub or GitLab provider.');
+  const repositoryBroker = createBroker({
+    root,
+    workDir,
+    branch,
+    parts,
+    repositoryToken,
+    onStep: step,
+  });
+  try {
+    step(`${reused ? 'Refreshing' : 'Cloning'} ${parts.fullName} through the secure repository broker…`);
+    const info = await repositoryBroker.prepare({ shallow: true });
+    return {
+      workDir,
+      branch,
+      cloned: !reused,
+      reused,
+      env,
+      repositoryBroker,
+      baseBranch: info.baseBranch,
+    };
+  } catch (error) {
+    repositoryBroker.dispose();
+    throw error;
+  }
 }
 
 module.exports = {
   prepareWorkspace,
   preparePlannedWorkspace,
   sanitizeSlug,
+  scopedProjectSlug,
   sanitizeBranch,
   repoParts,
-  buildGitAuthEnv,
-  GIT_CREDENTIAL_HELPER,
-  GIT_TOKEN_ENV,
 };

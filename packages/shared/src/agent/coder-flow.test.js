@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const { parseVerdict } = require('./coder-orchestrator');
+const { activeRepositoryBranch, assertOpenSweRepositoryProvider } = require('./coder');
 const { pickStateByType } = require('../linear');
 
 /* ------------------------------ parseVerdict ---------------------------- */
@@ -53,6 +54,17 @@ test('parseVerdict defaults to insufficient when no verdict is present', () => {
 test('parseVerdict defaults to insufficient on empty/nullish input', () => {
   assert.strictEqual(parseVerdict('').status, 'insufficient');
   assert.strictEqual(parseVerdict(undefined).status, 'insufficient');
+});
+
+test('OpenSWE fails closed for a GitLab repository selection', () => {
+  assert.doesNotThrow(() => assertOpenSweRepositoryProvider('github'));
+  assert.throws(() => assertOpenSweRepositoryProvider('gitlab'), /GitHub-only/);
+});
+
+test('coder results report the broker branch after an automatic retry rotation', () => {
+  const broker = { publicInfo: () => ({ branch: 'task-123-retry-17' }) };
+  assert.strictEqual(activeRepositoryBranch('task-123', broker), 'task-123-retry-17');
+  assert.strictEqual(activeRepositoryBranch('task-123', null), 'task-123');
 });
 
 /* ----------------------------- pickStateByType -------------------------- */
