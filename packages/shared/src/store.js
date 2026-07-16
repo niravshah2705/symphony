@@ -105,6 +105,18 @@ const DEFAULT_AGENT_CONFIG = Object.freeze({
 const DEFAULT_STORE = Object.freeze({
   settings: {
     linearApiKey: '',
+    // External work-management and source-control connectors. The selected
+    // providers are public UI preferences; every credential remains in this
+    // server-side store and is only exposed through masked status fields.
+    planningProvider: 'linear',
+    jiraBaseUrl: '',
+    jiraEmail: '',
+    jiraApiToken: '',
+    asanaWorkspaceId: '',
+    asanaAccessToken: '',
+    repositoryProvider: 'github',
+    repositoryUrl: '',
+    gitlabToken: '',
     // Deep-agent LLM providers. Two role slots, each choosing one of the four
     // providers ('ollama' / 'lmstudio' (local) or 'codex' / 'claude' (OAuth)):
     //   llmProvider      — GLOBAL (hosted) slot: used by the planner and by the
@@ -167,6 +179,7 @@ const DEFAULT_STORE = Object.freeze({
       name: 'OTA',
       description: 'Online Travel Agency — initial business.',
       projectId: null,
+      repoProvider: 'github',
       createdAt: '2026-07-01T00:00:00.000Z',
     },
   ],
@@ -183,6 +196,18 @@ function ensureDataDir() {
 
 function cloneDefault() {
   return JSON.parse(JSON.stringify(DEFAULT_STORE));
+}
+
+/**
+ * Back-compat for business repositories created before provider identity was
+ * persisted. Those references were explicitly GitHub-only, so pin them to
+ * GitHub instead of interpreting them through the current global connector.
+ */
+function migrateBusinessRepositories(businesses) {
+  return businesses.map((business) => {
+    if (!business || typeof business !== 'object' || business.repoProvider !== undefined) return business;
+    return { ...business, repoProvider: 'github' };
+  });
 }
 
 function readStore() {
@@ -233,7 +258,7 @@ function readStore() {
       ...base,
       ...parsed,
       settings,
-      businesses: Array.isArray(parsed.businesses) ? parsed.businesses : base.businesses,
+      businesses: migrateBusinessRepositories(Array.isArray(parsed.businesses) ? parsed.businesses : base.businesses),
       assumedRole: parsed.assumedRole || null,
       agentConfig: migrateAgentConfig({ ...base.agentConfig, ...(parsed.agentConfig || {}) }),
       jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
@@ -297,6 +322,49 @@ function getGithubToken() {
 
 function setGithubToken(githubToken) {
   return patchSettings({ githubToken: String(githubToken || '') });
+}
+
+/** Selected repository connector, including the matching private token. */
+function getRepositoryConfig() {
+  const settings = readStore().settings;
+  const provider = settings.repositoryProvider === 'gitlab' ? 'gitlab' : 'github';
+  return {
+    provider,
+    url: String(settings.repositoryUrl || ''),
+    token: provider === 'gitlab' ? String(settings.gitlabToken || '') : String(settings.githubToken || ''),
+  };
+}
+
+function getRepositoryToken(provider) {
+  if (provider === undefined) return getRepositoryConfig().token;
+  const settings = readStore().settings;
+  if (provider === 'github') return String(settings.githubToken || '');
+  if (provider === 'gitlab') return String(settings.gitlabToken || '');
+  return '';
+}
+
+/** Selected planning connector. Credentials are intentionally returned only server-side. */
+function getPlanningConfig() {
+  const settings = readStore().settings;
+  const provider = ['linear', 'jira', 'asana'].includes(settings.planningProvider)
+    ? settings.planningProvider
+    : 'linear';
+  if (provider === 'jira') {
+    return {
+      provider,
+      baseUrl: String(settings.jiraBaseUrl || ''),
+      email: String(settings.jiraEmail || ''),
+      token: String(settings.jiraApiToken || ''),
+    };
+  }
+  if (provider === 'asana') {
+    return {
+      provider,
+      workspaceId: String(settings.asanaWorkspaceId || ''),
+      token: String(settings.asanaAccessToken || ''),
+    };
+  }
+  return { provider, token: String(settings.linearApiKey || '') };
 }
 
 /* --------------------------- Codex OAuth tokens ------------------------- */
@@ -441,6 +509,7 @@ function pruneJobs(keep = 100) {
 module.exports = {
   DEFAULT_STORE,
   DEFAULT_AGENT_CONFIG,
+  migrateBusinessRepositories,
   settingsForConfiguredModel,
   applyLegacyHostedReasoningDefaults,
   readStore,
@@ -451,6 +520,9 @@ module.exports = {
   patchSettings,
   getGithubToken,
   setGithubToken,
+  getRepositoryConfig,
+  getRepositoryToken,
+  getPlanningConfig,
   getBusinessByProjectId,
   getCodexTokens,
   setCodexTokens,

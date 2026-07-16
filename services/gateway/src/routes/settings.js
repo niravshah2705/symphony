@@ -5,6 +5,7 @@ const { getApiKey, setApiKey, getSettings, patchSettings } = require('@ai-fleet/
 const { getViewer } = require('@ai-fleet/shared/linear');
 const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
 const { CONFIG } = require('@ai-fleet/shared/config');
+const { repoParts } = require('@ai-fleet/shared/agent/workspace');
 const {
   publicCatalog,
   presetForRole,
@@ -23,9 +24,28 @@ const router = express.Router();
 /** Public settings view — secrets are masked, never returned raw. */
 function publicSettings() {
   const s = getSettings();
+  const planningProvider = ['linear', 'jira', 'asana'].includes(s.planningProvider) ? s.planningProvider : 'linear';
+  const repositoryProvider = s.repositoryProvider === 'gitlab' ? 'gitlab' : 'github';
   return {
     hasKey: Boolean(s.linearApiKey),
     maskedKey: maskKey(s.linearApiKey),
+    planningProvider,
+    planningConfigured:
+      planningProvider === 'linear'
+        ? Boolean(s.linearApiKey)
+        : planningProvider === 'jira'
+          ? Boolean(s.jiraBaseUrl && s.jiraEmail && s.jiraApiToken)
+          : Boolean(s.asanaWorkspaceId && s.asanaAccessToken),
+    jiraBaseUrl: s.jiraBaseUrl || '',
+    jiraEmail: s.jiraEmail || '',
+    hasJiraToken: Boolean(s.jiraApiToken),
+    maskedJiraToken: maskKey(s.jiraApiToken),
+    asanaWorkspaceId: s.asanaWorkspaceId || '',
+    hasAsanaToken: Boolean(s.asanaAccessToken),
+    maskedAsanaToken: maskKey(s.asanaAccessToken),
+    repositoryProvider,
+    repositoryUrl: s.repositoryUrl || '',
+    repositoryConfigured: Boolean(s.repositoryUrl && (repositoryProvider === 'gitlab' ? s.gitlabToken : s.githubToken)),
     // Deep-agent provider slots. `llmProvider` = GLOBAL (hosted) slot (planner +
     // coder's hosted/unlabeled route); `localLlmProvider` = LOCAL slot (coder's
     // "local"/XS route). Each is 'ollama'/'lmstudio' (local) or 'codex'/'claude' (OAuth).
@@ -73,6 +93,8 @@ function publicSettings() {
     claudeReasoningAdapter: s.claudeReasoningAdapter || 'none',
     hasGithubToken: Boolean(s.githubToken),
     maskedGithubToken: maskKey(s.githubToken),
+    hasGitlabToken: Boolean(s.gitlabToken),
+    maskedGitlabToken: maskKey(s.gitlabToken),
     hasLangsmithKey: Boolean(s.langsmithApiKey),
     maskedLangsmithKey: maskKey(s.langsmithApiKey),
     langsmithProject: s.langsmithProject,
@@ -97,6 +119,29 @@ function normalizeHost(value, fallback) {
   } catch (_) {
     return fallback;
   }
+}
+
+/** Optional connector URL. Empty is meaningful (not configured). */
+function normalizeOptionalUrl(value, fallback = '') {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return fallback;
+    return url.origin + (url.pathname === '/' ? '' : url.pathname.replace(/\/$/, ''));
+  } catch (_) {
+    return fallback;
+  }
+}
+
+/** Tokenless repository reference: owner/name or a GitHub/GitLab HTTPS/SSH URL. */
+function sanitizeRepositoryUrl(value, fallback = '') {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+(?:\.git)?$/.test(raw)) return raw;
+  if (/^https:\/\/(?:github\.com|gitlab\.com)\/[A-Za-z0-9_.\/-]+(?:\.git)?$/.test(raw)) return raw;
+  if (/^git@(?:github\.com|gitlab\.com):[A-Za-z0-9_.\/-]+(?:\.git)?$/.test(raw)) return raw;
+  return fallback;
 }
 
 function clampInt(value, min, max, fallback) {
@@ -459,6 +504,72 @@ router.put('/github', (req, res) => {
   if (b.githubToken !== undefined) {
     patchSettings({ githubToken: String(b.githubToken).trim() });
   }
+  res.json(publicSettings());
+});
+
+// PUT /api/settings/integrations — configure the work-management and source
+// repository connectors in one atomic, server-owned settings update. Blank
+// credential fields are ignored so editing a URL never erases a saved secret;
+// explicit `clear*Token` flags are used for removal.
+router.put('/integrations', (req, res) => {
+  const b = req.body || {};
+  const current = getSettings();
+  const patch = {};
+
+  if (b.planningProvider !== undefined) {
+    const planningProvider = String(b.planningProvider).toLowerCase();
+    if (!['linear', 'jira', 'asana'].includes(planningProvider)) {
+      return res.status(400).json({ error: 'Planning provider must be Linear, Jira, or Asana.' });
+    }
+    patch.planningProvider = planningProvider;
+  }
+  if (b.repositoryProvider !== undefined) {
+    const repositoryProvider = String(b.repositoryProvider).toLowerCase();
+    if (!['github', 'gitlab'].includes(repositoryProvider)) {
+      return res.status(400).json({ error: 'Repository provider must be GitHub or GitLab.' });
+    }
+    patch.repositoryProvider = repositoryProvider;
+  }
+  if (b.repositoryUrl !== undefined) {
+    const repositoryUrl = sanitizeRepositoryUrl(b.repositoryUrl, '');
+    if (String(b.repositoryUrl || '').trim() && !repositoryUrl) {
+      return res.status(400).json({ error: 'Repository must be owner/name or a github.com/gitlab.com Git URL.' });
+    }
+    patch.repositoryUrl = repositoryUrl;
+  }
+
+  // Validate the effective pair, including provider-only API updates. This keeps
+  // a saved GitHub URL from becoming an invalid GitLab configuration (or vice
+  // versa) when a non-UI client changes only the provider field.
+  const effectiveRepositoryProvider = patch.repositoryProvider || current.repositoryProvider || 'github';
+  const effectiveRepositoryUrl = patch.repositoryUrl !== undefined ? patch.repositoryUrl : current.repositoryUrl;
+  if (effectiveRepositoryUrl && !repoParts(effectiveRepositoryUrl, effectiveRepositoryProvider)) {
+    return res.status(400).json({
+      error: `Repository URL must match the selected ${effectiveRepositoryProvider === 'gitlab' ? 'GitLab' : 'GitHub'} host.`,
+    });
+  }
+
+  if (b.jiraBaseUrl !== undefined) {
+    const jiraBaseUrl = normalizeOptionalUrl(b.jiraBaseUrl, '');
+    if (String(b.jiraBaseUrl || '').trim() && !jiraBaseUrl) {
+      return res.status(400).json({ error: 'Jira site must be a valid http(s) URL.' });
+    }
+    patch.jiraBaseUrl = jiraBaseUrl;
+  }
+  if (b.jiraEmail !== undefined) patch.jiraEmail = String(b.jiraEmail || '').trim().slice(0, 320);
+  if (b.asanaWorkspaceId !== undefined) patch.asanaWorkspaceId = String(b.asanaWorkspaceId || '').trim().slice(0, 160);
+
+  for (const [bodyKey, settingKey, clearKey] of [
+    ['githubToken', 'githubToken', 'clearGithubToken'],
+    ['gitlabToken', 'gitlabToken', 'clearGitlabToken'],
+    ['jiraApiToken', 'jiraApiToken', 'clearJiraToken'],
+    ['asanaAccessToken', 'asanaAccessToken', 'clearAsanaToken'],
+  ]) {
+    if (b[clearKey] === true) patch[settingKey] = '';
+    else if (b[bodyKey] !== undefined && String(b[bodyKey]).trim()) patch[settingKey] = String(b[bodyKey]).trim();
+  }
+
+  patchSettings(patch);
   res.json(publicSettings());
 });
 

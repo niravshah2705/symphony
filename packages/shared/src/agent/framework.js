@@ -4,9 +4,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 const { createChatModel } = require('./llm');
 const toolRegistry = require('./tools');
 const { installSafeRead } = require('./safe-read');
+const { buildSafeAgentEnv } = require('./repository-broker');
 
 /**
  * Workflow-driven deep-agent framework.
@@ -33,6 +35,8 @@ const { installSafeRead } = require('./safe-read');
 
 const SKILLS_SRC = path.join(__dirname, 'skills');
 const SKILLS_DEST_DIRNAME = '.agent-skills';
+const SKILLS_OWNER_MARKER = '.tech-symphony-managed';
+const SKILLS_OWNER_MARKER_CONTENT = 'tech-symphony-agent-skills-v1\n';
 const WORKFLOWS_DIR = path.join(__dirname, 'workflows');
 
 /**
@@ -42,19 +46,125 @@ const WORKFLOWS_DIR = path.join(__dirname, 'workflows');
  * previous "install all" behavior).
  */
 function installSkills(destRoot, skillNames) {
-  const dest = path.join(destRoot, SKILLS_DEST_DIRNAME);
+  const root = path.resolve(destRoot);
+  const rootStat = lstatOrNull(root);
+  if (!rootStat || !rootStat.isDirectory()) {
+    throw new Error(`Skill destination root is not a directory: ${root}`);
+  }
+  const realRoot = fs.realpathSync(root);
+  const dest = path.join(realRoot, SKILLS_DEST_DIRNAME);
   const available = fs.readdirSync(SKILLS_SRC).filter((n) => isDir(path.join(SKILLS_SRC, n)));
   const names = Array.isArray(skillNames) && skillNames.length ? skillNames : available;
+  for (const name of names) validateSkillName(name);
+
+  const tracked = trackedSkillPaths(root);
+  if (tracked.length) {
+    throw new Error(
+      `Refusing to install framework skills over tracked project files in ${SKILLS_DEST_DIRNAME}: ${tracked.slice(0, 3).join(', ')}`
+    );
+  }
+
+  claimSkillsDirectory(dest, realRoot);
   const paths = [];
-  for (const name of names) {
+  for (const name of new Set(names)) {
     const from = path.join(SKILLS_SRC, name);
     if (!isDir(from)) continue; // skip unknown skill names rather than throw
+    assertNoSymlinks(from);
     const to = path.join(dest, name);
+    assertContained(realRoot, to);
+    assertNoSymlinks(to);
     fs.rmSync(to, { recursive: true, force: true });
     fs.cpSync(from, to, { recursive: true });
     paths.push(`/${SKILLS_DEST_DIRNAME}/${name}/`);
   }
   return paths;
+}
+
+function validateSkillName(name) {
+  if (
+    typeof name !== 'string'
+    || !name
+    || name === '.'
+    || name === '..'
+    || path.basename(name) !== name
+    || name.includes('/')
+    || name.includes('\\')
+  ) {
+    throw new Error(`Invalid skill name: ${String(name)}`);
+  }
+}
+
+function trackedSkillPaths(root) {
+  try {
+    const output = execFileSync('git', ['-C', root, 'ls-files', '--', SKILLS_DEST_DIRNAME], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  } catch (_) {
+    // Scratch workspaces are intentionally not Git repositories.
+    return [];
+  }
+}
+
+function claimSkillsDirectory(dest, realRoot) {
+  const existing = lstatOrNull(dest);
+  if (existing) {
+    if (existing.isSymbolicLink()) {
+      throw new Error(`Refusing symbolic-link skill destination: ${dest}`);
+    }
+    if (!existing.isDirectory()) {
+      throw new Error(`Refusing non-directory skill destination: ${dest}`);
+    }
+    assertContained(realRoot, fs.realpathSync(dest));
+    assertNoSymlinks(dest);
+    const marker = path.join(dest, SKILLS_OWNER_MARKER);
+    const markerStat = lstatOrNull(marker);
+    if (!markerStat || markerStat.isSymbolicLink() || !markerStat.isFile()) {
+      throw new Error(`Refusing project-owned skill directory without a valid ownership marker: ${dest}`);
+    }
+    if (fs.readFileSync(marker, 'utf8') !== SKILLS_OWNER_MARKER_CONTENT) {
+      throw new Error(`Refusing skill directory with an invalid ownership marker: ${dest}`);
+    }
+    return;
+  }
+
+  assertContained(realRoot, dest);
+  fs.mkdirSync(dest);
+  assertContained(realRoot, fs.realpathSync(dest));
+  fs.writeFileSync(path.join(dest, SKILLS_OWNER_MARKER), SKILLS_OWNER_MARKER_CONTENT, {
+    encoding: 'utf8',
+    flag: 'wx',
+    mode: 0o600,
+  });
+}
+
+function assertContained(realRoot, candidate) {
+  const relative = path.relative(realRoot, path.resolve(candidate));
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Refusing to install skills outside destination root: ${candidate}`);
+  }
+}
+
+function assertNoSymlinks(target) {
+  const stat = lstatOrNull(target);
+  if (!stat) return;
+  if (stat.isSymbolicLink()) {
+    throw new Error(`Refusing symbolic link inside skill destination: ${target}`);
+  }
+  if (!stat.isDirectory()) return;
+  for (const entry of fs.readdirSync(target)) {
+    assertNoSymlinks(path.join(target, entry));
+  }
+}
+
+function lstatOrNull(p) {
+  try {
+    return fs.lstatSync(p);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return null;
+    throw error;
+  }
 }
 
 function isDir(p) {
@@ -69,12 +179,11 @@ function isDir(p) {
 function buildBackend(kind, rootDir, opts = {}) {
   const { FilesystemBackend, LocalShellBackend } = require('deepagents');
   if (kind === 'shell') {
-    // When an explicit env is supplied (e.g. git credential-helper variables),
-    // pass the full env and disable inheritEnv so it isn't clobbered.
-    if (opts.env) {
-      return new LocalShellBackend({ rootDir, env: opts.env, inheritEnv: false, timeout: opts.timeout || 600 });
-    }
-    return new LocalShellBackend({ rootDir, inheritEnv: true, timeout: opts.timeout || 600 });
+    // The shell never inherits the service environment. Re-sanitize even an
+    // explicitly supplied env so repository/API credentials cannot reach agent
+    // commands through a future caller by mistake.
+    const env = buildSafeAgentEnv(opts.env || process.env, rootDir);
+    return new LocalShellBackend({ rootDir, env, inheritEnv: false, timeout: opts.timeout || 600 });
   }
   return new FilesystemBackend({ rootDir });
 }

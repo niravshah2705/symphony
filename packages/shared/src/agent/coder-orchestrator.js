@@ -196,7 +196,17 @@ function dispatch(task, ctx) {
     //    startIssue/finishIssue (Linear) errors reach the outer catch → retry.
     .then((state) => {
       const issue = { ...task, state: (state && state.name) || task.state };
-      return runPlannedCoder({ issue, project: task.project, llm: ctx.llm, apiKey: ctx.apiKey, keys: ctx.keys, githubToken: ctx.githubToken, onStep: step })
+      return runPlannedCoder({
+        issue,
+        project: task.project,
+        llm: ctx.llm,
+        apiKey: ctx.apiKey,
+        keys: ctx.keys,
+        repositoryProvider: ctx.repositoryProvider,
+        repositoryToken: ctx.repositoryToken,
+        repositoryUrl: ctx.repositoryUrl,
+        onStep: step,
+      })
         .then((r) => ({ r, verdict: parseVerdict(r && r.finalText) }))
         .catch((err) => {
           const message = err && err.message ? err.message : String(err);
@@ -256,7 +266,14 @@ async function pollOnce() {
     return;
   }
 
-  const ctx = { apiKey: settings.linearApiKey, keys: buildKeys(settings), githubToken: store.getGithubToken() };
+  const repository = store.getRepositoryConfig();
+  const ctx = {
+    apiKey: settings.linearApiKey,
+    keys: buildKeys(settings),
+    repositoryProvider: repository.provider,
+    repositoryToken: repository.token,
+    repositoryUrl: repository.url,
+  };
   // Resolve each role's provider at most once per tick, on demand — a task routes
   // to 'local' or 'global' by its model label. Resolution can throw (e.g. an
   // OAuth provider not signed in); we cache the promise and skip only the tasks

@@ -55,6 +55,8 @@ export const api = {
     request('/settings/langsmith', { method: 'PUT', body: JSON.stringify(payload) }),
   saveGithubToken: (githubToken) =>
     request('/settings/github', { method: 'PUT', body: JSON.stringify({ githubToken }) }),
+  saveIntegrations: (payload) =>
+    request('/settings/integrations', { method: 'PUT', body: JSON.stringify(payload) }),
   getOllamaModels: () => request('/agent/ollama-models'),
   getLmstudioModels: () => request('/agent/lmstudio-models'),
   getProviderModels: (provider, refresh = false) => {
@@ -100,6 +102,10 @@ export const api = {
   getAgentCandidates: () => request('/agent/candidates'),
   getJobs: () => request('/agent/jobs'),
   runAgentNow: () => request('/agent/run-now', { method: 'POST' }),
+  enrichInput: (payload) =>
+    request('/agent/enrich-input', { method: 'POST', body: JSON.stringify(payload) }),
+  analyzeTrace: (payload) =>
+    request('/agent/analyze-trace', { method: 'POST', body: JSON.stringify(payload) }),
   clearFinishedJobs: () => request('/agent/jobs', { method: 'DELETE' }),
   deleteJob: (id) => request(`/agent/jobs/${id}`, { method: 'DELETE' }),
 };

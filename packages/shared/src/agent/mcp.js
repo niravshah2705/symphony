@@ -15,8 +15,17 @@ const log = require('../logger');
  * So enabling MCP never breaks the standard (built-in tools) flow.
  */
 
+/** Repository-aware MCP gate. Broker-backed runs never expose a broad forge MCP. */
+function repositoryAllowsMcp(name, ctx = {}) {
+  if (name !== 'github') return true;
+  if (ctx.repositoryProvider === 'gitlab') return false;
+  if (ctx.repositoryBroker) return false;
+  return true;
+}
+
 /** Whether a named MCP server is enabled and has the credentials it needs. */
 function isConfigured(name, ctx) {
+  if (!repositoryAllowsMcp(name, ctx)) return false;
   const conf = CONFIG.MCP[name];
   if (!conf || !conf.enabled) return false;
   if (name === 'linear') return Boolean(ctx.apiKey); // Bearer = stored Linear key
@@ -74,4 +83,4 @@ async function loadMcpTools(names, ctx = {}) {
   }
 }
 
-module.exports = { loadMcpTools, isConfigured };
+module.exports = { loadMcpTools, isConfigured, repositoryAllowsMcp };

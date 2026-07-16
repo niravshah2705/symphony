@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { readStore, writeStore, getApiKey, getAgentConfig } = require('@ai-fleet/shared/store');
 const { getProjects, createProject, getOrCreateProjectLabels } = require('@ai-fleet/shared/linear');
 const { asyncHandler } = require('@ai-fleet/shared/util');
+const { repoParts } = require('@ai-fleet/shared/agent/workspace');
 
 const router = express.Router();
 
@@ -17,19 +18,34 @@ function slugify(name) {
 }
 
 /**
- * Normalize an operator-supplied repository reference to a canonical `owner/name`,
- * accepting a bare `owner/name`, an https GitHub URL, or an ssh GitHub URL. Returns
- * '' when absent/invalid. Restricting to a GitHub owner/name (allowlist chars) keeps
- * a project's repo config from becoming an arbitrary-host clone target (SSRF/injection).
+ * Normalize an operator-supplied repository reference to its canonical namespace.
+ * Explicit provider identity is required so a bare namespace cannot change meaning
+ * when the global repository connector changes. GitLab may use nested groups.
  */
-function normalizeRepo(value) {
+function normalizeRepo(value, provider = 'github') {
   const raw = String(value || '').trim();
   if (!raw) return '';
-  const SEG = '[A-Za-z0-9_.-]+';
-  let m = raw.match(new RegExp(`^(${SEG})/(${SEG}?)(?:\\.git)?$`));
-  if (!m) m = raw.match(/github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?$/);
-  if (!m) return '';
-  return `${m[1]}/${m[2]}`;
+  const parts = repoParts(raw, provider);
+  return parts ? parts.fullName : '';
+}
+
+function normalizeRepoProvider(value, fallback = 'github') {
+  const provider = String(value === undefined ? fallback : value).trim().toLowerCase();
+  return provider === 'github' || provider === 'gitlab' ? provider : '';
+}
+
+function repositoryFields(body, current = null) {
+  const fallbackProvider = current && current.repoProvider ? current.repoProvider : 'github';
+  const repoProvider = normalizeRepoProvider(body.repoProvider, fallbackProvider);
+  if (!repoProvider) return { error: 'Repository provider must be GitHub or GitLab.' };
+
+  const rawRepo = body.repo !== undefined ? String(body.repo || '').trim() : String((current && current.repo) || '').trim();
+  const repo = normalizeRepo(rawRepo, repoProvider);
+  if (rawRepo && !repo) {
+    const format = repoProvider === 'gitlab' ? 'group/project (nested groups are supported)' : 'owner/repository';
+    return { error: `Repository must be a ${repoProvider === 'gitlab' ? 'GitLab' : 'GitHub'} ${format} or matching official-host Git URL.` };
+  }
+  return { repo, repoProvider };
 }
 
 /** Attach the linked Linear project (name/state) to each business, if any. */
@@ -67,6 +83,8 @@ router.post(
     if (!name) return res.status(400).json({ error: 'Business name is required.' });
 
     const description = body.description ? String(body.description) : '';
+    const repository = repositoryFields(body);
+    if (repository.error) return res.status(400).json({ error: repository.error });
     let projectId = body.projectId ? String(body.projectId) : null;
 
     // Optionally create a brand-new Linear project for this business.
@@ -99,9 +117,10 @@ router.post(
       name,
       description,
       projectId,
-      // Repository (owner/name) for future code generation — the coding flow clones
-      // this per project. Validated + normalized; '' when not provided.
-      repo: normalizeRepo(body.repo),
+      // Provider is stored beside the canonical namespace so a later global
+      // connector switch cannot reinterpret this project repository.
+      repo: repository.repo,
+      repoProvider: repository.repoProvider,
       createdAt: new Date().toISOString(),
     };
     if (store.businesses.some((b) => b.id === business.id)) {
@@ -125,6 +144,8 @@ router.put(
 
     const body = req.body || {};
     const current = store.businesses[index];
+    const repository = repositoryFields(body, current);
+    if (repository.error) return res.status(400).json({ error: repository.error });
     const updated = {
       ...current,
       name: body.name !== undefined ? String(body.name).trim() || current.name : current.name,
@@ -133,7 +154,8 @@ router.put(
         body.projectId !== undefined
           ? (body.projectId ? String(body.projectId) : null)
           : current.projectId,
-      repo: body.repo !== undefined ? normalizeRepo(body.repo) : (current.repo || ''),
+      repo: repository.repo,
+      repoProvider: repository.repoProvider,
     };
 
     const businesses = store.businesses.map((b, i) => (i === index ? updated : b));
@@ -155,3 +177,6 @@ router.delete('/:id', (req, res) => {
 });
 
 module.exports = router;
+module.exports.normalizeRepo = normalizeRepo;
+module.exports.normalizeRepoProvider = normalizeRepoProvider;
+module.exports.repositoryFields = repositoryFields;

@@ -1,11 +1,13 @@
 ---
 name: push
-description: Publish the current branch and keep the remote up to date. Use after validation passes and before requesting review.
+description: Publish the server-scoped task branch through the repository broker after validation passes.
 ---
 
 # push
 
 1. Run the required validation for the scope and confirm it passes BEFORE pushing.
-2. First push: `git push -u origin <branch>`; thereafter: `git push`.
-3. If the remote rejects because upstream moved, run the `pull` skill, re-validate, then push again.
-4. Never force-push a shared branch without an explicit, recorded reason.
+2. Confirm all intended changes are committed and `git status --porcelain` is empty.
+3. Call `repository_broker` with `{ "action": "push" }`. The server chooses the only allowed remote, branch, and non-force refspec.
+4. If the remote rejects because the branch moved, run the `pull` skill, re-validate, then call the broker again.
+
+Never run `git push`, `gh`, or `glab`, and never edit credential, proxy, or remote Git configuration.

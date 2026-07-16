@@ -40,7 +40,8 @@ function buildTicketPrompt({ issue, attempt, branch }) {
   if (branch) {
     lines.push(
       `Workspace: a MONOREPO clone; you are ALREADY on the task branch \`${branch}\`. Commit ALL your`,
-      `changes on \`${branch}\` (do not create other branches), push it, and open the PR from it.`,
+      `changes on \`${branch}\` (do not create other branches), publish it through the repository broker,`,
+      'and open the provider-neutral PR/MR from it.',
       ''
     );
   }
@@ -78,6 +79,59 @@ function isCoderLlmUsable(llm) {
   return Boolean(llm.host); // ollama / lmstudio (local, host-based)
 }
 
+function assertOpenSweRepositoryProvider(provider) {
+  if (String(provider || 'github').toLowerCase() !== 'github') {
+    throw new CoderError(
+      'The OpenSWE backend is GitHub-only and does not use the scoped repository broker. Select the local coder backend for GitLab.',
+      400
+    );
+  }
+}
+
+function activeRepositoryBranch(initialBranch, repositoryBroker) {
+  if (!repositoryBroker) return initialBranch;
+  const info = repositoryBroker.publicInfo();
+  return (info && info.branch) || initialBranch;
+}
+
+/**
+ * Resolve a planned project's repository without letting a business-scoped
+ * namespace inherit a later global provider change. Missing provider metadata
+ * is the legacy GitHub-only shape; unknown stored providers fail closed.
+ */
+function resolvePlannedRepository({
+  business,
+  globalRepository,
+  repositoryUrl,
+  repositoryProvider,
+  repositoryToken,
+  githubToken,
+  configuredRepoUrl = '',
+  tokenForProvider = () => '',
+}) {
+  const repository = globalRepository || {};
+  const businessRepo = String((business && business.repo) || '').trim();
+  let businessProvider = null;
+  if (businessRepo) {
+    businessProvider = String((business && business.repoProvider) || 'github').trim().toLowerCase();
+    if (businessProvider !== 'github' && businessProvider !== 'gitlab') {
+      throw new CoderError('The business repository provider must be GitHub or GitLab.', 400);
+    }
+  }
+
+  const defaultRepo = repositoryUrl !== undefined ? repositoryUrl : repository.url;
+  const repoRef = businessRepo || defaultRepo || configuredRepoUrl;
+  const provider = businessProvider || repositoryProvider || repository.provider || 'github';
+  const token = businessRepo
+    ? tokenForProvider(provider)
+    : repositoryToken !== undefined
+      ? repositoryToken
+      : provider === 'github' && githubToken
+        ? githubToken
+        : repository.token;
+  return { repoRef, provider, token };
+}
+
 /**
  * Run one code-writer attempt on a ticket. Prepares an isolated workspace, builds
  * the coding-workflow agent rooted there via the framework, and invokes it.
@@ -92,38 +146,51 @@ async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep }) {
   const runId = crypto.randomUUID();
 
   step(`Preparing workspace for ${issue.identifier || issue.id}…`);
-  const { workDir, reused } = await prepareWorkspace({
-    repoUrl: CONFIG.CODER.repoUrl,
+  const repository = store.getRepositoryConfig();
+  const { workDir, branch, reused, env, repositoryBroker } = await prepareWorkspace({
+    repoUrl: repository.url || CONFIG.CODER.repoUrl,
+    repositoryProvider: repository.provider,
+    repositoryToken: repository.token,
     identifier: issue.identifier || issue.id,
     onStep: step,
   });
   step(`Workspace ${reused ? 'reused' : 'ready'} at ${workDir}.`);
+  try {
+    // The Linear key stays behind linear_graphql. Repository auth stays behind
+    // one branch/repo-scoped broker tool; neither secret enters ctx or shell env.
+    const extraTools = await require('./mcp').loadMcpTools(codingWorkflow.mcp, {
+      apiKey,
+      step,
+      repositoryProvider: repository.provider,
+      repositoryBroker: Boolean(repositoryBroker),
+    });
+    if (repositoryBroker) extraTools.push(repositoryBroker.createTool());
+    const { agent, skillPaths } = framework.buildAgent({
+      workflow: codingWorkflow,
+      llm,
+      rootDir: workDir,
+      ctx: { apiKey, step },
+      extraTools,
+      env,
+    });
+    step(`Running code-writer (provider ${llm.provider}, model ${llm.model}, ${skillPaths.length} skills, max ${CONFIG.CODER.maxTurns} turns)…`);
 
-  // Framework builds the LocalShellBackend rooted at workDir, installs the coding
-  // skills there, and wires the linear_graphql tool (server-side key via ctx).
-  // Optional Linear/GitHub MCP tools are attached when enabled (no-op otherwise).
-  const extraTools = await require('./mcp').loadMcpTools(codingWorkflow.mcp, { apiKey, step });
-  const { agent, skillPaths } = framework.buildAgent({
-    workflow: codingWorkflow,
-    llm,
-    rootDir: workDir,
-    ctx: { apiKey, step },
-    extraTools,
-  });
-  step(`Running code-writer (provider ${llm.provider}, model ${llm.model}, ${skillPaths.length} skills, max ${CONFIG.CODER.maxTurns} turns)…`);
+    const result = await agent.invoke(
+      { messages: [{ role: 'user', content: buildTicketPrompt({ issue, branch: repositoryBroker ? branch : null }) }] },
+      withAnnotations(
+        { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id } },
+        { project: issue.projectName, taskId: issue.identifier || issue.id, session: runId }
+      )
+    );
 
-  const result = await agent.invoke(
-    { messages: [{ role: 'user', content: buildTicketPrompt({ issue }) }] },
-    withAnnotations(
-      { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id } },
-      { project: issue.projectName, taskId: issue.identifier || issue.id, session: runId }
-    )
-  );
-
-  const finalText = framework.lastText(result);
-  const messages = (result && result.messages) || [];
-  step(`Code-writer finished (${messages.length} messages).`);
-  return { workDir, finalText, messages, traced };
+    const finalText = framework.lastText(result);
+    const messages = (result && result.messages) || [];
+    const finalBranch = activeRepositoryBranch(branch, repositoryBroker);
+    step(`Code-writer finished (${messages.length} messages).`);
+    return { workDir, branch: finalBranch, finalText, messages, traced };
+  } finally {
+    if (repositoryBroker) repositoryBroker.dispose();
+  }
 }
 
 /**
@@ -134,6 +201,7 @@ async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep }) {
  */
 async function runCoder(args) {
   if (CONFIG.CODER.backend === 'openswe') {
+    assertOpenSweRepositoryProvider(store.getRepositoryConfig().provider);
     const { runOpenSwe } = require('./openswe');
     return runOpenSwe(args);
   }
@@ -142,11 +210,22 @@ async function runCoder(args) {
 
 /**
  * Run a PLANNED task (aiplanned flow): monorepo workspace at
- * <plannedWorkspaceRoot>/<project-slug>/, a per-task branch, GitHub-token git auth.
+ * <plannedWorkspaceRoot>/<project-slug>/, a per-task branch, and brokered repository auth.
  * Uses the same coding workflow/skills as the local coder but roots it at the
  * project's monorepo clone and tells the agent to work on the task branch.
  */
-async function runPlannedCoderLocal({ issue, project, llm, apiKey, keys = {}, githubToken, onStep }) {
+async function runPlannedCoderLocal({
+  issue,
+  project,
+  llm,
+  apiKey,
+  keys = {},
+  githubToken,
+  repositoryToken,
+  repositoryProvider,
+  repositoryUrl,
+  onStep,
+}) {
   const step = typeof onStep === 'function' ? onStep : () => {};
   if (!isCoderLlmUsable(llm)) throw new CoderError('Configure the deep-agent LLM in Settings → LLM.', 400);
   if (!apiKey) throw new CoderError('A Linear API key is required for the code-writer agent.', 400);
@@ -155,49 +234,83 @@ async function runPlannedCoderLocal({ issue, project, llm, apiKey, keys = {}, gi
   const runId = crypto.randomUUID();
 
   // Resolve the repo for THIS project (set at project creation), else the global
-  // default. The GitHub token comes from Settings (store), never from the request.
+  // default. The selected forge token comes from Settings (store), never from
+  // the browser request or the agent prompt.
   const business = store.getBusinessByProjectId(project.id);
-  const repoRef = (business && business.repo) || CONFIG.CODER.repoUrl;
-  const token = githubToken || store.getGithubToken();
+  const repository = store.getRepositoryConfig();
+  const { repoRef, provider, token } = resolvePlannedRepository({
+    business,
+    globalRepository: repository,
+    repositoryUrl,
+    repositoryProvider,
+    repositoryToken,
+    githubToken,
+    configuredRepoUrl: CONFIG.CODER.repoUrl,
+    tokenForProvider: store.getRepositoryToken,
+  });
   if (!repoRef) step('No repository configured for this project (set one on the business); using an empty workspace.', 'warn');
 
   step(`Preparing monorepo workspace for ${project.name || project.id} / ${issue.identifier || issue.id}${repoRef ? ` (repo ${repoRef})` : ''}…`);
-  const { workDir, branch, slug, env } = await preparePlannedWorkspace({
+  const { workDir, branch, slug, env, repositoryBroker } = await preparePlannedWorkspace({
     repoUrl: repoRef,
+    repositoryProvider: provider,
     projectSlug: project.name || project.id,
+    projectId: project.id,
     taskBranch: issue.identifier || issue.id,
-    githubToken: token,
+    repositoryToken: token,
     onStep: step,
   });
+  try {
+    const extraTools = await require('./mcp').loadMcpTools(codingWorkflow.mcp, {
+      apiKey,
+      step,
+      repositoryProvider: provider,
+      repositoryBroker: Boolean(repositoryBroker),
+    });
+    if (repositoryBroker) extraTools.push(repositoryBroker.createTool());
+    const { agent, skillPaths } = framework.buildAgent({
+      workflow: codingWorkflow,
+      llm,
+      rootDir: workDir,
+      ctx: { apiKey, step },
+      extraTools,
+      env,
+    });
+    step(`Running planned coder on branch ${branch} (monorepo ${slug}, ${skillPaths.length} skills)…`);
 
-  const extraTools = await require('./mcp').loadMcpTools(codingWorkflow.mcp, { apiKey, step });
-  const { agent, skillPaths } = framework.buildAgent({
-    workflow: codingWorkflow,
-    llm,
-    rootDir: workDir,
-    ctx: { apiKey, step },
-    extraTools,
-    env, // carries GH_TOKEN for the git credential helper
-  });
-  step(`Running planned coder on branch ${branch} (monorepo ${slug}, ${skillPaths.length} skills)…`);
+    const result = await agent.invoke(
+      { messages: [{ role: 'user', content: buildTicketPrompt({ issue, branch: repositoryBroker ? branch : null }) }] },
+      withAnnotations(
+        { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id, projectId: project.id, branch } },
+        { project: project.name || project.id, taskId: issue.identifier || issue.id, session: runId }
+      )
+    );
 
-  const result = await agent.invoke(
-    { messages: [{ role: 'user', content: buildTicketPrompt({ issue, branch }) }] },
-    withAnnotations(
-      { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id, projectId: project.id, branch } },
-      { project: project.name || project.id, taskId: issue.identifier || issue.id, session: runId }
-    )
-  );
-
-  const finalText = framework.lastText(result);
-  const messages = (result && result.messages) || [];
-  step(`Planned coder finished on ${branch} (${messages.length} messages).`);
-  return { workDir, branch, finalText, messages, traced };
+    const finalText = framework.lastText(result);
+    const messages = (result && result.messages) || [];
+    const finalBranch = activeRepositoryBranch(branch, repositoryBroker);
+    step(`Planned coder finished on ${finalBranch} (${messages.length} messages).`);
+    return { workDir, branch: finalBranch, finalText, messages, traced };
+  } finally {
+    if (repositoryBroker) repositoryBroker.dispose();
+  }
 }
 
 /** Planned-task entry point, backend-aware ('openswe' delegates to Open SWE). */
 async function runPlannedCoder(args) {
   if (CONFIG.CODER.backend === 'openswe') {
+    const business = args.project && store.getBusinessByProjectId(args.project.id);
+    const selection = resolvePlannedRepository({
+      business,
+      globalRepository: store.getRepositoryConfig(),
+      repositoryUrl: args.repositoryUrl,
+      repositoryProvider: args.repositoryProvider,
+      repositoryToken: args.repositoryToken,
+      githubToken: args.githubToken,
+      configuredRepoUrl: CONFIG.CODER.repoUrl,
+      tokenForProvider: store.getRepositoryToken,
+    });
+    assertOpenSweRepositoryProvider(selection.provider);
     const { runOpenSwe } = require('./openswe');
     return runOpenSwe(args);
   }
@@ -211,6 +324,9 @@ module.exports = {
   runPlannedCoder,
   runPlannedCoderLocal,
   isCoderLlmUsable,
+  assertOpenSweRepositoryProvider,
+  activeRepositoryBranch,
+  resolvePlannedRepository,
   buildTicketPrompt,
   // Back-compat re-exports (moved into the workflow / tool registry).
   buildWorkflowPrompt: codingWorkflow.buildWorkflowPrompt,

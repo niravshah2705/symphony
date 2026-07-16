@@ -4,15 +4,17 @@ import { el, clear, esc, toast, initials, loading, fmtPercent } from '../dom.js'
 
 export async function renderBusiness(view) {
   view.append(loading('Loading businesses…'));
-  const [{ businesses }, { projects }] = await Promise.all([
+  const [{ businesses }, { projects }, settings] = await Promise.all([
     api.getBusinesses(),
     api.getProjects().catch(() => ({ projects: [] })),
+    api.getSettings().catch(() => ({ repositoryProvider: 'github' })),
   ]);
+  const repositoryProvider = settings.repositoryProvider === 'gitlab' ? 'gitlab' : 'github';
 
   clear(view).append(
     el('div', { class: 'page-head' }, [
       el('h1', {}, 'Businesses'),
-      el('button', { class: 'primary', onclick: () => openBusinessModal(view, { projects }) }, '+ New Business'),
+      el('button', { class: 'primary', onclick: () => openBusinessModal(view, { projects, repositoryProvider }) }, '+ New Business'),
     ]),
     el('p', { class: 'muted', style: 'margin-top:-8px' }, 'Each business is backed by a Linear project. OTA is the initial business.')
   );
@@ -24,12 +26,12 @@ export async function renderBusiness(view) {
 
   const list = el('div', {});
   for (const b of businesses) {
-    list.append(businessRow(b, projects, view));
+    list.append(businessRow(b, projects, view, repositoryProvider));
   }
   view.append(list);
 }
 
-function businessRow(b, projects, view) {
+function businessRow(b, projects, view, repositoryProvider) {
   const linked = b.project;
   const linkInfo = linked
     ? el('div', { class: 'link-info' }, [
@@ -54,7 +56,7 @@ function businessRow(b, projects, view) {
     },
   }, 'Board');
 
-  const edit = el('button', { onclick: () => openBusinessModal(view, { business: b, projects }) }, 'Edit');
+  const edit = el('button', { onclick: () => openBusinessModal(view, { business: b, projects, repositoryProvider }) }, 'Edit');
   const del = el('button', {
     class: 'danger',
     onclick: async () => {
@@ -71,12 +73,17 @@ function businessRow(b, projects, view) {
 
   return el('div', { class: 'biz-row' }, [
     el('span', { class: 'avatar' }, initials(b.name)),
-    el('div', {}, [el('div', { class: 'biz-name' }, b.name), linkInfo, b.description ? el('div', { class: 'muted', style: 'font-size:12px' }, b.description) : null]),
+    el('div', {}, [
+      el('div', { class: 'biz-name' }, b.name),
+      linkInfo,
+      b.repo ? el('div', { class: 'muted', style: 'font-size:12px' }, `${b.repoProvider === 'gitlab' ? 'GitLab' : 'GitHub'} · ${b.repo}`) : null,
+      b.description ? el('div', { class: 'muted', style: 'font-size:12px' }, b.description) : null,
+    ]),
     el('div', { class: 'actions' }, [openPlanning, openBoard, edit, del]),
   ]);
 }
 
-function openBusinessModal(view, { business = null, projects = [] }) {
+function openBusinessModal(view, { business = null, projects = [], repositoryProvider = 'github' }) {
   const isEdit = Boolean(business);
   const backdrop = el('div', { class: 'modal-backdrop' });
   const close = () => backdrop.remove();
@@ -86,7 +93,27 @@ function openBusinessModal(view, { business = null, projects = [] }) {
 
   const nameInput = el('input', { value: business ? business.name : '', placeholder: 'e.g. OTA' });
   const descInput = el('textarea', { rows: '2', placeholder: 'Optional description' }, business ? business.description || '' : '');
-  const repoInput = el('input', { value: business ? business.repo || '' : '', placeholder: 'owner/name (e.g. my-org/hotel-app)' });
+  const selectedRepoProvider = business
+    ? (business.repoProvider === 'gitlab' ? 'gitlab' : 'github')
+    : repositoryProvider;
+  const repoProviderSelect = el('select', { 'aria-label': 'Repository provider' }, [
+    el('option', { value: 'github', selected: selectedRepoProvider !== 'gitlab' }, 'GitHub'),
+    el('option', { value: 'gitlab', selected: selectedRepoProvider === 'gitlab' }, 'GitLab'),
+  ]);
+  const repoInput = el('input', {
+    value: business ? business.repo || '' : '',
+    'aria-label': 'Repository namespace or URL',
+  });
+  const repoHelp = el('p', { class: 'muted', style: 'margin:6px 0 0;font-size:12px' });
+  const syncRepoFields = () => {
+    const gitlab = repoProviderSelect.value === 'gitlab';
+    repoInput.placeholder = gitlab ? 'group/subgroup/project' : 'owner/repository';
+    repoHelp.textContent = gitlab
+      ? 'GitLab namespace or official Git URL; nested groups are supported. Uses the saved GitLab token.'
+      : 'GitHub owner/repository or official Git URL. Uses the saved GitHub token.';
+  };
+  repoProviderSelect.addEventListener('change', syncRepoFields);
+  syncRepoFields();
 
   // Link mode: existing project, create new project, or none.
   const linkSelect = el('select', {}, [
@@ -136,7 +163,12 @@ function openBusinessModal(view, { business = null, projects = [] }) {
     const name = nameInput.value.trim();
     if (!name) return toast('Name is required.', 'err');
     const mode = linkSelect.value;
-    const payload = { name, description: descInput.value, repo: repoInput.value.trim() };
+    const payload = {
+      name,
+      description: descInput.value,
+      repo: repoInput.value.trim(),
+      repoProvider: repoProviderSelect.value,
+    };
 
     if (mode === 'existing') payload.projectId = projectSelect.value || null;
     if (mode === 'new') {
@@ -169,8 +201,9 @@ function openBusinessModal(view, { business = null, projects = [] }) {
         el('div', { class: 'field' }, [el('label', {}, 'Description'), descInput]),
         el('div', { class: 'field' }, [
           el('label', {}, 'Repository (for code generation)'),
+          repoProviderSelect,
           repoInput,
-          el('p', { class: 'muted', style: 'margin:6px 0 0;font-size:12px' }, 'GitHub owner/name the code-writer will clone for this project. Uses the GitHub token from Settings.'),
+          repoHelp,
         ]),
         el('div', { class: 'field' }, [el('label', {}, 'Project link'), linkSelect]),
         existingWrap,

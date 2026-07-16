@@ -1,368 +1,437 @@
 import { api } from '../api.js';
-import { el, clear, toast, loading } from '../dom.js';
+import { el, clear, toast } from '../dom.js';
 
-// Job ids whose step trace is expanded (persists across the 4s auto-refresh).
-const expandedJobs = new Set();
-
-// Auto-refresh timer for jobs/status (cleared when leaving the Agent view).
 let refreshTimer = null;
+let railPinned = false;
+const conversation = [];
+
 function stopRefresh() {
-  if (refreshTimer) {
-    clearInterval(refreshTimer);
-    refreshTimer = null;
-  }
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = null;
+}
+
+function agentRouteActive() {
+  return location.hash === '#/agent' || location.hash.startsWith('#/agent/');
 }
 
 export async function renderAgent(view) {
   stopRefresh();
-  view.append(loading('Loading agent…'));
+  railPinned = false;
+  const [status, jobsResponse] = await Promise.all([
+    api.getAgentStatus().catch((error) => ({ unavailable: true, error: error.message, counts: {} })),
+    api.getJobs().catch(() => ({ jobs: [] })),
+  ]);
 
-  const [status, jobsRes] = await Promise.all([api.getAgentStatus(), api.getJobs()]);
-  const assumedRole = status.assumedRole;
+  const stream = el('div', { class: 'conversation-stream', 'aria-live': 'polite' });
+  const railBody = el('div', { id: 'agent-details-panel', class: 'rail-content', role: 'tabpanel', 'aria-labelledby': 'agent-details-tab' });
+  const composer = buildComposer(stream, railBody);
+  const jobs = jobsResponse.jobs || [];
 
   clear(view).append(
-    el('div', { class: 'page-head' }, [
-      el('h1', {}, 'Agent'),
-      activeToggle(status, view),
-      el('a', { class: 'btn', href: '#/settings' }, '⚙ Configure in Settings'),
+    el('section', { class: 'agent-workspace' }, [
+      el('main', { class: 'scenario-reader agent-reader' }, [
+        agentToolbar(status, view, railBody),
+        el('div', { class: 'conversation-wrap' }, [stream, composer]),
+      ]),
+      el('aside', { class: 'evidence-rail scenario-rail', 'aria-label': 'Agent details' }, [
+        el('div', { class: 'rail-tabs', role: 'tablist' }, [
+          el('button', { id: 'agent-details-tab', class: 'active', type: 'button', role: 'tab', 'aria-selected': 'true', 'aria-controls': 'agent-details-panel' }, 'Details'),
+          el('span', { class: 'rail-model-chip' }, status.localActiveModel || status.ollamaModel || 'Local AI'),
+        ]),
+        railBody,
+      ]),
     ])
   );
 
-  const statusBar = el('div', {});
-  const enrichHost = el('div', {});
-  const jobsHost = el('div', {});
-
-  view.append(statusBar, enrichHost, jobsHost);
-
-  renderStatusBar(statusBar, status);
-  await renderEnrichCard(enrichHost, { assumedRole, labels: status.enrichLabels });
-  renderJobs(jobsHost, jobsRes.jobs);
+  renderWelcome(stream, status);
+  for (const entry of conversation) stream.append(renderConversationEntry(entry, railBody));
+  renderRecentWork(stream, jobs, railBody);
+  renderAgentRail(railBody, status, null);
 
   refreshTimer = setInterval(async () => {
-    if (!location.hash.startsWith('#/agent')) return stopRefresh();
+    if (!agentRouteActive()) return stopRefresh();
     try {
-      const [s, j] = await Promise.all([api.getAgentStatus(), api.getJobs()]);
-      renderStatusBar(statusBar, s);
-      renderJobs(jobsHost, j.jobs);
+      const [nextStatus, nextJobs] = await Promise.all([api.getAgentStatus(), api.getJobs()]);
+      if (!railPinned) renderAgentRail(railBody, nextStatus, null);
+      updateLiveJobs(stream, nextJobs.jobs || [], railBody);
     } catch (_) {
-      /* transient */
+      // A short service restart should not interrupt the conversation.
     }
-  }, 4000);
+  }, 5000);
 }
 
-/* ------------------------- Active / inactive toggle --------------------- */
-
-/**
- * Agent Active/Inactive switch. "Active" = the scheduler runs on its cadence;
- * toggling flips `scheduleEnabled` in the agent config and re-renders.
- */
-function activeToggle(status, view) {
+function agentToolbar(status, view, railBody) {
   const active = Boolean(status.scheduleEnabled);
-  const btn = el('button', { class: active ? 'primary' : 'danger' }, active ? '● Active' : '○ Inactive');
-  btn.title = active ? 'Agent is active — click to deactivate' : 'Agent is inactive — click to activate';
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
+  const toggle = el('button', {
+    class: `agent-state-toggle ${active ? 'is-active' : ''}`,
+    type: 'button',
+    title: active ? 'Pause automatic planning' : 'Resume automatic planning',
+  }, [el('span', { class: 'status-dot' }), active ? 'Planning is on' : 'Planning is paused']);
+  toggle.addEventListener('click', async () => {
+    toggle.disabled = true;
     try {
       await api.saveAgentConfig({ scheduleEnabled: !active });
-      toast(active ? 'Agent deactivated.' : 'Agent activated.', 'ok');
-      renderAgent(clear(view));
-    } catch (err) {
-      toast(err.message, 'err');
-      btn.disabled = false;
+      toast(active ? 'Automatic planning paused.' : 'Automatic planning resumed.', 'ok');
+      if (view.isConnected && agentRouteActive()) await renderAgent(clear(view));
+    } catch (error) {
+      toast(error.message, 'err');
+      toggle.disabled = false;
     }
   });
-  return btn;
-}
 
-/* ------------------------------ Status bar ------------------------------ */
+  const runNow = el('button', {
+    class: 'agent-run-now',
+    type: 'button',
+    disabled: !status.assumedRole,
+    title: status.assumedRole ? 'Plan matching projects now' : 'Choose a role in Settings first',
+  }, 'Plan projects now');
+  runNow.addEventListener('click', async () => {
+    runNow.disabled = true;
+    runNow.textContent = 'Starting…';
+    try {
+      const response = await api.runAgentNow();
+      const result = response.result || {};
+      toast(result.error || `Found ${result.discovered || 0}; started ${result.processed || 0}.`, result.error ? 'err' : 'ok');
+      if (view.isConnected && agentRouteActive()) await renderAgent(clear(view));
+    } catch (error) {
+      toast(error.message, 'err');
+      runNow.disabled = false;
+      runNow.textContent = 'Plan projects now';
+    }
+  });
 
-function renderStatusBar(host, status) {
-  const c = status.counts || {};
-  clear(host).append(
-    el('div', { class: 'row', style: 'margin-bottom:16px;gap:8px' }, [
-      pill(status.scheduleEnabled ? '⏱ Scheduler on' : '⏸ Scheduler off', status.scheduleEnabled ? 'ok' : ''),
-      pill(`Every ${status.intervalMinutes}m`, ''),
-      pill(`Labels: ${(status.enrichLabels || []).join(', ') || 'any'}`, ''),
-      pill(status.llmConfigured ? `🧠 ${status.activeModel || status.ollamaModel}` : '🧠 LLM not set', status.llmConfigured ? 'ok' : 'bad'),
-      pill(status.tracingEnabled ? '🔎 Tracing on' : '🔎 Tracing off', status.tracingEnabled ? 'ok' : ''),
-      el('span', { class: 'spacer' }),
-      pill(`pending ${c.pending || 0}`, ''),
-      pill(`running ${c.running || 0}`, c.running ? 'ok' : ''),
-      pill(`done ${c.done || 0}`, ''),
-      pill(`error ${c.error || 0}`, c.error ? 'bad' : ''),
+  return el('div', { class: 'reader-toolbar agent-toolbar' }, [
+    el('div', { class: 'breadcrumbs' }, [
+      el('span', {}, 'Workspace'),
+      el('span', {}, '›'),
+      el('strong', {}, 'Planning conversation'),
     ]),
-    status.lastError ? el('div', { class: 'muted', style: 'margin:-8px 0 12px;font-size:12px' }, `Scheduler: ${status.lastError}`) : null
-  );
+    el('div', { class: 'reader-actions' }, [
+      toggle,
+      runNow,
+      el('button', {
+        class: 'tiny-link toolbar-details',
+        type: 'button',
+        onclick: () => {
+          railPinned = false;
+          renderAgentRail(railBody, status, null);
+        },
+      }, 'View setup'),
+    ]),
+  ]);
 }
 
-function pill(text, kind) {
-  const cls = kind === 'ok' ? 'badge state-completed' : kind === 'bad' ? 'badge state-started' : 'badge';
-  return el('span', { class: cls }, text);
-}
-
-/* --------------------------- Enrich card (auto) ------------------------- */
-
-async function renderEnrichCard(host, { assumedRole, labels }) {
-  clear(host);
-  const labelText = (labels || []).join(', ') || 'any';
-  const card = el('div', { class: 'card' });
-  card.append(
-    el('div', { class: 'row' }, [
-      el('h3', { style: 'margin:0' }, 'Auto Enrichment'),
-      el('span', { class: 'spacer' }),
-      el('span', { class: 'badge' }, `labels: ${labelText}`),
-    ])
+function renderWelcome(stream, status) {
+  stream.append(
+    assistantMessage(
+      'What are we working on?',
+      'Tell me about an idea, a customer problem, or an outcome you want. I’ll organize the useful context, notice what is missing, and suggest a clear next move.',
+      [
+        { label: 'Uses local AI', action: () => {} },
+        { label: 'Change model', href: '#/settings' },
+      ]
+    )
   );
 
-  if (!assumedRole) {
-    card.classList.add('disabled-card');
-    card.append(
-      el('div', { class: 'muted', style: 'padding:18px 0' }, [
-        '🔒 Assume a role in ',
-        el('a', { href: '#/settings', style: 'color:var(--accent-2)' }, 'Settings'),
-        ' to enable automatic enrichment.',
-      ])
+  if (!status.assumedRole) {
+    stream.append(
+      assistantMessage(
+        'One small setup item',
+        'You can explore ideas here now. To let me create project work automatically, choose who I should act as in Settings.',
+        [{ label: 'Choose a role', href: '#/settings' }],
+        'notice'
+      )
     );
-    host.append(card);
+  }
+}
+
+function buildComposer(stream, railBody) {
+  const input = el('textarea', {
+    rows: '3',
+    maxlength: '8000',
+    placeholder: 'Describe what you want to build or improve…',
+    'aria-label': 'Message the planning agent',
+  });
+  const count = el('span', { class: 'composer-count' }, '0 / 8,000');
+  const send = el('button', { class: 'primary scenario-submit', type: 'button' }, 'Send');
+
+  const submit = async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    const user = { role: 'user', text };
+    conversation.push(user);
+    stream.append(renderConversationEntry(user, railBody));
+
+    const pending = assistantMessage('I’m shaping that into something useful…', 'Looking for the goal, the people it helps, useful constraints, and unanswered questions.');
+    pending.classList.add('is-pending');
+    stream.append(pending);
+    pending.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    send.disabled = true;
+    send.textContent = 'Thinking…';
+
+    try {
+      const response = await api.enrichInput({ scenario: 'planning', input: text });
+      const entry = { role: 'assistant', analysis: normalizeEnrichment(response) };
+      conversation.push(entry);
+      pending.replaceWith(renderConversationEntry(entry, railBody));
+      railPinned = true;
+      renderAgentRail(railBody, null, entry.analysis);
+    } catch (error) {
+      pending.replaceWith(
+        assistantMessage(
+          'I couldn’t reach the local model.',
+          error.message || 'Make sure Ollama or LM Studio is running, then try again.',
+          [{ label: 'Open local model settings', href: '#/settings' }],
+          'error'
+        )
+      );
+    } finally {
+      send.disabled = false;
+      send.textContent = 'Send';
+    }
+  };
+
+  input.addEventListener('input', () => {
+    count.textContent = `${input.value.length.toLocaleString()} / 8,000`;
+  });
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      void submit();
+    }
+  });
+  send.addEventListener('click', submit);
+
+  const suggestions = [
+    'Turn my rough idea into a plan',
+    'Find the gaps in what I know',
+    'Suggest the first milestone',
+  ];
+  return el('div', { class: 'chat-composer' }, [
+    el('div', { class: 'suggestion-row' }, suggestions.map((label) =>
+      el('button', {
+        type: 'button',
+        onclick: () => {
+          input.value = `${label}: `;
+          input.dispatchEvent(new Event('input'));
+          input.focus();
+        },
+      }, label)
+    )),
+    el('div', { class: 'composer-surface' }, [
+      input,
+      el('div', { class: 'composer-actions' }, [
+        el('span', { class: 'privacy-chip' }, 'Local-model route'),
+        count,
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'composer-hint' }, 'Enter to send · Shift+Enter for a new line'),
+        send,
+      ]),
+    ]),
+  ]);
+}
+
+function normalizeEnrichment(response) {
+  const source = response && (response.enrichment || response.enriched || response.result || response.analysis || response);
+  if (typeof source === 'string') {
+    return { summary: source, goal: '', audience: '', constraints: [], assumptions: [], questions: [], nextSteps: [], warnings: [], provider: response.provider, model: response.model };
+  }
+  return {
+    summary: source.summary || source.message || source.enrichedContext || 'I organized the information you shared.',
+    goal: source.goal || source.outcome || (Array.isArray(source.goals) ? source.goals.join(' · ') : ''),
+    audience: source.audience || source.customer || source.targetUsers || '',
+    constraints: textArray(source.constraints),
+    assumptions: textArray(source.assumptions),
+    questions: textArray(source.questions || source.openQuestions || source.missingInformation),
+    nextSteps: textArray(source.nextSteps || source.recommendations || source.suggestedActions || source.suggestedNextSteps),
+    details: source.details || source.enrichedContext || source.clarifiedBrief || '',
+    warnings: textArray(source.warnings),
+    usedFallback: Boolean(source.provenance && source.provenance.usedFallback),
+    provider: response.provider || source.provider || source.provenance && source.provenance.provider || 'local',
+    model: response.model || source.model || source.provenance && source.provenance.model || 'configured model',
+  };
+}
+
+function textArray(value) {
+  if (!Array.isArray(value)) return value ? [String(value)] : [];
+  return value.map((item) => typeof item === 'string' ? item : item && (item.text || item.question || item.label) || JSON.stringify(item)).filter(Boolean);
+}
+
+function renderConversationEntry(entry, railBody) {
+  if (entry.role === 'user') return userMessage(entry.text);
+  const analysis = entry.analysis;
+  const message = assistantMessage(
+    analysis.goal ? 'Here’s what I heard.' : 'I’ve organized that.',
+    analysis.summary,
+    [{ label: 'View details', action: () => {
+      railPinned = true;
+      renderAgentRail(railBody, null, analysis);
+    } }]
+  );
+  const body = message.querySelector('.message-copy');
+  if (analysis.goal) body.append(el('p', { class: 'friendly-highlight' }, [el('strong', {}, 'The outcome: '), analysis.goal]));
+  if (analysis.audience) body.append(el('p', {}, [el('strong', {}, 'For: '), analysis.audience]));
+  if (analysis.nextSteps.length) {
+    body.append(el('div', { class: 'friendly-next-steps' }, [
+      el('strong', {}, 'A good next move'),
+      el('ol', {}, analysis.nextSteps.slice(0, 4).map((step) => el('li', {}, step))),
+    ]));
+  }
+  if (analysis.questions.length) {
+    body.append(el('div', { class: 'friendly-questions' }, [
+      el('strong', {}, 'A few things worth deciding'),
+      el('ul', {}, analysis.questions.slice(0, 4).map((question) => el('li', {}, question))),
+    ]));
+  }
+  return message;
+}
+
+function renderRecentWork(stream, jobs, railBody) {
+  const host = el('div', { class: 'live-jobs' });
+  host.dataset.liveJobs = 'true';
+  stream.append(host);
+  updateLiveJobs(stream, jobs, railBody);
+}
+
+function updateLiveJobs(stream, jobs, railBody) {
+  const host = stream.querySelector('[data-live-jobs="true"]');
+  if (!host) return;
+  clear(host);
+  const visible = (jobs || []).slice(0, 5);
+  if (!visible.length) return;
+  host.append(el('div', { class: 'conversation-divider' }, [el('span', {}, 'Recent work')]), ...visible.map((job) => jobMessage(job, railBody)));
+}
+
+function jobMessage(job, railBody) {
+  const coding = job.kind === 'coding';
+  const subject = coding ? job.taskTitle || job.taskIdentifier || 'a coding task' : job.projectName || 'your project';
+  const copy = friendlyJobCopy(job, subject);
+  const links = [{ label: 'See activity', action: () => renderJobRail(railBody, job) }];
+  if (job.traceUrl) links.push({ label: 'Open trace', href: job.traceUrl, external: true });
+  if (job.taskUrl) links.push({ label: 'Open task', href: job.taskUrl, external: true });
+  return assistantMessage(copy.title, copy.text, links, `job-message status-${job.status}`);
+}
+
+function friendlyJobCopy(job, subject) {
+  const coding = job.kind === 'coding';
+  if (job.status === 'pending') return { title: `I’ve queued ${subject}.`, text: 'It will start as soon as capacity is available.' };
+  if (job.status === 'running') return { title: `I’m working on ${subject}.`, text: 'I’ll keep the detailed activity in the side panel while the work continues.' };
+  if (job.status === 'error') return { title: `I hit a snag with ${subject}.`, text: job.error || 'The work stopped before it could finish. Open activity to see where.' };
+  const summary = job.summary || {};
+  if (summary.aifail) return { title: `${subject} needs another look.`, text: summary.reason || 'It was not ready to turn into an automated plan yet.' };
+  if (coding) return { title: `${subject} is finished.`, text: summary.pr ? 'The change is complete and its pull request is ready.' : 'The coding pass has completed.' };
+  return { title: `The plan for ${subject} is ready.`, text: summary.milestonesCreated
+    ? `I organized it into ${summary.milestonesCreated} milestone${summary.milestonesCreated === 1 ? '' : 's'} and ${summary.issuesCreated || 0} pieces of work.`
+    : 'The planning pass has completed.' };
+}
+
+function renderAgentRail(host, status, analysis) {
+  clear(host);
+  if (analysis) {
+    host.append(
+      railIntro('Local enrichment details', 'The context behind the friendly answer.'),
+      el('div', { class: 'rail-section-label' }, 'Model provenance'),
+      detailCard([
+        ['Provider', analysis.provider || 'local'],
+        ['Model', analysis.model || 'configured model'],
+        ['Data route', 'Configured local-model host'],
+        ['Result', analysis.usedFallback ? 'Safe basic fallback' : 'Model-generated'],
+      ]),
+      analysis.constraints.length ? railList('Constraints', analysis.constraints) : null,
+      analysis.assumptions.length ? railList('Assumptions noticed', analysis.assumptions) : null,
+      analysis.questions.length ? railList('Open questions', analysis.questions) : null,
+      analysis.warnings.length ? railList('Warnings', analysis.warnings) : null,
+      analysis.details ? el('div', {}, [el('div', { class: 'rail-section-label' }, 'Enriched context'), el('p', { class: 'rail-copy' }, String(analysis.details))]) : null
+    );
     return;
   }
 
-  card.append(
-    el('p', { class: 'muted', style: 'font-size:13px;margin-bottom:4px' }, 'Two jobs run automatically:'),
-    el('ul', { class: 'muted', style: 'font-size:13px;margin:0 0 10px;padding-left:18px' }, [
-      el('li', {}, [
-        el('strong', {}, '1. Planning'),
-        ' — projects labeled ',
-        el('strong', {}, labelText),
-        ' are planned into software-design issues, then relabeled ',
-        el('strong', {}, 'aiplanned'),
-        ' (unfit projects become ',
-        el('strong', {}, 'aifail'),
-        '). Run it on the schedule or with ',
-        el('strong', {}, 'Run now'),
-        ' below.',
-      ]),
-      el('li', {}, [
-        el('strong', {}, '2. Coding'),
-        ' — the code-writer monitor takes ',
-        el('strong', {}, 'aiplanned'),
-        " projects and works each milestone's issues in creation order (skipping dependency-blocked ones), moving every issue to ",
-        el('strong', {}, 'Done'),
-        ' by merging its PR. A fully coded project becomes ',
-        el('strong', {}, 'aidone'),
-        '.',
-      ]),
-    ]),
-    el('p', { class: 'muted', style: 'font-size:13px;margin:0' }, [
-      'Interrupted work resumes on restart. Change labels & cadence in ',
-      el('a', { href: '#/settings', style: 'color:var(--accent-2)' }, 'Settings'),
-      '.',
-    ])
-  );
-
-  const preview = el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:12px' }, loading('Checking candidates…'));
-  card.append(preview);
-
-  const runNowBtn = el('button', {
-    class: 'primary',
-    onclick: async () => {
-      runNowBtn.disabled = true;
-      runNowBtn.textContent = 'Running…';
-      try {
-        const res = await api.runAgentNow();
-        const r = res.result || {};
-        const skippedMsg = r.reason || (r.skipped ? `Tick skipped: ${r.skipped}` : '');
-        const msg = r.error
-          ? r.error
-          : r.skipped
-          ? skippedMsg
-          : `Discovered ${r.discovered || 0}, processed ${r.processed || 0}.`;
-        toast(msg, r.error || r.skipped ? 'err' : 'ok');
-        renderAgent(clear(document.getElementById('view')));
-      } catch (err) {
-        toast(err.message, 'err');
-      } finally {
-        runNowBtn.disabled = false;
-        runNowBtn.textContent = 'Run now';
-      }
-    },
-  }, 'Run now');
-
-  card.append(el('div', { class: 'row' }, [runNowBtn]));
-  host.append(card);
-
-  // Read-only preview of what the next run will pick up.
-  try {
-    const { projects } = await api.getAgentCandidates();
-    clear(preview);
-    if (!projects.length) {
-      preview.append(el('span', {}, 'No matching open projects right now.'));
-    } else {
-      preview.append(
-        el('span', {}, `${projects.length} project(s) awaiting enrichment: `),
-        el('strong', {}, projects.map((p) => p.name).join(', '))
-      );
-    }
-  } catch (err) {
-    clear(preview).append(el('span', {}, `Could not load candidates: ${err.message}`));
-  }
-}
-
-/* ------------------------------ Jobs ------------------------------------ */
-
-function renderJobs(host, jobs) {
-  clear(host);
-  const all = jobs || [];
-  const enrichment = all.filter((j) => (j.kind || 'enrichment') === 'enrichment');
-  const coding = all.filter((j) => j.kind === 'coding');
+  const safe = status || {};
+  const counts = safe.counts || {};
   host.append(
-    jobsCard(host, {
-      title: 'Enrichment Jobs',
-      jobs: enrichment,
-      empty: 'No jobs yet. Matching projects are enriched automatically on the schedule.',
-      showClear: all.length > 0,
-    }),
-    jobsCard(host, {
-      title: 'Coding Jobs',
-      jobs: coding,
-      empty: 'No coding jobs yet. aiplanned projects are coded automatically.',
-      showClear: false,
-    })
+    railIntro('Workspace setup', 'Automatic planning and the model that supports this conversation.'),
+    el('div', { class: 'rail-summary' }, [
+      el('div', {}, [el('strong', {}, String(counts.running || 0)), el('span', {}, 'active')]),
+      el('div', {}, [el('strong', {}, String(counts.done || 0)), el('span', {}, 'done')]),
+      el('div', {}, [el('strong', {}, String(counts.error || 0)), el('span', {}, 'needs help')]),
+    ]),
+    el('div', { class: 'rail-section-label' }, 'Current setup'),
+    detailCard([
+      ['Planning', safe.scheduleEnabled ? `Every ${safe.intervalMinutes || 5} minutes` : 'Paused'],
+      ['Model', safe.localActiveModel || safe.ollamaModel || 'Not configured'],
+      ['Acting as', safe.assumedRole ? safe.assumedRole.name : 'No role selected'],
+      ['Labels', (safe.enrichLabels || []).join(', ') || 'Any'],
+    ]),
+    el('a', { class: 'rail-action-link', href: '#/settings' }, 'Change workspace settings')
   );
 }
 
-/** One card listing jobs of a single kind (enrichment or coding). */
-function jobsCard(host, { title, jobs, empty, showClear }) {
-  const card = el('div', { class: 'card', style: 'margin-top:16px' });
-  card.append(
-    el('div', { class: 'row' }, [
-      el('h3', { style: 'margin:0' }, title),
-      el('span', { class: 'spacer' }),
-      showClear
-        ? el('button', {
-            onclick: async () => {
-              await api.clearFinishedJobs();
-              toast('Cleared finished jobs.');
-              const j = await api.getJobs();
-              renderJobs(host, j.jobs);
-            },
-          }, 'Clear finished')
-        : null,
-    ])
-  );
-
-  if (!jobs.length) {
-    card.append(el('div', { class: 'muted', style: 'padding:12px 0' }, empty));
-    return card;
-  }
-
-  const rows = jobs.map((job) => jobRow(job, host));
-  card.append(el('div', { style: 'margin-top:10px;display:grid;gap:8px' }, rows));
-  return card;
-}
-
-/** Human-readable one-line summary for an enrichment job. */
-function enrichmentSummary(job) {
-  const s = job.summary;
-  return s && s.aifail
-    ? `⚠ aifail — ${s.reason || 'not a fit for a software-driven solution'}`
-    : s && s.resumed
-    ? `↻ resumed · ${s.issuesCreated} tasks created → aidone`
-    : s
-    ? `${s.milestonesCreated} milestones · ${s.issuesCreated} issues · ${s.dependenciesCreated} deps${s.warnings && s.warnings.length ? ` · ${s.warnings.length} warning(s)` : ''} → aidone`
-    : job.error || (job.status === 'pending' ? 'Waiting for next scheduler tick…' : job.status === 'running' ? 'Enriching…' : '');
-}
-
-/** Human-readable one-line summary for a coding job. */
-function codingSummary(job) {
-  const s = job.summary;
-  if (s && s.coding) {
-    const outcome = s.outcome === 'completed' ? '✓ aidone' : s.outcome === 'insufficient' ? '⚠ aifail' : '';
-    const merged = s.pr ? ' · PR merged' : '';
-    const branch = s.branch ? ` · branch ${s.branch}` : '';
-    const tail = s.reason || (s.finalText || '').slice(0, 140);
-    return `${outcome}${merged}${branch}${tail ? ` · ${tail}` : ''}`.trim() || 'done';
-  }
-  return job.error || (job.status === 'running' ? 'Coding…' : job.status === 'pending' ? 'Queued…' : '');
-}
-
-function jobRow(job, host) {
+function renderJobRail(host, job) {
+  railPinned = true;
   const steps = job.steps || [];
-  const coding = job.kind === 'coding';
-  const heading = coding ? `${job.taskIdentifier || 'task'}${job.taskTitle ? ` · ${job.taskTitle}` : ''}` : job.projectName;
-  const summaryText = coding ? `${job.projectName} — ${codingSummary(job)}` : enrichmentSummary(job);
-  const linkBtn = coding
-    ? job.taskUrl && el('a', { class: 'btn', href: job.taskUrl, target: '_blank' }, '↗ Ticket')
-    : job.traceUrl && el('a', { class: 'btn', href: job.traceUrl, target: '_blank' }, '🔎 Trace');
-
-  const stepsPanel = el(
-    'div',
-    { class: 'job-steps', hidden: !expandedJobs.has(job.id) },
-    steps.length ? steps.map(stepLine) : [el('div', { class: 'muted', style: 'font-size:12px' }, 'No steps recorded yet.')]
+  clear(host).append(
+    railIntro(job.projectName || job.taskIdentifier || 'Run activity', 'A detailed record of what the agent did.'),
+    el('div', { class: 'rail-section-label' }, 'Run details'),
+    detailCard([
+      ['Status', job.status || 'unknown'],
+      ['Started', formatTime(job.startedAt || job.createdAt)],
+      ['Finished', job.finishedAt ? formatTime(job.finishedAt) : 'Still working'],
+      ['Steps', String(steps.length)],
+    ]),
+    el('div', { class: 'rail-section-label' }, 'Activity'),
+    steps.length
+      ? el('ol', { class: 'activity-list' }, steps.map((step) => el('li', { class: `lvl-${step.level || 'info'}` }, [
+          el('time', {}, formatTime(step.ts)),
+          el('span', {}, step.message),
+        ])))
+      : el('p', { class: 'rail-copy' }, 'No detailed activity has been recorded yet.')
   );
-
-  const stepsToggle = el('button', {
-    title: 'Show step trace',
-    onclick: () => {
-      if (expandedJobs.has(job.id)) {
-        expandedJobs.delete(job.id);
-        stepsPanel.hidden = true;
-      } else {
-        expandedJobs.add(job.id);
-        stepsPanel.hidden = false;
-      }
-    },
-  }, `🧾 ${steps.length}`);
-
-  const topRow = el('div', { class: 'biz-row', style: 'margin:0' }, [
-    statusBadge(job.status),
-    el('div', {}, [
-      el('div', { style: 'font-weight:600' }, heading),
-      el('div', { class: 'muted', style: 'font-size:12px' }, summaryText),
-    ]),
-    el('div', { class: 'actions' }, [
-      job.assumedRole ? el('span', { class: 'muted', style: 'font-size:12px;align-self:center' }, `as ${job.assumedRole.name}`) : null,
-      stepsToggle,
-      linkBtn || null,
-      el('button', {
-        class: 'danger',
-        onclick: async () => {
-          try {
-            await api.deleteJob(job.id);
-            expandedJobs.delete(job.id);
-            const j = await api.getJobs();
-            renderJobs(host, j.jobs);
-          } catch (err) {
-            toast(err.message, 'err');
-          }
-        },
-      }, '✕'),
-    ]),
-  ]);
-
-  return el('div', { class: 'job' }, [topRow, stepsPanel]);
 }
 
-function stepLine(step) {
-  let time = step.ts;
-  try {
-    time = new Date(step.ts).toLocaleTimeString();
-  } catch (_) {
-    /* keep raw */
-  }
-  return el('div', { class: `job-step lvl-${step.level || 'info'}` }, [
-    el('span', { class: 'ts' }, time),
-    el('span', {}, step.message),
+function assistantMessage(title, copy, links = [], kind = '') {
+  return el('article', { class: `conversation-message assistant ${kind}`.trim() }, [
+    el('div', { class: 'message-avatar' }, 'S'),
+    el('div', { class: 'message-copy' }, [
+      el('strong', { class: 'message-title' }, title),
+      el('p', {}, copy),
+      links.length ? el('div', { class: 'message-links' }, links.map((link) => {
+        if (link.href) return el('a', { href: link.href, ...(link.external ? { target: '_blank', rel: 'noreferrer' } : {}) }, link.label);
+        return el('button', { type: 'button', onclick: link.action }, link.label);
+      })) : null,
+    ]),
   ]);
 }
 
-function statusBadge(status) {
-  const map = {
-    pending: ['badge', '⏳ pending'],
-    running: ['badge state-started', '▶ running'],
-    done: ['badge state-completed', '✓ done'],
-    error: ['badge state-started', '✕ error'],
-  };
-  const [cls, text] = map[status] || ['badge', status];
-  return el('span', { class: cls, style: 'align-self:center' }, text);
+function userMessage(copy) {
+  return el('article', { class: 'conversation-message user' }, [
+    el('div', { class: 'message-avatar' }, 'You'),
+    el('div', { class: 'message-copy' }, [el('p', {}, copy)]),
+  ]);
+}
+
+function railIntro(title, copy) {
+  return el('div', { class: 'rail-intro' }, [
+    el('span', { class: 'rail-intro-icon' }, '◇'),
+    el('div', {}, [el('strong', {}, title), el('p', {}, copy)]),
+  ]);
+}
+
+function detailCard(rows) {
+  return el('div', { class: 'detail-card' }, rows.flatMap(([label, value]) => [el('span', {}, label), el('strong', {}, value)]));
+}
+
+function railList(title, items) {
+  return el('div', {}, [
+    el('div', { class: 'rail-section-label' }, title),
+    el('ul', { class: 'rail-list' }, items.map((item) => el('li', {}, item))),
+  ]);
+}
+
+function formatTime(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }

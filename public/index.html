@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Fleet</title>
+    <title>AI Fleet — Agent Workspace</title>
     <link rel="stylesheet" href="/styles.css" />
     <link
       rel="icon"
@@ -22,24 +22,104 @@
     </script>
   </head>
   <body>
+    <a class="skip-link" href="#view">Skip to workspace</a>
+
     <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark">◆</span>
-        <span>AI Fleet</span>
+      <div class="brand-area">
+        <button
+          class="mobile-nav-button icon-button"
+          id="sidebar-toggle"
+          type="button"
+          aria-label="Open navigation"
+          aria-controls="app-sidebar"
+          aria-expanded="false"
+        >
+          <span data-icon="menu"></span>
+        </button>
+        <a class="brand" href="#/agent" aria-label="AI Fleet agent workspace">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span>AI Fleet</span>
+        </a>
       </div>
-      <nav class="tabs" id="tabs">
-        <a href="#/business" data-route="business">Business</a>
-        <a href="#/projects" data-route="projects">Projects</a>
-        <a href="#/board" data-route="board">Board</a>
-        <a href="#/agent" data-route="agent">Agent</a>
-        <a href="#/settings" data-route="settings">Settings</a>
-      </nav>
-      <div class="assumed-role" id="assumed-role" hidden></div>
-      <div class="conn" id="conn"><span class="dot"></span><span id="conn-text">Checking…</span></div>
-      <div class="theme-toggle" id="theme-toggle"></div>
+
+      <div class="topbar-context" aria-live="polite">
+        <span id="route-eyebrow">Workspace</span>
+        <strong id="route-title">Agent workspace</strong>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="assumed-role" id="assumed-role" hidden></div>
+        <div class="conn" id="conn"><span class="dot"></span><span id="conn-text">Checking…</span></div>
+        <div class="theme-toggle" id="theme-toggle"></div>
+      </div>
     </header>
 
-    <main id="view" class="view"></main>
+    <div class="app-frame">
+      <button
+        class="sidebar-backdrop"
+        id="sidebar-backdrop"
+        type="button"
+        aria-label="Close navigation"
+        tabindex="-1"
+        hidden
+      ></button>
+
+      <aside class="app-sidebar" id="app-sidebar" aria-label="Primary navigation">
+        <div class="workspace-picker">
+          <span class="workspace-icon" aria-hidden="true">A</span>
+          <span><small>Workspace</small>Agent operations</span>
+        </div>
+
+        <nav class="sidebar-nav" id="tabs" aria-label="Application">
+          <div class="nav-section">
+            <div class="nav-heading">Workspace</div>
+            <a href="#/agent" data-route="agent">
+              <span class="nav-icon" data-icon="spark"></span>
+              <span class="nav-link-copy"><strong>Agent workspace</strong><small>Plan and run work</small></span>
+            </a>
+            <a href="#/calls" data-route="calls">
+              <span class="nav-icon" data-icon="video"></span>
+              <span class="nav-link-copy"><strong>Call recorder</strong><small>Capture agent sessions</small></span>
+            </a>
+            <a href="#/traces" data-route="traces">
+              <span class="nav-icon" data-icon="graph"></span>
+              <span class="nav-link-copy"><strong>Trace analysis</strong><small>Understand what happened</small></span>
+            </a>
+          </div>
+
+          <div class="nav-section">
+            <div class="nav-heading">Planning</div>
+            <a href="#/business" data-route="business">
+              <span class="nav-icon" data-icon="briefcase"></span>
+              <span class="nav-link-copy"><strong>Business</strong><small>Contexts and roles</small></span>
+            </a>
+            <a href="#/projects" data-route="projects">
+              <span class="nav-icon" data-icon="folder"></span>
+              <span class="nav-link-copy"><strong>Projects</strong><small>Plans and milestones</small></span>
+            </a>
+            <a href="#/board" data-route="board">
+              <span class="nav-icon" data-icon="board"></span>
+              <span class="nav-link-copy"><strong>Board</strong><small>Issues in motion</small></span>
+            </a>
+          </div>
+
+          <div class="nav-section nav-section-system">
+            <div class="nav-heading">System</div>
+            <a href="#/settings" data-route="settings">
+              <span class="nav-icon" data-icon="sliders"></span>
+              <span class="nav-link-copy"><strong>Settings</strong><small>Models and connections</small></span>
+            </a>
+          </div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="sync-line"><span class="sync-dot"></span>Workspace ready</div>
+          <span>Local models and connected tools</span>
+        </div>
+      </aside>
+
+      <main id="view" class="view" tabindex="-1"></main>
+    </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 

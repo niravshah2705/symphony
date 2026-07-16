@@ -11,6 +11,10 @@ A simple Node.js UI (branded **AI Fleet**) to manage Linear projects:
 - **Agent** — a **business-owner planning deep agent** (Ollama, LM Studio, Codex, or Claude + web search) enriches projects **carrying any of the chosen labels** (default `AI`): it checks business viability (unfit → `aifail`), writes a business plan — **MVB** (Minimal Viable Business) first, then business metrics, branding, and beyond — creates milestones, tasks, and dependencies, and marks the project **`aidone`** once issues exist. Interrupted projects **resume on restart** (missing issues get created). Projects are **discovered and processed on a configurable 5/10/15-minute schedule**.
 - **Code-writer agent** — a second deep agent that works a **single Linear ticket end-to-end** inside an **isolated git clone**: it implements the change, keeps one **`## Workpad`** comment as the source of truth, and drives the ticket through its state machine to a **pull request** (stamped with a configurable label). A board monitor polls active-state tickets and dispatches runs up to a concurrency cap. See [Code-writer agent](#code-writer-agent) below.
 - **Settings** — a tidy page of **collapsible sections**: **API Keys & Connection** (Linear + LangSmith key/host/project/tracing), **Deep Agent LLM** (provider, model, and model-aware reasoning dropdowns for each route, with collapsed parameter customization), **Assume Role**, and **Deep Agent** (enrich labels, schedule cadence, parallelism, caps, toggles). All secrets are validated/stored **server-side** (never exposed to the browser).
+- **Conversational workspace** — a citation-inspired three-pane interface keeps the main conversation plain-language while run steps, model provenance, assumptions, and trace evidence stay behind small **Details** links.
+- **Agentic call recorder** — record a shared screen or camera with microphone audio, review/download the recording locally, and use the configured local model to organize typed call notes. Recording media never leaves the browser.
+- **Local trace analysis** — paste logs or a structured agent trace and get a concise explanation, evidence, bottlenecks, and next actions from the configured Ollama or LM Studio model.
+- **Tool integrations** — choose **GitHub or GitLab** as the repository host and save a default repository/token; choose **Linear, Jira, or Asana** as the planning connector in Settings. A server-side repository broker owns authenticated clone/fetch/push and PR/MR/check/merge calls through the providers' official APIs. Existing live project/board automation remains Linear-backed while the additional planning credentials provide the configuration surface for connector routing.
 
 ## Demo
 
@@ -37,14 +41,21 @@ AI Fleet in action — from creating a business to shipping merged PRs:
 Collapsible sections:
 
 1. **API Keys & Connection** — the Linear and LangSmith keys together, plus the LangSmith **host/endpoint**, project, and tracing toggle. One **Save keys** button; the Linear key is validated on save and connection status is shown.
-2. **Deep Agent LLM** — choose **Provider**, **Model**, and **Reasoning** for each route. The **Local / XS** route offers Ollama and LM Studio; the **Hosted / planner + larger tasks** route offers OpenAI and Anthropic. Selecting a model atomically applies its recommended context, output, sampling, and provider-native reasoning defaults. Expand **Customize parameters** to change supported numeric values later.
+2. **Tool integrations** — choose a planning connector (**Linear / Jira / Asana**) and repository host (**GitHub / GitLab**), then save the matching connection details. Tokens are masked and stored only on the server. The code agent receives a provider-neutral, repository/branch-scoped broker tool; the token is never copied into its shell environment or checkout configuration.
+3. **Deep Agent LLM** — choose **Provider**, **Model**, and **Reasoning** for each route. The **Local / XS** route offers Ollama and LM Studio; the **Hosted / planner + larger tasks** route offers OpenAI and Anthropic. Selecting a model atomically applies its recommended context, output, sampling, and provider-native reasoning defaults. Expand **Customize parameters** to change supported numeric values later.
    - **Ollama / LM Studio (local)** — no API key is required. The page renders immediately, discovers loaded models asynchronously, and offers a refresh action. LM Studio's configured context must match the context used when loading the model, and its output budget is capped at half that context so prompt and output fit together.
    - **OpenAI / Codex OAuth** — **Sign in with ChatGPT** using OAuth 2.0 Authorization Code + PKCE. The model list is refreshed from the signed-in Codex account with a bundled current fallback. Reasoning choices are model-specific: for example, GPT-5.6 Sol and Terra expose Low through Ultra, while GPT-5.5 exposes Low through Extra high. `ultra` is sent only to the ChatGPT/Codex backend.
    - **Anthropic / Claude OAuth** — **Sign in with Claude**, approve in the opened tab, then paste the returned `code#state`. Available models are queried from Anthropic with bundled fallbacks, and only each model's advertised adaptive-thinking effort values are shown.
 
 The committed source of truth is [`packages/shared/src/agent/llm-presets.json`](packages/shared/src/agent/llm-presets.json). It separates model limits from request defaults and records the exact reasoning adapter used by each provider.
-3. **Assume Role** — pick a workspace member (validated server-side). The assumed role owns enriched projects and is shown in the **top toolbar**.
-4. **Deep Agent** — **enrich labels** (multi-select dropdown of your Linear project labels), **scheduler cadence** (5 / 10 / 15 minutes), parallelism, and per-run/milestone/issue caps, plus toggles.
+4. **Assume Role** — pick a workspace member (validated server-side). The assumed role owns enriched projects and is shown in the **top toolbar**.
+5. **Deep Agent** — **enrich labels** (multi-select dropdown of your Linear project labels), **scheduler cadence** (5 / 10 / 15 minutes), parallelism, and per-run/milestone/issue caps, plus toggles.
+
+## Local workspace scenarios
+
+- **Agent workspace** (`#/agent`) accepts rough product or project context and returns a clarified brief, goals, constraints, explicit assumptions, missing information, and suggested next steps. The center stays conversational; exact model/run data appears in the evidence rail.
+- **Call recorder** (`#/calls`) uses browser `MediaRecorder` APIs for screen/camera + microphone capture. The generated media stays in a local Blob URL for review/download. Only typed notes and small metadata such as duration are sent to local enrichment.
+- **Trace analysis** (`#/traces`) accepts pasted text logs or structured JSON traces. Input is bounded, fenced as untrusted data, and routed only through the configured local role. A deterministic evidence-based fallback is returned if the local model response is unavailable or malformed.
 
 ## Agent tab (project enrichment)
 
@@ -88,6 +99,8 @@ in **Deep Agent LLM** (local Ollama/LM Studio or hosted Codex/Claude, routed by 
   isolated workspace (a per-ticket clone under `CODER_WORKSPACE_ROOT`). It has
   filesystem + shell tools (rooted at the clone), an injected **`linear_graphql`**
   tool (the raw Linear token stays server-side — the agent never sees it), and a
+  scoped **`repository_broker`** tool for GitHub/GitLab fetch, push, review status,
+  checks, and squash merge (the repository token also stays server-side), plus a
   set of **skills** (`linear`, `commit`, `push`, `pull`, `land`) loaded from
   `packages/shared/src/agent/skills/`. Its system prompt is the **workflow** (ticket state
   machine + a single `## Workpad` comment as the source of truth).
@@ -132,10 +145,17 @@ curl -X POST http://localhost:4000/api/coder/monitor \
 Progress is reported to the server logs (`data/app.log`) and to the ticket's
 `## Workpad` comment in Linear.
 
+`CODER_BACKEND=openswe` is a legacy GitHub-only adapter configured on the OpenSWE
+side (`OPENSWE_REPO`/`CODER_REPO_URL`); it does not use the local repository broker
+or the selected repository setting. A GitLab selection therefore fails closed.
+Use the default local backend for brokered GitHub/GitLab operation.
+
 ## Security notes
 
 - **Role assumption is enforced server-side** — enrich endpoints return `403` without an assumed role; the assumed member id is validated against the real workspace member list.
 - **Secrets stay on the server** — Linear/LangSmith keys and **Codex/Claude OAuth tokens** live only in `data/store.json`, are masked in API responses, and are never sent to the browser. Ollama needs no key.
+- **Repository credentials are brokered** — stored GitHub/GitLab tokens never enter the code agent's `LocalShellBackend` environment, prompt, tool arguments, origin URL, or `.git/config`. Authenticated Git executes from a broker-private bare staging repository with a fixed host/repository/branch/refspec; PR/MR creation, check/review reads, and SHA-checked squash merge use the official GitHub/GitLab HTTP APIs. Provider redirects, arbitrary URLs/refspecs, force pushes, and broad GitHub MCP access are denied.
+- **Local shell trust boundary** — `LocalShellBackend` is a host shell rooted by convention, not an OS security sandbox. It runs with the coder service user's filesystem permissions and can read other paths that user can access (including the plaintext local store if it discovers its path). Environment sanitization and the repository broker prevent routine credential injection, but do not contain adversarial shell code. Run the coder only for trusted repositories/tickets in this local deployment; stronger isolation requires a separate container/VM or OS identity with a narrowly mounted workspace and an external secret broker.
 - **Codex OAuth** — Authorization Code + **PKCE (S256, never `plain`)**; a cryptographically-random, server-issued, **single-use** `state` guards the callback against CSRF/replay; the `redirect_uri` is server-derived and reused exact-match in the code exchange; **refresh tokens rotate** on use. Provider endpoint URLs + client id are trusted server-side config and are **not** accepted from request bodies. Browser-settable preset overrides are allowlisted, normalized, and model-family checked.
 - **Claude OAuth** — the same Authorization Code + **PKCE (S256)** guarantees: a single-use, server-issued `state` is echoed back inside the pasted `code#state` and matched against a login we issued (CSRF/replay guard); provider URLs, client id, and scope are trusted server-side config (env-overridable via `CLAUDE_OAUTH_*`) and are **not** taken from the browser. Tokens are stored server-side, refreshed automatically, and sent as `Authorization: Bearer` with the `anthropic-beta: oauth-2025-04-20` header (never `x-api-key`).
 - **Local inference hosts** — operator-configured settings are restricted to `http`/`https`, normalized on save, and never accepted from an agent inference call. This is a local single-user tool, so localhost is the intended target.
@@ -181,7 +201,7 @@ packages/shared/
       framework.js        workflow-driven deep-agent runner (skills + tools + backend)
       workflows/          planning.workflow.js · coding.workflow.js (declarative)
       schema.js plan.js apply.js scheduler.js search.js   ← planner
-      coder.js coder-orchestrator.js workspace.js openswe.js  ← code-writer
+      coder.js coder-orchestrator.js workspace.js repository-broker.js openswe.js  ← code-writer
       tools.js mcp.js safe-read.js   built-in tools (web_search, linear_graphql) + optional MCP
       llm.js llm-presets.json model-presets.js model-discovery.js lmstudio-context.js  ← LLM router + catalog
       oauth.js pkce.js claude-oauth.js trace-annotations.js

@@ -21,10 +21,10 @@ These drive the ticket → implement → review → land loop.
 | `linear` | Read the issue, manage the single Workpad comment, and transition ticket state via the injected `linear_graphql` tool. |
 | `software-planning` | Turn an idea into an engineering plan: milestones and buildable issues as user stories with acceptance criteria and dependencies. |
 | `web-research` | Ground planning/tech decisions in current real-world info via the `web_search` tool. |
-| `pull` | Sync the working branch with `origin/main` at kickoff and before every push/handoff. |
+| `pull` | Ask the repository broker to fetch, then locally merge its scoped base branch. |
 | `commit` | Produce clean, logical git commits during implementation. |
-| `push` | Publish the current branch and keep the remote up to date before review. |
-| `land` | Merge the ticket's PR into `main` as the final step before a `completed` verdict. |
+| `push` | Publish the scoped task branch through the repository broker before review. |
+| `land` | Check and merge the provider-neutral PR/MR through the broker before completion. |
 
 ---
 
