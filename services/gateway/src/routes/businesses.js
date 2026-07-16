@@ -2,9 +2,9 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const { readStore, writeStore, getApiKey, getAgentConfig } = require('../store');
-const { getProjects, createProject, getOrCreateProjectLabels } = require('../linear');
-const { asyncHandler } = require('../util');
+const { readStore, writeStore, getApiKey, getAgentConfig } = require('@ai-fleet/shared/store');
+const { getProjects, createProject, getOrCreateProjectLabels } = require('@ai-fleet/shared/linear');
+const { asyncHandler } = require('@ai-fleet/shared/util');
 
 const router = express.Router();
 

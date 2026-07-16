@@ -1,14 +1,14 @@
 'use strict';
 
 const express = require('express');
-const { CONFIG } = require('../config');
-const { getSettings, patchSettings, getClaudeTokens, setClaudeTokens, clearClaudeTokens } = require('../store');
-const { asyncHandler, maskKey } = require('../util');
-const claudeOauth = require('../agent/claude-oauth');
-const { ensureFreshClaudeTokens, resolveLlm, createChatModel } = require('../agent/llm');
-const { presetForModel } = require('../agent/model-presets');
-const { discoverModels } = require('../agent/model-discovery');
-const log = require('../logger');
+const { CONFIG } = require('@ai-fleet/shared/config');
+const { getSettings, patchSettings, getClaudeTokens, setClaudeTokens, clearClaudeTokens } = require('@ai-fleet/shared/store');
+const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
+const claudeOauth = require('@ai-fleet/shared/agent/claude-oauth');
+const { ensureFreshClaudeTokens, resolveLlm, createChatModel } = require('@ai-fleet/shared/agent/llm');
+const { presetForModel } = require('@ai-fleet/shared/agent/model-presets');
+const { discoverModels } = require('@ai-fleet/shared/agent/model-discovery');
+const log = require('@ai-fleet/shared/logger');
 
 /**
  * Claude (Anthropic) OAuth 2.0 Authorization Code + PKCE endpoints.

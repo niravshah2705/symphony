@@ -3,10 +3,11 @@
 Welcome! This guide gets a new developer from a fresh clone to a running app,
 explains what the software does, and points you at the code you'll be working in.
 
-> **What is this?** AI Fleet (npm package `linear-manager`, repo `tech-symphony`)
-> is a **single-user Node.js + Express** tool with a dependency-free vanilla-JS
-> single-page frontend. It manages **Linear** projects/issues **and** runs two AI
-> "deep agents" against them:
+> **What is this?** AI Fleet (repo `tech-symphony`) is a **single-user** tool with
+> a dependency-free vanilla-JS single-page frontend, decomposed into **three
+> isolated Node.js + Express services over one shared library** (an npm-workspaces
+> monorepo — see §6). It manages **Linear** projects/issues **and** runs two AI
+> "deep agents" against them, each living in its own service:
 > 1. a **business-owner planner** that turns a labelled Linear project into a full
 >    business plan (milestones + issues), and
 > 2. a **code-writer** that works a Linear ticket end-to-end inside an isolated git
@@ -35,29 +36,48 @@ served straight from `public/`.
 ```bash
 # from the repo root: /Users/niravshah2705/git/reasearch/tech-symphony
 
-npm install            # install dependencies (one time)
+npm install            # install ALL workspaces (one time)
 
-npm start              # run the server → http://localhost:4000
+npm start              # boot the whole fleet:
+                       #   gateway  → http://localhost:4000  (SPA + API + proxy)
+                       #   planner  → http://localhost:4010  (internal)
+                       #   coder    → http://localhost:4020  (internal)
 # or
-npm run dev            # same, but auto-restarts on file changes (node --watch)
+npm run dev            # same, each service under node --watch
 
-npm test               # run the test suite (node --test)
+# run one service at a time (they share data/store.json):
+npm run start:gateway  # or start:planner / start:coder
+
+npm test               # run the whole suite (node --test) — tests live in packages/shared
 ```
 
-Override the port with the `PORT` env var:
+Override ports with env vars — `PORT` (gateway), `PLANNER_PORT`, `CODER_SERVICE_PORT`:
 
 ```bash
-PORT=5000 npm start    # → http://localhost:5000
+PORT=5000 npm start    # gateway → http://localhost:5000
 ```
+
+If the agent services run on other hosts, tell the gateway where with `PLANNER_URL`
+and `CODER_URL`. Move the shared store with `AI_FLEET_DATA_DIR`.
 
 Then open **<http://localhost:4000>** in a browser. On first launch you'll be
 prompted to add a Linear API key before any view will load.
 
 ### What happens on boot
-`server/index.js` wires the Express routes, serves the SPA, and then
-**starts the enrichment scheduler** (`scheduler.startScheduler()`), which also
-reconciles any interrupted jobs. The code-writer board monitor is **not** started
-automatically — you start it explicitly (see §5.2).
+`npm start` runs `scripts/start-all.js`, which spawns the three service
+processes with prefixed output:
+- **gateway** (`services/gateway/src/index.js`) wires the user-facing routes,
+  serves the SPA, and **reverse-proxies** `/api/agent/*` → planner and
+  `/api/coder/*` → coder. It is the only browser-facing origin.
+- **planner** (`services/planner/src/index.js`) mounts `/api/agent` and
+  **starts the enrichment scheduler** (`scheduler.startScheduler()`), which also
+  reconciles interrupted jobs.
+- **coder** (`services/coder/src/index.js`) mounts `/api/coder` and **starts the
+  board monitor** so `aiplanned` projects are picked up automatically (each poll
+  self-guards on missing keys).
+
+All three import the same `@ai-fleet/shared` library, so there is exactly one
+copy of every module (config, store, Linear client, deep-agent runtime).
 
 ---
 
@@ -107,13 +127,14 @@ The SPA (`public/js/app.js`) hash-routes between five views:
 
 ## 5. The two deep agents (developer mental model)
 
-Both agents live under `server/agent/` and are the SAME **workflow-driven
-framework** (`framework.js`) configured by a declarative *workflow file*
-(`workflows/*.workflow.js`). A workflow declares its **skills**, **tools**,
-backend, and system prompt; the framework installs the skills, builds the
-`deepagents` agent (FilesystemBackend for the planner, LocalShellBackend for the
-coder), and runs it. Both share the LLM provider factory (`llm.js` →
-`resolveLlm`). The planner uses the hosted route; the coder uses the local route
+Each agent runs in its **own service** (`services/planner`, `services/coder`),
+but both are built from the SAME **workflow-driven framework** that lives once in
+the shared library (`packages/shared/src/agent/framework.js`), configured by a
+declarative *workflow file* (`agent/workflows/*.workflow.js`). A workflow declares
+its **skills**, **tools**, backend, and system prompt; the framework installs the
+skills, builds the `deepagents` agent (FilesystemBackend for the planner,
+LocalShellBackend for the coder), and runs it. Both share the LLM provider factory
+(`agent/llm.js` → `resolveLlm`) — there is one copy, imported by both services. The planner uses the hosted route; the coder uses the local route
 for `local`/XS tickets and the hosted route for larger or unlabeled tickets. The
 `local`/`hosted` routing labels are created under a **`Models` issue-label group**
 (`CONFIG.CODER.modelLabelGroup`), so Linear renders them as a single-select
@@ -161,7 +182,7 @@ tickets** (coder, scheduled + parallel).
   - `CODER_BACKEND=openswe` — dispatches to a running **Open SWE** LangGraph server
     (see [OPENSWE_SETUP.md](./OPENSWE_SETUP.md)); Open SWE runs the coding loop in
     its (optionally local) sandbox and opens the PR.
-- **Config:** `CODER_*` env vars in `server/config.js` — `CODER_REPO_URL`,
+- **Config:** `CODER_*` env vars in `packages/shared/src/config.js` — `CODER_REPO_URL`,
   `CODER_WORKSPACE_ROOT`, `CODER_TASK_LABEL` (default `AI`), `CODER_BACKEND`.
 - **Trigger it:**
   - one ticket → `POST /api/coder/run` with `{ "issueId": "..." }`
@@ -172,33 +193,42 @@ tickets** (coder, scheduled + parallel).
 
 ## 6. Architecture map
 
+The repo is an **npm-workspaces monorepo**: one shared library, three isolated
+service processes. `data/store.json` and `public/` live at the repo root and are
+shared by all services (resolved via `@ai-fleet/shared/config`).
+
 ```
-server/
-  index.js              Express app + route wiring + SPA fallback + boots scheduler
-  config.js             All constants + env-overridable OAuth/CODER config
-  store.js              JSON-file store  →  data/store.json
-  linear.js             Linear GraphQL client (server holds the key)
-  logger.js             stdout + data/app.log
-  util.js               asyncHandler, sendError, maskKey
-  routes/               settings · projects · issues · businesses · roles
-                        · agent · coder · codex(OAuth) · claude(OAuth)
-  agent/
-    framework.js          workflow-driven deep-agent runner (skills + tools + backend)
-    workflows/            planning.workflow.js · coding.workflow.js (declarative)
-    tools.js mcp.js       tool registry (web_search, linear_graphql) + optional MCP
-    skills/               SKILL.md dirs: software-planning, web-research, linear, commit, push, pull, land
-    plan.js schema.js apply.js scheduler.js search.js   ← software-design planner
-    coder.js coder-orchestrator.js workspace.js openswe.js  ← code-writer (+ Open SWE)
-    llm.js                provider factory (ollama | lmstudio | codex | claude)
-    llm-presets.json      shared model limits + recommended request parameters
-    model-presets.js      preset validation, normalization, settings mapping
-    oauth.js pkce.js      Codex OAuth (+ .test.js)
-    claude-oauth.js       Claude OAuth (+ .test.js)
-public/
-  index.html styles.css
-  js/  app.js (router) · api.js · dom.js · state.js
-  js/views/  projects · board · business · agent · settings
-data/                    store.json (secrets/config/jobs) + app.log   ← git-ignored
+packages/shared/              @ai-fleet/shared — ONE copy of all business logic
+  index.js                    barrel (CONFIG, store, linear, log, util)
+  src/
+    config.js                 constants + repo-root paths + SERVICES topology + OAuth/CODER config
+    store.js                  JSON-file store  →  data/store.json
+    linear.js                 Linear GraphQL client (server holds the key)
+    logger.js  util.js        stdout + data/app.log · asyncHandler/sendError/maskKey
+    agent/
+      framework.js              workflow-driven deep-agent runner (skills + tools + backend)
+      workflows/                planning.workflow.js · coding.workflow.js (declarative)
+      tools.js mcp.js safe-read.js   tool registry (web_search, linear_graphql) + optional MCP
+      skills/                   SKILL.md dirs: software-planning, web-research, linear, commit, push, pull, land
+      plan.js schema.js apply.js scheduler.js search.js   ← software-design planner
+      coder.js coder-orchestrator.js workspace.js openswe.js  ← code-writer (+ Open SWE)
+      llm.js llm-presets.json model-presets.js model-discovery.js lmstudio-context.js  ← LLM router + catalog
+      oauth.js pkce.js claude-oauth.js trace-annotations.js
+      *.test.js                 the whole test suite (node --test finds it here)
+
+services/                     each an isolated Express process importing @ai-fleet/shared
+  gateway/src/                :4000 — SPA + user API + OAuth; proxies /api/agent, /api/coder
+    index.js  proxy.js  routes/ (settings · projects · issues · businesses · roles · codex · claude)
+  planner/src/                :4010 — mounts /api/agent, boots scheduler
+    index.js  routes/agent.js
+  coder/src/                  :4020 — mounts /api/coder, boots board monitor
+    index.js  routes/coder.js
+
+scripts/
+  start-all.js                boot all three services from one terminal
+  models-label-group.js       one-off: create the Linear "Models" label group
+public/                       index.html · styles.css · js/ (app.js router · api.js · dom.js · state.js · views/)
+data/                         store.json (secrets/config/jobs) + app.log   ← git-ignored
 ```
 
 **Store shape** (`data/store.json`): `settings`, `businesses`, `assumedRole`,

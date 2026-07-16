@@ -1,26 +1,22 @@
 {
-  "name": "linear-manager",
+  "name": "ai-fleet",
   "version": "1.0.0",
-  "description": "Simple UI to manage Linear projects: milestone planning view, issues board, and a Business tab mapping businesses to Linear projects.",
-  "main": "server/index.js",
+  "description": "AI Fleet — a microservice-decomposed tool to manage Linear projects and run isolated planner + coder deep-agent services over a shared library.",
+  "private": true,
   "type": "commonjs",
+  "workspaces": [
+    "packages/*",
+    "services/*"
+  ],
   "scripts": {
-    "start": "node --env-file-if-exists=.env server/index.js",
-    "dev": "node --watch --env-file-if-exists=.env server/index.js",
+    "start": "node --env-file-if-exists=.env scripts/start-all.js",
+    "dev": "node --env-file-if-exists=.env scripts/start-all.js --watch",
+    "start:gateway": "npm start -w @ai-fleet/gateway",
+    "start:planner": "npm start -w @ai-fleet/planner",
+    "start:coder": "npm start -w @ai-fleet/coder",
     "test": "node --test"
   },
   "engines": {
     "node": ">=18"
-  },
-  "dependencies": {
-    "@langchain/anthropic": "^1.5.1",
-    "@langchain/core": "^1.2.1",
-    "@langchain/langgraph": "^1.4.7",
-    "@langchain/langgraph-sdk": "^1.9.25",
-    "@langchain/ollama": "^1.3.0",
-    "@langchain/openai": "^1.5.3",
-    "deepagents": "^1.10.5",
-    "express": "^4.19.2",
-    "langsmith": "^0.7.14"
   }
 }

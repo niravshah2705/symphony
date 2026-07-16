@@ -14,9 +14,9 @@
  *   LINEAR_API_KEY=lin_api_xxx node scripts/models-label-group.js
  */
 
-const { CONFIG } = require('../server/config');
-const { getApiKey } = require('../server/store');
-const { getOrCreateGroupedIssueLabel } = require('../server/linear');
+const { CONFIG } = require('@ai-fleet/shared/config');
+const { getApiKey } = require('@ai-fleet/shared/store');
+const { getOrCreateGroupedIssueLabel } = require('@ai-fleet/shared/linear');
 
 async function main() {
   const apiKey = process.env.LINEAR_API_KEY || getApiKey();

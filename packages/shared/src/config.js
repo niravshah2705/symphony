@@ -216,14 +216,44 @@ const MCP = Object.freeze({
   }),
 });
 
+/**
+ * Repo-root-anchored data/public locations. This module lives at
+ * packages/shared/src/config.js, so the monorepo root is three levels up. All
+ * services (gateway, planner, coder) resolve the SAME data/store.json and
+ * public/ regardless of which service process loads this shared config — the
+ * store is the single shared source of truth, never copied per service. Both
+ * roots are env-overridable for containerized deployments.
+ */
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
+const DATA_DIR = process.env.AI_FLEET_DATA_DIR || path.join(REPO_ROOT, 'data');
+const PUBLIC_DIR = process.env.AI_FLEET_PUBLIC_DIR || path.join(REPO_ROOT, 'public');
+
+/**
+ * Isolated agent-service topology. The gateway is the only browser-facing
+ * origin (it also owns OAuth via CONFIG.PORT above); it proxies /api/agent to
+ * the planner service and /api/coder to the coder service. Ports and internal
+ * base URLs are env-overridable so the services can move hosts/containers
+ * without a code change.
+ */
+const PLANNER_PORT = Number(process.env.PLANNER_PORT) || 4010;
+const CODER_SERVICE_PORT = Number(process.env.CODER_SERVICE_PORT) || 4020;
+const SERVICES = Object.freeze({
+  gatewayPort: PORT,
+  plannerPort: PLANNER_PORT,
+  coderPort: CODER_SERVICE_PORT,
+  plannerUrl: process.env.PLANNER_URL || `http://localhost:${PLANNER_PORT}`,
+  coderUrl: process.env.CODER_URL || `http://localhost:${CODER_SERVICE_PORT}`,
+});
+
 /** Server configuration and shared constants. */
 const CONFIG = Object.freeze({
   PORT,
   LINEAR_API_URL: 'https://api.linear.app/graphql',
-  DATA_DIR: path.join(__dirname, '..', 'data'),
-  STORE_FILE: path.join(__dirname, '..', 'data', 'store.json'),
-  LOG_FILE: path.join(__dirname, '..', 'data', 'app.log'),
-  PUBLIC_DIR: path.join(__dirname, '..', 'public'),
+  DATA_DIR,
+  STORE_FILE: path.join(DATA_DIR, 'store.json'),
+  LOG_FILE: path.join(DATA_DIR, 'app.log'),
+  PUBLIC_DIR,
+  SERVICES,
   // Number of records to request from Linear in list queries.
   PAGE_SIZE: 100,
   ISSUE_PAGE_SIZE: 250,

@@ -1,38 +1,50 @@
 # AI Fleet Architecture Diagram
 
-This diagram shows the preset-routed DeepAgent architecture: Linear is the ticket
-system, Ollama/LM Studio provide the local route, OpenAI/Claude provide the hosted
-route, and the DeepAgent runtime uses skills plus Linear/GitHub tools to plan and
-execute work.
+This diagram shows the preset-routed DeepAgent architecture, decomposed into
+**three isolated services over one shared library**: a browser-facing **gateway**
+(SPA + user API + OAuth) that reverse-proxies the two isolated agent services
+(**planner** and **coder**). Linear is the ticket system, Ollama/LM Studio provide
+the local route, OpenAI/Claude provide the hosted route, and the DeepAgent runtime
+(shipped once in `@ai-fleet/shared`) uses skills plus Linear/GitHub tools to plan
+and execute work.
 
 ```mermaid
 flowchart LR
   User["User / operator"] --> Browser["AI Fleet SPA<br/>Business, Projects, Board, Agent, Settings"]
-  Browser -->|REST API| Api["Node.js + Express API<br/>server/index.js + routes"]
+  Browser -->|same-origin REST| Gateway["Gateway service :4000<br/>services/gateway<br/>SPA + user API + OAuth"]
 
-  Api --> Store["Server-side store<br/>data/store.json<br/>settings, keys, jobs"]
-  Catalog["LLM preset catalog<br/>server/agent/llm-presets.json<br/>limits, sampling, reasoning adapters"] --> Api
-  Api <-->|GraphQL with server-held Linear key| Linear["Linear<br/>ticket management<br/>projects, milestones, issues, labels"]
+  Gateway -->|proxy /api/agent| Planner["Planner service :4010<br/>services/planner<br/>scheduler + /api/agent"]
+  Gateway -->|proxy /api/coder| CoderSvc["Coder service :4020<br/>services/coder<br/>board monitor + /api/coder"]
 
-  subgraph AgentRuntime["DeepAgent runtime"]
-    Framework["Workflow framework<br/>server/agent/framework.js"]
-    Planner["Planning DeepAgent<br/>software-design planner"]
-    Coder["Code-writer DeepAgent<br/>Linear ticket to merged PR"]
+  Gateway --> Store["Shared store<br/>data/store.json<br/>settings, keys, jobs"]
+  Planner --> Store
+  CoderSvc --> Store
+  Shared["@ai-fleet/shared<br/>config · store · linear · logger/util<br/>+ DeepAgent runtime (one copy)"] -.->|imported by| Gateway
+  Shared -.->|imported by| Planner
+  Shared -.->|imported by| CoderSvc
+  Catalog["LLM preset catalog<br/>agent/llm-presets.json<br/>limits, sampling, reasoning adapters"] --> Shared
+  Gateway <-->|GraphQL with server-held Linear key| Linear["Linear<br/>ticket management<br/>projects, milestones, issues, labels"]
+
+  subgraph AgentRuntime["DeepAgent runtime (in @ai-fleet/shared)"]
+    Framework["Workflow framework<br/>agent/framework.js"]
+    PlannerAgent["Planning DeepAgent<br/>software-design planner"]
+    CoderAgent["Code-writer DeepAgent<br/>Linear ticket to merged PR"]
     Skills["Skills<br/>software-planning, web-research<br/>linear, commit, push, pull, land"]
     BuiltInTools["Built-in tools<br/>web_search, linear_graphql"]
     McpTools["Optional MCP tools<br/>Linear MCP, GitHub MCP"]
     LlmRouter["Role-aware LLM router<br/>local / XS vs hosted / planner"]
 
-    Framework --> Planner
-    Framework --> Coder
+    Framework --> PlannerAgent
+    Framework --> CoderAgent
     Framework --> Skills
     Framework --> BuiltInTools
     Framework -.-> McpTools
-    Planner -->|hosted route| LlmRouter
-    Coder -->|route by issue label| LlmRouter
+    PlannerAgent -->|hosted route| LlmRouter
+    CoderAgent -->|route by issue label| LlmRouter
   end
 
-  Api -->|scheduler, run-now, coder monitor| AgentRuntime
+  Planner -->|scheduler, run-now| AgentRuntime
+  CoderSvc -->|board monitor, run one ticket| AgentRuntime
 
   subgraph LocalLlm["Local LLM providers"]
     Ollama["Ollama<br/>http://localhost:11434<br/>@langchain/ollama"]
@@ -52,12 +64,12 @@ flowchart LR
   BuiltInTools -->|linear_graphql| Linear
   McpTools -.->|Linear MCP| Linear
 
-  Coder --> Workspace["Isolated git workspace<br/>per project / ticket branch"]
+  CoderAgent --> Workspace["Isolated git workspace<br/>per project / ticket branch"]
   Workspace -->|clone, commit, push| GitHub["GitHub<br/>repository, branches, pull requests"]
   McpTools -.->|GitHub MCP / token| GitHub
 
   AgentRuntime -->|traces and run metadata| Observability["LangSmith tracing<br/>trace links in Agent tab"]
-  Api --> Logs["data/app.log<br/>server logs"]
+  Shared --> Logs["data/app.log<br/>shared logger, one file"]
 ```
 
 ## Request Flow
@@ -66,7 +78,7 @@ flowchart LR
 sequenceDiagram
   actor User as User
   participant UI as AI Fleet SPA
-  participant API as Express API
+  participant API as Gateway + agent services
   participant Linear as Linear
   participant Agent as DeepAgent framework
   participant LLM as Routed LLM - local or hosted

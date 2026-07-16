@@ -1,10 +1,10 @@
 'use strict';
 
 const express = require('express');
-const { getApiKey, setApiKey, getSettings, patchSettings } = require('../store');
-const { getViewer } = require('../linear');
-const { asyncHandler, maskKey } = require('../util');
-const { CONFIG } = require('../config');
+const { getApiKey, setApiKey, getSettings, patchSettings } = require('@ai-fleet/shared/store');
+const { getViewer } = require('@ai-fleet/shared/linear');
+const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
+const { CONFIG } = require('@ai-fleet/shared/config');
 const {
   publicCatalog,
   presetForRole,
@@ -16,7 +16,7 @@ const {
   sanitizeModelId,
   runtimePresetForProfile,
   neutralLocalPreset,
-} = require('../agent/model-presets');
+} = require('@ai-fleet/shared/agent/model-presets');
 
 const router = express.Router();
 
@@ -136,7 +136,7 @@ async function selectionPreset(provider, model) {
   // unavailable during startup or an installation upgrade.
   let discovery;
   try {
-    discovery = require('../agent/model-discovery');
+    discovery = require('@ai-fleet/shared/agent/model-discovery');
   } catch (_) {
     return null;
   }
