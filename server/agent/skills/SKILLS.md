@@ -3,12 +3,11 @@
 Skills available to the deep-agent (`server/agent/skills/`). Each subdirectory is one
 skill: a `SKILL.md` definition plus any supporting `scripts/`, `assets/`, or `references/`.
 
-The catalog has three groups:
+The catalog has two groups:
 
-1. **Core workflow skills** — built for this app's implementation loop.
-2. **Imported skills** — general-purpose skills vendored in from local Claude/Codex
-   configuration on **2026-07-13**.
-3. **Plugin-provided skills** — available in the environment but managed by the plugin
+1. **Core workflow skills** — built for this app's implementation loop; these are the
+   only skills wired into the deep-agent workflows and vendored in this directory.
+2. **Plugin-provided skills** — available in the environment but managed by the plugin
    system; documented here, not vendored.
 
 ---
@@ -27,44 +26,9 @@ These drive the ticket → implement → review → land loop.
 | `push` | Publish the current branch and keep the remote up to date before review. |
 | `land` | Merge the ticket's PR into `main` as the final step before a `completed` verdict. |
 
-## 2. Imported skills
-
-General-purpose skills copied in from local agent configuration. Origins recorded for
-resync; they are **snapshots**, not linked to the upstream copies.
-
-### From Claude user config (`~/.claude/skills/`)
-
-| Skill | Trigger | What it does |
-|-------|---------|--------------|
-| `deepagent-web-search` | `/deepagent-web-search` | Search the web for technical info/debug logs/docs, then summarize findings and tasks. |
-| `deepagent-task-summarizer` | `/deepagent-task-summarizer` | Extract actionable tasks from requirements/research and format as a structured todo list. |
-| `graphify` | `/graphify` | Turn any input (code, docs, papers, images) into a knowledge graph with clustered communities → HTML + JSON + audit report. |
-| `research` | `/research` | Preliminary research on a topic → research outline (academic, benchmark, tech selection). |
-| `research-add-fields` | `/research-add-fields` | Add field definitions to an existing research outline. |
-| `research-add-items` | `/research-add-items` | Add items (research objects) to an existing research outline. |
-| `research-deep` | `/research-deep` | Read a research outline and launch an independent agent per item for deep research. |
-| `research-report` | `/research-report` | Summarize deep-research results into a markdown report covering all fields. |
-| `youtube-channel` | `/youtube-channel` | Crawl a YouTube channel/playlist, download transcripts, build a CSV + per-video Markdown + index archive. |
-
-> `deepagent-web-search` and `deepagent-task-summarizer` use the JS-style
-> `export const meta = {…}` skill format; the others use YAML-frontmatter `SKILL.md`.
-
-### From Codex system skills (`~/.codex/skills/.system/`)
-
-Codex built-in system skills; each ships with its `scripts/`, `assets/`, `references/`,
-and a `LICENSE.txt`.
-
-| Skill | What it does |
-|-------|--------------|
-| `imagegen` | Generate or edit raster images (photos, illustrations, textures, sprites, mockups, transparent cutouts). |
-| `openai-docs` | Answer "how to build with OpenAI/Codex" questions with up-to-date official docs and citations. |
-| `plugin-creator` | Scaffold Codex plugin directories (`.codex-plugin/plugin.json`, manifests, marketplace entries). |
-| `skill-creator` | Guide for creating/updating effective skills. |
-| `skill-installer` | Install Codex skills into `$CODEX_HOME/skills` from a curated list or a GitHub repo. |
-
 ---
 
-## 3. Plugin-provided skills (not vendored)
+## 2. Plugin-provided skills (not vendored)
 
 These exist in the Claude Code environment but are **managed by the plugin system**
 (versioned under `~/.claude/plugins/`, invoked with a `plugin:skill` namespace). They were
@@ -90,16 +54,3 @@ stale on the next update. Install the plugin instead if the agent should use the
 | `security-guidance` | `claude-plugins-official` | 2.0.0 | Pattern + LLM security review on edits/commits (Anthropic). |
 | `playwright` | `claude-plugins-official` | — | Browser-automation MCP server (Microsoft). |
 | `langsmith-tracing` | `langsmith-claude-code-plugins` | 0.1.3 | Traces Claude Code conversations to LangSmith (LangChain). |
-
----
-
-## Resync imported skills from upstream
-
-```bash
-DEST=server/agent/skills
-for d in ~/.claude/skills/*/;        do cp -R "${d%/}" "$DEST"/; done   # Claude user skills
-for d in ~/.codex/skills/.system/*/; do cp -R "${d%/}" "$DEST"/; done   # Codex system skills
-```
-
-> Copy each skill folder **without** a trailing slash — `cp -R dir/` (trailing slash)
-> flattens contents into the destination on macOS.
