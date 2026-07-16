@@ -1,15 +1,15 @@
 'use strict';
 
 const express = require('express');
-const { CONFIG } = require('../config');
-const { getSettings, patchSettings, getCodexTokens, setCodexTokens, clearCodexTokens } = require('../store');
-const { asyncHandler, maskKey } = require('../util');
-const { createLogin, consumeLogin, exchangeCodeForTokens } = require('../agent/oauth');
-const { ensureFreshCodexTokens } = require('../agent/llm');
-const { presetForModel } = require('../agent/model-presets');
-const { discoverModels } = require('../agent/model-discovery');
-const oauthLib = require('../agent/oauth');
-const log = require('../logger');
+const { CONFIG } = require('@ai-fleet/shared/config');
+const { getSettings, patchSettings, getCodexTokens, setCodexTokens, clearCodexTokens } = require('@ai-fleet/shared/store');
+const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
+const { createLogin, consumeLogin, exchangeCodeForTokens } = require('@ai-fleet/shared/agent/oauth');
+const { ensureFreshCodexTokens } = require('@ai-fleet/shared/agent/llm');
+const { presetForModel } = require('@ai-fleet/shared/agent/model-presets');
+const { discoverModels } = require('@ai-fleet/shared/agent/model-discovery');
+const oauthLib = require('@ai-fleet/shared/agent/oauth');
+const log = require('@ai-fleet/shared/logger');
 
 /**
  * Codex (OpenAI) OAuth 2.0 Authorization Code + PKCE endpoints.
@@ -153,7 +153,7 @@ router.post(
     // Exercise the real generation path so auth, model selection, and Responses
     // request compatibility are validated together.
     if (CONFIG.OAUTH.backend === 'chatgpt') {
-      const { resolveLlm, createChatModel } = require('../agent/llm');
+      const { resolveLlm, createChatModel } = require('@ai-fleet/shared/agent/llm');
       const llm = await resolveLlm({ ...getSettings(), llmProvider: 'codex' });
       const msg = await createChatModel(llm).invoke('Reply with the single word: ok');
       const text = typeof msg.content === 'string' ? msg.content : Array.isArray(msg.content) ? msg.content.map((c) => c.text || '').join('') : '';

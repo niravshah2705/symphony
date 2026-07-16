@@ -1,13 +1,13 @@
 'use strict';
 
 const express = require('express');
-const { getSettings } = require('../store');
-const { asyncHandler } = require('../util');
-const linear = require('../linear');
-const log = require('../logger');
-const { resolveLlm } = require('../agent/llm');
-const { runCoder } = require('../agent/coder');
-const orchestrator = require('../agent/coder-orchestrator');
+const { getSettings } = require('@ai-fleet/shared/store');
+const { asyncHandler } = require('@ai-fleet/shared/util');
+const linear = require('@ai-fleet/shared/linear');
+const log = require('@ai-fleet/shared/logger');
+const { resolveLlm } = require('@ai-fleet/shared/agent/llm');
+const { runCoder } = require('@ai-fleet/shared/agent/coder');
+const orchestrator = require('@ai-fleet/shared/agent/coder-orchestrator');
 
 /**
  * Code-writer deep agent endpoints:

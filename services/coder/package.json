@@ -1,0 +1,18 @@
+{
+  "name": "@ai-fleet/coder",
+  "version": "1.0.0",
+  "description": "AI Fleet coder service — isolated code-writer deep agent (board monitor + single-ticket runner) exposing /api/coder.",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env src/index.js",
+    "dev": "node --watch --env-file-if-exists=../../.env src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ai-fleet/shared": "*",
+    "express": "^4.19.2"
+  }
+}

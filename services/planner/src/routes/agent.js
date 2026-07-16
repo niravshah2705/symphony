@@ -10,12 +10,12 @@ const {
   listJobs,
   removeJob,
   clearFinishedJobs,
-} = require('../store');
-const { getProjectsWithLabels, getAllProjectLabels } = require('../linear');
-const { asyncHandler } = require('../util');
-const { CONFIG } = require('../config');
-const scheduler = require('../agent/scheduler');
-const { llmReady } = require('../agent/llm');
+} = require('@ai-fleet/shared/store');
+const { getProjectsWithLabels, getAllProjectLabels } = require('@ai-fleet/shared/linear');
+const { asyncHandler } = require('@ai-fleet/shared/util');
+const { CONFIG } = require('@ai-fleet/shared/config');
+const scheduler = require('@ai-fleet/shared/agent/scheduler');
+const { llmReady } = require('@ai-fleet/shared/agent/llm');
 
 const router = express.Router();
 
