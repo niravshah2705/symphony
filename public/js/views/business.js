@@ -35,7 +35,9 @@ function businessRow(b, projects, view, repositoryProvider) {
   const linked = b.project;
   const linkInfo = linked
     ? el('div', { class: 'link-info' }, [
-        `Linear project: ${linked.name} · ${fmtPercent(linked.progress)}% · `,
+        'Linear project: ',
+        el('span', { dataset: { userContent: 'true' } }, linked.name),
+        ` · ${fmtPercent(linked.progress)}% · `,
         el('span', { class: `badge state-${esc(linked.state || '')}` }, linked.state || ''),
       ])
     : el('div', { class: 'link-info' }, 'Not linked to a Linear project yet.');
@@ -74,10 +76,10 @@ function businessRow(b, projects, view, repositoryProvider) {
   return el('div', { class: 'biz-row' }, [
     el('span', { class: 'avatar' }, initials(b.name)),
     el('div', {}, [
-      el('div', { class: 'biz-name' }, b.name),
+      el('div', { class: 'biz-name', dataset: { userContent: 'true' } }, b.name),
       linkInfo,
       b.repo ? el('div', { class: 'muted', style: 'font-size:12px' }, `${b.repoProvider === 'gitlab' ? 'GitLab' : 'GitHub'} · ${b.repo}`) : null,
-      b.description ? el('div', { class: 'muted', style: 'font-size:12px' }, b.description) : null,
+      b.description ? el('div', { class: 'muted', style: 'font-size:12px', dataset: { userContent: 'true' } }, b.description) : null,
     ]),
     el('div', { class: 'actions' }, [openPlanning, openBoard, edit, del]),
   ]);
@@ -126,7 +128,7 @@ function openBusinessModal(view, { business = null, projects = [], repositoryPro
     'select',
     {},
     [el('option', { value: '' }, '— select a project —')].concat(
-      projects.map((p) => el('option', { value: p.id, selected: business && business.projectId === p.id }, p.name))
+      projects.map((p) => el('option', { value: p.id, selected: business && business.projectId === p.id, dataset: { userContent: 'true' } }, p.name))
     )
   );
 
@@ -151,7 +153,7 @@ function openBusinessModal(view, { business = null, projects = [], repositoryPro
       const { teams } = await api.getTeams();
       clear(teamSelect).append(
         el('option', { value: '' }, '— select a team —'),
-        ...teams.map((t) => el('option', { value: t.id }, `${t.name} (${t.key})`))
+        ...teams.map((t) => el('option', { value: t.id, dataset: { userContent: 'true' } }, `${t.name} (${t.key})`))
       );
     } catch (err) {
       clear(teamSelect).append(el('option', { value: '' }, `Failed to load teams: ${err.message}`));
@@ -195,7 +197,9 @@ function openBusinessModal(view, { business = null, projects = [], repositoryPro
 
   backdrop.append(
     el('div', { class: 'modal' }, [
-      el('div', { class: 'modal-head' }, isEdit ? `Edit ${business.name}` : 'New Business'),
+      el('div', { class: 'modal-head' }, isEdit
+        ? ['Edit ', el('span', { dataset: { userContent: 'true' } }, business.name)]
+        : 'New Business'),
       el('div', { class: 'modal-body' }, [
         el('div', { class: 'field' }, [el('label', {}, 'Business name'), nameInput]),
         el('div', { class: 'field' }, [el('label', {}, 'Description'), descInput]),

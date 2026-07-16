@@ -200,6 +200,8 @@ async function processPending() {
       langsmithProject: settings.langsmithProject,
       langsmithEndpoint: settings.langsmithEndpoint,
       langsmithTracing: settings.langsmithTracing,
+      agentRuntime: settings.agentRuntime,
+      workflowPattern: settings.workflowPattern,
     };
 
     // 1. Discover projects to enrich automatically (by label).

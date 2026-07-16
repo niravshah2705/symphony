@@ -407,7 +407,7 @@ function assistantMessage(title, copy, links = [], kind = '') {
 function userMessage(copy) {
   return el('article', { class: 'conversation-message user' }, [
     el('div', { class: 'message-avatar' }, 'You'),
-    el('div', { class: 'message-copy' }, [el('p', {}, copy)]),
+    el('div', { class: 'message-copy' }, [el('p', { dataset: { userContent: 'true' } }, copy)]),
   ]);
 }
 

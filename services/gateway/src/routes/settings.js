@@ -18,6 +18,10 @@ const {
   runtimePresetForProfile,
   neutralLocalPreset,
 } = require('@ai-fleet/shared/agent/model-presets');
+const {
+  normalizeAgentRuntime,
+  normalizeWorkflowPattern,
+} = require('@ai-fleet/shared/agent/runtimes');
 
 const router = express.Router();
 
@@ -100,6 +104,8 @@ function publicSettings() {
     langsmithProject: s.langsmithProject,
     langsmithEndpoint: s.langsmithEndpoint,
     langsmithTracing: Boolean(s.langsmithTracing),
+    agentRuntime: normalizeAgentRuntime(s.agentRuntime),
+    workflowPattern: normalizeWorkflowPattern(s.workflowPattern),
   };
 }
 
@@ -569,6 +575,29 @@ router.put('/integrations', (req, res) => {
     else if (b[bodyKey] !== undefined && String(b[bodyKey]).trim()) patch[settingKey] = String(b[bodyKey]).trim();
   }
 
+  patchSettings(patch);
+  res.json(publicSettings());
+});
+
+// PUT /api/settings/runtime — select the provider-neutral SDK runtime and the
+// bounded workflow pattern used by new planner/coder runs. Descriptive aliases
+// such as "parallel-fan-out" are accepted but persisted as canonical ids.
+router.put('/runtime', (req, res) => {
+  const b = req.body || {};
+  const patch = {};
+  try {
+    if (b.agentRuntime !== undefined) {
+      patch.agentRuntime = normalizeAgentRuntime(b.agentRuntime, { strict: true });
+    }
+    if (b.workflowPattern !== undefined) {
+      patch.workflowPattern = normalizeWorkflowPattern(b.workflowPattern, { strict: true });
+    }
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
+  if (!Object.keys(patch).length) {
+    return res.status(400).json({ error: 'agentRuntime or workflowPattern is required.' });
+  }
   patchSettings(patch);
   res.json(publicSettings());
 });

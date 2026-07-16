@@ -1,0 +1,447 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const store = require('../store');
+const { resolveLlm } = require('./llm');
+
+const {
+  AgentRuntimeError,
+  normalizeAgentRuntime,
+  effectiveAgentRuntime,
+  normalizeWorkflowPattern,
+  runtimeCatalog,
+  plannerWebSearchAllowed,
+  workflowPatternCatalog,
+  applyWorkflowPattern,
+  executeAgentRuntime,
+  claudePermissionGuard,
+} = require('./runtimes');
+
+function workspace(t) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-runtime-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  return root;
+}
+
+function chatgptCodexLlm() {
+  return {
+    provider: 'codex',
+    backend: 'chatgpt',
+    model: 'gpt-5-codex',
+    accessToken: 'chatgpt-access-secret',
+    baseUrl: 'https://chatgpt.example.test/backend-api/codex',
+    accountId: 'account-123',
+    authTokens: {
+      accessToken: 'chatgpt-access-secret',
+      refreshToken: 'chatgpt-refresh-secret',
+      idToken: 'chatgpt-id-secret',
+      obtainedAt: Date.now(),
+    },
+  };
+}
+
+test('runtime and workflow registries use stable canonical ids and aliases', () => {
+  assert.deepEqual(runtimeCatalog().map((item) => item.id), ['deepagent', 'codex-sdk', 'claude-agent-sdk']);
+  assert.deepEqual(workflowPatternCatalog().map((item) => item.id), [
+    'sequential',
+    'parallel',
+    'evaluator',
+    'supervisor',
+  ]);
+  assert.equal(normalizeAgentRuntime(), 'deepagent');
+  assert.equal(normalizeWorkflowPattern('parallel-fan-out'), 'parallel');
+  assert.equal(normalizeWorkflowPattern('evaluator/retry'), 'evaluator');
+  assert.equal(normalizeWorkflowPattern('supervisor-handoff'), 'supervisor');
+  assert.throws(
+    () => normalizeAgentRuntime('unknown', { strict: true }),
+    (error) => error instanceof AgentRuntimeError && error.code === 'invalid_agent_runtime'
+  );
+});
+
+test('sequential keeps the original task while other patterns add bounded guidance', () => {
+  assert.equal(applyWorkflowPattern('Do the work', 'sequential'), 'Do the work');
+  const prompt = applyWorkflowPattern('Do the work', 'evaluator');
+  assert.match(prompt, /workflow_pattern id="evaluator"/);
+  assert.match(prompt, /generator-evaluator loop/);
+  assert.match(prompt, /Do the work$/);
+});
+
+test('SDK web search is limited to the explicit filesystem planning workflow', () => {
+  assert.equal(plannerWebSearchAllowed({ workflow: 'planning', backendKind: 'filesystem' }), true);
+  assert.equal(plannerWebSearchAllowed({ workflow: 'coding', backendKind: 'shell' }), false);
+  assert.equal(plannerWebSearchAllowed({ workflow: 'planning', backendKind: 'shell' }), false);
+});
+
+test('brokered coding stays on DeepAgent even with a matching SDK provider', () => {
+  assert.equal(
+    effectiveAgentRuntime('codex-sdk', { provider: 'codex' }, { strict: true, workflow: 'coding' }),
+    'deepagent'
+  );
+  assert.equal(
+    effectiveAgentRuntime('claude-agent-sdk', { provider: 'claude' }, { strict: true, workflow: 'planning' }),
+    'claude-agent-sdk'
+  );
+});
+
+test('resolveLlm exposes a cloned fresh Codex token set to the runtime descriptor', async (t) => {
+  const payload = Buffer.from(JSON.stringify({
+    'https://api.openai.com/auth': { chatgpt_account_id: 'account-123' },
+  })).toString('base64url');
+  const tokens = {
+    accessToken: 'access-secret',
+    refreshToken: 'refresh-secret',
+    idToken: `e30.${payload}.signature`,
+    expiresAt: Date.now() + 3_600_000,
+    obtainedAt: Date.now(),
+  };
+  const original = store.getCodexTokens;
+  store.getCodexTokens = () => tokens;
+  t.after(() => { store.getCodexTokens = original; });
+
+  const llm = await resolveLlm({ llmProvider: 'codex', codexModel: 'gpt-test' });
+
+  assert.deepEqual(llm.authTokens, tokens);
+  assert.notEqual(llm.authTokens, tokens);
+  assert.equal(llm.accessToken, 'access-secret');
+});
+
+test('DeepAgent adapter preserves behavior and normalizes usage', async () => {
+  let invoked;
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    workflowPattern: 'sequential',
+    prompt: 'Ship it',
+    llm: { provider: 'ollama', model: 'qwen' },
+    invokeConfig: { runId: 'ignored-by-test', tags: ['coder'] },
+    deepAgentInvoke: async (prompt, config) => {
+      invoked = { prompt, config };
+      return {
+        messages: [{
+          role: 'assistant',
+          content: 'done',
+          usage_metadata: { input_tokens: 10, output_tokens: 4, total_tokens: 14 },
+        }],
+      };
+    },
+    lastText: (result) => result.messages.at(-1).content,
+    trace: false,
+  });
+
+  assert.equal(invoked.prompt, 'Ship it');
+  assert.equal(execution.finalText, 'done');
+  assert.equal(execution.runtime, 'deepagent');
+  assert.deepEqual(execution.usage, {
+    inputTokens: 10,
+    outputTokens: 4,
+    cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
+    reasoningOutputTokens: 0,
+    totalTokens: 14,
+  });
+});
+
+test('Codex SDK API backend uses a constrained thread and reports token usage', async (t) => {
+  const root = workspace(t);
+  const seen = { run: { metadata: {} } };
+  class FakeCodex {
+    constructor(options) {
+      seen.client = options;
+    }
+    startThread(options) {
+      seen.thread = options;
+      return {
+        id: 'codex-thread-1',
+        run: async (prompt) => {
+          seen.prompt = prompt;
+          return {
+            finalResponse: 'Codex finished',
+            items: [],
+            usage: {
+              input_tokens: 20,
+              cached_input_tokens: 3,
+              output_tokens: 8,
+              reasoning_output_tokens: 2,
+            },
+          };
+        },
+      };
+    }
+  }
+
+  const execution = await executeAgentRuntime({
+    runtime: 'codex-sdk',
+    workflowPattern: 'parallel',
+    prompt: 'Inspect the repository',
+    rootDir: root,
+    backendKind: 'shell',
+    systemPrompt: 'Trusted coding rules',
+    llm: {
+      provider: 'codex',
+      backend: 'api',
+      model: 'gpt-5-codex',
+      accessToken: 'secret-token',
+      baseUrl: 'https://example.test/v1',
+      reasoningEffort: 'high',
+    },
+    loaders: { 'codex-sdk': async () => ({ Codex: FakeCodex }) },
+    invokeConfig: { metadata: { issueId: 'ABC-1' }, tags: ['coder'] },
+    getCurrentRunTree: () => seen.run,
+    traceFactory: (fn, config) => {
+      seen.trace = config;
+      return fn;
+    },
+  });
+
+  assert.equal(seen.thread.sandboxMode, 'workspace-write');
+  assert.equal(seen.thread.approvalPolicy, 'never');
+  assert.equal(seen.thread.networkAccessEnabled, false);
+  assert.equal(seen.client.env.GIT_TERMINAL_PROMPT, '0');
+  assert.equal(seen.client.env.GH_TOKEN, undefined);
+  assert.equal(seen.client.apiKey, 'secret-token');
+  assert.equal(seen.client.baseUrl, 'https://example.test/v1');
+  assert.equal(seen.client.config.allow_login_shell, false);
+  assert.equal(seen.client.config.developer_instructions, 'Trusted coding rules');
+  assert.equal(seen.client.config.shell_environment_policy.inherit, 'core');
+  assert.equal(seen.client.config.shell_environment_policy.ignore_default_excludes, false);
+  assert.deepEqual(seen.client.config.shell_environment_policy.exclude, [
+    '*TOKEN*',
+    '*KEY*',
+    '*SECRET*',
+    'CODEX_API_KEY',
+    'OPENAI_API_KEY',
+    'GH_TOKEN',
+    'GITHUB_TOKEN',
+    'GITLAB_TOKEN',
+    'LINEAR_API_KEY',
+    'LANGSMITH_API_KEY',
+  ]);
+  assert.doesNotMatch(seen.prompt, /Trusted coding rules/);
+  assert.match(seen.prompt, /workflow_pattern id="parallel"/);
+  assert.equal(execution.sessionId, 'codex-thread-1');
+  assert.equal(execution.usage.totalTokens, 28);
+  assert.equal(execution.usage.cachedInputTokens, 3);
+  assert.equal(execution.costUsd, null);
+  assert.equal(seen.trace.metadata.agent_runtime, 'codex-sdk');
+  assert.equal(seen.trace.metadata.model_provider, 'codex');
+  assert.equal(seen.trace.metadata.model_name, 'gpt-5-codex');
+  assert.equal(seen.trace.metadata.ls_provider, 'openai');
+  assert.equal(seen.trace.metadata.ls_model_name, 'gpt-5-codex');
+  assert.equal(seen.trace.run_type, 'llm');
+  assert.equal(seen.trace.metadata.issueId, 'ABC-1');
+  assert.equal(seen.run.metadata.usage_input_tokens, 20);
+  assert.equal(seen.run.metadata.usage_output_tokens, 8);
+  assert.deepEqual(seen.run.metadata.usage_metadata, {
+    input_tokens: 20,
+    output_tokens: 8,
+    total_tokens: 28,
+  });
+  assert.equal(seen.run.metadata.cost_available, false);
+  assert.equal(Object.hasOwn(seen.run.metadata, 'cost_usd'), false);
+});
+
+test('Codex SDK ChatGPT backend uses an isolated official auth file and removes it', async (t) => {
+  const root = workspace(t);
+  const seen = {};
+  class FakeCodex {
+    constructor(options) {
+      seen.client = options;
+      seen.home = options.env.HOME;
+      seen.authFile = path.join(seen.home, '.codex', 'auth.json');
+      seen.auth = JSON.parse(fs.readFileSync(seen.authFile, 'utf8'));
+      seen.homeMode = fs.statSync(seen.home).mode & 0o777;
+      seen.codexHomeMode = fs.statSync(path.dirname(seen.authFile)).mode & 0o777;
+      seen.authMode = fs.statSync(seen.authFile).mode & 0o777;
+    }
+    startThread() {
+      return {
+        id: 'chatgpt-thread',
+        run: async () => {
+          seen.authExistedDuringRun = fs.existsSync(seen.authFile);
+          return { finalResponse: 'done', usage: null };
+        },
+      };
+    }
+  }
+
+  const execution = await executeAgentRuntime({
+    runtime: 'codex-sdk',
+    prompt: 'Use ChatGPT auth',
+    rootDir: root,
+    llm: chatgptCodexLlm(),
+    loaders: { 'codex-sdk': async () => ({ Codex: FakeCodex }) },
+    trace: false,
+  });
+
+  assert.equal(Object.hasOwn(seen.client, 'apiKey'), false);
+  assert.equal(Object.hasOwn(seen.client, 'baseUrl'), false);
+  assert.equal(seen.client.config.cli_auth_credentials_store, 'file');
+  assert.equal(seen.client.config.forced_login_method, 'chatgpt');
+  assert.equal(seen.client.config.history.persistence, 'none');
+  assert.equal(seen.client.env.CODEX_HOME, path.join(seen.home, '.codex'));
+  assert.equal(seen.authExistedDuringRun, true);
+  assert.deepEqual(seen.auth, {
+    auth_mode: 'chatgpt',
+    OPENAI_API_KEY: null,
+    tokens: {
+      id_token: 'chatgpt-id-secret',
+      access_token: 'chatgpt-access-secret',
+      refresh_token: '',
+      account_id: 'account-123',
+    },
+    last_refresh: seen.auth.last_refresh,
+  });
+  assert.equal(JSON.stringify(seen.auth).includes('chatgpt-refresh-secret'), false);
+  assert.equal(Number.isNaN(Date.parse(seen.auth.last_refresh)), false);
+  if (process.platform !== 'win32') {
+    assert.equal(seen.homeMode, 0o700);
+    assert.equal(seen.codexHomeMode, 0o700);
+    assert.equal(seen.authMode, 0o600);
+  }
+  assert.equal(execution.sessionId, 'chatgpt-thread');
+  assert.equal(fs.existsSync(seen.authFile), false);
+  assert.equal(fs.existsSync(seen.home), false);
+});
+
+test('Codex SDK removes isolated ChatGPT auth when execution fails', async (t) => {
+  const root = workspace(t);
+  let home;
+  class FailingCodex {
+    constructor(options) {
+      home = options.env.HOME;
+    }
+    startThread() {
+      return { run: async () => { throw new Error('simulated SDK failure'); } };
+    }
+  }
+
+  await assert.rejects(
+    executeAgentRuntime({
+      runtime: 'codex-sdk',
+      prompt: 'fail safely',
+      rootDir: root,
+      llm: chatgptCodexLlm(),
+      loaders: { 'codex-sdk': async () => ({ Codex: FailingCodex }) },
+      trace: false,
+    }),
+    (error) => error.code === 'runtime_execution_failed'
+  );
+  assert.ok(home);
+  assert.equal(fs.existsSync(home), false);
+});
+
+test('Claude Agent SDK adapter streams a result with cost and isolated settings', async (t) => {
+  const root = workspace(t);
+  const seen = { run: { metadata: {} } };
+  const fakeQuery = (request) => {
+    seen.request = request;
+    return (async function* messages() {
+      yield { type: 'assistant', message: { content: [{ type: 'text', text: 'working' }] } };
+      yield {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: 'Claude finished',
+        session_id: 'claude-session-1',
+        total_cost_usd: 0.0125,
+        usage: {
+          input_tokens: 30,
+          output_tokens: 12,
+          cache_read_input_tokens: 4,
+          cache_creation_input_tokens: 2,
+        },
+      };
+    })();
+  };
+
+  const execution = await executeAgentRuntime({
+    runtime: 'claude-agent-sdk',
+    workflowPattern: 'supervisor',
+    prompt: 'Implement the change',
+    rootDir: root,
+    backendKind: 'shell',
+    systemPrompt: 'Trusted coding rules',
+    maxTurns: 9,
+    llm: { provider: 'claude', model: 'claude-sonnet-4-6', accessToken: 'oauth-secret' },
+    loaders: { 'claude-agent-sdk': async () => ({ query: fakeQuery }) },
+    getCurrentRunTree: () => seen.run,
+    traceFactory: (fn, config) => {
+      seen.trace = config;
+      return fn;
+    },
+  });
+
+  assert.equal(seen.request.options.maxTurns, 9);
+  assert.deepEqual(seen.request.options.settingSources, []);
+  assert.equal(seen.request.options.strictMcpConfig, true);
+  assert.equal(seen.request.options.persistSession, false);
+  assert.equal(seen.request.options.env.CLAUDE_CODE_OAUTH_TOKEN, 'oauth-secret');
+  assert.equal(seen.request.options.tools.includes('Bash'), false);
+  assert.equal(seen.request.options.tools.includes('Agent'), true);
+  assert.equal(execution.finalText, 'Claude finished');
+  assert.equal(execution.workflowPattern, 'supervisor');
+  assert.equal(execution.costUsd, 0.0125);
+  assert.equal(execution.usage.totalTokens, 42);
+  assert.equal(seen.trace.metadata.workflow_pattern, 'supervisor');
+  assert.equal(seen.trace.metadata.ls_provider, 'anthropic');
+  assert.equal(seen.trace.run_type, 'llm');
+  assert.equal(seen.run.metadata.cost_usd, 0.0125);
+  assert.equal(seen.run.metadata.usage_total_tokens, 42);
+  assert.equal(seen.run.metadata.usage_metadata.total_cost, 0.0125);
+});
+
+test('runtime/provider mismatches fall back to traced DeepAgent execution', async (t) => {
+  const root = workspace(t);
+  const seen = { run: { metadata: {} }, sdkLoads: 0 };
+  const execution = await executeAgentRuntime({
+    runtime: 'codex-sdk',
+    prompt: 'local task',
+    rootDir: root,
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'local done' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    loaders: { 'codex-sdk': async () => { seen.sdkLoads += 1; return {}; } },
+    getCurrentRunTree: () => seen.run,
+    traceFactory: (fn, config) => {
+      seen.trace = config;
+      return fn;
+    },
+  });
+
+  assert.equal(execution.runtime, 'deepagent');
+  assert.equal(execution.finalText, 'local done');
+  assert.equal(seen.sdkLoads, 0);
+  assert.equal(seen.trace.metadata.agent_runtime, 'deepagent');
+  assert.equal(seen.trace.metadata.requested_agent_runtime, 'codex-sdk');
+  assert.equal(seen.trace.metadata.runtime_fallback_reason, 'provider_mismatch');
+  assert.equal(seen.trace.run_type, 'chain');
+  assert.match(seen.trace.name, /deepagent/);
+});
+
+test('matching SDK providers still fail closed when authentication is unavailable', async (t) => {
+  const root = workspace(t);
+  await assert.rejects(
+    executeAgentRuntime({
+      runtime: 'claude-agent-sdk',
+      prompt: 'task',
+      rootDir: root,
+      llm: { provider: 'claude', model: 'claude' },
+      trace: false,
+    }),
+    (error) => error.code === 'runtime_auth_unavailable' && error.status === 401
+  );
+});
+
+test('Claude permission guard denies credential-bearing shell and path escapes', async (t) => {
+  const root = workspace(t);
+  const outside = workspace(t);
+  fs.symlinkSync(outside, path.join(root, 'outside-link'), 'dir');
+  const guard = claudePermissionGuard(root, true);
+  assert.equal((await guard('Bash', { command: 'env' })).behavior, 'deny');
+  assert.equal((await guard('Read', { file_path: path.join(root, 'README.md') })).behavior, 'allow');
+  assert.equal((await guard('Read', { file_path: path.join(root, '..', 'secret') })).behavior, 'deny');
+  assert.equal((await guard('Read', { file_path: path.join(root, 'outside-link', 'secret') })).behavior, 'deny');
+});

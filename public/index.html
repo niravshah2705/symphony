@@ -22,7 +22,7 @@
     </script>
   </head>
   <body>
-    <a class="skip-link" href="#view">Skip to workspace</a>
+    <a class="skip-link" href="#view" data-i18n="skipWorkspace">Skip to workspace</a>
 
     <header class="topbar">
       <div class="brand-area">
@@ -33,10 +33,12 @@
           aria-label="Open navigation"
           aria-controls="app-sidebar"
           aria-expanded="false"
+          data-i18n="openNavigation"
+          data-i18n-attr="aria-label"
         >
           <span data-icon="menu"></span>
         </button>
-        <a class="brand" href="#/agent" aria-label="AI Fleet agent workspace">
+        <a class="brand" href="#/agent" aria-label="AI Fleet agent workspace" data-i18n-skip>
           <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
           <span>AI Fleet</span>
         </a>
@@ -49,7 +51,8 @@
 
       <div class="topbar-actions">
         <div class="assumed-role" id="assumed-role" hidden></div>
-        <div class="conn" id="conn"><span class="dot"></span><span id="conn-text">Checking…</span></div>
+        <div class="conn" id="conn"><span class="dot"></span><span id="conn-text" data-i18n="checking">Checking…</span></div>
+        <div class="language-control" id="language-control" aria-live="polite"></div>
         <div class="theme-toggle" id="theme-toggle"></div>
       </div>
     </header>
@@ -60,61 +63,98 @@
         id="sidebar-backdrop"
         type="button"
         aria-label="Close navigation"
+        data-i18n="closeNavigation"
+        data-i18n-attr="aria-label"
         tabindex="-1"
         hidden
       ></button>
 
-      <aside class="app-sidebar" id="app-sidebar" aria-label="Primary navigation">
+      <aside
+        class="app-sidebar"
+        id="app-sidebar"
+        aria-label="Primary navigation"
+        data-i18n="primaryNavigation"
+        data-i18n-attr="aria-label"
+      >
         <div class="workspace-picker">
           <span class="workspace-icon" aria-hidden="true">A</span>
-          <span><small>Workspace</small>Agent operations</span>
+          <span><small data-i18n="workspace">Workspace</small><span data-i18n="agentOperations">Agent operations</span></span>
+          <button
+            class="sidebar-collapse icon-button"
+            id="sidebar-collapse"
+            type="button"
+            aria-controls="app-sidebar"
+            aria-expanded="true"
+            aria-pressed="false"
+            aria-label="Collapse navigation"
+            data-i18n="collapseNavigation"
+            data-i18n-attr="aria-label"
+          >
+            <span data-icon="left"></span>
+          </button>
         </div>
 
-        <nav class="sidebar-nav" id="tabs" aria-label="Application">
+        <nav class="sidebar-nav" id="tabs" aria-label="Application" data-i18n="application" data-i18n-attr="aria-label">
           <div class="nav-section">
-            <div class="nav-heading">Workspace</div>
+            <div class="nav-heading" data-i18n="workspaceSection">Workspace</div>
             <a href="#/agent" data-route="agent">
               <span class="nav-icon" data-icon="spark"></span>
-              <span class="nav-link-copy"><strong>Agent workspace</strong><small>Plan and run work</small></span>
+              <span class="nav-link-copy"><strong data-i18n="agentWorkspace">Agent workspace</strong><small data-i18n="agentWorkspaceSub">Plan and run work</small></span>
             </a>
             <a href="#/calls" data-route="calls">
               <span class="nav-icon" data-icon="video"></span>
-              <span class="nav-link-copy"><strong>Call recorder</strong><small>Capture agent sessions</small></span>
+              <span class="nav-link-copy"><strong data-i18n="callRecorder">Call recorder</strong><small data-i18n="callRecorderSub">Capture agent sessions</small></span>
             </a>
             <a href="#/traces" data-route="traces">
               <span class="nav-icon" data-icon="graph"></span>
-              <span class="nav-link-copy"><strong>Trace analysis</strong><small>Understand what happened</small></span>
+              <span class="nav-link-copy"><strong data-i18n="traceAnalysis">Trace analysis</strong><small data-i18n="traceAnalysisSub">Understand what happened</small></span>
             </a>
           </div>
 
           <div class="nav-section">
-            <div class="nav-heading">Planning</div>
+            <div class="nav-heading" data-i18n="planning">Planning</div>
             <a href="#/business" data-route="business">
               <span class="nav-icon" data-icon="briefcase"></span>
-              <span class="nav-link-copy"><strong>Business</strong><small>Contexts and roles</small></span>
+              <span class="nav-link-copy"><strong data-i18n="business">Business</strong><small data-i18n="businessSub">Contexts and roles</small></span>
             </a>
             <a href="#/projects" data-route="projects">
               <span class="nav-icon" data-icon="folder"></span>
-              <span class="nav-link-copy"><strong>Projects</strong><small>Plans and milestones</small></span>
+              <span class="nav-link-copy"><strong data-i18n="projects">Projects</strong><small data-i18n="projectsSub">Plans and milestones</small></span>
             </a>
             <a href="#/board" data-route="board">
               <span class="nav-icon" data-icon="board"></span>
-              <span class="nav-link-copy"><strong>Board</strong><small>Issues in motion</small></span>
+              <span class="nav-link-copy"><strong data-i18n="board">Board</strong><small data-i18n="boardSub">Issues in motion</small></span>
+            </a>
+          </div>
+
+          <div class="nav-section">
+            <div class="nav-heading" data-i18n="insights">Insights</div>
+            <a href="#/analytics" data-route="analytics">
+              <span class="nav-icon" data-icon="chart"></span>
+              <span class="nav-link-copy"><strong data-i18n="analytics">Analytics</strong><small data-i18n="analyticsSub">Cost and performance</small></span>
+            </a>
+            <a href="#/workflows" data-route="workflows">
+              <span class="nav-icon" data-icon="workflow"></span>
+              <span class="nav-link-copy"><strong data-i18n="workflows">Workflows</strong><small data-i18n="workflowsSub">Patterns and orchestration</small></span>
             </a>
           </div>
 
           <div class="nav-section nav-section-system">
-            <div class="nav-heading">System</div>
+            <div class="nav-heading" data-i18n="system">System</div>
+            <a href="#/troubleshooting" data-route="troubleshooting">
+              <span class="nav-icon" data-icon="lifebuoy"></span>
+              <span class="nav-link-copy"><strong data-i18n="troubleshooting">Troubleshooting</strong><small data-i18n="troubleshootingSub">Diagnose connections</small></span>
+            </a>
             <a href="#/settings" data-route="settings">
               <span class="nav-icon" data-icon="sliders"></span>
-              <span class="nav-link-copy"><strong>Settings</strong><small>Models and connections</small></span>
+              <span class="nav-link-copy"><strong data-i18n="settings">Settings</strong><small data-i18n="settingsSub">Models and connections</small></span>
             </a>
           </div>
         </nav>
 
         <div class="sidebar-footer">
-          <div class="sync-line"><span class="sync-dot"></span>Workspace ready</div>
-          <span>Local models and connected tools</span>
+          <div class="sync-line"><span class="sync-dot"></span><span data-i18n="workspaceReady">Workspace ready</span></div>
+          <span data-i18n="localTools">Local models and connected tools</span>
         </div>
       </aside>
 

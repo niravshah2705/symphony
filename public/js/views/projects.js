@@ -31,11 +31,11 @@ function projectCard(p) {
   const pct = fmtPercent(p.progress);
   const card = el('div', { class: 'project-card card' }, [
     el('div', { class: 'row' }, [
-      el('h3', {}, p.name),
+      el('h3', { dataset: { userContent: 'true' } }, p.name),
       el('span', { class: 'spacer' }),
       el('span', { class: `badge state-${esc(p.state || '')}` }, p.state || 'no state'),
     ]),
-    p.description ? el('p', { class: 'muted', style: 'margin:0;font-size:13px' }, truncate(p.description, 120)) : null,
+    p.description ? el('p', { class: 'muted', style: 'margin:0;font-size:13px', dataset: { userContent: 'true' } }, truncate(p.description, 120)) : null,
     el('div', { class: 'progress' }, [el('span', { style: `width:${pct}%` })]),
     el('div', { class: 'row muted', style: 'font-size:12px' }, [
       el('span', {}, `${pct}% complete`),
@@ -71,7 +71,7 @@ async function renderPlanning(view, projectId) {
     el('div', { class: 'page-head' }, [
       el('div', { class: 'row' }, [
         el('a', { class: 'btn', href: '#/projects' }, '← Projects'),
-        el('h1', {}, project.name),
+        el('h1', { dataset: { userContent: 'true' } }, project.name),
         el('span', { class: `badge state-${esc(project.state || '')}` }, project.state || ''),
       ]),
       el('div', { class: 'row' }, [
@@ -84,7 +84,7 @@ async function renderPlanning(view, projectId) {
   const pct = fmtPercent(project.progress);
   view.append(
     el('div', { class: 'card', style: 'margin-bottom:20px' }, [
-      project.description ? el('p', { class: 'muted', style: 'margin-top:0' }, project.description) : null,
+      project.description ? el('p', { class: 'muted', style: 'margin-top:0', dataset: { userContent: 'true' } }, project.description) : null,
       el('div', { class: 'progress' }, [el('span', { style: `width:${pct}%` })]),
       el('div', { class: 'row muted', style: 'font-size:12px;margin-top:8px' }, [
         el('span', {}, `${pct}% complete`),
@@ -119,20 +119,20 @@ function milestoneNode(m, issues) {
   const done = issues.filter((i) => i.state && i.state.type === 'completed').length;
   return el('div', { class: 'milestone' }, [
     el('div', { class: 'm-head' }, [
-      el('h4', {}, m.name),
+      el('h4', { dataset: { userContent: 'true' } }, m.name),
       el('span', { class: 'date' }, fmtDate(m.targetDate)),
       el('span', { class: 'spacer' }),
       el('span', { class: 'badge' }, `${done}/${issues.length} done`),
     ]),
-    m.description ? el('p', { class: 'muted', style: 'margin:4px 0;font-size:13px' }, m.description) : null,
+    m.description ? el('p', { class: 'muted', style: 'margin:4px 0;font-size:13px', dataset: { userContent: 'true' } }, m.description) : null,
     issues.length
       ? el(
           'div',
           { class: 'milestone-issues' },
           issues.map((i) =>
             el('div', { class: 'mini-issue' }, [
-              el('span', { class: 'id' }, i.identifier || ''),
-              el('span', {}, i.title),
+              el('span', { class: 'id', dataset: { userContent: 'true' } }, i.identifier || ''),
+              el('span', { dataset: { userContent: 'true' } }, i.title),
               el('span', { class: 'spacer' }),
               i.state ? el('span', { class: 'badge' }, i.state.name) : null,
             ])
