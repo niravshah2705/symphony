@@ -27,6 +27,12 @@ const MESSAGES = Object.freeze({
     workspaceSection: 'Workspace',
     agentWorkspace: 'Agent workspace',
     agentWorkspaceSub: 'Plan and run work',
+    agentJobs: 'Agent jobs',
+    agentJobsSub: 'Planner and coding history',
+    agentJobsDelete: 'Delete',
+    agentJobsConfirmDelete: 'Confirm delete',
+    agentJobsClearFinished: 'Clear finished',
+    agentJobsConfirmClear: 'Confirm clear',
     callRecorder: 'Call recorder',
     callRecorderSub: 'Capture agent sessions',
     traceAnalysis: 'Trace analysis',
@@ -56,6 +62,24 @@ const MESSAGES = Object.freeze({
     connected: 'Connected',
     translationUnavailable: 'Local translation is temporarily unavailable',
     actingAs: 'Acting as {name}',
+    security: 'Security',
+    authentication: 'Authentication',
+    signIn: 'Sign in',
+    signOut: 'Sign out',
+    signedInUser: 'Signed-in user',
+    auth0Account: 'Auth0 account',
+    protectedWorkspace: 'Protected workspace',
+    authLoadingTitle: 'Checking your session',
+    authLoading: 'Restoring secure session…',
+    authTitle: 'Sign in to AI Fleet',
+    authDescription: 'Use your organization account to access this workspace.',
+    continueWithAuth0: 'Continue with Auth0',
+    whySignIn: 'Why do I need to sign in?',
+    authDetails: 'In production, Auth0 signs you in and Istio verifies your access token before any workspace request reaches AI Fleet.',
+    authenticationFailed: 'We could not verify your session. Try signing in again.',
+    sessionExpired: 'Your session expired. Sign in again to continue.',
+    details: 'Details',
+    retry: 'Retry',
   },
   gu: {
     language: 'ભાષા',
@@ -71,6 +95,12 @@ const MESSAGES = Object.freeze({
     workspaceSection: 'કાર્યસ્થળ',
     agentWorkspace: 'એજન્ટ કાર્યસ્થળ',
     agentWorkspaceSub: 'કાર્યની યોજના બનાવો અને ચલાવો',
+    agentJobs: 'એજન્ટ જોબ્સ',
+    agentJobsSub: 'યોજના અને કોડિંગનો ઇતિહાસ',
+    agentJobsDelete: 'કાઢી નાખો',
+    agentJobsConfirmDelete: 'કાઢી નાખવાની પુષ્ટિ કરો',
+    agentJobsClearFinished: 'પૂર્ણ થયેલ જોબ્સ સાફ કરો',
+    agentJobsConfirmClear: 'સાફ કરવાની પુષ્ટિ કરો',
     callRecorder: 'કૉલ રેકોર્ડર',
     callRecorderSub: 'એજન્ટ સત્રો રેકોર્ડ કરો',
     traceAnalysis: 'ટ્રેસ વિશ્લેષણ',
@@ -100,6 +130,24 @@ const MESSAGES = Object.freeze({
     connected: 'જોડાયેલ છે',
     translationUnavailable: 'સ્થાનિક અનુવાદ હાલમાં ઉપલબ્ધ નથી',
     actingAs: '{name} તરીકે કાર્યરત',
+    security: 'સુરક્ષા',
+    authentication: 'પ્રમાણીકરણ',
+    signIn: 'સાઇન ઇન',
+    signOut: 'સાઇન આઉટ',
+    signedInUser: 'સાઇન ઇન કરેલ વપરાશકર્તા',
+    auth0Account: 'Auth0 ખાતું',
+    protectedWorkspace: 'સુરક્ષિત કાર્યસ્થળ',
+    authLoadingTitle: 'તમારા સત્રની તપાસ થઈ રહી છે',
+    authLoading: 'સુરક્ષિત સત્ર પુનઃસ્થાપિત થઈ રહ્યું છે…',
+    authTitle: 'AI Fleet માં સાઇન ઇન કરો',
+    authDescription: 'આ કાર્યસ્થળ ઍક્સેસ કરવા માટે તમારા સંસ્થાના ખાતાનો ઉપયોગ કરો.',
+    continueWithAuth0: 'Auth0 વડે આગળ વધો',
+    whySignIn: 'મારે સાઇન ઇન શા માટે કરવું જરૂરી છે?',
+    authDetails: 'પ્રોડક્શનમાં Auth0 તમને સાઇન ઇન કરાવે છે અને કાર્યસ્થળની કોઈપણ વિનંતી AI Fleet સુધી પહોંચે તે પહેલાં Istio તમારા ઍક્સેસ ટોકનની ચકાસણી કરે છે.',
+    authenticationFailed: 'અમે તમારા સત્રની ચકાસણી કરી શક્યા નથી. ફરી સાઇન ઇન કરવાનો પ્રયાસ કરો.',
+    sessionExpired: 'તમારા સત્રની મુદત પૂરી થઈ ગઈ છે. આગળ વધવા માટે ફરી સાઇન ઇન કરો.',
+    details: 'વિગતો',
+    retry: 'ફરી પ્રયાસ કરો',
   },
   hi: {
     language: 'भाषा',
@@ -115,6 +163,12 @@ const MESSAGES = Object.freeze({
     workspaceSection: 'कार्यक्षेत्र',
     agentWorkspace: 'एजेंट कार्यक्षेत्र',
     agentWorkspaceSub: 'काम की योजना बनाएँ और चलाएँ',
+    agentJobs: 'एजेंट जॉब्स',
+    agentJobsSub: 'योजना और कोडिंग का इतिहास',
+    agentJobsDelete: 'हटाएँ',
+    agentJobsConfirmDelete: 'हटाने की पुष्टि करें',
+    agentJobsClearFinished: 'पूर्ण जॉब्स साफ़ करें',
+    agentJobsConfirmClear: 'साफ़ करने की पुष्टि करें',
     callRecorder: 'कॉल रिकॉर्डर',
     callRecorderSub: 'एजेंट सत्र रिकॉर्ड करें',
     traceAnalysis: 'ट्रेस विश्लेषण',
@@ -144,6 +198,24 @@ const MESSAGES = Object.freeze({
     connected: 'कनेक्टेड',
     translationUnavailable: 'स्थानीय अनुवाद अभी उपलब्ध नहीं है',
     actingAs: '{name} के रूप में कार्यरत',
+    security: 'सुरक्षा',
+    authentication: 'प्रमाणीकरण',
+    signIn: 'साइन इन',
+    signOut: 'साइन आउट',
+    signedInUser: 'साइन-इन किया हुआ उपयोगकर्ता',
+    auth0Account: 'Auth0 खाता',
+    protectedWorkspace: 'सुरक्षित कार्यक्षेत्र',
+    authLoadingTitle: 'आपके सत्र की जाँच हो रही है',
+    authLoading: 'सुरक्षित सत्र बहाल किया जा रहा है…',
+    authTitle: 'AI Fleet में साइन इन करें',
+    authDescription: 'इस कार्यक्षेत्र तक पहुँचने के लिए अपने संगठन के खाते का उपयोग करें।',
+    continueWithAuth0: 'Auth0 के साथ जारी रखें',
+    whySignIn: 'मुझे साइन इन करने की आवश्यकता क्यों है?',
+    authDetails: 'प्रोडक्शन में Auth0 आपको साइन इन कराता है और किसी कार्यक्षेत्र अनुरोध के AI Fleet तक पहुँचने से पहले Istio आपके एक्सेस टोकन की जाँच करता है।',
+    authenticationFailed: 'हम आपके सत्र की जाँच नहीं कर सके। फिर से साइन इन करने का प्रयास करें।',
+    sessionExpired: 'आपके सत्र की अवधि समाप्त हो गई है। जारी रखने के लिए फिर से साइन इन करें।',
+    details: 'विवरण',
+    retry: 'पुनः प्रयास करें',
   },
 });
 
@@ -235,8 +307,11 @@ function applyStaticTranslations(root = document) {
   document.querySelectorAll('#tabs a[data-route]').forEach((link) => {
     const strong = link.querySelector('.nav-link-copy strong');
     const label = strong?.textContent || '';
-    link.title = label;
-    link.setAttribute('aria-label', label);
+    // These attributes are observed below. Rewriting an unchanged value still
+    // queues a MutationRecord in browsers, which would recursively schedule
+    // localization passes and starve route rendering.
+    if (link.title !== label) link.title = label;
+    if (link.getAttribute('aria-label') !== label) link.setAttribute('aria-label', label);
   });
 }
 
@@ -545,9 +620,9 @@ function watchDynamicContent() {
   });
 }
 
-export async function initializeI18n() {
+export async function initializeI18n({ discover = true } = {}) {
   applyDocumentLocale();
-  await loadSuggestions();
+  if (discover) await loadSuggestions();
   applyDocumentLocale();
   renderLanguageControl();
   localize(document);

@@ -136,6 +136,20 @@ textarea:focus-visible, a:focus-visible, [tabindex]:focus-visible {
 .topbar-context strong { overflow: hidden; color: var(--text); font-size: 12px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
 .topbar-actions { justify-self: end; display: flex; align-items: center; gap: 10px; }
 
+.auth-control { display: flex; align-items: center; gap: 6px; }
+.auth-control[hidden] { display: none; }
+.auth-user {
+  min-width: 0; max-width: 210px; display: flex; align-items: center; gap: 7px;
+  padding: 4px 8px 4px 5px; border: 1px solid var(--border); border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+}
+.auth-user-copy { min-width: 0; display: flex; flex-direction: column; line-height: 1.18; }
+.auth-user-copy strong, .auth-user-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auth-user-copy strong { font-size: 9px; font-weight: 650; }
+.auth-user-copy small { color: var(--muted); font-size: 7px; }
+.auth-sign-in, .auth-sign-out { padding: 6px 9px; font-size: 9px; font-weight: 650; white-space: nowrap; }
+.auth-sign-in { color: var(--accent-2); }
+
 .assumed-role {
   display: flex; align-items: center; gap: 7px; max-width: 190px; padding: 4px 9px 4px 5px;
   overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
@@ -275,6 +289,34 @@ body.sidebar-collapsed { --sidebar-width: 76px; }
 .view-immersive { padding: 22px; background: var(--panel); }
 .view[aria-busy='true'] { cursor: progress; }
 .view:focus { outline-offset: -3px; }
+.auth-view { display: grid; place-items: center; }
+.auth-card {
+  width: min(500px, 100%); padding: clamp(26px, 5vw, 46px); border: 1px solid var(--border-strong);
+  border-radius: 16px; background: var(--panel); box-shadow: var(--shadow);
+}
+.auth-card h1 { margin: 12px 0 8px; font-family: var(--font-serif); font-size: clamp(26px, 4vw, 36px); letter-spacing: -.035em; }
+.auth-badge {
+  display: inline-flex; padding: 4px 8px; border-radius: 999px; background: var(--accent-soft);
+  color: var(--accent-2); font-size: 8px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase;
+}
+.auth-copy { max-width: 420px; margin: 0 0 22px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.auth-actions { display: flex; align-items: center; min-height: 39px; }
+.auth-continue { min-width: 155px; }
+.auth-progress { display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; }
+.auth-spinner {
+  width: 15px; height: 15px; border: 2px solid var(--border-strong); border-top-color: var(--accent-2);
+  border-radius: 50%; animation: auth-spin .8s linear infinite;
+}
+.auth-details { margin-top: 20px; color: var(--muted); font-size: 9px; }
+.auth-details summary { width: fit-content; color: var(--accent-2); cursor: pointer; font-weight: 650; }
+.auth-details p { margin: 8px 0 0; line-height: 1.55; }
+.auth-details code { display: block; margin-top: 5px; padding: 8px; overflow-wrap: anywhere; border-radius: 6px; background: var(--code-bg); }
+.auth-technical-label { font-weight: 700; }
+body.auth-locked .topbar { grid-template-columns: minmax(180px, 1fr) auto auto; }
+body.auth-locked .mobile-nav-button, body.auth-locked .assumed-role, body.auth-locked .conn { display: none; }
+body.auth-locked .app-frame { grid-template-columns: minmax(0, 1fr); }
+body.auth-locked .app-sidebar, body.auth-locked .sidebar-backdrop { display: none; }
+@keyframes auth-spin { to { transform: rotate(360deg); } }
 .page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 16px; }
 .page-head h1 { margin: 0; font-family: var(--font-serif); font-size: 25px; line-height: 1.2; letter-spacing: -.025em; }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -514,6 +556,41 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 .job-step .ts { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .job-step.lvl-warn { color: var(--amber); }
 .job-step.lvl-error { color: var(--red); }
+
+/* Full Agent jobs history. The conversational Agent page intentionally stays
+   compact; this standard page restores the complete planner/coder lists. */
+.job-history-refresh-status { min-height: 22px; margin: -10px 0 10px; color: var(--muted); font-size: 10px; }
+.job-history-refresh-status.stale {
+  padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  border-radius: 8px; background: var(--amber-soft); color: var(--text);
+}
+.job-history-refresh-status.pending {
+  padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-radius: 8px; background: var(--accent-soft); color: var(--text);
+}
+.job-history-section { padding: 18px; }
+.job-history-list { display: grid; gap: 8px; }
+.job-history-row { min-width: 0; }
+.job-history-summary {
+  min-width: 0; display: grid; grid-template-columns: auto minmax(220px, 1fr) auto; gap: 13px;
+  align-items: start; padding: 13px 14px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--panel-2);
+}
+.job-history-copy { min-width: 0; }
+.job-history-copy > strong { display: block; overflow-wrap: anywhere; font-size: 12px; line-height: 1.4; }
+.job-history-copy > p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.job-history-meta { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 7px; color: var(--muted); font-size: 8px; }
+.job-history-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.job-history-actions :is(button, .btn) { min-height: 29px; padding: 5px 8px; font-size: 9px; white-space: nowrap; }
+.job-history-actions button[data-confirming='true'], .job-history-page-actions button[data-confirming='true'] {
+  border-color: var(--red); background: var(--red-soft); color: var(--red);
+}
+.job-history-steps { margin: -2px 8px 2px; border-radius: 0 0 8px 8px; }
+.job-history-steps[hidden] { display: none; }
+.job-history-step-list { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.job-history-step-list .job-step time { min-width: 128px; color: var(--muted); font-size: 9px; white-space: nowrap; }
+.job-history-step-list .job-step > span { min-width: 0; overflow-wrap: anywhere; }
+.job-history-no-steps { margin: 0; }
 
 /* Citation-style building blocks for Agent, Calls, and Traces. */
 .view-immersive:has(> :is(.immersive-layout, .agent-workspace, .scenario-workspace, .scenario-view)) {
@@ -1014,15 +1091,20 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
   .trace-canvas { min-height: 420px; overflow: auto; }
   .scenario-page-head { align-items: flex-start; flex-direction: column; padding: 0 0 3px; border: 0; background: transparent; }
   .scenario-local-badge { align-self: flex-start; }
+  .job-history-summary { grid-template-columns: auto minmax(0, 1fr); }
+  .job-history-actions { grid-column: 2; justify-content: flex-start; }
 }
 
 @media (max-width: 620px) {
   .topbar { grid-template-columns: minmax(0, 1fr) auto; }
+  body.auth-locked .topbar { grid-template-columns: minmax(0, 1fr) auto; }
   .topbar-context { display: none; }
   .topbar-actions { gap: 7px; }
   .language-select { max-width: 88px; }
   .assumed-role { max-width: 32px; padding-right: 5px; }
   .assumed-role > span:last-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .auth-user-copy { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .auth-user { padding-right: 5px; }
   .conn #conn-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   .view-standard { padding: 22px 18px 42px; }
   .view-immersive { padding: 16px; }
@@ -1059,6 +1141,13 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
   .scenario-detail + .scenario-detail { margin-top: 7px; }
   .call-chat-composer { grid-template-columns: 1fr; }
   .call-chat-composer button { width: 100%; }
+  .job-history-page-actions { width: 100%; }
+  .job-history-page-actions > * { flex: 1 1 auto; text-align: center; }
+  .job-history-summary { grid-template-columns: 1fr; }
+  .job-history-summary > .status-pill { grid-column: 1; }
+  .job-history-actions { grid-column: 1; justify-content: flex-start; }
+  .job-history-step-list .job-step { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .job-history-step-list .job-step time { min-width: 0; }
   .toast { right: 12px; bottom: 14px; left: 12px; max-width: none; transform: none; text-align: center; }
 }
 

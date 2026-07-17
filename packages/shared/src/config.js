@@ -4,6 +4,93 @@ const path = require('path');
 
 const PORT = Number(process.env.PORT) || 4000;
 
+const AUTH_MODES = new Set(['disabled', 'istio']);
+const ISTIO_AUTH_PAYLOAD_HEADER = 'x-ai-fleet-jwt-payload';
+
+function requiredAuthValue(env, name) {
+  const value = String(env[name] || '').trim();
+  if (!value) throw new Error(`${name} is required when AUTH_MODE=istio`);
+  if (value.length > 2048 || /[\r\n]/.test(value)) throw new Error(`${name} is invalid`);
+  return value;
+}
+
+function normalizeAuth0Domain(value) {
+  const domain = String(value || '').trim().toLowerCase();
+  if (!domain || domain.length > 253 || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(domain)) {
+    throw new Error('AUTH0_DOMAIN must be a hostname without a scheme or path');
+  }
+  return domain;
+}
+
+function normalizePublicAuthUrl(value, name) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch (_) {
+    throw new Error(`${name} must be an absolute URL`);
+  }
+  const localHttp = parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+  if (parsed.protocol !== 'https:' && !localHttp) {
+    throw new Error(`${name} must use HTTPS (HTTP is allowed only for localhost)`);
+  }
+  if (parsed.username || parsed.password || parsed.hash) throw new Error(`${name} must not contain credentials or a fragment`);
+  return parsed.toString();
+}
+
+/**
+ * Browser authentication is deliberately off for the local, single-user
+ * workflow. In production, Istio validates Auth0 access tokens and emits the
+ * verified JWT payload in a fixed internal header. The Node gateway validates
+ * the copied claims again, but never accepts or verifies bearer credentials
+ * itself; the gateway must therefore be reachable only through the mesh.
+ */
+function buildAuthConfig(env = process.env) {
+  const mode = String(env.AUTH_MODE || 'disabled').trim().toLowerCase();
+  if (!AUTH_MODES.has(mode)) throw new Error('AUTH_MODE must be either disabled or istio');
+  if (String(env.NODE_ENV || '').trim().toLowerCase() === 'production' && mode !== 'istio') {
+    throw new Error('AUTH_MODE=istio is required when NODE_ENV=production');
+  }
+
+  if (mode === 'disabled') {
+    return Object.freeze({
+      mode,
+      enabled: false,
+      payloadHeader: ISTIO_AUTH_PAYLOAD_HEADER,
+    });
+  }
+
+  const domain = normalizeAuth0Domain(requiredAuthValue(env, 'AUTH0_DOMAIN'));
+  const clientId = requiredAuthValue(env, 'AUTH0_CLIENT_ID');
+  const audience = requiredAuthValue(env, 'AUTH0_AUDIENCE');
+  const redirectUri = normalizePublicAuthUrl(requiredAuthValue(env, 'AUTH0_REDIRECT_URI'), 'AUTH0_REDIRECT_URI');
+  const requiredPermission = requiredAuthValue(env, 'AUTH0_REQUIRED_PERMISSION');
+  if (!/^[A-Za-z0-9:_-]{1,160}$/.test(requiredPermission)) {
+    throw new Error('AUTH0_REQUIRED_PERMISSION must be a single permission name');
+  }
+  const logoutReturnTo = normalizePublicAuthUrl(
+    String(env.AUTH0_LOGOUT_RETURN_TO || new URL(redirectUri).origin),
+    'AUTH0_LOGOUT_RETURN_TO'
+  );
+
+  return Object.freeze({
+    mode,
+    enabled: true,
+    provider: 'auth0',
+    payloadHeader: ISTIO_AUTH_PAYLOAD_HEADER,
+    domain,
+    issuer: `https://${domain}/`,
+    clientId,
+    audience,
+    requiredPermission,
+    redirectUri,
+    logoutReturnTo,
+    scope: String(env.AUTH0_SCOPE || 'openid profile email').trim() || 'openid profile email',
+    organization: String(env.AUTH0_ORGANIZATION || '').trim(),
+  });
+}
+
+const AUTH = buildAuthConfig();
+
 /**
  * Codex (OpenAI) OAuth provider configuration.
  *
@@ -281,6 +368,7 @@ const CONFIG = Object.freeze({
   LMSTUDIO,
   CODER,
   MCP,
+  AUTH,
 });
 
-module.exports = { CONFIG };
+module.exports = { CONFIG, buildAuthConfig };

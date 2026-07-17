@@ -68,6 +68,7 @@ The top-bar language picker intentionally shows a small suggestion set rather th
 ## Local workspace scenarios
 
 - **Agent workspace** (`#/agent`) accepts rough product or project context and returns a clarified brief, goals, constraints, explicit assumptions, missing information, and suggested next steps. The center stays conversational; exact model/run data appears in the evidence rail.
+- **Agent jobs** (`#/agent-jobs`) restores the complete operational history as separate planner and coding lists. It shows every retained job, lazily expands step activity, links to traces/tasks, refreshes live, and supports guarded per-job or finished-history cleanup.
 - **Call recorder** (`#/calls`) uses browser `MediaRecorder` APIs for screen/camera + microphone capture. The generated media stays in a local Blob URL for review/download. Only typed notes and small metadata such as duration are sent to local enrichment.
 - **Trace analysis** (`#/traces`) accepts pasted text logs or structured JSON traces. Input is bounded, fenced as untrusted data, and routed only through the configured local role. A deterministic evidence-based fallback is returned if the local model response is unavailable or malformed.
 
@@ -76,7 +77,7 @@ The top-bar language picker intentionally shows a small suggestion set rather th
 - **Auto Enrichment** — open projects (no lead) carrying any selected label are **picked up automatically** on the schedule. The Agent tab shows a read-only preview of what the next run will process and a **Run now** button; there is no manual project list. Assume a role in **Settings** first (the section is disabled and server-enforced until then). For each project the deep agent:
   - generates a validated plan (description + milestones + dates + issues + dependencies) under **LangSmith tracing**;
   - the server deterministically applies it to Linear using your **existing Linear token**: assign lead, update description, create milestones (start date preserved in the milestone note, target date = stop date), create issues per milestone, and create `blocks` dependencies.
-- **Enrichment Jobs** — live status (pending → running → done/error), a per-job **Trace** link into LangSmith, and per-job/finished cleanup.
+- **Agent jobs page** — live planner/enrichment and coding status (pending → running → done/error), per-job **Trace** and task links, expandable activity, and guarded per-job/finished cleanup.
 
 ### How the deep agent works (business-owner planner)
 
@@ -255,6 +256,61 @@ Then open http://localhost:4000, go to **Settings**, and paste a Linear
 **personal API key** (create one at https://linear.app/settings/api). The key is
 validated against Linear before it is saved.
 
+### Authentication
+
+Authentication is disabled by default for the local single-user workflow. The
+gateway still exposes `GET /api/auth/config` and `GET /api/auth/me`, so the same
+frontend boot path is exercised locally without requiring an identity provider.
+
+Production uses an Auth0 Single Page Application with Authorization Code + PKCE.
+The browser keeps the access token in memory and adds it to API requests. Istio
+validates its signature, issuer, exact API audience, and expiry, removes the
+bearer credential, and forwards only a verified JWT payload to the gateway. The
+gateway fails closed when that payload is absent, malformed, expired, or has the
+wrong issuer/audience.
+
+```bash
+NODE_ENV=production
+AUTH_MODE=istio
+AUTH0_DOMAIN=YOUR_TENANT.REGION.auth0.com
+AUTH0_CLIENT_ID=YOUR_AUTH0_SPA_CLIENT_ID
+AUTH0_AUDIENCE=https://api.ai-fleet.example.com
+AUTH0_REQUIRED_PERMISSION=fleet:access
+AUTH0_REDIRECT_URI=https://fleet.example.com/
+AUTH0_LOGOUT_RETURN_TO=https://fleet.example.com/
+AUTH0_SCOPE="openid profile email"
+# AUTH0_ORGANIZATION=org_OPTIONAL_AUTH0_ORGANIZATION_ID
+```
+
+`NODE_ENV=production` refuses to start unless `AUTH_MODE=istio` and every
+required Auth0 value is present; a missing production environment variable
+cannot silently fall back to anonymous access.
+
+See [`deploy/istio-auth0/README.md`](deploy/istio-auth0/README.md) for the
+`RequestAuthentication`, `AuthorizationPolicy`, mTLS, network-policy, rollout,
+and verification templates. The gateway must be reachable only through the
+mesh: its verified-payload header is not safe on a directly exposed Node port.
+
+Authentication does not make the current JSON store multi-tenant. All accepted
+users with the required `fleet:access` permission operate the same settings,
+integrations, credentials, jobs, and assumed Linear role. Enable Auth0 API RBAC,
+include permissions in access tokens, and grant `fleet:access` only to trusted
+operators; keep the application restricted to one trusted organization until
+those records are tenant-scoped and finer authorization policies are added.
+
+### Browser loading regression
+
+Playwright covers the startup failure where optional Linear validation stalls
+while the workspace should remain usable. The test runs a separate local stack
+on ports 1456–1458 with isolated test data, captures a trace/screenshot on
+failure, and uses the installed Chrome channel.
+
+```bash
+npx playwright install chrome  # once, only when Chrome is not already installed
+npm run test:e2e               # headless regression scenario
+npm run test:e2e:debug         # headed Playwright inspector
+```
+
 ## Using it
 
 1. **Settings** → save your Linear API key. The header shows connection status.
@@ -294,7 +350,7 @@ grep "Agoda" data/app.log
 grep -E "WARN|ERROR" data/app.log
 ```
 
-In the UI, each row in **Agent → Enrichment Jobs** has a **🧾 N** button that
+In the UI, each row in **Agent jobs** has a **Show activity · N** button that
 expands the stored **step trace** for that job (timestamped, warnings/errors
 highlighted). Steps persist in `data/store.json`, so you can review them later.
 On restart, any job left mid-run is marked *interrupted* (and retried next tick)
@@ -304,6 +360,9 @@ rather than stuck in "running".
 
 | Method | Path | Purpose |
 | ------ | ---- | ------- |
+| GET | `/healthz` | Public gateway liveness probe |
+| GET | `/api/auth/config` | Public, secret-free Auth0 SPA bootstrap configuration |
+| GET | `/api/auth/me` | Current mesh-verified application identity |
 | GET | `/api/settings` | Whether a key is set (masked) |
 | PUT | `/api/settings` | Validate + save API key |
 | DELETE | `/api/settings` | Remove key |
