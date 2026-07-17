@@ -111,16 +111,17 @@ required for normal use. Secrets are validated and stored **server-side** in
 
 ---
 
-## 4. The five tabs (using the app)
+## 4. Workspace views (using the app)
 
-The SPA (`public/js/app.js`) hash-routes between five views:
+The SPA (`public/js/app.js`) hash-routes between workspace views; the core planning/history views are:
 
 | Tab | What it does | View file |
 | --- | ------------ | --------- |
 | **Business** | Map a "business" to a backing Linear project (OTA is pre-seeded). Jump to its Planning/Board. | `public/js/views/business.js` |
 | **Projects** | Project list + a milestone **planning timeline** per project. | `public/js/views/projects.js` |
 | **Board** | Kanban board of a project's issues by workflow state, drag-and-drop to move. | `public/js/views/board.js` |
-| **Agent** | Preview + **Run now** the business-owner planner; watch **Enrichment Jobs** and open their LangSmith traces. | `public/js/views/agent.js` |
+| **Agent** | Conversational planning workspace, local enrichment, and a five-item recent-work preview. | `public/js/views/agent.js` |
+| **Agent jobs** | Complete planner and coding history with status, trace/task links, expandable steps, and cleanup controls. | `public/js/views/agent-jobs.js` |
 | **Settings** | Everything in §3. | `public/js/views/settings.js` |
 
 ---
@@ -254,7 +255,7 @@ grep -E "WARN|ERROR" data/app.log    # only problems
 grep "coder ENG-123" data/app.log    # one ticket's code-writer run
 ```
 
-In the UI, each **Agent → Enrichment Jobs** row has a **🧾** button that expands
+In the UI, each **Agent jobs** row has a **Show activity** button that expands
 the stored step trace for that job (persisted in `store.json`).
 
 ---

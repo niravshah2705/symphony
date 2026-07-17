@@ -109,6 +109,7 @@ function agentToolbar(status, view, railBody) {
     el('div', { class: 'reader-actions' }, [
       toggle,
       runNow,
+      el('a', { class: 'tiny-link agent-jobs-link', href: '#/agent-jobs' }, 'View all jobs'),
       el('button', {
         class: 'tiny-link toolbar-details',
         type: 'button',

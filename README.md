@@ -68,6 +68,7 @@ The top-bar language picker intentionally shows a small suggestion set rather th
 ## Local workspace scenarios
 
 - **Agent workspace** (`#/agent`) accepts rough product or project context and returns a clarified brief, goals, constraints, explicit assumptions, missing information, and suggested next steps. The center stays conversational; exact model/run data appears in the evidence rail.
+- **Agent jobs** (`#/agent-jobs`) restores the complete operational history as separate planner and coding lists. It shows every retained job, lazily expands step activity, links to traces/tasks, refreshes live, and supports guarded per-job or finished-history cleanup.
 - **Call recorder** (`#/calls`) uses browser `MediaRecorder` APIs for screen/camera + microphone capture. The generated media stays in a local Blob URL for review/download. Only typed notes and small metadata such as duration are sent to local enrichment.
 - **Trace analysis** (`#/traces`) accepts pasted text logs or structured JSON traces. Input is bounded, fenced as untrusted data, and routed only through the configured local role. A deterministic evidence-based fallback is returned if the local model response is unavailable or malformed.
 
@@ -76,7 +77,7 @@ The top-bar language picker intentionally shows a small suggestion set rather th
 - **Auto Enrichment** — open projects (no lead) carrying any selected label are **picked up automatically** on the schedule. The Agent tab shows a read-only preview of what the next run will process and a **Run now** button; there is no manual project list. Assume a role in **Settings** first (the section is disabled and server-enforced until then). For each project the deep agent:
   - generates a validated plan (description + milestones + dates + issues + dependencies) under **LangSmith tracing**;
   - the server deterministically applies it to Linear using your **existing Linear token**: assign lead, update description, create milestones (start date preserved in the milestone note, target date = stop date), create issues per milestone, and create `blocks` dependencies.
-- **Enrichment Jobs** — live status (pending → running → done/error), a per-job **Trace** link into LangSmith, and per-job/finished cleanup.
+- **Agent jobs page** — live planner/enrichment and coding status (pending → running → done/error), per-job **Trace** and task links, expandable activity, and guarded per-job/finished cleanup.
 
 ### How the deep agent works (business-owner planner)
 
@@ -349,7 +350,7 @@ grep "Agoda" data/app.log
 grep -E "WARN|ERROR" data/app.log
 ```
 
-In the UI, each row in **Agent → Enrichment Jobs** has a **🧾 N** button that
+In the UI, each row in **Agent jobs** has a **Show activity · N** button that
 expands the stored **step trace** for that job (timestamped, warnings/errors
 highlighted). Steps persist in `data/store.json`, so you can review them later.
 On restart, any job left mid-run is marked *interrupted* (and retried next tick)

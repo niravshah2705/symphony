@@ -22,6 +22,7 @@ import { renderProjects } from './views/projects.js';
 import { renderBoard } from './views/board.js';
 import { renderBusiness } from './views/business.js';
 import { renderAgent } from './views/agent.js';
+import { renderAgentJobs } from './views/agent-jobs.js';
 import { renderCalls } from './views/calls.js';
 import { renderTraces } from './views/traces.js';
 import { renderAnalytics } from './views/analytics.js';
@@ -32,6 +33,7 @@ import { initThemeToggle } from './theme.js';
 
 const routes = {
   agent: renderAgent,
+  'agent-jobs': renderAgentJobs,
   calls: renderCalls,
   traces: renderTraces,
   business: renderBusiness,
@@ -45,6 +47,7 @@ const routes = {
 
 const routeMeta = {
   agent: { titleKey: 'agentWorkspace', eyebrowKey: 'workspace' },
+  'agent-jobs': { titleKey: 'agentJobs', eyebrowKey: 'workspace' },
   calls: { titleKey: 'callRecorder', eyebrowKey: 'workspace' },
   traces: { titleKey: 'traceAnalysis', eyebrowKey: 'workspace' },
   business: { titleKey: 'business', eyebrowKey: 'planning' },

@@ -557,6 +557,41 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 .job-step.lvl-warn { color: var(--amber); }
 .job-step.lvl-error { color: var(--red); }
 
+/* Full Agent jobs history. The conversational Agent page intentionally stays
+   compact; this standard page restores the complete planner/coder lists. */
+.job-history-refresh-status { min-height: 22px; margin: -10px 0 10px; color: var(--muted); font-size: 10px; }
+.job-history-refresh-status.stale {
+  padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  border-radius: 8px; background: var(--amber-soft); color: var(--text);
+}
+.job-history-refresh-status.pending {
+  padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-radius: 8px; background: var(--accent-soft); color: var(--text);
+}
+.job-history-section { padding: 18px; }
+.job-history-list { display: grid; gap: 8px; }
+.job-history-row { min-width: 0; }
+.job-history-summary {
+  min-width: 0; display: grid; grid-template-columns: auto minmax(220px, 1fr) auto; gap: 13px;
+  align-items: start; padding: 13px 14px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--panel-2);
+}
+.job-history-copy { min-width: 0; }
+.job-history-copy > strong { display: block; overflow-wrap: anywhere; font-size: 12px; line-height: 1.4; }
+.job-history-copy > p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.job-history-meta { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 7px; color: var(--muted); font-size: 8px; }
+.job-history-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.job-history-actions :is(button, .btn) { min-height: 29px; padding: 5px 8px; font-size: 9px; white-space: nowrap; }
+.job-history-actions button[data-confirming='true'], .job-history-page-actions button[data-confirming='true'] {
+  border-color: var(--red); background: var(--red-soft); color: var(--red);
+}
+.job-history-steps { margin: -2px 8px 2px; border-radius: 0 0 8px 8px; }
+.job-history-steps[hidden] { display: none; }
+.job-history-step-list { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.job-history-step-list .job-step time { min-width: 128px; color: var(--muted); font-size: 9px; white-space: nowrap; }
+.job-history-step-list .job-step > span { min-width: 0; overflow-wrap: anywhere; }
+.job-history-no-steps { margin: 0; }
+
 /* Citation-style building blocks for Agent, Calls, and Traces. */
 .view-immersive:has(> :is(.immersive-layout, .agent-workspace, .scenario-workspace, .scenario-view)) {
   padding: 0; overflow: hidden;
@@ -1056,6 +1091,8 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
   .trace-canvas { min-height: 420px; overflow: auto; }
   .scenario-page-head { align-items: flex-start; flex-direction: column; padding: 0 0 3px; border: 0; background: transparent; }
   .scenario-local-badge { align-self: flex-start; }
+  .job-history-summary { grid-template-columns: auto minmax(0, 1fr); }
+  .job-history-actions { grid-column: 2; justify-content: flex-start; }
 }
 
 @media (max-width: 620px) {
@@ -1104,6 +1141,13 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
   .scenario-detail + .scenario-detail { margin-top: 7px; }
   .call-chat-composer { grid-template-columns: 1fr; }
   .call-chat-composer button { width: 100%; }
+  .job-history-page-actions { width: 100%; }
+  .job-history-page-actions > * { flex: 1 1 auto; text-align: center; }
+  .job-history-summary { grid-template-columns: 1fr; }
+  .job-history-summary > .status-pill { grid-column: 1; }
+  .job-history-actions { grid-column: 1; justify-content: flex-start; }
+  .job-history-step-list .job-step { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .job-history-step-list .job-step time { min-width: 0; }
   .toast { right: 12px; bottom: 14px; left: 12px; max-width: none; transform: none; text-align: center; }
 }
 
