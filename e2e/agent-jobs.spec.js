@@ -33,6 +33,19 @@ async function mockShell(page, { locale = 'en' } = {}) {
     planningProvider: 'linear',
   }));
   await page.route('**/api/roles/assumed', (route) => json(route, { assumedRole: null }));
+  await page.route('**/api/agent/status', (route) => json(route, {
+    scheduleEnabled: false,
+    counts: {},
+    localActiveModel: 'Local test model',
+    paused: false,
+    pauseReason: null,
+  }));
+  await page.route('**/api/coder', (route) => json(route, {
+    running: false,
+    paused: false,
+    pauseReason: null,
+    inFlight: [],
+  }));
 }
 
 function mixedJobs() {
@@ -224,8 +237,19 @@ test('Agent jobs preserves row focus and defers refresh while delete is armed', 
   await expect(row.getByText('FOCUS-1 · Deferred task title')).toHaveCount(0);
 });
 
-test('Agent jobs route and menu use the selected Gujarati locale', async ({ page }) => {
+test('Agent jobs route, menu, and pause notice use the selected Gujarati locale', async ({ page }) => {
   await mockShell(page, { locale: 'gu-IN' });
+  await page.route('**/api/coder', (route) => json(route, {
+    running: true,
+    paused: true,
+    pauseReason: {
+      code: 'git-unavailable',
+      resource: 'git',
+      message: 'raw provider message that must not be translated at runtime',
+      since: '2026-07-17T10:00:00.000Z',
+    },
+    inFlight: [],
+  }));
   await page.route('**/api/agent/jobs**', (route) => json(route, { jobs: [] }));
 
   await page.goto('/#/agent-jobs', { waitUntil: 'domcontentloaded' });
@@ -235,4 +259,136 @@ test('Agent jobs route and menu use the selected Gujarati locale', async ({ page
   await expect(link.locator('strong')).toHaveText('એજન્ટ જોબ્સ');
   await expect(link.locator('small')).toHaveText('યોજના અને કોડિંગનો ઇતિહાસ');
   await expect(link).toHaveAttribute('aria-current', 'page');
+  const pause = page.locator('.agent-pause-notice[data-pause-code="git_unavailable"]');
+  await expect(pause.locator('strong')).toHaveText('સ્વચાલિત કાર્ય કોડ કનેક્શનની રાહ જોઈ રહ્યું છે.');
+  await expect(pause.locator('p')).toHaveText('GitHub અથવા GitLab જોડાયેલ અને તૈયાર થાય ત્યાં સુધી નવું કાર્ય શરૂ થશે નહીં. કતારમાં રહેલું કાર્ય સુરક્ષિત છે.');
+  await expect(pause.getByRole('link', { name: 'કોડ કનેક્શન તપાસો' })).toHaveAttribute('href', '#/settings');
+});
+
+test('Agent surfaces deduplicate Git pauses and explain recovery in plain language', async ({ page }) => {
+  await mockShell(page);
+  const rawReason = {
+    code: 'git-unavailable',
+    resource: 'git',
+    message: 'GitHub returned 403 for token do-not-render-this-secret.',
+    since: '2026-07-17T10:00:00.000Z',
+  };
+  const pausedJob = {
+    id: 'paused-git-job',
+    kind: 'coding',
+    taskIdentifier: 'PAUSE-1',
+    taskTitle: 'Queued coding task',
+    status: 'paused',
+    createdAt: '2026-07-17T10:00:00.000Z',
+    updatedAt: '2026-07-17T10:01:00.000Z',
+    summary: { coding: true, paused: true, pauseReason: rawReason },
+    steps: [],
+  };
+
+  await page.route('**/api/agent/status', (route) => json(route, {
+    scheduleEnabled: true,
+    counts: { paused: 1 },
+    localActiveModel: 'Local test model',
+    paused: true,
+    pauseReason: rawReason,
+  }));
+  await page.route('**/api/coder', (route) => json(route, {
+    running: true,
+    paused: true,
+    pauseReason: rawReason,
+    inFlight: [],
+  }));
+  await page.route('**/api/agent/jobs**', (route) => json(route, {
+    jobs: [pausedJob],
+    paused: true,
+    pauseReason: rawReason,
+  }));
+
+  await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
+  const workspacePause = page.locator('.agent-workspace .agent-pause-notice[data-pause-code="git_unavailable"]');
+  await expect(workspacePause).toHaveCount(1);
+  await expect(workspacePause.locator('strong')).toHaveText('Automatic work is waiting for a code connection.');
+  await expect(workspacePause.locator('p')).toHaveText('Nothing new will start until GitHub or GitLab is connected and ready. Queued work is safe.');
+  await expect(workspacePause.getByRole('link', { name: 'Check code connection' })).toHaveAttribute('href', '#/settings');
+  await expect(page.getByText(/403|do-not-render-this-secret/)).toHaveCount(0);
+
+  await page.goto('/#/agent-jobs', { waitUntil: 'domcontentloaded' });
+  const historyPause = page.locator('.job-history-page .agent-pause-notice[data-pause-code="git_unavailable"]');
+  await expect(historyPause).toHaveCount(1);
+  await expect(historyPause.locator('strong')).toHaveText('Automatic work is waiting for a code connection.');
+  await expect(historyPause.getByRole('link', { name: 'Check code connection' })).toHaveAttribute('href', '#/settings');
+  await expect(page.locator('.job-history-row[data-job-id="paused-git-job"]')).toContainText(
+    'This job stopped because the code connection was unavailable.'
+  );
+  await expect(page.getByText(/403|do-not-render-this-secret/)).toHaveCount(0);
+});
+
+test('Agent workspace clears a model pause after the next readiness poll', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-07-17T10:00:00.000Z') });
+  await mockShell(page);
+  const modelPause = {
+    code: 'model-unavailable',
+    resource: 'model',
+    message: 'The selected Ollama model is unavailable.',
+    since: '2026-07-17T10:00:00.000Z',
+  };
+  const historicalPausedJob = {
+    id: 'historical-model-pause',
+    kind: 'enrichment',
+    projectName: 'Recovered planning job',
+    status: 'error',
+    createdAt: '2026-07-17T09:59:00.000Z',
+    updatedAt: '2026-07-17T10:00:00.000Z',
+    summary: { paused: true, pauseReason: modelPause },
+    steps: [],
+  };
+  let statusRequests = 0;
+
+  await page.route('**/api/agent/status', (route) => {
+    statusRequests += 1;
+    return json(route, statusRequests === 1
+      ? {
+          scheduleEnabled: true,
+          assumedRole: { id: 'role-1', name: 'Product lead' },
+          counts: {},
+          localActiveModel: 'Local test model',
+          paused: true,
+          pauseReason: modelPause,
+        }
+      : {
+          scheduleEnabled: true,
+          assumedRole: { id: 'role-1', name: 'Product lead' },
+          counts: {},
+          localActiveModel: 'Local test model',
+          paused: false,
+          pauseReason: null,
+        });
+  });
+  await page.route('**/api/agent/jobs**', (route) => json(route, { jobs: [historicalPausedJob] }));
+
+  await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
+  const modelNotice = page.locator('.agent-pause-notice[data-pause-code="model_unavailable"]');
+  await expect(modelNotice).toHaveCount(1);
+  await expect(modelNotice.locator('strong')).toHaveText('Automatic work is waiting for an AI model.');
+  await expect(modelNotice.locator('p')).toHaveText('Nothing new will start until the selected model is available. Queued work is safe.');
+  await expect(modelNotice.getByRole('link', { name: 'Check model setup' })).toHaveAttribute('href', '#/settings');
+  await expect(page.locator('.agent-run-now')).toBeDisabled();
+
+  const poll = page.waitForResponse((response) =>
+    response.request().method() === 'GET'
+      && new URL(response.url()).pathname === '/api/agent/status'
+      && statusRequests > 1
+  );
+  await page.clock.fastForward(5_000);
+  await poll;
+  await expect(modelNotice).toHaveCount(0);
+  await expect(page.locator('.agent-pause-host')).toBeHidden();
+  await expect(page.locator('.agent-state-toggle')).toContainText('Planning is on');
+  await expect(page.locator('.agent-run-now')).toBeEnabled();
+
+  await page.goto('/#/agent-jobs', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.job-history-page .agent-pause-notice')).toHaveCount(0);
+  await expect(page.locator('.job-history-row[data-job-id="historical-model-pause"]')).toContainText(
+    'This job stopped because the selected model was unavailable.'
+  );
 });

@@ -6,8 +6,17 @@ const store = require('../store');
 const log = require('../logger');
 const linear = require('../linear');
 const { resolveLlm } = require('./llm');
-const { runPlannedCoder } = require('./coder');
+const { runPlannedCoder, resolvePlannedRepository } = require('./coder');
 const { applyAidone, startIssue, finishIssue } = require('./apply');
+const {
+  AgentAvailabilityError,
+  isModelAvailabilityError,
+  isRepositoryAvailabilityError,
+  pauseReasonFor,
+  probeModelAvailability,
+  probeRepositoryAvailability,
+  publicAvailabilityMessage,
+} = require('./availability');
 
 /**
  * Board monitor for the code-writer — the AIPLANNED flow.
@@ -28,6 +37,14 @@ const { applyAidone, startIssue, finishIssue } = require('./apply');
 const running = new Map();
 let timer = null;
 let started = false;
+let pauseReason = null;
+let pauseContext = null;
+
+// Readiness checks are intentionally much cheaper than a failed agent run.
+// Deduplicate only simultaneous checks: every later dispatch probes again so a
+// credential revoked moments ago cannot slip through a stale success cache.
+const RECOVERY_PROBE_MS = 60 * 1000;
+const readinessCache = new Map();
 
 const PLANNED_PROJECTS_QUERY = `
   query PlannedProjects($label: String!, $first: Int!) {
@@ -125,8 +142,220 @@ function buildKeys(settings) {
   };
 }
 
+function readinessFingerprint() {
+  const data = store.readStore();
+  const settings = data.settings || {};
+  const relevant = {
+    repositoryProvider: settings.repositoryProvider,
+    repositoryUrl: settings.repositoryUrl,
+    githubToken: settings.githubToken,
+    gitlabToken: settings.gitlabToken,
+    llmProvider: settings.llmProvider,
+    localLlmProvider: settings.localLlmProvider,
+    ollamaHost: settings.ollamaHost,
+    ollamaModel: settings.ollamaModel,
+    lmstudioHost: settings.lmstudioHost,
+    lmstudioModel: settings.lmstudioModel,
+    codexModel: settings.codexModel,
+    codexTokens: settings.codexTokens,
+    claudeModel: settings.claudeModel,
+    claudeTokens: settings.claudeTokens,
+    businesses: (data.businesses || []).map((business) => ({
+      projectId: business.projectId,
+      repo: business.repo,
+      repoProvider: business.repoProvider,
+    })),
+  };
+  // The digest is process-private and never returned by status(); credentials
+  // are therefore useful for change detection without entering logs or the UI.
+  return crypto.createHash('sha256').update(JSON.stringify(relevant)).digest('hex');
+}
+
+function repositorySelectionForTask(task) {
+  const business = store.getBusinessByProjectId(task.project && task.project.id);
+  const repository = store.getRepositoryConfig();
+  return resolvePlannedRepository({
+    business,
+    globalRepository: repository,
+    configuredRepoUrl: CONFIG.CODER.repoUrl,
+    tokenForProvider: store.getRepositoryToken,
+  });
+}
+
+function probeKey(resource, value) {
+  return crypto.createHash('sha256').update(`${resource}:${JSON.stringify(value)}`).digest('hex');
+}
+
+async function cachedReadinessProbe(key, probe) {
+  const cached = readinessCache.get(key);
+  if (cached) return cached;
+  const promise = Promise.resolve().then(probe);
+  readinessCache.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    if (readinessCache.get(key) === promise) readinessCache.delete(key);
+  }
+}
+
+/**
+ * Resolve and verify every external dependency before dispatch creates a job or
+ * moves the task to In Progress. The repository check intentionally runs first:
+ * a 403 from GitHub/GitLab therefore has no task or job side effects.
+ */
+async function preflightTask(task, resolveRole, dependencies = {}) {
+  const role = modelRoleForTask(task);
+  const selectionForTask = dependencies.repositorySelectionForTask || repositorySelectionForTask;
+  const repositoryProbe = dependencies.probeRepositoryAvailability || probeRepositoryAvailability;
+  const modelProbe = dependencies.probeModelAvailability || probeModelAvailability;
+  const runProbe = dependencies.cachedReadinessProbe || cachedReadinessProbe;
+  let selection;
+  try {
+    selection = selectionForTask(task);
+  } catch (error) {
+    const provider = store.getRepositoryConfig().provider;
+    throw new AgentAvailabilityError(
+      'git',
+      publicAvailabilityMessage('git', { provider }),
+      Number(error && (error.status || error.statusCode)) || 400,
+      (error && error.code) || 'git_not_configured',
+    );
+  }
+  const gitKey = probeKey('git', {
+    provider: selection.provider,
+    repoRef: selection.repoRef,
+    token: selection.token,
+  });
+  await runProbe(gitKey, () => repositoryProbe(selection));
+
+  const llm = await resolveRole(role);
+  const modelKey = probeKey('model', {
+    provider: llm.provider,
+    backend: llm.backend,
+    host: llm.host,
+    baseUrl: llm.baseUrl,
+    model: llm.model,
+    accessToken: llm.accessToken,
+    accountId: llm.accountId,
+  });
+  await runProbe(modelKey, () => modelProbe(llm));
+  return { role, selection, llm };
+}
+
+async function dispatchReadyTask(task, resolveRole, ctx, dependencies = {}) {
+  const readiness = await preflightTask(task, resolveRole, dependencies);
+  if (typeof dependencies.beforeDispatch === 'function') dependencies.beforeDispatch(readiness);
+  const dispatchImpl = dependencies.dispatch || dispatch;
+  const completion = dispatchImpl(task, {
+    ...ctx,
+    llm: readiness.llm,
+    role: readiness.role,
+    repositoryProvider: readiness.selection.provider,
+    repositoryToken: readiness.selection.token,
+    repositoryUrl: readiness.selection.repoRef,
+  }, dependencies.dispatchDependencies);
+  return { ...readiness, completion };
+}
+
+/**
+ * Readiness guard for direct/manual coder requests. Unlike the board poll it
+ * has no dispatch lifecycle to catch the error, so establish the same global
+ * pause here and return only the sanitized pause reason to the route.
+ */
+async function preflightAndPause(task, resolveRole, dependencies = {}) {
+  const role = modelRoleForTask(task || {});
+  try {
+    return await preflightTask(task || {}, resolveRole, dependencies);
+  } catch (error) {
+    const resource = isRepositoryAvailabilityError(error) || (error && error.resource === 'git') ? 'git' : 'model';
+    const repository = store.getRepositoryConfig();
+    const reason = pause(resource, error, {
+      task: task || null,
+      taskIdentifier: task && task.identifier,
+      role,
+      provider: resource === 'git' ? repository.provider : undefined,
+    });
+    if (error && (typeof error === 'object' || typeof error === 'function')) {
+      error.pauseReason = reason;
+      throw error;
+    }
+    const availabilityError = new AgentAvailabilityError(resource, reason.message);
+    availabilityError.pauseReason = reason;
+    throw availabilityError;
+  }
+}
+
+function pause(resource, error, context = {}) {
+  if (!pauseReason || pauseReason.resource !== resource) {
+    pauseReason = pauseReasonFor(resource, error, context);
+  }
+  pauseContext = {
+    resource,
+    task: context.task || null,
+    role: context.role || null,
+    fingerprint: readinessFingerprint(),
+    nextProbeAt: Date.now() + RECOVERY_PROBE_MS,
+  };
+  log.warn(`Code-writer paused: ${pauseReason.message}`);
+  return pauseReason;
+}
+
+function clearPause(source = 'manual resume') {
+  if (!pauseReason) return false;
+  log.info(`Code-writer availability pause cleared (${source}).`);
+  pauseReason = null;
+  pauseContext = null;
+  readinessCache.clear();
+  return true;
+}
+
+/** Convert only a genuine runtime Git/model outage into monitor pause state. */
+function pauseForRuntimeError(error, context = {}) {
+  const repositoryUnavailable = isRepositoryAvailabilityError(error);
+  const modelUnavailable = !repositoryUnavailable && isModelAvailabilityError(error);
+  if (!repositoryUnavailable && !modelUnavailable) return null;
+  const resource = repositoryUnavailable ? 'git' : 'model';
+  return pause(resource, error, {
+    task: context.task || null,
+    taskIdentifier: context.taskIdentifier || (context.task && context.task.identifier),
+    role: context.role,
+    provider: resource === 'git'
+      ? context.repositoryProvider
+      : context.llm && context.llm.provider,
+    model: resource === 'model' && context.llm ? context.llm.model : undefined,
+  });
+}
+
+async function recoverPause(settings, dependencies = {}) {
+  if (!pauseReason || !pauseContext) return true;
+  const fingerprint = dependencies.readinessFingerprint || readinessFingerprint;
+  const now = dependencies.now || Date.now;
+  const resolve = dependencies.resolveLlm || resolveLlm;
+  const modelProbe = dependencies.probeModelAvailability || probeModelAvailability;
+  const selectionForTask = dependencies.repositorySelectionForTask || repositorySelectionForTask;
+  const repositoryProbe = dependencies.probeRepositoryAvailability || probeRepositoryAvailability;
+  const changed = fingerprint() !== pauseContext.fingerprint;
+  if (!changed && now() < pauseContext.nextProbeAt) return false;
+
+  try {
+    if (pauseContext.resource === 'model') {
+      const llm = await resolve(settings, pauseContext.role || 'global');
+      await modelProbe(llm);
+    } else {
+      const selection = selectionForTask(pauseContext.task || {});
+      await repositoryProbe(selection);
+    }
+    clearPause(changed ? 'settings changed and readiness passed' : 'periodic readiness probe passed');
+    return true;
+  } catch (_) {
+    pauseContext.fingerprint = fingerprint();
+    pauseContext.nextProbeAt = now() + RECOVERY_PROBE_MS;
+    return false;
+  }
+}
+
 /** Persist a coding-run job (kind 'coding') so it shows in the UI job list. */
-function createCodingJob(task) {
+function createCodingJob(task, jobStore = store) {
   const now = new Date().toISOString();
   const job = {
     id: crypto.randomUUID(),
@@ -145,7 +374,7 @@ function createCodingJob(task) {
     summary: null,
     steps: [],
   };
-  store.addJob(job);
+  jobStore.addJob(job);
   return job;
 }
 
@@ -177,28 +406,35 @@ function parseVerdict(finalText) {
 }
 
 /** Dispatch one planned task (fire-and-forget; releases its slot on completion). */
-function dispatch(task, ctx) {
+function dispatch(task, ctx, dependencies = {}) {
+  const jobStore = dependencies.store || store;
+  const startIssueImpl = dependencies.startIssue || startIssue;
+  const finishIssueImpl = dependencies.finishIssue || finishIssue;
+  const runPlannedCoderImpl = dependencies.runPlannedCoder || runPlannedCoder;
   running.set(task.id, { identifier: task.identifier, projectId: task.project.id, startedAt: Date.now() });
 
   // Track this coding run as a job (same store as enrichment jobs) so it is
   // visible in the UI with a live step trace, not just in the server log.
-  const job = createCodingJob(task);
+  const job = createCodingJob(task, jobStore);
+  let phase = 'linear-start';
   const step = (message, level = 'info') => {
     (log[level] || log.info)(`[coder ${task.identifier}] ${message}`);
-    store.appendJobStep(job.id, { ts: new Date().toISOString(), level, message });
+    jobStore.appendJobStep(job.id, { ts: new Date().toISOString(), level, message });
   };
 
-  Promise.resolve()
+  return Promise.resolve()
     // 1. Take ownership of the task's state: move it to "In Progress".
-    .then(() => startIssue(ctx.apiKey, { issueId: task.id, onStep: step }))
-    // 2. Run the coder and derive a verdict. A coder-run FAILURE (recursion
-    //    limit, crash) is treated as an 'insufficient' outcome rather than
-    //    re-thrown: otherwise the issue would stay In Progress and be
-    //    re-dispatched (a full agent run) every poll, forever. Only
-    //    startIssue/finishIssue (Linear) errors reach the outer catch → retry.
+    .then(() => startIssueImpl(ctx.apiKey, { issueId: task.id, onStep: step }))
+    // 2. Run the coder and derive a verdict. An ordinary coder-run FAILURE
+    //    (recursion limit, workflow crash) is an 'insufficient' outcome rather
+    //    than an endless retry. Model/repository availability failures are the
+    //    exception: they reach the outer handler, pause dispatch, and keep the
+    //    issue retryable. Linear start/finalize errors also reach the outer
+    //    handler but do not masquerade as model failures.
     .then((state) => {
+      phase = 'agent';
       const issue = { ...task, state: (state && state.name) || task.state };
-      return runPlannedCoder({
+      return runPlannedCoderImpl({
         issue,
         project: task.project,
         llm: ctx.llm,
@@ -211,6 +447,10 @@ function dispatch(task, ctx) {
       })
         .then((r) => ({ r, verdict: parseVerdict(r && r.finalText) }))
         .catch((err) => {
+          // Availability failures are not task outcomes. Bubble them to the
+          // outer handler so the monitor pauses and leaves the Linear issue in
+          // progress for an operator-controlled retry.
+          if (isRepositoryAvailabilityError(err) || isModelAvailabilityError(err)) throw err;
           const message = err && err.message ? err.message : String(err);
           step(`Coder run did not complete: ${message}`, 'error');
           return { r: null, verdict: { status: 'insufficient', reason: `Coder run did not complete: ${message}` } };
@@ -219,9 +459,10 @@ function dispatch(task, ctx) {
     // 3. Finalize: Done + aidone (completed) | aifail (insufficient). This always
     //    moves the task out of the active queue so it is not re-picked.
     .then(async ({ r, verdict }) => {
+      phase = 'linear-finish';
       step(`Verdict: ${verdict.status}${verdict.pr ? ` (PR ${verdict.pr})` : ''}${verdict.reason ? ` — ${verdict.reason}` : ''}`);
-      await finishIssue(ctx.apiKey, { issueId: task.id, outcome: verdict.status, reason: verdict.reason, onStep: step });
-      store.updateJob(job.id, {
+      await finishIssueImpl(ctx.apiKey, { issueId: task.id, outcome: verdict.status, reason: verdict.reason, onStep: step });
+      jobStore.updateJob(job.id, {
         status: 'done',
         finishedAt: new Date().toISOString(),
         error: null,
@@ -236,11 +477,31 @@ function dispatch(task, ctx) {
       });
     })
     .catch((err) => {
+      const reason = phase === 'agent'
+        ? pauseForRuntimeError(err, {
+          task,
+          role: ctx.role,
+          repositoryProvider: ctx.repositoryProvider,
+          llm: ctx.llm,
+        })
+        : null;
+      if (reason) {
+        step(`Agent jobs paused: ${reason.message}`, 'warn');
+        jobStore.updateJob(job.id, {
+          // Keep the persisted job lifecycle on its established four states;
+          // the monitor-level pause is exposed separately by status().
+          status: 'error',
+          finishedAt: new Date().toISOString(),
+          error: reason.message,
+          summary: { coding: true, paused: true, pauseReason: reason },
+        });
+        return;
+      }
       // Linear-side failure (couldn't start or finalize the issue) — leave it for
       // the next poll to retry rather than losing the task.
       const message = err && err.message ? err.message : String(err);
       step(`Failed: ${message}`, 'error');
-      store.updateJob(job.id, { status: 'error', finishedAt: new Date().toISOString(), error: message });
+      jobStore.updateJob(job.id, { status: 'error', finishedAt: new Date().toISOString(), error: message });
     })
     .finally(() => running.delete(task.id));
 }
@@ -256,7 +517,10 @@ async function pollOnce() {
   const settings = store.getSettings();
   if (!settings.linearApiKey) {
     log.warn('Coder poll skipped: add a Linear API key in Settings.');
-    return;
+    return { skipped: 'missing-linear-key' };
+  }
+  if (pauseReason && !(await recoverPause(settings))) {
+    return { skipped: 'paused', pauseReason };
   }
   let projects;
   let tasksByProject;
@@ -265,7 +529,7 @@ async function pollOnce() {
     tasksByProject = await fetchPlannedTasks(settings.linearApiKey);
   } catch (err) {
     log.warn(`Coder poll: fetch failed: ${err && err.message ? err.message : err}`);
-    return;
+    return { skipped: 'planning-provider-unavailable' };
   }
 
   const repository = store.getRepositoryConfig();
@@ -309,21 +573,30 @@ async function pollOnce() {
     }
     // Route to the local or hosted deep-agent slot by the task's model label.
     const role = modelRoleForTask(next);
-    let llm;
     try {
-      llm = await resolveRole(role);
+      await dispatchReadyTask(next, resolveRole, ctx, {
+        beforeDispatch: ({ llm }) => {
+          log.info(`Dispatching ${next.identifier} ("${project.name}", created ${next.createdAt}, ${role} agent → ${llm.provider}) via ${CONFIG.CODER.backend} backend.`);
+        },
+      });
     } catch (err) {
-      log.warn(`Coder poll: ${role} LLM not ready for ${next.identifier}: ${err && err.message ? err.message : err}; skipping.`);
-      continue;
+      const resource = isRepositoryAvailabilityError(err) || (err && err.resource === 'git') ? 'git' : 'model';
+      const reason = pause(resource, err, {
+        task: next,
+        taskIdentifier: next.identifier,
+        role,
+        provider: resource === 'git' ? store.getRepositoryConfig().provider : undefined,
+      });
+      return { skipped: 'paused', pauseReason: reason };
     }
-    log.info(`Dispatching ${next.identifier} ("${project.name}", created ${next.createdAt}, ${role} agent → ${llm.provider}) via ${CONFIG.CODER.backend} backend.`);
-    dispatch(next, { ...ctx, llm });
   }
+  return { dispatched: true };
 }
 
 /** Start the board monitor (idempotent). Serializes ticks so they never overlap. */
 function start() {
-  if (started) return { started: true, already: true };
+  const resumed = clearPause('monitor start requested');
+  if (started) return { started: true, already: true, resumed };
   started = true;
   const tick = () => {
     pollOnce().finally(() => {
@@ -332,7 +605,13 @@ function start() {
   };
   tick();
   log.info(`Code-writer monitor started (aiplanned flow, every ${CONFIG.CODER.pollIntervalMs} ms, max ${CONFIG.CODER.maxConcurrent} concurrent).`);
-  return { started: true };
+  return { started: true, resumed };
+}
+
+function resume() {
+  const resumed = clearPause('manual resume');
+  if (!started) start();
+  return { ...status(), resumed };
 }
 
 function stop() {
@@ -347,6 +626,8 @@ function stop() {
 function status() {
   return {
     running: started,
+    paused: Boolean(pauseReason),
+    pauseReason,
     plannedLabel: CONFIG.CODER.plannedLabel,
     backend: CONFIG.CODER.backend,
     maxConcurrent: CONFIG.CODER.maxConcurrent,
@@ -354,4 +635,26 @@ function status() {
   };
 }
 
-module.exports = { start, stop, status, pollOnce, fetchPlannedProjects, fetchPlannedTasks, parseVerdict, modelRoleForTask };
+module.exports = {
+  start,
+  stop,
+  resume,
+  status,
+  pollOnce,
+  fetchPlannedProjects,
+  fetchPlannedTasks,
+  parseVerdict,
+  modelRoleForTask,
+  repositorySelectionForTask,
+  preflightTask,
+  preflightAndPause,
+  pauseForRuntimeError,
+  dispatchReadyTask,
+  dispatch,
+  _test: {
+    clearPause,
+    pause,
+    recoverPause,
+    readinessFingerprint,
+  },
+};

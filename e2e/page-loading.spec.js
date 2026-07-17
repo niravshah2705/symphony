@@ -48,6 +48,12 @@ test('workspace renders while optional Linear validation is stalled', async ({ p
     localActiveModel: 'Local test model',
   }));
   await page.route('**/api/agent/jobs', (route) => json(route, { jobs: [] }));
+  await page.route('**/api/coder', (route) => json(route, {
+    running: false,
+    paused: false,
+    pauseReason: null,
+    inFlight: [],
+  }));
 
   const response = await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
   expect(response && response.ok()).toBeTruthy();
@@ -148,6 +154,12 @@ test('authenticated Auth0 session adds a bearer token and ignores an unrelated p
     localActiveModel: 'Local test model',
   }));
   await page.route('**/api/agent/jobs', (route) => authorizedJson(route, { jobs: [] }));
+  await page.route('**/api/coder', (route) => authorizedJson(route, {
+    running: false,
+    paused: false,
+    pauseReason: null,
+    inFlight: [],
+  }));
 
   const response = await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
   expect(response && response.ok()).toBeTruthy();

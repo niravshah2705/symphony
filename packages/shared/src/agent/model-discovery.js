@@ -506,7 +506,12 @@ async function discoverModels(provider, options = {}) {
     const refreshedAt = new Date(now).toISOString();
     cache.set(key, { models: cloneModels(models), source: 'live', refreshedAt, expiresAt: now + CACHE_TTL_MS });
     return result(provider, models, 'live', true, refreshedAt);
-  } catch (_) {
+  } catch (error) {
+    // Agent dispatch uses strict discovery as a readiness preflight: falling
+    // back to a static catalog there would claim that an inaccessible model is
+    // usable and start a job that is certain to fail. Settings keeps the
+    // existing fail-open behavior by omitting `strict`.
+    if (options.strict) throw error;
     cache.set(key, { models: fallbackModels(provider, backend), source: 'fallback', refreshedAt: null, expiresAt: 0 });
     return fallbackResult(provider, backend, true);
   }

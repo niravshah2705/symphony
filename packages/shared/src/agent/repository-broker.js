@@ -59,6 +59,18 @@ const BROKER_TOKEN_ENV = 'TECHSYMPHONY_BROKER_GIT_TOKEN';
 const BROKER_HOST_ENV = 'TECHSYMPHONY_BROKER_GIT_HOST';
 const BROKER_USER_ENV = 'TECHSYMPHONY_BROKER_GIT_USER';
 const FRAMEWORK_SKILLS_EXCLUDE = '/.agent-skills/';
+const AVAILABILITY_ERROR_CODES = new Set(['missing_token', 'provider_unavailable']);
+const REMOTE_GIT_FAILURE = /(?:authentication failed|could not resolve host|could not read username|could not read from remote repository|unable to access|connection (?:refused|reset|timed?\s*out)|network (?:is unreachable|error)|remote:\s*[^\r\n]*(?:permission denied|not allowed|forbidden)|permission to [^\r\n]+ denied|repository not found|not authorized|requested url returned error:\s*(?:401|403|404|408|429|5\d\d)|http\s*(?:401|403|404|408|429|5\d\d))\b/i;
+
+function isAvailabilityFailure(error) {
+  if (!error) return false;
+  if (AVAILABILITY_ERROR_CODES.has(error.code)) return true;
+  const message = String(error.message || '');
+  if (error.code === 'provider_error') {
+    return /returned (?:401|403|404|408|429|5\d\d)\b/.test(message) || REMOTE_GIT_FAILURE.test(message);
+  }
+  return error.code === 'git_failed' && REMOTE_GIT_FAILURE.test(message);
+}
 
 // This helper is supplied only with `git -c` in broker-owned child processes.
 // It is never persisted in an agent workspace. Git sends the requested host on
@@ -315,6 +327,7 @@ class RepositoryBroker {
   #disposed = false;
   #feedbackReads = new Map();
   #scopeBranch;
+  #availabilityError = null;
 
   constructor({
     provider,
@@ -355,6 +368,15 @@ class RepositoryBroker {
       branch: this.branch,
       baseBranch: this.baseBranch,
     };
+  }
+
+  /**
+   * A credential/network failure returned through the agent-facing tool would
+   * otherwise look like ordinary tool output. Expose only the already-redacted
+   * broker error so the orchestrator can pause instead of finalizing the task.
+   */
+  availabilityError() {
+    return this.#availabilityError;
   }
 
   #assertActive() {
@@ -1317,6 +1339,7 @@ class RepositoryBroker {
           }
           return output;
         } catch (error) {
+          if (isAvailabilityFailure(error)) this.#availabilityError = error;
           return JSON.stringify({ ok: false, error: this.#safeError(error), code: error && error.code }).slice(
             0,
             LIMITS.toolOutputChars

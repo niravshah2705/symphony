@@ -976,4 +976,14 @@ test('tool-facing provider errors are redacted', async (t) => {
 
   assert.doesNotMatch(output, new RegExp(token));
   assert.match(output, /\*\*\*/);
+  assert.equal(broker.availabilityError().code, 'provider_error');
+  assert.doesNotMatch(broker.availabilityError().message, new RegExp(token));
+});
+
+test('ordinary review workflow errors are not reported as repository outages', async (t) => {
+  const { broker } = createScope(t, { fetchImpl: async () => response(200, []) });
+  const output = await broker.createTool().invoke({ action: 'merge_review' });
+
+  assert.match(output, /review_missing/);
+  assert.equal(broker.availabilityError(), null);
 });

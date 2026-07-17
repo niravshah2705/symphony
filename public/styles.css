@@ -330,6 +330,27 @@ body.auth-locked .app-sidebar, body.auth-locked .sidebar-backdrop { display: non
   display: flex; align-items: center; gap: 6px; margin-bottom: 18px; padding: 12px 14px;
   border: 1px solid var(--amber); border-radius: 10px; background: var(--amber-soft); font-size: 12px;
 }
+.agent-pause-host { display: grid; gap: 9px; }
+.agent-pause-host[hidden] { display: none; }
+.agent-pause-notice {
+  min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px;
+  padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--amber) 48%, var(--border)); border-radius: 10px;
+  background: color-mix(in srgb, var(--amber-soft) 78%, var(--panel));
+}
+.agent-pause-icon {
+  width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px;
+  background: var(--amber-soft); color: var(--amber); font-size: 11px; font-weight: 800;
+}
+.agent-pause-copy { min-width: 0; }
+.agent-pause-copy strong { display: block; font-size: 11px; line-height: 1.4; }
+.agent-pause-copy p { margin: 2px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.agent-pause-action {
+  display: inline-flex; align-items: center; min-height: 27px; padding: 4px 8px; border: 1px solid var(--amber);
+  border-radius: 6px; color: var(--text); font-size: 8px; font-weight: 700; white-space: nowrap;
+}
+.agent-pause-action:hover { background: var(--amber); color: #fff; }
+.job-history-pause-host { margin: 0 0 14px; }
+.agent-conversation-pause { margin-bottom: 24px; }
 .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
 .metric-card {
   min-width: 0; display: flex; flex-direction: column; gap: 7px; padding: 17px;
@@ -1114,6 +1135,8 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
   .operational-panel { padding: 14px; }
   .workflow-save-row { align-items: stretch; flex-direction: column; }
   .workflow-save-row button { width: 100%; }
+  .agent-pause-notice { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+  .agent-pause-action { grid-column: 2; justify-self: start; white-space: normal; }
   .conversation-wrap, .immersive-content { padding: 30px 20px 54px; }
   .reader-toolbar { min-height: 52px; padding: 7px 10px; }
   .breadcrumbs > span { display: none; }

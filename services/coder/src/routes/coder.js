@@ -13,7 +13,7 @@ const orchestrator = require('@ai-fleet/shared/agent/coder-orchestrator');
  * Code-writer deep agent endpoints:
  *   GET  /api/coder             — monitor status + in-flight tickets
  *   POST /api/coder/run         — run the code-writer on one ticket { issueId }
- *   POST /api/coder/monitor     — start/stop the board monitor { action }
+ *   POST /api/coder/monitor     — start/resume/stop the board monitor { action }
  */
 
 const router = express.Router();
@@ -64,34 +64,53 @@ router.post(
     const settings = getSettings();
     if (!settings.linearApiKey) return res.status(400).json({ error: 'Add a Linear API key in Settings.' });
 
-    let llm;
-    try {
-      llm = await resolveLlm(settings);
-    } catch (err) {
-      return res.status(err.status || 400).json({ error: err.message });
-    }
-
     const data = await linear.linearRequest(settings.linearApiKey, ISSUE_QUERY, { id: issueId });
     if (!data || !data.issue) return res.status(404).json({ error: `Issue ${issueId} not found.` });
     const issue = toIssue(data.issue);
+
+    let readiness;
+    try {
+      readiness = await orchestrator.preflightAndPause(issue, (role) => resolveLlm(settings, role));
+    } catch (error) {
+      const reason = error && error.pauseReason;
+      return res.status(503).json({
+        error: reason ? reason.message : 'Agent jobs are paused until the workspace is ready.',
+        paused: true,
+        pauseReason: reason || null,
+      });
+    }
+    const { llm } = readiness;
 
     // Long-running; dispatch detached and return accepted. Progress goes to the logs + the Linear Workpad.
     const step = (m) => log.info(`[coder ${issue.identifier}] ${m}`);
     Promise.resolve()
       .then(() => runCoder({ issue, llm, apiKey: settings.linearApiKey, keys: buildKeys(settings), onStep: step }))
       .then((r) => log.info(`[coder ${issue.identifier}] done: ${String(r.finalText || '').slice(0, 160)}`))
-      .catch((err) => log.error(`[coder ${issue.identifier}] failed: ${err && err.message ? err.message : err}`));
+      .catch((err) => {
+        const reason = orchestrator.pauseForRuntimeError(err, {
+          task: issue,
+          role: readiness.role,
+          repositoryProvider: readiness.selection.provider,
+          llm,
+        });
+        if (reason) {
+          log.warn(`[coder ${issue.identifier}] Agent jobs paused: ${reason.message}`);
+          return;
+        }
+        log.error(`[coder ${issue.identifier}] failed: ${err && err.message ? err.message : err}`);
+      });
 
     res.status(202).json({ accepted: true, issue: { id: issue.id, identifier: issue.identifier, state: issue.state }, provider: llm.provider, model: llm.model });
   })
 );
 
-// POST /api/coder/monitor — start/stop the board monitor.
+// POST /api/coder/monitor — start/resume/stop the board monitor.
 router.post('/monitor', (req, res) => {
   const action = req.body && String(req.body.action || '').trim();
   if (action === 'start') return res.json(orchestrator.start());
+  if (action === 'resume') return res.json(orchestrator.resume());
   if (action === 'stop') return res.json(orchestrator.stop());
-  return res.status(400).json({ error: 'action must be "start" or "stop".' });
+  return res.status(400).json({ error: 'action must be "start", "resume", or "stop".' });
 });
 
 module.exports = router;

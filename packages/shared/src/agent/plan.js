@@ -24,10 +24,11 @@ const framework = require('./framework');
  */
 
 class AgentError extends Error {
-  constructor(message, status = 400) {
-    super(message);
+  constructor(message, status = 400, { code = 'agent_error', cause } = {}) {
+    super(message, cause ? { cause } : undefined);
     this.name = 'AgentError';
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -303,11 +304,19 @@ async function generateIssuesForMilestones({ project, milestones, config, llm, k
       business: { project: project.name, session: runId },
     });
   } catch (err) {
-    throw new AgentError(`The model did not return valid tasks: ${err && err.message ? err.message : err}`, 502);
+    throw new AgentError(
+      `The model did not return valid tasks: ${err && err.message ? err.message : err}`,
+      502,
+      { code: 'model_call_failed', cause: err },
+    );
   }
   const parsed = ResumeSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new AgentError(`Tasks failed validation: ${parsed.error.issues[0].message}`, 502);
+    throw new AgentError(
+      `Tasks failed validation: ${parsed.error.issues[0].message}`,
+      502,
+      { code: 'model_output_invalid' },
+    );
   }
   const maxIssues = Math.max(0, config.maxIssuesPerMilestone || 5);
   const genMilestones = parsed.data.milestones.map((m) => ({ name: m.name, issues: m.issues.slice(0, maxIssues) }));
@@ -417,12 +426,20 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep })
       business: { project: project.name, session: runId },
     });
   } catch (err) {
-    throw new AgentError(`The model did not return a valid plan: ${err && err.message ? err.message : err}`, 502);
+    throw new AgentError(
+      `The model did not return a valid plan: ${err && err.message ? err.message : err}`,
+      502,
+      { code: 'model_call_failed', cause: err },
+    );
   }
 
   const parsed = PlanSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new AgentError(`Plan failed validation: ${parsed.error.issues[0].message}`, 502);
+    throw new AgentError(
+      `Plan failed validation: ${parsed.error.issues[0].message}`,
+      502,
+      { code: 'model_output_invalid' },
+    );
   }
   const plan = normalizePlan(parsed.data, {
     maxMilestones: config.maxMilestones,

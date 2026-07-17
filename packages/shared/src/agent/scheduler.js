@@ -7,6 +7,7 @@ const log = require('../logger');
 const { generatePlan, generateIssuesForMilestones } = require('./plan');
 const { applyPlan, applyIssuesForMilestones, applyAiplanned, applyAifail } = require('./apply');
 const { llmReady, notReadyReason, resolveLlm } = require('./llm');
+const { isModelAvailabilityError, pauseReasonFor, probeModelAvailability } = require('./availability');
 
 const { CONFIG } = require('../config');
 
@@ -35,7 +36,42 @@ const runtime = {
   lastRunAt: null,
   nextRunAt: null,
   lastError: null,
+  pauseReason: null,
 };
+
+function pauseForModel(error, settings, llm = null) {
+  if (!runtime.pauseReason) {
+    runtime.pauseReason = pauseReasonFor('model', error, {
+      provider: (llm && llm.provider) || settings.llmProvider,
+      model: llm && llm.model,
+      role: 'global',
+    });
+  }
+  runtime.lastError = runtime.pauseReason.message;
+  return runtime.pauseReason;
+}
+
+function clearModelPause() {
+  const cleared = Boolean(runtime.pauseReason);
+  runtime.pauseReason = null;
+  if (cleared) log.info('Planner model availability pause cleared.');
+}
+
+async function verifyModelReadiness(settings, dependencies = {}) {
+  const resolve = dependencies.resolveLlm || resolveLlm;
+  const probe = dependencies.probeModelAvailability || probeModelAvailability;
+  let llm;
+  try {
+    llm = await resolve(settings);
+    await probe(llm);
+    clearModelPause();
+    runtime.lastError = null;
+    return llm;
+  } catch (error) {
+    pauseForModel(error, settings, llm);
+    throw error;
+  }
+}
 
 /** Queue a project for enrichment, skipping duplicates already in flight. */
 function enqueue({ projectId, projectName, assumedRole }) {
@@ -66,21 +102,36 @@ function enqueue({ projectId, projectName, assumedRole }) {
 }
 
 /** Run one enrichment job end-to-end, recording a step trace on the job. */
-async function runJob(job, { apiKey, keys, llm, config }) {
+async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
+  const jobStore = dependencies.store || store;
+  const linearClient = dependencies.linear || linear;
+  const generatePlanImpl = dependencies.generatePlan || generatePlan;
+  const generateIssuesImpl = dependencies.generateIssuesForMilestones || generateIssuesForMilestones;
+  const applyPlanImpl = dependencies.applyPlan || applyPlan;
+  const applyIssuesImpl = dependencies.applyIssuesForMilestones || applyIssuesForMilestones;
+  const applyAiplannedImpl = dependencies.applyAiplanned || applyAiplanned;
+  const applyAifailImpl = dependencies.applyAifail || applyAifail;
+  const getSettings = dependencies.getSettings || store.getSettings;
   // Records a step both to the persistent log file and onto the job (for the UI).
   const step = (message, level = 'info') => {
     log[level] ? log[level](`[job ${job.id.slice(0, 8)} · ${job.projectName}] ${message}`) : log.info(message);
-    store.appendJobStep(job.id, { ts: new Date().toISOString(), level, message });
+    jobStore.appendJobStep(job.id, { ts: new Date().toISOString(), level, message });
   };
 
   const finish = (patch) =>
-    store.updateJob(job.id, { status: 'done', finishedAt: new Date().toISOString(), error: null, ...patch });
+    jobStore.updateJob(job.id, { status: 'done', finishedAt: new Date().toISOString(), error: null, ...patch });
 
-  store.updateJob(job.id, { status: 'running', startedAt: new Date().toISOString() });
+  jobStore.updateJob(job.id, {
+    status: 'running',
+    startedAt: new Date().toISOString(),
+    error: null,
+    pauseReason: null,
+  });
   step('Enrichment started.');
+  let phase = 'planning-provider';
   try {
     // Inspect existing milestones to decide: NEW plan vs RESUME (create issues).
-    const { project, milestones } = await linear.getMilestonesWithIssueCounts(apiKey, job.projectId);
+    const { project, milestones } = await linearClient.getMilestonesWithIssueCounts(apiKey, job.projectId);
 
     if (milestones.length > 0) {
       // ---- RESUME: milestones already exist; ensure each has issues, then aidone.
@@ -88,13 +139,15 @@ async function runJob(job, { apiKey, keys, llm, config }) {
       step(`Found ${milestones.length} existing milestone(s); ${missing.length} without issues.`);
       let summary = { milestonesCreated: 0, issuesCreated: 0, dependenciesCreated: 0, warnings: [], resumed: true };
       if (missing.length && config.createIssues) {
-        const gen = await generateIssuesForMilestones({ project, milestones: missing, config, llm, keys, onStep: step });
-        summary = await applyIssuesForMilestones(apiKey, { project, milestones: missing, generated: gen.milestones, config, onStep: step });
-        await applyAiplanned(apiKey, { project, onStep: step });
+        phase = 'model';
+        const gen = await generateIssuesImpl({ project, milestones: missing, config, llm, keys, onStep: step });
+        phase = 'planning-provider';
+        summary = await applyIssuesImpl(apiKey, { project, milestones: missing, generated: gen.milestones, config, onStep: step });
+        await applyAiplannedImpl(apiKey, { project, onStep: step });
         step(`Resumed: created ${summary.issuesCreated} task(s); marked aiplanned.`);
         finish({ traceUrl: gen.traceUrl, traced: gen.traced, summary });
       } else {
-        await applyAiplanned(apiKey, { project, onStep: step });
+        await applyAiplannedImpl(apiKey, { project, onStep: step });
         step('All milestones already have issues; marked aiplanned.');
         finish({ summary });
       }
@@ -102,32 +155,48 @@ async function runJob(job, { apiKey, keys, llm, config }) {
     }
 
     // ---- NEW: no milestones yet — viability + full business plan.
-    const result = await generatePlan({ project, assumedRole: job.assumedRole, config, llm, keys, onStep: step });
+    phase = 'model';
+    const result = await generatePlanImpl({ project, assumedRole: job.assumedRole, config, llm, keys, onStep: step });
+    phase = 'planning-provider';
 
     if (!result.viable) {
-      const summary = await applyAifail(apiKey, { project, reason: result.reason, onStep: step });
+      const summary = await applyAifailImpl(apiKey, { project, reason: result.reason, onStep: step });
       step(`Marked aifail: ${result.reason.slice(0, 160)}`, 'warn');
       finish({ traceUrl: result.traceUrl, traced: result.traced, summary });
       return;
     }
 
-    const summary = await applyPlan(apiKey, { project, plan: result.plan, assumedRole: job.assumedRole, config, onStep: step });
+    const summary = await applyPlanImpl(apiKey, { project, plan: result.plan, assumedRole: job.assumedRole, config, onStep: step });
     // Mark aiplanned once issues exist (or when issue creation is disabled) — the
     // project is now planned and ready for the coding flow to work its tasks.
     if (summary.issuesCreated > 0 || !config.createIssues) {
-      await applyAiplanned(apiKey, { project, onStep: step });
+      await applyAiplannedImpl(apiKey, { project, onStep: step });
     }
     step(`Done: ${summary.milestonesCreated} milestones, ${summary.issuesCreated} issues, ${summary.dependenciesCreated} deps${summary.warnings.length ? `, ${summary.warnings.length} warning(s)` : ''}.`);
     finish({ traceUrl: result.traceUrl, traced: result.traced, summary });
   } catch (err) {
+    if (phase === 'model' && isModelAvailabilityError(err)) {
+      const reason = pauseForModel(err, getSettings(), llm);
+      step(`Agent jobs paused: ${reason.message}`, 'warn');
+      jobStore.updateJob(job.id, {
+        status: 'pending',
+        startedAt: null,
+        finishedAt: null,
+        error: reason.message,
+        pauseReason: reason,
+      });
+      return { paused: true, pauseReason: reason };
+    }
     const message = err && err.message ? err.message : String(err);
     step(`Failed: ${message}`, 'error');
-    store.updateJob(job.id, {
+    jobStore.updateJob(job.id, {
       status: 'error',
       finishedAt: new Date().toISOString(),
       error: message,
     });
+    return { error: message };
   }
+  return { done: true };
 }
 
 /**
@@ -175,9 +244,9 @@ async function processPending() {
       return { skipped: 'missing-keys', reason: runtime.lastError };
     }
     if (!llmReady(settings)) {
-      runtime.lastError = notReadyReason(settings);
-      log.warn(`Tick skipped: ${runtime.lastError}`);
-      return { skipped: 'missing-keys', reason: runtime.lastError };
+      const reason = pauseForModel(new Error(notReadyReason(settings)), settings);
+      log.warn(`Tick skipped: ${reason.message}`);
+      return { skipped: 'paused', reason: reason.message, pauseReason: reason };
     }
     if (!assumedRole) {
       runtime.lastError = 'Assume a role in Settings to enable automatic enrichment.';
@@ -189,11 +258,11 @@ async function processPending() {
     // Resolve the active provider (refreshes the Codex OAuth token if needed).
     let llm;
     try {
-      llm = await resolveLlm(settings);
+      llm = await verifyModelReadiness(settings);
     } catch (err) {
-      runtime.lastError = err && err.message ? err.message : 'LLM provider unavailable.';
-      log.warn(`Tick skipped: ${runtime.lastError}`);
-      return { skipped: 'missing-keys', reason: runtime.lastError };
+      const reason = runtime.pauseReason;
+      log.warn(`Tick skipped: ${reason.message}`);
+      return { skipped: 'paused', reason: reason.message, pauseReason: reason };
     }
     const keys = {
       langsmithApiKey: settings.langsmithApiKey,
@@ -218,9 +287,16 @@ async function processPending() {
     const concurrency = Math.max(1, Math.min(config.parallelProcessing || 1, batch.length || 1));
 
     log.info(`Tick: discovered ${discovered}, processing ${batch.length} (parallel ${concurrency}).`);
-    await runWithConcurrency(batch, concurrency, (job) => runJob(job, { apiKey, keys, llm, config }));
+    await runWithConcurrency(batch, concurrency, (job) =>
+      runtime.pauseReason
+        ? Promise.resolve({ skipped: 'paused' })
+        : runJob(job, { apiKey, keys, llm, config })
+    );
     store.pruneJobs();
     log.info(`Tick finished (processed ${batch.length}).`);
+    if (runtime.pauseReason) {
+      return { discovered, processed: batch.length, paused: true, pauseReason: runtime.pauseReason };
+    }
     return { discovered, processed: batch.length };
   } catch (err) {
     runtime.lastError = err && err.message ? err.message : String(err);
@@ -290,6 +366,8 @@ function getStatus() {
     lastRunAt: runtime.lastRunAt,
     nextRunAt: runtime.nextRunAt,
     lastError: runtime.lastError,
+    paused: Boolean(runtime.pauseReason),
+    pauseReason: runtime.pauseReason,
     counts: {
       pending: jobs.filter((j) => j.status === 'pending').length,
       running: jobs.filter((j) => j.status === 'running').length,
@@ -304,4 +382,10 @@ module.exports = {
   processPending,
   startScheduler,
   getStatus,
+  _test: {
+    clearModelPause,
+    pauseForModel,
+    runJob,
+    verifyModelReadiness,
+  },
 };

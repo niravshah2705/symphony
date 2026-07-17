@@ -1,6 +1,7 @@
 import { api } from '../api.js';
 import { el, clear, loading, toast } from '../dom.js';
 import { formatDate, formatNumber } from '../i18n.js';
+import { agentPauseCopy, agentPauseInfo, agentPauseNotice, hasAgentPauseContract } from '../agent-pause.js';
 
 const REFRESH_INTERVAL_MS = 5_000;
 const CONFIRM_WINDOW_MS = 5_000;
@@ -78,13 +79,52 @@ function jobsFingerprint(jobs) {
   ]));
 }
 
+function pauseList(...sources) {
+  const seen = new Set();
+  return sources
+    .map((source) => agentPauseInfo(source))
+    .filter((pause) => pause && !seen.has(pause.code) && seen.add(pause.code));
+}
+
+function snapshotFingerprint(jobs, pauses) {
+  return JSON.stringify([
+    jobsFingerprint(jobs),
+    pauses.map((pause) => [pause.code, pause.pausedAt, pause.retryable]),
+  ]);
+}
+
+function pauseSources(plannerStatus, coderStatus, jobs) {
+  const plannerOwnsState = hasAgentPauseContract(plannerStatus);
+  const coderOwnsState = hasAgentPauseContract(coderStatus);
+  const legacy = jobs.filter((job) => {
+    if (job.status !== 'paused') return false;
+    return jobKind(job) === 'coding' ? !coderOwnsState : !plannerOwnsState;
+  });
+  return [plannerStatus, coderStatus, ...legacy];
+}
+
+async function loadJobSnapshot() {
+  const [response, plannerStatus, coderStatus] = await Promise.all([
+    api.getJobs(),
+    api.getAgentStatus().catch(() => null),
+    api.getCoderStatus().catch(() => null),
+  ]);
+  const jobs = jobsFrom(response);
+  return {
+    jobs,
+    plannerStatus,
+    coderStatus,
+    pauses: pauseList(...pauseSources(plannerStatus, coderStatus, jobs)),
+  };
+}
+
 function domToken(value) {
   return String(value || 'job').replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 120) || 'job';
 }
 
 function statusClass(status) {
   if (status === 'done') return 'ok';
-  if (status === 'pending' || status === 'running') return 'warn';
+  if (status === 'pending' || status === 'running' || status === 'paused') return 'warn';
   if (status === 'error') return 'bad';
   return 'neutral';
 }
@@ -93,6 +133,7 @@ function statusLabel(status) {
   if (status === 'done') return 'Done';
   if (status === 'pending') return 'Pending';
   if (status === 'running') return 'Running';
+  if (status === 'paused') return 'Paused';
   if (status === 'error') return 'Needs attention';
   return status ? String(status) : 'Unknown';
 }
@@ -247,7 +288,9 @@ function jobRow(job, index, { removeJob }) {
   const title = kind === 'coding'
     ? [job.taskIdentifier, job.taskTitle].filter(Boolean).join(' · ') || 'Coding job'
     : job.projectName || job.taskTitle || (kind === 'planner' ? 'Planner job' : 'Agent job');
-  const summary = kind === 'coding' ? codingSummary(job) : kind === 'planner' ? plannerSummary(job) : otherSummary(job);
+  const pause = agentPauseInfo(job);
+  const pauseCopy = pause ? agentPauseCopy(pause) : null;
+  const summary = pauseCopy?.job || (kind === 'coding' ? codingSummary(job) : kind === 'planner' ? plannerSummary(job) : otherSummary(job));
   const toggle = el('button', {
     type: 'button',
     class: 'job-history-activity',
@@ -272,7 +315,7 @@ function jobRow(job, index, { removeJob }) {
   if (taskUrl) actions.push(el('a', { class: 'btn job-history-link', href: taskUrl, target: '_blank', rel: 'noopener noreferrer', dataset: { jobAction: 'task' } }, 'Open task'));
 
   const deletableId = safeJobId(job.id);
-  if (deletableId && ['done', 'error'].includes(job.status)) {
+  if (deletableId && ['done', 'error', 'paused'].includes(job.status)) {
     const remove = el('button', { type: 'button', class: 'danger job-history-delete', dataset: { jobAction: 'delete' } });
     armDestructiveButton(remove, {
       confirmation: () => translatedLabel('agentJobsConfirmDelete', 'Confirm delete'),
@@ -295,10 +338,13 @@ function jobRow(job, index, { removeJob }) {
 
   return el('article', { class: 'job job-history-row', role: 'listitem', dataset: { jobId: key, jobKind: kind } }, [
     el('div', { class: 'job-history-summary' }, [
-      el('span', { class: `status-pill ${statusClass(job.status)}` }, statusLabel(job.status)),
+      el('span', {
+        class: `status-pill ${statusClass(job.status)}`,
+        ...(job.status === 'paused' ? { dataset: { i18n: 'agentPaused', i18nFallback: 'Paused' } } : {}),
+      }, statusLabel(job.status)),
       el('div', { class: 'job-history-copy' }, [
         el('strong', { dataset: { userContent: 'true' } }, title),
-        el('p', {}, summary),
+        el('p', pauseCopy ? { dataset: { i18n: pauseCopy.jobKey, i18nFallback: pauseCopy.job } } : {}, summary),
         el('div', { class: 'job-history-meta' }, meta),
       ]),
       el('div', { class: 'job-history-actions' }, actions),
@@ -354,8 +400,16 @@ export async function renderAgentJobs(view) {
   clear(view).append(loadingState);
 
   let jobs;
+  let pauses;
+  let plannerStatus;
+  let coderStatus;
+  let renderedPauseFingerprint = null;
   try {
-    jobs = jobsFrom(await api.getJobs());
+    const snapshot = await loadJobSnapshot();
+    jobs = snapshot.jobs;
+    pauses = snapshot.pauses;
+    plannerStatus = snapshot.plannerStatus;
+    coderStatus = snapshot.coderStatus;
   } catch (error) {
     if (generation === renderGeneration && view.isConnected && routeActive()) {
       renderLoadFailure(view, error);
@@ -370,6 +424,7 @@ export async function renderAgentJobs(view) {
   const plannerHost = el('section', { class: 'operational-panel job-history-section', dataset: { jobKind: 'planner' }, 'aria-labelledby': 'planner-jobs-title' });
   const codingHost = el('section', { class: 'operational-panel job-history-section', dataset: { jobKind: 'coding' }, 'aria-labelledby': 'coding-jobs-title' });
   const otherHost = el('section', { class: 'operational-panel job-history-section', dataset: { jobKind: 'other' }, 'aria-labelledby': 'other-jobs-title', hidden: true });
+  const pauseHost = el('div', { class: 'agent-pause-host job-history-pause-host' });
   const refreshStatus = el('div', { class: 'job-history-refresh-status', role: 'status', 'aria-live': 'polite' });
   const refresh = el('button', { type: 'button' }, 'Refresh');
   const clearFinished = el('button', { type: 'button', class: 'danger' });
@@ -378,10 +433,14 @@ export async function renderAgentJobs(view) {
   let reloadInFlight = null;
 
   const pageActive = () => generation === renderGeneration && view.isConnected && page.isConnected && routeActive();
+  const refreshDerivedPauses = () => {
+    pauses = pauseList(...pauseSources(plannerStatus, coderStatus, jobs));
+  };
 
   const removeJob = (id) => {
     dataEpoch += 1;
     jobs = jobs.filter((job) => job.id !== id);
+    refreshDerivedPauses();
     renderAll();
   };
 
@@ -392,6 +451,12 @@ export async function renderAgentJobs(view) {
     const other = jobs.filter((job) => jobKind(job) === 'other');
     const active = jobs.filter(isActiveJob).length;
     const attention = jobs.filter((job) => job.status === 'error').length;
+    const nextPauseFingerprint = JSON.stringify(pauses.map((pause) => [pause.code, pause.pausedAt, pause.retryable]));
+    if (nextPauseFingerprint !== renderedPauseFingerprint) {
+      clear(pauseHost).append(...pauses.map((pause) => agentPauseNotice(pause)));
+      pauseHost.hidden = pauses.length === 0;
+      renderedPauseFingerprint = nextPauseFingerprint;
+    }
     clear(summaryHost).append(
       metric('All jobs', jobs.length, `${formatNumber(attention)} need attention`),
       metric('Planner', planner.length, 'Planning and enrichment runs'),
@@ -432,7 +497,7 @@ export async function renderAgentJobs(view) {
     if (!clearFinished.hasAttribute('data-confirming')) {
       setButtonLabel(clearFinished, countedLabel('agentJobsClearFinished', 'Clear finished', clearable));
     }
-    renderedFingerprint = jobsFingerprint(jobs);
+    renderedFingerprint = snapshotFingerprint(jobs, pauses);
     restoreJobAction(page, focusTarget);
   };
 
@@ -447,15 +512,18 @@ export async function renderAgentJobs(view) {
     if (announce) refreshStatus.textContent = 'Refreshing jobs…';
     const request = (async () => {
       try {
-        const nextJobs = jobsFrom(await api.getJobs());
+        const snapshot = await loadJobSnapshot();
         if (!pageActive() || requestEpoch !== dataEpoch) return;
-        if (jobsFingerprint(nextJobs) !== renderedFingerprint) {
+        if (snapshotFingerprint(snapshot.jobs, snapshot.pauses) !== renderedFingerprint) {
           if (hasArmedConfirmation(page)) {
             refreshStatus.className = 'job-history-refresh-status pending';
             refreshStatus.textContent = 'New activity is waiting. Finish or cancel the pending confirmation to update this page.';
             return;
           }
-          jobs = nextJobs;
+          jobs = snapshot.jobs;
+          pauses = snapshot.pauses;
+          plannerStatus = snapshot.plannerStatus;
+          coderStatus = snapshot.coderStatus;
           renderAll();
         }
         refreshStatus.className = 'job-history-refresh-status';
@@ -483,6 +551,7 @@ export async function renderAgentJobs(view) {
       const response = await api.clearFinishedJobs();
       dataEpoch += 1;
       jobs = jobsFrom(response);
+      refreshDerivedPauses();
       for (const key of [...expandedJobs]) {
         if (!jobs.some((job, index) => jobKey(job, index) === key)) expandedJobs.delete(key);
       }
@@ -504,6 +573,7 @@ export async function renderAgentJobs(view) {
       ]),
     ]),
     refreshStatus,
+    pauseHost,
     summaryHost,
     plannerHost,
     codingHost,

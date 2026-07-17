@@ -1,9 +1,12 @@
 import { api } from '../api.js';
 import { el, clear, toast } from '../dom.js';
+import { t } from '../i18n.js';
+import { agentPauseCopy, agentPauseInfo, agentPauseNotice, hasAgentPauseContract } from '../agent-pause.js';
 
 let refreshTimer = null;
 let railPinned = false;
 const conversation = [];
+const pauseSignatures = new WeakMap();
 
 function stopRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
@@ -17,21 +20,25 @@ function agentRouteActive() {
 export async function renderAgent(view) {
   stopRefresh();
   railPinned = false;
-  const [status, jobsResponse] = await Promise.all([
+  const [status, jobsResponse, coderStatus] = await Promise.all([
     api.getAgentStatus().catch((error) => ({ unavailable: true, error: error.message, counts: {} })),
     api.getJobs().catch(() => ({ jobs: [] })),
+    api.getCoderStatus().catch(() => null),
   ]);
 
+  const pauseHost = el('div', { class: 'agent-pause-host' });
   const stream = el('div', { class: 'conversation-stream', 'aria-live': 'polite' });
   const railBody = el('div', { id: 'agent-details-panel', class: 'rail-content', role: 'tabpanel', 'aria-labelledby': 'agent-details-tab' });
   const composer = buildComposer(stream, railBody);
   const jobs = jobsResponse.jobs || [];
+  let toolbar = agentToolbar(status, view, railBody);
+  let toolbarSignature = agentToolbarSignature(status);
 
   clear(view).append(
     el('section', { class: 'agent-workspace' }, [
       el('main', { class: 'scenario-reader agent-reader' }, [
-        agentToolbar(status, view, railBody),
-        el('div', { class: 'conversation-wrap' }, [stream, composer]),
+        toolbar,
+        el('div', { class: 'conversation-wrap' }, [pauseHost, stream, composer]),
       ]),
       el('aside', { class: 'evidence-rail scenario-rail', 'aria-label': 'Agent details' }, [
         el('div', { class: 'rail-tabs', role: 'tablist' }, [
@@ -43,6 +50,7 @@ export async function renderAgent(view) {
     ])
   );
 
+  renderPauseNotices(pauseHost, ...pauseSources(status, coderStatus, jobs));
   renderWelcome(stream, status);
   for (const entry of conversation) stream.append(renderConversationEntry(entry, railBody));
   renderRecentWork(stream, jobs, railBody);
@@ -51,27 +59,86 @@ export async function renderAgent(view) {
   refreshTimer = setInterval(async () => {
     if (!agentRouteActive()) return stopRefresh();
     try {
-      const [nextStatus, nextJobs] = await Promise.all([api.getAgentStatus(), api.getJobs()]);
+      const [nextStatus, nextJobs, nextCoderStatus] = await Promise.all([
+        api.getAgentStatus(),
+        api.getJobs(),
+        api.getCoderStatus().catch(() => null),
+      ]);
+      const refreshedJobs = nextJobs.jobs || [];
+      renderPauseNotices(pauseHost, ...pauseSources(nextStatus, nextCoderStatus, refreshedJobs));
+      const nextToolbarSignature = agentToolbarSignature(nextStatus);
+      if (nextToolbarSignature !== toolbarSignature) {
+        const replacement = agentToolbar(nextStatus, view, railBody);
+        toolbar.replaceWith(replacement);
+        toolbar = replacement;
+        toolbarSignature = nextToolbarSignature;
+      }
       if (!railPinned) renderAgentRail(railBody, nextStatus, null);
-      updateLiveJobs(stream, nextJobs.jobs || [], railBody);
+      updateLiveJobs(stream, refreshedJobs, railBody);
     } catch (_) {
       // A short service restart should not interrupt the conversation.
     }
   }, 5000);
 }
 
+function pauseSources(plannerStatus, coderStatus, jobs) {
+  const plannerOwnsState = hasAgentPauseContract(plannerStatus);
+  const coderOwnsState = hasAgentPauseContract(coderStatus);
+  const legacy = jobs.filter((job) => {
+    if (job.status !== 'paused') return false;
+    const coding = job.kind === 'coding' || job.summary?.coding === true;
+    return coding ? !coderOwnsState : !plannerOwnsState;
+  });
+  return [plannerStatus, coderStatus, ...legacy];
+}
+
+function renderPauseNotices(host, ...statuses) {
+  const seen = new Set();
+  const pauses = statuses
+    .map((status) => agentPauseInfo(status))
+    .filter((pause) => pause && !seen.has(pause.code) && seen.add(pause.code));
+  const signature = JSON.stringify(pauses.map((pause) => [
+    pause.code,
+    pause.pausedAt,
+    pause.retryable,
+  ]));
+  // Avoid rebuilding an unchanged aria-live region on every poll. Replacing
+  // identical notices would make screen readers announce the same pause every
+  // five seconds even though nothing changed.
+  if (pauseSignatures.get(host) === signature) return;
+  pauseSignatures.set(host, signature);
+  clear(host).append(...pauses.map((pause) => agentPauseNotice(pause, { className: 'agent-conversation-pause' })));
+  host.hidden = pauses.length === 0;
+}
+
+function agentToolbarSignature(status) {
+  const pause = agentPauseInfo(status);
+  return JSON.stringify([
+    Boolean(status && status.scheduleEnabled),
+    Boolean(status && status.assumedRole),
+    pause && pause.code,
+    pause && pause.pausedAt,
+  ]);
+}
+
 function agentToolbar(status, view, railBody) {
-  const active = Boolean(status.scheduleEnabled);
+  const configured = Boolean(status.scheduleEnabled);
+  const pause = agentPauseInfo(status);
+  const pauseCopy = agentPauseCopy(pause);
+  const active = configured && !pause;
+  const stateLabel = pause
+    ? el('span', { dataset: { i18n: 'agentPlanningPaused' } }, 'Planning is paused')
+    : active ? 'Planning is on' : 'Planning is paused';
   const toggle = el('button', {
     class: `agent-state-toggle ${active ? 'is-active' : ''}`,
     type: 'button',
-    title: active ? 'Pause automatic planning' : 'Resume automatic planning',
-  }, [el('span', { class: 'status-dot' }), active ? 'Planning is on' : 'Planning is paused']);
+    title: pause ? t(pauseCopy.titleKey, pauseCopy.title) : active ? 'Pause automatic planning' : 'Resume automatic planning',
+  }, [el('span', { class: 'status-dot' }), stateLabel]);
   toggle.addEventListener('click', async () => {
     toggle.disabled = true;
     try {
-      await api.saveAgentConfig({ scheduleEnabled: !active });
-      toast(active ? 'Automatic planning paused.' : 'Automatic planning resumed.', 'ok');
+      await api.saveAgentConfig({ scheduleEnabled: !configured });
+      toast(configured ? 'Automatic planning paused.' : 'Automatic planning resumed.', 'ok');
       if (view.isConnected && agentRouteActive()) await renderAgent(clear(view));
     } catch (error) {
       toast(error.message, 'err');
@@ -82,8 +149,10 @@ function agentToolbar(status, view, railBody) {
   const runNow = el('button', {
     class: 'agent-run-now',
     type: 'button',
-    disabled: !status.assumedRole,
-    title: status.assumedRole ? 'Plan matching projects now' : 'Choose a role in Settings first',
+    disabled: !status.assumedRole || Boolean(pause),
+    title: pause
+      ? t(pauseCopy.bodyKey, pauseCopy.body)
+      : status.assumedRole ? 'Plan matching projects now' : 'Choose a role in Settings first',
   }, 'Plan projects now');
   runNow.addEventListener('click', async () => {
     runNow.disabled = true;
@@ -309,14 +378,30 @@ function jobMessage(job, railBody) {
   const coding = job.kind === 'coding';
   const subject = coding ? job.taskTitle || job.taskIdentifier || 'a coding task' : job.projectName || 'your project';
   const copy = friendlyJobCopy(job, subject);
-  const links = [{ label: 'See activity', action: () => renderJobRail(railBody, job) }];
+  const links = [{ label: 'See activity', i18n: 'agentJobActivity', action: () => renderJobRail(railBody, job) }];
   if (job.traceUrl) links.push({ label: 'Open trace', href: job.traceUrl, external: true });
   if (job.taskUrl) links.push({ label: 'Open task', href: job.taskUrl, external: true });
-  return assistantMessage(copy.title, copy.text, links, `job-message status-${job.status}`);
+  const title = copy.titleKey
+    ? { text: copy.title, attrs: { dataset: { i18n: copy.titleKey, i18nFallback: copy.title } } }
+    : copy.title;
+  const text = copy.textKey
+    ? { text: copy.text, attrs: { dataset: { i18n: copy.textKey, i18nFallback: copy.text } } }
+    : copy.text;
+  return assistantMessage(title, text, links, `job-message status-${job.status}`);
 }
 
 function friendlyJobCopy(job, subject) {
   const coding = job.kind === 'coding';
+  const pause = agentPauseInfo(job);
+  if (pause) {
+    const pauseCopy = agentPauseCopy(pause);
+    return {
+      title: pauseCopy.title,
+      titleKey: pauseCopy.titleKey,
+      text: pauseCopy.job,
+      textKey: pauseCopy.jobKey,
+    };
+  }
   if (job.status === 'pending') return { title: `I’ve queued ${subject}.`, text: 'It will start as soon as capacity is available.' };
   if (job.status === 'running') return { title: `I’m working on ${subject}.`, text: 'I’ll keep the detailed activity in the side panel while the work continues.' };
   if (job.status === 'error') return { title: `I hit a snag with ${subject}.`, text: job.error || 'The work stopped before it could finish. Open activity to see where.' };
@@ -351,6 +436,7 @@ function renderAgentRail(host, status, analysis) {
 
   const safe = status || {};
   const counts = safe.counts || {};
+  const pause = agentPauseInfo(safe);
   host.append(
     railIntro('Workspace setup', 'Automatic planning and the model that supports this conversation.'),
     el('div', { class: 'rail-summary' }, [
@@ -360,7 +446,7 @@ function renderAgentRail(host, status, analysis) {
     ]),
     el('div', { class: 'rail-section-label' }, 'Current setup'),
     detailCard([
-      ['Planning', safe.scheduleEnabled ? `Every ${safe.intervalMinutes || 5} minutes` : 'Paused'],
+      ['Planning', pause ? t('agentPaused', 'Paused') : safe.scheduleEnabled ? `Every ${safe.intervalMinutes || 5} minutes` : 'Paused'],
       ['Model', safe.localActiveModel || safe.ollamaModel || 'Not configured'],
       ['Acting as', safe.assumedRole ? safe.assumedRole.name : 'No role selected'],
       ['Labels', (safe.enrichLabels || []).join(', ') || 'Any'],
@@ -392,14 +478,19 @@ function renderJobRail(host, job) {
 }
 
 function assistantMessage(title, copy, links = [], kind = '') {
+  const titleAttrs = title && typeof title === 'object' ? title.attrs || {} : {};
+  const copyAttrs = copy && typeof copy === 'object' ? copy.attrs || {} : {};
+  const titleText = title && typeof title === 'object' ? title.text : title;
+  const copyText = copy && typeof copy === 'object' ? copy.text : copy;
   return el('article', { class: `conversation-message assistant ${kind}`.trim() }, [
     el('div', { class: 'message-avatar' }, 'S'),
     el('div', { class: 'message-copy' }, [
-      el('strong', { class: 'message-title' }, title),
-      el('p', {}, copy),
+      el('strong', { class: 'message-title', ...titleAttrs }, titleText),
+      el('p', copyAttrs, copyText),
       links.length ? el('div', { class: 'message-links' }, links.map((link) => {
-        if (link.href) return el('a', { href: link.href, ...(link.external ? { target: '_blank', rel: 'noreferrer' } : {}) }, link.label);
-        return el('button', { type: 'button', onclick: link.action }, link.label);
+        const localized = link.i18n ? { dataset: { i18n: link.i18n, i18nFallback: link.label } } : {};
+        if (link.href) return el('a', { href: link.href, ...localized, ...(link.external ? { target: '_blank', rel: 'noreferrer' } : {}) }, link.label);
+        return el('button', { type: 'button', onclick: link.action, ...localized }, link.label);
       })) : null,
     ]),
   ]);

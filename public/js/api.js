@@ -142,6 +142,7 @@ export const api = {
   getAgentLabels: () => request('/agent/labels'),
   getAgentCandidates: () => request('/agent/candidates'),
   getJobs: () => request('/agent/jobs'),
+  getCoderStatus: () => request('/coder'),
   runAgentNow: () => request('/agent/run-now', { method: 'POST' }),
   enrichInput: (payload) =>
     request('/agent/enrich-input', { method: 'POST', body: JSON.stringify(payload) }),

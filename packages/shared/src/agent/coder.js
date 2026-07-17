@@ -254,6 +254,9 @@ async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep }) {
       ),
     });
 
+    const repositoryError = repositoryBroker && repositoryBroker.availabilityError();
+    if (repositoryError) throw repositoryError;
+
     const finalBranch = activeRepositoryBranch(branch, repositoryBroker);
     step(`Code-writer finished (${execution.messages.length} messages).`);
     return { workDir, branch: finalBranch, ...execution, traced };
@@ -345,6 +348,9 @@ async function runPlannedCoderLocal({
         { project: project.name || project.id, taskId: issue.identifier || issue.id, session: runId }
       ),
     });
+
+    const repositoryError = repositoryBroker && repositoryBroker.availabilityError();
+    if (repositoryError) throw repositoryError;
 
     const finalBranch = activeRepositoryBranch(branch, repositoryBroker);
     step(`Planned coder finished on ${finalBranch} (${execution.messages.length} messages, monorepo ${slug}).`);

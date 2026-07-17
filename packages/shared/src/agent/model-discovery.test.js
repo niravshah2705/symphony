@@ -207,6 +207,18 @@ test('live discovery failures return connected static fallback data', async () =
   assert.ok(codex.models.some((model) => model.id === 'gpt-5.6-sol'));
 });
 
+test('strict discovery surfaces provider failures for agent readiness checks', async () => {
+  await assert.rejects(
+    () => discoverModels('codex', {
+      credentials: { accessToken: 'token', accountId: 'acct_1' },
+      fetchImpl: async () => jsonResponse({ error: 'forbidden' }, 403),
+      refresh: true,
+      strict: true,
+    }),
+    /HTTP 403/
+  );
+});
+
 test('ultra is forwarded only by the ChatGPT Codex backend', () => {
   const subscription = createChatModel({
     provider: 'codex',
