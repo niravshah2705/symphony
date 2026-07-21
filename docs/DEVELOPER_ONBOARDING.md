@@ -21,10 +21,11 @@ explains what the software does, and points you at the code you'll be working in
 | ----------- | ----- |
 | **Node.js ≥ 18** | Repo is developed on Node 20. Check with `node -v`. |
 | **A Linear account + personal API key** | Create one at <https://linear.app/settings/api>. Required for every feature. |
-| **LLM routes** (for the agents only) | For full routing, configure one local preset (Ollama or LM Studio) and one hosted preset (OpenAI or Claude OAuth). Not needed just to browse projects/board. |
+| **LLM routes** (for the agents only) | For full routing, configure one local preset (Ollama, LM Studio, or OMLX) and one hosted preset (OpenAI or Claude OAuth). Not needed just to browse projects/board. |
 | **git** | Required by the **code-writer** agent (it clones and pushes). |
 | **Ollama** (optional) | Only if you use the Ollama local route. Install from <https://ollama.com>, then `ollama pull gpt-oss:20b` (or another model offered by the preset dropdown). |
 | **LM Studio** (optional) | Only if you use the LM Studio local provider (handy for models not in Ollama's catalog). Install from <https://lmstudio.ai>, load a **tool-capable** model, then start its server (Developer → Start Server, default `http://localhost:1234`). |
+| **OMLX** (optional) | Only if you use the OMLX local provider. On an Apple Silicon Mac running macOS 15 or newer, install and start [OMLX](https://github.com/jundot/omlx) with a model or profile available; its default origin is `http://127.0.0.1:8000`. |
 
 No database, no build step, no framework — the frontend is plain ES modules
 served straight from `public/`.
@@ -94,10 +95,13 @@ required for normal use. Secrets are validated and stored **server-side** in
    applies its model, context/output budgets, sampling, JSON mode, and native
    reasoning control together. Expand **Customize parameters** only for an
    override; **Reset to recommended** restores the JSON catalog values.
-   - **Local / XS tasks** — choose an Ollama or LM Studio preset. No key is
-     required. Detected compatible model ids can be mapped from the status row;
-     expand customization to change the host (defaults: Ollama `:11434`, LM
-     Studio `:1234`). LM Studio's context must match the loaded model context.
+   - **Local / XS tasks** — choose an Ollama, LM Studio, or OMLX preset. Detected
+     compatible model ids can be mapped from the status row. Configure the local
+     connection in its card (defaults: Ollama `:11434`, LM Studio `:1234`, OMLX
+     `http://127.0.0.1:8000`). OMLX accepts either the origin or a trailing `/v1`,
+     discovers models from `GET /v1/models`, and only needs a key when its server
+     has API-key protection enabled. LM Studio's context must match the loaded
+     model context.
    - **Hosted / planner + larger tasks** — choose OpenAI GPT-5.5 or Claude Opus
      4.8. For OpenAI, click **Sign in with ChatGPT**. For Claude, click **Sign in
      with Claude** and paste back the `code#state` Anthropic gives you.
@@ -292,6 +296,10 @@ The full table lives in the root `README.md` (§ *API*). Most-used endpoints:
 - **LM Studio "not reachable" / empty model list** → start its server (Developer →
   Start Server) and load a **tool-capable** model; the host must match (default
   `http://localhost:1234`). Reload Settings after starting it.
+- **OMLX "not reachable" / empty model list** → start OMLX and make a model or
+  profile available. The host can be `http://127.0.0.1:8000` or the equivalent
+  `/v1` base; check the saved API key when the server requires authentication,
+  then use **Refresh models** in Settings.
 - **Code-writer does nothing** → set `CODER_REPO_URL`, and start the monitor
   (`POST /api/coder/monitor {"action":"start"}`) or run a single ticket.
 - **`data/` is git-ignored** — it holds your secrets, config, and jobs. Don't commit it.

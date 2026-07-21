@@ -430,3 +430,13 @@ test('pickStateByType resolves the completed (Done) state', () => {
 test('pickStateByType returns null when no state of the type exists', () => {
   assert.strictEqual(pickStateByType(STATES, 'canceled', 'Canceled'), null);
 });
+
+test('resolveMaxConcurrent reflects the UI-editable agent config value', () => {
+  const { getAgentConfig } = require('../store');
+  const configured = Number(getAgentConfig().maxConcurrentCoders);
+  const resolved = orchestrator._test.resolveMaxConcurrent();
+  assert.ok(Number.isInteger(resolved) && resolved >= 1);
+  if (Number.isFinite(configured) && configured >= 1) {
+    assert.strictEqual(resolved, Math.floor(configured));
+  }
+});

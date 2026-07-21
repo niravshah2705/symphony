@@ -3,7 +3,7 @@
 This diagram shows the preset-routed DeepAgent architecture, decomposed into
 **three isolated services over one shared library**: a browser-facing **gateway**
 (SPA + user API + OAuth) that reverse-proxies the two isolated agent services
-(**planner** and **coder**). Linear is the ticket system, Ollama/LM Studio provide
+(**planner** and **coder**). Linear is the ticket system, Ollama/LM Studio/OMLX provide
 the local route, OpenAI/Claude provide the hosted route, and the DeepAgent runtime
 (shipped once in `@ai-fleet/shared`) uses skills plus Linear/GitHub tools to plan
 and execute work.
@@ -49,6 +49,7 @@ flowchart LR
   subgraph LocalLlm["Local LLM providers"]
     Ollama["Ollama<br/>http://localhost:11434<br/>@langchain/ollama"]
     LmStudio["LM Studio<br/>http://localhost:1234/v1<br/>OpenAI-compatible API"]
+    Omlx["OMLX<br/>http://127.0.0.1:8000/v1<br/>OpenAI-compatible API"]
   end
 
   subgraph HostedLlm["Hosted LLM providers"]
@@ -58,6 +59,7 @@ flowchart LR
 
   LlmRouter -->|local preset| Ollama
   LlmRouter -->|local preset| LmStudio
+  LlmRouter -->|local preset| Omlx
   LlmRouter -->|hosted preset| OpenAI
   LlmRouter -->|hosted preset| Claude
 
@@ -101,8 +103,10 @@ sequenceDiagram
 
 - **Linear** is the source of truth for ticket management: projects, issues,
   labels, dependencies, state transitions, and Workpad comments.
-- **Ollama** and **LM Studio** are local inference providers. **OpenAI** and
-  **Claude** are hosted providers authenticated with OAuth. The planner uses the
+- **Ollama**, **LM Studio**, and **OMLX** are local inference providers. OMLX
+  discovers models through `GET /v1/models` and supports an optional server-held
+  API key. **OpenAI** and **Claude** are hosted providers authenticated with
+  OAuth. The planner uses the
   hosted route; the coder selects local or hosted by issue label.
 - **The JSON preset catalog** owns model limits, recommended request parameters,
   provider-native reasoning adapters, and effective output/context constraints.

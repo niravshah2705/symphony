@@ -220,6 +220,24 @@ const LMSTUDIO = Object.freeze({
 });
 
 /**
+ * oMLX (local, OpenAI-compatible) provider configuration.
+ *
+ * oMLX serves multiple MLX models on Apple Silicon and exposes its OpenAI API
+ * below `/v1`. Keep its runtime knobs separate from LM Studio: the two servers
+ * accept different provider-native request fields even though both implement
+ * Chat Completions.
+ */
+const OMLX = Object.freeze({
+  defaultHost: process.env.OMLX_HOST || 'http://127.0.0.1:8000',
+  apiPath: process.env.OMLX_API_PATH || '/v1',
+  requestTimeoutMs: Number(process.env.OMLX_REQUEST_TIMEOUT_MS) || 30 * 60 * 1000,
+  maxRetries: Number.isFinite(Number(process.env.OMLX_MAX_RETRIES)) ? Number(process.env.OMLX_MAX_RETRIES) : 1,
+  charsPerToken: Number(process.env.OMLX_CHARS_PER_TOKEN) || 3,
+  promptMarginTokens: Number(process.env.OMLX_PROMPT_MARGIN_TOKENS) || 1024,
+  summaryMaxTokens: Number(process.env.OMLX_SUMMARY_MAX_TOKENS) || 1024,
+});
+
+/**
  * Code-writer deep agent + workflow config (an equivalent of OpenAI Symphony's
  * WORKFLOW.md frontmatter). The agent works a Linear ticket end-to-end in an
  * isolated git workspace, driving it through the ticket state machine while
@@ -347,7 +365,7 @@ const CONFIG = Object.freeze({
   // Allowed scheduler cadences (minutes).
   INTERVAL_OPTIONS: [5, 10, 15],
   // Deep-agent LLM providers.
-  LLM_PROVIDERS: ['ollama', 'lmstudio', 'codex', 'claude'],
+  LLM_PROVIDERS: ['ollama', 'lmstudio', 'omlx', 'codex', 'claude'],
   // How each local provider constrains JSON output for the planner's structured
   // calls. Not every model/engine accepts the same format (e.g. some LM Studio
   // engines reject `json_object` and require `json_schema` or `text`), so the
@@ -359,13 +377,16 @@ const CONFIG = Object.freeze({
   //             'json_schema' → OpenAI-style structured output (permissive object)
   OLLAMA_JSON_MODES: ['json', 'text'],
   LMSTUDIO_JSON_MODES: ['text', 'json_object', 'json_schema'],
+  OMLX_JSON_MODES: ['text', 'json_object', 'json_schema'],
   // How the LM Studio provider keeps the deep-agent prompt within the loaded window
   // (only acts when the prompt exceeds it): summarize old turns, trim (drop) them,
   // or none (send as-is — may overflow). 'summarize' preserves the most context.
   LMSTUDIO_CONTEXT_MODES: ['summarize', 'trim', 'none'],
+  OMLX_CONTEXT_MODES: ['summarize', 'trim', 'none'],
   OAUTH,
   CLAUDE,
   LMSTUDIO,
+  OMLX,
   CODER,
   MCP,
   AUTH,

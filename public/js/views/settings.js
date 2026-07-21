@@ -23,36 +23,107 @@ export async function renderSettings(view) {
   if (!settings.codexModel) settings.codexModel = codexRes.model || codexRes.defaultModel || 'gpt-5.6-sol';
   if (!settings.claudeModel) settings.claudeModel = claudeRes.model || claudeRes.defaultModel || 'claude-opus-4-8';
 
-  // Two-column layout: keys + LLM on the left, role + agent config on the right.
-  // Collapses to a single column on narrow screens (see .settings-grid).
+  const llm = llmSection({
+    settings,
+    presets,
+    discovery: Object.create(null),
+    selectionPending: Object.create(null),
+    codex: codexRes,
+    claude: claudeRes,
+    view,
+  });
+  const groups = [
+    settingsGroup('settings-models', 'Models & runtime', 'Choose where work runs and how agents coordinate.', [
+      llm,
+      runtimeSection({ settings, codex: codexRes, claude: claudeRes }),
+    ]),
+    settingsGroup('settings-connections', 'Connections', 'Connect planning, source control, and observability services.', [
+      integrationsSection(settings),
+      keysSection(settings),
+    ]),
+    settingsGroup('settings-automation', 'Automation', 'Control schedules, limits, and automatic outputs.', [
+      agentSection({
+        config: configRes.config,
+        intervals: modelsRes.intervals || [5, 10, 15],
+        labels: labelsRes.labels || [],
+        view,
+      }),
+    ]),
+    settingsGroup('settings-identity', 'Identity', 'Choose the workspace member used for owned actions.', [
+      roleSection({ members: membersRes.members || [], assumedRole: roleRes.assumedRole, view }),
+    ]),
+  ];
+
   clear(view).append(
-    el('div', { class: 'page-head' }, [el('h1', {}, 'Settings')]),
-    el('div', { class: 'settings-grid' }, [
-      el('div', { class: 'settings-col' }, [
-        keysSection(settings),
-        integrationsSection(settings),
-        llmSection({
-          settings,
-          presets,
-          discovery: Object.create(null),
-          selectionPending: Object.create(null),
-          codex: codexRes,
-          claude: claudeRes,
-          view,
-        }),
+    el('header', { class: 'page-head settings-page-head' }, [
+      el('div', {}, [
+        el('span', { class: 'settings-eyebrow' }, 'Workspace configuration'),
+        el('h1', {}, 'Settings'),
+        el('p', { class: 'muted settings-page-intro' }, 'Set up models and connections first, then tune runtime and automation only when you need to.'),
       ]),
-      el('div', { class: 'settings-col' }, [
-        runtimeSection({ settings, codex: codexRes, claude: claudeRes }),
-        roleSection({ members: membersRes.members || [], assumedRole: roleRes.assumedRole, view }),
-        agentSection({
-          config: configRes.config,
-          intervals: modelsRes.intervals || [5, 10, 15],
-          labels: labelsRes.labels || [],
-          view,
-        }),
-      ]),
+    ]),
+    settingsOverview({ settings, codex: codexRes, claude: claudeRes }),
+    el('div', { class: 'settings-layout' }, [
+      settingsIndex(),
+      el('div', { class: 'settings-content' }, groups),
     ])
   );
+}
+
+function settingsIndex() {
+  return el('nav', { class: 'settings-index', 'aria-label': 'Settings categories' }, [
+    el('span', { class: 'settings-index-label' }, 'Jump to'),
+    ...[
+      ['settings-models', '01', 'Models'],
+      ['settings-connections', '02', 'Connections'],
+      ['settings-automation', '03', 'Automation'],
+      ['settings-identity', '04', 'Identity'],
+    ].map(([id, number, label]) => el('a', { href: `#${id}` }, [
+      el('span', { 'aria-hidden': 'true' }, number),
+      el('strong', {}, label),
+    ])),
+  ]);
+}
+
+function settingsGroup(id, title, description, children) {
+  const headingId = `${id}-heading`;
+  return el('section', { class: 'settings-group', id, 'aria-labelledby': headingId }, [
+    el('div', { class: 'settings-group-head' }, [
+      el('h2', { id: headingId }, title),
+      el('p', { class: 'muted' }, description),
+    ]),
+    ...children,
+  ]);
+}
+
+function configuredLocalModel(settings) {
+  const provider = settings.localLlmProvider || 'ollama';
+  if (provider === 'lmstudio') return Boolean(settings.lmstudioHost && settings.lmstudioModel);
+  if (provider === 'omlx') return Boolean(settings.omlxHost && settings.omlxModel);
+  return Boolean(settings.ollamaHost && settings.ollamaModel);
+}
+
+function settingsOverview({ settings, codex, claude }) {
+  const localProvider = settings.localLlmProvider || 'ollama';
+  const localParams = currentParameters(settings, localProvider);
+  const hostedProvider = settings.llmProvider || 'claude';
+  const hostedParams = currentParameters(settings, hostedProvider);
+  const hostedReady = hostedProvider === 'codex' ? Boolean(codex && codex.connected) : Boolean(claude && claude.connected);
+  const planningReady = Boolean(settings.planningConfigured || settings.hasKey);
+  const repositoryReady = Boolean(settings.repositoryConfigured);
+  const cards = [
+    ['#settings-models', 'Local model', configuredLocalModel(settings), `${PROVIDER_LABELS[localProvider] || localProvider} · ${localParams.model || 'Choose model'}`],
+    ['#settings-models', 'Hosted model', hostedReady, `${PROVIDER_LABELS[hostedProvider] || hostedProvider} · ${hostedParams.model || 'Choose model'}`],
+    ['#settings-connections', 'Planning', planningReady, settings.planningProvider === 'jira' ? 'Jira' : settings.planningProvider === 'asana' ? 'Asana' : 'Linear'],
+    ['#settings-connections', 'Repository', repositoryReady, settings.repositoryProvider === 'gitlab' ? 'GitLab' : 'GitHub'],
+  ];
+  return el('section', { class: 'settings-overview', 'aria-label': 'Configuration health' }, cards.map(([href, label, ready, value]) =>
+    el('a', { class: `settings-health-card ${ready ? 'ok' : 'warn'}`, href }, [
+      el('span', { class: 'settings-health-label' }, label),
+      el('strong', { dataset: { i18nSkip: 'true' } }, value),
+      el('small', {}, ready ? 'Configured' : 'Needs attention'),
+    ])
+  ));
 }
 
 /* ---------------------- Runtime & workflow pattern --------------------- */
@@ -137,7 +208,7 @@ function runtimeSection({ settings, codex, claude }) {
 function section(title, subtitle, open, children) {
   return el('details', { class: 'section', ...(open ? { open: 'open' } : {}) }, [
     el('summary', {}, [
-      el('span', {}, title),
+      el('span', { class: 'section-title', role: 'heading', 'aria-level': '3' }, title),
       subtitle ? el('span', { class: 'section-sub' }, subtitle) : null,
     ]),
     el('div', { class: 'section-body' }, children),
@@ -440,14 +511,17 @@ function llmSection(ctx) {
 const PROVIDER_LABELS = Object.freeze({
   ollama: 'Ollama',
   lmstudio: 'LM Studio',
+  omlx: 'oMLX',
   codex: 'OpenAI',
   claude: 'Anthropic',
 });
 
 const ROLE_PROVIDERS = Object.freeze({
-  local: ['ollama', 'lmstudio'],
+  local: ['ollama', 'lmstudio', 'omlx'],
   hosted: ['codex', 'claude'],
 });
+
+const LOCAL_PROVIDERS = new Set(ROLE_PROVIDERS.local);
 
 const REASONING_META = Object.freeze({
   none: { label: 'Off', description: 'Do not request additional reasoning from this model.' },
@@ -466,13 +540,9 @@ function buildLlmSection(ctx, rebuild) {
   const hostedProvider = hostedPreset ? hostedPreset.provider : ctx.settings.llmProvider;
   const localName = `${PROVIDER_LABELS[localProvider] || localProvider} · ${currentParameters(ctx.settings, localProvider).model || 'Choose model'}`;
   const hostedName = `${PROVIDER_LABELS[hostedProvider] || hostedProvider} · ${currentParameters(ctx.settings, hostedProvider).model || 'Choose model'}`;
-  const incomplete = !currentParameters(ctx.settings, localProvider).model ||
-    !currentParameters(ctx.settings, hostedProvider).model ||
-    !providerConnected(ctx, localProvider) ||
-    !providerConnected(ctx, hostedProvider);
 
-  return section('Deep Agent LLM', `Local: ${localName} · Hosted: ${hostedName}`, incomplete, [
-    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Choose a provider, model, and model-supported reasoning level. Recommended context, output, and sampling values are applied automatically; advanced values remain customizable.'),
+  return section('Model routes', `Local: ${localName} · Hosted: ${hostedName}`, true, [
+    el('p', { class: 'muted settings-section-intro' }, 'Small jobs stay private on your local server. Planning and larger work use the hosted route. Model changes save immediately; connection and advanced values use an explicit save.'),
     el('div', { class: 'preset-stack' }, [
       presetSlot(ctx, 'local', rebuild),
       presetSlot(ctx, 'hosted', rebuild),
@@ -490,12 +560,6 @@ function roleProvider(settings, role) {
 
 function selectedPresetId(settings, role) {
   return role === 'local' ? settings.localLlmPresetId : settings.hostedLlmPresetId;
-}
-
-function providerConnected(ctx, provider) {
-  if (provider === 'codex') return Boolean(ctx.codex && ctx.codex.connected);
-  if (provider === 'claude') return Boolean(ctx.claude && ctx.claude.connected);
-  return true;
 }
 
 function presetSlot(ctx, role, rebuild) {
@@ -517,6 +581,7 @@ function presetSlot(ctx, role, rebuild) {
   const currentReasoning = adapterActive && reasoningOptions.some((option) => option.value === params.reasoningEffort)
     ? params.reasoningEffort
     : '';
+  const editorPreset = preset || customEditorPreset(provider, params, ctx.settings, deployment);
 
   const applySelection = async ({ nextProvider, model, reasoningEffort, mode }) => {
     ctx.selectionPending[role] = true;
@@ -619,8 +684,8 @@ function presetSlot(ctx, role, rebuild) {
 
   const heading = role === 'local' ? 'Local / XS tasks' : 'Hosted / planner + larger tasks';
   const description = role === 'local'
-    ? provider === 'ollama' || provider === 'lmstudio'
-      ? 'Runs fully on this machine through Ollama or LM Studio.'
+    ? LOCAL_PROVIDERS.has(provider)
+      ? `Runs privately through ${PROVIDER_LABELS[provider] || provider}.`
       : 'Legacy custom route for XS tasks using a hosted OAuth provider.'
     : provider === 'codex' || provider === 'claude'
       ? 'Used by planning and every hosted or unlabeled coding task.'
@@ -643,7 +708,6 @@ function presetSlot(ctx, role, rebuild) {
     children.push(
       descriptionText ? el('p', { class: 'preset-description' }, descriptionText) : null,
       parameterSummary(params, reasoningOptions, currentReasoning),
-      status,
       profilePreset && profilePreset.requirements ? el('p', { class: 'muted preset-requirement' }, [
         profilePreset.requirements,
         profilePreset.sourceUrl ? ' ' : null,
@@ -655,15 +719,17 @@ function presetSlot(ctx, role, rebuild) {
       el('div', { class: 'preset-legacy-note' }, [
         el('strong', {}, `Custom ${PROVIDER_LABELS[provider] || provider} configuration`),
         el('span', {}, ' This discovered model has no catalog profile, so provider-specific reasoning overrides remain disabled.'),
-      ]),
-      status
+      ])
     );
   }
 
+  if (deployment === 'local' && editorPreset) {
+    children.push(localConnectionEditor(ctx, role, editorPreset, params, rebuild));
+  }
+  children.push(status);
   if (provider === 'codex' || provider === 'claude') {
     children.push(hostedConnection(ctx, provider));
   }
-  const editorPreset = preset || customEditorPreset(provider, params, ctx.settings, deployment);
   if (editorPreset) children.push(parameterEditor(ctx, role, editorPreset, params, rebuild));
 
   return el('div', { class: `preset-card preset-card-${deployment}`, dataset: { role } }, children);
@@ -672,48 +738,56 @@ function presetSlot(ctx, role, rebuild) {
 function customEditorPreset(provider, params, settings, deployment) {
   const isOllama = provider === 'ollama';
   const isLmstudio = provider === 'lmstudio';
+  const isOmlx = provider === 'omlx';
+  const isOpenAiLocal = isLmstudio || isOmlx;
   const isCodex = provider === 'codex';
-  const adapter = isOllama
-    ? ['ollama-think-effort', 'ollama-think-toggle'].includes(settings.ollamaReasoningAdapter) ? settings.ollamaReasoningAdapter : 'none'
-    : isLmstudio
-      ? settings.lmstudioReasoningAdapter === 'openai-compatible' ? 'openai-compatible' : 'none'
-      : isCodex
-        ? settings.codexReasoningAdapter === 'openai' ? 'openai' : 'none'
-        : ['anthropic-adaptive', 'anthropic-effort'].includes(settings.claudeReasoningAdapter)
-          ? settings.claudeReasoningAdapter
-          : 'none';
-  const efforts = isOllama
-    ? adapter === 'ollama-think-effort' ? ['low', 'medium', 'high'] : adapter === 'ollama-think-toggle' ? ['none', 'medium'] : ['none']
-    : isLmstudio
-      ? adapter === 'openai-compatible' ? ['none', 'low', 'medium', 'high'] : ['none']
-      : isCodex
-        ? adapter === 'openai' ? ['none', 'low', 'medium', 'high', 'xhigh'] : ['none']
-      : adapter === 'anthropic-adaptive' || adapter === 'anthropic-effort'
-        ? ['none', 'low', 'medium', 'high', 'xhigh', 'max']
-        : ['none'];
-  const parameter = adapter === 'ollama-think-effort' || adapter === 'ollama-think-toggle'
-    ? 'think'
-    : adapter === 'openai-compatible'
-      ? 'reasoning_effort'
-      : adapter === 'openai'
-        ? 'reasoning.effort'
-        : adapter === 'anthropic-adaptive'
-          ? 'thinking.type=adaptive + output_config.effort'
-          : adapter === 'anthropic-effort' ? 'output_config.effort' : null;
+  let adapter = 'none';
+  if (isOllama && ['ollama-think-effort', 'ollama-think-toggle'].includes(settings.ollamaReasoningAdapter)) {
+    adapter = settings.ollamaReasoningAdapter;
+  } else if (isLmstudio && settings.lmstudioReasoningAdapter === 'openai-compatible') {
+    adapter = 'openai-compatible';
+  } else if (isOmlx && settings.omlxReasoningAdapter === 'omlx-template-effort') {
+    adapter = 'omlx-template-effort';
+  } else if (isCodex && settings.codexReasoningAdapter === 'openai') {
+    adapter = 'openai';
+  } else if (!isOpenAiLocal && !isOllama && !isCodex &&
+    ['anthropic-adaptive', 'anthropic-effort'].includes(settings.claudeReasoningAdapter)) {
+    adapter = settings.claudeReasoningAdapter;
+  }
+
+  let efforts = ['none'];
+  if (adapter === 'ollama-think-effort' || adapter === 'omlx-template-effort') efforts = ['low', 'medium', 'high'];
+  else if (adapter === 'ollama-think-toggle') efforts = ['none', 'medium'];
+  else if (adapter === 'openai-compatible') efforts = ['none', 'low', 'medium', 'high'];
+  else if (adapter === 'openai') efforts = ['none', 'low', 'medium', 'high', 'xhigh'];
+  else if (adapter === 'anthropic-adaptive' || adapter === 'anthropic-effort') {
+    efforts = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+  }
+
+  const parameter = {
+    'ollama-think-effort': 'think',
+    'ollama-think-toggle': 'think',
+    'openai-compatible': 'reasoning_effort',
+    'omlx-template-effort': 'chat_template_kwargs.reasoning_effort',
+    openai: 'reasoning.effort',
+    'anthropic-adaptive': 'thinking.type=adaptive + output_config.effort',
+    'anthropic-effort': 'output_config.effort',
+  }[adapter] || null;
   return {
     id: 'custom',
     provider,
+    deployment,
     model: params.model,
     limits: {
-      contextWindow: isOllama || isLmstudio ? 262144 : isCodex ? 1050000 : 1000000,
+      contextWindow: isOllama || isOpenAiLocal ? 262144 : isCodex ? 1050000 : 1000000,
       maxOutputTokens: 128000,
     },
     requestLimits: {
-      maxOutputContextFraction: isLmstudio ? 0.5 : isOllama ? 1 : null,
+      maxOutputContextFraction: isOpenAiLocal ? 0.5 : isOllama ? 1 : null,
     },
     capabilities: {
-      temperature: isOllama || isLmstudio || (isCodex && adapter === 'none'),
-      contextWindowConfigurable: isOllama || isLmstudio,
+      temperature: isOllama || isOpenAiLocal || (isCodex && adapter === 'none'),
+      contextWindowConfigurable: isOllama || isOpenAiLocal,
       reasoningAdapter: adapter,
       reasoningEfforts: efforts,
     },
@@ -847,7 +921,7 @@ function recommendedModelEntry(ctx, provider) {
 }
 
 function modelSelectControl(entries, current) {
-  const option = (entry) => el('option', { value: entry.id, selected: entry.id === current },
+  const option = (entry) => el('option', { value: entry.id, selected: entry.id === current, dataset: { i18nSkip: 'true' } },
     `${entry.recommended ? '★ ' : ''}${entry.label}${entry.label !== entry.id ? ` — ${entry.id}` : ''}`);
   const recommended = entries.filter((entry) => entry.recommended);
   const available = entries.filter((entry) => !entry.recommended && entry.available);
@@ -918,7 +992,7 @@ async function discoverProviderModels(ctx, role, provider, refresh, rebuild) {
   try {
     const response = await api.getProviderModels(provider, refresh);
     if (requestId !== state.requestId) return;
-    const source = response.source || (provider === 'ollama' || provider === 'lmstudio' ? 'local' : 'provider');
+    const source = response.source || (LOCAL_PROVIDERS.has(provider) ? 'local' : 'provider');
     state.models = (response.models || [])
       .map((model) => discoveredModelEntry(ctx, provider, model, source))
       .filter(Boolean);
@@ -964,10 +1038,12 @@ function modelDiscoveryStatus(ctx, role, provider, model, rebuild) {
   const exact = state.models.some((entry) => entry.id === model);
   const count = state.models.length;
   const sourceLabel = state.source === 'fallback' || state.source === 'catalog' ? 'the catalog' : state.source || 'the provider';
-  const message = provider === 'ollama' || provider === 'lmstudio'
-    ? exact ? `Ready · ${model} detected` : `${count} local model${count === 1 ? '' : 's'} detected; ${model || 'the selected model'} is not currently loaded.`
+  const message = LOCAL_PROVIDERS.has(provider)
+    ? exact
+      ? provider === 'omlx' ? `Ready · ${model} available` : `Ready · ${model} detected`
+      : `${count} local model${count === 1 ? '' : 's'} available; ${model || 'the selected model'} was not found.`
     : `${count} ${PROVIDER_LABELS[provider] || provider} model${count === 1 ? '' : 's'} loaded from ${sourceLabel}.`;
-  const healthy = provider === 'ollama' || provider === 'lmstudio'
+  const healthy = LOCAL_PROVIDERS.has(provider)
     ? exact
     : state.source === 'live';
   return el('div', { class: `preset-status ${healthy ? 'ok' : 'warn'}`, role: 'status', 'aria-live': 'polite' }, [
@@ -1002,6 +1078,19 @@ function currentParameters(settings, provider) {
     jsonMode: settings.lmstudioJsonMode || 'text',
     contextMode: settings.lmstudioContextMode || 'summarize',
   };
+  if (provider === 'omlx') return {
+    host: settings.omlxHost,
+    model: settings.omlxModel,
+    contextWindow: settings.omlxContextWindow,
+    maxOutputTokens: settings.omlxNumTokens,
+    temperature: settings.omlxTemperature,
+    topP: settings.omlxTopP,
+    topK: settings.omlxTopK,
+    repeatPenalty: settings.omlxRepeatPenalty,
+    reasoningEffort: settings.omlxReasoningEffort || 'none',
+    jsonMode: settings.omlxJsonMode || 'json_schema',
+    contextMode: settings.omlxContextMode || 'summarize',
+  };
   if (provider === 'codex') return {
     model: settings.codexModel || 'gpt-5.5',
     contextWindow: settings.codexContextWindow || 1050000,
@@ -1027,6 +1116,7 @@ function currentParameters(settings, provider) {
 function configuredReasoningAdapter(settings, provider) {
   if (provider === 'ollama') return settings.ollamaReasoningAdapter || 'none';
   if (provider === 'lmstudio') return settings.lmstudioReasoningAdapter || 'none';
+  if (provider === 'omlx') return settings.omlxReasoningAdapter || 'none';
   if (provider === 'codex') return settings.codexReasoningAdapter || 'none';
   return settings.claudeReasoningAdapter || 'none';
 }
@@ -1070,13 +1160,137 @@ function optionSelect(options, current) {
   return el('select', {}, options.map(([value, label]) => el('option', { value, selected: value === current }, label)));
 }
 
+function localConnectionEditor(ctx, role, preset, params, rebuild) {
+  const provider = preset.provider;
+  const isOmlx = provider === 'omlx';
+  const meta = {
+    ollama: {
+      placeholder: 'http://127.0.0.1:11434',
+      apiPath: '/api/tags',
+      hint: 'Address of the Ollama server that exposes your installed models.',
+    },
+    lmstudio: {
+      placeholder: 'http://127.0.0.1:1234',
+      apiPath: '/v1/models',
+      hint: 'Address of the LM Studio local server. Start the server before testing.',
+    },
+    omlx: {
+      placeholder: 'http://127.0.0.1:8000',
+      apiPath: '/v1/models',
+      hint: 'Use the oMLX server origin or its /v1 API URL. The saved address is normalized automatically.',
+    },
+  }[provider];
+  if (!meta) return null;
+
+  const hostInput = el('input', {
+    type: 'url',
+    value: params.host || '',
+    placeholder: meta.placeholder,
+    autocomplete: 'url',
+    spellcheck: 'false',
+  });
+  const endpoint = el('code', { class: 'local-endpoint-value', dataset: { i18nSkip: 'true' } });
+  const refreshEndpoint = () => {
+    let base = hostInput.value.trim().replace(/\/$/, '');
+    if (isOmlx) base = base.replace(/\/v1$/i, '');
+    endpoint.textContent = `${base || meta.placeholder}${meta.apiPath}`;
+  };
+  hostInput.addEventListener('input', refreshEndpoint);
+  refreshEndpoint();
+
+  const keyInput = isOmlx
+    ? pwd(ctx.settings.hasOmlxApiKey ? `Saved: ${ctx.settings.maskedOmlxApiKey}` : 'Optional API key')
+    : null;
+  const clearKey = isOmlx && ctx.settings.hasOmlxApiKey
+    ? el('input', { type: 'checkbox', style: 'width:auto' })
+    : null;
+  if (clearKey) {
+    clearKey.addEventListener('change', () => {
+      keyInput.disabled = clearKey.checked;
+      if (clearKey.checked) keyInput.value = '';
+    });
+  }
+
+  const info = el('div', { class: 'muted preset-save-info', role: 'status', 'aria-live': 'polite' });
+  const save = el('button', { class: 'primary', type: 'button' }, 'Save & test');
+  save.addEventListener('click', async () => {
+    if (!hostInput.value.trim() || !hostInput.checkValidity()) {
+      hostInput.reportValidity();
+      return;
+    }
+    save.disabled = true;
+    save.textContent = 'Testing…';
+    info.textContent = 'Saving connection and refreshing models…';
+    const overrides = {
+      model: params.model,
+      contextWindow: params.contextWindow,
+      maxOutputTokens: params.maxOutputTokens,
+      temperature: params.temperature,
+      topP: params.topP,
+      topK: params.topK,
+      repeatPenalty: params.repeatPenalty,
+      reasoningEffort: params.reasoningEffort,
+      jsonMode: params.jsonMode,
+      contextMode: params.contextMode,
+      host: hostInput.value.trim(),
+      ...(isOmlx && keyInput.value.trim() ? { apiKey: keyInput.value.trim() } : {}),
+      ...(isOmlx && clearKey && clearKey.checked ? { clearApiKey: true } : {}),
+    };
+    try {
+      const next = await api.applyLlmPreset({
+        role: role === 'local' ? 'local' : 'global',
+        presetId: preset.id,
+        provider,
+        overrides,
+      });
+      Object.assign(ctx.settings, next);
+      await discoverProviderModels(ctx, role, provider, true, rebuild);
+      const live = discoveryState(ctx, provider);
+      toast(
+        live.reachable === false
+          ? 'Connection saved, but the model server is not reachable.'
+          : 'Connection saved and models refreshed.',
+        live.reachable === false ? 'err' : 'ok'
+      );
+    } catch (err) {
+      info.textContent = err.message;
+      info.style.color = 'var(--red)';
+      toast(err.message, 'err');
+      save.disabled = false;
+      save.textContent = 'Save & test';
+    }
+  });
+
+  const fields = [
+    field('Server address', hostInput, meta.hint),
+    isOmlx ? field('API key', keyInput, 'Optional. It is stored server-side and is never returned to this page.') : null,
+  ];
+  return el('div', { class: 'local-connection' }, [
+    el('div', { class: 'local-connection-head' }, [
+      el('div', {}, [
+        el('strong', {}, `${PROVIDER_LABELS[provider]} connection`),
+        el('span', { class: 'muted' }, ' Configure the server before tuning model parameters.'),
+      ]),
+      isOmlx ? el('a', {
+        class: 'detail-link', href: 'https://github.com/jundot/omlx', target: '_blank', rel: 'noopener',
+      }, 'oMLX setup ↗') : null,
+    ]),
+    el('div', { class: 'local-connection-grid' }, fields),
+    clearKey ? el('label', { class: 'row local-key-clear' }, [clearKey, el('span', {}, 'Remove saved API key')]) : null,
+    el('div', { class: 'local-endpoint' }, [
+      el('span', {}, 'Model discovery'), endpoint,
+    ]),
+    el('div', { class: 'row local-connection-actions' }, [save, info]),
+  ]);
+}
+
 function parameterEditor(ctx, role, preset, params, rebuild) {
   const contextInput = el('input', {
     type: 'number', min: '512', max: String(preset.limits.contextWindow), value: String(params.contextWindow),
     ...(preset.capabilities.contextWindowConfigurable ? {} : { disabled: 'disabled' }),
   });
   const outputInput = el('input', {
-    type: 'number', min: preset.provider === 'lmstudio' ? '256' : '128',
+    type: 'number', min: preset.provider === 'lmstudio' || preset.provider === 'omlx' ? '256' : '128',
     max: String(preset.limits.maxOutputTokens), value: String(params.maxOutputTokens),
   });
   const temperatureInput = preset.capabilities.temperature
@@ -1091,13 +1305,12 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
   const repeatPenaltyInput = preset.parameters.repeatPenalty !== null
     ? el('input', { type: 'number', min: '0', max: '2', step: '0.01', value: String(params.repeatPenalty ?? preset.parameters.repeatPenalty) })
     : null;
-  const hostInput = params.host ? el('input', { value: params.host }) : null;
   const jsonInput = preset.provider === 'ollama'
     ? optionSelect([['json', 'Constrained JSON'], ['text', 'Prompt-only text']], params.jsonMode)
-    : preset.provider === 'lmstudio'
+    : preset.provider === 'lmstudio' || preset.provider === 'omlx'
       ? optionSelect([['text', 'Prompt-only text'], ['json_object', 'OpenAI json_object'], ['json_schema', 'Structured json_schema']], params.jsonMode)
       : null;
-  const contextModeInput = preset.provider === 'lmstudio'
+  const contextModeInput = preset.provider === 'lmstudio' || preset.provider === 'omlx'
     ? optionSelect([['summarize', 'Summarize old turns'], ['trim', 'Trim old turns'], ['none', 'None']], params.contextMode)
     : null;
   const info = el('div', { class: 'muted preset-save-info', role: 'status', 'aria-live': 'polite' });
@@ -1105,7 +1318,7 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
   const syncLocalOutputLimit = () => {
     const fraction = preset.requestLimits && preset.requestLimits.maxOutputContextFraction;
     if (!Number.isFinite(fraction)) return;
-    const minimum = preset.provider === 'lmstudio' ? 256 : 128;
+    const minimum = preset.provider === 'lmstudio' || preset.provider === 'omlx' ? 256 : 128;
     const contextCap = Math.max(minimum, Math.floor(Number(contextInput.value) * fraction));
     const cap = Math.min(preset.limits.maxOutputTokens, contextCap);
     outputInput.max = String(cap);
@@ -1134,9 +1347,7 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
       reasoningEffort: params.reasoningEffort,
       jsonMode: jsonInput ? jsonInput.value : null,
       contextMode: contextModeInput ? contextModeInput.value : null,
-      ...(hostInput ? { host: hostInput.value.trim() } : {}),
     };
-    const hostChanged = Boolean(hostInput && hostInput.value.trim().replace(/\/$/, '') !== String(params.host || '').replace(/\/$/, ''));
     info.textContent = 'Saving…';
     try {
       const next = await api.applyLlmPreset({
@@ -1147,8 +1358,7 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
       });
       Object.assign(ctx.settings, next);
       toast(reset ? 'Recommended parameters restored.' : 'Custom LLM parameters saved.', 'ok');
-      if (hostChanged) await renderSettings(clear(ctx.view));
-      else rebuild();
+      rebuild();
     } catch (err) {
       info.textContent = err.message;
       info.style.color = 'var(--red)';
@@ -1157,13 +1367,18 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
   };
 
   const fields = [
-    hostInput ? field(`${PROVIDER_LABELS[preset.provider]} host`, hostInput) : null,
-    field('Context window', contextInput, preset.capabilities.contextWindowConfigurable ? 'For LM Studio, this must match the context used when loading the model.' : 'Model capability; hosted providers do not change it per request.'),
+    field('Context window', contextInput, preset.capabilities.contextWindowConfigurable
+      ? preset.provider === 'lmstudio'
+        ? 'Match the context used when loading the model in LM Studio.'
+        : preset.provider === 'omlx'
+          ? 'Keep this within the model context reported by oMLX.'
+          : 'Maximum prompt and response context for this local model.'
+      : 'Model capability; hosted providers do not change it per request.'),
     field('Max output tokens', outputInput,
       preset.provider === 'codex'
         ? 'Saved for API mode; the ChatGPT subscription backend manages this limit.'
         : preset.requestLimits && preset.requestLimits.maxOutputContextFraction === 0.5
-          ? 'Capped at half the loaded context so prompt and output fit together.'
+          ? 'Capped at half the configured context so prompt and output fit together.'
           : preset.requestLimits && preset.requestLimits.maxOutputContextFraction === 1
             ? 'Cannot exceed the configured context window.'
             : null),
@@ -1329,8 +1544,12 @@ function labelDropdown(available, selected) {
   // Include any already-selected labels that aren't in the fetched list.
   const options = [...new Set([...available, ...selected])].sort((a, b) => a.localeCompare(b));
 
-  const trigger = el('button', { type: 'button', class: 'ms-trigger' }, '');
-  const panel = el('div', { class: 'ms-panel', hidden: true });
+  const panelId = `settings-labels-${++fieldSequence}`;
+  const trigger = el('button', {
+    type: 'button', class: 'ms-trigger', 'aria-haspopup': 'true',
+    'aria-expanded': 'false', 'aria-controls': panelId, dataset: { userContent: 'true' },
+  }, '');
+  const panel = el('div', { class: 'ms-panel', id: panelId, hidden: true, role: 'group', 'aria-label': 'Project labels' });
   const wrap = el('div', { class: 'ms' }, [trigger, panel]);
 
   const refresh = () => {
@@ -1347,14 +1566,24 @@ function labelDropdown(available, selected) {
       else sel.delete(name);
       refresh();
     });
-    panel.append(el('label', { class: 'ms-item' }, [cb, el('span', {}, name)]));
+    panel.append(el('label', { class: 'ms-item', dataset: { userContent: 'true' } }, [cb, el('span', {}, name)]));
   }
 
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    trigger.setAttribute('aria-expanded', String(open));
+  };
   trigger.addEventListener('click', () => {
-    panel.hidden = !panel.hidden;
+    setOpen(panel.hidden);
+  });
+  wrap.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !panel.hidden) {
+      setOpen(false);
+      trigger.focus();
+    }
   });
   document.addEventListener('click', (e) => {
-    if (wrap.isConnected && !wrap.contains(e.target)) panel.hidden = true;
+    if (wrap.isConnected && !wrap.contains(e.target)) setOpen(false);
   });
 
   refresh();
@@ -1389,6 +1618,7 @@ function agentSection({ config, intervals, labels, view }) {
       enrichLabels: labelsCtl.get(),
       intervalMinutes: Number(intervalSelect.value),
       parallelProcessing: inputs.parallelProcessing(),
+      maxConcurrentCoders: inputs.maxConcurrentCoders(),
       maxProjectsPerRun: inputs.maxProjectsPerRun(),
       maxMilestones: inputs.maxMilestones(),
       maxIssuesPerMilestone: inputs.maxIssuesPerMilestone(),
@@ -1408,9 +1638,10 @@ function agentSection({ config, intervals, labels, view }) {
 
   return section('Deep Agent', 'Labels, schedule & limits', false, [
     field('Enrich projects with labels', labelsCtl.element, 'Open (no-lead) projects carrying ANY selected label are auto-enriched. Select none to enrich all open projects.'),
-    el('div', { class: 'grid', style: 'grid-template-columns:1fr 1fr' }, [
+    el('div', { class: 'grid settings-agent-grid' }, [
       field('Run scheduler every', intervalSelect),
       num('parallelProcessing', 'Parallel processing', 1, 8),
+      num('maxConcurrentCoders', 'Max concurrent coders', 1, 8),
       num('maxProjectsPerRun', 'Max projects / run', 1, 20),
       num('maxMilestones', 'Max milestones', 1, 12),
       num('maxIssuesPerMilestone', 'Max issues / milestone', 0, 12),

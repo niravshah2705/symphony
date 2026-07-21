@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "updatedAt": "2026-07-10",
+  "version": 3,
+  "updatedAt": "2026-07-19",
   "defaults": {
     "local": "ollama-gpt-oss-20b",
     "hosted": "claude-opus-4-8"
@@ -238,6 +238,88 @@
           "parameter": null
         },
         "jsonMode": "text",
+        "contextMode": "summarize"
+      }
+    },
+    {
+      "id": "omlx-gpt-oss-20b",
+      "label": "GPT-OSS 20B",
+      "deployment": "local",
+      "provider": "omlx",
+      "model": "gpt-oss-20b",
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-oss-20b",
+      "modelPatterns": ["gpt-oss-20b", "gpt_oss-20b"],
+      "recommended": true,
+      "description": "Apple-Silicon preset for GPT-OSS served by oMLX, with native template reasoning and structured output.",
+      "requirements": "Install oMLX on an Apple Silicon Mac, add an MLX GPT-OSS 20B model, and start the server.",
+      "limits": {
+        "contextWindow": 131072,
+        "maxOutputTokens": 131072
+      },
+      "requestLimits": {
+        "maxOutputContextFraction": 0.5
+      },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": true,
+        "reasoningAdapter": "omlx-template-effort",
+        "reasoningEfforts": ["low", "medium", "high"]
+      },
+      "parameters": {
+        "contextWindow": 65536,
+        "maxOutputTokens": 16384,
+        "temperature": 1,
+        "topP": 1,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": {
+          "effort": "medium",
+          "parameter": "chat_template_kwargs.reasoning_effort"
+        },
+        "jsonMode": "json_schema",
+        "contextMode": "summarize"
+      }
+    },
+    {
+      "id": "omlx-qwen3-coder-next",
+      "label": "Qwen3 Coder Next",
+      "deployment": "local",
+      "provider": "omlx",
+      "model": "Qwen3-Coder-Next-8bit",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen3-Coder-Next",
+      "modelPatterns": ["qwen3-coder-next", "qwen3_coder_next"],
+      "recommended": false,
+      "description": "Coding-focused MLX model for oMLX with long context, tool use, and JSON-schema output.",
+      "requirements": "Download an MLX conversion of Qwen3 Coder Next in the oMLX admin dashboard or model directory.",
+      "limits": {
+        "contextWindow": 262144,
+        "maxOutputTokens": 65536
+      },
+      "requestLimits": {
+        "maxOutputContextFraction": 0.5
+      },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": true,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 131072,
+        "maxOutputTokens": 32768,
+        "temperature": 0.7,
+        "topP": 0.8,
+        "topK": 20,
+        "repeatPenalty": 1.05,
+        "reasoning": {
+          "effort": "none",
+          "parameter": null
+        },
+        "jsonMode": "json_schema",
         "contextMode": "summarize"
       }
     },

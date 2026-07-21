@@ -197,7 +197,7 @@ function isLlmUsable(llm) {
   if (!llm || !llm.model) return false;
   if (llm.provider === 'codex') return Boolean(llm.accessToken && llm.baseUrl);
   if (llm.provider === 'claude') return Boolean(llm.accessToken);
-  return Boolean(llm.host); // ollama / lmstudio (local, host-based)
+  return Boolean(llm.host); // Local host-based providers.
 }
 
 /**
@@ -232,7 +232,7 @@ async function jsonCall(llm, prompt, runName, { runId, business } = {}) {
     const reasoning = (usage.completion_tokens_details && usage.completion_tokens_details.reasoning_tokens) || 0;
     throw new Error(
       `model returned empty output${reasoning ? ` (${reasoning} reasoning tokens, no answer content)` : ''}` +
-        ' — if this is a reasoning model, set the LM Studio JSON output mode to "Prompt-only (text)"'
+        ' — if this is a reasoning model, set the local OpenAI-compatible JSON output mode to "Prompt-only text"'
     );
   }
   return parseJsonLoose(text);

@@ -328,6 +328,7 @@ class RepositoryBroker {
   #feedbackReads = new Map();
   #scopeBranch;
   #availabilityError = null;
+  #remoteEmpty = false;
 
   constructor({
     provider,
@@ -584,6 +585,60 @@ class RepositoryBroker {
       ['fetch', '--prune', '--no-tags', 'origin', '+refs/heads/*:refs/remotes/origin/*'],
       { auth: true }
     );
+    // A brand-new repository has no branches yet. Detect it from the fetched
+    // mirror so prepare() can initialize a base branch instead of failing to
+    // fork the first task from a ref that does not exist.
+    const mirrored = await this.#bare(['for-each-ref', '--count=1', 'refs/remotes/origin/'], { allowFailure: true });
+    this.#remoteEmpty = !mirrored || !mirrored.trim();
+  }
+
+  /**
+   * Initialize an empty remote so task branches have a base to fork from and
+   * reviews have a base branch to target. Creates a single empty commit on the
+   * scoped base branch and publishes it through the same broker-private,
+   * credential-scoped staging path as an ordinary branch push — the agent's
+   * hooks/config never run in the credentialed child.
+   */
+  async #seedEmptyRemote() {
+    const hasCommit = await this.#workspace(['rev-parse', '--verify', '--quiet', 'HEAD'], { allowFailure: true });
+    if (hasCommit === null) {
+      await this.#workspace(['checkout', '--orphan', this.baseBranch]);
+      await this.#workspace(['commit', '--allow-empty', '-m', 'Initialize repository']);
+    } else {
+      await this.#workspace(['checkout', '-B', this.baseBranch, 'HEAD']);
+    }
+    await this.#publishBase();
+    await this.#bare(
+      ['fetch', '--prune', '--no-tags', 'origin', '+refs/heads/*:refs/remotes/origin/*'],
+      { auth: true }
+    );
+    await this.#exportRemoteRefs();
+    this.#remoteEmpty = false;
+  }
+
+  async #publishBase() {
+    if (!this.#token) throw new RepositoryBrokerError('No repository token is configured.', 'missing_token');
+    const current = await this.#workspace(['branch', '--show-current']);
+    if (current !== this.baseBranch) {
+      throw new RepositoryBrokerError('Base-branch initialization must run on the scoped base branch.', 'branch_scope');
+    }
+    const dirty = await this.#workspaceStatus();
+    if (dirty) throw new RepositoryBrokerError('Commit all workspace changes before publishing the base branch.', 'workspace_dirty');
+
+    const workspaceGit = path.join(this.workDir, '.git');
+    const localUrl = pathToFileURL(workspaceGit).href;
+    const headSha = await this.#workspace(['rev-parse', 'HEAD']);
+    await this.#bare([
+      '-c', 'protocol.file.allow=always',
+      'fetch', '--no-tags', localUrl, `+${headSha}:refs/heads/${this.baseBranch}`,
+    ]);
+    const stagedSha = await this.#bare(['rev-parse', `refs/heads/${this.baseBranch}`]);
+    if (stagedSha !== headSha) throw new RepositoryBrokerError('Broker staging SHA did not match base HEAD.', 'sha_mismatch');
+    await this.#bare(
+      ['push', 'origin', `refs/heads/${this.baseBranch}:refs/heads/${this.baseBranch}`],
+      { auth: true }
+    );
+    this.step(`Repository broker initialized ${this.repository.fullName} on ${this.baseBranch} at ${headSha.slice(0, 12)}.`);
   }
 
   async #exportRemoteRefs() {
@@ -625,7 +680,24 @@ class RepositoryBroker {
     await this.#exportRemoteRefs();
 
     const dirty = await this.#workspaceStatus();
-    if (dirty) throw new RepositoryBrokerError('Workspace has uncommitted changes from an earlier run.', 'workspace_dirty');
+    if (dirty) {
+      // The per-project workspace is shared and reused across tasks. A prior run
+      // that terminated without committing (crash, turn limit, transient model
+      // error) would otherwise brick EVERY later task for this project on this
+      // check. The broker is the single writer and every accepted result is
+      // committed and pushed before the run ends, so leftover uncommitted changes
+      // are abandoned work: discard them and continue from a clean tree instead
+      // of failing closed. Committed history is untouched (reset --hard only
+      // rewinds the working tree to HEAD; clean -fd drops untracked, not ignored).
+      this.step('Discarding uncommitted changes left by an earlier run.', 'warn');
+      await this.#workspace(['reset', '--hard']);
+      await this.#workspace(['clean', '-fd']);
+      const stillDirty = await this.#workspaceStatus();
+      if (stillDirty) {
+        throw new RepositoryBrokerError('Workspace could not be reset to a clean state.', 'workspace_dirty');
+      }
+    }
+    if (this.#remoteEmpty) await this.#seedEmptyRemote();
     const exists = await this.#workspace(
       ['show-ref', '--verify', '--quiet', `refs/heads/${this.branch}`],
       { allowFailure: true }
@@ -646,7 +718,14 @@ class RepositoryBroker {
     } else if (remoteExists !== null) {
       await this.#workspace(['checkout', '-b', this.branch, remoteTaskRef]);
     } else {
-      await this.#workspace(['checkout', '-b', this.branch, `refs/remotes/origin/${this.baseBranch}`]);
+      // Prefer the locally seeded base (empty-remote path) and fall back to the
+      // fetched remote base branch for an ordinary repository.
+      const baseLocal = await this.#workspace(
+        ['show-ref', '--verify', '--quiet', `refs/heads/${this.baseBranch}`],
+        { allowFailure: true }
+      );
+      const baseStart = baseLocal !== null ? this.baseBranch : `refs/remotes/origin/${this.baseBranch}`;
+      await this.#workspace(['checkout', '-b', this.branch, baseStart]);
     }
     await this.#sanitizeWorkspaceConfig();
     this.step(`Repository broker ready for ${this.repository.fullName} on ${this.branch}.`);
