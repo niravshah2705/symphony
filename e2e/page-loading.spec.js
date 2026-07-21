@@ -10,6 +10,25 @@ function json(route, body, status = 200) {
   });
 }
 
+test('settings renders task-model controls without a view error', async ({ page }) => {
+  const browserErrors = [];
+  page.on('pageerror', (error) => browserErrors.push(error.message));
+
+  await page.addInitScript(() => {
+    localStorage.setItem('ai-fleet.locale', 'en');
+  });
+
+  const response = await page.goto('/#/settings', { waitUntil: 'domcontentloaded' });
+  expect(response && response.ok()).toBeTruthy();
+
+  await expect(page.locator('#view')).toHaveAttribute('aria-busy', 'false');
+  await expect(page.locator('#settings-models')).toBeVisible();
+  await expect(page.locator('.settings-layout')).toBeVisible();
+  await expect(page.locator('.settings-index')).toHaveCount(0);
+  await expect(page.locator('#view > .error-banner')).toHaveCount(0);
+  expect(browserErrors).toEqual([]);
+});
+
 test('workspace renders while optional Linear validation is stalled', async ({ page }) => {
   const browserErrors = [];
   const failedAssets = [];

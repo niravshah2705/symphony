@@ -959,19 +959,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 .settings-health-label { grid-column: 1; color: var(--muted); font-size: 9px; font-weight: 720; letter-spacing: .04em; text-transform: uppercase; }
 .settings-health-card strong { grid-column: 1 / -1; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .settings-health-card small { grid-column: 1 / -1; color: var(--muted); font-size: 9px; }
-.settings-layout {
-  max-width: 1180px; display: grid; grid-template-columns: 170px minmax(0, 880px);
-  gap: clamp(22px, 3vw, 42px); align-items: start;
-}
-.settings-index {
-  position: sticky; top: 18px; display: grid; gap: 3px; padding: 10px;
-  border: 1px solid var(--border); border-radius: 11px; background: var(--panel);
-}
-.settings-index-label { padding: 4px 8px 7px; color: var(--muted); font-size: 8px; font-weight: 760; letter-spacing: .09em; text-transform: uppercase; }
-.settings-index a { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: 6px; padding: 8px; border-radius: 7px; color: var(--muted); font-size: 11px; }
-.settings-index a:hover { background: var(--panel-2); color: var(--text); }
-.settings-index a > span { color: var(--accent-2); font-family: var(--font-mono); font-size: 8px; }
-.settings-index a strong { font-weight: 620; }
+.settings-layout { max-width: 880px; }
 .settings-content { min-width: 0; }
 .settings-group { scroll-margin-top: 18px; margin-bottom: 36px; }
 .settings-group-head { margin-bottom: 12px; padding: 0 2px; }
@@ -1092,16 +1080,6 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 .preset-param-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; }
 .preset-param-grid .field:first-child:nth-last-child(odd) { grid-column: 1 / -1; }
 .preset-save-info { font-size: 12px; margin-top: 8px; min-height: 16px; }
-@media (max-width: 980px) {
-  .settings-layout { grid-template-columns: 1fr; gap: 20px; }
-  .settings-index {
-    z-index: 8; top: 0; grid-template-columns: repeat(4, minmax(max-content, 1fr));
-    overflow-x: auto; border-radius: 0 0 10px 10px;
-  }
-  .settings-index-label { display: none; }
-  .settings-index a { grid-template-columns: auto auto; justify-content: center; }
-  .settings-group { scroll-margin-top: 74px; }
-}
 @media (max-width: 700px) {
   .settings-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .llm-primary-grid { grid-template-columns: 1fr; }
@@ -1112,9 +1090,6 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 }
 @media (max-width: 460px) {
   .settings-overview { grid-template-columns: 1fr; }
-  .settings-index { grid-template-columns: repeat(4, max-content); justify-content: start; }
-  .settings-index a { padding-inline: 10px; }
-  .settings-index a > span { display: none; }
   .section .section-sub { display: none; }
   .preset-card { padding: 13px; }
   .local-connection-head { flex-direction: column; }

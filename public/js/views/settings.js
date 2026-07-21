@@ -69,26 +69,9 @@ export async function renderSettings(view) {
     ]),
     settingsOverview({ settings, codex: codexRes, claude: claudeRes }),
     el('div', { class: 'settings-layout' }, [
-      settingsIndex(),
       el('div', { class: 'settings-content' }, groups),
     ])
   );
-}
-
-function settingsIndex() {
-  return el('nav', { class: 'settings-index', 'aria-label': 'Settings categories' }, [
-    el('span', { class: 'settings-index-label' }, 'Jump to'),
-    ...[
-      ['settings-models', '01', 'Models'],
-      ['settings-connections', '02', 'Connections'],
-      ['settings-automation', '03', 'Automation'],
-      ['settings-identity', '04', 'Identity'],
-      ['settings-json', '05', 'JSON'],
-    ].map(([id, number, label]) => el('a', { href: `#${id}` }, [
-      el('span', { 'aria-hidden': 'true' }, number),
-      el('strong', {}, label),
-    ])),
-  ]);
 }
 
 function settingsGroup(id, title, description, children) {
@@ -744,6 +727,12 @@ function selectedPresetId(settings, role) {
   const fields = ROLE_FIELDS[role];
   if (fields) return settings[fields.preset];
   return role === 'local' ? settings.localLlmPresetId : settings.hostedLlmPresetId;
+}
+
+function providerConnected(ctx, provider) {
+  if (provider === 'codex') return Boolean(ctx.codex && ctx.codex.connected);
+  if (provider === 'claude') return Boolean(ctx.claude && ctx.claude.connected);
+  return true;
 }
 
 function presetSlot(ctx, role, rebuild) {
