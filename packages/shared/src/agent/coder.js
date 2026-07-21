@@ -180,7 +180,9 @@ async function executeCodingRuntime({
       llm,
       rootDir: workDir,
       skillPaths,
-      ctx: { apiKey, step },
+      // `cwd` scopes the developer tools (docker/build/env/…) to this isolated
+      // workspace; they refuse to operate outside it.
+      ctx: { apiKey, step, cwd: workDir },
       extraTools,
       env,
     });

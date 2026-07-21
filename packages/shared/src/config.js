@@ -319,6 +319,29 @@ const MCP = Object.freeze({
     url: process.env.GITHUB_MCP_URL || 'https://api.githubcopilot.com/mcp/',
     token: process.env.GITHUB_MCP_TOKEN || '',
   }),
+  // Playwright MCP (local, stdio): interactive browser automation tools
+  // (navigate/click/snapshot). Launched as a child process via npx, so no
+  // network credentials are involved. Enable with PLAYWRIGHT_MCP_ENABLED=true.
+  playwright: Object.freeze({
+    enabled: (process.env.PLAYWRIGHT_MCP_ENABLED || 'false').toLowerCase() === 'true',
+    transport: 'stdio',
+    command: process.env.PLAYWRIGHT_MCP_COMMAND || 'npx',
+    args: (process.env.PLAYWRIGHT_MCP_ARGS || '-y,@playwright/mcp@latest,--headless,--isolated')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  }),
+});
+
+/**
+ * Developer-tool folder limits (packages/shared/src/agent/tools/*). These tools
+ * delegate to pre-installed CLIs (docker, gradle, uv, npm, trivy, playwright…)
+ * via hardened execFile calls. `timeoutSec` bounds a single delegated command;
+ * `maxOutputBytes` bounds the (secret-redacted) output returned to the model.
+ */
+const TOOLS = Object.freeze({
+  timeoutSec: Number(process.env.TOOLS_TIMEOUT_SEC) || 900,
+  maxOutputBytes: Number(process.env.TOOLS_MAX_OUTPUT_BYTES) || 64 * 1024,
 });
 
 /**
@@ -389,6 +412,7 @@ const CONFIG = Object.freeze({
   OMLX,
   CODER,
   MCP,
+  TOOLS,
   AUTH,
 });
 
