@@ -82,7 +82,7 @@ export const api = {
     request(`/businesses/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteBusiness: (id) => request(`/businesses/${id}`, { method: 'DELETE' }),
 
-  // LLM (Ollama / LM Studio) / LangSmith settings
+  // Local/hosted LLM and LangSmith settings
   getLlmPresets: () => request('/settings/llm-presets'),
   applyLlmPreset: (payload) =>
     request('/settings/llm-preset', { method: 'PUT', body: JSON.stringify(payload) }),
@@ -100,10 +100,12 @@ export const api = {
     request('/settings/runtime', { method: 'PUT', body: JSON.stringify(payload) }),
   getOllamaModels: () => request('/agent/ollama-models'),
   getLmstudioModels: () => request('/agent/lmstudio-models'),
+  getOmlxModels: () => request('/agent/omlx-models'),
   getProviderModels: (provider, refresh = false) => {
     const suffix = `?refresh=${refresh ? '1' : '0'}`;
     if (provider === 'ollama') return request(`/agent/ollama-models${suffix}`);
     if (provider === 'lmstudio') return request(`/agent/lmstudio-models${suffix}`);
+    if (provider === 'omlx') return request(`/agent/omlx-models${suffix}`);
     if (provider === 'codex' || provider === 'claude') {
       return request(`/settings/${provider}/models${suffix}`);
     }

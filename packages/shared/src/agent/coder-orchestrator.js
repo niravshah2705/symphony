@@ -24,9 +24,11 @@ const {
  * On a fixed cadence it finds projects labelled `aiplanned` (set by the planner)
  * and works their tasks (issues) in CREATION ORDER, honoring dependencies:
  *   - a task blocked by a not-yet-Done issue is skipped until the blocker lands,
- *   - at most ONE task per project runs at a time (they share the project's
- *     monorepo workspace at ~/git/workspace/<project>/, each on its own branch),
- *   - across different projects, up to `maxConcurrent` run in parallel,
+ *   - independent tasks run concurrently — within AND across projects — each in
+ *     its own isolated per-task workspace at
+ *     ~/git/workspace/<project>/<task>/ on its own branch,
+ *   - up to `maxConcurrentCoders` (UI-configurable, env `CODER_MAX_CONCURRENT`
+ *     as the default) run in parallel across all projects,
  *   - when a project has no open tasks left, it is marked `aidone`.
  *
  * Single-writer model: `running` is only mutated from the serialized poll tick +
@@ -157,6 +159,9 @@ function readinessFingerprint() {
     ollamaModel: settings.ollamaModel,
     lmstudioHost: settings.lmstudioHost,
     lmstudioModel: settings.lmstudioModel,
+    omlxHost: settings.omlxHost,
+    omlxModel: settings.omlxModel,
+    omlxApiKey: settings.omlxApiKey,
     codexModel: settings.codexModel,
     codexTokens: settings.codexTokens,
     claudeModel: settings.claudeModel,
@@ -507,10 +512,25 @@ function dispatch(task, ctx, dependencies = {}) {
     .finally(() => running.delete(task.id));
 }
 
-/** True when this project already has a task in flight (monorepo workspace is shared). */
+/** True when this project still has any task in flight (guards the aidone stamp). */
 function projectBusy(projectId) {
   for (const r of running.values()) if (r.projectId === projectId) return true;
   return false;
+}
+
+/**
+ * Effective concurrent-coder cap. Prefers the UI-editable agent-config value
+ * (`maxConcurrentCoders`), falling back to the `CODER_MAX_CONCURRENT` env default.
+ */
+function resolveMaxConcurrent() {
+  try {
+    const cfg = store.getAgentConfig();
+    const n = Number(cfg && cfg.maxConcurrentCoders);
+    if (Number.isFinite(n) && n >= 1) return Math.floor(n);
+  } catch (_) {
+    /* fall through to the env-backed default */
+  }
+  return CONFIG.CODER.maxConcurrent;
 }
 
 /** One poll+dispatch cycle. Serialized (never overlaps itself). */
@@ -551,9 +571,11 @@ async function pollOnce() {
     return roleLlm.get(role);
   };
 
+  const cap = resolveMaxConcurrent();
   for (const project of projects) {
     const tasks = tasksByProject.get(project.id) || [];
-    // No open tasks left → the project is fully coded; mark it aidone (once).
+    // No open tasks left → the project is fully coded; mark it aidone (once),
+    // but only when nothing for it is still in flight.
     if (!tasks.length) {
       if (!projectBusy(project.id)) {
         applyAidone(settings.linearApiKey, { project, onStep: (m) => log.info(`[coder ${project.name}] ${m}`) })
@@ -562,34 +584,41 @@ async function pollOnce() {
       }
       continue;
     }
-    if (running.size >= CONFIG.CODER.maxConcurrent) break; // global cap
-    if (projectBusy(project.id)) continue; // one task per project (shared monorepo workspace)
+    if (running.size >= cap) break; // global cap
 
-    // Next unblocked, not-already-running task in creation order.
-    const next = tasks.find((t) => !running.has(t.id) && (!t.blockers || t.blockers.length === 0));
-    if (!next) {
-      const head = tasks.find((t) => t.blockers && t.blockers.length);
+    // Dispatch every unblocked, not-already-running task in creation order, up to
+    // the global cap. Independent tasks of the same project now run concurrently,
+    // each in its own isolated per-task workspace; a task blocked by a not-yet-Done
+    // issue stays skipped until its blocker lands.
+    let dispatchedForProject = 0;
+    for (const next of tasks) {
+      if (running.size >= cap) break;
+      if (running.has(next.id) || (next.blockers && next.blockers.length)) continue;
+      const role = modelRoleForTask(next);
+      try {
+        await dispatchReadyTask(next, resolveRole, ctx, {
+          beforeDispatch: ({ llm }) => {
+            log.info(`Dispatching ${next.identifier} ("${project.name}", created ${next.createdAt}, ${role} agent → ${llm.provider}) via ${CONFIG.CODER.backend} backend.`);
+          },
+        });
+        dispatchedForProject += 1;
+      } catch (err) {
+        const resource = isRepositoryAvailabilityError(err) || (err && err.resource === 'git') ? 'git' : 'model';
+        const reason = pause(resource, err, {
+          task: next,
+          taskIdentifier: next.identifier,
+          role,
+          provider: resource === 'git' ? store.getRepositoryConfig().provider : undefined,
+        });
+        return { skipped: 'paused', pauseReason: reason };
+      }
+    }
+    // Nothing dispatched despite free capacity → the remaining tasks are blocked.
+    if (!dispatchedForProject && running.size < cap) {
+      const head = tasks.find((t) => t.blockers && t.blockers.length && !running.has(t.id));
       if (head) log.info(`Project "${project.name}": next task ${head.identifier} blocked by ${head.blockers.join(', ')}.`);
-      continue;
     }
-    // Route to the local or hosted deep-agent slot by the task's model label.
-    const role = modelRoleForTask(next);
-    try {
-      await dispatchReadyTask(next, resolveRole, ctx, {
-        beforeDispatch: ({ llm }) => {
-          log.info(`Dispatching ${next.identifier} ("${project.name}", created ${next.createdAt}, ${role} agent → ${llm.provider}) via ${CONFIG.CODER.backend} backend.`);
-        },
-      });
-    } catch (err) {
-      const resource = isRepositoryAvailabilityError(err) || (err && err.resource === 'git') ? 'git' : 'model';
-      const reason = pause(resource, err, {
-        task: next,
-        taskIdentifier: next.identifier,
-        role,
-        provider: resource === 'git' ? store.getRepositoryConfig().provider : undefined,
-      });
-      return { skipped: 'paused', pauseReason: reason };
-    }
+    if (running.size >= cap) break; // cap reached; stop scanning further projects
   }
   return { dispatched: true };
 }
@@ -605,7 +634,7 @@ function start() {
     });
   };
   tick();
-  log.info(`Code-writer monitor started (aiplanned flow, every ${CONFIG.CODER.pollIntervalMs} ms, max ${CONFIG.CODER.maxConcurrent} concurrent).`);
+  log.info(`Code-writer monitor started (aiplanned flow, every ${CONFIG.CODER.pollIntervalMs} ms, max ${resolveMaxConcurrent()} concurrent).`);
   return { started: true, resumed };
 }
 
@@ -631,7 +660,7 @@ function status() {
     pauseReason,
     plannedLabel: CONFIG.CODER.plannedLabel,
     backend: CONFIG.CODER.backend,
-    maxConcurrent: CONFIG.CODER.maxConcurrent,
+    maxConcurrent: resolveMaxConcurrent(),
     inFlight: [...running.values()].map((r) => ({ identifier: r.identifier, startedAt: r.startedAt })),
   };
 }
@@ -657,5 +686,6 @@ module.exports = {
     pause,
     recoverPause,
     readinessFingerprint,
+    resolveMaxConcurrent,
   },
 };

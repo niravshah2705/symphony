@@ -48,6 +48,7 @@ function activeModelFor(provider, settings) {
     return settings.codexModel || fallback;
   }
   if (provider === 'lmstudio') return settings.lmstudioModel;
+  if (provider === 'omlx') return settings.omlxModel;
   return settings.ollamaModel;
 }
 
@@ -65,6 +66,7 @@ function sanitizeConfig(body, current) {
     : current.intervalMinutes;
   return {
     parallelProcessing: clampInt(b.parallelProcessing, 1, 8, current.parallelProcessing),
+    maxConcurrentCoders: clampInt(b.maxConcurrentCoders, 1, 8, current.maxConcurrentCoders),
     maxProjectsPerRun: clampInt(b.maxProjectsPerRun, 1, 20, current.maxProjectsPerRun),
     maxMilestones: clampInt(b.maxMilestones, 1, 12, current.maxMilestones),
     maxIssuesPerMilestone: clampInt(b.maxIssuesPerMilestone, 0, 12, current.maxIssuesPerMilestone),
@@ -126,6 +128,45 @@ router.get(
   })
 );
 
+// GET /api/agent/omlx-models — models advertised by the configured oMLX server.
+// oMLX auto-loads/evicts models, so discovery represents availability rather
+// than the model's current in-memory state. Optional API-key auth stays server-side.
+router.get(
+  '/omlx-models',
+  asyncHandler(async (req, res) => {
+    const settings = getSettings();
+    const host = String(settings.omlxHost || CONFIG.OMLX.defaultHost)
+      .replace(/\/v1\/?$/i, '')
+      .replace(/\/$/, '');
+    const headers = { Accept: 'application/json' };
+    if (settings.omlxApiKey) headers.Authorization = `Bearer ${settings.omlxApiKey}`;
+    try {
+      const resp = await fetch(`${host}${CONFIG.OMLX.apiPath}/models`, {
+        headers,
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!resp.ok) return res.json({ models: [], reachable: false });
+      const data = await resp.json();
+      const models = (data.data || [])
+        .map((model) => {
+          const id = String(model && model.id || '').trim();
+          if (!id) return null;
+          const contextWindow = Number(model.max_model_len);
+          return {
+            id,
+            label: id,
+            ...(Number.isFinite(contextWindow) && contextWindow > 0 ? { contextWindow } : {}),
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.id.localeCompare(b.id));
+      res.json({ models, reachable: true, source: 'local' });
+    } catch (_) {
+      res.json({ models: [], reachable: false });
+    }
+  })
+);
+
 // GET /api/agent/labels — distinct Linear project labels (for the dropdown).
 router.get(
   '/labels',
@@ -162,6 +203,7 @@ router.get('/status', (req, res) => {
     localActiveModel: activeModelFor(localProvider, settings),
     ollamaModel: settings.ollamaModel,
     lmstudioModel: settings.lmstudioModel,
+    omlxModel: settings.omlxModel,
     codexModel: settings.codexModel || CONFIG.OAUTH.defaultModel,
     codexConnected: Boolean(codexTokens && (codexTokens.accessToken || codexTokens.refreshToken)),
     tracingEnabled: Boolean(settings.langsmithApiKey && settings.langsmithTracing),
@@ -189,7 +231,7 @@ router.get('/jobs', (req, res) => {
 });
 
 // POST /api/agent/enrich-input — turn short user notes into a clearer brief via
-// the configured LOCAL role only (Ollama / LM Studio; never a hosted fallback).
+// the configured LOCAL role only (Ollama / LM Studio / oMLX; never a hosted fallback).
 router.post(
   '/enrich-input',
   asyncHandler(async (req, res) => {

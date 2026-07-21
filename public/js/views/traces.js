@@ -44,7 +44,7 @@ export async function renderTraces(view) {
           el('strong', {}, analysis ? 'Analysis details' : 'Private local analysis'),
           el('p', {}, analysis
             ? 'The technical evidence behind the plain-language answer.'
-            : 'Trace text is sent only to the Ollama or LM Studio host configured in Settings.'),
+            : 'Trace text is sent only to the local model host configured in Settings.'),
         ]),
       ]),
       analysis ? detailRail(analysis) : emptyRail()

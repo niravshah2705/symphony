@@ -8,10 +8,12 @@ const oauth = require('./oauth');
 const claudeOauth = require('./claude-oauth');
 
 /**
- * Deep-agent LLM provider factory. Four providers are supported:
+ * Deep-agent LLM provider factory. Five providers are supported:
  *   - 'ollama'   — local inference (ChatOllama), no credentials.
  *   - 'lmstudio' — local inference via LM Studio's OpenAI-compatible API
  *                  (ChatOpenAI against http://localhost:1234/v1), no credentials.
+ *   - 'omlx'     — local Apple-Silicon inference via oMLX's OpenAI-compatible API
+ *                  (ChatOpenAI against http://127.0.0.1:8000/v1), optional key.
  *   - 'codex'    — OpenAI via OAuth (ChatOpenAI) with a Bearer access token.
  *   - 'claude'   — Anthropic via OAuth (ChatAnthropic) with a Bearer access token.
  *
@@ -64,6 +66,13 @@ function lmstudioMaxTokens(llm) {
   return Math.max(256, Math.min(want, Math.floor(ctx / 2)));
 }
 
+/** oMLX output budget; saved presets already reserve prompt room explicitly. */
+function omlxMaxTokens(llm) {
+  const ctx = Number(llm.contextWindow) || 8192;
+  const want = Number(llm.numTokens) || 4096;
+  return Math.max(256, Math.min(want, Math.max(256, ctx - 256)));
+}
+
 // Context-window management (trim / summarize) lives in its own module; it is
 // provider-agnostic and LLM-client-free (summarization is injected), so it stays
 // pure and testable. See lmstudio-context.js.
@@ -87,6 +96,12 @@ function lmstudioPromptBudget(llm) {
   if (ctx <= 0) return 0;
   const budget = ctx - lmstudioMaxTokens(llm) - CONFIG.LMSTUDIO.promptMarginTokens;
   return Math.max(0, budget);
+}
+
+function omlxPromptBudget(llm) {
+  const ctx = Number(llm && llm.contextWindow) || 0;
+  if (ctx <= 0) return 0;
+  return Math.max(0, ctx - omlxMaxTokens(llm) - CONFIG.OMLX.promptMarginTokens);
 }
 
 // Dedup key for the "loaded < configured" warning so resolveLlm (called on every
@@ -334,6 +349,7 @@ function getLmStudioChatModelClass() {
       // Captured for the (separate, tool-free) summarizer sub-model.
       this._summaryCfg = {
         model: fields && fields.model,
+        apiKey: fields && fields.apiKey,
         baseURL: fields && fields.configuration && fields.configuration.baseURL,
         timeout: fields && fields.timeout,
         maxRetries: fields && fields.maxRetries,
@@ -346,7 +362,7 @@ function getLmStudioChatModelClass() {
       if (this._summaryModel) return this._summaryModel;
       this._summaryModel = new ChatOpenAI({
         model: this._summaryCfg.model,
-        apiKey: 'lm-studio',
+        apiKey: this._summaryCfg.apiKey || 'local-openai-compatible',
         temperature: 0,
         maxTokens: this.summaryMaxTokens,
         timeout: this._summaryCfg.timeout,
@@ -477,7 +493,45 @@ function createChatModel(llm, { json = false } = {}) {
     if (Object.keys(modelKwargs).length) opts.modelKwargs = modelKwargs;
     return new LmStudioChatModel(opts);
   }
-  // Default: local Ollama.
+  if (llm.provider === 'omlx') {
+    const OmlxChatModel = getLmStudioChatModelClass();
+    const opts = {
+      model: llm.model,
+      apiKey: llm.apiKey || 'omlx-local',
+      maxTokens: omlxMaxTokens(llm),
+      streaming: true,
+      timeout: CONFIG.OMLX.requestTimeoutMs,
+      maxRetries: CONFIG.OMLX.maxRetries,
+      configuration: { baseURL: llm.baseUrl },
+      promptBudget: omlxPromptBudget(llm),
+      charsPerToken: CONFIG.OMLX.charsPerToken,
+      contextMode: llm.contextMode,
+      summaryMaxTokens: CONFIG.OMLX.summaryMaxTokens,
+    };
+    if (typeof llm.temperature === 'number' && Number.isFinite(llm.temperature)) {
+      opts.temperature = llm.temperature;
+    }
+    if (typeof llm.topP === 'number' && Number.isFinite(llm.topP)) opts.topP = llm.topP;
+    const modelKwargs = {};
+    if (typeof llm.topK === 'number' && Number.isFinite(llm.topK)) modelKwargs.top_k = llm.topK;
+    if (typeof llm.repeatPenalty === 'number' && Number.isFinite(llm.repeatPenalty)) {
+      // oMLX names this field differently from LM Studio.
+      modelKwargs.repetition_penalty = llm.repeatPenalty;
+    }
+    if (llm.reasoningAdapter === 'omlx-template-effort' && ['low', 'medium', 'high'].includes(llm.reasoningEffort)) {
+      modelKwargs.chat_template_kwargs = { reasoning_effort: llm.reasoningEffort };
+    }
+    if (json) {
+      const kwargs = lmstudioJsonKwargs(llm.jsonMode);
+      if (kwargs) Object.assign(modelKwargs, kwargs);
+    }
+    if (Object.keys(modelKwargs).length) opts.modelKwargs = modelKwargs;
+    return new OmlxChatModel(opts);
+  }
+  if (llm.provider !== 'ollama') {
+    throw new TypeError(`Unsupported LLM provider: ${llm.provider || 'unknown'}`);
+  }
+  // Local Ollama.
   const { ChatOllama } = require('@langchain/ollama');
   const opts = {
     baseUrl: llm.host,
@@ -655,6 +709,29 @@ async function resolveLlm(settings, role = 'global') {
       contextMode: settings.lmstudioContextMode || 'summarize',
     };
   }
+  if (provider === 'omlx') {
+    const host = String(settings.omlxHost || CONFIG.OMLX.defaultHost)
+      .replace(/\/v1\/?$/i, '')
+      .replace(/\/$/, '');
+    return {
+      provider: 'omlx',
+      host,
+      baseUrl: `${host}${CONFIG.OMLX.apiPath}`,
+      apiKey: settings.omlxApiKey || '',
+      model: settings.omlxModel,
+      contextWindow: settings.omlxContextWindow,
+      numTokens: settings.omlxNumTokens,
+      temperature: settings.omlxTemperature ?? null,
+      topP: settings.omlxTopP ?? null,
+      topK: settings.omlxTopK ?? null,
+      repeatPenalty: settings.omlxRepeatPenalty ?? null,
+      reasoningEffort: settings.omlxReasoningEffort || 'none',
+      reasoningAdapter: settings.omlxReasoningAdapter || 'none',
+      jsonMode: settings.omlxJsonMode || 'text',
+      contextMode: settings.omlxContextMode || 'summarize',
+    };
+  }
+  if (provider !== 'ollama') throw new TypeError(`Unsupported LLM provider: ${provider || 'unknown'}`);
   return {
     provider: 'ollama',
     host: settings.ollamaHost,
@@ -694,6 +771,9 @@ function llmReady(settings, role = 'global') {
   if (provider === 'lmstudio') {
     return Boolean(settings.lmstudioHost && settings.lmstudioModel);
   }
+  if (provider === 'omlx') {
+    return Boolean(settings.omlxHost && settings.omlxModel);
+  }
   return Boolean(settings.ollamaHost && settings.ollamaModel);
 }
 
@@ -709,6 +789,9 @@ function notReadyReason(settings, role = 'global') {
   if (provider === 'lmstudio') {
     return 'Set the LM Studio host and model in Settings → LLM to enable enrichment.';
   }
+  if (provider === 'omlx') {
+    return 'Set the oMLX host and model in Settings → LLM to enable enrichment.';
+  }
   return 'Set the Ollama host and model in Settings → LLM to enable enrichment.';
 }
 
@@ -722,6 +805,8 @@ module.exports = {
   notReadyReason,
   lmstudioMaxTokens,
   lmstudioPromptBudget,
+  omlxMaxTokens,
+  omlxPromptBudget,
   clampContextWindow,
   trimMessagesForBudget,
   estimateMessageTokens,

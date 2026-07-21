@@ -252,7 +252,7 @@ function buildComposer(stream, railBody) {
       pending.replaceWith(
         assistantMessage(
           'I couldn’t reach the local model.',
-          error.message || 'Make sure Ollama or LM Studio is running, then try again.',
+          error.message || 'Make sure your configured local model server is running, then try again.',
           [{ label: 'Open local model settings', href: '#/settings' }],
           'error'
         )

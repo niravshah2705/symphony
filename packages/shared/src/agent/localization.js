@@ -496,6 +496,7 @@ let currentLocationCache = { value: null, expiresAt: 0, pending: null };
 function configuredLocalIdentity(settings) {
   const provider = providerForRole(settings || {}, 'local');
   if (provider === 'lmstudio') return { provider, model: settings && settings.lmstudioModel || null };
+  if (provider === 'omlx') return { provider, model: settings && settings.omlxModel || null };
   if (provider === 'ollama') return { provider, model: settings && settings.ollamaModel || null };
   return { provider: null, model: null };
 }

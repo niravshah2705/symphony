@@ -37,7 +37,7 @@ function pauseCode(value, reason = '') {
   const code = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   const hint = `${code} ${String(reason || '').toLowerCase()}`;
   if (/(?:git|github|gitlab|repository|\brepo\b)/.test(hint)) return 'git_unavailable';
-  if (/(?:model|\bllm\b|ollama|lm\s*studio|codex|claude)/.test(hint)) return 'model_unavailable';
+  if (/(?:model|\bllm\b|ollama|lm\s*studio|omlx|codex|claude)/.test(hint)) return 'model_unavailable';
   return 'unavailable';
 }
 

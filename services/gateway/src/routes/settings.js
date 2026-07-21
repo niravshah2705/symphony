@@ -36,7 +36,7 @@ const ROLE_KEYS = Object.freeze({
   execution: { provider: 'executionLlmProvider', preset: 'executionLlmPresetId' },
   testing: { provider: 'testingLlmProvider', preset: 'testingLlmPresetId' },
 });
-const LOCAL_PROVIDERS = Object.freeze(['ollama', 'lmstudio']);
+const LOCAL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx']);
 const HOSTED_PROVIDERS = Object.freeze(['codex', 'claude']);
 
 /** Canonicalize a request's role, or null when unrecognized. */
@@ -81,7 +81,8 @@ function publicSettings() {
     repositoryConfigured: Boolean(s.repositoryUrl && (repositoryProvider === 'gitlab' ? s.gitlabToken : s.githubToken)),
     // Deep-agent provider slots. `llmProvider` = GLOBAL (hosted) slot (planner +
     // coder's hosted/unlabeled route); `localLlmProvider` = LOCAL slot (coder's
-    // "local"/XS route). Each is 'ollama'/'lmstudio' (local) or 'codex'/'claude' (OAuth).
+    // "local"/XS route). Local providers are Ollama, LM Studio, or oMLX;
+    // hosted providers are OpenAI/Codex or Anthropic/Claude.
     llmProvider: s.llmProvider || 'ollama',
     localLlmProvider: s.localLlmProvider || 'lmstudio',
     hostedLlmPresetId: s.hostedLlmPresetId || 'custom',
@@ -119,6 +120,21 @@ function publicSettings() {
     lmstudioReasoningAdapter: s.lmstudioReasoningAdapter || 'none',
     lmstudioJsonMode: s.lmstudioJsonMode || 'text',
     lmstudioContextMode: s.lmstudioContextMode || 'summarize',
+    // oMLX (local, OpenAI-compatible). The optional API key is never returned.
+    omlxHost: s.omlxHost,
+    omlxModel: s.omlxModel,
+    omlxContextWindow: s.omlxContextWindow,
+    omlxNumTokens: s.omlxNumTokens,
+    omlxTemperature: s.omlxTemperature ?? null,
+    omlxTopP: s.omlxTopP ?? null,
+    omlxTopK: s.omlxTopK ?? null,
+    omlxRepeatPenalty: s.omlxRepeatPenalty ?? null,
+    omlxReasoningEffort: s.omlxReasoningEffort || 'none',
+    omlxReasoningAdapter: s.omlxReasoningAdapter || 'none',
+    omlxJsonMode: s.omlxJsonMode || 'text',
+    omlxContextMode: s.omlxContextMode || 'summarize',
+    hasOmlxApiKey: Boolean(s.omlxApiKey),
+    maskedOmlxApiKey: maskKey(s.omlxApiKey),
     // Hosted model values are not secrets; OAuth tokens remain masked in their
     // dedicated status endpoints.
     codexModel: s.codexModel,
@@ -148,7 +164,7 @@ function publicSettings() {
 }
 
 /**
- * Validate an operator-supplied local inference host (Ollama or LM Studio). This
+ * Validate an operator-supplied local inference host. This
  * is a local single-user tool, so localhost is the intended target (unlike a
  * public SSRF sink). We only enforce a well-formed http/https URL; the host is
  * stored server-side and is never taken from a request parameter at call time.
@@ -163,6 +179,12 @@ function normalizeHost(value, fallback) {
   } catch (_) {
     return fallback;
   }
+}
+
+/** Accept either the oMLX server origin or its documented `/v1` client URL. */
+function normalizeOmlxHost(value, fallback) {
+  const normalized = normalizeHost(value, fallback);
+  return String(normalized || '').replace(/\/v1\/?$/i, '');
 }
 
 /** Optional connector URL. Empty is meaningful (not configured). */
@@ -219,7 +241,9 @@ async function selectionPreset(provider, model) {
   // the Codex-only `ultra` level, so resolve even known models through its
   // backend-specific discovery fallback below.
   if (preset && !(provider === 'codex' && CONFIG.OAUTH.backend === 'api')) return preset;
-  if (provider === 'ollama' || provider === 'lmstudio') return neutralLocalPreset(provider, model);
+  if (provider === 'ollama' || provider === 'lmstudio' || provider === 'omlx') {
+    return neutralLocalPreset(provider, model);
+  }
 
   // Lazy import keeps the static catalog usable if discovery is temporarily
   // unavailable during startup or an installation upgrade.
@@ -288,6 +312,15 @@ router.put('/llm-preset', (req, res) => {
   }
   if (preset.provider === 'lmstudio' && overrides.host !== undefined) {
     patch.lmstudioHost = normalizeHost(overrides.host, current.lmstudioHost);
+  }
+  if (preset.provider === 'omlx') {
+    if (overrides.host !== undefined) {
+      patch.omlxHost = normalizeOmlxHost(overrides.host, current.omlxHost || CONFIG.OMLX.defaultHost);
+    }
+    if (overrides.clearApiKey === true) patch.omlxApiKey = '';
+    else if (overrides.apiKey !== undefined && String(overrides.apiKey).trim()) {
+      patch.omlxApiKey = String(overrides.apiKey).trim().slice(0, 4096);
+    }
   }
   patch[keys.provider] = preset.provider;
   patch[keys.preset] = preset.id;

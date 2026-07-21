@@ -49,6 +49,8 @@ function publicAvailabilityMessage(resource, context = {}) {
   }
   const provider = context.provider === 'lmstudio'
     ? 'LM Studio'
+    : context.provider === 'omlx'
+      ? 'oMLX'
     : context.provider === 'ollama'
       ? 'Ollama'
       : context.provider === 'claude'
@@ -121,11 +123,13 @@ async function probeModelAvailability(llm, dependencies = {}) {
   }
 
   try {
-    if (llm.provider === 'ollama' || llm.provider === 'lmstudio') {
+    if (llm.provider === 'ollama' || llm.provider === 'lmstudio' || llm.provider === 'omlx') {
       if (typeof fetchImpl !== 'function' || !llm.host) throw new Error('Local model host is not configured.');
       const path = llm.provider === 'ollama' ? '/api/tags' : '/v1/models';
+      const headers = { Accept: 'application/json' };
+      if (llm.provider === 'omlx' && llm.apiKey) headers.Authorization = `Bearer ${llm.apiKey}`;
       const response = await fetchImpl(`${String(llm.host).replace(/\/$/, '')}${path}`, {
-        headers: { Accept: 'application/json' },
+        headers,
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) throw Object.assign(new Error('Local model service rejected the readiness check.'), { status: response.status });

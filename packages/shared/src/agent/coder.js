@@ -77,7 +77,7 @@ function isCoderLlmUsable(llm) {
   if (!llm || !llm.model) return false;
   if (llm.provider === 'claude') return Boolean(llm.accessToken);
   if (llm.provider === 'codex') return Boolean(llm.accessToken && llm.baseUrl);
-  return Boolean(llm.host); // ollama / lmstudio (local, host-based)
+  return Boolean(llm.host); // Local host-based providers.
 }
 
 function assertOpenSweRepositoryProvider(provider) {

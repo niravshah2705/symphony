@@ -389,7 +389,7 @@ function langSmithProvider(llm) {
   const provider = llm && llm.provider;
   if (provider === 'codex') return 'openai';
   if (provider === 'claude') return 'anthropic';
-  if (provider === 'lmstudio') return 'openai';
+  if (provider === 'lmstudio' || provider === 'omlx') return 'openai';
   return provider || 'unknown';
 }
 

@@ -37,7 +37,7 @@ function endpoint(base, pathname) {
   return url.toString();
 }
 
-async function probe(url, dependencies = {}) {
+async function probe(url, dependencies = {}, options = {}) {
   if (!url) return { status: 'not-configured', summary: 'No valid endpoint is configured.' };
   const fetchFn = dependencies.fetch || globalThis.fetch;
   if (typeof fetchFn !== 'function') return { status: 'unavailable', summary: 'HTTP diagnostics are unavailable.' };
@@ -47,7 +47,7 @@ async function probe(url, dependencies = {}) {
   try {
     const response = await fetchFn(url, {
       method: 'GET',
-      headers: { accept: 'application/json' },
+      headers: { accept: 'application/json', ...(options.headers || {}) },
       signal: controller.signal,
     });
     if (response.body && typeof response.body.cancel === 'function') {
@@ -136,10 +136,14 @@ function integrationChecks(settings) {
 }
 
 function sdkChecks(settings, resolver) {
-  const localProvider = settings.localLlmProvider === 'lmstudio' ? 'lmstudio' : 'ollama';
+  const localProvider = ['ollama', 'lmstudio', 'omlx'].includes(settings.localLlmProvider)
+    ? settings.localLlmProvider
+    : 'ollama';
   const localReady = localProvider === 'lmstudio'
     ? Boolean(settings.lmstudioHost && settings.lmstudioModel)
-    : Boolean(settings.ollamaHost && settings.ollamaModel);
+    : localProvider === 'omlx'
+      ? Boolean(settings.omlxHost && settings.omlxModel)
+      : Boolean(settings.ollamaHost && settings.ollamaModel);
   const codexAuth = configuredToken(settings.codexTokens);
   const claudeAuth = configuredToken(settings.claudeTokens);
   const definitions = [
@@ -203,10 +207,16 @@ async function serviceChecks(services, dependencies) {
 }
 
 async function localModelCheck(settings, dependencies) {
-  const provider = settings.localLlmProvider === 'lmstudio' ? 'lmstudio' : 'ollama';
-  const base = provider === 'lmstudio' ? settings.lmstudioHost : settings.ollamaHost;
-  const model = provider === 'lmstudio' ? settings.lmstudioModel : settings.ollamaModel;
-  const url = endpoint(base, provider === 'lmstudio' ? '/v1/models' : '/api/tags');
+  const provider = ['ollama', 'lmstudio', 'omlx'].includes(settings.localLlmProvider)
+    ? settings.localLlmProvider
+    : 'ollama';
+  const base = provider === 'lmstudio'
+    ? settings.lmstudioHost
+    : provider === 'omlx' ? settings.omlxHost : settings.ollamaHost;
+  const model = provider === 'lmstudio'
+    ? settings.lmstudioModel
+    : provider === 'omlx' ? settings.omlxModel : settings.ollamaModel;
+  const url = endpoint(base, provider === 'ollama' ? '/api/tags' : '/v1/models');
   if (!model || !url) {
     return check(
       'local-model',
@@ -217,7 +227,10 @@ async function localModelCheck(settings, dependencies) {
       { provider, configured: false }
     );
   }
-  const result = await probe(url, dependencies);
+  const headers = provider === 'omlx' && settings.omlxApiKey
+    ? { authorization: `Bearer ${settings.omlxApiKey}` }
+    : {};
+  const result = await probe(url, dependencies, { headers });
   return check(
     'local-model',
     'Local model',

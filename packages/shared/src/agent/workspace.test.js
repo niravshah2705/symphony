@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { repoParts, sanitizeBranch, sanitizeSlug, scopedProjectSlug } = require('./workspace');
+const { repoParts, sanitizeBranch, sanitizeSlug, scopedProjectSlug, plannedTaskWorkdir } = require('./workspace');
 
 test('repoParts accepts owner/name and normalizes to GitHub https URL', () => {
   assert.deepEqual(repoParts('acme/widgets'), {
@@ -46,4 +46,20 @@ test('planned workspace slug includes project identity to prevent same-name coll
   assert.match(scopedProjectSlug('Payments', 'project-a'), /^payments-[a-f0-9]{10}$/);
   assert.notEqual(scopedProjectSlug('Payments', 'project-a'), scopedProjectSlug('Payments', 'project-b'));
   assert.equal(scopedProjectSlug('Payments', 'project-a'), scopedProjectSlug('Payments', 'project-a'));
+});
+
+test('planned task workdir is per-task so concurrent same-project tasks are isolated', () => {
+  const root = '/tmp/ws';
+  const a = plannedTaskWorkdir(root, 'Payments', 'project-a', 'NIR-1');
+  const b = plannedTaskWorkdir(root, 'Payments', 'project-a', 'NIR-2');
+  // Same project, different tasks → different working directories.
+  assert.notEqual(a, b);
+  // Both live under the project's scoped directory.
+  const projectDir = `${root}/${scopedProjectSlug('Payments', 'project-a')}`;
+  assert.ok(a.startsWith(`${projectDir}/`) && b.startsWith(`${projectDir}/`));
+  // Stable per task branch so a retry reuses the same checkout.
+  assert.equal(a, plannedTaskWorkdir(root, 'Payments', 'project-a', 'NIR-1'));
+  // Filesystem-safe leaf (no slashes even for slash-bearing branch names).
+  const nested = plannedTaskWorkdir(root, 'Payments', 'project-a', 'feature/x');
+  assert.equal(nested.split('/').length, a.split('/').length);
 });
