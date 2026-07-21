@@ -5,6 +5,7 @@ const catalog = require('./llm-presets.json');
 const PROVIDER_DEPLOYMENT = Object.freeze({
   ollama: 'local',
   lmstudio: 'local',
+  omlx: 'local',
   codex: 'hosted',
   claude: 'hosted',
 });
@@ -14,6 +15,7 @@ const REASONING_ADAPTERS = new Set([
   'ollama-think-toggle',
   'ollama-think-effort',
   'openai-compatible',
+  'omlx-template-effort',
   'openai',
   'anthropic-adaptive',
   'anthropic-effort',
@@ -22,6 +24,7 @@ const REASONING_EFFORTS = new Set(['none', 'low', 'medium', 'high', 'xhigh', 'ma
 const JSON_MODES = Object.freeze({
   ollama: new Set(['json', 'text']),
   lmstudio: new Set(['text', 'json_object', 'json_schema']),
+  omlx: new Set(['text', 'json_object', 'json_schema']),
 });
 const CONTEXT_MODES = new Set(['summarize', 'trim', 'none']);
 
@@ -95,13 +98,16 @@ function validateCatalog(value) {
     } else {
       assert(typeof params.reasoning.parameter === 'string' && params.reasoning.parameter, `${preset.id}: reasoning parameter is required`);
     }
-    if (preset.provider === 'ollama' || preset.provider === 'lmstudio') {
+    if (preset.deployment === 'local') {
       assert(JSON_MODES[preset.provider].has(params.jsonMode), `${preset.id}: invalid JSON mode`);
     } else {
       assert(params.jsonMode === null, `${preset.id}: hosted JSON mode must be null`);
     }
-    if (preset.provider === 'lmstudio') assert(CONTEXT_MODES.has(params.contextMode), `${preset.id}: invalid context mode`);
-    else assert(params.contextMode === null, `${preset.id}: context mode only applies to LM Studio`);
+    if (preset.provider === 'lmstudio' || preset.provider === 'omlx') {
+      assert(CONTEXT_MODES.has(params.contextMode), `${preset.id}: invalid context mode`);
+    } else {
+      assert(params.contextMode === null, `${preset.id}: context mode only applies to OpenAI-compatible local providers`);
+    }
   }
 
   for (const deployment of ['local', 'hosted']) {
@@ -193,7 +199,7 @@ function normalizeParameters(preset, overrides = {}) {
   const contextWindow = caps.contextWindowConfigurable
     ? clampInt(overrides.contextWindow, 512, limits.contextWindow, defaults.contextWindow)
     : defaults.contextWindow;
-  const outputMinimum = preset.provider === 'lmstudio' ? 256 : 128;
+  const outputMinimum = preset.provider === 'lmstudio' || preset.provider === 'omlx' ? 256 : 128;
   let outputLimit = limits.maxOutputTokens;
   // The catalog carries the effective request rule separately from the model's
   // absolute output capability. LM Studio reserves half the loaded context;
@@ -216,7 +222,7 @@ function normalizeParameters(preset, overrides = {}) {
   const allowedJson = JSON_MODES[preset.provider];
   const jsonMode = allowedJson && allowedJson.has(overrides.jsonMode) ? overrides.jsonMode : defaults.jsonMode;
   const contextMode =
-    preset.provider === 'lmstudio' && CONTEXT_MODES.has(overrides.contextMode)
+    (preset.provider === 'lmstudio' || preset.provider === 'omlx') && CONTEXT_MODES.has(overrides.contextMode)
       ? overrides.contextMode
       : defaults.contextMode;
 
@@ -268,6 +274,21 @@ function settingsPatchForPreset(preset, overrides = {}) {
       lmstudioReasoningAdapter: params.reasoningAdapter,
       lmstudioJsonMode: params.jsonMode,
       lmstudioContextMode: params.contextMode,
+    };
+  }
+  if (preset.provider === 'omlx') {
+    return {
+      omlxModel: params.model,
+      omlxContextWindow: params.contextWindow,
+      omlxNumTokens: params.maxOutputTokens,
+      omlxTemperature: params.temperature,
+      omlxTopP: params.topP,
+      omlxTopK: params.topK,
+      omlxRepeatPenalty: params.repeatPenalty,
+      omlxReasoningEffort: params.reasoningEffort,
+      omlxReasoningAdapter: params.reasoningAdapter,
+      omlxJsonMode: params.jsonMode,
+      omlxContextMode: params.contextMode,
     };
   }
   if (preset.provider === 'codex') {
@@ -382,10 +403,10 @@ function runtimePresetForProfile(provider, profile) {
  * model-specific reasoning adapter from the previously selected model.
  */
 function neutralLocalPreset(provider, value) {
-  if (!['ollama', 'lmstudio'].includes(provider)) return null;
+  if (!['ollama', 'lmstudio', 'omlx'].includes(provider)) return null;
   const model = sanitizeModelId(value);
   if (!model) return null;
-  const lmstudio = provider === 'lmstudio';
+  const openAiCompatible = provider === 'lmstudio' || provider === 'omlx';
   return {
     id: 'custom',
     label: model,
@@ -393,7 +414,7 @@ function neutralLocalPreset(provider, value) {
     provider,
     model,
     limits: { contextWindow: 262144, maxOutputTokens: 128000 },
-    requestLimits: { maxOutputContextFraction: lmstudio ? 0.5 : 1 },
+    requestLimits: { maxOutputContextFraction: openAiCompatible ? 0.5 : 1 },
     capabilities: {
       toolCalling: true,
       structuredOutput: true,
@@ -410,8 +431,8 @@ function neutralLocalPreset(provider, value) {
       topK: null,
       repeatPenalty: null,
       reasoning: { effort: 'none', parameter: null },
-      jsonMode: lmstudio ? 'text' : 'json',
-      contextMode: lmstudio ? 'summarize' : null,
+      jsonMode: openAiCompatible ? 'text' : 'json',
+      contextMode: openAiCompatible ? 'summarize' : null,
     },
   };
 }
@@ -479,6 +500,34 @@ function customPresetForSettings(provider, settings) {
         repeatPenalty: settings.lmstudioRepeatPenalty ?? null,
         reasoning: { effort: settings.lmstudioReasoningEffort || 'none', parameter: adapter === 'openai-compatible' ? 'reasoning_effort' : null },
         jsonMode: settings.lmstudioJsonMode || 'text', contextMode: settings.lmstudioContextMode || 'summarize',
+      },
+    };
+  }
+  if (provider === 'omlx') {
+    const adapter = settings.omlxReasoningAdapter === 'omlx-template-effort' ? 'omlx-template-effort' : 'none';
+    const efforts = adapter === 'omlx-template-effort' ? ['low', 'medium', 'high'] : ['none'];
+    const defaultEffort = efforts.includes(settings.omlxReasoningEffort) ? settings.omlxReasoningEffort : efforts[0];
+    return {
+      id: 'custom', provider, deployment: 'local', model: settings.omlxModel || 'custom-model',
+      limits: { contextWindow: 262144, maxOutputTokens: 128000 },
+      requestLimits: { maxOutputContextFraction: 0.5 },
+      capabilities: {
+        temperature: true, contextWindowConfigurable: true, reasoningAdapter: adapter,
+        reasoningEfforts: efforts,
+      },
+      parameters: {
+        contextWindow: settings.omlxContextWindow || 8192,
+        maxOutputTokens: settings.omlxNumTokens || 4096,
+        temperature: settings.omlxTemperature ?? 0,
+        topP: settings.omlxTopP ?? null,
+        topK: settings.omlxTopK ?? null,
+        repeatPenalty: settings.omlxRepeatPenalty ?? null,
+        reasoning: {
+          effort: defaultEffort,
+          parameter: adapter === 'omlx-template-effort' ? 'chat_template_kwargs.reasoning_effort' : null,
+        },
+        jsonMode: settings.omlxJsonMode || 'text',
+        contextMode: settings.omlxContextMode || 'summarize',
       },
     };
   }

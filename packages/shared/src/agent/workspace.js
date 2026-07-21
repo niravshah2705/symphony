@@ -44,6 +44,18 @@ function scopedProjectSlug(name, id) {
 }
 
 /**
+ * Absolute per-task workspace path: <root>/<project-slug>/<task-slug>. Distinct
+ * per task branch so a project's concurrent tasks never share a working tree,
+ * and stable per branch so a retry of the same task reuses (and refreshes) its
+ * checkout.
+ */
+function plannedTaskWorkdir(root, projectSlug, projectId, taskBranch) {
+  const slug = scopedProjectSlug(projectSlug, projectId);
+  const taskDir = sanitizeSlug(sanitizeBranch(taskBranch));
+  return path.join(root, slug, taskDir);
+}
+
+/**
  * Parse a GitHub/GitLab repo reference into a display name + tokenless HTTPS URL.
  * Bare namespace/repo values use the selected provider. Explicit URLs are
  * restricted to the selected official host; GitHub has exactly owner/repo while
@@ -101,9 +113,12 @@ function createBroker({ root, workDir, branch, parts, repositoryToken, onStep })
 }
 
 /**
- * Prepare the MONOREPO workspace for a planned task: one checkout per project at
- * <plannedWorkspaceRoot>/<project-slug>/, reused across tasks, with a server-
- * scoped repository broker controlling the current task branch.
+ * Prepare the workspace for a planned task: one checkout PER TASK at
+ * <plannedWorkspaceRoot>/<project-slug>/<task-slug>/, so a project's independent
+ * tasks can run concurrently without sharing a working tree. The dir is keyed by
+ * the task branch, so a retry of the same task reuses (and refreshes) its
+ * checkout while a different task gets its own isolated clone. A server-scoped
+ * repository broker controls the task branch.
  */
 async function preparePlannedWorkspace({
   repoUrl,
@@ -118,7 +133,9 @@ async function preparePlannedWorkspace({
   const slug = scopedProjectSlug(projectSlug, projectId);
   const branch = sanitizeBranch(taskBranch);
   const root = CONFIG.CODER.plannedWorkspaceRoot;
-  const workDir = path.join(root, slug);
+  // Per-task subdirectory keeps a project's concurrent tasks from clobbering each
+  // other's checkout/branch; reused only by a retry of the same task branch.
+  const workDir = plannedTaskWorkdir(root, projectSlug, projectId, taskBranch);
   const env = buildSafeAgentEnv(process.env, workDir);
   const reused = fs.existsSync(path.join(workDir, '.git'));
 
@@ -212,6 +229,7 @@ module.exports = {
   preparePlannedWorkspace,
   sanitizeSlug,
   scopedProjectSlug,
+  plannedTaskWorkdir,
   sanitizeBranch,
   repoParts,
 };

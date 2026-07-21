@@ -599,7 +599,7 @@ function createCallSession(view) {
 
     const request = String(instruction || DEFAULT_ENRICHMENT_PROMPT).trim();
     if (!automatic) appendUserMessage(request);
-    const thinking = appendAssistantMessage('Organizing your notes with the configured local model…', 'Ollama / LM Studio route');
+    const thinking = appendAssistantMessage('Organizing your notes with the configured local model…', 'Private local-model route');
     state.enriching = true;
     updateControls();
 

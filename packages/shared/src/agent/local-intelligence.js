@@ -10,11 +10,12 @@ const { withRunTree } = require('langsmith/traceable');
  * This intentionally does not use the LiteRT demo's unfinished generative path.
  * It borrows the useful parts of that prototype instead: a narrow inference
  * contract, bounded attempts, strict structured output, and deterministic
- * fallbacks. Inference is always routed to the configured Ollama/LM Studio role;
+ * fallbacks. Inference is always routed to the configured local-model role;
  * trace or user content is never silently sent to a hosted provider.
  */
 
-const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio']);
+const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio', 'omlx']);
+const LOCAL_PROVIDER_LABELS = Object.freeze({ ollama: 'Ollama', lmstudio: 'LM Studio', omlx: 'oMLX' });
 
 const LIMITS = Object.freeze({
   inputChars: 8_000,
@@ -531,13 +532,13 @@ async function resolveLocalLlm(settings) {
   const provider = providerForRole(settings || {}, 'local');
   if (!LOCAL_PROVIDERS.has(provider)) {
     throw new LocalIntelligenceError(
-      'Choose Ollama or LM Studio for Local / XS tasks in Settings before using local intelligence.'
+      'Choose Ollama, LM Studio, or oMLX for Local / XS tasks in Settings before using local intelligence.'
     );
   }
   const llm = await resolveLlm(settings || {}, 'local');
   if (!llm || !llm.model || !llm.host) {
     throw new LocalIntelligenceError(
-      `Configure a ${provider === 'lmstudio' ? 'LM Studio' : 'Ollama'} host and model in Settings before using local intelligence.`
+      `Configure a ${LOCAL_PROVIDER_LABELS[provider] || 'local'} host and model in Settings before using local intelligence.`
     );
   }
   return {

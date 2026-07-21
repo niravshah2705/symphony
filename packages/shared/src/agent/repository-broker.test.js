@@ -331,6 +331,118 @@ test('prepared checkout excludes framework-owned skills without hiding project c
   assert.match(execFileSync('git', ['status', '--porcelain'], { cwd: workDir, encoding: 'utf8' }), /project-change\.txt/);
 });
 
+test('an empty remote is initialized with a base branch so the first task can start', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repository-broker-empty-'));
+  const remote = path.join(root, 'remote.git');
+  const workspaceRoot = path.join(root, 'workspaces');
+  const workDir = path.join(workspaceRoot, 'ticket');
+  // A brand-new repository: default branch configured, but zero commits/branches.
+  execFileSync('git', ['init', '--bare', '-b', 'main', remote], { cwd: root });
+
+  // Only broker-private network reads/writes are redirected to the local bare
+  // remote; every other Git command (clone/commit/checkout/status) runs unchanged.
+  const execFileImpl = async (command, inputArgs, options) => {
+    const args = [...inputArgs];
+    const privateBareCommand = args.some((arg) => String(arg).startsWith('--git-dir='));
+    if (args.includes('ls-remote') || (privateBareCommand && (args.includes('fetch') || args.includes('push')))) {
+      const origin = args.indexOf('origin');
+      if (origin >= 0) args[origin] = remote;
+    }
+    return execFileP(command, args, options);
+  };
+  const broker = new RepositoryBroker({
+    provider: 'github',
+    repository: {
+      provider: 'github',
+      owner: 'acme',
+      name: 'widgets',
+      fullName: 'acme/widgets',
+      https: 'https://github.com/acme/widgets.git',
+    },
+    token: 'seed-token',
+    workspaceRoot,
+    workDir,
+    branch: 'task-123',
+    execFileImpl,
+  });
+  t.after(() => {
+    broker.dispose();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const info = await broker.prepare();
+
+  assert.equal(info.branch, 'task-123');
+  assert.equal(info.baseBranch, 'main');
+  // The base branch is now published to the previously empty remote so reviews
+  // have a base to target.
+  const heads = execFileSync('git', ['ls-remote', '--heads', remote], { encoding: 'utf8' });
+  assert.match(heads, /refs\/heads\/main$/m);
+  // The workspace is forked onto the scoped task branch, ready for the agent.
+  assert.equal(
+    execFileSync('git', ['branch', '--show-current'], { cwd: workDir, encoding: 'utf8' }).trim(),
+    'task-123'
+  );
+  // The seed commit did not leave the workspace dirty.
+  assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: workDir, encoding: 'utf8' }), '');
+});
+
+test('a workspace left dirty by an earlier run is reset instead of bricking the next task', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repository-broker-dirty-'));
+  const seed = path.join(root, 'seed');
+  const remote = path.join(root, 'remote.git');
+  const workspaceRoot = path.join(root, 'workspaces');
+  const workDir = path.join(workspaceRoot, 'ticket');
+  fs.mkdirSync(seed, { recursive: true });
+  execFileSync('git', ['init', '-b', 'main'], { cwd: seed });
+  execFileSync('git', ['config', 'user.name', 'Test'], { cwd: seed });
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: seed });
+  fs.writeFileSync(path.join(seed, 'README.md'), '# fixture\n', 'utf8');
+  execFileSync('git', ['add', 'README.md'], { cwd: seed });
+  execFileSync('git', ['commit', '-m', 'fixture'], { cwd: seed });
+  execFileSync('git', ['clone', '--bare', seed, remote], { cwd: root });
+
+  const execFileImpl = async (command, inputArgs, options) => {
+    const args = [...inputArgs];
+    const privateBareCommand = args.some((arg) => String(arg).startsWith('--git-dir='));
+    if (args.includes('ls-remote') || (privateBareCommand && args.includes('fetch'))) {
+      const origin = args.indexOf('origin');
+      if (origin >= 0) args[origin] = remote;
+    }
+    return execFileP(command, args, options);
+  };
+  const repository = {
+    provider: 'github', owner: 'acme', name: 'widgets',
+    fullName: 'acme/widgets', https: 'https://github.com/acme/widgets.git',
+  };
+  const makeBroker = (branch) => new RepositoryBroker({
+    provider: 'github', repository, workspaceRoot, workDir, branch, execFileImpl,
+  });
+
+  const first = makeBroker('task-aaa');
+  await first.prepare();
+  first.dispose();
+
+  // Simulate a prior run that scaffolded files but died before committing:
+  // both an untracked file and an uncommitted edit to a tracked file.
+  fs.writeFileSync(path.join(workDir, 'scaffold.js'), 'console.log("wip")\n', 'utf8');
+  fs.writeFileSync(path.join(workDir, 'README.md'), '# fixture\nuncommitted edit\n', 'utf8');
+  assert.notEqual(execFileSync('git', ['status', '--porcelain'], { cwd: workDir, encoding: 'utf8' }), '');
+
+  const second = makeBroker('task-bbb');
+  t.after(() => {
+    second.dispose();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // The next task must not throw workspace_dirty; the leftovers are discarded.
+  const info = await second.prepare();
+  assert.equal(info.branch, 'task-bbb');
+  assert.equal(fs.existsSync(path.join(workDir, 'scaffold.js')), false, 'untracked leftover is removed');
+  assert.equal(fs.readFileSync(path.join(workDir, 'README.md'), 'utf8'), '# fixture\n', 'tracked edit is reverted');
+  assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: workDir, encoding: 'utf8' }), '');
+});
+
 test('GitHub review creation uses the official API and a server-scoped branch', async (t) => {
   const requests = [];
   const fetchImpl = async (url, options) => {

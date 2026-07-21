@@ -71,6 +71,7 @@ function settingsForConfiguredModel(preset, model = configuredModel(preset.provi
 
 const DEFAULT_OLLAMA_SETTINGS = settingsPatchForPreset(recommendedPreset('ollama'));
 const DEFAULT_LMSTUDIO_SETTINGS = settingsPatchForPreset(recommendedPreset('lmstudio'));
+const DEFAULT_OMLX_SETTINGS = settingsPatchForPreset(recommendedPreset('omlx'));
 const DEFAULT_CODEX_SETTINGS = settingsForConfiguredModel(recommendedPreset('codex'));
 const DEFAULT_CLAUDE_SETTINGS = settingsForConfiguredModel(recommendedPreset('claude'));
 // The exact catalog defaults win over a same-provider recommended preset. This
@@ -90,6 +91,9 @@ const DEFAULT_HOSTED_MODEL = configuredModel(DEFAULT_HOSTED_PRESET.provider);
 
 const DEFAULT_AGENT_CONFIG = Object.freeze({
   parallelProcessing: 2, // concurrent projects per scheduler tick
+  // Max coding tasks the board monitor runs at once (across and within projects).
+  // Seeds from CODER_MAX_CONCURRENT for back-compat; editable from the UI.
+  maxConcurrentCoders: Number(process.env.CODER_MAX_CONCURRENT) || 3,
   scheduleEnabled: true, // run the 5-minute scheduler
   autoAssignLead: true, // assign the assumed role as project lead on enrich
   autoLabelNewProjects: true, // attach the enrichLabels to a project created for a new business
@@ -117,8 +121,8 @@ const DEFAULT_STORE = Object.freeze({
     repositoryProvider: 'github',
     repositoryUrl: '',
     gitlabToken: '',
-    // Deep-agent LLM providers. Two role slots, each choosing one of the four
-    // providers ('ollama' / 'lmstudio' (local) or 'codex' / 'claude' (OAuth)):
+    // Deep-agent LLM providers. Two role slots choose a local provider
+    // ('ollama' / 'lmstudio' / 'omlx') or hosted provider ('codex' / 'claude'):
     //   llmProvider      — GLOBAL (hosted) slot: used by the planner and by the
     //                      coder for hosted-labeled (and unlabeled) issues.
     //   localLlmProvider — LOCAL slot: used by the coder for "local"-labeled (XS)
@@ -152,6 +156,12 @@ const DEFAULT_STORE = Object.freeze({
     // a note and keeps recent turns verbatim; 'trim' drops old turns; 'none' sends
     // as-is. 'summarize' preserves the most context (at the cost of extra LLM calls).
     ...DEFAULT_LMSTUDIO_SETTINGS,
+    // oMLX (local Apple-Silicon inference, OpenAI-compatible API). Authentication
+    // is optional; when present the key remains server-side and is only exposed
+    // through masked status fields.
+    omlxHost: CONFIG.OMLX.defaultHost,
+    omlxApiKey: '',
+    ...DEFAULT_OMLX_SETTINGS,
     // Codex (OpenAI) provider — endpoints/client come from CONFIG.OAUTH (trusted),
     // the browser only chooses the model. Tokens live server-side only.
     ...DEFAULT_CODEX_SETTINGS,
@@ -286,6 +296,10 @@ function migrateAgentConfig(config) {
   }
   delete next.enrichLabel;
   if (!next.intervalMinutes) next.intervalMinutes = 5;
+  const coders = Number(next.maxConcurrentCoders);
+  next.maxConcurrentCoders = Number.isFinite(coders) && coders >= 1
+    ? Math.min(8, Math.floor(coders))
+    : DEFAULT_AGENT_CONFIG.maxConcurrentCoders;
   // Legacy Anthropic-era fields — LLM config now lives in settings.
   delete next.model;
   delete next.maxTokens;
