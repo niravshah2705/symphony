@@ -96,24 +96,28 @@ function settingsGroup(id, title, description, children) {
   ]);
 }
 
-function configuredLocalModel(settings) {
-  const provider = settings.localLlmProvider || 'ollama';
+function providerConfigured(settings, provider, codex, claude) {
+  if (provider === 'codex') return Boolean(codex && codex.connected);
+  if (provider === 'claude') return Boolean(claude && claude.connected);
   if (provider === 'lmstudio') return Boolean(settings.lmstudioHost && settings.lmstudioModel);
   if (provider === 'omlx') return Boolean(settings.omlxHost && settings.omlxModel);
   return Boolean(settings.ollamaHost && settings.ollamaModel);
 }
 
 function settingsOverview({ settings, codex, claude }) {
-  const localProvider = settings.localLlmProvider || 'ollama';
-  const localParams = currentParameters(settings, localProvider);
-  const hostedProvider = settings.llmProvider || 'claude';
-  const hostedParams = currentParameters(settings, hostedProvider);
-  const hostedReady = hostedProvider === 'codex' ? Boolean(codex && codex.connected) : Boolean(claude && claude.connected);
+  // Show the two active task roles (Thinking = planner, Execution = coder);
+  // Testing is reserved and intentionally omitted from the health overview.
+  const roleCard = (role, label) => {
+    const provider = roleProvider(settings, role) || 'ollama';
+    const params = currentParameters(settings, provider);
+    return ['#settings-models', label, providerConfigured(settings, provider, codex, claude),
+      `${PROVIDER_LABELS[provider] || provider} · ${params.model || 'Choose model'}`];
+  };
   const planningReady = Boolean(settings.planningConfigured || settings.hasKey);
   const repositoryReady = Boolean(settings.repositoryConfigured);
   const cards = [
-    ['#settings-models', 'Local model', configuredLocalModel(settings), `${PROVIDER_LABELS[localProvider] || localProvider} · ${localParams.model || 'Choose model'}`],
-    ['#settings-models', 'Hosted model', hostedReady, `${PROVIDER_LABELS[hostedProvider] || hostedProvider} · ${hostedParams.model || 'Choose model'}`],
+    roleCard('thinking', 'Thinking model'),
+    roleCard('execution', 'Execution model'),
     ['#settings-connections', 'Planning', planningReady, settings.planningProvider === 'jira' ? 'Jira' : settings.planningProvider === 'asana' ? 'Asana' : 'Linear'],
     ['#settings-connections', 'Repository', repositoryReady, settings.repositoryProvider === 'gitlab' ? 'GitLab' : 'GitHub'],
   ];
@@ -502,8 +506,9 @@ function llmSection(ctx) {
 
   rebuild();
   queueMicrotask(() => {
-    void discoverProviderModels(ctx, 'local', roleProvider(ctx.settings, 'local'), false, rebuild);
-    void discoverProviderModels(ctx, 'hosted', roleProvider(ctx.settings, 'hosted'), false, rebuild);
+    for (const entry of LLM_ROLES) {
+      void discoverProviderModels(ctx, entry.role, roleProvider(ctx.settings, entry.role), false, rebuild);
+    }
   });
   return container;
 }
@@ -516,9 +521,54 @@ const PROVIDER_LABELS = Object.freeze({
   claude: 'Anthropic',
 });
 
+const PROVIDER_DEPLOYMENT = Object.freeze({
+  ollama: 'local',
+  lmstudio: 'local',
+  omlx: 'local',
+  codex: 'hosted',
+  claude: 'hosted',
+});
+
+// Purpose-based model roles ("models as tasks"). Each role is provider-flexible
+// (any of the four providers) and maps to its own settings fields.
+const LLM_ROLES = Object.freeze([
+  {
+    role: 'thinking',
+    provider: 'thinkingLlmProvider',
+    preset: 'thinkingLlmPresetId',
+    heading: 'Thinking · task planning',
+    description: 'Used by the planner to generate and enrich plans.',
+  },
+  {
+    role: 'execution',
+    provider: 'executionLlmProvider',
+    preset: 'executionLlmPresetId',
+    heading: 'Execution · coder',
+    description: 'Used by the code-writer for every coding task.',
+  },
+  {
+    role: 'testing',
+    provider: 'testingLlmProvider',
+    preset: 'testingLlmPresetId',
+    heading: 'Testing · tool calling',
+    description: 'Reserved for tool-calling / test agents — not used yet.',
+  },
+]);
+const ROLE_FIELDS = Object.freeze(Object.fromEntries(
+  LLM_ROLES.map((entry) => [entry.role, { provider: entry.provider, preset: entry.preset }])
+));
+const ROLE_META = Object.freeze(Object.fromEntries(
+  LLM_ROLES.map((entry) => [entry.role, { heading: entry.heading, description: entry.description }])
+));
+const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude']);
 const ROLE_PROVIDERS = Object.freeze({
+  // Legacy deployment slots, kept for any deployment-scoped callers.
   local: ['ollama', 'lmstudio', 'omlx'],
   hosted: ['codex', 'claude'],
+  // Purpose roles accept any provider (local or hosted).
+  thinking: ALL_PROVIDERS,
+  execution: ALL_PROVIDERS,
+  testing: ALL_PROVIDERS,
 });
 
 const LOCAL_PROVIDERS = new Set(ROLE_PROVIDERS.local);
@@ -534,38 +584,49 @@ const REASONING_META = Object.freeze({
 });
 
 function buildLlmSection(ctx, rebuild) {
-  const localPreset = findPreset(ctx, ctx.settings.localLlmPresetId, 'local');
-  const hostedPreset = findPreset(ctx, ctx.settings.hostedLlmPresetId, 'hosted');
-  const localProvider = localPreset ? localPreset.provider : ctx.settings.localLlmProvider;
-  const hostedProvider = hostedPreset ? hostedPreset.provider : ctx.settings.llmProvider;
-  const localName = `${PROVIDER_LABELS[localProvider] || localProvider} · ${currentParameters(ctx.settings, localProvider).model || 'Choose model'}`;
-  const hostedName = `${PROVIDER_LABELS[hostedProvider] || hostedProvider} · ${currentParameters(ctx.settings, hostedProvider).model || 'Choose model'}`;
+  const summary = LLM_ROLES.map((entry) => {
+    const provider = roleProvider(ctx.settings, entry.role);
+    const model = currentParameters(ctx.settings, provider).model || 'Choose model';
+    const name = entry.heading.split(' · ')[0];
+    return `${name}: ${PROVIDER_LABELS[provider] || provider} · ${model}`;
+  }).join(' · ');
+  // The reserved "testing" role never blocks the section — it is not wired to a
+  // consumer yet, so an unconfigured testing model is expected.
+  const incomplete = LLM_ROLES.filter((entry) => entry.role !== 'testing').some((entry) => {
+    const provider = roleProvider(ctx.settings, entry.role);
+    return !currentParameters(ctx.settings, provider).model || !providerConnected(ctx, provider);
+  });
 
-  return section('Model routes', `Local: ${localName} · Hosted: ${hostedName}`, true, [
-    el('p', { class: 'muted settings-section-intro' }, 'Small jobs stay private on your local server. Planning and larger work use the hosted route. Model changes save immediately; connection and advanced values use an explicit save.'),
-    el('div', { class: 'preset-stack' }, [
-      presetSlot(ctx, 'local', rebuild),
-      presetSlot(ctx, 'hosted', rebuild),
-    ]),
+  return section('Task Models', summary, incomplete, [
+    el('p', { class: 'muted settings-section-intro' }, 'Assign a model to each task type. Each role picks any provider — local (Ollama / LM Studio / OMLX) or hosted (OpenAI / Anthropic) — plus a model and model-supported reasoning level. Model changes save immediately; recommended context, output, and sampling values are applied automatically, and advanced values use an explicit save.'),
+    el('div', { class: 'preset-stack' }, LLM_ROLES.map((entry) => presetSlot(ctx, entry.role, rebuild))),
   ]);
 }
 
 function findPreset(ctx, id, deployment) {
-  return (ctx.presets.presets || []).find((preset) => preset.id === id && preset.deployment === deployment) || null;
+  return (ctx.presets.presets || []).find(
+    (preset) => preset.id === id && (!deployment || preset.deployment === deployment)
+  ) || null;
 }
 
 function roleProvider(settings, role) {
+  const fields = ROLE_FIELDS[role];
+  if (fields) return settings[fields.provider];
   return role === 'local' ? settings.localLlmProvider : settings.llmProvider;
 }
 
 function selectedPresetId(settings, role) {
+  const fields = ROLE_FIELDS[role];
+  if (fields) return settings[fields.preset];
   return role === 'local' ? settings.localLlmPresetId : settings.hostedLlmPresetId;
 }
 
 function presetSlot(ctx, role, rebuild) {
-  const deployment = role === 'local' ? 'local' : 'hosted';
+  const slotProvider = roleProvider(ctx.settings, role);
+  // A purpose role's deployment follows whichever provider it names.
+  const deployment = PROVIDER_DEPLOYMENT[slotProvider] || 'hosted';
   const preset = findPreset(ctx, selectedPresetId(ctx.settings, role), deployment);
-  const provider = preset ? preset.provider : roleProvider(ctx.settings, role);
+  const provider = preset ? preset.provider : slotProvider;
   const params = currentParameters(ctx.settings, provider);
   const customized = Boolean(preset && presetCustomized(preset, params));
   const pending = Boolean(ctx.selectionPending[role]);
@@ -682,14 +743,12 @@ function presetSlot(ctx, role, rebuild) {
     });
   });
 
-  const heading = role === 'local' ? 'Local / XS tasks' : 'Hosted / planner + larger tasks';
-  const description = role === 'local'
-    ? LOCAL_PROVIDERS.has(provider)
-      ? `Runs privately through ${PROVIDER_LABELS[provider] || provider}.`
-      : 'Legacy custom route for XS tasks using a hosted OAuth provider.'
-    : provider === 'codex' || provider === 'claude'
-      ? 'Used by planning and every hosted or unlabeled coding task.'
-      : 'Legacy custom planner route using a local inference server.';
+  const meta = ROLE_META[role] || {};
+  const heading = meta.heading || role;
+  const deploymentHint = LOCAL_PROVIDERS.has(provider)
+    ? ` Runs privately on this machine through ${PROVIDER_LABELS[provider] || provider}.`
+    : ' Runs on a hosted OAuth provider (OpenAI / Anthropic).';
+  const description = `${meta.description || ''}${deploymentHint}`;
   const status = modelDiscoveryStatus(ctx, role, provider, params.model, rebuild);
   const children = [
     el('div', { class: 'preset-card-head' }, [
@@ -1351,7 +1410,7 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
     info.textContent = 'Saving…';
     try {
       const next = await api.applyLlmPreset({
-        role: role === 'local' ? 'local' : 'global',
+        role,
         presetId: preset.id,
         provider: preset.provider,
         overrides,

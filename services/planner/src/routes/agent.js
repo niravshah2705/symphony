@@ -15,7 +15,7 @@ const { getProjectsWithLabels, getAllProjectLabels } = require('@ai-fleet/shared
 const { asyncHandler } = require('@ai-fleet/shared/util');
 const { CONFIG } = require('@ai-fleet/shared/config');
 const scheduler = require('@ai-fleet/shared/agent/scheduler');
-const { llmReady } = require('@ai-fleet/shared/agent/llm');
+const { llmReady, providerForRole } = require('@ai-fleet/shared/agent/llm');
 const localIntelligence = require('@ai-fleet/shared/agent/local-intelligence');
 
 const router = express.Router();
@@ -188,12 +188,14 @@ router.get('/status', (req, res) => {
   const settings = getSettings();
   const config = getAgentConfig();
   const codexTokens = settings.codexTokens;
-  const provider = settings.llmProvider || 'ollama';
+  // The planner runs on the `thinking` role, so the dashboard LLM pill reflects
+  // that role's provider/model and readiness.
+  const provider = providerForRole(settings, 'thinking');
   const localProvider = settings.localLlmProvider || settings.llmProvider || 'ollama';
   res.json({
     ...scheduler.getStatus(),
     assumedRole: getAssumedRole(),
-    llmConfigured: llmReady(settings),
+    llmConfigured: llmReady(settings, 'thinking'),
     llmProvider: provider,
     // Model for the active provider — used for the dashboard's LLM pill.
     activeModel: activeModelFor(provider, settings),

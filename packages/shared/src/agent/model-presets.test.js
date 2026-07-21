@@ -15,6 +15,7 @@ const {
   customPresetForSettings,
   runtimePresetForProfile,
   neutralLocalPreset,
+  MODEL_ROLES,
 } = require('./model-presets');
 const { createChatModel } = require('./llm');
 const {
@@ -116,6 +117,22 @@ test('presetForRole prevents a local preset from entering the hosted slot and vi
   assert.equal(presetForRole('claude-opus-4-8', 'global').provider, 'claude');
   assert.equal(presetForRole('claude-opus-4-8', 'local'), null);
   assert.equal(presetForRole('does-not-exist', 'local'), null);
+});
+
+test('presetForRole lets purpose roles select any deployment (local or hosted)', () => {
+  for (const role of MODEL_ROLES) {
+    assert.equal(presetForRole('ollama-gpt-oss-20b', role).provider, 'ollama');
+    assert.equal(presetForRole('claude-opus-4-8', role).provider, 'claude');
+    assert.equal(presetForRole('does-not-exist', role), null);
+  }
+});
+
+test('fresh store seeds every purpose model role from the hosted slot', () => {
+  const { settings } = DEFAULT_STORE;
+  for (const role of MODEL_ROLES) {
+    assert.equal(settings[`${role}LlmProvider`], settings.llmProvider, `${role} provider`);
+    assert.equal(settings[`${role}LlmPresetId`], settings.hostedLlmPresetId, `${role} preset`);
+  }
 });
 
 test('named presets accept compatible local aliases but reject cross-model overrides', () => {

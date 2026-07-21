@@ -594,15 +594,31 @@ async function ensureFreshClaudeTokens() {
 }
 
 /**
- * Which provider name backs a given deep-agent role:
- *   'global' (default) — the hosted slot (settings.llmProvider); used by the
- *     planner and by the coder for hosted/unlabeled issues.
- *   'local' — the local slot (settings.localLlmProvider); used by the coder for
- *     "local"-labeled (XS) issues. Falls back to the global slot when unset.
+ * Which provider name backs a given deep-agent role. Two kinds of roles exist:
+ *   Deployment slots (legacy, deployment-pinned):
+ *     'global' (default) — hosted slot (settings.llmProvider),
+ *     'local'            — local slot (settings.localLlmProvider); used by
+ *                          localization / local-intelligence. Falls back to the
+ *                          global slot when unset.
+ *   Purpose roles (provider-flexible; see MODEL_ROLES):
+ *     'thinking'  — planner model (settings.thinkingLlmProvider),
+ *     'execution' — coder model (settings.executionLlmProvider),
+ *     'testing'   — tool-calling model (settings.testingLlmProvider; reserved).
+ * A purpose role falls back to the hosted slot when unset (matching how new
+ * roles are seeded from the hosted slot on migration).
  */
+const ROLE_PROVIDER_KEYS = Object.freeze({
+  global: 'llmProvider',
+  local: 'localLlmProvider',
+  thinking: 'thinkingLlmProvider',
+  execution: 'executionLlmProvider',
+  testing: 'testingLlmProvider',
+});
+
 function providerForRole(settings, role) {
   if (role === 'local') return settings.localLlmProvider || settings.llmProvider || 'ollama';
-  return settings.llmProvider || 'ollama';
+  const key = ROLE_PROVIDER_KEYS[role] || 'llmProvider';
+  return settings[key] || settings.llmProvider || 'ollama';
 }
 
 /**
@@ -732,41 +748,48 @@ async function resolveLlm(settings, role = 'global') {
   };
 }
 
-/** Cheap readiness check (no network) for status endpoints and scheduler gating. */
-function llmReady(settings) {
-  if (settings.llmProvider === 'claude') {
+/**
+ * Cheap readiness check (no network) for status endpoints and scheduler gating.
+ * `role` selects which slot's provider to check (defaults to the hosted/global
+ * slot); the planner passes 'thinking'. Provider-specific fields are shared per
+ * provider, so the resolved provider name is sufficient.
+ */
+function llmReady(settings, role = 'global') {
+  const provider = providerForRole(settings, role);
+  if (provider === 'claude') {
     const t = settings.claudeTokens;
     const hasToken = Boolean(t && (t.accessToken || t.refreshToken));
     const hasModel = Boolean(settings.claudeModel || CONFIG.CLAUDE.defaultModel);
     return hasToken && hasModel;
   }
-  if (settings.llmProvider === 'codex') {
+  if (provider === 'codex') {
     const t = settings.codexTokens;
     const hasToken = Boolean(t && (t.accessToken || t.refreshToken));
     const hasModel = Boolean(settings.codexModel || CONFIG.OAUTH.defaultModel);
     return hasToken && hasModel;
   }
-  if (settings.llmProvider === 'lmstudio') {
+  if (provider === 'lmstudio') {
     return Boolean(settings.lmstudioHost && settings.lmstudioModel);
   }
-  if (settings.llmProvider === 'omlx') {
+  if (provider === 'omlx') {
     return Boolean(settings.omlxHost && settings.omlxModel);
   }
   return Boolean(settings.ollamaHost && settings.ollamaModel);
 }
 
-/** Human-readable "not ready" reason for the active provider. */
-function notReadyReason(settings) {
-  if (settings.llmProvider === 'claude') {
+/** Human-readable "not ready" reason for the given role's provider. */
+function notReadyReason(settings, role = 'global') {
+  const provider = providerForRole(settings, role);
+  if (provider === 'claude') {
     return 'Sign in with Claude in Settings → LLM to enable enrichment.';
   }
-  if (settings.llmProvider === 'codex') {
+  if (provider === 'codex') {
     return 'Sign in with Codex (OpenAI) in Settings → LLM to enable enrichment.';
   }
-  if (settings.llmProvider === 'lmstudio') {
+  if (provider === 'lmstudio') {
     return 'Set the LM Studio host and model in Settings → LLM to enable enrichment.';
   }
-  if (settings.llmProvider === 'omlx') {
+  if (provider === 'omlx') {
     return 'Set the oMLX host and model in Settings → LLM to enable enrichment.';
   }
   return 'Set the Ollama host and model in Settings → LLM to enable enrichment.';

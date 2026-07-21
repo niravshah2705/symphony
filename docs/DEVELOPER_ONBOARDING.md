@@ -91,20 +91,24 @@ required for normal use. Secrets are validated and stored **server-side** in
 1. **API Keys & Connection** → paste your **Linear personal API key**. It is
    validated against Linear on save; the header shows connection status.
    (Optional: add a **LangSmith** key + host to trace agent runs.)
-2. **Deep Agent LLM** → choose one preset in each dropdown. Selecting a preset
-   applies its model, context/output budgets, sampling, JSON mode, and native
-   reasoning control together. Expand **Customize parameters** only for an
-   override; **Reset to recommended** restores the JSON catalog values.
-   - **Local / XS tasks** — choose an Ollama, LM Studio, or OMLX preset. Detected
-     compatible model ids can be mapped from the status row. Configure the local
-     connection in its card (defaults: Ollama `:11434`, LM Studio `:1234`, OMLX
-     `http://127.0.0.1:8000`). OMLX accepts either the origin or a trailing `/v1`,
-     discovers models from `GET /v1/models`, and only needs a key when its server
-     has API-key protection enabled. LM Studio's context must match the loaded
-     model context.
-   - **Hosted / planner + larger tasks** — choose OpenAI GPT-5.5 or Claude Opus
-     4.8. For OpenAI, click **Sign in with ChatGPT**. For Claude, click **Sign in
-     with Claude** and paste back the `code#state` Anthropic gives you.
+2. **Task Models** → assign a model to each task role ("models as tasks"):
+   **Thinking** (task planning — used by the planner), **Execution** (coder —
+   used by the code-writer), and **Testing** (tool calling — reserved, not used
+   yet). Each role picks any provider — local (Ollama / LM Studio / OMLX) or
+   hosted (OpenAI / Anthropic). Selecting a preset applies its model,
+   context/output budgets, sampling, JSON mode, and native reasoning control
+   together. Expand **Customize parameters** only for an override; **Reset to
+   recommended** restores the JSON catalog values.
+   - **Local providers (Ollama / LM Studio / OMLX)** — detected compatible model
+     ids can be mapped from the status row. Configure the local connection in its
+     card (defaults: Ollama `:11434`, LM Studio `:1234`, OMLX
+     `http://127.0.0.1:8000`). Ollama and LM Studio need no key; OMLX accepts
+     either the origin or a trailing `/v1`, discovers models from `GET /v1/models`,
+     and only needs a key when its server has API-key protection enabled. LM
+     Studio's context must match the loaded model context.
+   - **Hosted providers (OpenAI / Anthropic)** — for OpenAI, click **Sign in with
+     ChatGPT**. For Claude, click **Sign in with Claude** and paste back the
+     `code#state` Anthropic gives you.
 3. **Assume Role** → pick a workspace member. The business-owner agent's enrich
    endpoints are **403 until a role is assumed** (server-enforced). The assumed
    member shows in the top toolbar.
@@ -139,12 +143,18 @@ declarative *workflow file* (`agent/workflows/*.workflow.js`). A workflow declar
 its **skills**, **tools**, backend, and system prompt; the framework installs the
 skills, builds the `deepagents` agent (FilesystemBackend for the planner,
 LocalShellBackend for the coder), and runs it. Both share the LLM provider factory
-(`agent/llm.js` → `resolveLlm`) — there is one copy, imported by both services. The planner uses the hosted route; the coder uses the local route
-for `local`/XS tickets and the hosted route for larger or unlabeled tickets. The
-`local`/`hosted` routing labels are created under a **`Models` issue-label group**
-(`CONFIG.CODER.modelLabelGroup`), so Linear renders them as a single-select
-dropdown on issues. Run `node scripts/models-label-group.js` once to create the
-group and pull any pre-existing flat `local`/`hosted` labels into it.
+(`agent/llm.js` → `resolveLlm`), which resolves a model by **task role**: the
+planner runs on the **`thinking`** role and the coder on the **`execution`** role
+(`testing` is reserved for tool-calling agents and not wired to a consumer yet).
+Each role independently names any provider — local (Ollama / LM Studio) or hosted
+(OpenAI / Anthropic) — and reuses that provider's shared config block. Repoint a
+role in **Settings → Task Models** to change which model runs that task.
+
+> **Legacy note:** the planner may still stamp `local`/`hosted` size labels under
+> the **`Models` issue-label group** (`CONFIG.CODER.modelLabelGroup`) for
+> reporting, but they no longer influence model selection — the coder always uses
+> the `execution` model. `node scripts/models-label-group.js` still manages that
+> label group.
 
 - **Skills** (`skills/<name>/SKILL.md`) = instructions loaded on demand:
   `software-planning`, `web-research` (planner); `linear`, `commit`, `push`,

@@ -195,9 +195,11 @@ test('manual readiness guard establishes the same sanitized global pause', async
   assert.doesNotMatch(JSON.stringify(orchestrator.status()), /raw provider|secret|403/i);
 });
 
-test('runtime outage helper pauses direct runs and preserves the selected model role', async (t) => {
+test('runtime outage helper pauses direct runs on the execution role regardless of legacy size label', async (t) => {
   orchestrator._test.clearPause('test setup');
   t.after(() => orchestrator._test.clearPause('test cleanup'));
+  // The legacy "local" model label no longer influences model selection — the
+  // coder always resolves the purpose-based `execution` role.
   const task = {
     id: 'issue-direct-local',
     identifier: 'ENG-DIRECT',
@@ -218,8 +220,8 @@ test('runtime outage helper pauses direct runs and preserves the selected model 
       probeModelAvailability: async () => ({ available: true }),
     },
   );
-  assert.equal(resolvedRole, 'local');
-  assert.equal(readiness.role, 'local');
+  assert.equal(resolvedRole, 'execution');
+  assert.equal(readiness.role, 'execution');
 
   const reason = pauseForRuntimeError(
     new AgentRuntimeError(
@@ -231,7 +233,7 @@ test('runtime outage helper pauses direct runs and preserves the selected model 
     { task, role: readiness.role, llm: readiness.llm, repositoryProvider: readiness.selection.provider },
   );
   assert.equal(reason.resource, 'model');
-  assert.equal(reason.role, 'local');
+  assert.equal(reason.role, 'execution');
   assert.equal(orchestrator.status().paused, true);
 });
 

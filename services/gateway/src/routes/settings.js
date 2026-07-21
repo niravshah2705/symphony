@@ -17,6 +17,7 @@ const {
   sanitizeModelId,
   runtimePresetForProfile,
   neutralLocalPreset,
+  isPurposeRole,
 } = require('@ai-fleet/shared/agent/model-presets');
 const {
   normalizeAgentRuntime,
@@ -24,6 +25,34 @@ const {
 } = require('@ai-fleet/shared/agent/runtimes');
 
 const router = express.Router();
+
+// Settings keys backing each LLM role. Deployment slots ('local'/'global') stay
+// deployment-pinned; purpose roles (thinking/execution/testing) are provider-
+// flexible and reuse whichever provider block they name.
+const ROLE_KEYS = Object.freeze({
+  global: { provider: 'llmProvider', preset: 'hostedLlmPresetId' },
+  local: { provider: 'localLlmProvider', preset: 'localLlmPresetId' },
+  thinking: { provider: 'thinkingLlmProvider', preset: 'thinkingLlmPresetId' },
+  execution: { provider: 'executionLlmProvider', preset: 'executionLlmPresetId' },
+  testing: { provider: 'testingLlmProvider', preset: 'testingLlmPresetId' },
+});
+const LOCAL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx']);
+const HOSTED_PROVIDERS = Object.freeze(['codex', 'claude']);
+
+/** Canonicalize a request's role, or null when unrecognized. */
+function parseRole(value) {
+  if (value === 'local') return 'local';
+  if (value === 'global' || value === 'hosted') return 'global';
+  if (isPurposeRole(value)) return value;
+  return null;
+}
+
+/** Providers a role may select — purpose roles accept both local and hosted. */
+function providersForRole(role) {
+  if (role === 'local') return LOCAL_PROVIDERS;
+  if (role === 'global') return HOSTED_PROVIDERS;
+  return [...LOCAL_PROVIDERS, ...HOSTED_PROVIDERS];
+}
 
 /** Public settings view — secrets are masked, never returned raw. */
 function publicSettings() {
@@ -58,6 +87,15 @@ function publicSettings() {
     localLlmProvider: s.localLlmProvider || 'lmstudio',
     hostedLlmPresetId: s.hostedLlmPresetId || 'custom',
     localLlmPresetId: s.localLlmPresetId || 'custom',
+    // Purpose-based model roles ("models as tasks"). Each names a provider and
+    // reuses that provider's block below. thinking → planner, execution →
+    // coder, testing → reserved (tool calling; not wired to a consumer yet).
+    thinkingLlmProvider: s.thinkingLlmProvider || s.llmProvider || 'ollama',
+    thinkingLlmPresetId: s.thinkingLlmPresetId || 'custom',
+    executionLlmProvider: s.executionLlmProvider || s.llmProvider || 'ollama',
+    executionLlmPresetId: s.executionLlmPresetId || 'custom',
+    testingLlmProvider: s.testingLlmProvider || s.llmProvider || 'ollama',
+    testingLlmPresetId: s.testingLlmPresetId || 'custom',
     ollamaHost: s.ollamaHost,
     ollamaModel: s.ollamaModel,
     ollamaContextWindow: s.ollamaContextWindow,
@@ -243,21 +281,23 @@ router.get('/llm-presets', (req, res) => {
 // global/planner role may only select hosted presets.
 router.put('/llm-preset', (req, res) => {
   const b = req.body || {};
-  const role = b.role === 'local' ? 'local' : b.role === 'global' || b.role === 'hosted' ? 'global' : null;
-  if (!role) return res.status(400).json({ error: 'Role must be "local" or "global".' });
+  const role = parseRole(b.role);
+  if (!role) return res.status(400).json({ error: 'Unknown LLM role.' });
+  const keys = ROLE_KEYS[role];
   const current = getSettings();
-  const currentProvider = role === 'local' ? current.localLlmProvider : current.llmProvider;
+  const currentProvider = current[keys.provider];
   const requestedProvider = String(b.provider || currentProvider || '').trim();
   const isCustom = b.presetId === 'custom';
   const preset = isCustom
     ? customPresetForSettings(requestedProvider, current)
     : presetForRole(b.presetId, role);
-  const expectedDeployment = role === 'local' ? 'local' : 'hosted';
-  // Real presets enforce the local/hosted split. A migrated custom slot may keep
-  // its existing cross-role provider so legacy local-only global setups remain
-  // editable until the operator intentionally selects a hosted preset.
-  if (!preset || (!isCustom && preset.deployment !== expectedDeployment) || (isCustom && requestedProvider !== currentProvider)) {
-    return res.status(400).json({ error: `Unknown or incompatible ${role === 'local' ? 'local' : 'hosted'} LLM preset.` });
+  // Deployment slots enforce the local/hosted split; purpose roles accept any
+  // deployment (presetForRole already relaxes this). A migrated custom slot may
+  // keep its existing provider until the operator selects a real preset.
+  const deploymentOk = isPurposeRole(role) || !preset
+    || preset.deployment === (role === 'local' ? 'local' : 'hosted');
+  if (!preset || (!isCustom && !deploymentOk) || (isCustom && requestedProvider !== currentProvider)) {
+    return res.status(400).json({ error: `Unknown or incompatible LLM preset for the ${role} role.` });
   }
 
   const overrides = b.overrides && typeof b.overrides === 'object' && !Array.isArray(b.overrides) ? b.overrides : {};
@@ -282,13 +322,8 @@ router.put('/llm-preset', (req, res) => {
       patch.omlxApiKey = String(overrides.apiKey).trim().slice(0, 4096);
     }
   }
-  if (role === 'local') {
-    patch.localLlmProvider = preset.provider;
-    patch.localLlmPresetId = preset.id;
-  } else {
-    patch.llmProvider = preset.provider;
-    patch.hostedLlmPresetId = preset.id;
-  }
+  patch[keys.provider] = preset.provider;
+  patch[keys.preset] = preset.id;
   patchSettings(patch);
   res.json(publicSettings());
 });
@@ -299,16 +334,16 @@ router.put('/llm-preset', (req, res) => {
 // numeric customization remains untouched.
 router.put('/llm-selection', asyncHandler(async (req, res) => {
   const b = req.body || {};
-  const role = b.role === 'local' ? 'local' : b.role === 'global' || b.role === 'hosted' ? 'global' : null;
-  if (!role) return res.status(400).json({ error: 'Role must be "local" or "global".' });
+  const role = parseRole(b.role);
+  if (!role) return res.status(400).json({ error: 'Unknown LLM role.' });
   const mode = b.mode === 'model' || b.mode === 'reasoning' ? b.mode : null;
   if (!mode) return res.status(400).json({ error: 'Mode must be "model" or "reasoning".' });
 
   const provider = String(b.provider || '').trim();
-  const allowedProviders = role === 'local' ? ['ollama', 'lmstudio', 'omlx'] : ['codex', 'claude'];
+  const allowedProviders = providersForRole(role);
   if (!allowedProviders.includes(provider)) {
     return res.status(400).json({
-      error: `${role === 'local' ? 'Local' : 'Hosted'} provider must be one of: ${allowedProviders.join(', ')}.`,
+      error: `Provider for the ${role} role must be one of: ${allowedProviders.join(', ')}.`,
     });
   }
   const model = sanitizeModelId(b.model);
@@ -338,13 +373,9 @@ router.put('/llm-selection', asyncHandler(async (req, res) => {
   }
 
   const presetId = preset.id === 'custom' || preset.id.startsWith('dynamic-') ? 'custom' : preset.id;
-  if (role === 'local') {
-    patch.localLlmProvider = provider;
-    if (mode === 'model') patch.localLlmPresetId = presetId;
-  } else {
-    patch.llmProvider = provider;
-    if (mode === 'model') patch.hostedLlmPresetId = presetId;
-  }
+  const keys = ROLE_KEYS[role];
+  patch[keys.provider] = provider;
+  if (mode === 'model') patch[keys.preset] = presetId;
   patchSettings(patch);
   res.json(publicSettings());
 }));
@@ -518,21 +549,19 @@ router.put('/lmstudio', (req, res) => {
 });
 
 // PUT /api/settings/provider — choose a deep-agent LLM provider for a role.
-// Body: { llmProvider|provider: <name>, role?: 'global'|'local' }. Defaults to the
-// global (hosted) slot; role:'local' targets the local slot.
+// Body: { llmProvider|provider: <name>, role?: 'global'|'local'|'thinking'|
+// 'execution'|'testing' }. Defaults to the global (hosted) slot. Purpose roles
+// accept any provider; deployment slots stay pinned to their deployment.
 router.put('/provider', (req, res) => {
   const b = req.body || {};
-  const role = b.role === 'local' ? 'local' : 'global';
+  const role = parseRole(b.role) || 'global';
   const requested = String(b.llmProvider || b.provider || '').trim();
-  const allowed = role === 'local' ? ['ollama', 'lmstudio', 'omlx'] : ['codex', 'claude'];
+  const allowed = providersForRole(role);
   if (!allowed.includes(requested)) {
-    return res.status(400).json({ error: `${role === 'local' ? 'Local' : 'Hosted'} provider must be one of: ${allowed.join(', ')}.` });
+    return res.status(400).json({ error: `Provider for the ${role} role must be one of: ${allowed.join(', ')}.` });
   }
-  patchSettings(
-    role === 'local'
-      ? { localLlmProvider: requested, localLlmPresetId: 'custom' }
-      : { llmProvider: requested, hostedLlmPresetId: 'custom' }
-  );
+  const keys = ROLE_KEYS[role];
+  patchSettings({ [keys.provider]: requested, [keys.preset]: 'custom' });
   res.json(publicSettings());
 });
 
