@@ -1,6 +1,7 @@
 'use strict';
 
 const { CONFIG } = require('../../config');
+const { TOOL_NAMES } = require('../tools/index');
 
 /**
  * Coding workflow — the code-writer agent.
@@ -29,6 +30,20 @@ function buildWorkflowPrompt(config) {
     'tool for local git inspection/commits, tests, and builds), the injected `linear_graphql` tool for Linear,',
     'and a server-scoped `repository_broker` tool for remote repository operations.',
     'and these skills (open them when relevant): `linear`, `commit`, `push`, `pull`, `land`.',
+    '',
+    '## Developer tools (PREFER these over ad-hoc shell)',
+    'A registry of hardened, pre-wired tools delegates to the standard toolchain — use them instead of',
+    'hand-writing the equivalent shell command, so behaviour is consistent and secrets stay redacted:',
+    '- Docker: `dockerfile_generate` (hardened Dockerfile+.dockerignore), `docker_build`, `docker_run`,',
+    '  `docker_compose`, `docker_info` (check Docker Desktop is running).',
+    '- Environments: `setup_local_env` (bootstrap the repo), `setup_python_env`, `setup_node_env`,',
+    '  `devcontainer_generate`.',
+    '- Build & test: `project_build` (auto-detects Gradle/Maven/npm/Cargo/Go/Make), `test_run`,',
+    '  `lint_format` (check|fix), `android_build`, `openapi_generate`.',
+    '- Quality & security: `security_scan` (Trivy/npm-audit/pip-audit/Semgrep), `secret_scan` (run before opening a PR).',
+    '- Browser E2E: `playwright_test`; interactive browser control is available via Playwright MCP tools when enabled.',
+    'Each tool works inside your workspace only and reports a bounded, secret-redacted result. If a tool reports',
+    'the underlying CLI is not installed, note it as an environment blocker rather than reimplementing it by hand.',
     '',
     '## Ownership of ticket state (IMPORTANT)',
     '- The orchestrator OWNS the ticket workflow state and its outcome labels. Before this run it',
@@ -100,10 +115,14 @@ module.exports = Object.freeze({
   description: 'Code-writer: works a single AI-labeled Linear ticket end-to-end in an isolated git workspace.',
   backend: 'shell',
   skills: ['linear', 'commit', 'push', 'pull', 'land'],
-  tools: ['linear_graphql'],
+  // The Linear tool plus the full developer-tool folder (docker/env/build/
+  // android/security/quality/codegen/playwright), auto-wired from the registry
+  // so new tools/<domain>.js files attach without editing this list.
+  tools: ['linear_graphql', ...TOOL_NAMES],
   // Forge operations use the provider-neutral, branch-scoped repository broker.
   // A broad GitHub MCP must not be attached (especially to GitLab runs).
-  mcp: ['linear'],
+  // Playwright MCP (interactive browser control) is opt-in via PLAYWRIGHT_MCP_ENABLED.
+  mcp: ['linear', 'playwright'],
   recursionLimit: CONFIG.CODER.maxTurns,
   shellTimeoutSec: CONFIG.CODER.shellTimeoutSec,
   tags: ['coder', 'techmavins'],

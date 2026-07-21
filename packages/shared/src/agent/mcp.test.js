@@ -14,6 +14,13 @@ test('GitHub MCP is disabled for GitLab and all repository-broker runs', () => {
 });
 
 test('coding workflow exposes no broad provider-specific forge MCP', () => {
-  assert.deepEqual(codingWorkflow.mcp, ['linear']);
+  // Linear (tracker) and Playwright (local browser) are allowed; a broad forge
+  // MCP (github) must never be attached — the repository broker owns forge ops.
+  assert.ok(codingWorkflow.mcp.includes('linear'));
+  assert.ok(!codingWorkflow.mcp.includes('github'));
   assert.match(codingWorkflow.buildWorkflowPrompt({ prLabel: 'agent' }), /repository_broker/);
+});
+
+test('coding workflow attaches the local Playwright MCP (opt-in) and not a forge MCP', () => {
+  assert.ok(codingWorkflow.mcp.includes('playwright'));
 });

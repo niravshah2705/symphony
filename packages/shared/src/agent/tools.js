@@ -71,9 +71,16 @@ function linearGraphqlTool(ctx = {}) {
   );
 }
 
+// Developer-tool folder (docker, environments, build, android, security,
+// quality, codegen, playwright). Each is a factory `(ctx) => LangChainTool`
+// that DELEGATES to a pre-installed standard CLI/MCP rather than re-implementing
+// its behaviour. See tools/index.js to add more.
+const { TOOL_FACTORIES } = require('./tools/index');
+
 const FACTORIES = Object.freeze({
   web_search: webSearchTool,
   linear_graphql: linearGraphqlTool,
+  ...TOOL_FACTORIES,
 });
 
 /** Build a single tool by registry name (returns null for unknown names). */

@@ -30,6 +30,7 @@ function isConfigured(name, ctx) {
   if (!conf || !conf.enabled) return false;
   if (name === 'linear') return Boolean(ctx.apiKey); // Bearer = stored Linear key
   if (name === 'github') return Boolean(conf.token);
+  if (name === 'playwright') return Boolean(conf.command); // local stdio server, no credentials
   return false;
 }
 
@@ -41,6 +42,10 @@ function serverConfig(name, ctx) {
   }
   if (name === 'github') {
     return { url: conf.url, headers: { Authorization: `Bearer ${conf.token}` } };
+  }
+  if (name === 'playwright') {
+    // Local stdio server launched as a child process (no network credentials).
+    return { transport: 'stdio', command: conf.command, args: Array.isArray(conf.args) ? conf.args : [] };
   }
   return null;
 }
