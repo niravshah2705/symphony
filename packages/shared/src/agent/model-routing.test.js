@@ -27,26 +27,37 @@ test('providerForRole: local falls back to global, then ollama', () => {
   assert.strictEqual(providerForRole({}, 'local'), 'ollama');
 });
 
+test('providerForRole: purpose roles read their own provider slot', () => {
+  const settings = {
+    llmProvider: 'claude',
+    thinkingLlmProvider: 'codex',
+    executionLlmProvider: 'ollama',
+    testingLlmProvider: 'lmstudio',
+  };
+  assert.strictEqual(providerForRole(settings, 'thinking'), 'codex');
+  assert.strictEqual(providerForRole(settings, 'execution'), 'ollama');
+  assert.strictEqual(providerForRole(settings, 'testing'), 'lmstudio');
+});
+
+test('providerForRole: purpose roles fall back to the hosted slot, then ollama', () => {
+  assert.strictEqual(providerForRole({ llmProvider: 'claude' }, 'thinking'), 'claude');
+  assert.strictEqual(providerForRole({ llmProvider: 'codex' }, 'execution'), 'codex');
+  assert.strictEqual(providerForRole({}, 'testing'), 'ollama');
+});
+
 /* ----------------------------- modelRoleForTask ------------------------ */
 
 const LOCAL = CONFIG.CODER.localModelLabel;
 const HOSTED = CONFIG.CODER.hostedModelLabel;
 
-test('modelRoleForTask: a "local" label routes to the local slot', () => {
-  assert.strictEqual(modelRoleForTask({ labels: ['AI', LOCAL] }), 'local');
-});
-
-test('modelRoleForTask: a "hosted" label routes to the global slot', () => {
-  assert.strictEqual(modelRoleForTask({ labels: ['AI', HOSTED] }), 'global');
-});
-
-test('modelRoleForTask: no model label defaults to global (hosted)', () => {
-  assert.strictEqual(modelRoleForTask({ labels: ['AI'] }), 'global');
-  assert.strictEqual(modelRoleForTask({}), 'global');
-});
-
-test('modelRoleForTask: model label match is case-insensitive', () => {
-  assert.strictEqual(modelRoleForTask({ labels: [LOCAL.toUpperCase()] }), 'local');
+// Model selection is now purpose-based: the coder always uses the `execution`
+// role regardless of a task's size or legacy "local"/"hosted" model label.
+test('modelRoleForTask: always routes the coder to the execution role', () => {
+  assert.strictEqual(modelRoleForTask({ labels: ['AI', LOCAL] }), 'execution');
+  assert.strictEqual(modelRoleForTask({ labels: ['AI', HOSTED] }), 'execution');
+  assert.strictEqual(modelRoleForTask({ labels: ['AI'] }), 'execution');
+  assert.strictEqual(modelRoleForTask({}), 'execution');
+  assert.strictEqual(modelRoleForTask({ labels: [LOCAL.toUpperCase()] }), 'execution');
 });
 
 /* --------------------------- schema: tshirtSize ------------------------- */

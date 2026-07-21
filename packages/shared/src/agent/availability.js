@@ -3,6 +3,11 @@
 const { CONFIG } = require('../config');
 const { discoverModels } = require('./model-discovery');
 const { repoParts } = require('./workspace');
+const { MODEL_ROLES } = require('./model-presets');
+
+// Roles that may be surfaced on a public pause reason (deployment slots plus the
+// purpose roles). Anything else is dropped so the UI never shows a stray value.
+const KNOWN_PAUSE_ROLES = new Set(['local', 'global', ...MODEL_ROLES]);
 
 const PROBE_TIMEOUT_MS = 5000;
 const MODEL_ERROR_CODES = new Set([
@@ -62,7 +67,7 @@ function pauseReasonFor(resource, error, context = {}, now = Date.now()) {
     since: new Date(now).toISOString(),
   };
   if (context.taskIdentifier) reason.taskIdentifier = String(context.taskIdentifier);
-  if (context.role === 'local' || context.role === 'global') reason.role = context.role;
+  if (KNOWN_PAUSE_ROLES.has(context.role)) reason.role = context.role;
   if (context.provider) reason.provider = String(context.provider);
   if (context.model) reason.model = String(context.model);
   return reason;

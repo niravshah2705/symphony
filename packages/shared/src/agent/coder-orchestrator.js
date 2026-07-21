@@ -76,15 +76,16 @@ function isDoneState(state) {
 }
 
 /**
- * Which deep-agent role a task routes to, from its model-routing label:
- *   - a "local" label → 'local' (the local LLM slot),
- *   - a "hosted" label OR no model label → 'global' (the hosted slot; the default).
- * The planner stamps "local" on XS issues and "hosted" on everything larger.
+ * The deep-agent role every coder task routes to. Model selection is now
+ * purpose-based ("models as tasks"): the coder always uses the configured
+ * `execution` model regardless of a task's size or model-routing label. The
+ * planner may still stamp "local"/"hosted" size labels (kept for reporting and
+ * backward compatibility), but they no longer influence which model runs a task
+ * — repoint the execution role in Settings to change the coder's model.
  */
 function modelRoleForTask(task) {
-  const names = (task.labels || []).map((n) => String(n).toLowerCase());
-  if (names.includes(String(CONFIG.CODER.localModelLabel).toLowerCase())) return 'local';
-  return 'global';
+  void task;
+  return 'execution';
 }
 
 /** Identifiers of not-yet-Done issues that block this task. */

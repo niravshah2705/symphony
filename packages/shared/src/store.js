@@ -8,6 +8,7 @@ const {
   settingsPatchForPreset,
   publicCatalog,
   modelMatchesPreset,
+  MODEL_ROLES,
 } = require('./agent/model-presets');
 
 const PRESET_CATALOG = publicCatalog();
@@ -78,6 +79,11 @@ const DEFAULT_CLAUDE_SETTINGS = settingsForConfiguredModel(recommendedPreset('cl
 const DEFAULT_ACTIVE_LOCAL_SETTINGS = settingsPatchForPreset(DEFAULT_LOCAL_PRESET);
 const DEFAULT_ACTIVE_HOSTED_SETTINGS = settingsForConfiguredModel(DEFAULT_HOSTED_PRESET);
 const DEFAULT_HOSTED_MODEL = configuredModel(DEFAULT_HOSTED_PRESET.provider);
+// The preset id a fresh hosted slot resolves to (or 'custom' when the configured
+// model diverges from the catalog default). Purpose roles seed from this too.
+const DEFAULT_HOSTED_PRESET_ID = modelMatchesPreset(DEFAULT_HOSTED_PRESET, DEFAULT_HOSTED_MODEL)
+  ? DEFAULT_HOSTED_PRESET.id
+  : 'custom';
 
 /**
  * Tiny JSON-file backed store for local settings, the business -> project
@@ -128,8 +134,19 @@ const DEFAULT_STORE = Object.freeze({
     // never silently replaced by a catalog recommendation.
     llmProvider: DEFAULT_HOSTED_PRESET.provider,
     localLlmProvider: DEFAULT_LOCAL_PRESET.provider,
-    hostedLlmPresetId: modelMatchesPreset(DEFAULT_HOSTED_PRESET, DEFAULT_HOSTED_MODEL) ? DEFAULT_HOSTED_PRESET.id : 'custom',
+    hostedLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
     localLlmPresetId: DEFAULT_LOCAL_PRESET.id,
+    // Purpose-based model roles ("models as tasks"). Each names one of the four
+    // providers and reuses that provider's shared config block below. New
+    // installs point every role at the hosted slot; an operator can independently
+    // repoint any role (including at a local provider). Consumers:
+    //   thinking  → the planner, execution → the coder, testing → reserved.
+    thinkingLlmProvider: DEFAULT_HOSTED_PRESET.provider,
+    thinkingLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
+    executionLlmProvider: DEFAULT_HOSTED_PRESET.provider,
+    executionLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
+    testingLlmProvider: DEFAULT_HOSTED_PRESET.provider,
+    testingLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
     ollamaHost: 'http://localhost:11434',
     ...DEFAULT_OLLAMA_SETTINGS,
     // LM Studio (local, OpenAI-compatible API) — an alternative local provider for
@@ -235,6 +252,19 @@ function readStore() {
     }
     if (!Object.prototype.hasOwnProperty.call(storedSettings, 'hostedLlmPresetId')) {
       settings.hostedLlmPresetId = 'custom';
+    }
+    // Purpose-based model roles did not exist before this migration. Seed each
+    // absent role from the operator's effective hosted slot so an existing
+    // install keeps its current planner/coder model (previously always the
+    // hosted slot) instead of jumping to a catalog default. The `local`/`global`
+    // slots are preserved untouched for localization and diagnostics.
+    for (const role of MODEL_ROLES) {
+      const providerKey = `${role}LlmProvider`;
+      const presetKey = `${role}LlmPresetId`;
+      if (!Object.prototype.hasOwnProperty.call(storedSettings, providerKey)) {
+        settings[providerKey] = settings.llmProvider;
+        settings[presetKey] = settings.hostedLlmPresetId;
+      }
     }
     // Preserve explicitly configured legacy request shapes. When both hosted
     // reasoning fields are absent, however, activate the reviewed default for

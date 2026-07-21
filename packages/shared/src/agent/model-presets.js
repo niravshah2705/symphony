@@ -9,6 +9,25 @@ const PROVIDER_DEPLOYMENT = Object.freeze({
   claude: 'hosted',
 });
 const ROLE_DEPLOYMENT = Object.freeze({ local: 'local', global: 'hosted' });
+
+/**
+ * Purpose-based model roles ("models as tasks"). Unlike the deployment-scoped
+ * `local`/`global` slots (which pin a role to a single deployment), a purpose
+ * role may select ANY provider — local or hosted:
+ *   thinking  — task-planning models (used by the planner),
+ *   execution — coder models (used by the code-writer),
+ *   testing   — tool-calling models (reserved; not wired to a consumer yet).
+ * Each purpose role names one of the four providers and reuses that provider's
+ * shared settings block, so two roles pointing at the same provider share that
+ * provider's model/params (last write wins).
+ */
+const MODEL_ROLES = Object.freeze(['thinking', 'execution', 'testing']);
+const MODEL_ROLE_META = Object.freeze({
+  thinking: { label: 'Thinking', description: 'Task planning models (used by the planner).' },
+  execution: { label: 'Execution', description: 'Coder models (used by the code-writer).' },
+  testing: { label: 'Testing', description: 'Tool-calling models (reserved; not used yet).' },
+});
+const isPurposeRole = (role) => MODEL_ROLES.includes(role);
 const REASONING_ADAPTERS = new Set([
   'none',
   'ollama-think-toggle',
@@ -125,13 +144,17 @@ function getPreset(id) {
 }
 
 function presetsForRole(role) {
+  // Purpose roles are provider-flexible: any preset (local or hosted) is valid.
+  if (isPurposeRole(role)) return catalog.presets;
   const deployment = ROLE_DEPLOYMENT[role];
   return deployment ? catalog.presets.filter((preset) => preset.deployment === deployment) : [];
 }
 
 function presetForRole(id, role) {
   const preset = getPreset(id);
-  return preset && preset.deployment === ROLE_DEPLOYMENT[role] ? preset : null;
+  if (!preset) return null;
+  if (isPurposeRole(role)) return preset;
+  return preset.deployment === ROLE_DEPLOYMENT[role] ? preset : null;
 }
 
 function presetForModel(provider, model) {
@@ -554,6 +577,9 @@ function publicCatalog() {
 module.exports = {
   PROVIDER_DEPLOYMENT,
   ROLE_DEPLOYMENT,
+  MODEL_ROLES,
+  MODEL_ROLE_META,
+  isPurposeRole,
   validateCatalog,
   getPreset,
   presetForRole,

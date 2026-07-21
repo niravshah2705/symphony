@@ -32,7 +32,7 @@ flowchart LR
     Skills["Skills<br/>software-planning, web-research<br/>linear, commit, push, pull, land"]
     BuiltInTools["Built-in tools<br/>web_search, linear_graphql"]
     McpTools["Optional MCP tools<br/>Linear MCP, GitHub MCP"]
-    LlmRouter["Role-aware LLM router<br/>local / XS vs hosted / planner"]
+    LlmRouter["Role-aware LLM router<br/>thinking / execution / testing"]
 
     Framework --> PlannerAgent
     Framework --> CoderAgent

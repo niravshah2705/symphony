@@ -6,7 +6,7 @@ const linear = require('../linear');
 const log = require('../logger');
 const { generatePlan, generateIssuesForMilestones } = require('./plan');
 const { applyPlan, applyIssuesForMilestones, applyAiplanned, applyAifail } = require('./apply');
-const { llmReady, notReadyReason, resolveLlm } = require('./llm');
+const { llmReady, notReadyReason, resolveLlm, providerForRole } = require('./llm');
 const { isModelAvailabilityError, pauseReasonFor, probeModelAvailability } = require('./availability');
 
 const { CONFIG } = require('../config');
@@ -42,9 +42,9 @@ const runtime = {
 function pauseForModel(error, settings, llm = null) {
   if (!runtime.pauseReason) {
     runtime.pauseReason = pauseReasonFor('model', error, {
-      provider: (llm && llm.provider) || settings.llmProvider,
+      provider: (llm && llm.provider) || providerForRole(settings, 'thinking'),
       model: llm && llm.model,
-      role: 'global',
+      role: 'thinking',
     });
   }
   runtime.lastError = runtime.pauseReason.message;
@@ -62,7 +62,7 @@ async function verifyModelReadiness(settings, dependencies = {}) {
   const probe = dependencies.probeModelAvailability || probeModelAvailability;
   let llm;
   try {
-    llm = await resolve(settings);
+    llm = await resolve(settings, 'thinking');
     await probe(llm);
     clearModelPause();
     runtime.lastError = null;
@@ -243,8 +243,8 @@ async function processPending() {
       log.warn(`Tick skipped: ${runtime.lastError}`);
       return { skipped: 'missing-keys', reason: runtime.lastError };
     }
-    if (!llmReady(settings)) {
-      const reason = pauseForModel(new Error(notReadyReason(settings)), settings);
+    if (!llmReady(settings, 'thinking')) {
+      const reason = pauseForModel(new Error(notReadyReason(settings, 'thinking')), settings);
       log.warn(`Tick skipped: ${reason.message}`);
       return { skipped: 'paused', reason: reason.message, pauseReason: reason };
     }
