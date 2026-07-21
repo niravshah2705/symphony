@@ -23,6 +23,11 @@ const {
   normalizeAgentRuntime,
   normalizeWorkflowPattern,
 } = require('@ai-fleet/shared/agent/runtimes');
+const {
+  sanitizeSettingsPatch,
+  snapshotEditable,
+  describeEditableSettings,
+} = require('@ai-fleet/shared/agent/settings-patch');
 
 const router = express.Router();
 
@@ -678,6 +683,29 @@ router.put('/langsmith', (req, res) => {
   if (b.langsmithTracing !== undefined) patch.langsmithTracing = Boolean(b.langsmithTracing);
   patchSettings(patch);
   res.json(publicSettings());
+});
+
+// GET /api/settings/json — editable, non-secret settings as a JSON document,
+// with a schema hint describing the accepted keys and enum values.
+router.get('/json', (req, res) => {
+  res.json({ settings: snapshotEditable(getSettings()), schema: describeEditableSettings() });
+});
+
+// PUT /api/settings/json — apply a JSON settings document. Only non-secret
+// operational keys are accepted; masked/derived and secret fields are ignored
+// (never clobbered), and every accepted value is validated.
+router.put('/json', (req, res) => {
+  const body = req.body || {};
+  const input = body.settings && typeof body.settings === 'object' ? body.settings : body;
+  const { patch, applied, rejected, ignored } = sanitizeSettingsPatch(input);
+  if (!applied.length) {
+    const detail = rejected.length
+      ? ` ${rejected.map((r) => `${r.key}: ${r.reason}`).join('; ')}`
+      : '';
+    return res.status(400).json({ error: `No valid settings to apply.${detail}`, rejected, ignored });
+  }
+  patchSettings(patch);
+  res.json({ settings: publicSettings(), applied, rejected, ignored });
 });
 
 // GET /api/settings/validate — test the currently stored Linear key.

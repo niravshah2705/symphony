@@ -18,6 +18,7 @@ const {
   fencedJson,
   modelMessageText,
   invokeWithTimeout,
+  normalizeSettingsProposal,
 } = require('./local-intelligence');
 
 test('normalizeEnrichmentRequest accepts the bounded call-recording contract', () => {
@@ -209,4 +210,29 @@ test('local model invocation runs in an explicit tracing-disabled context', asyn
     {}
   );
   assert.deepEqual(observed, { tracingEnabled: false });
+});
+
+test('normalizeSettingsProposal keeps only primitive-valued keys', () => {
+  const out = normalizeSettingsProposal({
+    patch: {
+      agentRuntime: 'codex-sdk',
+      langsmithTracing: false,
+      ollamaTemperature: 0.2,
+      nested: { x: 1 }, // dropped
+      list: [1, 2], // dropped
+    },
+    notes: 'set harness to codex',
+  });
+  assert.deepEqual(out.patch, {
+    agentRuntime: 'codex-sdk',
+    langsmithTracing: false,
+    ollamaTemperature: 0.2,
+  });
+  assert.equal(out.notes, 'set harness to codex');
+});
+
+test('normalizeSettingsProposal tolerates a missing or non-object patch', () => {
+  assert.deepEqual(normalizeSettingsProposal({}).patch, {});
+  assert.deepEqual(normalizeSettingsProposal({ patch: 'nope', notes: 42 }).patch, {});
+  assert.equal(normalizeSettingsProposal(null).notes, '');
 });

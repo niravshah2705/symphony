@@ -26,6 +26,22 @@ const RUNTIMES = Object.freeze({
 });
 
 /**
+ * Short, operator-facing "harness" names for each runtime id. These are the
+ * values surfaced on LangSmith traces (as the `harness:` tag) and in the
+ * Settings UI, kept stable and friendlier than the internal runtime ids.
+ */
+const HARNESS_LABELS = Object.freeze({
+  deepagent: 'deepagent',
+  'codex-sdk': 'codex',
+  'claude-agent-sdk': 'claudecode',
+});
+
+/** Friendly harness name for a runtime id (falls back to the id itself). */
+function harnessLabel(runtime) {
+  return HARNESS_LABELS[runtime] || runtime;
+}
+
+/**
  * Workflow patterns are deliberately runtime-neutral. The selected pattern is
  * expressed as trusted orchestration guidance before the task. A single SDK
  * session remains responsible for tool ordering, which avoids concurrent
@@ -715,9 +731,12 @@ async function executeAgentRuntime(options = {}) {
 
   if (options.trace === false) return execute();
   const invokeConfig = options.invokeConfig || {};
+  const harness = harnessLabel(runtime);
+  const modelName = (options.llm && options.llm.model) || '';
   const traceMetadataBase = {
     ...(invokeConfig.metadata || {}),
     agent_runtime: runtime,
+    harness,
     ...(requestedRuntime !== runtime
       ? {
           requested_agent_runtime: requestedRuntime,
@@ -727,9 +746,9 @@ async function executeAgentRuntime(options = {}) {
         }
       : {}),
     model_provider: (options.llm && options.llm.provider) || 'unknown',
-    model_name: (options.llm && options.llm.model) || 'unknown',
+    model_name: modelName || 'unknown',
     ls_provider: langSmithProvider(options.llm),
-    ls_model_name: (options.llm && options.llm.model) || 'unknown',
+    ls_model_name: modelName || 'unknown',
     workflow_pattern: workflowPattern,
     workflow_name: options.workflow || 'agent',
   };
@@ -738,7 +757,16 @@ async function executeAgentRuntime(options = {}) {
     name: String(invokeConfig.runName || `agent-runtime:${runtime}`).slice(0, 120),
     run_type: runtime === 'deepagent' ? 'chain' : 'llm',
     id: invokeConfig.runId,
-    tags: [...new Set([...(invokeConfig.tags || []), ...(options.tags || []), `runtime:${runtime}`, `pattern:${workflowPattern}`])],
+    tags: [
+      ...new Set([
+        ...(invokeConfig.tags || []),
+        ...(options.tags || []),
+        `runtime:${runtime}`,
+        `harness:${harness}`,
+        `pattern:${workflowPattern}`,
+        ...(modelName ? [`model:${modelName}`] : []),
+      ]),
+    ],
     metadata: traceMetadataBase,
     processInputs: () => ({ prompt: String(prompt).slice(0, 20_000) }),
     processOutputs: (result) => publicExecution(result),
@@ -748,6 +776,8 @@ async function executeAgentRuntime(options = {}) {
 
 module.exports = {
   RUNTIMES,
+  HARNESS_LABELS,
+  harnessLabel,
   WORKFLOW_PATTERNS,
   AgentRuntimeError,
   normalizeAgentRuntime,

@@ -232,6 +232,13 @@ test('Codex SDK API backend uses a constrained thread and reports token usage', 
   assert.equal(seen.trace.metadata.ls_model_name, 'gpt-5-codex');
   assert.equal(seen.trace.run_type, 'llm');
   assert.equal(seen.trace.metadata.issueId, 'ABC-1');
+  // Harness + model surface both as trace metadata and as flat tags.
+  assert.equal(seen.trace.metadata.harness, 'codex');
+  assert.ok(seen.trace.tags.includes('harness:codex'));
+  assert.ok(seen.trace.tags.includes('model:gpt-5-codex'));
+  assert.ok(seen.trace.tags.includes('runtime:codex-sdk'));
+  assert.ok(seen.trace.tags.includes('pattern:parallel'));
+  assert.ok(seen.trace.tags.includes('coder')); // caller-supplied tag preserved
   assert.equal(seen.run.metadata.usage_input_tokens, 20);
   assert.equal(seen.run.metadata.usage_output_tokens, 8);
   assert.deepEqual(seen.run.metadata.usage_metadata, {
@@ -387,6 +394,9 @@ test('Claude Agent SDK adapter streams a result with cost and isolated settings'
   assert.equal(execution.usage.totalTokens, 42);
   assert.equal(seen.trace.metadata.workflow_pattern, 'supervisor');
   assert.equal(seen.trace.metadata.ls_provider, 'anthropic');
+  assert.equal(seen.trace.metadata.harness, 'claudecode');
+  assert.ok(seen.trace.tags.includes('harness:claudecode'));
+  assert.ok(seen.trace.tags.includes('model:claude-sonnet-4-6'));
   assert.equal(seen.trace.run_type, 'llm');
   assert.equal(seen.run.metadata.cost_usd, 0.0125);
   assert.equal(seen.run.metadata.usage_total_tokens, 42);

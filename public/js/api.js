@@ -98,6 +98,9 @@ export const api = {
     request('/settings/integrations', { method: 'PUT', body: JSON.stringify(payload) }),
   saveAgentRuntime: (payload) =>
     request('/settings/runtime', { method: 'PUT', body: JSON.stringify(payload) }),
+  getSettingsJson: () => request('/settings/json'),
+  saveSettingsJson: (settings) =>
+    request('/settings/json', { method: 'PUT', body: JSON.stringify({ settings }) }),
   getOllamaModels: () => request('/agent/ollama-models'),
   getLmstudioModels: () => request('/agent/lmstudio-models'),
   getOmlxModels: () => request('/agent/omlx-models'),
@@ -150,6 +153,8 @@ export const api = {
     request('/agent/enrich-input', { method: 'POST', body: JSON.stringify(payload) }),
   analyzeTrace: (payload) =>
     request('/agent/analyze-trace', { method: 'POST', body: JSON.stringify(payload) }),
+  settingsCommand: (payload) =>
+    request('/agent/settings-command', { method: 'POST', body: JSON.stringify(payload) }),
   clearFinishedJobs: () => request('/agent/jobs', { method: 'DELETE' }),
   deleteJob: (id) => request(`/agent/jobs/${id}`, { method: 'DELETE' }),
 

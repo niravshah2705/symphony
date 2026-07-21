@@ -4,7 +4,7 @@ import { el, clear, toast, loading } from '../dom.js';
 export async function renderSettings(view) {
   view.append(loading('Loading settings…'));
 
-  const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes] = await Promise.all([
+  const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes, jsonRes] = await Promise.all([
     api.getSettings(),
     api.getLlmPresets(),
     api.getAgentConfig(),
@@ -14,6 +14,7 @@ export async function renderSettings(view) {
     api.getAssumedRole().catch(() => ({ assumedRole: null })),
     api.getCodexStatus().catch(() => ({ connected: false })),
     api.getClaudeStatus().catch(() => ({ connected: false })),
+    api.getSettingsJson().catch(() => ({ settings: {} })),
   ]);
 
   // Older stores intentionally kept hosted model ids blank and relied on the
@@ -52,6 +53,10 @@ export async function renderSettings(view) {
     settingsGroup('settings-identity', 'Identity', 'Choose the workspace member used for owned actions.', [
       roleSection({ members: membersRes.members || [], assumedRole: roleRes.assumedRole, view }),
     ]),
+    settingsGroup('settings-json', 'Settings as JSON', 'Generate, edit, or describe your configuration; changes save to data/store.json.', [
+      jsonSection({ view, doc: (jsonRes && jsonRes.settings) || {} }),
+      settingsCommandCard({ view }),
+    ]),
   ];
 
   clear(view).append(
@@ -78,6 +83,7 @@ function settingsIndex() {
       ['settings-connections', '02', 'Connections'],
       ['settings-automation', '03', 'Automation'],
       ['settings-identity', '04', 'Identity'],
+      ['settings-json', '05', 'JSON'],
     ].map(([id, number, label]) => el('a', { href: `#${id}` }, [
       el('span', { 'aria-hidden': 'true' }, number),
       el('strong', {}, label),
@@ -200,10 +206,129 @@ function runtimeSection({ settings, codex, claude }) {
   return section('Agent runtime & workflow', `${runtimeLabel} · ${patternLabel}`, true, [
     el('p', { class: 'muted', style: 'font-size:12px;margin-top:0' }, 'Select the SDK for compatible planning work. Credential-brokered coding runs use DeepAgent. Every effective runtime creates a LangSmith root trace when tracing is enabled.'),
     readiness,
-    field('Agent SDK', runtime),
+    field('Harness (agent SDK)', runtime, 'Execution harness for compatible runs: deepagent, codex, or claudecode. This value is tagged on every LangSmith trace.'),
     field('Workflow pattern', pattern, 'Patterns are bounded orchestration guidance: sequential, fan-out, evaluator/retry, or supervisor/handoff.'),
     el('div', { class: 'row' }, [save, status]),
     el('a', { class: 'detail-link', href: '#/workflows' }, 'Compare workflow patterns'),
+  ]);
+}
+
+/* ----------------------------- Settings JSON ---------------------------- */
+
+const JSON_EDITOR_STYLE =
+  'width:100%;min-height:320px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.5;padding:10px;box-sizing:border-box';
+
+function jsonSection({ view, doc }) {
+  const editor = el('textarea', { class: 'settings-json-editor', spellcheck: 'false', style: JSON_EDITOR_STYLE });
+  editor.value = JSON.stringify(doc || {}, null, 2);
+  const status = el('span', { class: 'muted', role: 'status', style: 'font-size:11px' });
+  const save = el('button', { class: 'primary', type: 'button' }, 'Save JSON');
+  const copy = el('button', { class: 'ghost', type: 'button' }, 'Copy');
+  const download = el('button', { class: 'ghost', type: 'button' }, 'Download');
+
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(editor.value);
+      toast('Copied settings JSON.', 'ok');
+    } catch (_) {
+      toast('Copy failed.', 'err');
+    }
+  });
+
+  download.addEventListener('click', () => {
+    const blob = new Blob([editor.value], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = el('a', { href: url, download: 'settings.json' });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  save.addEventListener('click', async () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(editor.value);
+    } catch (err) {
+      status.textContent = `Invalid JSON: ${err.message}`;
+      toast('Invalid JSON.', 'err');
+      return;
+    }
+    const payload = parsed && typeof parsed.settings === 'object' && !Array.isArray(parsed.settings) ? parsed.settings : parsed;
+    save.disabled = true;
+    save.textContent = 'Saving…';
+    try {
+      const res = await api.saveSettingsJson(payload);
+      const applied = res.applied || [];
+      const rejected = res.rejected || [];
+      status.textContent =
+        `Applied ${applied.length} setting${applied.length === 1 ? '' : 's'}.` +
+        (rejected.length ? ` Rejected: ${rejected.map((r) => r.key).join(', ')}.` : '');
+      toast(rejected.length ? 'Saved with some rejected keys.' : 'Settings JSON saved.', rejected.length ? 'err' : 'ok');
+      if (view) setTimeout(() => renderSettings(view), 700);
+    } catch (err) {
+      status.textContent = err.message;
+      toast(err.message, 'err');
+    } finally {
+      save.disabled = false;
+      save.textContent = 'Save JSON';
+    }
+  });
+
+  return section('Edit as JSON', 'Non-secret operational settings', false, [
+    el('p', { class: 'muted', style: 'font-size:12px;margin-top:0' }, 'The full non-secret configuration as JSON. Edit and save to apply; only known keys are accepted and validated. Secrets and tokens keep their own fields and are never shown here.'),
+    editor,
+    el('div', { class: 'row', style: 'margin-top:10px;gap:8px;flex-wrap:wrap' }, [save, copy, download, status]),
+  ]);
+}
+
+function settingsCommandCard({ view }) {
+  const input = el('textarea', {
+    rows: '2',
+    placeholder: 'e.g. Set the harness to codex and turn off LangSmith tracing',
+    style: 'width:100%;box-sizing:border-box',
+  });
+  const run = el('button', { class: 'primary', type: 'button' }, 'Apply with local model');
+  const status = el('span', { class: 'muted', role: 'status', style: 'font-size:11px' });
+  const result = el('pre', {
+    style: 'display:none;white-space:pre-wrap;margin-top:10px;padding:10px;border-radius:8px;background:rgba(127,127,127,0.12);font-size:12px;overflow:auto',
+  });
+
+  run.addEventListener('click', async () => {
+    const instruction = input.value.trim();
+    if (!instruction) {
+      status.textContent = 'Describe the change first.';
+      return;
+    }
+    run.disabled = true;
+    run.textContent = 'Thinking…';
+    try {
+      const res = await api.settingsCommand({ instruction });
+      const command = res.command || {};
+      const applied = res.applied || [];
+      const rejected = res.rejected || [];
+      result.style.display = 'block';
+      result.textContent = JSON.stringify(command.patch || {}, null, 2);
+      status.textContent =
+        (command.notes ? `${command.notes} ` : '') +
+        `Applied ${applied.length} setting${applied.length === 1 ? '' : 's'}.` +
+        (rejected.length ? ` Rejected: ${rejected.map((r) => r.key).join(', ')}.` : '');
+      toast(applied.length ? 'Settings updated by the local model.' : 'No changes applied.', applied.length ? 'ok' : 'err');
+      if (applied.length && view) setTimeout(() => renderSettings(view), 900);
+    } catch (err) {
+      status.textContent = err.message;
+      toast(err.message, 'err');
+    } finally {
+      run.disabled = false;
+      run.textContent = 'Apply with local model';
+    }
+  });
+
+  return section('Change settings by typing', 'Local model · never leaves your machine', false, [
+    el('p', { class: 'muted', style: 'font-size:12px;margin-top:0' }, 'Describe a change in plain language. The configured local model proposes a validated settings patch, which is saved to data/store.json. Secrets can only be changed through their own fields.'),
+    field('Request', input),
+    el('div', { class: 'row', style: 'gap:8px' }, [run, status]),
+    result,
   ]);
 }
 
