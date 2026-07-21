@@ -17,6 +17,7 @@ const { CONFIG } = require('@ai-fleet/shared/config');
 const scheduler = require('@ai-fleet/shared/agent/scheduler');
 const { llmReady, providerForRole } = require('@ai-fleet/shared/agent/llm');
 const localIntelligence = require('@ai-fleet/shared/agent/local-intelligence');
+const { applySettingsPatch, sanitizeSettingsPatch } = require('@ai-fleet/shared/agent/settings-patch');
 
 const router = express.Router();
 
@@ -288,6 +289,38 @@ router.post(
     const trace = traceForAnalysis(req.body);
     const analysis = await localIntelligence.analyzeTrace({ trace, settings: getSettings() });
     res.json({ analysis });
+  })
+);
+
+// POST /api/agent/settings-command — interpret a natural-language settings
+// request with the LOCAL model only, then apply the validated (non-secret) patch
+// to the store (data/store.json). Pass { apply: false } to preview without saving.
+router.post(
+  '/settings-command',
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const instruction =
+      typeof body.instruction === 'string'
+        ? body.instruction
+        : typeof body.input === 'string'
+          ? body.input
+          : '';
+    const proposal = await localIntelligence.proposeSettings({ instruction, settings: getSettings() });
+    const preview = body.apply === false;
+    const outcome = preview ? sanitizeSettingsPatch(proposal.patch) : applySettingsPatch(proposal.patch);
+    res.json({
+      command: {
+        instruction: proposal.instruction,
+        notes: proposal.notes,
+        patch: proposal.patch,
+        provenance: proposal.provenance,
+        warnings: proposal.warnings,
+      },
+      applied: preview ? [] : outcome.applied,
+      preview: preview ? outcome.patch : undefined,
+      rejected: outcome.rejected,
+      ignored: outcome.ignored,
+    });
   })
 );
 
