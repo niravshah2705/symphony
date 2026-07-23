@@ -6,6 +6,7 @@ const { CONFIG } = require('../config');
 
 const DEFAULT_TIMEOUT_MS = 1800;
 const MAX_TIMEOUT_MS = 5000;
+const MAX_LOG_TAIL_BYTES = 64 * 1024;
 
 function boundedTimeout(value) {
   const number = Number(value);
@@ -87,6 +88,46 @@ function check(id, label, status, summary, action, details) {
   const result = { id, label, status, summary, action };
   if (details && Object.keys(details).length) result.details = details;
   return result;
+}
+
+function readBoundedLog(file = CONFIG.LOG_FILE, maxBytes = MAX_LOG_TAIL_BYTES) {
+  try {
+    const size = fs.statSync(file).size;
+    const length = Math.min(size, maxBytes);
+    const descriptor = fs.openSync(file, 'r');
+    try {
+      const buffer = Buffer.alloc(length);
+      fs.readSync(descriptor, buffer, 0, length, Math.max(0, size - length));
+      return { text: buffer.toString('utf8'), bytesRead: length, exists: true };
+    } finally {
+      fs.closeSync(descriptor);
+    }
+  } catch (error) {
+    return { text: '', bytesRead: 0, exists: false, code: error && error.code };
+  }
+}
+
+function summarizeLogTail(result) {
+  const source = result && typeof result === 'object' ? result : { text: String(result || ''), bytesRead: 0, exists: true };
+  if (!source.exists) {
+    return check('service-log', 'Service log', 'attention', 'The shared service log is not available yet.', 'Run a workspace service, then retry diagnostics.', { inspectedBytes: 0 });
+  }
+  const lines = String(source.text || '').split(/\r?\n/).filter(Boolean);
+  const errorLines = lines.filter((line) => /\]\s+ERROR\s/i.test(line)).length;
+  const warningLines = lines.filter((line) => /\]\s+WARN\s/i.test(line)).length;
+  const latestTimestamp = [...lines].reverse().map((line) => line.match(/^\[([^\]]+)\]/)).find(Boolean)?.[1] || null;
+  const status = errorLines || warningLines ? 'attention' : 'healthy';
+  const summary = errorLines || warningLines
+    ? `The bounded log window contains ${errorLines} error and ${warningLines} warning entries.`
+    : 'No warning or error entries were found in the bounded log window.';
+  return check(
+    'service-log',
+    'Service log',
+    status,
+    summary,
+    status === 'healthy' ? 'No action needed.' : 'Open Agent activity or Trace analysis to inspect the related run without exposing secrets.',
+    { inspectedBytes: Number(source.bytesRead) || 0, errorLines, warningLines, latestTimestamp }
+  );
 }
 
 function integrationChecks(settings) {
@@ -255,9 +296,13 @@ async function runDiagnostics(settings = {}, dependencies = {}) {
     serviceChecks(services, dependencies),
     localModelCheck(settings, dependencies),
   ]);
+  const logResult = dependencies.readLogTail
+    ? await dependencies.readLogTail(CONFIG.LOG_FILE, MAX_LOG_TAIL_BYTES)
+    : readBoundedLog(CONFIG.LOG_FILE, MAX_LOG_TAIL_BYTES);
   const checks = [
     ...serviceResults,
     modelResult,
+    summarizeLogTail(logResult),
     ...integrationChecks(settings),
     ...sdkChecks(settings, resolver),
   ];
@@ -272,9 +317,12 @@ async function runDiagnostics(settings = {}, dependencies = {}) {
 module.exports = {
   DEFAULT_TIMEOUT_MS,
   MAX_TIMEOUT_MS,
+  MAX_LOG_TAIL_BYTES,
   endpoint,
   probe,
   packageAvailable,
+  readBoundedLog,
+  summarizeLogTail,
   integrationChecks,
   sdkChecks,
   runDiagnostics,

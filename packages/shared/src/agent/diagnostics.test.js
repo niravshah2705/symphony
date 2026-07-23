@@ -60,6 +60,7 @@ test('diagnostics report services, local model, integrations, and SDK readiness 
       return response(200);
     },
     resolvePackage: () => '/installed/package.js',
+    readLogTail: async () => ({ text: '[2026-07-16T11:59:00.000Z] INFO  Ready\n', bytesRead: 42, exists: true }),
     now: '2026-07-16T12:00:00.000Z',
   });
 
@@ -73,7 +74,7 @@ test('diagnostics report services, local model, integrations, and SDK readiness 
   const ids = new Set(report.checks.map((item) => item.id));
   for (const id of [
     'planner-service', 'coder-service', 'local-model', 'planning-integration', 'repository-integration',
-    'langsmith-integration', 'deepagents-sdk', 'codex-sdk', 'claude-sdk',
+    'service-log', 'langsmith-integration', 'deepagents-sdk', 'codex-sdk', 'claude-sdk',
   ]) assert.equal(ids.has(id), true, id);
 
   const serialized = JSON.stringify(report);
@@ -94,6 +95,7 @@ test('diagnostics distinguish unavailable endpoints and missing SDK packages', a
     services: { plannerUrl: 'http://localhost:4010', coderUrl: 'http://localhost:4020' },
     fetch: async () => { throw new Error('connection refused with private detail'); },
     resolvePackage: () => { throw new Error('missing'); },
+    readLogTail: async () => ({ text: '[2026-07-16T11:59:00.000Z] ERROR secret detail omitted\n', bytesRead: 60, exists: true }),
   });
 
   assert.equal(report.status, 'degraded');

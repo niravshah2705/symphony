@@ -10,6 +10,10 @@ const {
   listJobs,
   removeJob,
   clearFinishedJobs,
+  readStore,
+  listMemories,
+  addMemory,
+  removeMemory,
 } = require('@ai-fleet/shared/store');
 const { getProjectsWithLabels, getAllProjectLabels } = require('@ai-fleet/shared/linear');
 const { asyncHandler } = require('@ai-fleet/shared/util');
@@ -18,6 +22,12 @@ const scheduler = require('@ai-fleet/shared/agent/scheduler');
 const { llmReady, providerForRole } = require('@ai-fleet/shared/agent/llm');
 const localIntelligence = require('@ai-fleet/shared/agent/local-intelligence');
 const { applySettingsPatch, sanitizeSettingsPatch } = require('@ai-fleet/shared/agent/settings-patch');
+const workspaceRouter = require('@ai-fleet/shared/agent/workspace-router');
+const { searchDocuments } = require('@ai-fleet/shared/agent/knowledge-search');
+const memory = require('@ai-fleet/shared/agent/memory');
+const businessPipeline = require('@ai-fleet/shared/agent/business-pipeline');
+
+const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 const router = express.Router();
 
@@ -230,6 +240,121 @@ router.get(
 router.get('/jobs', (req, res) => {
   res.json({ jobs: listJobs() });
 });
+
+// POST /api/agent/message — deterministic intent and safety gate for the Agent
+// omnibox. Greetings and rejected abuse never reach retrieval, a model, tools,
+// or a mutation. Business/general requests may use the configured local model
+// only to enrich their bounded, already-routed context.
+router.post(
+  '/message',
+  asyncHandler(async (req, res) => {
+    const route = workspaceRouter.classifyIntent(req.body && req.body.input);
+    let enrichment = null;
+    let warning = null;
+    let memoryDraft = null;
+    let canPrepare = false;
+
+    if (route.intent === 'business') {
+      // Keep /message fast: the real 6-step pipeline (fraud, revenue, memory,
+      // spec breakdown, UI design, scheduling) runs on demand via /business/prepare.
+      canPrepare = true;
+    } else if (route.intent === 'general') {
+      try {
+        enrichment = await localIntelligence.enrichInput({
+          input: route.input,
+          scenario: 'planning',
+          metadata: { intent: route.intent, workflow: 'thinker' },
+          settings: getSettings(),
+        });
+      } catch (error) {
+        warning = error && error.message
+          ? error.message
+          : 'The configured local model was unavailable; the deterministic route is still ready.';
+      }
+    } else if (route.intent === 'knowledge') {
+      // "Remember this" phrasing yields a confirmable draft only — the write is a
+      // separate, explicit POST /memory. Free text never auto-persists.
+      memoryDraft = memory.detectMemoryWrite(route.input);
+    }
+
+    res.json({ route, enrichment, warning, memoryDraft, canPrepare });
+  })
+);
+
+// POST /api/agent/knowledge-search — bounded, read-only lexical retrieval over
+// the workspace's README/docs corpus. It returns real relative paths and
+// snippets, never arbitrary files, absolute paths, credentials, or model prose.
+router.post('/knowledge-search', (req, res) => {
+  res.json(searchDocuments(req.body && (req.body.query || req.body.input)));
+});
+
+// POST /api/agent/memory-search — typed, read-only recall across the five memory
+// scopes, blended with reviewed documentation. Scope is detected from the query
+// when not explicitly supplied. Never returns secrets or absolute paths.
+router.post('/memory-search', (req, res) => {
+  const body = req.body || {};
+  const query = typeof body.query === 'string' ? body.query : typeof body.input === 'string' ? body.input : '';
+  const requested = typeof body.scope === 'string' ? body.scope.toLowerCase() : '';
+  const scope = memory.MEMORY_SCOPES.includes(requested) ? requested : memory.detectMemoryScope(query);
+  const results = memory.searchMemories(query, listMemories(), { scope });
+  // Blend reviewed docs for the workspace scope (or when the scope is ambiguous).
+  if ((scope === 'workspace' || scope === 'all') && query.trim()) {
+    try {
+      const docs = searchDocuments(query);
+      for (const doc of docs.results || []) {
+        results.push({ scope: 'workspace', type: 'Workspace document', title: doc.title, summary: doc.snippet, status: doc.path, refId: null });
+      }
+    } catch (_) {
+      // A bad/empty query for the doc index is non-fatal; stored memory still returns.
+    }
+  }
+  res.json({ query, scope, results: results.slice(0, 12) });
+});
+
+// POST /api/agent/memory — persist a confirmed memory (the write). Validation
+// (scope allowlist, bounded fields, safe refId) happens in normalizeMemory;
+// a MemoryError carries a 400 to the central error handler.
+router.post('/memory', (req, res) => {
+  const record = addMemory(memory.normalizeMemory(req.body));
+  res.status(201).json({ memory: record });
+});
+
+// GET /api/agent/memory — list stored memories, optionally filtered by scope/refId.
+router.get('/memory', (req, res) => {
+  const requested = typeof req.query.scope === 'string' ? req.query.scope.toLowerCase() : '';
+  const scope = memory.MEMORY_SCOPES.includes(requested) ? requested : undefined;
+  const refId = typeof req.query.refId === 'string' && REF_ID_PATTERN.test(req.query.refId) ? req.query.refId : undefined;
+  res.json({ memories: listMemories({ scope, refId }) });
+});
+
+// DELETE /api/agent/memory/:id — remove one stored memory.
+router.delete('/memory/:id', (req, res) => {
+  const id = String(req.params.id || '');
+  if (!/^mem_[A-Za-z0-9-]{1,80}$/.test(id)) return res.status(400).json({ error: 'Invalid memory id.' });
+  if (!removeMemory(id)) return res.status(404).json({ error: 'Memory not found.' });
+  res.json({ ok: true });
+});
+
+// POST /api/agent/business/prepare — run the real, on-demand business pipeline.
+// The unsafe gate is re-asserted inside prepareBusiness; a missing role/project
+// degrades the scheduling stage rather than failing the whole request.
+router.post(
+  '/business/prepare',
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    let business = null;
+    if (typeof body.businessId === 'string' && REF_ID_PATTERN.test(body.businessId)) {
+      business = readStore().businesses.find((b) => b.id === body.businessId) || null;
+    }
+    const payload = await businessPipeline.prepareBusiness({
+      input: typeof body.input === 'string' ? body.input : '',
+      business,
+      settings: getSettings(),
+      assumedRole: getAssumedRole(),
+    });
+    res.json({ business: payload });
+  })
+);
 
 // POST /api/agent/enrich-input — turn short user notes into a clearer brief via
 // the configured LOCAL role only (Ollama / LM Studio / oMLX; never a hosted fallback).
