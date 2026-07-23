@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { randomUUID } = require('node:crypto');
 const { CONFIG } = require('./config');
 const {
   getPreset,
@@ -217,6 +218,7 @@ const DEFAULT_STORE = Object.freeze({
   assumedRole: null, // { id, name, email } — the member currently assumed
   agentConfig: DEFAULT_AGENT_CONFIG,
   jobs: [], // enrichment jobs (see routes/agent.js)
+  memories: [], // typed workspace memory records (see agent/memory.js)
 });
 
 function ensureDataDir() {
@@ -306,6 +308,7 @@ function readStore() {
       assumedRole: parsed.assumedRole || null,
       agentConfig: migrateAgentConfig({ ...base.agentConfig, ...(parsed.agentConfig || {}) }),
       jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
+      memories: Array.isArray(parsed.memories) ? parsed.memories : [],
     };
   } catch (err) {
     return cloneDefault();
@@ -554,6 +557,50 @@ function pruneJobs(keep = 100) {
   return jobs;
 }
 
+/* --------------------------- Memories ----------------------------------- */
+
+const MAX_MEMORIES = 1000;
+
+/** All memories, newest first — optionally filtered by scope and/or refId. */
+function listMemories(filter = {}) {
+  const { scope, refId } = filter || {};
+  let memories = readStore().memories;
+  if (scope) memories = memories.filter((m) => m.scope === scope);
+  if (refId) memories = memories.filter((m) => m.refId === refId);
+  return memories;
+}
+
+/**
+ * Prepend a memory (newest first) with a generated id + timestamps, capping the
+ * total count (oldest dropped). The caller supplies already-validated fields
+ * (see agent/memory.js normalizeMemory); id/createdAt/updatedAt are authoritative.
+ */
+function addMemory(memory) {
+  const current = readStore();
+  const now = new Date().toISOString();
+  const record = { ...memory, id: `mem_${randomUUID()}`, createdAt: now, updatedAt: now };
+  const memories = [record, ...current.memories].slice(0, MAX_MEMORIES);
+  writeStore({ ...current, memories });
+  return record;
+}
+
+function removeMemory(id) {
+  const current = readStore();
+  const memories = current.memories.filter((m) => m.id !== id);
+  const removed = memories.length !== current.memories.length;
+  if (removed) writeStore({ ...current, memories });
+  return removed;
+}
+
+/** Keep only the newest `keep` memories. Returns the remaining list. */
+function pruneMemories(keep = MAX_MEMORIES) {
+  const current = readStore();
+  if (current.memories.length <= keep) return current.memories;
+  const memories = current.memories.slice(0, keep);
+  writeStore({ ...current, memories });
+  return memories;
+}
+
 module.exports = {
   DEFAULT_STORE,
   DEFAULT_AGENT_CONFIG,
@@ -590,4 +637,9 @@ module.exports = {
   removeJob,
   clearFinishedJobs,
   pruneJobs,
+  MAX_MEMORIES,
+  listMemories,
+  addMemory,
+  removeMemory,
+  pruneMemories,
 };

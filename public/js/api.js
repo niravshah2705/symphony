@@ -73,6 +73,8 @@ export const api = {
   getBoard: (projectId) => request(`/issues/board/${projectId}`),
   moveIssue: (issueId, stateId) =>
     request(`/issues/${issueId}/state`, { method: 'PATCH', body: JSON.stringify({ stateId }) }),
+  createProjectTask: (payload) =>
+    request('/issues', { method: 'POST', body: JSON.stringify(payload) }),
 
   // Businesses
   getBusinesses: () => request('/businesses'),
@@ -149,6 +151,23 @@ export const api = {
   getJobs: () => request('/agent/jobs'),
   getCoderStatus: () => request('/coder'),
   runAgentNow: () => request('/agent/run-now', { method: 'POST' }),
+  routeAgentMessage: (payload) =>
+    request('/agent/message', { method: 'POST', body: JSON.stringify(payload) }),
+  searchAgentKnowledge: (payload) =>
+    request('/agent/knowledge-search', { method: 'POST', body: JSON.stringify(payload) }),
+  // Typed workspace memory (user | business | project | task | workspace).
+  searchMemory: (payload) =>
+    request('/agent/memory-search', { method: 'POST', body: JSON.stringify(payload) }),
+  saveMemory: (payload) =>
+    request('/agent/memory', { method: 'POST', body: JSON.stringify(payload) }),
+  listMemory: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/agent/memory${query ? `?${query}` : ''}`);
+  },
+  deleteMemory: (id) => request(`/agent/memory/${id}`, { method: 'DELETE' }),
+  // On-demand 6-step business pipeline (fraud, revenue, memory, spec, design, scheduler).
+  prepareBusiness: (payload) =>
+    request('/agent/business/prepare', { method: 'POST', body: JSON.stringify(payload) }),
   enrichInput: (payload) =>
     request('/agent/enrich-input', { method: 'POST', body: JSON.stringify(payload) }),
   analyzeTrace: (payload) =>
