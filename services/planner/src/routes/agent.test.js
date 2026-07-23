@@ -43,6 +43,26 @@ function call(handler, req = {}) {
   });
 }
 
+/** Run a route's FULL handler stack (middleware + handler), so gates like requireAssumedRole fire. */
+function callRoute(router, method, path, req = {}) {
+  const layer = router.stack.find((c) => c.route && c.route.path === path && c.route.methods[method]);
+  assert.ok(layer, `${method.toUpperCase()} ${path} route must exist`);
+  const stack = layer.route.stack.map((s) => s.handle);
+  return new Promise((resolve, reject) => {
+    const res = { statusCode: 200 };
+    res.status = (code) => { res.statusCode = code; return res; };
+    res.json = (body) => { resolve({ status: res.statusCode, body }); return res; };
+    let i = 0;
+    const next = (err) => {
+      if (err) return reject(err);
+      const handle = stack[i++];
+      if (!handle) return;
+      try { Promise.resolve(handle(req, res, next)).catch(reject); } catch (error) { reject(error); }
+    };
+    next();
+  });
+}
+
 test('omnibox policy routes greetings and unsafe requests before local inference', async (t) => {
   const originalEnrich = localIntelligence.enrichInput;
   const modulePath = require.resolve('./agent');
@@ -203,4 +223,93 @@ test('business/prepare resolves the linked business and forwards pipeline output
   assert.equal(res.body.business.goal, 'A subscription tool');
   assert.equal(received.business.id, 'biz_x');
   assert.equal(received.business.projectId, 'proj_x');
+});
+
+test('conversation threads: create, append (auto-title), list, get, rename, delete', async (t) => {
+  const modulePath = require.resolve('./agent');
+  const original = {
+    listConversations: store.listConversations, getConversation: store.getConversation, addConversation: store.addConversation,
+    appendConversationMessages: store.appendConversationMessages, updateConversation: store.updateConversation, removeConversation: store.removeConversation,
+  };
+  let convs = [];
+  store.addConversation = (c = {}) => { const rec = { id: `conv_${convs.length + 1}`, title: c.title || 'New conversation', createdAt: 't', updatedAt: 't', messages: [] }; convs = [rec, ...convs]; return rec; };
+  store.getConversation = (id) => convs.find((c) => c.id === id) || null;
+  store.listConversations = () => convs;
+  store.appendConversationMessages = (id, messages) => { let u = null; convs = convs.map((c) => { if (c.id !== id) return c; u = { ...c, messages: [...c.messages, ...messages] }; return u; }); return u; };
+  store.updateConversation = (id, patch) => { let u = null; convs = convs.map((c) => { if (c.id !== id) return c; u = { ...c, ...patch, id: c.id }; return u; }); return u; };
+  store.removeConversation = (id) => { const n = convs.length; convs = convs.filter((c) => c.id !== id); return convs.length !== n; };
+  delete require.cache[modulePath];
+  t.after(() => { Object.assign(store, original); delete require.cache[modulePath]; });
+
+  const router = require('./agent');
+  const created = await call(handlerFor(router, 'post', '/conversations'), { body: {} });
+  assert.equal(created.status, 201);
+  const id = created.body.conversation.id;
+  assert.equal(created.body.conversation.title, 'New conversation');
+
+  const appended = await call(handlerFor(router, 'post', '/conversations/:id/messages'), { params: { id }, body: { messages: [{ role: 'user', text: 'Assess my subscription business' }, { role: 'assistant', copy: 'Business workflow', intent: 'business' }] } });
+  assert.equal(appended.body.conversation.title, 'Assess my subscription business'); // auto-titled
+  assert.equal(appended.body.conversation.messages.length, 2);
+
+  await assert.rejects(call(handlerFor(router, 'post', '/conversations/:id/messages'), { params: { id }, body: { messages: [] } }), /non-empty/);
+  await assert.rejects(call(handlerFor(router, 'post', '/conversations/:id/messages'), { params: { id }, body: { messages: [{ role: 'system', text: 'x' }] } }), /role/);
+
+  const listed = await call(handlerFor(router, 'get', '/conversations'), {});
+  assert.equal(listed.body.conversations.length, 1);
+  assert.equal(listed.body.conversations[0].messageCount, 2);
+  assert.equal(listed.body.conversations[0].messages, undefined); // summary omits messages
+
+  const got = await call(handlerFor(router, 'get', '/conversations/:id'), { params: { id } });
+  assert.equal(got.body.conversation.messages.length, 2);
+
+  const renamed = await call(handlerFor(router, 'patch', '/conversations/:id'), { params: { id }, body: { title: '  My thread  ' } });
+  assert.equal(renamed.body.conversation.title, 'My thread');
+
+  const del = await call(handlerFor(router, 'delete', '/conversations/:id'), { params: { id } });
+  assert.equal(del.body.ok, true);
+});
+
+test('conversation routes reject malformed ids and unknown threads', async () => {
+  const router = require('./agent');
+  const badId = await call(handlerFor(router, 'get', '/conversations/:id'), { params: { id: 'not-a-conv' } });
+  assert.equal(badId.status, 400);
+  const notFound = await call(handlerFor(router, 'get', '/conversations/:id'), { params: { id: 'conv_definitelymissing' } });
+  assert.equal(notFound.status, 404);
+});
+
+test('enqueue is role-gated, validates projectId, and queues exactly one project', async (t) => {
+  const modulePath = require.resolve('./agent');
+  const scheduler = require('@ai-fleet/shared/agent/scheduler');
+  const original = { getAssumedRole: store.getAssumedRole, enqueue: scheduler.enqueue, processPending: scheduler.processPending, getStatus: scheduler.getStatus };
+  let role = null;
+  const enqueued = [];
+  store.getAssumedRole = () => role;
+  scheduler.enqueue = (args) => { enqueued.push(args); return { id: 'job-1', ...args }; };
+  scheduler.processPending = async () => ({ processed: 1 });
+  scheduler.getStatus = () => ({ running: false });
+  delete require.cache[modulePath];
+  t.after(() => {
+    store.getAssumedRole = original.getAssumedRole;
+    scheduler.enqueue = original.enqueue;
+    scheduler.processPending = original.processPending;
+    scheduler.getStatus = original.getStatus;
+    delete require.cache[modulePath];
+  });
+
+  const router = require('./agent');
+
+  const denied = await callRoute(router, 'post', '/enqueue', { body: { projectId: 'proj_1' } });
+  assert.equal(denied.status, 403);
+  assert.equal(enqueued.length, 0);
+
+  role = { id: 'r1', name: 'Ada' };
+  const bad = await callRoute(router, 'post', '/enqueue', { body: {} });
+  assert.equal(bad.status, 400);
+  assert.equal(enqueued.length, 0);
+
+  const ok = await callRoute(router, 'post', '/enqueue', { body: { projectId: 'proj_1', projectName: 'Clinic booking' } });
+  assert.equal(ok.body.job.id, 'job-1');
+  assert.equal(enqueued.length, 1);
+  assert.equal(enqueued[0].projectId, 'proj_1');
+  assert.equal(enqueued[0].assumedRole.id, 'r1');
 });

@@ -14,6 +14,12 @@ const {
   listMemories,
   addMemory,
   removeMemory,
+  listConversations,
+  getConversation,
+  addConversation,
+  appendConversationMessages,
+  updateConversation,
+  removeConversation,
 } = require('@ai-fleet/shared/store');
 const { getProjectsWithLabels, getAllProjectLabels } = require('@ai-fleet/shared/linear');
 const { asyncHandler } = require('@ai-fleet/shared/util');
@@ -26,8 +32,10 @@ const workspaceRouter = require('@ai-fleet/shared/agent/workspace-router');
 const { searchDocuments } = require('@ai-fleet/shared/agent/knowledge-search');
 const memory = require('@ai-fleet/shared/agent/memory');
 const businessPipeline = require('@ai-fleet/shared/agent/business-pipeline');
+const conversations = require('@ai-fleet/shared/agent/conversations');
 
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const CONV_ID_PATTERN = /^conv_[A-Za-z0-9_-]{1,64}$/;
 
 const router = express.Router();
 
@@ -356,6 +364,66 @@ router.post(
   })
 );
 
+// ---- Conversation threads (agent workspace history) --------------------
+// Persisted server-side in the shared store, mirroring jobs/memories. Validation
+// (id shape, role allowlist, bounded fields) lives in agent/conversations.js; a
+// ConversationError carries its status to the central error handler.
+
+// GET /api/agent/conversations — thread summaries (no messages), newest-first.
+router.get('/conversations', (req, res) => {
+  res.json({ conversations: listConversations().map(conversations.summarizeConversation) });
+});
+
+// POST /api/agent/conversations — create an empty thread.
+router.post('/conversations', (req, res) => {
+  const body = req.body || {};
+  const title = typeof body.title === 'string' && body.title.trim() ? conversations.normalizeTitle(body.title) : undefined;
+  res.status(201).json({ conversation: addConversation(title ? { title } : {}) });
+});
+
+// GET /api/agent/conversations/:id — full thread with messages.
+router.get('/conversations/:id', (req, res) => {
+  if (!CONV_ID_PATTERN.test(String(req.params.id || ''))) return res.status(400).json({ error: 'Invalid conversation id.' });
+  const conversation = getConversation(req.params.id);
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+  res.json({ conversation });
+});
+
+// POST /api/agent/conversations/:id/messages — append a turn; auto-titles an
+// untitled thread from its first user message.
+router.post('/conversations/:id/messages', (req, res) => {
+  const id = String(req.params.id || '');
+  if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+  const existing = getConversation(id);
+  if (!existing) return res.status(404).json({ error: 'Conversation not found.' });
+  const messages = conversations.normalizeMessages(req.body && req.body.messages);
+  const updated = appendConversationMessages(id, messages);
+  const untitled = !existing.title || existing.title === 'New conversation';
+  const hadUser = (existing.messages || []).some((message) => message.role === 'user');
+  const firstUser = hadUser ? null : messages.find((message) => message.role === 'user');
+  const conversation = untitled && firstUser
+    ? updateConversation(id, { title: conversations.deriveTitle(firstUser.text) })
+    : updated;
+  res.json({ conversation });
+});
+
+// PATCH /api/agent/conversations/:id — rename.
+router.patch('/conversations/:id', (req, res) => {
+  const id = String(req.params.id || '');
+  if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+  const conversation = updateConversation(id, { title: conversations.normalizeTitle(req.body && req.body.title) });
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+  res.json({ conversation });
+});
+
+// DELETE /api/agent/conversations/:id — remove a thread.
+router.delete('/conversations/:id', (req, res) => {
+  const id = String(req.params.id || '');
+  if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+  if (!removeConversation(id)) return res.status(404).json({ error: 'Conversation not found.' });
+  res.json({ ok: true });
+});
+
 // POST /api/agent/enrich-input — turn short user notes into a clearer brief via
 // the configured LOCAL role only (Ollama / LM Studio / oMLX; never a hosted fallback).
 router.post(
@@ -461,6 +529,25 @@ router.delete('/jobs/:id', (req, res) => {
   if (!removed) return res.status(404).json({ error: 'Job not found.' });
   res.json({ ok: true });
 });
+
+// POST /api/agent/enqueue — queue ONE project for the planner, then kick a
+// non-overlapping tick so it starts without waiting for the cadence. Role-gated
+// (the same server-side gate as run-now); projectId is bounded and only ever
+// passed as a parameterized Linear GraphQL variable, never a path.
+router.post(
+  '/enqueue',
+  requireAssumedRole,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const projectId = typeof body.projectId === 'string' ? body.projectId.trim() : '';
+    if (!projectId || projectId.length > 200) return res.status(400).json({ error: 'projectId is required.' });
+    const projectName = typeof body.projectName === 'string' ? body.projectName.slice(0, 200) : projectId;
+    const job = scheduler.enqueue({ projectId, projectName, assumedRole: req.assumedRole });
+    // Fire-and-forget tick; the queued job is processed on this (or the next) tick.
+    Promise.resolve(scheduler.processPending()).catch(() => {});
+    res.json({ job, status: scheduler.getStatus() });
+  })
+);
 
 // POST /api/agent/run-now — manual scheduler tick (still bounded/non-overlapping).
 router.post(

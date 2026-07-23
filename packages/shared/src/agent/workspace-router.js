@@ -23,6 +23,11 @@ const ROUTES = Object.freeze({
     title: 'Business workflow prepared',
     answer: 'I ran the request through the fraud gate, mapped the revenue signals, prepared business memory and architecture, and broke the work into scheduler-ready segments.',
   }),
+  build: Object.freeze({
+    label: 'Build request',
+    title: 'Let’s build that.',
+    answer: 'I’ll help set up the project and hand it to the planner. Confirm each step below.',
+  }),
   troubleshooting: Object.freeze({
     label: 'Troubleshooting',
     title: 'Checking diagnostics and logs',
@@ -92,6 +97,14 @@ function classifyIntent(value) {
 
   if (/\b(?:rag|document(?:s|ation)?|docs|knowledge base|memory|remember|workspace history|search (?:for|my|our|the)|look up|find (?:in|my|our))\b/i.test(input)) {
     return result('knowledge', input, 0.9);
+  }
+
+  // A "build" request (create/build a product) precedes the business branch so
+  // "Create X software" drives the guided project → planner flow rather than the
+  // business-analysis flow. Both a build verb and a product noun are required.
+  if (/\b(?:create|build|make|develop|design|prototype|scaffold|architect|spin up|stand up|kick off|start building)\b/i.test(input)
+    && /\b(?:software|apps?|application|web ?app|website|platform|tool|system|service|product|saas|mvp|prototype|bot|assistant|dashboard|marketplace|portal|extension|plugin)\b/i.test(input)) {
+    return result('build', input, 0.9);
   }
 
   if (/\b(?:business|startup|revenue|moneti[sz]e|pricing|sales|customer|market|go-to-market|growth|profit|margin|subscription|business model|launch|founder|venture|product idea)\b/i.test(input)) {

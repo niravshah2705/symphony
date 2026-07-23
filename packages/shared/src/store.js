@@ -219,6 +219,7 @@ const DEFAULT_STORE = Object.freeze({
   agentConfig: DEFAULT_AGENT_CONFIG,
   jobs: [], // enrichment jobs (see routes/agent.js)
   memories: [], // typed workspace memory records (see agent/memory.js)
+  conversations: [], // agent workspace conversation threads (see agent/conversations.js)
 });
 
 function ensureDataDir() {
@@ -309,6 +310,7 @@ function readStore() {
       agentConfig: migrateAgentConfig({ ...base.agentConfig, ...(parsed.agentConfig || {}) }),
       jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
       memories: Array.isArray(parsed.memories) ? parsed.memories : [],
+      conversations: Array.isArray(parsed.conversations) ? parsed.conversations : [],
     };
   } catch (err) {
     return cloneDefault();
@@ -601,6 +603,86 @@ function pruneMemories(keep = MAX_MEMORIES) {
   return memories;
 }
 
+/* --------------------------- Conversations ------------------------------ */
+
+const MAX_CONVERSATIONS = 100;
+const MAX_MESSAGES_PER_CONVERSATION = 200;
+
+/** All conversation threads, newest-first by updatedAt. */
+function listConversations() {
+  return [...readStore().conversations].sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+}
+
+function getConversation(id) {
+  return readStore().conversations.find((conversation) => conversation.id === id) || null;
+}
+
+/** Create a thread with a generated id + timestamps; cap total count (oldest dropped). */
+function addConversation(conversation = {}) {
+  const current = readStore();
+  const now = new Date().toISOString();
+  const record = {
+    id: `conv_${randomUUID()}`,
+    title: conversation.title || 'New conversation',
+    createdAt: now,
+    updatedAt: now,
+    messages: Array.isArray(conversation.messages) ? conversation.messages.slice(0, MAX_MESSAGES_PER_CONVERSATION) : [],
+  };
+  const conversations = [record, ...current.conversations].slice(0, MAX_CONVERSATIONS);
+  writeStore({ ...current, conversations });
+  return record;
+}
+
+/**
+ * Append already-validated messages (each stamped with a generated id + ts) to a
+ * thread, capped to the newest MAX_MESSAGES_PER_CONVERSATION. Returns the updated
+ * record or null when the id is unknown.
+ */
+function appendConversationMessages(id, messages) {
+  const current = readStore();
+  const now = new Date().toISOString();
+  const stamped = (Array.isArray(messages) ? messages : []).map((message) => ({ ...message, id: `msg_${randomUUID()}`, ts: now }));
+  let updated = null;
+  const conversations = current.conversations.map((conversation) => {
+    if (conversation.id !== id) return conversation;
+    const nextMessages = [...(conversation.messages || []), ...stamped].slice(-MAX_MESSAGES_PER_CONVERSATION);
+    updated = { ...conversation, messages: nextMessages, updatedAt: now };
+    return updated;
+  });
+  if (updated) writeStore({ ...current, conversations });
+  return updated;
+}
+
+/** Immutably patch a thread (e.g. rename); the id is never overwritten. */
+function updateConversation(id, patch) {
+  const current = readStore();
+  let updated = null;
+  const conversations = current.conversations.map((conversation) => {
+    if (conversation.id !== id) return conversation;
+    updated = { ...conversation, ...patch, id: conversation.id, updatedAt: new Date().toISOString() };
+    return updated;
+  });
+  if (updated) writeStore({ ...current, conversations });
+  return updated;
+}
+
+function removeConversation(id) {
+  const current = readStore();
+  const conversations = current.conversations.filter((conversation) => conversation.id !== id);
+  const removed = conversations.length !== current.conversations.length;
+  if (removed) writeStore({ ...current, conversations });
+  return removed;
+}
+
+/** Keep only the newest `keep` threads. Returns the remaining list. */
+function pruneConversations(keep = MAX_CONVERSATIONS) {
+  const current = readStore();
+  if (current.conversations.length <= keep) return current.conversations;
+  const conversations = current.conversations.slice(0, keep);
+  writeStore({ ...current, conversations });
+  return conversations;
+}
+
 module.exports = {
   DEFAULT_STORE,
   DEFAULT_AGENT_CONFIG,
@@ -642,4 +724,13 @@ module.exports = {
   addMemory,
   removeMemory,
   pruneMemories,
+  MAX_CONVERSATIONS,
+  MAX_MESSAGES_PER_CONVERSATION,
+  listConversations,
+  getConversation,
+  addConversation,
+  appendConversationMessages,
+  updateConversation,
+  removeConversation,
+  pruneConversations,
 };
