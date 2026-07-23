@@ -151,6 +151,7 @@ export const api = {
   getJobs: () => request('/agent/jobs'),
   getCoderStatus: () => request('/coder'),
   runAgentNow: () => request('/agent/run-now', { method: 'POST' }),
+  enqueueProject: (payload) => request('/agent/enqueue', { method: 'POST', body: JSON.stringify(payload) }),
   routeAgentMessage: (payload) =>
     request('/agent/message', { method: 'POST', body: JSON.stringify(payload) }),
   searchAgentKnowledge: (payload) =>
@@ -168,6 +169,16 @@ export const api = {
   // On-demand 6-step business pipeline (fraud, revenue, memory, spec, design, scheduler).
   prepareBusiness: (payload) =>
     request('/agent/business/prepare', { method: 'POST', body: JSON.stringify(payload) }),
+  // Conversation threads (agent workspace history).
+  listConversations: () => request('/agent/conversations'),
+  createConversation: (payload = {}) =>
+    request('/agent/conversations', { method: 'POST', body: JSON.stringify(payload) }),
+  getConversation: (id) => request(`/agent/conversations/${id}`),
+  appendConversationMessages: (id, messages) =>
+    request(`/agent/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify({ messages }) }),
+  renameConversation: (id, title) =>
+    request(`/agent/conversations/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+  deleteConversation: (id) => request(`/agent/conversations/${id}`, { method: 'DELETE' }),
   enrichInput: (payload) =>
     request('/agent/enrich-input', { method: 'POST', body: JSON.stringify(payload) }),
   analyzeTrace: (payload) =>

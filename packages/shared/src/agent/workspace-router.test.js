@@ -26,6 +26,12 @@ test('routes retrieval, diagnostics, implementation, and business intents in pri
   assert.equal(classifyIntent('Pressure-test the revenue model for my marketplace').intent, 'business');
 });
 
+test('routes build requests to the guided build intent, before the business branch', () => {
+  assert.equal(classifyIntent('Create medical transcription software').intent, 'build');
+  assert.equal(classifyIntent('Build a scheduling app for clinics').intent, 'build');
+  assert.equal(classifyIntent('Assess my subscription business revenue model').intent, 'business');
+});
+
 test('normalization rejects missing and oversized input', () => {
   assert.throws(() => normalizeMessage('   '), WorkspaceRouterError);
   assert.throws(() => normalizeMessage('x'.repeat(8_001)), /8,000/);

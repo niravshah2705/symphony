@@ -64,6 +64,7 @@ async function mockAgentWorkspace(page, {
   const routedInputs = [];
   const memoryPosts = [];
   const prepareInputs = [];
+  const enqueuePosts = [];
 
   await page.addInitScript(() => {
     localStorage.setItem('ai-fleet.locale', 'en');
@@ -100,7 +101,18 @@ async function mockAgentWorkspace(page, {
   }));
   await page.route('**/api/agent/jobs**', (route) => json(route, { jobs }));
   await page.route('**/api/projects', (route) => json(route, { projects }));
-  await page.route('**/api/businesses', (route) => json(route, { businesses }));
+  await page.route('**/api/projects/teams', (route) => json(route, { teams: [{ id: 'team_1', name: 'Core' }] }));
+  await page.route('**/api/businesses', (route) => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() || {};
+      return json(route, { business: { id: 'biz_new', name: body.name, projectId: 'proj_new', project: { id: 'proj_new', name: body.projectName || body.name } } }, 201);
+    }
+    return json(route, { businesses });
+  });
+  await page.route('**/api/agent/enqueue', (route) => {
+    enqueuePosts.push(route.request().postDataJSON());
+    return json(route, { job: { id: 'job_1' }, status: { running: false } });
+  });
   await page.route('**/api/agent/knowledge-search', (route) => json(route, documents));
   await page.route('**/api/observability/troubleshooting', (route) => json(route, diagnostics));
   await page.route('**/api/agent/message', (route) => {
@@ -124,6 +136,40 @@ async function mockAgentWorkspace(page, {
     prepareInputs.push(route.request().postDataJSON().input);
     return json(route, { business: prepared });
   });
+  // In-memory conversation store — one handler dispatches on method + path tail.
+  const conversationStore = [];
+  let convSeq = 0;
+  const summarize = (c) => ({ id: c.id, title: c.title, createdAt: c.createdAt, updatedAt: c.updatedAt, messageCount: c.messages.length });
+  await page.route('**/api/agent/conversations**', (route) => {
+    const method = route.request().method();
+    const rest = (new URL(route.request().url()).pathname.split('/api/agent/conversations')[1] || '');
+    const segs = rest.split('/').filter(Boolean);
+    if (segs.length === 0) {
+      if (method === 'GET') return json(route, { conversations: conversationStore.map(summarize) });
+      if (method === 'POST') {
+        convSeq += 1;
+        const body = route.request().postDataJSON() || {};
+        const conv = { id: `conv_${convSeq}`, title: body.title || 'New conversation', createdAt: 't', updatedAt: `t${convSeq}`, messages: [] };
+        conversationStore.unshift(conv);
+        return json(route, { conversation: conv }, 201);
+      }
+      return json(route, { error: 'method' }, 405);
+    }
+    const conv = conversationStore.find((c) => c.id === segs[0]);
+    if (segs[1] === 'messages' && method === 'POST') {
+      if (!conv) return json(route, { error: 'not found' }, 404);
+      const { messages = [] } = route.request().postDataJSON() || {};
+      conv.messages.push(...messages);
+      const firstUser = messages.find((m) => m.role === 'user');
+      if ((!conv.title || conv.title === 'New conversation') && firstUser) conv.title = firstUser.text.slice(0, 60);
+      return json(route, { conversation: conv });
+    }
+    if (!conv) return json(route, { error: 'not found' }, 404);
+    if (method === 'GET') return json(route, { conversation: conv });
+    if (method === 'PATCH') { conv.title = (route.request().postDataJSON() || {}).title; return json(route, { conversation: conv }); }
+    if (method === 'DELETE') { conversationStore.splice(conversationStore.indexOf(conv), 1); return json(route, { ok: true }); }
+    return json(route, { error: 'method' }, 405);
+  });
   await page.route('**/api/issues', (route) => {
     if (route.request().method() !== 'POST') return json(route, { error: 'Unexpected issue request' }, 405);
     const payload = route.request().postDataJSON();
@@ -139,7 +185,7 @@ async function mockAgentWorkspace(page, {
     });
   });
 
-  return { issuePosts, routedInputs, memoryPosts, prepareInputs };
+  return { issuePosts, routedInputs, memoryPosts, prepareInputs, enqueuePosts, conversationStore };
 }
 
 async function openAgent(page) {
@@ -152,7 +198,7 @@ async function openAgent(page) {
 async function routeRequest(page, input) {
   const composer = page.getByRole('textbox', { name: 'Ask or act from the Agent omnibox' });
   await composer.fill(input);
-  await page.getByRole('button', { name: 'Route request' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
 }
 
 test('greetings and unsafe scam requests stay on non-mutating routes', async ({ page }) => {
@@ -236,6 +282,65 @@ test('knowledge requests report typed memory, documents, and workspace matches',
   await expect(matches.locator('.memory-scope-chip.scope-business')).toBeVisible();
   await expect(rail.locator('[data-source-type="Workspace document"]')).toContainText('docs/revenue.md');
   await expect(rail).toContainText('Semantic vector retrieval is not connected yet.');
+});
+
+test('build requests run a guided project -> planner flow with human-in-the-loop steps', async ({ page }) => {
+  const { enqueuePosts } = await mockAgentWorkspace(page);
+  await openAgent(page);
+
+  await routeRequest(page, 'Create medical transcription software');
+  await expect(page.locator('.intent-message[data-agent-intent="build"]')).toBeVisible();
+
+  const flow = page.locator('.build-flow');
+  await expect(flow).toBeVisible();
+  await expect(flow).toContainText('Step 1');
+
+  // No project selected -> create a new one (human-in-the-loop: team + name).
+  await flow.getByRole('button', { name: 'Create new project' }).click();
+  await expect(flow.getByRole('textbox', { name: 'Project name' })).toHaveValue(/medical transcription software/i);
+  await flow.getByRole('button', { name: 'Create project', exact: true }).click();
+
+  // Then the planner handoff step.
+  await expect(flow).toContainText('Step 2 · Planner');
+  await flow.getByRole('button', { name: 'Start planning' }).click();
+  await expect(flow).toContainText('Queued for planning');
+
+  expect(enqueuePosts).toHaveLength(1);
+  expect(enqueuePosts[0].projectId).toBe('proj_new');
+});
+
+test('conversation history: sending lazily creates a thread that survives reload, plus new chat and delete', async ({ page }) => {
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+
+  const rail = page.locator('.conversation-rail');
+  await expect(rail).toBeVisible();
+  await expect(rail.locator('.conversation-thread')).toHaveCount(0);
+
+  // Sending a message lazily creates a thread and persists the turn (auto-titled).
+  await routeRequest(page, 'Search docs & memory for revenue decisions');
+  await expect(page.locator('.intent-message[data-agent-intent="knowledge"]')).toBeVisible();
+  await expect(rail.locator('.conversation-thread')).toHaveCount(1);
+  await expect(rail.locator('.conversation-thread-open strong')).toContainText('Search docs & memory');
+  await expect(page).toHaveURL(/#\/agent\/conv_/);
+
+  // Reload: the thread list and the message stream replay from the server.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.agent-workspace')).toBeVisible();
+  await expect(rail.locator('.conversation-thread')).toHaveCount(1);
+  await expect(page.locator('.conversation-message.user')).toContainText('Search docs & memory for revenue decisions');
+  await expect(page.locator('.intent-message[data-agent-intent="knowledge"]')).toBeVisible();
+
+  // "New chat" opens an empty thread; sending creates a second thread.
+  await rail.getByRole('button', { name: '+ New chat' }).click();
+  await expect(page).toHaveURL(/#\/agent\/new$/);
+  await expect(page.locator('.conversation-message.user')).toHaveCount(0);
+  await routeRequest(page, 'Assess a subscription business idea');
+  await expect(rail.locator('.conversation-thread')).toHaveCount(2);
+
+  // Deleting the active thread falls back to the remaining one.
+  await rail.locator('.conversation-thread.active .conversation-thread-delete').click();
+  await expect(rail.locator('.conversation-thread')).toHaveCount(1);
 });
 
 test('remember phrasing surfaces a confirm-before-save memory draft', async ({ page }) => {

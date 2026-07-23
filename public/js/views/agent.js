@@ -9,13 +9,16 @@ import {
   searchWorkspaceMemory,
   summarizeTroubleshooting,
 } from '../omnibox-router.mjs';
+import { state, setCurrentProject } from '../state.js';
 
 let refreshTimer = null;
 let railState = { mode: 'setup', result: null };
 let latestAgentStatus = null;
 let latestJobs = [];
-const conversation = [];
+let conversation = []; // in-memory entries for the ACTIVE thread (full routeResult fidelity)
+let activeConversationId = null; // the open thread; null = unsaved "new" state (lazy-created on first send)
 const pauseSignatures = new WeakMap();
+const CONVERSATION_ID = /^conv_[A-Za-z0-9_-]{1,64}$/;
 
 function stopRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
@@ -35,6 +38,15 @@ export async function renderAgent(view) {
     api.getCoderStatus().catch(() => null),
   ]);
 
+  // Load the active conversation thread (from the #/agent/<id> hash) + the thread
+  // list for the rail. Bare #/agent restores the most recent thread; #/agent/new
+  // (or a missing thread) starts an unsaved conversation created lazily on send.
+  const threadsResponse = await api.listConversations().catch(() => ({ conversations: [] }));
+  const summaries = threadsResponse.conversations || [];
+  const active = await resolveActiveConversation(parseWorkspaceId(), summaries);
+  activeConversationId = active ? active.id : null;
+  conversation = active ? hydrateMessages(active.messages) : [];
+
   const pauseHost = el('div', { class: 'agent-pause-host' });
   const stream = el('div', { class: 'conversation-stream', 'aria-live': 'polite' });
   const railBody = el('div', { id: 'agent-details-panel', class: 'rail-content', role: 'tabpanel', 'aria-labelledby': 'agent-setup-tab' });
@@ -47,6 +59,7 @@ export async function renderAgent(view) {
 
   clear(view).append(
     el('section', { class: 'agent-workspace' }, [
+      buildThreadRail(summaries),
       el('main', { class: 'scenario-reader agent-reader' }, [
         toolbar,
         el('div', { class: 'conversation-wrap agent-omnibox-wrap' }, [
@@ -73,7 +86,6 @@ export async function renderAgent(view) {
   renderPauseNotices(pauseHost, ...pauseSources(status, coderStatus, jobs));
   renderWelcome(stream, status);
   for (const entry of conversation) stream.append(renderConversationEntry(entry, railBody));
-  renderRecentWork(stream, jobs, railBody);
   renderCurrentRail(railBody);
 
   refreshTimer = setInterval(async () => {
@@ -96,7 +108,6 @@ export async function renderAgent(view) {
         toolbarSignature = nextToolbarSignature;
       }
       if (railState.mode !== 'result') renderCurrentRail(railBody);
-      updateLiveJobs(stream, refreshedJobs, railBody);
     } catch (_) {
       // A short service restart should not interrupt the conversation.
     }
@@ -312,7 +323,7 @@ function buildComposer(stream, railBody) {
     'aria-label': 'Ask or act from the Agent omnibox',
   });
   const count = el('span', { class: 'composer-count' }, '0 / 8,000');
-  const send = el('button', { class: 'primary scenario-submit', type: 'button' }, 'Route request');
+  const send = el('button', { class: 'primary scenario-submit', type: 'button' }, 'Send');
 
   const submit = async () => {
     const text = input.value.trim();
@@ -337,6 +348,10 @@ function buildComposer(stream, railBody) {
       conversation.push(entry);
       pending.replaceWith(renderConversationEntry(entry, railBody));
       showRailResult(railBody, result);
+      // Persist the turn server-side (lazily creating the thread on first send).
+      void persistTurn(text, result);
+      // A build request runs a guided, human-in-the-loop flow inline in the chat.
+      if (result.route && result.route.intent === 'build') void startBuildFlow(result.route, stream, railBody);
     } catch (error) {
       pending.replaceWith(
         assistantMessage(
@@ -348,7 +363,7 @@ function buildComposer(stream, railBody) {
       );
     } finally {
       send.disabled = false;
-      send.textContent = 'Route request';
+      send.textContent = 'Send';
     }
   };
 
@@ -534,6 +549,7 @@ function textArray(value) {
 function renderConversationEntry(entry, railBody) {
   if (entry.role === 'user') return userMessage(entry.text);
   if (entry.routeResult) return renderRoutedConversation(entry.routeResult, railBody);
+  if (entry.stored) return renderStoredAssistant(entry.stored, railBody);
   const analysis = entry.analysis;
   const message = assistantMessage(
     analysis.goal ? 'Here’s what I heard.' : 'I’ve organized that.',
@@ -560,95 +576,332 @@ function renderConversationEntry(entry, railBody) {
   return message;
 }
 
-function renderRoutedConversation(result, railBody) {
-  const { route, payload = {} } = result;
-  let copy = route.answer;
+/** The dynamic assistant copy for a routed result (reused for stored transcripts). */
+function routedCopy(result) {
+  const { route = {}, payload = {} } = result || {};
   if (route.intent === 'knowledge') {
-    copy = payload.results?.length
-      ? `I found ${payload.results.length} relevant workspace ${payload.results.length === 1 ? 'record' : 'records'} across business memory, projects, and recent activity.`
+    return payload.results?.length
+      ? `I found ${payload.results.length} relevant workspace ${payload.results.length === 1 ? 'record' : 'records'} across memory, projects, and recent activity.`
       : 'I checked the connected workspace sources but did not find a matching record. I won’t invent a document or memory that is not connected.';
-  } else if (route.intent === 'troubleshooting') {
-    copy = payload.headline ? `${payload.headline}. I also checked ${payload.signals?.length || 0} recent warning or error log signals.` : route.answer;
-  } else if (route.intent === 'business') {
-    copy = !payload || !payload.stages
+  }
+  if (route.intent === 'troubleshooting') {
+    return payload.headline ? `${payload.headline}. I also checked ${payload.signals?.length || 0} recent warning or error log signals.` : route.answer;
+  }
+  if (route.intent === 'business') {
+    return !payload || !payload.stages
       ? 'This looks like business work. Open the result and press “Prepare business plan” to run the fraud gate, revenue metrics, memory, spec breakdown, UI mockup, and scheduling.'
       : payload.blocked || payload.fraud?.level === 'high'
         ? 'The fraud gate found high-risk signals, so I stopped before scheduling work. Review the flagged claims in the side panel.'
         : 'I ran the full business pipeline. Review the fraud gate, revenue metrics, memory, segments, and UI mockup in the side panel.';
-  } else if (route.intent === 'implementation' && !payload.projects?.length) {
-    copy = 'I drafted the implementation task. Connect or create a project before confirming the task in the side panel.';
-  } else if (route.intent === 'general' && result.analysis?.summary) {
-    copy = result.analysis.summary;
   }
+  if (route.intent === 'implementation' && !payload.projects?.length) {
+    return 'I drafted the implementation task. Connect or create a project before confirming the task in the side panel.';
+  }
+  if (route.intent === 'general' && result.analysis?.summary) {
+    return result.analysis.summary;
+  }
+  return route.answer;
+}
 
-  const links = [{ label: route.intent === 'implementation' ? 'Review task' : 'Open result', action: () => showRailResult(railBody, result) }];
+function chipTone(intent) {
+  return intent === 'unsafe' ? 'red' : intent === 'business' ? 'green' : 'blue';
+}
+
+function renderRoutedConversation(result, railBody) {
+  const { route } = result;
+  const links = route.intent === 'build' ? [] : [{ label: route.intent === 'implementation' ? 'Review task' : 'Open result', action: () => showRailResult(railBody, result) }];
   if (route.intent === 'troubleshooting') links.push({ label: 'Full diagnostics', href: '#/troubleshooting' });
   if (route.intent === 'knowledge') links.push({ label: 'Browse projects', href: '#/projects' });
-  const message = assistantMessage(route.title, copy, links, `intent-message intent-${route.intent}`);
+  const message = assistantMessage(route.title, routedCopy(result), links, `intent-message intent-${route.intent}`);
   message.dataset.agentIntent = route.intent;
   const body = message.querySelector('.message-copy');
-  body.prepend(el('span', { class: `intent-route-chip tone-${route.intent === 'unsafe' ? 'red' : route.intent === 'business' ? 'green' : 'blue'}` }, route.label));
+  body.prepend(el('span', { class: `intent-route-chip tone-${chipTone(route.intent)}` }, route.label));
   if (result.warning) body.append(el('p', { class: 'intent-warning' }, result.warning));
   return message;
 }
 
-function renderRecentWork(stream, jobs, railBody) {
-  const host = el('div', { class: 'live-jobs' });
-  host.dataset.liveJobs = 'true';
-  stream.append(host);
-  updateLiveJobs(stream, jobs, railBody);
+/** Re-render a persisted assistant turn. "Open result" re-routes the original input live (read-only, no mutation). */
+function renderStoredAssistant(stored, railBody) {
+  const intent = stored.intent || 'general';
+  const links = (stored.input && intent !== 'build') ? [{ label: 'Open result', action: async () => {
+    try {
+      showRailResult(railBody, await resolveOmniboxRequest(stored.input));
+    } catch (error) {
+      toast(error.message, 'err');
+    }
+  } }] : [];
+  const message = assistantMessage(stored.title || 'Result', stored.copy || '', links, `intent-message intent-${intent}`);
+  message.dataset.agentIntent = intent;
+  const body = message.querySelector('.message-copy');
+  if (stored.label) body.prepend(el('span', { class: `intent-route-chip tone-${chipTone(intent)}` }, stored.label));
+  if (stored.warning) body.append(el('p', { class: 'intent-warning' }, stored.warning));
+  return message;
 }
 
-function updateLiveJobs(stream, jobs, railBody) {
-  const host = stream.querySelector('[data-live-jobs="true"]');
-  if (!host) return;
-  clear(host);
-  const visible = (jobs || []).slice(0, 5);
-  if (!visible.length) return;
-  host.append(el('div', { class: 'conversation-divider' }, [el('span', {}, 'Recent work')]), ...visible.map((job) => jobMessage(job, railBody)));
+/* --------------------------- Conversation threads ----------------------- */
+
+/** The `<id>` from `#/agent/<id>` ('new' = explicit fresh thread; null = bare #/agent). */
+function parseWorkspaceId() {
+  const parts = window.location.hash.replace(/^#\/?/, '').split('/');
+  return parts[0] === 'agent' && parts[1] ? parts[1] : null;
 }
 
-function jobMessage(job, railBody) {
-  const coding = job.kind === 'coding';
-  const subject = coding ? job.taskTitle || job.taskIdentifier || 'a coding task' : job.projectName || 'your project';
-  const copy = friendlyJobCopy(job, subject);
-  const links = [{ label: 'See activity', i18n: 'agentJobActivity', action: () => {
-    railState.mode = 'activity';
-    syncRailTabs(railBody);
-    renderJobRail(railBody, job);
-  } }];
-  if (job.traceUrl) links.push({ label: 'Open trace', href: job.traceUrl, external: true });
-  if (job.taskUrl) links.push({ label: 'Open task', href: job.taskUrl, external: true });
-  const title = copy.titleKey
-    ? { text: copy.title, attrs: { dataset: { i18n: copy.titleKey, i18nFallback: copy.title } } }
-    : copy.title;
-  const text = copy.textKey
-    ? { text: copy.text, attrs: { dataset: { i18n: copy.textKey, i18nFallback: copy.text } } }
-    : copy.text;
-  return assistantMessage(title, text, links, `job-message status-${job.status}`);
-}
-
-function friendlyJobCopy(job, subject) {
-  const coding = job.kind === 'coding';
-  const pause = agentPauseInfo(job);
-  if (pause) {
-    const pauseCopy = agentPauseCopy(pause);
-    return {
-      title: pauseCopy.title,
-      titleKey: pauseCopy.titleKey,
-      text: pauseCopy.job,
-      textKey: pauseCopy.jobKey,
-    };
+async function resolveActiveConversation(workspaceId, summaries) {
+  if (workspaceId === 'new') return null;
+  if (workspaceId && CONVERSATION_ID.test(workspaceId)) {
+    const found = await api.getConversation(workspaceId).then((r) => r.conversation).catch(() => null);
+    if (found) return found;
   }
-  if (job.status === 'pending') return { title: `I’ve queued ${subject}.`, text: 'It will start as soon as capacity is available.' };
-  if (job.status === 'running') return { title: `I’m working on ${subject}.`, text: 'I’ll keep the detailed activity in the side panel while the work continues.' };
-  if (job.status === 'error') return { title: `I hit a snag with ${subject}.`, text: job.error || 'The work stopped before it could finish. Open activity to see where.' };
-  const summary = job.summary || {};
-  if (summary.aifail) return { title: `${subject} needs another look.`, text: summary.reason || 'It was not ready to turn into an automated plan yet.' };
-  if (coding) return { title: `${subject} is finished.`, text: summary.pr ? 'The change is complete and its pull request is ready.' : 'The coding pass has completed.' };
-  return { title: `The plan for ${subject} is ready.`, text: summary.milestonesCreated
-    ? `I organized it into ${summary.milestonesCreated} milestone${summary.milestonesCreated === 1 ? '' : 's'} and ${summary.issuesCreated || 0} pieces of work.`
-    : 'The planning pass has completed.' };
+  if (!workspaceId && summaries.length) {
+    const recent = await api.getConversation(summaries[0].id).then((r) => r.conversation).catch(() => null);
+    if (recent) {
+      try { window.history.replaceState(null, '', `#/agent/${recent.id}`); } catch (_) { /* ignore */ }
+      return recent;
+    }
+  }
+  return null;
+}
+
+function hydrateMessages(messages) {
+  return (messages || []).map((message) => (message.role === 'user'
+    ? { role: 'user', text: message.text }
+    : { role: 'assistant', stored: message }));
+}
+
+function compactAssistant(userText, result) {
+  const route = result.route || {};
+  return {
+    role: 'assistant',
+    intent: route.intent || 'general',
+    title: route.title || 'Result',
+    copy: routedCopy(result),
+    label: route.label || '',
+    warning: result.warning || '',
+    input: userText,
+  };
+}
+
+async function persistTurn(userText, result) {
+  try {
+    if (!activeConversationId) {
+      const created = await api.createConversation({});
+      activeConversationId = created.conversation.id;
+      try { window.history.replaceState(null, '', `#/agent/${activeConversationId}`); } catch (_) { /* ignore */ }
+    }
+    await api.appendConversationMessages(activeConversationId, [
+      { role: 'user', text: userText },
+      compactAssistant(userText, result),
+    ]);
+    void refreshThreadRail();
+  } catch (_) {
+    // A persistence failure should never break the live conversation.
+  }
+}
+
+async function refreshThreadRail() {
+  const host = document.querySelector('.conversation-thread-list');
+  if (!host) return;
+  const { conversations = [] } = await api.listConversations().catch(() => ({ conversations: [] }));
+  clear(host);
+  if (!conversations.length) {
+    host.append(el('p', { class: 'rail-copy' }, 'No conversations yet. Start one below.'));
+    return;
+  }
+  for (const summary of conversations) host.append(threadItem(summary));
+}
+
+function buildThreadRail(summaries) {
+  const newChat = el('button', { class: 'conversation-new', type: 'button' }, '+ New chat');
+  newChat.addEventListener('click', () => { window.location.hash = '#/agent/new'; });
+  const list = el('div', { class: 'conversation-thread-list' }, summaries.length
+    ? summaries.map((summary) => threadItem(summary))
+    : [el('p', { class: 'rail-copy' }, 'No conversations yet. Start one below.')]);
+  return el('aside', { class: 'conversation-rail', 'aria-label': 'Conversations' }, [
+    el('div', { class: 'conversation-rail-head' }, [el('strong', {}, 'Conversations'), newChat]),
+    list,
+  ]);
+}
+
+function threadItem(summary) {
+  const active = summary.id === activeConversationId;
+  const open = el('a', { class: 'conversation-thread-open', href: `#/agent/${summary.id}` }, [
+    el('strong', {}, summary.title || 'New conversation'),
+    el('small', {}, `${summary.messageCount || 0} message${summary.messageCount === 1 ? '' : 's'}`),
+  ]);
+  const rename = el('button', { class: 'conversation-thread-rename', type: 'button', 'aria-label': 'Rename conversation', title: 'Rename' }, '✎');
+  rename.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); startRename(open, summary); });
+  const del = el('button', { class: 'conversation-thread-delete', type: 'button', 'aria-label': 'Delete conversation', title: 'Delete' }, '×');
+  del.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      await api.deleteConversation(summary.id);
+      if (summary.id === activeConversationId) window.location.hash = '#/agent';
+      else void refreshThreadRail();
+    } catch (error) {
+      toast(error.message, 'err');
+    }
+  });
+  return el('div', { class: `conversation-thread ${active ? 'active' : ''}`.trim(), dataset: { threadId: summary.id } }, [open, rename, del]);
+}
+
+/** Inline rename: replace the row with a text input; Enter/blur commits, Escape cancels. */
+function startRename(open, summary) {
+  const row = open.closest('.conversation-thread');
+  if (!row) return;
+  const input = el('input', { class: 'conversation-rename-input', type: 'text', maxlength: '120', value: summary.title || '', 'aria-label': 'Conversation title' });
+  const commit = async () => {
+    const title = input.value.trim();
+    if (title && title !== summary.title) {
+      try { await api.renameConversation(summary.id, title); } catch (error) { toast(error.message, 'err'); }
+    }
+    void refreshThreadRail();
+  };
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
+    else if (event.key === 'Escape') { input.value = summary.title || ''; input.blur(); }
+  });
+  input.addEventListener('blur', commit, { once: true });
+  clear(row).append(input);
+  input.focus();
+  input.select();
+}
+
+/* --------------------------- Guided build flow -------------------------- */
+
+/** Derive a project name from a build request ("Create medical transcription software"). */
+function projectNameFromGoal(goal) {
+  const stripped = String(goal || '')
+    .replace(/^\s*(?:please\s+|can you\s+|i want (?:you )?to\s+)?(?:create|build|make|develop|design|prototype|scaffold|architect|spin up|stand up|kick off|start building)\s+(?:a |an |the |me a )?/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const name = (stripped || 'New product').slice(0, 80).replace(/[.!?]+$/, '');
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/** Append a concise assistant note to the active thread's transcript. */
+function persistNote(intent, copy) {
+  if (!activeConversationId) return;
+  api.appendConversationMessages(activeConversationId, [{ role: 'assistant', intent, title: 'Build', copy }])
+    .then(() => refreshThreadRail())
+    .catch(() => { /* a note that fails to persist should not break the flow */ });
+}
+
+/** Human-in-the-loop build flow appended to the chat: resolve/create project → hand to planner. */
+async function startBuildFlow(route, stream, railBody) {
+  const card = el('article', { class: 'conversation-message assistant build-flow' }, [
+    el('div', { class: 'message-avatar' }, 'S'),
+    el('div', { class: 'message-copy build-flow-body' }),
+  ]);
+  stream.append(card);
+  const body = card.querySelector('.build-flow-body');
+  let projects = [];
+  try { projects = (await api.getProjects()).projects || []; } catch (_) { /* offline: still allow create */ }
+  const selected = state.currentProjectId ? projects.find((project) => project.id === state.currentProjectId) : null;
+  renderBuildProjectStep(body, { goal: route.input, selected, projects, railBody });
+  card.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
+function buildStepHead(body, title, sub) {
+  clear(body).append(el('strong', { class: 'message-title' }, title), sub ? el('p', {}, sub) : null);
+}
+
+function renderBuildProjectStep(body, ctx) {
+  buildStepHead(body, 'Step 1 · Project', ctx.selected
+    ? `Use the selected project “${ctx.selected.name}”, create a new one, or pick another.`
+    : 'No project is selected. Create a new project or pick an existing one.');
+  const actions = el('div', { class: 'build-flow-actions' });
+  if (ctx.selected) {
+    const useBtn = el('button', { class: 'primary', type: 'button' }, `Use “${ctx.selected.name}”`);
+    useBtn.addEventListener('click', () => renderBuildPlannerStep(body, { ...ctx, project: ctx.selected }));
+    actions.append(useBtn);
+  }
+  const createBtn = el('button', { class: ctx.selected ? '' : 'primary', type: 'button' }, 'Create new project');
+  createBtn.addEventListener('click', () => renderBuildCreateStep(body, ctx));
+  actions.append(createBtn);
+  if (ctx.projects.length) {
+    const picker = el('select', { 'aria-label': 'Existing project' }, [
+      el('option', { value: '' }, 'Pick an existing project…'),
+      ...ctx.projects.map((project) => el('option', { value: project.id }, project.name || project.id)),
+    ]);
+    picker.addEventListener('change', () => {
+      const project = ctx.projects.find((candidate) => candidate.id === picker.value);
+      if (project) { setCurrentProject(project.id); renderBuildPlannerStep(body, { ...ctx, project }); }
+    });
+    body.append(picker);
+  }
+  body.append(actions);
+}
+
+async function renderBuildCreateStep(body, ctx) {
+  buildStepHead(body, 'Step 1 · Create project', 'Confirm the team and name. This creates a business-backed project the planner can pick up.');
+  const nameInput = el('input', { type: 'text', maxlength: '120', value: projectNameFromGoal(ctx.goal), 'aria-label': 'Project name' });
+  const teamSelect = el('select', { 'aria-label': 'Team' }, [el('option', { value: '' }, 'Loading teams…')]);
+  const feedback = el('div', { class: 'task-create-feedback', role: 'status', 'aria-live': 'polite' });
+  const create = el('button', { class: 'primary', type: 'button', disabled: true }, 'Create project');
+  const back = el('button', { class: '', type: 'button' }, 'Back');
+  back.addEventListener('click', () => renderBuildProjectStep(body, ctx));
+  try {
+    const teams = (await api.getTeams()).teams || [];
+    if (!teams.length) {
+      clear(teamSelect).append(el('option', { value: '' }, 'No teams — connect Linear in Settings'));
+    } else {
+      clear(teamSelect).append(...teams.map((team) => el('option', { value: team.id }, team.name || team.id)));
+      create.disabled = false;
+    }
+  } catch (_) {
+    clear(teamSelect).append(el('option', { value: '' }, 'Could not load teams'));
+  }
+  create.addEventListener('click', async () => {
+    if (!teamSelect.value || !nameInput.value.trim()) return;
+    create.disabled = true;
+    create.textContent = 'Creating…';
+    feedback.className = 'task-create-feedback';
+    try {
+      const name = nameInput.value.trim();
+      const response = await api.createBusiness({ name, description: ctx.goal, createNewProject: true, teamId: teamSelect.value, projectName: name });
+      const business = response.business || {};
+      const project = business.project || { id: business.projectId, name };
+      if (project.id) setCurrentProject(project.id);
+      persistNote('build', `Created project “${name}”.`);
+      renderBuildPlannerStep(body, { ...ctx, project: { id: project.id, name: project.name || name } });
+    } catch (error) {
+      create.disabled = false;
+      create.textContent = 'Create project';
+      feedback.classList.add('error');
+      feedback.textContent = error.message;
+    }
+  });
+  body.append(formField('Team', teamSelect), formField('Project name', nameInput), el('div', { class: 'build-flow-actions' }, [create, back]), feedback);
+}
+
+function renderBuildPlannerStep(body, ctx) {
+  const project = ctx.project || {};
+  const label = project.name || project.id;
+  buildStepHead(body, 'Step 2 · Planner', `Project “${label}” is ready. Move it to the planner to break it into milestones and tasks?`);
+  const feedback = el('div', { class: 'task-create-feedback', role: 'status', 'aria-live': 'polite' });
+  const start = el('button', { class: 'primary', type: 'button' }, 'Start planning');
+  const notYet = el('button', { class: '', type: 'button' }, 'Not yet');
+  notYet.addEventListener('click', () => {
+    buildStepHead(body, 'Project ready', `“${label}” is set up. Ask me anything else, or say “start planning” when you’re ready.`);
+  });
+  start.addEventListener('click', async () => {
+    start.disabled = true;
+    start.textContent = 'Queuing…';
+    feedback.className = 'task-create-feedback';
+    try {
+      await api.enqueueProject({ projectId: project.id, projectName: project.name });
+      persistNote('build', `Queued “${label}” for the planner.`);
+      buildStepHead(body, 'Queued for planning', `“${label}” is queued. I’ll break it into milestones and tasks — follow progress in the Activity tab. You can keep chatting.`);
+    } catch (error) {
+      start.disabled = false;
+      start.textContent = 'Start planning';
+      feedback.classList.add('error');
+      feedback.textContent = error.status === 403 ? 'Assume a role in Settings before starting the planner.' : error.message;
+      if (error.status === 403) feedback.append(el('a', { href: '#/settings', style: 'margin-left:6px' }, 'Open Settings'));
+    }
+  });
+  body.append(el('div', { class: 'build-flow-actions' }, [start, notYet]), feedback);
 }
 
 function renderIntentRail(host, result) {
