@@ -248,6 +248,9 @@ function normalizeParameters(preset, overrides = {}) {
     (preset.provider === 'lmstudio' || preset.provider === 'omlx') && CONTEXT_MODES.has(overrides.contextMode)
       ? overrides.contextMode
       : defaults.contextMode;
+  // Streaming: only Claude exposes it (default on); other providers force it on
+  // elsewhere. An explicit boolean override wins, else the preset default (on).
+  const streaming = typeof overrides.streaming === 'boolean' ? overrides.streaming : defaults.streaming !== false;
 
   return {
     model: (() => {
@@ -264,6 +267,7 @@ function normalizeParameters(preset, overrides = {}) {
     reasoningAdapter: caps.reasoningAdapter,
     jsonMode,
     contextMode,
+    streaming,
   };
 }
 
@@ -331,6 +335,7 @@ function settingsPatchForPreset(preset, overrides = {}) {
     claudeTemperature: params.temperature,
     claudeReasoningEffort: params.reasoningEffort,
     claudeReasoningAdapter: params.reasoningAdapter,
+    claudeStreaming: params.streaming,
   };
 }
 
@@ -601,11 +606,12 @@ function customPresetForSettings(provider, settings) {
     requestLimits: { maxOutputContextFraction: null },
     capabilities: {
       temperature: false, contextWindowConfigurable: false, reasoningAdapter: adapter,
-      reasoningEfforts: efforts,
+      reasoningEfforts: efforts, streamingConfigurable: true,
     },
     parameters: {
       contextWindow: settings.claudeContextWindow || 1000000,
       maxOutputTokens: settings.claudeMaxTokens || 16000,
+      streaming: settings.claudeStreaming !== false,
       temperature: null,
       topP: null, topK: null, repeatPenalty: null,
       reasoning: {
