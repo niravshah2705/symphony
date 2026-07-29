@@ -20,6 +20,8 @@ const {
   appendConversationMessages,
   updateConversation,
   removeConversation,
+  getApprovalGate,
+  listApprovalGates,
 } = require('@ai-fleet/shared/store');
 const { getProjectsWithLabels, getAllProjectLabels } = require('@ai-fleet/shared/linear');
 const { asyncHandler } = require('@ai-fleet/shared/util');
@@ -32,10 +34,13 @@ const workspaceRouter = require('@ai-fleet/shared/agent/workspace-router');
 const { searchDocuments } = require('@ai-fleet/shared/agent/knowledge-search');
 const memory = require('@ai-fleet/shared/agent/memory');
 const businessPipeline = require('@ai-fleet/shared/agent/business-pipeline');
+const approvalGate = require('@ai-fleet/shared/agent/approval-gate');
 const conversations = require('@ai-fleet/shared/agent/conversations');
 
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const CONV_ID_PATTERN = /^conv_[A-Za-z0-9_-]{1,64}$/;
+const GATE_ID_PATTERN = /^gate_[A-Za-z0-9_-]{1,64}$/;
+const GATE_STATUSES = Object.freeze(['awaiting-approval', 'approved', 'auto-approved', 'proceeded', 'superseded']);
 
 const router = express.Router();
 
@@ -97,6 +102,8 @@ function sanitizeConfig(body, current) {
       typeof b.autoLabelNewProjects === 'boolean' ? b.autoLabelNewProjects : current.autoLabelNewProjects,
     createIssues: typeof b.createIssues === 'boolean' ? b.createIssues : current.createIssues,
     addDependencies: typeof b.addDependencies === 'boolean' ? b.addDependencies : current.addDependencies,
+    // Minutes to hold an amber/red requirement gate before auto-approving (1 min – 7 days).
+    evaluationApprovalWaitMinutes: clampInt(b.evaluationApprovalWaitMinutes, 1, 10080, current.evaluationApprovalWaitMinutes),
   };
 }
 
@@ -361,6 +368,83 @@ router.post(
       assumedRole: getAssumedRole(),
     });
     res.json({ business: payload });
+  })
+);
+
+// POST /api/agent/business/evaluate — requirement-readiness preflight (step 0),
+// run BEFORE design/scheduling. Returns a traffic-light signal + acceptance
+// criteria. Green proceeds straight to the pipeline (no gate); amber/red opens a
+// durable approval gate that holds the pipeline pending human refinement. The
+// signal is computed server-side from readiness scores — the model cannot force
+// green (business-pipeline normalizeEvaluation clamps it down).
+router.post(
+  '/business/evaluate',
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    let business = null;
+    if (typeof body.businessId === 'string' && REF_ID_PATTERN.test(body.businessId)) {
+      business = readStore().businesses.find((b) => b.id === body.businessId) || null;
+    }
+    const conversationId = typeof body.conversationId === 'string' && CONV_ID_PATTERN.test(body.conversationId)
+      ? body.conversationId
+      : null;
+
+    const result = await businessPipeline.evaluateRequirement({
+      input: typeof body.input === 'string' ? body.input : '',
+      settings: getSettings(),
+      business,
+    });
+
+    if (result.blocked) return res.json({ blocked: true, answer: result.answer, signal: result.signal });
+    if (result.signal === 'green') return res.json({ evaluation: result.evaluation, signal: 'green', gate: null });
+
+    const gate = approvalGate.createGate({
+      requirement: result.goal,
+      businessId: business ? business.id : null,
+      conversationId,
+      evaluation: result.evaluation,
+      signal: result.signal,
+      waitMinutes: getAgentConfig().evaluationApprovalWaitMinutes,
+    });
+    res.json({ evaluation: result.evaluation, signal: result.signal, gate });
+  })
+);
+
+// GET /api/agent/business/gates — list gates (optional ?businessId= &status=).
+router.get('/business/gates', (req, res) => {
+  const filter = {};
+  if (typeof req.query.businessId === 'string' && REF_ID_PATTERN.test(req.query.businessId)) filter.businessId = req.query.businessId;
+  if (typeof req.query.status === 'string' && GATE_STATUSES.includes(req.query.status)) filter.status = req.query.status;
+  res.json({ gates: listApprovalGates(filter) });
+});
+
+// GET /api/agent/business/gates/:id — one gate (front-end polls for the countdown
+// and to auto-advance when status flips to proceeded).
+router.get('/business/gates/:id', (req, res) => {
+  if (!GATE_ID_PATTERN.test(req.params.id)) return res.status(400).json({ error: 'Invalid gate id.' });
+  const gate = getApprovalGate(req.params.id);
+  if (!gate) return res.status(404).json({ error: 'Approval gate not found.' });
+  res.json({ gate });
+});
+
+// POST /api/agent/business/gates/:id/approve — human "approve & proceed now".
+router.post(
+  '/business/gates/:id/approve',
+  asyncHandler(async (req, res) => {
+    if (!GATE_ID_PATTERN.test(req.params.id)) return res.status(400).json({ error: 'Invalid gate id.' });
+    const { gate, business } = await approvalGate.approveGate(req.params.id);
+    res.json({ gate, business });
+  })
+);
+
+// POST /api/agent/business/gates/:id/reevaluate — refine the requirement + re-score.
+router.post(
+  '/business/gates/:id/reevaluate',
+  asyncHandler(async (req, res) => {
+    if (!GATE_ID_PATTERN.test(req.params.id)) return res.status(400).json({ error: 'Invalid gate id.' });
+    const body = req.body || {};
+    const out = await approvalGate.reevaluateGate(req.params.id, typeof body.input === 'string' ? body.input : '');
+    res.json(out);
   })
 );
 

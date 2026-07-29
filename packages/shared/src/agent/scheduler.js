@@ -307,6 +307,22 @@ async function processPending() {
   }
 }
 
+/**
+ * Auto-approve requirement-evaluation gates whose deadline has elapsed. Runs
+ * every cadence, INDEPENDENT of the Linear-key/role/LLM guards in
+ * `processPending` — a missing Linear key must never stall auto-approval. Errors
+ * are swallowed (logged) so a bad gate cannot break the scheduling loop.
+ */
+async function processApprovalDeadlines(deps = {}) {
+  const sweep = deps.sweepExpiredGates || require('./approval-gate').sweepExpiredGates;
+  try {
+    return await sweep(Date.now(), deps.gateDeps || {});
+  } catch (err) {
+    log.warn(`Approval-gate sweep failed: ${err && err.message ? err.message : err}`);
+    return { error: true };
+  }
+}
+
 /** Simple bounded-concurrency pool. */
 async function runWithConcurrency(items, limit, worker) {
   const queue = [...items];
@@ -330,6 +346,8 @@ function scheduleNext() {
   runtime.timer = setTimeout(async () => {
     const config = store.getAgentConfig();
     if (config.scheduleEnabled) {
+      // Approval deadlines first, independent of processPending's key/role guards.
+      await processApprovalDeadlines().catch(() => {});
       await processPending().catch(() => {});
     }
     scheduleNext();
@@ -349,6 +367,8 @@ function startScheduler() {
   setTimeout(() => {
     if (store.getAgentConfig().scheduleEnabled) {
       log.info('Restart resume pass…');
+      // Fire any approval deadlines that elapsed while the server was down.
+      processApprovalDeadlines().catch(() => {});
       processPending().catch(() => {});
     }
   }, RESTART_KICKOFF_MS);
@@ -382,10 +402,12 @@ module.exports = {
   processPending,
   startScheduler,
   getStatus,
+  processApprovalDeadlines,
   _test: {
     clearModelPause,
     pauseForModel,
     runJob,
     verifyModelReadiness,
+    processApprovalDeadlines,
   },
 };
