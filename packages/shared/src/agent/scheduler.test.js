@@ -135,3 +135,14 @@ test('planner invalid model output is a job error, not a global availability pau
   assert.equal(scheduler.getStatus().paused, false);
   assert.equal(scheduler.getStatus().pauseReason, null);
 });
+
+test('processApprovalDeadlines delegates to the sweep and swallows errors', async () => {
+  let called = 0;
+  await scheduler._test.processApprovalDeadlines({ sweepExpiredGates: async () => { called += 1; return []; } });
+  assert.equal(called, 1); // runs with no Linear key/role — it is not gated by processPending
+
+  const res = await scheduler._test.processApprovalDeadlines({
+    sweepExpiredGates: async () => { throw new Error('boom'); },
+  });
+  assert.deepEqual(res, { error: true }); // a failing sweep cannot break the scheduling loop
+});

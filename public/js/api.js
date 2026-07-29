@@ -166,6 +166,15 @@ export const api = {
     return request(`/agent/memory${query ? `?${query}` : ''}`);
   },
   deleteMemory: (id) => request(`/agent/memory/${id}`, { method: 'DELETE' }),
+  // Requirement-readiness preflight — runs before the pipeline; returns a signal + criteria.
+  evaluateBusiness: (payload) =>
+    request('/agent/business/evaluate', { method: 'POST', body: JSON.stringify(payload) }),
+  // Durable approval gates for amber/red requirements (poll, approve, refine).
+  getBusinessGate: (id) => request(`/agent/business/gates/${id}`),
+  approveBusinessGate: (id) =>
+    request(`/agent/business/gates/${id}/approve`, { method: 'POST' }),
+  reevaluateBusinessGate: (id, input) =>
+    request(`/agent/business/gates/${id}/reevaluate`, { method: 'POST', body: JSON.stringify({ input }) }),
   // On-demand 6-step business pipeline (fraud, revenue, memory, spec, design, scheduler).
   prepareBusiness: (payload) =>
     request('/agent/business/prepare', { method: 'POST', body: JSON.stringify(payload) }),
