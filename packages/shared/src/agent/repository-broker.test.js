@@ -12,7 +12,23 @@ const {
   RepositoryBroker,
   buildSafeAgentEnv,
   validateRepository,
+  normalizeReview,
 } = require('./repository-broker');
+
+test('normalizeReview treats a GitHub list-endpoint merged PR (merged_at, no `merged`) as merged', () => {
+  // pull-request-simple (list) shape: merged_at set, state closed, NO `merged` field.
+  const merged = normalizeReview('github', {
+    number: 7, html_url: 'u', state: 'closed', merged_at: '2026-02-01T00:00:00Z',
+    head: { ref: 'eng-1' }, base: { ref: 'main' },
+  });
+  assert.equal(merged.state, 'merged');
+  // A genuinely closed-unmerged PR (merged_at null) stays 'closed'.
+  const closed = normalizeReview('github', {
+    number: 8, html_url: 'u', state: 'closed', merged_at: null,
+    head: { ref: 'eng-2' }, base: { ref: 'main' },
+  });
+  assert.equal(closed.state, 'closed');
+});
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 const execFileP = promisify(execFile);

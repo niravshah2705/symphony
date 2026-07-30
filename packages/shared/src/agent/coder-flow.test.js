@@ -442,3 +442,53 @@ test('resolveMaxConcurrent reflects the UI-editable agent config value', () => {
     assert.strictEqual(resolved, Math.floor(configured));
   }
 });
+
+/* --------------------------- stacked dependencies ----------------------- */
+
+const { sanitizeBranch } = require('./workspace');
+
+test('dependencyLinks returns all blockers latest-first, including already-Done ones', () => {
+  const node = { inverseRelations: { nodes: [
+    { type: 'blocks', issue: { identifier: 'ENG-1', createdAt: '2026-01-01T00:00:00Z', state: { type: 'completed' } } },
+    { type: 'blocks', issue: { identifier: 'ENG-3', createdAt: '2026-03-01T00:00:00Z', state: { type: 'started' } } },
+    { type: 'related', issue: { identifier: 'ENG-9', createdAt: '2026-09-01T00:00:00Z', state: { type: 'started' } } },
+  ] } };
+  const deps = orchestrator._test.dependencyLinks(node);
+  // 'related' is excluded; a completed blocker is still listed (unlike blockers());
+  // ordering is newest-created first so the coder stacks on the most recent blocker.
+  assert.deepStrictEqual(deps.map((d) => d.identifier), ['ENG-3', 'ENG-1']);
+});
+
+test('recordStackLink persists the link and recovers the blocker identifier', () => {
+  const links = [];
+  const jobStore = { addStackLink: (l) => { links.push(l); return { id: 'stk_x', ...l }; } };
+  const task = {
+    id: 'i2',
+    identifier: 'ENG-2',
+    project: { id: 'proj_1', name: 'App' },
+    dependencies: [{ identifier: 'ENG-1', createdAt: 'x' }],
+  };
+  const run = { stackedOn: { branch: sanitizeBranch('ENG-1'), defaultBase: 'main', dependentBranch: sanitizeBranch('ENG-2') } };
+  const ctx = { repositoryProvider: 'github', repositoryUrl: 'acme/app' };
+
+  orchestrator._test.recordStackLink(task, run, ctx, jobStore);
+
+  assert.strictEqual(links.length, 1);
+  assert.strictEqual(links[0].dependentBranch, sanitizeBranch('ENG-2'));
+  assert.strictEqual(links[0].blockerBranch, sanitizeBranch('ENG-1'));
+  assert.strictEqual(links[0].blockerIdentifier, 'ENG-1');
+  assert.strictEqual(links[0].defaultBase, 'main');
+  assert.strictEqual(links[0].projectId, 'proj_1');
+  assert.strictEqual(links[0].repoFullName, 'acme/app');
+});
+
+test('recordStackLink is a no-op when the run was not stacked', () => {
+  const jobStore = { addStackLink: () => { throw new Error('addStackLink should not be called'); } };
+  const result = orchestrator._test.recordStackLink(
+    { identifier: 'ENG-2', project: {} },
+    { stackedOn: null },
+    {},
+    jobStore
+  );
+  assert.strictEqual(result, null);
+});

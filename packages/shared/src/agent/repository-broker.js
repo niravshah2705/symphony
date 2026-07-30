@@ -271,7 +271,10 @@ function normalizeReview(provider, value) {
       provider,
       id: Number(value.number),
       url: value.html_url || null,
-      state: value.merged ? 'merged' : value.state || 'unknown',
+      // The pulls LIST endpoint (pull-request-simple) omits the `merged` boolean
+      // and only sets `merged_at`; treat either as merged so a merged PR read
+      // from a list is not misclassified as a plain 'closed'.
+      state: value.merged || value.merged_at ? 'merged' : value.state || 'unknown',
       title: oneLine(value.title, LIMITS.titleChars),
       sourceBranch: value.head && value.head.ref,
       targetBranch: value.base && value.base.ref,
@@ -299,6 +302,126 @@ function normalizeReview(provider, value) {
       value.blocking_discussions_resolved == null ? null : Boolean(value.blocking_discussions_resolved),
     labels: (Array.isArray(value.labels) ? value.labels : []).map((label) => oneLine(label, 100)).filter(Boolean),
   };
+}
+
+/** Provider REST path prefix for a repository (owner/repo for GitHub, project for GitLab). */
+function repoApiPath(repository) {
+  if (repository.provider === 'github') {
+    return `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}`;
+  }
+  return `/api/v4/projects/${encodeURIComponent(repository.fullName)}`;
+}
+
+/**
+ * Hardened forge REST call shared by the broker instance and the stateless
+ * stack-reconcile pass. Enforces the same redirect/abort/size/redaction guards
+ * regardless of caller, so a lightweight API-only client never bypasses them.
+ * `redactSecrets` scrubs the token from any surfaced error text.
+ */
+async function forgeApiRequest({
+  provider,
+  repository,
+  token,
+  method,
+  endpoint,
+  body,
+  fetchImpl = global.fetch,
+  allow404 = false,
+  withMeta = false,
+  redactSecrets = [],
+}) {
+  if (!token) throw new RepositoryBrokerError('No repository token is configured.', 'missing_token');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LIMITS.apiTimeoutMs);
+  const github = provider === 'github';
+  const headers = github
+    ? {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'tech-symphony-repository-broker',
+      }
+    : {
+        Accept: 'application/json',
+        'PRIVATE-TOKEN': token,
+        'User-Agent': 'tech-symphony-repository-broker',
+      };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const url = `${repository.apiOrigin}${endpoint}`;
+  const safe = (value) => redact(value, redactSecrets);
+  try {
+    const response = await fetchImpl(url, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      redirect: 'error',
+      signal: controller.signal,
+    });
+    const raw = await response.text();
+    if (Buffer.byteLength(raw, 'utf8') > LIMITS.responseBytes) {
+      throw new RepositoryBrokerError('Repository provider response exceeded the size limit.', 'response_too_large');
+    }
+    let data = null;
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch (_) {
+        data = { message: oneLine(raw, 500) };
+      }
+    }
+    if (allow404 && response.status === 404) return null;
+    if (!response.ok) {
+      const message = data && (data.message || data.error_description || data.error);
+      throw new RepositoryBrokerError(
+        `Repository provider returned ${response.status}: ${safe(oneLine(message || 'request failed', 500))}`,
+        'provider_error'
+      );
+    }
+    if (withMeta) {
+      const header = (name) => response.headers && typeof response.headers.get === 'function'
+        ? response.headers.get(name)
+        : null;
+      const link = header('link') || '';
+      const nextPage = header('x-next-page') || '';
+      return { data, hasNext: /rel\s*=\s*"?next"?/i.test(link) || Boolean(String(nextPage).trim()) };
+    }
+    return data;
+  } catch (error) {
+    if (error instanceof RepositoryBrokerError) throw error;
+    throw new RepositoryBrokerError(safe(errorText(error)), 'provider_unavailable');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Find the review (PR/MR) for a head branch, newest-open preferred. Optional
+ * `base` narrows to a specific target branch. Returns a normalized review or
+ * null. Shared by stack-base resolution and the reconcile pass.
+ */
+async function findReviewByBranch({ provider, repository, token, branch, fetchImpl, base = null }) {
+  const api = repoApiPath(repository);
+  const request = (endpoint) => forgeApiRequest({
+    provider, repository, token, method: 'GET', endpoint, fetchImpl, redactSecrets: [token],
+  });
+  if (provider === 'github') {
+    const params = { state: 'all', head: `${repository.owner}:${branch}`, per_page: '20' };
+    if (base) params.base = base;
+    const list = await request(`${api}/pulls?${new URLSearchParams(params)}`);
+    const items = (Array.isArray(list) ? list : []).filter(
+      (item) => item && item.head && item.head.ref === branch && (!base || (item.base && item.base.ref === base))
+    );
+    const chosen = items.find((item) => item.state === 'open') || items[0] || null;
+    return chosen ? normalizeReview('github', chosen) : null;
+  }
+  const params = { scope: 'all', state: 'all', source_branch: branch, per_page: '20' };
+  if (base) params.target_branch = base;
+  const list = await request(`${api}/merge_requests?${new URLSearchParams(params)}`);
+  const items = (Array.isArray(list) ? list : []).filter(
+    (item) => item && item.source_branch === branch && (!base || item.target_branch === base)
+  );
+  const chosen = items.find((item) => item.state === 'opened') || items[0] || null;
+  return chosen ? normalizeReview(provider, chosen) : null;
 }
 
 function feedbackWindow(items, cursor = 0) {
@@ -329,6 +452,8 @@ class RepositoryBroker {
   #scopeBranch;
   #availabilityError = null;
   #remoteEmpty = false;
+  #stackCandidates = [];
+  #stackedOn = null;
 
   constructor({
     provider,
@@ -337,6 +462,7 @@ class RepositoryBroker {
     workspaceRoot,
     workDir,
     branch,
+    stackCandidates = [],
     label = '',
     step,
     fetchImpl = global.fetch,
@@ -350,6 +476,21 @@ class RepositoryBroker {
     this.branch = validateBranch(branch, 'task branch');
     this.#scopeBranch = this.branch;
     this.baseBranch = null;
+    // Ordered blocker branches (latest-first) this task may stack onto. Drop
+    // anything unsafe, duplicated, or equal to the task's own branch; the
+    // resolution during prepare() picks the first that is present and unmerged.
+    const seenCandidates = new Set([this.branch]);
+    for (const candidate of Array.isArray(stackCandidates) ? stackCandidates : []) {
+      let safe;
+      try {
+        safe = validateBranch(candidate, 'stack candidate');
+      } catch (_) {
+        continue;
+      }
+      if (seenCandidates.has(safe)) continue;
+      seenCandidates.add(safe);
+      this.#stackCandidates.push(safe);
+    }
     this.label = oneLine(label, 100);
     this.step = typeof step === 'function' ? step : () => {};
     this.#token = String(token || '');
@@ -368,6 +509,7 @@ class RepositoryBroker {
       repository: this.repository.fullName,
       branch: this.branch,
       baseBranch: this.baseBranch,
+      stackedOn: this.#stackedOn,
     };
   }
 
@@ -651,6 +793,75 @@ class RepositoryBroker {
     ]);
   }
 
+  /**
+   * Pick a stack base for this task among its blocker branches (latest-first).
+   * A candidate qualifies only when its branch exists on the remote and is NOT
+   * already merged/contained in the default base — i.e. its work is still open.
+   * The first qualifying candidate becomes `baseBranch`, so the existing fork
+   * and review-scope machinery targets it. No candidate → the default base is
+   * kept unchanged. Best-effort: provider hiccups fall back to a git-ancestry
+   * check rather than blocking the run.
+   */
+  async #resolveStackBase() {
+    if (!this.#stackCandidates.length) return;
+    const defaultBase = this.baseBranch;
+    const skipped = [];
+    for (const candidate of this.#stackCandidates) {
+      if (candidate === defaultBase) continue;
+      const remoteRef = `refs/remotes/origin/${candidate}`;
+      const branchExists = await this.#workspace(
+        ['show-ref', '--verify', '--quiet', remoteRef],
+        { allowFailure: true }
+      );
+      if (branchExists === null) continue; // blocker never pushed a branch → nothing to stack on
+
+      let review = null;
+      try {
+        review = await findReviewByBranch({
+          provider: this.repository.provider,
+          repository: this.repository,
+          token: this.#token,
+          branch: candidate,
+          fetchImpl: this.#fetchImpl,
+        });
+      } catch (_) {
+        // Provider unavailable — defer to the ancestry check below.
+      }
+      if (review && review.state === 'merged') {
+        skipped.push(`${candidate} (merged)`);
+        continue;
+      }
+      // Already contained in the default base (fast-forward/rebase-merged, or an
+      // empty branch) → its work has landed, so stacking would target stale work.
+      const contained = await this.#workspace(
+        ['merge-base', '--is-ancestor', remoteRef, `refs/remotes/origin/${defaultBase}`],
+        { allowFailure: true }
+      );
+      if (contained !== null) {
+        skipped.push(`${candidate} (already in ${defaultBase})`);
+        continue;
+      }
+
+      this.baseBranch = candidate;
+      this.#stackedOn = {
+        branch: candidate,
+        defaultBase,
+        dependentBranch: this.branch,
+        reviewId: review ? review.id : null,
+        reviewUrl: review ? review.url : null,
+      };
+      const others = this.#stackCandidates.filter((c) => c !== candidate && c !== defaultBase);
+      if (others.length) {
+        this.step(`Other blockers not folded into this stack: ${others.join(', ')}.`, 'warn');
+      }
+      this.step(`Stacking ${this.branch} on unmerged blocker branch ${candidate} (default base ${defaultBase}).`);
+      return;
+    }
+    if (skipped.length) {
+      this.step(`No open blocker branch to stack on (${skipped.join(', ')}); targeting ${defaultBase}.`);
+    }
+  }
+
   async prepare({ shallow = false } = {}) {
     this.#assertActive();
     fs.mkdirSync(this.workspaceRoot, { recursive: true });
@@ -698,6 +909,10 @@ class RepositoryBroker {
       }
     }
     if (this.#remoteEmpty) await this.#seedEmptyRemote();
+    // Retarget the base to an unmerged blocker branch before forking the task
+    // branch, so a dependent task builds on (and its PR targets) the blocker's
+    // still-open work instead of the default branch it has not landed in yet.
+    await this.#resolveStackBase();
     const exists = await this.#workspace(
       ['show-ref', '--verify', '--quiet', `refs/heads/${this.branch}`],
       { allowFailure: true }
@@ -901,74 +1116,22 @@ class RepositoryBroker {
   }
 
   #apiPath() {
-    if (this.repository.provider === 'github') {
-      return `/repos/${encodeURIComponent(this.repository.owner)}/${encodeURIComponent(this.repository.name)}`;
-    }
-    return `/api/v4/projects/${encodeURIComponent(this.repository.fullName)}`;
+    return repoApiPath(this.repository);
   }
 
   async #request(method, endpoint, body, { allow404 = false, withMeta = false } = {}) {
-    if (!this.#token) throw new RepositoryBrokerError('No repository token is configured.', 'missing_token');
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), LIMITS.apiTimeoutMs);
-    const github = this.repository.provider === 'github';
-    const headers = github
-      ? {
-          Accept: 'application/vnd.github+json',
-          Authorization: `Bearer ${this.#token}`,
-          'X-GitHub-Api-Version': '2022-11-28',
-          'User-Agent': 'tech-symphony-repository-broker',
-        }
-      : {
-          Accept: 'application/json',
-          'PRIVATE-TOKEN': this.#token,
-          'User-Agent': 'tech-symphony-repository-broker',
-        };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const url = `${this.repository.apiOrigin}${endpoint}`;
-    try {
-      const response = await this.#fetchImpl(url, {
-        method,
-        headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
-        redirect: 'error',
-        signal: controller.signal,
-      });
-      const raw = await response.text();
-      if (Buffer.byteLength(raw, 'utf8') > LIMITS.responseBytes) {
-        throw new RepositoryBrokerError('Repository provider response exceeded the size limit.', 'response_too_large');
-      }
-      let data = null;
-      if (raw) {
-        try {
-          data = JSON.parse(raw);
-        } catch (_) {
-          data = { message: oneLine(raw, 500) };
-        }
-      }
-      if (allow404 && response.status === 404) return null;
-      if (!response.ok) {
-        const message = data && (data.message || data.error_description || data.error);
-        throw new RepositoryBrokerError(
-          `Repository provider returned ${response.status}: ${this.#safeError(oneLine(message || 'request failed', 500))}`,
-          'provider_error'
-        );
-      }
-      if (withMeta) {
-        const header = (name) => response.headers && typeof response.headers.get === 'function'
-          ? response.headers.get(name)
-          : null;
-        const link = header('link') || '';
-        const nextPage = header('x-next-page') || '';
-        return { data, hasNext: /rel\s*=\s*"?next"?/i.test(link) || Boolean(String(nextPage).trim()) };
-      }
-      return data;
-    } catch (error) {
-      if (error instanceof RepositoryBrokerError) throw error;
-      throw new RepositoryBrokerError(this.#safeError(error), 'provider_unavailable');
-    } finally {
-      clearTimeout(timer);
-    }
+    return forgeApiRequest({
+      provider: this.repository.provider,
+      repository: this.repository,
+      token: this.#token,
+      method,
+      endpoint,
+      body,
+      fetchImpl: this.#fetchImpl,
+      allow404,
+      withMeta,
+      redactSecrets: [this.#token],
+    });
   }
 
   async #findReview(branch = this.branch) {
@@ -1474,4 +1637,8 @@ module.exports = {
   validateBranch,
   validateRepository,
   redact,
+  forgeApiRequest,
+  findReviewByBranch,
+  repoApiPath,
+  normalizeReview,
 };
