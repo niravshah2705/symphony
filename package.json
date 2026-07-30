@@ -19,7 +19,11 @@
     "test:e2e:debug": "PWDEBUG=1 playwright test --project=chrome"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1"
+    "@playwright/test": "^1.62.0"
+  },
+  "overrides": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "fast-uri": "^3.1.4"
   },
   "engines": {
     "node": ">=18"
