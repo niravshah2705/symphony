@@ -68,6 +68,10 @@ function settingsForConfiguredModel(preset, model = configuredModel(preset.provi
     claudeTemperature: null,
     claudeReasoningEffort: 'none',
     claudeReasoningAdapter: 'none',
+    // Stream Claude responses. Must stay on for large max output — a non-streaming
+    // request with a big maxTokens trips the Anthropic SDK's 10-minute guard.
+    // Editable from Settings (default on); see createClaudeModel in agent/llm.js.
+    claudeStreaming: true,
   };
 }
 

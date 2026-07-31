@@ -376,6 +376,16 @@ function createClaudeModel(llm /* , json */) {
     model: llm.model,
     maxTokens: llm.numTokens,
     streamRetries: clampStreamRetries(llm.streamRetries),
+    // Stream responses (settings-configurable, `claudeStreaming`, default on). A
+    // large maxTokens (up to 128000) makes a NON-streaming request one the
+    // Anthropic SDK rejects outright — "Streaming is required for operations that
+    // may take longer than 10 minutes" — because it estimates the request could
+    // exceed the 10-minute non-streaming ceiling. Streaming routes through the
+    // SDK's .stream() (headers/tokens arrive incrementally), so the guard never
+    // fires. LangChain aggregates the chunks, so .invoke() callers (the deep-agent
+    // loop) are unaffected. Mirrors the lmstudio/omlx paths. Only an explicit
+    // `false` disables it — turning it off re-breaks large max output.
+    streaming: llm.streaming !== false,
     // No apiKey — createClient supplies OAuth Bearer auth, so x-api-key is never sent.
     createClient: (options) =>
       new Anthropic({
@@ -798,6 +808,7 @@ async function resolveLlm(settings, role = 'global') {
       temperature: settings.claudeTemperature ?? null,
       reasoningEffort: settings.claudeReasoningEffort ?? null,
       reasoningAdapter: settings.claudeReasoningAdapter || 'none',
+      streaming: settings.claudeStreaming !== false,
       streamRetries,
     };
   }
