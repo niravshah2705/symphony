@@ -1,6 +1,17 @@
 # Dependencies
 node_modules/
 
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
 # Local runtime data — secrets (API keys, OAuth tokens), config, jobs, logs.
 # Never commit; see docs/DEVELOPER_ONBOARDING.md.
 data/
