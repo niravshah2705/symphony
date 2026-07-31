@@ -445,6 +445,95 @@ test('matching SDK providers still fail closed when authentication is unavailabl
   );
 });
 
+test('rubric review runs for a DeepAgent run and surfaces its verdict on the trace', async (t) => {
+  const seen = { run: { metadata: {} } };
+  let reviewedWith = null;
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    prompt: 'Ship the feature',
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'Opened PR #7.' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    rubric: ['a', 'b'],
+    reviewer: async (args) => {
+      reviewedWith = args;
+      return { available: true, verdict: 'pass', passed: true, score: 1, unmetRequired: [], criteria: [], summary: 'ok' };
+    },
+    getCurrentRunTree: () => seen.run,
+    traceFactory: (fn) => fn,
+  });
+
+  // The reviewer sees the raw task and the normalized execution result.
+  assert.equal(reviewedWith.task, 'Ship the feature');
+  assert.equal(reviewedWith.execution.finalText, 'Opened PR #7.');
+  assert.equal(execution.review.verdict, 'pass');
+  // Verdict is copied into trace metadata for analytics.
+  assert.equal(seen.run.metadata.rubric_reviewed, true);
+  assert.equal(seen.run.metadata.rubric_verdict, 'pass');
+  assert.equal(seen.run.metadata.rubric_passed, true);
+  assert.equal(seen.run.metadata.rubric_score, 1);
+});
+
+test('rubric review also runs for an SDK runtime (Codex) on the same contract', async (t) => {
+  const root = workspace(t);
+  class FakeCodex {
+    startThread() {
+      return { id: 't', run: async () => ({ finalResponse: 'SDK finished', usage: null }) };
+    }
+  }
+  const execution = await executeAgentRuntime({
+    runtime: 'codex-sdk',
+    prompt: 'Do the SDK task',
+    rootDir: root,
+    llm: { provider: 'codex', backend: 'api', model: 'gpt-5-codex', accessToken: 'k', baseUrl: 'https://x.test/v1' },
+    loaders: { 'codex-sdk': async () => ({ Codex: FakeCodex }) },
+    rubric: [{ id: 'done', description: 'Task finished', required: true }],
+    reviewer: async ({ execution: result }) => ({
+      available: true,
+      verdict: result.finalText.includes('finished') ? 'pass' : 'fail',
+      passed: result.finalText.includes('finished'),
+      score: 1,
+      unmetRequired: [],
+      criteria: [],
+      summary: 'ok',
+    }),
+    trace: false,
+  });
+
+  assert.equal(execution.runtime, 'codex-sdk');
+  assert.equal(execution.review.verdict, 'pass');
+});
+
+test('a reviewer defect never fails a completed run (fail-open backstop)', async (t) => {
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    prompt: 'task',
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'done' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    rubric: ['a'],
+    reviewer: async () => { throw new Error('reviewer exploded'); },
+    trace: false,
+  });
+
+  assert.equal(execution.finalText, 'done');
+  assert.equal(execution.review.available, false);
+  assert.equal(execution.review.verdict, 'insufficient');
+  assert.match(execution.review.error, /reviewer exploded/);
+});
+
+test('runs without a rubric attach no review (opt-in, backwards compatible)', async () => {
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    prompt: 'task',
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'done' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    trace: false,
+  });
+  assert.equal(Object.hasOwn(execution, 'review'), false);
+});
+
 test('Claude permission guard denies credential-bearing shell and path escapes', async (t) => {
   const root = workspace(t);
   const outside = workspace(t);

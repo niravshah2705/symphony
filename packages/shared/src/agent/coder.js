@@ -149,6 +149,9 @@ async function executeCodingRuntime({
   repositoryBroker,
   prompt,
   invokeConfig,
+  rubric,
+  reviewer,
+  settings,
 }) {
   const requestedRuntime = normalizeAgentRuntime(keys.agentRuntime || 'deepagent', { strict: true });
   const runtime = effectiveAgentRuntime(requestedRuntime, llm, {
@@ -213,6 +216,10 @@ async function executeCodingRuntime({
     tags: codingWorkflow.tags,
     deepAgentInvoke,
     lastText: framework.lastText,
+    // Optional rubric review of the finished coding run (opt-in; no-op if unset).
+    rubric,
+    reviewer,
+    settings,
   });
 }
 

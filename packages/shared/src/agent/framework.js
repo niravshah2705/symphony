@@ -257,6 +257,9 @@ async function runWorkflow({
   runtime = 'deepagent',
   workflowPattern = 'sequential',
   env,
+  rubric,
+  reviewer,
+  settings,
 }) {
   let scratch = null;
   if (!backend && !rootDir) {
@@ -303,6 +306,10 @@ async function runWorkflow({
       tags: workflow.tags || [],
       deepAgentInvoke,
       lastText,
+      // Optional provider-neutral completion review. Absent → no review runs.
+      rubric,
+      reviewer,
+      settings,
     });
   } finally {
     if (scratch) scratch.cleanup();

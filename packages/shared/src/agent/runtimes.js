@@ -374,7 +374,49 @@ function publicExecution(result) {
     costUsd: result.costUsd,
     costAvailable: result.costUsd !== null,
     sessionId: result.sessionId || null,
+    ...(result.review ? { review: result.review } : {}),
   };
+}
+
+/**
+ * Provider-neutral task-completion review. When a caller supplies a `rubric`,
+ * the finished run (any SDK) is scored against it by the rubric middleware.
+ *
+ * Fail-open by contract: the middleware itself never throws, but this backstop
+ * guarantees a reviewer defect can never turn a completed run into a failure —
+ * the run result is authoritative; the review is advisory metadata.
+ */
+async function runRubricReview(options, value) {
+  const reviewer = typeof options.reviewer === 'function'
+    ? options.reviewer
+    : (args) => require('./rubric-middleware').reviewTaskCompletion(args);
+  try {
+    return await reviewer({
+      rubric: options.rubric,
+      task: options.prompt,
+      execution: value,
+      llm: options.llm,
+      settings: options.settings,
+      signal: options.signal,
+    });
+  } catch (error) {
+    return require('./rubric-middleware').unavailableReview(options.rubric, error);
+  }
+}
+
+function reviewMetadata(review) {
+  if (!review) return {};
+  const metadata = {
+    rubric_reviewed: true,
+    rubric_available: Boolean(review.available),
+    rubric_verdict: review.verdict,
+    rubric_passed: Boolean(review.passed),
+  };
+  if (finiteNumber(review.score) !== null) metadata.rubric_score = review.score;
+  if (Array.isArray(review.unmetRequired) && review.unmetRequired.length) {
+    metadata.rubric_unmet_required = review.unmetRequired.length;
+  }
+  return metadata;
 }
 
 function traceMetadata(resultOrError) {
@@ -398,7 +440,7 @@ function traceMetadata(resultOrError) {
     metadata.usage_reasoning_output_tokens = usage.reasoningOutputTokens;
   }
   if (costUsd !== null) metadata.cost_usd = costUsd;
-  return metadata;
+  return { ...metadata, ...reviewMetadata(resultOrError && resultOrError.review) };
 }
 
 function langSmithProvider(llm) {
@@ -720,6 +762,7 @@ async function executeAgentRuntime(options = {}) {
   const execute = async () => {
     try {
       const value = await EXECUTORS[runtime]({ ...options, runtime, workflowPattern }, prompt);
+      if (options.rubric) value.review = await runRubricReview(options, value);
       annotateTrace(value, options.getCurrentRunTree || getCurrentRunTree);
       return value;
     } catch (error) {
