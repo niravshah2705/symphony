@@ -652,6 +652,171 @@
         "jsonMode": null,
         "contextMode": null
       }
+    },
+    {
+      "id": "huggingface-llama-3-3-70b",
+      "label": "Llama 3.3 70B Instruct",
+      "deployment": "hosted",
+      "provider": "huggingface",
+      "model": "meta-llama/Llama-3.3-70B-Instruct",
+      "sourceUrl": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct",
+      "modelPatterns": ["meta-llama/llama-3.3-70b-instruct", "llama-3.3-70b-instruct"],
+      "recommended": true,
+      "description": "General-purpose 70B instruction model served over Hugging Face's OpenAI-compatible router. Tool calling and JSON output supported.",
+      "requirements": "Create a Hugging Face access token with Inference permissions and paste it in Settings. Usage is billed to your HF account.",
+      "limits": { "contextWindow": 131072, "maxOutputTokens": 32768 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 32768,
+        "maxOutputTokens": 8192,
+        "temperature": 0.7,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "none", "parameter": null },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "huggingface-qwen2-5-coder-32b",
+      "label": "Qwen2.5 Coder 32B",
+      "deployment": "hosted",
+      "provider": "huggingface",
+      "model": "Qwen/Qwen2.5-Coder-32B-Instruct",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct",
+      "modelPatterns": ["qwen/qwen2.5-coder-32b-instruct", "qwen2.5-coder-32b-instruct"],
+      "recommended": false,
+      "description": "Coding-focused 32B model over the Hugging Face router, with long context, tool use, and JSON output.",
+      "requirements": "Create a Hugging Face access token with Inference permissions and paste it in Settings. Usage is billed to your HF account.",
+      "limits": { "contextWindow": 131072, "maxOutputTokens": 32768 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 32768,
+        "maxOutputTokens": 8192,
+        "temperature": 0.2,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "none", "parameter": null },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "huggingface-kimi-k3",
+      "label": "Kimi K3",
+      "deployment": "hosted",
+      "provider": "huggingface",
+      "model": "moonshotai/Kimi-K3",
+      "sourceUrl": "https://huggingface.co/moonshotai/Kimi-K3",
+      "modelPatterns": ["moonshotai/kimi-k3", "kimi-k3"],
+      "recommended": false,
+      "description": "Moonshot AI's Kimi K3 — a large mixture-of-experts model with strong agentic, tool-use, and long-context performance, served over the Hugging Face router.",
+      "requirements": "Create a Hugging Face access token with Inference permissions and paste it in Settings. Availability depends on the routed Inference Provider; usage is billed to your HF account.",
+      "limits": { "contextWindow": 131072, "maxOutputTokens": 16384 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 32768,
+        "maxOutputTokens": 8192,
+        "temperature": 0.6,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "none", "parameter": null },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "huggingface-deepseek-v3",
+      "label": "DeepSeek V3",
+      "deployment": "hosted",
+      "provider": "huggingface",
+      "model": "deepseek-ai/DeepSeek-V3-0324",
+      "sourceUrl": "https://huggingface.co/deepseek-ai/DeepSeek-V3-0324",
+      "modelPatterns": ["deepseek-ai/deepseek-v3-0324", "deepseek-v3-0324", "deepseek-v3"],
+      "recommended": false,
+      "description": "DeepSeek V3 (0324) mixture-of-experts model over the Hugging Face router, with tool use and JSON output.",
+      "requirements": "Create a Hugging Face access token with Inference permissions and paste it in Settings. Usage is billed to your HF account.",
+      "limits": { "contextWindow": 131072, "maxOutputTokens": 16384 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 32768,
+        "maxOutputTokens": 8192,
+        "temperature": 0.3,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "none", "parameter": null },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "huggingface-qwen2-5-72b",
+      "label": "Qwen2.5 72B Instruct",
+      "deployment": "hosted",
+      "provider": "huggingface",
+      "model": "Qwen/Qwen2.5-72B-Instruct",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen2.5-72B-Instruct",
+      "modelPatterns": ["qwen/qwen2.5-72b-instruct", "qwen2.5-72b-instruct"],
+      "recommended": false,
+      "description": "General-purpose 72B instruction model over the Hugging Face router, with long context, tool use, and JSON output.",
+      "requirements": "Create a Hugging Face access token with Inference permissions and paste it in Settings. Usage is billed to your HF account.",
+      "limits": { "contextWindow": 131072, "maxOutputTokens": 32768 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 32768,
+        "maxOutputTokens": 8192,
+        "temperature": 0.7,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "none", "parameter": null },
+        "jsonMode": null,
+        "contextMode": null
+      }
     }
   ]
 }

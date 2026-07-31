@@ -8,6 +8,7 @@ const PROVIDER_DEPLOYMENT = Object.freeze({
   omlx: 'local',
   codex: 'hosted',
   claude: 'hosted',
+  huggingface: 'hosted',
 });
 const ROLE_DEPLOYMENT = Object.freeze({ local: 'local', global: 'hosted' });
 
@@ -328,6 +329,16 @@ function settingsPatchForPreset(preset, overrides = {}) {
       codexReasoningAdapter: params.reasoningAdapter,
     };
   }
+  if (preset.provider === 'huggingface') {
+    return {
+      huggingfaceModel: params.model,
+      huggingfaceContextWindow: params.contextWindow,
+      huggingfaceMaxTokens: params.maxOutputTokens,
+      huggingfaceTemperature: params.temperature,
+      huggingfaceReasoningEffort: params.reasoningEffort,
+      huggingfaceReasoningAdapter: params.reasoningAdapter,
+    };
+  }
   return {
     claudeModel: params.model,
     claudeContextWindow: params.contextWindow,
@@ -582,6 +593,28 @@ function customPresetForSettings(provider, settings) {
         contextWindow: settings.codexContextWindow || 1000000,
         maxOutputTokens: settings.codexMaxTokens || 4096,
         temperature: adapter === 'none' ? settings.codexTemperature ?? 0 : null,
+        topP: null, topK: null, repeatPenalty: null,
+        reasoning: { effort: defaultEffort, parameter: adapter === 'openai' ? 'reasoning.effort' : null },
+        jsonMode: null, contextMode: null,
+      },
+    };
+  }
+  if (provider === 'huggingface') {
+    const adapter = settings.huggingfaceReasoningAdapter === 'openai' ? 'openai' : 'none';
+    const efforts = adapter === 'openai' ? ['none', 'low', 'medium', 'high'] : ['none'];
+    const defaultEffort = efforts.includes(settings.huggingfaceReasoningEffort) ? settings.huggingfaceReasoningEffort : efforts[0];
+    return {
+      id: 'custom', provider, deployment: 'hosted', model: settings.huggingfaceModel || 'meta-llama/Llama-3.3-70B-Instruct',
+      limits: { contextWindow: 262144, maxOutputTokens: 128000 },
+      requestLimits: { maxOutputContextFraction: null },
+      capabilities: {
+        temperature: adapter === 'none', contextWindowConfigurable: false, reasoningAdapter: adapter,
+        reasoningEfforts: efforts,
+      },
+      parameters: {
+        contextWindow: settings.huggingfaceContextWindow || 32768,
+        maxOutputTokens: settings.huggingfaceMaxTokens || 4096,
+        temperature: adapter === 'none' ? settings.huggingfaceTemperature ?? 0.7 : null,
         topP: null, topK: null, repeatPenalty: null,
         reasoning: { effort: defaultEffort, parameter: adapter === 'openai' ? 'reasoning.effort' : null },
         jsonMode: null, contextMode: null,

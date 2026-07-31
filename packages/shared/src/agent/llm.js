@@ -6,6 +6,33 @@ const store = require('../store');
 const logger = require('../logger');
 const oauth = require('./oauth');
 const claudeOauth = require('./claude-oauth');
+const { runWithRetry, streamWithRetry } = require('./llm-retry');
+
+// Hard cap on the configurable stream-retry count (mirrors settings-patch.js).
+const MAX_STREAM_RETRIES = 5;
+
+/** Coerce an operator-supplied retry count to a bounded, non-negative integer. */
+function clampStreamRetries(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return CONFIG.LLM_STREAM_RETRIES;
+  return Math.min(MAX_STREAM_RETRIES, Math.max(0, Math.round(n)));
+}
+
+/**
+ * Build the `onRetry` callback passed to the retry helpers: logs each retry with
+ * the provider and whatever the provider disclosed (HTTP status, error code/type,
+ * message) so a recurring transient failure is visible instead of silent.
+ */
+function streamRetryLogger(provider) {
+  return (err, attempt) => {
+    const status = err && (err.status ?? err.statusCode);
+    const detail = (err && err.error && (err.error.code || err.error.type)) || (err && err.code) || '';
+    const message = err && err.message ? ` ${err.message}` : '';
+    logger.warn(
+      `LLM stream error on ${provider} (status=${status ?? 'none'}${detail ? `, ${detail}` : ''}); retry ${attempt}.${message}`
+    );
+  };
+}
 
 /**
  * Deep-agent LLM provider factory. Five providers are supported:
@@ -71,6 +98,30 @@ function omlxMaxTokens(llm) {
   const ctx = Number(llm.contextWindow) || 8192;
   const want = Number(llm.numTokens) || 4096;
   return Math.max(256, Math.min(want, Math.max(256, ctx - 256)));
+}
+
+/**
+ * Output-token reserve used when sizing the Codex prompt budget. The ChatGPT
+ * backend rejects `max_output_tokens` (we send `maxTokens:-1`), so unlike LM
+ * Studio this does NOT cap output — it only reserves room for the response when
+ * computing how much of the context window the prompt may occupy.
+ */
+function codexMaxTokens(llm) {
+  const want = Number(llm && llm.numTokens) || 4096;
+  return Math.max(256, want);
+}
+
+/**
+ * Prompt-token budget for Codex: the model's context window minus the output
+ * reserve and a fixed margin. Returns 0 when no window is known (→ context
+ * management disabled). Mirrors lmstudioPromptBudget so a long deep-agent run
+ * can't overflow even a large hosted window.
+ */
+function codexPromptBudget(llm) {
+  const ctx = Number(llm && llm.contextWindow) || 0;
+  if (ctx <= 0) return 0;
+  const budget = ctx - codexMaxTokens(llm) - CONFIG.OAUTH.promptMarginTokens;
+  return Math.max(0, budget);
 }
 
 // Context-window management (trim / summarize) lives in its own module; it is
@@ -170,27 +221,23 @@ function systemToDeveloper(messages) {
 }
 
 // Lazily built (and cached) so the heavy @langchain/openai import stays off the
-// Ollama path. Subclasses ChatOpenAI to (a) rewrite system→developer messages and
-// (b) preserve itself through `withConfig`/`bindTools`, which otherwise rebuild a
-// base ChatOpenAI and would drop the message rewrite.
+// Ollama path. Extends the shared context-managed base (prompt budget + stream
+// retry) and additionally rewrites system→developer messages, which the ChatGPT
+// Codex backend requires. `_prepareMessages` composes the base's budget step with
+// that rewrite; `_buildSummarizer` reuses THIS authenticated Codex model (with the
+// budget disabled to avoid recursion) so 'summarize' mode works on the backend.
 let CodexChatModelClass = null;
 function getCodexChatModelClass() {
   if (CodexChatModelClass) return CodexChatModelClass;
-  const { ChatOpenAI } = require('@langchain/openai');
-  CodexChatModelClass = class CodexChatModel extends ChatOpenAI {
-    async _generate(messages, options, runManager) {
-      return super._generate(systemToDeveloper(messages), options, runManager);
+  const Base = getManagedChatOpenAIClass();
+  CodexChatModelClass = class CodexChatModel extends Base {
+    async _prepareMessages(messages) {
+      return systemToDeveloper(await super._prepareMessages(messages));
     }
-    async *_streamResponseChunks(messages, options, runManager) {
-      yield* super._streamResponseChunks(systemToDeveloper(messages), options, runManager);
-    }
-    async *_streamChatModelEvents(messages, options, runManager) {
-      yield* super._streamChatModelEvents(systemToDeveloper(messages), options, runManager);
-    }
-    withConfig(config) {
-      const next = new CodexChatModel(this.fields);
-      next.defaultOptions = { ...this.defaultOptions, ...config };
-      return next;
+    _buildSummarizer() {
+      // A second Codex model carrying the same auth/headers, with context
+      // management + retry disabled so the summarize call never re-enters budgeting.
+      return new this.constructor({ ...this.fields, promptBudget: 0, contextMode: 'none', streamRetries: 0 });
     }
   };
   return CodexChatModelClass;
@@ -227,6 +274,17 @@ function createCodexChatgptModel(llm, json) {
         session_id: crypto.randomUUID(),
       },
     },
+    // Bound the growing deep-agent history to fit the Codex context window (only
+    // acts when it overflows). Same strategy as LM Studio; 'trim' by default so
+    // no extra hosted call is made unless the operator selects 'summarize'.
+    promptBudget: codexPromptBudget(llm),
+    charsPerToken: CONFIG.OAUTH.charsPerToken,
+    contextMode: llm.contextMode,
+    summaryMaxTokens: CONFIG.OAUTH.summaryMaxTokens,
+    // Retry once (by default) on a Codex in-stream error — the failure that
+    // surfaces as "An error occurred while processing your request" mid-generation.
+    streamRetries: clampStreamRetries(llm.streamRetries),
+    retryProvider: 'codex',
   };
   // `ultra` is advertised by the Codex subscription model catalog. It is not a
   // public Responses API effort, so it is accepted only on this ChatGPT path.
@@ -272,11 +330,25 @@ function getClaudeChatModelClass() {
   const { ChatAnthropic } = require('@langchain/anthropic');
   const prefix = CONFIG.CLAUDE.systemPrefix;
   ClaudeChatModelClass = class ClaudeChatModel extends ChatAnthropic {
+    constructor(fields) {
+      super(fields);
+      this.streamRetries = clampStreamRetries(fields && fields.streamRetries);
+    }
     async _generate(messages, options, runManager) {
-      return super._generate(withClaudeIdentity(messages, prefix), options, runManager);
+      const prepared = withClaudeIdentity(messages, prefix);
+      return runWithRetry(
+        () => super._generate(prepared, options, runManager),
+        this.streamRetries,
+        streamRetryLogger('claude')
+      );
     }
     async *_streamResponseChunks(messages, options, runManager) {
-      yield* super._streamResponseChunks(withClaudeIdentity(messages, prefix), options, runManager);
+      const prepared = withClaudeIdentity(messages, prefix);
+      yield* streamWithRetry(
+        () => super._streamResponseChunks(prepared, options, runManager),
+        this.streamRetries,
+        streamRetryLogger('claude')
+      );
     }
     async *_streamChatModelEvents(messages, options, runManager) {
       yield* super._streamChatModelEvents(withClaudeIdentity(messages, prefix), options, runManager);
@@ -303,6 +375,7 @@ function createClaudeModel(llm /* , json */) {
   const opts = {
     model: llm.model,
     maxTokens: llm.numTokens,
+    streamRetries: clampStreamRetries(llm.streamRetries),
     // Stream responses (settings-configurable, `claudeStreaming`, default on). A
     // large maxTokens (up to 128000) makes a NON-streaming request one the
     // Anthropic SDK rejects outright — "Streaming is required for operations that
@@ -338,17 +411,18 @@ function createClaudeModel(llm /* , json */) {
 }
 
 // Lazily built + cached so @langchain/openai stays off the Ollama/Claude paths.
-// Subclasses ChatOpenAI to bound the (unbounded, re-sent-every-turn) deep-agent
+// Subclasses ChatOpenAI to (a) bound the (unbounded, re-sent-every-turn) deep-agent
 // history to `promptBudget` tokens before each call — via the configured strategy
 // (trim | summarize | none) and ONLY when the prompt actually exceeds the budget —
-// so a long run can't overflow LM Studio's fixed context window. Mirrors the Codex
-// wrapper's shape, including the withConfig override that otherwise rebuilds a base
-// ChatOpenAI and would drop the behavior (bindTools wraps `this`, so no override).
-let LmStudioChatModelClass = null;
-function getLmStudioChatModelClass() {
-  if (LmStudioChatModelClass) return LmStudioChatModelClass;
+// and (b) retry a transient/in-stream error `streamRetries` times. Shared by the
+// LM Studio, oMLX, Codex, and Hugging Face paths (Codex subclasses it to add its
+// system→developer rewrite). Overrides withConfig, which otherwise rebuilds a base
+// ChatOpenAI (bindTools wraps `this`) and would drop these behaviors.
+let ManagedChatOpenAIClass = null;
+function getManagedChatOpenAIClass() {
+  if (ManagedChatOpenAIClass) return ManagedChatOpenAIClass;
   const { ChatOpenAI } = require('@langchain/openai');
-  LmStudioChatModelClass = class LmStudioChatModel extends ChatOpenAI {
+  ManagedChatOpenAIClass = class ContextManagedChatOpenAI extends ChatOpenAI {
     constructor(fields) {
       super(fields);
       // 0/undefined budget → context management disabled (pass-through).
@@ -356,6 +430,8 @@ function getLmStudioChatModelClass() {
       this.charsPerToken = Number(fields && fields.charsPerToken) || CONFIG.LMSTUDIO.charsPerToken;
       this.contextMode = (fields && fields.contextMode) || 'trim';
       this.summaryMaxTokens = Number(fields && fields.summaryMaxTokens) || CONFIG.LMSTUDIO.summaryMaxTokens;
+      this.streamRetries = clampStreamRetries(fields && fields.streamRetries);
+      this.retryProvider = (fields && fields.retryProvider) || 'openai';
       // Captured for the (separate, tool-free) summarizer sub-model.
       this._summaryCfg = {
         model: fields && fields.model,
@@ -368,9 +444,9 @@ function getLmStudioChatModelClass() {
     }
     // A plain ChatOpenAI (no tools, small output) reused for summarization calls, so
     // they never re-enter _prepareMessages and never carry the agent's bound tools.
-    _summarizer() {
-      if (this._summaryModel) return this._summaryModel;
-      this._summaryModel = new ChatOpenAI({
+    // Overridable — the Codex backend needs its own (authenticated) summarizer.
+    _buildSummarizer() {
+      return new ChatOpenAI({
         model: this._summaryCfg.model,
         apiKey: this._summaryCfg.apiKey || 'local-openai-compatible',
         temperature: 0,
@@ -379,6 +455,9 @@ function getLmStudioChatModelClass() {
         maxRetries: this._summaryCfg.maxRetries,
         configuration: { baseURL: this._summaryCfg.baseURL },
       });
+    }
+    _summarizer() {
+      if (!this._summaryModel) this._summaryModel = this._buildSummarizer();
       return this._summaryModel;
     }
     _summarize(text) {
@@ -398,27 +477,66 @@ function getLmStudioChatModelClass() {
       });
     }
     async _generate(messages, options, runManager) {
-      return super._generate(await this._prepareMessages(messages), options, runManager);
+      const prepared = await this._prepareMessages(messages);
+      return runWithRetry(
+        () => super._generate(prepared, options, runManager),
+        this.streamRetries,
+        streamRetryLogger(this.retryProvider)
+      );
     }
     async *_streamResponseChunks(messages, options, runManager) {
-      yield* super._streamResponseChunks(await this._prepareMessages(messages), options, runManager);
+      const prepared = await this._prepareMessages(messages);
+      yield* streamWithRetry(
+        () => super._streamResponseChunks(prepared, options, runManager),
+        this.streamRetries,
+        streamRetryLogger(this.retryProvider)
+      );
     }
     async *_streamChatModelEvents(messages, options, runManager) {
       yield* super._streamChatModelEvents(await this._prepareMessages(messages), options, runManager);
     }
     withConfig(config) {
-      const next = new LmStudioChatModel({
+      const next = new this.constructor({
         ...this.fields,
         promptBudget: this.promptBudget,
         charsPerToken: this.charsPerToken,
         contextMode: this.contextMode,
         summaryMaxTokens: this.summaryMaxTokens,
+        streamRetries: this.streamRetries,
+        retryProvider: this.retryProvider,
       });
       next.defaultOptions = { ...this.defaultOptions, ...config };
       return next;
     }
   };
-  return LmStudioChatModelClass;
+  return ManagedChatOpenAIClass;
+}
+
+// Lazily built + cached so @langchain/ollama stays off the other providers' paths.
+// Subclasses ChatOllama to add the same transient/in-stream retry as the hosted
+// providers. No withConfig override is needed: base Runnable.withConfig wraps
+// `this` (as for ChatAnthropic), so the overridden methods survive bindTools.
+let OllamaChatModelClass = null;
+function getOllamaChatModelClass() {
+  if (OllamaChatModelClass) return OllamaChatModelClass;
+  const { ChatOllama } = require('@langchain/ollama');
+  OllamaChatModelClass = class RetryingChatOllama extends ChatOllama {
+    constructor(fields) {
+      super(fields);
+      this.streamRetries = clampStreamRetries(fields && fields.streamRetries);
+    }
+    // ChatOllama._generate aggregates by iterating THIS._streamResponseChunks, so
+    // wrapping only the stream covers both .invoke() and .stream() with a single
+    // retry layer (wrapping _generate too would nest retries).
+    async *_streamResponseChunks(messages, options, runManager) {
+      yield* streamWithRetry(
+        () => super._streamResponseChunks(messages, options, runManager),
+        this.streamRetries,
+        streamRetryLogger('ollama')
+      );
+    }
+  };
+  return OllamaChatModelClass;
 }
 
 /** Build a LangChain chat model for the given provider descriptor. */
@@ -428,13 +546,22 @@ function createChatModel(llm, { json = false } = {}) {
   }
   if (llm.provider === 'codex') {
     if (llm.backend === 'chatgpt') return createCodexChatgptModel(llm, json);
-    // Metered OpenAI Chat Completions API (requires funded API credits).
-    const { ChatOpenAI } = require('@langchain/openai');
+    // Metered OpenAI Chat Completions API (requires funded API credits). Routed
+    // through the shared managed base so it gets the same prompt budget + stream
+    // retry as the ChatGPT backend (the standard API accepts role:"system", so no
+    // developer rewrite is needed here).
+    const ManagedChatOpenAI = getManagedChatOpenAIClass();
     const opts = {
       model: llm.model,
       apiKey: llm.accessToken,
       maxTokens: llm.numTokens,
       configuration: { baseURL: llm.baseUrl },
+      promptBudget: codexPromptBudget(llm),
+      charsPerToken: CONFIG.OAUTH.charsPerToken,
+      contextMode: llm.contextMode,
+      summaryMaxTokens: CONFIG.OAUTH.summaryMaxTokens,
+      streamRetries: clampStreamRetries(llm.streamRetries),
+      retryProvider: 'codex',
     };
     if (llm.reasoningAdapter === 'openai' && ['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(llm.reasoningEffort)) {
       opts.reasoning = { effort: llm.reasoningEffort };
@@ -446,7 +573,31 @@ function createChatModel(llm, { json = false } = {}) {
     }
     // Constrained JSON output (equivalent to Ollama's format:'json').
     if (json) opts.modelKwargs = { response_format: { type: 'json_object' } };
-    return new ChatOpenAI(opts);
+    return new ManagedChatOpenAI(opts);
+  }
+  if (llm.provider === 'huggingface') {
+    // Hugging Face's router is OpenAI-compatible, so the shared managed base targets
+    // it with a Bearer HF token (context budget stays off — no window is declared —
+    // but the stream retry applies). Streamed so a large max output never trips the
+    // SDK's 10-minute non-streaming ceiling (LangChain re-aggregates for .invoke()).
+    const ManagedChatOpenAI = getManagedChatOpenAIClass();
+    const opts = {
+      model: llm.model,
+      apiKey: llm.apiKey,
+      maxTokens: llm.numTokens,
+      streaming: true,
+      configuration: { baseURL: llm.baseUrl },
+      streamRetries: clampStreamRetries(llm.streamRetries),
+      retryProvider: 'huggingface',
+    };
+    if (llm.reasoningAdapter === 'openai' && ['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(llm.reasoningEffort)) {
+      opts.reasoning = { effort: llm.reasoningEffort };
+    }
+    if ((llm.reasoningAdapter !== 'openai' || llm.reasoningEffort === 'none') && typeof llm.temperature === 'number' && Number.isFinite(llm.temperature)) {
+      opts.temperature = llm.temperature;
+    }
+    if (json) opts.modelKwargs = { response_format: { type: 'json_object' } };
+    return new ManagedChatOpenAI(opts);
   }
   if (llm.provider === 'lmstudio') {
     // LM Studio serves an OpenAI-compatible API, so ChatOpenAI targets it directly.
@@ -456,11 +607,13 @@ function createChatModel(llm, { json = false } = {}) {
     // (max_tokens) to fit the operator-declared context window, reserving room for
     // the (large) deep-agent prompt. Without this, sending max_tokens > n_ctx (e.g.
     // 16000 in an 8192 window) yields LM Studio 400s like "n_keep >= n_ctx".
-    const LmStudioChatModel = getLmStudioChatModelClass();
+    const LmStudioChatModel = getManagedChatOpenAIClass();
     const opts = {
       model: llm.model,
       apiKey: 'lm-studio',
       maxTokens: lmstudioMaxTokens(llm),
+      streamRetries: clampStreamRetries(llm.streamRetries),
+      retryProvider: 'lmstudio',
       // Stream responses. A slow local model can take minutes per turn; a
       // NON-streaming request holds the socket until the whole answer is ready, so
       // Node's undici HTTP client aborts it at its default 5-min headers timeout
@@ -504,7 +657,7 @@ function createChatModel(llm, { json = false } = {}) {
     return new LmStudioChatModel(opts);
   }
   if (llm.provider === 'omlx') {
-    const OmlxChatModel = getLmStudioChatModelClass();
+    const OmlxChatModel = getManagedChatOpenAIClass();
     const opts = {
       model: llm.model,
       apiKey: llm.apiKey || 'omlx-local',
@@ -517,6 +670,8 @@ function createChatModel(llm, { json = false } = {}) {
       charsPerToken: CONFIG.OMLX.charsPerToken,
       contextMode: llm.contextMode,
       summaryMaxTokens: CONFIG.OMLX.summaryMaxTokens,
+      streamRetries: clampStreamRetries(llm.streamRetries),
+      retryProvider: 'omlx',
     };
     if (typeof llm.temperature === 'number' && Number.isFinite(llm.temperature)) {
       opts.temperature = llm.temperature;
@@ -542,12 +697,13 @@ function createChatModel(llm, { json = false } = {}) {
     throw new TypeError(`Unsupported LLM provider: ${llm.provider || 'unknown'}`);
   }
   // Local Ollama.
-  const { ChatOllama } = require('@langchain/ollama');
+  const OllamaChatModel = getOllamaChatModelClass();
   const opts = {
     baseUrl: llm.host,
     model: llm.model,
     numCtx: llm.contextWindow,
     numPredict: llm.numTokens,
+    streamRetries: clampStreamRetries(llm.streamRetries),
   };
   if (typeof llm.temperature === 'number' && Number.isFinite(llm.temperature)) {
     opts.temperature = llm.temperature;
@@ -564,7 +720,7 @@ function createChatModel(llm, { json = false } = {}) {
   }
   // 'json' uses Ollama's native constrained mode; 'text' relies on the prompt.
   if (json && llm.jsonMode !== 'text') opts.format = 'json';
-  return new ChatOllama(opts);
+  return new OllamaChatModel(opts);
 }
 
 /**
@@ -639,6 +795,8 @@ function providerForRole(settings, role) {
  */
 async function resolveLlm(settings, role = 'global') {
   const provider = providerForRole(settings, role);
+  // Transient/in-stream retry count is a single knob applied to every provider.
+  const streamRetries = clampStreamRetries(settings.llmStreamRetries);
   if (provider === 'claude') {
     const tokens = await ensureFreshClaudeTokens();
     return {
@@ -651,6 +809,7 @@ async function resolveLlm(settings, role = 'global') {
       reasoningEffort: settings.claudeReasoningEffort ?? null,
       reasoningAdapter: settings.claudeReasoningAdapter || 'none',
       streaming: settings.claudeStreaming !== false,
+      streamRetries,
     };
   }
   if (provider === 'codex') {
@@ -675,9 +834,12 @@ async function resolveLlm(settings, role = 'global') {
         authTokens: { ...tokens },
         accountId,
         numTokens: settings.codexMaxTokens || 65536,
+        contextWindow: Number(settings.codexContextWindow) || 0,
+        contextMode: settings.codexContextMode || 'trim',
         temperature: settings.codexTemperature ?? null,
         reasoningEffort: settings.codexReasoningEffort ?? null,
         reasoningAdapter: settings.codexReasoningAdapter || 'none',
+        streamRetries,
       };
     }
     return {
@@ -688,9 +850,12 @@ async function resolveLlm(settings, role = 'global') {
       accessToken: tokens.accessToken,
       authTokens: { ...tokens },
       numTokens: settings.codexMaxTokens || 65536,
+      contextWindow: Number(settings.codexContextWindow) || 0,
+      contextMode: settings.codexContextMode || 'trim',
       temperature: settings.codexTemperature ?? null,
       reasoningEffort: settings.codexReasoningEffort ?? null,
       reasoningAdapter: settings.codexReasoningAdapter || 'none',
+      streamRetries,
     };
   }
   if (provider === 'lmstudio') {
@@ -718,6 +883,7 @@ async function resolveLlm(settings, role = 'global') {
       jsonMode: settings.lmstudioJsonMode || 'text',
       // How to keep the prompt within the loaded window: trim | summarize | none.
       contextMode: settings.lmstudioContextMode || 'summarize',
+      streamRetries,
     };
   }
   if (provider === 'omlx') {
@@ -740,6 +906,25 @@ async function resolveLlm(settings, role = 'global') {
       reasoningAdapter: settings.omlxReasoningAdapter || 'none',
       jsonMode: settings.omlxJsonMode || 'text',
       contextMode: settings.omlxContextMode || 'summarize',
+      streamRetries,
+    };
+  }
+  if (provider === 'huggingface') {
+    const host = String(settings.huggingfaceHost || CONFIG.HUGGINGFACE.defaultHost)
+      .replace(/\/v1\/?$/i, '')
+      .replace(/\/$/, '');
+    return {
+      provider: 'huggingface',
+      host,
+      baseUrl: `${host}${CONFIG.HUGGINGFACE.apiPath}`,
+      apiKey: settings.huggingfaceApiKey || '',
+      model: settings.huggingfaceModel,
+      contextWindow: settings.huggingfaceContextWindow,
+      numTokens: settings.huggingfaceMaxTokens || 8192,
+      temperature: settings.huggingfaceTemperature ?? null,
+      reasoningEffort: settings.huggingfaceReasoningEffort || 'none',
+      reasoningAdapter: settings.huggingfaceReasoningAdapter || 'none',
+      streamRetries,
     };
   }
   if (provider !== 'ollama') throw new TypeError(`Unsupported LLM provider: ${provider || 'unknown'}`);
@@ -756,6 +941,7 @@ async function resolveLlm(settings, role = 'global') {
     reasoningEffort: settings.ollamaReasoningEffort || 'none',
     reasoningAdapter: settings.ollamaReasoningAdapter || 'none',
     jsonMode: settings.ollamaJsonMode || 'json',
+    streamRetries,
   };
 }
 
@@ -785,6 +971,10 @@ function llmReady(settings, role = 'global') {
   if (provider === 'omlx') {
     return Boolean(settings.omlxHost && settings.omlxModel);
   }
+  if (provider === 'huggingface') {
+    // The HF access token is mandatory (the router rejects unauthenticated calls).
+    return Boolean(settings.huggingfaceApiKey && settings.huggingfaceModel);
+  }
   return Boolean(settings.ollamaHost && settings.ollamaModel);
 }
 
@@ -803,6 +993,9 @@ function notReadyReason(settings, role = 'global') {
   if (provider === 'omlx') {
     return 'Set the oMLX host and model in Settings → LLM to enable enrichment.';
   }
+  if (provider === 'huggingface') {
+    return 'Add your Hugging Face access token and model in Settings → LLM to enable enrichment.';
+  }
   return 'Set the Ollama host and model in Settings → LLM to enable enrichment.';
 }
 
@@ -818,6 +1011,9 @@ module.exports = {
   lmstudioPromptBudget,
   omlxMaxTokens,
   omlxPromptBudget,
+  codexMaxTokens,
+  codexPromptBudget,
+  clampStreamRetries,
   clampContextWindow,
   trimMessagesForBudget,
   estimateMessageTokens,
