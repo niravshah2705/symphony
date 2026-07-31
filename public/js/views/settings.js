@@ -90,6 +90,7 @@ function providerConfigured(settings, provider, codex, claude) {
   if (provider === 'claude') return Boolean(claude && claude.connected);
   if (provider === 'lmstudio') return Boolean(settings.lmstudioHost && settings.lmstudioModel);
   if (provider === 'omlx') return Boolean(settings.omlxHost && settings.omlxModel);
+  if (provider === 'huggingface') return Boolean(settings.hasHuggingfaceApiKey && settings.huggingfaceModel);
   return Boolean(settings.ollamaHost && settings.ollamaModel);
 }
 
@@ -627,6 +628,7 @@ const PROVIDER_LABELS = Object.freeze({
   omlx: 'oMLX',
   codex: 'OpenAI',
   claude: 'Anthropic',
+  huggingface: 'Hugging Face',
 });
 
 const PROVIDER_DEPLOYMENT = Object.freeze({
@@ -635,6 +637,7 @@ const PROVIDER_DEPLOYMENT = Object.freeze({
   omlx: 'local',
   codex: 'hosted',
   claude: 'hosted',
+  huggingface: 'hosted',
 });
 
 // Purpose-based model roles ("models as tasks"). Each role is provider-flexible
@@ -668,11 +671,11 @@ const ROLE_FIELDS = Object.freeze(Object.fromEntries(
 const ROLE_META = Object.freeze(Object.fromEntries(
   LLM_ROLES.map((entry) => [entry.role, { heading: entry.heading, description: entry.description }])
 ));
-const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude']);
+const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface']);
 const ROLE_PROVIDERS = Object.freeze({
   // Legacy deployment slots, kept for any deployment-scoped callers.
   local: ['ollama', 'lmstudio', 'omlx'],
-  hosted: ['codex', 'claude'],
+  hosted: ['codex', 'claude', 'huggingface'],
   // Purpose roles accept any provider (local or hosted).
   thinking: ALL_PROVIDERS,
   execution: ALL_PROVIDERS,
@@ -732,6 +735,7 @@ function selectedPresetId(settings, role) {
 function providerConnected(ctx, provider) {
   if (provider === 'codex') return Boolean(ctx.codex && ctx.codex.connected);
   if (provider === 'claude') return Boolean(ctx.claude && ctx.claude.connected);
+  if (provider === 'huggingface') return Boolean(ctx.settings && ctx.settings.hasHuggingfaceApiKey);
   return true;
 }
 
@@ -861,7 +865,9 @@ function presetSlot(ctx, role, rebuild) {
   const heading = meta.heading || role;
   const deploymentHint = LOCAL_PROVIDERS.has(provider)
     ? ` Runs privately on this machine through ${PROVIDER_LABELS[provider] || provider}.`
-    : ' Runs on a hosted OAuth provider (OpenAI / Anthropic).';
+    : provider === 'huggingface'
+      ? ' Runs on Hugging Face hosted inference (billed to your HF account).'
+      : ' Runs on a hosted OAuth provider (OpenAI / Anthropic).';
   const description = `${meta.description || ''}${deploymentHint}`;
   const status = modelDiscoveryStatus(ctx, role, provider, params.model, rebuild);
   const children = [
@@ -903,6 +909,9 @@ function presetSlot(ctx, role, rebuild) {
   if (provider === 'codex' || provider === 'claude') {
     children.push(hostedConnection(ctx, provider));
   }
+  if (provider === 'huggingface' && editorPreset) {
+    children.push(huggingfaceConnection(ctx, role, editorPreset, params, rebuild));
+  }
   if (editorPreset) children.push(parameterEditor(ctx, role, editorPreset, params, rebuild));
 
   return el('div', { class: `preset-card preset-card-${deployment}`, dataset: { role } }, children);
@@ -914,6 +923,7 @@ function customEditorPreset(provider, params, settings, deployment) {
   const isOmlx = provider === 'omlx';
   const isOpenAiLocal = isLmstudio || isOmlx;
   const isCodex = provider === 'codex';
+  const isHuggingface = provider === 'huggingface';
   let adapter = 'none';
   if (isOllama && ['ollama-think-effort', 'ollama-think-toggle'].includes(settings.ollamaReasoningAdapter)) {
     adapter = settings.ollamaReasoningAdapter;
@@ -923,7 +933,9 @@ function customEditorPreset(provider, params, settings, deployment) {
     adapter = 'omlx-template-effort';
   } else if (isCodex && settings.codexReasoningAdapter === 'openai') {
     adapter = 'openai';
-  } else if (!isOpenAiLocal && !isOllama && !isCodex &&
+  } else if (isHuggingface && settings.huggingfaceReasoningAdapter === 'openai') {
+    adapter = 'openai';
+  } else if (!isOpenAiLocal && !isOllama && !isCodex && !isHuggingface &&
     ['anthropic-adaptive', 'anthropic-effort'].includes(settings.claudeReasoningAdapter)) {
     adapter = settings.claudeReasoningAdapter;
   }
@@ -959,7 +971,7 @@ function customEditorPreset(provider, params, settings, deployment) {
       maxOutputContextFraction: isOpenAiLocal ? 0.5 : isOllama ? 1 : null,
     },
     capabilities: {
-      temperature: isOllama || isOpenAiLocal || (isCodex && adapter === 'none'),
+      temperature: isOllama || isOpenAiLocal || ((isCodex || isHuggingface) && adapter === 'none'),
       contextWindowConfigurable: isOllama || isOpenAiLocal,
       reasoningAdapter: adapter,
       reasoningEfforts: efforts,
@@ -1274,6 +1286,17 @@ function currentParameters(settings, provider) {
     jsonMode: null,
     contextMode: null,
   };
+  if (provider === 'huggingface') return {
+    host: settings.huggingfaceHost,
+    model: settings.huggingfaceModel,
+    contextWindow: settings.huggingfaceContextWindow || 32768,
+    maxOutputTokens: settings.huggingfaceMaxTokens || 8192,
+    temperature: settings.huggingfaceTemperature,
+    topP: null, topK: null, repeatPenalty: null,
+    reasoningEffort: settings.huggingfaceReasoningEffort || 'none',
+    jsonMode: null,
+    contextMode: null,
+  };
   return {
     model: settings.claudeModel || 'claude-opus-4-8',
     contextWindow: settings.claudeContextWindow || 1000000,
@@ -1291,6 +1314,7 @@ function configuredReasoningAdapter(settings, provider) {
   if (provider === 'lmstudio') return settings.lmstudioReasoningAdapter || 'none';
   if (provider === 'omlx') return settings.omlxReasoningAdapter || 'none';
   if (provider === 'codex') return settings.codexReasoningAdapter || 'none';
+  if (provider === 'huggingface') return settings.huggingfaceReasoningAdapter || 'none';
   return settings.claudeReasoningAdapter || 'none';
 }
 
@@ -1657,6 +1681,92 @@ function claudeConnection(ctx) {
       } }, 'Complete sign-in'),
     ]),
     info,
+  ]);
+}
+
+// Hosted provider configured with an API token (not OAuth): router base URL,
+// an arbitrary model id, and a Hugging Face access token. The token is stored
+// server-side (masked here) and cleared via the checkbox.
+function huggingfaceConnection(ctx, role, preset, params, rebuild) {
+  const s = ctx.settings;
+  const hostInput = el('input', {
+    type: 'url', value: s.huggingfaceHost || 'https://router.huggingface.co',
+    placeholder: 'https://router.huggingface.co', autocomplete: 'url', spellcheck: 'false',
+  });
+  const modelInput = el('input', {
+    type: 'text', value: params.model || '',
+    placeholder: 'meta-llama/Llama-3.3-70B-Instruct', spellcheck: 'false',
+  });
+  const keyInput = pwd(s.hasHuggingfaceApiKey ? `Saved: ${s.maskedHuggingfaceApiKey}` : 'hf_… access token');
+  const clearKey = s.hasHuggingfaceApiKey ? el('input', { type: 'checkbox', style: 'width:auto' }) : null;
+  if (clearKey) {
+    clearKey.addEventListener('change', () => {
+      keyInput.disabled = clearKey.checked;
+      if (clearKey.checked) keyInput.value = '';
+    });
+  }
+  const info = el('div', { class: 'muted preset-save-info', role: 'status', 'aria-live': 'polite' });
+  const save = el('button', { class: 'primary', type: 'button' }, 'Save connection');
+  save.addEventListener('click', async () => {
+    const model = modelInput.value.trim();
+    if (!model) {
+      info.textContent = 'Enter a model id (e.g. meta-llama/Llama-3.3-70B-Instruct).';
+      info.style.color = 'var(--red)';
+      return;
+    }
+    if (!s.hasHuggingfaceApiKey && !keyInput.value.trim()) {
+      info.textContent = 'A Hugging Face access token is required.';
+      info.style.color = 'var(--red)';
+      return;
+    }
+    save.disabled = true;
+    save.textContent = 'Saving…';
+    info.style.color = '';
+    info.textContent = 'Saving Hugging Face connection…';
+    const matched = findPresetForModel(ctx, 'huggingface', model);
+    const overrides = {
+      model,
+      contextWindow: params.contextWindow,
+      maxOutputTokens: params.maxOutputTokens,
+      temperature: params.temperature,
+      reasoningEffort: params.reasoningEffort,
+      host: hostInput.value.trim(),
+      ...(keyInput.value.trim() ? { apiKey: keyInput.value.trim() } : {}),
+      ...(clearKey && clearKey.checked ? { clearApiKey: true } : {}),
+    };
+    try {
+      const next = await api.applyLlmPreset({
+        role,
+        presetId: matched ? matched.id : 'custom',
+        provider: 'huggingface',
+        overrides,
+      });
+      Object.assign(ctx.settings, next);
+      toast('Hugging Face connection saved.', 'ok');
+      rebuild();
+    } catch (err) {
+      info.textContent = err.message;
+      info.style.color = 'var(--red)';
+      toast(err.message, 'err');
+      save.disabled = false;
+      save.textContent = 'Save connection';
+    }
+  });
+  return el('div', { class: 'local-connection' }, [
+    el('div', { class: 'local-connection-head' }, [
+      el('div', {}, [
+        el('strong', {}, 'Hugging Face connection'),
+        el('span', { class: 'muted' }, ' Router base URL, model, and access token.'),
+      ]),
+      el('a', { class: 'detail-link', href: 'https://huggingface.co/settings/tokens', target: '_blank', rel: 'noopener' }, 'Create a token ↗'),
+    ]),
+    el('div', { class: 'local-connection-grid' }, [
+      field('Router base URL', hostInput, 'Default is the Hugging Face router. Change only for a custom or proxied endpoint.'),
+      field('Model', modelInput, 'Any model routable via HF Inference Providers, e.g. meta-llama/Llama-3.3-70B-Instruct.'),
+      field('Access token', keyInput, 'Stored server-side and never returned to this page. Required.'),
+    ]),
+    clearKey ? el('label', { class: 'row local-key-clear' }, [clearKey, el('span', {}, 'Remove saved token')]) : null,
+    el('div', { class: 'row local-connection-actions' }, [save, info]),
   ]);
 }
 

@@ -57,7 +57,9 @@ function publicAvailabilityMessage(resource, context = {}) {
         ? 'Claude'
         : context.provider === 'codex'
           ? 'Codex'
-          : 'selected';
+          : context.provider === 'huggingface'
+            ? 'Hugging Face'
+            : 'selected';
   return `The ${provider} model is unavailable. Check the model in Settings, then resume agent jobs.`;
 }
 
@@ -158,6 +160,22 @@ async function probeModelAvailability(llm, dependencies = {}) {
       if (!model || (llm.provider === 'codex' && llm.backend === 'api' && model.source !== 'live')) {
         throw new AgentAvailabilityError('model', publicAvailabilityMessage('model', context), 404, 'model_not_found');
       }
+      return { available: true, provider: llm.provider, model: llm.model };
+    }
+
+    if (llm.provider === 'huggingface') {
+      if (typeof fetchImpl !== 'function' || !llm.baseUrl) throw new Error('Hugging Face endpoint is not configured.');
+      if (!llm.apiKey) {
+        throw new AgentAvailabilityError('model', publicAvailabilityMessage('model', context), 401, 'model_not_configured');
+      }
+      // Validate the token + connectivity against the router. Its model listing is
+      // large and may omit routable models, so we do NOT require the configured
+      // model to appear — only that the authenticated call succeeds.
+      const response = await fetchImpl(`${String(llm.baseUrl).replace(/\/$/, '')}/models`, {
+        headers: { Accept: 'application/json', Authorization: `Bearer ${llm.apiKey}` },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!response.ok) throw Object.assign(new Error('Hugging Face rejected the readiness check.'), { status: response.status });
       return { available: true, provider: llm.provider, model: llm.model };
     }
 

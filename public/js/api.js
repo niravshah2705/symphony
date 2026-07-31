@@ -114,6 +114,9 @@ export const api = {
     if (provider === 'codex' || provider === 'claude') {
       return request(`/settings/${provider}/models${suffix}`);
     }
+    // Hugging Face has no live model-discovery endpoint (the router hosts many
+    // thousands); the catalog presets and the manual model field cover selection.
+    if (provider === 'huggingface') return Promise.resolve({ models: [], reachable: true, source: 'catalog' });
     return Promise.reject(new Error(`Unsupported LLM provider: ${provider}`));
   },
 
