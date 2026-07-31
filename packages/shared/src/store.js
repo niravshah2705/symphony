@@ -68,12 +68,17 @@ function settingsForConfiguredModel(preset, model = configuredModel(preset.provi
     claudeTemperature: null,
     claudeReasoningEffort: 'none',
     claudeReasoningAdapter: 'none',
+    // Stream Claude responses. Must stay on for large max output — a non-streaming
+    // request with a big maxTokens trips the Anthropic SDK's 10-minute guard.
+    // Editable from Settings (default on); see createClaudeModel in agent/llm.js.
+    claudeStreaming: true,
   };
 }
 
 const DEFAULT_OLLAMA_SETTINGS = settingsPatchForPreset(recommendedPreset('ollama'));
 const DEFAULT_LMSTUDIO_SETTINGS = settingsPatchForPreset(recommendedPreset('lmstudio'));
 const DEFAULT_OMLX_SETTINGS = settingsPatchForPreset(recommendedPreset('omlx'));
+const DEFAULT_HUGGINGFACE_SETTINGS = settingsPatchForPreset(recommendedPreset('huggingface'));
 const DEFAULT_CODEX_SETTINGS = settingsForConfiguredModel(recommendedPreset('codex'));
 const DEFAULT_CLAUDE_SETTINGS = settingsForConfiguredModel(recommendedPreset('claude'));
 // The exact catalog defaults win over a same-provider recommended preset. This
@@ -183,9 +188,22 @@ const DEFAULT_STORE = Object.freeze({
     omlxHost: CONFIG.OMLX.defaultHost,
     omlxApiKey: '',
     ...DEFAULT_OMLX_SETTINGS,
+    // Hugging Face (hosted, OpenAI-compatible router). The access token is
+    // REQUIRED; it lives server-side only and is exposed solely via masked
+    // status fields. Endpoint host comes from CONFIG.HUGGINGFACE (trusted).
+    huggingfaceHost: CONFIG.HUGGINGFACE.defaultHost,
+    huggingfaceApiKey: '',
+    ...DEFAULT_HUGGINGFACE_SETTINGS,
     // Codex (OpenAI) provider — endpoints/client come from CONFIG.OAUTH (trusted),
     // the browser only chooses the model. Tokens live server-side only.
     ...DEFAULT_CODEX_SETTINGS,
+    // How Codex keeps the deep-agent prompt within its context window on long
+    // runs (only acts when the prompt overflows codexContextWindow): 'trim' drops
+    // old turns, 'summarize' condenses them via one extra Codex call, 'none'
+    // sends as-is. 'trim' by default — the same strategy LM Studio uses, but
+    // without an extra hosted request. Not part of the preset patch, so it is
+    // preserved across model/preset changes.
+    codexContextMode: 'trim',
     codexTokens: null, // OAuth token set { accessToken, refreshToken, ... } — never sent to the browser
     // Claude (Anthropic) provider — "Sign in with Claude" OAuth. Endpoints/client
     // come from CONFIG.CLAUDE (trusted); the browser only chooses the model.
@@ -207,6 +225,12 @@ const DEFAULT_STORE = Object.freeze({
     // Existing installations inherit these values through the store merge.
     agentRuntime: 'deepagent',
     workflowPattern: 'sequential',
+    // How many times to retry an LLM stream on a transient/in-stream error
+    // (a stream `error` event, a 5xx/429, or a dropped connection) — these
+    // surface after a 200 so the provider SDK's own retries never cover them.
+    // Applies to every provider. 0 disables retrying. Existing installs inherit
+    // this default through the store merge.
+    llmStreamRetries: CONFIG.LLM_STREAM_RETRIES,
   },
   businesses: [
     {
@@ -288,7 +312,7 @@ function readStore() {
     // reasoning fields are absent, however, activate the reviewed default for
     // the effective known model. This keeps the visible model-aware default and
     // the actual runtime request in sync without overwriting an explicit Off.
-    for (const prefix of ['ollama', 'lmstudio', 'codex', 'claude']) {
+    for (const prefix of ['ollama', 'lmstudio', 'codex', 'claude', 'huggingface']) {
       const effortKey = `${prefix}ReasoningEffort`;
       const adapterKey = `${prefix}ReasoningAdapter`;
       if (!Object.prototype.hasOwnProperty.call(storedSettings, effortKey)) settings[effortKey] = null;

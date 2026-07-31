@@ -16,12 +16,15 @@
 
 const { normalizeAgentRuntime, normalizeWorkflowPattern } = require('./runtimes');
 
-const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude']);
+const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface']);
 const LOCAL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx']);
 const PLANNING_PROVIDERS = Object.freeze(['linear', 'jira', 'asana']);
 const REPOSITORY_PROVIDERS = Object.freeze(['github', 'gitlab']);
 const RUNTIME_IDS = Object.freeze(['deepagent', 'codex-sdk', 'claude-agent-sdk']);
 const WORKFLOW_PATTERN_IDS = Object.freeze(['sequential', 'parallel', 'evaluator', 'supervisor']);
+const CONTEXT_MODES = Object.freeze(['summarize', 'trim', 'none']);
+// Upper bound on the LLM stream retry count; matches the clamp in agent/llm.js.
+const MAX_LLM_STREAM_RETRIES = 5;
 
 /* ------------------------------ coercers ------------------------------ */
 // Each coercer returns { ok: true, value } or { ok: false, reason }.
@@ -40,6 +43,12 @@ const num = (min, max) => (v) => {
 };
 
 const bool = () => (v) => ({ ok: true, value: Boolean(v) });
+
+const int = (min, max) => (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return { ok: false, reason: 'must be an integer' };
+  return { ok: true, value: Math.min(max, Math.max(min, Math.round(n))) };
+};
 
 const oneOf = (values) => (v) => {
   const s = String(v ?? '').trim();
@@ -97,8 +106,8 @@ function localParamKeys(p, { contextMode = false } = {}) {
   return map;
 }
 
-function hostedParamKeys(p) {
-  return {
+function hostedParamKeys(p, { contextMode = false } = {}) {
+  const map = {
     [`${p}Model`]: str(200),
     [`${p}ContextWindow`]: num(0, 100_000_000),
     [`${p}MaxTokens`]: num(0, 100_000_000),
@@ -106,6 +115,8 @@ function hostedParamKeys(p) {
     [`${p}ReasoningEffort`]: str(40),
     [`${p}ReasoningAdapter`]: str(40),
   };
+  if (contextMode) map[`${p}ContextMode`] = oneOf(CONTEXT_MODES);
+  return map;
 }
 
 /* --------------------------- the allow-list --------------------------- */
@@ -114,6 +125,10 @@ const ALLOWED = Object.freeze({
   // Harness (agent runtime) + workflow pattern
   agentRuntime: runtimeCoerce,
   workflowPattern: patternCoerce,
+
+  // Retry an LLM stream this many times on a transient/in-stream error. Applies
+  // to every provider (0 disables). See CONFIG.LLM_STREAM_RETRIES.
+  llmStreamRetries: int(0, MAX_LLM_STREAM_RETRIES),
 
   // Provider slots (legacy) + purpose roles (thinking/execution/testing)
   llmProvider: oneOf(ALL_PROVIDERS),
@@ -131,8 +146,10 @@ const ALLOWED = Object.freeze({
   ...localParamKeys('ollama'),
   ...localParamKeys('lmstudio', { contextMode: true }),
   ...localParamKeys('omlx', { contextMode: true }),
-  ...hostedParamKeys('codex'),
+  ...hostedParamKeys('codex', { contextMode: true }),
   ...hostedParamKeys('claude'),
+  ...hostedParamKeys('huggingface'),
+  huggingfaceHost: httpUrl(), // hosted, but the router base URL is operator-configurable
 
   // LangSmith (non-secret only; the API key keeps its dedicated endpoint)
   langsmithProject: str(200),
@@ -216,9 +233,11 @@ function describeEditableSettings() {
     `- localLlmProvider: ${LOCAL_PROVIDERS.join(' | ')}`,
     `- planningProvider: ${PLANNING_PROVIDERS.join(' | ')}`,
     `- repositoryProvider: ${REPOSITORY_PROVIDERS.join(' | ')}`,
+    `- lmstudioContextMode / omlxContextMode / codexContextMode: ${CONTEXT_MODES.join(' | ')}`,
     '- langsmithTracing: true | false',
     '',
     'Numbers: temperature 0-2, topP 0-1; context windows and token limits are integers.',
+    `- llmStreamRetries (all providers): integer 0-${MAX_LLM_STREAM_RETRIES} (retries on a transient/in-stream LLM error).`,
     'Never set secrets, API keys, or tokens here — those are not editable.',
   ].join('\n');
 }

@@ -139,6 +139,17 @@ const OAUTH = Object.freeze({
   loginTtlMs: 10 * 60 * 1000,
   // Refresh the access token when it is within this window of expiring.
   refreshSkewMs: 60 * 1000,
+  // Prompt-budget trimming for Codex — same purpose as LM Studio's: the deep
+  // agent re-sends its whole (growing) history each turn, so a long run can
+  // eventually exceed even a large hosted context window. We bound the prompt to
+  // a token budget (context window minus the output reserve and this margin) and
+  // trim/summarize the oldest turns only when it actually overflows.
+  //   charsPerToken     — chars→tokens estimate (GPT BPE averages ~4 for code/prose).
+  //   promptMarginTokens — fixed headroom under the window for request framing.
+  //   summaryMaxTokens   — output cap for the 'summarize' mode's condensed note.
+  charsPerToken: Number(process.env.CODEX_CHARS_PER_TOKEN) || 4,
+  promptMarginTokens: Number(process.env.CODEX_PROMPT_MARGIN_TOKENS) || 4096,
+  summaryMaxTokens: Number(process.env.CODEX_SUMMARY_MAX_TOKENS) || 2048,
 });
 
 /**
@@ -235,6 +246,19 @@ const OMLX = Object.freeze({
   charsPerToken: Number(process.env.OMLX_CHARS_PER_TOKEN) || 3,
   promptMarginTokens: Number(process.env.OMLX_PROMPT_MARGIN_TOKENS) || 1024,
   summaryMaxTokens: Number(process.env.OMLX_SUMMARY_MAX_TOKENS) || 1024,
+});
+
+/**
+ * Hugging Face hosted inference. The router exposes an OpenAI-compatible Chat
+ * Completions API (`https://router.huggingface.co/v1/chat/completions`) that
+ * fans out to serverless Inference Providers, authenticated with an HF access
+ * token. Targeted with the same ChatOpenAI client as Codex's metered backend.
+ */
+const HUGGINGFACE = Object.freeze({
+  defaultHost: process.env.HUGGINGFACE_HOST || 'https://router.huggingface.co',
+  apiPath: process.env.HUGGINGFACE_API_PATH || '/v1',
+  requestTimeoutMs: Number(process.env.HUGGINGFACE_REQUEST_TIMEOUT_MS) || 10 * 60 * 1000,
+  maxRetries: Number.isFinite(Number(process.env.HUGGINGFACE_MAX_RETRIES)) ? Number(process.env.HUGGINGFACE_MAX_RETRIES) : 1,
 });
 
 /**
@@ -388,7 +412,7 @@ const CONFIG = Object.freeze({
   // Allowed scheduler cadences (minutes).
   INTERVAL_OPTIONS: [5, 10, 15],
   // Deep-agent LLM providers.
-  LLM_PROVIDERS: ['ollama', 'lmstudio', 'omlx', 'codex', 'claude'],
+  LLM_PROVIDERS: ['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface'],
   // How each local provider constrains JSON output for the planner's structured
   // calls. Not every model/engine accepts the same format (e.g. some LM Studio
   // engines reject `json_object` and require `json_schema` or `text`), so the
@@ -406,10 +430,21 @@ const CONFIG = Object.freeze({
   // or none (send as-is — may overflow). 'summarize' preserves the most context.
   LMSTUDIO_CONTEXT_MODES: ['summarize', 'trim', 'none'],
   OMLX_CONTEXT_MODES: ['summarize', 'trim', 'none'],
+  // Codex reuses the same prompt-budget strategy as the local providers. Default
+  // is 'trim' (no extra hosted call); 'summarize' condenses old turns via one
+  // extra Codex call, 'none' sends the history as-is.
+  CODEX_CONTEXT_MODES: ['summarize', 'trim', 'none'],
+  // Retry an LLM stream once, by default, on a transient/in-stream error (an
+  // OpenAI stream `error` event, a 5xx/429, or a dropped connection). These
+  // arrive AFTER a 200 so the OpenAI SDK's own maxRetries never covers them.
+  // Applies to every provider; operator-overridable per install via the
+  // `llmStreamRetries` setting. 0 disables retrying.
+  LLM_STREAM_RETRIES: Number.isFinite(Number(process.env.LLM_STREAM_RETRIES)) ? Number(process.env.LLM_STREAM_RETRIES) : 1,
   OAUTH,
   CLAUDE,
   LMSTUDIO,
   OMLX,
+  HUGGINGFACE,
   CODER,
   MCP,
   TOOLS,

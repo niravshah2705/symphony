@@ -42,7 +42,7 @@ const ROLE_KEYS = Object.freeze({
   testing: { provider: 'testingLlmProvider', preset: 'testingLlmPresetId' },
 });
 const LOCAL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx']);
-const HOSTED_PROVIDERS = Object.freeze(['codex', 'claude']);
+const HOSTED_PROVIDERS = Object.freeze(['codex', 'claude', 'huggingface']);
 
 /** Canonicalize a request's role, or null when unrecognized. */
 function parseRole(value) {
@@ -148,12 +148,24 @@ function publicSettings() {
     codexTemperature: s.codexTemperature ?? null,
     codexReasoningEffort: s.codexReasoningEffort || 'none',
     codexReasoningAdapter: s.codexReasoningAdapter || 'none',
+    codexContextMode: s.codexContextMode || 'trim',
     claudeModel: s.claudeModel,
     claudeContextWindow: s.claudeContextWindow,
     claudeMaxTokens: s.claudeMaxTokens,
     claudeTemperature: s.claudeTemperature ?? null,
     claudeReasoningEffort: s.claudeReasoningEffort || 'none',
     claudeReasoningAdapter: s.claudeReasoningAdapter || 'none',
+    // Hugging Face — host/model/params are not secrets; the access token is and
+    // is exposed only as has/masked fields.
+    huggingfaceHost: s.huggingfaceHost,
+    huggingfaceModel: s.huggingfaceModel,
+    huggingfaceContextWindow: s.huggingfaceContextWindow,
+    huggingfaceMaxTokens: s.huggingfaceMaxTokens,
+    huggingfaceTemperature: s.huggingfaceTemperature ?? null,
+    huggingfaceReasoningEffort: s.huggingfaceReasoningEffort || 'none',
+    huggingfaceReasoningAdapter: s.huggingfaceReasoningAdapter || 'none',
+    hasHuggingfaceApiKey: Boolean(s.huggingfaceApiKey),
+    maskedHuggingfaceApiKey: maskKey(s.huggingfaceApiKey),
     hasGithubToken: Boolean(s.githubToken),
     maskedGithubToken: maskKey(s.githubToken),
     hasGitlabToken: Boolean(s.gitlabToken),
@@ -165,6 +177,8 @@ function publicSettings() {
     langsmithTracing: Boolean(s.langsmithTracing),
     agentRuntime: normalizeAgentRuntime(s.agentRuntime),
     workflowPattern: normalizeWorkflowPattern(s.workflowPattern),
+    // Retry count applied to every provider's LLM stream on a transient error.
+    llmStreamRetries: Number.isFinite(Number(s.llmStreamRetries)) ? Number(s.llmStreamRetries) : CONFIG.LLM_STREAM_RETRIES,
   };
 }
 
@@ -325,6 +339,15 @@ router.put('/llm-preset', (req, res) => {
     if (overrides.clearApiKey === true) patch.omlxApiKey = '';
     else if (overrides.apiKey !== undefined && String(overrides.apiKey).trim()) {
       patch.omlxApiKey = String(overrides.apiKey).trim().slice(0, 4096);
+    }
+  }
+  if (preset.provider === 'huggingface') {
+    if (overrides.host !== undefined) {
+      patch.huggingfaceHost = normalizeOmlxHost(overrides.host, current.huggingfaceHost || CONFIG.HUGGINGFACE.defaultHost);
+    }
+    if (overrides.clearApiKey === true) patch.huggingfaceApiKey = '';
+    else if (overrides.apiKey !== undefined && String(overrides.apiKey).trim()) {
+      patch.huggingfaceApiKey = String(overrides.apiKey).trim().slice(0, 4096);
     }
   }
   patch[keys.provider] = preset.provider;

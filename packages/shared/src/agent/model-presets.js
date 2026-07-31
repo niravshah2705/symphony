@@ -8,6 +8,7 @@ const PROVIDER_DEPLOYMENT = Object.freeze({
   omlx: 'local',
   codex: 'hosted',
   claude: 'hosted',
+  huggingface: 'hosted',
 });
 const ROLE_DEPLOYMENT = Object.freeze({ local: 'local', global: 'hosted' });
 
@@ -248,6 +249,9 @@ function normalizeParameters(preset, overrides = {}) {
     (preset.provider === 'lmstudio' || preset.provider === 'omlx') && CONTEXT_MODES.has(overrides.contextMode)
       ? overrides.contextMode
       : defaults.contextMode;
+  // Streaming: only Claude exposes it (default on); other providers force it on
+  // elsewhere. An explicit boolean override wins, else the preset default (on).
+  const streaming = typeof overrides.streaming === 'boolean' ? overrides.streaming : defaults.streaming !== false;
 
   return {
     model: (() => {
@@ -264,6 +268,7 @@ function normalizeParameters(preset, overrides = {}) {
     reasoningAdapter: caps.reasoningAdapter,
     jsonMode,
     contextMode,
+    streaming,
   };
 }
 
@@ -324,6 +329,16 @@ function settingsPatchForPreset(preset, overrides = {}) {
       codexReasoningAdapter: params.reasoningAdapter,
     };
   }
+  if (preset.provider === 'huggingface') {
+    return {
+      huggingfaceModel: params.model,
+      huggingfaceContextWindow: params.contextWindow,
+      huggingfaceMaxTokens: params.maxOutputTokens,
+      huggingfaceTemperature: params.temperature,
+      huggingfaceReasoningEffort: params.reasoningEffort,
+      huggingfaceReasoningAdapter: params.reasoningAdapter,
+    };
+  }
   return {
     claudeModel: params.model,
     claudeContextWindow: params.contextWindow,
@@ -331,6 +346,7 @@ function settingsPatchForPreset(preset, overrides = {}) {
     claudeTemperature: params.temperature,
     claudeReasoningEffort: params.reasoningEffort,
     claudeReasoningAdapter: params.reasoningAdapter,
+    claudeStreaming: params.streaming,
   };
 }
 
@@ -583,6 +599,28 @@ function customPresetForSettings(provider, settings) {
       },
     };
   }
+  if (provider === 'huggingface') {
+    const adapter = settings.huggingfaceReasoningAdapter === 'openai' ? 'openai' : 'none';
+    const efforts = adapter === 'openai' ? ['none', 'low', 'medium', 'high'] : ['none'];
+    const defaultEffort = efforts.includes(settings.huggingfaceReasoningEffort) ? settings.huggingfaceReasoningEffort : efforts[0];
+    return {
+      id: 'custom', provider, deployment: 'hosted', model: settings.huggingfaceModel || 'meta-llama/Llama-3.3-70B-Instruct',
+      limits: { contextWindow: 262144, maxOutputTokens: 128000 },
+      requestLimits: { maxOutputContextFraction: null },
+      capabilities: {
+        temperature: adapter === 'none', contextWindowConfigurable: false, reasoningAdapter: adapter,
+        reasoningEfforts: efforts,
+      },
+      parameters: {
+        contextWindow: settings.huggingfaceContextWindow || 32768,
+        maxOutputTokens: settings.huggingfaceMaxTokens || 4096,
+        temperature: adapter === 'none' ? settings.huggingfaceTemperature ?? 0.7 : null,
+        topP: null, topK: null, repeatPenalty: null,
+        reasoning: { effort: defaultEffort, parameter: adapter === 'openai' ? 'reasoning.effort' : null },
+        jsonMode: null, contextMode: null,
+      },
+    };
+  }
   const adapter = ['anthropic-adaptive', 'anthropic-effort'].includes(settings.claudeReasoningAdapter)
     ? settings.claudeReasoningAdapter
     : 'none';
@@ -601,11 +639,12 @@ function customPresetForSettings(provider, settings) {
     requestLimits: { maxOutputContextFraction: null },
     capabilities: {
       temperature: false, contextWindowConfigurable: false, reasoningAdapter: adapter,
-      reasoningEfforts: efforts,
+      reasoningEfforts: efforts, streamingConfigurable: true,
     },
     parameters: {
       contextWindow: settings.claudeContextWindow || 1000000,
       maxOutputTokens: settings.claudeMaxTokens || 16000,
+      streaming: settings.claudeStreaming !== false,
       temperature: null,
       topP: null, topK: null, repeatPenalty: null,
       reasoning: {

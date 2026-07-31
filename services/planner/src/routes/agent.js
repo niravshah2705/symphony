@@ -73,6 +73,7 @@ function activeModelFor(provider, settings) {
   }
   if (provider === 'lmstudio') return settings.lmstudioModel;
   if (provider === 'omlx') return settings.omlxModel;
+  if (provider === 'huggingface') return settings.huggingfaceModel;
   return settings.ollamaModel;
 }
 
@@ -230,6 +231,7 @@ router.get('/status', (req, res) => {
     ollamaModel: settings.ollamaModel,
     lmstudioModel: settings.lmstudioModel,
     omlxModel: settings.omlxModel,
+    huggingfaceModel: settings.huggingfaceModel,
     codexModel: settings.codexModel || CONFIG.OAUTH.defaultModel,
     codexConnected: Boolean(codexTokens && (codexTokens.accessToken || codexTokens.refreshToken)),
     tracingEnabled: Boolean(settings.langsmithApiKey && settings.langsmithTracing),
