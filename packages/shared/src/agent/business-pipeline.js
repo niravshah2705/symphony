@@ -26,15 +26,26 @@ const { normalizeMemory } = require('./memory');
 const MODEL_TIMEOUT_MS = 45_000;
 const MAX_DESIGN_HTML = 20_000;
 const MAX_SEGMENTS = 6;
-const MAX_TOKENS = Object.freeze({ fraud: 600, revenue: 700, breakdown: 1_200, design: 2_600 });
+const MAX_TOKENS = Object.freeze({ evaluate: 700, fraud: 600, revenue: 700, breakdown: 1_200, design: 2_600 });
 const TONES = Object.freeze(['green', 'amber', 'red', 'blue']);
 
 const TASKS = Object.freeze({
+  evaluate: 'business-evaluate',
   fraud: 'business-fraud',
   revenue: 'business-revenue',
   breakdown: 'business-breakdown',
   design: 'business-design',
 });
+
+// Requirement-readiness banding. The signal is derived server-side from these
+// numeric scores; the model's own claimed signal can only make it MORE severe,
+// never upgrade it (a requirement that says "return green" cannot force green).
+const READINESS_DIMS = Object.freeze(['clarity', 'completeness', 'measurability', 'feasibility']);
+const GREEN_MIN = 75;
+const AMBER_MIN = 45;
+const SIGNAL_RANK = Object.freeze({ red: 0, amber: 1, green: 2 });
+const MAX_CRITERIA = 8;
+const MAX_GAPS = 6;
 
 const STAGE_LABELS = Object.freeze([
   'Fraud check', 'Revenue metrics', 'Business memory', 'Thinker + specs', 'UI design', 'Task scheduler',
@@ -119,6 +130,25 @@ function buildDeps(deps) {
 
 const HIGH_FRAUD = /\b(?:guaranteed returns?|risk[- ]free profit|pyramid|ponzi|fake reviews?|fake invoice|impersonat(?:e|ion)|stolen|phish|launder|bypass verification)\b/i;
 const REVIEW_FRAUD = /\b(?:crypto|investment|lending|cash advance|affiliate|reseller|dropship|lead generation|commission-only|prepay|upfront fee)\b/i;
+
+// Fail-safe fallback for the readiness step: a model outage must land in human
+// review (amber), never auto-green. Dimensions sit mid-band so the derived
+// signal is amber and the verdict stays not-viable.
+function evaluationSeed() {
+  return {
+    criteria: [
+      { text: 'Name the specific user and the measurable outcome they get', mustHave: true },
+      { text: 'State the acceptance criteria that mark this requirement as done', mustHave: true },
+    ],
+    readiness: { clarity: 55, completeness: 55, measurability: 55, feasibility: 55 },
+    score: 55,
+    signal: 'amber',
+    verdict: { viable: false, reason: 'Readiness could not be scored automatically; a human should confirm this requirement before building.' },
+    gaps: ['Clarify the measurable outcome and its acceptance criteria'],
+    summary: 'Automatic readiness estimate — needs a human review before proceeding.',
+    warnings: [],
+  };
+}
 
 function fraudSeed(input) {
   if (HIGH_FRAUD.test(input)) {
@@ -221,6 +251,16 @@ const SYSTEM = [
   'Do not call tools, browse, invent facts, or expose hidden reasoning. Return only the requested JSON (or HTML when asked).',
 ].join(' ');
 
+function evaluatePrompt(input) {
+  return [
+    'Assess whether this business requirement is clear and complete enough to start building. Derive acceptance criteria (definition of done) and score readiness on four 0-100 dimensions.',
+    'clarity = is the intent unambiguous; completeness = are the needed details present; measurability = can success be objectively verified; feasibility = is it realistically buildable now.',
+    'List concrete gaps only for what is genuinely missing. Mark a criterion mustHave when the requirement cannot be considered done without it.',
+    'Return ONLY JSON: {"criteria":[{"text":string,"mustHave":boolean}],"clarity":0-100,"completeness":0-100,"measurability":0-100,"feasibility":0-100,"signal":"green|amber|red","reason":string,"gaps":string[],"summary":string}',
+    '<untrusted_requirement>', fenced(input), '</untrusted_requirement>',
+  ].join('\n');
+}
+
 function fraudPrompt(input) {
   return [
     'Assess fraud/scam risk for the business idea below. Consider deception, unrealistic claims, consent, payments, and counterparties.',
@@ -254,6 +294,54 @@ function designPrompt(goal) {
 }
 
 /* ------------------------------ normalizers ----------------------------- */
+
+function clampScore(value, fallback) {
+  return Number.isFinite(Number(value)) ? Math.min(100, Math.max(0, Math.round(Number(value)))) : fallback;
+}
+
+function signalFromScore(score, hasBlockingGap) {
+  if (score >= GREEN_MIN && !hasBlockingGap) return 'green';
+  if (score >= AMBER_MIN) return 'amber';
+  return 'red';
+}
+
+function normalizeCriteria(value, seed) {
+  if (!Array.isArray(value)) return seed;
+  const cleaned = value
+    .map((item) => (typeof item === 'string'
+      ? { text: clean(item, 240), mustHave: false }
+      : { text: clean(item && item.text, 240), mustHave: Boolean(item && item.mustHave) }))
+    .filter((item) => item.text)
+    .slice(0, MAX_CRITERIA);
+  return cleaned.length ? cleaned : seed;
+}
+
+function normalizeEvaluation(value, seed) {
+  const source = value && typeof value === 'object' ? value : {};
+  const readiness = {};
+  for (const dim of READINESS_DIMS) readiness[dim] = clampScore(source[dim], seed.readiness[dim]);
+  const score = Math.round(READINESS_DIMS.reduce((sum, dim) => sum + readiness[dim], 0) / READINESS_DIMS.length);
+
+  const criteria = normalizeCriteria(source.criteria, seed.criteria);
+  const gaps = Array.isArray(source.gaps) ? source.gaps.map((g) => clean(g, 200)).filter(Boolean).slice(0, MAX_GAPS) : [];
+
+  // Any open gap caps the signal below green ("green" means nothing outstanding).
+  const computed = signalFromScore(score, gaps.length > 0);
+  const claimed = SIGNAL_RANK[source.signal] !== undefined ? source.signal : computed;
+  // Take whichever is MORE severe — the model can flag a concern but never upgrade.
+  const signal = SIGNAL_RANK[claimed] < SIGNAL_RANK[computed] ? claimed : computed;
+
+  return {
+    criteria,
+    readiness,
+    score,
+    signal,
+    verdict: { viable: signal === 'green', reason: clean(source.reason, 400) || seed.verdict.reason },
+    gaps,
+    summary: clean(source.summary, 400) || seed.summary,
+    warnings: [],
+  };
+}
 
 function normalizeFraud(value, seed) {
   const source = value && typeof value === 'object' ? value : {};
@@ -303,6 +391,49 @@ function normalizeDesign(value, seed) {
 }
 
 /* --------------------------------- steps -------------------------------- */
+
+async function scoreEvaluation(input, settings, deps, warnings) {
+  const seed = evaluationSeed();
+  try {
+    const value = await deps.callJson({ settings, task: TASKS.evaluate, system: SYSTEM, prompt: evaluatePrompt(input), maxTokens: MAX_TOKENS.evaluate });
+    return normalizeEvaluation(value, seed);
+  } catch (_) {
+    warnings.push('Readiness model unavailable; used a deterministic estimate (amber, needs human review).');
+    return seed;
+  }
+}
+
+/**
+ * Requirement-readiness preflight (step 0). Runs BEFORE the design/scheduling
+ * steps: derives acceptance criteria and a traffic-light signal so the caller
+ * can gate progression. The unsafe gate is re-asserted here (server is the
+ * trust boundary) so a direct call cannot bypass the browser safety check.
+ * @param {{ input:string, settings?:object, business?:object|null }} args
+ * @param {object} [deps] injectable seam: callJson
+ */
+async function evaluateRequirement(args, deps = {}) {
+  const input = normalizeMessage(args && args.input); // throws WorkspaceRouterError on empty/oversized
+  const settings = (args && args.settings) || {};
+  const resolved = buildDeps(deps || {});
+  const warnings = [];
+  const goal = clean(input, 400);
+
+  if (classifyIntent(input).intent === 'unsafe') {
+    return {
+      intent: 'business',
+      goal,
+      blocked: true,
+      answer: 'I can’t help with that. This workspace is for lawful work that grows durable businesses and improves people’s lives.',
+      evaluation: null,
+      signal: 'red',
+      warnings,
+    };
+  }
+
+  const evaluation = await scoreEvaluation(input, settings, resolved, warnings);
+  evaluation.warnings = warnings.slice();
+  return { intent: 'business', goal, blocked: false, evaluation, signal: evaluation.signal, warnings };
+}
 
 async function scoreFraud(input, settings, deps, warnings) {
   const seed = fraudSeed(input);
@@ -479,5 +610,6 @@ module.exports = {
   MAX_DESIGN_HTML,
   STAGE_LABELS,
   sanitizeDesignHtml,
+  evaluateRequirement,
   prepareBusiness,
 };

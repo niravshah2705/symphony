@@ -12,6 +12,8 @@ import {
 import { state, setCurrentProject } from '../state.js';
 
 let refreshTimer = null;
+let gateTimer = null; // polls an awaiting approval gate for auto-advance
+let activeGateId = null;
 let railState = { mode: 'setup', result: null };
 let latestAgentStatus = null;
 let latestJobs = [];
@@ -23,10 +25,23 @@ const CONVERSATION_ID = /^conv_[A-Za-z0-9_-]{1,64}$/;
 function stopRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = null;
+  stopGatePoll();
+}
+
+function stopGatePoll() {
+  if (gateTimer) clearInterval(gateTimer);
+  gateTimer = null;
+  activeGateId = null;
 }
 
 function agentRouteActive() {
   return location.hash === '#/agent' || location.hash.startsWith('#/agent/');
+}
+
+// Pin the view to the newest message (composer is sticky at the bottom).
+function scrollConversationToEnd() {
+  const reader = document.querySelector('.agent-reader');
+  if (reader) reader.scrollTop = reader.scrollHeight;
 }
 
 export async function renderAgent(view) {
@@ -72,8 +87,8 @@ export async function renderAgent(view) {
             el('h1', {}, 'What should we move forward?'),
             el('p', {}, 'Ask a question, search workspace memory, pressure-test a business, troubleshoot a run, or turn an implementation change into a task.'),
           ]),
-          composer,
           stream,
+          composer,
         ]),
       ]),
       el('aside', { class: 'evidence-rail scenario-rail', 'aria-label': 'Agent details' }, [
@@ -87,6 +102,7 @@ export async function renderAgent(view) {
   renderWelcome(stream, status);
   for (const entry of conversation) stream.append(renderConversationEntry(entry, railBody));
   renderCurrentRail(railBody);
+  requestAnimationFrame(scrollConversationToEnd);
 
   refreshTimer = setInterval(async () => {
     if (!agentRouteActive()) return stopRefresh();
@@ -338,7 +354,7 @@ function buildComposer(stream, railBody) {
     pending.classList.add('is-pending');
     pending.dataset.agentIntent = 'routing';
     stream.append(pending);
-    pending.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    scrollConversationToEnd();
     send.disabled = true;
     send.textContent = 'Thinking…';
 
@@ -347,6 +363,7 @@ function buildComposer(stream, railBody) {
       const entry = { role: 'assistant', routeResult: result };
       conversation.push(entry);
       pending.replaceWith(renderConversationEntry(entry, railBody));
+      scrollConversationToEnd();
       showRailResult(railBody, result);
       // Persist the turn server-side (lazily creating the thread on first send).
       void persistTurn(text, result);
@@ -1050,36 +1067,15 @@ function renderTroubleshootingRail(host, result) {
 function renderBusinessRail(host, result) {
   const business = result.payload || null;
 
-  // On demand: no pipeline output yet → show the Prepare call to action. The
-  // heavy 6-step pipeline (real model calls) only runs when the user clicks.
+  // On demand: no pipeline output yet → evaluate the requirement FIRST. A green
+  // signal proceeds automatically to the full pipeline; amber/red holds at a gate
+  // (rendered here) until a human refines/approves or the deadline auto-approves.
   if (!business || !business.stages) {
-    const status = el('p', { class: 'business-scheduler-status' }, 'Runs the fraud gate, revenue metrics, business memory, a spec breakdown, a UI mockup, and the scheduling stage. This makes real model calls and can take a few seconds.');
-    const prepare = el('button', { class: 'primary business-prepare-button', type: 'button' }, 'Prepare business plan');
-    prepare.addEventListener('click', async () => {
-      prepare.disabled = true;
-      prepare.textContent = 'Preparing…';
-      status.classList.remove('error');
-      status.textContent = 'Running the six-step business pipeline…';
-      try {
-        const response = await api.prepareBusiness({ input: result.route?.input || '', businessId: result.businessId });
-        result.payload = response.business;
-        renderBusinessRail(host, result);
-      } catch (error) {
-        prepare.disabled = false;
-        prepare.textContent = 'Try preparing again';
-        status.classList.add('error');
-        status.textContent = error.message;
-      }
-    });
-    clear(host).append(
-      railIntro('Business decision workspace', result.route?.input || 'Pressure-test a business idea before scheduling any work.'),
-      el('section', { class: 'business-prepare-card', dataset: { panelSection: 'prepare' } }, [
-        el('span', { class: 'scheduler-pulse', 'aria-hidden': 'true' }),
-        el('strong', {}, 'Ready to run the full pipeline'),
-        status,
-        prepare,
-      ])
-    );
+    if (result.evaluation) {
+      renderEvaluationGate(host, result);
+      return;
+    }
+    renderEvaluatePrompt(host, result);
     return;
   }
 
@@ -1145,6 +1141,221 @@ function segmentText(segment) {
   if (typeof segment === 'string') return segment;
   if (!segment || typeof segment !== 'object') return String(segment ?? '');
   return segment.size ? `${segment.title} · ${segment.size}` : segment.title || '';
+}
+
+/* ---------------------- Requirement evaluation gate --------------------- */
+
+const READINESS_DIMS = [
+  ['clarity', 'Clarity'], ['completeness', 'Completeness'],
+  ['measurability', 'Measurability'], ['feasibility', 'Feasibility'],
+];
+
+function signalLabel(signal) {
+  if (signal === 'green') return 'Ready to build';
+  if (signal === 'red') return 'Not ready';
+  return 'Needs refinement';
+}
+
+function toneForScore(score) {
+  return score >= 75 ? 'green' : score >= 45 ? 'amber' : 'red';
+}
+
+// Initial call-to-action: score requirement readiness before any pipeline work.
+function renderEvaluatePrompt(host, result) {
+  const status = el('p', { class: 'business-scheduler-status' }, 'First checks the requirement is clear, complete, and measurable enough to build — deriving acceptance criteria and a readiness signal — before running the design and scheduling steps.');
+  const evaluateBtn = el('button', { class: 'primary business-prepare-button', type: 'button' }, 'Check requirement');
+  evaluateBtn.addEventListener('click', async () => {
+    evaluateBtn.disabled = true;
+    evaluateBtn.textContent = 'Evaluating…';
+    status.classList.remove('error');
+    status.textContent = 'Scoring requirement readiness…';
+    try {
+      const response = await api.evaluateBusiness({
+        input: result.route?.input || '',
+        businessId: result.businessId,
+        conversationId: activeConversationId || undefined,
+      });
+      if (response.blocked) {
+        status.classList.add('error');
+        status.textContent = response.answer || 'This request cannot be supported.';
+        evaluateBtn.remove();
+        return;
+      }
+      if (response.signal === 'green') {
+        status.textContent = 'Requirement is ready — preparing the plan…';
+        await proceedToPipeline(host, result); // auto-advance on green
+        return;
+      }
+      result.evaluation = response.evaluation;
+      result.signal = response.signal;
+      result.gate = response.gate;
+      renderBusinessRail(host, result);
+    } catch (error) {
+      evaluateBtn.disabled = false;
+      evaluateBtn.textContent = 'Try again';
+      status.classList.add('error');
+      status.textContent = error.message;
+    }
+  });
+  clear(host).append(
+    railIntro('Business decision workspace', result.route?.input || 'Pressure-test a business idea before scheduling any work.'),
+    el('section', { class: 'business-prepare-card', dataset: { panelSection: 'evaluate' } }, [
+      el('span', { class: 'scheduler-pulse', 'aria-hidden': 'true' }),
+      el('strong', {}, 'Evaluate the requirement first'),
+      status,
+      evaluateBtn,
+    ])
+  );
+}
+
+// Run the full pipeline and swap the rail to the 6-stage view.
+async function proceedToPipeline(host, result) {
+  stopGatePoll();
+  const response = await api.prepareBusiness({ input: result.route?.input || '', businessId: result.businessId });
+  result.payload = response.business;
+  result.evaluation = null;
+  result.gate = null;
+  renderBusinessRail(host, result);
+}
+
+// The amber/red signal card + acceptance criteria + gate-hold controls.
+function renderEvaluationGate(host, result) {
+  const evaluation = result.evaluation || {};
+  const signal = result.signal || evaluation.signal || 'amber';
+  const gate = result.gate || null;
+  const readiness = evaluation.readiness || {};
+
+  const nodes = [
+    railIntro('Requirement readiness', result.route?.input || 'A readiness check before any design or scheduling.'),
+    el('section', { class: `evaluation-signal-card tone-${signal}`, dataset: { panelSection: 'evaluation', tone: signal } }, [
+      el('div', { class: 'fraud-gate-head' }, [el('span', {}, 'REQ'), el('strong', {}, signalLabel(signal)), el('b', {}, `${evaluation.score ?? 0}/100`)]),
+      evaluation.summary ? el('p', {}, evaluation.summary) : null,
+    ]),
+    el('div', { class: 'rail-section-label' }, 'Readiness'),
+    el('section', { class: 'troubleshooting-summary-grid', dataset: { panelSection: 'readiness' } },
+      READINESS_DIMS.map(([key, label]) => summaryStat(readiness[key] ?? 0, label, toneForScore(readiness[key] ?? 0)))),
+    el('div', { class: 'rail-section-label' }, 'Acceptance criteria'),
+    el('ol', { class: 'evaluation-criteria', dataset: { panelSection: 'criteria' } }, (evaluation.criteria || []).map((c) =>
+      el('li', { dataset: { must: c.mustHave ? 'yes' : 'no' } }, [
+        c.mustHave ? el('span', { class: 'criterion-must' }, 'must') : null,
+        el('span', {}, c.text),
+      ])
+    )),
+    evaluation.gaps && evaluation.gaps.length
+      ? el('div', { class: 'rail-inline-notice warning' }, [el('strong', {}, 'Gaps: '), evaluation.gaps.join(' · ')])
+      : null,
+    evaluation.warnings && evaluation.warnings.length
+      ? el('div', { class: 'rail-inline-notice warning' }, evaluation.warnings.join(' · '))
+      : null,
+    gate ? renderGateHold(host, result, gate) : null,
+  ];
+
+  clear(host).append(...nodes.filter(Boolean));
+
+  if (gate && gate.status === 'awaiting-approval') startGatePoll(host, result, gate);
+  else stopGatePoll();
+}
+
+// Human-in-the-loop controls: refine + re-check, or approve & proceed now. A
+// countdown shows when the gate will auto-approve if no one responds.
+function renderGateHold(host, result, gate) {
+  const countdown = el('p', { class: 'rail-inline-notice gate-countdown' }, gateCountdownText(gate));
+
+  const refine = el('textarea', { class: 'evaluation-refine', rows: '3', placeholder: 'Refine the requirement to address the gaps, then re-check…' });
+  const refineBtn = el('button', { type: 'button' }, 'Re-check requirement');
+  refineBtn.addEventListener('click', async () => {
+    const input = refine.value.trim();
+    if (!input) { refine.focus(); return; }
+    refineBtn.disabled = true;
+    refineBtn.textContent = 'Re-checking…';
+    try {
+      const out = await api.reevaluateBusinessGate(gate.id, input);
+      if (out.blocked) {
+        toast(out.answer || 'This request cannot be supported.', 'error');
+        refineBtn.disabled = false;
+        refineBtn.textContent = 'Re-check requirement';
+        return;
+      }
+      if (out.signal === 'green') { await proceedToPipeline(host, result); return; }
+      result.evaluation = out.evaluation;
+      result.signal = out.signal;
+      result.gate = out.gate;
+      renderBusinessRail(host, result);
+    } catch (error) {
+      refineBtn.disabled = false;
+      refineBtn.textContent = 'Re-check requirement';
+      toast(error.message, 'error');
+    }
+  });
+
+  const approveBtn = el('button', { class: 'primary', type: 'button' }, 'Approve & proceed now');
+  approveBtn.addEventListener('click', async () => {
+    approveBtn.disabled = true;
+    approveBtn.textContent = 'Proceeding…';
+    try {
+      const response = await api.approveBusinessGate(gate.id);
+      stopGatePoll();
+      result.payload = response.business;
+      result.evaluation = null;
+      result.gate = null;
+      renderBusinessRail(host, result);
+    } catch (error) {
+      approveBtn.disabled = false;
+      approveBtn.textContent = 'Approve & proceed now';
+      toast(error.message, 'error');
+    }
+  });
+
+  return el('section', { class: 'evaluation-gate-hold', dataset: { panelSection: 'gate' } }, [
+    el('div', { class: 'rail-section-label' }, 'Awaiting your decision'),
+    countdown,
+    refine,
+    el('div', { class: 'build-flow-actions' }, [refineBtn, approveBtn]),
+  ]);
+}
+
+function gateCountdownText(gate) {
+  const deadline = gate && gate.deadline ? Date.parse(gate.deadline) : NaN;
+  if (!Number.isFinite(deadline)) return 'Waiting for your decision.';
+  const ms = deadline - Date.now();
+  if (ms <= 0) return 'Auto-approving now…';
+  return `Auto-approves in ${formatDuration(ms)} if no one responds.`;
+}
+
+function formatDuration(ms) {
+  const totalMin = Math.floor(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${Math.max(1, Math.floor(ms / 1000))}s`;
+}
+
+// Poll the gate every 5s: refresh the countdown and auto-advance to the full
+// pipeline once the gate is proceeded (human approval in another tab, or the
+// deadline firing server-side). Durable state lives server-side; this only mirrors it.
+function startGatePoll(host, result, gate) {
+  stopGatePoll();
+  activeGateId = gate.id;
+  gateTimer = setInterval(async () => {
+    if (!agentRouteActive()) return stopGatePoll();
+    const label = host.querySelector('.gate-countdown');
+    if (label) label.textContent = gateCountdownText(result.gate || gate);
+    try {
+      const response = await api.getBusinessGate(activeGateId);
+      const fresh = response && response.gate;
+      if (!fresh) return;
+      result.gate = fresh;
+      if (fresh.status === 'proceeded') {
+        stopGatePoll();
+        await proceedToPipeline(host, result);
+      } else if (fresh.status !== 'awaiting-approval') {
+        stopGatePoll(); // superseded or otherwise terminal
+      }
+    } catch (_) {
+      // Transient error — keep polling.
+    }
+  }, 5000);
 }
 
 function architectureDiagram(nodes) {

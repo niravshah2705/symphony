@@ -115,6 +115,9 @@ const DEFAULT_AGENT_CONFIG = Object.freeze({
   maxIssuesPerMilestone: 5, // cap issues per milestone
   enrichLabels: ['AI'], // open projects with ANY of these labels are auto-enriched
   intervalMinutes: 5, // scheduler cadence (5 | 10 | 15)
+  // Hold an amber/red requirement-evaluation gate this long (minutes) awaiting a
+  // human before auto-approving and proceeding. See agent/approval-gate.js.
+  evaluationApprovalWaitMinutes: 120,
 });
 
 const DEFAULT_STORE = Object.freeze({
@@ -224,6 +227,7 @@ const DEFAULT_STORE = Object.freeze({
   jobs: [], // enrichment jobs (see routes/agent.js)
   memories: [], // typed workspace memory records (see agent/memory.js)
   conversations: [], // agent workspace conversation threads (see agent/conversations.js)
+  approvals: [], // requirement-evaluation approval gates (see agent/approval-gate.js)
 });
 
 function ensureDataDir() {
@@ -315,6 +319,7 @@ function readStore() {
       jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
       memories: Array.isArray(parsed.memories) ? parsed.memories : [],
       conversations: Array.isArray(parsed.conversations) ? parsed.conversations : [],
+      approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
     };
   } catch (err) {
     return cloneDefault();
@@ -339,6 +344,7 @@ function migrateAgentConfig(config) {
   next.maxConcurrentCoders = Number.isFinite(coders) && coders >= 1
     ? Math.min(8, Math.floor(coders))
     : DEFAULT_AGENT_CONFIG.maxConcurrentCoders;
+  if (!next.evaluationApprovalWaitMinutes) next.evaluationApprovalWaitMinutes = DEFAULT_AGENT_CONFIG.evaluationApprovalWaitMinutes;
   // Legacy Anthropic-era fields — LLM config now lives in settings.
   delete next.model;
   delete next.maxTokens;
@@ -687,6 +693,66 @@ function pruneConversations(keep = MAX_CONVERSATIONS) {
   return conversations;
 }
 
+/* --------------------- Requirement approval gates ----------------------- */
+
+const MAX_APPROVAL_GATES = 200;
+
+/** Approval gates, newest-first by createdAt; optional {status, businessId} filter. */
+function listApprovalGates(filter = {}) {
+  const all = [...readStore().approvals].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  return all.filter((gate) => {
+    if (filter.status && gate.status !== filter.status) return false;
+    if (filter.businessId && gate.businessId !== filter.businessId) return false;
+    return true;
+  });
+}
+
+function getApprovalGate(id) {
+  return readStore().approvals.find((gate) => gate.id === id) || null;
+}
+
+/** Persist a new gate with a generated id + timestamps; cap total (oldest dropped). */
+function addApprovalGate(gate = {}) {
+  const current = readStore();
+  const now = new Date().toISOString();
+  const record = { ...gate, id: `gate_${randomUUID()}`, createdAt: now, updatedAt: now };
+  const approvals = [record, ...current.approvals].slice(0, MAX_APPROVAL_GATES);
+  writeStore({ ...current, approvals });
+  return record;
+}
+
+/** Immutably patch a gate; the id/createdAt are never overwritten. */
+function updateApprovalGate(id, patch) {
+  const current = readStore();
+  let updated = null;
+  const approvals = current.approvals.map((gate) => {
+    if (gate.id !== id) return gate;
+    updated = { ...gate, ...patch, id: gate.id, createdAt: gate.createdAt, updatedAt: new Date().toISOString() };
+    return updated;
+  });
+  if (updated) writeStore({ ...current, approvals });
+  return updated;
+}
+
+function removeApprovalGate(id) {
+  const current = readStore();
+  const approvals = current.approvals.filter((gate) => gate.id !== id);
+  const removed = approvals.length !== current.approvals.length;
+  if (removed) writeStore({ ...current, approvals });
+  return removed;
+}
+
+/** Keep only the newest `keep` gates. Returns the remaining list. */
+function pruneApprovalGates(keep = MAX_APPROVAL_GATES) {
+  const current = readStore();
+  if (current.approvals.length <= keep) return current.approvals;
+  const approvals = [...current.approvals]
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+    .slice(0, keep);
+  writeStore({ ...current, approvals });
+  return approvals;
+}
+
 module.exports = {
   DEFAULT_STORE,
   DEFAULT_AGENT_CONFIG,
@@ -737,4 +803,11 @@ module.exports = {
   updateConversation,
   removeConversation,
   pruneConversations,
+  MAX_APPROVAL_GATES,
+  listApprovalGates,
+  getApprovalGate,
+  addApprovalGate,
+  updateApprovalGate,
+  removeApprovalGate,
+  pruneApprovalGates,
 };
