@@ -963,10 +963,12 @@ function customEditorPreset(provider, params, settings, deployment) {
       contextWindowConfigurable: isOllama || isOpenAiLocal,
       reasoningAdapter: adapter,
       reasoningEfforts: efforts,
+      streamingConfigurable: !isOllama && !isOpenAiLocal && !isCodex,
     },
     parameters: {
       contextWindow: params.contextWindow,
       maxOutputTokens: params.maxOutputTokens,
+      streaming: params.streaming,
       temperature: params.temperature,
       topP: params.topP,
       topK: params.topK,
@@ -1278,6 +1280,7 @@ function currentParameters(settings, provider) {
     model: settings.claudeModel || 'claude-opus-4-8',
     contextWindow: settings.claudeContextWindow || 1000000,
     maxOutputTokens: settings.claudeMaxTokens || 65536,
+    streaming: settings.claudeStreaming !== false,
     temperature: settings.claudeTemperature,
     topP: null, topK: null, repeatPenalty: null,
     reasoningEffort: settings.claudeReasoningEffort || 'xhigh',
@@ -1305,7 +1308,8 @@ function presetCustomized(preset, params) {
     (params.repeatPenalty ?? null) !== (defaults.repeatPenalty ?? null) ||
     params.reasoningEffort !== defaults.reasoning.effort ||
     params.jsonMode !== defaults.jsonMode ||
-    params.contextMode !== defaults.contextMode;
+    params.contextMode !== defaults.contextMode ||
+    (defaults.streaming !== undefined && (params.streaming !== false) !== (defaults.streaming !== false));
 }
 
 function compactTokens(value) {
@@ -1466,6 +1470,14 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
     type: 'number', min: preset.provider === 'lmstudio' || preset.provider === 'omlx' ? '256' : '128',
     max: String(preset.limits.maxOutputTokens), value: String(params.maxOutputTokens),
   });
+  // Streaming toggle — only where the provider lets it vary (Claude). Codex's
+  // Responses API and the local providers force streaming on regardless. Gate on
+  // provider so it shows for both the catalog preset and the client-built custom
+  // preset paths (streamingConfigurable is set on both, but provider is surest).
+  const streamingConfigurable = preset.provider === 'claude' || (preset.capabilities && preset.capabilities.streamingConfigurable);
+  const streamingInput = streamingConfigurable
+    ? optionSelect([['on', 'On'], ['off', 'Off']], params.streaming === false ? 'off' : 'on')
+    : null;
   const temperatureInput = preset.capabilities.temperature
     ? el('input', { type: 'number', min: '0', max: '2', step: '0.1', value: String(params.temperature ?? 0) })
     : el('input', { value: 'Provider managed', disabled: 'disabled' });
@@ -1520,6 +1532,7 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
       reasoningEffort: params.reasoningEffort,
       jsonMode: jsonInput ? jsonInput.value : null,
       contextMode: contextModeInput ? contextModeInput.value : null,
+      ...(streamingInput ? { streaming: streamingInput.value !== 'off' } : {}),
     };
     info.textContent = 'Saving…';
     try {
@@ -1555,6 +1568,8 @@ function parameterEditor(ctx, role, preset, params, rebuild) {
           : preset.requestLimits && preset.requestLimits.maxOutputContextFraction === 1
             ? 'Cannot exceed the configured context window.'
             : null),
+    streamingInput ? field('Streaming', streamingInput,
+      'Keep on. Turning it off re-triggers the 10-minute request guard for large max output.') : null,
     field('Temperature', temperatureInput, preset.capabilities.temperature ? null : 'Omitted because this model/provider does not accept sampling overrides.'),
     topPInput ? field('Top P', topPInput) : null,
     topKInput ? field('Top K', topKInput) : null,

@@ -8,6 +8,7 @@ const { execFileSync } = require('child_process');
 const { createChatModel } = require('./llm');
 const toolRegistry = require('./tools');
 const { installSafeRead } = require('./safe-read');
+const { createFsArgNormalizerMiddleware } = require('./fs-arg-normalizer');
 const { buildSafeAgentEnv } = require('./repository-broker');
 const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = require('./runtimes');
 
@@ -230,7 +231,11 @@ function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, ext
   be = installSafeRead(be);
   const tools = [...toolRegistry.buildMany(workflow.tools, ctx), ...(extraTools || [])];
   const systemPrompt = typeof workflow.systemPrompt === 'function' ? workflow.systemPrompt(ctx) : workflow.systemPrompt;
-  const agent = createDeepAgent({ model: createChatModel(llm), backend: be, skills, tools, systemPrompt });
+  // Repair mis-keyed filesystem tool calls (e.g. read_file with `path` instead
+  // of `file_path`) before they hit the tool's schema — a single wrong key
+  // otherwise aborts the whole deep-agent run. See fs-arg-normalizer.js.
+  const middleware = [createFsArgNormalizerMiddleware()];
+  const agent = createDeepAgent({ model: createChatModel(llm), backend: be, skills, tools, systemPrompt, middleware });
   return { agent, backend: be, skillPaths: skills, tools };
 }
 
