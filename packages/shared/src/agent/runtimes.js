@@ -378,43 +378,76 @@ function publicExecution(result) {
   };
 }
 
+function addCost(a, b) {
+  const x = finiteNumber(a);
+  const y = finiteNumber(b);
+  if (x === null && y === null) return null;
+  return (x || 0) + (y || 0);
+}
+
 /**
- * Provider-neutral task-completion review. When a caller supplies a `rubric`,
- * the finished run (any SDK) is scored against it by the rubric middleware.
+ * Apply the RubricMiddleware to a finished run. When a caller supplies a
+ * `rubric` (or a prebuilt `rubricMiddleware`), the middleware grades the output
+ * against the checklist and — on `needs_revision` — re-runs the SAME runtime
+ * with the per-criterion gaps appended, up to its iteration cap. This is what
+ * makes the review work for every SDK: `runOnce` re-invokes whichever runtime
+ * produced the run.
  *
- * Fail-open by contract: the middleware itself never throws, but this backstop
- * guarantees a reviewer defect can never turn a completed run into a failure —
- * the run result is authoritative; the review is advisory metadata.
+ * Usage/cost from every (re-)run accumulate onto the returned value so the one
+ * trace span reflects all iterations. Fail-open: the middleware never throws,
+ * and this backstop guarantees a grader defect can never fail a completed run.
+ *
+ * @param {(prompt:string)=>Promise<object>} runOnce re-invokes the runtime executor
  */
-async function runRubricReview(options, value) {
-  const reviewer = typeof options.reviewer === 'function'
-    ? options.reviewer
-    : (args) => require('./rubric-middleware').reviewTaskCompletion(args);
+async function applyRubricMiddleware(options, value, prompt, runOnce) {
+  const rubricLib = require('./rubric-middleware');
+  const middleware = options.rubricMiddleware && typeof options.rubricMiddleware.run === 'function'
+    ? options.rubricMiddleware
+    : rubricLib.createRubricMiddleware({ rubric: options.rubric, ...(options.rubricOptions || {}) });
+
+  let accUsage = value.usage ? { ...value.usage } : null;
+  let accCost = value.costUsd;
+  const runAgent = async (revisionPrompt) => {
+    const next = await runOnce(revisionPrompt);
+    accUsage = mergeUsage(accUsage, next.usage);
+    accCost = addCost(accCost, next.costUsd);
+    return next;
+  };
+
+  let review;
   try {
-    return await reviewer({
+    review = await middleware.run({
       rubric: options.rubric,
       task: options.prompt,
-      execution: value,
-      llm: options.llm,
+      output: value,
+      basePrompt: prompt,
+      runAgent,
       settings: options.settings,
       signal: options.signal,
     });
   } catch (error) {
-    return require('./rubric-middleware').unavailableReview(options.rubric, error);
+    review = rubricLib.failedReview(options.rubric, error);
   }
+
+  // A re-run's result is authoritative; carry the accumulated usage/cost onto it.
+  const finalValue = review.finalResult && review.finalResult !== value ? review.finalResult : value;
+  finalValue.usage = accUsage;
+  finalValue.costUsd = accCost;
+  delete review.finalResult; // internal loop plumbing; not part of the public review
+  finalValue.review = review;
+  return finalValue;
 }
 
 function reviewMetadata(review) {
   if (!review) return {};
   const metadata = {
     rubric_reviewed: true,
-    rubric_available: Boolean(review.available),
-    rubric_verdict: review.verdict,
-    rubric_passed: Boolean(review.passed),
+    rubric_result: review.result,
+    rubric_satisfied: Boolean(review.satisfied),
+    rubric_iterations: review.iterations,
   };
-  if (finiteNumber(review.score) !== null) metadata.rubric_score = review.score;
-  if (Array.isArray(review.unmetRequired) && review.unmetRequired.length) {
-    metadata.rubric_unmet_required = review.unmetRequired.length;
+  if (Array.isArray(review.unsatisfied) && review.unsatisfied.length) {
+    metadata.rubric_unsatisfied = review.unsatisfied.length;
   }
   return metadata;
 }
@@ -759,12 +792,15 @@ async function executeAgentRuntime(options = {}) {
   });
   const workflowPattern = normalizeWorkflowPattern(options.workflowPattern, { strict: true });
   const prompt = applyWorkflowPattern(options.prompt, workflowPattern);
+  const runtimeOptions = { ...options, runtime, workflowPattern };
+  const runOnce = (promptText) => EXECUTORS[runtime](runtimeOptions, promptText);
+  const reviewEnabled = Boolean(options.rubric || options.rubricMiddleware);
   const execute = async () => {
     try {
-      const value = await EXECUTORS[runtime]({ ...options, runtime, workflowPattern }, prompt);
-      if (options.rubric) value.review = await runRubricReview(options, value);
-      annotateTrace(value, options.getCurrentRunTree || getCurrentRunTree);
-      return value;
+      const value = await runOnce(prompt);
+      const reviewed = reviewEnabled ? await applyRubricMiddleware(options, value, prompt, runOnce) : value;
+      annotateTrace(reviewed, options.getCurrentRunTree || getCurrentRunTree);
+      return reviewed;
     } catch (error) {
       const wrapped = wrapExecutionError(runtime, error);
       annotateTrace(wrapped, options.getCurrentRunTree || getCurrentRunTree);

@@ -5,201 +5,251 @@ const assert = require('node:assert/strict');
 
 const {
   RubricError,
-  DEFAULT_PASS_THRESHOLD,
+  RESULT,
+  DEFAULT_MAX_ITERATIONS,
   normalizeRubric,
-  scoreReview,
-  buildReviewPrompt,
-  reviewTaskCompletion,
+  scoreCriteria,
+  buildGraderPrompt,
+  buildRevisionPrompt,
+  gradeOnce,
+  runRubric,
   createRubricMiddleware,
-  unavailableReview,
+  failedReview,
 } = require('./rubric-middleware');
 
 /* ------------------------------ normalization ------------------------------ */
 
-test('normalizeRubric accepts a string array and fills stable defaults', () => {
-  const rubric = normalizeRubric(['Tests pass', 'PR opened']);
-  assert.equal(rubric.passThreshold, DEFAULT_PASS_THRESHOLD);
-  assert.deepEqual(rubric.criteria.map((c) => c.id), ['tests-pass', 'pr-opened']);
-  assert.equal(rubric.criteria[0].weight, 1);
-  assert.equal(rubric.criteria[0].required, false);
+test('normalizeRubric parses a newline checklist and strips bullets', () => {
+  const rubric = normalizeRubric('- The poem has three lines\n- Theme is spring\n');
+  assert.deepEqual(rubric.criteria.map((c) => c.name), ['The poem has three lines', 'Theme is spring']);
 });
 
-test('normalizeRubric honors explicit ids, weights, required, threshold, and de-dupes ids', () => {
-  const rubric = normalizeRubric({
-    threshold: 0.5,
-    criteria: [
-      { id: 'build', description: 'Build succeeds', required: true, weight: 3 },
-      { text: 'build', mustHave: false }, // duplicate slug → suffixed
-    ],
-  });
-  assert.equal(rubric.passThreshold, 0.5);
-  assert.deepEqual(rubric.criteria.map((c) => c.id), ['build', 'build-2']);
-  assert.equal(rubric.criteria[0].required, true);
-  assert.equal(rubric.criteria[0].weight, 3);
+test('normalizeRubric accepts arrays of strings or objects and de-dupes', () => {
+  const rubric = normalizeRubric(['Tests pass', { description: 'PR opened' }, 'tests pass']);
+  assert.deepEqual(rubric.criteria.map((c) => c.name), ['Tests pass', 'PR opened']);
 });
 
-test('normalizeRubric clamps the threshold into [0,1] and drops blank criteria', () => {
-  const rubric = normalizeRubric({ passThreshold: 5, criteria: ['Real', '', '   ', null] });
-  assert.equal(rubric.passThreshold, 1);
-  assert.equal(rubric.criteria.length, 1);
+test('normalizeRubric accepts an object with a rubric/criteria field', () => {
+  assert.equal(normalizeRubric({ rubric: '- a\n- b' }).criteria.length, 2);
+  assert.equal(normalizeRubric({ criteria: ['a', 'b', 'c'] }).criteria.length, 3);
 });
 
-test('normalizeRubric rejects an empty rubric', () => {
-  assert.throws(() => normalizeRubric([]), (e) => e instanceof RubricError && e.status === 400);
-  assert.throws(() => normalizeRubric({ criteria: [{ description: '' }] }), RubricError);
+test('normalizeRubric rejects an empty or non-checklist rubric', () => {
+  assert.throws(() => normalizeRubric('   \n  '), (e) => e instanceof RubricError && e.status === 400);
+  assert.throws(() => normalizeRubric([]), RubricError);
   assert.throws(() => normalizeRubric(42), RubricError);
 });
 
 /* -------------------------------- scoring --------------------------------- */
 
-test('scoreReview passes when the weighted score clears the threshold', () => {
-  const rubric = normalizeRubric({ threshold: 0.7, criteria: ['a', 'b', 'c'] });
-  const scored = scoreReview(rubric, [
-    { id: 'a', met: true },
-    { id: 'b', met: true },
-    { id: 'c', met: false, reason: 'missing docs' },
-  ]);
-  assert.equal(scored.score, round(2 / 3));
-  assert.equal(scored.verdict, 'insufficient'); // 0.6667 < 0.7
-  assert.equal(scored.passed, false);
-});
-
-test('scoreReview weights criteria and can pass below a raw 2/3 count', () => {
-  const rubric = normalizeRubric({
-    threshold: 0.7,
-    criteria: [
-      { id: 'a', description: 'Heavy criterion', weight: 4 },
-      { id: 'b', description: 'Light criterion', weight: 1 },
-    ],
-  });
-  const scored = scoreReview(rubric, [{ id: 'a', met: true }, { id: 'b', met: false }]);
-  assert.equal(scored.score, 0.8);
-  assert.equal(scored.verdict, 'pass');
-});
-
-test('scoreReview forces fail when a required criterion is unmet, ignoring the score', () => {
-  const rubric = normalizeRubric({
-    threshold: 0.1,
-    criteria: [
-      { id: 'must', description: 'Required criterion', required: true, weight: 1 },
-      { id: 'nice', description: 'Nice to have', weight: 100 },
-    ],
-  });
-  const scored = scoreReview(rubric, [{ id: 'must', met: false }, { id: 'nice', met: true }]);
-  assert.equal(scored.verdict, 'fail');
-  assert.equal(scored.passed, false);
-  assert.deepEqual(scored.unmetRequired, ['must']);
-});
-
-test('scoreReview treats an unassessed criterion as not met (conservative)', () => {
+test('scoreCriteria is satisfied only when every criterion passes (all-or-nothing)', () => {
   const rubric = normalizeRubric(['a', 'b']);
-  const scored = scoreReview(rubric, [{ id: 'a', met: true }]);
-  assert.equal(scored.criteria[1].met, false);
-  assert.match(scored.criteria[1].reason, /did not assess/i);
+  const all = scoreCriteria(rubric, [{ name: 'a', passed: true }, { name: 'b', passed: true }]);
+  assert.equal(all.result, RESULT.SATISFIED);
+  const some = scoreCriteria(rubric, [{ name: 'a', passed: true }, { name: 'b', passed: false, gap: 'missing' }]);
+  assert.equal(some.result, RESULT.NEEDS_REVISION);
+  assert.equal(some.criteria[1].gap, 'missing');
 });
 
-/* --------------------------------- prompt --------------------------------- */
-
-test('buildReviewPrompt lists ids and marks task/output strictly as data', () => {
-  const rubric = normalizeRubric([{ id: 'x', description: 'Do X', required: true }]);
-  const { system, human } = buildReviewPrompt(rubric, 'the task', { finalText: 'the output' });
-  assert.match(system, /strictly as DATA/i);
-  assert.match(system, /Return ONLY JSON/i);
-  assert.match(human, /\[x\] \(required, weight 1\): Do X/);
-  assert.match(human, /the task/);
-  assert.match(human, /the output/);
+test('scoreCriteria matches by verbatim name regardless of order', () => {
+  const rubric = normalizeRubric(['first', 'second']);
+  const scored = scoreCriteria(rubric, [{ name: 'second', passed: false, gap: 'no' }, { name: 'first', passed: true }]);
+  assert.equal(scored.criteria[0].passed, true);
+  assert.equal(scored.criteria[1].passed, false);
 });
 
-/* --------------------------------- review --------------------------------- */
+test('scoreCriteria treats a criterion the grader omitted as not passed', () => {
+  const rubric = normalizeRubric(['a', 'b']);
+  const scored = scoreCriteria(rubric, [{ name: 'a', passed: true }]);
+  assert.equal(scored.criteria[1].passed, false);
+  assert.match(scored.criteria[1].gap, /not demonstrated/i);
+  assert.equal(scored.result, RESULT.NEEDS_REVISION);
+});
 
-test('reviewTaskCompletion scores via an injected judge and derives the verdict server-side', async () => {
-  let captured = null;
-  const review = await reviewTaskCompletion({
-    rubric: {
-      threshold: 0.7,
-      criteria: [
-        { id: 'a', description: 'Feature works' },
-        { id: 'b', description: 'Tests added', required: true },
-      ],
-    },
-    task: 'Ship the feature',
-    execution: { finalText: 'Done. Opened PR #12.' },
+test('a passed criterion never carries a gap even if the grader supplied one', () => {
+  const rubric = normalizeRubric(['a']);
+  const scored = scoreCriteria(rubric, [{ name: 'a', passed: true, gap: 'noise' }]);
+  assert.equal(scored.criteria[0].gap, '');
+});
+
+/* --------------------------------- prompts -------------------------------- */
+
+test('buildGraderPrompt lists the checklist and demands verbatim names', () => {
+  const rubric = normalizeRubric(['Do X', 'Do Y']);
+  const prompt = buildGraderPrompt(rubric, 'the task', { finalText: 'the output' });
+  assert.match(prompt, /- Do X\n- Do Y/);
+  assert.match(prompt, /the task/);
+  assert.match(prompt, /the output/);
+  assert.match(prompt, /verbatim/i);
+});
+
+test('buildRevisionPrompt appends only the unmet gaps and bumps the iteration', () => {
+  const evaluation = {
+    iteration: 1,
+    criteria: [
+      { name: 'a', passed: true, gap: '' },
+      { name: 'b', passed: false, gap: 'add tests' },
+    ],
+  };
+  const prompt = buildRevisionPrompt('BASE TASK', evaluation);
+  assert.match(prompt, /^BASE TASK/);
+  assert.match(prompt, /rubric_revision iteration="2"/);
+  assert.match(prompt, /- b — add tests/);
+  assert.doesNotMatch(prompt, /- a /);
+});
+
+/* --------------------------------- gradeOnce ------------------------------- */
+
+test('gradeOnce returns a RubricEvaluation from an injected grader', async () => {
+  const rubric = normalizeRubric(['a', 'b']);
+  const evaluation = await gradeOnce({
+    rubric,
+    task: 't',
+    output: { finalText: 'work' },
+    iteration: 1,
+    callJson: async () => ({ json: { criteria: [{ name: 'a', passed: true }, { name: 'b', passed: false, gap: 'x' }], explanation: 'why' }, grader: { provider: 'ollama', model: 'q' } }),
+  });
+  assert.equal(evaluation.iteration, 1);
+  assert.equal(evaluation.result, RESULT.NEEDS_REVISION);
+  assert.equal(evaluation.explanation, 'why');
+  assert.equal(typeof evaluation.gradingRunId, 'string');
+  assert.deepEqual(evaluation.grader, { provider: 'ollama', model: 'q' });
+});
+
+test('gradeOnce reports grader_error (fail-open) when the grader throws', async () => {
+  const rubric = normalizeRubric(['a']);
+  const evaluation = await gradeOnce({
+    rubric, task: 't', output: 'o', iteration: 1,
+    callJson: async () => { throw new Error('model down'); },
+  });
+  assert.equal(evaluation.result, RESULT.GRADER_ERROR);
+  assert.equal(evaluation.criteria[0].passed, false);
+  assert.match(evaluation.error, /model down/);
+});
+
+/* ---------------------------------- loop ---------------------------------- */
+
+test('runRubric terminates immediately when the first grade is satisfied', async () => {
+  const calls = [];
+  const review = await runRubric({
+    rubric: ['a'],
+    task: 't',
+    output: { finalText: 'done' },
+    runAgent: async () => { calls.push('rerun'); return { finalText: 'again' }; },
+    deps: { callJson: async () => ({ json: { criteria: [{ name: 'a', passed: true }] } }) },
+  });
+  assert.equal(review.result, RESULT.SATISFIED);
+  assert.equal(review.satisfied, true);
+  assert.equal(review.iterations, 1);
+  assert.equal(calls.length, 0); // never re-ran the agent
+});
+
+test('runRubric re-prompts the agent with gaps until satisfied', async () => {
+  const prompts = [];
+  let round = 0;
+  const review = await runRubric({
+    rubric: ['tests pass'],
+    task: 'Ship it',
+    basePrompt: 'BASE',
+    output: { finalText: 'v1' },
+    maxIterations: 3,
+    runAgent: async (prompt) => { prompts.push(prompt); return { finalText: `v${prompts.length + 1}`, usage: null }; },
     deps: {
-      callJson: async ({ system, prompt }) => {
-        captured = { system, prompt };
-        // A dishonest judge claiming pass cannot override a required miss.
-        return {
-          json: { criteria: [{ id: 'a', met: true }, { id: 'b', met: false, reason: 'no tests' }], summary: 'ok-ish' },
-          reviewer: { provider: 'ollama', model: 'qwen' },
-        };
+      callJson: async () => {
+        round += 1;
+        // Fail the first grade, pass the second (after one revision).
+        return { json: { criteria: [{ name: 'tests pass', passed: round >= 2, gap: 'no tests' }] } };
       },
     },
   });
-
-  assert.match(captured.prompt, /Ship the feature/);
-  assert.match(captured.prompt, /Opened PR #12/);
-  assert.equal(review.available, true);
-  assert.equal(review.verdict, 'fail');
-  assert.equal(review.passed, false);
-  assert.deepEqual(review.unmetRequired, ['b']);
-  assert.deepEqual(review.reviewer, { provider: 'ollama', model: 'qwen' });
-  assert.equal(review.error, null);
+  assert.equal(review.result, RESULT.SATISFIED);
+  assert.equal(review.iterations, 2);
+  assert.equal(prompts.length, 1); // exactly one re-run
+  assert.match(prompts[0], /BASE/);
+  assert.match(prompts[0], /tests pass — no tests/);
+  assert.deepEqual(review.finalResult, { finalText: 'v2', usage: null });
 });
 
-test('reviewTaskCompletion is fail-open when the judge throws', async () => {
-  const review = await reviewTaskCompletion({
-    rubric: ['a', 'b'],
+test('runRubric hits max_iterations_reached when criteria keep failing', async () => {
+  let reruns = 0;
+  const review = await runRubric({
+    rubric: ['a'],
     task: 't',
-    execution: { finalText: 'x' },
-    deps: { callJson: async () => { throw new Error('model down'); } },
+    output: { finalText: 'v1' },
+    maxIterations: 2,
+    runAgent: async () => { reruns += 1; return { finalText: 'again' }; },
+    deps: { callJson: async () => ({ json: { criteria: [{ name: 'a', passed: false, gap: 'nope' }] } }) },
   });
-  assert.equal(review.available, false);
-  assert.equal(review.verdict, 'insufficient');
-  assert.equal(review.passed, false);
-  assert.equal(review.score, null);
-  assert.match(review.error, /model down/);
-  assert.equal(review.criteria.length, 2);
+  assert.equal(review.result, RESULT.MAX_ITERATIONS_REACHED);
+  assert.equal(review.satisfied, false);
+  assert.equal(review.iterations, 2);
+  assert.equal(reruns, 1); // 2 grades, 1 re-run between them
+  assert.deepEqual(review.unsatisfied, ['a']);
 });
 
-test('reviewTaskCompletion is fail-open on a malformed rubric', async () => {
-  const review = await reviewTaskCompletion({
-    rubric: [],
+test('runRubric cannot re-run without a runAgent, so it stops at needs_revision', async () => {
+  const review = await runRubric({
+    rubric: ['a'],
     task: 't',
-    execution: { finalText: 'x' },
-    deps: { callJson: async () => ({ json: { criteria: [] } }) },
+    output: 'v1',
+    maxIterations: 5,
+    deps: { callJson: async () => ({ json: { criteria: [{ name: 'a', passed: false }] } }) },
   });
-  assert.equal(review.available, false);
-  assert.equal(review.verdict, 'insufficient');
+  assert.equal(review.result, RESULT.NEEDS_REVISION);
+  assert.equal(review.iterations, 1);
 });
 
-test('unavailableReview lists the rubric and flags required misses without a model', () => {
-  const review = unavailableReview([{ id: 'must', description: 'x', required: true }], new Error('timeout'));
-  assert.equal(review.available, false);
-  assert.equal(review.criteria[0].met, false);
-  assert.deepEqual(review.unmetRequired, ['must']);
-  assert.match(review.error, /timeout/);
+test('runRubric is fail-open on a bad rubric (failed) and a grader outage (grader_error)', async () => {
+  const bad = await runRubric({ rubric: [], task: 't', output: 'o' });
+  assert.equal(bad.result, RESULT.FAILED);
+  assert.equal(bad.iterations, 0);
+
+  const down = await runRubric({
+    rubric: ['a'], task: 't', output: 'o',
+    deps: { callJson: async () => { throw new Error('boom'); } },
+  });
+  assert.equal(down.result, RESULT.GRADER_ERROR);
+  assert.match(down.error, /boom/);
+});
+
+test('runRubric fires onEvaluation once per grading iteration', async () => {
+  const seen = [];
+  await runRubric({
+    rubric: ['a'],
+    task: 't',
+    output: { finalText: 'v1' },
+    maxIterations: 2,
+    onEvaluation: (ev) => seen.push(ev.iteration),
+    runAgent: async () => ({ finalText: 'v2' }),
+    deps: { callJson: async () => ({ json: { criteria: [{ name: 'a', passed: false }] } }) },
+  });
+  assert.deepEqual(seen, [1, 2]);
 });
 
 /* ------------------------------- middleware -------------------------------- */
 
-test('createRubricMiddleware binds one rubric and reuses the injected seam', async () => {
-  const calls = [];
+test('createRubricMiddleware exposes the upstream name and binds a rubric', async () => {
   const mw = createRubricMiddleware({
-    rubric: ['a'],
-    deps: { callJson: async () => { calls.push(1); return { json: { criteria: [{ id: 'a', met: true }] } }; } },
+    rubric: '- a\n- b',
+    maxIterations: 4,
+    deps: { callJson: async () => ({ json: { criteria: [{ name: 'a', passed: true }, { name: 'b', passed: true }] } }) },
   });
-  assert.equal(mw.name, 'RubricReview');
-  assert.deepEqual(mw.rubric.criteria.map((c) => c.id), ['a']);
+  assert.equal(mw.name, 'RubricMiddleware');
+  assert.equal(mw.maxIterations, 4);
+  assert.deepEqual(mw.rubric.criteria.map((c) => c.name), ['a', 'b']);
 
-  const review = await mw.reviewer({ task: 't', execution: { finalText: 'ok' } });
-  assert.equal(review.verdict, 'pass');
-  assert.equal(calls.length, 1);
+  const review = await mw.run({ task: 't', output: { finalText: 'ok' } });
+  assert.equal(review.result, RESULT.SATISFIED);
 });
 
-test('createRubricMiddleware throws immediately on a bad rubric', () => {
+test('createRubricMiddleware throws immediately on a bad bound rubric', () => {
   assert.throws(() => createRubricMiddleware({ rubric: [] }), RubricError);
 });
 
-function round(value) {
-  return Math.round(value * 10_000) / 10_000;
-}
+test('failedReview lists the rubric names and never throws', () => {
+  const review = failedReview(['a', 'b'], new Error('timeout'));
+  assert.equal(review.result, RESULT.FAILED);
+  assert.deepEqual(review.unsatisfied, ['a', 'b']);
+  assert.match(review.error, /timeout/);
+  assert.equal(DEFAULT_MAX_ITERATIONS, 3);
+});

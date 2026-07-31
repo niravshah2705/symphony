@@ -150,7 +150,8 @@ async function executeCodingRuntime({
   prompt,
   invokeConfig,
   rubric,
-  reviewer,
+  rubricOptions,
+  rubricMiddleware,
   settings,
 }) {
   const requestedRuntime = normalizeAgentRuntime(keys.agentRuntime || 'deepagent', { strict: true });
@@ -216,9 +217,10 @@ async function executeCodingRuntime({
     tags: codingWorkflow.tags,
     deepAgentInvoke,
     lastText: framework.lastText,
-    // Optional rubric review of the finished coding run (opt-in; no-op if unset).
+    // Optional RubricMiddleware review of the finished coding run (opt-in; no-op if unset).
     rubric,
-    reviewer,
+    rubricOptions,
+    rubricMiddleware,
     settings,
   });
 }

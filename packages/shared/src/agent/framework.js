@@ -258,7 +258,8 @@ async function runWorkflow({
   workflowPattern = 'sequential',
   env,
   rubric,
-  reviewer,
+  rubricOptions,
+  rubricMiddleware,
   settings,
 }) {
   let scratch = null;
@@ -306,9 +307,10 @@ async function runWorkflow({
       tags: workflow.tags || [],
       deepAgentInvoke,
       lastText,
-      // Optional provider-neutral completion review. Absent → no review runs.
+      // Optional RubricMiddleware completion review. Absent → no review runs.
       rubric,
-      reviewer,
+      rubricOptions,
+      rubricMiddleware,
       settings,
     });
   } finally {
