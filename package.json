@@ -1,29 +1,15 @@
 {
-  "name": "ai-fleet",
+  "name": "ai-fleet-frontend",
   "version": "1.0.0",
-  "description": "AI Fleet — a microservice-decomposed tool to manage Linear projects and run isolated planner + coder deep-agent services over a shared library.",
+  "description": "AI Fleet frontend — the browser SPA (public/) and the Playwright e2e suite. The backend is Python: see ai_fleet/ and pyproject.toml (run `python -m ai_fleet.start_all`).",
   "private": true,
   "type": "commonjs",
-  "workspaces": [
-    "packages/*",
-    "services/*"
-  ],
   "scripts": {
-    "start": "node --env-file-if-exists=.env scripts/start-all.js",
-    "dev": "node --env-file-if-exists=.env scripts/start-all.js --watch",
-    "start:gateway": "npm start -w @ai-fleet/gateway",
-    "start:planner": "npm start -w @ai-fleet/planner",
-    "start:coder": "npm start -w @ai-fleet/coder",
-    "test": "node --test",
     "test:e2e": "playwright test",
     "test:e2e:debug": "PWDEBUG=1 playwright test --project=chrome"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0"
-  },
-  "overrides": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "fast-uri": "^3.1.4"
   },
   "engines": {
     "node": ">=18"

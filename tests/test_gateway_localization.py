@@ -1,72 +1,20 @@
 """Port of services/gateway/src/routes/localization.test.js.
 
-``ai_fleet.agent.localization`` has not landed yet, so these tests inject a fake
-localization module onto the route and assert the ROUTE/helper wiring (the JS
-suite likewise drives the pure helpers with injected seams). The localization
-primitives themselves are covered by that module's own test when it ships.
+Exercises the two pure route helpers against the real ``ai_fleet.agent.localization``
+module, injecting only the geolocation/translator seams (as the JS suite does),
+plus a TestClient smoke test of the FastAPI wiring + shared exception handler.
 """
 
 import json
-import types
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import ai_fleet.services.gateway.routes.localization as loc_route
+from ai_fleet.agent.localization import LocalizationError
 from ai_fleet import store
 from ai_fleet.services.common import register_exception_handlers
-
-
-class FakeLocalizationError(Exception):
-    def __init__(self, message, status=400):
-        super().__init__(message)
-        self.message = message
-        self.status = status
-
-
-def _make_fake(**overrides):
-    """A stand-in for ai_fleet.agent.localization with allowlisting semantics."""
-    ns = types.SimpleNamespace()
-    ns.parse_language_hints = lambda langs, accept=None: ["fr", "en", "gu-IN"]
-    ns.request_ip = lambda req: (req.get("ip") if isinstance(req, dict) else None)
-    # Public unless loopback/empty (enough to exercise the two branches).
-    ns.is_public_ip = lambda ip: bool(ip) and ip != "127.0.0.1"
-    ns.normalize_geo_result = lambda value: (
-        {"countryCode": value.get("countryCode"), "region": value.get("region")}
-        if isinstance(value, dict)
-        else None
-    )
-    ns.language_suggestions = lambda browser_languages, country_code, region: {
-        "locale": browser_languages[0] if browser_languages else "en",
-        "countryCode": country_code,
-        "region": region,
-        "suggestions": [{"tag": tag} for tag in browser_languages],
-    }
-
-    async def _locate_ip(ip):
-        return {}
-
-    async def _locate_current_ip():
-        return {}
-
-    async def _translate_texts(request):
-        return {}
-
-    ns.locate_ip = _locate_ip
-    ns.locate_current_ip = _locate_current_ip
-    ns.translate_texts = _translate_texts
-    ns.LocalizationError = FakeLocalizationError
-    for key, value in overrides.items():
-        setattr(ns, key, value)
-    return ns
-
-
-@pytest.fixture(autouse=True)
-def _fake_localization(monkeypatch):
-    fake = _make_fake()
-    monkeypatch.setattr(loc_route, "localization", fake)
-    return fake
 
 
 def test_localization_router_exposes_the_agreed_suggestions_and_translation_routes():
@@ -78,17 +26,12 @@ def test_localization_router_exposes_the_agreed_suggestions_and_translation_rout
     assert ("/translate", ["POST"]) in routes
 
 
-async def test_suggestions_use_browser_hints_and_coarse_ip_without_returning_the_address(_fake_localization):
+async def test_suggestions_use_browser_hints_and_coarse_ip_without_returning_the_address():
     looked_up = {"ip": None}
-    called_current = {"count": 0}
 
     async def geolocate(ip):
         looked_up["ip"] = ip
         return {"countryCode": "IN", "region": "Gujarat", "ip": ip, "latitude": 23.2}
-
-    async def geolocate_current():
-        called_current["count"] += 1
-        return {}
 
     payload = await loc_route.suggestions_for_request(
         {
@@ -98,19 +41,22 @@ async def test_suggestions_use_browser_hints_and_coarse_ip_without_returning_the
             "socket": {},
         },
         geolocate=geolocate,
-        geolocate_current=geolocate_current,
     )
 
     assert looked_up["ip"] == "8.8.8.8"
-    assert called_current["count"] == 0
+    assert payload["locale"] == "fr"
     assert payload["countryCode"] == "IN"
     assert payload["region"] == "Gujarat"
+    assert len(payload["suggestions"]) <= 5
+    tags = [item["tag"] for item in payload["suggestions"]]
+    assert "en" in tags
+    assert "gu-IN" in tags
     # The transient address and precise coordinates must never reach the browser.
     assert "8.8.8.8" not in json.dumps(payload)
     assert "latitude" not in json.dumps(payload)
 
 
-async def test_suggestions_remain_usable_when_lookup_offline_or_address_is_private(_fake_localization):
+async def test_suggestions_remain_usable_when_lookup_offline_or_address_is_private():
     async def offline_geolocate(ip):
         raise RuntimeError("offline")
 
@@ -118,6 +64,7 @@ async def test_suggestions_remain_usable_when_lookup_offline_or_address_is_priva
         {"query": {"languages": "gu"}, "headers": {}, "ip": "1.1.1.1", "socket": {}},
         geolocate=offline_geolocate,
     )
+    assert offline["locale"] == "gu-IN"
     assert offline["countryCode"] is None
     assert offline["region"] is None
 
@@ -135,6 +82,7 @@ async def test_suggestions_remain_usable_when_lookup_offline_or_address_is_priva
         geolocate=unexpected_geolocate,
         geolocate_current=geolocate_current,
     )
+    assert local["locale"] == "en"
     assert calls["count"] == 0
     assert local["countryCode"] == "IN"
     assert local["region"] == "Gujarat"
@@ -172,7 +120,7 @@ async def test_translation_helper_rejects_missing_json_object_before_reading_set
         settings_read["value"] = True
         return {}
 
-    with pytest.raises(FakeLocalizationError) as excinfo:
+    with pytest.raises(LocalizationError) as excinfo:
         await loc_route.translation_for_body(None, settings_provider=settings_provider)
     assert excinfo.value.status == 400
     assert "JSON request body" in excinfo.value.message
@@ -186,16 +134,16 @@ def _app():
     return app
 
 
-def test_translate_route_forwards_body_end_to_end(monkeypatch, _fake_localization):
+def test_translate_route_forwards_body_end_to_end(monkeypatch):
     settings = {"localLlmProvider": "ollama"}
     received = {"request": None}
 
-    async def translator(request):
+    async def translator(request, deps=None):
         received["request"] = request
         return {"locale": "gu-IN", "translations": ["એજન્ટ"], "fallback": False}
 
     monkeypatch.setattr(store, "get_settings", lambda: settings)
-    monkeypatch.setattr(_fake_localization, "translate_texts", translator)
+    monkeypatch.setattr(loc_route.localization, "translate_texts", translator)
 
     client = TestClient(_app())
     resp = client.post("/api/locale/translate", json={"locale": "gu-IN", "texts": ["Agent"]})
@@ -204,15 +152,13 @@ def test_translate_route_forwards_body_end_to_end(monkeypatch, _fake_localizatio
     assert received["request"] == {"locale": "gu-IN", "texts": ["Agent"], "settings": settings}
 
 
-def test_suggestions_route_builds_request_and_returns_payload(monkeypatch, _fake_localization):
-    # Force the private-IP branch so the server-egress lookup runs deterministically
-    # regardless of the TestClient's synthetic client host.
-    monkeypatch.setattr(_fake_localization, "is_public_ip", lambda ip: False)
-
-    async def geolocate_current():
+def test_suggestions_route_builds_request_and_returns_payload(monkeypatch):
+    # The TestClient's synthetic client host isn't a public IP, so the server-egress
+    # lookup runs; stub it to keep the payload deterministic and address-free.
+    async def geolocate_current(fetch_impl=None, timeout_ms=None, now=None):
         return {"countryCode": "IN", "region": "Gujarat", "ip": "must-not-leak"}
 
-    monkeypatch.setattr(_fake_localization, "locate_current_ip", geolocate_current)
+    monkeypatch.setattr(loc_route.localization, "locate_current_ip", geolocate_current)
 
     client = TestClient(_app())
     resp = client.get("/api/locale/suggestions", params={"languages": "gu-IN,en-US"})
