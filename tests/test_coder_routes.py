@@ -1,27 +1,25 @@
 """Smoke tests for ai_fleet.services.coder.routes.coder.
 
 There is no coder route test in the JS repo; these are minimal FastAPI TestClient
-checks. ``coder_orchestrator`` is lazy-imported inside the handlers, so we stub it
-in ``sys.modules`` and assert the router surfaces it (GET status, POST /monitor).
-The heavy ``coder``/``llm`` deps are never imported by these paths.
+checks. ``coder_orchestrator`` is lazy-imported inside the handlers, so we patch
+the real module's functions (isolation-safe regardless of import order) and assert
+the router surfaces them (GET status, POST /monitor). The heavy ``coder``/``llm``
+deps are never reached by these paths.
 """
-
-import sys
-import types
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import ai_fleet.agent.coder_orchestrator as orchestrator
+
 
 @pytest.fixture()
 def client(monkeypatch):
-    fake = types.ModuleType("ai_fleet.agent.coder_orchestrator")
-    fake.status = lambda: {"running": True, "paused": False, "inFlight": []}
-    fake.start = lambda: {"running": True, "action": "start"}
-    fake.resume = lambda: {"running": True, "action": "resume"}
-    fake.stop = lambda: {"running": False, "action": "stop"}
-    monkeypatch.setitem(sys.modules, "ai_fleet.agent.coder_orchestrator", fake)
+    monkeypatch.setattr(orchestrator, "status", lambda: {"running": True, "paused": False, "inFlight": []})
+    monkeypatch.setattr(orchestrator, "start", lambda: {"running": True, "action": "start"})
+    monkeypatch.setattr(orchestrator, "resume", lambda: {"running": True, "action": "resume"})
+    monkeypatch.setattr(orchestrator, "stop", lambda: {"running": False, "action": "stop"})
 
     from ai_fleet.services.coder.routes import coder as coder_routes
 

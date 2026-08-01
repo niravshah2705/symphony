@@ -28,7 +28,11 @@ module.exports = defineConfig({
     },
   ],
   webServer: externalBaseURL ? undefined : {
-    command: 'npm start',
+    // The backend is Python now; the e2e harness boots the whole Python fleet
+    // (gateway + planner + coder). Requires the ai_fleet package to be importable
+    // (e.g. `pip install -e .` or an active venv). The env below is honored by
+    // ai_fleet/config.py exactly as the Node services honored it.
+    command: 'python -m ai_fleet.start_all',
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

@@ -79,7 +79,8 @@ def _clamp_int(value, min_, max_, fallback):
         return fallback
     if not math.isfinite(n):
         return fallback
-    return min(max_, max(min_, round(n)))
+    # JS Math.round rounds halves toward +Infinity (not Python's banker's rounding).
+    return min(max_, max(min_, math.floor(n + 0.5)))
 
 
 def _finite_positive(value):
