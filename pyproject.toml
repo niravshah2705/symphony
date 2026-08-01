@@ -43,6 +43,8 @@ ai-fleet-gateway = "ai_fleet.services.gateway.app:main"
 ai-fleet-planner = "ai_fleet.services.planner.app:main"
 ai-fleet-coder = "ai_fleet.services.coder.app:main"
 ai-fleet = "ai_fleet.start_all:main"
+ai-fleet-reset-aifail = "ai_fleet.scripts.reset_aifail:cli"
+ai-fleet-models-label-group = "ai_fleet.scripts.models_label_group:cli"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
