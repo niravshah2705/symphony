@@ -50,7 +50,7 @@ Collapsible sections:
    - **OpenAI / Codex OAuth** — **Sign in with ChatGPT** using OAuth 2.0 Authorization Code + PKCE. The model list is refreshed from the signed-in Codex account with a bundled current fallback. Reasoning choices are model-specific: for example, GPT-5.6 Sol and Terra expose Low through Ultra, while GPT-5.5 exposes Low through Extra high. `ultra` is sent only to the ChatGPT/Codex backend.
    - **Anthropic / Claude OAuth** — **Sign in with Claude**, approve in the opened tab, then paste the returned `code#state`. Available models are queried from Anthropic with bundled fallbacks, and only each model's advertised adaptive-thinking effort values are shown.
 
-The committed source of truth is [`packages/shared/src/agent/llm-presets.json`](packages/shared/src/agent/llm-presets.json). It separates model limits from request defaults and records the exact reasoning adapter used by each provider.
+The committed source of truth is [`ai_fleet/agent/llm-presets.json`](ai_fleet/agent/llm-presets.json). It separates model limits from request defaults and records the exact reasoning adapter used by each provider.
 
 For **OMLX**, start the server with at least one model or profile available, then
 select an OMLX preset. Its default origin is `http://127.0.0.1:8000`; Settings
@@ -117,16 +117,16 @@ instead of Codex) works a **single Linear ticket end-to-end** inside an **isolat
 git clone** and drives it to a pull request. It reuses the same LLM provider chosen
 in **Task Models** (each of Thinking / Execution / Testing picks any local Ollama/LM Studio/OMLX or hosted Codex/Claude model).
 
-- **One attempt per ticket** (`packages/shared/src/agent/coder.js`) — the agent runs in an
+- **One attempt per ticket** (`ai_fleet/agent/coder.py`) — the agent runs in an
   isolated workspace (a per-ticket clone under `CODER_WORKSPACE_ROOT`). It has
   filesystem + shell tools (rooted at the clone), an injected **`linear_graphql`**
   tool (the raw Linear token stays server-side — the agent never sees it), and a
   scoped **`repository_broker`** tool for GitHub/GitLab fetch, push, review status,
   checks, and squash merge (the repository token also stays server-side), plus a
   set of **skills** (`linear`, `commit`, `push`, `pull`, `land`) loaded from
-  `packages/shared/src/agent/skills/`. Its system prompt is the **workflow** (ticket state
+  `ai_fleet/agent/skills/`. Its system prompt is the **workflow** (ticket state
   machine + a single `## Workpad` comment as the source of truth).
-- **Board monitor** (`packages/shared/src/agent/coder-orchestrator.js`) — on a fixed cadence it
+- **Board monitor** (`ai_fleet/agent/coder_orchestrator.py`) — on a fixed cadence it
   polls the tracker for tickets in an **active state**
   (`Todo, In Progress, Merging, Rework` by default) and dispatches a code-writer
   run per ticket, up to a global concurrency cap. State is in-memory and re-derived
@@ -135,7 +135,7 @@ in **Task Models** (each of Thinking / Execution / Testing picks any local Ollam
 
 ### Configuring the code-writer
 
-All values are env-overridable (`CODER_*`, see `packages/shared/src/config.js`):
+All values are env-overridable (`CODER_*`, see `ai_fleet/config.py`):
 
 | Env var | Default | Purpose |
 | ------- | ------- | ------- |
@@ -190,68 +190,72 @@ Use the default local backend for brokered GitHub/GitLab operation.
   map covering preset-routed local and hosted inference, Linear ticket management,
   DeepAgent skills, and Linear/GitHub integrations.
 
-The app is an **npm-workspaces monorepo** decomposed into **three isolated
-services over one shared library**. Each service is an independently runnable
-Express process with its own port and HTTP surface; all business logic lives in
-a single shared package (`@ai-fleet/shared`) so nothing is copied per service.
+The app is a **Python backend** decomposed into **three isolated FastAPI
+services over one shared package**. Each service is an independently runnable
+uvicorn process with its own port and HTTP surface; all business logic lives in
+a single Python package (`ai_fleet`) so nothing is copied per service. The
+browser single-page app in `public/` is the only JavaScript that remains.
 
-- **`packages/shared`** (`@ai-fleet/shared`) — the single source of truth:
-  config, JSON store, Linear GraphQL client, logger/util, and the whole
-  deep-agent runtime (framework, tools, skills, LLM router, planner + coder
-  modules). Imported by every service; never duplicated.
-- **`services/gateway`** (`@ai-fleet/gateway`, default port 4000) — the only
+- **`ai_fleet`** — the single source of truth: config, JSON store, Linear
+  GraphQL client, logger/util, and the whole deep-agent runtime (framework,
+  tools, skills, LLM router, planner + coder modules). Imported by every service;
+  never duplicated. The three agent runtimes — **deepagent** (LangGraph/deepagents),
+  **claudecode** (Claude Agent SDK), and **codex** (Codex SDK) — live in
+  `ai_fleet/agent/runtimes.py` + `runtimes_sdk.py`.
+- **gateway** (`ai_fleet.services.gateway`, default port 4000) — the only
   browser-facing origin. Serves the SPA, owns the user-facing REST API
   (settings, projects, issues, businesses, roles) and the OAuth flows, and
   **reverse-proxies** `/api/agent/*` → planner and `/api/coder/*` → coder.
-- **`services/planner`** (`@ai-fleet/planner`, default port 4010) — the isolated
+- **planner** (`ai_fleet.services.planner`, default port 4010) — the isolated
   software-design planner (deep agent + enrichment scheduler); exposes `/api/agent`.
-- **`services/coder`** (`@ai-fleet/coder`, default port 4020) — the isolated
+- **coder** (`ai_fleet.services.coder`, default port 4020) — the isolated
   code-writer (board monitor + single-ticket runner); exposes `/api/coder`.
 - **Frontend** (`public/`) — a dependency-free vanilla-JS single-page app (ES
-  modules) served by the gateway. It calls same-origin `/api/*` and is unaware
-  of the split (the gateway proxies agent calls to the agent services).
+  modules) served by the gateway. It is the only Node/JS surface in the repo
+  (alongside the Playwright e2e suite). It calls same-origin `/api/*` and is
+  unaware of the split (the gateway proxies agent calls to the agent services).
 
 ```
-packages/shared/
-  index.js              barrel (CONFIG, store, linear, log, util)
-  src/
-    config.js           constants + paths (repo-root data/public) + SERVICES topology + OAuth/CODER config
-    store.js            JSON-file store (settings, businesses, assumed role, agent config, jobs)
-    linear.js           Linear GraphQL client (queries/mutations)
-    logger.js  util.js  stdout + data/app.log logger · asyncHandler/JSON error/maskKey
-    agent/
-      framework.js        workflow-driven deep-agent runner (skills + tools + backend)
-      runtimes.js         DeepAgent / Codex SDK / Claude Agent SDK adapters + root traces
-      localization.js     BCP 47 suggestions, coarse IP location, local UI translation
-      analytics.js diagnostics.js workflow-patterns.js  ← operations
-      workflows/          planning.workflow.js · coding.workflow.js (declarative)
-      schema.js plan.js apply.js scheduler.js search.js   ← planner
-      coder.js coder-orchestrator.js workspace.js repository-broker.js openswe.js  ← code-writer
-      tools.js mcp.js safe-read.js   built-in tools (web_search, linear_graphql) + optional MCP
-      llm.js llm-presets.json model-presets.js model-discovery.js lmstudio-context.js  ← LLM router + catalog
-      oauth.js pkce.js claude-oauth.js trace-annotations.js
-      skills/           software-planning · web-research · linear · commit · push · pull · land (SKILL.md each)
-services/
-  gateway/src/   index.js · proxy.js · routes/ (settings, projects, issues, businesses, roles, codex, claude)
-  planner/src/   index.js (boots scheduler) · routes/agent.js
-  coder/src/     index.js (boots board monitor) · routes/coder.js
-scripts/
-  start-all.js          boot all three services from one terminal (prefixed output)
-  models-label-group.js one-off: create the Linear "Models" label group
-public/
-  index.html · styles.css · js/ (app.js router · api.js · dom.js · state.js · views/)
+ai_fleet/
+  config.py             constants + paths (repo-root data/public) + SERVICES topology + OAuth/CODER config
+  store.py              JSON-file store (settings, businesses, assumed role, agent config, jobs)
+  linear.py             Linear GraphQL client (async httpx)
+  logger.py  util.py    stdout + data/app.log logger · AppError/JSON error/mask_key
+  start_all.py          boot all three services from one terminal (prefixed output)
+  agent/
+    framework.py        workflow-driven deep-agent runner (skills + tools + backend)
+    runtimes.py runtimes_sdk.py   deepagent / codex / claudecode adapters + root traces
+    localization.py     BCP 47 suggestions, coarse IP location, local UI translation
+    analytics.py diagnostics.py workflow_patterns.py   ← operations
+    workflows/          planning.py · coding.py (declarative)
+    schema.py plan.py apply.py scheduler.py search.py   ← planner
+    coder.py coder_orchestrator.py workspace.py repository_broker.py openswe.py   ← code-writer
+    tools/ mcp.py safe_read.py   built-in tools (web_search, linear_graphql) + dev tools + optional MCP
+    llm.py llm-presets.json model_presets.py model_discovery.py lmstudio_context.py   ← LLM router + catalog
+    oauth.py pkce.py claude_oauth.py trace_annotations.py
+    skills/             software-planning · web-research · linear · commit · push · pull · land (SKILL.md each)
+  services/
+    gateway/  app.py · proxy.py · auth.py · routes/ (settings, projects, issues, businesses, roles, codex, claude, ...)
+    planner/  app.py (boots scheduler) · routes/agent.py
+    coder/    app.py (boots board monitor) · routes/coder.py
+  scripts/              reset_aifail.py · models_label_group.py (one-off maintenance)
+public/                 index.html · styles.css · vendor/auth0-spa-js.js · js/ (app.js router · api.js · views/)  ← the only JS
+tests/                  pytest suite (ported from the Node node:test suites)
 ```
 
 ## Run
 
-```bash
-npm install        # installs all workspaces
+The backend is Python (>= 3.11). Create a venv and install the package:
 
-npm start          # boots gateway (:4000) + planner (:4010) + coder (:4020)
-# or: npm run dev  # same, each service under node --watch
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e .            # installs ai_fleet + fastapi/uvicorn/deepagents/langchain/...
+
+python -m ai_fleet.start_all   # boots gateway (:4000) + planner (:4010) + coder (:4020)
+# equivalently, the console script: ai-fleet
 
 # run a single service (e.g. only the gateway):
-npm run start:gateway   # or start:planner / start:coder
+python -m ai_fleet.services.gateway.app    # or ...planner.app / ...coder.app
 ```
 
 Ports are env-overridable: `PORT` (gateway), `PLANNER_PORT`, `CODER_SERVICE_PORT`.
@@ -296,7 +300,7 @@ cannot silently fall back to anonymous access.
 See [`deploy/istio-auth0/README.md`](deploy/istio-auth0/README.md) for the
 `RequestAuthentication`, `AuthorizationPolicy`, mTLS, network-policy, rollout,
 and verification templates. The gateway must be reachable only through the
-mesh: its verified-payload header is not safe on a directly exposed Node port.
+mesh: its verified-payload header is not safe on a directly exposed port.
 
 Authentication does not make the current JSON store multi-tenant. All accepted
 users with the required `fleet:access` permission operate the same settings,
