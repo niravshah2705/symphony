@@ -265,45 +265,40 @@ validated against Linear before it is saved.
 
 ### Authentication
 
-Authentication is disabled by default for the local single-user workflow. The
-gateway still exposes `GET /api/auth/config` and `GET /api/auth/me`, so the same
-frontend boot path is exercised locally without requiring an identity provider.
+Authentication is `AUTH_MODE=disabled` by default for the local single-user
+workflow. The gateway still exposes `GET /api/auth/config` and `GET /api/auth/me`,
+so the same frontend boot path is exercised locally without requiring an identity
+provider.
 
-Production uses an Auth0 Single Page Application with Authorization Code + PKCE.
-The browser keeps the access token in memory and adds it to API requests. Istio
-validates its signature, issuer, exact API audience, and expiry, removes the
-bearer credential, and forwards only a verified JWT payload to the gateway. The
-gateway fails closed when that payload is absent, malformed, expired, or has the
-wrong issuer/audience.
+In the cloud the gateway runs `AUTH_MODE=firebase` for Firebase Google-SSO. The
+SPA fetches the **public** Firebase web config from the gateway's
+`GET /api/auth/config` at runtime, signs the user in with Google, and sends the
+resulting Firebase **ID token** as a bearer credential. The gateway verifies that
+ID token on every request and fails closed when it is absent, malformed, or
+expired.
 
 ```bash
 NODE_ENV=production
-AUTH_MODE=istio
-AUTH0_DOMAIN=YOUR_TENANT.REGION.auth0.com
-AUTH0_CLIENT_ID=YOUR_AUTH0_SPA_CLIENT_ID
-AUTH0_AUDIENCE=https://api.ai-fleet.example.com
-AUTH0_REQUIRED_PERMISSION=fleet:access
-AUTH0_REDIRECT_URI=https://fleet.example.com/
-AUTH0_LOGOUT_RETURN_TO=https://fleet.example.com/
-AUTH0_SCOPE="openid profile email"
-# AUTH0_ORGANIZATION=org_OPTIONAL_AUTH0_ORGANIZATION_ID
+AUTH_MODE=firebase
+FIREBASE_PROJECT_ID=your-gcp-project   # defaults to GCP_PROJECT_ID
+FIREBASE_API_KEY=AIza...               # public Firebase Web API key (NOT a secret)
+FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com   # optional; defaults to <projectId>.firebaseapp.com
+FIREBASE_ALLOWED_DOMAIN=example.com    # optional; empty = any verified user
+# FIREBASE_ALLOWED_EMAILS=a@example.com,b@example.com   # optional explicit allowlist
+# FIREBASE_HD=example.com              # optional Google hosted-domain hint
 ```
 
-`NODE_ENV=production` refuses to start unless `AUTH_MODE=istio` and every
-required Auth0 value is present; a missing production environment variable
-cannot silently fall back to anonymous access.
-
-See [`deploy/istio-auth0/README.md`](deploy/istio-auth0/README.md) for the
-`RequestAuthentication`, `AuthorizationPolicy`, mTLS, network-policy, rollout,
-and verification templates. The gateway must be reachable only through the
-mesh: its verified-payload header is not safe on a directly exposed Node port.
+The Firebase web config (`apiKey`/`authDomain`/`projectId`) is **public** — it is
+served to the browser via `/api/auth/config` as plain env/Terraform vars and is
+**never** stored in Secret Manager. By default any verified Google user may sign
+in; set `FIREBASE_ALLOWED_DOMAIN` (a single email domain) or
+`FIREBASE_ALLOWED_EMAILS` (an explicit allowlist) to restrict access.
 
 Authentication does not make the current JSON store multi-tenant. All accepted
-users with the required `fleet:access` permission operate the same settings,
-integrations, credentials, jobs, and assumed Linear role. Enable Auth0 API RBAC,
-include permissions in access tokens, and grant `fleet:access` only to trusted
-operators; keep the application restricted to one trusted organization until
-those records are tenant-scoped and finer authorization policies are added.
+users operate the same settings, integrations, credentials, jobs, and assumed
+Linear role. Restrict login with `FIREBASE_ALLOWED_DOMAIN` / `FIREBASE_ALLOWED_EMAILS`
+and keep the application scoped to trusted operators until those records are
+tenant-scoped and finer authorization policies are added.
 
 ### Browser loading regression
 
@@ -368,7 +363,7 @@ rather than stuck in "running".
 | Method | Path | Purpose |
 | ------ | ---- | ------- |
 | GET | `/healthz` | Public gateway liveness probe |
-| GET | `/api/auth/config` | Public, secret-free Auth0 SPA bootstrap configuration |
+| GET | `/api/auth/config` | Public, secret-free Firebase web config bootstrap |
 | GET | `/api/auth/me` | Current mesh-verified application identity |
 | GET | `/api/settings` | Whether a key is set (masked) |
 | PUT | `/api/settings` | Validate + save API key |

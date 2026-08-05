@@ -95,10 +95,10 @@ test('authentication configuration failure locks the workspace before protected 
     }
   });
   await page.route('**/api/auth/config', (route) => json(route, {
-    mode: 'istio',
+    mode: 'firebase',
     enabled: true,
-    provider: 'auth0',
-    auth0: {},
+    provider: 'firebase',
+    firebase: {},
   }));
 
   const response = await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
@@ -110,7 +110,7 @@ test('authentication configuration failure locks the workspace before protected 
   expect(protectedRequests).toEqual([]);
 });
 
-test('authenticated Auth0 session adds a bearer token and ignores an unrelated provider 401', async ({ page }) => {
+test('authenticated Firebase session adds a bearer token and ignores an unrelated provider 401', async ({ page }) => {
   const authenticatedRequests = [];
   const authorizedJson = (route, body, status = 200) => {
     const authorization = route.request().headers().authorization;
@@ -123,46 +123,47 @@ test('authenticated Auth0 session adds a bearer token and ignores an unrelated p
     localStorage.setItem('ai-fleet.locale', 'en');
     localStorage.setItem('lm.lastWorkspaceRoute', 'agent');
   });
-  await page.route('**/vendor/auth0-spa-js.js', (route) => route.fulfill({
+  // Stub the vendored Firebase Web SDK with an already signed-in Google user.
+  await page.route('**/vendor/firebase/firebase-app.js', (route) => route.fulfill({
+    status: 200,
+    contentType: 'text/javascript',
+    body: 'export function initializeApp() { return {}; }',
+  }));
+  await page.route('**/vendor/firebase/firebase-auth.js', (route) => route.fulfill({
     status: 200,
     contentType: 'text/javascript',
     body: `
-      export async function createAuth0Client() {
-        return {
-          handleRedirectCallback: async () => ({ appState: {} }),
-          isAuthenticated: async () => true,
-          getTokenSilently: async () => 'browser-access-token',
-          getUser: async () => ({ name: 'Ada Operator', email: 'ada@example.com' }),
-          loginWithRedirect: async () => {},
-          logout: async () => {},
-        };
-      }
+      const user = { uid: 'firebase|ada', displayName: 'Ada Operator', email: 'ada@example.com', photoURL: '', getIdToken: async () => 'browser-access-token' };
+      export function getAuth() { return { currentUser: user }; }
+      export async function setPersistence() {}
+      export const browserLocalPersistence = {};
+      export function onAuthStateChanged(_auth, cb) { Promise.resolve().then(() => cb(user)); return () => {}; }
+      export class GoogleAuthProvider { setCustomParameters() {} }
+      export async function signInWithPopup() { return { user }; }
+      export async function signOut() {}
     `,
   }));
   await page.route('**/api/auth/config', (route) => json(route, {
-    mode: 'istio',
+    mode: 'firebase',
     enabled: true,
-    provider: 'auth0',
-    auth0: {
-      domain: 'tenant.example.auth0.com',
-      clientId: 'browser-client',
-      audience: 'https://api.ai-fleet.example.com',
-      redirectUri: 'https://fleet.example.com/',
-      logoutReturnTo: 'https://fleet.example.com/',
-      scope: 'openid profile email',
+    provider: 'firebase',
+    firebase: {
+      apiKey: 'AIzaTESTKEY',
+      authDomain: 'demo-proj.firebaseapp.com',
+      projectId: 'demo-proj',
     },
   }));
   await page.route('**/api/auth/me', (route) => authorizedJson(route, {
-    mode: 'istio',
+    mode: 'firebase',
     authenticated: true,
-    user: { sub: 'auth0|ada', name: 'Ada Operator', email: 'ada@example.com' },
+    user: { sub: 'firebase|ada', name: 'Ada Operator', email: 'ada@example.com' },
   }));
   await page.route('**/api/locale/suggestions**', (route) => authorizedJson(route, {
     locale: 'en',
     suggestions: [{ tag: 'en', label: 'English', nativeLabel: 'English', direction: 'ltr' }],
   }));
   // This 401 belongs to the Linear connector, not application authentication.
-  // It must update connection health without clearing the Auth0 session.
+  // It must update connection health without clearing the Firebase session.
   await page.route('**/api/settings', (route) => authorizedJson(route, {
     error: 'Linear credential needs attention',
   }, 401));

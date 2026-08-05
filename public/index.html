@@ -168,6 +168,9 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
+    <!-- Sets window.__API_BASE__ before the app loads (same-origin locally; the
+         gateway Cloud Run URL when the SPA is hosted on GCS). -->
+    <script src="/config.js"></script>
     <script type="module" src="/js/app.js"></script>
   </body>
 </html>

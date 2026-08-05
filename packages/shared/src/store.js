@@ -1,8 +1,9 @@
 'use strict';
 
-const fs = require('fs');
 const { randomUUID } = require('node:crypto');
 const { CONFIG } = require('./config');
+const fileBackend = require('./store/file-backend');
+const firestoreBackend = require('./store/firestore-backend');
 const {
   getPreset,
   presetForModel,
@@ -250,12 +251,6 @@ const DEFAULT_STORE = Object.freeze({
   approvals: [], // requirement-evaluation approval gates (see agent/approval-gate.js)
 });
 
-function ensureDataDir() {
-  if (!fs.existsSync(CONFIG.DATA_DIR)) {
-    fs.mkdirSync(CONFIG.DATA_DIR, { recursive: true });
-  }
-}
-
 function cloneDefault() {
   return JSON.parse(JSON.stringify(DEFAULT_STORE));
 }
@@ -272,84 +267,115 @@ function migrateBusinessRepositories(businesses) {
   });
 }
 
-function readStore() {
-  ensureDataDir();
-  if (!fs.existsSync(CONFIG.STORE_FILE)) {
-    const seed = cloneDefault();
-    writeStore(seed);
-    return seed;
+/**
+ * Merge + migrate a raw parsed store into a full, current-schema store. This is
+ * PURE (no I/O), so the file and Firestore backends share the exact same
+ * normalization. Previously this logic lived inline in the file-only readStore.
+ */
+function normalizeStore(parsed) {
+  const source = parsed && typeof parsed === 'object' ? parsed : {};
+  const base = cloneDefault();
+  const storedSettings = source.settings || {};
+  const settings = { ...base.settings, ...storedSettings };
+  // Preset ids did not exist before catalog v1. Treat legacy settings as
+  // customized instead of claiming they match (and possibly later reapplying)
+  // a new default preset.
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'localLlmPresetId')) {
+    settings.localLlmPresetId = 'custom';
   }
-  try {
-    const raw = fs.readFileSync(CONFIG.STORE_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    const base = cloneDefault();
-    const storedSettings = parsed.settings || {};
-    const settings = { ...base.settings, ...storedSettings };
-    // Preset ids did not exist before catalog v1. Treat legacy settings as
-    // customized instead of claiming they match (and possibly later reapplying)
-    // a new default preset.
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'localLlmPresetId')) {
-      settings.localLlmPresetId = 'custom';
-    }
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'hostedLlmPresetId')) {
-      settings.hostedLlmPresetId = 'custom';
-    }
-    // Purpose-based model roles did not exist before this migration. Seed each
-    // absent role from the operator's effective hosted slot so an existing
-    // install keeps its current planner/coder model (previously always the
-    // hosted slot) instead of jumping to a catalog default. The `local`/`global`
-    // slots are preserved untouched for localization and diagnostics.
-    for (const role of MODEL_ROLES) {
-      const providerKey = `${role}LlmProvider`;
-      const presetKey = `${role}LlmPresetId`;
-      if (!Object.prototype.hasOwnProperty.call(storedSettings, providerKey)) {
-        settings[providerKey] = settings.llmProvider;
-        settings[presetKey] = settings.hostedLlmPresetId;
-      }
-    }
-    // Preserve explicitly configured legacy request shapes. When both hosted
-    // reasoning fields are absent, however, activate the reviewed default for
-    // the effective known model. This keeps the visible model-aware default and
-    // the actual runtime request in sync without overwriting an explicit Off.
-    for (const prefix of ['ollama', 'lmstudio', 'codex', 'claude', 'huggingface']) {
-      const effortKey = `${prefix}ReasoningEffort`;
-      const adapterKey = `${prefix}ReasoningAdapter`;
-      if (!Object.prototype.hasOwnProperty.call(storedSettings, effortKey)) settings[effortKey] = null;
-      if (!Object.prototype.hasOwnProperty.call(storedSettings, adapterKey)) settings[adapterKey] = 'none';
-    }
-    applyLegacyHostedReasoningDefaults(settings, storedSettings);
-    // Sampling fields were previously hard-coded in the provider factory. Keep
-    // those request shapes for legacy custom settings until a preset is chosen.
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'ollamaTemperature')) settings.ollamaTemperature = 0;
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'lmstudioTemperature')) settings.lmstudioTemperature = 0;
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'codexTemperature')) settings.codexTemperature = 0;
-    for (const prefix of ['ollama', 'lmstudio']) {
-      for (const suffix of ['TopP', 'TopK', 'RepeatPenalty']) {
-        const key = `${prefix}${suffix}`;
-        if (!Object.prototype.hasOwnProperty.call(storedSettings, key)) settings[key] = null;
-      }
-    }
-    return {
-      ...base,
-      ...parsed,
-      settings,
-      businesses: migrateBusinessRepositories(Array.isArray(parsed.businesses) ? parsed.businesses : base.businesses),
-      assumedRole: parsed.assumedRole || null,
-      agentConfig: migrateAgentConfig({ ...base.agentConfig, ...(parsed.agentConfig || {}) }),
-      jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
-      memories: Array.isArray(parsed.memories) ? parsed.memories : [],
-      conversations: Array.isArray(parsed.conversations) ? parsed.conversations : [],
-      approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
-    };
-  } catch (err) {
-    return cloneDefault();
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'hostedLlmPresetId')) {
+    settings.hostedLlmPresetId = 'custom';
   }
+  // Purpose-based model roles did not exist before this migration. Seed each
+  // absent role from the operator's effective hosted slot so an existing
+  // install keeps its current planner/coder model (previously always the
+  // hosted slot) instead of jumping to a catalog default. The `local`/`global`
+  // slots are preserved untouched for localization and diagnostics.
+  for (const role of MODEL_ROLES) {
+    const providerKey = `${role}LlmProvider`;
+    const presetKey = `${role}LlmPresetId`;
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, providerKey)) {
+      settings[providerKey] = settings.llmProvider;
+      settings[presetKey] = settings.hostedLlmPresetId;
+    }
+  }
+  // Preserve explicitly configured legacy request shapes. When both hosted
+  // reasoning fields are absent, however, activate the reviewed default for
+  // the effective known model. This keeps the visible model-aware default and
+  // the actual runtime request in sync without overwriting an explicit Off.
+  for (const prefix of ['ollama', 'lmstudio', 'codex', 'claude', 'huggingface']) {
+    const effortKey = `${prefix}ReasoningEffort`;
+    const adapterKey = `${prefix}ReasoningAdapter`;
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, effortKey)) settings[effortKey] = null;
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, adapterKey)) settings[adapterKey] = 'none';
+  }
+  applyLegacyHostedReasoningDefaults(settings, storedSettings);
+  // Sampling fields were previously hard-coded in the provider factory. Keep
+  // those request shapes for legacy custom settings until a preset is chosen.
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'ollamaTemperature')) settings.ollamaTemperature = 0;
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'lmstudioTemperature')) settings.lmstudioTemperature = 0;
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'codexTemperature')) settings.codexTemperature = 0;
+  for (const prefix of ['ollama', 'lmstudio']) {
+    for (const suffix of ['TopP', 'TopK', 'RepeatPenalty']) {
+      const key = `${prefix}${suffix}`;
+      if (!Object.prototype.hasOwnProperty.call(storedSettings, key)) settings[key] = null;
+    }
+  }
+  return {
+    ...base,
+    ...source,
+    settings,
+    businesses: migrateBusinessRepositories(Array.isArray(source.businesses) ? source.businesses : base.businesses),
+    assumedRole: source.assumedRole || null,
+    agentConfig: migrateAgentConfig({ ...base.agentConfig, ...(source.agentConfig || {}) }),
+    jobs: Array.isArray(source.jobs) ? source.jobs : [],
+    memories: Array.isArray(source.memories) ? source.memories : [],
+    conversations: Array.isArray(source.conversations) ? source.conversations : [],
+    approvals: Array.isArray(source.approvals) ? source.approvals : [],
+  };
 }
 
+function seedStore() {
+  return cloneDefault();
+}
+
+// Top-level keys kept together in one Firestore document (small, singleton) vs.
+// the growing arrays that each become a per-record sub-collection so no single
+// document approaches Firestore's 1 MB limit.
+const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig'];
+const STORE_COLLECTION_KEYS = ['jobs', 'memories', 'conversations', 'approvals'];
+
+const backend = CONFIG.STORE_BACKEND === 'firestore'
+  ? firestoreBackend.create({
+      mainKeys: STORE_MAIN_KEYS,
+      collectionKeys: STORE_COLLECTION_KEYS,
+      normalize: normalizeStore,
+      seed: seedStore,
+    })
+  : fileBackend.create({
+      file: CONFIG.STORE_FILE,
+      dataDir: CONFIG.DATA_DIR,
+      normalize: normalizeStore,
+      seed: seedStore,
+    });
+
+/** Read the current store. Synchronous for both backends. */
+function readStore() {
+  return backend.read();
+}
+
+/** Persist a new store and return it. */
 function writeStore(store) {
-  ensureDataDir();
-  fs.writeFileSync(CONFIG.STORE_FILE, JSON.stringify(store, null, 2), 'utf8');
-  return store;
+  return backend.write(store);
+}
+
+/**
+ * Hydrate the store backend before serving traffic. A no-op for the file
+ * backend; the Firestore backend loads its in-memory mirror and starts live
+ * listeners. Services should `await initStore()` on boot.
+ */
+async function initStore() {
+  if (typeof backend.init === 'function') await backend.init();
 }
 
 /** Back-compat: convert legacy single `enrichLabel` into `enrichLabels[]`. */
@@ -373,8 +399,36 @@ function migrateAgentConfig(config) {
 
 /* --------------------------- Settings / secrets ------------------------- */
 
+/**
+ * Secrets sourced from the environment (Cloud Run injects Secret Manager values
+ * as env vars) take precedence over anything persisted in the store. This keeps
+ * long-lived credentials out of Firestore/the JSON file in the cloud while local
+ * dev (no env) keeps using the values entered in the Settings UI. Rotating OAuth
+ * token SETS (codexTokens/claudeTokens) stay in the IAM-protected store because
+ * they are rewritten on refresh.
+ */
+const SECRET_ENV = Object.freeze({
+  linearApiKey: 'LINEAR_API_KEY',
+  githubToken: 'GITHUB_TOKEN',
+  gitlabToken: 'GITLAB_TOKEN',
+  langsmithApiKey: 'LANGSMITH_API_KEY',
+  jiraApiToken: 'JIRA_API_TOKEN',
+  asanaAccessToken: 'ASANA_ACCESS_TOKEN',
+  omlxApiKey: 'OMLX_API_KEY',
+  huggingfaceApiKey: 'HUGGINGFACE_API_KEY',
+});
+
+function secretOverlay() {
+  const patch = {};
+  for (const [key, envName] of Object.entries(SECRET_ENV)) {
+    const value = process.env[envName];
+    if (value) patch[key] = value;
+  }
+  return patch;
+}
+
 function getApiKey() {
-  return readStore().settings.linearApiKey || '';
+  return getSettings().linearApiKey || '';
 }
 
 function setApiKey(linearApiKey) {
@@ -382,8 +436,9 @@ function setApiKey(linearApiKey) {
   return writeStore({ ...current, settings: { ...current.settings, linearApiKey } });
 }
 
+/** Effective settings: stored values with any environment secrets overlaid. */
 function getSettings() {
-  return readStore().settings;
+  return { ...readStore().settings, ...secretOverlay() };
 }
 
 /** Merge a partial settings patch (used for LLM / LangSmith keys). */
@@ -400,7 +455,7 @@ function getBusinessByProjectId(projectId) {
 
 /** Server-side GitHub token (never returned raw to the browser). */
 function getGithubToken() {
-  return readStore().settings.githubToken || '';
+  return getSettings().githubToken || '';
 }
 
 function setGithubToken(githubToken) {
@@ -409,7 +464,7 @@ function setGithubToken(githubToken) {
 
 /** Selected repository connector, including the matching private token. */
 function getRepositoryConfig() {
-  const settings = readStore().settings;
+  const settings = getSettings();
   const provider = settings.repositoryProvider === 'gitlab' ? 'gitlab' : 'github';
   return {
     provider,
@@ -420,7 +475,7 @@ function getRepositoryConfig() {
 
 function getRepositoryToken(provider) {
   if (provider === undefined) return getRepositoryConfig().token;
-  const settings = readStore().settings;
+  const settings = getSettings();
   if (provider === 'github') return String(settings.githubToken || '');
   if (provider === 'gitlab') return String(settings.gitlabToken || '');
   return '';
@@ -428,7 +483,7 @@ function getRepositoryToken(provider) {
 
 /** Selected planning connector. Credentials are intentionally returned only server-side. */
 function getPlanningConfig() {
-  const settings = readStore().settings;
+  const settings = getSettings();
   const provider = ['linear', 'jira', 'asana'].includes(settings.planningProvider)
     ? settings.planningProvider
     : 'linear';
@@ -779,8 +834,10 @@ module.exports = {
   migrateBusinessRepositories,
   settingsForConfiguredModel,
   applyLegacyHostedReasoningDefaults,
+  normalizeStore,
   readStore,
   writeStore,
+  initStore,
   getApiKey,
   setApiKey,
   getSettings,

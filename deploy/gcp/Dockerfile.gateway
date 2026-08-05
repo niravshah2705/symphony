@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1
+#
+# Gateway service image (PUBLIC Cloud Run service, API-only).
+#
+# Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared:
+#   docker build -f deploy/gcp/Dockerfile.gateway -t <tag> .
+#
+# Base image is pinned by DIGEST (not just a mutable tag) per the
+# infrastructure-misconfig checklist. This is the multi-arch index digest for
+# node:20-alpine.
+# VERIFY / UPDATE the digest on a base refresh, e.g.:
+#   docker buildx imagetools inspect node:20-alpine
+# (or read the registry `Docker-Content-Digest` for the index manifest).
+ARG NODE_IMAGE=node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+
+# ---------------------------------------------------------------------------
+# Stage 1 — install production dependencies at the workspace root.
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS builder
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Copy manifests first for a cacheable dependency layer, then the sources.
+# All workspace package.json files must be present for `npm ci` to resolve the
+# @ai-fleet/* symlinks; copying packages/ + services/ wholesale is simplest.
+COPY package.json package-lock.json ./
+COPY packages/ ./packages/
+COPY services/ ./services/
+
+# Reproducible install from the lockfile; --omit=dev keeps the image lean.
+RUN npm ci --omit=dev && npm cache clean --force
+
+# ---------------------------------------------------------------------------
+# Stage 2 — minimal runtime.
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+
+# NODE_ENV=production selects the cloud config profile; state + logs go to /tmp
+# (Firestore is the real state backend — AI_FLEET_DATA_DIR only holds log files).
+ENV NODE_ENV=production \
+    AI_FLEET_DATA_DIR=/tmp
+
+# Copy the installed workspace (node_modules + sources) from the builder.
+# NOTE: public/ is intentionally NEVER copied — the SPA ships to a GCS bucket
+# and the gateway runs API-only in the cloud (MESSAGING_MODE=pubsub).
+COPY --from=builder --chown=node:node /app /app
+
+# Run as the built-in unprivileged user — never root (infra-misconfig checklist).
+USER node
+
+# Documentation only: Cloud Run injects PORT=8080 and the gateway listens on
+# process.env.PORT (CONFIG.SERVICES.gatewayPort).
+EXPOSE 8080
+
+CMD ["node", "services/gateway/src/index.js"]

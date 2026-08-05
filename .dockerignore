@@ -1,0 +1,46 @@
+# Docker build-context excludes.
+#
+# Keeps secrets, local runtime state, and heavy dev artifacts OUT of the image
+# layers (secret-leakage checklist: an incomplete .dockerignore leaks .env /
+# credentials into COPY layers even when CMD never references them). Everything
+# needed to run the services (root manifests, packages/, services/) is copied
+# explicitly by the Dockerfiles.
+
+# Dependencies — reinstalled with `npm ci --omit=dev` inside the image.
+node_modules
+**/node_modules
+
+# Git metadata.
+.git
+.gitignore
+
+# Local runtime data — live secrets (API keys, OAuth tokens), jobs, logs.
+# NEVER ship to an image; state lives in Firestore in the cloud.
+data/
+
+# Environment / secrets.
+.env
+.env.*
+
+# Python virtualenv used by local tooling.
+.venv
+
+# Test + browser-automation artifacts.
+test-results
+playwright-report
+.playwright-mcp
+
+# graphify scratch output.
+graphify-out
+
+# Binary docs / screenshots (large, never needed at runtime).
+*.png
+
+# End-to-end tests and unit tests — not part of the runtime image.
+e2e/
+**/*.test.js
+
+# OS / editor cruft and agent config.
+.DS_Store
+*.log
+.claude

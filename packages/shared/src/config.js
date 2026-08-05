@@ -4,92 +4,68 @@ const path = require('path');
 
 const PORT = Number(process.env.PORT) || 4000;
 
-const AUTH_MODES = new Set(['disabled', 'istio']);
-const ISTIO_AUTH_PAYLOAD_HEADER = 'x-ai-fleet-jwt-payload';
+// Application login modes: 'disabled' (local single-user workflow — open) and
+// 'firebase' (Google SSO via Firebase Authentication).
+const AUTH_MODES = new Set(['disabled', 'firebase']);
 
-function requiredAuthValue(env, name) {
+function boundedEnv(env, name, max = 512) {
   const value = String(env[name] || '').trim();
-  if (!value) throw new Error(`${name} is required when AUTH_MODE=istio`);
-  if (value.length > 2048 || /[\r\n]/.test(value)) throw new Error(`${name} is invalid`);
+  if (value.length > max || /[\r\n]/.test(value)) throw new Error(`${name} is invalid`);
   return value;
 }
 
-function normalizeAuth0Domain(value) {
-  const domain = String(value || '').trim().toLowerCase();
-  if (!domain || domain.length > 253 || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(domain)) {
-    throw new Error('AUTH0_DOMAIN must be a hostname without a scheme or path');
-  }
-  return domain;
-}
-
-function normalizePublicAuthUrl(value, name) {
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch (_) {
-    throw new Error(`${name} must be an absolute URL`);
-  }
-  const localHttp = parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
-  if (parsed.protocol !== 'https:' && !localHttp) {
-    throw new Error(`${name} must use HTTPS (HTTP is allowed only for localhost)`);
-  }
-  if (parsed.username || parsed.password || parsed.hash) throw new Error(`${name} must not contain credentials or a fragment`);
-  return parsed.toString();
-}
-
 /**
- * Browser authentication is deliberately off for the local, single-user
- * workflow. In production, Istio validates Auth0 access tokens and emits the
- * verified JWT payload in a fixed internal header. The Node gateway validates
- * the copied claims again, but never accepts or verifies bearer credentials
- * itself; the gateway must therefore be reachable only through the mesh.
+ * Application login config.
+ *
+ * Off ('disabled') for the local single-user workflow. In the cloud ('firebase')
+ * the SPA signs in with Google through Firebase Authentication and the gateway
+ * verifies the Firebase ID token (services/gateway/src/auth.js): issuer
+ * `https://securetoken.google.com/<projectId>`, audience `<projectId>`.
+ *
+ * The Firebase WEB config (apiKey/authDomain/projectId) is PUBLIC by design — it
+ * is safe to expose to the browser via /api/auth/config and is NOT a secret.
+ * Authorization defaults to "any verified user"; set FIREBASE_ALLOWED_EMAILS
+ * (comma-separated) or FIREBASE_ALLOWED_DOMAIN to restrict who may sign in.
  */
-function buildAuthConfig(env = process.env) {
+function buildFirebaseAuthConfig(env = process.env) {
   const mode = String(env.AUTH_MODE || 'disabled').trim().toLowerCase();
-  if (!AUTH_MODES.has(mode)) throw new Error('AUTH_MODE must be either disabled or istio');
-  if (String(env.NODE_ENV || '').trim().toLowerCase() === 'production' && mode !== 'istio') {
-    throw new Error('AUTH_MODE=istio is required when NODE_ENV=production');
+  if (!AUTH_MODES.has(mode)) throw new Error('AUTH_MODE must be either disabled or firebase');
+  if (String(env.NODE_ENV || '').trim().toLowerCase() === 'production' && mode === 'disabled') {
+    throw new Error('AUTH_MODE must be firebase when NODE_ENV=production');
   }
 
   if (mode === 'disabled') {
-    return Object.freeze({
-      mode,
-      enabled: false,
-      payloadHeader: ISTIO_AUTH_PAYLOAD_HEADER,
-    });
+    return Object.freeze({ mode, enabled: false, provider: 'none' });
   }
 
-  const domain = normalizeAuth0Domain(requiredAuthValue(env, 'AUTH0_DOMAIN'));
-  const clientId = requiredAuthValue(env, 'AUTH0_CLIENT_ID');
-  const audience = requiredAuthValue(env, 'AUTH0_AUDIENCE');
-  const redirectUri = normalizePublicAuthUrl(requiredAuthValue(env, 'AUTH0_REDIRECT_URI'), 'AUTH0_REDIRECT_URI');
-  const requiredPermission = requiredAuthValue(env, 'AUTH0_REQUIRED_PERMISSION');
-  if (!/^[A-Za-z0-9:_-]{1,160}$/.test(requiredPermission)) {
-    throw new Error('AUTH0_REQUIRED_PERMISSION must be a single permission name');
-  }
-  const logoutReturnTo = normalizePublicAuthUrl(
-    String(env.AUTH0_LOGOUT_RETURN_TO || new URL(redirectUri).origin),
-    'AUTH0_LOGOUT_RETURN_TO'
-  );
+  const projectId = boundedEnv(env, 'FIREBASE_PROJECT_ID', 256)
+    || boundedEnv(env, 'GCP_PROJECT_ID', 256)
+    || boundedEnv(env, 'GOOGLE_CLOUD_PROJECT', 256);
+  if (!projectId) throw new Error('FIREBASE_PROJECT_ID (or GCP_PROJECT_ID) is required when AUTH_MODE=firebase');
+  const apiKey = boundedEnv(env, 'FIREBASE_API_KEY', 256);
+  if (!apiKey) throw new Error('FIREBASE_API_KEY is required when AUTH_MODE=firebase');
+  const authDomain = boundedEnv(env, 'FIREBASE_AUTH_DOMAIN', 256) || `${projectId}.firebaseapp.com`;
+  const allowedEmails = boundedEnv(env, 'FIREBASE_ALLOWED_EMAILS', 4096)
+    .split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const allowedDomain = boundedEnv(env, 'FIREBASE_ALLOWED_DOMAIN', 256).toLowerCase();
+  const hostedDomain = boundedEnv(env, 'FIREBASE_HD', 256);
 
   return Object.freeze({
     mode,
     enabled: true,
-    provider: 'auth0',
-    payloadHeader: ISTIO_AUTH_PAYLOAD_HEADER,
-    domain,
-    issuer: `https://${domain}/`,
-    clientId,
-    audience,
-    requiredPermission,
-    redirectUri,
-    logoutReturnTo,
-    scope: String(env.AUTH0_SCOPE || 'openid profile email').trim() || 'openid profile email',
-    organization: String(env.AUTH0_ORGANIZATION || '').trim(),
+    provider: 'firebase',
+    projectId,
+    apiKey,
+    authDomain,
+    issuer: `https://securetoken.google.com/${projectId}`,
+    audience: projectId,
+    allowedEmails: Object.freeze(allowedEmails),
+    allowedDomain,
+    hostedDomain,
   });
 }
 
-const AUTH = buildAuthConfig();
+const AUTH = buildFirebaseAuthConfig();
 
 /**
  * Codex (OpenAI) OAuth provider configuration.
@@ -397,6 +373,41 @@ const SERVICES = Object.freeze({
   coderUrl: process.env.CODER_URL || `http://localhost:${CODER_SERVICE_PORT}`,
 });
 
+/**
+ * GCP / Cloud Run deployment knobs. All optional and INERT for local dev — the
+ * defaults keep the file store, in-process request delivery, and in-memory event
+ * bus, so `npm start` needs no Google Cloud. See docs/GCP_DEPLOY (deployment plan).
+ *   STORE_BACKEND   'file' (local JSON) | 'firestore' (Cloud Run shared state)
+ *   MESSAGING_MODE  'direct' (in-process HTTP) | 'pubsub' (Cloud Pub/Sub)
+ *   EVENTS_BACKEND  'memory' (EventEmitter) | 'firestore' (onSnapshot SSE relay)
+ */
+const STORE_BACKEND = String(process.env.STORE_BACKEND || 'file').trim().toLowerCase();
+const MESSAGING_MODE = String(process.env.MESSAGING_MODE || 'direct').trim().toLowerCase();
+const EVENTS_BACKEND = String(process.env.EVENTS_BACKEND || 'memory').trim().toLowerCase();
+// Cross-process event sink for local multi-process dev: worker services (planner
+// /coder) POST events here and the gateway ingests them into its in-process bus,
+// which its SSE endpoint reads. Unset on the gateway itself. Ignored when
+// EVENTS_BACKEND=firestore (the cloud path fans out via onSnapshot instead).
+const EVENTS_SINK_URL = String(process.env.EVENTS_SINK_URL || '').trim();
+const GCP = Object.freeze({
+  projectId: process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || '',
+  region: process.env.GCP_REGION || 'us-central1',
+  plannerTopic: process.env.PUBSUB_PLANNER_TOPIC || 'planner-requests',
+  coderTopic: process.env.PUBSUB_CODER_TOPIC || 'coder-requests',
+  // Cloud Run Job launched (by coder-control) to run one coder ticket to completion.
+  coderJobName: process.env.CODER_JOB_NAME || 'coder-worker',
+  // Pub/Sub push OIDC verification (enforced only when MESSAGING_MODE=pubsub):
+  //   pushAudience        expected `aud` of the push token (the push endpoint URL)
+  //   pushServiceAccount  the SA email Pub/Sub is configured to sign push tokens as
+  pushAudience: String(process.env.PUBSUB_PUSH_AUDIENCE || '').trim(),
+  pushServiceAccount: String(process.env.PUBSUB_PUSH_SA || '').trim(),
+  // Allowlist of browser origins permitted via CORS (the SPA's GCS/website
+  // origin). Empty in local dev (same-origin — no CORS needed).
+  spaOrigins: String(process.env.SPA_ORIGIN || '').split(',').map((value) => value.trim()).filter(Boolean),
+  // Absolute base URL of the gateway API, injected into the SPA at deploy time.
+  apiBaseUrl: String(process.env.API_BASE_URL || '').trim(),
+});
+
 /** Server configuration and shared constants. */
 const CONFIG = Object.freeze({
   PORT,
@@ -406,6 +417,11 @@ const CONFIG = Object.freeze({
   LOG_FILE: path.join(DATA_DIR, 'app.log'),
   PUBLIC_DIR,
   SERVICES,
+  STORE_BACKEND,
+  MESSAGING_MODE,
+  EVENTS_BACKEND,
+  EVENTS_SINK_URL,
+  GCP,
   // Number of records to request from Linear in list queries.
   PAGE_SIZE: 100,
   ISSUE_PAGE_SIZE: 250,
@@ -451,4 +467,4 @@ const CONFIG = Object.freeze({
   AUTH,
 });
 
-module.exports = { CONFIG, buildAuthConfig };
+module.exports = { CONFIG, buildFirebaseAuthConfig };
