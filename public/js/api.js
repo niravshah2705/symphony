@@ -6,6 +6,17 @@ export function setAccessTokenProvider(provider) {
   accessTokenProvider = typeof provider === 'function' ? provider : null;
 }
 
+/**
+ * Absolute base URL of the gateway API. Empty = same-origin (local dev, where
+ * the gateway also serves the SPA). When the SPA is hosted on GCS, deploy-time
+ * config.js sets window.__API_BASE__ to the gateway's Cloud Run URL so the
+ * cross-origin calls (and SSE) target the API.
+ */
+export function getApiBase() {
+  const base = (typeof window !== 'undefined' && window.__API_BASE__) ? String(window.__API_BASE__) : '';
+  return base.replace(/\/+$/, '');
+}
+
 function notifyAuthenticationRequired(error) {
   window.dispatchEvent(new CustomEvent('ai-fleet:auth-required', {
     detail: { message: error?.message || 'Authentication required' },
@@ -28,7 +39,7 @@ async function request(path, options = {}) {
     }
   }
 
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${getApiBase()}/api${path}`, {
     ...options,
     headers,
   });
@@ -155,6 +166,30 @@ export const api = {
   getCoderStatus: () => request('/coder'),
   runAgentNow: () => request('/agent/run-now', { method: 'POST' }),
   enqueueProject: (payload) => request('/agent/enqueue', { method: 'POST', body: JSON.stringify(payload) }),
+  // Short-lived token authorizing an EventSource (which cannot send a bearer header).
+  getStreamToken: (conversationId) =>
+    request(`/agent/stream-token?conversationId=${encodeURIComponent(conversationId)}`),
+  // Open an SSE stream of a conversation's intermittent agent responses. Returns
+  // the EventSource so callers can close() it; onEvent receives each parsed event.
+  openAgentStream: async (conversationId, onEvent, onError) => {
+    let token = '';
+    try {
+      ({ token } = await api.getStreamToken(conversationId));
+    } catch (_) {
+      /* auth disabled locally → the stream token is optional */
+    }
+    const url = `${getApiBase()}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token || '')}`;
+    const source = new EventSource(url);
+    source.onmessage = (event) => {
+      try {
+        onEvent(JSON.parse(event.data));
+      } catch (_) {
+        /* comments/keepalives are not JSON */
+      }
+    };
+    if (typeof onError === 'function') source.onerror = onError;
+    return source;
+  },
   routeAgentMessage: (payload) =>
     request('/agent/message', { method: 'POST', body: JSON.stringify(payload) }),
   searchAgentKnowledge: (payload) =>

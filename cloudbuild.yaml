@@ -1,0 +1,163 @@
+# =============================================================================
+# Cloud Build — build + push the three service images, publish the SPA to GCS,
+# and apply the Terraform stack.
+# =============================================================================
+# Bootstrapping note: Terraform OWNS the Artifact Registry repo, but images must
+# exist before the full apply (else Cloud Run revisions fail to pull). So we run
+# a TARGETED apply first (APIs + Artifact Registry only), then build/push, then
+# the full apply. Terraform stays the single source of truth — nothing is
+# created out-of-band.
+#
+# REQUIRED substitutions (pass via the trigger or --substitutions):
+#   _BUCKET            globally-unique GCS bucket name for the SPA
+#   _TF_STATE_BUCKET   existing GCS bucket for Terraform remote state
+# Recommended per-build:
+#   _IMAGE_TAG=$SHORT_SHA   (immutable image tag; defaults to "latest")
+#
+# The Cloud Build service account needs: Cloud Run admin, Artifact Registry
+# writer, Pub/Sub admin, Cloud Scheduler admin, Firestore/Datastore admin,
+# Secret Manager admin, Service Account admin + user, Storage admin, and Service
+# Usage admin (to enable APIs) — or run this pipeline as a dedicated deployer SA.
+
+substitutions:
+  _REGION: "us-central1"
+  _REPO: "ai-fleet"
+  _BUCKET: "REPLACE_ME_spa_bucket" # REQUIRED — override
+  _IMAGE_TAG: "latest"             # override with $SHORT_SHA per build
+  _GATEWAY_SERVICE: "gateway"
+  _TF_DIR: "deploy/gcp/terraform"
+  _TF_STATE_BUCKET: "REPLACE_ME_tf_state_bucket" # REQUIRED — override
+  _TF_STATE_PREFIX: "ai-fleet/gcp"
+  _FIRESTORE_LOCATION: "nam5"
+  # Firebase web config is PUBLIC (apiKey is non-secret; exposed via /api/auth/config).
+  _FIREBASE_API_KEY: ""
+  _FIREBASE_ALLOWED_DOMAIN: "" # empty = any verified user
+  _SPA_ORIGIN: "https://storage.googleapis.com"
+
+steps:
+  # --- Build the three images (parallel) -------------------------------------
+  - id: build-gateway
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - deploy/gcp/Dockerfile.gateway
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/gateway:${_IMAGE_TAG}
+      - .
+
+  - id: build-planner
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - deploy/gcp/Dockerfile.planner
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/planner:${_IMAGE_TAG}
+      - .
+
+  - id: build-coder
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - deploy/gcp/Dockerfile.coder
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/coder-control:${_IMAGE_TAG}
+      - .
+
+  # --- Terraform: init + bootstrap (APIs + Artifact Registry only) -----------
+  - id: tf-bootstrap
+    name: hashicorp/terraform:1.9
+    waitFor: ["-"]
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        cd "${_TF_DIR}"
+        terraform init -input=false \
+          -backend-config="bucket=${_TF_STATE_BUCKET}" \
+          -backend-config="prefix=${_TF_STATE_PREFIX}"
+        terraform apply -input=false -auto-approve \
+          -target=google_project_service.services \
+          -target=google_artifact_registry_repository.docker \
+          -target=google_storage_bucket.spa \
+          -target=google_storage_bucket_iam_member.spa_public_read \
+          -var="project_id=$PROJECT_ID" \
+          -var="region=${_REGION}" \
+          -var="artifact_repo=${_REPO}" \
+          -var="spa_bucket_name=${_BUCKET}"
+
+  # --- Push images (after their build AND after the AR repo exists) ----------
+  - id: push-gateway
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-gateway, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/gateway:${_IMAGE_TAG}"]
+
+  - id: push-planner
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-planner, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/planner:${_IMAGE_TAG}"]
+
+  - id: push-coder
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-coder, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/coder-control:${_IMAGE_TAG}"]
+
+  # --- Publish the SPA to GCS ------------------------------------------------
+  # Generate public/config.js with the gateway's deterministic URL (window.__API_BASE__
+  # is read by the SPA at runtime), then rsync the static site to the bucket.
+  - id: spa-publish
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    waitFor: [tf-bootstrap]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        PROJECT_NUMBER="$$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+        GATEWAY_URL="https://${_GATEWAY_SERVICE}-$${PROJECT_NUMBER}.${_REGION}.run.app"
+        echo "Gateway URL: $${GATEWAY_URL}"
+        printf "window.__API_BASE__='%s';\n" "$${GATEWAY_URL}" > public/config.js
+        # Persist for the Terraform step so API_BASE_URL matches config.js exactly.
+        printf "%s" "$${GATEWAY_URL}" > /workspace/gateway_url.txt
+        gsutil -m rsync -r -d public "gs://${_BUCKET}"
+        # Ensure ES module content-type for .mjs assets.
+        gsutil -m setmeta -h "Content-Type:text/javascript" "gs://${_BUCKET}/**/*.mjs" || true
+
+  # --- Terraform: full apply (services, job, pubsub, scheduler, secrets, …) --
+  - id: tf-apply
+    name: hashicorp/terraform:1.9
+    waitFor: [push-gateway, push-planner, push-coder, spa-publish]
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        cd "${_TF_DIR}"
+        terraform init -input=false \
+          -backend-config="bucket=${_TF_STATE_BUCKET}" \
+          -backend-config="prefix=${_TF_STATE_PREFIX}"
+        API_BASE_URL="$$(cat /workspace/gateway_url.txt)"
+        terraform apply -input=false -auto-approve \
+          -var="project_id=$PROJECT_ID" \
+          -var="region=${_REGION}" \
+          -var="artifact_repo=${_REPO}" \
+          -var="image_tag=${_IMAGE_TAG}" \
+          -var="spa_bucket_name=${_BUCKET}" \
+          -var="firestore_location=${_FIRESTORE_LOCATION}" \
+          -var="spa_origin=${_SPA_ORIGIN}" \
+          -var="api_base_url=$${API_BASE_URL}" \
+          -var="firebase_api_key=${_FIREBASE_API_KEY}" \
+          -var="firebase_allowed_domain=${_FIREBASE_ALLOWED_DOMAIN}"
+
+# Longer timeout: three npm ci builds + two terraform applies.
+timeout: 3600s
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8

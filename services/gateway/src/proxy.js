@@ -1,21 +1,49 @@
 'use strict';
 
+const { CONFIG } = require('@ai-fleet/shared/config');
 const log = require('@ai-fleet/shared/logger');
 
 /**
  * Minimal reverse proxy from the gateway to an isolated agent service.
  *
- * The gateway is the only browser-facing origin; agent endpoints (/api/agent,
- * /api/coder) are served by separate service processes. This forwards the
- * request verbatim (method, path + query via req.originalUrl, JSON body) to the
- * target service and streams the response status/body back. All agent endpoints
- * speak JSON, so the body is reconstructed from the already-parsed req.body
- * rather than re-piping the raw stream.
+ * The gateway is the only browser-facing origin; agent read endpoints
+ * (/api/agent, /api/coder) are served by separate internal services. This
+ * forwards the request (method, path + query, JSON body) and returns the
+ * response. All agent endpoints speak JSON, so the body is reconstructed from
+ * the already-parsed req.body.
  *
- * A network failure (service down) surfaces as 502 with a clear message instead
- * of a hung request — the UI degrades gracefully when an agent service is off.
+ * In the cloud (MESSAGING_MODE=pubsub) planner/coder run with internal ingress
+ * and `--no-allow-unauthenticated`, so the gateway must present a Google OIDC ID
+ * token (audience = the target service origin) for Cloud Run's IAM check. Locally
+ * (direct mode) no token is attached. google-auth-library is required lazily so
+ * local dev never loads it.
  */
+
+let googleAuth = null;
+const idTokenClients = new Map();
+
+async function idTokenHeader(audience) {
+  if (!googleAuth) {
+    const { GoogleAuth } = require('google-auth-library');
+    googleAuth = new GoogleAuth();
+  }
+  if (!idTokenClients.has(audience)) {
+    idTokenClients.set(audience, await googleAuth.getIdTokenClient(audience));
+  }
+  const client = idTokenClients.get(audience);
+  const headers = await client.getRequestHeaders();
+  return headers.Authorization || headers.authorization || '';
+}
+
 function createProxy(baseUrl) {
+  const audience = (() => {
+    try {
+      return new URL(baseUrl).origin;
+    } catch (_) {
+      return baseUrl;
+    }
+  })();
+
   return async function proxy(req, res) {
     const target = `${baseUrl}${req.originalUrl}`;
     const headers = {};
@@ -25,6 +53,15 @@ function createProxy(baseUrl) {
     if (hasBody && req.body && Object.keys(req.body).length > 0) {
       init.body = JSON.stringify(req.body);
       headers['content-type'] = 'application/json';
+    }
+
+    if (CONFIG.MESSAGING_MODE === 'pubsub') {
+      try {
+        const authorization = await idTokenHeader(audience);
+        if (authorization) headers.authorization = authorization;
+      } catch (err) {
+        log.error(`gateway proxy could not mint ID token for ${audience}: ${err && err.message ? err.message : err}`);
+      }
     }
 
     try {

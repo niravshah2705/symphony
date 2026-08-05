@@ -1,0 +1,19 @@
+# Terraform working artifacts — never commit (may contain secrets / plaintext state).
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# The provider lock file IS safe (and recommended) to commit once generated with
+# cross-platform hashes:
+#   terraform providers lock -platform=linux_amd64 -platform=darwin_arm64
+!.terraform.lock.hcl

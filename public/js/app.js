@@ -303,7 +303,7 @@ function renderAuthControl() {
   }
 
   const label = session.user.name || session.user.email || t('signedInUser');
-  const secondary = session.user.email && session.user.email !== label ? session.user.email : t('auth0Account');
+  const secondary = session.user.email && session.user.email !== label ? session.user.email : t('googleAccount');
   host.append(
     el('div', { class: 'auth-user', title: label, dataset: { userContent: 'true' } }, [
       el('span', { class: 'avatar sm', 'aria-hidden': 'true' }, initials(label)),
@@ -352,8 +352,8 @@ function renderAuthenticationGate({ loading = false, error = '' } = {}) {
       class: 'primary auth-continue',
       type: 'button',
       onclick: configurationFailed ? () => window.location.reload() : beginSignIn,
-      dataset: { i18n: configurationFailed ? 'retry' : 'continueWithAuth0' },
-    }, t(configurationFailed ? 'retry' : 'continueWithAuth0')));
+      dataset: { i18n: configurationFailed ? 'retry' : 'continueWithGoogle' },
+    }, t(configurationFailed ? 'retry' : 'continueWithGoogle')));
   }
 
   const details = el('details', { class: 'auth-details' }, [
@@ -444,8 +444,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   syncSidebarCollapsed();
 
   // Authentication is the only network dependency allowed to gate the
-  // workspace. Paint a useful status immediately while Auth0 restores its
-  // in-memory session or processes the PKCE callback.
+  // workspace. Paint a useful status immediately while Firebase restores the
+  // signed-in session.
   renderAuthenticationGate({ loading: true });
   let session;
   try {

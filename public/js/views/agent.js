@@ -907,9 +907,18 @@ function renderBuildPlannerStep(body, ctx) {
     start.textContent = 'Queuing…';
     feedback.className = 'task-create-feedback';
     try {
-      await api.enqueueProject({ projectId: project.id, projectName: project.name });
+      const { conversationId } = await api.enqueueProject({ projectId: project.id, projectName: project.name });
       persistNote('build', `Queued “${label}” for the planner.`);
-      buildStepHead(body, 'Queued for planning', `“${label}” is queued. I’ll break it into milestones and tasks — follow progress in the Activity tab. You can keep chatting.`);
+      buildStepHead(body, 'Queued for planning', `“${label}” is queued. I’ll break it into milestones and tasks — follow progress below or in the Activity tab. You can keep chatting.`);
+      // Stream the planner's intermittent responses live into the conversation.
+      if (conversationId) {
+        const streamLog = el('div', { class: 'agent-stream-log' });
+        body.append(streamLog);
+        api.openAgentStream(conversationId, (event) => {
+          const prefix = event.level && event.level !== 'info' ? `[${event.level}] ` : '';
+          streamLog.append(el('div', { class: `agent-stream-line ${event.level || 'info'}` }, `${prefix}${event.message || ''}`));
+        }).catch(() => { /* stream is best-effort; the Activity tab remains the source of truth */ });
+      }
     } catch (error) {
       start.disabled = false;
       start.textContent = 'Start planning';
