@@ -138,7 +138,9 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
       export async function setPersistence() {}
       export const browserLocalPersistence = {};
       export function onAuthStateChanged(_auth, cb) { Promise.resolve().then(() => cb(user)); return () => {}; }
-      export class GoogleAuthProvider { setCustomParameters() {} }
+      export class GoogleAuthProvider { static credential() { return {}; } setCustomParameters() {} }
+      export class OAuthProvider { credential() { return {}; } }
+      export async function signInWithCredential() { return { user }; }
       export async function signInWithPopup() { return { user }; }
       export async function signOut() {}
     `,
