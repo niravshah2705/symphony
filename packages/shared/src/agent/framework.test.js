@@ -8,6 +8,24 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { buildBackend, installSkills } = require('./framework');
+const { resolveSkillsSrc } = require('../config');
+
+// Snapshot + restore the skills env so a test that pins SKILLS_ROOT/SKILLS_VERSION
+// never leaks the versioned mount into the vendored-default tests (they run in
+// the same process). Returns a restore fn to register with t.after.
+function withSkillsEnv(overrides) {
+  const saved = { SKILLS_ROOT: process.env.SKILLS_ROOT, SKILLS_VERSION: process.env.SKILLS_VERSION };
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  return () => {
+    for (const key of ['SKILLS_ROOT', 'SKILLS_VERSION']) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  };
+}
 
 test('installSkills refuses a symbolic-link destination without writing outside the root', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'framework-skills-root-'));
@@ -69,6 +87,61 @@ test('installSkills can refresh a framework-owned skill directory', (t) => {
   assert.deepEqual(second, first);
   assert.equal(fs.readFileSync(path.join(root, '.agent-skills', '.tech-symphony-managed'), 'utf8'), 'tech-symphony-agent-skills-v1\n');
   assert.equal(fs.existsSync(path.join(root, '.agent-skills', 'software-planning', 'SKILL.md')), true);
+});
+
+test('installSkills reads the vendored default skills when SKILLS_ROOT is unset (backward-compat)', (t) => {
+  const restore = withSkillsEnv({ SKILLS_ROOT: undefined, SKILLS_VERSION: undefined });
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'framework-skills-default-'));
+  t.after(() => {
+    restore();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // resolveSkillsSrc falls back to the vendored packages/shared/src/agent/skills.
+  assert.equal(resolveSkillsSrc(), path.join(__dirname, 'skills'));
+
+  const paths = installSkills(root, ['software-planning']);
+  assert.deepEqual(paths, ['/.agent-skills/software-planning/']);
+  assert.equal(fs.existsSync(path.join(root, '.agent-skills', 'software-planning', 'SKILL.md')), true);
+});
+
+test('installSkills honors SKILLS_ROOT + SKILLS_VERSION and installs from the pinned bundle', (t) => {
+  // A versioned bundle laid out like the gcsfuse mount: <root>/<version>/<skill>/SKILL.md.
+  const src = fs.mkdtempSync(path.join(os.tmpdir(), 'framework-skills-src-'));
+  const bundleSkill = path.join(src, 'v9', 'demo-skill');
+  fs.mkdirSync(bundleSkill, { recursive: true });
+  fs.writeFileSync(path.join(bundleSkill, 'SKILL.md'), '# demo-skill v9\n', 'utf8');
+
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'framework-skills-dest-'));
+  const restore = withSkillsEnv({ SKILLS_ROOT: src, SKILLS_VERSION: 'v9' });
+  t.after(() => {
+    restore();
+    fs.rmSync(src, { recursive: true, force: true });
+    fs.rmSync(dest, { recursive: true, force: true });
+  });
+
+  assert.equal(resolveSkillsSrc(), path.join(src, 'v9'));
+
+  const paths = installSkills(dest, ['demo-skill']);
+  assert.deepEqual(paths, ['/.agent-skills/demo-skill/']);
+  assert.equal(fs.readFileSync(path.join(dest, '.agent-skills', 'demo-skill', 'SKILL.md'), 'utf8'), '# demo-skill v9\n');
+
+  // The vendored skills are NOT reachable from the pinned bundle: an unknown name
+  // there is skipped rather than pulled from the default dir.
+  const only = installSkills(dest, ['software-planning']);
+  assert.deepEqual(only, []);
+  assert.equal(fs.existsSync(path.join(dest, '.agent-skills', 'software-planning')), false);
+});
+
+test('resolveSkillsSrc pins the mount root directly when SKILLS_VERSION is unset', () => {
+  assert.equal(resolveSkillsSrc({ SKILLS_ROOT: '/skills' }), path.join('/skills'));
+  assert.equal(resolveSkillsSrc({ SKILLS_ROOT: '/skills', SKILLS_VERSION: 'v2' }), path.join('/skills', 'v2'));
+  assert.equal(resolveSkillsSrc({}), path.join(__dirname, 'skills'));
+});
+
+test('resolveSkillsSrc rejects a SKILLS_VERSION that is not a single safe path segment', () => {
+  assert.throws(() => resolveSkillsSrc({ SKILLS_ROOT: '/skills', SKILLS_VERSION: '../etc' }), /single path segment/);
+  assert.throws(() => resolveSkillsSrc({ SKILLS_ROOT: '/skills', SKILLS_VERSION: 'a/b' }), /single path segment/);
 });
 
 test('LocalShellBackend receives only the sanitized allowlisted environment', async () => {

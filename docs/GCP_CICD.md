@@ -115,6 +115,10 @@ gh variable set GCP_PROJECT_ID   --repo niravshah2705/symphony --body "adlc-9e72
 gh variable set GCP_REGION       --repo niravshah2705/symphony --body "asia-south1"
 gh variable set SPA_BUCKET       --repo niravshah2705/symphony --body "adlc-9e72f-aifleet-spa"
 gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72f-tfstate"
+# Skills registry (optional; see docs/GCP_DEPLOY.md "Skills registry"). Set only
+# if you serve versioned skill bundles from GCS. .github/workflows/publish-skills.yml
+# reads SKILLS_BUCKET; Terraform var.skills_bucket_name must name the SAME bucket.
+# gh variable set SKILLS_BUCKET --repo niravshah2705/symphony --body "adlc-9e72f-aifleet-skills"
 # FIREBASE_API_KEY is NOT needed — Terraform reads it from the managed Firebase
 # web app (data.google_firebase_web_app_config) and injects it into the gateway.
 # Optional: gh variable set FIREBASE_ALLOWED_DOMAIN --repo niravshah2705/symphony --body "yourco.com"
@@ -147,3 +151,7 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
   revision; unchanged services keep their live tag and are left untouched.
 - No untrusted event input (PR/commit text, `head_ref`) is used in any `run:` step.
 - Path filters read only file paths (`dorny/paths-filter`), never event text.
+- Skills are published by a **separate** workflow (`publish-skills.yml`), also WIF
+  keyless, triggered by changes under `packages/shared/src/agent/skills/**`. It only
+  writes GCS objects (never applies Terraform); roll a new version forward by bumping
+  `skills_version`. See docs/GCP_DEPLOY.md ("Skills registry").

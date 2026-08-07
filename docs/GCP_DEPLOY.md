@@ -69,6 +69,52 @@ In the **Firebase console**: enable the **Google** sign-in provider
 (Authentication → Sign-in method), and add the printed gateway URL and the SPA's
 GCS origin to Authentication → Settings → **Authorized domains**.
 
+## Skills registry (versioned, GCS + gcsfuse)
+
+The deep-agent **skills** (`packages/shared/src/agent/skills/<skill>/SKILL.md`) can
+be served from a **GCS bucket** instead of only the copy baked into the image, so a
+skill edit ships without rebuilding/redeploying a service — and so multiple skill
+**versions coexist** and a running deployment stays pinned to a known-good one.
+
+**How it fits together**
+
+- **Manifest** — `packages/shared/src/agent/skills/skills-manifest.json` records the
+  bundle `version`, `updatedAt`, and a per-skill `{ name, version }` list (mirrors
+  `llm-presets.json`). The bundle `version` (e.g. `v1`) is the release token used
+  everywhere below.
+- **CI publish** — `.github/workflows/publish-skills.yml` runs on any push touching
+  `packages/shared/src/agent/skills/**` (or `workflow_dispatch` with a `version`
+  input). It authenticates via WIF and `gsutil rsync`es the skills dir to
+  `gs://<SKILLS_BUCKET>/<version>/` (plus the manifest object). On a push the
+  version is read from the manifest; each version lives under its own prefix, so
+  publishing a new one **never touches** an older prefix.
+- **Mount** — `deploy/gcp/terraform/skills.tf` provisions the bucket (guarded by
+  `var.skills_bucket_name`; empty disables the whole feature) and mounts it
+  **read-only** on the **planner** and **coder** (control service + worker Job) via
+  a gen2 **gcsfuse** GCS volume at `/skills`. The planner/coder service accounts get
+  `objectViewer`.
+- **Version-pinned install** — those services run with `SKILLS_ROOT=/skills` and
+  `SKILLS_VERSION=<var.skills_version>`. `packages/shared/src/config.js`
+  `resolveSkillsSrc()` resolves the install source to `/skills/<version>`, and
+  `installSkills()` copies from there. **Backward-compat:** when `SKILLS_ROOT` is
+  unset (local/dev, or a project without the bucket) it falls back to the vendored
+  `packages/shared/src/agent/skills` — existing behavior, unchanged.
+
+**Cut a new skills version**
+
+1. Edit the skills and bump the manifest `version` (e.g. `v1` → `v2`) + the touched
+   per-skill `version`; update `updatedAt`.
+2. Merge to `main`. `publish-skills.yml` publishes the new bundle to
+   `gs://<SKILLS_BUCKET>/v2/` — `v1` stays intact, so every deployment still pinned
+   to `v1` keeps working.
+3. Roll the deployment forward by bumping **`skills_version`** (Terraform var /
+   `gh variable set SKILLS_VERSION`) and applying. Only then do planner/coder read
+   `v2`. To roll back, set it to `v1` again — the objects are still there.
+
+Set-up (one-off): create the bucket via Terraform (`skills_bucket_name`), grant the
+CI deployer write access (`skills_publisher_member` or out-of-band `objectAdmin`),
+and set the repo variable `SKILLS_BUCKET` (see docs/GCP_CICD.md).
+
 ## Roles & access control (RBAC)
 
 Authorization is **role-based** and enforced **server-side on every `/api` route**

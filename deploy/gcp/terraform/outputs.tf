@@ -42,6 +42,16 @@ output "spa_website_url" {
   value       = "http://${google_storage_bucket.spa.name}.storage.googleapis.com"
 }
 
+output "skills_bucket" {
+  description = "GCS bucket holding versioned agent-skill bundles (null when the skills registry is disabled). Mounted read-only on planner + coder at /skills; the runtime pins var.skills_version."
+  value       = one(google_storage_bucket.skills[*].name)
+}
+
+output "skills_version_pinned" {
+  description = "Skills bundle version the planner/coder currently pin (SKILLS_VERSION). Bump var.skills_version after publishing a new bundle to roll the deployment forward."
+  value       = local.skills_enabled ? var.skills_version : null
+}
+
 output "artifact_registry_repo" {
   description = "Artifact Registry Docker repo path (images are pushed here as <repo>/<service>:<tag>)."
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}"

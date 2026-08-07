@@ -6,6 +6,17 @@
 # so an idle deployment costs nothing.
 
 locals {
+  # Skills registry (skills.tf). When a bucket is configured the planner/coder
+  # mount it read-only at /skills via a gcsfuse volume and pin a version, so the
+  # runtime reads /skills/<version>/<skill>/SKILL.md (packages/shared/src/config.js
+  # resolveSkillsSrc). Empty bucket → no mount + no env → the image's vendored
+  # skills are used (unchanged local behavior).
+  skills_enabled = var.skills_bucket_name != ""
+  skills_env = local.skills_enabled ? {
+    SKILLS_ROOT    = "/skills"
+    SKILLS_VERSION = var.skills_version
+  } : {}
+
   # Plain (non-secret) env per service. Secrets are mounted as separate env
   # blocks below via secret_key_ref.
   gateway_env = merge(local.common_env, {
@@ -38,7 +49,7 @@ locals {
     PLANNER_PORT         = "8080"
     PUBSUB_PUSH_AUDIENCE = local.planner_url
     PUBSUB_PUSH_SA       = google_service_account.pubsub_push.email
-  })
+  }, local.skills_env)
 
   coder_control_env = merge(local.common_env, {
     # The coder-control listens on CODER_SERVICE_PORT, not PORT.
@@ -48,7 +59,7 @@ locals {
     PUBSUB_PUSH_AUDIENCE = local.coder_url
     PUBSUB_PUSH_SA       = google_service_account.pubsub_push.email
     CODER_REPO_URL       = var.coder_repo_url
-  })
+  }, local.skills_env)
 
   coder_worker_env = merge(local.common_env, {
     CODER_ROLE = "worker"
@@ -60,7 +71,7 @@ locals {
     CODER_REPO_URL               = var.coder_repo_url
     # ISSUE_ID (+ CONVERSATION_ID) are supplied per-execution by coder-control
     # as container overrides — see packages/shared/src/messaging/jobs.js.
-  })
+  }, local.skills_env)
 }
 
 # --- Google One Tap client id (Secret Manager) --------------------------------
@@ -212,9 +223,26 @@ resource "google_cloud_run_v2_service" "planner" {
   template {
     service_account = google_service_account.planner.email
 
+    # gcsfuse GCS volume mounts run on the gen2 execution environment. null (the
+    # platform default) when the skills registry is disabled.
+    execution_environment = local.skills_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
+
     scaling {
       min_instance_count = 0
       max_instance_count = var.max_instances
+    }
+
+    # Versioned skills bundle mounted read-only via gcsfuse (skills.tf). Only
+    # present when a bucket is configured.
+    dynamic "volumes" {
+      for_each = local.skills_enabled ? [1] : []
+      content {
+        name = "skills"
+        gcs {
+          bucket    = var.skills_bucket_name
+          read_only = true
+        }
+      }
     }
 
     containers {
@@ -242,6 +270,16 @@ resource "google_cloud_run_v2_service" "planner" {
         }
       }
 
+      # Mount the skills bundle at SKILLS_ROOT (/skills). resolveSkillsSrc pins
+      # /skills/<SKILLS_VERSION>.
+      dynamic "volume_mounts" {
+        for_each = local.skills_enabled ? [1] : []
+        content {
+          name       = "skills"
+          mount_path = "/skills"
+        }
+      }
+
       resources {
         limits = {
           cpu    = "1"
@@ -258,6 +296,7 @@ resource "google_cloud_run_v2_service" "planner" {
     google_firestore_database.default,
     google_project_iam_member.planner_datastore,
     google_secret_manager_secret_iam_member.planner_linear,
+    google_storage_bucket.skills,
   ]
 }
 
@@ -273,9 +312,26 @@ resource "google_cloud_run_v2_service" "coder_control" {
   template {
     service_account = google_service_account.coder.email
 
+    # gcsfuse GCS volume mounts run on the gen2 execution environment. null (the
+    # platform default) when the skills registry is disabled.
+    execution_environment = local.skills_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
+
     scaling {
       min_instance_count = 0
       max_instance_count = var.max_instances
+    }
+
+    # Versioned skills bundle mounted read-only via gcsfuse (skills.tf). Only
+    # present when a bucket is configured.
+    dynamic "volumes" {
+      for_each = local.skills_enabled ? [1] : []
+      content {
+        name = "skills"
+        gcs {
+          bucket    = var.skills_bucket_name
+          read_only = true
+        }
+      }
     }
 
     containers {
@@ -303,6 +359,16 @@ resource "google_cloud_run_v2_service" "coder_control" {
         }
       }
 
+      # Mount the skills bundle at SKILLS_ROOT (/skills). resolveSkillsSrc pins
+      # /skills/<SKILLS_VERSION>.
+      dynamic "volume_mounts" {
+        for_each = local.skills_enabled ? [1] : []
+        content {
+          name       = "skills"
+          mount_path = "/skills"
+        }
+      }
+
       resources {
         limits = {
           cpu    = "1"
@@ -319,6 +385,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
     google_firestore_database.default,
     google_project_iam_member.coder_datastore,
     google_secret_manager_secret_iam_member.coder_linear,
+    google_storage_bucket.skills,
   ]
 }
 
@@ -342,6 +409,22 @@ resource "google_cloud_run_v2_job" "coder_worker" {
       timeout         = var.coder_job_task_timeout
       max_retries     = 1
 
+      # gcsfuse GCS volume mounts run on the gen2 execution environment. The
+      # worker is where the coder agent actually installs skills, so it needs the
+      # same versioned mount as the services. null when the registry is disabled.
+      execution_environment = local.skills_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
+
+      dynamic "volumes" {
+        for_each = local.skills_enabled ? [1] : []
+        content {
+          name = "skills"
+          gcs {
+            bucket    = var.skills_bucket_name
+            read_only = true
+          }
+        }
+      }
+
       containers {
         image = local.coder_image
 
@@ -363,6 +446,16 @@ resource "google_cloud_run_v2_job" "coder_worker" {
           }
         }
 
+        # Mount the skills bundle at SKILLS_ROOT (/skills). resolveSkillsSrc pins
+        # /skills/<SKILLS_VERSION>.
+        dynamic "volume_mounts" {
+          for_each = local.skills_enabled ? [1] : []
+          content {
+            name       = "skills"
+            mount_path = "/skills"
+          }
+        }
+
         resources {
           limits = {
             cpu    = var.coder_job_cpu
@@ -378,5 +471,6 @@ resource "google_cloud_run_v2_job" "coder_worker" {
     google_firestore_database.default,
     google_project_iam_member.coder_datastore,
     google_secret_manager_secret_iam_member.coder_linear,
+    google_storage_bucket.skills,
   ]
 }
