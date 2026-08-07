@@ -8,6 +8,8 @@ const linear = require('../linear');
 const { resolveLlm } = require('./llm');
 const { runPlannedCoder, resolvePlannedRepository } = require('./coder');
 const { applyAidone, startIssue, finishIssue } = require('./apply');
+const { sanitizeBranch, repoParts } = require('./workspace');
+const { reconcileStacks } = require('./stack-reconcile');
 const {
   AgentAvailabilityError,
   isModelAvailabilityError,
@@ -90,7 +92,7 @@ const PLANNED_TASKS_QUERY = `
         state { name type }
         labels(first: 20) { nodes { name } }
         project { id name }
-        inverseRelations(first: 25) { nodes { type issue { id identifier state { type } } } }
+        inverseRelations(first: 25) { nodes { type issue { id identifier createdAt state { type } } } }
       }
     }
   }`;
@@ -121,6 +123,21 @@ function blockers(node) {
     .map((r) => r.issue.identifier || r.issue.id);
 }
 
+/**
+ * All issues that block this task (regardless of Done state), latest-created
+ * first, as `{ identifier, createdAt }`. A blocker drops out of `blockers()`
+ * the moment it opens a PR (→ Done), so the dependent unblocks while that PR is
+ * still open — this full list is what lets the coder stack onto the most recent
+ * unmerged blocker's branch instead of building from a base it has not landed in.
+ */
+function dependencyLinks(node) {
+  const inv = (node.inverseRelations && node.inverseRelations.nodes) || [];
+  return inv
+    .filter((r) => r.type === 'blocks' && r.issue && (r.issue.identifier || r.issue.id))
+    .map((r) => ({ identifier: r.issue.identifier || r.issue.id, createdAt: r.issue.createdAt || '' }))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
 async function fetchPlannedProjects(apiKey) {
   const data = await linear.linearRequest(apiKey, PLANNED_PROJECTS_QUERY, { label: CONFIG.CODER.plannedLabel, first: CONFIG.PAGE_SIZE });
   return (data && data.projects && data.projects.nodes) || [];
@@ -145,6 +162,7 @@ async function fetchPlannedTasks(apiKey) {
       labels: ((n.labels && n.labels.nodes) || []).map((l) => l.name),
       project: { id: pid, name: n.project.name },
       blockers: blockers(n),
+      dependencies: dependencyLinks(n),
     };
     if (!byProject.has(pid)) byProject.set(pid, []);
     byProject.get(pid).push(task);
@@ -416,6 +434,32 @@ function createCodingJob(task, jobStore = store) {
 }
 
 /**
+ * Persist a stack link for a completed task whose PR was stacked onto an
+ * unmerged blocker branch. The dependent branch is the broker's task branch and
+ * the blocker's Linear identifier is recovered from the task's dependency list
+ * (its sanitized branch matches the stacked-on branch). The dependent review
+ * id/url is filled in lazily by the reconcile pass. Token is never persisted.
+ */
+function recordStackLink(task, run, ctx, jobStore = store) {
+  const stacked = run && run.stackedOn;
+  if (!stacked || !stacked.branch) return null;
+  const dependentBranch = stacked.dependentBranch || sanitizeBranch(task.identifier || task.id);
+  const dependency = (task.dependencies || []).find((d) => sanitizeBranch(d.identifier) === stacked.branch);
+  const parts = ctx.repositoryUrl ? repoParts(ctx.repositoryUrl, ctx.repositoryProvider) : null;
+  return jobStore.addStackLink({
+    projectId: task.project && task.project.id,
+    provider: ctx.repositoryProvider,
+    repoFullName: parts ? parts.fullName : null,
+    dependentBranch,
+    blockerBranch: stacked.branch,
+    blockerIdentifier: dependency ? dependency.identifier : null,
+    defaultBase: stacked.defaultBase,
+    dependentReviewId: null,
+    dependentReviewUrl: null,
+  });
+}
+
+/**
  * Parse the agent's end-of-run verdict. The workflow prompt requires a
  * ```verdict { "status": "completed"|"insufficient", "reason": "..." }``` block;
  * a plain `VERDICT: <status> — <reason>` line is also accepted. Defaults to
@@ -483,6 +527,7 @@ function dispatch(task, ctx, dependencies = {}) {
         repositoryProvider: ctx.repositoryProvider,
         repositoryToken: ctx.repositoryToken,
         repositoryUrl: ctx.repositoryUrl,
+        dependencies: task.dependencies || [],
         onStep: step,
       })
         .then((r) => ({ r, verdict: parseVerdict(r && r.finalText) }))
@@ -502,6 +547,16 @@ function dispatch(task, ctx, dependencies = {}) {
       phase = 'linear-finish';
       step(`Verdict: ${verdict.status}${verdict.pr ? ` (PR ${verdict.pr})` : ''}${verdict.reason ? ` — ${verdict.reason}` : ''}`);
       await finishIssueImpl(ctx.apiKey, { issueId: task.id, outcome: verdict.status, reason: verdict.reason, onStep: step });
+      // A completed task whose PR was stacked onto an unmerged blocker is tracked
+      // so a later poll can retarget it to the default base once the blocker merges.
+      if (verdict.status === 'completed' && r && r.stackedOn && r.stackedOn.branch) {
+        try {
+          recordStackLink(task, r, ctx, jobStore);
+          step(`Tracking stacked PR on ${r.stackedOn.branch} for auto-retarget to ${r.stackedOn.defaultBase}.`);
+        } catch (error) {
+          step(`Could not record stack link: ${error && error.message ? error.message : error}`, 'warn');
+        }
+      }
       jobStore.updateJob(job.id, {
         status: 'done',
         finishedAt: new Date().toISOString(),
@@ -662,6 +717,16 @@ async function pollOnce() {
     }
     if (running.size >= cap) break; // cap reached; stop scanning further projects
   }
+  // Retarget any stacked dependent PR whose blocker has since merged. Best-effort
+  // and independent of dispatch: a failure here never pauses the monitor.
+  try {
+    const summary = await reconcileStacks({
+      resolveSelection: (projectId) => repositorySelectionForTask({ project: { id: projectId } }),
+    });
+    if (summary && summary.retargeted) log.info(`Stack reconcile: retargeted ${summary.retargeted} PR(s) to their default base.`);
+  } catch (err) {
+    log.warn(`Stack reconcile skipped: ${err && err.message ? err.message : err}`);
+  }
   return { dispatched: true };
 }
 
@@ -731,5 +796,7 @@ module.exports = {
     recoverPause,
     readinessFingerprint,
     resolveMaxConcurrent,
+    dependencyLinks,
+    recordStackLink,
   },
 };

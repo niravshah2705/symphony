@@ -99,7 +99,7 @@ function repoParts(repoUrl, selectedProvider = 'github') {
   return null;
 }
 
-function createBroker({ root, workDir, branch, parts, repositoryToken, onStep }) {
+function createBroker({ root, workDir, branch, parts, repositoryToken, stackCandidates = [], onStep }) {
   return new RepositoryBroker({
     provider: parts.provider,
     repository: parts,
@@ -107,6 +107,7 @@ function createBroker({ root, workDir, branch, parts, repositoryToken, onStep })
     workspaceRoot: root,
     workDir,
     branch,
+    stackCandidates,
     label: CONFIG.CODER.prLabel,
     step: onStep,
   });
@@ -127,6 +128,7 @@ async function preparePlannedWorkspace({
   projectId,
   taskBranch,
   repositoryToken = '',
+  stackCandidates = [],
   onStep,
 }) {
   const step = typeof onStep === 'function' ? onStep : () => {};
@@ -142,17 +144,22 @@ async function preparePlannedWorkspace({
   if (!repoUrl) {
     step('No repository configured; using an empty monorepo workspace.');
     fs.mkdirSync(workDir, { recursive: true });
-    return { workDir, branch, slug, cloned: false, reused, env, repositoryBroker: null, baseBranch: null };
+    return { workDir, branch, slug, cloned: false, reused, env, repositoryBroker: null, baseBranch: null, stackedOn: null };
   }
 
   const parts = repoParts(repoUrl, repositoryProvider);
   if (!parts) throw new Error('Repository must match the selected GitHub or GitLab provider.');
+  // Blocker branches (latest-first) the coder derives from unmerged dependencies;
+  // the broker stacks the task onto the first present-and-unmerged one.
+  const candidateBranches = (Array.isArray(stackCandidates) ? stackCandidates : [])
+    .map((name) => sanitizeBranch(name));
   const repositoryBroker = createBroker({
     root,
     workDir,
     branch,
     parts,
     repositoryToken,
+    stackCandidates: candidateBranches,
     onStep: step,
   });
   try {
@@ -167,6 +174,7 @@ async function preparePlannedWorkspace({
       env,
       repositoryBroker,
       baseBranch: info.baseBranch,
+      stackedOn: info.stackedOn || null,
     };
   } catch (error) {
     repositoryBroker.dispose();

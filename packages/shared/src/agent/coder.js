@@ -307,6 +307,7 @@ async function runPlannedCoderLocal({
   repositoryToken,
   repositoryProvider,
   repositoryUrl,
+  dependencies = [],
   onStep,
 }) {
   const step = typeof onStep === 'function' ? onStep : () => {};
@@ -333,14 +334,22 @@ async function runPlannedCoderLocal({
   });
   if (!repoRef) step('No repository configured for this project (set one on the business); using an empty workspace.', 'warn');
 
+  // Blocker branches (latest-first) this task may stack onto when their PRs are
+  // still open. Each dependency's branch is the same deterministic sanitized
+  // identifier the coder used for that task (workspace.sanitizeBranch).
+  const stackCandidates = (Array.isArray(dependencies) ? dependencies : [])
+    .map((dep) => (dep && typeof dep === 'object' ? dep.identifier : dep))
+    .filter(Boolean);
+
   step(`Preparing monorepo workspace for ${project.name || project.id} / ${issue.identifier || issue.id}${repoRef ? ` (repo ${repoRef})` : ''}…`);
-  const { workDir, branch, slug, env, repositoryBroker } = await preparePlannedWorkspace({
+  const { workDir, branch, slug, env, repositoryBroker, stackedOn } = await preparePlannedWorkspace({
     repoUrl: repoRef,
     repositoryProvider: provider,
     projectSlug: project.name || project.id,
     projectId: project.id,
     taskBranch: issue.identifier || issue.id,
     repositoryToken: token,
+    stackCandidates,
     onStep: step,
   });
   try {
@@ -365,7 +374,7 @@ async function runPlannedCoderLocal({
 
     const finalBranch = activeRepositoryBranch(branch, repositoryBroker);
     step(`Planned coder finished on ${finalBranch} (${execution.messages.length} messages, monorepo ${slug}).`);
-    return { workDir, branch: finalBranch, ...execution, traced };
+    return { workDir, branch: finalBranch, stackedOn: stackedOn || null, ...execution, traced };
   } finally {
     if (repositoryBroker) repositoryBroker.dispose();
   }

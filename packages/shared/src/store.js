@@ -269,6 +269,7 @@ const DEFAULT_STORE = Object.freeze({
   memories: [], // typed workspace memory records (see agent/memory.js)
   conversations: [], // agent workspace conversation threads (see agent/conversations.js)
   approvals: [], // requirement-evaluation approval gates (see agent/approval-gate.js)
+  stackLinks: [], // open stacked-PR links awaiting blocker merge (see agent/stack-reconcile.js)
 });
 
 function cloneDefault() {
@@ -365,6 +366,7 @@ function normalizeStore(parsed) {
     memories: Array.isArray(source.memories) ? source.memories : [],
     conversations: Array.isArray(source.conversations) ? source.conversations : [],
     approvals: Array.isArray(source.approvals) ? source.approvals : [],
+    stackLinks: Array.isArray(source.stackLinks) ? source.stackLinks : [],
   };
 }
 
@@ -678,6 +680,48 @@ function pruneJobs(keep = 100) {
   return jobs;
 }
 
+/* --------------------------- Stack links -------------------------------- */
+
+/**
+ * Open stacked-PR links: a dependent task's PR that was stacked onto an
+ * unmerged blocker branch and is waiting for the blocker to merge so it can be
+ * retargeted to the default base. Legacy stores without the field read as [].
+ */
+function listStackLinks() {
+  return readStore().stackLinks || [];
+}
+
+/** Append a stack link (newest first) with a generated id + createdAt. */
+function addStackLink(link) {
+  const current = readStore();
+  const record = { ...link, id: `stk_${randomUUID()}`, createdAt: new Date().toISOString(), resolvedAt: null };
+  const stackLinks = [record, ...(current.stackLinks || [])];
+  writeStore({ ...current, stackLinks });
+  return record;
+}
+
+/** Immutably update a stack link by id, returning the updated link (or null). */
+function updateStackLink(id, patch) {
+  const current = readStore();
+  let updated = null;
+  const stackLinks = (current.stackLinks || []).map((link) => {
+    if (link.id !== id) return link;
+    updated = { ...link, ...patch };
+    return updated;
+  });
+  writeStore({ ...current, stackLinks });
+  return updated;
+}
+
+/** Remove a stack link by id. Returns true when one was removed. */
+function removeStackLink(id) {
+  const current = readStore();
+  const stackLinks = (current.stackLinks || []).filter((link) => link.id !== id);
+  const removed = stackLinks.length !== (current.stackLinks || []).length;
+  if (removed) writeStore({ ...current, stackLinks });
+  return removed;
+}
+
 /* --------------------------- Memories ----------------------------------- */
 
 const MAX_MEMORIES = 1000;
@@ -900,6 +944,10 @@ module.exports = {
   removeJob,
   clearFinishedJobs,
   pruneJobs,
+  listStackLinks,
+  addStackLink,
+  updateStackLink,
+  removeStackLink,
   MAX_MEMORIES,
   listMemories,
   addMemory,
