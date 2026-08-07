@@ -17,7 +17,9 @@
     "adlc": "node --env-file-if-exists=.env packages/cli/bin/adlc.js",
     "test": "node --test",
     "test:e2e": "playwright test",
-    "test:e2e:debug": "PWDEBUG=1 playwright test --project=chrome"
+    "test:e2e:debug": "PWDEBUG=1 playwright test --project=chrome",
+    "docs:code": "bash scripts/gen-code-docs.sh",
+    "hooks:install": "git config core.hooksPath .githooks && echo 'Git hooks enabled (core.hooksPath=.githooks)'"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0"

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#
+# pre-commit — block the commit when the code-graph docs are out of date.
+#
+# On every commit that touches source (or the generated docs), this hook
+# regenerates docs/code-graph/ and fails the commit if the result differs from
+# what is staged. That guarantees the committed documentation always matches
+# the code it describes.
+#
+# Enable it once with:  npm run hooks:install   (sets core.hooksPath=.githooks)
+# Emergency bypass:      SKIP_DOCS_HOOK=1 git commit ...
+#
+# NOTE: docs are generated from the working tree, not the staged snapshot — the
+# usual pre-commit trade-off. Keep unstaged edits out of source files you are
+# committing if you need the docs to match byte-for-byte.
+set -euo pipefail
+
+if [ "${SKIP_DOCS_HOOK:-}" = "1" ]; then
+  echo "[pre-commit] SKIP_DOCS_HOOK=1 — skipping code-docs drift check."
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# --- fast path: only run when this commit includes parseable source or docs --
+CODE_RE='\.(js|cjs|mjs|jsx|ts|tsx|py|sh)$'
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+if ! printf '%s\n' "$STAGED" | grep -Eq "$CODE_RE" \
+   && ! printf '%s\n' "$STAGED" | grep -q '^docs/code-graph/'; then
+  exit 0
+fi
+
+echo "[pre-commit] Regenerating code docs to verify they are up to date…"
+if ! bash scripts/gen-code-docs.sh; then
+  echo "" >&2
+  echo "❌ [pre-commit] Could not generate code docs — commit blocked." >&2
+  echo "   Fix the code-review-graph install, or bypass with SKIP_DOCS_HOOK=1." >&2
+  exit 1
+fi
+
+# --- drift = freshly generated docs differ from what is staged ---------------
+drift=0
+# Tracked docs whose working tree (just regenerated) != index (staged).
+if ! git diff --quiet -- docs/code-graph; then drift=1; fi
+# Generated docs that are not tracked/staged at all.
+if [ -n "$(git ls-files --others --exclude-standard -- docs/code-graph)" ]; then drift=1; fi
+
+if [ "$drift" -eq 1 ]; then
+  echo "" >&2
+  echo "❌ [pre-commit] Code documentation is out of date — commit blocked." >&2
+  echo "   docs/code-graph/ was regenerated to match your code. Review and stage it:" >&2
+  echo "" >&2
+  echo "       git add -A docs/code-graph && git commit …" >&2
+  echo "" >&2
+  echo "   (emergency bypass: SKIP_DOCS_HOOK=1 git commit …)" >&2
+  exit 1
+fi
+
+echo "[pre-commit] Code docs up to date ✅"
+exit 0
