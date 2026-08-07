@@ -1,21 +1,55 @@
-"""Shared repository helpers."""
+"""Collection-path helpers and pagination for the Firestore repositories.
+
+Tenant isolation is structural: org-owned entities live under
+``organizations/{org_id}/...``. Top-level ``users`` carries an ``org_id`` field
+(None only for super-admins). Uniqueness that matters for security (user email,
+external subject) is enforced with atomic guard docs; tag-name uniqueness is a
+best-effort query check (an admin-only action).
+"""
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
-from sqlalchemy import Select, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.core.firestore import Db
 from app.schemas.common import PageParams
+
+# Top-level collections
+ORGS = "organizations"
+USERS = "users"
+REFRESH_TOKENS = "refresh_tokens"
+UNIQUE_EMAILS = "unique_emails"
+UNIQUE_EXTERNAL_SUBJECTS = "unique_external_subjects"
+
+
+def projects_col(org_id: uuid.UUID) -> str:
+    return f"{ORGS}/{org_id}/projects"
+
+
+def tasks_col(org_id: uuid.UUID, project_id: uuid.UUID) -> str:
+    return f"{ORGS}/{org_id}/projects/{project_id}/tasks"
+
+
+def tags_col(org_id: uuid.UUID) -> str:
+    return f"{ORGS}/{org_id}/tags"
+
+
+def memberships_col(org_id: uuid.UUID) -> str:
+    return f"{ORGS}/{org_id}/memberships"
 
 
 async def paginate(
-    session: AsyncSession, stmt: Select, params: PageParams
-) -> tuple[list[Any], int]:
-    """Return (rows, total) for a SELECT with LIMIT/OFFSET applied.
-
-    A max page size is enforced by PageParams, so lists are always bounded.
-    """
-    total = await session.scalar(select(func.count()).select_from(stmt.subquery()))
-    rows = (await session.scalars(stmt.limit(params.limit).offset(params.offset))).all()
-    return list(rows), int(total or 0)
+    db: Db,
+    collection: str,
+    params: PageParams,
+    *,
+    filters: list[tuple[str, Any]] | None = None,
+    order_by: str = "created_at",
+    desc: bool = True,
+) -> tuple[list[dict], int]:
+    """Return (page of raw docs, total count). Page size is bounded by PageParams."""
+    total = await db.count(collection, filters)
+    rows = await db.query(
+        collection, filters, order_by=order_by, desc=desc, limit=params.limit, offset=params.offset
+    )
+    return rows, total

@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from app.models.base import id_list, new_uuid, to_uuid, utcnow, uuid_str
+from app.models.base import new_uuid, to_uuid, utcnow, uuid_str
 from app.models.enums import TaskStatus
 
 if True:
@@ -24,7 +24,7 @@ class Task:
     id: uuid.UUID = field(default_factory=new_uuid)
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
-    tag_ids: list[uuid.UUID] = field(default_factory=list)
+    # Source of truth for the task's tags; persisted as an id array.
     tags: list["Tag"] = field(default_factory=list, compare=False, repr=False)
 
     def to_doc(self) -> dict:
@@ -37,7 +37,7 @@ class Task:
             "assignee_id": uuid_str(self.assignee_id),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
-            "tag_ids": [uuid_str(t) for t in self.tag_ids],
+            "tag_ids": [uuid_str(t.id) for t in self.tags],
         }
 
     @classmethod
@@ -51,5 +51,4 @@ class Task:
             assignee_id=to_uuid(doc.get("assignee_id")),
             created_at=doc.get("created_at") or utcnow(),
             updated_at=doc.get("updated_at") or utcnow(),
-            tag_ids=id_list(doc.get("tag_ids")),
         )
