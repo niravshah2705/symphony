@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Build/release artifacts (e.g. the adlc CLI bundle + tarball; produced in CI).
+dist/
+
 # Local runtime data — secrets (API keys, OAuth tokens), config, jobs, logs.
 # Never commit; see docs/DEVELOPER_ONBOARDING.md.
 data/
@@ -10,6 +13,10 @@ data/
 .env.*
 !.env.example
 
+# adlc CLI stored token (normally in $HOME/.adlc; ignored here in case
+# $ADLC_HOME ever points into the repo). Never commit credentials.
+.adlc/
+
 # OS / editor cruft
 .DS_Store
 *.log
@@ -17,3 +24,16 @@ data/
 # Playwright browser-test artifacts
 playwright-report/
 test-results/
+
+# Terraform — provider binaries and state (the .terraform.lock.hcl IS committed).
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# AI/dev tooling & local artifacts — ephemeral, never committed.
+.claude/worktrees/
+.playwright-mcp/
+graphify-out/
+agent-layout.png

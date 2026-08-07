@@ -130,6 +130,10 @@
               <span class="nav-icon" data-icon="board"></span>
               <span class="nav-link-copy"><strong data-i18n="board">Board</strong><small data-i18n="boardSub">Issues in motion</small></span>
             </a>
+            <a href="#/organization" data-route="organization">
+              <span class="nav-icon" data-icon="briefcase"></span>
+              <span class="nav-link-copy"><strong data-i18n="organization">Organization</strong><small>Personal &amp; org projects</small></span>
+            </a>
           </div>
 
           <div class="nav-section">
@@ -154,12 +158,16 @@
               <span class="nav-icon" data-icon="sliders"></span>
               <span class="nav-link-copy"><strong data-i18n="settings">Settings</strong><small data-i18n="settingsSub">Models and connections</small></span>
             </a>
+            <a href="#/settings-policy" data-route="settings-policy">
+              <span class="nav-icon" data-icon="file"></span>
+              <span class="nav-link-copy"><strong data-i18n="settingsPolicy">Settings Policy</strong><small data-i18n="settingsPolicySub">Harness, tools, skills, plugins</small></span>
+            </a>
           </div>
         </nav>
 
         <div class="sidebar-footer">
           <div class="sync-line"><span class="sync-dot"></span><span data-i18n="workspaceReady">Workspace ready</span></div>
-          <span data-i18n="localTools">Local models and connected tools</span>
+          <span data-i18n="localTools">BYoM and connected tools</span>
         </div>
       </aside>
 
@@ -168,6 +176,9 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
+    <!-- Sets window.__API_BASE__ before the app loads (same-origin locally; the
+         gateway Cloud Run URL when the SPA is hosted on GCS). -->
+    <script src="/config.js"></script>
     <script type="module" src="/js/app.js"></script>
   </body>
 </html>

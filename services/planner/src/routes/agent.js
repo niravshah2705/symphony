@@ -36,6 +36,7 @@ const memory = require('@ai-fleet/shared/agent/memory');
 const businessPipeline = require('@ai-fleet/shared/agent/business-pipeline');
 const approvalGate = require('@ai-fleet/shared/agent/approval-gate');
 const conversations = require('@ai-fleet/shared/agent/conversations');
+const workspaceEvents = require('@ai-fleet/shared/agent/workspace-events');
 
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const CONV_ID_PATTERN = /^conv_[A-Za-z0-9_-]{1,64}$/;
@@ -74,6 +75,7 @@ function activeModelFor(provider, settings) {
   if (provider === 'lmstudio') return settings.lmstudioModel;
   if (provider === 'omlx') return settings.omlxModel;
   if (provider === 'huggingface') return settings.huggingfaceModel;
+  if (provider === 'antigravity') return settings.antigravityModel || CONFIG.ANTIGRAVITY.defaultModel;
   return settings.ollamaModel;
 }
 
@@ -207,6 +209,9 @@ router.get(
 router.put('/config', (req, res) => {
   const next = sanitizeConfig(req.body, getAgentConfig());
   setAgentConfig(next);
+  // A schedule toggle / cadence change is a status transition — push it to the
+  // workspace stream so every open workspace updates without polling /status.
+  workspaceEvents.publishAgentStatus({ ...scheduler.getStatus(), assumedRole: getAssumedRole() });
   res.json({ config: next });
 });
 
@@ -218,7 +223,7 @@ router.get('/status', (req, res) => {
   // The planner runs on the `thinking` role, so the dashboard LLM pill reflects
   // that role's provider/model and readiness.
   const provider = providerForRole(settings, 'thinking');
-  const localProvider = settings.localLlmProvider || settings.llmProvider || 'ollama';
+  const byomProvider = settings.byomProvider || settings.llmProvider || 'ollama';
   res.json({
     ...scheduler.getStatus(),
     assumedRole: getAssumedRole(),
@@ -226,12 +231,13 @@ router.get('/status', (req, res) => {
     llmProvider: provider,
     // Model for the active provider — used for the dashboard's LLM pill.
     activeModel: activeModelFor(provider, settings),
-    localLlmProvider: localProvider,
-    localActiveModel: activeModelFor(localProvider, settings),
+    byomProvider: byomProvider,
+    byomActiveModel: activeModelFor(byomProvider, settings),
     ollamaModel: settings.ollamaModel,
     lmstudioModel: settings.lmstudioModel,
     omlxModel: settings.omlxModel,
     huggingfaceModel: settings.huggingfaceModel,
+    antigravityModel: settings.antigravityModel,
     codexModel: settings.codexModel || CONFIG.OAUTH.defaultModel,
     codexConnected: Boolean(codexTokens && (codexTokens.accessToken || codexTokens.refreshToken)),
     tracingEnabled: Boolean(settings.langsmithApiKey && settings.langsmithTracing),

@@ -1,0 +1,58 @@
+# syntax=docker/dockerfile:1
+#
+# Coder image — ONE image, TWO roles (DRY), selected at runtime by CODER_ROLE:
+#   CODER_ROLE=control  → coder-control INTERNAL Cloud Run service (index.js)
+#   CODER_ROLE=worker   → coder-worker  Cloud Run Job (job.js)
+# The container CMD runs the dispatcher services/coder/src/main.js which forks
+# on CODER_ROLE.
+#
+# Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared:
+#   docker build -f deploy/gcp/Dockerfile.coder -t <tag> .
+#
+# Base image is pinned by DIGEST (infrastructure-misconfig checklist) — the
+# multi-arch index digest for node:20-alpine.
+# VERIFY / UPDATE with: docker buildx imagetools inspect node:20-alpine
+ARG NODE_IMAGE=node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+
+# ---------------------------------------------------------------------------
+# Stage 1 — install production dependencies at the workspace root.
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS builder
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+COPY packages/ ./packages/
+COPY services/ ./services/
+
+RUN npm ci --omit=dev && npm cache clean --force
+
+# ---------------------------------------------------------------------------
+# Stage 2 — runtime with the extra CLIs the coder agent shells out to.
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+
+# The coder clones, builds, and tests repositories, so it needs git + a shell +
+# SSH/TLS trust roots. Add further language toolchains here (python3, make, g++,
+# openjdk, etc.) as the target repos require — keep the set minimal to limit the
+# image's attack surface.
+RUN apk add --no-cache git openssh-client ca-certificates bash
+
+ENV NODE_ENV=production \
+    AI_FLEET_DATA_DIR=/tmp
+
+COPY --from=builder --chown=node:node /app /app
+
+# Non-root (infra-misconfig checklist). The worker clones into /tmp (see the
+# CODER_WORKSPACE_ROOT env set on the Cloud Run Job) so it needs no writable
+# path outside /tmp.
+USER node
+
+# Documentation only. As the control SERVICE the app listens on
+# process.env.CODER_SERVICE_PORT (set to 8080 by the Cloud Run service). As the
+# worker JOB it serves no HTTP.
+EXPOSE 8080
+
+# Dual-role dispatcher (checks CODER_ROLE).
+CMD ["node", "services/coder/src/main.js"]

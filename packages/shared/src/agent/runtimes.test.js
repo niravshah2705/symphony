@@ -45,7 +45,7 @@ function chatgptCodexLlm() {
 }
 
 test('runtime and workflow registries use stable canonical ids and aliases', () => {
-  assert.deepEqual(runtimeCatalog().map((item) => item.id), ['deepagent', 'codex-sdk', 'claude-agent-sdk']);
+  assert.deepEqual(runtimeCatalog().map((item) => item.id), ['deepagent', 'codex-sdk', 'claude-agent-sdk', 'antigravity-sdk']);
   assert.deepEqual(workflowPatternCatalog().map((item) => item.id), [
     'sequential',
     'parallel',
@@ -554,6 +554,145 @@ test('runs without a rubric attach no review (opt-in, backwards compatible)', as
     trace: false,
   });
   assert.equal(Object.hasOwn(execution, 'review'), false);
+test('Antigravity harness gates on a matching provider and the coding workflow', () => {
+  // Matching provider (planning) runs the harness; a mismatch or brokered coding
+  // falls back to DeepAgent — mirroring the codex/claude gating.
+  assert.equal(
+    effectiveAgentRuntime('antigravity-sdk', { provider: 'antigravity' }, { strict: true, workflow: 'planning' }),
+    'antigravity-sdk'
+  );
+  assert.equal(
+    effectiveAgentRuntime('antigravity-sdk', { provider: 'claude' }, { strict: true, workflow: 'planning' }),
+    'deepagent'
+  );
+  assert.equal(
+    effectiveAgentRuntime('antigravity-sdk', { provider: 'antigravity' }, { strict: true, workflow: 'coding' }),
+    'deepagent'
+  );
+});
+
+test('Antigravity SDK adapter returns the contract shape via the interactions API', async (t) => {
+  const root = workspace(t);
+  const seen = { run: { metadata: {} } };
+  class FakeGoogleGenAI {
+    constructor(options) {
+      seen.client = options;
+    }
+    get interactions() {
+      return {
+        create: async (request) => {
+          seen.request = request;
+          return {
+            id: 'antigravity-interaction-1',
+            output: [{ content: [{ text: 'Antigravity finished' }] }],
+            usageMetadata: {
+              promptTokenCount: 18,
+              candidatesTokenCount: 7,
+              totalTokenCount: 25,
+              thoughtsTokenCount: 2,
+            },
+          };
+        },
+      };
+    }
+  }
+
+  const execution = await executeAgentRuntime({
+    runtime: 'antigravity-sdk',
+    workflowPattern: 'parallel',
+    prompt: 'Plan the change',
+    rootDir: root,
+    backendKind: 'filesystem',
+    systemPrompt: 'Trusted planning rules',
+    llm: {
+      provider: 'antigravity',
+      model: 'gemini-2.5-flash',
+      apiKey: 'gemini-secret',
+      // Config-driven target: the preview agent id overrides the model for the call.
+      agentId: 'antigravity-preview-agent',
+    },
+    loaders: { 'antigravity-sdk': async () => ({ GoogleGenAI: FakeGoogleGenAI }) },
+    getCurrentRunTree: () => seen.run,
+    traceFactory: (fn, config) => {
+      seen.trace = config;
+      return fn;
+    },
+  });
+
+  assert.equal(seen.client.apiKey, 'gemini-secret');
+  // The configured agent id is the call target; the trusted rules ride in `input`.
+  assert.equal(seen.request.model, 'antigravity-preview-agent');
+  assert.match(seen.request.input, /Trusted planning rules/);
+  assert.match(seen.request.input, /workflow_pattern id="parallel"/);
+  assert.match(seen.request.input, /Plan the change/);
+
+  assert.equal(execution.runtime, 'antigravity-sdk');
+  assert.equal(execution.provider, 'antigravity');
+  // The contract's `model` stays the descriptor model even when an agent id is used.
+  assert.equal(execution.model, 'gemini-2.5-flash');
+  assert.equal(execution.finalText, 'Antigravity finished');
+  assert.equal(execution.sessionId, 'antigravity-interaction-1');
+  assert.equal(execution.costUsd, null);
+  assert.equal(execution.usage.inputTokens, 18);
+  assert.equal(execution.usage.outputTokens, 7);
+  assert.equal(execution.usage.reasoningOutputTokens, 2);
+  assert.equal(execution.usage.totalTokens, 25);
+
+  assert.equal(seen.trace.metadata.agent_runtime, 'antigravity-sdk');
+  assert.equal(seen.trace.metadata.harness, 'antigravity');
+  assert.equal(seen.trace.metadata.ls_provider, 'google');
+  assert.equal(seen.trace.run_type, 'llm');
+  assert.ok(seen.trace.tags.includes('harness:antigravity'));
+  assert.ok(seen.trace.tags.includes('runtime:antigravity-sdk'));
+  assert.equal(seen.run.metadata.usage_total_tokens, 25);
+});
+
+test('Antigravity SDK falls back to models.generateContent when interactions is unavailable', async (t) => {
+  const root = workspace(t);
+  const seen = {};
+  class FakeGoogleGenAI {
+    constructor() {}
+    get models() {
+      return {
+        generateContent: async (request) => {
+          seen.request = request;
+          return {
+            responseId: 'gc-1',
+            candidates: [{ content: { parts: [{ text: 'Generated content' }] } }],
+            usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 3, totalTokenCount: 8 },
+          };
+        },
+      };
+    }
+  }
+
+  const execution = await executeAgentRuntime({
+    runtime: 'antigravity-sdk',
+    prompt: 'Summarize',
+    rootDir: root,
+    llm: { provider: 'antigravity', model: 'gemini-2.5-flash', apiKey: 'gemini-secret' },
+    loaders: { 'antigravity-sdk': async () => ({ GoogleGenAI: FakeGoogleGenAI }) },
+    trace: false,
+  });
+
+  assert.equal(seen.request.model, 'gemini-2.5-flash');
+  assert.equal(execution.finalText, 'Generated content');
+  assert.equal(execution.sessionId, 'gc-1');
+  assert.equal(execution.usage.totalTokens, 8);
+});
+
+test('Antigravity SDK fails closed when the Gemini API key is unavailable', async (t) => {
+  const root = workspace(t);
+  await assert.rejects(
+    executeAgentRuntime({
+      runtime: 'antigravity-sdk',
+      prompt: 'task',
+      rootDir: root,
+      llm: { provider: 'antigravity', model: 'gemini-2.5-flash' },
+      trace: false,
+    }),
+    (error) => error.code === 'runtime_auth_unavailable' && error.status === 401
+  );
 });
 
 test('Claude permission guard denies credential-bearing shell and path escapes', async (t) => {

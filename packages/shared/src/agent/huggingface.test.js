@@ -48,17 +48,20 @@ test('createChatModel returns a ChatOpenAI targeting the router', async () => {
   assert.equal(model.model || model.modelName, 'meta-llama/Llama-3.3-70B-Instruct');
 });
 
-test('catalog exposes hosted huggingface presets and maps params to huggingface* settings', () => {
+test('catalog exposes byom huggingface presets and maps params to huggingface* settings', () => {
   mp.validateCatalog(mp.publicCatalog());
   const presets = mp.publicCatalog().presets.filter((p) => p.provider === 'huggingface');
   assert.ok(presets.length >= 1);
   assert.equal(presets.filter((p) => p.recommended).length, 1); // exactly one recommended
-  assert.equal(mp.PROVIDER_DEPLOYMENT.huggingface, 'hosted');
+  // Hugging Face is folded into the BYoM deployment tier (hosted router, but the
+  // operator brings the model), while still forbidding local-only preset fields.
+  assert.equal(mp.PROVIDER_DEPLOYMENT.huggingface, 'byom');
+  assert.equal(presets.find((p) => p.recommended).deployment, 'byom');
   const patch = mp.settingsPatchForPreset(presets.find((p) => p.recommended));
   assert.equal(patch.huggingfaceModel, 'meta-llama/Llama-3.3-70B-Instruct');
   assert.ok(Number.isInteger(patch.huggingfaceMaxTokens));
   const custom = mp.customPresetForSettings('huggingface', { huggingfaceModel: 'Qwen/Qwen2.5-7B-Instruct' });
-  assert.equal(custom.deployment, 'hosted');
+  assert.equal(custom.deployment, 'byom');
   assert.equal(custom.model, 'Qwen/Qwen2.5-7B-Instruct');
 });
 

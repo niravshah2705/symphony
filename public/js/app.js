@@ -15,6 +15,7 @@ import {
   expireAuthentication,
   getAuthenticationState,
   initializeAuthentication,
+  promptOneTap,
   signIn,
   signOut,
 } from './auth.js';
@@ -29,7 +30,10 @@ import { renderAnalytics } from './views/analytics.js';
 import { renderWorkflows } from './views/workflows.js';
 import { renderTroubleshooting } from './views/troubleshooting.js';
 import { renderSettings } from './views/settings.js';
+import { renderOrganization } from './views/organization.js';
+import { renderSettingsPolicy } from './views/settings-policy.js';
 import { initThemeToggle } from './theme.js';
+import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 
 const routes = {
   agent: renderAgent,
@@ -43,6 +47,8 @@ const routes = {
   workflows: renderWorkflows,
   troubleshooting: renderTroubleshooting,
   settings: renderSettings,
+  organization: renderOrganization,
+  'settings-policy': renderSettingsPolicy,
 };
 
 const routeMeta = {
@@ -57,6 +63,8 @@ const routeMeta = {
   workflows: { titleKey: 'workflows', eyebrowKey: 'insights' },
   troubleshooting: { titleKey: 'troubleshooting', eyebrowKey: 'system' },
   settings: { titleKey: 'settings', eyebrowKey: 'system' },
+  organization: { titleKey: 'organization', eyebrowKey: 'workspace' },
+  'settings-policy': { titleKey: 'settingsPolicy', eyebrowKey: 'system' },
 };
 
 // These existing surfaces depend on the configured project-management connection.
@@ -70,6 +78,34 @@ function currentRoute() {
   const fallback = routes[state.lastWorkspaceRoute] ? state.lastWorkspaceRoute : 'agent';
   window.history.replaceState(null, '', `#/${fallback}`);
   return fallback;
+}
+
+// Hide nav links (and their now-empty sections) the current permissions don't
+// allow. UX only — the gateway enforces the same rules on every /api route.
+function applyMenuPermissions(permissions) {
+  const nav = document.getElementById('tabs');
+  if (!nav) return;
+  nav.querySelectorAll('a[data-route]').forEach((link) => {
+    link.hidden = !canAccessRoute(permissions, link.dataset.route);
+  });
+  nav.querySelectorAll('.nav-section').forEach((section) => {
+    const links = section.querySelectorAll('a[data-route]');
+    const anyVisible = Array.from(links).some((link) => !link.hidden);
+    section.hidden = links.length > 0 && !anyVisible;
+  });
+}
+
+// Connection/role toolbar refreshes call permission-gated APIs — only run them
+// for a session that actually holds the permission (avoids public 401 noise).
+function maybeRefreshConnection(session) {
+  if (session.authenticated && permitted(session.permissions, 'settings', 'read')) return refreshConnection();
+  return Promise.resolve();
+}
+function maybeRefreshRole(session) {
+  if (session.authenticated && permitted(session.permissions, 'settings', 'write')) return refreshRole();
+  const chip = document.getElementById('assumed-role');
+  if (chip) { chip.hidden = true; chip.replaceChildren(); }
+  return Promise.resolve();
 }
 
 function syncShell(name, view) {
@@ -303,7 +339,7 @@ function renderAuthControl() {
   }
 
   const label = session.user.name || session.user.email || t('signedInUser');
-  const secondary = session.user.email && session.user.email !== label ? session.user.email : t('auth0Account');
+  const secondary = session.user.email && session.user.email !== label ? session.user.email : t('googleAccount');
   host.append(
     el('div', { class: 'auth-user', title: label, dataset: { userContent: 'true' } }, [
       el('span', { class: 'avatar sm', 'aria-hidden': 'true' }, initials(label)),
@@ -352,8 +388,8 @@ function renderAuthenticationGate({ loading = false, error = '' } = {}) {
       class: 'primary auth-continue',
       type: 'button',
       onclick: configurationFailed ? () => window.location.reload() : beginSignIn,
-      dataset: { i18n: configurationFailed ? 'retry' : 'continueWithAuth0' },
-    }, t(configurationFailed ? 'retry' : 'continueWithAuth0')));
+      dataset: { i18n: configurationFailed ? 'retry' : 'continueWithGoogle' },
+    }, t(configurationFailed ? 'retry' : 'continueWithGoogle')));
   }
 
   const details = el('details', { class: 'auth-details' }, [
@@ -380,15 +416,55 @@ function renderAuthenticationGate({ loading = false, error = '' } = {}) {
   localize(view);
 }
 
+// A gated route reached without permission: prompt sign-in (public) or explain
+// the missing role (signed in). The shell stays interactive so the visitor can
+// navigate back to what they can access.
+function renderSignInRequired(name) {
+  const view = freshView();
+  syncShell(name, view);
+  syncSidebar(false);
+  view.className = 'view view-standard';
+  view.append(el('section', { class: 'auth-card', 'aria-labelledby': 'auth-title' }, [
+    el('span', { class: 'auth-badge' }, t('protectedWorkspace')),
+    el('h1', { id: 'auth-title' }, t('signInRequiredTitle', 'Sign in to continue')),
+    el('p', { class: 'auth-copy' }, t('signInRequiredBody', 'Sign in with Google to open this area.')),
+    el('div', { class: 'auth-actions' }, [
+      el('button', { class: 'primary auth-continue', type: 'button', onclick: beginSignIn, dataset: { i18n: 'continueWithGoogle' } }, t('continueWithGoogle')),
+    ]),
+  ]));
+  localize(view);
+}
+
+function renderAccessDenied(name) {
+  const view = freshView();
+  syncShell(name, view);
+  syncSidebar(false);
+  view.className = 'view view-standard';
+  view.append(el('div', { class: 'empty' }, [
+    el('span', { class: 'empty-mark', 'aria-hidden': 'true' }, '⛔'),
+    el('h2', {}, t('noAccessTitle', 'You do not have access')),
+    el('p', { class: 'muted' }, t('noAccessBody', 'Your role does not permit this area. Ask an administrator for access.')),
+    el('a', { class: 'btn primary', href: `#/${DEFAULT_PUBLIC_ROUTE}` }, t('backToWorkspace', 'Back to workspace')),
+  ]));
+  localize(view);
+}
+
 async function render({ focus = false } = {}) {
   const session = getAuthenticationState();
-  if (!session.authenticated) {
-    renderAuthenticationGate({ error: session.error });
-    return;
-  }
+  const permissions = session.permissions || {};
+  applyMenuPermissions(permissions);
   setAuthenticationLocked(false);
   const epoch = ++renderEpoch;
   const name = currentRoute();
+
+  // Per-route authorization (mirrors the gateway). No permission → sign-in
+  // prompt for public visitors, access-denied for signed-in users.
+  if (!canAccessRoute(permissions, name)) {
+    if (!session.authenticated) renderSignInRequired(name);
+    else renderAccessDenied(name);
+    return;
+  }
+
   const view = freshView();
   syncShell(name, view);
   syncSidebar(false);
@@ -396,7 +472,7 @@ async function render({ focus = false } = {}) {
   if (focus) view.focus({ preventScroll: true });
 
   // Keep connection-dependent routes useful by explaining the single next step.
-  if (!state.hasKey && connectionRoutes.has(name)) {
+  if (session.authenticated && !state.hasKey && connectionRoutes.has(name)) {
     const selectedElsewhere = state.planningConfigured && state.planningProvider !== 'linear';
     view.append(
       el('div', { class: 'empty connection-empty' }, [
@@ -432,11 +508,7 @@ function capitalize(value) {
   return text ? `${text[0].toUpperCase()}${text.slice(1)}` : '';
 }
 
-window.addEventListener('hashchange', () => {
-  const session = getAuthenticationState();
-  if (session.authenticated) render({ focus: true });
-  else renderAuthenticationGate({ error: session.error });
-});
+window.addEventListener('hashchange', () => render({ focus: true }));
 window.addEventListener('DOMContentLoaded', async () => {
   hydrateIcons();
   initThemeToggle(document.getElementById('theme-toggle'));
@@ -444,66 +516,79 @@ window.addEventListener('DOMContentLoaded', async () => {
   syncSidebarCollapsed();
 
   // Authentication is the only network dependency allowed to gate the
-  // workspace. Paint a useful status immediately while Auth0 restores its
-  // in-memory session or processes the PKCE callback.
+  // workspace. Paint a useful status immediately while Firebase restores the
+  // signed-in session.
   renderAuthenticationGate({ loading: true });
   let session;
   try {
     session = await initializeAuthentication();
   } catch (error) {
-    session = expireAuthentication(error.message);
+    // Hard configuration failure (Firebase web config unreachable) — show the
+    // retry gate; there is no usable surface without it.
+    await initializeI18n({ discover: false });
+    renderAuthControl();
+    renderAuthenticationGate({ error: error.message });
+    return;
   }
   await initializeI18n({ discover: session.authenticated });
   renderAuthControl();
-  if (!session.authenticated) {
-    renderAuthenticationGate({ error: session.error });
-    return;
-  }
 
-  // Optional network discovery and integration validation must never gate the
-  // first useful paint. Start them together, render immediately, then refresh
-  // a connection-backed route once the bounded checks settle.
+  // Public visitors AND signed-in users both get a first paint; render() applies
+  // per-route authorization (public → read-only Agent workspace). Optional
+  // connection/role discovery runs only when the session holds the permission.
   const readiness = Promise.allSettled([
-    refreshConnection(),
-    refreshRole(),
+    maybeRefreshConnection(session),
+    maybeRefreshRole(session),
   ]);
   await render();
   await readiness;
-  if (connectionRoutes.has(currentRoute())) await render();
+  if (session.authenticated && connectionRoutes.has(currentRoute())) await render();
+
+  // Anonymous visitors: surface the compact Google One Tap card (the screenshot
+  // shape). Non-blocking — the read-only workspace + basic RAG stay usable, and
+  // it is a no-op when One Tap is not configured or a user is already signed in.
+  if (session.enabled && !session.authenticated) promptOneTap().catch(() => {});
 });
 
 window.addEventListener('ai-fleet:locale-changed', async () => {
   const session = getAuthenticationState();
+  const permissions = session.permissions || {};
   renderAuthControl();
-  if (!session.authenticated) {
-    renderAuthenticationGate({ error: session.error });
-    return;
+  applyMenuPermissions(permissions);
+  const name = currentRoute();
+  if (canAccessRoute(permissions, name)) {
+    // Keep the in-view state; only refresh the shell chrome + labels.
+    const view = document.getElementById('view');
+    if (view) syncShell(name, view);
+  } else {
+    await render(); // re-render the sign-in / denied panel in the new locale
   }
-  const view = document.getElementById('view');
-  syncShell(currentRoute(), view);
   syncSidebarCollapsed();
-  await Promise.all([refreshConnection(), refreshRole()]);
+  await Promise.all([maybeRefreshConnection(session), maybeRefreshRole(session)]);
   localize(document);
 });
 
 window.addEventListener('ai-fleet:auth-required', (event) => {
   const session = getAuthenticationState();
   // A connected tool can legitimately return 401 in local mode; only an
-  // enabled application-auth session should lock the entire workspace.
+  // enabled application-auth session reacts to an app-auth failure.
   if (!session.enabled) return;
   expireAuthentication(event.detail?.message || t('sessionExpired'));
   renderAuthControl();
-  renderAuthenticationGate({ error: t('sessionExpired') });
+  // Drop back to the public surface: read-only Agent workspace, or a sign-in
+  // prompt if the current route needs a role.
+  render();
 });
 
 // Allow views to request a connection re-check (e.g. after saving a key).
 window.addEventListener('lm:connection-changed', async () => {
-  if (!getAuthenticationState().authenticated) return;
-  await refreshConnection();
+  const session = getAuthenticationState();
+  await maybeRefreshConnection(session);
   await render();
 });
 
-// Update the toolbar when the assumed role changes.
+// Update the toolbar when the assumed role changes (admin only).
 window.addEventListener('lm:role-changed', () => {
-  if (getAuthenticationState().authenticated) refreshRole();
+  const session = getAuthenticationState();
+  if (session.authenticated && permitted(session.permissions, 'settings', 'write')) refreshRole();
 });

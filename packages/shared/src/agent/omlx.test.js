@@ -37,7 +37,7 @@ function jsonResponse(body, status = 200) {
 function settings(overrides = {}) {
   return {
     llmProvider: 'codex',
-    localLlmProvider: 'omlx',
+    byomProvider: 'omlx',
     omlxHost: 'http://127.0.0.1:8000',
     omlxModel: 'gpt-oss-20b',
     omlxApiKey: 'local-secret',
@@ -55,17 +55,17 @@ function settings(overrides = {}) {
   };
 }
 
-test('OMLX is a validated local preset provider with one reviewed recommendation', () => {
+test('OMLX is a validated byom preset provider with one reviewed recommendation', () => {
   const catalog = publicCatalog();
   assert.equal(validateCatalog(catalog), catalog);
   assert.equal(CONFIG.LLM_PROVIDERS.includes('omlx'), true);
-  assert.equal(PROVIDER_DEPLOYMENT.omlx, 'local');
+  assert.equal(PROVIDER_DEPLOYMENT.omlx, 'byom');
 
   const presets = catalog.presets.filter((preset) => preset.provider === 'omlx');
   assert.equal(presets.filter((preset) => preset.recommended).length, 1);
   assert.equal(presets.find((preset) => preset.recommended).id, 'omlx-gpt-oss-20b');
-  assert.equal(getPreset('omlx-qwen3-coder-next').deployment, 'local');
-  assert.equal(presetForRole('omlx-gpt-oss-20b', 'local').provider, 'omlx');
+  assert.equal(getPreset('omlx-qwen3-coder-next').deployment, 'byom');
+  assert.equal(presetForRole('omlx-gpt-oss-20b', 'byom').provider, 'omlx');
   assert.equal(presetForRole('omlx-gpt-oss-20b', 'global'), null);
 });
 
@@ -111,12 +111,12 @@ test('fresh stores include an isolated OMLX endpoint, optional key, and preset d
   }
 });
 
-test('OMLX routes through the local slot and resolves as a ready OpenAI-compatible local model', async () => {
+test('OMLX routes through the byom slot and resolves as a ready OpenAI-compatible local model', async () => {
   const configured = settings({ omlxHost: 'http://127.0.0.1:8000/' });
-  assert.equal(providerForRole(configured, 'local'), 'omlx');
+  assert.equal(providerForRole(configured, 'byom'), 'omlx');
   assert.equal(providerForRole(configured, 'global'), 'codex');
 
-  const llm = await resolveLlm(configured, 'local');
+  const llm = await resolveLlm(configured, 'byom');
   assert.equal(llm.provider, 'omlx');
   assert.equal(llm.host, 'http://127.0.0.1:8000');
   assert.equal(llm.baseUrl, 'http://127.0.0.1:8000/v1');

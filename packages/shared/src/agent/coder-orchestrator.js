@@ -17,6 +17,7 @@ const {
   probeRepositoryAvailability,
   publicAvailabilityMessage,
 } = require('./availability');
+const workspaceEvents = require('./workspace-events');
 
 /**
  * Board monitor for the code-writer — the AIPLANNED flow.
@@ -47,6 +48,28 @@ let pauseContext = null;
 // credential revoked moments ago cannot slip through a stale success cache.
 const RECOVERY_PROBE_MS = 60 * 1000;
 const readinessCache = new Map();
+
+/**
+ * Push coder state to the global workspace channel so the SPA reflects monitor
+ * start/stop/pause and in-flight ticket changes without polling GET /api/coder.
+ * Best-effort — telemetry must never break the poll or a dispatch.
+ */
+function emitCoderStatus() {
+  try {
+    workspaceEvents.publishCoderStatus(status());
+  } catch (_) {
+    /* telemetry only */
+  }
+}
+
+/** Push the jobs snapshot (a coding run shows in the same list as enrichment). */
+function emitCoderJobs() {
+  try {
+    workspaceEvents.publishJobsSnapshot();
+  } catch (_) {
+    /* telemetry only */
+  }
+}
 
 const PLANNED_PROJECTS_QUERY = `
   query PlannedProjects($label: String!, $first: Int!) {
@@ -154,7 +177,7 @@ function readinessFingerprint() {
     githubToken: settings.githubToken,
     gitlabToken: settings.gitlabToken,
     llmProvider: settings.llmProvider,
-    localLlmProvider: settings.localLlmProvider,
+    byomProvider: settings.byomProvider,
     ollamaHost: settings.ollamaHost,
     ollamaModel: settings.ollamaModel,
     lmstudioHost: settings.lmstudioHost,
@@ -165,6 +188,9 @@ function readinessFingerprint() {
     huggingfaceHost: settings.huggingfaceHost,
     huggingfaceModel: settings.huggingfaceModel,
     huggingfaceApiKey: settings.huggingfaceApiKey,
+    antigravityModel: settings.antigravityModel,
+    antigravityAgentId: settings.antigravityAgentId,
+    antigravityApiKey: settings.antigravityApiKey,
     codexModel: settings.codexModel,
     codexTokens: settings.codexTokens,
     claudeModel: settings.claudeModel,
@@ -306,6 +332,7 @@ function pause(resource, error, context = {}) {
     nextProbeAt: Date.now() + RECOVERY_PROBE_MS,
   };
   log.warn(`Code-writer paused: ${pauseReason.message}`);
+  emitCoderStatus();
   return pauseReason;
 }
 
@@ -315,6 +342,7 @@ function clearPause(source = 'manual resume') {
   pauseReason = null;
   pauseContext = null;
   readinessCache.clear();
+  emitCoderStatus();
   return true;
 }
 
@@ -425,6 +453,9 @@ function dispatch(task, ctx, dependencies = {}) {
   // Track this coding run as a job (same store as enrichment jobs) so it is
   // visible in the UI with a live step trace, not just in the server log.
   const job = createCodingJob(task, jobStore);
+  // In-flight ticket count + a new coding job — push both to the workspace stream.
+  emitCoderStatus();
+  emitCoderJobs();
   let phase = 'linear-start';
   const step = (message, level = 'info') => {
     (log[level] || log.info)(`[coder ${task.identifier}] ${message}`);
@@ -484,6 +515,7 @@ function dispatch(task, ctx, dependencies = {}) {
           finalText: String((r && r.finalText) || '').slice(0, 2000),
         },
       });
+      emitCoderJobs();
     })
     .catch((err) => {
       const reason = phase === 'agent'
@@ -504,6 +536,7 @@ function dispatch(task, ctx, dependencies = {}) {
           error: reason.message,
           summary: { coding: true, paused: true, pauseReason: reason },
         });
+        emitCoderJobs();
         return;
       }
       // Linear-side failure (couldn't start or finalize the issue) — leave it for
@@ -511,8 +544,14 @@ function dispatch(task, ctx, dependencies = {}) {
       const message = err && err.message ? err.message : String(err);
       step(`Failed: ${message}`, 'error');
       jobStore.updateJob(job.id, { status: 'error', finishedAt: new Date().toISOString(), error: message });
+      emitCoderJobs();
     })
-    .finally(() => running.delete(task.id));
+    .finally(() => {
+      running.delete(task.id);
+      // In-flight count dropped — refresh coder status + jobs on the stream.
+      emitCoderStatus();
+      emitCoderJobs();
+    });
 }
 
 /** True when this project still has any task in flight (guards the aidone stamp). */
@@ -638,6 +677,7 @@ function start() {
   };
   tick();
   log.info(`Code-writer monitor started (aiplanned flow, every ${CONFIG.CODER.pollIntervalMs} ms, max ${resolveMaxConcurrent()} concurrent).`);
+  emitCoderStatus();
   return { started: true, resumed };
 }
 
@@ -652,6 +692,7 @@ function stop() {
   if (timer) clearTimeout(timer);
   timer = null;
   log.info('Code-writer monitor stopped.');
+  emitCoderStatus();
   return { started: false };
 }
 

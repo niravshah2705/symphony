@@ -11,20 +11,24 @@ const { CONFIG } = require('../config');
 /* ----------------------------- providerForRole ------------------------- */
 
 test('providerForRole: global role uses the hosted slot (llmProvider)', () => {
-  assert.strictEqual(providerForRole({ llmProvider: 'claude', localLlmProvider: 'lmstudio' }, 'global'), 'claude');
+  assert.strictEqual(providerForRole({ llmProvider: 'claude', byomProvider: 'lmstudio' }, 'global'), 'claude');
 });
 
-test('providerForRole: local role uses the local slot (localLlmProvider)', () => {
-  assert.strictEqual(providerForRole({ llmProvider: 'claude', localLlmProvider: 'lmstudio' }, 'local'), 'lmstudio');
+test('providerForRole: byom role uses the BYoM slot (byomProvider)', () => {
+  assert.strictEqual(providerForRole({ llmProvider: 'claude', byomProvider: 'lmstudio' }, 'byom'), 'lmstudio');
+});
+
+test('providerForRole: legacy "local" role alias still reads the BYoM slot', () => {
+  assert.strictEqual(providerForRole({ llmProvider: 'claude', byomProvider: 'lmstudio' }, 'local'), 'lmstudio');
 });
 
 test('providerForRole: default role is global', () => {
-  assert.strictEqual(providerForRole({ llmProvider: 'codex', localLlmProvider: 'ollama' }), 'codex');
+  assert.strictEqual(providerForRole({ llmProvider: 'codex', byomProvider: 'ollama' }), 'codex');
 });
 
-test('providerForRole: local falls back to global, then ollama', () => {
-  assert.strictEqual(providerForRole({ llmProvider: 'codex' }, 'local'), 'codex');
-  assert.strictEqual(providerForRole({}, 'local'), 'ollama');
+test('providerForRole: byom falls back to global, then ollama', () => {
+  assert.strictEqual(providerForRole({ llmProvider: 'codex' }, 'byom'), 'codex');
+  assert.strictEqual(providerForRole({}, 'byom'), 'ollama');
 });
 
 test('providerForRole: purpose roles read their own provider slot', () => {

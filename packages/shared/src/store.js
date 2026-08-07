@@ -1,8 +1,9 @@
 'use strict';
 
-const fs = require('fs');
 const { randomUUID } = require('node:crypto');
 const { CONFIG } = require('./config');
+const fileBackend = require('./store/file-backend');
+const firestoreBackend = require('./store/firestore-backend');
 const {
   getPreset,
   presetForModel,
@@ -13,7 +14,7 @@ const {
 } = require('./agent/model-presets');
 
 const PRESET_CATALOG = publicCatalog();
-const DEFAULT_LOCAL_PRESET = getPreset(PRESET_CATALOG.defaults.local);
+const DEFAULT_BYOM_PRESET = getPreset(PRESET_CATALOG.defaults.byom);
 const DEFAULT_HOSTED_PRESET = getPreset(PRESET_CATALOG.defaults.hosted);
 
 function recommendedPreset(provider) {
@@ -79,11 +80,12 @@ const DEFAULT_OLLAMA_SETTINGS = settingsPatchForPreset(recommendedPreset('ollama
 const DEFAULT_LMSTUDIO_SETTINGS = settingsPatchForPreset(recommendedPreset('lmstudio'));
 const DEFAULT_OMLX_SETTINGS = settingsPatchForPreset(recommendedPreset('omlx'));
 const DEFAULT_HUGGINGFACE_SETTINGS = settingsPatchForPreset(recommendedPreset('huggingface'));
+const DEFAULT_ANTIGRAVITY_SETTINGS = settingsPatchForPreset(recommendedPreset('antigravity'));
 const DEFAULT_CODEX_SETTINGS = settingsForConfiguredModel(recommendedPreset('codex'));
 const DEFAULT_CLAUDE_SETTINGS = settingsForConfiguredModel(recommendedPreset('claude'));
 // The exact catalog defaults win over a same-provider recommended preset. This
-// keeps changing `defaults.local/hosted` in JSON sufficient to change new installs.
-const DEFAULT_ACTIVE_LOCAL_SETTINGS = settingsPatchForPreset(DEFAULT_LOCAL_PRESET);
+// keeps changing `defaults.byom/hosted` in JSON sufficient to change new installs.
+const DEFAULT_ACTIVE_BYOM_SETTINGS = settingsPatchForPreset(DEFAULT_BYOM_PRESET);
 const DEFAULT_ACTIVE_HOSTED_SETTINGS = settingsForConfiguredModel(DEFAULT_HOSTED_PRESET);
 const DEFAULT_HOSTED_MODEL = configuredModel(DEFAULT_HOSTED_PRESET.provider);
 // The preset id a fresh hosted slot resolves to (or 'custom' when the configured
@@ -91,6 +93,15 @@ const DEFAULT_HOSTED_MODEL = configuredModel(DEFAULT_HOSTED_PRESET.provider);
 const DEFAULT_HOSTED_PRESET_ID = modelMatchesPreset(DEFAULT_HOSTED_PRESET, DEFAULT_HOSTED_MODEL)
   ? DEFAULT_HOSTED_PRESET.id
   : 'custom';
+
+// Legacy "Local Models" settings key → its "BYoM" (Bring Your Own Model)
+// replacement. Applied at load time (see normalizeStore) so a store written
+// before the rename keeps working after upgrade.
+const BYOM_KEY_MIGRATIONS = Object.freeze([
+  ['localLlmProvider', 'byomProvider'],
+  ['localLlmPresetId', 'byomPresetId'],
+  ['localActiveModel', 'byomActiveModel'],
+]);
 
 /**
  * Tiny JSON-file backed store for local settings, the business -> project
@@ -136,19 +147,22 @@ const DEFAULT_STORE = Object.freeze({
     repositoryProvider: 'github',
     repositoryUrl: '',
     gitlabToken: '',
-    // Deep-agent LLM providers. Two role slots choose a local provider
-    // ('ollama' / 'lmstudio' / 'omlx') or hosted provider ('codex' / 'claude'):
-    //   llmProvider      — GLOBAL (hosted) slot: used by the planner and by the
-    //                      coder for hosted-labeled (and unlabeled) issues.
-    //   localLlmProvider — LOCAL slot: used by the coder for "local"-labeled (XS)
-    //                      issues only.
-    // New installs start with one useful local preset and one hosted preset. An
+    // Deep-agent LLM providers. Two role slots choose a BYoM provider
+    // ('ollama' / 'lmstudio' / 'omlx' / 'huggingface') or a hosted provider
+    // ('codex' / 'claude'):
+    //   llmProvider  — GLOBAL (hosted) slot: used by the planner and by the
+    //                  coder for hosted-labeled (and unlabeled) issues.
+    //   byomProvider — BYoM slot ("Bring Your Own Model"; formerly the "local"
+    //                  slot): used by the coder for "byom"-labeled (XS) issues
+    //                  only. Renamed from localLlmProvider — see normalizeStore
+    //                  for the load-time migration of the legacy key.
+    // New installs start with one useful BYoM preset and one hosted preset. An
     // existing store is migrated to "custom" below so its hand-tuned values are
     // never silently replaced by a catalog recommendation.
     llmProvider: DEFAULT_HOSTED_PRESET.provider,
-    localLlmProvider: DEFAULT_LOCAL_PRESET.provider,
+    byomProvider: DEFAULT_BYOM_PRESET.provider,
     hostedLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
-    localLlmPresetId: DEFAULT_LOCAL_PRESET.id,
+    byomPresetId: DEFAULT_BYOM_PRESET.id,
     // Purpose-based model roles ("models as tasks"). Each names one of the four
     // providers and reuses that provider's shared config block below. New
     // installs point every role at the hosted slot; an operator can independently
@@ -194,6 +208,13 @@ const DEFAULT_STORE = Object.freeze({
     huggingfaceHost: CONFIG.HUGGINGFACE.defaultHost,
     huggingfaceApiKey: '',
     ...DEFAULT_HUGGINGFACE_SETTINGS,
+    // Antigravity (Google) — backed by the Gemini API via @google/genai. The
+    // Gemini API key is REQUIRED; it lives server-side only and is exposed solely
+    // via masked status fields (read from GEMINI_API_KEY in the cloud). The called
+    // target (model / preview agent id) comes from CONFIG.ANTIGRAVITY (trusted).
+    antigravityApiKey: '',
+    antigravityAgentId: '',
+    ...DEFAULT_ANTIGRAVITY_SETTINGS,
     // Codex (OpenAI) provider — endpoints/client come from CONFIG.OAUTH (trusted),
     // the browser only chooses the model. Tokens live server-side only.
     ...DEFAULT_CODEX_SETTINGS,
@@ -211,7 +232,7 @@ const DEFAULT_STORE = Object.freeze({
     // per-item criteria), so the selected preset supplies enough headroom while
     // the model still stops naturally at end_turn.
     ...DEFAULT_CLAUDE_SETTINGS,
-    ...DEFAULT_ACTIVE_LOCAL_SETTINGS,
+    ...DEFAULT_ACTIVE_BYOM_SETTINGS,
     ...DEFAULT_ACTIVE_HOSTED_SETTINGS,
     claudeTokens: null, // OAuth token set — never sent to the browser
     // GitHub token (fine-grained PAT) for the code-writer's git clone/push against
@@ -250,12 +271,6 @@ const DEFAULT_STORE = Object.freeze({
   approvals: [], // requirement-evaluation approval gates (see agent/approval-gate.js)
 });
 
-function ensureDataDir() {
-  if (!fs.existsSync(CONFIG.DATA_DIR)) {
-    fs.mkdirSync(CONFIG.DATA_DIR, { recursive: true });
-  }
-}
-
 function cloneDefault() {
   return JSON.parse(JSON.stringify(DEFAULT_STORE));
 }
@@ -272,84 +287,128 @@ function migrateBusinessRepositories(businesses) {
   });
 }
 
-function readStore() {
-  ensureDataDir();
-  if (!fs.existsSync(CONFIG.STORE_FILE)) {
-    const seed = cloneDefault();
-    writeStore(seed);
-    return seed;
+/**
+ * Merge + migrate a raw parsed store into a full, current-schema store. This is
+ * PURE (no I/O), so the file and Firestore backends share the exact same
+ * normalization. Previously this logic lived inline in the file-only readStore.
+ */
+function normalizeStore(parsed) {
+  const source = parsed && typeof parsed === 'object' ? parsed : {};
+  const base = cloneDefault();
+  const storedSettings = source.settings || {};
+  const settings = { ...base.settings, ...storedSettings };
+  // Rename migration: the "Local Models" slot became "BYoM" (Bring Your Own
+  // Model). Copy any legacy localLlm*/localActiveModel value into its byom*
+  // replacement when the new key is absent, then drop the stale key so a
+  // migrated store carries only the current schema. Existing data keeps working.
+  for (const [legacyKey, byomKey] of BYOM_KEY_MIGRATIONS) {
+    if (Object.prototype.hasOwnProperty.call(storedSettings, legacyKey)
+      && !Object.prototype.hasOwnProperty.call(storedSettings, byomKey)) {
+      settings[byomKey] = storedSettings[legacyKey];
+    }
+    delete settings[legacyKey];
   }
-  try {
-    const raw = fs.readFileSync(CONFIG.STORE_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    const base = cloneDefault();
-    const storedSettings = parsed.settings || {};
-    const settings = { ...base.settings, ...storedSettings };
-    // Preset ids did not exist before catalog v1. Treat legacy settings as
-    // customized instead of claiming they match (and possibly later reapplying)
-    // a new default preset.
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'localLlmPresetId')) {
-      settings.localLlmPresetId = 'custom';
-    }
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'hostedLlmPresetId')) {
-      settings.hostedLlmPresetId = 'custom';
-    }
-    // Purpose-based model roles did not exist before this migration. Seed each
-    // absent role from the operator's effective hosted slot so an existing
-    // install keeps its current planner/coder model (previously always the
-    // hosted slot) instead of jumping to a catalog default. The `local`/`global`
-    // slots are preserved untouched for localization and diagnostics.
-    for (const role of MODEL_ROLES) {
-      const providerKey = `${role}LlmProvider`;
-      const presetKey = `${role}LlmPresetId`;
-      if (!Object.prototype.hasOwnProperty.call(storedSettings, providerKey)) {
-        settings[providerKey] = settings.llmProvider;
-        settings[presetKey] = settings.hostedLlmPresetId;
-      }
-    }
-    // Preserve explicitly configured legacy request shapes. When both hosted
-    // reasoning fields are absent, however, activate the reviewed default for
-    // the effective known model. This keeps the visible model-aware default and
-    // the actual runtime request in sync without overwriting an explicit Off.
-    for (const prefix of ['ollama', 'lmstudio', 'codex', 'claude', 'huggingface']) {
-      const effortKey = `${prefix}ReasoningEffort`;
-      const adapterKey = `${prefix}ReasoningAdapter`;
-      if (!Object.prototype.hasOwnProperty.call(storedSettings, effortKey)) settings[effortKey] = null;
-      if (!Object.prototype.hasOwnProperty.call(storedSettings, adapterKey)) settings[adapterKey] = 'none';
-    }
-    applyLegacyHostedReasoningDefaults(settings, storedSettings);
-    // Sampling fields were previously hard-coded in the provider factory. Keep
-    // those request shapes for legacy custom settings until a preset is chosen.
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'ollamaTemperature')) settings.ollamaTemperature = 0;
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'lmstudioTemperature')) settings.lmstudioTemperature = 0;
-    if (!Object.prototype.hasOwnProperty.call(storedSettings, 'codexTemperature')) settings.codexTemperature = 0;
-    for (const prefix of ['ollama', 'lmstudio']) {
-      for (const suffix of ['TopP', 'TopK', 'RepeatPenalty']) {
-        const key = `${prefix}${suffix}`;
-        if (!Object.prototype.hasOwnProperty.call(storedSettings, key)) settings[key] = null;
-      }
-    }
-    return {
-      ...base,
-      ...parsed,
-      settings,
-      businesses: migrateBusinessRepositories(Array.isArray(parsed.businesses) ? parsed.businesses : base.businesses),
-      assumedRole: parsed.assumedRole || null,
-      agentConfig: migrateAgentConfig({ ...base.agentConfig, ...(parsed.agentConfig || {}) }),
-      jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
-      memories: Array.isArray(parsed.memories) ? parsed.memories : [],
-      conversations: Array.isArray(parsed.conversations) ? parsed.conversations : [],
-      approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
-    };
-  } catch (err) {
-    return cloneDefault();
+  // Preset ids did not exist before catalog v1. Treat legacy settings as
+  // customized instead of claiming they match (and possibly later reapplying)
+  // a new default preset. A pre-rename store carries localLlmPresetId (already
+  // migrated to byomPresetId above), so only a store missing BOTH keys is legacy.
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'byomPresetId')
+    && !Object.prototype.hasOwnProperty.call(storedSettings, 'localLlmPresetId')) {
+    settings.byomPresetId = 'custom';
   }
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'hostedLlmPresetId')) {
+    settings.hostedLlmPresetId = 'custom';
+  }
+  // Purpose-based model roles did not exist before this migration. Seed each
+  // absent role from the operator's effective hosted slot so an existing
+  // install keeps its current planner/coder model (previously always the
+  // hosted slot) instead of jumping to a catalog default. The `byom`/`global`
+  // slots are preserved untouched for localization and diagnostics.
+  for (const role of MODEL_ROLES) {
+    const providerKey = `${role}LlmProvider`;
+    const presetKey = `${role}LlmPresetId`;
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, providerKey)) {
+      settings[providerKey] = settings.llmProvider;
+      settings[presetKey] = settings.hostedLlmPresetId;
+    }
+  }
+  // Preserve explicitly configured legacy request shapes. When both hosted
+  // reasoning fields are absent, however, activate the reviewed default for
+  // the effective known model. This keeps the visible model-aware default and
+  // the actual runtime request in sync without overwriting an explicit Off.
+  for (const prefix of ['ollama', 'lmstudio', 'codex', 'claude', 'huggingface', 'antigravity']) {
+    const effortKey = `${prefix}ReasoningEffort`;
+    const adapterKey = `${prefix}ReasoningAdapter`;
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, effortKey)) settings[effortKey] = null;
+    if (!Object.prototype.hasOwnProperty.call(storedSettings, adapterKey)) settings[adapterKey] = 'none';
+  }
+  applyLegacyHostedReasoningDefaults(settings, storedSettings);
+  // Sampling fields were previously hard-coded in the provider factory. Keep
+  // those request shapes for legacy custom settings until a preset is chosen.
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'ollamaTemperature')) settings.ollamaTemperature = 0;
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'lmstudioTemperature')) settings.lmstudioTemperature = 0;
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'codexTemperature')) settings.codexTemperature = 0;
+  for (const prefix of ['ollama', 'lmstudio']) {
+    for (const suffix of ['TopP', 'TopK', 'RepeatPenalty']) {
+      const key = `${prefix}${suffix}`;
+      if (!Object.prototype.hasOwnProperty.call(storedSettings, key)) settings[key] = null;
+    }
+  }
+  return {
+    ...base,
+    ...source,
+    settings,
+    businesses: migrateBusinessRepositories(Array.isArray(source.businesses) ? source.businesses : base.businesses),
+    assumedRole: source.assumedRole || null,
+    agentConfig: migrateAgentConfig({ ...base.agentConfig, ...(source.agentConfig || {}) }),
+    jobs: Array.isArray(source.jobs) ? source.jobs : [],
+    memories: Array.isArray(source.memories) ? source.memories : [],
+    conversations: Array.isArray(source.conversations) ? source.conversations : [],
+    approvals: Array.isArray(source.approvals) ? source.approvals : [],
+  };
 }
 
+function seedStore() {
+  return cloneDefault();
+}
+
+// Top-level keys kept together in one Firestore document (small, singleton) vs.
+// the growing arrays that each become a per-record sub-collection so no single
+// document approaches Firestore's 1 MB limit.
+const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig'];
+const STORE_COLLECTION_KEYS = ['jobs', 'memories', 'conversations', 'approvals'];
+
+const backend = CONFIG.STORE_BACKEND === 'firestore'
+  ? firestoreBackend.create({
+      mainKeys: STORE_MAIN_KEYS,
+      collectionKeys: STORE_COLLECTION_KEYS,
+      normalize: normalizeStore,
+      seed: seedStore,
+    })
+  : fileBackend.create({
+      file: CONFIG.STORE_FILE,
+      dataDir: CONFIG.DATA_DIR,
+      normalize: normalizeStore,
+      seed: seedStore,
+    });
+
+/** Read the current store. Synchronous for both backends. */
+function readStore() {
+  return backend.read();
+}
+
+/** Persist a new store and return it. */
 function writeStore(store) {
-  ensureDataDir();
-  fs.writeFileSync(CONFIG.STORE_FILE, JSON.stringify(store, null, 2), 'utf8');
-  return store;
+  return backend.write(store);
+}
+
+/**
+ * Hydrate the store backend before serving traffic. A no-op for the file
+ * backend; the Firestore backend loads its in-memory mirror and starts live
+ * listeners. Services should `await initStore()` on boot.
+ */
+async function initStore() {
+  if (typeof backend.init === 'function') await backend.init();
 }
 
 /** Back-compat: convert legacy single `enrichLabel` into `enrichLabels[]`. */
@@ -373,8 +432,37 @@ function migrateAgentConfig(config) {
 
 /* --------------------------- Settings / secrets ------------------------- */
 
+/**
+ * Secrets sourced from the environment (Cloud Run injects Secret Manager values
+ * as env vars) take precedence over anything persisted in the store. This keeps
+ * long-lived credentials out of Firestore/the JSON file in the cloud while local
+ * dev (no env) keeps using the values entered in the Settings UI. Rotating OAuth
+ * token SETS (codexTokens/claudeTokens) stay in the IAM-protected store because
+ * they are rewritten on refresh.
+ */
+const SECRET_ENV = Object.freeze({
+  linearApiKey: 'LINEAR_API_KEY',
+  githubToken: 'GITHUB_TOKEN',
+  gitlabToken: 'GITLAB_TOKEN',
+  langsmithApiKey: 'LANGSMITH_API_KEY',
+  jiraApiToken: 'JIRA_API_TOKEN',
+  asanaAccessToken: 'ASANA_ACCESS_TOKEN',
+  omlxApiKey: 'OMLX_API_KEY',
+  huggingfaceApiKey: 'HUGGINGFACE_API_KEY',
+  antigravityApiKey: 'GEMINI_API_KEY',
+});
+
+function secretOverlay() {
+  const patch = {};
+  for (const [key, envName] of Object.entries(SECRET_ENV)) {
+    const value = process.env[envName];
+    if (value) patch[key] = value;
+  }
+  return patch;
+}
+
 function getApiKey() {
-  return readStore().settings.linearApiKey || '';
+  return getSettings().linearApiKey || '';
 }
 
 function setApiKey(linearApiKey) {
@@ -382,8 +470,9 @@ function setApiKey(linearApiKey) {
   return writeStore({ ...current, settings: { ...current.settings, linearApiKey } });
 }
 
+/** Effective settings: stored values with any environment secrets overlaid. */
 function getSettings() {
-  return readStore().settings;
+  return { ...readStore().settings, ...secretOverlay() };
 }
 
 /** Merge a partial settings patch (used for LLM / LangSmith keys). */
@@ -400,7 +489,7 @@ function getBusinessByProjectId(projectId) {
 
 /** Server-side GitHub token (never returned raw to the browser). */
 function getGithubToken() {
-  return readStore().settings.githubToken || '';
+  return getSettings().githubToken || '';
 }
 
 function setGithubToken(githubToken) {
@@ -409,7 +498,7 @@ function setGithubToken(githubToken) {
 
 /** Selected repository connector, including the matching private token. */
 function getRepositoryConfig() {
-  const settings = readStore().settings;
+  const settings = getSettings();
   const provider = settings.repositoryProvider === 'gitlab' ? 'gitlab' : 'github';
   return {
     provider,
@@ -420,7 +509,7 @@ function getRepositoryConfig() {
 
 function getRepositoryToken(provider) {
   if (provider === undefined) return getRepositoryConfig().token;
-  const settings = readStore().settings;
+  const settings = getSettings();
   if (provider === 'github') return String(settings.githubToken || '');
   if (provider === 'gitlab') return String(settings.gitlabToken || '');
   return '';
@@ -428,7 +517,7 @@ function getRepositoryToken(provider) {
 
 /** Selected planning connector. Credentials are intentionally returned only server-side. */
 function getPlanningConfig() {
-  const settings = readStore().settings;
+  const settings = getSettings();
   const provider = ['linear', 'jira', 'asana'].includes(settings.planningProvider)
     ? settings.planningProvider
     : 'linear';
@@ -779,8 +868,10 @@ module.exports = {
   migrateBusinessRepositories,
   settingsForConfiguredModel,
   applyLegacyHostedReasoningDefaults,
+  normalizeStore,
   readStore,
   writeStore,
+  initStore,
   getApiKey,
   setApiKey,
   getSettings,

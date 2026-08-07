@@ -31,32 +31,35 @@ const {
 
 const router = express.Router();
 
-// Settings keys backing each LLM role. Deployment slots ('local'/'global') stay
+// Settings keys backing each LLM role. Deployment slots ('byom'/'global') stay
 // deployment-pinned; purpose roles (thinking/execution/testing) are provider-
 // flexible and reuse whichever provider block they name.
 const ROLE_KEYS = Object.freeze({
   global: { provider: 'llmProvider', preset: 'hostedLlmPresetId' },
-  local: { provider: 'localLlmProvider', preset: 'localLlmPresetId' },
+  byom: { provider: 'byomProvider', preset: 'byomPresetId' },
   thinking: { provider: 'thinkingLlmProvider', preset: 'thinkingLlmPresetId' },
   execution: { provider: 'executionLlmProvider', preset: 'executionLlmPresetId' },
   testing: { provider: 'testingLlmProvider', preset: 'testingLlmPresetId' },
 });
-const LOCAL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx']);
-const HOSTED_PROVIDERS = Object.freeze(['codex', 'claude', 'huggingface']);
+// BYoM ("Bring Your Own Model") providers: the local-inference runtimes plus the
+// Hugging Face hosted router. Codex/Claude/Antigravity are the managed hosted providers.
+const BYOM_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'huggingface']);
+const HOSTED_PROVIDERS = Object.freeze(['codex', 'claude', 'antigravity']);
 
 /** Canonicalize a request's role, or null when unrecognized. */
 function parseRole(value) {
-  if (value === 'local') return 'local';
+  // 'byom' is canonical; 'local' is still accepted as a legacy alias.
+  if (value === 'byom' || value === 'local') return 'byom';
   if (value === 'global' || value === 'hosted') return 'global';
   if (isPurposeRole(value)) return value;
   return null;
 }
 
-/** Providers a role may select — purpose roles accept both local and hosted. */
+/** Providers a role may select — purpose roles accept both BYoM and hosted. */
 function providersForRole(role) {
-  if (role === 'local') return LOCAL_PROVIDERS;
+  if (role === 'byom') return BYOM_PROVIDERS;
   if (role === 'global') return HOSTED_PROVIDERS;
-  return [...LOCAL_PROVIDERS, ...HOSTED_PROVIDERS];
+  return [...BYOM_PROVIDERS, ...HOSTED_PROVIDERS];
 }
 
 /** Public settings view — secrets are masked, never returned raw. */
@@ -85,13 +88,13 @@ function publicSettings() {
     repositoryUrl: s.repositoryUrl || '',
     repositoryConfigured: Boolean(s.repositoryUrl && (repositoryProvider === 'gitlab' ? s.gitlabToken : s.githubToken)),
     // Deep-agent provider slots. `llmProvider` = GLOBAL (hosted) slot (planner +
-    // coder's hosted/unlabeled route); `localLlmProvider` = LOCAL slot (coder's
-    // "local"/XS route). Local providers are Ollama, LM Studio, or oMLX;
-    // hosted providers are OpenAI/Codex or Anthropic/Claude.
+    // coder's hosted/unlabeled route); `byomProvider` = BYoM slot (coder's
+    // "byom"/XS route). BYoM providers are Ollama, LM Studio, oMLX, or Hugging
+    // Face; hosted providers are OpenAI/Codex or Anthropic/Claude.
     llmProvider: s.llmProvider || 'ollama',
-    localLlmProvider: s.localLlmProvider || 'lmstudio',
+    byomProvider: s.byomProvider || 'lmstudio',
     hostedLlmPresetId: s.hostedLlmPresetId || 'custom',
-    localLlmPresetId: s.localLlmPresetId || 'custom',
+    byomPresetId: s.byomPresetId || 'custom',
     // Purpose-based model roles ("models as tasks"). Each names a provider and
     // reuses that provider's block below. thinking → planner, execution →
     // coder, testing → reserved (tool calling; not wired to a consumer yet).
@@ -166,6 +169,17 @@ function publicSettings() {
     huggingfaceReasoningAdapter: s.huggingfaceReasoningAdapter || 'none',
     hasHuggingfaceApiKey: Boolean(s.huggingfaceApiKey),
     maskedHuggingfaceApiKey: maskKey(s.huggingfaceApiKey),
+    // Antigravity (Google/Gemini) — model/params/agent-id are not secrets; the
+    // Gemini API key is and is exposed only as has/masked fields.
+    antigravityModel: s.antigravityModel,
+    antigravityAgentId: s.antigravityAgentId || '',
+    antigravityContextWindow: s.antigravityContextWindow,
+    antigravityMaxTokens: s.antigravityMaxTokens,
+    antigravityTemperature: s.antigravityTemperature ?? null,
+    antigravityReasoningEffort: s.antigravityReasoningEffort || 'none',
+    antigravityReasoningAdapter: s.antigravityReasoningAdapter || 'none',
+    hasAntigravityApiKey: Boolean(s.antigravityApiKey),
+    maskedAntigravityApiKey: maskKey(s.antigravityApiKey),
     hasGithubToken: Boolean(s.githubToken),
     maskedGithubToken: maskKey(s.githubToken),
     hasGitlabToken: Boolean(s.gitlabToken),
@@ -314,7 +328,7 @@ router.put('/llm-preset', (req, res) => {
   // deployment (presetForRole already relaxes this). A migrated custom slot may
   // keep its existing provider until the operator selects a real preset.
   const deploymentOk = isPurposeRole(role) || !preset
-    || preset.deployment === (role === 'local' ? 'local' : 'hosted');
+    || preset.deployment === (role === 'byom' ? 'byom' : 'hosted');
   if (!preset || (!isCustom && !deploymentOk) || (isCustom && requestedProvider !== currentProvider)) {
     return res.status(400).json({ error: `Unknown or incompatible LLM preset for the ${role} role.` });
   }
@@ -348,6 +362,14 @@ router.put('/llm-preset', (req, res) => {
     if (overrides.clearApiKey === true) patch.huggingfaceApiKey = '';
     else if (overrides.apiKey !== undefined && String(overrides.apiKey).trim()) {
       patch.huggingfaceApiKey = String(overrides.apiKey).trim().slice(0, 4096);
+    }
+  }
+  if (preset.provider === 'antigravity') {
+    // Optional preview agent-id override (non-secret) and the Gemini API key.
+    if (overrides.agentId !== undefined) patch.antigravityAgentId = String(overrides.agentId).trim().slice(0, 200);
+    if (overrides.clearApiKey === true) patch.antigravityApiKey = '';
+    else if (overrides.apiKey !== undefined && String(overrides.apiKey).trim()) {
+      patch.antigravityApiKey = String(overrides.apiKey).trim().slice(0, 4096);
     }
   }
   patch[keys.provider] = preset.provider;
@@ -490,7 +512,7 @@ router.put('/llm', (req, res) => {
     ollamaJsonMode: oneOf(b.ollamaJsonMode, CONFIG.OLLAMA_JSON_MODES, current.ollamaJsonMode || 'json'),
   };
   if (hasModelOverride) patch.ollamaModel = model;
-  if (current.localLlmProvider === 'ollama') patch.localLlmPresetId = 'custom';
+  if (current.byomProvider === 'ollama') patch.byomPresetId = 'custom';
   if (current.llmProvider === 'ollama') patch.hostedLlmPresetId = 'custom';
   patchSettings(patch);
   res.json(publicSettings());
@@ -570,14 +592,14 @@ router.put('/lmstudio', (req, res) => {
     lmstudioContextMode: oneOf(b.lmstudioContextMode, CONFIG.LMSTUDIO_CONTEXT_MODES, current.lmstudioContextMode || 'summarize'),
   };
   if (hasModelOverride) patch.lmstudioModel = model;
-  if (current.localLlmProvider === 'lmstudio') patch.localLlmPresetId = 'custom';
+  if (current.byomProvider === 'lmstudio') patch.byomPresetId = 'custom';
   if (current.llmProvider === 'lmstudio') patch.hostedLlmPresetId = 'custom';
   patchSettings(patch);
   res.json(publicSettings());
 });
 
 // PUT /api/settings/provider — choose a deep-agent LLM provider for a role.
-// Body: { llmProvider|provider: <name>, role?: 'global'|'local'|'thinking'|
+// Body: { llmProvider|provider: <name>, role?: 'global'|'byom'|'thinking'|
 // 'execution'|'testing' }. Defaults to the global (hosted) slot. Purpose roles
 // accept any provider; deployment slots stay pinned to their deployment.
 router.put('/provider', (req, res) => {

@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const { resolveSkillsSrc } = require('../config');
 const { createChatModel } = require('./llm');
 const toolRegistry = require('./tools');
 const { installSafeRead } = require('./safe-read');
@@ -35,19 +36,23 @@ const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = re
  *     recursionLimit?: number, tags?: string[], shellTimeoutSec?: number }
  */
 
-const SKILLS_SRC = path.join(__dirname, 'skills');
 const SKILLS_DEST_DIRNAME = '.agent-skills';
 const SKILLS_OWNER_MARKER = '.tech-symphony-managed';
 const SKILLS_OWNER_MARKER_CONTENT = 'tech-symphony-agent-skills-v1\n';
 const WORKFLOWS_DIR = path.join(__dirname, 'workflows');
 
 /**
- * Copy the named skills from server/agent/skills/ into `destRoot/.agent-skills/`
- * and return their backend-relative paths (e.g. `/.agent-skills/software-planning/`).
- * With no names, installs every available skill (back-compat with the coder's
- * previous "install all" behavior).
+ * Copy the named skills from the configured skills source into
+ * `destRoot/.agent-skills/` and return their backend-relative paths (e.g.
+ * `/.agent-skills/software-planning/`). With no names, installs every available
+ * skill (back-compat with the coder's previous "install all" behavior).
+ *
+ * The source directory is resolved per call from config (resolveSkillsSrc): the
+ * vendored `skills/` dir by default, or a version-pinned gcsfuse mount subdir
+ * (`$SKILLS_ROOT/$SKILLS_VERSION`) in the cloud. See packages/shared/src/config.js.
  */
 function installSkills(destRoot, skillNames) {
+  const skillsSrc = resolveSkillsSrc();
   const root = path.resolve(destRoot);
   const rootStat = lstatOrNull(root);
   if (!rootStat || !rootStat.isDirectory()) {
@@ -55,7 +60,7 @@ function installSkills(destRoot, skillNames) {
   }
   const realRoot = fs.realpathSync(root);
   const dest = path.join(realRoot, SKILLS_DEST_DIRNAME);
-  const available = fs.readdirSync(SKILLS_SRC).filter((n) => isDir(path.join(SKILLS_SRC, n)));
+  const available = fs.readdirSync(skillsSrc).filter((n) => isDir(path.join(skillsSrc, n)));
   const names = Array.isArray(skillNames) && skillNames.length ? skillNames : available;
   for (const name of names) validateSkillName(name);
 
@@ -69,7 +74,7 @@ function installSkills(destRoot, skillNames) {
   claimSkillsDirectory(dest, realRoot);
   const paths = [];
   for (const name of new Set(names)) {
-    const from = path.join(SKILLS_SRC, name);
+    const from = path.join(skillsSrc, name);
     if (!isDir(from)) continue; // skip unknown skill names rather than throw
     assertNoSymlinks(from);
     const to = path.join(dest, name);
@@ -229,6 +234,23 @@ function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, ext
   // Guard read_file against Anthropic's content-block rules: unrecognized/binary
   // files must not be sent as non-PDF `document` blocks (invalid_request_error).
   be = installSafeRead(be);
+  // TODO(settings-service enforcement): filter this workflow's harness/tools/
+  // skills/plugins by the caller's EFFECTIVE settings policy before the agent is
+  // built. The settings service (services/settings) resolves the org→project→user
+  // include/exclude cascade; the gateway/planner should either call its
+  // GET /api/settings-policy/settings/effective?project_id=... endpoint or resolve
+  // locally via `require('./settings-policy').resolveEffective(universe, { org,
+  // project, user })`, then prune with `filterByPolicy(...)`:
+  //     const { filterByPolicy } = require('./settings-policy');
+  //     const eff = ctx.effectivePolicy;               // plumbed in from the caller
+  //     workflow = { ...workflow,
+  //       tools:  filterByPolicy(workflow.tools,  eff.tools.effective),
+  //       skills: filterByPolicy(workflow.skills, eff.skills.effective) };
+  //     // harness: effectiveAgentRuntime(runtime) must also be checked against
+  //     //          eff.harness.effective in runWorkflow/effectiveAgentRuntime.
+  // Left as a TODO (not silently skipped): wiring the effective policy through
+  // `ctx` end-to-end is a follow-up so this PR ships the service + resolver +
+  // proxy + terraform + UI without changing existing agent-build behaviour.
   const tools = [...toolRegistry.buildMany(workflow.tools, ctx), ...(extraTools || [])];
   const systemPrompt = typeof workflow.systemPrompt === 'function' ? workflow.systemPrompt(ctx) : workflow.systemPrompt;
   // Repair mis-keyed filesystem tool calls (e.g. read_file with `path` instead
