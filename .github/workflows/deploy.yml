@@ -94,16 +94,14 @@ jobs:
           docker push "$BASE/planner:${IMAGE_TAG}"
           docker push "$BASE/coder-control:${IMAGE_TAG}"
 
-      - name: Publish SPA to GCS
+      - name: Deploy SPA to Firebase Hosting
+        # Served at https://<project>.web.app (root → absolute asset paths resolve),
+        # with a catch-all rewrite (** → /index.html) so any unknown/deep path
+        # falls back to the SPA. Auth is the WIF ADC from the auth step (keyless).
         run: |
           set -euo pipefail
           printf "window.__API_BASE__='%s';\n" "${{ steps.vars.outputs.gateway_url }}" > public/config.js
-          # no-cache: the SPA filenames are unhashed, so long-caching would serve
-          # stale JS/CSS after a deploy. Access the SPA via the virtual-hosted URL
-          # (https://<bucket>.storage.googleapis.com/index.html) so absolute asset
-          # paths resolve.
-          gsutil -h "Cache-Control:no-cache" -m rsync -r -d public "gs://${{ vars.SPA_BUCKET }}"
-          gsutil -m setmeta -h "Content-Type:text/javascript" "gs://${{ vars.SPA_BUCKET }}/**/*.mjs" || true
+          npx --yes firebase-tools@13 deploy --only hosting --project "${{ vars.GCP_PROJECT_ID }}" --non-interactive
 
       # Full apply: Cloud Run services + coder Job, Pub/Sub, Cloud Scheduler,
       # Firestore, Secret Manager grants, IAM. Rolls out the new image tag.
