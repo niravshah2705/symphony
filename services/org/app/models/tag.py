@@ -1,25 +1,39 @@
-"""Tag model — an org-scoped, free-form label reused across the org."""
+"""Tag model — an org-scoped, free-form label.
+Firestore: `organizations/{org_id}/tags/{id}` (unique per-org name enforced by
+a guard doc `organizations/{org_id}/tag_names/{name}` in the repository).
+"""
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint, Uuid
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from app.models.base import Base, TimestampMixin, UUIDMixin
-
-if TYPE_CHECKING:
-    from app.models.organization import Organization
+from app.models.base import new_uuid, to_uuid, utcnow, uuid_str
 
 
-class Tag(UUIDMixin, TimestampMixin, Base):
-    __tablename__ = "tags"
-    __table_args__ = (UniqueConstraint("org_id", "name", name="uq_org_tag_name"),)
+@dataclass
+class Tag:
+    org_id: uuid.UUID | None = None
+    name: str = ""
+    id: uuid.UUID = field(default_factory=new_uuid)
+    created_at: datetime = field(default_factory=utcnow)
+    updated_at: datetime = field(default_factory=utcnow)
 
-    org_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    def to_doc(self) -> dict:
+        return {
+            "id": uuid_str(self.id),
+            "org_id": uuid_str(self.org_id),
+            "name": self.name,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
 
-    organization: Mapped["Organization"] = relationship(back_populates="tags")
+    @classmethod
+    def from_doc(cls, doc: dict) -> "Tag":
+        return cls(
+            id=to_uuid(doc["id"]),
+            org_id=to_uuid(doc.get("org_id")),
+            name=doc.get("name", ""),
+            created_at=doc.get("created_at") or utcnow(),
+            updated_at=doc.get("updated_at") or utcnow(),
+        )

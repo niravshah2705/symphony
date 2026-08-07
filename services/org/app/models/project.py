@@ -1,36 +1,46 @@
-"""Project model (scoped to an organization)."""
+"""Project model (org-scoped). Firestore: `organizations/{org_id}/projects/{id}`."""
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, Uuid
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.models.base import id_list, new_uuid, to_uuid, utcnow, uuid_str
 
-from app.models.associations import project_tag
-from app.models.base import Base, TimestampMixin, UUIDMixin
-
-if TYPE_CHECKING:
-    from app.models.organization import Organization
-    from app.models.project_membership import ProjectMembership
+if True:
     from app.models.tag import Tag
-    from app.models.task import Task
 
 
-class Project(UUIDMixin, TimestampMixin, Base):
-    __tablename__ = "projects"
+@dataclass
+class Project:
+    org_id: uuid.UUID | None = None
+    name: str = ""
+    description: str | None = None
+    id: uuid.UUID = field(default_factory=new_uuid)
+    created_at: datetime = field(default_factory=utcnow)
+    updated_at: datetime = field(default_factory=utcnow)
+    tag_ids: list[uuid.UUID] = field(default_factory=list)
+    tags: list["Tag"] = field(default_factory=list, compare=False, repr=False)
 
-    org_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    def to_doc(self) -> dict:
+        return {
+            "id": uuid_str(self.id),
+            "org_id": uuid_str(self.org_id),
+            "name": self.name,
+            "description": self.description,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "tag_ids": [uuid_str(t) for t in self.tag_ids],
+        }
 
-    organization: Mapped["Organization"] = relationship(back_populates="projects")
-    memberships: Mapped[list["ProjectMembership"]] = relationship(
-        back_populates="project", cascade="all, delete-orphan"
-    )
-    tasks: Mapped[list["Task"]] = relationship(
-        back_populates="project", cascade="all, delete-orphan"
-    )
-    tags: Mapped[list["Tag"]] = relationship(secondary=project_tag, lazy="selectin")
+    @classmethod
+    def from_doc(cls, doc: dict) -> "Project":
+        return cls(
+            id=to_uuid(doc["id"]),
+            org_id=to_uuid(doc.get("org_id")),
+            name=doc.get("name", ""),
+            description=doc.get("description"),
+            created_at=doc.get("created_at") or utcnow(),
+            updated_at=doc.get("updated_at") or utcnow(),
+            tag_ids=id_list(doc.get("tag_ids")),
+        )

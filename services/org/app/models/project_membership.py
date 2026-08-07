@@ -1,33 +1,47 @@
-"""Developer <-> Project many-to-many, carrying the project-scoped role."""
+"""Developer <-> Project membership, carrying the project-scoped role.
+Firestore: `organizations/{org_id}/memberships/{project_id}_{user_id}` — the
+composite doc id makes (project, user) uniqueness structural.
+"""
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from datetime import datetime
 
-from sqlalchemy import Enum, ForeignKey, UniqueConstraint, Uuid
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.base import new_uuid, to_uuid, utcnow, uuid_str
 from app.models.enums import ProjectRole
 
-if TYPE_CHECKING:
-    from app.models.project import Project
-    from app.models.user import User
 
+@dataclass
+class ProjectMembership:
+    project_id: uuid.UUID | None = None
+    user_id: uuid.UUID | None = None
+    role: ProjectRole = ProjectRole.DEVELOPER
+    id: uuid.UUID = field(default_factory=new_uuid)
+    created_at: datetime = field(default_factory=utcnow)
+    updated_at: datetime = field(default_factory=utcnow)
 
-class ProjectMembership(UUIDMixin, TimestampMixin, Base):
-    __tablename__ = "project_memberships"
-    __table_args__ = (UniqueConstraint("project_id", "user_id", name="uq_project_user"),)
+    @staticmethod
+    def doc_id(project_id: uuid.UUID, user_id: uuid.UUID) -> str:
+        return f"{project_id}_{user_id}"
 
-    project_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    role: Mapped[ProjectRole] = mapped_column(
-        Enum(ProjectRole, name="project_role"), nullable=False
-    )
+    def to_doc(self) -> dict:
+        return {
+            "id": uuid_str(self.id),
+            "project_id": uuid_str(self.project_id),
+            "user_id": uuid_str(self.user_id),
+            "role": self.role.value,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
 
-    project: Mapped["Project"] = relationship(back_populates="memberships")
-    user: Mapped["User"] = relationship(back_populates="memberships")
+    @classmethod
+    def from_doc(cls, doc: dict) -> "ProjectMembership":
+        return cls(
+            id=to_uuid(doc["id"]),
+            project_id=to_uuid(doc.get("project_id")),
+            user_id=to_uuid(doc.get("user_id")),
+            role=ProjectRole(doc.get("role", ProjectRole.DEVELOPER.value)),
+            created_at=doc.get("created_at") or utcnow(),
+            updated_at=doc.get("updated_at") or utcnow(),
+        )

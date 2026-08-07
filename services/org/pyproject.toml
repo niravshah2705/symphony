@@ -1,14 +1,12 @@
 [project]
 name = "org-service"
 version = "0.1.0"
-description = "Multi-tenant organization/project/task management backend with RBAC (FastAPI)"
+description = "Multi-tenant organization/project/task management backend with RBAC (FastAPI, Firestore)"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
-    "sqlalchemy[asyncio]>=2.0.30",
-    "asyncpg>=0.29",
-    "alembic>=1.13",
+    "google-cloud-firestore>=2.16",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "pyjwt[crypto]>=2.8",
@@ -25,7 +23,6 @@ test = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
-    "aiosqlite>=0.20",
     "asgi-lifespan>=2.1",
 ]
 

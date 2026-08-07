@@ -1,30 +1,34 @@
-"""Declarative base and shared column mixins."""
+"""Shared helpers for the Firestore-backed dataclass models.
+
+Models keep native ``uuid.UUID`` / ``datetime`` / enum fields (so the service,
+guard, and route layers are unchanged); persistence converts to/from Firestore
+document dicts (uuid -> str, enum -> value, datetime stored natively).
+Relationship fields (e.g. ``tags``) are TRANSIENT — populated by repositories
+from stored id arrays, never serialized directly.
+"""
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-
-from sqlalchemy import DateTime, Uuid, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from datetime import datetime, timezone
 
 
-class Base(DeclarativeBase):
-    """Declarative base for all ORM models."""
+def new_uuid() -> uuid.UUID:
+    return uuid.uuid4()
 
 
-class UUIDMixin:
-    """Primary key as a random UUIDv4 (prevents cross-org enumeration)."""
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
-class TimestampMixin:
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
+def to_uuid(value) -> uuid.UUID | None:  # type: ignore[no-untyped-def]
+    if value is None or isinstance(value, uuid.UUID):
+        return value
+    return uuid.UUID(str(value))
+
+
+def uuid_str(value) -> str | None:  # type: ignore[no-untyped-def]
+    return None if value is None else str(value)
+
+
+def id_list(values) -> list[uuid.UUID]:  # type: ignore[no-untyped-def]
+    return [to_uuid(v) for v in (values or [])]  # type: ignore[misc]

@@ -1,35 +1,55 @@
-"""Task model (scoped to a project)."""
+"""Task model (project-scoped).
+Firestore: `organizations/{org_id}/projects/{project_id}/tasks/{id}`.
+"""
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from datetime import datetime
 
-from sqlalchemy import Enum, ForeignKey, String, Uuid
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from app.models.associations import task_tag
-from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.base import id_list, new_uuid, to_uuid, utcnow, uuid_str
 from app.models.enums import TaskStatus
 
-if TYPE_CHECKING:
-    from app.models.project import Project
+if True:
     from app.models.tag import Tag
 
 
-class Task(UUIDMixin, TimestampMixin, Base):
-    __tablename__ = "tasks"
+@dataclass
+class Task:
+    project_id: uuid.UUID | None = None
+    title: str = ""
+    description: str | None = None
+    status: TaskStatus = TaskStatus.TODO
+    assignee_id: uuid.UUID | None = None
+    id: uuid.UUID = field(default_factory=new_uuid)
+    created_at: datetime = field(default_factory=utcnow)
+    updated_at: datetime = field(default_factory=utcnow)
+    tag_ids: list[uuid.UUID] = field(default_factory=list)
+    tags: list["Tag"] = field(default_factory=list, compare=False, repr=False)
 
-    project_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    title: Mapped[str] = mapped_column(String(300), nullable=False)
-    description: Mapped[str | None] = mapped_column(String(5000), nullable=True)
-    status: Mapped[TaskStatus] = mapped_column(
-        Enum(TaskStatus, name="task_status"), default=TaskStatus.TODO, nullable=False
-    )
-    assignee_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
-    )
+    def to_doc(self) -> dict:
+        return {
+            "id": uuid_str(self.id),
+            "project_id": uuid_str(self.project_id),
+            "title": self.title,
+            "description": self.description,
+            "status": self.status.value,
+            "assignee_id": uuid_str(self.assignee_id),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "tag_ids": [uuid_str(t) for t in self.tag_ids],
+        }
 
-    project: Mapped["Project"] = relationship(back_populates="tasks")
-    tags: Mapped[list["Tag"]] = relationship(secondary=task_tag, lazy="selectin")
+    @classmethod
+    def from_doc(cls, doc: dict) -> "Task":
+        return cls(
+            id=to_uuid(doc["id"]),
+            project_id=to_uuid(doc.get("project_id")),
+            title=doc.get("title", ""),
+            description=doc.get("description"),
+            status=TaskStatus(doc.get("status", TaskStatus.TODO.value)),
+            assignee_id=to_uuid(doc.get("assignee_id")),
+            created_at=doc.get("created_at") or utcnow(),
+            updated_at=doc.get("updated_at") or utcnow(),
+            tag_ids=id_list(doc.get("tag_ids")),
+        )

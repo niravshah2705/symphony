@@ -1,57 +1,72 @@
 """User model. A regular user belongs to exactly one org; a platform
-super-admin has no org (org_id is NULL) and is the only cross-org identity.
+super-admin has no org (org_id is None). Firestore: `users/{id}`.
 """
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Uuid
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.base import new_uuid, to_uuid, utcnow, uuid_str
 from app.models.enums import AuthProvider, OrgRole
 
-if TYPE_CHECKING:
-    from app.models.organization import Organization
-    from app.models.project_membership import ProjectMembership
 
+@dataclass
+class User:
+    email: str = ""
+    org_id: uuid.UUID | None = None
+    full_name: str | None = None
+    password_hash: str | None = None
+    auth_provider: AuthProvider = AuthProvider.LOCAL
+    external_subject: str | None = None
+    org_role: OrgRole = OrgRole.MEMBER
+    is_super_admin: bool = False
+    is_active: bool = True
+    email_verified: bool = False
+    password_changed_at: datetime | None = None
+    email_verification_token_hash: str | None = None
+    email_verification_expires_at: datetime | None = None
+    id: uuid.UUID = field(default_factory=new_uuid)
+    created_at: datetime = field(default_factory=utcnow)
+    updated_at: datetime = field(default_factory=utcnow)
 
-class User(UUIDMixin, TimestampMixin, Base):
-    __tablename__ = "users"
+    def to_doc(self) -> dict:
+        return {
+            "id": uuid_str(self.id),
+            "org_id": uuid_str(self.org_id),
+            "email": self.email,
+            "full_name": self.full_name,
+            "password_hash": self.password_hash,
+            "auth_provider": self.auth_provider.value,
+            "external_subject": self.external_subject,
+            "org_role": self.org_role.value,
+            "is_super_admin": self.is_super_admin,
+            "is_active": self.is_active,
+            "email_verified": self.email_verified,
+            "password_changed_at": self.password_changed_at,
+            "email_verification_token_hash": self.email_verification_token_hash,
+            "email_verification_expires_at": self.email_verification_expires_at,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
 
-    org_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True
-    )
-    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
-    full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    auth_provider: Mapped[AuthProvider] = mapped_column(
-        Enum(AuthProvider, name="auth_provider"), default=AuthProvider.LOCAL, nullable=False
-    )
-    external_subject: Mapped[str | None] = mapped_column(
-        String(255), unique=True, nullable=True, index=True
-    )
-    org_role: Mapped[OrgRole] = mapped_column(
-        Enum(OrgRole, name="org_role"), default=OrgRole.MEMBER, nullable=False
-    )
-    is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    # Any password change bumps this; tokens issued before it are rejected.
-    password_changed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    # Single-use email verification (hash stored, never the raw token).
-    email_verification_token_hash: Mapped[str | None] = mapped_column(
-        String(128), nullable=True
-    )
-    email_verification_expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-
-    organization: Mapped["Organization | None"] = relationship(back_populates="users")
-    memberships: Mapped[list["ProjectMembership"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
+    @classmethod
+    def from_doc(cls, doc: dict) -> "User":
+        return cls(
+            id=to_uuid(doc["id"]),
+            org_id=to_uuid(doc.get("org_id")),
+            email=doc.get("email", ""),
+            full_name=doc.get("full_name"),
+            password_hash=doc.get("password_hash"),
+            auth_provider=AuthProvider(doc.get("auth_provider", AuthProvider.LOCAL.value)),
+            external_subject=doc.get("external_subject"),
+            org_role=OrgRole(doc.get("org_role", OrgRole.MEMBER.value)),
+            is_super_admin=bool(doc.get("is_super_admin", False)),
+            is_active=bool(doc.get("is_active", True)),
+            email_verified=bool(doc.get("email_verified", False)),
+            password_changed_at=doc.get("password_changed_at"),
+            email_verification_token_hash=doc.get("email_verification_token_hash"),
+            email_verification_expires_at=doc.get("email_verification_expires_at"),
+            created_at=doc.get("created_at") or utcnow(),
+            updated_at=doc.get("updated_at") or utcnow(),
+        )
