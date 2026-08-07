@@ -16,6 +16,13 @@ locals {
   # per component in the console's cost-by-label view / BigQuery billing export.
   common_labels = merge(var.labels, { environment = var.environment })
 
+  # Skills registry (skills.tf). Terraform CREATES the bucket; the name defaults to
+  # a stable derived value so the operator no longer pre-creates it. An empty
+  # var.skills_bucket_name (the default) → derived "<project_id>-aifleet-skills";
+  # a non-empty value is an explicit override. The same name is used by the CI
+  # publish workflow (derived the same way) — no repo-var dependency for the name.
+  skills_bucket_name = var.skills_bucket_name != "" ? var.skills_bucket_name : "${var.project_id}-aifleet-skills"
+
   # Artifact Registry image references. Each service resolves its own tag,
   # falling back to var.image_tag when no per-service override is set — this is
   # what lets the CD pipeline roll ONE service (its tag = new SHA) while every

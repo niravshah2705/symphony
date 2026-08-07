@@ -9,21 +9,30 @@
 # runtime reads /skills/<version>/<skill>/SKILL.md. Multiple versions coexist, so
 # an older pinned deployment keeps working while a new version is published.
 #
-# OPTIONAL / GUARDED: everything here is gated on var.skills_bucket_name. Empty
-# ('') disables the whole feature — no bucket, no mount, no SKILLS_ROOT env — so
-# local/dev and a project without the bucket fall back to the vendored skills
-# baked into the image (packages/shared/src/config.js resolveSkillsSrc default).
+# Terraform CREATES and OWNS this bucket — it is NOT assumed to pre-exist. The
+# name defaults to a stable derived value (local.skills_bucket_name =
+# "<project_id>-aifleet-skills"; override with var.skills_bucket_name). The whole
+# feature is toggled by var.skills_enabled: false → no bucket, no mount, no
+# SKILLS_ROOT env, so local/dev and a project with it off fall back to the
+# vendored skills baked into the image (packages/shared/src/config.js
+# resolveSkillsSrc default).
 
 resource "google_storage_bucket" "skills" {
-  count    = var.skills_bucket_name != "" ? 1 : 0
+  count    = var.skills_enabled ? 1 : 0
   project  = var.project_id
-  name     = var.skills_bucket_name
+  name     = local.skills_bucket_name
   location = var.region
   labels   = merge(local.common_labels, { component = "skills" })
 
   # Uniform bucket-level access — no per-object ACLs (infra checklist).
   uniform_bucket_level_access = true
-  force_destroy               = var.skills_bucket_force_destroy
+
+  # This registry is internal (read by planner/coder SAs, written by the CI
+  # deployer). Enforce no-public-access at the bucket level so an accidental
+  # allUsers/allAuthenticatedUsers grant can never expose the skill bundles.
+  public_access_prevention = "enforced"
+
+  force_destroy = var.skills_bucket_force_destroy
 
   # Object versioning keeps a prior generation if an object is ever overwritten
   # in place — a safety net; the primary "coexist" story is separate `<version>/`
@@ -39,14 +48,14 @@ resource "google_storage_bucket" "skills" {
 # coder-sa is shared by coder-control AND the coder-worker Job, so this single
 # grant covers the worker that actually installs the skills.
 resource "google_storage_bucket_iam_member" "planner_skills_read" {
-  count  = var.skills_bucket_name != "" ? 1 : 0
+  count  = var.skills_enabled ? 1 : 0
   bucket = google_storage_bucket.skills[0].name
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.planner.email}"
 }
 
 resource "google_storage_bucket_iam_member" "coder_skills_read" {
-  count  = var.skills_bucket_name != "" ? 1 : 0
+  count  = var.skills_enabled ? 1 : 0
   bucket = google_storage_bucket.skills[0].name
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.coder.email}"
@@ -59,7 +68,7 @@ resource "google_storage_bucket_iam_member" "coder_skills_read" {
 # its member string is provided. objectAdmin (not admin) — write objects, never
 # change bucket IAM/config.
 resource "google_storage_bucket_iam_member" "skills_publisher" {
-  count  = var.skills_bucket_name != "" && var.skills_publisher_member != "" ? 1 : 0
+  count  = var.skills_enabled && var.skills_publisher_member != "" ? 1 : 0
   bucket = google_storage_bucket.skills[0].name
   role   = "roles/storage.objectAdmin"
   member = var.skills_publisher_member

@@ -115,10 +115,13 @@ gh variable set GCP_PROJECT_ID   --repo niravshah2705/symphony --body "adlc-9e72
 gh variable set GCP_REGION       --repo niravshah2705/symphony --body "asia-south1"
 gh variable set SPA_BUCKET       --repo niravshah2705/symphony --body "adlc-9e72f-aifleet-spa"
 gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72f-tfstate"
-# Skills registry (optional; see docs/GCP_DEPLOY.md "Skills registry"). Set only
-# if you serve versioned skill bundles from GCS. .github/workflows/publish-skills.yml
-# reads SKILLS_BUCKET; Terraform var.skills_bucket_name must name the SAME bucket.
-# gh variable set SKILLS_BUCKET --repo niravshah2705/symphony --body "adlc-9e72f-aifleet-skills"
+# Skills registry (see docs/GCP_DEPLOY.md "Skills registry"). NO repo variable is
+# required for the bucket name: Terraform CREATES the bucket (var.skills_enabled,
+# default true) with a derived name "<GCP_PROJECT_ID>-aifleet-skills", and
+# .github/workflows/publish-skills.yml derives that SAME name from GCP_PROJECT_ID.
+# SKILLS_BUCKET is only an OPTIONAL override if you pin a custom bucket name (it
+# must then match Terraform var.skills_bucket_name):
+# gh variable set SKILLS_BUCKET --repo niravshah2705/symphony --body "custom-bucket-name"
 # FIREBASE_API_KEY is NOT needed — Terraform reads it from the managed Firebase
 # web app (data.google_firebase_web_app_config) and injects it into the gateway.
 # Optional: gh variable set FIREBASE_ALLOWED_DOMAIN --repo niravshah2705/symphony --body "yourco.com"

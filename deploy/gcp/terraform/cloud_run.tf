@@ -6,12 +6,12 @@
 # so an idle deployment costs nothing.
 
 locals {
-  # Skills registry (skills.tf). When a bucket is configured the planner/coder
-  # mount it read-only at /skills via a gcsfuse volume and pin a version, so the
-  # runtime reads /skills/<version>/<skill>/SKILL.md (packages/shared/src/config.js
-  # resolveSkillsSrc). Empty bucket → no mount + no env → the image's vendored
-  # skills are used (unchanged local behavior).
-  skills_enabled = var.skills_bucket_name != ""
+  # Skills registry (skills.tf). Terraform CREATES the bucket; when skills_enabled
+  # the planner/coder mount it read-only at /skills via a gcsfuse volume and pin a
+  # version, so the runtime reads /skills/<version>/<skill>/SKILL.md
+  # (packages/shared/src/config.js resolveSkillsSrc). Disabled → no bucket, no
+  # mount, no env → the image's vendored skills are used (unchanged local behavior).
+  skills_enabled = var.skills_enabled
   skills_env = local.skills_enabled ? {
     SKILLS_ROOT    = "/skills"
     SKILLS_VERSION = var.skills_version
@@ -240,7 +240,7 @@ resource "google_cloud_run_v2_service" "planner" {
       content {
         name = "skills"
         gcs {
-          bucket    = var.skills_bucket_name
+          bucket    = google_storage_bucket.skills[0].name
           read_only = true
         }
       }
@@ -329,7 +329,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
       content {
         name = "skills"
         gcs {
-          bucket    = var.skills_bucket_name
+          bucket    = google_storage_bucket.skills[0].name
           read_only = true
         }
       }
@@ -420,7 +420,7 @@ resource "google_cloud_run_v2_job" "coder_worker" {
         content {
           name = "skills"
           gcs {
-            bucket    = var.skills_bucket_name
+            bucket    = google_storage_bucket.skills[0].name
             read_only = true
           }
         }

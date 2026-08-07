@@ -223,13 +223,21 @@ variable "spa_origin" {
 }
 
 # --- Skills registry (GCS bucket, gcsfuse mount) -----------------------------
-# See skills.tf. All OPTIONAL: an empty skills_bucket_name disables the feature
-# (no bucket, no mount, no SKILLS_ROOT env) so a project without it keeps using
-# the vendored skills baked into the image.
+# See skills.tf. Terraform CREATES and OWNS the bucket. skills_enabled toggles the
+# whole feature (bucket + mounts + SKILLS_ROOT env); when off, planner/coder fall
+# back to the vendored skills baked into the image. The bucket name defaults to a
+# stable derived value ("<project_id>-aifleet-skills") — skills_bucket_name is an
+# OPTIONAL override, no longer a pre-existing bucket the operator must supply.
+
+variable "skills_enabled" {
+  type        = bool
+  description = "Create the Terraform-managed skills registry (GCS bucket + read-only gcsfuse mounts on planner/coder + SKILLS_ROOT/SKILLS_VERSION env). false disables the whole feature so the services use the vendored skills baked into the image (local-default behavior; packages/shared/src/config.js resolveSkillsSrc)."
+  default     = true
+}
 
 variable "skills_bucket_name" {
   type        = string
-  description = "Globally-unique GCS bucket holding versioned agent-skill bundles (<version>/<skill>/SKILL.md), mounted read-only on planner + coder via gcsfuse. Empty ('') disables the skills registry entirely."
+  description = "OPTIONAL override for the skills bucket name. Empty ('') derives a stable default of '<project_id>-aifleet-skills' (see locals.tf). Terraform CREATES this bucket — it is NOT assumed to pre-exist. Set only to pin a custom globally-unique name. Ignored when skills_enabled = false."
   default     = ""
 }
 

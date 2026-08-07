@@ -2,7 +2,11 @@ name: Publish Skills Bundle
 
 # Publish the deep-agent skills (packages/shared/src/agent/skills/) to the GCS
 # skills registry as a VERSIONED bundle:
-#   gs://<SKILLS_BUCKET>/<version>/<skill>/SKILL.md   (+ skills-manifest.json)
+#   gs://<bucket>/<version>/<skill>/SKILL.md   (+ skills-manifest.json)
+# Terraform CREATES the bucket (deploy/gcp/terraform/skills.tf) with a derived name
+# ("<GCP_PROJECT_ID>-aifleet-skills"); this workflow derives the SAME name from the
+# GCP_PROJECT_ID repo variable, so there is NO SKILLS_BUCKET repo-var dependency for
+# the name (SKILLS_BUCKET remains an OPTIONAL override, matching var.skills_bucket_name).
 # The planner/coder Cloud Run services mount that bucket read-only via gcsfuse and
 # PIN a version (Terraform var.skills_version → SKILLS_VERSION), so publishing a
 # new version never disturbs an older pinned deployment — versions coexist and
@@ -80,15 +84,27 @@ jobs:
 
       - name: Publish versioned bundle to GCS
         env:
-          BUCKET: ${{ vars.SKILLS_BUCKET }}
+          # Both are repo VARS (trusted config), never untrusted github.event.* —
+          # read via env only. GCP_PROJECT_ID derives the Terraform-created bucket
+          # name ("<project_id>-aifleet-skills", same as locals.tf); SKILLS_BUCKET is
+          # an OPTIONAL override for a custom name (matches var.skills_bucket_name).
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          SKILLS_BUCKET_OVERRIDE: ${{ vars.SKILLS_BUCKET }}
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
           set -euo pipefail
-          if [ -z "${BUCKET:-}" ]; then
-            echo "Repo variable SKILLS_BUCKET is not set — cannot publish." >&2
-            echo "Set it with: gh variable set SKILLS_BUCKET --body <bucket-name>" >&2
-            exit 1
+          # Derive the bucket name the SAME way Terraform does; no repo var required
+          # for the name. An explicit SKILLS_BUCKET override wins when set.
+          BUCKET="${SKILLS_BUCKET_OVERRIDE:-}"
+          if [ -z "$BUCKET" ]; then
+            if [ -z "${GCP_PROJECT_ID:-}" ]; then
+              echo "GCP_PROJECT_ID repo variable is not set — cannot derive the skills bucket name." >&2
+              echo "Set it with: gh variable set GCP_PROJECT_ID --body <project-id>" >&2
+              exit 1
+            fi
+            BUCKET="${GCP_PROJECT_ID}-aifleet-skills"
           fi
+          echo "Target skills bucket: $BUCKET"
           test -f "$SKILLS_DIR/skills-manifest.json" || { echo "Missing skills-manifest.json" >&2; exit 1; }
 
           DEST="gs://${BUCKET}/${VERSION}"

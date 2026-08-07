@@ -85,14 +85,19 @@ skill edit ships without rebuilding/redeploying a service — and so multiple sk
 - **CI publish** — `.github/workflows/publish-skills.yml` runs on any push touching
   `packages/shared/src/agent/skills/**` (or `workflow_dispatch` with a `version`
   input). It authenticates via WIF and `gsutil rsync`es the skills dir to
-  `gs://<SKILLS_BUCKET>/<version>/` (plus the manifest object). On a push the
-  version is read from the manifest; each version lives under its own prefix, so
+  `gs://<bucket>/<version>/` (plus the manifest object). It derives `<bucket>` from
+  the `GCP_PROJECT_ID` repo variable the same way Terraform does
+  (`<project_id>-aifleet-skills`) — no `SKILLS_BUCKET` repo var is needed. On a push
+  the version is read from the manifest; each version lives under its own prefix, so
   publishing a new one **never touches** an older prefix.
-- **Mount** — `deploy/gcp/terraform/skills.tf` provisions the bucket (guarded by
-  `var.skills_bucket_name`; empty disables the whole feature) and mounts it
-  **read-only** on the **planner** and **coder** (control service + worker Job) via
-  a gen2 **gcsfuse** GCS volume at `/skills`. The planner/coder service accounts get
-  `objectViewer`.
+- **Mount** — `deploy/gcp/terraform/skills.tf` **CREATES and owns** the bucket (name
+  derived as `<project_id>-aifleet-skills`; override with `var.skills_bucket_name`,
+  toggle the whole feature with `var.skills_enabled`, default `true`). It has
+  uniform bucket-level access, object versioning, and public-access-prevention
+  **enforced** (no public access). Terraform mounts it **read-only** on the
+  **planner** and **coder** (control service + worker Job) via a gen2 **gcsfuse** GCS
+  volume at `/skills`. The planner/coder service accounts get `objectViewer`, and
+  the CI deployer gets `objectAdmin` when `var.skills_publisher_member` is set.
 - **Version-pinned install** — those services run with `SKILLS_ROOT=/skills` and
   `SKILLS_VERSION=<var.skills_version>`. `packages/shared/src/config.js`
   `resolveSkillsSrc()` resolves the install source to `/skills/<version>`, and
@@ -105,15 +110,19 @@ skill edit ships without rebuilding/redeploying a service — and so multiple sk
 1. Edit the skills and bump the manifest `version` (e.g. `v1` → `v2`) + the touched
    per-skill `version`; update `updatedAt`.
 2. Merge to `main`. `publish-skills.yml` publishes the new bundle to
-   `gs://<SKILLS_BUCKET>/v2/` — `v1` stays intact, so every deployment still pinned
+   `gs://<bucket>/v2/` — `v1` stays intact, so every deployment still pinned
    to `v1` keeps working.
 3. Roll the deployment forward by bumping **`skills_version`** (Terraform var /
    `gh variable set SKILLS_VERSION`) and applying. Only then do planner/coder read
    `v2`. To roll back, set it to `v1` again — the objects are still there.
 
-Set-up (one-off): create the bucket via Terraform (`skills_bucket_name`), grant the
-CI deployer write access (`skills_publisher_member` or out-of-band `objectAdmin`),
-and set the repo variable `SKILLS_BUCKET` (see docs/GCP_CICD.md).
+Set-up (one-off): nothing to pre-create — **Terraform creates the bucket** (name
+`<project_id>-aifleet-skills`) and grants the CI deployer write access when you set
+`var.skills_publisher_member` to the deployer SA. After the first `terraform apply`,
+publish an initial version by running the **Publish Skills Bundle** workflow
+(`workflow_dispatch`, `version = v1`) or by pushing a change under
+`packages/shared/src/agent/skills/**`. No `SKILLS_BUCKET` repo variable is
+required — the workflow derives the name from `GCP_PROJECT_ID`.
 
 ## Roles & access control (RBAC)
 
