@@ -8,7 +8,7 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
 } from '/vendor/firebase/firebase-auth.js';
-import { api, setAccessTokenProvider } from './api.js';
+import { api, setAccessTokenProvider, getApiBase } from './api.js';
 
 const AUTH_SESSION_TIMEOUT_MS = 15_000;
 
@@ -47,7 +47,7 @@ async function loadConfiguration() {
   const timeout = window.setTimeout(() => controller.abort(), 8_000);
   let response;
   try {
-    response = await fetch('/api/auth/config', {
+    response = await fetch(`${getApiBase()}/api/auth/config`, {
       headers: { Accept: 'application/json' },
       cache: 'no-store',
       signal: controller.signal,
