@@ -61,6 +61,9 @@ resource "google_cloud_run_v2_service" "gateway" {
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
   labels   = merge(local.common_labels, { component = "gateway" })
+  # Off so a region move (or teardown) can replace the service. This app is
+  # stateless per-service; state lives in Firestore, not the Cloud Run resource.
+  deletion_protection = false
 
   template {
     service_account = google_service_account.gateway.email
@@ -137,11 +140,12 @@ resource "google_cloud_run_v2_service" "gateway" {
 #   template { vpc_access { network_interfaces { network=... subnetwork=... }
 #                          egress = "ALL_TRAFFIC" } }
 resource "google_cloud_run_v2_service" "planner" {
-  project  = var.project_id
-  name     = var.planner_service_name
-  location = var.region
-  ingress  = var.internal_ingress # IAM-gated; see note above
-  labels   = merge(local.common_labels, { component = "planner" })
+  project             = var.project_id
+  name                = var.planner_service_name
+  location            = var.region
+  ingress             = var.internal_ingress # IAM-gated; see note above
+  labels              = merge(local.common_labels, { component = "planner" })
+  deletion_protection = false
 
   template {
     service_account = google_service_account.planner.email
@@ -197,11 +201,12 @@ resource "google_cloud_run_v2_service" "planner" {
 
 # --- Coder-control (non-public, IAM-gated — see the planner note) -------------
 resource "google_cloud_run_v2_service" "coder_control" {
-  project  = var.project_id
-  name     = var.coder_service_name
-  location = var.region
-  ingress  = var.internal_ingress # IAM-gated; see the planner note above
-  labels   = merge(local.common_labels, { component = "coder-control" })
+  project             = var.project_id
+  name                = var.coder_service_name
+  location            = var.region
+  ingress             = var.internal_ingress # IAM-gated; see the planner note above
+  labels              = merge(local.common_labels, { component = "coder-control" })
+  deletion_protection = false
 
   template {
     service_account = google_service_account.coder.email
@@ -260,10 +265,11 @@ resource "google_cloud_run_v2_service" "coder_control" {
 # Launched one execution per ticket by coder-control (with ISSUE_ID override);
 # runs the ticket to completion (up to 24h), then exits.
 resource "google_cloud_run_v2_job" "coder_worker" {
-  project  = var.project_id
-  name     = var.coder_job_name
-  location = var.region
-  labels   = merge(local.common_labels, { component = "coder-worker" })
+  project             = var.project_id
+  name                = var.coder_job_name
+  location            = var.region
+  labels              = merge(local.common_labels, { component = "coder-worker" })
+  deletion_protection = false
 
   template {
     parallelism = 1 # one ticket per execution
