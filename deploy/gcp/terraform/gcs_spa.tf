@@ -8,9 +8,9 @@
 
 resource "google_storage_bucket" "spa" {
   project  = var.project_id
-  name     = var.spa_bucket_name
+  name     = var.spa_bucket_name # legacy GCS SPA bucket (SPA now on Firebase Hosting)
   location = var.region
-  labels   = var.labels
+  labels   = merge(local.common_labels, { component = "spa" })
 
   # Uniform bucket-level access — no per-object ACLs (infra checklist).
   uniform_bucket_level_access = true

@@ -8,7 +8,7 @@ resource "google_artifact_registry_repository" "docker" {
   repository_id = var.artifact_repo
   format        = "DOCKER"
   description   = "AI Fleet service images (gateway, planner, coder)."
-  labels        = var.labels
+  labels        = merge(local.common_labels, { component = "registry" })
 
   # Keep storage cost near zero: retain only the most recent images.
   cleanup_policies {

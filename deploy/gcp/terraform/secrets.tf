@@ -12,7 +12,7 @@
 resource "google_secret_manager_secret" "stream_token_secret" {
   project   = var.project_id
   secret_id = "stream-token-secret"
-  labels    = var.labels
+  labels    = merge(local.common_labels, { component = "gateway" })
 
   replication {
     auto {}
@@ -24,7 +24,7 @@ resource "google_secret_manager_secret" "stream_token_secret" {
 resource "google_secret_manager_secret" "linear_api_key" {
   project   = var.project_id
   secret_id = "linear-api-key"
-  labels    = var.labels
+  labels    = merge(local.common_labels, { component = "shared" })
 
   replication {
     auto {}
@@ -41,7 +41,7 @@ resource "google_secret_manager_secret" "extra" {
 
   project   = var.project_id
   secret_id = each.value
-  labels    = var.labels
+  labels    = merge(local.common_labels, { component = "shared" })
 
   replication {
     auto {}

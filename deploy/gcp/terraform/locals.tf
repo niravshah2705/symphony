@@ -11,6 +11,11 @@ locals {
   # deterministic URL format.
   project_number = data.google_project.this.number
 
+  # Labels merged onto every labelable resource. Each resource additionally sets
+  # a `component` label (e.g. gateway/planner/spa) so billing can be broken down
+  # per component in the console's cost-by-label view / BigQuery billing export.
+  common_labels = merge(var.labels, { environment = var.environment })
+
   # Artifact Registry image references. Each service resolves its own tag,
   # falling back to var.image_tag when no per-service override is set — this is
   # what lets the CD pipeline roll ONE service (its tag = new SHA) while every
