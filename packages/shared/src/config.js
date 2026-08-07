@@ -379,12 +379,17 @@ const PUBLIC_DIR = process.env.AI_FLEET_PUBLIC_DIR || path.join(REPO_ROOT, 'publ
  */
 const PLANNER_PORT = Number(process.env.PLANNER_PORT) || 4010;
 const CODER_SERVICE_PORT = Number(process.env.CODER_SERVICE_PORT) || 4020;
+const ORG_SERVICE_PORT = Number(process.env.ORG_SERVICE_PORT) || 8000;
 const SERVICES = Object.freeze({
   gatewayPort: PORT,
   plannerPort: PLANNER_PORT,
   coderPort: CODER_SERVICE_PORT,
   plannerUrl: process.env.PLANNER_URL || `http://localhost:${PLANNER_PORT}`,
   coderUrl: process.env.CODER_URL || `http://localhost:${CODER_SERVICE_PORT}`,
+  // Organization service (Python/FastAPI, Firestore). The gateway proxies
+  // /api/org/* -> orgUrl/api/v1/* (see services/gateway/src/index.js). Empty
+  // when unset so the gateway can 501 the org routes rather than crash.
+  orgUrl: process.env.ORG_URL || (process.env.NODE_ENV === 'production' ? '' : `http://localhost:${ORG_SERVICE_PORT}`),
 });
 
 /**

@@ -24,10 +24,12 @@ locals {
   gateway_tag = var.gateway_image_tag != "" ? var.gateway_image_tag : var.image_tag
   planner_tag = var.planner_image_tag != "" ? var.planner_image_tag : var.image_tag
   coder_tag   = var.coder_image_tag != "" ? var.coder_image_tag : var.image_tag
+  org_tag     = var.org_image_tag != "" ? var.org_image_tag : var.image_tag
 
   gateway_image = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
   planner_image = "${local.image_base}/${var.planner_service_name}:${local.planner_tag}"
   coder_image   = "${local.image_base}/${var.coder_service_name}:${local.coder_tag}"
+  org_image     = "${local.image_base}/${var.org_service_name}:${local.org_tag}"
 
   # Cloud Run's deterministic per-project URL:
   #   https://<service>-<project_number>.<region>.run.app
@@ -41,6 +43,7 @@ locals {
   gateway_url    = var.api_base_url != "" ? var.api_base_url : "https://${var.gateway_service_name}-${local.run_url_suffix}"
   planner_url    = "https://${var.planner_service_name}-${local.run_url_suffix}"
   coder_url      = "https://${var.coder_service_name}-${local.run_url_suffix}"
+  org_url        = "https://${var.org_service_name}-${local.run_url_suffix}"
 
   # Pub/Sub's Google-managed service agent — needs publisher on the dead-letter
   # topic, subscriber on the source subscriptions, and token-creator on the push

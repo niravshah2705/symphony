@@ -35,7 +35,13 @@ async function idTokenHeader(audience) {
   return headers.Authorization || headers.authorization || '';
 }
 
-function createProxy(baseUrl) {
+// opts.rewrite = { from, to } rewrites the leading path segment (e.g. mount at
+// /api/org but the target service serves /api/v1). opts.forwardUserAuth carries
+// the caller's bearer to a service that does its OWN token auth (the org service
+// verifies the Firebase ID token): the user token rides in
+// X-Forwarded-Authorization while Authorization holds the S2S OIDC token that
+// Cloud Run's IAM check requires.
+function createProxy(baseUrl, opts = {}) {
   const audience = (() => {
     try {
       return new URL(baseUrl).origin;
@@ -45,7 +51,9 @@ function createProxy(baseUrl) {
   })();
 
   return async function proxy(req, res) {
-    const target = `${baseUrl}${req.originalUrl}`;
+    let path = req.originalUrl;
+    if (opts.rewrite) path = path.replace(opts.rewrite.from, opts.rewrite.to);
+    const target = `${baseUrl}${path}`;
     const headers = {};
     const init = { method: req.method, headers };
 
@@ -55,6 +63,11 @@ function createProxy(baseUrl) {
       headers['content-type'] = 'application/json';
     }
 
+    const incomingAuth = (req.get && req.get('authorization')) || '';
+    if (opts.forwardUserAuth && incomingAuth) {
+      headers['x-forwarded-authorization'] = incomingAuth;
+    }
+
     if (CONFIG.MESSAGING_MODE === 'pubsub') {
       try {
         const authorization = await idTokenHeader(audience);
@@ -62,6 +75,9 @@ function createProxy(baseUrl) {
       } catch (err) {
         log.error(`gateway proxy could not mint ID token for ${audience}: ${err && err.message ? err.message : err}`);
       }
+    } else if (opts.forwardUserAuth && incomingAuth) {
+      // Local/direct mode: no S2S OIDC — pass the user's bearer straight through.
+      headers.authorization = incomingAuth;
     }
 
     try {

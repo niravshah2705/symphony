@@ -18,14 +18,15 @@
  * Each domain is granted at a level: 'read' (GET) or 'write' (mutations).
  */
 
-const DOMAINS = Object.freeze(['workspace', 'planning', 'insights', 'settings']);
+const DOMAINS = Object.freeze(['workspace', 'planning', 'insights', 'settings', 'org']);
 const ROLES = Object.freeze(['admin', 'operator', 'viewer']);
 const LEVEL_RANK = Object.freeze({ read: 1, write: 2 });
 
+// `org` gates the Organization service (services/org) reached via /api/org/*.
 const ROLE_PERMISSIONS = Object.freeze({
-  admin: Object.freeze({ workspace: 'write', planning: 'write', insights: 'write', settings: 'write' }),
-  operator: Object.freeze({ workspace: 'write', planning: 'write', insights: 'write', settings: 'read' }),
-  viewer: Object.freeze({ workspace: 'read', planning: 'read', insights: 'read', settings: 'read' }),
+  admin: Object.freeze({ workspace: 'write', planning: 'write', insights: 'write', settings: 'write', org: 'write' }),
+  operator: Object.freeze({ workspace: 'write', planning: 'write', insights: 'write', settings: 'read', org: 'write' }),
+  viewer: Object.freeze({ workspace: 'read', planning: 'read', insights: 'read', settings: 'read', org: 'read' }),
 });
 
 // Everything an UNAUTHENTICATED visitor may do: read-only Agent workspace only.
