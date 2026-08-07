@@ -1,9 +1,33 @@
 # GitHub Actions CD (deploy on merge to main)
 
-`.github/workflows/deploy.yml` runs on every merge to `main`: it builds + pushes
-the three images, publishes the SPA to GCS, and runs `terraform apply`. Auth is
-**keyless** via Workload Identity Federation (WIF) — no service-account key is
-stored in GitHub.
+`.github/workflows/deploy.yml` runs on every merge to `main`, but it is
+**path-filtered** — a merge only does the work its diff actually requires.
+Auth is **keyless** via Workload Identity Federation (WIF) — no service-account
+key is stored in GitHub.
+
+## Path-filtered deploys
+
+A `changes` job (via `dorny/paths-filter`) computes a work plan; downstream jobs
+are conditional on it:
+
+| Changed paths | What runs |
+|---|---|
+| `services/gateway/**` (or its Dockerfile) | rebuild **gateway** image → `terraform apply` rolls **only** gateway |
+| `services/planner/**` / `services/coder/**` | rebuild that image → apply rolls **only** that service (coder ⇒ coder-control + the worker Job) |
+| `packages/shared/**`, root `package.json`/`package-lock.json` | rebuild **all three** images → apply rolls all |
+| `deploy/gcp/terraform/**` | `terraform apply` **only** (no image rebuild) |
+| `public/**`, `firebase.json` | **Firebase Hosting** deploy only (no images, no Terraform) |
+| docs / anything else | nothing runs |
+
+How "roll only one service" works: each unchanged service keeps its
+**currently-deployed** image tag (resolved live from Cloud Run) while the
+rebuilt service gets the new commit SHA, so `terraform apply` is a no-op for
+everything except the service that changed (see the per-service
+`*_image_tag` vars in `terraform/{variables,locals}.tf`).
+
+Need a full rebuild + apply of everything (e.g. after a manual hotfix or to
+re-converge state)? Trigger the workflow manually with **`deploy_all: true`**
+(Actions → Deploy to GCP → Run workflow).
 
 One-time setup below (values pre-filled for project `adlc-9e72f`, number
 `819642330335`, repo `niravshah2705/symphony` — change if yours differ).
@@ -90,5 +114,7 @@ gh variable set FIREBASE_API_KEY --repo niravshah2705/symphony --body "AIzaSyBBo
 
 - Keyless (WIF) — no static SA key in GitHub (cicd-pipeline checklist).
 - `concurrency: gcp-deploy` serializes applies so two merges never race the state.
-- The image tag is the commit SHA, so each merge rolls out a fresh Cloud Run revision.
+- A rebuilt service's image tag is the commit SHA, so it rolls a fresh Cloud Run
+  revision; unchanged services keep their live tag and are left untouched.
 - No untrusted event input (PR/commit text, `head_ref`) is used in any `run:` step.
+- Path filters read only file paths (`dorny/paths-filter`), never event text.
