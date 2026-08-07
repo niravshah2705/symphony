@@ -74,6 +74,7 @@ function activeModelFor(provider, settings) {
   if (provider === 'lmstudio') return settings.lmstudioModel;
   if (provider === 'omlx') return settings.omlxModel;
   if (provider === 'huggingface') return settings.huggingfaceModel;
+  if (provider === 'antigravity') return settings.antigravityModel || CONFIG.ANTIGRAVITY.defaultModel;
   return settings.ollamaModel;
 }
 
@@ -232,6 +233,7 @@ router.get('/status', (req, res) => {
     lmstudioModel: settings.lmstudioModel,
     omlxModel: settings.omlxModel,
     huggingfaceModel: settings.huggingfaceModel,
+    antigravityModel: settings.antigravityModel,
     codexModel: settings.codexModel || CONFIG.OAUTH.defaultModel,
     codexConnected: Boolean(codexTokens && (codexTokens.accessToken || codexTokens.refreshToken)),
     tracingEnabled: Boolean(settings.langsmithApiKey && settings.langsmithTracing),

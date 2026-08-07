@@ -599,6 +599,28 @@ function createChatModel(llm, { json = false } = {}) {
     if (json) opts.modelKwargs = { response_format: { type: 'json_object' } };
     return new ManagedChatOpenAI(opts);
   }
+  if (llm.provider === 'antigravity') {
+    // Antigravity (Gemini) — the harness (runtimes.js executeAntigravity) uses the
+    // native @google/genai interactions API. The deep-agent path here maps minimally
+    // to Gemini's OpenAI-compatible endpoint via the shared managed base (Bearer
+    // API key + stream retry), matching the huggingface path. Streamed so a large
+    // max output never trips the SDK's 10-minute non-streaming ceiling.
+    const ManagedChatOpenAI = getManagedChatOpenAIClass();
+    const opts = {
+      model: llm.model,
+      apiKey: llm.apiKey,
+      maxTokens: llm.numTokens,
+      streaming: true,
+      configuration: { baseURL: llm.baseUrl },
+      streamRetries: clampStreamRetries(llm.streamRetries),
+      retryProvider: 'antigravity',
+    };
+    if (typeof llm.temperature === 'number' && Number.isFinite(llm.temperature)) {
+      opts.temperature = llm.temperature;
+    }
+    if (json) opts.modelKwargs = { response_format: { type: 'json_object' } };
+    return new ManagedChatOpenAI(opts);
+  }
   if (llm.provider === 'lmstudio') {
     // LM Studio serves an OpenAI-compatible API, so ChatOpenAI targets it directly.
     // No real key is needed (LM Studio ignores it), but the SDK requires a non-empty
@@ -928,6 +950,28 @@ async function resolveLlm(settings, role = 'global') {
       streamRetries,
     };
   }
+  if (provider === 'antigravity') {
+    // Gemini API key (mandatory). It is the credential for BOTH the native harness
+    // (@google/genai) and the OpenAI-compatible deep-agent path, so it is exposed as
+    // `apiKey` (deep-agent) and `accessToken` (harness auth guard) on the descriptor.
+    const apiKey = settings.antigravityApiKey || '';
+    return {
+      provider: 'antigravity',
+      apiKey,
+      accessToken: apiKey,
+      model: settings.antigravityModel || CONFIG.ANTIGRAVITY.defaultModel,
+      // Config-driven target: the Antigravity preview agent id overrides the model
+      // for the harness call when set.
+      agentId: settings.antigravityAgentId || CONFIG.ANTIGRAVITY.agentId,
+      // OpenAI-compatible Gemini endpoint used by the deep-agent (createChatModel) path.
+      baseUrl: CONFIG.ANTIGRAVITY.openaiBaseUrl,
+      numTokens: settings.antigravityMaxTokens || 8192,
+      temperature: settings.antigravityTemperature ?? null,
+      reasoningEffort: settings.antigravityReasoningEffort || 'none',
+      reasoningAdapter: settings.antigravityReasoningAdapter || 'none',
+      streamRetries,
+    };
+  }
   if (provider !== 'ollama') throw new TypeError(`Unsupported LLM provider: ${provider || 'unknown'}`);
   return {
     provider: 'ollama',
@@ -976,6 +1020,10 @@ function llmReady(settings, role = 'global') {
     // The HF access token is mandatory (the router rejects unauthenticated calls).
     return Boolean(settings.huggingfaceApiKey && settings.huggingfaceModel);
   }
+  if (provider === 'antigravity') {
+    // The Gemini API key is mandatory; the model falls back to the config default.
+    return Boolean(settings.antigravityApiKey && (settings.antigravityModel || CONFIG.ANTIGRAVITY.defaultModel));
+  }
   return Boolean(settings.ollamaHost && settings.ollamaModel);
 }
 
@@ -996,6 +1044,9 @@ function notReadyReason(settings, role = 'global') {
   }
   if (provider === 'huggingface') {
     return 'Add your Hugging Face access token and model in Settings → LLM to enable enrichment.';
+  }
+  if (provider === 'antigravity') {
+    return 'Add your Gemini API key and model in Settings → LLM to enable enrichment.';
   }
   return 'Set the Ollama host and model in Settings → LLM to enable enrichment.';
 }

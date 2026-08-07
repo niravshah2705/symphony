@@ -258,6 +258,30 @@ const HUGGINGFACE = Object.freeze({
 });
 
 /**
+ * Antigravity (Google) provider — backed by the Gemini API.
+ *
+ * Google Antigravity ships no npm package (its managed-agent SDK is Python +
+ * a Go CLI), so the Node adapter is backed by @google/genai. Authentication is a
+ * Gemini API key (PREVIEW): the key is REQUIRED and lives server-side only,
+ * exposed solely through masked status fields, and read from GEMINI_API_KEY in
+ * the cloud (see store.js SECRET_ENV → antigravityApiKey).
+ *
+ * The called target is config-driven: `defaultModel` is a stable Gemini model
+ * by default; set ANTIGRAVITY_AGENT_ID to route the harness at the Antigravity
+ * preview managed-agent id instead. `openaiBaseUrl` is Gemini's
+ * OpenAI-compatible endpoint used by the deep-agent (createChatModel) path.
+ */
+const ANTIGRAVITY = Object.freeze({
+  defaultModel: process.env.ANTIGRAVITY_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  // Optional override to the Antigravity preview agent id (else the model above).
+  agentId: process.env.ANTIGRAVITY_AGENT_ID || '',
+  // OpenAI-compatible Gemini endpoint targeted by the ChatOpenAI-based deep-agent path.
+  openaiBaseUrl: process.env.GEMINI_OPENAI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai',
+  requestTimeoutMs: Number(process.env.ANTIGRAVITY_REQUEST_TIMEOUT_MS) || 10 * 60 * 1000,
+  maxRetries: Number.isFinite(Number(process.env.ANTIGRAVITY_MAX_RETRIES)) ? Number(process.env.ANTIGRAVITY_MAX_RETRIES) : 1,
+});
+
+/**
  * Code-writer deep agent + workflow config (an equivalent of OpenAI Symphony's
  * WORKFLOW.md frontmatter). The agent works a Linear ticket end-to-end in an
  * isolated git workspace, driving it through the ticket state machine while
@@ -453,7 +477,7 @@ const CONFIG = Object.freeze({
   // Allowed scheduler cadences (minutes).
   INTERVAL_OPTIONS: [5, 10, 15],
   // Deep-agent LLM providers.
-  LLM_PROVIDERS: ['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface'],
+  LLM_PROVIDERS: ['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity'],
   // How each local provider constrains JSON output for the planner's structured
   // calls. Not every model/engine accepts the same format (e.g. some LM Studio
   // engines reject `json_object` and require `json_schema` or `text`), so the
@@ -486,6 +510,7 @@ const CONFIG = Object.freeze({
   LMSTUDIO,
   OMLX,
   HUGGINGFACE,
+  ANTIGRAVITY,
   CODER,
   MCP,
   TOOLS,

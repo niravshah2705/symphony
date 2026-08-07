@@ -12,6 +12,7 @@ const RUNTIMES = [
   { id: 'deepagent', label: 'DeepAgent SDK', description: 'Current LangGraph-based skills, tools, and repository workflow.' },
   { id: 'codex-sdk', label: 'Codex SDK', description: 'Official server-side Codex planning sessions with scoped web research.' },
   { id: 'claude-agent-sdk', label: 'Claude Agent SDK', description: 'Official Claude planning loop with streamed usage and reported cost.' },
+  { id: 'antigravity-sdk', label: 'Antigravity SDK', description: 'Google Antigravity planning via the Gemini @google/genai interactions API (preview).' },
 ];
 
 export async function renderWorkflows(view) {

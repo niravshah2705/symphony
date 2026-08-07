@@ -42,9 +42,9 @@ const ROLE_KEYS = Object.freeze({
   testing: { provider: 'testingLlmProvider', preset: 'testingLlmPresetId' },
 });
 // BYoM ("Bring Your Own Model") providers: the local-inference runtimes plus the
-// Hugging Face hosted router. Codex/Claude are the managed hosted OAuth providers.
+// Hugging Face hosted router. Codex/Claude/Antigravity are the managed hosted providers.
 const BYOM_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'huggingface']);
-const HOSTED_PROVIDERS = Object.freeze(['codex', 'claude']);
+const HOSTED_PROVIDERS = Object.freeze(['codex', 'claude', 'antigravity']);
 
 /** Canonicalize a request's role, or null when unrecognized. */
 function parseRole(value) {
@@ -169,6 +169,17 @@ function publicSettings() {
     huggingfaceReasoningAdapter: s.huggingfaceReasoningAdapter || 'none',
     hasHuggingfaceApiKey: Boolean(s.huggingfaceApiKey),
     maskedHuggingfaceApiKey: maskKey(s.huggingfaceApiKey),
+    // Antigravity (Google/Gemini) — model/params/agent-id are not secrets; the
+    // Gemini API key is and is exposed only as has/masked fields.
+    antigravityModel: s.antigravityModel,
+    antigravityAgentId: s.antigravityAgentId || '',
+    antigravityContextWindow: s.antigravityContextWindow,
+    antigravityMaxTokens: s.antigravityMaxTokens,
+    antigravityTemperature: s.antigravityTemperature ?? null,
+    antigravityReasoningEffort: s.antigravityReasoningEffort || 'none',
+    antigravityReasoningAdapter: s.antigravityReasoningAdapter || 'none',
+    hasAntigravityApiKey: Boolean(s.antigravityApiKey),
+    maskedAntigravityApiKey: maskKey(s.antigravityApiKey),
     hasGithubToken: Boolean(s.githubToken),
     maskedGithubToken: maskKey(s.githubToken),
     hasGitlabToken: Boolean(s.gitlabToken),
@@ -351,6 +362,14 @@ router.put('/llm-preset', (req, res) => {
     if (overrides.clearApiKey === true) patch.huggingfaceApiKey = '';
     else if (overrides.apiKey !== undefined && String(overrides.apiKey).trim()) {
       patch.huggingfaceApiKey = String(overrides.apiKey).trim().slice(0, 4096);
+    }
+  }
+  if (preset.provider === 'antigravity') {
+    // Optional preview agent-id override (non-secret) and the Gemini API key.
+    if (overrides.agentId !== undefined) patch.antigravityAgentId = String(overrides.agentId).trim().slice(0, 200);
+    if (overrides.clearApiKey === true) patch.antigravityApiKey = '';
+    else if (overrides.apiKey !== undefined && String(overrides.apiKey).trim()) {
+      patch.antigravityApiKey = String(overrides.apiKey).trim().slice(0, 4096);
     }
   }
   patch[keys.provider] = preset.provider;

@@ -125,10 +125,12 @@ function settingsOverview({ settings, codex, claude }) {
 function runtimeSection({ settings, codex, claude }) {
   const codexReady = codex.connected && settings.llmProvider === 'codex';
   const claudeReady = claude.connected && settings.llmProvider === 'claude';
+  const antigravityReady = Boolean(settings.hasAntigravityApiKey) && settings.llmProvider === 'antigravity';
   const runtimes = [
     ['deepagent', 'DeepAgent SDK'],
     ['codex-sdk', 'Codex SDK'],
     ['claude-agent-sdk', 'Claude Agent SDK'],
+    ['antigravity-sdk', 'Antigravity SDK'],
   ];
   const patterns = [
     ['sequential', 'Sequential'],
@@ -148,6 +150,7 @@ function runtimeSection({ settings, codex, claude }) {
     el('span', {}, [el('strong', {}, 'DeepAgent'), el('small', {}, 'Ready')]),
     el('span', {}, [el('strong', {}, 'Codex SDK'), el('small', {}, codexReady ? 'Ready' : codex.connected ? 'Select Codex hosted slot' : 'Sign-in needed')]),
     el('span', {}, [el('strong', {}, 'Claude SDK'), el('small', {}, claudeReady ? 'Ready' : claude.connected ? 'Select Claude hosted slot' : 'Sign-in needed')]),
+    el('span', {}, [el('strong', {}, 'Antigravity SDK'), el('small', {}, antigravityReady ? 'Ready' : settings.hasAntigravityApiKey ? 'Select Antigravity hosted slot' : 'Gemini API key needed')]),
   ]);
 
   const updateHint = () => {
@@ -159,6 +162,10 @@ function runtimeSection({ settings, codex, claude }) {
       status.textContent = claudeReady
         ? 'Uses the hosted Claude slot for compatible planning runs; brokered coding stays on DeepAgent.'
         : 'Choose Claude in the Hosted model slot and sign in; until then runs safely use DeepAgent.';
+    } else if (runtime.value === 'antigravity-sdk') {
+      status.textContent = antigravityReady
+        ? 'Uses the hosted Antigravity (Gemini) slot for compatible planning runs; brokered coding stays on DeepAgent.'
+        : 'Choose Antigravity in the Hosted model slot and add a Gemini API key; until then runs safely use DeepAgent.';
     } else {
       status.textContent = 'Uses the existing skills-and-tools DeepAgent runtime.';
     }
