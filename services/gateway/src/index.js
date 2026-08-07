@@ -16,6 +16,7 @@ const localizationRoutes = require('./routes/localization');
 const { router: codexRoutes, callback: codexCallback } = require('./routes/codex');
 const { router: claudeRoutes } = require('./routes/claude');
 const { createProxy } = require('./proxy');
+const { blockInternalProxy } = require('./settings-internal-guard');
 const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig } = require('./auth');
 const { createCorsMiddleware } = require('./cors');
 const { initStore, getConversation } = require('@ai-fleet/shared/store');
@@ -194,6 +195,10 @@ if (CONFIG.SERVICES.settingsUrl) {
     rewrite: { from: '/api/settings-policy', to: '/api/v1' },
     forwardUserAuth: true,
   });
+  // The settings service's /api/v1/internal/* surface returns UNMASKED provider
+  // secrets and must never be reachable from a browser. Refuse to proxy any
+  // `internal` path segment (see settings-internal-guard.js).
+  app.use('/api/settings-policy', blockInternalProxy);
   // Personal settings (/api/settings-policy/me/*): every SIGNED-IN user may
   // manage their own user-scope policy, even without an `org` role. Mounted
   // BEFORE the role-gated prefix so this exact path wins (mirrors /api/org/me).

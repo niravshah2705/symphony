@@ -223,13 +223,27 @@ variable "spa_origin" {
 }
 
 # --- Skills registry (GCS bucket, gcsfuse mount) -----------------------------
-# See skills.tf. All OPTIONAL: an empty skills_bucket_name disables the feature
-# (no bucket, no mount, no SKILLS_ROOT env) so a project without it keeps using
-# the vendored skills baked into the image.
+# See skills.tf. Terraform CREATES and OWNS the bucket. skills_enabled toggles the
+# whole feature (bucket + mounts + SKILLS_ROOT env); when off, planner/coder fall
+# back to the vendored skills baked into the image. The bucket name defaults to a
+# stable derived value ("<project_id>-aifleet-skills") — skills_bucket_name is an
+# OPTIONAL override, no longer a pre-existing bucket the operator must supply.
+
+variable "skills_enabled" {
+  type        = bool
+  description = "Create the Terraform-managed skills registry GCS bucket (+ IAM). true creates and owns the bucket; false disables the feature entirely. The read-only gcsfuse MOUNT is a separate toggle (skills_mount_enabled)."
+  default     = true
+}
+
+variable "skills_mount_enabled" {
+  type        = bool
+  description = "Mount the skills bucket read-only via gcsfuse (+ gen2 exec env + SKILLS_ROOT/SKILLS_VERSION env) on planner/coder. Default OFF: the fuse mount under the gen2 execution environment currently fails the coder-control startup probe (heavy dual-role image) and needs validation (and an initially-populated bucket + a resolveSkillsSrc empty-mount fallback) before enabling. Requires skills_enabled. Off → services use the vendored skills baked into the image."
+  default     = false
+}
 
 variable "skills_bucket_name" {
   type        = string
-  description = "Globally-unique GCS bucket holding versioned agent-skill bundles (<version>/<skill>/SKILL.md), mounted read-only on planner + coder via gcsfuse. Empty ('') disables the skills registry entirely."
+  description = "OPTIONAL override for the skills bucket name. Empty ('') derives a stable default of '<project_id>-aifleet-skills' (see locals.tf). Terraform CREATES this bucket — it is NOT assumed to pre-exist. Set only to pin a custom globally-unique name. Ignored when skills_enabled = false."
   default     = ""
 }
 

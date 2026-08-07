@@ -336,5 +336,16 @@ export const api = {
     getMyPolicy: () => request('/settings-policy/me/settings'),
     setMyPolicy: (payload) =>
       request('/settings-policy/me/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+
+    // Config VALUES (provider API keys, e.g. geminiApiKey). Write-only: the PUT
+    // takes plaintext and reads back only `values.<key>.set` (never the secret).
+    // Sent alone (no `domains`), so the scope's include/exclude policy is
+    // preserved. An empty string clears a stored key.
+    setOrgConfig: (values) =>
+      request('/settings-policy/settings/org', { method: 'PUT', body: JSON.stringify({ values }) }),
+    setProjectConfig: (projectId, values) =>
+      request(`/settings-policy/settings/project/${projectId}`, { method: 'PUT', body: JSON.stringify({ values }) }),
+    setMyConfig: (values) =>
+      request('/settings-policy/me/settings', { method: 'PUT', body: JSON.stringify({ values }) }),
   },
 };

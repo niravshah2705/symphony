@@ -329,10 +329,21 @@ async function generateIssuesForMilestones({ project, milestones, config, llm, k
 
 /**
  * Run the software-design planning agent.
+ *
+ * `settings` (optional) carries the caller's resolved settings-policy context:
+ * `{ effectivePolicy, geminiApiKey }` from settings-client.resolveEffectiveSettings.
+ * It is threaded into the agent `ctx` so the framework can ENFORCE the effective
+ * harness/tools/skills policy and wire the resolved Gemini key into the harness.
+ * When absent (local single-user / no scope) the framework defaults to allow-all
+ * and the GEMINI_API_KEY env/store fallback (no regression).
  * @returns {Promise<{ viable:boolean, reason?:string, plan?:object, traceUrl:string|null, runId:string, traced:boolean }>}
  */
-async function generatePlan({ project, assumedRole, config, llm, keys, onStep }) {
+async function generatePlan({ project, assumedRole, config, llm, keys, onStep, settings = {} }) {
   const step = typeof onStep === 'function' ? onStep : () => {};
+  const policyCtx = {
+    effectivePolicy: settings.effectivePolicy || null,
+    geminiApiKey: settings.geminiApiKey || '',
+  };
   if (!isLlmUsable(llm)) {
     throw new AgentError('Configure the deep-agent LLM in Settings → LLM.', 400);
   }
@@ -406,7 +417,7 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep })
       workflow,
       llm,
       userMessage: buildDraftPrompt({ project, today, config }),
-      ctx: { step },
+      ctx: { step, ...policyCtx },
       invokeConfig: { runId, ...traceMeta },
       runtime: keys.agentRuntime || 'deepagent',
       workflowPattern: keys.workflowPattern || 'sequential',

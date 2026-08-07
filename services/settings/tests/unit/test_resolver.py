@@ -6,7 +6,12 @@ excluded; exclude always wins downward.
 """
 from __future__ import annotations
 
-from app.domain.resolver import apply_scope, resolve_domain, resolve_effective
+from app.domain.resolver import (
+    apply_scope,
+    resolve_domain,
+    resolve_effective,
+    resolve_effective_values,
+)
 from app.models.policy import DomainPolicy, SettingsPolicy
 
 HARNESS = ["deepagent", "codex-sdk", "claude-agent-sdk"]
@@ -130,3 +135,29 @@ def test_missing_policies_are_treated_as_empty():
     universe = {"harness": HARNESS, "tools": [], "skills": [], "plugins": []}
     resolution = resolve_effective(universe, None, None, None)
     assert resolution["harness"].effective == HARNESS
+
+
+# ---- resolve_effective_values (config value override precedence) ------------
+
+def sp(scope_type, values) -> SettingsPolicy:
+    return SettingsPolicy(scope_type=scope_type, scope_id="s", values=dict(values))
+
+
+def test_effective_value_uses_user_over_project_over_org():
+    org = sp("org", {"geminiApiKey": "org-key"})
+    project = sp("project", {"geminiApiKey": "project-key"})
+    user = sp("user", {"geminiApiKey": "user-key"})
+    assert resolve_effective_values(org, project, user) == {"geminiApiKey": "user-key"}
+
+
+def test_effective_value_falls_through_to_higher_scope_when_lower_unset():
+    org = sp("org", {"geminiApiKey": "org-key"})
+    # user/project have no value -> org wins.
+    assert resolve_effective_values(org, None, None) == {"geminiApiKey": "org-key"}
+    project = sp("project", {"geminiApiKey": "project-key"})
+    assert resolve_effective_values(org, project, None) == {"geminiApiKey": "project-key"}
+
+
+def test_effective_value_absent_when_no_scope_sets_it():
+    assert resolve_effective_values(None, None, None) == {}
+    assert resolve_effective_values(sp("org", {}), None, None) == {}

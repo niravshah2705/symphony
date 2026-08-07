@@ -75,7 +75,7 @@ function linearGraphqlTool(ctx = {}) {
 // quality, codegen, playwright). Each is a factory `(ctx) => LangChainTool`
 // that DELEGATES to a pre-installed standard CLI/MCP rather than re-implementing
 // its behaviour. See tools/index.js to add more.
-const { TOOL_FACTORIES } = require('./tools/index');
+const { TOOL_FACTORIES, TOOL_DOMAIN } = require('./tools/index');
 
 const FACTORIES = Object.freeze({
   web_search: webSearchTool,
@@ -94,4 +94,4 @@ function buildMany(names, ctx) {
   return (Array.isArray(names) ? names : []).map((n) => build(n, ctx)).filter(Boolean);
 }
 
-module.exports = { build, buildMany, webSearchTool, linearGraphqlTool, FACTORIES };
+module.exports = { build, buildMany, webSearchTool, linearGraphqlTool, FACTORIES, TOOL_DOMAIN };

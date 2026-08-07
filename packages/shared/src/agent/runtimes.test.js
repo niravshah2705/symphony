@@ -739,6 +739,65 @@ test('RubricMiddleware re-runs the SAME SDK runtime (Antigravity) on needs_revis
   assert.equal(execution.usage.totalTokens, 14); // usage accumulated across both runs (7 + 7)
 });
 
+test('Antigravity SDK resolves the key from settings (ctx) and falls back to env/store', async (t) => {
+  const root = workspace(t);
+  const seen = {};
+  class FakeGoogleGenAI {
+    constructor(options) {
+      seen.apiKey = options.apiKey;
+    }
+    get models() {
+      return {
+        generateContent: async () => ({
+          responseId: 'gc',
+          candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+          usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 },
+        }),
+      };
+    }
+  }
+  const loaders = { 'antigravity-sdk': async () => ({ GoogleGenAI: FakeGoogleGenAI }) };
+
+  // The settings-resolved key (ctx.geminiApiKey) wins over the descriptor key.
+  await executeAgentRuntime({
+    runtime: 'antigravity-sdk',
+    prompt: 'task',
+    rootDir: root,
+    llm: { provider: 'antigravity', model: 'gemini-2.5-flash', apiKey: 'env-fallback-key' },
+    ctx: { geminiApiKey: 'settings-resolved-key' },
+    loaders,
+    trace: false,
+  });
+  assert.equal(seen.apiKey, 'settings-resolved-key');
+
+  // With no settings value, the descriptor's key (from GEMINI_API_KEY env/store) is used.
+  await executeAgentRuntime({
+    runtime: 'antigravity-sdk',
+    prompt: 'task',
+    rootDir: root,
+    llm: { provider: 'antigravity', model: 'gemini-2.5-flash', apiKey: 'env-fallback-key' },
+    ctx: {},
+    loaders,
+    trace: false,
+  });
+  assert.equal(seen.apiKey, 'env-fallback-key');
+});
+
+test('effectiveAgentRuntime downgrades a policy-excluded harness (enforcement)', () => {
+  // codex is the provider so codex-sdk normally survives; the policy excludes it.
+  const llm = { provider: 'codex' };
+  const excludesCodex = { harness: { effective: ['deepagent', 'claude-agent-sdk'] } };
+  assert.equal(
+    effectiveAgentRuntime('codex-sdk', llm, { strict: true, workflow: 'planning', effectivePolicy: excludesCodex }),
+    'deepagent'
+  );
+  // Without a policy, the provider-matched runtime is unchanged (no regression).
+  assert.equal(
+    effectiveAgentRuntime('codex-sdk', llm, { strict: true, workflow: 'planning' }),
+    'codex-sdk'
+  );
+});
+
 test('Claude permission guard denies credential-bearing shell and path escapes', async (t) => {
   const root = workspace(t);
   const outside = workspace(t);

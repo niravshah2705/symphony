@@ -6,6 +6,7 @@ const path = require('path');
 const { traceable, getCurrentRunTree } = require('langsmith/traceable');
 const { buildSafeAgentEnv } = require('./repository-broker');
 const { PATTERNS, patternId } = require('./workflow-patterns');
+const { enforceHarness } = require('./settings-policy');
 
 /**
  * Provider-neutral agent-runtime registry.
@@ -114,18 +115,22 @@ function normalizeAgentRuntime(value, { strict = false } = {}) {
  * the only provider-neutral execution path, so use it explicitly and surface
  * the requested/effective runtimes on the trace.
  */
-function effectiveAgentRuntime(value, llm, { strict = false, workflow = '' } = {}) {
+function effectiveAgentRuntime(value, llm, { strict = false, workflow = '', effectivePolicy = null } = {}) {
   const runtime = normalizeAgentRuntime(value, { strict });
   const provider = llm && llm.provider;
   // The unattended coding workflow requires the private Linear and scoped
   // repository-broker tools. Official SDK subprocesses deliberately never
   // receive those application credentials, so keep this lifecycle on the
   // prepared DeepAgent path instead of running an SDK that cannot finish it.
-  if (workflow === 'coding' && runtime !== 'deepagent') return 'deepagent';
-  if (runtime === 'codex-sdk' && provider !== 'codex') return 'deepagent';
-  if (runtime === 'claude-agent-sdk' && provider !== 'claude') return 'deepagent';
-  if (runtime === 'antigravity-sdk' && provider !== 'antigravity') return 'deepagent';
-  return runtime;
+  let resolved = runtime;
+  if (workflow === 'coding' && runtime !== 'deepagent') resolved = 'deepagent';
+  else if (runtime === 'codex-sdk' && provider !== 'codex') resolved = 'deepagent';
+  else if (runtime === 'claude-agent-sdk' && provider !== 'claude') resolved = 'deepagent';
+  else if (runtime === 'antigravity-sdk' && provider !== 'antigravity') resolved = 'deepagent';
+  // Settings-service ENFORCEMENT: if the resolved harness is excluded by the
+  // caller's effective policy, downgrade to an allowed harness (prefer the
+  // provider-neutral deepagent). Absent policy → unchanged (allow-all).
+  return enforceHarness(resolved, effectivePolicy);
 }
 
 function normalizeWorkflowPattern(value, { strict = false } = {}) {
@@ -847,7 +852,13 @@ async function executeAntigravity(options, prompt) {
       400
     );
   }
-  const apiKey = String((options.llm && (options.llm.apiKey || options.llm.accessToken)) || '');
+  // Gemini API key precedence: the effective key resolved from the settings
+  // service (per the caller's org/project/user) wins; otherwise fall back to the
+  // descriptor's key, which carries the GEMINI_API_KEY env / store value.
+  const resolvedConfigKey = options.ctx && options.ctx.geminiApiKey;
+  const apiKey = String(
+    resolvedConfigKey || (options.llm && (options.llm.apiKey || options.llm.accessToken)) || ''
+  );
   if (!apiKey) {
     throw new AgentRuntimeError(
       'Antigravity SDK authentication is unavailable. Add a Gemini API key in Settings and try again.',
@@ -927,6 +938,7 @@ async function executeAgentRuntime(options = {}) {
   const runtime = effectiveAgentRuntime(requestedRuntime, options.llm, {
     strict: true,
     workflow: options.workflow || '',
+    effectivePolicy: (options.ctx && options.ctx.effectivePolicy) || null,
   });
   const workflowPattern = normalizeWorkflowPattern(options.workflowPattern, { strict: true });
   const prompt = applyWorkflowPattern(options.prompt, workflowPattern);
