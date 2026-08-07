@@ -13,6 +13,10 @@ data/
 .env.*
 !.env.example
 
+# adlc CLI stored token (normally in $HOME/.adlc; ignored here in case
+# $ADLC_HOME ever points into the repo). Never commit credentials.
+.adlc/
+
 # OS / editor cruft
 .DS_Store
 *.log
