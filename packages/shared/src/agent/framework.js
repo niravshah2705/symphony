@@ -234,6 +234,23 @@ function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, ext
   // Guard read_file against Anthropic's content-block rules: unrecognized/binary
   // files must not be sent as non-PDF `document` blocks (invalid_request_error).
   be = installSafeRead(be);
+  // TODO(settings-service enforcement): filter this workflow's harness/tools/
+  // skills/plugins by the caller's EFFECTIVE settings policy before the agent is
+  // built. The settings service (services/settings) resolves the org→project→user
+  // include/exclude cascade; the gateway/planner should either call its
+  // GET /api/settings-policy/settings/effective?project_id=... endpoint or resolve
+  // locally via `require('./settings-policy').resolveEffective(universe, { org,
+  // project, user })`, then prune with `filterByPolicy(...)`:
+  //     const { filterByPolicy } = require('./settings-policy');
+  //     const eff = ctx.effectivePolicy;               // plumbed in from the caller
+  //     workflow = { ...workflow,
+  //       tools:  filterByPolicy(workflow.tools,  eff.tools.effective),
+  //       skills: filterByPolicy(workflow.skills, eff.skills.effective) };
+  //     // harness: effectiveAgentRuntime(runtime) must also be checked against
+  //     //          eff.harness.effective in runWorkflow/effectiveAgentRuntime.
+  // Left as a TODO (not silently skipped): wiring the effective policy through
+  // `ctx` end-to-end is a follow-up so this PR ships the service + resolver +
+  // proxy + terraform + UI without changing existing agent-build behaviour.
   const tools = [...toolRegistry.buildMany(workflow.tools, ctx), ...(extraTools || [])];
   const systemPrompt = typeof workflow.systemPrompt === 'function' ? workflow.systemPrompt(ctx) : workflow.systemPrompt;
   // Repair mis-keyed filesystem tool calls (e.g. read_file with `path` instead

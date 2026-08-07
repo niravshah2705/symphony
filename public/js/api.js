@@ -311,4 +311,30 @@ export const api = {
     removeProjectMember: (projectId, userId) =>
       request(`/org/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
   },
+
+  // Settings-policy service (services/settings via /api/settings-policy/*). Stores
+  // the org→project→user include/exclude cascade for harness/tools/skills/plugins.
+  // The `me` surface is auth-only; org/project surfaces need an org role and the
+  // service enforces per-org / per-project RBAC (cross-org → 404).
+  settingsPolicy: {
+    // Item universe (choices) + the caller's resolved effective policy.
+    getUniverse: () => request('/settings-policy/settings/universe'),
+    getEffective: (projectId) =>
+      request(`/settings-policy/settings/effective${projectId ? `?project_id=${projectId}` : ''}`),
+
+    // Org-scope policy (org admin).
+    getOrgPolicy: () => request('/settings-policy/settings/org'),
+    setOrgPolicy: (payload) =>
+      request('/settings-policy/settings/org', { method: 'PUT', body: JSON.stringify(payload) }),
+
+    // Project-scope policy (project admin, org-scoped).
+    getProjectPolicy: (projectId) => request(`/settings-policy/settings/project/${projectId}`),
+    setProjectPolicy: (projectId, payload) =>
+      request(`/settings-policy/settings/project/${projectId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+    // User-scope policy (any signed-in user) — /api/settings-policy/me/*
+    getMyPolicy: () => request('/settings-policy/me/settings'),
+    setMyPolicy: (payload) =>
+      request('/settings-policy/me/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  },
 };

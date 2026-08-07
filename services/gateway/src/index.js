@@ -182,6 +182,30 @@ if (CONFIG.SERVICES.orgUrl) {
     res.status(501).json({ error: 'Organization service is not configured (ORG_URL unset).' }));
 }
 
+// Settings-policy service (FastAPI + Firestore, services/settings). Stores the
+// org→project→user include/exclude settings cascade (harness/tools/skills/
+// plugins). Like the org service it runs its own Firebase-OIDC auth + org-scoped
+// RBAC, so the gateway forwards the caller's Firebase bearer (forwardUserAuth)
+// and rewrites /api/settings-policy/* -> /api/v1/*. The `org` permission domain
+// is the coarse gate (reused per the epic); the service enforces the real
+// per-org / per-project authorization.
+if (CONFIG.SERVICES.settingsUrl) {
+  const settingsPolicyProxy = createProxy(CONFIG.SERVICES.settingsUrl, {
+    rewrite: { from: '/api/settings-policy', to: '/api/v1' },
+    forwardUserAuth: true,
+  });
+  // Personal settings (/api/settings-policy/me/*): every SIGNED-IN user may
+  // manage their own user-scope policy, even without an `org` role. Mounted
+  // BEFORE the role-gated prefix so this exact path wins (mirrors /api/org/me).
+  app.use('/api/settings-policy/me', requireAuthenticated(), settingsPolicyProxy);
+  // Org/project settings surface — needs the `org` permission domain; the
+  // settings service enforces org-admin / project-admin authorization.
+  app.use('/api/settings-policy', requirePermission('org'), settingsPolicyProxy);
+} else {
+  app.use('/api/settings-policy', requirePermission('org'), (req, res) =>
+    res.status(501).json({ error: 'Settings service is not configured (SETTINGS_URL unset).' }));
+}
+
 // Codex OAuth redirect target — must be registered before the SPA fallback.
 app.get('/auth/callback', codexCallback);
 

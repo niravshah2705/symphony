@@ -58,9 +58,10 @@ jobs:
             planner: ['services/planner/**', 'deploy/gcp/Dockerfile.planner']
             coder:   ['services/coder/**',   'deploy/gcp/Dockerfile.coder']
             spa:     ['public/**', 'firebase.json']
-            infra:   ['deploy/gcp/terraform/**']
-            root:    ['package.json', 'package-lock.json']
-            org:     ['services/org/**']
+            infra:    ['deploy/gcp/terraform/**']
+            root:     ['package.json', 'package-lock.json']
+            org:      ['services/org/**']
+            settings: ['services/settings/**']
 
       - id: plan
         env:
@@ -73,6 +74,7 @@ jobs:
           SPA: ${{ steps.filter.outputs.spa }}
           INFRA: ${{ steps.filter.outputs.infra }}
           ORG: ${{ steps.filter.outputs.org }}
+          SETTINGS: ${{ steps.filter.outputs.settings }}
         run: |
           set -euo pipefail
           # A shared-code / root-deps change (or a forced run) rebuilds the Node
@@ -91,6 +93,9 @@ jobs:
           # The org service builds from its own directory (its Dockerfile expects
           # services/org as the build context).
           if [ "$FORCE_ALL" = "true" ] || [ "$ORG" = "true" ]; then push org org-service services/org/Dockerfile services/org ; fi
+          # The settings service is an independent Python app that builds from its
+          # own directory (its Dockerfile expects services/settings as the context).
+          if [ "$FORCE_ALL" = "true" ] || [ "$SETTINGS" = "true" ]; then push settings settings-service services/settings/Dockerfile services/settings ; fi
 
           spa=false
           if [ "$FORCE_ALL" = "true" ] || [ "$SPA" = "true" ]; then spa=true; fi
@@ -229,6 +234,7 @@ jobs:
             echo "planner=$(resolve planner planner)"
             echo "coder=$(resolve coder coder-control)"
             echo "org=$(resolve org org-service)"
+            echo "settings=$(resolve settings settings-service)"
           } >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
@@ -265,6 +271,7 @@ jobs:
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
           [ -n "${{ steps.tags.outputs.coder }}" ]   && apply_args+=(-var="coder_image_tag=${{ steps.tags.outputs.coder }}") || true
           [ -n "${{ steps.tags.outputs.org }}" ]     && apply_args+=(-var="org_image_tag=${{ steps.tags.outputs.org }}") || true
+          [ -n "${{ steps.tags.outputs.settings }}" ] && apply_args+=(-var="settings_image_tag=${{ steps.tags.outputs.settings }}") || true
 
           terraform apply -input=false -auto-approve "${apply_args[@]}"
 
