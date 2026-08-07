@@ -14,7 +14,7 @@ const {
 } = require('./agent/model-presets');
 
 const PRESET_CATALOG = publicCatalog();
-const DEFAULT_LOCAL_PRESET = getPreset(PRESET_CATALOG.defaults.local);
+const DEFAULT_BYOM_PRESET = getPreset(PRESET_CATALOG.defaults.byom);
 const DEFAULT_HOSTED_PRESET = getPreset(PRESET_CATALOG.defaults.hosted);
 
 function recommendedPreset(provider) {
@@ -83,8 +83,8 @@ const DEFAULT_HUGGINGFACE_SETTINGS = settingsPatchForPreset(recommendedPreset('h
 const DEFAULT_CODEX_SETTINGS = settingsForConfiguredModel(recommendedPreset('codex'));
 const DEFAULT_CLAUDE_SETTINGS = settingsForConfiguredModel(recommendedPreset('claude'));
 // The exact catalog defaults win over a same-provider recommended preset. This
-// keeps changing `defaults.local/hosted` in JSON sufficient to change new installs.
-const DEFAULT_ACTIVE_LOCAL_SETTINGS = settingsPatchForPreset(DEFAULT_LOCAL_PRESET);
+// keeps changing `defaults.byom/hosted` in JSON sufficient to change new installs.
+const DEFAULT_ACTIVE_BYOM_SETTINGS = settingsPatchForPreset(DEFAULT_BYOM_PRESET);
 const DEFAULT_ACTIVE_HOSTED_SETTINGS = settingsForConfiguredModel(DEFAULT_HOSTED_PRESET);
 const DEFAULT_HOSTED_MODEL = configuredModel(DEFAULT_HOSTED_PRESET.provider);
 // The preset id a fresh hosted slot resolves to (or 'custom' when the configured
@@ -92,6 +92,15 @@ const DEFAULT_HOSTED_MODEL = configuredModel(DEFAULT_HOSTED_PRESET.provider);
 const DEFAULT_HOSTED_PRESET_ID = modelMatchesPreset(DEFAULT_HOSTED_PRESET, DEFAULT_HOSTED_MODEL)
   ? DEFAULT_HOSTED_PRESET.id
   : 'custom';
+
+// Legacy "Local Models" settings key → its "BYoM" (Bring Your Own Model)
+// replacement. Applied at load time (see normalizeStore) so a store written
+// before the rename keeps working after upgrade.
+const BYOM_KEY_MIGRATIONS = Object.freeze([
+  ['localLlmProvider', 'byomProvider'],
+  ['localLlmPresetId', 'byomPresetId'],
+  ['localActiveModel', 'byomActiveModel'],
+]);
 
 /**
  * Tiny JSON-file backed store for local settings, the business -> project
@@ -137,19 +146,22 @@ const DEFAULT_STORE = Object.freeze({
     repositoryProvider: 'github',
     repositoryUrl: '',
     gitlabToken: '',
-    // Deep-agent LLM providers. Two role slots choose a local provider
-    // ('ollama' / 'lmstudio' / 'omlx') or hosted provider ('codex' / 'claude'):
-    //   llmProvider      — GLOBAL (hosted) slot: used by the planner and by the
-    //                      coder for hosted-labeled (and unlabeled) issues.
-    //   localLlmProvider — LOCAL slot: used by the coder for "local"-labeled (XS)
-    //                      issues only.
-    // New installs start with one useful local preset and one hosted preset. An
+    // Deep-agent LLM providers. Two role slots choose a BYoM provider
+    // ('ollama' / 'lmstudio' / 'omlx' / 'huggingface') or a hosted provider
+    // ('codex' / 'claude'):
+    //   llmProvider  — GLOBAL (hosted) slot: used by the planner and by the
+    //                  coder for hosted-labeled (and unlabeled) issues.
+    //   byomProvider — BYoM slot ("Bring Your Own Model"; formerly the "local"
+    //                  slot): used by the coder for "byom"-labeled (XS) issues
+    //                  only. Renamed from localLlmProvider — see normalizeStore
+    //                  for the load-time migration of the legacy key.
+    // New installs start with one useful BYoM preset and one hosted preset. An
     // existing store is migrated to "custom" below so its hand-tuned values are
     // never silently replaced by a catalog recommendation.
     llmProvider: DEFAULT_HOSTED_PRESET.provider,
-    localLlmProvider: DEFAULT_LOCAL_PRESET.provider,
+    byomProvider: DEFAULT_BYOM_PRESET.provider,
     hostedLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
-    localLlmPresetId: DEFAULT_LOCAL_PRESET.id,
+    byomPresetId: DEFAULT_BYOM_PRESET.id,
     // Purpose-based model roles ("models as tasks"). Each names one of the four
     // providers and reuses that provider's shared config block below. New
     // installs point every role at the hosted slot; an operator can independently
@@ -212,7 +224,7 @@ const DEFAULT_STORE = Object.freeze({
     // per-item criteria), so the selected preset supplies enough headroom while
     // the model still stops naturally at end_turn.
     ...DEFAULT_CLAUDE_SETTINGS,
-    ...DEFAULT_ACTIVE_LOCAL_SETTINGS,
+    ...DEFAULT_ACTIVE_BYOM_SETTINGS,
     ...DEFAULT_ACTIVE_HOSTED_SETTINGS,
     claudeTokens: null, // OAuth token set — never sent to the browser
     // GitHub token (fine-grained PAT) for the code-writer's git clone/push against
@@ -277,11 +289,24 @@ function normalizeStore(parsed) {
   const base = cloneDefault();
   const storedSettings = source.settings || {};
   const settings = { ...base.settings, ...storedSettings };
+  // Rename migration: the "Local Models" slot became "BYoM" (Bring Your Own
+  // Model). Copy any legacy localLlm*/localActiveModel value into its byom*
+  // replacement when the new key is absent, then drop the stale key so a
+  // migrated store carries only the current schema. Existing data keeps working.
+  for (const [legacyKey, byomKey] of BYOM_KEY_MIGRATIONS) {
+    if (Object.prototype.hasOwnProperty.call(storedSettings, legacyKey)
+      && !Object.prototype.hasOwnProperty.call(storedSettings, byomKey)) {
+      settings[byomKey] = storedSettings[legacyKey];
+    }
+    delete settings[legacyKey];
+  }
   // Preset ids did not exist before catalog v1. Treat legacy settings as
   // customized instead of claiming they match (and possibly later reapplying)
-  // a new default preset.
-  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'localLlmPresetId')) {
-    settings.localLlmPresetId = 'custom';
+  // a new default preset. A pre-rename store carries localLlmPresetId (already
+  // migrated to byomPresetId above), so only a store missing BOTH keys is legacy.
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'byomPresetId')
+    && !Object.prototype.hasOwnProperty.call(storedSettings, 'localLlmPresetId')) {
+    settings.byomPresetId = 'custom';
   }
   if (!Object.prototype.hasOwnProperty.call(storedSettings, 'hostedLlmPresetId')) {
     settings.hostedLlmPresetId = 'custom';
@@ -289,7 +314,7 @@ function normalizeStore(parsed) {
   // Purpose-based model roles did not exist before this migration. Seed each
   // absent role from the operator's effective hosted slot so an existing
   // install keeps its current planner/coder model (previously always the
-  // hosted slot) instead of jumping to a catalog default. The `local`/`global`
+  // hosted slot) instead of jumping to a catalog default. The `byom`/`global`
   // slots are preserved untouched for localization and diagnostics.
   for (const role of MODEL_ROLES) {
     const providerKey = `${role}LlmProvider`;

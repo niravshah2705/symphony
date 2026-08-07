@@ -1205,7 +1205,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
   background: var(--panel-2);
   background: color-mix(in srgb, var(--panel-2) 55%, var(--panel));
 }
-.preset-card-local { border-inline-start: 3px solid var(--green); }
+.preset-card-byom { border-inline-start: 3px solid var(--green); }
 .preset-card-hosted { border-inline-start: 3px solid var(--accent-2); }
 .preset-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
 .preset-title { font-weight: 650; font-size: 14px; }

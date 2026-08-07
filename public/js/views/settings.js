@@ -632,12 +632,12 @@ const PROVIDER_LABELS = Object.freeze({
 });
 
 const PROVIDER_DEPLOYMENT = Object.freeze({
-  ollama: 'local',
-  lmstudio: 'local',
-  omlx: 'local',
+  ollama: 'byom',
+  lmstudio: 'byom',
+  omlx: 'byom',
+  huggingface: 'byom',
   codex: 'hosted',
   claude: 'hosted',
-  huggingface: 'hosted',
 });
 
 // Purpose-based model roles ("models as tasks"). Each role is provider-flexible
@@ -673,16 +673,20 @@ const ROLE_META = Object.freeze(Object.fromEntries(
 ));
 const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface']);
 const ROLE_PROVIDERS = Object.freeze({
-  // Legacy deployment slots, kept for any deployment-scoped callers.
-  local: ['ollama', 'lmstudio', 'omlx'],
-  hosted: ['codex', 'claude', 'huggingface'],
-  // Purpose roles accept any provider (local or hosted).
+  // Legacy deployment slots, kept for any deployment-scoped callers. "byom"
+  // (Bring Your Own Model) folds Hugging Face in with the local runtimes.
+  byom: ['ollama', 'lmstudio', 'omlx', 'huggingface'],
+  hosted: ['codex', 'claude'],
+  // Purpose roles accept any provider (BYoM or hosted).
   thinking: ALL_PROVIDERS,
   execution: ALL_PROVIDERS,
   testing: ALL_PROVIDERS,
 });
 
-const LOCAL_PROVIDERS = new Set(ROLE_PROVIDERS.local);
+// Providers that truly run on the operator's own machine. Narrower than the BYoM
+// group (which also includes the Hugging Face hosted router): only these get the
+// "runs privately" hint, the local discovery source, and substring model matching.
+const LOCAL_INFERENCE_PROVIDERS = new Set(['ollama', 'lmstudio', 'omlx']);
 
 const REASONING_META = Object.freeze({
   none: { label: 'Off', description: 'Do not request additional reasoning from this model.' },
@@ -709,7 +713,7 @@ function buildLlmSection(ctx, rebuild) {
   });
 
   return section('Task Models', summary, incomplete, [
-    el('p', { class: 'muted settings-section-intro' }, 'Assign a model to each task type. Each role picks any provider — local (Ollama / LM Studio / OMLX) or hosted (OpenAI / Anthropic) — plus a model and model-supported reasoning level. Model changes save immediately; recommended context, output, and sampling values are applied automatically, and advanced values use an explicit save.'),
+    el('p', { class: 'muted settings-section-intro' }, 'Assign a model to each task type. Each role picks any provider — BYoM (Ollama / LM Studio / oMLX / Hugging Face) or hosted (OpenAI / Anthropic) — plus a model and model-supported reasoning level. Model changes save immediately; recommended context, output, and sampling values are applied automatically, and advanced values use an explicit save.'),
     el('div', { class: 'preset-stack' }, LLM_ROLES.map((entry) => presetSlot(ctx, entry.role, rebuild))),
   ]);
 }
@@ -723,13 +727,13 @@ function findPreset(ctx, id, deployment) {
 function roleProvider(settings, role) {
   const fields = ROLE_FIELDS[role];
   if (fields) return settings[fields.provider];
-  return role === 'local' ? settings.localLlmProvider : settings.llmProvider;
+  return role === 'byom' ? settings.byomProvider : settings.llmProvider;
 }
 
 function selectedPresetId(settings, role) {
   const fields = ROLE_FIELDS[role];
   if (fields) return settings[fields.preset];
-  return role === 'local' ? settings.localLlmPresetId : settings.hostedLlmPresetId;
+  return role === 'byom' ? settings.byomPresetId : settings.hostedLlmPresetId;
 }
 
 function providerConnected(ctx, provider) {
@@ -863,10 +867,10 @@ function presetSlot(ctx, role, rebuild) {
 
   const meta = ROLE_META[role] || {};
   const heading = meta.heading || role;
-  const deploymentHint = LOCAL_PROVIDERS.has(provider)
+  const deploymentHint = LOCAL_INFERENCE_PROVIDERS.has(provider)
     ? ` Runs privately on this machine through ${PROVIDER_LABELS[provider] || provider}.`
     : provider === 'huggingface'
-      ? ' Runs on Hugging Face hosted inference (billed to your HF account).'
+      ? ' Runs on the Hugging Face hosted router — your own model, billed to your HF account (BYoM).'
       : ' Runs on a hosted OAuth provider (OpenAI / Anthropic).';
   const description = `${meta.description || ''}${deploymentHint}`;
   const status = modelDiscoveryStatus(ctx, role, provider, params.model, rebuild);
@@ -902,7 +906,7 @@ function presetSlot(ctx, role, rebuild) {
     );
   }
 
-  if (deployment === 'local' && editorPreset) {
+  if (LOCAL_INFERENCE_PROVIDERS.has(provider) && editorPreset) {
     children.push(localConnectionEditor(ctx, role, editorPreset, params, rebuild));
   }
   children.push(status);
@@ -999,9 +1003,12 @@ function normalizedModel(value) {
 function modelMatchesPreset(preset, model) {
   const actual = normalizedModel(model);
   const patterns = [preset.model, ...(preset.modelPatterns || [])].map(normalizedModel).filter(Boolean);
-  return preset.deployment === 'hosted'
-    ? patterns.includes(actual)
-    : patterns.some((pattern) => actual.includes(pattern));
+  // Local-inference runtimes carry noisy, quantized file names, so match by
+  // substring; hosted-inference vendors (Codex, Claude, Hugging Face) use
+  // canonical ids, so match exactly.
+  return LOCAL_INFERENCE_PROVIDERS.has(preset.provider)
+    ? patterns.some((pattern) => actual.includes(pattern))
+    : patterns.includes(actual);
 }
 
 function findPresetForModel(ctx, provider, model) {
@@ -1179,7 +1186,7 @@ async function discoverProviderModels(ctx, role, provider, refresh, rebuild) {
   try {
     const response = await api.getProviderModels(provider, refresh);
     if (requestId !== state.requestId) return;
-    const source = response.source || (LOCAL_PROVIDERS.has(provider) ? 'local' : 'provider');
+    const source = response.source || (LOCAL_INFERENCE_PROVIDERS.has(provider) ? 'local' : 'provider');
     state.models = (response.models || [])
       .map((model) => discoveredModelEntry(ctx, provider, model, source))
       .filter(Boolean);
@@ -1225,12 +1232,12 @@ function modelDiscoveryStatus(ctx, role, provider, model, rebuild) {
   const exact = state.models.some((entry) => entry.id === model);
   const count = state.models.length;
   const sourceLabel = state.source === 'fallback' || state.source === 'catalog' ? 'the catalog' : state.source || 'the provider';
-  const message = LOCAL_PROVIDERS.has(provider)
+  const message = LOCAL_INFERENCE_PROVIDERS.has(provider)
     ? exact
       ? provider === 'omlx' ? `Ready · ${model} available` : `Ready · ${model} detected`
       : `${count} local model${count === 1 ? '' : 's'} available; ${model || 'the selected model'} was not found.`
     : `${count} ${PROVIDER_LABELS[provider] || provider} model${count === 1 ? '' : 's'} loaded from ${sourceLabel}.`;
-  const healthy = LOCAL_PROVIDERS.has(provider)
+  const healthy = LOCAL_INFERENCE_PROVIDERS.has(provider)
     ? exact
     : state.source === 'live';
   return el('div', { class: `preset-status ${healthy ? 'ok' : 'warn'}`, role: 'status', 'aria-live': 'polite' }, [
@@ -1439,7 +1446,7 @@ function localConnectionEditor(ctx, role, preset, params, rebuild) {
     };
     try {
       const next = await api.applyLlmPreset({
-        role: role === 'local' ? 'local' : 'global',
+        role: role === 'byom' ? 'byom' : 'global',
         presetId: preset.id,
         provider,
         overrides,

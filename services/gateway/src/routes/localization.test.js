@@ -69,7 +69,7 @@ test('suggestions remain usable when lookup is offline or the request address is
 });
 
 test('translation body passes only locale, texts, and server settings to the translator', async () => {
-  const settings = { localLlmProvider: 'ollama', ollamaModel: 'gemma-local' };
+  const settings = { byomProvider: 'ollama', ollamaModel: 'gemma-local' };
   let received = null;
   const payload = await translationForBody(
     { locale: 'gu-IN', texts: ['Agent', 'Settings'], ignored: 'not forwarded' },

@@ -1558,7 +1558,7 @@ function renderAgentRail(host, status, analysis) {
     el('div', { class: 'rail-section-label' }, 'Current setup'),
     detailCard([
       ['Planning', pause ? t('agentPaused', 'Paused') : safe.scheduleEnabled ? `Every ${safe.intervalMinutes || 5} minutes` : 'Paused'],
-      ['Model', safe.localActiveModel || safe.ollamaModel || 'Not configured'],
+      ['Model', safe.byomActiveModel || safe.ollamaModel || 'Not configured'],
       ['Acting as', safe.assumedRole ? safe.assumedRole.name : 'No role selected'],
       ['Labels', (safe.enrichLabels || []).join(', ') || 'Any'],
     ]),

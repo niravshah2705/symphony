@@ -2,15 +2,25 @@
 
 const catalog = require('./llm-presets.json');
 
+// "BYoM" (Bring Your Own Model) folds the true local-inference runtimes together
+// with Hugging Face's hosted router: in every case the operator supplies the
+// model. Codex/Claude remain the managed "hosted" OAuth providers.
 const PROVIDER_DEPLOYMENT = Object.freeze({
-  ollama: 'local',
-  lmstudio: 'local',
-  omlx: 'local',
+  ollama: 'byom',
+  lmstudio: 'byom',
+  omlx: 'byom',
+  huggingface: 'byom',
   codex: 'hosted',
   claude: 'hosted',
-  huggingface: 'hosted',
 });
-const ROLE_DEPLOYMENT = Object.freeze({ local: 'local', global: 'hosted' });
+const ROLE_DEPLOYMENT = Object.freeze({ byom: 'byom', global: 'hosted' });
+
+// Providers that actually run inference on the operator's own machine. This is
+// narrower than the BYoM deployment tier (which also includes Hugging Face's
+// hosted router): only these require an output/context fraction and a JSON mode,
+// and only these use substring model matching for locally-loaded model files.
+const LOCAL_INFERENCE_PROVIDERS = new Set(['ollama', 'lmstudio', 'omlx']);
+const isLocalInference = (provider) => LOCAL_INFERENCE_PROVIDERS.has(provider);
 
 /**
  * Purpose-based model roles ("models as tasks"). Unlike the deployment-scoped
@@ -90,7 +100,10 @@ function validateCatalog(value) {
     assert(limits.maxOutputTokens <= limits.contextWindow, `${preset.id}: output limit exceeds context limit`);
     const outputFraction = requestLimits.maxOutputContextFraction;
     assert(outputFraction === null || (Number.isFinite(outputFraction) && outputFraction > 0 && outputFraction <= 1), `${preset.id}: invalid output/context fraction`);
-    assert(preset.deployment === 'local' ? outputFraction !== null : outputFraction === null, `${preset.id}: output/context fraction must match deployment`);
+    // The effective-context fraction is only meaningful for true local inference
+    // (Ollama/LM Studio/oMLX); hosted-inference providers — including the BYoM
+    // Hugging Face router — must leave it null.
+    assert(isLocalInference(preset.provider) ? outputFraction !== null : outputFraction === null, `${preset.id}: output/context fraction must match deployment`);
     assert(Number.isInteger(params.contextWindow) && params.contextWindow >= 512, `${preset.id}: invalid context default`);
     assert(params.contextWindow <= limits.contextWindow, `${preset.id}: context default exceeds limit`);
     assert(Number.isInteger(params.maxOutputTokens) && params.maxOutputTokens >= 128, `${preset.id}: invalid output default`);
@@ -118,7 +131,7 @@ function validateCatalog(value) {
     } else {
       assert(typeof params.reasoning.parameter === 'string' && params.reasoning.parameter, `${preset.id}: reasoning parameter is required`);
     }
-    if (preset.deployment === 'local') {
+    if (isLocalInference(preset.provider)) {
       assert(JSON_MODES[preset.provider].has(params.jsonMode), `${preset.id}: invalid JSON mode`);
     } else {
       assert(params.jsonMode === null, `${preset.id}: hosted JSON mode must be null`);
@@ -130,7 +143,7 @@ function validateCatalog(value) {
     }
   }
 
-  for (const deployment of ['local', 'hosted']) {
+  for (const deployment of ['byom', 'hosted']) {
     const preset = value.presets.find((item) => item.id === value.defaults[deployment]);
     assert(preset && preset.deployment === deployment, `default ${deployment} preset is missing or mismatched`);
   }
@@ -205,9 +218,12 @@ function modelMatchesPreset(preset, value) {
   if (preset.id === 'custom') return true;
   const actual = normalizedModel(model);
   const patterns = [preset.model, ...(preset.modelPatterns || [])].map(normalizedModel).filter(Boolean);
-  return preset.deployment === 'hosted'
-    ? patterns.includes(actual)
-    : patterns.some((pattern) => actual.includes(pattern));
+  // Locally-loaded model files carry noisy names (quant/repo suffixes), so local
+  // inference matches by substring; every hosted-inference vendor (Codex, Claude,
+  // and the BYoM Hugging Face router) uses canonical ids, so match exactly.
+  return isLocalInference(preset.provider)
+    ? patterns.some((pattern) => actual.includes(pattern))
+    : patterns.includes(actual);
 }
 
 function normalizeParameters(preset, overrides = {}) {
@@ -449,7 +465,7 @@ function neutralLocalPreset(provider, value) {
   return {
     id: 'custom',
     label: model,
-    deployment: 'local',
+    deployment: 'byom',
     provider,
     model,
     limits: { contextWindow: 262144, maxOutputTokens: 128000 },
@@ -501,7 +517,7 @@ function customPresetForSettings(provider, settings) {
       ? ['low', 'medium', 'high']
       : adapter === 'ollama-think-toggle' ? ['none', 'medium'] : ['none'];
     return {
-      id: 'custom', provider, deployment: 'local', model: settings.ollamaModel || 'custom-model',
+      id: 'custom', provider, deployment: 'byom', model: settings.ollamaModel || 'custom-model',
       limits: { contextWindow: 262144, maxOutputTokens: 128000 },
       requestLimits: { maxOutputContextFraction: 1 },
       capabilities: {
@@ -523,7 +539,7 @@ function customPresetForSettings(provider, settings) {
   if (provider === 'lmstudio') {
     const adapter = settings.lmstudioReasoningAdapter === 'openai-compatible' ? 'openai-compatible' : 'none';
     return {
-      id: 'custom', provider, deployment: 'local', model: settings.lmstudioModel || 'custom-model',
+      id: 'custom', provider, deployment: 'byom', model: settings.lmstudioModel || 'custom-model',
       limits: { contextWindow: 262144, maxOutputTokens: 128000 },
       requestLimits: { maxOutputContextFraction: 0.5 },
       capabilities: {
@@ -547,7 +563,7 @@ function customPresetForSettings(provider, settings) {
     const efforts = adapter === 'omlx-template-effort' ? ['low', 'medium', 'high'] : ['none'];
     const defaultEffort = efforts.includes(settings.omlxReasoningEffort) ? settings.omlxReasoningEffort : efforts[0];
     return {
-      id: 'custom', provider, deployment: 'local', model: settings.omlxModel || 'custom-model',
+      id: 'custom', provider, deployment: 'byom', model: settings.omlxModel || 'custom-model',
       limits: { contextWindow: 262144, maxOutputTokens: 128000 },
       requestLimits: { maxOutputContextFraction: 0.5 },
       capabilities: {
@@ -604,7 +620,7 @@ function customPresetForSettings(provider, settings) {
     const efforts = adapter === 'openai' ? ['none', 'low', 'medium', 'high'] : ['none'];
     const defaultEffort = efforts.includes(settings.huggingfaceReasoningEffort) ? settings.huggingfaceReasoningEffort : efforts[0];
     return {
-      id: 'custom', provider, deployment: 'hosted', model: settings.huggingfaceModel || 'meta-llama/Llama-3.3-70B-Instruct',
+      id: 'custom', provider, deployment: 'byom', model: settings.huggingfaceModel || 'meta-llama/Llama-3.3-70B-Instruct',
       limits: { contextWindow: 262144, maxOutputTokens: 128000 },
       requestLimits: { maxOutputContextFraction: null },
       capabilities: {

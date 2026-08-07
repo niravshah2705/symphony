@@ -154,7 +154,7 @@ function readinessFingerprint() {
     githubToken: settings.githubToken,
     gitlabToken: settings.gitlabToken,
     llmProvider: settings.llmProvider,
-    localLlmProvider: settings.localLlmProvider,
+    byomProvider: settings.byomProvider,
     ollamaHost: settings.ollamaHost,
     ollamaModel: settings.ollamaModel,
     lmstudioHost: settings.lmstudioHost,

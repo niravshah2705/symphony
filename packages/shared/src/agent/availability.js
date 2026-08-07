@@ -6,8 +6,9 @@ const { repoParts } = require('./workspace');
 const { MODEL_ROLES } = require('./model-presets');
 
 // Roles that may be surfaced on a public pause reason (deployment slots plus the
-// purpose roles). Anything else is dropped so the UI never shows a stray value.
-const KNOWN_PAUSE_ROLES = new Set(['local', 'global', ...MODEL_ROLES]);
+// purpose roles). 'byom' is the canonical BYoM slot; 'local' stays as its legacy
+// alias. Anything else is dropped so the UI never shows a stray value.
+const KNOWN_PAUSE_ROLES = new Set(['byom', 'local', 'global', ...MODEL_ROLES]);
 
 const PROBE_TIMEOUT_MS = 5000;
 const MODEL_ERROR_CODES = new Set([

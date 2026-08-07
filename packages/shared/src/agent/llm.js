@@ -763,9 +763,10 @@ async function ensureFreshClaudeTokens() {
  * Which provider name backs a given deep-agent role. Two kinds of roles exist:
  *   Deployment slots (legacy, deployment-pinned):
  *     'global' (default) — hosted slot (settings.llmProvider),
- *     'local'            — local slot (settings.localLlmProvider); used by
+ *     'byom'             — BYoM slot (settings.byomProvider); used by
  *                          localization / local-intelligence. Falls back to the
- *                          global slot when unset.
+ *                          global slot when unset. 'local' is accepted as a
+ *                          back-compat alias for callers not yet renamed.
  *   Purpose roles (provider-flexible; see MODEL_ROLES):
  *     'thinking'  — planner model (settings.thinkingLlmProvider),
  *     'execution' — coder model (settings.executionLlmProvider),
@@ -775,21 +776,21 @@ async function ensureFreshClaudeTokens() {
  */
 const ROLE_PROVIDER_KEYS = Object.freeze({
   global: 'llmProvider',
-  local: 'localLlmProvider',
+  byom: 'byomProvider',
+  local: 'byomProvider', // legacy alias — the "local" slot was renamed to BYoM
   thinking: 'thinkingLlmProvider',
   execution: 'executionLlmProvider',
   testing: 'testingLlmProvider',
 });
 
 function providerForRole(settings, role) {
-  if (role === 'local') return settings.localLlmProvider || settings.llmProvider || 'ollama';
   const key = ROLE_PROVIDER_KEYS[role] || 'llmProvider';
   return settings[key] || settings.llmProvider || 'ollama';
 }
 
 /**
  * Resolve a provider descriptor from settings for the given role ('global' by
- * default, or 'local'). For 'codex'/'claude' this refreshes the access token if
+ * default, or 'byom'). For 'codex'/'claude' this refreshes the access token if
  * needed (async, may hit the token endpoint). The per-provider config (model,
  * host, tokens) is shared across roles; only WHICH provider differs by role.
  */

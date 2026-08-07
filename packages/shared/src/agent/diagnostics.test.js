@@ -23,7 +23,7 @@ const configuredSettings = {
   langsmithTracing: true,
   langsmithApiKey: 'langsmith-secret',
   langsmithProject: 'project',
-  localLlmProvider: 'ollama',
+  byomProvider: 'ollama',
   ollamaHost: 'http://127.0.0.1:11434',
   ollamaModel: 'local-model',
   codexTokens: { accessToken: 'codex-secret' },
@@ -86,7 +86,7 @@ test('diagnostics report services, local model, integrations, and SDK readiness 
 
 test('diagnostics distinguish unavailable endpoints and missing SDK packages', async () => {
   const report = await runDiagnostics({
-    localLlmProvider: 'lmstudio',
+    byomProvider: 'lmstudio',
     lmstudioHost: 'http://localhost:1234',
     lmstudioModel: 'model',
     planningProvider: 'linear',
