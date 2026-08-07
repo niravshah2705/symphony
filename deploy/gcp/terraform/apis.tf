@@ -16,6 +16,10 @@ locals {
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "storage.googleapis.com",
+    # Firebase — Hosting (SPA), the web app config, and Identity Platform (auth).
+    "firebase.googleapis.com",
+    "firebasehosting.googleapis.com",
+    "identitytoolkit.googleapis.com",
   ]
 }
 

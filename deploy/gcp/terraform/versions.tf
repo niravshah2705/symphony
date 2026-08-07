@@ -52,9 +52,18 @@ terraform {
 provider "google" {
   project = var.project_id
   region  = var.region
+
+  # Firebase / Identity Platform APIs require a quota (billing) project on the
+  # request; without this they 403 under both ADC and WIF. Harmless for the other
+  # APIs (attributes quota to this same project).
+  user_project_override = true
+  billing_project       = var.project_id
 }
 
 provider "google-beta" {
   project = var.project_id
   region  = var.region
+
+  user_project_override = true
+  billing_project       = var.project_id
 }
