@@ -41,3 +41,45 @@ test('subscribe returns a no-op unsubscribe when conversationId is missing', () 
   assert.equal(typeof unsub, 'function');
   assert.doesNotThrow(() => unsub());
 });
+
+/* ----------------------- Global workspace channel ----------------------- */
+
+test('subscribeWorkspace receives typed events published via publishWorkspace', () => {
+  const got = [];
+  const unsub = events.subscribeWorkspace((e) => got.push(e));
+  events.publishWorkspace({ type: 'jobs', jobs: [] });
+  events.publishWorkspace({ type: 'coder', coder: { running: true } });
+  assert.deepEqual(got, [{ type: 'jobs', jobs: [] }, { type: 'coder', coder: { running: true } }]);
+  unsub();
+});
+
+test('the workspace channel is isolated from conversation streams', () => {
+  // The single workspace channel replays its buffered history to a late
+  // subscriber, so assert on membership (marker present, cross-channel absent)
+  // rather than exact array equality.
+  const workspace = [];
+  const conversation = [];
+  const unsubW = events.subscribeWorkspace((e) => workspace.push(e));
+  const unsubC = events.subscribe('isolation-conv', (e) => conversation.push(e));
+  events.publishWorkspace({ type: 'agent-status', status: { marker: 'iso' } });
+  events.publishEvent('isolation-conv', { message: 'hi' });
+  assert.ok(workspace.some((e) => e.status && e.status.marker === 'iso'), 'workspace saw its own event');
+  assert.ok(!workspace.some((e) => e.message === 'hi'), 'workspace never saw the conversation event');
+  assert.deepEqual(conversation, [{ message: 'hi' }]);
+  unsubW();
+  unsubC();
+});
+
+test('ingest routes an http-sink workspace event onto the workspace channel', () => {
+  const got = [];
+  const unsub = events.subscribeWorkspace((e) => got.push(e));
+  // The gateway collector calls ingest(conversationId, event); the workspace
+  // channel rides the same path under its reserved id.
+  events.ingest(events.WORKSPACE_CHANNEL, { type: 'gate', gateId: 'gate_x', status: 'proceeded' });
+  assert.deepEqual(got.at(-1), { type: 'gate', gateId: 'gate_x', status: 'proceeded' });
+  unsub();
+});
+
+test('WORKSPACE_CHANNEL is a reserved, non-conversation id', () => {
+  assert.equal(events.WORKSPACE_CHANNEL, '__workspace__');
+});

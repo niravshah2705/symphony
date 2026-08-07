@@ -3,16 +3,17 @@ import { el, clear, loading, toast } from '../dom.js';
 import { formatDate, formatNumber } from '../i18n.js';
 import { agentPauseCopy, agentPauseInfo, agentPauseNotice, hasAgentPauseContract } from '../agent-pause.js';
 
-const REFRESH_INTERVAL_MS = 5_000;
 const CONFIRM_WINDOW_MS = 5_000;
 
-let refreshTimer = null;
+let workspaceStream = null; // EventSource: global status/jobs/coder feed (replaces polling)
 let renderGeneration = 0;
 const expandedJobs = new Set();
 
 function stopRefresh() {
-  if (refreshTimer) window.clearInterval(refreshTimer);
-  refreshTimer = null;
+  if (workspaceStream) {
+    try { workspaceStream.close(); } catch (_) { /* already closed */ }
+    workspaceStream = null;
+  }
 }
 
 function routeActive() {
@@ -583,8 +584,39 @@ export async function renderAgentJobs(view) {
   view.setAttribute('aria-busy', 'false');
   renderAll();
 
-  refreshTimer = window.setInterval(() => {
+  // Live updates over SSE replace the old 5s poll. Each typed event updates the
+  // in-memory snapshot; we re-render only when the fingerprint changed and no
+  // destructive confirmation is currently armed (mirrors reload()'s guards).
+  const applyServerEvent = (event) => {
     if (!pageActive()) return stopRefresh();
-    void reload();
-  }, REFRESH_INTERVAL_MS);
+    if (!event || !event.type) return;
+    if (event.type === 'jobs' && Array.isArray(event.jobs)) {
+      jobs = event.jobs.filter((job) => job && typeof job === 'object');
+    } else if (event.type === 'agent-status' && event.status) {
+      // MERGE: a partial transition snapshot must not drop seeded status fields.
+      plannerStatus = { ...(plannerStatus || {}), ...event.status };
+    } else if (event.type === 'coder') {
+      coderStatus = event.coder || null;
+    } else {
+      return; // gate + unknown types are not shown on this page
+    }
+    refreshDerivedPauses();
+    if (snapshotFingerprint(jobs, pauses) === renderedFingerprint) return;
+    if (hasArmedConfirmation(page)) {
+      refreshStatus.className = 'job-history-refresh-status pending';
+      refreshStatus.textContent = 'New activity is waiting. Finish or cancel the pending confirmation to update this page.';
+      return;
+    }
+    renderAll();
+    refreshStatus.className = 'job-history-refresh-status';
+    refreshStatus.textContent = '';
+  };
+
+  api.openWorkspaceStream(applyServerEvent).then((source) => {
+    if (!pageActive()) {
+      try { source.close(); } catch (_) { /* ignore */ }
+      return;
+    }
+    workspaceStream = source;
+  }).catch(() => { /* best-effort; the manual Refresh button still works */ });
 }

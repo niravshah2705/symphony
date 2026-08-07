@@ -8,6 +8,7 @@ const { generatePlan, generateIssuesForMilestones } = require('./plan');
 const { applyPlan, applyIssuesForMilestones, applyAiplanned, applyAifail } = require('./apply');
 const { llmReady, notReadyReason, resolveLlm, providerForRole } = require('./llm');
 const { isModelAvailabilityError, pauseReasonFor, probeModelAvailability } = require('./availability');
+const workspaceEvents = require('./workspace-events');
 
 const { CONFIG } = require('../config');
 
@@ -73,6 +74,20 @@ async function verifyModelReadiness(settings, dependencies = {}) {
   }
 }
 
+/**
+ * Push the current jobs + planner-status snapshot to the global workspace channel
+ * so the SPA updates live instead of polling /status + /jobs. Best-effort —
+ * telemetry must never break enqueue or a running job.
+ */
+function emitWorkspaceState() {
+  try {
+    workspaceEvents.publishJobsSnapshot();
+    workspaceEvents.publishAgentStatus({ ...getStatus(), assumedRole: store.getAssumedRole() });
+  } catch (_) {
+    /* telemetry only */
+  }
+}
+
 /** Queue a project for enrichment, skipping duplicates already in flight. */
 function enqueue({ projectId, projectName, assumedRole }) {
   const active = store.listJobs('enrichment').some(
@@ -98,6 +113,7 @@ function enqueue({ projectId, projectName, assumedRole }) {
     steps: [],
   };
   store.addJob(job);
+  emitWorkspaceState();
   return job;
 }
 
@@ -118,8 +134,11 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
     jobStore.appendJobStep(job.id, { ts: new Date().toISOString(), level, message });
   };
 
-  const finish = (patch) =>
-    jobStore.updateJob(job.id, { status: 'done', finishedAt: new Date().toISOString(), error: null, ...patch });
+  const finish = (patch) => {
+    const done = jobStore.updateJob(job.id, { status: 'done', finishedAt: new Date().toISOString(), error: null, ...patch });
+    emitWorkspaceState();
+    return done;
+  };
 
   jobStore.updateJob(job.id, {
     status: 'running',
@@ -127,6 +146,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
     error: null,
     pauseReason: null,
   });
+  emitWorkspaceState();
   step('Enrichment started.');
   let phase = 'planning-provider';
   try {
@@ -185,6 +205,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
         error: reason.message,
         pauseReason: reason,
       });
+      emitWorkspaceState();
       return { paused: true, pauseReason: reason };
     }
     const message = err && err.message ? err.message : String(err);
@@ -194,6 +215,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
       finishedAt: new Date().toISOString(),
       error: message,
     });
+    emitWorkspaceState();
     return { error: message };
   }
   return { done: true };

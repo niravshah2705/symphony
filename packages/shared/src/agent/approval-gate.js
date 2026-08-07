@@ -40,6 +40,9 @@ function resolveDeps(deps = {}) {
     getSettings: deps.getSettings || (() => storeImpl.getSettings()),
     getAssumedRole: deps.getAssumedRole || (() => storeImpl.getAssumedRole()),
     resolveBusiness: deps.resolveBusiness || ((businessId) => defaultResolveBusiness(storeImpl, businessId)),
+    // Emit a gate transition to the global workspace channel so the SPA can drive
+    // the terminal advance from SSE instead of polling the gate. Best-effort.
+    publishGate: deps.publishGate || ((gateId, status) => require('./workspace-events').publishGate(gateId, status)),
     now: deps.now || (() => Date.now()),
   };
 }
@@ -136,6 +139,9 @@ async function proceedGate(inputGate, decision = {}, deps = {}) {
 
   const jobId = (business && business.scheduler && business.scheduler.jobId) || null;
   const finalized = store.updateApprovalGate(gate.id, { status: 'proceeded', proceededAt: new Date(d.now()).toISOString(), jobId });
+  // The gate advanced (human approve OR timeout auto-approve both land here) —
+  // tell watching browsers so they run the pipeline without polling the gate.
+  d.publishGate(gate.id, 'proceeded');
   return { gate: finalized || { ...decided, status: 'proceeded' }, business };
 }
 
@@ -161,6 +167,8 @@ async function reevaluateGate(id, input, deps = {}) {
 
   const out = await d.evaluateRequirement({ input, settings: d.getSettings(), business: d.resolveBusiness(gate.businessId) });
   d.store.updateApprovalGate(gate.id, { status: 'superseded' });
+  // The gate a browser is watching is now terminal — tell it to stop the poll.
+  d.publishGate(gate.id, 'superseded');
 
   if (out.blocked) return { evaluation: null, signal: out.signal, gate: null, blocked: true, answer: out.answer };
   if (out.signal === 'green') return { evaluation: out.evaluation, signal: 'green', gate: null };

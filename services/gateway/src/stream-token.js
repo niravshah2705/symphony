@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { CONFIG } = require('@ai-fleet/shared/config');
+const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared/messaging/events');
 
 /**
  * Short-lived, HMAC-signed stream tokens.
@@ -39,6 +40,15 @@ function mintStreamToken(conversationId) {
   return `${exp}.${sign(conversationId, exp)}`;
 }
 
+/**
+ * Mint a token for the reserved GLOBAL workspace channel. Bound to the fixed
+ * channel id (not a conversation), so the read-only home can stream workspace
+ * status/jobs/coder/gate events without owning a conversation.
+ */
+function mintWorkspaceToken() {
+  return mintStreamToken(WORKSPACE_CHANNEL);
+}
+
 function verifyStreamToken(token, conversationId) {
   if (!token || !conversationId) return false;
   const [expStr, sig] = String(token).split('.');
@@ -51,4 +61,4 @@ function verifyStreamToken(token, conversationId) {
   return crypto.timingSafeEqual(provided, wanted);
 }
 
-module.exports = { mintStreamToken, verifyStreamToken, TTL_MS };
+module.exports = { mintStreamToken, mintWorkspaceToken, verifyStreamToken, TTL_MS };

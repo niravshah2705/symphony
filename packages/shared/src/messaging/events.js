@@ -29,6 +29,15 @@ const emitter = new EventEmitter();
 emitter.setMaxListeners(0);
 const buffers = new Map(); // conversationId -> event[]
 
+/**
+ * Reserved channel id for GLOBAL workspace events (typed status/jobs/coder/gate
+ * snapshots) that are not tied to any one conversation. It rides the exact same
+ * relay as a conversation stream — a fixed key in the memory bus, the same POST
+ * shape into the http-sink collector, and a fixed doc under the Firestore events
+ * collection — so it works across all three backends with no parallel code path.
+ */
+const WORKSPACE_CHANNEL = '__workspace__';
+
 function memoryPublish(conversationId, event) {
   const buffer = buffers.get(conversationId) || [];
   buffers.set(conversationId, [...buffer, event].slice(-MAX_BUFFER));
@@ -116,4 +125,25 @@ function subscribe(conversationId, cb) {
     : memorySubscribe(conversationId, cb);
 }
 
-module.exports = { publishEvent, subscribe, ingest, MAX_BUFFER };
+/**
+ * Publish a typed event to the GLOBAL workspace channel (drives the SPA's
+ * workspace SSE stream: agent-status / jobs / coder / gate). Fire-and-forget.
+ */
+function publishWorkspace(event) {
+  return publishEvent(WORKSPACE_CHANNEL, event);
+}
+
+/** Subscribe to the global workspace channel. Replays recent history, then streams. */
+function subscribeWorkspace(cb) {
+  return subscribe(WORKSPACE_CHANNEL, cb);
+}
+
+module.exports = {
+  publishEvent,
+  subscribe,
+  ingest,
+  publishWorkspace,
+  subscribeWorkspace,
+  WORKSPACE_CHANNEL,
+  MAX_BUFFER,
+};
