@@ -69,6 +69,30 @@ In the **Firebase console**: enable the **Google** sign-in provider
 (Authentication → Sign-in method), and add the printed gateway URL and the SPA's
 GCS origin to Authentication → Settings → **Authorized domains**.
 
+## Roles & access control (RBAC)
+
+Authorization is **role-based** and enforced **server-side on every `/api` route**
+(`services/gateway/src/auth.js` `requirePermission`); the SPA mirrors the same
+rules only to hide menu items — never the security boundary. Roles map to four
+permission domains (`packages/shared/src/authz.js`):
+
+| Role | workspace (agent) | planning (projects/board/business) | insights (analytics/workflows/troubleshooting) | settings |
+|------|------|------|------|------|
+| **admin** | write | write | write | write (config, provider keys, roles) |
+| **operator** | write | write | write | read |
+| **viewer** | read | read | read | read |
+| **public** (not signed in) | read | — | — | — |
+
+- **Public/root:** an unauthenticated visitor sees the **read-only Agent workspace** only; every other menu item is hidden and its API returns 401.
+- **Menu items hide** when the signed-in role lacks the permission; the Settings item is admin-only.
+- **Assigning roles** — set a Firebase custom claim (the user re-logs in to pick it up):
+  ```bash
+  FIREBASE_PROJECT_ID=<project> node services/gateway/scripts/set-user-role.js user@corp.com admin
+  ```
+- **Bootstrap** the first admin(s) without a pre-existing admin via the
+  `AUTH_ADMIN_EMAILS` (comma-separated) env / repo var; `AUTH_DEFAULT_ROLE`
+  (default `viewer`) is what a signed-in user gets before any claim is set.
+
 ### Security posture (see the tribal-knowledge checklists)
 
 - planner/coder are **IAM-gated (no `allUsers` invoker)** — only the gateway SA

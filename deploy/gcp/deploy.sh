@@ -39,6 +39,8 @@ TF_STATE_PREFIX="${TF_STATE_PREFIX:-ai-fleet/gcp}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://storage.googleapis.com}"
 FIREBASE_ALLOWED_DOMAIN="${FIREBASE_ALLOWED_DOMAIN:-}"
+AUTH_ADMIN_EMAILS="${AUTH_ADMIN_EMAILS:-}"
+AUTH_DEFAULT_ROLE="${AUTH_DEFAULT_ROLE:-viewer}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -74,6 +76,8 @@ TFVARS=(
   -var="image_tag=${IMAGE_TAG}"
   -var="spa_origin=${SPA_ORIGIN}"
   -var="firebase_allowed_domain=${FIREBASE_ALLOWED_DOMAIN}"
+  -var="auth_admin_emails=${AUTH_ADMIN_EMAILS}"
+  -var="auth_default_role=${AUTH_DEFAULT_ROLE}"
 )
 
 # --- 1. Enable APIs ---------------------------------------------------------

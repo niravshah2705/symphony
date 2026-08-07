@@ -15,10 +15,16 @@ const AUTH_SESSION_TIMEOUT_MS = 15_000;
 let auth = null;
 let currentUser = null;
 let configuration = null;
+// Full local access when auth is disabled; read-only Agent workspace for public.
+const ADMIN_PERMISSIONS = Object.freeze({ workspace: 'write', planning: 'write', insights: 'write', settings: 'write' });
+const FALLBACK_PUBLIC_PERMISSIONS = Object.freeze({ workspace: 'read' });
+
 let authState = Object.freeze({
   mode: 'loading',
   enabled: false,
   authenticated: false,
+  role: 'public',
+  permissions: {},
   user: null,
   error: '',
 });
@@ -110,10 +116,13 @@ async function confirmIdentity() {
 export async function initializeAuthentication() {
   configuration = await loadConfiguration();
   if (!configuration.enabled) {
+    // Auth disabled (local dev): fully open, single admin operator.
     auth = null;
     setAccessTokenProvider(null);
-    return setState({ mode: 'disabled', enabled: false, authenticated: true, user: null, error: '' });
+    return setState({ mode: 'disabled', enabled: false, authenticated: true, role: 'admin', permissions: ADMIN_PERMISSIONS, user: null, error: '' });
   }
+
+  const publicPermissions = configuration.publicPermissions || FALLBACK_PUBLIC_PERMISSIONS;
 
   const app = initializeApp(configuration.firebase);
   auth = getAuth(app);
@@ -125,23 +134,27 @@ export async function initializeAuthentication() {
 
   const user = await withinSessionTimeout(firstAuthUser(auth));
   if (!user) {
+    // No signed-in user → public visitor (read-only Agent workspace).
     setAccessTokenProvider(null);
-    return setState({ mode: 'firebase', enabled: true, authenticated: false, user: null, error: '' });
+    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: '' });
   }
 
   let identity;
   try {
     identity = await withinSessionTimeout(confirmIdentity());
   } catch (error) {
+    // Signed in but rejected (unverified / not allowed) → sign out, stay public.
     setAccessTokenProvider(null);
     try { await firebaseSignOut(auth); } catch (_) { /* ignore */ }
-    return setState({ mode: 'firebase', enabled: true, authenticated: false, user: null, error: error?.message || 'This account is not allowed.' });
+    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: error?.message || 'This account is not allowed.' });
   }
 
   return setState({
     mode: 'firebase',
     enabled: true,
     authenticated: true,
+    role: identity.role || 'viewer',
+    permissions: identity.permissions || {},
     user: mergeDisplayProfile(identity.user, { name: user.displayName, email: user.email, picture: user.photoURL }),
     error: '',
   });
@@ -153,7 +166,9 @@ export function getAuthenticationState() {
 
 export function expireAuthentication(message = '') {
   setAccessTokenProvider(null);
-  return setState({ authenticated: false, user: null, error: message });
+  // Drop back to the public surface rather than a locked state.
+  const permissions = (configuration && configuration.publicPermissions) || FALLBACK_PUBLIC_PERMISSIONS;
+  return setState({ authenticated: false, role: 'public', permissions, user: null, error: message });
 }
 
 export async function signIn() {

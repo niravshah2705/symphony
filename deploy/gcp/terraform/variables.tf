@@ -218,6 +218,18 @@ variable "firebase_auth_domain" {
   default     = ""
 }
 
+variable "auth_admin_emails" {
+  type        = string
+  description = "Comma-separated emails granted the ADMIN role at sign-in (bootstrap). Other roles are assigned as Firebase custom claims via services/gateway/scripts/set-user-role.js. Set on the gateway only."
+  default     = ""
+}
+
+variable "auth_default_role" {
+  type        = string
+  description = "Role a signed-in user gets before any role claim is assigned: admin | operator | viewer (least-privilege default)."
+  default     = "viewer"
+}
+
 variable "firebase_allowed_domain" {
   type        = string
   description = "Optional: restrict app login to this email domain; empty = any verified user."

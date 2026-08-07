@@ -118,6 +118,9 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
 # FIREBASE_API_KEY is NOT needed — Terraform reads it from the managed Firebase
 # web app (data.google_firebase_web_app_config) and injects it into the gateway.
 # Optional: gh variable set FIREBASE_ALLOWED_DOMAIN --repo niravshah2705/symphony --body "yourco.com"
+# Optional RBAC bootstrap: gh variable set AUTH_ADMIN_EMAILS --repo niravshah2705/symphony --body "you@corp.com"
+#   (admins at sign-in) and AUTH_DEFAULT_ROLE (default "viewer"). Other roles are
+#   assigned as Firebase custom claims via services/gateway/scripts/set-user-role.js.
 ```
 
 ## Prerequisites the pipeline assumes

@@ -16,7 +16,7 @@ const localizationRoutes = require('./routes/localization');
 const { router: codexRoutes, callback: codexCallback } = require('./routes/codex');
 const { router: claudeRoutes } = require('./routes/claude');
 const { createProxy } = require('./proxy');
-const { createAuthenticationMiddleware, publicAuthConfig } = require('./auth');
+const { createAuthenticationMiddleware, requirePermission, publicAuthConfig } = require('./auth');
 const { createCorsMiddleware } = require('./cors');
 const { initStore, getConversation } = require('@ai-fleet/shared/store');
 const events = require('@ai-fleet/shared/messaging/events');
@@ -80,11 +80,25 @@ app.post('/internal/events', (req, res) => {
 // in the query string instead (see sse.js / stream-token.js).
 app.get('/api/agent/stream', sse.handleStream);
 
-// In local development this middleware is a no-op. AUTH_MODE=firebase fails
-// closed unless a valid Firebase ID token accompanies every API call.
+// Attaches req.auth (identity + role + permissions) to every /api request. It
+// does NOT deny — authorization is enforced per-router by requirePermission
+// below, so unauthenticated visitors get exactly the public surface (read-only
+// Agent workspace) and 401/403 on anything else. Local dev is fully open.
 app.use('/api', createAuthenticationMiddleware());
+
+// Authenticated identity + resolved permissions. 401 (not 200-with-null) when
+// unauthenticated so the SPA can distinguish signed-in from public.
 app.get('/api/auth/me', (req, res) => {
-  res.set('Cache-Control', 'no-store').json(req.auth);
+  res.set('Cache-Control', 'no-store');
+  if (!req.auth || !req.auth.authenticated) {
+    return res.status(401).json({ error: 'Authentication required', code: 'authentication_required' });
+  }
+  return res.json({
+    authenticated: true,
+    user: req.auth.user,
+    role: req.auth.role,
+    permissions: req.auth.permissions,
+  });
 });
 
 // Mint a short-lived stream token for the authenticated user to open an SSE
@@ -92,33 +106,38 @@ app.get('/api/auth/me', (req, res) => {
 // all fleet:access operators share one store/conversations (see README), so there
 // is no per-user ownership boundary to enforce here. We still require the
 // conversation to EXIST so tokens can't be minted for arbitrary/guessed ids.
-app.get('/api/agent/stream-token', (req, res) => {
+app.get('/api/agent/stream-token', requirePermission('workspace'), (req, res) => {
   const conversationId = String(req.query.conversationId || '').trim();
   if (!conversationId) return res.status(400).json({ error: 'conversationId is required.' });
   if (!getConversation(conversationId)) return res.status(404).json({ error: 'Unknown conversation.' });
   return res.set('Cache-Control', 'no-store').json({ token: mintStreamToken(conversationId), conversationId });
 });
 
-// User-facing API routes (owned by the gateway).
-app.use('/api/settings', settingsRoutes);
-app.use('/api/settings/codex', codexRoutes);
-app.use('/api/settings/claude', claudeRoutes);
-app.use('/api/projects', projectsRoutes);
-app.use('/api/issues', issuesRoutes);
-app.use('/api/businesses', businessesRoutes);
-app.use('/api/roles', rolesRoutes);
-app.use('/api/observability', observabilityRoutes);
+// User-facing API routes (owned by the gateway). Each is guarded by the
+// permission domain its feature area belongs to (see packages/shared/authz.js).
+// GET → 'read', mutations → 'write'. The codex/claude/roles config surfaces are
+// admin-only (settings:write) since only the admin Settings view uses them.
+app.use('/api/settings', requirePermission('settings'), settingsRoutes);
+app.use('/api/settings/codex', requirePermission('settings', { level: 'write' }), codexRoutes);
+app.use('/api/settings/claude', requirePermission('settings', { level: 'write' }), claudeRoutes);
+app.use('/api/projects', requirePermission('planning'), projectsRoutes);
+app.use('/api/issues', requirePermission('planning'), issuesRoutes);
+app.use('/api/businesses', requirePermission('planning'), businessesRoutes);
+app.use('/api/roles', requirePermission('settings', { level: 'write' }), rolesRoutes);
+app.use('/api/observability', requirePermission('insights'), observabilityRoutes);
+// Locale is non-sensitive UI strings — available to public + authenticated.
 app.use('/api/locale', localizationRoutes);
 
 // The two long-running request submissions are PUBLISHED (Pub/Sub) rather than
 // proxied — they return a conversationId the browser streams via SSE. Registered
-// before the proxies so these exact paths win.
-app.post('/api/agent/enqueue', publish.enqueue);
-app.post('/api/coder/run', publish.coderRun);
+// before the proxies so these exact paths win. Both mutate → workspace:write.
+app.post('/api/agent/enqueue', requirePermission('workspace'), publish.enqueue);
+app.post('/api/coder/run', requirePermission('workspace'), publish.coderRun);
 
 // All other agent surfaces are reverse-proxied to their isolated services.
-app.use('/api/agent', createProxy(CONFIG.SERVICES.plannerUrl));
-app.use('/api/coder', createProxy(CONFIG.SERVICES.coderUrl));
+// workspace:read (GET) is public — the read-only Agent home; writes need a role.
+app.use('/api/agent', requirePermission('workspace'), createProxy(CONFIG.SERVICES.plannerUrl));
+app.use('/api/coder', requirePermission('workspace'), createProxy(CONFIG.SERVICES.coderUrl));
 
 // Codex OAuth redirect target — must be registered before the SPA fallback.
 app.get('/auth/callback', codexCallback);

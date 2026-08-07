@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { buildFirebaseAuthConfig } = require('@ai-fleet/shared/config');
-const { createAuthenticationMiddleware, publicAuthConfig, verifyFirebaseIdToken } = require('./auth');
+const { createAuthenticationMiddleware, requirePermission, publicAuthConfig, verifyFirebaseIdToken } = require('./auth');
 
 function firebaseConfig(overrides = {}) {
   return {
@@ -77,6 +77,7 @@ test('publicAuthConfig exposes only the public Firebase web config (no authz sec
     enabled: true,
     provider: 'firebase',
     firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo-proj.firebaseapp.com', projectId: 'demo-proj', hostedDomain: undefined },
+    publicPermissions: { workspace: 'read' },
   });
   const serialized = JSON.stringify(pub);
   assert.doesNotMatch(serialized, /allowedEmails|allowedDomain|x@y\.com/);
@@ -86,17 +87,19 @@ test('publicAuthConfig collapses to disabled when auth is off', () => {
   assert.deepEqual(publicAuthConfig({ enabled: false }), { mode: 'disabled', enabled: false });
 });
 
-/* ---------------------------- middleware -------------------------------- */
+/* ---------------------------- middleware (attach, never deny) ----------- */
 
-test('disabled mode is open (no token required)', () => {
+test('disabled mode → open with full admin permissions', () => {
   const request = req();
   let nexted = 0;
   createAuthenticationMiddleware({ mode: 'disabled', enabled: false })(request, responseRecorder(), () => { nexted += 1; });
   assert.equal(nexted, 1);
-  assert.equal(request.auth.authenticated, false);
+  assert.equal(request.auth.authenticated, true);
+  assert.equal(request.auth.role, 'admin');
+  assert.equal(request.auth.permissions.settings, 'write');
 });
 
-test('firebase mode admits a verified Google user and normalizes identity', async () => {
+test('firebase: verified user → authenticated with resolved role + permissions', async () => {
   const request = req({ authorization: 'Bearer good' });
   let nexted = 0;
   createAuthenticationMiddleware(firebaseConfig(), verifierReturning(verifiedUser))(request, responseRecorder(), () => { nexted += 1; });
@@ -104,62 +107,109 @@ test('firebase mode admits a verified Google user and normalizes identity', asyn
   assert.equal(nexted, 1);
   assert.equal(request.auth.authenticated, true);
   assert.equal(request.auth.user.email, 'operator@uipath.com'); // lowercased
-  assert.equal(request.auth.user.name, 'Fleet Operator');
-  assert.equal(request.auth.user.sub, 'uid-1');
+  assert.equal(request.auth.role, 'viewer'); // no claim / not admin → default
+  assert.equal(request.auth.permissions.workspace, 'read');
 });
 
-test('firebase mode rejects a missing bearer (401)', async () => {
-  const res = responseRecorder();
-  createAuthenticationMiddleware(firebaseConfig(), verifierReturning(verifiedUser))(req(), res, () => {});
+test('firebase: bootstrap admin email → admin role', async () => {
+  const request = req({ authorization: 'Bearer good' });
+  createAuthenticationMiddleware(firebaseConfig({ adminEmails: ['operator@uipath.com'] }), verifierReturning(verifiedUser))(request, responseRecorder(), () => {});
   await tick();
+  assert.equal(request.auth.role, 'admin');
+  assert.equal(request.auth.permissions.settings, 'write');
+});
+
+test('firebase: `role` custom claim is honored (operator)', async () => {
+  const request = req({ authorization: 'Bearer good' });
+  createAuthenticationMiddleware(firebaseConfig(), verifierReturning({ ...verifiedUser, role: 'operator' }))(request, responseRecorder(), () => {});
+  await tick();
+  assert.equal(request.auth.role, 'operator');
+  assert.equal(request.auth.permissions.planning, 'write');
+  assert.equal(request.auth.permissions.settings, 'read'); // operator can read config, not write
+});
+
+test('firebase: missing / invalid / unverified / out-of-domain token → PUBLIC (not denied)', async () => {
+  const cases = [
+    ['no bearer', {}, firebaseConfig(), verifierReturning(verifiedUser)],
+    ['invalid token', { authorization: 'Bearer bad' }, firebaseConfig(), verifierReturning(verifiedUser)],
+    ['unverified email', { authorization: 'Bearer good' }, firebaseConfig(), verifierReturning({ ...verifiedUser, email_verified: false })],
+    ['out of domain', { authorization: 'Bearer good' }, firebaseConfig({ allowedDomain: 'uipath.com' }), verifierReturning({ ...verifiedUser, email: 'op@gmail.com' })],
+  ];
+  for (const [label, headers, config, verify] of cases) {
+    const request = req(headers);
+    const res = responseRecorder();
+    let nexted = 0;
+    createAuthenticationMiddleware(config, verify)(request, res, () => { nexted += 1; });
+    await tick();
+    assert.equal(nexted, 1, `${label}: middleware must not deny`);
+    assert.equal(res.statusCode, 200, `${label}: no error response`);
+    assert.equal(request.auth.authenticated, false, label);
+    assert.equal(request.auth.role, 'public', label);
+    assert.equal(request.auth.permissions.workspace, 'read', label);
+    assert.equal(request.auth.permissions.planning, undefined, `${label}: public has no planning`);
+  }
+});
+
+test('verifyFirebaseIdToken returns a frozen identity carrying the resolved role', async () => {
+  const identity = await verifyFirebaseIdToken(req({ authorization: 'Bearer good' }), firebaseConfig(), verifierReturning(verifiedUser));
+  assert.equal(identity.email, 'operator@uipath.com');
+  assert.equal(identity.role, 'viewer');
+  assert.ok(Object.isFrozen(identity));
+});
+
+/* ---------------------------- requirePermission (the real gate) --------- */
+
+const authed = (role, permissions) => ({ authenticated: true, role, permissions });
+const publicAuth = { authenticated: false, role: 'public', permissions: { workspace: 'read' } };
+
+test('requirePermission: public may READ workspace (read-only Agent home)', () => {
+  const request = { method: 'GET', auth: publicAuth };
+  let nexted = 0;
+  requirePermission('workspace')(request, responseRecorder(), () => { nexted += 1; });
+  assert.equal(nexted, 1);
+});
+
+test('requirePermission: public WRITING workspace → 401 (prompt sign-in)', () => {
+  const request = { method: 'POST', auth: publicAuth };
+  const res = responseRecorder();
+  let nexted = 0;
+  requirePermission('workspace')(request, res, () => { nexted += 1; });
+  assert.equal(nexted, 0);
   assert.equal(res.statusCode, 401);
   assert.equal(res.body.code, 'authentication_required');
 });
 
-test('firebase mode rejects an invalid token (401)', async () => {
-  const res = responseRecorder();
-  createAuthenticationMiddleware(firebaseConfig(), verifierReturning(verifiedUser))(req({ authorization: 'Bearer bad' }), res, () => {});
-  await tick();
-  assert.equal(res.statusCode, 401);
+test('requirePermission: public reaching planning/settings → 401', () => {
+  for (const domain of ['planning', 'insights', 'settings']) {
+    const res = responseRecorder();
+    requirePermission(domain)({ method: 'GET', auth: publicAuth }, res, () => {});
+    assert.equal(res.statusCode, 401, domain);
+  }
 });
 
-test('firebase mode rejects an unverified email (403)', async () => {
+test('requirePermission: viewer reads planning but is 403 on writes', () => {
+  const perms = { workspace: 'read', planning: 'read', insights: 'read', settings: 'read' };
+  let reads = 0;
+  requirePermission('planning')({ method: 'GET', auth: authed('viewer', perms) }, responseRecorder(), () => { reads += 1; });
+  assert.equal(reads, 1);
   const res = responseRecorder();
-  const verify = verifierReturning({ ...verifiedUser, email_verified: false });
-  createAuthenticationMiddleware(firebaseConfig(), verify)(req({ authorization: 'Bearer good' }), res, () => {});
-  await tick();
+  let writes = 0;
+  requirePermission('planning')({ method: 'POST', auth: authed('viewer', perms) }, res, () => { writes += 1; });
+  assert.equal(writes, 0);
   assert.equal(res.statusCode, 403);
   assert.equal(res.body.code, 'access_denied');
 });
 
-test('firebase mode enforces the email allowlist when configured (403)', async () => {
+test('requirePermission: forced write level (codex/claude/roles) blocks a read-only settings user', () => {
   const res = responseRecorder();
-  const config = firebaseConfig({ allowedEmails: ['someone-else@uipath.com'] });
-  createAuthenticationMiddleware(config, verifierReturning(verifiedUser))(req({ authorization: 'Bearer good' }), res, () => {});
-  await tick();
+  let nexted = 0;
+  requirePermission('settings', { level: 'write' })({ method: 'GET', auth: authed('operator', { settings: 'read' }) }, res, () => { nexted += 1; });
+  assert.equal(nexted, 0);
   assert.equal(res.statusCode, 403);
 });
 
-test('firebase mode enforces the allowed domain when configured', async () => {
-  // Wrong domain → 403.
-  const denied = responseRecorder();
-  const domainConfig = firebaseConfig({ allowedDomain: 'uipath.com' });
-  const gmailUser = { ...verifiedUser, email: 'op@gmail.com' };
-  createAuthenticationMiddleware(domainConfig, verifierReturning(gmailUser))(req({ authorization: 'Bearer good' }), denied, () => {});
-  await tick();
-  assert.equal(denied.statusCode, 403);
-
-  // Right domain → allowed.
-  const request = req({ authorization: 'Bearer good' });
+test('requirePermission: OPTIONS preflight is never gated', () => {
   let nexted = 0;
-  createAuthenticationMiddleware(domainConfig, verifierReturning(verifiedUser))(request, responseRecorder(), () => { nexted += 1; });
-  await tick();
+  requirePermission('settings', { level: 'write' })({ method: 'OPTIONS', auth: publicAuth }, responseRecorder(), () => { nexted += 1; });
   assert.equal(nexted, 1);
-  assert.equal(request.auth.user.email, 'operator@uipath.com');
-});
-
-test('verifyFirebaseIdToken returns a frozen normalized identity', async () => {
-  const identity = await verifyFirebaseIdToken(req({ authorization: 'Bearer good' }), firebaseConfig(), verifierReturning(verifiedUser));
-  assert.equal(identity.email, 'operator@uipath.com');
-  assert.ok(Object.isFrozen(identity));
 });
