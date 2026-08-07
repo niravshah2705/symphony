@@ -175,6 +175,21 @@ function requirePermission(domain, opts = {}) {
   };
 }
 
+/**
+ * Route guard: require an AUTHENTICATED identity (any role), independent of the
+ * permission domains. Used for the personal-workspace surface (/api/org/me/*),
+ * which every signed-in user may use even without an org role — the org service
+ * enforces owner-scoping. Public/anonymous callers get 401. Local dev is open.
+ */
+function requireAuthenticated() {
+  return function authenticate(req, res, next) {
+    if (req.method === 'OPTIONS') return next(); // CORS preflight — never gated
+    const auth = req.auth || PUBLIC_AUTH;
+    if (auth.authenticated) return next();
+    return denyAccess(res, authError('Authentication required'));
+  };
+}
+
 /** Public, non-secret Firebase web config for the SPA (safe to expose). */
 function publicAuthConfig(config = CONFIG.AUTH) {
   if (!config.enabled) return Object.freeze({ mode: 'disabled', enabled: false });
@@ -187,6 +202,9 @@ function publicAuthConfig(config = CONFIG.AUTH) {
       authDomain: config.authDomain,
       projectId: config.projectId,
       hostedDomain: config.hostedDomain || undefined,
+      // Public OAuth Web client id for Google One Tap (falls back to the popup
+      // when absent). Not a secret — see packages/shared/src/config.js.
+      googleClientId: config.googleClientId || undefined,
     }),
     // What an unauthenticated visitor may do — lets the SPA render the public
     // (read-only Agent) surface and hide everything else before sign-in.
@@ -202,6 +220,7 @@ function authEnabled(config = CONFIG.AUTH) {
 module.exports = {
   createAuthenticationMiddleware,
   requirePermission,
+  requireAuthenticated,
   publicAuthConfig,
   verifyFirebaseIdToken,
   authEnabled,

@@ -272,10 +272,15 @@ provider.
 
 In the cloud the gateway runs `AUTH_MODE=firebase` for Firebase Google-SSO. The
 SPA fetches the **public** Firebase web config from the gateway's
-`GET /api/auth/config` at runtime, signs the user in with Google, and sends the
-resulting Firebase **ID token** as a bearer credential. The gateway verifies that
-ID token on every request and fails closed when it is absent, malformed, or
-expired.
+`GET /api/auth/config` at runtime, signs the user in with Google via a compact
+**Google One Tap** card, and sends the resulting Firebase **ID token** as a bearer
+credential. The gateway verifies that ID token on every request and fails closed
+when it is absent, malformed, or expired.
+
+Access has **three additive tiers** — anonymous (read-only + basic RAG),
+authenticated with no org (personal projects), and organization member (shared
+org projects/members). See [Access & Tenancy Model](docs/ACCESS_MODEL.md) for the
+full contract and the org-upgrade path.
 
 ```bash
 NODE_ENV=production
@@ -283,6 +288,7 @@ AUTH_MODE=firebase
 FIREBASE_PROJECT_ID=your-gcp-project   # defaults to GCP_PROJECT_ID
 FIREBASE_API_KEY=AIza...               # public Firebase Web API key (NOT a secret)
 FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com   # optional; defaults to <projectId>.firebaseapp.com
+GOOGLE_ONE_TAP_CLIENT_ID=...apps.googleusercontent.com   # public OAuth Web client id for One Tap (optional; falls back to popup)
 FIREBASE_ALLOWED_DOMAIN=example.com    # optional; empty = any verified user
 # FIREBASE_ALLOWED_EMAILS=a@example.com,b@example.com   # optional explicit allowlist
 # FIREBASE_HD=example.com              # optional Google hosted-domain hint

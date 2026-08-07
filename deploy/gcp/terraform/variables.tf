@@ -247,6 +247,12 @@ variable "firebase_allowed_domain" {
   default     = ""
 }
 
+variable "google_one_tap_client_id" {
+  type        = string
+  description = "Optional: public Google OAuth Web client id for the Google One Tap sign-in prompt (…apps.googleusercontent.com). Public, not a secret. Empty = the SPA uses the Firebase Google popup only."
+  default     = ""
+}
+
 variable "labels" {
   type        = map(string)
   description = "Base labels merged onto every labelable resource (for billing cost attribution). Each resource also gets a per-resource `component` label; see locals.common_labels."

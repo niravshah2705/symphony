@@ -10,6 +10,7 @@ import {
   summarizeTroubleshooting,
 } from '../omnibox-router.mjs';
 import { state, setCurrentProject } from '../state.js';
+import { getAuthenticationState } from '../auth.js';
 
 let refreshTimer = null;
 let gateTimer = null; // polls an awaiting approval gate for auto-advance
@@ -427,18 +428,27 @@ function buildComposer(stream, railBody) {
 
 async function resolveOmniboxRequest(text) {
   let routed;
-  try {
-    routed = await api.routeAgentMessage({ input: text });
-  } catch (error) {
-    // Keep the workspace useful during a planner restart. The same deterministic
-    // classifier runs in the browser as a no-mutation fallback; server routing
-    // remains the authoritative pre-model safety gate during normal operation.
-    routed = {
-      route: classifyOmniboxIntent(text),
-      enrichment: null,
-      offline: true,
-      warning: error.message || 'The server router was unavailable, so a local no-action route was used.',
-    };
+  // Anonymous visitors get BASIC RAG: the server router (POST /agent/message)
+  // needs workspace:write, so for a public session we classify in the browser
+  // and use only the public read-only knowledge/memory search endpoints. This
+  // also avoids a 401 that would otherwise churn the auth state mid-search.
+  const session = getAuthenticationState();
+  if (!session.authenticated) {
+    routed = { route: classifyOmniboxIntent(text), enrichment: null, offline: true };
+  } else {
+    try {
+      routed = await api.routeAgentMessage({ input: text });
+    } catch (error) {
+      // Keep the workspace useful during a planner restart. The same deterministic
+      // classifier runs in the browser as a no-mutation fallback; server routing
+      // remains the authoritative pre-model safety gate during normal operation.
+      routed = {
+        route: classifyOmniboxIntent(text),
+        enrichment: null,
+        offline: true,
+        warning: error.message || 'The server router was unavailable, so a local no-action route was used.',
+      };
+    }
   }
   const route = routed.route || classifyOmniboxIntent(text);
   const base = { route, warning: routed.warning || null };

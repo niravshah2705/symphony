@@ -18,6 +18,10 @@ export const MENU_PERMISSIONS = Object.freeze({
   workflows: { domain: 'insights', level: 'read' },
   troubleshooting: { domain: 'insights', level: 'read' },
   settings: { domain: 'settings', level: 'write' },
+  // Personal projects + organization (org service). org:read → visible to any
+  // signed-in user (even org-less); hidden for anonymous visitors. Create
+  // actions inside are auth-only (/api/org/me/*), enforced server-side.
+  organization: { domain: 'org', level: 'read' },
 });
 
 // Where an unauthenticated visitor (or a signed-out session) lands.

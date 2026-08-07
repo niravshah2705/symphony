@@ -39,6 +39,7 @@ TF_STATE_PREFIX="${TF_STATE_PREFIX:-ai-fleet/gcp}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://storage.googleapis.com}"
 FIREBASE_ALLOWED_DOMAIN="${FIREBASE_ALLOWED_DOMAIN:-}"
+GOOGLE_ONE_TAP_CLIENT_ID="${GOOGLE_ONE_TAP_CLIENT_ID:-}"  # public OAuth Web client id for Google One Tap (optional)
 AUTH_ADMIN_EMAILS="${AUTH_ADMIN_EMAILS:-}"
 AUTH_DEFAULT_ROLE="${AUTH_DEFAULT_ROLE:-viewer}"
 
@@ -76,6 +77,7 @@ TFVARS=(
   -var="image_tag=${IMAGE_TAG}"
   -var="spa_origin=${SPA_ORIGIN}"
   -var="firebase_allowed_domain=${FIREBASE_ALLOWED_DOMAIN}"
+  -var="google_one_tap_client_id=${GOOGLE_ONE_TAP_CLIENT_ID}"
   -var="auth_admin_emails=${AUTH_ADMIN_EMAILS}"
   -var="auth_default_role=${AUTH_DEFAULT_ROLE}"
 )

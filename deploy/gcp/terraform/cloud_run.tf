@@ -28,6 +28,9 @@ locals {
     var.firebase_auth_domain != "" ? { FIREBASE_AUTH_DOMAIN = var.firebase_auth_domain } : {},
     var.firebase_allowed_domain != "" ? { FIREBASE_ALLOWED_DOMAIN = var.firebase_allowed_domain } : {},
     var.auth_admin_emails != "" ? { AUTH_ADMIN_EMAILS = var.auth_admin_emails } : {},
+    # Public Google One Tap client id (not a secret). Only set when provided so
+    # the SPA falls back to the Firebase Google popup otherwise.
+    var.google_one_tap_client_id != "" ? { GOOGLE_ONE_TAP_CLIENT_ID = var.google_one_tap_client_id } : {},
   )
 
   planner_env = merge(local.common_env, {

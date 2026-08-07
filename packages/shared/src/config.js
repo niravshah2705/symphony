@@ -46,6 +46,11 @@ function buildFirebaseAuthConfig(env = process.env) {
   const apiKey = boundedEnv(env, 'FIREBASE_API_KEY', 256);
   if (!apiKey) throw new Error('FIREBASE_API_KEY is required when AUTH_MODE=firebase');
   const authDomain = boundedEnv(env, 'FIREBASE_AUTH_DOMAIN', 256) || `${projectId}.firebaseapp.com`;
+  // Google OAuth Web client id for the One Tap prompt. PUBLIC (like apiKey) — no
+  // client secret is involved. Optional: when unset the SPA falls back to the
+  // Firebase Google popup. Accepts either alias for operator convenience.
+  const googleClientId = boundedEnv(env, 'GOOGLE_ONE_TAP_CLIENT_ID', 256)
+    || boundedEnv(env, 'FIREBASE_GOOGLE_CLIENT_ID', 256);
   const allowedEmails = boundedEnv(env, 'FIREBASE_ALLOWED_EMAILS', 4096)
     .split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
   const allowedDomain = boundedEnv(env, 'FIREBASE_ALLOWED_DOMAIN', 256).toLowerCase();
@@ -69,6 +74,7 @@ function buildFirebaseAuthConfig(env = process.env) {
     projectId,
     apiKey,
     authDomain,
+    googleClientId,
     issuer: `https://securetoken.google.com/${projectId}`,
     audience: projectId,
     allowedEmails: Object.freeze(allowedEmails),

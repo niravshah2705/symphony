@@ -22,6 +22,8 @@ from app.authz.principal import Principal
 from app.core.database import new_uow
 from app.core.logging import get_logger
 from app.core.timeutils import ensure_aware
+from app.errors import ConflictError
+from app.models.enums import AuthProvider, OrgRole
 from app.models.user import User
 from app.repositories.user_repo import UserRepository
 
@@ -98,10 +100,16 @@ class AuthContextMiddleware:
 
         if is_idp_issuer(issuer):
             claims = decode_idp_token(token)
-            # External (e.g. Firebase) users must be PRE-PROVISIONED in the org
-            # directory (no silent JIT creation): matched by external_subject.
+            # External (e.g. Firebase) users are matched by external_subject and,
+            # if unknown, JIT-provisioned as an ORG-LESS user (org_id=None). An
+            # org-less user is rejected by every tenant guard, so this grants
+            # identity only — never tenant data access — which is what lets a
+            # signed-in-but-org-less user reach `/me` (personal projects +
+            # create-org). See docs/ACCESS_MODEL.md.
             subject = claims.get("sub")
             user = await repo.get_by_external_subject(str(subject)) if subject else None
+            if user is None and subject is not None:
+                user = await self._provision_external_user(repo, claims, str(subject))
         else:
             claims = decode_access_token(token)
             user = await self._load_local_user(repo, claims.get("sub"))
@@ -131,3 +139,37 @@ class AuthContextMiddleware:
         except (ValueError, TypeError):
             raise _AuthFailure()
         return await repo.get_by_id(user_id)
+
+    async def _provision_external_user(  # type: ignore[no-untyped-def]
+        self, repo: UserRepository, claims: dict, subject: str
+    ) -> User | None:
+        """Create an org-less user from a verified external-IdP identity.
+
+        Requires ``email_verified`` (authentication-failures.md). Idempotent under
+        concurrency: the external-subject uniqueness guard makes a losing racer's
+        create raise ConflictError, after which we return the winner's record.
+        Returns None (→ 401) if the identity is unverified or has no email.
+        """
+        if claims.get("email_verified") is not True:
+            return None
+        email = str(claims.get("email") or "").strip().lower()
+        if not email:
+            return None
+        user = User(
+            email=email,
+            org_id=None,
+            full_name=(claims.get("name") or None),
+            auth_provider=AuthProvider.EXTERNAL,
+            external_subject=subject,
+            org_role=OrgRole.MEMBER,  # unused while org_id is None
+            is_super_admin=False,
+            is_active=True,
+            email_verified=True,
+        )
+        try:
+            await repo.add(user)
+        except ConflictError:
+            # Concurrent first-request, or the email is already taken by another
+            # identity — fail closed unless the external subject now resolves.
+            return await repo.get_by_external_subject(subject)
+        return user

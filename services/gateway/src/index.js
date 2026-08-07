@@ -16,7 +16,7 @@ const localizationRoutes = require('./routes/localization');
 const { router: codexRoutes, callback: codexCallback } = require('./routes/codex');
 const { router: claudeRoutes } = require('./routes/claude');
 const { createProxy } = require('./proxy');
-const { createAuthenticationMiddleware, requirePermission, publicAuthConfig } = require('./auth');
+const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig } = require('./auth');
 const { createCorsMiddleware } = require('./cors');
 const { initStore, getConversation } = require('@ai-fleet/shared/store');
 const events = require('@ai-fleet/shared/messaging/events');
@@ -136,7 +136,15 @@ app.post('/api/coder/run', requirePermission('workspace'), publish.coderRun);
 
 // All other agent surfaces are reverse-proxied to their isolated services.
 // workspace:read (GET) is public — the read-only Agent home; writes need a role.
-app.use('/api/agent', requirePermission('workspace'), createProxy(CONFIG.SERVICES.plannerUrl));
+const plannerProxy = createProxy(CONFIG.SERVICES.plannerUrl);
+// Basic RAG for ANONYMOUS visitors: these two POSTs are side-effect-free reads
+// (bounded lexical doc/memory retrieval), so they are authorized at
+// workspace:READ even though they are POST — mounted ahead of the catch-all
+// /api/agent (which maps POST → write). Everything else on /api/agent still
+// needs workspace:write. See docs/ACCESS_MODEL.md.
+app.post('/api/agent/knowledge-search', requirePermission('workspace', { level: 'read' }), plannerProxy);
+app.post('/api/agent/memory-search', requirePermission('workspace', { level: 'read' }), plannerProxy);
+app.use('/api/agent', requirePermission('workspace'), plannerProxy);
 app.use('/api/coder', requirePermission('workspace'), createProxy(CONFIG.SERVICES.coderUrl));
 
 // Organization service (FastAPI + Firestore, services/org). It runs its own
@@ -145,10 +153,19 @@ app.use('/api/coder', requirePermission('workspace'), createProxy(CONFIG.SERVICE
 // requirePermission('org') is the coarse gate; the org service enforces the
 // real per-organization authorization.
 if (CONFIG.SERVICES.orgUrl) {
-  app.use('/api/org', requirePermission('org'), createProxy(CONFIG.SERVICES.orgUrl, {
+  const orgProxy = createProxy(CONFIG.SERVICES.orgUrl, {
     rewrite: { from: '/api/org', to: '/api/v1' },
     forwardUserAuth: true,
-  }));
+  });
+  // Personal workspace (/api/org/me/*): every SIGNED-IN user may create/manage
+  // their own personal projects and create their first org, even without an
+  // `org` role (a default viewer only has org:read). Mounted BEFORE the
+  // role-gated /api/org so this exact prefix wins. The org service enforces
+  // owner-scoping regardless; this is only the coarse authentication gate.
+  app.use('/api/org/me', requireAuthenticated(), orgProxy);
+  // Org tenant surface — needs the `org` permission domain (org:read for GETs,
+  // org:write for mutations). The org service enforces per-org RBAC.
+  app.use('/api/org', requirePermission('org'), orgProxy);
 } else {
   app.use('/api/org', requirePermission('org'), (req, res) =>
     res.status(501).json({ error: 'Organization service is not configured (ORG_URL unset).' }));
