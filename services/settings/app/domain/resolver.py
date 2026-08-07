@@ -22,7 +22,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 
-from app.models.policy import DOMAINS, DomainPolicy, SettingsPolicy
+from app.models.policy import (
+    CONFIG_VALUE_KEYS,
+    DOMAINS,
+    DomainPolicy,
+    SettingsPolicy,
+)
 
 
 def _matches_any(item: str, patterns: list[str]) -> bool:
@@ -95,3 +100,32 @@ def resolve_effective(
             scope(user_policy, domain),
         )
     return result
+
+
+def resolve_effective_values(
+    org_policy: SettingsPolicy | None,
+    project_policy: SettingsPolicy | None,
+    user_policy: SettingsPolicy | None,
+) -> dict[str, str]:
+    """Resolve each allow-listed config value with **user > project > org**
+    precedence — a lower scope overrides a higher one (the opposite direction of
+    the include/exclude narrowing, because config values are overrides, not
+    restrictions). Only keys with a non-empty value at some scope are returned.
+    """
+
+    def values(policy: SettingsPolicy | None) -> dict[str, str]:
+        return policy.values if policy is not None else {}
+
+    org_values = values(org_policy)
+    project_values = values(project_policy)
+    user_values = values(user_policy)
+
+    effective: dict[str, str] = {}
+    for key in CONFIG_VALUE_KEYS:
+        # Lowest scope with a value wins.
+        for source in (user_values, project_values, org_values):
+            candidate = source.get(key)
+            if candidate:
+                effective[key] = candidate
+                break
+    return effective
