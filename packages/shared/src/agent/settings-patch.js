@@ -16,11 +16,13 @@
 
 const { normalizeAgentRuntime, normalizeWorkflowPattern } = require('./runtimes');
 
-const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface']);
-const LOCAL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx']);
+const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity']);
+// BYoM ("Bring Your Own Model") slot providers — the true local-inference
+// runtimes plus the Hugging Face hosted router (formerly the "local" providers).
+const BYOM_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'huggingface']);
 const PLANNING_PROVIDERS = Object.freeze(['linear', 'jira', 'asana']);
 const REPOSITORY_PROVIDERS = Object.freeze(['github', 'gitlab']);
-const RUNTIME_IDS = Object.freeze(['deepagent', 'codex-sdk', 'claude-agent-sdk']);
+const RUNTIME_IDS = Object.freeze(['deepagent', 'codex-sdk', 'claude-agent-sdk', 'antigravity-sdk']);
 const WORKFLOW_PATTERN_IDS = Object.freeze(['sequential', 'parallel', 'evaluator', 'supervisor']);
 const CONTEXT_MODES = Object.freeze(['summarize', 'trim', 'none']);
 // Upper bound on the LLM stream retry count; matches the clamp in agent/llm.js.
@@ -132,12 +134,12 @@ const ALLOWED = Object.freeze({
 
   // Provider slots (legacy) + purpose roles (thinking/execution/testing)
   llmProvider: oneOf(ALL_PROVIDERS),
-  localLlmProvider: oneOf(LOCAL_PROVIDERS),
+  byomProvider: oneOf(BYOM_PROVIDERS),
   thinkingLlmProvider: oneOf(ALL_PROVIDERS),
   executionLlmProvider: oneOf(ALL_PROVIDERS),
   testingLlmProvider: oneOf(ALL_PROVIDERS),
   hostedLlmPresetId: str(80),
-  localLlmPresetId: str(80),
+  byomPresetId: str(80),
   thinkingLlmPresetId: str(80),
   executionLlmPresetId: str(80),
   testingLlmPresetId: str(80),
@@ -150,6 +152,10 @@ const ALLOWED = Object.freeze({
   ...hostedParamKeys('claude'),
   ...hostedParamKeys('huggingface'),
   huggingfaceHost: httpUrl(), // hosted, but the router base URL is operator-configurable
+  ...hostedParamKeys('antigravity'),
+  // Optional Antigravity preview managed-agent id (non-secret config; the API key
+  // stays out of the allow-list and keeps its dedicated endpoint).
+  antigravityAgentId: str(200),
 
   // LangSmith (non-secret only; the API key keeps its dedicated endpoint)
   langsmithProject: str(200),
@@ -227,10 +233,10 @@ function describeEditableSettings() {
     EDITABLE_KEYS.join(', '),
     '',
     'Enum values:',
-    `- agentRuntime (harness): ${RUNTIME_IDS.join(' | ')} (deepagent=DeepAgent, codex-sdk=Codex, claude-agent-sdk=ClaudeCode)`,
+    `- agentRuntime (harness): ${RUNTIME_IDS.join(' | ')} (deepagent=DeepAgent, codex-sdk=Codex, claude-agent-sdk=ClaudeCode, antigravity-sdk=Antigravity)`,
     `- workflowPattern: ${WORKFLOW_PATTERN_IDS.join(' | ')}`,
     `- llmProvider / thinkingLlmProvider / executionLlmProvider / testingLlmProvider: ${ALL_PROVIDERS.join(' | ')}`,
-    `- localLlmProvider: ${LOCAL_PROVIDERS.join(' | ')}`,
+    `- byomProvider: ${BYOM_PROVIDERS.join(' | ')}`,
     `- planningProvider: ${PLANNING_PROVIDERS.join(' | ')}`,
     `- repositoryProvider: ${REPOSITORY_PROVIDERS.join(' | ')}`,
     `- lmstudioContextMode / omlxContextMode / codexContextMode: ${CONTEXT_MODES.join(' | ')}`,
@@ -244,7 +250,7 @@ function describeEditableSettings() {
 
 module.exports = {
   ALL_PROVIDERS,
-  LOCAL_PROVIDERS,
+  BYOM_PROVIDERS,
   EDITABLE_KEYS,
   sanitizeSettingsPatch,
   applySettingsPatch,

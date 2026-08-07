@@ -5,12 +5,14 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const { resolveSkillsSrc } = require('../config');
 const { createChatModel } = require('./llm');
 const toolRegistry = require('./tools');
 const { installSafeRead } = require('./safe-read');
 const { createFsArgNormalizerMiddleware } = require('./fs-arg-normalizer');
 const { buildSafeAgentEnv } = require('./repository-broker');
 const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = require('./runtimes');
+const { applyPolicyToWorkflow, filterSkillPaths } = require('./settings-policy');
 
 /**
  * Workflow-driven deep-agent framework.
@@ -35,19 +37,23 @@ const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = re
  *     recursionLimit?: number, tags?: string[], shellTimeoutSec?: number }
  */
 
-const SKILLS_SRC = path.join(__dirname, 'skills');
 const SKILLS_DEST_DIRNAME = '.agent-skills';
 const SKILLS_OWNER_MARKER = '.tech-symphony-managed';
 const SKILLS_OWNER_MARKER_CONTENT = 'tech-symphony-agent-skills-v1\n';
 const WORKFLOWS_DIR = path.join(__dirname, 'workflows');
 
 /**
- * Copy the named skills from server/agent/skills/ into `destRoot/.agent-skills/`
- * and return their backend-relative paths (e.g. `/.agent-skills/software-planning/`).
- * With no names, installs every available skill (back-compat with the coder's
- * previous "install all" behavior).
+ * Copy the named skills from the configured skills source into
+ * `destRoot/.agent-skills/` and return their backend-relative paths (e.g.
+ * `/.agent-skills/software-planning/`). With no names, installs every available
+ * skill (back-compat with the coder's previous "install all" behavior).
+ *
+ * The source directory is resolved per call from config (resolveSkillsSrc): the
+ * vendored `skills/` dir by default, or a version-pinned gcsfuse mount subdir
+ * (`$SKILLS_ROOT/$SKILLS_VERSION`) in the cloud. See packages/shared/src/config.js.
  */
 function installSkills(destRoot, skillNames) {
+  const skillsSrc = resolveSkillsSrc();
   const root = path.resolve(destRoot);
   const rootStat = lstatOrNull(root);
   if (!rootStat || !rootStat.isDirectory()) {
@@ -55,7 +61,7 @@ function installSkills(destRoot, skillNames) {
   }
   const realRoot = fs.realpathSync(root);
   const dest = path.join(realRoot, SKILLS_DEST_DIRNAME);
-  const available = fs.readdirSync(SKILLS_SRC).filter((n) => isDir(path.join(SKILLS_SRC, n)));
+  const available = fs.readdirSync(skillsSrc).filter((n) => isDir(path.join(skillsSrc, n)));
   const names = Array.isArray(skillNames) && skillNames.length ? skillNames : available;
   for (const name of names) validateSkillName(name);
 
@@ -69,7 +75,7 @@ function installSkills(destRoot, skillNames) {
   claimSkillsDirectory(dest, realRoot);
   const paths = [];
   for (const name of new Set(names)) {
-    const from = path.join(SKILLS_SRC, name);
+    const from = path.join(skillsSrc, name);
     if (!isDir(from)) continue; // skip unknown skill names rather than throw
     assertNoSymlinks(from);
     const to = path.join(dest, name);
@@ -229,7 +235,14 @@ function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, ext
   // Guard read_file against Anthropic's content-block rules: unrecognized/binary
   // files must not be sent as non-PDF `document` blocks (invalid_request_error).
   be = installSafeRead(be);
-  const tools = [...toolRegistry.buildMany(workflow.tools, ctx), ...(extraTools || [])];
+  // Settings-service ENFORCEMENT: prune this workflow's tools/skills by the
+  // caller's EFFECTIVE include/exclude policy (services/settings resolves the
+  // org→project→user cascade; `ctx.effectivePolicy` is threaded in by the
+  // caller). Absent policy → allow-all (local single-user; no regression).
+  const effective = ctx.effectivePolicy;
+  const effectiveWorkflow = applyPolicyToWorkflow(workflow, effective, { toolDomains: toolRegistry.TOOL_DOMAIN });
+  skills = filterSkillPaths(skills, effective);
+  const tools = [...toolRegistry.buildMany(effectiveWorkflow.tools, ctx), ...(extraTools || [])];
   const systemPrompt = typeof workflow.systemPrompt === 'function' ? workflow.systemPrompt(ctx) : workflow.systemPrompt;
   // Repair mis-keyed filesystem tool calls (e.g. read_file with `path` instead
   // of `file_path`) before they hit the tool's schema — a single wrong key
@@ -257,6 +270,10 @@ async function runWorkflow({
   runtime = 'deepagent',
   workflowPattern = 'sequential',
   env,
+  rubric,
+  rubricOptions,
+  rubricMiddleware,
+  settings,
 }) {
   let scratch = null;
   if (!backend && !rootDir) {
@@ -269,6 +286,7 @@ async function runWorkflow({
     const runtimeId = effectiveAgentRuntime(requestedRuntime, llm, {
       strict: true,
       workflow: workflow.name,
+      effectivePolicy: ctx.effectivePolicy || null,
     });
     const config = {
       recursionLimit: workflow.recursionLimit || 24,
@@ -303,6 +321,11 @@ async function runWorkflow({
       tags: workflow.tags || [],
       deepAgentInvoke,
       lastText,
+      // Optional RubricMiddleware completion review. Absent → no review runs.
+      rubric,
+      rubricOptions,
+      rubricMiddleware,
+      settings,
     });
   } finally {
     if (scratch) scratch.cleanup();

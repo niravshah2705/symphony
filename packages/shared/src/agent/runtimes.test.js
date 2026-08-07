@@ -45,7 +45,7 @@ function chatgptCodexLlm() {
 }
 
 test('runtime and workflow registries use stable canonical ids and aliases', () => {
-  assert.deepEqual(runtimeCatalog().map((item) => item.id), ['deepagent', 'codex-sdk', 'claude-agent-sdk']);
+  assert.deepEqual(runtimeCatalog().map((item) => item.id), ['deepagent', 'codex-sdk', 'claude-agent-sdk', 'antigravity-sdk']);
   assert.deepEqual(workflowPatternCatalog().map((item) => item.id), [
     'sequential',
     'parallel',
@@ -442,6 +442,359 @@ test('matching SDK providers still fail closed when authentication is unavailabl
       trace: false,
     }),
     (error) => error.code === 'runtime_auth_unavailable' && error.status === 401
+  );
+});
+
+test('RubricMiddleware grades a DeepAgent run and surfaces its verdict on the trace', async (t) => {
+  const seen = { run: { metadata: {} } };
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    prompt: 'Ship the feature',
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'Opened PR #7.' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    rubric: '- feature works\n- PR opened',
+    rubricOptions: { deps: { callJson: async () => ({ json: { criteria: [{ name: 'feature works', passed: true }, { name: 'PR opened', passed: true }] } }) } },
+    getCurrentRunTree: () => seen.run,
+    traceFactory: (fn) => fn,
+  });
+
+  assert.equal(execution.finalText, 'Opened PR #7.');
+  assert.equal(execution.review.result, 'satisfied');
+  assert.equal(execution.review.satisfied, true);
+  assert.equal(execution.review.iterations, 1);
+  // Verdict is copied into trace metadata for analytics.
+  assert.equal(seen.run.metadata.rubric_reviewed, true);
+  assert.equal(seen.run.metadata.rubric_result, 'satisfied');
+  assert.equal(seen.run.metadata.rubric_satisfied, true);
+  assert.equal(seen.run.metadata.rubric_iterations, 1);
+});
+
+test('RubricMiddleware re-runs the SAME SDK runtime (Codex) on needs_revision', async (t) => {
+  const root = workspace(t);
+  const runs = [];
+  class FakeCodex {
+    startThread() {
+      return {
+        id: 't',
+        run: async (prompt) => {
+          runs.push(prompt);
+          // First attempt is incomplete; the revision includes the gap block.
+          return { finalResponse: runs.length === 1 ? 'draft' : 'DONE with tests', usage: { input_tokens: 5, output_tokens: 2 } };
+        },
+      };
+    }
+  }
+  let round = 0;
+  const execution = await executeAgentRuntime({
+    runtime: 'codex-sdk',
+    prompt: 'Do the SDK task',
+    rootDir: root,
+    llm: { provider: 'codex', backend: 'api', model: 'gpt-5-codex', accessToken: 'k', baseUrl: 'https://x.test/v1' },
+    loaders: { 'codex-sdk': async () => ({ Codex: FakeCodex }) },
+    rubric: ['ships tests'],
+    rubricOptions: {
+      deps: { callJson: async () => { round += 1; return { json: { criteria: [{ name: 'ships tests', passed: round >= 2, gap: 'add tests' }] } }; } },
+    },
+    trace: false,
+  });
+
+  assert.equal(execution.runtime, 'codex-sdk');
+  assert.equal(runs.length, 2); // original run + one revision re-run
+  assert.match(runs[1], /rubric_revision/); // the re-run carried the gap feedback
+  assert.equal(execution.review.result, 'satisfied');
+  assert.equal(execution.review.iterations, 2);
+  assert.equal(execution.finalText, 'DONE with tests'); // final iteration output wins
+  assert.equal(execution.usage.totalTokens, 14); // usage accumulated across both runs (7 + 7)
+});
+
+test('a grader defect never fails a completed run (fail-open backstop)', async (t) => {
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    prompt: 'task',
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'done' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    rubric: ['a'],
+    rubricOptions: { deps: { callJson: async () => { throw new Error('grader exploded'); } } },
+    trace: false,
+  });
+
+  assert.equal(execution.finalText, 'done');
+  assert.equal(execution.review.result, 'grader_error');
+  assert.equal(execution.review.satisfied, false);
+  assert.match(execution.review.error, /grader exploded/);
+});
+
+test('a prebuilt rubricMiddleware instance is honored', async (t) => {
+  const { createRubricMiddleware } = require('./rubric-middleware');
+  const middleware = createRubricMiddleware({
+    rubric: ['a'],
+    deps: { callJson: async () => ({ json: { criteria: [{ name: 'a', passed: true }] } }) },
+  });
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    prompt: 'task',
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'done' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    rubricMiddleware: middleware,
+    trace: false,
+  });
+  assert.equal(execution.review.result, 'satisfied');
+});
+
+test('runs without a rubric attach no review (opt-in, backwards compatible)', async () => {
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    prompt: 'task',
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'done' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    trace: false,
+  });
+  assert.equal(Object.hasOwn(execution, 'review'), false);
+});
+
+test('Antigravity harness gates on a matching provider and the coding workflow', () => {
+  // Matching provider (planning) runs the harness; a mismatch or brokered coding
+  // falls back to DeepAgent — mirroring the codex/claude gating.
+  assert.equal(
+    effectiveAgentRuntime('antigravity-sdk', { provider: 'antigravity' }, { strict: true, workflow: 'planning' }),
+    'antigravity-sdk'
+  );
+  assert.equal(
+    effectiveAgentRuntime('antigravity-sdk', { provider: 'claude' }, { strict: true, workflow: 'planning' }),
+    'deepagent'
+  );
+  assert.equal(
+    effectiveAgentRuntime('antigravity-sdk', { provider: 'antigravity' }, { strict: true, workflow: 'coding' }),
+    'deepagent'
+  );
+});
+
+test('Antigravity SDK adapter returns the contract shape via the interactions API', async (t) => {
+  const root = workspace(t);
+  const seen = { run: { metadata: {} } };
+  class FakeGoogleGenAI {
+    constructor(options) {
+      seen.client = options;
+    }
+    get interactions() {
+      return {
+        create: async (request) => {
+          seen.request = request;
+          return {
+            id: 'antigravity-interaction-1',
+            output: [{ content: [{ text: 'Antigravity finished' }] }],
+            usageMetadata: {
+              promptTokenCount: 18,
+              candidatesTokenCount: 7,
+              totalTokenCount: 25,
+              thoughtsTokenCount: 2,
+            },
+          };
+        },
+      };
+    }
+  }
+
+  const execution = await executeAgentRuntime({
+    runtime: 'antigravity-sdk',
+    workflowPattern: 'parallel',
+    prompt: 'Plan the change',
+    rootDir: root,
+    backendKind: 'filesystem',
+    systemPrompt: 'Trusted planning rules',
+    llm: {
+      provider: 'antigravity',
+      model: 'gemini-2.5-flash',
+      apiKey: 'gemini-secret',
+      // Config-driven target: the preview agent id overrides the model for the call.
+      agentId: 'antigravity-preview-agent',
+    },
+    loaders: { 'antigravity-sdk': async () => ({ GoogleGenAI: FakeGoogleGenAI }) },
+    getCurrentRunTree: () => seen.run,
+    traceFactory: (fn, config) => {
+      seen.trace = config;
+      return fn;
+    },
+  });
+
+  assert.equal(seen.client.apiKey, 'gemini-secret');
+  // The configured agent id is the call target; the trusted rules ride in `input`.
+  assert.equal(seen.request.model, 'antigravity-preview-agent');
+  assert.match(seen.request.input, /Trusted planning rules/);
+  assert.match(seen.request.input, /workflow_pattern id="parallel"/);
+  assert.match(seen.request.input, /Plan the change/);
+
+  assert.equal(execution.runtime, 'antigravity-sdk');
+  assert.equal(execution.provider, 'antigravity');
+  // The contract's `model` stays the descriptor model even when an agent id is used.
+  assert.equal(execution.model, 'gemini-2.5-flash');
+  assert.equal(execution.finalText, 'Antigravity finished');
+  assert.equal(execution.sessionId, 'antigravity-interaction-1');
+  assert.equal(execution.costUsd, null);
+  assert.equal(execution.usage.inputTokens, 18);
+  assert.equal(execution.usage.outputTokens, 7);
+  assert.equal(execution.usage.reasoningOutputTokens, 2);
+  assert.equal(execution.usage.totalTokens, 25);
+
+  assert.equal(seen.trace.metadata.agent_runtime, 'antigravity-sdk');
+  assert.equal(seen.trace.metadata.harness, 'antigravity');
+  assert.equal(seen.trace.metadata.ls_provider, 'google');
+  assert.equal(seen.trace.run_type, 'llm');
+  assert.ok(seen.trace.tags.includes('harness:antigravity'));
+  assert.ok(seen.trace.tags.includes('runtime:antigravity-sdk'));
+  assert.equal(seen.run.metadata.usage_total_tokens, 25);
+});
+
+test('Antigravity SDK falls back to models.generateContent when interactions is unavailable', async (t) => {
+  const root = workspace(t);
+  const seen = {};
+  class FakeGoogleGenAI {
+    constructor() {}
+    get models() {
+      return {
+        generateContent: async (request) => {
+          seen.request = request;
+          return {
+            responseId: 'gc-1',
+            candidates: [{ content: { parts: [{ text: 'Generated content' }] } }],
+            usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 3, totalTokenCount: 8 },
+          };
+        },
+      };
+    }
+  }
+
+  const execution = await executeAgentRuntime({
+    runtime: 'antigravity-sdk',
+    prompt: 'Summarize',
+    rootDir: root,
+    llm: { provider: 'antigravity', model: 'gemini-2.5-flash', apiKey: 'gemini-secret' },
+    loaders: { 'antigravity-sdk': async () => ({ GoogleGenAI: FakeGoogleGenAI }) },
+    trace: false,
+  });
+
+  assert.equal(seen.request.model, 'gemini-2.5-flash');
+  assert.equal(execution.finalText, 'Generated content');
+  assert.equal(execution.sessionId, 'gc-1');
+  assert.equal(execution.usage.totalTokens, 8);
+});
+
+test('Antigravity SDK fails closed when the Gemini API key is unavailable', async (t) => {
+  const root = workspace(t);
+  await assert.rejects(
+    executeAgentRuntime({
+      runtime: 'antigravity-sdk',
+      prompt: 'task',
+      rootDir: root,
+      llm: { provider: 'antigravity', model: 'gemini-2.5-flash' },
+      trace: false,
+    }),
+    (error) => error.code === 'runtime_auth_unavailable' && error.status === 401
+  );
+});
+
+test('RubricMiddleware re-runs the SAME SDK runtime (Antigravity) on needs_revision', async (t) => {
+  const root = workspace(t);
+  const inputs = [];
+  class FakeGoogleGenAI {
+    constructor() {}
+    get interactions() {
+      return {
+        create: async (request) => {
+          inputs.push(request.input);
+          // First attempt is incomplete; the revision includes the gap block.
+          return {
+            id: `antigravity-${inputs.length}`,
+            output: [{ content: [{ text: inputs.length === 1 ? 'draft' : 'DONE with tests' }] }],
+            usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 2, totalTokenCount: 7 },
+          };
+        },
+      };
+    }
+  }
+  let round = 0;
+  const execution = await executeAgentRuntime({
+    runtime: 'antigravity-sdk',
+    prompt: 'Do the SDK task',
+    rootDir: root,
+    llm: { provider: 'antigravity', model: 'gemini-2.5-flash', apiKey: 'gemini-secret' },
+    loaders: { 'antigravity-sdk': async () => ({ GoogleGenAI: FakeGoogleGenAI }) },
+    rubric: ['ships tests'],
+    rubricOptions: {
+      deps: { callJson: async () => { round += 1; return { json: { criteria: [{ name: 'ships tests', passed: round >= 2, gap: 'add tests' }] } }; } },
+    },
+    trace: false,
+  });
+
+  assert.equal(execution.runtime, 'antigravity-sdk');
+  assert.equal(inputs.length, 2); // original run + one revision re-run
+  assert.match(inputs[1], /rubric_revision/); // the re-run carried the gap feedback
+  assert.equal(execution.review.result, 'satisfied');
+  assert.equal(execution.review.iterations, 2);
+  assert.equal(execution.finalText, 'DONE with tests'); // final iteration output wins
+  assert.equal(execution.usage.totalTokens, 14); // usage accumulated across both runs (7 + 7)
+});
+
+test('Antigravity SDK resolves the key from settings (ctx) and falls back to env/store', async (t) => {
+  const root = workspace(t);
+  const seen = {};
+  class FakeGoogleGenAI {
+    constructor(options) {
+      seen.apiKey = options.apiKey;
+    }
+    get models() {
+      return {
+        generateContent: async () => ({
+          responseId: 'gc',
+          candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+          usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 },
+        }),
+      };
+    }
+  }
+  const loaders = { 'antigravity-sdk': async () => ({ GoogleGenAI: FakeGoogleGenAI }) };
+
+  // The settings-resolved key (ctx.geminiApiKey) wins over the descriptor key.
+  await executeAgentRuntime({
+    runtime: 'antigravity-sdk',
+    prompt: 'task',
+    rootDir: root,
+    llm: { provider: 'antigravity', model: 'gemini-2.5-flash', apiKey: 'env-fallback-key' },
+    ctx: { geminiApiKey: 'settings-resolved-key' },
+    loaders,
+    trace: false,
+  });
+  assert.equal(seen.apiKey, 'settings-resolved-key');
+
+  // With no settings value, the descriptor's key (from GEMINI_API_KEY env/store) is used.
+  await executeAgentRuntime({
+    runtime: 'antigravity-sdk',
+    prompt: 'task',
+    rootDir: root,
+    llm: { provider: 'antigravity', model: 'gemini-2.5-flash', apiKey: 'env-fallback-key' },
+    ctx: {},
+    loaders,
+    trace: false,
+  });
+  assert.equal(seen.apiKey, 'env-fallback-key');
+});
+
+test('effectiveAgentRuntime downgrades a policy-excluded harness (enforcement)', () => {
+  // codex is the provider so codex-sdk normally survives; the policy excludes it.
+  const llm = { provider: 'codex' };
+  const excludesCodex = { harness: { effective: ['deepagent', 'claude-agent-sdk'] } };
+  assert.equal(
+    effectiveAgentRuntime('codex-sdk', llm, { strict: true, workflow: 'planning', effectivePolicy: excludesCodex }),
+    'deepagent'
+  );
+  // Without a policy, the provider-matched runtime is unchanged (no regression).
+  assert.equal(
+    effectiveAgentRuntime('codex-sdk', llm, { strict: true, workflow: 'planning' }),
+    'codex-sdk'
   );
 });
 

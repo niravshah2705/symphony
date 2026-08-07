@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "updatedAt": "2026-08-07",
+  "skills": [
+    { "name": "commit", "version": 1 },
+    { "name": "land", "version": 1 },
+    { "name": "linear", "version": 1 },
+    { "name": "pull", "version": 1 },
+    { "name": "push", "version": 1 },
+    { "name": "software-planning", "version": 1 },
+    { "name": "web-research", "version": 1 }
+  ]
+}

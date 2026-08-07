@@ -6,6 +6,7 @@ const path = require('path');
 const { traceable, getCurrentRunTree } = require('langsmith/traceable');
 const { buildSafeAgentEnv } = require('./repository-broker');
 const { PATTERNS, patternId } = require('./workflow-patterns');
+const { enforceHarness } = require('./settings-policy');
 
 /**
  * Provider-neutral agent-runtime registry.
@@ -23,6 +24,15 @@ const RUNTIMES = Object.freeze({
     label: 'Claude Agent SDK',
     packageName: '@anthropic-ai/claude-agent-sdk',
   }),
+  // Google Antigravity has no npm package (the managed-agent SDK is Python + a Go
+  // CLI). The Node adapter is backed by @google/genai's managed-agent
+  // `interactions` API — the true peer of the Codex/Claude SDKs — which is PREVIEW
+  // and Gemini API-key authenticated. The agent id/model is config-driven.
+  'antigravity-sdk': Object.freeze({
+    id: 'antigravity-sdk',
+    label: 'Antigravity SDK',
+    packageName: '@google/genai',
+  }),
 });
 
 /**
@@ -34,6 +44,7 @@ const HARNESS_LABELS = Object.freeze({
   deepagent: 'deepagent',
   'codex-sdk': 'codex',
   'claude-agent-sdk': 'claudecode',
+  'antigravity-sdk': 'antigravity',
 });
 
 /** Friendly harness name for a runtime id (falls back to the id itself). */
@@ -104,17 +115,22 @@ function normalizeAgentRuntime(value, { strict = false } = {}) {
  * the only provider-neutral execution path, so use it explicitly and surface
  * the requested/effective runtimes on the trace.
  */
-function effectiveAgentRuntime(value, llm, { strict = false, workflow = '' } = {}) {
+function effectiveAgentRuntime(value, llm, { strict = false, workflow = '', effectivePolicy = null } = {}) {
   const runtime = normalizeAgentRuntime(value, { strict });
   const provider = llm && llm.provider;
   // The unattended coding workflow requires the private Linear and scoped
   // repository-broker tools. Official SDK subprocesses deliberately never
   // receive those application credentials, so keep this lifecycle on the
   // prepared DeepAgent path instead of running an SDK that cannot finish it.
-  if (workflow === 'coding' && runtime !== 'deepagent') return 'deepagent';
-  if (runtime === 'codex-sdk' && provider !== 'codex') return 'deepagent';
-  if (runtime === 'claude-agent-sdk' && provider !== 'claude') return 'deepagent';
-  return runtime;
+  let resolved = runtime;
+  if (workflow === 'coding' && runtime !== 'deepagent') resolved = 'deepagent';
+  else if (runtime === 'codex-sdk' && provider !== 'codex') resolved = 'deepagent';
+  else if (runtime === 'claude-agent-sdk' && provider !== 'claude') resolved = 'deepagent';
+  else if (runtime === 'antigravity-sdk' && provider !== 'antigravity') resolved = 'deepagent';
+  // Settings-service ENFORCEMENT: if the resolved harness is excluded by the
+  // caller's effective policy, downgrade to an allowed harness (prefer the
+  // provider-neutral deepagent). Absent policy → unchanged (allow-all).
+  return enforceHarness(resolved, effectivePolicy);
 }
 
 function normalizeWorkflowPattern(value, { strict = false } = {}) {
@@ -280,6 +296,7 @@ async function loadSdk(id, loaders = {}) {
   try {
     if (id === 'codex-sdk') return await import('@openai/codex-sdk');
     if (id === 'claude-agent-sdk') return await import('@anthropic-ai/claude-agent-sdk');
+    if (id === 'antigravity-sdk') return await import('@google/genai');
   } catch (error) {
     throw optionalPackageError(id, RUNTIMES[id].packageName, error);
   }
@@ -374,7 +391,82 @@ function publicExecution(result) {
     costUsd: result.costUsd,
     costAvailable: result.costUsd !== null,
     sessionId: result.sessionId || null,
+    ...(result.review ? { review: result.review } : {}),
   };
+}
+
+function addCost(a, b) {
+  const x = finiteNumber(a);
+  const y = finiteNumber(b);
+  if (x === null && y === null) return null;
+  return (x || 0) + (y || 0);
+}
+
+/**
+ * Apply the RubricMiddleware to a finished run. When a caller supplies a
+ * `rubric` (or a prebuilt `rubricMiddleware`), the middleware grades the output
+ * against the checklist and — on `needs_revision` — re-runs the SAME runtime
+ * with the per-criterion gaps appended, up to its iteration cap. This is what
+ * makes the review work for every SDK: `runOnce` re-invokes whichever runtime
+ * produced the run.
+ *
+ * Usage/cost from every (re-)run accumulate onto the returned value so the one
+ * trace span reflects all iterations. Fail-open: the middleware never throws,
+ * and this backstop guarantees a grader defect can never fail a completed run.
+ *
+ * @param {(prompt:string)=>Promise<object>} runOnce re-invokes the runtime executor
+ */
+async function applyRubricMiddleware(options, value, prompt, runOnce) {
+  const rubricLib = require('./rubric-middleware');
+  const middleware = options.rubricMiddleware && typeof options.rubricMiddleware.run === 'function'
+    ? options.rubricMiddleware
+    : rubricLib.createRubricMiddleware({ rubric: options.rubric, ...(options.rubricOptions || {}) });
+
+  let accUsage = value.usage ? { ...value.usage } : null;
+  let accCost = value.costUsd;
+  const runAgent = async (revisionPrompt) => {
+    const next = await runOnce(revisionPrompt);
+    accUsage = mergeUsage(accUsage, next.usage);
+    accCost = addCost(accCost, next.costUsd);
+    return next;
+  };
+
+  let review;
+  try {
+    review = await middleware.run({
+      rubric: options.rubric,
+      task: options.prompt,
+      output: value,
+      basePrompt: prompt,
+      runAgent,
+      settings: options.settings,
+      signal: options.signal,
+    });
+  } catch (error) {
+    review = rubricLib.failedReview(options.rubric, error);
+  }
+
+  // A re-run's result is authoritative; carry the accumulated usage/cost onto it.
+  const finalValue = review.finalResult && review.finalResult !== value ? review.finalResult : value;
+  finalValue.usage = accUsage;
+  finalValue.costUsd = accCost;
+  delete review.finalResult; // internal loop plumbing; not part of the public review
+  finalValue.review = review;
+  return finalValue;
+}
+
+function reviewMetadata(review) {
+  if (!review) return {};
+  const metadata = {
+    rubric_reviewed: true,
+    rubric_result: review.result,
+    rubric_satisfied: Boolean(review.satisfied),
+    rubric_iterations: review.iterations,
+  };
+  if (Array.isArray(review.unsatisfied) && review.unsatisfied.length) {
+    metadata.rubric_unsatisfied = review.unsatisfied.length;
+  }
+  return metadata;
 }
 
 function traceMetadata(resultOrError) {
@@ -398,13 +490,14 @@ function traceMetadata(resultOrError) {
     metadata.usage_reasoning_output_tokens = usage.reasoningOutputTokens;
   }
   if (costUsd !== null) metadata.cost_usd = costUsd;
-  return metadata;
+  return { ...metadata, ...reviewMetadata(resultOrError && resultOrError.review) };
 }
 
 function langSmithProvider(llm) {
   const provider = llm && llm.provider;
   if (provider === 'codex') return 'openai';
   if (provider === 'claude') return 'anthropic';
+  if (provider === 'antigravity') return 'google';
   if (provider === 'lmstudio' || provider === 'omlx' || provider === 'huggingface') return 'openai';
   return provider || 'unknown';
 }
@@ -698,10 +791,141 @@ async function executeClaude(options, prompt) {
   };
 }
 
+/**
+ * Map Gemini/@google/genai usage metadata onto the shared usage contract. The
+ * native API reports promptTokenCount/candidatesTokenCount/totalTokenCount; the
+ * preview interactions API may instead report input/output token counts.
+ */
+function antigravityUsage(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  return normalizeUsage({
+    input_tokens: raw.promptTokenCount ?? raw.inputTokens ?? raw.input_tokens,
+    output_tokens: raw.candidatesTokenCount ?? raw.outputTokens ?? raw.output_tokens,
+    total_tokens: raw.totalTokenCount ?? raw.totalTokens ?? raw.total_tokens,
+    cached_input_tokens: raw.cachedContentTokenCount ?? raw.cachedInputTokens ?? raw.cached_input_tokens,
+    reasoning_output_tokens: raw.thoughtsTokenCount ?? raw.reasoningOutputTokens ?? raw.reasoning_output_tokens,
+  });
+}
+
+/** Extract the assistant text from an interactions/generateContent response. */
+function antigravityText(response) {
+  if (!response || typeof response !== 'object') return '';
+  for (const key of ['text', 'outputText', 'output_text', 'finalText']) {
+    if (typeof response[key] === 'string' && response[key]) return response[key];
+  }
+  // Managed-agent interactions typically return a list of output items whose
+  // content parts each carry a `text` field.
+  const output = response.output || response.outputs;
+  if (Array.isArray(output)) {
+    const parts = output.flatMap((item) => {
+      const content = item && (item.content || item.parts);
+      return Array.isArray(content) ? content : [];
+    });
+    const text = parts.map((part) => (part && typeof part.text === 'string' ? part.text : '')).join('');
+    if (text) return text;
+  }
+  // Native generateContent candidates fallback.
+  const candidates = response.candidates;
+  if (Array.isArray(candidates) && candidates.length) {
+    const parts = candidates[0] && candidates[0].content && candidates[0].content.parts;
+    if (Array.isArray(parts)) {
+      return parts.map((part) => (part && typeof part.text === 'string' ? part.text : '')).join('');
+    }
+  }
+  return '';
+}
+
+/**
+ * Antigravity harness. Google Antigravity ships no npm package, so the Node
+ * adapter is backed by @google/genai's managed-agent `interactions` API (the
+ * peer of the Codex/Claude SDKs), falling back to `models.generateContent` when
+ * the PREVIEW interactions API is unavailable. Auth is a Gemini API key; the
+ * called model/agent id is config-driven (a stable Gemini model by default, or
+ * the Antigravity preview agent id when set). Mirrors executeCodex/executeClaude:
+ * provider + auth guards, working-dir assert, and the shared result contract.
+ */
+async function executeAntigravity(options, prompt) {
+  if (!options.llm || options.llm.provider !== 'antigravity') {
+    throw new AgentRuntimeError(
+      'Antigravity SDK requires the hosted Antigravity (Gemini) model slot.',
+      'runtime_provider_mismatch',
+      400
+    );
+  }
+  // Gemini API key precedence: the effective key resolved from the settings
+  // service (per the caller's org/project/user) wins; otherwise fall back to the
+  // descriptor's key, which carries the GEMINI_API_KEY env / store value.
+  const resolvedConfigKey = options.ctx && options.ctx.geminiApiKey;
+  const apiKey = String(
+    resolvedConfigKey || (options.llm && (options.llm.apiKey || options.llm.accessToken)) || ''
+  );
+  if (!apiKey) {
+    throw new AgentRuntimeError(
+      'Antigravity SDK authentication is unavailable. Add a Gemini API key in Settings and try again.',
+      'runtime_auth_unavailable',
+      401
+    );
+  }
+  const sdk = await loadSdk('antigravity-sdk', options.loaders);
+  const GoogleGenAI = sdk && (sdk.GoogleGenAI || (sdk.default && sdk.default.GoogleGenAI));
+  if (typeof GoogleGenAI !== 'function') {
+    throw new AgentRuntimeError('The installed @google/genai does not export GoogleGenAI.', 'runtime_unavailable', 503);
+  }
+  const cwd = assertWorkingDirectory(options.rootDir);
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    // Config-driven target: the Antigravity preview agent id when provided, else a
+    // stable Gemini model. The trusted workflow rules stay in the system prompt.
+    const target = String(options.llm.agentId || options.llm.model || '');
+    const systemPrompt = cleanSystemPrompt(options.systemPrompt, options.ctx);
+    const input = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+
+    let response;
+    let sessionId = null;
+    if (ai.interactions && typeof ai.interactions.create === 'function') {
+      response = await ai.interactions.create({
+        model: target,
+        input,
+        stream: false,
+        ...(cwd ? { workingDirectory: cwd } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
+      sessionId = (response && (response.id || response.interactionId || response.sessionId)) || null;
+    } else if (ai.models && typeof ai.models.generateContent === 'function') {
+      response = await ai.models.generateContent({ model: target, contents: input });
+      sessionId = (response && (response.responseId || response.response_id)) || null;
+    } else {
+      throw new AgentRuntimeError(
+        'The installed @google/genai exposes neither interactions.create nor models.generateContent.',
+        'runtime_unavailable',
+        503
+      );
+    }
+
+    const finalText = antigravityText(response);
+    return {
+      runtime: 'antigravity-sdk',
+      provider: 'antigravity',
+      model: options.llm.model,
+      workflowPattern: options.workflowPattern,
+      result: response,
+      messages: assistantMessagesFromText(finalText),
+      finalText,
+      usage: antigravityUsage(response && (response.usageMetadata || response.usage_metadata || response.usage)),
+      // The Gemini API reports token usage but no billed USD amount.
+      costUsd: null,
+      sessionId,
+    };
+  } catch (error) {
+    throw wrapExecutionError('antigravity-sdk', error);
+  }
+}
+
 const EXECUTORS = Object.freeze({
   deepagent: executeDeepAgent,
   'codex-sdk': executeCodex,
   'claude-agent-sdk': executeClaude,
+  'antigravity-sdk': executeAntigravity,
 });
 
 /**
@@ -714,14 +938,19 @@ async function executeAgentRuntime(options = {}) {
   const runtime = effectiveAgentRuntime(requestedRuntime, options.llm, {
     strict: true,
     workflow: options.workflow || '',
+    effectivePolicy: (options.ctx && options.ctx.effectivePolicy) || null,
   });
   const workflowPattern = normalizeWorkflowPattern(options.workflowPattern, { strict: true });
   const prompt = applyWorkflowPattern(options.prompt, workflowPattern);
+  const runtimeOptions = { ...options, runtime, workflowPattern };
+  const runOnce = (promptText) => EXECUTORS[runtime](runtimeOptions, promptText);
+  const reviewEnabled = Boolean(options.rubric || options.rubricMiddleware);
   const execute = async () => {
     try {
-      const value = await EXECUTORS[runtime]({ ...options, runtime, workflowPattern }, prompt);
-      annotateTrace(value, options.getCurrentRunTree || getCurrentRunTree);
-      return value;
+      const value = await runOnce(prompt);
+      const reviewed = reviewEnabled ? await applyRubricMiddleware(options, value, prompt, runOnce) : value;
+      annotateTrace(reviewed, options.getCurrentRunTree || getCurrentRunTree);
+      return reviewed;
     } catch (error) {
       const wrapped = wrapExecutionError(runtime, error);
       annotateTrace(wrapped, options.getCurrentRunTree || getCurrentRunTree);

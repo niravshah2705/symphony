@@ -1,0 +1,140 @@
+name: Release adlc CLI
+
+# Package + release the adlc CLI. Two ways to cut a release:
+#   • push a tag `adlc-v<semver>` (e.g. adlc-v1.2.0), or
+#   • run this workflow manually and pass the version.
+#
+# It tests, packs an npm tarball, builds a self-contained single-file bundle
+# (adlc.js — runs with just Node 18+, no `npm install`), writes SHA256SUMS, and
+# publishes a GitHub Release with all three attached.
+#
+# Security posture (see the CI/CD checklist): no pull_request trigger, so no PR
+# author ever runs with the release token; default permissions are read-only and
+# only the release job is granted contents:write; no third-party actions (the
+# GitHub CLI + npx esbuild are used instead), so there is nothing to SHA-pin; and
+# the manual version input is validated + passed via env, never interpolated into
+# a shell line.
+on:
+  push:
+    tags: ['adlc-v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver to release, e.g. 1.2.0 (creates tag adlc-v<version>)"
+        type: string
+        required: true
+
+concurrency:
+  group: adlc-release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Least privilege: read-only by default; the release job elevates locally.
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  # 1. Gate the release on the CLI's own unit tests.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Unit tests (adlc CLI)
+        run: node --test packages/cli/src/
+
+  # 2. Package the artifacts and publish the GitHub Release.
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release + upload assets (nothing else)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+
+      # Resolve the version from the tag (adlc-v1.2.0 → 1.2.0) or the manual
+      # input, validate it, and expose it + the tag to later steps.
+      - name: Resolve version
+        id: ver
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${REF_NAME#adlc-v}"
+          fi
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'; then
+            echo "::error::Invalid version '$VERSION' — expected semver like 1.2.0"
+            exit 1
+          fi
+          {
+            echo "version=$VERSION"
+            echo "tag=adlc-v$VERSION"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing adlc v$VERSION"
+
+      # Stamp the workspace package.json so the tarball is named for this version
+      # (build-time only; not committed).
+      - name: Set package version
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version -w @ai-fleet/cli
+
+      - name: Pack npm tarball
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          npm pack -w @ai-fleet/cli --pack-destination dist
+          ls -l dist
+
+      # Bundle the CLI + its only dependency (@ai-fleet/shared/config, which pulls
+      # in just config.js + authz.js) into one runnable file. esbuild preserves
+      # the entry file's `#!/usr/bin/env node` shebang, so no banner is needed.
+      # Pinned esbuild for reproducibility; matches the repo's `npx --yes <tool>@<ver>`.
+      - name: Build standalone bundle
+        run: |
+          set -euo pipefail
+          npx --yes esbuild@0.24.2 packages/cli/bin/adlc.js \
+            --bundle --platform=node --target=node18 --format=cjs \
+            --outfile=dist/adlc.js
+          chmod +x dist/adlc.js
+          node dist/adlc.js --help >/dev/null && echo "bundle smoke test: ok"
+
+      - name: Checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum adlc.js *.tgz > SHA256SUMS
+          cat SHA256SUMS
+
+      # `gh` uses GITHUB_TOKEN. Creating the tag via the token does NOT re-trigger
+      # the push-tag workflow (GitHub suppresses token-driven event recursion), so
+      # the manual path won't loop. `--target` is honored only when creating a new
+      # tag; for a pushed tag it is ignored.
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            --title "adlc CLI v$VERSION" \
+            --generate-notes \
+            --target "$GITHUB_SHA" \
+            dist/adlc.js dist/*.tgz dist/SHA256SUMS

@@ -6,8 +6,9 @@ const { repoParts } = require('./workspace');
 const { MODEL_ROLES } = require('./model-presets');
 
 // Roles that may be surfaced on a public pause reason (deployment slots plus the
-// purpose roles). Anything else is dropped so the UI never shows a stray value.
-const KNOWN_PAUSE_ROLES = new Set(['local', 'global', ...MODEL_ROLES]);
+// purpose roles). 'byom' is the canonical BYoM slot; 'local' stays as its legacy
+// alias. Anything else is dropped so the UI never shows a stray value.
+const KNOWN_PAUSE_ROLES = new Set(['byom', 'local', 'global', ...MODEL_ROLES]);
 
 const PROBE_TIMEOUT_MS = 5000;
 const MODEL_ERROR_CODES = new Set([
@@ -59,7 +60,9 @@ function publicAvailabilityMessage(resource, context = {}) {
           ? 'Codex'
           : context.provider === 'huggingface'
             ? 'Hugging Face'
-            : 'selected';
+            : context.provider === 'antigravity'
+              ? 'Antigravity'
+              : 'selected';
   return `The ${provider} model is unavailable. Check the model in Settings, then resume agent jobs.`;
 }
 
@@ -176,6 +179,22 @@ async function probeModelAvailability(llm, dependencies = {}) {
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) throw Object.assign(new Error('Hugging Face rejected the readiness check.'), { status: response.status });
+      return { available: true, provider: llm.provider, model: llm.model };
+    }
+
+    if (llm.provider === 'antigravity') {
+      if (typeof fetchImpl !== 'function' || !llm.baseUrl) throw new Error('Antigravity endpoint is not configured.');
+      if (!llm.apiKey) {
+        throw new AgentAvailabilityError('model', publicAvailabilityMessage('model', context), 401, 'model_not_configured');
+      }
+      // Validate the Gemini API key + connectivity against the OpenAI-compatible
+      // endpoint. Gemini's model listing does not always surface every routable
+      // model, so we only require the authenticated call to succeed.
+      const response = await fetchImpl(`${String(llm.baseUrl).replace(/\/$/, '')}/models`, {
+        headers: { Accept: 'application/json', Authorization: `Bearer ${llm.apiKey}` },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!response.ok) throw Object.assign(new Error('Antigravity (Gemini) rejected the readiness check.'), { status: response.status });
       return { available: true, provider: llm.provider, model: llm.model };
     }
 

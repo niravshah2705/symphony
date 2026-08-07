@@ -165,7 +165,7 @@ test('translation uses exact deterministic source fallback when local inference 
     {
       locale: 'gu-IN',
       texts: input,
-      settings: { localLlmProvider: 'ollama', ollamaModel: 'local-model' },
+      settings: { byomProvider: 'ollama', ollamaModel: 'local-model' },
     },
     { resolveLocal: async () => { throw new Error('offline'); }, cache: null }
   );
@@ -192,7 +192,7 @@ test('successful local translations are cached by model, locale, and input witho
   const request = {
     locale: 'gu-IN',
     texts: ['Agent', 'Settings'],
-    settings: { localLlmProvider: 'ollama', ollamaModel: 'gemma-local' },
+    settings: { byomProvider: 'ollama', ollamaModel: 'gemma-local' },
   };
   const first = await translateTexts(request, deps);
   const second = await translateTexts(request, deps);

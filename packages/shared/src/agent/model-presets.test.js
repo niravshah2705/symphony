@@ -24,11 +24,11 @@ const {
   applyLegacyHostedReasoningDefaults,
 } = require('../store');
 
-test('LLM preset catalog has valid, unique local and hosted defaults', () => {
+test('LLM preset catalog has valid, unique byom and hosted defaults', () => {
   const catalog = publicCatalog();
   assert.equal(validateCatalog(catalog), catalog);
   assert.equal(new Set(catalog.presets.map((preset) => preset.id)).size, catalog.presets.length);
-  assert.equal(getPreset(catalog.defaults.local).deployment, 'local');
+  assert.equal(getPreset(catalog.defaults.byom).deployment, 'byom');
   assert.equal(getPreset(catalog.defaults.hosted).deployment, 'hosted');
 });
 
@@ -63,10 +63,10 @@ test('hosted catalog exposes current models and shared reasoning labels', () => 
 
 test('fresh-store active settings come from the exact catalog defaults', () => {
   const catalog = publicCatalog();
-  const local = getPreset(catalog.defaults.local);
+  const local = getPreset(catalog.defaults.byom);
   const expectedLocal = settingsPatchForPreset(local);
-  assert.equal(DEFAULT_STORE.settings.localLlmPresetId, local.id);
-  assert.equal(DEFAULT_STORE.settings.localLlmProvider, local.provider);
+  assert.equal(DEFAULT_STORE.settings.byomPresetId, local.id);
+  assert.equal(DEFAULT_STORE.settings.byomProvider, local.provider);
   for (const [key, value] of Object.entries(expectedLocal)) {
     assert.deepEqual(DEFAULT_STORE.settings[key], value, key);
   }
@@ -111,15 +111,15 @@ test('legacy known hosted models receive their real reasoning default but explic
   assert.equal(explicit.codexReasoningAdapter, 'none');
 });
 
-test('presetForRole prevents a local preset from entering the hosted slot and vice versa', () => {
-  assert.equal(presetForRole('ollama-gpt-oss-20b', 'local').provider, 'ollama');
+test('presetForRole prevents a byom preset from entering the hosted slot and vice versa', () => {
+  assert.equal(presetForRole('ollama-gpt-oss-20b', 'byom').provider, 'ollama');
   assert.equal(presetForRole('ollama-gpt-oss-20b', 'global'), null);
   assert.equal(presetForRole('claude-opus-4-8', 'global').provider, 'claude');
-  assert.equal(presetForRole('claude-opus-4-8', 'local'), null);
-  assert.equal(presetForRole('does-not-exist', 'local'), null);
+  assert.equal(presetForRole('claude-opus-4-8', 'byom'), null);
+  assert.equal(presetForRole('does-not-exist', 'byom'), null);
 });
 
-test('presetForRole lets purpose roles select any deployment (local or hosted)', () => {
+test('presetForRole lets purpose roles select any deployment (byom or hosted)', () => {
   for (const role of MODEL_ROLES) {
     assert.equal(presetForRole('ollama-gpt-oss-20b', role).provider, 'ollama');
     assert.equal(presetForRole('claude-opus-4-8', role).provider, 'claude');

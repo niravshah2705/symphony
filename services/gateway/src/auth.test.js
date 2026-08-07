@@ -3,194 +3,250 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildAuthConfig } = require('@ai-fleet/shared/config');
-const {
-  createAuthenticationMiddleware,
-  decodeVerifiedPayload,
-  identityFromClaims,
-  publicAuthConfig,
-} = require('./auth');
+const { buildFirebaseAuthConfig } = require('@ai-fleet/shared/config');
+const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig, verifyFirebaseIdToken } = require('./auth');
 
-function istioConfig(overrides = {}) {
+function firebaseConfig(overrides = {}) {
   return {
-    mode: 'istio',
+    mode: 'firebase',
     enabled: true,
-    provider: 'auth0',
-    payloadHeader: 'x-ai-fleet-jwt-payload',
-    domain: 'tenant.example.auth0.com',
-    issuer: 'https://tenant.example.auth0.com/',
-    clientId: 'client-id',
-    audience: 'https://api.ai-fleet.example.com',
-    requiredPermission: 'fleet:access',
-    redirectUri: 'https://fleet.example.com/',
-    logoutReturnTo: 'https://fleet.example.com/',
-    scope: 'openid profile email',
-    organization: '',
+    provider: 'firebase',
+    projectId: 'demo-proj',
+    apiKey: 'AIzaTESTKEY',
+    authDomain: 'demo-proj.firebaseapp.com',
+    issuer: 'https://securetoken.google.com/demo-proj',
+    audience: 'demo-proj',
+    allowedEmails: [],
+    allowedDomain: '',
+    hostedDomain: '',
     ...overrides,
   };
 }
 
-function claims(overrides = {}) {
-  return {
-    iss: 'https://tenant.example.auth0.com/',
-    aud: ['unrelated', 'https://api.ai-fleet.example.com'],
-    sub: 'auth0|operator-123',
-    exp: Math.floor(Date.now() / 1000) + 3600,
-    name: 'Fleet Operator',
-    email: 'operator@example.com',
-    scope: 'openid profile fleet:read',
-    permissions: ['fleet:access', 'fleet:read', 'fleet:operate'],
-    unexpectedSecret: 'not-forwarded',
-    ...overrides,
+// A stub Firebase verifier: 'good' → a verified Google user; anything else rejects.
+function verifierReturning(decoded) {
+  return async (token) => {
+    if (token !== 'good') throw new Error('invalid token');
+    return decoded;
   };
 }
+const verifiedUser = { uid: 'uid-1', email: 'Operator@UiPath.com', email_verified: true, name: 'Fleet Operator', picture: 'https://pic' };
 
-function encoded(value) {
-  return Buffer.from(JSON.stringify(value)).toString('base64url');
+function req(headers = {}, method = 'GET') {
+  return { method, get: (name) => headers[String(name).toLowerCase()] || '' };
 }
-
 function responseRecorder() {
   return {
     statusCode: 200,
     headers: {},
     body: null,
     status(code) { this.statusCode = code; return this; },
-    set(name, value) { this.headers[name.toLowerCase()] = value; return this; },
+    set(name, value) { this.headers[String(name).toLowerCase()] = value; return this; },
     json(body) { this.body = body; return this; },
   };
 }
+const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-test('authentication configuration defaults to local disabled mode', () => {
-  assert.deepEqual(buildAuthConfig({}), {
-    mode: 'disabled',
-    enabled: false,
-    payloadHeader: 'x-ai-fleet-jwt-payload',
-  });
+/* ---------------------------- config builder ---------------------------- */
+
+test('buildFirebaseAuthConfig: disabled by default (local, open)', () => {
+  assert.deepEqual(buildFirebaseAuthConfig({}), { mode: 'disabled', enabled: false, provider: 'none' });
 });
 
-test('Istio authentication configuration is complete and public client settings are secret-free', () => {
-  const config = buildAuthConfig({
-    AUTH_MODE: 'istio',
-    AUTH0_DOMAIN: 'tenant.example.auth0.com',
-    AUTH0_CLIENT_ID: 'public-spa-client',
-    AUTH0_AUDIENCE: 'https://api.ai-fleet.example.com',
-    AUTH0_REQUIRED_PERMISSION: 'fleet:access',
-    AUTH0_REDIRECT_URI: 'https://fleet.example.com/',
-    AUTH0_ORGANIZATION: 'org_123',
-  });
-  assert.equal(config.issuer, 'https://tenant.example.auth0.com/');
-  assert.equal(config.payloadHeader, 'x-ai-fleet-jwt-payload');
-  assert.equal(config.requiredPermission, 'fleet:access');
-  assert.deepEqual(publicAuthConfig(config), {
-    mode: 'istio',
+test('buildFirebaseAuthConfig: firebase mode derives issuer/audience/authDomain', () => {
+  const config = buildFirebaseAuthConfig({ AUTH_MODE: 'firebase', FIREBASE_PROJECT_ID: 'p', FIREBASE_API_KEY: 'AIza' });
+  assert.equal(config.enabled, true);
+  assert.equal(config.issuer, 'https://securetoken.google.com/p');
+  assert.equal(config.audience, 'p');
+  assert.equal(config.authDomain, 'p.firebaseapp.com');
+});
+
+test('buildFirebaseAuthConfig: fails closed on missing project/api key and in production', () => {
+  assert.throws(() => buildFirebaseAuthConfig({ AUTH_MODE: 'firebase' }), /FIREBASE_PROJECT_ID/);
+  assert.throws(() => buildFirebaseAuthConfig({ AUTH_MODE: 'firebase', FIREBASE_PROJECT_ID: 'p' }), /FIREBASE_API_KEY/);
+  assert.throws(() => buildFirebaseAuthConfig({ NODE_ENV: 'production' }), /AUTH_MODE must be firebase/);
+  assert.throws(() => buildFirebaseAuthConfig({ AUTH_MODE: 'istio' }), /disabled or firebase/);
+});
+
+/* ---------------------------- publicAuthConfig -------------------------- */
+
+test('publicAuthConfig exposes only the public Firebase web config (no authz secrets)', () => {
+  const pub = publicAuthConfig(firebaseConfig({ allowedEmails: ['x@y.com'], allowedDomain: 'uipath.com' }));
+  assert.deepEqual(pub, {
+    mode: 'firebase',
     enabled: true,
-    provider: 'auth0',
-    auth0: {
-      domain: 'tenant.example.auth0.com',
-      clientId: 'public-spa-client',
-      audience: 'https://api.ai-fleet.example.com',
-      redirectUri: 'https://fleet.example.com/',
-      logoutReturnTo: 'https://fleet.example.com/',
-      scope: 'openid profile email',
-      organization: 'org_123',
-    },
+    provider: 'firebase',
+    firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo-proj.firebaseapp.com', projectId: 'demo-proj', hostedDomain: undefined, googleClientId: undefined },
+    publicPermissions: { workspace: 'read' },
   });
-  assert.doesNotMatch(JSON.stringify(publicAuthConfig(config)), /payloadHeader|issuer|secret/i);
+  const serialized = JSON.stringify(pub);
+  assert.doesNotMatch(serialized, /allowedEmails|allowedDomain|x@y\.com/);
 });
 
-test('Istio authentication configuration fails closed when required values are unsafe or missing', () => {
-  assert.throws(() => buildAuthConfig({ AUTH_MODE: 'production' }), /AUTH_MODE/);
-  assert.throws(() => buildAuthConfig({ NODE_ENV: 'production' }), /AUTH_MODE=istio/);
-  assert.throws(() => buildAuthConfig({ NODE_ENV: 'production', AUTH_MODE: 'disabled' }), /AUTH_MODE=istio/);
-  assert.throws(() => buildAuthConfig({ AUTH_MODE: 'istio' }), /AUTH0_DOMAIN/);
-  assert.throws(() => buildAuthConfig({
-    AUTH_MODE: 'istio',
-    AUTH0_DOMAIN: 'tenant.example.auth0.com',
-    AUTH0_CLIENT_ID: 'client',
-    AUTH0_AUDIENCE: 'api',
-    AUTH0_REDIRECT_URI: 'https://fleet.example.com/',
-  }), /AUTH0_REQUIRED_PERMISSION/);
-  assert.throws(() => buildAuthConfig({
-    AUTH_MODE: 'istio',
-    AUTH0_DOMAIN: 'https://tenant.example.auth0.com/',
-    AUTH0_CLIENT_ID: 'client',
-    AUTH0_AUDIENCE: 'api',
-    AUTH0_REDIRECT_URI: 'https://fleet.example.com/',
-  }), /hostname/);
-  assert.throws(() => buildAuthConfig({
-    AUTH_MODE: 'istio',
-    AUTH0_DOMAIN: 'tenant.example.auth0.com',
-    AUTH0_CLIENT_ID: 'client',
-    AUTH0_AUDIENCE: 'api',
-    AUTH0_REDIRECT_URI: 'http://fleet.example.com/',
-  }), /HTTPS/);
+test('publicAuthConfig surfaces the public One Tap client id when configured', () => {
+  const pub = publicAuthConfig(firebaseConfig({ googleClientId: '123.apps.googleusercontent.com' }));
+  assert.equal(pub.firebase.googleClientId, '123.apps.googleusercontent.com');
 });
 
-test('verified payload parsing returns only normalized identity claims', () => {
-  const decoded = decodeVerifiedPayload(encoded(claims()));
-  const identity = identityFromClaims(decoded, istioConfig());
-  assert.deepEqual(identity, {
-    sub: 'auth0|operator-123',
-    name: 'Fleet Operator',
-    email: 'operator@example.com',
-    organizationId: '',
-    permissions: ['fleet:access', 'fleet:read', 'fleet:operate'],
-    scopes: ['openid', 'profile', 'fleet:read'],
-  });
-  assert.equal(identity.unexpectedSecret, undefined);
+test('publicAuthConfig collapses to disabled when auth is off', () => {
+  assert.deepEqual(publicAuthConfig({ enabled: false }), { mode: 'disabled', enabled: false });
 });
 
-test('identity validation rejects malformed, expired, wrong-issuer, and wrong-audience claims', () => {
-  assert.throws(() => decodeVerifiedPayload('not-json'), /malformed/);
-  assert.throws(() => identityFromClaims(claims({ exp: 1 }), istioConfig()), /expired/);
-  assert.throws(() => identityFromClaims(claims({ iss: 'https://attacker.example/' }), istioConfig()), /issuer/);
-  assert.throws(() => identityFromClaims(claims({ aud: 'another-api' }), istioConfig()), /audience/);
-  assert.throws(() => identityFromClaims(
-    claims({ org_id: 'org_other' }),
-    istioConfig({ organization: 'org_expected' })
-  ), /organization/);
-  assert.throws(() => identityFromClaims(
-    claims({ permissions: [], scope: 'openid profile fleet:access' }),
-    istioConfig()
-  ), (error) => error.status === 403 && error.code === 'access_denied' && /permission/.test(error.message));
-  assert.throws(() => identityFromClaims(claims({ sub: '' }), istioConfig()), /subject/);
-});
+/* ---------------------------- middleware (attach, never deny) ----------- */
 
-test('gateway middleware permits local mode and requires the Istio verified payload in production', () => {
-  let localNext = 0;
-  createAuthenticationMiddleware({ mode: 'disabled', enabled: false })({}, responseRecorder(), () => { localNext += 1; });
-  assert.equal(localNext, 1);
-
-  const config = istioConfig();
-  const missingResponse = responseRecorder();
-  createAuthenticationMiddleware(config)({ method: 'GET', get: () => '' }, missingResponse, () => {});
-  assert.equal(missingResponse.statusCode, 401);
-  assert.equal(missingResponse.body.code, 'authentication_required');
-  assert.match(missingResponse.headers['www-authenticate'], /^Bearer/);
-
-  const request = {
-    method: 'GET',
-    get: (name) => name === config.payloadHeader ? encoded(claims()) : '',
-  };
-  let protectedNext = 0;
-  createAuthenticationMiddleware(config)(request, responseRecorder(), () => { protectedNext += 1; });
-  assert.equal(protectedNext, 1);
+test('disabled mode → open with full admin permissions', () => {
+  const request = req();
+  let nexted = 0;
+  createAuthenticationMiddleware({ mode: 'disabled', enabled: false })(request, responseRecorder(), () => { nexted += 1; });
+  assert.equal(nexted, 1);
   assert.equal(request.auth.authenticated, true);
-  assert.equal(request.auth.user.sub, 'auth0|operator-123');
-
-  const deniedResponse = responseRecorder();
-  createAuthenticationMiddleware(config)({
-    method: 'GET',
-    get: () => encoded(claims({ permissions: [], scope: 'openid profile' })),
-  }, deniedResponse, () => {});
-  assert.equal(deniedResponse.statusCode, 403);
-  assert.equal(deniedResponse.body.code, 'access_denied');
+  assert.equal(request.auth.role, 'admin');
+  assert.equal(request.auth.permissions.settings, 'write');
 });
 
-test('CORS preflight can reach Express without an access token', () => {
-  const request = { method: 'OPTIONS', get: () => '' };
-  let nextCalls = 0;
-  createAuthenticationMiddleware(istioConfig())(request, responseRecorder(), () => { nextCalls += 1; });
-  assert.equal(nextCalls, 1);
-  assert.equal(request.auth.authenticated, false);
+test('firebase: verified user → authenticated with resolved role + permissions', async () => {
+  const request = req({ authorization: 'Bearer good' });
+  let nexted = 0;
+  createAuthenticationMiddleware(firebaseConfig(), verifierReturning(verifiedUser))(request, responseRecorder(), () => { nexted += 1; });
+  await tick();
+  assert.equal(nexted, 1);
+  assert.equal(request.auth.authenticated, true);
+  assert.equal(request.auth.user.email, 'operator@uipath.com'); // lowercased
+  assert.equal(request.auth.role, 'viewer'); // no claim / not admin → default
+  assert.equal(request.auth.permissions.workspace, 'read');
+});
+
+test('firebase: bootstrap admin email → admin role', async () => {
+  const request = req({ authorization: 'Bearer good' });
+  createAuthenticationMiddleware(firebaseConfig({ adminEmails: ['operator@uipath.com'] }), verifierReturning(verifiedUser))(request, responseRecorder(), () => {});
+  await tick();
+  assert.equal(request.auth.role, 'admin');
+  assert.equal(request.auth.permissions.settings, 'write');
+});
+
+test('firebase: `role` custom claim is honored (operator)', async () => {
+  const request = req({ authorization: 'Bearer good' });
+  createAuthenticationMiddleware(firebaseConfig(), verifierReturning({ ...verifiedUser, role: 'operator' }))(request, responseRecorder(), () => {});
+  await tick();
+  assert.equal(request.auth.role, 'operator');
+  assert.equal(request.auth.permissions.planning, 'write');
+  assert.equal(request.auth.permissions.settings, 'read'); // operator can read config, not write
+});
+
+test('firebase: missing / invalid / unverified / out-of-domain token → PUBLIC (not denied)', async () => {
+  const cases = [
+    ['no bearer', {}, firebaseConfig(), verifierReturning(verifiedUser)],
+    ['invalid token', { authorization: 'Bearer bad' }, firebaseConfig(), verifierReturning(verifiedUser)],
+    ['unverified email', { authorization: 'Bearer good' }, firebaseConfig(), verifierReturning({ ...verifiedUser, email_verified: false })],
+    ['out of domain', { authorization: 'Bearer good' }, firebaseConfig({ allowedDomain: 'uipath.com' }), verifierReturning({ ...verifiedUser, email: 'op@gmail.com' })],
+  ];
+  for (const [label, headers, config, verify] of cases) {
+    const request = req(headers);
+    const res = responseRecorder();
+    let nexted = 0;
+    createAuthenticationMiddleware(config, verify)(request, res, () => { nexted += 1; });
+    await tick();
+    assert.equal(nexted, 1, `${label}: middleware must not deny`);
+    assert.equal(res.statusCode, 200, `${label}: no error response`);
+    assert.equal(request.auth.authenticated, false, label);
+    assert.equal(request.auth.role, 'public', label);
+    assert.equal(request.auth.permissions.workspace, 'read', label);
+    assert.equal(request.auth.permissions.planning, undefined, `${label}: public has no planning`);
+  }
+});
+
+test('verifyFirebaseIdToken returns a frozen identity carrying the resolved role', async () => {
+  const identity = await verifyFirebaseIdToken(req({ authorization: 'Bearer good' }), firebaseConfig(), verifierReturning(verifiedUser));
+  assert.equal(identity.email, 'operator@uipath.com');
+  assert.equal(identity.role, 'viewer');
+  assert.ok(Object.isFrozen(identity));
+});
+
+/* ---------------------------- requirePermission (the real gate) --------- */
+
+const authed = (role, permissions) => ({ authenticated: true, role, permissions });
+const publicAuth = { authenticated: false, role: 'public', permissions: { workspace: 'read' } };
+
+test('requirePermission: public may READ workspace (read-only Agent home)', () => {
+  const request = { method: 'GET', auth: publicAuth };
+  let nexted = 0;
+  requirePermission('workspace')(request, responseRecorder(), () => { nexted += 1; });
+  assert.equal(nexted, 1);
+});
+
+test('requirePermission: public WRITING workspace → 401 (prompt sign-in)', () => {
+  const request = { method: 'POST', auth: publicAuth };
+  const res = responseRecorder();
+  let nexted = 0;
+  requirePermission('workspace')(request, res, () => { nexted += 1; });
+  assert.equal(nexted, 0);
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.body.code, 'authentication_required');
+});
+
+test('requirePermission: public reaching planning/settings → 401', () => {
+  for (const domain of ['planning', 'insights', 'settings']) {
+    const res = responseRecorder();
+    requirePermission(domain)({ method: 'GET', auth: publicAuth }, res, () => {});
+    assert.equal(res.statusCode, 401, domain);
+  }
+});
+
+test('requirePermission: viewer reads planning but is 403 on writes', () => {
+  const perms = { workspace: 'read', planning: 'read', insights: 'read', settings: 'read' };
+  let reads = 0;
+  requirePermission('planning')({ method: 'GET', auth: authed('viewer', perms) }, responseRecorder(), () => { reads += 1; });
+  assert.equal(reads, 1);
+  const res = responseRecorder();
+  let writes = 0;
+  requirePermission('planning')({ method: 'POST', auth: authed('viewer', perms) }, res, () => { writes += 1; });
+  assert.equal(writes, 0);
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.code, 'access_denied');
+});
+
+test('requirePermission: forced write level (codex/claude/roles) blocks a read-only settings user', () => {
+  const res = responseRecorder();
+  let nexted = 0;
+  requirePermission('settings', { level: 'write' })({ method: 'GET', auth: authed('operator', { settings: 'read' }) }, res, () => { nexted += 1; });
+  assert.equal(nexted, 0);
+  assert.equal(res.statusCode, 403);
+});
+
+test('requirePermission: OPTIONS preflight is never gated', () => {
+  let nexted = 0;
+  requirePermission('settings', { level: 'write' })({ method: 'OPTIONS', auth: publicAuth }, responseRecorder(), () => { nexted += 1; });
+  assert.equal(nexted, 1);
+});
+
+/* ---------------------------- requireAuthenticated (/api/org/me) -------- */
+
+test('requireAuthenticated: any signed-in user passes regardless of role', () => {
+  // A default viewer has only org:read, but the personal workspace is theirs.
+  const request = { method: 'POST', auth: authed('viewer', { workspace: 'read', org: 'read' }) };
+  let nexted = 0;
+  requireAuthenticated()(request, responseRecorder(), () => { nexted += 1; });
+  assert.equal(nexted, 1);
+});
+
+test('requireAuthenticated: anonymous/public → 401', () => {
+  const res = responseRecorder();
+  let nexted = 0;
+  requireAuthenticated()({ method: 'POST', auth: publicAuth }, res, () => { nexted += 1; });
+  assert.equal(nexted, 0);
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.body.code, 'authentication_required');
+});
+
+test('requireAuthenticated: OPTIONS preflight is never gated', () => {
+  let nexted = 0;
+  requireAuthenticated()({ method: 'OPTIONS', auth: publicAuth }, responseRecorder(), () => { nexted += 1; });
+  assert.equal(nexted, 1);
+});
+
+test('buildFirebaseAuthConfig: One Tap client id from either env alias (public)', () => {
+  const a = buildFirebaseAuthConfig({ AUTH_MODE: 'firebase', FIREBASE_PROJECT_ID: 'p', FIREBASE_API_KEY: 'AIza', GOOGLE_ONE_TAP_CLIENT_ID: 'aaa.apps.googleusercontent.com' });
+  assert.equal(a.googleClientId, 'aaa.apps.googleusercontent.com');
+  const b = buildFirebaseAuthConfig({ AUTH_MODE: 'firebase', FIREBASE_PROJECT_ID: 'p', FIREBASE_API_KEY: 'AIza', FIREBASE_GOOGLE_CLIENT_ID: 'bbb.apps.googleusercontent.com' });
+  assert.equal(b.googleClientId, 'bbb.apps.googleusercontent.com');
 });

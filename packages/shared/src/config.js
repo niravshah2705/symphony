@@ -1,95 +1,91 @@
 'use strict';
 
 const path = require('path');
+const { ROLES } = require('./authz');
 
 const PORT = Number(process.env.PORT) || 4000;
 
-const AUTH_MODES = new Set(['disabled', 'istio']);
-const ISTIO_AUTH_PAYLOAD_HEADER = 'x-ai-fleet-jwt-payload';
+// Application login modes: 'disabled' (local single-user workflow — open) and
+// 'firebase' (Google SSO via Firebase Authentication).
+const AUTH_MODES = new Set(['disabled', 'firebase']);
 
-function requiredAuthValue(env, name) {
+function boundedEnv(env, name, max = 512) {
   const value = String(env[name] || '').trim();
-  if (!value) throw new Error(`${name} is required when AUTH_MODE=istio`);
-  if (value.length > 2048 || /[\r\n]/.test(value)) throw new Error(`${name} is invalid`);
+  if (value.length > max || /[\r\n]/.test(value)) throw new Error(`${name} is invalid`);
   return value;
 }
 
-function normalizeAuth0Domain(value) {
-  const domain = String(value || '').trim().toLowerCase();
-  if (!domain || domain.length > 253 || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(domain)) {
-    throw new Error('AUTH0_DOMAIN must be a hostname without a scheme or path');
-  }
-  return domain;
-}
-
-function normalizePublicAuthUrl(value, name) {
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch (_) {
-    throw new Error(`${name} must be an absolute URL`);
-  }
-  const localHttp = parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
-  if (parsed.protocol !== 'https:' && !localHttp) {
-    throw new Error(`${name} must use HTTPS (HTTP is allowed only for localhost)`);
-  }
-  if (parsed.username || parsed.password || parsed.hash) throw new Error(`${name} must not contain credentials or a fragment`);
-  return parsed.toString();
-}
-
 /**
- * Browser authentication is deliberately off for the local, single-user
- * workflow. In production, Istio validates Auth0 access tokens and emits the
- * verified JWT payload in a fixed internal header. The Node gateway validates
- * the copied claims again, but never accepts or verifies bearer credentials
- * itself; the gateway must therefore be reachable only through the mesh.
+ * Application login config.
+ *
+ * Off ('disabled') for the local single-user workflow. In the cloud ('firebase')
+ * the SPA signs in with Google through Firebase Authentication and the gateway
+ * verifies the Firebase ID token (services/gateway/src/auth.js): issuer
+ * `https://securetoken.google.com/<projectId>`, audience `<projectId>`.
+ *
+ * The Firebase WEB config (apiKey/authDomain/projectId) is PUBLIC by design — it
+ * is safe to expose to the browser via /api/auth/config and is NOT a secret.
+ * Authorization defaults to "any verified user"; set FIREBASE_ALLOWED_EMAILS
+ * (comma-separated) or FIREBASE_ALLOWED_DOMAIN to restrict who may sign in.
  */
-function buildAuthConfig(env = process.env) {
+function buildFirebaseAuthConfig(env = process.env) {
   const mode = String(env.AUTH_MODE || 'disabled').trim().toLowerCase();
-  if (!AUTH_MODES.has(mode)) throw new Error('AUTH_MODE must be either disabled or istio');
-  if (String(env.NODE_ENV || '').trim().toLowerCase() === 'production' && mode !== 'istio') {
-    throw new Error('AUTH_MODE=istio is required when NODE_ENV=production');
+  if (!AUTH_MODES.has(mode)) throw new Error('AUTH_MODE must be either disabled or firebase');
+  if (String(env.NODE_ENV || '').trim().toLowerCase() === 'production' && mode === 'disabled') {
+    throw new Error('AUTH_MODE must be firebase when NODE_ENV=production');
   }
 
   if (mode === 'disabled') {
-    return Object.freeze({
-      mode,
-      enabled: false,
-      payloadHeader: ISTIO_AUTH_PAYLOAD_HEADER,
-    });
+    return Object.freeze({ mode, enabled: false, provider: 'none' });
   }
 
-  const domain = normalizeAuth0Domain(requiredAuthValue(env, 'AUTH0_DOMAIN'));
-  const clientId = requiredAuthValue(env, 'AUTH0_CLIENT_ID');
-  const audience = requiredAuthValue(env, 'AUTH0_AUDIENCE');
-  const redirectUri = normalizePublicAuthUrl(requiredAuthValue(env, 'AUTH0_REDIRECT_URI'), 'AUTH0_REDIRECT_URI');
-  const requiredPermission = requiredAuthValue(env, 'AUTH0_REQUIRED_PERMISSION');
-  if (!/^[A-Za-z0-9:_-]{1,160}$/.test(requiredPermission)) {
-    throw new Error('AUTH0_REQUIRED_PERMISSION must be a single permission name');
+  const projectId = boundedEnv(env, 'FIREBASE_PROJECT_ID', 256)
+    || boundedEnv(env, 'GCP_PROJECT_ID', 256)
+    || boundedEnv(env, 'GOOGLE_CLOUD_PROJECT', 256);
+  if (!projectId) throw new Error('FIREBASE_PROJECT_ID (or GCP_PROJECT_ID) is required when AUTH_MODE=firebase');
+  const apiKey = boundedEnv(env, 'FIREBASE_API_KEY', 256);
+  if (!apiKey) throw new Error('FIREBASE_API_KEY is required when AUTH_MODE=firebase');
+  const authDomain = boundedEnv(env, 'FIREBASE_AUTH_DOMAIN', 256) || `${projectId}.firebaseapp.com`;
+  // Google OAuth Web client id for the One Tap prompt. PUBLIC (like apiKey) — no
+  // client secret is involved. Optional: when unset the SPA falls back to the
+  // Firebase Google popup. Accepts either alias for operator convenience.
+  const googleClientId = boundedEnv(env, 'GOOGLE_ONE_TAP_CLIENT_ID', 256)
+    || boundedEnv(env, 'FIREBASE_GOOGLE_CLIENT_ID', 256);
+  const allowedEmails = boundedEnv(env, 'FIREBASE_ALLOWED_EMAILS', 4096)
+    .split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const allowedDomain = boundedEnv(env, 'FIREBASE_ALLOWED_DOMAIN', 256).toLowerCase();
+  const hostedDomain = boundedEnv(env, 'FIREBASE_HD', 256);
+
+  // Authorization (RBAC): bootstrap admins by email (config-backed, not
+  // hardcoded — set via terraform/gh var) and the least-privilege role handed to
+  // any other signed-in user who has no `role` custom claim yet. Roles are
+  // otherwise assigned as a Firebase custom claim; see packages/shared/src/authz.js.
+  const adminEmails = boundedEnv(env, 'AUTH_ADMIN_EMAILS', 4096)
+    .split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const defaultRole = boundedEnv(env, 'AUTH_DEFAULT_ROLE', 32).toLowerCase() || 'viewer';
+  if (!ROLES.includes(defaultRole)) {
+    throw new Error(`AUTH_DEFAULT_ROLE must be one of: ${ROLES.join(', ')}`);
   }
-  const logoutReturnTo = normalizePublicAuthUrl(
-    String(env.AUTH0_LOGOUT_RETURN_TO || new URL(redirectUri).origin),
-    'AUTH0_LOGOUT_RETURN_TO'
-  );
 
   return Object.freeze({
     mode,
     enabled: true,
-    provider: 'auth0',
-    payloadHeader: ISTIO_AUTH_PAYLOAD_HEADER,
-    domain,
-    issuer: `https://${domain}/`,
-    clientId,
-    audience,
-    requiredPermission,
-    redirectUri,
-    logoutReturnTo,
-    scope: String(env.AUTH0_SCOPE || 'openid profile email').trim() || 'openid profile email',
-    organization: String(env.AUTH0_ORGANIZATION || '').trim(),
+    provider: 'firebase',
+    projectId,
+    apiKey,
+    authDomain,
+    googleClientId,
+    issuer: `https://securetoken.google.com/${projectId}`,
+    audience: projectId,
+    allowedEmails: Object.freeze(allowedEmails),
+    allowedDomain,
+    hostedDomain,
+    adminEmails: Object.freeze(adminEmails),
+    defaultRole,
   });
 }
 
-const AUTH = buildAuthConfig();
+const AUTH = buildFirebaseAuthConfig();
 
 /**
  * Codex (OpenAI) OAuth provider configuration.
@@ -262,6 +258,30 @@ const HUGGINGFACE = Object.freeze({
 });
 
 /**
+ * Antigravity (Google) provider — backed by the Gemini API.
+ *
+ * Google Antigravity ships no npm package (its managed-agent SDK is Python +
+ * a Go CLI), so the Node adapter is backed by @google/genai. Authentication is a
+ * Gemini API key (PREVIEW): the key is REQUIRED and lives server-side only,
+ * exposed solely through masked status fields, and read from GEMINI_API_KEY in
+ * the cloud (see store.js SECRET_ENV → antigravityApiKey).
+ *
+ * The called target is config-driven: `defaultModel` is a stable Gemini model
+ * by default; set ANTIGRAVITY_AGENT_ID to route the harness at the Antigravity
+ * preview managed-agent id instead. `openaiBaseUrl` is Gemini's
+ * OpenAI-compatible endpoint used by the deep-agent (createChatModel) path.
+ */
+const ANTIGRAVITY = Object.freeze({
+  defaultModel: process.env.ANTIGRAVITY_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  // Optional override to the Antigravity preview agent id (else the model above).
+  agentId: process.env.ANTIGRAVITY_AGENT_ID || '',
+  // OpenAI-compatible Gemini endpoint targeted by the ChatOpenAI-based deep-agent path.
+  openaiBaseUrl: process.env.GEMINI_OPENAI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai',
+  requestTimeoutMs: Number(process.env.ANTIGRAVITY_REQUEST_TIMEOUT_MS) || 10 * 60 * 1000,
+  maxRetries: Number.isFinite(Number(process.env.ANTIGRAVITY_MAX_RETRIES)) ? Number(process.env.ANTIGRAVITY_MAX_RETRIES) : 1,
+});
+
+/**
  * Code-writer deep agent + workflow config (an equivalent of OpenAI Symphony's
  * WORKFLOW.md frontmatter). The agent works a Linear ticket end-to-end in an
  * isolated git workspace, driving it through the ticket state machine while
@@ -389,12 +409,111 @@ const PUBLIC_DIR = process.env.AI_FLEET_PUBLIC_DIR || path.join(REPO_ROOT, 'publ
  */
 const PLANNER_PORT = Number(process.env.PLANNER_PORT) || 4010;
 const CODER_SERVICE_PORT = Number(process.env.CODER_SERVICE_PORT) || 4020;
+const ORG_SERVICE_PORT = Number(process.env.ORG_SERVICE_PORT) || 8000;
+// Settings-policy service (Python/FastAPI, Firestore). Local default 8100 so it
+// does not clash with the org service's 8000 when both run on one host.
+const SETTINGS_SERVICE_PORT = Number(process.env.SETTINGS_SERVICE_PORT) || 8100;
 const SERVICES = Object.freeze({
   gatewayPort: PORT,
   plannerPort: PLANNER_PORT,
   coderPort: CODER_SERVICE_PORT,
+  settingsPort: SETTINGS_SERVICE_PORT,
   plannerUrl: process.env.PLANNER_URL || `http://localhost:${PLANNER_PORT}`,
   coderUrl: process.env.CODER_URL || `http://localhost:${CODER_SERVICE_PORT}`,
+  // Organization service (Python/FastAPI, Firestore). The gateway proxies
+  // /api/org/* -> orgUrl/api/v1/* (see services/gateway/src/index.js). Empty
+  // when unset so the gateway can 501 the org routes rather than crash.
+  orgUrl: process.env.ORG_URL || (process.env.NODE_ENV === 'production' ? '' : `http://localhost:${ORG_SERVICE_PORT}`),
+  // Settings-policy service (Python/FastAPI, Firestore). The gateway proxies
+  // /api/settings-policy/* -> settingsUrl/api/v1/*. Empty when unset in
+  // production so the gateway can 501 the routes rather than crash.
+  settingsUrl: process.env.SETTINGS_URL || (process.env.NODE_ENV === 'production' ? '' : `http://localhost:${SETTINGS_SERVICE_PORT}`),
+});
+
+/**
+ * GCP / Cloud Run deployment knobs. All optional and INERT for local dev — the
+ * defaults keep the file store, in-process request delivery, and in-memory event
+ * bus, so `npm start` needs no Google Cloud. See docs/GCP_DEPLOY (deployment plan).
+ *   STORE_BACKEND   'file' (local JSON) | 'firestore' (Cloud Run shared state)
+ *   MESSAGING_MODE  'direct' (in-process HTTP) | 'pubsub' (Cloud Pub/Sub)
+ *   EVENTS_BACKEND  'memory' (EventEmitter) | 'firestore' (onSnapshot SSE relay)
+ */
+const STORE_BACKEND = String(process.env.STORE_BACKEND || 'file').trim().toLowerCase();
+const MESSAGING_MODE = String(process.env.MESSAGING_MODE || 'direct').trim().toLowerCase();
+const EVENTS_BACKEND = String(process.env.EVENTS_BACKEND || 'memory').trim().toLowerCase();
+// Cross-process event sink for local multi-process dev: worker services (planner
+// /coder) POST events here and the gateway ingests them into its in-process bus,
+// which its SSE endpoint reads. Unset on the gateway itself. Ignored when
+// EVENTS_BACKEND=firestore (the cloud path fans out via onSnapshot instead).
+const EVENTS_SINK_URL = String(process.env.EVENTS_SINK_URL || '').trim();
+const GCP = Object.freeze({
+  projectId: process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || '',
+  region: process.env.GCP_REGION || 'us-central1',
+  plannerTopic: process.env.PUBSUB_PLANNER_TOPIC || 'planner-requests',
+  coderTopic: process.env.PUBSUB_CODER_TOPIC || 'coder-requests',
+  // Cloud Run Job launched (by coder-control) to run one coder ticket to completion.
+  coderJobName: process.env.CODER_JOB_NAME || 'coder-worker',
+  // Pub/Sub push OIDC verification (enforced only when MESSAGING_MODE=pubsub):
+  //   pushAudience        expected `aud` of the push token (the push endpoint URL)
+  //   pushServiceAccount  the SA email Pub/Sub is configured to sign push tokens as
+  pushAudience: String(process.env.PUBSUB_PUSH_AUDIENCE || '').trim(),
+  pushServiceAccount: String(process.env.PUBSUB_PUSH_SA || '').trim(),
+  // Allowlist of browser origins permitted via CORS (the SPA's GCS/website
+  // origin). Empty in local dev (same-origin — no CORS needed).
+  spaOrigins: String(process.env.SPA_ORIGIN || '').split(',').map((value) => value.trim()).filter(Boolean),
+  // Absolute base URL of the gateway API, injected into the SPA at deploy time.
+  apiBaseUrl: String(process.env.API_BASE_URL || '').trim(),
+});
+
+/**
+ * Agent skills source resolution.
+ *
+ * Locally (SKILLS_ROOT unset) the framework installs its skills from the
+ * vendored directory packages/shared/src/agent/skills — the EXISTING behavior,
+ * unchanged. In the cloud a versioned skills bundle is published to a GCS bucket
+ * and mounted read-only on the planner/coder Cloud Run services via gcsfuse at
+ * SKILLS_ROOT (e.g. /skills), laid out as `<version>/<skill>/SKILL.md`. The
+ * runtime PINS a version with SKILLS_VERSION so multiple published versions can
+ * coexist and an older pinned version keeps working (backward-compat).
+ *
+ *   SKILLS_ROOT     gcsfuse mount root of the versioned bundles.
+ *                   Empty ('') = the vendored default (local/dev).
+ *   SKILLS_VERSION  the version subdirectory to pin under SKILLS_ROOT.
+ *                   Empty ('') = read the mount root directly.
+ *
+ * SKILLS_ROOT / SKILLS_VERSION are TRUSTED server-side config (env from
+ * Terraform), not request input. SKILLS_VERSION still forms a filesystem path,
+ * so it is validated to a single safe path segment (defense-in-depth).
+ */
+const SKILLS_VENDORED_SRC = path.join(__dirname, 'agent', 'skills');
+
+function assertSafeSkillsVersion(version) {
+  if (version === '') return version;
+  if (version === '.' || version === '..' || !/^[A-Za-z0-9._-]+$/.test(version)) {
+    throw new Error(`SKILLS_VERSION must be a single path segment (got: ${version})`);
+  }
+  return version;
+}
+
+/**
+ * Resolve the directory installSkills copies skills FROM, given an environment.
+ * Kept as a pure function (env injectable) so it honors runtime env and is unit
+ * testable. Returns the vendored default when SKILLS_ROOT is unset.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string} absolute path to the skills source directory
+ */
+function resolveSkillsSrc(env = process.env) {
+  const root = String(env.SKILLS_ROOT || '').trim();
+  if (!root) return SKILLS_VENDORED_SRC;
+  const version = assertSafeSkillsVersion(String(env.SKILLS_VERSION || '').trim());
+  return version ? path.join(root, version) : root;
+}
+
+const SKILLS = Object.freeze({
+  root: String(process.env.SKILLS_ROOT || '').trim(),
+  version: String(process.env.SKILLS_VERSION || '').trim(),
+  vendoredSrc: SKILLS_VENDORED_SRC,
+  src: resolveSkillsSrc(),
 });
 
 /** Server configuration and shared constants. */
@@ -406,13 +525,18 @@ const CONFIG = Object.freeze({
   LOG_FILE: path.join(DATA_DIR, 'app.log'),
   PUBLIC_DIR,
   SERVICES,
+  STORE_BACKEND,
+  MESSAGING_MODE,
+  EVENTS_BACKEND,
+  EVENTS_SINK_URL,
+  GCP,
   // Number of records to request from Linear in list queries.
   PAGE_SIZE: 100,
   ISSUE_PAGE_SIZE: 250,
   // Allowed scheduler cadences (minutes).
   INTERVAL_OPTIONS: [5, 10, 15],
   // Deep-agent LLM providers.
-  LLM_PROVIDERS: ['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface'],
+  LLM_PROVIDERS: ['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity'],
   // How each local provider constrains JSON output for the planner's structured
   // calls. Not every model/engine accepts the same format (e.g. some LM Studio
   // engines reject `json_object` and require `json_schema` or `text`), so the
@@ -445,10 +569,12 @@ const CONFIG = Object.freeze({
   LMSTUDIO,
   OMLX,
   HUGGINGFACE,
+  ANTIGRAVITY,
   CODER,
   MCP,
   TOOLS,
   AUTH,
+  SKILLS,
 });
 
-module.exports = { CONFIG, buildAuthConfig };
+module.exports = { CONFIG, buildFirebaseAuthConfig, resolveSkillsSrc };

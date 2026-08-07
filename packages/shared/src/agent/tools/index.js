@@ -38,4 +38,17 @@ const TOOL_FACTORIES = Object.freeze(
 /** All developer-tool names this folder contributes (stable, sorted). */
 const TOOL_NAMES = Object.freeze(Object.keys(TOOL_FACTORIES).sort());
 
-module.exports = { TOOL_FACTORIES, TOOL_NAMES, DOMAINS };
+/**
+ * Reverse map tool name → settings ``tools`` domain (docker/build/…). Used by
+ * the settings-service enforcement to drop a workflow's tools when their domain
+ * is excluded. Tools with no entry here (e.g. web_search, linear_graphql) are
+ * ungoverned by the tools policy and always kept.
+ */
+const TOOL_DOMAIN = Object.freeze(
+  Object.entries(DOMAINS).reduce((acc, [domain, factories]) => {
+    for (const name of Object.keys(factories)) acc[name] = domain;
+    return acc;
+  }, {})
+);
+
+module.exports = { TOOL_FACTORIES, TOOL_NAMES, DOMAINS, TOOL_DOMAIN };

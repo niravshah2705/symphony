@@ -1,0 +1,72 @@
+name: Checks
+
+# Runs the test suites as required checks on every PR and on pushes to main.
+# (Deploy/release live in their own workflows; this one only verifies.)
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-tests:
+    name: Node unit tests (shared + gateway)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: node --test packages/shared/src/ services/gateway/src/
+
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      # The e2e project uses the "chrome" channel (see playwright.config.js).
+      - run: npx playwright install --with-deps chrome
+      # CI=true makes Playwright start its own webServer (npm start) fresh.
+      - run: npm run test:e2e
+        env:
+          CI: 'true'
+
+  org-tests:
+    name: Org service (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/org
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e '.[test]'
+      # Emulator-free: the suite runs on the in-memory Firestore fake.
+      - run: pytest -q
+
+  settings-tests:
+    name: Settings service (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/settings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e '.[test]'
+      # Emulator-free: the suite runs on the in-memory Firestore fake.
+      - run: pytest -q

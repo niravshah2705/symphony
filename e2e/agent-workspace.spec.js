@@ -63,6 +63,7 @@ async function mockAgentWorkspace(page, {
   const issuePosts = [];
   const routedInputs = [];
   const memoryPosts = [];
+  const evaluateInputs = [];
   const prepareInputs = [];
   const enqueuePosts = [];
 
@@ -132,10 +133,39 @@ async function mockAgentWorkspace(page, {
     return json(route, { memory: { id: 'mem_9', ...payload } }, 201);
   });
   await page.route('**/api/agent/memory-search', (route) => json(route, { query: '', scope: 'workspace', results: memoryResults }));
+  // Requirement-readiness preflight (business-pipeline evaluateRequirement). A green
+  // signal has no gate and auto-advances into the full prepare pipeline (agent.js
+  // renderEvaluatePrompt → proceedToPipeline). Matches the planner's green shape.
+  await page.route('**/api/agent/business/evaluate', (route) => {
+    evaluateInputs.push((route.request().postDataJSON() || {}).input);
+    return json(route, {
+      signal: 'green',
+      gate: null,
+      evaluation: {
+        signal: 'green',
+        goal: 'A subscription business for independent design studios',
+        readiness: { clarity: 90, completeness: 86, measurability: 82, feasibility: 88 },
+        criteria: [
+          { title: 'Target customer is explicit', met: true },
+          { title: 'Outcome is measurable', met: true },
+        ],
+        warnings: [],
+      },
+    });
+  });
   await page.route('**/api/agent/business/prepare', (route) => {
     prepareInputs.push(route.request().postDataJSON().input);
     return json(route, { business: prepared });
   });
+  // Isolate every workspace test from the live gateway SSE feed: an event-free
+  // stream can't inject a pause or clobber rail state mid-assertion. Register the
+  // stream route BEFORE the token route so the more specific token match wins.
+  await page.route('**/api/agent/workspace-stream**', (route) => route.fulfill({
+    status: 200,
+    headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
+    body: ': ok\n\n',
+  }));
+  await page.route('**/api/agent/workspace-stream-token**', (route) => json(route, { token: 'test-workspace-token' }));
   // In-memory conversation store — one handler dispatches on method + path tail.
   const conversationStore = [];
   let convSeq = 0;
@@ -185,7 +215,7 @@ async function mockAgentWorkspace(page, {
     });
   });
 
-  return { issuePosts, routedInputs, memoryPosts, prepareInputs, enqueuePosts, conversationStore };
+  return { issuePosts, routedInputs, memoryPosts, evaluateInputs, prepareInputs, enqueuePosts, conversationStore };
 }
 
 async function openAgent(page) {
@@ -223,17 +253,30 @@ test('greetings and unsafe scam requests stay on non-mutating routes', async ({ 
   ]);
 });
 
-test('business requests prepare on demand, then render the staged decision rail and metric tones', async ({ page }) => {
-  const { prepareInputs } = await mockAgentWorkspace(page);
+// The on-demand business pipeline is now gated by a requirement-readiness check:
+// the rail first shows the "Evaluate the requirement" CTA (data-panel-section
+// "evaluate", button "Check requirement"), NOT the old one-click "Prepare business
+// plan" button. A green readiness signal auto-advances into the full staged
+// pipeline (agent.js renderEvaluatePrompt → proceedToPipeline). This test was
+// quarantined against that stale prepare-panel contract; it now drives the current
+// evaluate→prepare flow. The live workspace SSE is stubbed event-free in
+// mockAgentWorkspace so it cannot clobber the rail while the pipeline renders.
+test('business requests evaluate first, then prepare on demand, rendering the staged decision rail and metric tones', async ({ page }) => {
+  const { evaluateInputs, prepareInputs } = await mockAgentWorkspace(page);
   await openAgent(page);
 
   await routeRequest(page, 'Assess a subscription business for independent design studios');
   await expect(page.locator('.intent-message[data-agent-intent="business"]')).toBeVisible();
 
   const rail = page.locator('#agent-details-panel[data-agent-intent="business"]');
-  // The heavy pipeline is on demand: the rail first shows the Prepare CTA.
-  await expect(rail.locator('[data-panel-section="prepare"]')).toBeVisible();
-  await rail.getByRole('button', { name: 'Prepare business plan' }).click();
+  // On demand: the rail first asks to evaluate the requirement's readiness.
+  await expect(rail.locator('[data-panel-section="evaluate"]')).toBeVisible();
+  await rail.getByRole('button', { name: 'Check requirement' }).click();
+
+  // A green signal auto-advances into the pipeline; waiting for the first staged
+  // section guarantees both the evaluate and prepare calls have completed.
+  await expect(rail.locator('[data-panel-section="fraud-gate"]')).toBeVisible();
+  expect(evaluateInputs).toHaveLength(1);
   expect(prepareInputs).toHaveLength(1);
 
   const sections = [

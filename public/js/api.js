@@ -6,6 +6,17 @@ export function setAccessTokenProvider(provider) {
   accessTokenProvider = typeof provider === 'function' ? provider : null;
 }
 
+/**
+ * Absolute base URL of the gateway API. Empty = same-origin (local dev, where
+ * the gateway also serves the SPA). When the SPA is hosted on GCS, deploy-time
+ * config.js sets window.__API_BASE__ to the gateway's Cloud Run URL so the
+ * cross-origin calls (and SSE) target the API.
+ */
+export function getApiBase() {
+  const base = (typeof window !== 'undefined' && window.__API_BASE__) ? String(window.__API_BASE__) : '';
+  return base.replace(/\/+$/, '');
+}
+
 function notifyAuthenticationRequired(error) {
   window.dispatchEvent(new CustomEvent('ai-fleet:auth-required', {
     detail: { message: error?.message || 'Authentication required' },
@@ -28,7 +39,7 @@ async function request(path, options = {}) {
     }
   }
 
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${getApiBase()}/api${path}`, {
     ...options,
     headers,
   });
@@ -39,9 +50,13 @@ async function request(path, options = {}) {
     /* empty body */
   }
   if (!res.ok) {
-    const error = new Error(data.error || `Request failed (${res.status})`);
+    // The gateway returns { error: "msg", code }; the org service returns a
+    // nested envelope { error: { code, message } }. Support both shapes.
+    const nested = data.error && typeof data.error === 'object' ? data.error : null;
+    const message = nested ? nested.message : data.error;
+    const error = new Error(message || `Request failed (${res.status})`);
     error.status = res.status;
-    error.code = data.code || '';
+    error.code = data.code || (nested && nested.code) || '';
     // Connected tools can also return 401. Lock the whole workspace only when
     // the gateway identified an application-auth failure (or while confirming
     // the current application identity), not for an unrelated provider key.
@@ -117,6 +132,9 @@ export const api = {
     // Hugging Face has no live model-discovery endpoint (the router hosts many
     // thousands); the catalog presets and the manual model field cover selection.
     if (provider === 'huggingface') return Promise.resolve({ models: [], reachable: true, source: 'catalog' });
+    // Antigravity (Gemini) has no live model-discovery endpoint here; the catalog
+    // presets and the manual model field cover selection.
+    if (provider === 'antigravity') return Promise.resolve({ models: [], reachable: true, source: 'catalog' });
     return Promise.reject(new Error(`Unsupported LLM provider: ${provider}`));
   },
 
@@ -155,6 +173,55 @@ export const api = {
   getCoderStatus: () => request('/coder'),
   runAgentNow: () => request('/agent/run-now', { method: 'POST' }),
   enqueueProject: (payload) => request('/agent/enqueue', { method: 'POST', body: JSON.stringify(payload) }),
+  // Short-lived token authorizing an EventSource (which cannot send a bearer header).
+  getStreamToken: (conversationId) =>
+    request(`/agent/stream-token?conversationId=${encodeURIComponent(conversationId)}`),
+  // Open an SSE stream of a conversation's intermittent agent responses. Returns
+  // the EventSource so callers can close() it; onEvent receives each parsed event.
+  openAgentStream: async (conversationId, onEvent, onError) => {
+    let token = '';
+    try {
+      ({ token } = await api.getStreamToken(conversationId));
+    } catch (_) {
+      /* auth disabled locally → the stream token is optional */
+    }
+    const url = `${getApiBase()}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token || '')}`;
+    const source = new EventSource(url);
+    source.onmessage = (event) => {
+      try {
+        onEvent(JSON.parse(event.data));
+      } catch (_) {
+        /* comments/keepalives are not JSON */
+      }
+    };
+    if (typeof onError === 'function') source.onerror = onError;
+    return source;
+  },
+  // Short-lived token authorizing the GLOBAL workspace EventSource. workspace:read,
+  // so the public read-only home can subscribe.
+  getWorkspaceStreamToken: () => request('/agent/workspace-stream-token'),
+  // Open the workspace SSE stream — typed status/jobs/coder/gate snapshots that
+  // replace the old 5s polling loops. Returns the EventSource so callers can
+  // close() it; onEvent receives each parsed event.
+  openWorkspaceStream: async (onEvent, onError) => {
+    let token = '';
+    try {
+      ({ token } = await api.getWorkspaceStreamToken());
+    } catch (_) {
+      /* auth disabled locally → the stream token is optional */
+    }
+    const url = `${getApiBase()}/api/agent/workspace-stream?t=${encodeURIComponent(token || '')}`;
+    const source = new EventSource(url);
+    source.onmessage = (event) => {
+      try {
+        onEvent(JSON.parse(event.data));
+      } catch (_) {
+        /* comments/keepalives are not JSON */
+      }
+    };
+    if (typeof onError === 'function') source.onerror = onError;
+    return source;
+  },
   routeAgentMessage: (payload) =>
     request('/agent/message', { method: 'POST', body: JSON.stringify(payload) }),
   searchAgentKnowledge: (payload) =>
@@ -213,4 +280,72 @@ export const api = {
   getAnalytics: () => request('/observability/analytics'),
   getTroubleshooting: () => request('/observability/troubleshooting'),
   getWorkflowPatterns: () => request('/observability/workflows'),
+
+  // Organization service (services/org via /api/org/*). The `me` surface is
+  // available to any signed-in user (personal projects + create-org); the org
+  // tenant surface needs an org role and the org service enforces per-org RBAC.
+  org: {
+    // Personal workspace (org-less friendly) — /api/org/me/*
+    getMe: () => request('/org/me'),
+    createOrganization: (payload) =>
+      request('/org/me/organization', { method: 'POST', body: JSON.stringify(payload) }),
+    listPersonalProjects: () => request('/org/me/projects'),
+    createPersonalProject: (payload) =>
+      request('/org/me/projects', { method: 'POST', body: JSON.stringify(payload) }),
+    getPersonalProject: (id) => request(`/org/me/projects/${id}`),
+    updatePersonalProject: (id, payload) =>
+      request(`/org/me/projects/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deletePersonalProject: (id) => request(`/org/me/projects/${id}`, { method: 'DELETE' }),
+
+    // Organization tenant surface — /api/org/*
+    getCurrentOrganization: () => request('/org/organizations/current'),
+    listOrgProjects: () => request('/org/projects'),
+    createOrgProject: (payload) =>
+      request('/org/projects', { method: 'POST', body: JSON.stringify(payload) }),
+    listOrgUsers: () => request('/org/users'),
+    createOrgUser: (payload) =>
+      request('/org/users', { method: 'POST', body: JSON.stringify(payload) }),
+    listProjectMembers: (projectId) => request(`/org/projects/${projectId}/members`),
+    addProjectMember: (projectId, payload) =>
+      request(`/org/projects/${projectId}/members`, { method: 'POST', body: JSON.stringify(payload) }),
+    removeProjectMember: (projectId, userId) =>
+      request(`/org/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
+  },
+
+  // Settings-policy service (services/settings via /api/settings-policy/*). Stores
+  // the org→project→user include/exclude cascade for harness/tools/skills/plugins.
+  // The `me` surface is auth-only; org/project surfaces need an org role and the
+  // service enforces per-org / per-project RBAC (cross-org → 404).
+  settingsPolicy: {
+    // Item universe (choices) + the caller's resolved effective policy.
+    getUniverse: () => request('/settings-policy/settings/universe'),
+    getEffective: (projectId) =>
+      request(`/settings-policy/settings/effective${projectId ? `?project_id=${projectId}` : ''}`),
+
+    // Org-scope policy (org admin).
+    getOrgPolicy: () => request('/settings-policy/settings/org'),
+    setOrgPolicy: (payload) =>
+      request('/settings-policy/settings/org', { method: 'PUT', body: JSON.stringify(payload) }),
+
+    // Project-scope policy (project admin, org-scoped).
+    getProjectPolicy: (projectId) => request(`/settings-policy/settings/project/${projectId}`),
+    setProjectPolicy: (projectId, payload) =>
+      request(`/settings-policy/settings/project/${projectId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+    // User-scope policy (any signed-in user) — /api/settings-policy/me/*
+    getMyPolicy: () => request('/settings-policy/me/settings'),
+    setMyPolicy: (payload) =>
+      request('/settings-policy/me/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+
+    // Config VALUES (provider API keys, e.g. geminiApiKey). Write-only: the PUT
+    // takes plaintext and reads back only `values.<key>.set` (never the secret).
+    // Sent alone (no `domains`), so the scope's include/exclude policy is
+    // preserved. An empty string clears a stored key.
+    setOrgConfig: (values) =>
+      request('/settings-policy/settings/org', { method: 'PUT', body: JSON.stringify({ values }) }),
+    setProjectConfig: (projectId, values) =>
+      request(`/settings-policy/settings/project/${projectId}`, { method: 'PUT', body: JSON.stringify({ values }) }),
+    setMyConfig: (values) =>
+      request('/settings-policy/me/settings', { method: 'PUT', body: JSON.stringify({ values }) }),
+  },
 };

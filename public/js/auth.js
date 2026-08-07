@@ -1,14 +1,37 @@
-import { createAuth0Client } from '/vendor/auth0-spa-js.js';
-import { api, setAccessTokenProvider } from './api.js';
+import { initializeApp } from '/vendor/firebase/firebase-app.js';
+import {
+  getAuth,
+  setPersistence,
+  browserLocalPersistence,
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  OAuthProvider,
+  signInWithCredential,
+  signInWithPopup,
+  signOut as firebaseSignOut,
+} from '/vendor/firebase/firebase-auth.js';
+import { api, setAccessTokenProvider, getApiBase } from './api.js';
 
 const AUTH_SESSION_TIMEOUT_MS = 15_000;
+// Google Identity Services (One Tap). Loaded on demand only when a public
+// client id is configured; the app works without it (popup fallback).
+const GIS_SRC = 'https://accounts.google.com/gsi/client';
+let gisPromise = null;
 
-let client = null;
+let auth = null;
+let currentUser = null;
 let configuration = null;
+// Full local access when auth is disabled; read-only Agent workspace for public.
+// Mirrors the server admin permission set (packages/shared/src/authz.js).
+const ADMIN_PERMISSIONS = Object.freeze({ workspace: 'write', planning: 'write', insights: 'write', settings: 'write', org: 'write' });
+const FALLBACK_PUBLIC_PERMISSIONS = Object.freeze({ workspace: 'read' });
+
 let authState = Object.freeze({
   mode: 'loading',
   enabled: false,
   authenticated: false,
+  role: 'public',
+  permissions: {},
   user: null,
   error: '',
 });
@@ -32,22 +55,12 @@ async function withinSessionTimeout(operation) {
   }
 }
 
-function authorizationParams() {
-  const params = {
-    audience: configuration.auth0.audience,
-    scope: configuration.auth0.scope,
-    redirect_uri: configuration.auth0.redirectUri,
-  };
-  if (configuration.auth0.organization) params.organization = configuration.auth0.organization;
-  return params;
-}
-
 async function loadConfiguration() {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 8_000);
   let response;
   try {
-    response = await fetch('/api/auth/config', {
+    response = await fetch(`${getApiBase()}/api/auth/config`, {
       headers: { Accept: 'application/json' },
       cache: 'no-store',
       signal: controller.signal,
@@ -66,33 +79,22 @@ async function loadConfiguration() {
   }
   if (!response.ok) throw new Error(payload.error || 'Authentication configuration could not be loaded.');
   if (!payload.enabled || payload.mode === 'disabled') return { mode: 'disabled', enabled: false };
-  const auth0 = payload.auth0 || {};
-  if (payload.mode !== 'istio' || !auth0.domain || !auth0.clientId || !auth0.audience || !auth0.redirectUri) {
+  const firebase = payload.firebase || {};
+  if (payload.mode !== 'firebase' || !firebase.apiKey || !firebase.projectId || !firebase.authDomain) {
     throw new Error('Authentication configuration is incomplete.');
   }
   return payload;
 }
 
-function cleanCallbackUrl(returnTo = '') {
-  if (typeof returnTo === 'string' && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
-    window.history.replaceState({}, document.title, returnTo);
-    return;
-  }
-  const url = new URL(window.location.href);
-  for (const name of ['code', 'state', 'error', 'error_description']) url.searchParams.delete(name);
-  window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
-}
-
-async function handleAuth0Callback() {
-  const query = new URLSearchParams(window.location.search);
-  if (query.has('error') && query.has('state')) {
-    const description = String(query.get('error_description') || query.get('error') || '').slice(0, 300);
-    cleanCallbackUrl();
-    throw new Error(description || 'Auth0 sign-in was not completed.');
-  }
-  if (!query.has('code') || !query.has('state')) return;
-  const result = await client.handleRedirectCallback();
-  cleanCallbackUrl(result?.appState?.returnTo);
+// Resolve with the first known auth state (signed-in user or null).
+function firstAuthUser(authInstance) {
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(
+      authInstance,
+      (user) => { unsubscribe(); resolve(user || null); },
+      () => { unsubscribe(); resolve(null); }
+    );
+  });
 }
 
 function mergeDisplayProfile(serverUser, browserUser) {
@@ -100,62 +102,67 @@ function mergeDisplayProfile(serverUser, browserUser) {
   const display = browserUser || {};
   return Object.freeze({
     ...authoritative,
-    name: authoritative.name || display.name || display.nickname || '',
+    name: authoritative.name || display.name || '',
     email: authoritative.email || display.email || '',
+    picture: authoritative.picture || display.picture || '',
   });
+}
+
+// Confirm the signed-in Google user is accepted by the gateway (verified email +
+// any allowlist/domain gate). Returns the server identity or throws.
+async function confirmIdentity() {
+  currentUser = auth.currentUser;
+  setAccessTokenProvider(() => currentUser.getIdToken());
+  const identity = await api.getCurrentUser();
+  if (!identity?.authenticated || !identity.user?.sub) {
+    throw new Error('This account is not allowed.');
+  }
+  return identity;
 }
 
 export async function initializeAuthentication() {
   configuration = await loadConfiguration();
   if (!configuration.enabled) {
-    client = null;
+    // Auth disabled (local dev): fully open, single admin operator.
+    auth = null;
     setAccessTokenProvider(null);
-    return setState({
-      mode: 'disabled',
-      enabled: false,
-      authenticated: true,
-      user: null,
-      error: '',
-    });
+    return setState({ mode: 'disabled', enabled: false, authenticated: true, role: 'admin', permissions: ADMIN_PERMISSIONS, user: null, error: '' });
   }
 
-  client = await withinSessionTimeout(createAuth0Client({
-    domain: configuration.auth0.domain,
-    clientId: configuration.auth0.clientId,
-    cacheLocation: 'memory',
-    authorizeTimeoutInSeconds: 12,
-    httpTimeoutInSeconds: 10,
-    authorizationParams: authorizationParams(),
-  }));
-  await withinSessionTimeout(handleAuth0Callback());
+  const publicPermissions = configuration.publicPermissions || FALLBACK_PUBLIC_PERMISSIONS;
 
-  const authenticated = await withinSessionTimeout(client.isAuthenticated());
-  if (!authenticated) {
-    setAccessTokenProvider(null);
-    return setState({
-      mode: configuration.mode,
-      enabled: true,
-      authenticated: false,
-      user: null,
-      error: '',
-    });
+  const app = initializeApp(configuration.firebase);
+  auth = getAuth(app);
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (_) {
+    // Persistence is best-effort; sign-in still works in-memory for this tab.
   }
 
-  setAccessTokenProvider(() => client.getTokenSilently({ authorizationParams: authorizationParams() }));
-  const [identity, browserUser] = await withinSessionTimeout(Promise.all([
-    api.getCurrentUser(),
-    client.getUser(),
-  ]));
-  if (!identity?.authenticated || !identity.user?.sub) {
+  const user = await withinSessionTimeout(firstAuthUser(auth));
+  if (!user) {
+    // No signed-in user → public visitor (read-only Agent workspace).
     setAccessTokenProvider(null);
-    throw new Error('The authenticated identity was not accepted by the application.');
+    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: '' });
+  }
+
+  let identity;
+  try {
+    identity = await withinSessionTimeout(confirmIdentity());
+  } catch (error) {
+    // Signed in but rejected (unverified / not allowed) → sign out, stay public.
+    setAccessTokenProvider(null);
+    try { await firebaseSignOut(auth); } catch (_) { /* ignore */ }
+    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: error?.message || 'This account is not allowed.' });
   }
 
   return setState({
-    mode: configuration.mode,
+    mode: 'firebase',
     enabled: true,
     authenticated: true,
-    user: mergeDisplayProfile(identity.user, browserUser),
+    role: identity.role || 'viewer',
+    permissions: identity.permissions || {},
+    user: mergeDisplayProfile(identity.user, { name: user.displayName, email: user.email, picture: user.photoURL }),
     error: '',
   });
 }
@@ -166,26 +173,119 @@ export function getAuthenticationState() {
 
 export function expireAuthentication(message = '') {
   setAccessTokenProvider(null);
-  return setState({
-    authenticated: false,
-    user: null,
-    error: message,
-  });
+  // Drop back to the public surface rather than a locked state.
+  const permissions = (configuration && configuration.publicPermissions) || FALLBACK_PUBLIC_PERMISSIONS;
+  return setState({ authenticated: false, role: 'public', permissions, user: null, error: message });
 }
 
 export async function signIn() {
-  if (!client || !configuration?.enabled) throw new Error('Auth0 is not configured.');
-  const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  await client.loginWithRedirect({
-    appState: { returnTo },
-    authorizationParams: authorizationParams(),
-  });
+  if (!auth || !configuration?.enabled) throw new Error('Sign-in is not configured.');
+  const provider = new GoogleAuthProvider();
+  const hostedDomain = configuration.firebase.hostedDomain;
+  if (hostedDomain) provider.setCustomParameters({ hd: hostedDomain });
+
+  await signInWithPopup(auth, provider);
+  // Authorize BEFORE entering so a rejected (unverified / out-of-domain) account
+  // shows the error instead of a reload bounce.
+  try {
+    await confirmIdentity();
+  } catch (error) {
+    setAccessTokenProvider(null);
+    try { await firebaseSignOut(auth); } catch (_) { /* ignore */ }
+    throw error;
+  }
+  // The popup resolved in-page (unlike Auth0's redirect); reload so the boot
+  // sequence re-runs with the now-persisted Firebase session.
+  window.location.reload();
 }
 
 export async function signOut() {
   setAccessTokenProvider(null);
-  if (!client || !configuration?.enabled) return;
-  await client.logout({
-    logoutParams: { returnTo: configuration.auth0.logoutReturnTo },
+  if (auth) {
+    try { await firebaseSignOut(auth); } catch (_) { /* ignore */ }
+  }
+  window.location.reload();
+}
+
+// --- Google One Tap -------------------------------------------------------
+
+function loadGisScript() {
+  if (window.google?.accounts?.id) return Promise.resolve(window.google);
+  if (gisPromise) return gisPromise;
+  gisPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = GIS_SRC;
+    script.async = true;
+    script.defer = true;
+    script.addEventListener('load', () => resolve(window.google));
+    script.addEventListener('error', () => reject(new Error('Google sign-in could not load.')));
+    document.head.appendChild(script);
   });
+  return gisPromise;
+}
+
+function toHex(buffer) {
+  return Array.from(new Uint8Array(buffer), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function randomNonce() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return toHex(bytes);
+}
+
+async function sha256Hex(text) {
+  return toHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
+}
+
+/**
+ * Show the Google One Tap prompt (the compact "Sign in with Google" card). The
+ * returned Google ID token is exchanged for a Firebase session via
+ * signInWithCredential; a per-prompt nonce (hashed for Google, raw for Firebase)
+ * binds the credential against replay (oauth-oidc). The gateway still verifies
+ * the resulting Firebase ID token on every request — One Tap only changes how
+ * the browser acquires it. No-op (popup remains the fallback) when no public
+ * client id is configured, the GIS script is blocked, or a user is signed in.
+ */
+export async function promptOneTap() {
+  const clientId = configuration?.firebase?.googleClientId;
+  if (!auth || !configuration?.enabled || !clientId || auth.currentUser) return false;
+
+  let google;
+  try {
+    google = await loadGisScript();
+  } catch (_) {
+    return false;
+  }
+  if (!google?.accounts?.id) return false;
+
+  const rawNonce = randomNonce();
+  const hashedNonce = await sha256Hex(rawNonce);
+  try {
+    google.accounts.id.initialize({
+      client_id: clientId,
+      nonce: hashedNonce,
+      auto_select: false,
+      cancel_on_tap_outside: false,
+      use_fedcm_for_prompt: true,
+      callback: async (response) => {
+        try {
+          const credential = new OAuthProvider('google.com').credential({
+            idToken: response.credential,
+            rawNonce,
+          });
+          await signInWithCredential(auth, credential);
+          await confirmIdentity(); // reject unverified / out-of-domain before entering
+          window.location.reload();
+        } catch (_) {
+          setAccessTokenProvider(null);
+          try { await firebaseSignOut(auth); } catch (_) { /* ignore */ }
+        }
+      },
+    });
+    google.accounts.id.prompt();
+    return true;
+  } catch (_) {
+    return false;
+  }
 }

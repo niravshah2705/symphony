@@ -34,6 +34,21 @@ const SERVICES = [
 const children = [];
 let shuttingDown = false;
 
+/**
+ * Per-service env. In local (non-firestore) mode the worker services POST their
+ * conversation events to the gateway's collector so SSE works across the three
+ * processes; the gateway reads its own in-process bus (no self-sink).
+ */
+function envFor(name) {
+  const env = { ...process.env };
+  if (String(env.EVENTS_BACKEND || 'memory').toLowerCase() === 'firestore') return env;
+  const gatewayPort = Number(env.PORT) || 4000;
+  const sink = `http://localhost:${gatewayPort}/internal/events`;
+  if (name === 'gateway') delete env.EVENTS_SINK_URL;
+  else env.EVENTS_SINK_URL = env.EVENTS_SINK_URL || sink;
+  return env;
+}
+
 function prefixStream(stream, name, sink) {
   let buffer = '';
   stream.on('data', (chunk) => {
@@ -51,7 +66,7 @@ function startService({ name, entry }) {
   const args = watch ? ['--watch', entry] : [entry];
   const child = spawn(process.execPath, args, {
     cwd: REPO_ROOT,
-    env: process.env,
+    env: envFor(name),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   prefixStream(child.stdout, name, process.stdout);

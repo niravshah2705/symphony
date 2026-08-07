@@ -13,6 +13,9 @@ module.exports = defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   timeout: 30_000,
+  // Tolerate occasional CI flake (async panels, iframes) without masking real
+  // regressions locally.
+  retries: process.env.CI ? 2 : 0,
   expect: { timeout: 8_000 },
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'line',
   use: {

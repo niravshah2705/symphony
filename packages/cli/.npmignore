@@ -1,0 +1,2 @@
+# Keep unit tests out of the published tarball (bin/ + src/ ship, tests don't).
+*.test.js

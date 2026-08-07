@@ -177,8 +177,8 @@ function integrationChecks(settings) {
 }
 
 function sdkChecks(settings, resolver) {
-  const localProvider = ['ollama', 'lmstudio', 'omlx'].includes(settings.localLlmProvider)
-    ? settings.localLlmProvider
+  const localProvider = ['ollama', 'lmstudio', 'omlx'].includes(settings.byomProvider)
+    ? settings.byomProvider
     : 'ollama';
   const localReady = localProvider === 'lmstudio'
     ? Boolean(settings.lmstudioHost && settings.lmstudioModel)
@@ -248,8 +248,8 @@ async function serviceChecks(services, dependencies) {
 }
 
 async function localModelCheck(settings, dependencies) {
-  const provider = ['ollama', 'lmstudio', 'omlx'].includes(settings.localLlmProvider)
-    ? settings.localLlmProvider
+  const provider = ['ollama', 'lmstudio', 'omlx'].includes(settings.byomProvider)
+    ? settings.byomProvider
     : 'ollama';
   const base = provider === 'lmstudio'
     ? settings.lmstudioHost
