@@ -24,3 +24,9 @@ test-results/
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+
+# AI/dev tooling & local artifacts — ephemeral, never committed.
+.claude/worktrees/
+.playwright-mcp/
+graphify-out/
+agent-layout.png
