@@ -16,12 +16,17 @@ locals {
     CODER_URL           = local.coder_url
     FIREBASE_PROJECT_ID = var.project_id
     FIREBASE_API_KEY    = data.google_firebase_web_app_config.default.api_key
+    # RBAC (packages/shared/src/authz.js): least-privilege default role for a
+    # signed-in user with no role claim yet. Roles are otherwise Firebase custom
+    # claims (services/gateway/scripts/set-user-role.js).
+    AUTH_DEFAULT_ROLE = var.auth_default_role
     # Firebase web config is PUBLIC (apiKey/authDomain/projectId) — served to the
     # browser via /api/auth/config, NOT a secret. Only set the optional keys when
     # non-empty so the gateway falls back to its own defaults otherwise.
     },
     var.firebase_auth_domain != "" ? { FIREBASE_AUTH_DOMAIN = var.firebase_auth_domain } : {},
     var.firebase_allowed_domain != "" ? { FIREBASE_ALLOWED_DOMAIN = var.firebase_allowed_domain } : {},
+    var.auth_admin_emails != "" ? { AUTH_ADMIN_EMAILS = var.auth_admin_emails } : {},
   )
 
   planner_env = merge(local.common_env, {

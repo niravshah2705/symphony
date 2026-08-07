@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const { ROLES } = require('./authz');
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -50,6 +51,17 @@ function buildFirebaseAuthConfig(env = process.env) {
   const allowedDomain = boundedEnv(env, 'FIREBASE_ALLOWED_DOMAIN', 256).toLowerCase();
   const hostedDomain = boundedEnv(env, 'FIREBASE_HD', 256);
 
+  // Authorization (RBAC): bootstrap admins by email (config-backed, not
+  // hardcoded — set via terraform/gh var) and the least-privilege role handed to
+  // any other signed-in user who has no `role` custom claim yet. Roles are
+  // otherwise assigned as a Firebase custom claim; see packages/shared/src/authz.js.
+  const adminEmails = boundedEnv(env, 'AUTH_ADMIN_EMAILS', 4096)
+    .split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const defaultRole = boundedEnv(env, 'AUTH_DEFAULT_ROLE', 32).toLowerCase() || 'viewer';
+  if (!ROLES.includes(defaultRole)) {
+    throw new Error(`AUTH_DEFAULT_ROLE must be one of: ${ROLES.join(', ')}`);
+  }
+
   return Object.freeze({
     mode,
     enabled: true,
@@ -62,6 +74,8 @@ function buildFirebaseAuthConfig(env = process.env) {
     allowedEmails: Object.freeze(allowedEmails),
     allowedDomain,
     hostedDomain,
+    adminEmails: Object.freeze(adminEmails),
+    defaultRole,
   });
 }
 

@@ -1,6 +1,14 @@
 'use strict';
 
 const { CONFIG } = require('@ai-fleet/shared/config');
+const {
+  resolveRole,
+  permissionsForRole,
+  permitted,
+  requiredLevel,
+  PUBLIC_PERMISSIONS,
+  ADMIN_PERMISSIONS,
+} = require('@ai-fleet/shared/authz');
 
 /**
  * Application authentication — Firebase Google SSO.
@@ -96,27 +104,74 @@ async function verifyFirebaseIdToken(req, config = CONFIG.AUTH, verify = default
     email,
     name: boundedClaim(decoded.name, 320),
     picture: boundedClaim(decoded.picture, 1024),
+    // Role comes from the verified `role` custom claim (or the bootstrap-admin /
+    // default-role fallback) — never from anything the browser can set directly.
+    role: resolveRole(decoded, config),
   });
 }
 
+const PUBLIC_AUTH = Object.freeze({
+  mode: 'firebase',
+  authenticated: false,
+  role: 'public',
+  user: null,
+  permissions: PUBLIC_PERMISSIONS,
+});
+
+/**
+ * Attach the caller's identity + permissions to `req.auth`. It does NOT deny —
+ * authorization is decided per-route by requirePermission(). An absent, invalid,
+ * expired, or unauthorized (unverified/out-of-allowlist) token yields the PUBLIC
+ * permission set, so unauthenticated visitors get exactly the public surface
+ * (read-only Agent workspace) and nothing more.
+ */
 function createAuthenticationMiddleware(config = CONFIG.AUTH, verify = defaultVerify) {
   return function authenticate(req, res, next) {
     if (!config.enabled || config.mode === 'disabled') {
-      req.auth = Object.freeze({ mode: 'disabled', authenticated: false, user: null });
+      // Local single-operator workflow — fully open.
+      req.auth = Object.freeze({ mode: 'disabled', authenticated: true, role: 'admin', user: null, permissions: ADMIN_PERMISSIONS });
       next();
       return;
     }
     if (req.method === 'OPTIONS') {
-      req.auth = Object.freeze({ mode: config.mode, authenticated: false, user: null });
+      req.auth = PUBLIC_AUTH;
       next();
       return;
     }
     verifyFirebaseIdToken(req, config, verify)
       .then((user) => {
-        req.auth = Object.freeze({ mode: config.mode, authenticated: true, user });
+        req.auth = Object.freeze({
+          mode: config.mode,
+          authenticated: true,
+          role: user.role,
+          user,
+          permissions: permissionsForRole(user.role),
+        });
         next();
       })
-      .catch((error) => denyAccess(res, error));
+      .catch(() => {
+        req.auth = PUBLIC_AUTH;
+        next();
+      });
+  };
+}
+
+/**
+ * Route guard: require `domain` at the level implied by the HTTP method (GET →
+ * read, mutations → write), or an explicit `opts.level`. This is the real
+ * authorization boundary — apply it to EVERY sensitive router. Unauthenticated
+ * callers who lack the permission get 401 (prompt sign-in); authenticated
+ * callers who lack it get 403.
+ */
+function requirePermission(domain, opts = {}) {
+  return function authorize(req, res, next) {
+    if (req.method === 'OPTIONS') return next(); // CORS preflight — never gated
+    const level = opts.level || requiredLevel(req.method);
+    const auth = req.auth || PUBLIC_AUTH;
+    if (permitted(auth.permissions, domain, level)) return next();
+    return denyAccess(res, auth.authenticated
+      ? authorizationError('You do not have permission to access this resource')
+      : authError('Authentication required'));
   };
 }
 
@@ -133,6 +188,9 @@ function publicAuthConfig(config = CONFIG.AUTH) {
       projectId: config.projectId,
       hostedDomain: config.hostedDomain || undefined,
     }),
+    // What an unauthenticated visitor may do — lets the SPA render the public
+    // (read-only Agent) surface and hide everything else before sign-in.
+    publicPermissions: PUBLIC_PERMISSIONS,
   });
 }
 
@@ -143,6 +201,7 @@ function authEnabled(config = CONFIG.AUTH) {
 
 module.exports = {
   createAuthenticationMiddleware,
+  requirePermission,
   publicAuthConfig,
   verifyFirebaseIdToken,
   authEnabled,
