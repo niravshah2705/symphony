@@ -11,17 +11,16 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from fastapi import Depends
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_principal
 from app.authz.policy import is_org_admin
 from app.authz.principal import Principal
-from app.core.database import get_session
+from app.core.database import Uow, get_session
 from app.errors import ForbiddenError, NotFoundError
 from app.models.enums import ProjectRole
 from app.models.project import Project
-from app.models.project_membership import ProjectMembership
+from app.repositories.membership_repo import MembershipRepository
+from app.repositories.project_repo import ProjectRepository
 
 
 @dataclass(frozen=True)
@@ -54,7 +53,7 @@ def require_org_member(principal: Principal = Depends(get_principal)) -> Princip
 async def get_project_context(
     project_id: uuid.UUID,
     principal: Principal = Depends(get_principal),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> ProjectContext:
     """Load a project scoped to the caller's org and resolve the effective role.
 
@@ -64,22 +63,17 @@ async def get_project_context(
     if principal.org_id is None:
         raise NotFoundError("Project not found")
 
-    project = await session.scalar(
-        select(Project).where(
-            Project.id == project_id, Project.org_id == principal.org_id
-        )
-    )
+    # Path-scoped read: organizations/{caller_org}/projects/{id} — a project in
+    # another org is unreachable, not merely filtered.
+    project = await ProjectRepository(session).get(project_id, principal.org_id)
     if project is None:
         raise NotFoundError("Project not found")
 
     if is_org_admin(principal):
         return ProjectContext(project=project, role=ProjectRole.PROJECT_ADMIN)
 
-    membership = await session.scalar(
-        select(ProjectMembership).where(
-            ProjectMembership.project_id == project_id,
-            ProjectMembership.user_id == principal.user_id,
-        )
+    membership = await MembershipRepository(session).get(
+        principal.org_id, project_id, principal.user_id
     )
     if membership is None:
         raise NotFoundError("Project not found")

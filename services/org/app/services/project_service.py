@@ -1,7 +1,7 @@
 """Project service (org-scoped)."""
 from __future__ import annotations
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.authz.policy import is_org_admin
 from app.authz.principal import Principal
@@ -12,7 +12,7 @@ from app.schemas.project import ProjectCreate, ProjectUpdate
 
 
 async def create_project(
-    session: AsyncSession, principal: Principal, data: ProjectCreate
+    session: Uow, principal: Principal, data: ProjectCreate
 ) -> Project:
     project = Project(
         org_id=principal.org_id, name=data.name, description=data.description
@@ -22,7 +22,7 @@ async def create_project(
 
 
 async def list_projects(
-    session: AsyncSession, principal: Principal, params: PageParams
+    session: Uow, principal: Principal, params: PageParams
 ) -> tuple[list[Project], int]:
     repo = ProjectRepository(session)
     if is_org_admin(principal):
@@ -31,7 +31,7 @@ async def list_projects(
 
 
 async def update_project(
-    session: AsyncSession, project: Project, data: ProjectUpdate
+    session: Uow, project: Project, data: ProjectUpdate
 ) -> Project:
     if data.name is not None:
         project.name = data.name
@@ -40,5 +40,5 @@ async def update_project(
     return project
 
 
-async def delete_project(session: AsyncSession, project: Project) -> None:
+async def delete_project(session: Uow, project: Project) -> None:
     await ProjectRepository(session).delete(project)

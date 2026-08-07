@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.authz.principal import Principal
 from app.core.security import hash_password
@@ -22,7 +22,7 @@ from app.services.common import allocate_org_slug, normalize_email
 
 # ---- Tenant self-service (scoped to the caller's own org) -------------------
 
-async def get_current_org(session: AsyncSession, principal: Principal) -> Organization:
+async def get_current_org(session: Uow, principal: Principal) -> Organization:
     org = await OrgRepository(session).get(principal.org_id) if principal.org_id else None
     if org is None:
         raise NotFoundError("Organization not found")
@@ -30,21 +30,21 @@ async def get_current_org(session: AsyncSession, principal: Principal) -> Organi
 
 
 async def update_current_org(
-    session: AsyncSession, principal: Principal, data: OrgUpdate
+    session: Uow, principal: Principal, data: OrgUpdate
 ) -> Organization:
     org = await get_current_org(session, principal)
     _apply_org_update(org, data)
     return org
 
 
-async def delete_current_org(session: AsyncSession, principal: Principal) -> None:
+async def delete_current_org(session: Uow, principal: Principal) -> None:
     org = await get_current_org(session, principal)
     await OrgRepository(session).delete(org)
 
 
 # ---- Super-admin cross-org management ---------------------------------------
 
-async def create_org(session: AsyncSession, data: OrgCreate) -> Organization:
+async def create_org(session: Uow, data: OrgCreate) -> Organization:
     org_repo = OrgRepository(session)
     org = Organization(
         name=data.name,
@@ -74,12 +74,12 @@ async def create_org(session: AsyncSession, data: OrgCreate) -> Organization:
 
 
 async def list_orgs(
-    session: AsyncSession, params: PageParams
+    session: Uow, params: PageParams
 ) -> tuple[list[Organization], int]:
     return await OrgRepository(session).list(params)
 
 
-async def get_org(session: AsyncSession, org_id: uuid.UUID) -> Organization:
+async def get_org(session: Uow, org_id: uuid.UUID) -> Organization:
     org = await OrgRepository(session).get(org_id)
     if org is None:
         raise NotFoundError("Organization not found")
@@ -87,14 +87,14 @@ async def get_org(session: AsyncSession, org_id: uuid.UUID) -> Organization:
 
 
 async def update_org(
-    session: AsyncSession, org_id: uuid.UUID, data: OrgUpdate
+    session: Uow, org_id: uuid.UUID, data: OrgUpdate
 ) -> Organization:
     org = await get_org(session, org_id)
     _apply_org_update(org, data)
     return org
 
 
-async def delete_org(session: AsyncSession, org_id: uuid.UUID) -> None:
+async def delete_org(session: Uow, org_id: uuid.UUID) -> None:
     org = await get_org(session, org_id)
     await OrgRepository(session).delete(org)
 

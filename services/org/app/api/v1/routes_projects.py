@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Body, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.api.deps import page_params
 from app.authz.guards import (
@@ -29,7 +29,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 async def list_projects(
     principal: Principal = Depends(require_org_member),
     params: PageParams = Depends(page_params),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     rows, total = await project_service.list_projects(session, principal, params)
     return Page(data=rows, meta={"total": total, "page": params.page, "limit": params.limit})
@@ -39,7 +39,7 @@ async def list_projects(
 async def create_project(
     body: ProjectCreate,
     principal: Principal = Depends(require_org_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await project_service.create_project(session, principal, body)
 
@@ -53,7 +53,7 @@ async def get_project(ctx: ProjectContext = Depends(get_project_context)):
 async def update_project(
     body: ProjectUpdate,
     ctx: ProjectContext = Depends(require_project(can_update_project)),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await project_service.update_project(session, ctx.project, body)
 
@@ -61,7 +61,7 @@ async def update_project(
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     ctx: ProjectContext = Depends(require_project(can_update_project)),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     await project_service.delete_project(session, ctx.project)
 
@@ -76,7 +76,7 @@ async def attach_project_tag(
     tag_id: uuid.UUID = Body(embed=True),
     ctx: ProjectContext = Depends(require_project(can_manage_project_tags)),
     principal: Principal = Depends(require_org_member),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await tag_service.attach_project_tag(session, principal, ctx.project, tag_id)
 
@@ -85,6 +85,6 @@ async def attach_project_tag(
 async def detach_project_tag(
     tag_id: uuid.UUID,
     ctx: ProjectContext = Depends(require_project(can_manage_project_tags)),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     await tag_service.detach_project_tag(session, ctx.project, tag_id)

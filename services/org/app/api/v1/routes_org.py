@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.api.deps import page_params
 from app.auth.dependencies import get_principal
@@ -29,7 +29,7 @@ router = APIRouter(prefix="/organizations", tags=["organizations"])
 @router.get("/current", response_model=OrgResponse)
 async def get_current(
     principal: Principal = Depends(require_org_member),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await org_service.get_current_org(session, principal)
 
@@ -38,7 +38,7 @@ async def get_current(
 async def update_current(
     body: OrgUpdate,
     principal: Principal = Depends(require_org_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await org_service.update_current_org(session, principal, body)
 
@@ -46,7 +46,7 @@ async def update_current(
 @router.delete("/current", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_current(
     principal: Principal = Depends(require_org_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     await org_service.delete_current_org(session, principal)
 
@@ -54,7 +54,7 @@ async def delete_current(
 @router.get("/current/tags", response_model=list[TagResponse])
 async def list_current_org_tags(
     principal: Principal = Depends(require_org_member),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     org = await org_service.get_current_org(session, principal)
     return org.applied_tags
@@ -64,7 +64,7 @@ async def list_current_org_tags(
 async def set_current_org_tags(
     tag_ids: list[uuid.UUID],
     principal: Principal = Depends(require_org_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     org = await org_service.get_current_org(session, principal)
     return await tag_service.set_org_tags(session, principal, org, tag_ids)
@@ -74,7 +74,7 @@ async def set_current_org_tags(
 async def detach_current_org_tag(
     tag_id: uuid.UUID,
     principal: Principal = Depends(require_org_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     org = await org_service.get_current_org(session, principal)
     await tag_service.detach_org_tag(session, org, tag_id)
@@ -86,7 +86,7 @@ async def detach_current_org_tag(
 async def create_org(
     body: OrgCreate,
     _admin: Principal = Depends(require_super_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await org_service.create_org(session, body)
 
@@ -95,7 +95,7 @@ async def create_org(
 async def list_orgs(
     _admin: Principal = Depends(require_super_admin),
     params: PageParams = Depends(page_params),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     rows, total = await org_service.list_orgs(session, params)
     return Page(data=rows, meta={"total": total, "page": params.page, "limit": params.limit})
@@ -105,7 +105,7 @@ async def list_orgs(
 async def get_org(
     org_id: uuid.UUID,
     _admin: Principal = Depends(require_super_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await org_service.get_org(session, org_id)
 
@@ -115,7 +115,7 @@ async def update_org(
     org_id: uuid.UUID,
     body: OrgUpdate,
     _admin: Principal = Depends(require_super_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await org_service.update_org(session, org_id, body)
 
@@ -124,6 +124,6 @@ async def update_org(
 async def delete_org(
     org_id: uuid.UUID,
     _admin: Principal = Depends(require_super_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     await org_service.delete_org(session, org_id)

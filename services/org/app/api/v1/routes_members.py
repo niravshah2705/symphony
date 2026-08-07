@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.authz.guards import ProjectContext, get_project_context, require_project
 from app.authz.policy import can_manage_project_access
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/projects/{project_id}/members", tags=["members"])
 @router.get("", response_model=list[MemberDetailResponse])
 async def list_members(
     ctx: ProjectContext = Depends(get_project_context),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     rows = await membership_service.list_members(session, ctx.project)
     return [
@@ -47,7 +47,7 @@ async def add_member(
     body: MemberCreate,
     ctx: ProjectContext = Depends(require_project(can_manage_project_access)),
     principal: Principal = Depends(require_org_member),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await membership_service.add_member(session, principal, ctx.project, body)
 
@@ -57,7 +57,7 @@ async def update_member(
     user_id: uuid.UUID,
     body: MemberUpdate,
     ctx: ProjectContext = Depends(require_project(can_manage_project_access)),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await membership_service.update_member(session, ctx.project, user_id, body)
 
@@ -66,6 +66,6 @@ async def update_member(
 async def remove_member(
     user_id: uuid.UUID,
     ctx: ProjectContext = Depends(require_project(can_manage_project_access)),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     await membership_service.remove_member(session, ctx.project, user_id)

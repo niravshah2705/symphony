@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.authz.principal import Principal
 from app.errors import ConflictError, NotFoundError, ValidationAppError
@@ -22,7 +22,7 @@ from app.schemas.tag import TagCreate, TagUpdate
 
 
 async def resolve_org_tags(
-    session: AsyncSession, tag_ids: Sequence[uuid.UUID], org_id: uuid.UUID
+    session: Uow, tag_ids: Sequence[uuid.UUID], org_id: uuid.UUID
 ) -> list[Tag]:
     """Load tags by id, requiring every one to belong to the org."""
     unique_ids = list(dict.fromkeys(tag_ids))
@@ -32,7 +32,7 @@ async def resolve_org_tags(
     return tags
 
 
-async def create_tag(session: AsyncSession, principal: Principal, data: TagCreate) -> Tag:
+async def create_tag(session: Uow, principal: Principal, data: TagCreate) -> Tag:
     repo = TagRepository(session)
     if await repo.get_by_name(data.name, principal.org_id) is not None:
         raise ConflictError("A tag with this name already exists")
@@ -40,12 +40,12 @@ async def create_tag(session: AsyncSession, principal: Principal, data: TagCreat
 
 
 async def list_tags(
-    session: AsyncSession, principal: Principal, params: PageParams
+    session: Uow, principal: Principal, params: PageParams
 ) -> tuple[list[Tag], int]:
     return await TagRepository(session).list_in_org(principal.org_id, params)
 
 
-async def get_tag(session: AsyncSession, principal: Principal, tag_id: uuid.UUID) -> Tag:
+async def get_tag(session: Uow, principal: Principal, tag_id: uuid.UUID) -> Tag:
     tag = await TagRepository(session).get_in_org(tag_id, principal.org_id)
     if tag is None:
         raise NotFoundError("Tag not found")
@@ -53,7 +53,7 @@ async def get_tag(session: AsyncSession, principal: Principal, tag_id: uuid.UUID
 
 
 async def update_tag(
-    session: AsyncSession, principal: Principal, tag_id: uuid.UUID, data: TagUpdate
+    session: Uow, principal: Principal, tag_id: uuid.UUID, data: TagUpdate
 ) -> Tag:
     repo = TagRepository(session)
     tag = await get_tag(session, principal, tag_id)
@@ -65,7 +65,7 @@ async def update_tag(
 
 
 async def delete_tag(
-    session: AsyncSession, principal: Principal, tag_id: uuid.UUID
+    session: Uow, principal: Principal, tag_id: uuid.UUID
 ) -> None:
     tag = await get_tag(session, principal, tag_id)
     await TagRepository(session).delete(tag)
@@ -74,7 +74,7 @@ async def delete_tag(
 # ---- Attach / detach on org and projects ------------------------------------
 
 async def set_org_tags(
-    session: AsyncSession, principal: Principal, org: Organization, tag_ids: Sequence[uuid.UUID]
+    session: Uow, principal: Principal, org: Organization, tag_ids: Sequence[uuid.UUID]
 ) -> list[Tag]:
     tags = await resolve_org_tags(session, tag_ids, principal.org_id)
     org.applied_tags = tags
@@ -82,13 +82,13 @@ async def set_org_tags(
 
 
 async def detach_org_tag(
-    session: AsyncSession, org: Organization, tag_id: uuid.UUID
+    session: Uow, org: Organization, tag_id: uuid.UUID
 ) -> None:
     org.applied_tags = [t for t in org.applied_tags if t.id != tag_id]
 
 
 async def attach_project_tag(
-    session: AsyncSession, principal: Principal, project: Project, tag_id: uuid.UUID
+    session: Uow, principal: Principal, project: Project, tag_id: uuid.UUID
 ) -> list[Tag]:
     tag = await TagRepository(session).get_in_org(tag_id, principal.org_id)
     if tag is None:
@@ -99,6 +99,6 @@ async def attach_project_tag(
 
 
 async def detach_project_tag(
-    session: AsyncSession, project: Project, tag_id: uuid.UUID
+    session: Uow, project: Project, tag_id: uuid.UUID
 ) -> None:
     project.tags = [t for t in project.tags if t.id != tag_id]

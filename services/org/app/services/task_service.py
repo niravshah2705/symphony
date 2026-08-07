@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.authz.principal import Principal
 from app.errors import NotFoundError, ValidationAppError
@@ -18,17 +18,17 @@ from app.services import tag_service
 
 
 async def _validate_assignee(
-    session: AsyncSession, project: Project, assignee_id: uuid.UUID | None
+    session: Uow, project: Project, assignee_id: uuid.UUID | None
 ) -> None:
     if assignee_id is None:
         return
     # An assignee must be a member of the project.
-    if await MembershipRepository(session).get(project.id, assignee_id) is None:
+    if await MembershipRepository(session).get(project.org_id, project.id, assignee_id) is None:
         raise ValidationAppError("Assignee must be a member of the project")
 
 
 async def create_task(
-    session: AsyncSession, principal: Principal, project: Project, data: TaskCreate
+    session: Uow, principal: Principal, project: Project, data: TaskCreate
 ) -> Task:
     await _validate_assignee(session, project, data.assignee_id)
     tags = await tag_service.resolve_org_tags(session, data.tag_ids, principal.org_id)
@@ -40,11 +40,11 @@ async def create_task(
         assignee_id=data.assignee_id,
     )
     task.tags = tags
-    return await TaskRepository(session).add(task)
+    return await TaskRepository(session).add(project, task)
 
 
 async def list_tasks(
-    session: AsyncSession,
+    session: Uow,
     project: Project,
     params: PageParams,
     *,
@@ -53,21 +53,21 @@ async def list_tasks(
     tag_id: uuid.UUID | None = None,
 ) -> tuple[list[Task], int]:
     return await TaskRepository(session).list_in_project(
-        project.id, params, status=status, assignee_id=assignee_id, tag_id=tag_id
+        project, params, status=status, assignee_id=assignee_id, tag_id=tag_id
     )
 
 
 async def get_task(
-    session: AsyncSession, project: Project, task_id: uuid.UUID
+    session: Uow, project: Project, task_id: uuid.UUID
 ) -> Task:
-    task = await TaskRepository(session).get_in_project(task_id, project.id)
+    task = await TaskRepository(session).get_in_project(project, task_id)
     if task is None:
         raise NotFoundError("Task not found")
     return task
 
 
 async def update_task(
-    session: AsyncSession, project: Project, task: Task, data: TaskUpdate
+    session: Uow, project: Project, task: Task, data: TaskUpdate
 ) -> Task:
     if data.assignee_id is not None:
         await _validate_assignee(session, project, data.assignee_id)
@@ -81,12 +81,12 @@ async def update_task(
     return task
 
 
-async def delete_task(session: AsyncSession, task: Task) -> None:
-    await TaskRepository(session).delete(task)
+async def delete_task(session: Uow, project: Project, task: Task) -> None:
+    await TaskRepository(session).delete(project, task)
 
 
 async def set_task_tags(
-    session: AsyncSession,
+    session: Uow,
     principal: Principal,
     task: Task,
     tag_ids: list[uuid.UUID],
@@ -95,5 +95,5 @@ async def set_task_tags(
     return task
 
 
-async def detach_task_tag(session: AsyncSession, task: Task, tag_id: uuid.UUID) -> None:
+async def detach_task_tag(session: Uow, task: Task, tag_id: uuid.UUID) -> None:
     task.tags = [t for t in task.tags if t.id != tag_id]

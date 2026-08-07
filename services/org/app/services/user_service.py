@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.authz.policy import is_org_admin
 from app.authz.principal import Principal
@@ -23,7 +23,7 @@ from app.services import auth_service
 from app.services.common import normalize_email
 
 
-async def create_user(session: AsyncSession, principal: Principal, data: UserCreate) -> User:
+async def create_user(session: Uow, principal: Principal, data: UserCreate) -> User:
     repo = UserRepository(session)
     email = normalize_email(data.email)
     if await repo.get_global_by_email(email) is not None:
@@ -54,12 +54,12 @@ async def create_user(session: AsyncSession, principal: Principal, data: UserCre
 
 
 async def list_users(
-    session: AsyncSession, principal: Principal, params: PageParams
+    session: Uow, principal: Principal, params: PageParams
 ) -> tuple[list[User], int]:
     return await UserRepository(session).list_in_org(principal.org_id, params)
 
 
-async def get_user(session: AsyncSession, principal: Principal, user_id: uuid.UUID) -> User:
+async def get_user(session: Uow, principal: Principal, user_id: uuid.UUID) -> User:
     user = await UserRepository(session).get_in_org(user_id, principal.org_id)
     if user is None:
         raise NotFoundError("User not found")
@@ -67,7 +67,7 @@ async def get_user(session: AsyncSession, principal: Principal, user_id: uuid.UU
 
 
 async def update_user(
-    session: AsyncSession,
+    session: Uow,
     principal: Principal,
     user_id: uuid.UUID,
     data: UserAdminUpdate,
@@ -94,7 +94,7 @@ async def update_user(
 
 
 async def deactivate_user(
-    session: AsyncSession, principal: Principal, user_id: uuid.UUID
+    session: Uow, principal: Principal, user_id: uuid.UUID
 ) -> None:
     target = await get_user(session, principal, user_id)
     target.is_active = False
@@ -102,7 +102,7 @@ async def deactivate_user(
 
 
 async def change_own_password(
-    session: AsyncSession,
+    session: Uow,
     principal: Principal,
     user_id: uuid.UUID,
     current_password: str,
@@ -110,7 +110,7 @@ async def change_own_password(
 ) -> None:
     if principal.user_id != user_id:
         raise ForbiddenError("You may only change your own password")
-    user = await session.get(User, user_id)
+    user = await UserRepository(session).get_by_id(user_id)
     if user is None:
         raise NotFoundError("User not found")
     await auth_service.change_password(session, user, current_password, new_password)

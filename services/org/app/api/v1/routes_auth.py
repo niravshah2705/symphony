@@ -7,7 +7,7 @@ valid access token.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.auth.dependencies import get_current_user
 from app.core.config import get_settings
@@ -30,7 +30,7 @@ def _rate() -> str:
 async def register(
     request: Request,
     body: RegisterRequest,
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> TokenResponse:
     return await auth_service.register(session, body)
 
@@ -40,7 +40,7 @@ async def register(
 async def login(
     request: Request,
     body: LoginRequest,
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> TokenResponse:
     return await auth_service.login(session, body)
 
@@ -50,7 +50,7 @@ async def login(
 async def refresh(
     request: Request,
     body: RefreshRequest,
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> TokenResponse:
     return await auth_service.refresh(session, body.refresh_token)
 
@@ -59,7 +59,7 @@ async def refresh(
 async def logout(
     body: RefreshRequest,
     _user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     await auth_service.logout(session, body.refresh_token)
 
@@ -67,7 +67,7 @@ async def logout(
 @router.get("/verify-email")
 async def verify_email(
     token: str = Query(min_length=1, max_length=512),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> dict[str, str]:
     await auth_service.verify_email(session, token)
     return {"status": "verified"}

@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_session
+from app.core.database import Uow, get_session
+from app.repositories.base import ORGS
 
 router = APIRouter(tags=["health"])
 
@@ -17,7 +16,7 @@ async def health() -> dict[str, str]:
 
 
 @router.get("/health/ready")
-async def readiness(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
-    """Readiness: process can reach the database."""
-    await session.execute(text("SELECT 1"))
+async def readiness(session: Uow = Depends(get_session)) -> dict[str, str]:
+    """Readiness: process can reach Firestore (a bounded read)."""
+    await session.db.query(ORGS, limit=1)
     return {"status": "ready"}

@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.api.deps import page_params
 from app.auth.dependencies import get_principal
@@ -29,7 +29,7 @@ async def list_tasks(
     status_filter: TaskStatus | None = None,
     assignee_id: uuid.UUID | None = None,
     tag_id: uuid.UUID | None = None,
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     rows, total = await task_service.list_tasks(
         session,
@@ -47,7 +47,7 @@ async def create_task(
     body: TaskCreate,
     ctx: ProjectContext = Depends(require_project(can_write_task)),
     principal: Principal = Depends(require_org_member),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await task_service.create_task(session, principal, ctx.project, body)
 
@@ -56,7 +56,7 @@ async def create_task(
 async def get_task(
     task_id: uuid.UUID,
     ctx: ProjectContext = Depends(get_project_context),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await task_service.get_task(session, ctx.project, task_id)
 
@@ -66,7 +66,7 @@ async def update_task(
     task_id: uuid.UUID,
     body: TaskUpdate,
     ctx: ProjectContext = Depends(require_project(can_write_task)),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     task = await task_service.get_task(session, ctx.project, task_id)
     return await task_service.update_task(session, ctx.project, task, body)
@@ -77,7 +77,7 @@ async def delete_task(
     task_id: uuid.UUID,
     ctx: ProjectContext = Depends(get_project_context),
     principal: Principal = Depends(get_principal),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     # A project admin (or org admin, elevated to PROJECT_ADMIN) may delete any
     # task; a task's own assignee may delete it too.
@@ -86,7 +86,7 @@ async def delete_task(
     task = await task_service.get_task(session, ctx.project, task_id)
     if not (can_delete_task(ctx.role) or task.assignee_id == principal.user_id):
         raise ForbiddenError("Insufficient permission to delete this task")
-    await task_service.delete_task(session, task)
+    await task_service.delete_task(session, ctx.project, task)
 
 
 @router.put("/{task_id}/tags", response_model=TaskResponse)
@@ -95,7 +95,7 @@ async def set_task_tags(
     body: TaskTagsSet,
     ctx: ProjectContext = Depends(require_project(can_write_task)),
     principal: Principal = Depends(require_org_member),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     task = await task_service.get_task(session, ctx.project, task_id)
     return await task_service.set_task_tags(session, principal, task, body.tag_ids)
@@ -106,7 +106,7 @@ async def detach_task_tag(
     task_id: uuid.UUID,
     tag_id: uuid.UUID,
     ctx: ProjectContext = Depends(require_project(can_write_task)),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     task = await task_service.get_task(session, ctx.project, task_id)
     await task_service.detach_task_tag(session, task, tag_id)

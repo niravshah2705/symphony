@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.api.deps import page_params
 from app.authz.guards import require_org_admin, require_org_member
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/tags", tags=["tags"])
 async def list_tags(
     principal: Principal = Depends(require_org_member),
     params: PageParams = Depends(page_params),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     rows, total = await tag_service.list_tags(session, principal, params)
     return Page(data=rows, meta={"total": total, "page": params.page, "limit": params.limit})
@@ -31,7 +31,7 @@ async def list_tags(
 async def create_tag(
     body: TagCreate,
     principal: Principal = Depends(require_org_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await tag_service.create_tag(session, principal, body)
 
@@ -40,7 +40,7 @@ async def create_tag(
 async def get_tag(
     tag_id: uuid.UUID,
     principal: Principal = Depends(require_org_member),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await tag_service.get_tag(session, principal, tag_id)
 
@@ -50,7 +50,7 @@ async def update_tag(
     tag_id: uuid.UUID,
     body: TagUpdate,
     principal: Principal = Depends(require_org_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await tag_service.update_tag(session, principal, tag_id, body)
 
@@ -59,6 +59,6 @@ async def update_tag(
 async def delete_tag(
     tag_id: uuid.UUID,
     principal: Principal = Depends(require_org_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     await tag_service.delete_tag(session, principal, tag_id)

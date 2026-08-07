@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.authz.principal import Principal
 from app.errors import ConflictError, NotFoundError, ValidationAppError
@@ -21,7 +21,7 @@ from app.schemas.membership import MemberCreate, MemberUpdate
 
 
 async def add_member(
-    session: AsyncSession, principal: Principal, project: Project, data: MemberCreate
+    session: Uow, principal: Principal, project: Project, data: MemberCreate
 ) -> ProjectMembership:
     # The target user must belong to the SAME org as the project (isolation).
     target = await UserRepository(session).get_in_org(data.user_id, principal.org_id)
@@ -29,25 +29,26 @@ async def add_member(
         raise ValidationAppError("User is not a member of this organization")
 
     repo = MembershipRepository(session)
-    if await repo.get(project.id, data.user_id) is not None:
+    if await repo.get(project.org_id, project.id, data.user_id) is not None:
         raise ConflictError("User is already a member of this project")
 
     return await repo.add(
-        ProjectMembership(project_id=project.id, user_id=data.user_id, role=data.role)
+        project.org_id,
+        ProjectMembership(project_id=project.id, user_id=data.user_id, role=data.role),
     )
 
 
 async def list_members(
-    session: AsyncSession, project: Project
+    session: Uow, project: Project
 ) -> list[tuple[ProjectMembership, User]]:
-    return await MembershipRepository(session).list_for_project(project.id)
+    return await MembershipRepository(session).list_for_project(project.org_id, project.id)
 
 
 async def update_member(
-    session: AsyncSession, project: Project, user_id: uuid.UUID, data: MemberUpdate
+    session: Uow, project: Project, user_id: uuid.UUID, data: MemberUpdate
 ) -> ProjectMembership:
     repo = MembershipRepository(session)
-    membership = await repo.get(project.id, user_id)
+    membership = await repo.get(project.org_id, project.id, user_id)
     if membership is None:
         raise NotFoundError("Membership not found")
     membership.role = data.role
@@ -55,10 +56,10 @@ async def update_member(
 
 
 async def remove_member(
-    session: AsyncSession, project: Project, user_id: uuid.UUID
+    session: Uow, project: Project, user_id: uuid.UUID
 ) -> None:
     repo = MembershipRepository(session)
-    membership = await repo.get(project.id, user_id)
+    membership = await repo.get(project.org_id, project.id, user_id)
     if membership is None:
         raise NotFoundError("Membership not found")
-    await repo.delete(membership)
+    await repo.delete(project.org_id, membership)

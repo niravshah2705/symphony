@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import Uow
 
 from app.api.deps import page_params
 from app.auth.dependencies import get_current_user, get_principal
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 async def list_users(
     principal: Principal = Depends(require_org_admin),
     params: PageParams = Depends(page_params),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     rows, total = await user_service.list_users(session, principal, params)
     return Page(data=rows, meta={"total": total, "page": params.page, "limit": params.limit})
@@ -38,7 +38,7 @@ async def list_users(
 async def create_user(
     body: UserCreate,
     principal: Principal = Depends(require_org_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     return await user_service.create_user(session, principal, body)
 
@@ -47,7 +47,7 @@ async def create_user(
 async def get_user(
     user_id: uuid.UUID,
     principal: Principal = Depends(require_org_member),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     # Any org member may look up a user in their org; cross-org -> 404.
     return await user_service.get_user(session, principal, user_id)
@@ -58,7 +58,7 @@ async def update_user(
     user_id: uuid.UUID,
     body: UserAdminUpdate,
     principal: Principal = Depends(require_org_member),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ):
     # Field-level authorization (self vs admin) is enforced in the service.
     return await user_service.update_user(session, principal, user_id, body)
@@ -68,7 +68,7 @@ async def update_user(
 async def deactivate_user(
     user_id: uuid.UUID,
     principal: Principal = Depends(require_org_admin),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     await user_service.deactivate_user(session, principal, user_id)
 
@@ -79,7 +79,7 @@ async def change_password(
     body: ChangePasswordRequest,
     principal: Principal = Depends(get_principal),
     _user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: Uow = Depends(get_session),
 ) -> None:
     await user_service.change_own_password(
         session, principal, user_id, body.current_password, body.new_password
