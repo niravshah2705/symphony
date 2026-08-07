@@ -60,6 +60,7 @@ jobs:
             spa:     ['public/**', 'firebase.json']
             infra:   ['deploy/gcp/terraform/**']
             root:    ['package.json', 'package-lock.json']
+            org:     ['services/org/**']
 
       - id: plan
         env:
@@ -71,20 +72,25 @@ jobs:
           CODER: ${{ steps.filter.outputs.coder }}
           SPA: ${{ steps.filter.outputs.spa }}
           INFRA: ${{ steps.filter.outputs.infra }}
+          ORG: ${{ steps.filter.outputs.org }}
         run: |
           set -euo pipefail
-          # A shared-code / root-deps change (or a forced run) rebuilds everything.
+          # A shared-code / root-deps change (or a forced run) rebuilds the Node
+          # services. The org service is an independent Python app.
           all=false
           if [ "$FORCE_ALL" = "true" ] || [ "$SHARED" = "true" ] || [ "$ROOT" = "true" ]; then all=true; fi
 
           services='[]'
           push() { services=$(printf '%s' "$services" | jq -c \
-            --arg id "$1" --arg image "$2" --arg df "$3" \
-            '. + [{id:$id, image:$image, dockerfile:$df}]'); }
+            --arg id "$1" --arg image "$2" --arg df "$3" --arg ctx "$4" \
+            '. + [{id:$id, image:$image, dockerfile:$df, context:$ctx}]'); }
 
-          if [ "$all" = "true" ] || [ "$GATEWAY" = "true" ]; then push gateway gateway       deploy/gcp/Dockerfile.gateway; fi
-          if [ "$all" = "true" ] || [ "$PLANNER" = "true" ]; then push planner planner       deploy/gcp/Dockerfile.planner; fi
-          if [ "$all" = "true" ] || [ "$CODER"   = "true" ]; then push coder   coder-control deploy/gcp/Dockerfile.coder;   fi
+          if [ "$all" = "true" ] || [ "$GATEWAY" = "true" ]; then push gateway gateway       deploy/gcp/Dockerfile.gateway . ; fi
+          if [ "$all" = "true" ] || [ "$PLANNER" = "true" ]; then push planner planner       deploy/gcp/Dockerfile.planner . ; fi
+          if [ "$all" = "true" ] || [ "$CODER"   = "true" ]; then push coder   coder-control deploy/gcp/Dockerfile.coder   . ; fi
+          # The org service builds from its own directory (its Dockerfile expects
+          # services/org as the build context).
+          if [ "$FORCE_ALL" = "true" ] || [ "$ORG" = "true" ]; then push org org-service services/org/Dockerfile services/org ; fi
 
           spa=false
           if [ "$FORCE_ALL" = "true" ] || [ "$SPA" = "true" ]; then spa=true; fi
@@ -140,7 +146,7 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${AR_REPO}/${{ matrix.svc.image }}:${GITHUB_SHA}"
-          docker build -f "${{ matrix.svc.dockerfile }}" -t "$IMAGE" .
+          docker build -f "${{ matrix.svc.dockerfile }}" -t "$IMAGE" "${{ matrix.svc.context }}"
           docker push "$IMAGE"
           echo "Pushed $IMAGE"
 
@@ -222,6 +228,7 @@ jobs:
             echo "gateway=$(resolve gateway gateway)"
             echo "planner=$(resolve planner planner)"
             echo "coder=$(resolve coder coder-control)"
+            echo "org=$(resolve org org-service)"
           } >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
@@ -253,7 +260,8 @@ jobs:
           )
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
-          [ -n "${{ steps.tags.outputs.coder }}" ]   && apply_args+=(-var="coder_image_tag=${{ steps.tags.outputs.coder }}")
+          [ -n "${{ steps.tags.outputs.coder }}" ]   && apply_args+=(-var="coder_image_tag=${{ steps.tags.outputs.coder }}") || true
+          [ -n "${{ steps.tags.outputs.org }}" ]     && apply_args+=(-var="org_image_tag=${{ steps.tags.outputs.org }}") || true
 
           terraform apply -input=false -auto-approve "${apply_args[@]}"
 

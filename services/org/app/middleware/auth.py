@@ -68,7 +68,12 @@ class AuthContextMiddleware:
             return
 
         request = Request(scope, receive=receive)
-        header = request.headers.get("Authorization", "")
+        # Behind the gateway, the end-user's Firebase bearer is forwarded in
+        # X-Forwarded-Authorization (the Authorization header carries the
+        # gateway's S2S OIDC token for Cloud Run IAM). Direct callers use
+        # Authorization. This header is only trustworthy because the service is
+        # IAM-gated (only the gateway SA can invoke it).
+        header = request.headers.get("X-Forwarded-Authorization") or request.headers.get("Authorization", "")
         if not header.lower().startswith("bearer "):
             await _unauthorized()(scope, receive, send)
             return

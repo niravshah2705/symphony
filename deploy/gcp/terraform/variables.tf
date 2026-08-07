@@ -55,6 +55,12 @@ variable "coder_image_tag" {
   default     = ""
 }
 
+variable "org_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the org service (FastAPI/Firestore)."
+  default     = ""
+}
+
 # --- Cloud Run service / job names -------------------------------------------
 
 variable "gateway_service_name" {
@@ -70,6 +76,11 @@ variable "planner_service_name" {
 variable "coder_service_name" {
   type    = string
   default = "coder-control"
+}
+
+variable "org_service_name" {
+  type    = string
+  default = "org-service"
 }
 
 variable "coder_job_name" {

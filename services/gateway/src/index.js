@@ -139,6 +139,21 @@ app.post('/api/coder/run', requirePermission('workspace'), publish.coderRun);
 app.use('/api/agent', requirePermission('workspace'), createProxy(CONFIG.SERVICES.plannerUrl));
 app.use('/api/coder', requirePermission('workspace'), createProxy(CONFIG.SERVICES.coderUrl));
 
+// Organization service (FastAPI + Firestore, services/org). It runs its own
+// Firebase-OIDC auth + org-scoped RBAC, so the gateway forwards the caller's
+// Firebase bearer (forwardUserAuth) and rewrites /api/org/* -> /api/v1/*.
+// requirePermission('org') is the coarse gate; the org service enforces the
+// real per-organization authorization.
+if (CONFIG.SERVICES.orgUrl) {
+  app.use('/api/org', requirePermission('org'), createProxy(CONFIG.SERVICES.orgUrl, {
+    rewrite: { from: '/api/org', to: '/api/v1' },
+    forwardUserAuth: true,
+  }));
+} else {
+  app.use('/api/org', requirePermission('org'), (req, res) =>
+    res.status(501).json({ error: 'Organization service is not configured (ORG_URL unset).' }));
+}
+
 // Codex OAuth redirect target — must be registered before the SPA fallback.
 app.get('/auth/callback', codexCallback);
 
