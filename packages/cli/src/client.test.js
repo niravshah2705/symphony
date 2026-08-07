@@ -2,8 +2,13 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const { createClient, resolveBaseUrl, resolveToken } = require('./client');
+const credentials = require('./credentials');
+const { version: VERSION } = require('../package.json');
 
 function fakeResponse({ ok = true, status = 200, statusText = 'OK', body = '' } = {}) {
   return {
@@ -101,4 +106,50 @@ test('a network failure surfaces a reachability hint', async () => {
   };
   const client = createClient({ baseUrl: 'http://gw', fetchImpl });
   await assert.rejects(() => client.request('GET', '/healthz'), /Cannot reach the gateway/);
+});
+
+test('every request carries the adlc version (User-Agent + X-Adlc-Version)', async () => {
+  let seen = null;
+  const fetchImpl = async (_url, init) => {
+    seen = init;
+    return fakeResponse({ body: {} });
+  };
+  const client = createClient({ baseUrl: 'http://gw', fetchImpl });
+  await client.request('GET', '/healthz');
+  assert.equal(seen.headers['User-Agent'], `adlc/${VERSION}`);
+  assert.equal(seen.headers['X-Adlc-Version'], VERSION);
+});
+
+test('a 401 attaches a re-login hint', async () => {
+  const fetchImpl = async () => fakeResponse({ ok: false, status: 401, body: { error: 'Authentication required' } });
+  const client = createClient({ baseUrl: 'http://gw', fetchImpl });
+  await assert.rejects(
+    () => client.request('GET', '/api/coder'),
+    (err) => {
+      assert.equal(err.status, 401);
+      assert.match(err.hint, /adlc auth login/);
+      return true;
+    }
+  );
+});
+
+test('resolveToken prefers $ADLC_TOKEN, else the stored credential', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'adlc-tok-'));
+  const prevHome = process.env.ADLC_HOME;
+  const prevTok = process.env.ADLC_TOKEN;
+  process.env.ADLC_HOME = home;
+  try {
+    delete process.env.ADLC_TOKEN;
+    credentials.save({ token: 'stored-tok' });
+    assert.equal(resolveToken(), 'stored-tok');
+
+    process.env.ADLC_TOKEN = 'env-tok';
+    assert.equal(resolveToken(), 'env-tok');
+  } finally {
+    if (prevHome === undefined) delete process.env.ADLC_HOME;
+    else process.env.ADLC_HOME = prevHome;
+    if (prevTok === undefined) delete process.env.ADLC_TOKEN;
+    else process.env.ADLC_TOKEN = prevTok;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });

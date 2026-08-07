@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Build/release artifacts (e.g. the adlc CLI bundle + tarball; produced in CI).
+dist/
+
 # Local runtime data — secrets (API keys, OAuth tokens), config, jobs, logs.
 # Never commit; see docs/DEVELOPER_ONBOARDING.md.
 data/
@@ -9,6 +12,10 @@ data/
 .env
 .env.*
 !.env.example
+
+# adlc CLI stored token (normally in $HOME/.adlc; ignored here in case
+# $ADLC_HOME ever points into the repo). Never commit credentials.
+.adlc/
 
 # OS / editor cruft
 .DS_Store

@@ -8,6 +8,10 @@
     "adlc": "./bin/adlc.js"
   },
   "main": "src/commands/index.js",
+  "files": [
+    "bin",
+    "src"
+  ],
   "scripts": {
     "test": "node --test"
   },

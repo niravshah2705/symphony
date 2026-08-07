@@ -64,7 +64,7 @@ async function follow(client, conversationId, options = {}) {
   const url = `${client.base}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token)}`;
 
   const controller = new AbortController();
-  const headers = { Accept: 'text/event-stream', ...(client.token ? { Authorization: `Bearer ${client.token}` } : {}) };
+  const headers = client.headers({ Accept: 'text/event-stream' });
   const res = await fetchImpl(url, { headers, signal: controller.signal });
   if (!res.ok || !res.body) throw new Error(`Stream failed: HTTP ${res.status}`);
 

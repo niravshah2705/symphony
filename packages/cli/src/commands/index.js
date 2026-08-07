@@ -7,6 +7,7 @@
  */
 
 module.exports = {
+  auth: require('./auth'),
   status: require('./status'),
   business: require('./business'),
   role: require('./role'),

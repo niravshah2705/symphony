@@ -73,5 +73,6 @@ async function main() {
 
 main().catch((err) => {
   out.error(err && err.message ? err.message : String(err));
+  if (err && err.hint) out.line(`  ${err.hint}`);
   process.exit(1);
 });
