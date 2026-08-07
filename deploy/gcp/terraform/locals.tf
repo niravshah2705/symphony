@@ -20,16 +20,18 @@ locals {
   # falling back to var.image_tag when no per-service override is set — this is
   # what lets the CD pipeline roll ONE service (its tag = new SHA) while every
   # other service keeps its currently-deployed tag, making apply a no-op for them.
-  image_base  = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}"
-  gateway_tag = var.gateway_image_tag != "" ? var.gateway_image_tag : var.image_tag
-  planner_tag = var.planner_image_tag != "" ? var.planner_image_tag : var.image_tag
-  coder_tag   = var.coder_image_tag != "" ? var.coder_image_tag : var.image_tag
-  org_tag     = var.org_image_tag != "" ? var.org_image_tag : var.image_tag
+  image_base   = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}"
+  gateway_tag  = var.gateway_image_tag != "" ? var.gateway_image_tag : var.image_tag
+  planner_tag  = var.planner_image_tag != "" ? var.planner_image_tag : var.image_tag
+  coder_tag    = var.coder_image_tag != "" ? var.coder_image_tag : var.image_tag
+  org_tag      = var.org_image_tag != "" ? var.org_image_tag : var.image_tag
+  settings_tag = var.settings_image_tag != "" ? var.settings_image_tag : var.image_tag
 
-  gateway_image = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
-  planner_image = "${local.image_base}/${var.planner_service_name}:${local.planner_tag}"
-  coder_image   = "${local.image_base}/${var.coder_service_name}:${local.coder_tag}"
-  org_image     = "${local.image_base}/${var.org_service_name}:${local.org_tag}"
+  gateway_image  = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
+  planner_image  = "${local.image_base}/${var.planner_service_name}:${local.planner_tag}"
+  coder_image    = "${local.image_base}/${var.coder_service_name}:${local.coder_tag}"
+  org_image      = "${local.image_base}/${var.org_service_name}:${local.org_tag}"
+  settings_image = "${local.image_base}/${var.settings_service_name}:${local.settings_tag}"
 
   # Cloud Run's deterministic per-project URL:
   #   https://<service>-<project_number>.<region>.run.app
@@ -44,6 +46,7 @@ locals {
   planner_url    = "https://${var.planner_service_name}-${local.run_url_suffix}"
   coder_url      = "https://${var.coder_service_name}-${local.run_url_suffix}"
   org_url        = "https://${var.org_service_name}-${local.run_url_suffix}"
+  settings_url   = "https://${var.settings_service_name}-${local.run_url_suffix}"
 
   # Pub/Sub's Google-managed service agent — needs publisher on the dead-letter
   # topic, subscriber on the source subscriptions, and token-creator on the push

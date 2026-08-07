@@ -25,7 +25,8 @@ locals {
     API_BASE_URL        = local.gateway_url
     PLANNER_URL         = local.planner_url # proxied read endpoints
     CODER_URL           = local.coder_url
-    ORG_URL             = local.org_url # org service (proxied at /api/org/*)
+    ORG_URL             = local.org_url      # org service (proxied at /api/org/*)
+    SETTINGS_URL        = local.settings_url # settings service (proxied at /api/settings-policy/*)
     FIREBASE_PROJECT_ID = var.project_id
     FIREBASE_API_KEY    = data.google_firebase_web_app_config.default.api_key
     # RBAC (packages/shared/src/authz.js): least-privilege default role for a
