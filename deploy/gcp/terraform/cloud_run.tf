@@ -15,7 +15,7 @@ locals {
     PLANNER_URL         = local.planner_url # proxied read endpoints
     CODER_URL           = local.coder_url
     FIREBASE_PROJECT_ID = var.project_id
-    FIREBASE_API_KEY    = var.firebase_api_key
+    FIREBASE_API_KEY    = data.google_firebase_web_app_config.default.api_key
     # Firebase web config is PUBLIC (apiKey/authDomain/projectId) — served to the
     # browser via /api/auth/config, NOT a secret. Only set the optional keys when
     # non-empty so the gateway falls back to its own defaults otherwise.

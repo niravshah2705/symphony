@@ -208,11 +208,9 @@ variable "api_base_url" {
   default     = ""
 }
 
-variable "firebase_api_key" {
-  type        = string
-  description = "Public Firebase Web API key — NOT a secret; exposed to the browser via /api/auth/config."
-  default     = ""
-}
+# NOTE: the Firebase Web API key is no longer a variable — Terraform reads it
+# straight from the managed web app via data.google_firebase_web_app_config (see
+# firebase.tf), so no FIREBASE_API_KEY repo var / manual copy is needed.
 
 variable "firebase_auth_domain" {
   type        = string

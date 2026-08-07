@@ -65,6 +65,6 @@ locals {
     # PUBLIC (not a secret); internal services build it but never use it.
     AUTH_MODE           = "firebase"
     FIREBASE_PROJECT_ID = var.project_id
-    FIREBASE_API_KEY    = var.firebase_api_key
+    FIREBASE_API_KEY    = data.google_firebase_web_app_config.default.api_key
   }
 }

@@ -29,6 +29,26 @@ Need a full rebuild + apply of everything (e.g. after a manual hotfix or to
 re-converge state)? Trigger the workflow manually with **`deploy_all: true`**
 (Actions → Deploy to GCP → Run workflow).
 
+## Automated bootstrap (new project)
+
+**`deploy/gcp/bootstrap.sh` does §1–§3 + the secret prerequisites in one run** —
+enable APIs, create the state bucket, create the deployer SA + roles, set up WIF,
+create the Pub/Sub service agent, seed Secret Manager, and set the GitHub
+secrets/variables (then imports the secrets into TF state so the first `git push`
+applies cleanly):
+
+```bash
+PROJECT_ID=my-proj REPO=owner/repo LINEAR_API_KEY=lin_... \
+  ./deploy/gcp/bootstrap.sh
+```
+
+After it, only two console actions remain: **link a billing account** and
+**enable the Google sign-in provider** in the Firebase console (the one Firebase
+piece Terraform can't create). Then push to main (first run:
+`gh workflow run deploy.yml -f deploy_all=true`).
+
+The manual equivalents are documented below for reference / customization.
+
 One-time setup below (values pre-filled for project `adlc-9e72f`, number
 `819642330335`, repo `niravshah2705/symphony` — change if yours differ).
 
@@ -95,7 +115,8 @@ gh variable set GCP_PROJECT_ID   --repo niravshah2705/symphony --body "adlc-9e72
 gh variable set GCP_REGION       --repo niravshah2705/symphony --body "asia-south1"
 gh variable set SPA_BUCKET       --repo niravshah2705/symphony --body "adlc-9e72f-aifleet-spa"
 gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72f-tfstate"
-gh variable set FIREBASE_API_KEY --repo niravshah2705/symphony --body "AIzaSyBBofGcIZP_JzcCHmuhAkoa_sMpdTWj5_8"
+# FIREBASE_API_KEY is NOT needed — Terraform reads it from the managed Firebase
+# web app (data.google_firebase_web_app_config) and injects it into the gateway.
 # Optional: gh variable set FIREBASE_ALLOWED_DOMAIN --repo niravshah2705/symphony --body "yourco.com"
 ```
 

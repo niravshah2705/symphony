@@ -32,9 +32,10 @@ in-process and worker events reach the gateway's SSE via the local collector
 Set the env vars documented in `.env.example` (GCP section) on each service:
 `STORE_BACKEND=firestore`, `MESSAGING_MODE=pubsub`, `EVENTS_BACKEND=firestore`,
 `AUTH_MODE=firebase`, project/region, topic names, push audience + SA, and the
-gateway's `SPA_ORIGIN` / `API_BASE_URL` / `STREAM_TOKEN_SECRET` plus the public
-Firebase web config (`FIREBASE_PROJECT_ID` / `FIREBASE_API_KEY`, optional
-`FIREBASE_AUTH_DOMAIN` / `FIREBASE_ALLOWED_DOMAIN`).
+gateway's `SPA_ORIGIN` / `API_BASE_URL` / `STREAM_TOKEN_SECRET`. The public
+Firebase web config (`FIREBASE_API_KEY` / `FIREBASE_AUTH_DOMAIN`) is injected by
+Terraform from the managed web app — no manual key needed; `FIREBASE_PROJECT_ID`
+defaults to the project id, and `FIREBASE_ALLOWED_DOMAIN` is optional.
 
 ### Deploy — one-shot script (recommended)
 
@@ -48,7 +49,6 @@ PROJECT_ID=my-proj \
 SPA_BUCKET=my-proj-aifleet-spa \        # globally-unique
 TF_STATE_BUCKET=my-proj-tfstate \
 LINEAR_API_KEY=lin_... \                # required (services won't start without it)
-FIREBASE_API_KEY=AIza... \              # public Firebase Web API key (NOT a secret)
 ./deploy/gcp/deploy.sh
 ```
 
@@ -59,7 +59,7 @@ gateway URL + SPA URL and the Firebase authorized domains to register.
 
 ### Deploy — CI (Cloud Build)
 
-`gcloud builds submit --config cloudbuild.yaml --substitutions=_BUCKET=...,_TF_STATE_BUCKET=...,_FIREBASE_API_KEY=...`
+`gcloud builds submit --config cloudbuild.yaml --substitutions=_BUCKET=...,_TF_STATE_BUCKET=...`
 runs the same build → SPA-publish → staged `terraform apply` in Cloud Build.
 Create the Secret Manager versions first (the script does this for you).
 
