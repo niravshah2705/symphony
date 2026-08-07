@@ -19,7 +19,9 @@ resource "google_project_iam_member" "org_datastore" {
 }
 
 # Local-JWT signing secret. The service requires it (>=32 chars) even though the
-# platform uses Firebase OIDC; the value is seeded out-of-band (deploy.sh / gcloud).
+# platform uses Firebase OIDC. Terraform generates and seeds it (a stable random
+# value stored in Secret Manager + the remote state) so the org revision always
+# has a version to mount — no out-of-band seeding step, no CD ordering hazard.
 resource "google_secret_manager_secret" "org_jwt_secret" {
   project   = var.project_id
   secret_id = "org-jwt-secret"
@@ -30,6 +32,18 @@ resource "google_secret_manager_secret" "org_jwt_secret" {
   }
 
   depends_on = [google_project_service.services]
+}
+
+# Generated once and kept stable across applies (rotating it would invalidate any
+# in-flight local refresh tokens). 48 chars satisfies the service's >=32 minimum.
+resource "random_password" "org_jwt_secret" {
+  length  = 48
+  special = false
+}
+
+resource "google_secret_manager_secret_version" "org_jwt_secret" {
+  secret      = google_secret_manager_secret.org_jwt_secret.id
+  secret_data = random_password.org_jwt_secret.result
 }
 
 resource "google_secret_manager_secret_iam_member" "org_jwt_accessor" {
@@ -109,6 +123,7 @@ resource "google_cloud_run_v2_service" "org" {
     google_firestore_database.default,
     google_project_iam_member.org_datastore,
     google_secret_manager_secret_iam_member.org_jwt_accessor,
+    google_secret_manager_secret_version.org_jwt_secret,
   ]
 }
 

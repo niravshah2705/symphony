@@ -257,6 +257,7 @@ jobs:
             -var="firebase_allowed_domain=${{ vars.FIREBASE_ALLOWED_DOMAIN }}"
             -var="auth_admin_emails=${{ vars.AUTH_ADMIN_EMAILS }}"
             -var="auth_default_role=${{ vars.AUTH_DEFAULT_ROLE || 'viewer' }}"
+            -var="google_one_tap_client_id=${{ vars.GOOGLE_ONE_TAP_CLIENT_ID }}"
           )
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")

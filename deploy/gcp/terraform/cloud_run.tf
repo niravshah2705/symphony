@@ -28,9 +28,9 @@ locals {
     var.firebase_auth_domain != "" ? { FIREBASE_AUTH_DOMAIN = var.firebase_auth_domain } : {},
     var.firebase_allowed_domain != "" ? { FIREBASE_ALLOWED_DOMAIN = var.firebase_allowed_domain } : {},
     var.auth_admin_emails != "" ? { AUTH_ADMIN_EMAILS = var.auth_admin_emails } : {},
-    # Public Google One Tap client id (not a secret). Only set when provided so
-    # the SPA falls back to the Firebase Google popup otherwise.
-    var.google_one_tap_client_id != "" ? { GOOGLE_ONE_TAP_CLIENT_ID = var.google_one_tap_client_id } : {},
+    # GOOGLE_ONE_TAP_CLIENT_ID is NOT here — it is delivered from Secret Manager
+    # (google_secret_manager_secret.google_one_tap_client_id) as a secret env on
+    # the gateway container below, only when a value is configured.
   )
 
   planner_env = merge(local.common_env, {
@@ -61,6 +61,42 @@ locals {
     # ISSUE_ID (+ CONVERSATION_ID) are supplied per-execution by coder-control
     # as container overrides — see packages/shared/src/messaging/jobs.js.
   })
+}
+
+# --- Google One Tap client id (Secret Manager) --------------------------------
+# The Google OAuth Web client id used by the One Tap prompt. It is technically a
+# PUBLIC value (served to the browser via /api/auth/config), but per operator
+# preference it is managed in Secret Manager alongside the other config secrets
+# and injected as a secret env. Created + versioned by Terraform from the tfvar
+# only when a value is provided; otherwise the SPA falls back to the Google popup.
+# NOTE: Terraform cannot mint an OAuth client id — create the Web client in the
+# GCP console (APIs & Services → Credentials) with the SPA origin as an
+# Authorized JavaScript origin, then pass its id as google_one_tap_client_id.
+resource "google_secret_manager_secret" "google_one_tap_client_id" {
+  count     = var.google_one_tap_client_id != "" ? 1 : 0
+  project   = var.project_id
+  secret_id = "google-one-tap-client-id"
+  labels    = merge(local.common_labels, { component = "gateway" })
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+resource "google_secret_manager_secret_version" "google_one_tap_client_id" {
+  count       = var.google_one_tap_client_id != "" ? 1 : 0
+  secret      = google_secret_manager_secret.google_one_tap_client_id[0].id
+  secret_data = var.google_one_tap_client_id
+}
+
+resource "google_secret_manager_secret_iam_member" "gateway_one_tap" {
+  count     = var.google_one_tap_client_id != "" ? 1 : 0
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.google_one_tap_client_id[0].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.gateway.email}"
 }
 
 # --- Gateway (PUBLIC) ---------------------------------------------------------
@@ -117,6 +153,21 @@ resource "google_cloud_run_v2_service" "gateway" {
         }
       }
 
+      # Public Google One Tap client id, delivered from Secret Manager only when
+      # configured. Absent → the SPA uses the Firebase Google popup.
+      dynamic "env" {
+        for_each = var.google_one_tap_client_id != "" ? [1] : []
+        content {
+          name = "GOOGLE_ONE_TAP_CLIENT_ID"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.google_one_tap_client_id[0].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
       resources {
         limits = {
           cpu    = "1"
@@ -134,6 +185,8 @@ resource "google_cloud_run_v2_service" "gateway" {
     google_project_iam_member.gateway_datastore,
     google_secret_manager_secret_iam_member.gateway_stream_token,
     google_secret_manager_secret_iam_member.gateway_linear,
+    google_secret_manager_secret_version.google_one_tap_client_id,
+    google_secret_manager_secret_iam_member.gateway_one_tap,
   ]
 }
 

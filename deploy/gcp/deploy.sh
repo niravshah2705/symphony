@@ -127,9 +127,7 @@ seed_secret() { # id, value
 # stream-token-secret: never printed; generated once if absent (do NOT rotate on redeploy).
 STREAM_TOKEN_SECRET="${STREAM_TOKEN_SECRET:-$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || head -c 32 /dev/urandom | base64 | tr -d '\n')}"
 seed_secret stream-token-secret "$STREAM_TOKEN_SECRET"
-# org service local-JWT signing secret (auto-generated once; do NOT rotate on redeploy).
-ORG_JWT_SECRET="${ORG_JWT_SECRET:-$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || head -c 32 /dev/urandom | base64 | tr -d '\n')}"
-seed_secret org-jwt-secret "$ORG_JWT_SECRET"
+# org-jwt-secret is Terraform-managed (random_password + secret version); no seed here.
 [ -n "${LINEAR_API_KEY:-}" ]    && seed_secret linear-api-key   "$LINEAR_API_KEY"    || echo "  linear-api-key: LINEAR_API_KEY not provided"
 [ -n "${GITHUB_TOKEN:-}" ]      && seed_secret github-token     "$GITHUB_TOKEN"      || true
 [ -n "${LANGSMITH_API_KEY:-}" ] && seed_secret langsmith-api-key "$LANGSMITH_API_KEY" || true
