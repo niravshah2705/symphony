@@ -11,7 +11,6 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from app.core.firestore import Db
 from app.schemas.common import PageParams
 
 # Top-level collections
@@ -39,7 +38,7 @@ def memberships_col(org_id: uuid.UUID) -> str:
 
 
 async def paginate(
-    db: Db,
+    uow,  # app.core.database.Uow (untyped to avoid an import cycle)
     collection: str,
     params: PageParams,
     *,
@@ -48,8 +47,8 @@ async def paginate(
     desc: bool = True,
 ) -> tuple[list[dict], int]:
     """Return (page of raw docs, total count). Page size is bounded by PageParams."""
-    total = await db.count(collection, filters)
-    rows = await db.query(
+    total = await uow.count(collection, filters)
+    rows = await uow.query(
         collection, filters, order_by=order_by, desc=desc, limit=params.limit, offset=params.offset
     )
     return rows, total

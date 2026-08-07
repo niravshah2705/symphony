@@ -93,14 +93,16 @@ async def add_member(
 
 
 async def create_super_admin(email: str = "root@platform.com", password: str = "password123") -> str:
-    """Insert a super-admin directly and return an access token for it."""
-    from app.core.database import get_sessionmaker
+    """Insert a super-admin directly and return its email (log in for a token)."""
+    from app.core.database import new_uow
     from app.core.security import hash_password
     from app.models.enums import AuthProvider, OrgRole
     from app.models.user import User
+    from app.repositories.user_repo import UserRepository
 
-    async with get_sessionmaker()() as session:
-        user = User(
+    uow = new_uow()
+    await UserRepository(uow).add(
+        User(
             email=email,
             password_hash=hash_password(password),
             auth_provider=AuthProvider.LOCAL,
@@ -110,6 +112,6 @@ async def create_super_admin(email: str = "root@platform.com", password: str = "
             is_active=True,
             email_verified=True,
         )
-        session.add(user)
-        await session.commit()
+    )
+    await uow.commit()
     return email

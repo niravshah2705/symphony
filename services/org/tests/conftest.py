@@ -1,48 +1,43 @@
-"""Test fixtures: in-memory SQLite, app client, and auth helpers."""
+"""Test fixtures: in-memory Firestore fake, app client, and a unit-of-work.
+
+No emulator or GCP project is required — `InMemoryDb` gives the repositories a
+real backing store so the authz/tenant-isolation matrix runs in-process.
+"""
 from __future__ import annotations
 
 import os
 
 # Configure the environment BEFORE any app module imports/caches settings.
 os.environ.setdefault("JWT_SECRET", "test-secret-0123456789abcdef0123456789")
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
 os.environ.setdefault("IDP_ENABLED", "false")
 os.environ.setdefault("AUTH_RATE_LIMIT", "10000/minute")  # don't throttle tests
+# No GCP_PROJECT_ID -> get_db() returns the in-memory fake.
+os.environ.pop("GCP_PROJECT_ID", None)
 
 import pytest_asyncio  # noqa: E402
 from asgi_lifespan import LifespanManager  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
-from app.core.database import get_engine  # noqa: E402
+from app.core.database import Uow, new_uow  # noqa: E402,F401
+from app.core.firestore import InMemoryDb, set_db  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import Base  # noqa: E402
 
 
 @pytest_asyncio.fixture
 async def client() -> AsyncClient:
-    engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
+    set_db(InMemoryDb())  # fresh, isolated store per test
     app = create_app()
     async with LifespanManager(app):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as c:
             yield c
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    set_db(None)
 
 
 @pytest_asyncio.fixture
-async def db_session():
-    """A committed-per-flush session for direct service-layer unit tests."""
-    from app.core.database import get_sessionmaker
-
-    engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    async with get_sessionmaker()() as session:
-        yield session
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+async def db_session() -> Uow:
+    """A unit of work over a fresh in-memory store for direct service-layer tests.
+    Tests that mutate loaded objects should `await session.commit()` to flush."""
+    set_db(InMemoryDb())
+    yield new_uow()
+    set_db(None)

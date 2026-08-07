@@ -1,18 +1,18 @@
 """Unit of work over Firestore.
 
-Replaces the SQLAlchemy async session. It keeps an identity map with a snapshot
-of each loaded/added object so that the service layer's *mutate-then-commit*
-pattern still persists: services load an object via a repository, mutate its
-fields in place, and `get_session` flushes the dirty objects on request success.
+Replaces the SQLAlchemy async session with just enough of its semantics that the
+service layer is unchanged:
 
-- `add()` and repository `delete()` are applied IMMEDIATELY (Firestore writes
-  are atomic per-document; there is no multi-doc rollback), so subsequent reads
-  in the same request see them.
-- In-place field mutations are detected by comparing `obj.to_doc()` to the
-  snapshot and written on `commit()`.
+- **Identity map**: loading the same document twice returns the *same* Python
+  object, so a mutation is visible through every reference to it.
+- **Dirty tracking + autoflush**: in-place field mutations are flushed to
+  Firestore before any read (`get`/`query`/`count`) and on `commit()`, so a
+  later query in the same request sees pending changes (SQLAlchemy autoflush).
+- `add()` and repository `delete()` are applied immediately.
 
-Atomic multi-step operations (refresh-token rotation) use
-`db.run_transaction(...)` directly, not this dirty-flush path.
+Reads MUST go through `Uow.get/query/count` (they autoflush first); writes go
+through `Uow.db` directly. Atomic multi-step ops (refresh-token rotation) use
+`Uow.db.run_transaction`.
 """
 from __future__ import annotations
 
@@ -25,12 +25,14 @@ from app.core.firestore import Db, get_db
 class Uow:
     def __init__(self, db: Db) -> None:
         self.db = db
-        # (collection, doc_id) -> (object, snapshot doc at track time)
         self._tracked: dict[tuple[str, str], tuple[Any, dict]] = {}
 
+    # -- identity map ---------------------------------------------------------
+    def tracked(self, collection: str, doc_id: str) -> Any | None:
+        entry = self._tracked.get((collection, doc_id))
+        return entry[0] if entry else None
+
     def track(self, collection: str, obj: Any, doc_id: str | None = None) -> Any:
-        """Register a loaded object so later in-place mutations are flushed.
-        `doc_id` defaults to str(obj.id); pass it for composite-id docs."""
         did = doc_id or str(obj.id)
         self._tracked[(collection, did)] = (obj, obj.to_doc())
         return obj
@@ -41,7 +43,6 @@ class Uow:
         return objs
 
     async def add(self, collection: str, obj: Any, doc_id: str | None = None) -> Any:
-        """Persist a new object immediately and track it for later mutations."""
         did = doc_id or str(obj.id)
         await self.db.set(collection, did, obj.to_doc())
         return self.track(collection, obj, did)
@@ -49,24 +50,39 @@ class Uow:
     def forget(self, collection: str, obj: Any, doc_id: str | None = None) -> None:
         self._tracked.pop((collection, doc_id or str(obj.id)), None)
 
-    async def commit(self) -> None:
-        """Flush every tracked object whose serialized form changed."""
+    # -- dirty flush + autoflushing reads ------------------------------------
+    async def flush(self) -> None:
         for (collection, doc_id), (obj, snapshot) in list(self._tracked.items()):
             current = obj.to_doc()
             if current != snapshot:
                 await self.db.set(collection, doc_id, current)
                 self._tracked[(collection, doc_id)] = (obj, current)
 
+    async def get(self, collection: str, doc_id: str) -> dict | None:
+        await self.flush()
+        return await self.db.get(collection, doc_id)
+
+    async def query(self, *args, **kwargs) -> list[dict]:
+        await self.flush()
+        return await self.db.query(*args, **kwargs)
+
+    async def count(self, *args, **kwargs) -> int:
+        await self.flush()
+        return await self.db.count(*args, **kwargs)
+
+    async def commit(self) -> None:
+        await self.flush()
+
 
 def new_uow() -> Uow:
     """A standalone unit of work (used outside the request lifecycle: bootstrap,
-    the auth middleware). Callers must `await uow.commit()` themselves."""
+    the auth middleware). Callers must `await uow.commit()` to flush mutations."""
     return Uow(get_db())
 
 
 async def get_session() -> AsyncIterator[Uow]:
     """FastAPI dependency yielding a request-scoped unit of work; flushes dirty
-    objects on success. Deletes/adds are already persisted immediately."""
+    objects on success."""
     uow = new_uow()
     yield uow
     await uow.commit()

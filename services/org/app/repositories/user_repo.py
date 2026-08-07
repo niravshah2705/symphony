@@ -23,16 +23,19 @@ class UserRepository:
         self.uow = uow
 
     async def get_by_id(self, user_id: uuid.UUID) -> User | None:
-        doc = await self.uow.db.get(USERS, str(user_id))
+        existing = self.uow.tracked(USERS, str(user_id))
+        if existing is not None:
+            return existing
+        doc = await self.uow.get(USERS, str(user_id))
         return self.uow.track(USERS, User.from_doc(doc)) if doc else None
 
     async def get_global_by_email(self, email: str) -> User | None:
         """Global lookup — used only by the login/register/create flows."""
-        rows = await self.uow.db.query(USERS, [("email", email)], limit=1)
+        rows = await self.uow.query(USERS, [("email", email)], limit=1)
         return self.uow.track(USERS, User.from_doc(rows[0])) if rows else None
 
     async def get_by_external_subject(self, subject: str) -> User | None:
-        rows = await self.uow.db.query(
+        rows = await self.uow.query(
             USERS,
             [("external_subject", subject), ("auth_provider", AuthProvider.EXTERNAL.value)],
             limit=1,
@@ -40,7 +43,7 @@ class UserRepository:
         return self.uow.track(USERS, User.from_doc(rows[0])) if rows else None
 
     async def get_super_admin(self) -> User | None:
-        rows = await self.uow.db.query(USERS, [("is_super_admin", True)], limit=1)
+        rows = await self.uow.query(USERS, [("is_super_admin", True)], limit=1)
         return User.from_doc(rows[0]) if rows else None
 
     async def get_in_org(self, user_id: uuid.UUID, org_id: uuid.UUID) -> User | None:
@@ -48,7 +51,7 @@ class UserRepository:
         return user if (user is not None and user.org_id == org_id) else None
 
     async def list_in_org(self, org_id: uuid.UUID, params: PageParams) -> tuple[list[User], int]:
-        rows, total = await paginate(self.uow.db, USERS, params, filters=[("org_id", str(org_id))])
+        rows, total = await paginate(self.uow, USERS, params, filters=[("org_id", str(org_id))])
         return self.uow.track_all(USERS, [User.from_doc(d) for d in rows]), total
 
     async def add(self, user: User) -> User:

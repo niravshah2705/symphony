@@ -31,10 +31,10 @@ pytestmark = pytest.mark.asyncio
 
 
 async def _seed_org(session, name="Org", slug=None) -> Organization:
+    from app.repositories.org_repo import OrgRepository
+
     org = Organization(name=name, slug=slug or uuid.uuid4().hex[:12])
-    session.add(org)
-    await session.flush()
-    return org
+    return await OrgRepository(session).add(org)
 
 
 def _principal(org_id, *, role=OrgRole.ORG_ADMIN, user_id=None) -> Principal:
@@ -48,11 +48,11 @@ def _principal(org_id, *, role=OrgRole.ORG_ADMIN, user_id=None) -> Principal:
 
 
 async def _seed_project(session, org_id, name="P") -> Project:
+    from app.repositories.project_repo import ProjectRepository
+
     project = Project(org_id=org_id, name=name)
     project.tags = []
-    session.add(project)
-    await session.flush()
-    return project
+    return await ProjectRepository(session).add(project)
 
 
 # ---- user_service -----------------------------------------------------------
@@ -297,6 +297,6 @@ async def test_task_service(db_session):
 
     await task_service.set_task_tags(db_session, admin, task, [])
     assert task.tags == []
-    await task_service.delete_task(db_session, task)
+    await task_service.delete_task(db_session, project, task)
     with pytest.raises(NotFoundError):
         await task_service.get_task(db_session, project, task.id)

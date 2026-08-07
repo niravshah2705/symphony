@@ -26,7 +26,10 @@ class TaskRepository:
         return self.uow.track(self._col(project), task)
 
     async def get_in_project(self, project: Project, task_id: uuid.UUID) -> Task | None:
-        doc = await self.uow.db.get(self._col(project), str(task_id))
+        existing = self.uow.tracked(self._col(project), str(task_id))
+        if existing is not None:
+            return existing
+        doc = await self.uow.get(self._col(project), str(task_id))
         return await self._hydrate(project, Task.from_doc(doc), doc) if doc else None
 
     async def list_in_project(
@@ -43,7 +46,7 @@ class TaskRepository:
             filters.append(("status", status.value))
         if assignee_id is not None:
             filters.append(("assignee_id", str(assignee_id)))
-        rows = await self.uow.db.query(
+        rows = await self.uow.query(
             self._col(project), filters or None, order_by="created_at", desc=True
         )
         if tag_id is not None:  # array membership — filtered in memory

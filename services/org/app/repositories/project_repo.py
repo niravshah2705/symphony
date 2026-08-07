@@ -20,20 +20,23 @@ class ProjectRepository:
         return self.uow.track(projects_col(org_id), project)
 
     async def get(self, project_id: uuid.UUID, org_id: uuid.UUID) -> Project | None:
-        doc = await self.uow.db.get(projects_col(org_id), str(project_id))
+        existing = self.uow.tracked(projects_col(org_id), str(project_id))
+        if existing is not None:
+            return existing
+        doc = await self.uow.get(projects_col(org_id), str(project_id))
         return await self._hydrate(org_id, Project.from_doc(doc), doc) if doc else None
 
     async def list_in_org(self, org_id: uuid.UUID, params: PageParams) -> tuple[list[Project], int]:
-        rows, total = await paginate(self.uow.db, projects_col(org_id), params)
+        rows, total = await paginate(self.uow, projects_col(org_id), params)
         return [await self._hydrate(org_id, Project.from_doc(d), d) for d in rows], total
 
     async def list_for_member(
         self, org_id: uuid.UUID, user_id: uuid.UUID, params: PageParams
     ) -> tuple[list[Project], int]:
-        memberships = await self.uow.db.query(memberships_col(org_id), [("user_id", str(user_id))])
+        memberships = await self.uow.query(memberships_col(org_id), [("user_id", str(user_id))])
         docs = []
         for m in memberships:
-            doc = await self.uow.db.get(projects_col(org_id), m["project_id"])
+            doc = await self.uow.get(projects_col(org_id), m["project_id"])
             if doc is not None:
                 docs.append(doc)
         docs.sort(key=lambda d: d.get("created_at"), reverse=True)

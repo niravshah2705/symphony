@@ -19,7 +19,7 @@ class MembershipRepository:
     async def get(
         self, org_id: uuid.UUID, project_id: uuid.UUID, user_id: uuid.UUID
     ) -> ProjectMembership | None:
-        rows = await self.uow.db.query(
+        rows = await self.uow.query(
             memberships_col(org_id),
             [("project_id", str(project_id)), ("user_id", str(user_id))],
             limit=1,
@@ -29,7 +29,7 @@ class MembershipRepository:
     async def list_for_project(
         self, org_id: uuid.UUID, project_id: uuid.UUID
     ) -> list[tuple[ProjectMembership, User]]:
-        rows = await self.uow.db.query(
+        rows = await self.uow.query(
             memberships_col(org_id), [("project_id", str(project_id))], order_by="created_at", desc=True
         )
         users = UserRepository(self.uow)

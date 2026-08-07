@@ -36,18 +36,21 @@ class OrgRepository:
         return self.uow.track(ORGS, org)
 
     async def get(self, org_id: uuid.UUID) -> Organization | None:
-        doc = await self.uow.db.get(ORGS, str(org_id))
+        existing = self.uow.tracked(ORGS, str(org_id))
+        if existing is not None:
+            return existing
+        doc = await self.uow.get(ORGS, str(org_id))
         return await self._hydrate(Organization.from_doc(doc), doc) if doc else None
 
     async def get_by_slug(self, slug: str) -> Organization | None:
-        rows = await self.uow.db.query(ORGS, [("slug", slug)], limit=1)
+        rows = await self.uow.query(ORGS, [("slug", slug)], limit=1)
         return await self._hydrate(Organization.from_doc(rows[0]), rows[0]) if rows else None
 
     async def add(self, org: Organization) -> Organization:
         return await self.uow.add(ORGS, org)
 
     async def list(self, params: PageParams) -> tuple[list[Organization], int]:
-        rows, total = await paginate(self.uow.db, ORGS, params)
+        rows, total = await paginate(self.uow, ORGS, params)
         return [await self._hydrate(Organization.from_doc(d), d) for d in rows], total
 
     async def delete(self, org: Organization) -> None:

@@ -20,7 +20,7 @@ async def load_tags(uow: Uow, org_id: uuid.UUID, ids: Sequence[uuid.UUID]) -> li
     """Hydrate tag objects by id, preserving order and skipping missing ones."""
     out: list[Tag] = []
     for tid in ids:
-        doc = await uow.db.get(tags_col(org_id), str(tid))
+        doc = await uow.get(tags_col(org_id), str(tid))
         if doc is not None:
             out.append(Tag.from_doc(doc))
     return out
@@ -31,18 +31,18 @@ class TagRepository:
         self.uow = uow
 
     async def get_in_org(self, tag_id: uuid.UUID, org_id: uuid.UUID) -> Tag | None:
-        doc = await self.uow.db.get(tags_col(org_id), str(tag_id))
+        doc = await self.uow.get(tags_col(org_id), str(tag_id))
         return self.uow.track(tags_col(org_id), Tag.from_doc(doc)) if doc else None
 
     async def get_by_name(self, name: str, org_id: uuid.UUID) -> Tag | None:
-        rows = await self.uow.db.query(tags_col(org_id), [("name", name)], limit=1)
+        rows = await self.uow.query(tags_col(org_id), [("name", name)], limit=1)
         return Tag.from_doc(rows[0]) if rows else None
 
     async def get_many_in_org(self, ids: Sequence[uuid.UUID], org_id: uuid.UUID) -> list[Tag]:
         return await load_tags(self.uow, org_id, list(dict.fromkeys(ids)))
 
     async def list_in_org(self, org_id: uuid.UUID, params: PageParams) -> tuple[list[Tag], int]:
-        rows, total = await paginate(self.uow.db, tags_col(org_id), params)
+        rows, total = await paginate(self.uow, tags_col(org_id), params)
         return self.uow.track_all(tags_col(org_id), [Tag.from_doc(d) for d in rows]), total
 
     async def add(self, tag: Tag) -> Tag:

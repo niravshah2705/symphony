@@ -158,17 +158,16 @@ async def test_super_admin_org_lifecycle(client):
 
 async def test_email_verification_flow(client):
     """Verify-email consumes a single-use token (generated server-side)."""
-    from app.core.database import get_sessionmaker
-    from app.models.user import User
+    from app.core.database import new_uow
+    from app.repositories.user_repo import UserRepository
     from app.services import auth_service
-    from sqlalchemy import select
 
     await register_org_admin(client, email="verify@acme.com")
 
-    async with get_sessionmaker()() as session:
-        user = await session.scalar(select(User).where(User.email == "verify@acme.com"))
-        raw = await auth_service.issue_email_verification(session, user)
-        await session.commit()
+    uow = new_uow()
+    user = await UserRepository(uow).get_global_by_email("verify@acme.com")
+    raw = await auth_service.issue_email_verification(uow, user)
+    await uow.commit()
 
     ok = await client.get(f"/api/v1/auth/verify-email?token={raw}")
     assert ok.status_code == 200 and ok.json()["status"] == "verified"
