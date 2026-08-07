@@ -43,7 +43,7 @@ output "spa_website_url" {
 }
 
 output "skills_bucket" {
-  description = "GCS bucket holding versioned agent-skill bundles (null when the skills registry is disabled). Mounted read-only on planner + coder at /skills; the runtime pins var.skills_version."
+  description = "Terraform-created GCS bucket holding versioned agent-skill bundles (null when skills_enabled = false). Name defaults to '<project_id>-aifleet-skills'. Mounted read-only on planner + coder at /skills; the runtime pins var.skills_version. The CI publish workflow targets this same name."
   value       = one(google_storage_bucket.skills[*].name)
 }
 
