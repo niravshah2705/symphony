@@ -12,8 +12,10 @@ Regenerates the code-graph documentation (`docs/code-graph/`) and **blocks the
 commit** if the result differs from what you staged. This keeps the docs in
 sync with the code that produced them.
 
-- Runs only when the commit touches parseable source (`.js/.cjs/.mjs/.jsx/.ts/.tsx/.py/.sh`)
-  or the generated docs themselves — doc-free commits are instant.
+- Runs only when the commit touches source in a language code-review-graph
+  supports (`.py`, `.ts`, `.go`, `.rs`, `.java`, `.tf`, … — the full `CODE_RE`
+  list in `pre-commit`) or the generated docs — other commits are instant.
+  (`.yml/.yaml` is excluded on purpose: this repo's YAML is CI/config, not Ansible.)
 - On drift, it regenerates `docs/code-graph/` for you; just `git add -A docs/code-graph`
   and commit again.
 - Requires the `code-review-graph` CLI (`pipx install code-review-graph`).

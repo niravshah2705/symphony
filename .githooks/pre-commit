@@ -24,9 +24,16 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
 # --- fast path: only run when this commit includes parseable source or docs --
-CODE_RE='\.(js|cjs|mjs|jsx|ts|tsx|py|sh)$'
+# Extensions mirror the languages code-review-graph supports (its Tree-sitter
+# grammars + documented infra like Terraform). Kept as a SUPERSET of what any
+# single CRG version parses — that's safe for a drift gate: an unparsed type at
+# worst triggers a no-op regeneration, whereas a MISSING type risks silent
+# drift. Matched case-insensitively (grep -Eiq) so e.g. .R matches .r.
+# NOTE: .yml/.yaml (Ansible) is intentionally excluded — this repo's YAML is
+# CI/config, not Ansible, so including it would regenerate on every config edit.
+CODE_RE='\.(astro|bash|c|cc|cjs|cpp|cs|cxx|dart|ex|exs|gd|go|h|hcl|hh|hpp|ipynb|java|jl|js|jsx|ksh|kt|lua|luau|m|mjs|mm|nix|php|pl|pm|ps1|psd1|psm1|py|r|rb|res|resi|rs|scala|sh|sol|sql|sv|svelte|svh|swift|t|tf|ts|tsx|v|vb|vh|vue|xs|zig|zsh)$'
 STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
-if ! printf '%s\n' "$STAGED" | grep -Eq "$CODE_RE" \
+if ! printf '%s\n' "$STAGED" | grep -Eiq "$CODE_RE" \
    && ! printf '%s\n' "$STAGED" | grep -q '^docs/code-graph/'; then
   exit 0
 fi

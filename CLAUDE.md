@@ -100,8 +100,9 @@ before changing that service.
 
 `.githooks/pre-commit` regenerates `docs/code-graph/` and **blocks the commit**
 if the result differs from what you staged, so the map never drifts from the
-code. It runs only when a commit touches parseable source
-(`.js/.cjs/.mjs/.jsx/.ts/.tsx/.py/.sh`) or the docs themselves.
+code. It runs only when a commit touches source in a language code-review-graph
+supports (`.py`, `.ts`, `.go`, `.rs`, `.java`, `.tf`, … — the full `CODE_RE`
+list in `.githooks/pre-commit`) or the docs themselves.
 
 - Enable once per clone: `npm run hooks:install`
 - On a block: `git add -A docs/code-graph` and commit again.
