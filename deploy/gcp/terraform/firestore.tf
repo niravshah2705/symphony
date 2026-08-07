@@ -5,6 +5,10 @@
 # Native mode is required for the document/collection model the store uses. A
 # project has exactly one Firestore database; this creates the "(default)" one.
 
+# NOTE: location_id is IMMUTABLE. When moving the stack to another region (e.g.
+# India), the database does NOT move with it — see docs/GCP_REGION_MIGRATION.md
+# for the export→import (or recreate) runbook. var.firestore_location stays nam5
+# by default so `terraform apply` never attempts an (impossible) in-place move.
 resource "google_firestore_database" "default" {
   project     = var.project_id
   name        = "(default)"

@@ -19,7 +19,7 @@
 #   FIREBASE_API_KEY=AIza... \              # public Firebase Web API key (NOT a secret)
 #   ./deploy/gcp/deploy.sh
 #
-# Optional env: REGION (us-central1), AR_REPO (ai-fleet), TF_STATE_PREFIX
+# Optional env: REGION (asia-south1), AR_REPO (ai-fleet), TF_STATE_PREFIX
 #   (ai-fleet/gcp), IMAGE_TAG (git short SHA), FIRESTORE_LOCATION (nam5),
 #   SPA_ORIGIN (https://storage.googleapis.com), FIREBASE_ALLOWED_DOMAIN (empty =
 #   any verified user), STREAM_TOKEN_SECRET (auto-generated if unset),
@@ -31,7 +31,7 @@ set -euo pipefail
 : "${SPA_BUCKET:?set SPA_BUCKET (a globally-unique GCS bucket name)}"
 : "${TF_STATE_BUCKET:?set TF_STATE_BUCKET (GCS bucket for Terraform remote state)}"
 
-REGION="${REGION:-us-central1}"
+REGION="${REGION:-asia-south1}"
 AR_REPO="${AR_REPO:-ai-fleet}"
 TF_STATE_PREFIX="${TF_STATE_PREFIX:-ai-fleet/gcp}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"

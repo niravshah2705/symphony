@@ -9,13 +9,13 @@ variable "project_id" {
 
 variable "region" {
   type        = string
-  description = "Region for Cloud Run, Artifact Registry, Pub/Sub-adjacent resources, and Scheduler."
-  default     = "us-central1"
+  description = "Region for Cloud Run, Artifact Registry, Pub/Sub-adjacent resources, and Scheduler. Default is asia-south1 (Mumbai, India)."
+  default     = "asia-south1"
 }
 
 variable "firestore_location" {
   type        = string
-  description = "Firestore location. May be a region (e.g. us-central1) or a multi-region (nam5, eur3). Cannot be changed after the database is created."
+  description = "Firestore location. May be a region (e.g. asia-south1) or a multi-region (nam5, eur3). IMMUTABLE — cannot be changed after the database is created; relocating it needs a data migration (see docs/GCP_REGION_MIGRATION.md). Kept at nam5 so an apply never tries to move the existing database in place."
   default     = "nam5"
 }
 
