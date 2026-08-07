@@ -18,7 +18,7 @@ from __future__ import annotations
 from app.core.config import get_settings
 
 # Agent-runtime ids (RUNTIMES keys in runtimes.js).
-HARNESS: tuple[str, ...] = ("deepagent", "codex-sdk", "claude-agent-sdk")
+HARNESS: tuple[str, ...] = ("deepagent", "codex-sdk", "claude-agent-sdk", "antigravity-sdk")
 
 # Developer-tool registry domain names (DOMAINS keys in tools/index.js).
 TOOLS: tuple[str, ...] = (

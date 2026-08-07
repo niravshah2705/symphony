@@ -74,11 +74,70 @@ function domainEditor(domain, policy, universe, editors) {
   ]);
 }
 
+// Allow-listed config value (provider secret) keys — mirror of the settings
+// service CONFIG_VALUE_KEYS. Write-only from the browser (masked on read).
+const CONFIG_VALUE_KEYS = ['geminiApiKey'];
+const CONFIG_VALUE_LABELS = { geminiApiKey: 'Gemini API key (Antigravity harness)' };
+
+/**
+ * Write-only provider-key editor for one scope. The policy response only tells
+ * us whether each key is `set` (never the secret), so we show a status and take
+ * a new plaintext value to store — or an empty value to clear. `saveConfig`
+ * persists `{ [key]: value }` alone (domains untouched).
+ */
+function providerKeysEditor(policy, saveConfig) {
+  const values = (policy && policy.values) || {};
+  const fieldset = el('fieldset', { class: 'policy-domain' }, [
+    el('legend', {}, 'Provider keys (write-only)'),
+    el('p', { class: 'muted' }, 'Stored server-side and never shown again. Lower scopes override higher ones.'),
+  ]);
+  for (const key of CONFIG_VALUE_KEYS) {
+    const isSet = Boolean(values[key] && values[key].set);
+    const status = el('span', { class: 'muted' }, isSet ? 'Configured' : 'Not set');
+    const input = el('input', {
+      type: 'password',
+      class: 'policy-input',
+      autocomplete: 'off',
+      placeholder: isSet ? 'Configured — enter a new value to replace' : 'Not set — paste a key to configure',
+    });
+    const saveKeyBtn = el('button', { type: 'button', class: 'btn' }, 'Save key');
+    const clearBtn = el('button', { type: 'button', class: 'btn' }, 'Clear');
+    const persist = async (value, okMessage, newStatus, button) => {
+      button.disabled = true;
+      try {
+        await saveConfig({ [key]: value });
+        input.value = '';
+        status.textContent = newStatus;
+        toast(okMessage);
+      } catch (err) {
+        toast(err.message || 'Could not update key.', 'error');
+      } finally {
+        button.disabled = false;
+      }
+    };
+    saveKeyBtn.addEventListener('click', () => {
+      const value = input.value.trim();
+      if (!value) {
+        toast('Enter a key value to save.', 'error');
+        return;
+      }
+      persist(value, 'Key saved.', 'Configured', saveKeyBtn);
+    });
+    clearBtn.addEventListener('click', () => persist('', 'Key cleared.', 'Not set', clearBtn));
+    fieldset.append(
+      el('label', {}, [CONFIG_VALUE_LABELS[key] || key, ' — ', status, input]),
+      el('div', { class: 'policy-controls' }, [saveKeyBtn, clearBtn])
+    );
+  }
+  return fieldset;
+}
+
 /**
  * A per-scope editing card. `load()` returns a policy (or throws), `save(body)`
- * persists it. `enabled` false renders a disabled explanation instead.
+ * persists the include/exclude domains, and (optional) `saveConfig(values)`
+ * persists provider keys. `enabled` false renders a disabled explanation.
  */
-async function scopeCard(section, { title, hint, load, save, universe, enabled, disabledReason }) {
+async function scopeCard(section, { title, hint, load, save, saveConfig, universe, enabled, disabledReason }) {
   clear(section).append(el('h2', {}, title), hint ? el('p', { class: 'muted' }, hint) : null);
   if (!enabled) {
     section.append(el('p', { class: 'muted' }, disabledReason || 'Not available for your role.'));
@@ -112,6 +171,7 @@ async function scopeCard(section, { title, hint, load, save, universe, enabled, 
     }
   });
   section.append(form);
+  if (saveConfig) section.append(providerKeysEditor(policy, saveConfig));
 }
 
 /** The resolved effective set for the caller (org → project → user cascade). */
@@ -141,6 +201,25 @@ async function effectiveCard(section, projectId) {
       ])
     );
   }
+
+  // Effective provider keys (masked — presence only, never the secret).
+  const values = data.values || {};
+  section.append(
+    el('div', { class: 'policy-effective' }, [
+      el('strong', {}, 'Provider keys'),
+      el(
+        'div',
+        { class: 'policy-chips' },
+        CONFIG_VALUE_KEYS.map((key) =>
+          el(
+            'code',
+            { class: `policy-chip ${values[key] && values[key].set ? 'ok' : ''}` },
+            `${CONFIG_VALUE_LABELS[key] || key}: ${values[key] && values[key].set ? 'set' : 'not set'}`
+          )
+        )
+      ),
+    ])
+  );
 }
 
 export async function renderSettingsPolicy(view) {
@@ -201,6 +280,7 @@ export async function renderSettingsPolicy(view) {
       disabledReason: 'Enter a project ID above to load its policy.',
       load: () => api.settingsPolicy.getProjectPolicy(projectId),
       save: (body) => api.settingsPolicy.setProjectPolicy(projectId, body),
+      saveConfig: (values) => api.settingsPolicy.setProjectConfig(projectId, values),
     });
 
   clear(view).append(
@@ -220,6 +300,7 @@ export async function renderSettingsPolicy(view) {
       enabled: true,
       load: () => api.settingsPolicy.getMyPolicy(),
       save: (body) => api.settingsPolicy.setMyPolicy(body),
+      saveConfig: (values) => api.settingsPolicy.setMyConfig(values),
     }),
     scopeCard(orgSection, {
       title: 'Organization scope',
@@ -229,6 +310,7 @@ export async function renderSettingsPolicy(view) {
       disabledReason: 'Organization admins only.',
       load: () => api.settingsPolicy.getOrgPolicy(),
       save: (body) => api.settingsPolicy.setOrgPolicy(body),
+      saveConfig: (values) => api.settingsPolicy.setOrgConfig(values),
     }),
     effectiveCard(effectiveSection),
   ]);
