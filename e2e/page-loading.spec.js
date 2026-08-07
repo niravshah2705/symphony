@@ -158,6 +158,11 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
   await page.route('**/api/auth/me', (route) => authorizedJson(route, {
     mode: 'firebase',
     authenticated: true,
+    role: 'admin',
+    // The gateway always returns the resolved permissions; the SPA gates routes
+    // on them (empty set → the agent workspace route is blocked). Mirror that so
+    // the authenticated workspace actually renders.
+    permissions: { workspace: 'write', planning: 'write', insights: 'write', settings: 'write', org: 'write' },
     user: { sub: 'firebase|ada', name: 'Ada Operator', email: 'ada@example.com' },
   }));
   await page.route('**/api/locale/suggestions**', (route) => authorizedJson(route, {
