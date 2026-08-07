@@ -331,15 +331,12 @@ test('Agent surfaces deduplicate Git pauses and explain recovery in plain langua
   await expect(page.getByText(/403|do-not-render-this-secret/)).toHaveCount(0);
 });
 
-// QUARANTINE: this test drives the pause-clear via the old 5s readiness POLL
-// (page.clock.fastForward → a second GET /api/agent/status, awaited at ~line 385).
-// The polling→SSE change removed that poll — the workspace now clears a pause from
-// a workspace SSE `agent-status` event instead — so the `waitForResponse` never
-// resolves. Needs a rewrite to deliver the clear via a stubbed workspace-stream
-// event (the product path works; only this poll-coupled test is stale). Un-fixme
-// after rewriting. Tracked as a follow-up alongside agent-workspace.spec.js:~231.
-test.fixme('Agent workspace clears a model pause after the next readiness poll', async ({ page }) => {
-  await page.clock.install({ time: new Date('2026-07-17T10:00:00.000Z') });
+// The workspace no longer polls /api/agent/status every 5s; a global workspace
+// SSE channel pushes typed snapshots instead (public/js/api.js openWorkspaceStream
+// → public/js/views/agent.js applyWorkspaceEvent). This drives the pause-clear via
+// a stubbed workspace-stream `agent-status` event with `paused:false` — the exact
+// shape agent.js merges onto its status — rather than a second readiness poll.
+test('Agent workspace clears a model pause from a workspace SSE agent-status event', async ({ page }) => {
   await mockShell(page);
   const modelPause = {
     code: 'model-unavailable',
@@ -357,29 +354,47 @@ test.fixme('Agent workspace clears a model pause after the next readiness poll',
     summary: { paused: true, pauseReason: modelPause },
     steps: [],
   };
-  let statusRequests = 0;
+  const pausedStatus = {
+    scheduleEnabled: true,
+    assumedRole: { id: 'role-1', name: 'Product lead' },
+    counts: {},
+    localActiveModel: 'Local test model',
+    paused: true,
+    pauseReason: modelPause,
+  };
+  const clearedStatus = {
+    scheduleEnabled: true,
+    assumedRole: { id: 'role-1', name: 'Product lead' },
+    counts: {},
+    localActiveModel: 'Local test model',
+    paused: false,
+    pauseReason: null,
+  };
 
-  await page.route('**/api/agent/status', (route) => {
-    statusRequests += 1;
-    return json(route, statusRequests === 1
-      ? {
-          scheduleEnabled: true,
-          assumedRole: { id: 'role-1', name: 'Product lead' },
-          counts: {},
-          localActiveModel: 'Local test model',
-          paused: true,
-          pauseReason: modelPause,
-        }
-      : {
-          scheduleEnabled: true,
-          assumedRole: { id: 'role-1', name: 'Product lead' },
-          counts: {},
-          localActiveModel: 'Local test model',
-          paused: false,
-          pauseReason: null,
-        });
-  });
+  // Hold the SSE stream until the paused seed is asserted, then release the
+  // `agent-status` clear so the pause-clear is observably driven by the event
+  // (not a race with the initial render). `modelAvailable` also flips the HTTP
+  // status seed the later agent-jobs page reads after the model recovers.
+  let releaseStream;
+  const streamReady = new Promise((resolve) => { releaseStream = resolve; });
+  let modelAvailable = false;
+
+  await page.route('**/api/agent/status', (route) =>
+    json(route, modelAvailable ? clearedStatus : pausedStatus));
   await page.route('**/api/agent/jobs**', (route) => json(route, { jobs: [historicalPausedJob] }));
+
+  // Register the stream route BEFORE the token route: Playwright checks the
+  // last-registered matching handler first, so the more specific `-token` route
+  // must win for the token request while the stream request falls through here.
+  await page.route('**/api/agent/workspace-stream**', async (route) => {
+    await streamReady;
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
+      body: `data: ${JSON.stringify({ type: 'agent-status', status: clearedStatus })}\n\n`,
+    });
+  });
+  await page.route('**/api/agent/workspace-stream-token**', (route) => json(route, { token: 'test-workspace-token' }));
 
   await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
   const modelNotice = page.locator('.agent-pause-notice[data-pause-code="model_unavailable"]');
@@ -389,13 +404,11 @@ test.fixme('Agent workspace clears a model pause after the next readiness poll',
   await expect(modelNotice.getByRole('link', { name: 'Check model setup' })).toHaveAttribute('href', '#/settings');
   await expect(page.locator('.agent-run-now')).toBeDisabled();
 
-  const poll = page.waitForResponse((response) =>
-    response.request().method() === 'GET'
-      && new URL(response.url()).pathname === '/api/agent/status'
-      && statusRequests > 1
-  );
-  await page.clock.fastForward(5_000);
-  await poll;
+  // The model becomes available; the workspace pushes an `agent-status` snapshot
+  // with paused:false, which clears the notice without any readiness poll.
+  modelAvailable = true;
+  releaseStream();
+
   await expect(modelNotice).toHaveCount(0);
   await expect(page.locator('.agent-pause-host')).toBeHidden();
   await expect(page.locator('.agent-state-toggle')).toContainText('Planning is on');
