@@ -1,8 +1,8 @@
 {
-  "version": 3,
-  "updatedAt": "2026-07-19",
+  "version": 4,
+  "updatedAt": "2026-08-07",
   "defaults": {
-    "local": "ollama-gpt-oss-20b",
+    "byom": "ollama-gpt-oss-20b",
     "hosted": "claude-opus-4-8"
   },
   "reasoningEfforts": {
@@ -39,7 +39,7 @@
     {
       "id": "ollama-gpt-oss-20b",
       "label": "GPT-OSS 20B",
-      "deployment": "local",
+      "deployment": "byom",
       "provider": "ollama",
       "model": "gpt-oss:20b",
       "sourceUrl": "https://ollama.com/library/gpt-oss",
@@ -80,7 +80,7 @@
     {
       "id": "ollama-qwen3-coder-30b",
       "label": "Qwen3 Coder 30B",
-      "deployment": "local",
+      "deployment": "byom",
       "provider": "ollama",
       "model": "qwen3-coder:30b",
       "sourceUrl": "https://huggingface.co/Qwen/Qwen3-Coder-30B-A3B-Instruct",
@@ -121,7 +121,7 @@
     {
       "id": "ollama-gpt-oss-120b",
       "label": "GPT-OSS 120B",
-      "deployment": "local",
+      "deployment": "byom",
       "provider": "ollama",
       "model": "gpt-oss:120b",
       "sourceUrl": "https://ollama.com/library/gpt-oss",
@@ -162,7 +162,7 @@
     {
       "id": "lmstudio-gpt-oss-20b",
       "label": "GPT-OSS 20B",
-      "deployment": "local",
+      "deployment": "byom",
       "provider": "lmstudio",
       "model": "openai/gpt-oss-20b",
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-oss-20b",
@@ -203,7 +203,7 @@
     {
       "id": "lmstudio-qwen3-coder-30b",
       "label": "Qwen3 Coder 30B",
-      "deployment": "local",
+      "deployment": "byom",
       "provider": "lmstudio",
       "model": "qwen3-coder-30b",
       "sourceUrl": "https://huggingface.co/Qwen/Qwen3-Coder-30B-A3B-Instruct",
@@ -244,7 +244,7 @@
     {
       "id": "omlx-gpt-oss-20b",
       "label": "GPT-OSS 20B",
-      "deployment": "local",
+      "deployment": "byom",
       "provider": "omlx",
       "model": "gpt-oss-20b",
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-oss-20b",
@@ -285,7 +285,7 @@
     {
       "id": "omlx-qwen3-coder-next",
       "label": "Qwen3 Coder Next",
-      "deployment": "local",
+      "deployment": "byom",
       "provider": "omlx",
       "model": "Qwen3-Coder-Next-8bit",
       "sourceUrl": "https://huggingface.co/Qwen/Qwen3-Coder-Next",
@@ -656,7 +656,7 @@
     {
       "id": "huggingface-llama-3-3-70b",
       "label": "Llama 3.3 70B Instruct",
-      "deployment": "hosted",
+      "deployment": "byom",
       "provider": "huggingface",
       "model": "meta-llama/Llama-3.3-70B-Instruct",
       "sourceUrl": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct",
@@ -689,7 +689,7 @@
     {
       "id": "huggingface-qwen2-5-coder-32b",
       "label": "Qwen2.5 Coder 32B",
-      "deployment": "hosted",
+      "deployment": "byom",
       "provider": "huggingface",
       "model": "Qwen/Qwen2.5-Coder-32B-Instruct",
       "sourceUrl": "https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct",
@@ -722,7 +722,7 @@
     {
       "id": "huggingface-kimi-k3",
       "label": "Kimi K3",
-      "deployment": "hosted",
+      "deployment": "byom",
       "provider": "huggingface",
       "model": "moonshotai/Kimi-K3",
       "sourceUrl": "https://huggingface.co/moonshotai/Kimi-K3",
@@ -755,7 +755,7 @@
     {
       "id": "huggingface-deepseek-v3",
       "label": "DeepSeek V3",
-      "deployment": "hosted",
+      "deployment": "byom",
       "provider": "huggingface",
       "model": "deepseek-ai/DeepSeek-V3-0324",
       "sourceUrl": "https://huggingface.co/deepseek-ai/DeepSeek-V3-0324",
@@ -788,7 +788,7 @@
     {
       "id": "huggingface-qwen2-5-72b",
       "label": "Qwen2.5 72B Instruct",
-      "deployment": "hosted",
+      "deployment": "byom",
       "provider": "huggingface",
       "model": "Qwen/Qwen2.5-72B-Instruct",
       "sourceUrl": "https://huggingface.co/Qwen/Qwen2.5-72B-Instruct",

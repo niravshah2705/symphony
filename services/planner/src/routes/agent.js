@@ -218,7 +218,7 @@ router.get('/status', (req, res) => {
   // The planner runs on the `thinking` role, so the dashboard LLM pill reflects
   // that role's provider/model and readiness.
   const provider = providerForRole(settings, 'thinking');
-  const localProvider = settings.localLlmProvider || settings.llmProvider || 'ollama';
+  const byomProvider = settings.byomProvider || settings.llmProvider || 'ollama';
   res.json({
     ...scheduler.getStatus(),
     assumedRole: getAssumedRole(),
@@ -226,8 +226,8 @@ router.get('/status', (req, res) => {
     llmProvider: provider,
     // Model for the active provider — used for the dashboard's LLM pill.
     activeModel: activeModelFor(provider, settings),
-    localLlmProvider: localProvider,
-    localActiveModel: activeModelFor(localProvider, settings),
+    byomProvider: byomProvider,
+    byomActiveModel: activeModelFor(byomProvider, settings),
     ollamaModel: settings.ollamaModel,
     lmstudioModel: settings.lmstudioModel,
     omlxModel: settings.omlxModel,

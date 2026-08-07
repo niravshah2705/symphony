@@ -42,8 +42,8 @@ test('OMLX preset settings normalize /v1 and expose only masked API-key state ac
   const patches = [];
   let state = {
     ...originalGetSettings(),
-    localLlmProvider: 'omlx',
-    localLlmPresetId: 'omlx-gpt-oss-20b',
+    byomProvider: 'omlx',
+    byomPresetId: 'omlx-gpt-oss-20b',
     omlxHost: 'http://127.0.0.1:8000',
     omlxApiKey: '',
   };
@@ -65,7 +65,7 @@ test('OMLX preset settings normalize /v1 and expose only masked API-key state ac
   const handler = routeHandler(router, 'put', '/llm-preset');
   const apiKey = 'omlx-local-secret-value';
   const selection = {
-    role: 'local',
+    role: 'byom',
     provider: 'omlx',
     presetId: 'omlx-gpt-oss-20b',
   };

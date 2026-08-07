@@ -42,10 +42,10 @@ test('sanitizeSettingsPatch rejects invalid enum/provider values with reasons', 
   const { rejected } = sanitizeSettingsPatch({
     agentRuntime: 'not-a-runtime',
     workflowPattern: 'nope',
-    localLlmProvider: 'codex', // not a local provider
+    byomProvider: 'codex', // not a BYoM provider
   });
   const keys = rejected.map((r) => r.key).sort();
-  assert.deepEqual(keys, ['agentRuntime', 'localLlmProvider', 'workflowPattern']);
+  assert.deepEqual(keys, ['agentRuntime', 'byomProvider', 'workflowPattern']);
   for (const r of rejected) assert.equal(typeof r.reason, 'string');
 });
 
