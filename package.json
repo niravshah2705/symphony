@@ -14,6 +14,7 @@
     "start:gateway": "npm start -w @ai-fleet/gateway",
     "start:planner": "npm start -w @ai-fleet/planner",
     "start:coder": "npm start -w @ai-fleet/coder",
+    "adlc": "node --env-file-if-exists=.env packages/cli/bin/adlc.js",
     "test": "node --test",
     "test:e2e": "playwright test",
     "test:e2e:debug": "PWDEBUG=1 playwright test --project=chrome"
