@@ -91,7 +91,7 @@ gh secret set GCP_DEPLOYER_SA --repo niravshah2705/symphony \
 
 # Variables (non-secret; Firebase web API key is public by design)
 gh variable set GCP_PROJECT_ID   --repo niravshah2705/symphony --body "adlc-9e72f"
-gh variable set GCP_REGION       --repo niravshah2705/symphony --body "us-central1"
+gh variable set GCP_REGION       --repo niravshah2705/symphony --body "asia-south1"
 gh variable set SPA_BUCKET       --repo niravshah2705/symphony --body "adlc-9e72f-aifleet-spa"
 gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72f-tfstate"
 gh variable set FIREBASE_API_KEY --repo niravshah2705/symphony --body "AIzaSyBBofGcIZP_JzcCHmuhAkoa_sMpdTWj5_8"

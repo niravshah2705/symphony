@@ -20,7 +20,7 @@
 # Usage admin (to enable APIs) — or run this pipeline as a dedicated deployer SA.
 
 substitutions:
-  _REGION: "us-central1"
+  _REGION: "asia-south1"
   _REPO: "ai-fleet"
   _BUCKET: "REPLACE_ME_spa_bucket" # REQUIRED — override
   _IMAGE_TAG: "latest"             # override with $SHORT_SHA per build
