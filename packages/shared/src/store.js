@@ -80,6 +80,7 @@ const DEFAULT_OLLAMA_SETTINGS = settingsPatchForPreset(recommendedPreset('ollama
 const DEFAULT_LMSTUDIO_SETTINGS = settingsPatchForPreset(recommendedPreset('lmstudio'));
 const DEFAULT_OMLX_SETTINGS = settingsPatchForPreset(recommendedPreset('omlx'));
 const DEFAULT_HUGGINGFACE_SETTINGS = settingsPatchForPreset(recommendedPreset('huggingface'));
+const DEFAULT_ANTIGRAVITY_SETTINGS = settingsPatchForPreset(recommendedPreset('antigravity'));
 const DEFAULT_CODEX_SETTINGS = settingsForConfiguredModel(recommendedPreset('codex'));
 const DEFAULT_CLAUDE_SETTINGS = settingsForConfiguredModel(recommendedPreset('claude'));
 // The exact catalog defaults win over a same-provider recommended preset. This
@@ -207,6 +208,13 @@ const DEFAULT_STORE = Object.freeze({
     huggingfaceHost: CONFIG.HUGGINGFACE.defaultHost,
     huggingfaceApiKey: '',
     ...DEFAULT_HUGGINGFACE_SETTINGS,
+    // Antigravity (Google) — backed by the Gemini API via @google/genai. The
+    // Gemini API key is REQUIRED; it lives server-side only and is exposed solely
+    // via masked status fields (read from GEMINI_API_KEY in the cloud). The called
+    // target (model / preview agent id) comes from CONFIG.ANTIGRAVITY (trusted).
+    antigravityApiKey: '',
+    antigravityAgentId: '',
+    ...DEFAULT_ANTIGRAVITY_SETTINGS,
     // Codex (OpenAI) provider — endpoints/client come from CONFIG.OAUTH (trusted),
     // the browser only chooses the model. Tokens live server-side only.
     ...DEFAULT_CODEX_SETTINGS,
@@ -328,7 +336,7 @@ function normalizeStore(parsed) {
   // reasoning fields are absent, however, activate the reviewed default for
   // the effective known model. This keeps the visible model-aware default and
   // the actual runtime request in sync without overwriting an explicit Off.
-  for (const prefix of ['ollama', 'lmstudio', 'codex', 'claude', 'huggingface']) {
+  for (const prefix of ['ollama', 'lmstudio', 'codex', 'claude', 'huggingface', 'antigravity']) {
     const effortKey = `${prefix}ReasoningEffort`;
     const adapterKey = `${prefix}ReasoningAdapter`;
     if (!Object.prototype.hasOwnProperty.call(storedSettings, effortKey)) settings[effortKey] = null;
@@ -441,6 +449,7 @@ const SECRET_ENV = Object.freeze({
   asanaAccessToken: 'ASANA_ACCESS_TOKEN',
   omlxApiKey: 'OMLX_API_KEY',
   huggingfaceApiKey: 'HUGGINGFACE_API_KEY',
+  antigravityApiKey: 'GEMINI_API_KEY',
 });
 
 function secretOverlay() {

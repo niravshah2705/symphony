@@ -817,6 +817,72 @@
         "jsonMode": null,
         "contextMode": null
       }
+    },
+    {
+      "id": "antigravity-gemini-2-5-flash",
+      "label": "Gemini 2.5 Flash (Antigravity)",
+      "deployment": "hosted",
+      "provider": "antigravity",
+      "model": "gemini-2.5-flash",
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/models",
+      "modelPatterns": ["gemini-2.5-flash", "models/gemini-2.5-flash"],
+      "recommended": true,
+      "description": "Fast, low-cost Gemini model reached through Google Antigravity, backed by @google/genai (PREVIEW). Stable default for the Antigravity harness; override to the Antigravity preview agent id when available.",
+      "requirements": "Create a Gemini API key in Google AI Studio and paste it in Settings (or set GEMINI_API_KEY). Usage is billed to your Google account.",
+      "limits": { "contextWindow": 1048576, "maxOutputTokens": 65536 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 32768,
+        "maxOutputTokens": 8192,
+        "temperature": 0.7,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "none", "parameter": null },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "antigravity-gemini-2-5-pro",
+      "label": "Gemini 2.5 Pro (Antigravity)",
+      "deployment": "hosted",
+      "provider": "antigravity",
+      "model": "gemini-2.5-pro",
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/models",
+      "modelPatterns": ["gemini-2.5-pro", "models/gemini-2.5-pro"],
+      "recommended": false,
+      "description": "Higher-capability Gemini model reached through Google Antigravity, backed by @google/genai (PREVIEW), with a large context window, tool use, and JSON output.",
+      "requirements": "Create a Gemini API key in Google AI Studio and paste it in Settings (or set GEMINI_API_KEY). Usage is billed to your Google account.",
+      "limits": { "contextWindow": 1048576, "maxOutputTokens": 65536 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": true,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 32768,
+        "maxOutputTokens": 8192,
+        "temperature": 0.7,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "none", "parameter": null },
+        "jsonMode": null,
+        "contextMode": null
+      }
     }
   ]
 }

@@ -132,6 +132,9 @@ export const api = {
     // Hugging Face has no live model-discovery endpoint (the router hosts many
     // thousands); the catalog presets and the manual model field cover selection.
     if (provider === 'huggingface') return Promise.resolve({ models: [], reachable: true, source: 'catalog' });
+    // Antigravity (Gemini) has no live model-discovery endpoint here; the catalog
+    // presets and the manual model field cover selection.
+    if (provider === 'antigravity') return Promise.resolve({ models: [], reachable: true, source: 'catalog' });
     return Promise.reject(new Error(`Unsupported LLM provider: ${provider}`));
   },
 

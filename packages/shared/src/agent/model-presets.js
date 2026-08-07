@@ -12,6 +12,7 @@ const PROVIDER_DEPLOYMENT = Object.freeze({
   huggingface: 'byom',
   codex: 'hosted',
   claude: 'hosted',
+  antigravity: 'hosted',
 });
 const ROLE_DEPLOYMENT = Object.freeze({ byom: 'byom', global: 'hosted' });
 
@@ -355,6 +356,16 @@ function settingsPatchForPreset(preset, overrides = {}) {
       huggingfaceReasoningAdapter: params.reasoningAdapter,
     };
   }
+  if (preset.provider === 'antigravity') {
+    return {
+      antigravityModel: params.model,
+      antigravityContextWindow: params.contextWindow,
+      antigravityMaxTokens: params.maxOutputTokens,
+      antigravityTemperature: params.temperature,
+      antigravityReasoningEffort: params.reasoningEffort,
+      antigravityReasoningAdapter: params.reasoningAdapter,
+    };
+  }
   return {
     claudeModel: params.model,
     claudeContextWindow: params.contextWindow,
@@ -631,6 +642,28 @@ function customPresetForSettings(provider, settings) {
         contextWindow: settings.huggingfaceContextWindow || 32768,
         maxOutputTokens: settings.huggingfaceMaxTokens || 4096,
         temperature: adapter === 'none' ? settings.huggingfaceTemperature ?? 0.7 : null,
+        topP: null, topK: null, repeatPenalty: null,
+        reasoning: { effort: defaultEffort, parameter: adapter === 'openai' ? 'reasoning.effort' : null },
+        jsonMode: null, contextMode: null,
+      },
+    };
+  }
+  if (provider === 'antigravity') {
+    const adapter = settings.antigravityReasoningAdapter === 'openai' ? 'openai' : 'none';
+    const efforts = adapter === 'openai' ? ['none', 'low', 'medium', 'high'] : ['none'];
+    const defaultEffort = efforts.includes(settings.antigravityReasoningEffort) ? settings.antigravityReasoningEffort : efforts[0];
+    return {
+      id: 'custom', provider, deployment: 'hosted', model: settings.antigravityModel || 'gemini-2.5-flash',
+      limits: { contextWindow: 1048576, maxOutputTokens: 65536 },
+      requestLimits: { maxOutputContextFraction: null },
+      capabilities: {
+        temperature: adapter === 'none', contextWindowConfigurable: false, reasoningAdapter: adapter,
+        reasoningEfforts: efforts,
+      },
+      parameters: {
+        contextWindow: settings.antigravityContextWindow || 32768,
+        maxOutputTokens: settings.antigravityMaxTokens || 4096,
+        temperature: adapter === 'none' ? settings.antigravityTemperature ?? 0.7 : null,
         topP: null, topK: null, repeatPenalty: null,
         reasoning: { effort: defaultEffort, parameter: adapter === 'openai' ? 'reasoning.effort' : null },
         jsonMode: null, contextMode: null,
