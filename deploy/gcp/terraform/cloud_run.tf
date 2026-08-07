@@ -118,6 +118,8 @@ resource "google_cloud_run_v2_service" "gateway" {
 
   depends_on = [
     google_project_service.services,
+    google_firestore_database.default,
+    google_project_iam_member.gateway_datastore,
     google_secret_manager_secret_iam_member.gateway_stream_token,
     google_secret_manager_secret_iam_member.gateway_linear,
   ]
@@ -187,6 +189,8 @@ resource "google_cloud_run_v2_service" "planner" {
 
   depends_on = [
     google_project_service.services,
+    google_firestore_database.default,
+    google_project_iam_member.planner_datastore,
     google_secret_manager_secret_iam_member.planner_linear,
   ]
 }
@@ -245,6 +249,8 @@ resource "google_cloud_run_v2_service" "coder_control" {
 
   depends_on = [
     google_project_service.services,
+    google_firestore_database.default,
+    google_project_iam_member.coder_datastore,
     google_secret_manager_secret_iam_member.coder_linear,
   ]
 }
@@ -301,6 +307,8 @@ resource "google_cloud_run_v2_job" "coder_worker" {
 
   depends_on = [
     google_project_service.services,
+    google_firestore_database.default,
+    google_project_iam_member.coder_datastore,
     google_secret_manager_secret_iam_member.coder_linear,
   ]
 }

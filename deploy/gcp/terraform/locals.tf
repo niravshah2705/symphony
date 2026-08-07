@@ -46,5 +46,13 @@ locals {
     PUBSUB_PLANNER_TOPIC = var.planner_topic
     PUBSUB_CODER_TOPIC   = var.coder_topic
     AI_FLEET_DATA_DIR    = "/tmp"
+    # The shared config (packages/shared/src/config.js) requires AUTH_MODE=firebase
+    # when NODE_ENV=production and validates the Firebase web config at load. Only
+    # the gateway actually enforces app-auth, but planner/coder/worker import the
+    # same config, so they must satisfy the guard too. The Firebase web config is
+    # PUBLIC (not a secret); internal services build it but never use it.
+    AUTH_MODE           = "firebase"
+    FIREBASE_PROJECT_ID = var.project_id
+    FIREBASE_API_KEY    = var.firebase_api_key
   }
 }

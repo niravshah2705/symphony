@@ -1,0 +1,14 @@
+# Keep `gcloud builds submit` uploads small — only the monorepo build inputs.
+.git/
+node_modules/
+.venv/
+graphify-out/
+.playwright-mcp/
+test-results/
+playwright-report/
+data/
+.env
+.env.*
+*.log
+*.png
+deploy/gcp/terraform/.terraform/

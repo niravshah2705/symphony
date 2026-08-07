@@ -1,0 +1,123 @@
+name: Deploy to GCP
+
+# Continuous deployment: every merge to main builds + pushes the three service
+# images, publishes the SPA to GCS, and runs `terraform apply` on the no-cost
+# GCP stack (Cloud Run + Pub/Sub + Cloud Scheduler + Firestore + Secret Manager).
+#
+# Auth is keyless via Workload Identity Federation (no long-lived SA key) — see
+# docs/GCP_CICD.md for the one-time WIF + deployer-SA setup and the required
+# repo variables/secrets.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Never run two applies against the same Terraform state at once.
+concurrency:
+  group: gcp-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for Workload Identity Federation
+
+env:
+  REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+  AR_REPO: ai-fleet
+  TF_DIR: deploy/gcp/terraform
+  TF_STATE_PREFIX: ai-fleet/gcp
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        name: Authenticate to GCP (WIF, keyless)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Resolve image base + gateway URL
+        id: vars
+        run: |
+          set -euo pipefail
+          IMAGE_BASE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${AR_REPO}"
+          PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
+          GATEWAY_URL="https://gateway-${PROJECT_NUMBER}.${REGION}.run.app"
+          echo "image_base=$IMAGE_BASE" >> "$GITHUB_OUTPUT"
+          echo "gateway_url=$GATEWAY_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=${TF_STATE_PREFIX}"
+
+      # Bootstrap the resources that must exist BEFORE images are pushed / the SPA
+      # is uploaded (idempotent — a no-op once they exist).
+      - name: Terraform apply (bootstrap — registry + SPA bucket)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform apply -input=false -auto-approve \
+            -target=google_project_service.services \
+            -target=google_artifact_registry_repository.docker \
+            -target=google_storage_bucket.spa \
+            -target=google_storage_bucket_iam_member.spa_public_read \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="region=${REGION}" \
+            -var="artifact_repo=${AR_REPO}" \
+            -var="spa_bucket_name=${{ vars.SPA_BUCKET }}"
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" -q
+
+      - name: Build & push images
+        run: |
+          set -euo pipefail
+          BASE="${{ steps.vars.outputs.image_base }}"
+          docker build -f deploy/gcp/Dockerfile.gateway -t "$BASE/gateway:${IMAGE_TAG}" .
+          docker build -f deploy/gcp/Dockerfile.planner -t "$BASE/planner:${IMAGE_TAG}" .
+          docker build -f deploy/gcp/Dockerfile.coder   -t "$BASE/coder-control:${IMAGE_TAG}" .
+          docker push "$BASE/gateway:${IMAGE_TAG}"
+          docker push "$BASE/planner:${IMAGE_TAG}"
+          docker push "$BASE/coder-control:${IMAGE_TAG}"
+
+      - name: Publish SPA to GCS
+        run: |
+          set -euo pipefail
+          printf "window.__API_BASE__='%s';\n" "${{ steps.vars.outputs.gateway_url }}" > public/config.js
+          gsutil -m rsync -r -d public "gs://${{ vars.SPA_BUCKET }}"
+          gsutil -m setmeta -h "Content-Type:text/javascript" "gs://${{ vars.SPA_BUCKET }}/**/*.mjs" || true
+
+      # Full apply: Cloud Run services + coder Job, Pub/Sub, Cloud Scheduler,
+      # Firestore, Secret Manager grants, IAM. Rolls out the new image tag.
+      - name: Terraform apply (full)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="region=${REGION}" \
+            -var="artifact_repo=${AR_REPO}" \
+            -var="image_tag=${IMAGE_TAG}" \
+            -var="spa_bucket_name=${{ vars.SPA_BUCKET }}" \
+            -var="firestore_location=${{ vars.FIRESTORE_LOCATION || 'nam5' }}" \
+            -var="spa_origin=${{ vars.SPA_ORIGIN || 'https://storage.googleapis.com' }}" \
+            -var="api_base_url=${{ steps.vars.outputs.gateway_url }}" \
+            -var="firebase_api_key=${{ vars.FIREBASE_API_KEY }}" \
+            -var="firebase_allowed_domain=${{ vars.FIREBASE_ALLOWED_DOMAIN }}"
+
+      - name: Outputs
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform output
