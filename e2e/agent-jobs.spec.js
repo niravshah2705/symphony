@@ -239,6 +239,14 @@ test('Agent jobs preserves row focus and defers refresh while delete is armed', 
 
 test('Agent jobs route, menu, and pause notice use the selected Gujarati locale', async ({ page }) => {
   await mockShell(page, { locale: 'gu-IN' });
+  // Silence the live workspace SSE so a real server-published `coder` event can't
+  // overwrite the stubbed paused HTTP seed this test asserts on.
+  await page.route('**/api/agent/workspace-stream-token**', (route) => json(route, { token: 'test-workspace-token' }));
+  await page.route('**/api/agent/workspace-stream**', (route) => route.fulfill({
+    status: 200,
+    headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
+    body: ': ok\n\n',
+  }));
   await page.route('**/api/coder', (route) => json(route, {
     running: true,
     paused: true,
