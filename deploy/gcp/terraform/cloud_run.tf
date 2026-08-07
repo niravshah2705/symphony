@@ -60,7 +60,7 @@ resource "google_cloud_run_v2_service" "gateway" {
   name     = var.gateway_service_name
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
-  labels   = var.labels
+  labels   = merge(local.common_labels, { component = "gateway" })
 
   template {
     service_account = google_service_account.gateway.email
@@ -141,7 +141,7 @@ resource "google_cloud_run_v2_service" "planner" {
   name     = var.planner_service_name
   location = var.region
   ingress  = var.internal_ingress # IAM-gated; see note above
-  labels   = var.labels
+  labels   = merge(local.common_labels, { component = "planner" })
 
   template {
     service_account = google_service_account.planner.email
@@ -201,7 +201,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
   name     = var.coder_service_name
   location = var.region
   ingress  = var.internal_ingress # IAM-gated; see the planner note above
-  labels   = var.labels
+  labels   = merge(local.common_labels, { component = "coder-control" })
 
   template {
     service_account = google_service_account.coder.email
@@ -263,7 +263,7 @@ resource "google_cloud_run_v2_job" "coder_worker" {
   project  = var.project_id
   name     = var.coder_job_name
   location = var.region
-  labels   = var.labels
+  labels   = merge(local.common_labels, { component = "coder-worker" })
 
   template {
     parallelism = 1 # one ticket per execution

@@ -11,7 +11,7 @@
 resource "google_pubsub_topic" "planner" {
   project = var.project_id
   name    = var.planner_topic
-  labels  = var.labels
+  labels  = merge(local.common_labels, { component = "planner" })
 
   depends_on = [google_project_service.services]
 }
@@ -19,7 +19,7 @@ resource "google_pubsub_topic" "planner" {
 resource "google_pubsub_topic" "coder" {
   project = var.project_id
   name    = var.coder_topic
-  labels  = var.labels
+  labels  = merge(local.common_labels, { component = "coder-control" })
 
   depends_on = [google_project_service.services]
 }
@@ -27,7 +27,7 @@ resource "google_pubsub_topic" "coder" {
 resource "google_pubsub_topic" "dead_letter" {
   project = var.project_id
   name    = var.dead_letter_topic
-  labels  = var.labels
+  labels  = merge(local.common_labels, { component = "messaging" })
 
   depends_on = [google_project_service.services]
 }
@@ -65,7 +65,7 @@ resource "google_pubsub_subscription" "planner_push" {
   project = var.project_id
   name    = "${var.planner_topic}-push"
   topic   = google_pubsub_topic.planner.id
-  labels  = var.labels
+  labels  = merge(local.common_labels, { component = "planner" })
 
   ack_deadline_seconds = var.ack_deadline_seconds
 
@@ -99,7 +99,7 @@ resource "google_pubsub_subscription" "coder_push" {
   project = var.project_id
   name    = "${var.coder_topic}-push"
   topic   = google_pubsub_topic.coder.id
-  labels  = var.labels
+  labels  = merge(local.common_labels, { component = "coder-control" })
 
   ack_deadline_seconds = var.ack_deadline_seconds
 

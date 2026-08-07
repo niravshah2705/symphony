@@ -228,9 +228,15 @@ variable "firebase_allowed_domain" {
 
 variable "labels" {
   type        = map(string)
-  description = "Labels applied to labelable resources."
+  description = "Base labels merged onto every labelable resource (for billing cost attribution). Each resource also gets a per-resource `component` label; see locals.common_labels."
   default = {
     app        = "ai-fleet"
     managed-by = "terraform"
   }
+}
+
+variable "environment" {
+  type        = string
+  description = "Deployment environment label (e.g. prod, staging) — added to every resource for billing breakdown by environment."
+  default     = "prod"
 }
