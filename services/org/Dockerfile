@@ -5,10 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
-
+# Copy the source BEFORE installing: `pip install .` builds the project from
+# pyproject.toml, which needs the `app` package present (otherwise
+# "package directory 'app' does not exist").
 COPY . .
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
