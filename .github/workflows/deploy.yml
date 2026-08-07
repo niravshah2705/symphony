@@ -98,7 +98,11 @@ jobs:
         run: |
           set -euo pipefail
           printf "window.__API_BASE__='%s';\n" "${{ steps.vars.outputs.gateway_url }}" > public/config.js
-          gsutil -m rsync -r -d public "gs://${{ vars.SPA_BUCKET }}"
+          # no-cache: the SPA filenames are unhashed, so long-caching would serve
+          # stale JS/CSS after a deploy. Access the SPA via the virtual-hosted URL
+          # (https://<bucket>.storage.googleapis.com/index.html) so absolute asset
+          # paths resolve.
+          gsutil -h "Cache-Control:no-cache" -m rsync -r -d public "gs://${{ vars.SPA_BUCKET }}"
           gsutil -m setmeta -h "Content-Type:text/javascript" "gs://${{ vars.SPA_BUCKET }}/**/*.mjs" || true
 
       # Full apply: Cloud Run services + coder Job, Pub/Sub, Cloud Scheduler,
