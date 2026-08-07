@@ -1,0 +1,110 @@
+name: Publish Skills Bundle
+
+# Publish the deep-agent skills (packages/shared/src/agent/skills/) to the GCS
+# skills registry as a VERSIONED bundle:
+#   gs://<SKILLS_BUCKET>/<version>/<skill>/SKILL.md   (+ skills-manifest.json)
+# The planner/coder Cloud Run services mount that bucket read-only via gcsfuse and
+# PIN a version (Terraform var.skills_version → SKILLS_VERSION), so publishing a
+# new version never disturbs an older pinned deployment — versions coexist and
+# rollout is a separate `terraform apply` that bumps the pin. See
+# docs/GCP_DEPLOY.md ("Skills registry").
+#
+# Auth is keyless via Workload Identity Federation (same provider/SA as deploy.yml).
+# SECURITY: no untrusted github.event.* value is interpolated into any `run:` script
+# body — the workflow_dispatch version input is passed via `env:` and validated to a
+# single safe path segment before it is ever used as a GCS prefix.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/shared/src/agent/skills/**"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Bundle version directory to publish (e.g. v1, v2). Must match a `version` you intend to pin in Terraform."
+        type: string
+        required: true
+        default: v1
+
+# Never let two publishes race the same bucket prefix.
+concurrency:
+  group: skills-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for Workload Identity Federation
+
+env:
+  SKILLS_DIR: packages/shared/src/agent/skills
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve + validate version
+        id: ver
+        env:
+          # Untrusted-ish inputs kept OUT of the script body — read from env only.
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # On a push the version is the manifest's own `version` (single source of
+          # truth); on manual dispatch it is the operator-provided input.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="$(jq -r '.version' "$SKILLS_DIR/skills-manifest.json")"
+          fi
+          # Must be a single safe path segment before it becomes a GCS prefix
+          # (defends against a poisoned manifest value or a crafted input).
+          case "$VERSION" in
+            "" | "." | ".." | */* | *[!A-Za-z0-9._-]*)
+              echo "Refusing invalid skills version: '$VERSION'" >&2
+              exit 1
+              ;;
+          esac
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved skills version: $VERSION"
+
+      - name: Publish versioned bundle to GCS
+        env:
+          BUCKET: ${{ vars.SKILLS_BUCKET }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BUCKET:-}" ]; then
+            echo "Repo variable SKILLS_BUCKET is not set — cannot publish." >&2
+            echo "Set it with: gh variable set SKILLS_BUCKET --body <bucket-name>" >&2
+            exit 1
+          fi
+          test -f "$SKILLS_DIR/skills-manifest.json" || { echo "Missing skills-manifest.json" >&2; exit 1; }
+
+          DEST="gs://${BUCKET}/${VERSION}"
+          echo "Publishing $SKILLS_DIR -> $DEST"
+
+          # rsync mirrors the skills dir INTO this version's prefix only. -d prunes
+          # objects removed from source WITHIN this <version>/ prefix; other version
+          # prefixes live elsewhere and are never touched, so pinned older versions
+          # keep working (backward-compat + multi-version coexistence).
+          gsutil -m rsync -r -d "$SKILLS_DIR" "$DEST"
+
+          # Refresh the per-version manifest and a convenience top-level pointer
+          # (the runtime pins a concrete <version>; the top-level copy is for humans
+          # / tooling to see the newest published bundle).
+          gsutil cp "$SKILLS_DIR/skills-manifest.json" "${DEST}/skills-manifest.json"
+          gsutil cp "$SKILLS_DIR/skills-manifest.json" "gs://${BUCKET}/skills-manifest.json"
+
+          echo "Published skills bundle to $DEST"
+          gsutil ls -r "$DEST" | head -50

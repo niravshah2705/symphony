@@ -457,6 +457,57 @@ const GCP = Object.freeze({
   apiBaseUrl: String(process.env.API_BASE_URL || '').trim(),
 });
 
+/**
+ * Agent skills source resolution.
+ *
+ * Locally (SKILLS_ROOT unset) the framework installs its skills from the
+ * vendored directory packages/shared/src/agent/skills — the EXISTING behavior,
+ * unchanged. In the cloud a versioned skills bundle is published to a GCS bucket
+ * and mounted read-only on the planner/coder Cloud Run services via gcsfuse at
+ * SKILLS_ROOT (e.g. /skills), laid out as `<version>/<skill>/SKILL.md`. The
+ * runtime PINS a version with SKILLS_VERSION so multiple published versions can
+ * coexist and an older pinned version keeps working (backward-compat).
+ *
+ *   SKILLS_ROOT     gcsfuse mount root of the versioned bundles.
+ *                   Empty ('') = the vendored default (local/dev).
+ *   SKILLS_VERSION  the version subdirectory to pin under SKILLS_ROOT.
+ *                   Empty ('') = read the mount root directly.
+ *
+ * SKILLS_ROOT / SKILLS_VERSION are TRUSTED server-side config (env from
+ * Terraform), not request input. SKILLS_VERSION still forms a filesystem path,
+ * so it is validated to a single safe path segment (defense-in-depth).
+ */
+const SKILLS_VENDORED_SRC = path.join(__dirname, 'agent', 'skills');
+
+function assertSafeSkillsVersion(version) {
+  if (version === '') return version;
+  if (version === '.' || version === '..' || !/^[A-Za-z0-9._-]+$/.test(version)) {
+    throw new Error(`SKILLS_VERSION must be a single path segment (got: ${version})`);
+  }
+  return version;
+}
+
+/**
+ * Resolve the directory installSkills copies skills FROM, given an environment.
+ * Kept as a pure function (env injectable) so it honors runtime env and is unit
+ * testable. Returns the vendored default when SKILLS_ROOT is unset.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string} absolute path to the skills source directory
+ */
+function resolveSkillsSrc(env = process.env) {
+  const root = String(env.SKILLS_ROOT || '').trim();
+  if (!root) return SKILLS_VENDORED_SRC;
+  const version = assertSafeSkillsVersion(String(env.SKILLS_VERSION || '').trim());
+  return version ? path.join(root, version) : root;
+}
+
+const SKILLS = Object.freeze({
+  root: String(process.env.SKILLS_ROOT || '').trim(),
+  version: String(process.env.SKILLS_VERSION || '').trim(),
+  vendoredSrc: SKILLS_VENDORED_SRC,
+  src: resolveSkillsSrc(),
+});
+
 /** Server configuration and shared constants. */
 const CONFIG = Object.freeze({
   PORT,
@@ -515,6 +566,7 @@ const CONFIG = Object.freeze({
   MCP,
   TOOLS,
   AUTH,
+  SKILLS,
 });
 
-module.exports = { CONFIG, buildFirebaseAuthConfig };
+module.exports = { CONFIG, buildFirebaseAuthConfig, resolveSkillsSrc };

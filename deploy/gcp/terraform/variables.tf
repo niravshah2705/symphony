@@ -211,6 +211,35 @@ variable "spa_origin" {
   default     = "https://storage.googleapis.com"
 }
 
+# --- Skills registry (GCS bucket, gcsfuse mount) -----------------------------
+# See skills.tf. All OPTIONAL: an empty skills_bucket_name disables the feature
+# (no bucket, no mount, no SKILLS_ROOT env) so a project without it keeps using
+# the vendored skills baked into the image.
+
+variable "skills_bucket_name" {
+  type        = string
+  description = "Globally-unique GCS bucket holding versioned agent-skill bundles (<version>/<skill>/SKILL.md), mounted read-only on planner + coder via gcsfuse. Empty ('') disables the skills registry entirely."
+  default     = ""
+}
+
+variable "skills_bucket_force_destroy" {
+  type        = bool
+  description = "Allow `terraform destroy` to delete the skills bucket even if it still holds objects."
+  default     = false
+}
+
+variable "skills_version" {
+  type        = string
+  description = "Skills bundle version the runtime PINS (SKILLS_VERSION). The planner/coder read /skills/<skills_version>/<skill>/SKILL.md, so bumping the published bundle to a new version does NOT affect a deployment until this is bumped — older pinned versions keep working. Must match a published `<version>/` prefix in the bucket."
+  default     = "v1"
+}
+
+variable "skills_publisher_member" {
+  type        = string
+  description = "Optional IAM member (e.g. serviceAccount:gh-deployer@PROJECT.iam.gserviceaccount.com) granted objectAdmin on the skills bucket so the CI publish workflow can push new bundles. Empty = no grant (manage the deployer SA's write access out-of-band)."
+  default     = ""
+}
+
 # --- Gateway public URL / Firebase auth --------------------------------------
 
 variable "api_base_url" {
