@@ -6,13 +6,16 @@
 # so an idle deployment costs nothing.
 
 locals {
-  # Skills registry (skills.tf). Terraform CREATES the bucket; when skills_enabled
-  # the planner/coder mount it read-only at /skills via a gcsfuse volume and pin a
-  # version, so the runtime reads /skills/<version>/<skill>/SKILL.md
-  # (packages/shared/src/config.js resolveSkillsSrc). Disabled → no bucket, no
-  # mount, no env → the image's vendored skills are used (unchanged local behavior).
-  skills_enabled = var.skills_enabled
-  skills_env = local.skills_enabled ? {
+  # Skills registry (skills.tf). Terraform CREATES the bucket when skills_enabled.
+  # The read-only gcsfuse MOUNT (+ gen2 exec env + SKILLS_ROOT env) is a SEPARATE
+  # toggle, skills_mount_enabled, default OFF: the fuse mount under gen2 currently
+  # fails the coder-control startup probe (heavy dual-role image), so the mount is
+  # opt-in until that's validated. Mount off → services use the vendored skills
+  # baked into the image (packages/shared/src/config.js resolveSkillsSrc). The
+  # mount requires the bucket, so it is ANDed with skills_enabled.
+  skills_enabled       = var.skills_enabled
+  skills_mount_enabled = var.skills_mount_enabled && var.skills_enabled
+  skills_env = local.skills_mount_enabled ? {
     SKILLS_ROOT    = "/skills"
     SKILLS_VERSION = var.skills_version
   } : {}
@@ -226,7 +229,7 @@ resource "google_cloud_run_v2_service" "planner" {
 
     # gcsfuse GCS volume mounts run on the gen2 execution environment. null (the
     # platform default) when the skills registry is disabled.
-    execution_environment = local.skills_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
+    execution_environment = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
 
     scaling {
       min_instance_count = 0
@@ -236,7 +239,7 @@ resource "google_cloud_run_v2_service" "planner" {
     # Versioned skills bundle mounted read-only via gcsfuse (skills.tf). Only
     # present when a bucket is configured.
     dynamic "volumes" {
-      for_each = local.skills_enabled ? [1] : []
+      for_each = local.skills_mount_enabled ? [1] : []
       content {
         name = "skills"
         gcs {
@@ -274,7 +277,7 @@ resource "google_cloud_run_v2_service" "planner" {
       # Mount the skills bundle at SKILLS_ROOT (/skills). resolveSkillsSrc pins
       # /skills/<SKILLS_VERSION>.
       dynamic "volume_mounts" {
-        for_each = local.skills_enabled ? [1] : []
+        for_each = local.skills_mount_enabled ? [1] : []
         content {
           name       = "skills"
           mount_path = "/skills"
@@ -315,7 +318,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
 
     # gcsfuse GCS volume mounts run on the gen2 execution environment. null (the
     # platform default) when the skills registry is disabled.
-    execution_environment = local.skills_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
+    execution_environment = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
 
     scaling {
       min_instance_count = 0
@@ -325,7 +328,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
     # Versioned skills bundle mounted read-only via gcsfuse (skills.tf). Only
     # present when a bucket is configured.
     dynamic "volumes" {
-      for_each = local.skills_enabled ? [1] : []
+      for_each = local.skills_mount_enabled ? [1] : []
       content {
         name = "skills"
         gcs {
@@ -363,7 +366,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
       # Mount the skills bundle at SKILLS_ROOT (/skills). resolveSkillsSrc pins
       # /skills/<SKILLS_VERSION>.
       dynamic "volume_mounts" {
-        for_each = local.skills_enabled ? [1] : []
+        for_each = local.skills_mount_enabled ? [1] : []
         content {
           name       = "skills"
           mount_path = "/skills"
@@ -413,10 +416,10 @@ resource "google_cloud_run_v2_job" "coder_worker" {
       # gcsfuse GCS volume mounts run on the gen2 execution environment. The
       # worker is where the coder agent actually installs skills, so it needs the
       # same versioned mount as the services. null when the registry is disabled.
-      execution_environment = local.skills_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
+      execution_environment = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
 
       dynamic "volumes" {
-        for_each = local.skills_enabled ? [1] : []
+        for_each = local.skills_mount_enabled ? [1] : []
         content {
           name = "skills"
           gcs {
@@ -450,7 +453,7 @@ resource "google_cloud_run_v2_job" "coder_worker" {
         # Mount the skills bundle at SKILLS_ROOT (/skills). resolveSkillsSrc pins
         # /skills/<SKILLS_VERSION>.
         dynamic "volume_mounts" {
-          for_each = local.skills_enabled ? [1] : []
+          for_each = local.skills_mount_enabled ? [1] : []
           content {
             name       = "skills"
             mount_path = "/skills"

@@ -231,8 +231,14 @@ variable "spa_origin" {
 
 variable "skills_enabled" {
   type        = bool
-  description = "Create the Terraform-managed skills registry (GCS bucket + read-only gcsfuse mounts on planner/coder + SKILLS_ROOT/SKILLS_VERSION env). false disables the whole feature so the services use the vendored skills baked into the image (local-default behavior; packages/shared/src/config.js resolveSkillsSrc)."
+  description = "Create the Terraform-managed skills registry GCS bucket (+ IAM). true creates and owns the bucket; false disables the feature entirely. The read-only gcsfuse MOUNT is a separate toggle (skills_mount_enabled)."
   default     = true
+}
+
+variable "skills_mount_enabled" {
+  type        = bool
+  description = "Mount the skills bucket read-only via gcsfuse (+ gen2 exec env + SKILLS_ROOT/SKILLS_VERSION env) on planner/coder. Default OFF: the fuse mount under the gen2 execution environment currently fails the coder-control startup probe (heavy dual-role image) and needs validation (and an initially-populated bucket + a resolveSkillsSrc empty-mount fallback) before enabling. Requires skills_enabled. Off → services use the vendored skills baked into the image."
+  default     = false
 }
 
 variable "skills_bucket_name" {
