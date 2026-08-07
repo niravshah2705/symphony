@@ -1,0 +1,20 @@
+{
+  "name": "@ai-fleet/cli",
+  "version": "1.0.0",
+  "description": "adlc — a command-line client that drives the AI Fleet life cycle (business → plan → issues → coder → PR) over the gateway REST API.",
+  "private": true,
+  "type": "commonjs",
+  "bin": {
+    "adlc": "./bin/adlc.js"
+  },
+  "main": "src/commands/index.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ai-fleet/shared": "*"
+  }
+}
