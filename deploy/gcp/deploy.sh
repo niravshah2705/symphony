@@ -16,8 +16,10 @@
 #   SPA_BUCKET=my-proj-aifleet-spa \        # globally-unique
 #   TF_STATE_BUCKET=my-proj-tfstate \       # created if missing
 #   LINEAR_API_KEY=lin_... \                # required secret (else services won't start)
-#   FIREBASE_API_KEY=AIza... \              # public Firebase Web API key (NOT a secret)
 #   ./deploy/gcp/deploy.sh
+#
+# The Firebase Web API key is read from the managed web app by Terraform — no
+# FIREBASE_API_KEY input is needed.
 #
 # Optional env: REGION (asia-south1), AR_REPO (ai-fleet), TF_STATE_PREFIX
 #   (ai-fleet/gcp), IMAGE_TAG (git short SHA), FIRESTORE_LOCATION (nam5),
@@ -36,9 +38,6 @@ AR_REPO="${AR_REPO:-ai-fleet}"
 TF_STATE_PREFIX="${TF_STATE_PREFIX:-ai-fleet/gcp}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://storage.googleapis.com}"
-# Firebase web config is PUBLIC (exposed to the browser via /api/auth/config) — plain
-# vars, never Secret Manager. FIREBASE_PROJECT_ID defaults to PROJECT_ID in Terraform.
-FIREBASE_API_KEY="${FIREBASE_API_KEY:-}"
 FIREBASE_ALLOWED_DOMAIN="${FIREBASE_ALLOWED_DOMAIN:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -74,7 +73,6 @@ TFVARS=(
   -var="firestore_location=${FIRESTORE_LOCATION}"
   -var="image_tag=${IMAGE_TAG}"
   -var="spa_origin=${SPA_ORIGIN}"
-  -var="firebase_api_key=${FIREBASE_API_KEY}"
   -var="firebase_allowed_domain=${FIREBASE_ALLOWED_DOMAIN}"
 )
 

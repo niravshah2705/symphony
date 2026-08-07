@@ -31,6 +31,16 @@ resource "google_firebase_web_app" "default" {
   depends_on = [google_firebase_project.default]
 }
 
+# The web app's client config (apiKey, authDomain, …) — PUBLIC values the SPA
+# needs. Wiring these straight from the created web app means a new project needs
+# NO FIREBASE_API_KEY repo variable / manual copy step: the gateway env below
+# reads the key from here. See docs/GCP_DEPLOY.md.
+data "google_firebase_web_app_config" "default" {
+  provider   = google-beta
+  project    = var.project_id
+  web_app_id = google_firebase_web_app.default.app_id
+}
+
 # The default Hosting site → https://<project>.web.app. The SPA is deployed to it
 # by CD (firebase deploy --only hosting); this resource just tracks the site.
 resource "google_firebase_hosting_site" "default" {
