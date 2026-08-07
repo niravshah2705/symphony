@@ -391,7 +391,82 @@ function publicExecution(result) {
     costUsd: result.costUsd,
     costAvailable: result.costUsd !== null,
     sessionId: result.sessionId || null,
+    ...(result.review ? { review: result.review } : {}),
   };
+}
+
+function addCost(a, b) {
+  const x = finiteNumber(a);
+  const y = finiteNumber(b);
+  if (x === null && y === null) return null;
+  return (x || 0) + (y || 0);
+}
+
+/**
+ * Apply the RubricMiddleware to a finished run. When a caller supplies a
+ * `rubric` (or a prebuilt `rubricMiddleware`), the middleware grades the output
+ * against the checklist and — on `needs_revision` — re-runs the SAME runtime
+ * with the per-criterion gaps appended, up to its iteration cap. This is what
+ * makes the review work for every SDK: `runOnce` re-invokes whichever runtime
+ * produced the run.
+ *
+ * Usage/cost from every (re-)run accumulate onto the returned value so the one
+ * trace span reflects all iterations. Fail-open: the middleware never throws,
+ * and this backstop guarantees a grader defect can never fail a completed run.
+ *
+ * @param {(prompt:string)=>Promise<object>} runOnce re-invokes the runtime executor
+ */
+async function applyRubricMiddleware(options, value, prompt, runOnce) {
+  const rubricLib = require('./rubric-middleware');
+  const middleware = options.rubricMiddleware && typeof options.rubricMiddleware.run === 'function'
+    ? options.rubricMiddleware
+    : rubricLib.createRubricMiddleware({ rubric: options.rubric, ...(options.rubricOptions || {}) });
+
+  let accUsage = value.usage ? { ...value.usage } : null;
+  let accCost = value.costUsd;
+  const runAgent = async (revisionPrompt) => {
+    const next = await runOnce(revisionPrompt);
+    accUsage = mergeUsage(accUsage, next.usage);
+    accCost = addCost(accCost, next.costUsd);
+    return next;
+  };
+
+  let review;
+  try {
+    review = await middleware.run({
+      rubric: options.rubric,
+      task: options.prompt,
+      output: value,
+      basePrompt: prompt,
+      runAgent,
+      settings: options.settings,
+      signal: options.signal,
+    });
+  } catch (error) {
+    review = rubricLib.failedReview(options.rubric, error);
+  }
+
+  // A re-run's result is authoritative; carry the accumulated usage/cost onto it.
+  const finalValue = review.finalResult && review.finalResult !== value ? review.finalResult : value;
+  finalValue.usage = accUsage;
+  finalValue.costUsd = accCost;
+  delete review.finalResult; // internal loop plumbing; not part of the public review
+  finalValue.review = review;
+  return finalValue;
+}
+
+function reviewMetadata(review) {
+  if (!review) return {};
+  const metadata = {
+    rubric_reviewed: true,
+    rubric_result: review.result,
+    rubric_satisfied: Boolean(review.satisfied),
+    rubric_iterations: review.iterations,
+  };
+  if (Array.isArray(review.unsatisfied) && review.unsatisfied.length) {
+    metadata.rubric_unsatisfied = review.unsatisfied.length;
+  }
+  return metadata;
 }
 
 function traceMetadata(resultOrError) {
@@ -415,7 +490,7 @@ function traceMetadata(resultOrError) {
     metadata.usage_reasoning_output_tokens = usage.reasoningOutputTokens;
   }
   if (costUsd !== null) metadata.cost_usd = costUsd;
-  return metadata;
+  return { ...metadata, ...reviewMetadata(resultOrError && resultOrError.review) };
 }
 
 function langSmithProvider(llm) {
@@ -867,11 +942,15 @@ async function executeAgentRuntime(options = {}) {
   });
   const workflowPattern = normalizeWorkflowPattern(options.workflowPattern, { strict: true });
   const prompt = applyWorkflowPattern(options.prompt, workflowPattern);
+  const runtimeOptions = { ...options, runtime, workflowPattern };
+  const runOnce = (promptText) => EXECUTORS[runtime](runtimeOptions, promptText);
+  const reviewEnabled = Boolean(options.rubric || options.rubricMiddleware);
   const execute = async () => {
     try {
-      const value = await EXECUTORS[runtime]({ ...options, runtime, workflowPattern }, prompt);
-      annotateTrace(value, options.getCurrentRunTree || getCurrentRunTree);
-      return value;
+      const value = await runOnce(prompt);
+      const reviewed = reviewEnabled ? await applyRubricMiddleware(options, value, prompt, runOnce) : value;
+      annotateTrace(reviewed, options.getCurrentRunTree || getCurrentRunTree);
+      return reviewed;
     } catch (error) {
       const wrapped = wrapExecutionError(runtime, error);
       annotateTrace(wrapped, options.getCurrentRunTree || getCurrentRunTree);

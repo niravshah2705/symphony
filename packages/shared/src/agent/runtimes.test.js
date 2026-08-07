@@ -445,6 +445,117 @@ test('matching SDK providers still fail closed when authentication is unavailabl
   );
 });
 
+test('RubricMiddleware grades a DeepAgent run and surfaces its verdict on the trace', async (t) => {
+  const seen = { run: { metadata: {} } };
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    prompt: 'Ship the feature',
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'Opened PR #7.' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    rubric: '- feature works\n- PR opened',
+    rubricOptions: { deps: { callJson: async () => ({ json: { criteria: [{ name: 'feature works', passed: true }, { name: 'PR opened', passed: true }] } }) } },
+    getCurrentRunTree: () => seen.run,
+    traceFactory: (fn) => fn,
+  });
+
+  assert.equal(execution.finalText, 'Opened PR #7.');
+  assert.equal(execution.review.result, 'satisfied');
+  assert.equal(execution.review.satisfied, true);
+  assert.equal(execution.review.iterations, 1);
+  // Verdict is copied into trace metadata for analytics.
+  assert.equal(seen.run.metadata.rubric_reviewed, true);
+  assert.equal(seen.run.metadata.rubric_result, 'satisfied');
+  assert.equal(seen.run.metadata.rubric_satisfied, true);
+  assert.equal(seen.run.metadata.rubric_iterations, 1);
+});
+
+test('RubricMiddleware re-runs the SAME SDK runtime (Codex) on needs_revision', async (t) => {
+  const root = workspace(t);
+  const runs = [];
+  class FakeCodex {
+    startThread() {
+      return {
+        id: 't',
+        run: async (prompt) => {
+          runs.push(prompt);
+          // First attempt is incomplete; the revision includes the gap block.
+          return { finalResponse: runs.length === 1 ? 'draft' : 'DONE with tests', usage: { input_tokens: 5, output_tokens: 2 } };
+        },
+      };
+    }
+  }
+  let round = 0;
+  const execution = await executeAgentRuntime({
+    runtime: 'codex-sdk',
+    prompt: 'Do the SDK task',
+    rootDir: root,
+    llm: { provider: 'codex', backend: 'api', model: 'gpt-5-codex', accessToken: 'k', baseUrl: 'https://x.test/v1' },
+    loaders: { 'codex-sdk': async () => ({ Codex: FakeCodex }) },
+    rubric: ['ships tests'],
+    rubricOptions: {
+      deps: { callJson: async () => { round += 1; return { json: { criteria: [{ name: 'ships tests', passed: round >= 2, gap: 'add tests' }] } }; } },
+    },
+    trace: false,
+  });
+
+  assert.equal(execution.runtime, 'codex-sdk');
+  assert.equal(runs.length, 2); // original run + one revision re-run
+  assert.match(runs[1], /rubric_revision/); // the re-run carried the gap feedback
+  assert.equal(execution.review.result, 'satisfied');
+  assert.equal(execution.review.iterations, 2);
+  assert.equal(execution.finalText, 'DONE with tests'); // final iteration output wins
+  assert.equal(execution.usage.totalTokens, 14); // usage accumulated across both runs (7 + 7)
+});
+
+test('a grader defect never fails a completed run (fail-open backstop)', async (t) => {
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    prompt: 'task',
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'done' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    rubric: ['a'],
+    rubricOptions: { deps: { callJson: async () => { throw new Error('grader exploded'); } } },
+    trace: false,
+  });
+
+  assert.equal(execution.finalText, 'done');
+  assert.equal(execution.review.result, 'grader_error');
+  assert.equal(execution.review.satisfied, false);
+  assert.match(execution.review.error, /grader exploded/);
+});
+
+test('a prebuilt rubricMiddleware instance is honored', async (t) => {
+  const { createRubricMiddleware } = require('./rubric-middleware');
+  const middleware = createRubricMiddleware({
+    rubric: ['a'],
+    deps: { callJson: async () => ({ json: { criteria: [{ name: 'a', passed: true }] } }) },
+  });
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    prompt: 'task',
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'done' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    rubricMiddleware: middleware,
+    trace: false,
+  });
+  assert.equal(execution.review.result, 'satisfied');
+});
+
+test('runs without a rubric attach no review (opt-in, backwards compatible)', async () => {
+  const execution = await executeAgentRuntime({
+    runtime: 'deepagent',
+    prompt: 'task',
+    llm: { provider: 'ollama', model: 'qwen' },
+    deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'done' }] }),
+    lastText: (result) => result.messages.at(-1).content,
+    trace: false,
+  });
+  assert.equal(Object.hasOwn(execution, 'review'), false);
+});
+
 test('Antigravity harness gates on a matching provider and the coding workflow', () => {
   // Matching provider (planning) runs the harness; a mismatch or brokered coding
   // falls back to DeepAgent — mirroring the codex/claude gating.
@@ -584,6 +695,48 @@ test('Antigravity SDK fails closed when the Gemini API key is unavailable', asyn
     }),
     (error) => error.code === 'runtime_auth_unavailable' && error.status === 401
   );
+});
+
+test('RubricMiddleware re-runs the SAME SDK runtime (Antigravity) on needs_revision', async (t) => {
+  const root = workspace(t);
+  const inputs = [];
+  class FakeGoogleGenAI {
+    constructor() {}
+    get interactions() {
+      return {
+        create: async (request) => {
+          inputs.push(request.input);
+          // First attempt is incomplete; the revision includes the gap block.
+          return {
+            id: `antigravity-${inputs.length}`,
+            output: [{ content: [{ text: inputs.length === 1 ? 'draft' : 'DONE with tests' }] }],
+            usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 2, totalTokenCount: 7 },
+          };
+        },
+      };
+    }
+  }
+  let round = 0;
+  const execution = await executeAgentRuntime({
+    runtime: 'antigravity-sdk',
+    prompt: 'Do the SDK task',
+    rootDir: root,
+    llm: { provider: 'antigravity', model: 'gemini-2.5-flash', apiKey: 'gemini-secret' },
+    loaders: { 'antigravity-sdk': async () => ({ GoogleGenAI: FakeGoogleGenAI }) },
+    rubric: ['ships tests'],
+    rubricOptions: {
+      deps: { callJson: async () => { round += 1; return { json: { criteria: [{ name: 'ships tests', passed: round >= 2, gap: 'add tests' }] } }; } },
+    },
+    trace: false,
+  });
+
+  assert.equal(execution.runtime, 'antigravity-sdk');
+  assert.equal(inputs.length, 2); // original run + one revision re-run
+  assert.match(inputs[1], /rubric_revision/); // the re-run carried the gap feedback
+  assert.equal(execution.review.result, 'satisfied');
+  assert.equal(execution.review.iterations, 2);
+  assert.equal(execution.finalText, 'DONE with tests'); // final iteration output wins
+  assert.equal(execution.usage.totalTokens, 14); // usage accumulated across both runs (7 + 7)
 });
 
 test('Antigravity SDK resolves the key from settings (ctx) and falls back to env/store', async (t) => {
