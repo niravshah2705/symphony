@@ -11,11 +11,18 @@ locals {
   # deterministic URL format.
   project_number = data.google_project.this.number
 
-  # Artifact Registry image references (Cloud Build supplies var.image_tag).
-  image_base    = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}"
-  gateway_image = "${local.image_base}/${var.gateway_service_name}:${var.image_tag}"
-  planner_image = "${local.image_base}/${var.planner_service_name}:${var.image_tag}"
-  coder_image   = "${local.image_base}/${var.coder_service_name}:${var.image_tag}"
+  # Artifact Registry image references. Each service resolves its own tag,
+  # falling back to var.image_tag when no per-service override is set — this is
+  # what lets the CD pipeline roll ONE service (its tag = new SHA) while every
+  # other service keeps its currently-deployed tag, making apply a no-op for them.
+  image_base  = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}"
+  gateway_tag = var.gateway_image_tag != "" ? var.gateway_image_tag : var.image_tag
+  planner_tag = var.planner_image_tag != "" ? var.planner_image_tag : var.image_tag
+  coder_tag   = var.coder_image_tag != "" ? var.coder_image_tag : var.image_tag
+
+  gateway_image = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
+  planner_image = "${local.image_base}/${var.planner_service_name}:${local.planner_tag}"
+  coder_image   = "${local.image_base}/${var.coder_service_name}:${local.coder_tag}"
 
   # Cloud Run's deterministic per-project URL:
   #   https://<service>-<project_number>.<region>.run.app

@@ -29,8 +29,30 @@ variable "artifact_repo" {
 
 variable "image_tag" {
   type        = string
-  description = "Image tag Cloud Build pushes and Terraform deploys (e.g. the commit SHA). Combined with the Artifact Registry path in locals.tf to form each container.image."
+  description = "Fallback image tag for ALL services (e.g. the commit SHA). deploy.sh / a full manual apply sets this. Combined with the Artifact Registry path in locals.tf to form each container.image. Per-service overrides below take precedence when set."
   default     = "latest"
+}
+
+# --- Per-service image tag overrides -----------------------------------------
+# The CD pipeline rebuilds only the service(s) whose code changed and passes that
+# service's new tag here, while passing each UNCHANGED service its currently-
+# deployed tag — so `terraform apply` rolls one service without disturbing the
+# others. Empty ("") falls back to var.image_tag (see locals.tf).
+
+variable "gateway_image_tag" {
+  type    = string
+  default = ""
+}
+
+variable "planner_image_tag" {
+  type    = string
+  default = ""
+}
+
+variable "coder_image_tag" {
+  type        = string
+  description = "Tag for coder-control AND the coder-worker Job (they share one image)."
+  default     = ""
 }
 
 # --- Cloud Run service / job names -------------------------------------------

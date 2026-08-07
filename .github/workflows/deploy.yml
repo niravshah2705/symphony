@@ -1,16 +1,24 @@
 name: Deploy to GCP
 
-# Continuous deployment: every merge to main builds + pushes the three service
-# images, publishes the SPA to GCS, and runs `terraform apply` on the no-cost
-# GCP stack (Cloud Run + Pub/Sub + Cloud Scheduler + Firestore + Secret Manager).
+# Continuous deployment on every merge to main — but PATH-FILTERED so a merge
+# only does the work it needs:
+#   • a service's code changed  → rebuild ONLY that image, then a per-service
+#                                  `terraform apply` rolls ONLY that service.
+#   • packages/shared or root deps changed → rebuild all three images.
+#   • deploy/gcp/terraform/** changed → `terraform apply` only (no image rebuild).
+#   • public/** or firebase.json changed → Firebase Hosting deploy only.
+#   • docs / anything else → nothing runs.
 #
-# Auth is keyless via Workload Identity Federation (no long-lived SA key) — see
-# docs/GCP_CICD.md for the one-time WIF + deployer-SA setup and the required
-# repo variables/secrets.
+# Auth is keyless via Workload Identity Federation — see docs/GCP_CICD.md.
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: "Force rebuild + apply everything (ignore path filters)"
+        type: boolean
+        default: false
 
 # Never run two applies against the same Terraform state at once.
 concurrency:
@@ -26,16 +34,159 @@ env:
   AR_REPO: ai-fleet
   TF_DIR: deploy/gcp/terraform
   TF_STATE_PREFIX: ai-fleet/gcp
-  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-  deploy:
+  # --------------------------------------------------------------------------
+  # 1. Decide what changed and build the work plan (a JSON list of services to
+  #    rebuild + whether the SPA / Terraform steps need to run at all).
+  # --------------------------------------------------------------------------
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.plan.outputs.services }} # JSON array of {id,image,dockerfile}
+      spa: ${{ steps.plan.outputs.spa }}
+      run_terraform: ${{ steps.plan.outputs.run_terraform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared:  ['packages/shared/**']
+            gateway: ['services/gateway/**', 'deploy/gcp/Dockerfile.gateway']
+            planner: ['services/planner/**', 'deploy/gcp/Dockerfile.planner']
+            coder:   ['services/coder/**',   'deploy/gcp/Dockerfile.coder']
+            spa:     ['public/**', 'firebase.json']
+            infra:   ['deploy/gcp/terraform/**']
+            root:    ['package.json', 'package-lock.json']
+
+      - id: plan
+        env:
+          FORCE_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_all }}
+          SHARED: ${{ steps.filter.outputs.shared }}
+          ROOT: ${{ steps.filter.outputs.root }}
+          GATEWAY: ${{ steps.filter.outputs.gateway }}
+          PLANNER: ${{ steps.filter.outputs.planner }}
+          CODER: ${{ steps.filter.outputs.coder }}
+          SPA: ${{ steps.filter.outputs.spa }}
+          INFRA: ${{ steps.filter.outputs.infra }}
+        run: |
+          set -euo pipefail
+          # A shared-code / root-deps change (or a forced run) rebuilds everything.
+          all=false
+          if [ "$FORCE_ALL" = "true" ] || [ "$SHARED" = "true" ] || [ "$ROOT" = "true" ]; then all=true; fi
+
+          services='[]'
+          push() { services=$(printf '%s' "$services" | jq -c \
+            --arg id "$1" --arg image "$2" --arg df "$3" \
+            '. + [{id:$id, image:$image, dockerfile:$df}]'); }
+
+          if [ "$all" = "true" ] || [ "$GATEWAY" = "true" ]; then push gateway gateway       deploy/gcp/Dockerfile.gateway; fi
+          if [ "$all" = "true" ] || [ "$PLANNER" = "true" ]; then push planner planner       deploy/gcp/Dockerfile.planner; fi
+          if [ "$all" = "true" ] || [ "$CODER"   = "true" ]; then push coder   coder-control deploy/gcp/Dockerfile.coder;   fi
+
+          spa=false
+          if [ "$FORCE_ALL" = "true" ] || [ "$SPA" = "true" ]; then spa=true; fi
+
+          # Terraform runs when infra changed OR any image was rebuilt (rolling a
+          # new image is a `terraform apply`). A SPA-only or docs-only change skips it.
+          run_tf=false
+          if [ "$FORCE_ALL" = "true" ] || [ "$INFRA" = "true" ] || [ "$services" != "[]" ]; then run_tf=true; fi
+
+          {
+            echo "services=$services"
+            echo "spa=$spa"
+            echo "run_terraform=$run_tf"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Plan → services=$services  spa=$spa  run_terraform=$run_tf"
+
+  # --------------------------------------------------------------------------
+  # 2a. Build + push ONLY the changed service images (one matrix leg each).
+  #     Push-only; the terraform job below actually rolls them.
+  # --------------------------------------------------------------------------
+  build:
+    needs: changes
+    if: needs.changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    name: build ${{ matrix.svc.id }}
+    strategy:
+      fail-fast: true
+      matrix:
+        svc: ${{ fromJSON(needs.changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Ensure Artifact Registry repo exists
+        run: |
+          gcloud artifacts repositories describe "$AR_REPO" \
+            --project "${{ vars.GCP_PROJECT_ID }}" --location "$REGION" >/dev/null 2>&1 \
+          || gcloud artifacts repositories create "$AR_REPO" \
+            --project "${{ vars.GCP_PROJECT_ID }}" --location "$REGION" --repository-format=docker
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" -q
+
+      - name: Build & push ${{ matrix.svc.id }}
+        run: |
+          set -euo pipefail
+          IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${AR_REPO}/${{ matrix.svc.image }}:${GITHUB_SHA}"
+          docker build -f "${{ matrix.svc.dockerfile }}" -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "Pushed $IMAGE"
+
+  # --------------------------------------------------------------------------
+  # 2b. Deploy the SPA to Firebase Hosting — only when public/** changed.
+  # --------------------------------------------------------------------------
+  deploy-spa:
+    needs: changes
+    if: needs.changes.outputs.spa == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - id: auth
-        name: Authenticate to GCP (WIF, keyless)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy SPA to Firebase Hosting
+        run: |
+          set -euo pipefail
+          PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
+          GATEWAY_URL="https://${{ vars.GATEWAY_SERVICE_NAME || 'gateway' }}-${PROJECT_NUMBER}.${REGION}.run.app"
+          printf "window.__API_BASE__='%s';\n" "$GATEWAY_URL" > public/config.js
+          npx --yes firebase-tools@13 deploy --only hosting \
+            --project "${{ vars.GCP_PROJECT_ID }}" --non-interactive
+
+  # --------------------------------------------------------------------------
+  # 3. Terraform apply. Rolls the rebuilt service(s) to the new SHA and applies
+  #    any infra change. UNCHANGED services keep their currently-deployed tag,
+  #    so apply is a no-op for them. Runs after (any) builds finish.
+  # --------------------------------------------------------------------------
+  terraform:
+    needs: [changes, build]
+    if: |
+      always() &&
+      needs.changes.outputs.run_terraform == 'true' &&
+      needs.build.result != 'failure' && needs.build.result != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
@@ -48,15 +199,30 @@ jobs:
           terraform_version: "1.9.8"
           terraform_wrapper: false
 
-      - name: Resolve image base + gateway URL
-        id: vars
+      - name: Resolve per-service image tags
+        id: tags
+        env:
+          SERVICES: ${{ needs.changes.outputs.services }}
         run: |
           set -euo pipefail
-          IMAGE_BASE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${AR_REPO}"
-          PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
-          GATEWAY_URL="https://gateway-${PROJECT_NUMBER}.${REGION}.run.app"
-          echo "image_base=$IMAGE_BASE" >> "$GITHUB_OUTPUT"
-          echo "gateway_url=$GATEWAY_URL" >> "$GITHUB_OUTPUT"
+          PROJECT="${{ vars.GCP_PROJECT_ID }}"
+
+          # A service that was rebuilt this run deploys at the new SHA; one that
+          # was NOT rebuilt keeps whatever tag is live now (→ apply no-op for it).
+          built() { printf '%s' "$SERVICES" | jq -e --arg id "$1" 'any(.[]; .id == $id)' >/dev/null; }
+          live_tag() {
+            gcloud run services describe "$1" --project "$PROJECT" --region "$REGION" \
+              --format='value(spec.template.spec.containers[0].image)' 2>/dev/null | sed 's#.*:##'
+          }
+          resolve() { # <plan-id> <cloud-run-service-name>
+            if built "$1"; then echo "$GITHUB_SHA"; else live_tag "$2"; fi
+          }
+
+          {
+            echo "gateway=$(resolve gateway gateway)"
+            echo "planner=$(resolve planner planner)"
+            echo "coder=$(resolve coder coder-control)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
         working-directory: ${{ env.TF_DIR }}
@@ -65,60 +231,30 @@ jobs:
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
             -backend-config="prefix=${TF_STATE_PREFIX}"
 
-      # Bootstrap the resources that must exist BEFORE images are pushed / the SPA
-      # is uploaded (idempotent — a no-op once they exist).
-      - name: Terraform apply (bootstrap — registry + SPA bucket)
+      - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}
         run: |
-          terraform apply -input=false -auto-approve \
-            -target=google_project_service.services \
-            -target=google_artifact_registry_repository.docker \
-            -target=google_storage_bucket.spa \
-            -target=google_storage_bucket_iam_member.spa_public_read \
-            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
-            -var="region=${REGION}" \
-            -var="artifact_repo=${AR_REPO}" \
+          set -euo pipefail
+          PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
+          GATEWAY_URL="https://${{ vars.GATEWAY_SERVICE_NAME || 'gateway' }}-${PROJECT_NUMBER}.${REGION}.run.app"
+
+          # Per-service tags: empty ones fall back to var.image_tag (locals.tf).
+          apply_args=(
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}"
+            -var="region=${REGION}"
+            -var="artifact_repo=${AR_REPO}"
             -var="spa_bucket_name=${{ vars.SPA_BUCKET }}"
-
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" -q
-
-      - name: Build & push images
-        run: |
-          set -euo pipefail
-          BASE="${{ steps.vars.outputs.image_base }}"
-          docker build -f deploy/gcp/Dockerfile.gateway -t "$BASE/gateway:${IMAGE_TAG}" .
-          docker build -f deploy/gcp/Dockerfile.planner -t "$BASE/planner:${IMAGE_TAG}" .
-          docker build -f deploy/gcp/Dockerfile.coder   -t "$BASE/coder-control:${IMAGE_TAG}" .
-          docker push "$BASE/gateway:${IMAGE_TAG}"
-          docker push "$BASE/planner:${IMAGE_TAG}"
-          docker push "$BASE/coder-control:${IMAGE_TAG}"
-
-      - name: Deploy SPA to Firebase Hosting
-        # Served at https://<project>.web.app (root → absolute asset paths resolve),
-        # with a catch-all rewrite (** → /index.html) so any unknown/deep path
-        # falls back to the SPA. Auth is the WIF ADC from the auth step (keyless).
-        run: |
-          set -euo pipefail
-          printf "window.__API_BASE__='%s';\n" "${{ steps.vars.outputs.gateway_url }}" > public/config.js
-          npx --yes firebase-tools@13 deploy --only hosting --project "${{ vars.GCP_PROJECT_ID }}" --non-interactive
-
-      # Full apply: Cloud Run services + coder Job, Pub/Sub, Cloud Scheduler,
-      # Firestore, Secret Manager grants, IAM. Rolls out the new image tag.
-      - name: Terraform apply (full)
-        working-directory: ${{ env.TF_DIR }}
-        run: |
-          terraform apply -input=false -auto-approve \
-            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
-            -var="region=${REGION}" \
-            -var="artifact_repo=${AR_REPO}" \
-            -var="image_tag=${IMAGE_TAG}" \
-            -var="spa_bucket_name=${{ vars.SPA_BUCKET }}" \
-            -var="firestore_location=${{ vars.FIRESTORE_LOCATION || 'nam5' }}" \
-            -var="spa_origin=${{ vars.SPA_ORIGIN || 'https://storage.googleapis.com' }}" \
-            -var="api_base_url=${{ steps.vars.outputs.gateway_url }}" \
-            -var="firebase_api_key=${{ vars.FIREBASE_API_KEY }}" \
+            -var="firestore_location=${{ vars.FIRESTORE_LOCATION || 'nam5' }}"
+            -var="spa_origin=${{ vars.SPA_ORIGIN || 'https://storage.googleapis.com' }}"
+            -var="api_base_url=${GATEWAY_URL}"
+            -var="firebase_api_key=${{ vars.FIREBASE_API_KEY }}"
             -var="firebase_allowed_domain=${{ vars.FIREBASE_ALLOWED_DOMAIN }}"
+          )
+          [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
+          [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
+          [ -n "${{ steps.tags.outputs.coder }}" ]   && apply_args+=(-var="coder_image_tag=${{ steps.tags.outputs.coder }}")
+
+          terraform apply -input=false -auto-approve "${apply_args[@]}"
 
       - name: Outputs
         working-directory: ${{ env.TF_DIR }}
