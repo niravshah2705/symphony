@@ -15,6 +15,7 @@ import {
   expireAuthentication,
   getAuthenticationState,
   initializeAuthentication,
+  promptOneTap,
   signIn,
   signOut,
 } from './auth.js';
@@ -29,6 +30,7 @@ import { renderAnalytics } from './views/analytics.js';
 import { renderWorkflows } from './views/workflows.js';
 import { renderTroubleshooting } from './views/troubleshooting.js';
 import { renderSettings } from './views/settings.js';
+import { renderOrganization } from './views/organization.js';
 import { initThemeToggle } from './theme.js';
 import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 
@@ -44,6 +46,7 @@ const routes = {
   workflows: renderWorkflows,
   troubleshooting: renderTroubleshooting,
   settings: renderSettings,
+  organization: renderOrganization,
 };
 
 const routeMeta = {
@@ -58,6 +61,7 @@ const routeMeta = {
   workflows: { titleKey: 'workflows', eyebrowKey: 'insights' },
   troubleshooting: { titleKey: 'troubleshooting', eyebrowKey: 'system' },
   settings: { titleKey: 'settings', eyebrowKey: 'system' },
+  organization: { titleKey: 'organization', eyebrowKey: 'workspace' },
 };
 
 // These existing surfaces depend on the configured project-management connection.
@@ -536,6 +540,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   await render();
   await readiness;
   if (session.authenticated && connectionRoutes.has(currentRoute())) await render();
+
+  // Anonymous visitors: surface the compact Google One Tap card (the screenshot
+  // shape). Non-blocking — the read-only workspace + basic RAG stay usable, and
+  // it is a no-op when One Tap is not configured or a user is already signed in.
+  if (session.enabled && !session.authenticated) promptOneTap().catch(() => {});
 });
 
 window.addEventListener('ai-fleet:locale-changed', async () => {

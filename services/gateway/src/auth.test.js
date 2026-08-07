@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { buildFirebaseAuthConfig } = require('@ai-fleet/shared/config');
-const { createAuthenticationMiddleware, requirePermission, publicAuthConfig, verifyFirebaseIdToken } = require('./auth');
+const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig, verifyFirebaseIdToken } = require('./auth');
 
 function firebaseConfig(overrides = {}) {
   return {
@@ -76,11 +76,16 @@ test('publicAuthConfig exposes only the public Firebase web config (no authz sec
     mode: 'firebase',
     enabled: true,
     provider: 'firebase',
-    firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo-proj.firebaseapp.com', projectId: 'demo-proj', hostedDomain: undefined },
+    firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo-proj.firebaseapp.com', projectId: 'demo-proj', hostedDomain: undefined, googleClientId: undefined },
     publicPermissions: { workspace: 'read' },
   });
   const serialized = JSON.stringify(pub);
   assert.doesNotMatch(serialized, /allowedEmails|allowedDomain|x@y\.com/);
+});
+
+test('publicAuthConfig surfaces the public One Tap client id when configured', () => {
+  const pub = publicAuthConfig(firebaseConfig({ googleClientId: '123.apps.googleusercontent.com' }));
+  assert.equal(pub.firebase.googleClientId, '123.apps.googleusercontent.com');
 });
 
 test('publicAuthConfig collapses to disabled when auth is off', () => {
@@ -212,4 +217,36 @@ test('requirePermission: OPTIONS preflight is never gated', () => {
   let nexted = 0;
   requirePermission('settings', { level: 'write' })({ method: 'OPTIONS', auth: publicAuth }, responseRecorder(), () => { nexted += 1; });
   assert.equal(nexted, 1);
+});
+
+/* ---------------------------- requireAuthenticated (/api/org/me) -------- */
+
+test('requireAuthenticated: any signed-in user passes regardless of role', () => {
+  // A default viewer has only org:read, but the personal workspace is theirs.
+  const request = { method: 'POST', auth: authed('viewer', { workspace: 'read', org: 'read' }) };
+  let nexted = 0;
+  requireAuthenticated()(request, responseRecorder(), () => { nexted += 1; });
+  assert.equal(nexted, 1);
+});
+
+test('requireAuthenticated: anonymous/public → 401', () => {
+  const res = responseRecorder();
+  let nexted = 0;
+  requireAuthenticated()({ method: 'POST', auth: publicAuth }, res, () => { nexted += 1; });
+  assert.equal(nexted, 0);
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.body.code, 'authentication_required');
+});
+
+test('requireAuthenticated: OPTIONS preflight is never gated', () => {
+  let nexted = 0;
+  requireAuthenticated()({ method: 'OPTIONS', auth: publicAuth }, responseRecorder(), () => { nexted += 1; });
+  assert.equal(nexted, 1);
+});
+
+test('buildFirebaseAuthConfig: One Tap client id from either env alias (public)', () => {
+  const a = buildFirebaseAuthConfig({ AUTH_MODE: 'firebase', FIREBASE_PROJECT_ID: 'p', FIREBASE_API_KEY: 'AIza', GOOGLE_ONE_TAP_CLIENT_ID: 'aaa.apps.googleusercontent.com' });
+  assert.equal(a.googleClientId, 'aaa.apps.googleusercontent.com');
+  const b = buildFirebaseAuthConfig({ AUTH_MODE: 'firebase', FIREBASE_PROJECT_ID: 'p', FIREBASE_API_KEY: 'AIza', FIREBASE_GOOGLE_CLIENT_ID: 'bbb.apps.googleusercontent.com' });
+  assert.equal(b.googleClientId, 'bbb.apps.googleusercontent.com');
 });

@@ -50,9 +50,13 @@ async function request(path, options = {}) {
     /* empty body */
   }
   if (!res.ok) {
-    const error = new Error(data.error || `Request failed (${res.status})`);
+    // The gateway returns { error: "msg", code }; the org service returns a
+    // nested envelope { error: { code, message } }. Support both shapes.
+    const nested = data.error && typeof data.error === 'object' ? data.error : null;
+    const message = nested ? nested.message : data.error;
+    const error = new Error(message || `Request failed (${res.status})`);
     error.status = res.status;
-    error.code = data.code || '';
+    error.code = data.code || (nested && nested.code) || '';
     // Connected tools can also return 401. Lock the whole workspace only when
     // the gateway identified an application-auth failure (or while confirming
     // the current application identity), not for an unrelated provider key.
@@ -248,4 +252,35 @@ export const api = {
   getAnalytics: () => request('/observability/analytics'),
   getTroubleshooting: () => request('/observability/troubleshooting'),
   getWorkflowPatterns: () => request('/observability/workflows'),
+
+  // Organization service (services/org via /api/org/*). The `me` surface is
+  // available to any signed-in user (personal projects + create-org); the org
+  // tenant surface needs an org role and the org service enforces per-org RBAC.
+  org: {
+    // Personal workspace (org-less friendly) — /api/org/me/*
+    getMe: () => request('/org/me'),
+    createOrganization: (payload) =>
+      request('/org/me/organization', { method: 'POST', body: JSON.stringify(payload) }),
+    listPersonalProjects: () => request('/org/me/projects'),
+    createPersonalProject: (payload) =>
+      request('/org/me/projects', { method: 'POST', body: JSON.stringify(payload) }),
+    getPersonalProject: (id) => request(`/org/me/projects/${id}`),
+    updatePersonalProject: (id, payload) =>
+      request(`/org/me/projects/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deletePersonalProject: (id) => request(`/org/me/projects/${id}`, { method: 'DELETE' }),
+
+    // Organization tenant surface — /api/org/*
+    getCurrentOrganization: () => request('/org/organizations/current'),
+    listOrgProjects: () => request('/org/projects'),
+    createOrgProject: (payload) =>
+      request('/org/projects', { method: 'POST', body: JSON.stringify(payload) }),
+    listOrgUsers: () => request('/org/users'),
+    createOrgUser: (payload) =>
+      request('/org/users', { method: 'POST', body: JSON.stringify(payload) }),
+    listProjectMembers: (projectId) => request(`/org/projects/${projectId}/members`),
+    addProjectMember: (projectId, payload) =>
+      request(`/org/projects/${projectId}/members`, { method: 'POST', body: JSON.stringify(payload) }),
+    removeProjectMember: (projectId, userId) =>
+      request(`/org/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
+  },
 };

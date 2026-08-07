@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     routes_auth,
     routes_health,
+    routes_me,
     routes_members,
     routes_org,
     routes_projects,
@@ -20,6 +21,7 @@ from app.api.v1 import (
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(routes_health.router)
 api_router.include_router(routes_auth.router)
+api_router.include_router(routes_me.router)
 api_router.include_router(routes_org.router)
 api_router.include_router(routes_users.router)
 api_router.include_router(routes_projects.router)

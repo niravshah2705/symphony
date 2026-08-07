@@ -25,6 +25,13 @@ def projects_col(org_id: uuid.UUID) -> str:
     return f"{ORGS}/{org_id}/projects"
 
 
+def personal_projects_col(owner_id: uuid.UUID) -> str:
+    """Personal (org-less) projects live under their owner: `users/{owner_id}/projects`.
+    The owner id always derives from the authenticated principal, so a project in
+    another user's subcollection is structurally unreachable."""
+    return f"{USERS}/{owner_id}/projects"
+
+
 def tasks_col(org_id: uuid.UUID, project_id: uuid.UUID) -> str:
     return f"{ORGS}/{org_id}/projects/{project_id}/tasks"
 
