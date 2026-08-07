@@ -25,6 +25,18 @@ Regenerate the docs manually any time with:
 npm run docs:code
 ```
 
+## `post-commit` — background graph refresh
+
+After each commit, regenerates the **local, gitignored** query indexes
+(`.code-review-graph/graph.db` and `graphify-out/`) so the two-graph query
+workflow (see `CLAUDE.md` → "Querying the code") stays fresh. Runs **detached**
+so `git commit` returns immediately, and is PID-locked so concurrent commits
+don't pile up rebuilds. Logs to `.code-review-graph/post-commit.log`.
+
+- This does **not** touch committed docs — that's the `pre-commit` gate above.
+- Rebuild on demand any time: `npm run graph:build`.
+- Bypass: `SKIP_GRAPH_REFRESH=1 git commit …`
+
 > Enforcement is **local only** — a git hook cannot be enforced server-side and
 > can be bypassed. To also block *merges*, add `npm run docs:code` as a job in
 > `.github/workflows/checks.yml` and mark it a required status check.
