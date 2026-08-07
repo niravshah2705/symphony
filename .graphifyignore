@@ -1,0 +1,13 @@
+# Paths graphify should not index (keeps the AST graph focused on our source).
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+data/
+.terraform/
+graphify-out/
+.code-review-graph/
+package-lock.json
+*.min.js
+*.log

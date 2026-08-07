@@ -1,0 +1,13 @@
+# Paths code-review-graph should not index (keeps the SQLite graph focused).
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+data/
+.terraform/
+graphify-out/
+.code-review-graph/
+package-lock.json
+*.min.js
+*.log

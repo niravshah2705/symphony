@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+#
+# post-commit — refresh the local code-intelligence indexes in the background.
+#
+# Keeps the CRG SQLite graph and the graphify AST graph fresh so "where/who/what
+# connects" queries stay accurate (see CLAUDE.md → "Querying the code"). Both are
+# gitignored local caches — this does NOT touch committed docs (that's the
+# drift-gated pre-commit hook).
+#
+# Runs detached so `git commit` returns immediately, and is PID-locked so
+# concurrent commits don't pile up rebuilds.
+#
+# Bypass: SKIP_GRAPH_REFRESH=1 git commit …
+set -uo pipefail
+
+[ "${SKIP_GRAPH_REFRESH:-}" = "1" ] && exit 0
+
+ROOT="$(git rev-parse --show-toplevel)" || exit 0
+CACHE="$ROOT/.code-review-graph"
+mkdir -p "$CACHE"
+LOCK="$CACHE/.refresh.lock"
+LOG="$CACHE/post-commit.log"
+
+# Already refreshing? leave it be.
+if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
+  exit 0
+fi
+
+# Detach: the subshell keeps running after git returns.
+(
+  echo $$ >"$LOCK"
+  trap 'rm -f "$LOCK"' EXIT
+  export PATH="$HOME/.local/bin:$PATH"
+  cd "$ROOT" || exit 0
+  {
+    echo "----- graph refresh (post-commit) -----"
+    command -v code-review-graph >/dev/null 2>&1 && code-review-graph update >/dev/null 2>&1 \
+      && echo "  code-review-graph: updated" || echo "  code-review-graph: skipped/failed"
+    command -v graphify >/dev/null 2>&1 && graphify update . >/dev/null 2>&1 \
+      && echo "  graphify: updated" || echo "  graphify: skipped/failed"
+  } >>"$LOG" 2>&1
+) </dev/null >/dev/null 2>&1 &
+
+exit 0
