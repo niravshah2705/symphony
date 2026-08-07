@@ -4,11 +4,18 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 
-const { mintStreamToken, verifyStreamToken } = require('./stream-token');
+const { mintStreamToken, mintWorkspaceToken, verifyStreamToken } = require('./stream-token');
+const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared/messaging/events');
 
 test('mint + verify roundtrip for the same conversationId', () => {
   const token = mintStreamToken('conv1');
   assert.equal(verifyStreamToken(token, 'conv1'), true);
+});
+
+test('workspace token verifies against the reserved workspace channel only', () => {
+  const token = mintWorkspaceToken();
+  assert.equal(verifyStreamToken(token, WORKSPACE_CHANNEL), true);
+  assert.equal(verifyStreamToken(token, 'conv1'), false);
 });
 
 test('token is bound to its conversationId (mismatch is rejected)', () => {

@@ -22,7 +22,8 @@ const { initStore, getConversation } = require('@ai-fleet/shared/store');
 const events = require('@ai-fleet/shared/messaging/events');
 const publish = require('./publish');
 const sse = require('./sse');
-const { mintStreamToken } = require('./stream-token');
+const { mintStreamToken, mintWorkspaceToken } = require('./stream-token');
+const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared/messaging/events');
 
 /**
  * Gateway service — the single browser-facing origin. It serves the SPA, owns
@@ -75,10 +76,13 @@ app.post('/internal/events', (req, res) => {
 // The Firebase Web SDK is a static asset under public/vendor/firebase/ (served
 // by express.static locally and from GCS in the cloud) — no gateway route needed.
 
-// SSE stream — mounted BEFORE the bearer auth middleware because EventSource
-// cannot send an Authorization header; it authorizes via a signed stream token
-// in the query string instead (see sse.js / stream-token.js).
+// SSE streams — mounted BEFORE the bearer auth middleware because EventSource
+// cannot send an Authorization header; they authorize via a signed stream token
+// in the query string instead (see sse.js / stream-token.js). The workspace
+// stream carries global status/jobs/coder/gate events (replaces SPA polling) and
+// is readable by the public read-only home.
 app.get('/api/agent/stream', sse.handleStream);
+app.get('/api/agent/workspace-stream', sse.handleWorkspaceStream);
 
 // Attaches req.auth (identity + role + permissions) to every /api request. It
 // does NOT deny — authorization is enforced per-router by requirePermission
@@ -111,6 +115,13 @@ app.get('/api/agent/stream-token', requirePermission('workspace'), (req, res) =>
   if (!conversationId) return res.status(400).json({ error: 'conversationId is required.' });
   if (!getConversation(conversationId)) return res.status(404).json({ error: 'Unknown conversation.' });
   return res.set('Cache-Control', 'no-store').json({ token: mintStreamToken(conversationId), conversationId });
+});
+
+// Mint a token for the GLOBAL workspace stream. workspace:READ (public) so the
+// read-only home can subscribe to live status/jobs/coder/gate updates. Bound to
+// the reserved channel id — no conversation to validate.
+app.get('/api/agent/workspace-stream-token', requirePermission('workspace', { level: 'read' }), (req, res) => {
+  res.set('Cache-Control', 'no-store').json({ token: mintWorkspaceToken(), conversationId: WORKSPACE_CHANNEL });
 });
 
 // User-facing API routes (owned by the gateway). Each is guarded by the

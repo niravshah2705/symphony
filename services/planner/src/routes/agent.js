@@ -36,6 +36,7 @@ const memory = require('@ai-fleet/shared/agent/memory');
 const businessPipeline = require('@ai-fleet/shared/agent/business-pipeline');
 const approvalGate = require('@ai-fleet/shared/agent/approval-gate');
 const conversations = require('@ai-fleet/shared/agent/conversations');
+const workspaceEvents = require('@ai-fleet/shared/agent/workspace-events');
 
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const CONV_ID_PATTERN = /^conv_[A-Za-z0-9_-]{1,64}$/;
@@ -208,6 +209,9 @@ router.get(
 router.put('/config', (req, res) => {
   const next = sanitizeConfig(req.body, getAgentConfig());
   setAgentConfig(next);
+  // A schedule toggle / cadence change is a status transition — push it to the
+  // workspace stream so every open workspace updates without polling /status.
+  workspaceEvents.publishAgentStatus({ ...scheduler.getStatus(), assumedRole: getAssumedRole() });
   res.json({ config: next });
 });
 

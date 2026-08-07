@@ -12,20 +12,26 @@ import {
 import { state, setCurrentProject } from '../state.js';
 import { getAuthenticationState } from '../auth.js';
 
-let refreshTimer = null;
-let gateTimer = null; // polls an awaiting approval gate for auto-advance
+let workspaceStream = null; // EventSource: global status/jobs/coder/gate feed (replaces polling)
+let gateTimer = null; // display-only countdown tick for an awaiting approval gate (no fetch)
 let activeGateId = null;
+let gateHost = null; // rail host + result of the gate currently on screen (driven by SSE)
+let gateResult = null;
 let railState = { mode: 'setup', result: null };
 let latestAgentStatus = null;
 let latestJobs = [];
+let latestCoderStatus = null;
 let conversation = []; // in-memory entries for the ACTIVE thread (full routeResult fidelity)
 let activeConversationId = null; // the open thread; null = unsaved "new" state (lazy-created on first send)
 const pauseSignatures = new WeakMap();
 const CONVERSATION_ID = /^conv_[A-Za-z0-9_-]{1,64}$/;
+const GATE_COUNTDOWN_TICK_MS = 1000; // refreshes only the countdown label; no network
 
 function stopRefresh() {
-  if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = null;
+  if (workspaceStream) {
+    try { workspaceStream.close(); } catch (_) { /* already closed */ }
+    workspaceStream = null;
+  }
   stopGatePoll();
 }
 
@@ -33,6 +39,8 @@ function stopGatePoll() {
   if (gateTimer) clearInterval(gateTimer);
   gateTimer = null;
   activeGateId = null;
+  gateHost = null;
+  gateResult = null;
 }
 
 function agentRouteActive() {
@@ -99,36 +107,106 @@ export async function renderAgent(view) {
     ])
   );
 
+  latestCoderStatus = coderStatus;
   renderPauseNotices(pauseHost, ...pauseSources(status, coderStatus, jobs));
   renderWelcome(stream, status);
   for (const entry of conversation) stream.append(renderConversationEntry(entry, railBody));
   renderCurrentRail(railBody);
   requestAnimationFrame(scrollConversationToEnd);
 
-  refreshTimer = setInterval(async () => {
-    if (!agentRouteActive()) return stopRefresh();
-    try {
-      const [nextStatus, nextJobs, nextCoderStatus] = await Promise.all([
-        api.getAgentStatus(),
-        api.getJobs(),
-        api.getCoderStatus().catch(() => null),
-      ]);
-      const refreshedJobs = nextJobs.jobs || [];
-      latestAgentStatus = nextStatus;
-      latestJobs = refreshedJobs;
-      renderPauseNotices(pauseHost, ...pauseSources(nextStatus, nextCoderStatus, refreshedJobs));
-      const nextToolbarSignature = agentToolbarSignature(nextStatus);
-      if (nextToolbarSignature !== toolbarSignature) {
-        const replacement = agentToolbar(nextStatus, view, railBody);
-        toolbar.replaceWith(replacement);
-        toolbar = replacement;
-        toolbarSignature = nextToolbarSignature;
-      }
-      if (railState.mode !== 'result') renderCurrentRail(railBody);
-    } catch (_) {
-      // A short service restart should not interrupt the conversation.
+  // Re-render the pause notices, toolbar, and rail from the latest state after an
+  // SSE update. Same diffing as the old poll — the toolbar/notices only rebuild
+  // when their signature actually changed.
+  const applyWorkspaceUpdate = () => {
+    renderPauseNotices(pauseHost, ...pauseSources(latestAgentStatus, latestCoderStatus, latestJobs));
+    const nextToolbarSignature = agentToolbarSignature(latestAgentStatus);
+    if (nextToolbarSignature !== toolbarSignature) {
+      const replacement = agentToolbar(latestAgentStatus, view, railBody);
+      toolbar.replaceWith(replacement);
+      toolbar = replacement;
+      toolbarSignature = nextToolbarSignature;
     }
-  }, 5000);
+    if (railState.mode !== 'result') renderCurrentRail(railBody);
+  };
+
+  // Live updates over SSE replace the old 5s polling of /status + /jobs + /coder.
+  // Initial state above is the one-shot seed; typed events keep it current.
+  void openWorkspaceStream((event) => {
+    if (!agentRouteActive()) return stopRefresh();
+    applyWorkspaceEvent(event, applyWorkspaceUpdate);
+  });
+}
+
+/** Apply one typed workspace event onto the module state, then refresh the UI. */
+function applyWorkspaceEvent(event, applyWorkspaceUpdate) {
+  if (!event || !event.type) return;
+  if (event.type === 'agent-status' && event.status) {
+    // MERGE so the model/provider fields from the seed load survive a partial
+    // transition snapshot (counts + pause + schedule).
+    latestAgentStatus = { ...latestAgentStatus, ...event.status };
+    applyWorkspaceUpdate();
+  } else if (event.type === 'jobs' && Array.isArray(event.jobs)) {
+    latestJobs = event.jobs;
+    applyWorkspaceUpdate();
+  } else if (event.type === 'coder') {
+    latestCoderStatus = event.coder || null;
+    applyWorkspaceUpdate();
+  } else if (event.type === 'gate') {
+    void handleGateEvent(event);
+  }
+}
+
+/**
+ * Open the workspace SSE stream, closing any prior one and guarding against a
+ * navigation that happened while the token request was in flight.
+ */
+async function openWorkspaceStream(onEvent) {
+  stopStreamOnly();
+  let source;
+  try {
+    source = await api.openWorkspaceStream(onEvent);
+  } catch (_) {
+    return; // best-effort; the initial seed load still populated the view
+  }
+  if (!agentRouteActive()) {
+    try { source.close(); } catch (_) { /* ignore */ }
+    return;
+  }
+  workspaceStream = source;
+}
+
+/** Close just the stream (used before reopening) without disturbing the gate timer. */
+function stopStreamOnly() {
+  if (workspaceStream) {
+    try { workspaceStream.close(); } catch (_) { /* already closed */ }
+    workspaceStream = null;
+  }
+}
+
+/**
+ * Drive an on-screen approval gate to its terminal state from an SSE `gate`
+ * event (server auto-approve after the deadline, or an approve/supersede in
+ * another tab). The local timer is now display-only, so this is what advances
+ * the pipeline — no polling.
+ */
+async function handleGateEvent(event) {
+  if (!activeGateId || event.gateId !== activeGateId) return;
+  const host = gateHost;
+  const result = gateResult;
+  if (event.status === 'proceeded') {
+    stopGatePoll();
+    if (host && result) {
+      result.gate = { ...(result.gate || {}), status: 'proceeded' };
+      try {
+        await proceedToPipeline(host, result);
+      } catch (_) {
+        // A transient prepare failure leaves the gate view as-is; the operator
+        // can retry via the on-screen controls.
+      }
+    }
+  } else if (event.status !== 'awaiting-approval') {
+    stopGatePoll(); // superseded or otherwise terminal
+  }
 }
 
 function buildRailTabs(railBody) {
@@ -1311,9 +1389,11 @@ function renderGateHold(host, result, gate) {
   approveBtn.addEventListener('click', async () => {
     approveBtn.disabled = true;
     approveBtn.textContent = 'Proceeding…';
+    // Stop watching this gate BEFORE the request so the SSE `proceeded` echo it
+    // triggers cannot also fire handleGateEvent — we advance from the response.
+    stopGatePoll();
     try {
       const response = await api.approveBusinessGate(gate.id);
-      stopGatePoll();
       result.payload = response.business;
       result.evaluation = null;
       result.gate = null;
@@ -1350,31 +1430,21 @@ function formatDuration(ms) {
   return `${Math.max(1, Math.floor(ms / 1000))}s`;
 }
 
-// Poll the gate every 5s: refresh the countdown and auto-advance to the full
-// pipeline once the gate is proceeded (human approval in another tab, or the
-// deadline firing server-side). Durable state lives server-side; this only mirrors it.
+// Track the on-screen gate and run a DISPLAY-ONLY countdown tick: it only
+// rewrites the countdown label (no network). The terminal transition — proceeded
+// when the server auto-approves at the deadline, or superseded from another tab —
+// arrives on the workspace SSE stream and is handled by handleGateEvent. Durable
+// state lives server-side; this only mirrors the remaining time.
 function startGatePoll(host, result, gate) {
   stopGatePoll();
   activeGateId = gate.id;
-  gateTimer = setInterval(async () => {
+  gateHost = host;
+  gateResult = result;
+  gateTimer = setInterval(() => {
     if (!agentRouteActive()) return stopGatePoll();
     const label = host.querySelector('.gate-countdown');
     if (label) label.textContent = gateCountdownText(result.gate || gate);
-    try {
-      const response = await api.getBusinessGate(activeGateId);
-      const fresh = response && response.gate;
-      if (!fresh) return;
-      result.gate = fresh;
-      if (fresh.status === 'proceeded') {
-        stopGatePoll();
-        await proceedToPipeline(host, result);
-      } else if (fresh.status !== 'awaiting-approval') {
-        stopGatePoll(); // superseded or otherwise terminal
-      }
-    } catch (_) {
-      // Transient error — keep polling.
-    }
-  }, 5000);
+  }, GATE_COUNTDOWN_TICK_MS);
 }
 
 function architectureDiagram(nodes) {

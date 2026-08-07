@@ -197,6 +197,31 @@ export const api = {
     if (typeof onError === 'function') source.onerror = onError;
     return source;
   },
+  // Short-lived token authorizing the GLOBAL workspace EventSource. workspace:read,
+  // so the public read-only home can subscribe.
+  getWorkspaceStreamToken: () => request('/agent/workspace-stream-token'),
+  // Open the workspace SSE stream — typed status/jobs/coder/gate snapshots that
+  // replace the old 5s polling loops. Returns the EventSource so callers can
+  // close() it; onEvent receives each parsed event.
+  openWorkspaceStream: async (onEvent, onError) => {
+    let token = '';
+    try {
+      ({ token } = await api.getWorkspaceStreamToken());
+    } catch (_) {
+      /* auth disabled locally → the stream token is optional */
+    }
+    const url = `${getApiBase()}/api/agent/workspace-stream?t=${encodeURIComponent(token || '')}`;
+    const source = new EventSource(url);
+    source.onmessage = (event) => {
+      try {
+        onEvent(JSON.parse(event.data));
+      } catch (_) {
+        /* comments/keepalives are not JSON */
+      }
+    };
+    if (typeof onError === 'function') source.onerror = onError;
+    return source;
+  },
   routeAgentMessage: (payload) =>
     request('/agent/message', { method: 'POST', body: JSON.stringify(payload) }),
   searchAgentKnowledge: (payload) =>
