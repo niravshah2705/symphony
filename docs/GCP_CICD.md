@@ -125,13 +125,16 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
 
 ## Prerequisites the pipeline assumes
 
-- **Secret Manager values already seeded** (the pipeline never creates/rotates them):
-  `stream-token-secret`, `linear-api-key`, and `org-jwt-secret` must have a version,
-  or the Cloud Run revisions won't start. `deploy/gcp/deploy.sh` / `bootstrap.sh`
+- **Secret Manager values already seeded** (the pipeline never creates/rotates
+  these two): `stream-token-secret` and `linear-api-key` must have a version, or
+  the Cloud Run revisions won't start. `deploy/gcp/deploy.sh` / `bootstrap.sh`
   seed these; or add manually:
   ```bash
   printf 'REPLACE' | gcloud secrets versions add linear-api-key --project adlc-9e72f --data-file=-
   ```
+  `org-jwt-secret` is **Terraform-managed** (`random_password` + version) — created
+  and seeded by the apply, no manual step. `google-one-tap-client-id` is likewise
+  Terraform-managed from the `google_one_tap_client_id` var (only when set).
 - The `TF_STATE_BUCKET` exists (created by `deploy.sh` / the first manual apply).
 - Firebase console: Google provider enabled + gateway URL and SPA origin in
   **Authorized domains** (see docs/GCP_DEPLOY.md).

@@ -249,7 +249,7 @@ variable "firebase_allowed_domain" {
 
 variable "google_one_tap_client_id" {
   type        = string
-  description = "Optional: public Google OAuth Web client id for the Google One Tap sign-in prompt (…apps.googleusercontent.com). Public, not a secret. Empty = the SPA uses the Firebase Google popup only."
+  description = "Google OAuth Web client id for the One Tap sign-in prompt (…apps.googleusercontent.com). Create the Web client in the console (Terraform cannot mint it); its value is stored in Secret Manager (google-one-tap-client-id) and injected into the gateway. Empty = the SPA uses the Firebase Google popup only."
   default     = ""
 }
 
