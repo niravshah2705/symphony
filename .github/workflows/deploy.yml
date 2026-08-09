@@ -165,6 +165,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
       - id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -172,6 +177,19 @@ jobs:
           service_account: ${{ secrets.GCP_DEPLOYER_SA }}
 
       - uses: google-github-actions/setup-gcloud@v2
+
+      # Obfuscate the SPA's client JS before it ships. Rewrites public/js/** in
+      # this ephemeral checkout only (source in git stays readable); config.js is
+      # regenerated below and vendor/ is left untouched. Strength preset is set by
+      # the SPA_OBFUSCATION_STRENGTH repo variable (light|balanced|maximum),
+      # defaulting to balanced. See scripts/obfuscate-spa.js.
+      - name: Obfuscate SPA client JS
+        env:
+          SPA_OBFUSCATION_STRENGTH: ${{ vars.SPA_OBFUSCATION_STRENGTH || 'balanced' }}
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund --ignore-scripts
+          node scripts/obfuscate-spa.js --in-place
 
       - name: Deploy SPA to Firebase Hosting
         run: |

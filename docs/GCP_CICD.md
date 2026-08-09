@@ -29,6 +29,40 @@ Need a full rebuild + apply of everything (e.g. after a manual hotfix or to
 re-converge state)? Trigger the workflow manually with **`deploy_all: true`**
 (Actions → Deploy to GCP → Run workflow).
 
+## SPA obfuscation (release-time)
+
+The SPA ships to browsers as raw ES modules, so the `deploy-spa` job
+**obfuscates `public/js/**` before the Firebase Hosting deploy**
+(`node scripts/obfuscate-spa.js --in-place`, backed by `javascript-obfuscator`).
+Cloud Build's `spa-publish` path does the same via its `spa-obfuscate` step
+before the GCS rsync, so both served copies are obfuscated.
+
+- It runs **in the ephemeral CI checkout only** — the source in git stays
+  readable. Locally, `npm run spa:obfuscate` writes an obfuscated copy to
+  `dist/spa-obfuscated/` and never touches your working tree.
+- `renameGlobals` and `renameProperties` are kept **off** so exported bindings,
+  import specifiers, and DOM/data property names survive — otherwise the native
+  (bundler-free) module graph would break. `config.js` (regenerated per deploy)
+  and `vendor/` (pre-minified Firebase SDK) are left untouched.
+- Strength is a selectable preset — **light | balanced | maximum**:
+
+  | Preset | Adds | Size | Runtime cost |
+  |---|---|---|---|
+  | `light` | rename locals only (strings stay clear-text) | ~0.9–1.1x | negligible |
+  | `balanced` *(default)* | + string-array encoding | ~1.5x | small |
+  | `maximum` | + control-flow flattening, dead-code injection, self-defending | ~4–5x | noticeable |
+
+  Choose it with `--strength <preset>`, the `SPA_OBFUSCATION_STRENGTH` env var,
+  or the defaults baked into the pipelines: the GitHub Actions `deploy-spa` job
+  reads the **`SPA_OBFUSCATION_STRENGTH` repo variable** (Actions → Variables),
+  and Cloud Build reads the **`_SPA_OBFUSCATION_STRENGTH` substitution**. Both
+  default to `balanced`. Preset definitions live in the `PRESETS` constant in
+  `scripts/obfuscate-spa.js`.
+
+> Obfuscation raises the effort to read the client bundle; it is **not** a
+> secret store. Anything that must stay private belongs server-side (the
+> gateway), never in `public/`.
+
 ## Automated bootstrap (new project)
 
 **`deploy/gcp/bootstrap.sh` does §1–§3 + the secret prerequisites in one run** —
