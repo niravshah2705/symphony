@@ -15,6 +15,7 @@ from app.models.organization import Organization
 from app.models.user import User
 from app.repositories.org_repo import OrgRepository
 from app.repositories.user_repo import UserRepository
+from app.services import provisioning_service
 from app.schemas.common import PageParams
 from app.schemas.org import OrgCreate, OrgUpdate
 from app.services.common import allocate_org_slug, normalize_email
@@ -70,6 +71,9 @@ async def create_org(session: Uow, data: OrgCreate) -> Organization:
                 email_verified=False,
             )
         )
+    # Explicit (super-admin) org creation → provision a dedicated stack (no-op
+    # unless enabled).
+    await provisioning_service.trigger_provisioning(session, org)
     return org
 
 

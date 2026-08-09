@@ -49,6 +49,12 @@ class _AuthFailure(Exception):
 def _requires_auth(path: str) -> bool:
     if not path.startswith(API_PREFIX):
         return False
+    # The S2S internal surface (/api/v1/internal/*) carries no end-user token — it
+    # is guarded in-route by a shared token + IAM + the gateway refusing to proxy
+    # /internal/ (see routes_internal.py). Skip the user-principal requirement so
+    # the provisioner's token-authenticated write-back is not 401'd here.
+    if path.startswith(f"{API_PREFIX}/internal/"):
+        return False
     return path.rstrip("/") not in {p.rstrip("/") for p in PUBLIC_PATHS}
 
 

@@ -1,0 +1,18 @@
+{
+  "name": "@ai-fleet/provisioner",
+  "version": "1.0.0",
+  "description": "AI Fleet provisioner service — internal, IAM-gated; provisions/tears down per-tenant Cloud Run stacks on tenant-provision events.",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env src/index.js",
+    "dev": "node --watch --env-file-if-exists=../../.env src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ai-fleet/shared": "*",
+    "express": "^5.2.1"
+  }
+}

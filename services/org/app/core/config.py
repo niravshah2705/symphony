@@ -69,6 +69,17 @@ class Settings(BaseSettings):
     # the shared gateway's Cloud Run URL in the cloud.
     shared_gateway_url: str = ""
 
+    # --- Per-tenant provisioning (Phase 1, OFF by default) ---
+    # When true, explicitly creating an org publishes a tenant-provision request
+    # (the provisioner service consumes it and stands up a dedicated stack). OFF
+    # keeps every org on the shared stack — no publish, no infra.
+    provisioning_enabled: bool = False
+    provisioning_topic: str = "tenant-provision-requests"
+    # Shared secret guarding the S2S deployment write-back
+    # (PATCH /api/v1/internal/orgs/{id}/deployments). The provisioner presents it
+    # as X-Internal-Token. Unset => the write-back is refused (fail closed).
+    internal_api_token: str = ""
+
     # Rate limiting
     auth_rate_limit: str = "10/minute"
 

@@ -20,6 +20,7 @@ from app.models.user import User
 from app.repositories.base import USER_ORG_LOCKS
 from app.repositories.org_repo import OrgRepository
 from app.schemas.me import CreateOrgRequest
+from app.services import provisioning_service
 from app.services.common import allocate_org_slug
 
 # Cap the derived workspace name well under the org-name max (200) to leave room
@@ -45,6 +46,8 @@ async def create_organization_for_user(
     user.org_id = org.id
     user.org_role = OrgRole.ORG_ADMIN
     user.updated_at = utcnow()
+    # Explicit org creation → provision a dedicated stack (no-op unless enabled).
+    await provisioning_service.trigger_provisioning(session, org)
     return org
 
 
