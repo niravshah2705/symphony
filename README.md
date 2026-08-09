@@ -284,7 +284,8 @@ Google is on by default and shows first; Microsoft is opt-in via
 with Google** first and **Continue with Microsoft** below. Enabling a provider
 also requires turning it on in the Firebase console (Microsoft additionally needs
 an Azure AD app registration — client id + secret entered in the console, never in
-env vars); see [Access & Tenancy Model](docs/ACCESS_MODEL.md).
+env vars); see [Access & Tenancy Model](docs/ACCESS_MODEL.md) and the step-by-step
+[Microsoft login setup runbook](docs/MICROSOFT_LOGIN_SETUP.md).
 
 Access has **three additive tiers** — anonymous (read-only + basic RAG),
 authenticated with no org (personal projects), and organization member (shared
