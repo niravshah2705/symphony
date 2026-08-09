@@ -297,7 +297,19 @@ variable "auth_default_role" {
 
 variable "firebase_allowed_domain" {
   type        = string
-  description = "Optional: restrict app login to this email domain; empty = any verified user."
+  description = "Optional: restrict app login to this email domain; empty = any verified user (Google OR Microsoft)."
+  default     = ""
+}
+
+variable "auth_microsoft_enabled" {
+  type        = bool
+  description = "Show the 'Continue with Microsoft' button (signInWithPopup, microsoft.com provider). Requires enabling the Microsoft provider in the Firebase console with an Azure app id + secret (console-managed, not in Terraform — the secret cannot be read back). Google stays enabled unless disabled separately."
+  default     = false
+}
+
+variable "microsoft_tenant" {
+  type        = string
+  description = "Optional Azure AD tenant for the Microsoft provider: 'common' (any account, the SDK default when empty), 'organizations' (work/school only), or a specific tenant id. A tenant id is PUBLIC (served via /api/auth/config), not a secret."
   default     = ""
 }
 

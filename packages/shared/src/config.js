@@ -15,6 +15,16 @@ function boundedEnv(env, name, max = 512) {
   return value;
 }
 
+// Parse a boolean env flag with an explicit default. Accepts true/1/yes/on and
+// false/0/no/off (case-insensitive); an unset/blank value falls back to fallback.
+function boolEnv(env, name, fallback = false) {
+  const value = boundedEnv(env, name, 8).toLowerCase();
+  if (!value) return fallback;
+  if (['true', '1', 'yes', 'on'].includes(value)) return true;
+  if (['false', '0', 'no', 'off'].includes(value)) return false;
+  throw new Error(`${name} must be a boolean (true/false)`);
+}
+
 /**
  * Application login config.
  *
@@ -51,6 +61,18 @@ function buildFirebaseAuthConfig(env = process.env) {
   // Firebase Google popup. Accepts either alias for operator convenience.
   const googleClientId = boundedEnv(env, 'GOOGLE_ONE_TAP_CLIENT_ID', 256)
     || boundedEnv(env, 'FIREBASE_GOOGLE_CLIENT_ID', 256);
+  // Which identity providers the SPA may offer. Both federate into the SAME
+  // Firebase session (issuer/audience unchanged), so the browser cannot tell
+  // which are enabled in the Firebase console — these explicit flags do.
+  // Google defaults ON (backward compatible); Microsoft is opt-in.
+  const googleEnabled = boolEnv(env, 'AUTH_GOOGLE_ENABLED', true);
+  const microsoftEnabled = boolEnv(env, 'AUTH_MICROSOFT_ENABLED', false);
+  // Azure AD tenant for the microsoft.com provider. PUBLIC (a tenant id is not a
+  // secret; the Azure client secret lives only in the Firebase console). When
+  // unset the SDK uses 'common' (any Microsoft account). Set to 'organizations'
+  // (work/school only) or a specific tenant id to restrict.
+  const microsoftTenant = boundedEnv(env, 'MICROSOFT_TENANT', 256)
+    || boundedEnv(env, 'AZURE_TENANT_ID', 256);
   const allowedEmails = boundedEnv(env, 'FIREBASE_ALLOWED_EMAILS', 4096)
     .split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
   const allowedDomain = boundedEnv(env, 'FIREBASE_ALLOWED_DOMAIN', 256).toLowerCase();
@@ -75,6 +97,9 @@ function buildFirebaseAuthConfig(env = process.env) {
     apiKey,
     authDomain,
     googleClientId,
+    googleEnabled,
+    microsoftEnabled,
+    microsoftTenant,
     issuer: `https://securetoken.google.com/${projectId}`,
     audience: projectId,
     allowedEmails: Object.freeze(allowedEmails),

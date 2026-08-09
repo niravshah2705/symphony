@@ -108,8 +108,9 @@ function mergeDisplayProfile(serverUser, browserUser) {
   });
 }
 
-// Confirm the signed-in Google user is accepted by the gateway (verified email +
-// any allowlist/domain gate). Returns the server identity or throws.
+// Confirm the signed-in user is accepted by the gateway (verified email +
+// any allowlist/domain gate). Provider-agnostic — Google and Microsoft both
+// resolve to the same Firebase session. Returns the server identity or throws.
 async function confirmIdentity() {
   currentUser = auth.currentUser;
   setAccessTokenProvider(() => currentUser.getIdToken());
@@ -171,6 +172,17 @@ export function getAuthenticationState() {
   return authState;
 }
 
+// Which sign-in buttons the SPA should render, from the public auth config.
+// Google defaults on (backward compatible with configs predating the flag);
+// Microsoft is opt-in via AUTH_MICROSOFT_ENABLED.
+export function getAuthProviders() {
+  const firebase = configuration?.firebase || {};
+  return Object.freeze({
+    google: firebase.googleEnabled !== false,
+    microsoft: Boolean(firebase.microsoftEnabled),
+  });
+}
+
 export function expireAuthentication(message = '') {
   setAccessTokenProvider(null);
   // Drop back to the public surface rather than a locked state.
@@ -178,15 +190,22 @@ export function expireAuthentication(message = '') {
   return setState({ authenticated: false, role: 'public', permissions, user: null, error: message });
 }
 
-export async function signIn() {
-  if (!auth || !configuration?.enabled) throw new Error('Sign-in is not configured.');
-  const provider = new GoogleAuthProvider();
-  const hostedDomain = configuration.firebase.hostedDomain;
-  if (hostedDomain) provider.setCustomParameters({ hd: hostedDomain });
-
-  await signInWithPopup(auth, provider);
-  // Authorize BEFORE entering so a rejected (unverified / out-of-domain) account
-  // shows the error instead of a reload bounce.
+// Run a Firebase popup sign-in for the given provider, then authorize the
+// account with the gateway BEFORE entering so a rejected (unverified /
+// out-of-domain) account shows the error instead of a reload bounce. Firebase
+// (Identity Platform ↔ the IdP) owns the OAuth authorization-code + state +
+// nonce + PKCE exchange — we never handle those directly.
+async function completeSignIn(provider) {
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (error) {
+    // Firebase's default "one account per email" rejects a second provider for
+    // an email that already exists. Surface a friendly, provider-neutral hint.
+    if (error?.code === 'auth/account-exists-with-different-credential') {
+      throw new Error('This email is already registered with a different sign-in method. Use the provider you first signed in with.');
+    }
+    throw error;
+  }
   try {
     await confirmIdentity();
   } catch (error) {
@@ -197,6 +216,23 @@ export async function signIn() {
   // The popup resolved in-page (unlike Auth0's redirect); reload so the boot
   // sequence re-runs with the now-persisted Firebase session.
   window.location.reload();
+}
+
+export async function signIn() {
+  if (!auth || !configuration?.enabled) throw new Error('Sign-in is not configured.');
+  const provider = new GoogleAuthProvider();
+  const hostedDomain = configuration.firebase.hostedDomain;
+  if (hostedDomain) provider.setCustomParameters({ hd: hostedDomain });
+  return completeSignIn(provider);
+}
+
+export async function signInWithMicrosoft() {
+  if (!auth || !configuration?.enabled) throw new Error('Sign-in is not configured.');
+  const provider = new OAuthProvider('microsoft.com');
+  // Optional Azure AD tenant scope ('common' when unset). Public, not a secret.
+  const tenant = configuration.firebase.microsoftTenant;
+  if (tenant) provider.setCustomParameters({ tenant });
+  return completeSignIn(provider);
 }
 
 export async function signOut() {
