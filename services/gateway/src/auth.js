@@ -205,6 +205,12 @@ function publicAuthConfig(config = CONFIG.AUTH) {
       // Public OAuth Web client id for Google One Tap (falls back to the popup
       // when absent). Not a secret — see packages/shared/src/config.js.
       googleClientId: config.googleClientId || undefined,
+      // Which sign-in buttons the SPA renders. Google defaults on unless
+      // explicitly disabled; Microsoft is opt-in. The Azure tenant is public
+      // (the client secret stays in the Firebase console, never here).
+      googleEnabled: config.googleEnabled !== false,
+      microsoftEnabled: Boolean(config.microsoftEnabled),
+      microsoftTenant: config.microsoftTenant || undefined,
     }),
     // What an unauthenticated visitor may do — lets the SPA render the public
     // (read-only Agent) surface and hide everything else before sign-in.

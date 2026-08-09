@@ -14,9 +14,11 @@ import { initializeI18n, localize, t } from './i18n.js';
 import {
   expireAuthentication,
   getAuthenticationState,
+  getAuthProviders,
   initializeAuthentication,
   promptOneTap,
   signIn,
+  signInWithMicrosoft,
   signOut,
 } from './auth.js';
 import { renderProjects } from './views/projects.js';
@@ -310,6 +312,41 @@ async function beginSignIn() {
   }
 }
 
+async function beginMicrosoftSignIn() {
+  try {
+    await signInWithMicrosoft();
+  } catch (error) {
+    expireAuthentication(error.message);
+    renderAuthControl();
+    renderAuthenticationGate({ error: error.message });
+  }
+}
+
+// Ordered sign-in buttons for the signed-out surfaces. Google first when
+// enabled, Microsoft second; if neither flag is on (config predating the
+// flags) fall back to a single Google button so a card is never actionless.
+// `primary` selects the full-page gate variant (labels + the leading button
+// styled `primary`) vs the compact toolbar variant.
+function authProviderButtons({ primary = false } = {}) {
+  const providers = getAuthProviders();
+  const entries = [];
+  if (providers.google || !providers.microsoft) {
+    entries.push({ provider: 'google', onclick: beginSignIn, i18n: primary ? 'continueWithGoogle' : 'signIn' });
+  }
+  if (providers.microsoft) {
+    entries.push({ provider: 'microsoft', onclick: beginMicrosoftSignIn, i18n: primary ? 'continueWithMicrosoft' : 'signInWithMicrosoft' });
+  }
+  const base = primary ? 'auth-continue' : 'auth-sign-in';
+  return entries.map((entry, index) => {
+    const classes = [base];
+    if (primary && index === 0) classes.unshift('primary'); // first provider is the primary CTA
+    if (entry.provider === 'microsoft') classes.push('microsoft');
+    return el('button', {
+      class: classes.join(' '), type: 'button', onclick: entry.onclick, dataset: { i18n: entry.i18n },
+    }, t(entry.i18n));
+  });
+}
+
 async function beginSignOut() {
   try {
     await signOut();
@@ -329,12 +366,7 @@ function renderAuthControl() {
   if (!session.enabled) return;
 
   if (!session.authenticated || !session.user) {
-    host.append(el('button', {
-      class: 'auth-sign-in',
-      type: 'button',
-      onclick: beginSignIn,
-      dataset: { i18n: 'signIn' },
-    }, t('signIn')));
+    host.append(...authProviderButtons({ primary: false }));
     return;
   }
 
@@ -384,12 +416,16 @@ function renderAuthenticationGate({ loading = false, error = '' } = {}) {
     ]));
   } else {
     const configurationFailed = Boolean(error && !session.enabled);
-    actions.push(el('button', {
-      class: 'primary auth-continue',
-      type: 'button',
-      onclick: configurationFailed ? () => window.location.reload() : beginSignIn,
-      dataset: { i18n: configurationFailed ? 'retry' : 'continueWithGoogle' },
-    }, t(configurationFailed ? 'retry' : 'continueWithGoogle')));
+    if (configurationFailed) {
+      actions.push(el('button', {
+        class: 'primary auth-continue',
+        type: 'button',
+        onclick: () => window.location.reload(),
+        dataset: { i18n: 'retry' },
+      }, t('retry')));
+    } else {
+      actions.push(...authProviderButtons({ primary: true }));
+    }
   }
 
   const details = el('details', { class: 'auth-details' }, [
@@ -427,10 +463,8 @@ function renderSignInRequired(name) {
   view.append(el('section', { class: 'auth-card', 'aria-labelledby': 'auth-title' }, [
     el('span', { class: 'auth-badge' }, t('protectedWorkspace')),
     el('h1', { id: 'auth-title' }, t('signInRequiredTitle', 'Sign in to continue')),
-    el('p', { class: 'auth-copy' }, t('signInRequiredBody', 'Sign in with Google to open this area.')),
-    el('div', { class: 'auth-actions' }, [
-      el('button', { class: 'primary auth-continue', type: 'button', onclick: beginSignIn, dataset: { i18n: 'continueWithGoogle' } }, t('continueWithGoogle')),
-    ]),
+    el('p', { class: 'auth-copy' }, t('signInRequiredBody', 'Sign in to open this area.')),
+    el('div', { class: 'auth-actions' }, authProviderButtons({ primary: true })),
   ]));
   localize(view);
 }

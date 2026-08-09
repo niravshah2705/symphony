@@ -76,7 +76,11 @@ test('publicAuthConfig exposes only the public Firebase web config (no authz sec
     mode: 'firebase',
     enabled: true,
     provider: 'firebase',
-    firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo-proj.firebaseapp.com', projectId: 'demo-proj', hostedDomain: undefined, googleClientId: undefined },
+    firebase: {
+      apiKey: 'AIzaTESTKEY', authDomain: 'demo-proj.firebaseapp.com', projectId: 'demo-proj',
+      hostedDomain: undefined, googleClientId: undefined,
+      googleEnabled: true, microsoftEnabled: false, microsoftTenant: undefined,
+    },
     publicPermissions: { workspace: 'read' },
   });
   const serialized = JSON.stringify(pub);
@@ -86,6 +90,22 @@ test('publicAuthConfig exposes only the public Firebase web config (no authz sec
 test('publicAuthConfig surfaces the public One Tap client id when configured', () => {
   const pub = publicAuthConfig(firebaseConfig({ googleClientId: '123.apps.googleusercontent.com' }));
   assert.equal(pub.firebase.googleClientId, '123.apps.googleusercontent.com');
+});
+
+test('publicAuthConfig surfaces provider availability flags + Microsoft tenant (no secret)', () => {
+  const pub = publicAuthConfig(firebaseConfig({ googleEnabled: false, microsoftEnabled: true, microsoftTenant: 'common' }));
+  assert.equal(pub.firebase.googleEnabled, false);
+  assert.equal(pub.firebase.microsoftEnabled, true);
+  assert.equal(pub.firebase.microsoftTenant, 'common');
+  // A tenant id is public, but confirm no client secret ever leaks into the payload.
+  assert.doesNotMatch(JSON.stringify(pub), /secret|clientSecret/i);
+});
+
+test('publicAuthConfig defaults google on / microsoft off when flags are absent', () => {
+  const pub = publicAuthConfig(firebaseConfig());
+  assert.equal(pub.firebase.googleEnabled, true);
+  assert.equal(pub.firebase.microsoftEnabled, false);
+  assert.equal(pub.firebase.microsoftTenant, undefined);
 });
 
 test('publicAuthConfig collapses to disabled when auth is off', () => {
@@ -249,4 +269,28 @@ test('buildFirebaseAuthConfig: One Tap client id from either env alias (public)'
   assert.equal(a.googleClientId, 'aaa.apps.googleusercontent.com');
   const b = buildFirebaseAuthConfig({ AUTH_MODE: 'firebase', FIREBASE_PROJECT_ID: 'p', FIREBASE_API_KEY: 'AIza', FIREBASE_GOOGLE_CLIENT_ID: 'bbb.apps.googleusercontent.com' });
   assert.equal(b.googleClientId, 'bbb.apps.googleusercontent.com');
+});
+
+test('buildFirebaseAuthConfig: provider flags default google on / microsoft off', () => {
+  const config = buildFirebaseAuthConfig({ AUTH_MODE: 'firebase', FIREBASE_PROJECT_ID: 'p', FIREBASE_API_KEY: 'AIza' });
+  assert.equal(config.googleEnabled, true);
+  assert.equal(config.microsoftEnabled, false);
+  assert.equal(config.microsoftTenant, '');
+});
+
+test('buildFirebaseAuthConfig: reads AUTH_MICROSOFT_ENABLED and Microsoft tenant (either alias)', () => {
+  const base = { AUTH_MODE: 'firebase', FIREBASE_PROJECT_ID: 'p', FIREBASE_API_KEY: 'AIza' };
+  const a = buildFirebaseAuthConfig({ ...base, AUTH_GOOGLE_ENABLED: 'false', AUTH_MICROSOFT_ENABLED: 'true', MICROSOFT_TENANT: 'organizations' });
+  assert.equal(a.googleEnabled, false);
+  assert.equal(a.microsoftEnabled, true);
+  assert.equal(a.microsoftTenant, 'organizations');
+  const b = buildFirebaseAuthConfig({ ...base, AZURE_TENANT_ID: 'tenant-123' });
+  assert.equal(b.microsoftTenant, 'tenant-123');
+});
+
+test('buildFirebaseAuthConfig: rejects a non-boolean provider flag', () => {
+  assert.throws(
+    () => buildFirebaseAuthConfig({ AUTH_MODE: 'firebase', FIREBASE_PROJECT_ID: 'p', FIREBASE_API_KEY: 'AIza', AUTH_MICROSOFT_ENABLED: 'maybe' }),
+    /AUTH_MICROSOFT_ENABLED must be a boolean/,
+  );
 });

@@ -270,12 +270,22 @@ workflow. The gateway still exposes `GET /api/auth/config` and `GET /api/auth/me
 so the same frontend boot path is exercised locally without requiring an identity
 provider.
 
-In the cloud the gateway runs `AUTH_MODE=firebase` for Firebase Google-SSO. The
-SPA fetches the **public** Firebase web config from the gateway's
-`GET /api/auth/config` at runtime, signs the user in with Google via a compact
-**Google One Tap** card, and sends the resulting Firebase **ID token** as a bearer
-credential. The gateway verifies that ID token on every request and fails closed
-when it is absent, malformed, or expired.
+In the cloud the gateway runs `AUTH_MODE=firebase`. The SPA fetches the **public**
+Firebase web config from the gateway's `GET /api/auth/config` at runtime, signs
+the user in through Firebase — **Google** (a compact **Google One Tap** card plus
+a popup) and/or **Microsoft** (`signInWithPopup`) — and sends the resulting
+Firebase **ID token** as a bearer credential. Both providers federate into the
+*same* Firebase session, so the gateway verifies one ID token shape on every
+request and fails closed when it is absent, malformed, or expired — it does not
+care which provider issued it.
+
+Each provider is availability-gated by an env flag surfaced in `/api/auth/config`:
+Google is on by default and shows first; Microsoft is opt-in via
+`AUTH_MICROSOFT_ENABLED`. When both are enabled the sign-in card shows **Continue
+with Google** first and **Continue with Microsoft** below. Enabling a provider
+also requires turning it on in the Firebase console (Microsoft additionally needs
+an Azure AD app registration — client id + secret entered in the console, never in
+env vars); see [Access & Tenancy Model](docs/ACCESS_MODEL.md).
 
 Access has **three additive tiers** — anonymous (read-only + basic RAG),
 authenticated with no org (personal projects), and organization member (shared
@@ -289,16 +299,26 @@ FIREBASE_PROJECT_ID=your-gcp-project   # defaults to GCP_PROJECT_ID
 FIREBASE_API_KEY=AIza...               # public Firebase Web API key (NOT a secret)
 FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com   # optional; defaults to <projectId>.firebaseapp.com
 GOOGLE_ONE_TAP_CLIENT_ID=...apps.googleusercontent.com   # public OAuth Web client id for One Tap (optional; falls back to popup)
-FIREBASE_ALLOWED_DOMAIN=example.com    # optional; empty = any verified user
+FIREBASE_ALLOWED_DOMAIN=example.com    # optional; empty = any verified user (Google OR Microsoft)
 # FIREBASE_ALLOWED_EMAILS=a@example.com,b@example.com   # optional explicit allowlist
 # FIREBASE_HD=example.com              # optional Google hosted-domain hint
+# --- Sign-in providers ---
+# AUTH_GOOGLE_ENABLED=true             # default true; false hides the Google button
+# AUTH_MICROSOFT_ENABLED=true          # show "Continue with Microsoft" (default false)
+# MICROSOFT_TENANT=common              # Azure tenant: common | organizations | <tenant-id> (public; alias AZURE_TENANT_ID)
 ```
 
 The Firebase web config (`apiKey`/`authDomain`/`projectId`) is **public** — it is
 served to the browser via `/api/auth/config` as plain env/Terraform vars and is
-**never** stored in Secret Manager. By default any verified Google user may sign
-in; set `FIREBASE_ALLOWED_DOMAIN` (a single email domain) or
-`FIREBASE_ALLOWED_EMAILS` (an explicit allowlist) to restrict access.
+**never** stored in Secret Manager. By default any user with a **verified email**
+may sign in (regardless of provider); set `FIREBASE_ALLOWED_DOMAIN` (a single
+email domain) or `FIREBASE_ALLOWED_EMAILS` (an explicit allowlist) to restrict
+access. Two caveats when enabling Microsoft: (1) the gateway requires
+`email_verified === true`, which Azure AD work/school accounts satisfy but some
+personal Microsoft accounts may not — those are dropped back to the public
+surface; (2) if `FIREBASE_ALLOWED_DOMAIN` pins a single (e.g. Google Workspace)
+domain, Microsoft users on other domains are rejected, so widen the allowlist as
+needed.
 
 Authentication does not make the current JSON store multi-tenant. All accepted
 users operate the same settings, integrations, credentials, jobs, and assumed
