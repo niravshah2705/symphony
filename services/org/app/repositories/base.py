@@ -19,6 +19,10 @@ USERS = "users"
 REFRESH_TOKENS = "refresh_tokens"
 UNIQUE_EMAILS = "unique_emails"
 UNIQUE_EXTERNAL_SUBJECTS = "unique_external_subjects"
+# One-org-per-user guard for auto-provisioned pseudo workspaces: an atomic
+# create-if-absent doc keyed by user id, so concurrent first requests can't each
+# mint an org (see onboarding_service.ensure_org_for_user).
+USER_ORG_LOCKS = "user_org_locks"
 
 
 def projects_col(org_id: uuid.UUID) -> str:

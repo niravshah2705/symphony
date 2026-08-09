@@ -32,3 +32,24 @@ class PersonalProjectResponse(BaseModel):
 class CreateOrgRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
+
+
+class MeDeploymentResponse(BaseModel):
+    """Which front-facing deployment the caller's workspace should use.
+
+    ``status`` is the resolved deployment state:
+      - ``shared``       — pseudo/org-less or any un-provisioned org → use the
+                           shared gateway (``gateway_url``).
+      - ``provisioning`` — a dedicated per-tenant stack is being created; the SPA
+                           polls until it flips to ``provisioned``.
+      - ``provisioned``  — use the per-tenant ``gateway_url``.
+      - ``failed``       — provisioning failed; the SPA falls back to shared.
+
+    Only ``gateway_url`` is browser-facing; planner/coder/org/settings URLs are
+    never returned to the client (they are S2S parameters of the deployment).
+    """
+
+    status: str = "shared"
+    gateway_url: str = ""
+    org_id: uuid.UUID | None = None
+    org_name: str | None = None

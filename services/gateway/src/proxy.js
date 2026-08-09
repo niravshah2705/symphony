@@ -2,6 +2,7 @@
 
 const { CONFIG } = require('@ai-fleet/shared/config');
 const log = require('@ai-fleet/shared/logger');
+const { idTokenHeader, originOf } = require('./service-client');
 
 /**
  * Minimal reverse proxy from the gateway to an isolated agent service.
@@ -12,28 +13,10 @@ const log = require('@ai-fleet/shared/logger');
  * response. All agent endpoints speak JSON, so the body is reconstructed from
  * the already-parsed req.body.
  *
- * In the cloud (MESSAGING_MODE=pubsub) planner/coder run with internal ingress
- * and `--no-allow-unauthenticated`, so the gateway must present a Google OIDC ID
- * token (audience = the target service origin) for Cloud Run's IAM check. Locally
- * (direct mode) no token is attached. google-auth-library is required lazily so
- * local dev never loads it.
+ * The S2S auth (Google OIDC ID token minting for Cloud Run IAM) lives in
+ * service-client.js so the proxy and the gateway's own S2S calls share one
+ * implementation.
  */
-
-let googleAuth = null;
-const idTokenClients = new Map();
-
-async function idTokenHeader(audience) {
-  if (!googleAuth) {
-    const { GoogleAuth } = require('google-auth-library');
-    googleAuth = new GoogleAuth();
-  }
-  if (!idTokenClients.has(audience)) {
-    idTokenClients.set(audience, await googleAuth.getIdTokenClient(audience));
-  }
-  const client = idTokenClients.get(audience);
-  const headers = await client.getRequestHeaders();
-  return headers.Authorization || headers.authorization || '';
-}
 
 // opts.rewrite = { from, to } rewrites the leading path segment (e.g. mount at
 // /api/org but the target service serves /api/v1). opts.forwardUserAuth carries
@@ -42,13 +25,7 @@ async function idTokenHeader(audience) {
 // X-Forwarded-Authorization while Authorization holds the S2S OIDC token that
 // Cloud Run's IAM check requires.
 function createProxy(baseUrl, opts = {}) {
-  const audience = (() => {
-    try {
-      return new URL(baseUrl).origin;
-    } catch (_) {
-      return baseUrl;
-    }
-  })();
+  const audience = originOf(baseUrl);
 
   return async function proxy(req, res) {
     let path = req.originalUrl;

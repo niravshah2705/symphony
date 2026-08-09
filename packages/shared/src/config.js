@@ -446,6 +446,19 @@ const EVENTS_BACKEND = String(process.env.EVENTS_BACKEND || 'memory').trim().toL
 // which its SSE endpoint reads. Unset on the gateway itself. Ignored when
 // EVENTS_BACKEND=firestore (the cloud path fans out via onSnapshot instead).
 const EVENTS_SINK_URL = String(process.env.EVENTS_SINK_URL || '').trim();
+// Per-tenant data namespace. Empty in the shared/default deployment — the store
+// and event streams keep their exact global collections ('aifleet' /
+// 'aifleet_events'), so existing data is untouched (byte-for-byte backward
+// compatible). A per-tenant gateway sets STORE_NAMESPACE=<deployment slug> so
+// its Firestore store, conversations, jobs, and SSE event stream are ISOLATED
+// from every other tenant sharing the same Firestore database (the multi-tenant
+// isolation invariant — see docs/GCP_DEPLOY / cross-tenant-isolation). Sanitized
+// to a Firestore-safe collection-name suffix as defense-in-depth (it feeds a
+// collection path); the provisioner only ever sets a validated slug here.
+const STORE_NAMESPACE = String(process.env.STORE_NAMESPACE || '')
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9-]/g, '');
 const GCP = Object.freeze({
   projectId: process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || '',
   region: process.env.GCP_REGION || 'us-central1',
@@ -529,6 +542,7 @@ const CONFIG = Object.freeze({
   MESSAGING_MODE,
   EVENTS_BACKEND,
   EVENTS_SINK_URL,
+  STORE_NAMESPACE,
   GCP,
   // Number of records to request from Linear in list queries.
   PAGE_SIZE: 100,
@@ -577,4 +591,17 @@ const CONFIG = Object.freeze({
   SKILLS,
 });
 
-module.exports = { CONFIG, buildFirebaseAuthConfig, resolveSkillsSrc };
+/**
+ * Apply the per-tenant data namespace (CONFIG.STORE_NAMESPACE) to a Firestore
+ * top-level collection name. Empty namespace (the shared/default deployment)
+ * returns the base name unchanged, so existing data keeps its exact
+ * 'aifleet'/'aifleet_events' paths. A per-tenant gateway (STORE_NAMESPACE=<slug>)
+ * gets an isolated 'aifleet__<slug>' / 'aifleet_events__<slug>' collection. The
+ * '__<slug>' shape matches the org/settings services' FIRESTORE_NAMESPACE and is
+ * never a Firestore-reserved '__.*__' name (the base prefix precedes it).
+ */
+function namespaceCollection(base) {
+  return STORE_NAMESPACE ? `${base}__${STORE_NAMESPACE}` : base;
+}
+
+module.exports = { CONFIG, buildFirebaseAuthConfig, resolveSkillsSrc, namespaceCollection };

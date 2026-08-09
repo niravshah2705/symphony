@@ -18,6 +18,7 @@ const { router: claudeRoutes } = require('./routes/claude');
 const { createProxy } = require('./proxy');
 const { blockInternalProxy } = require('./settings-internal-guard');
 const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig } = require('./auth');
+const { createConfigResolver } = require('./config-resolver');
 const { createCorsMiddleware } = require('./cors');
 const { initStore, getConversation } = require('@ai-fleet/shared/store');
 const events = require('@ai-fleet/shared/messaging/events');
@@ -105,6 +106,13 @@ app.get('/api/auth/me', (req, res) => {
     permissions: req.auth.permissions,
   });
 });
+
+// Per-org deployment resolver. The SPA calls this after sign-in to learn which
+// front-facing gateway to use (shared vs a provisioned per-tenant stack). Mounted
+// WITHOUT requireAuthenticated so anonymous callers get a 200 { authenticated:
+// false } and stay same-origin; authenticated callers are resolved against the
+// org service by the caller's token (no client-supplied org id). See config-resolver.js.
+app.get('/api/config', createConfigResolver());
 
 // Mint a short-lived stream token for the authenticated user to open an SSE
 // connection for a specific conversation. AI Fleet is single-tenant by design —

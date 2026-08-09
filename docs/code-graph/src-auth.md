@@ -6,8 +6,8 @@
 
 Directory-based community: services/gateway
 
-- **Size**: 153 nodes
-- **Cohesion**: 0.1328
+- **Size**: 171 nodes
+- **Cohesion**: 0.1427
 - **Dominant Language**: javascript
 
 ## Members
@@ -59,13 +59,13 @@ Directory-based community: services/gateway
 | test:requireAuthenticated: anonymous/public → 401@L232 | Test | ./services/gateway/src/auth.test.js | 232-239 |
 | test:requireAuthenticated: OPTIONS preflight is never gated@L241 | Test | ./services/gateway/src/auth.test.js | 241-245 |
 | test:buildFirebaseAuthConfig: One Tap client id from either env alias (public)@L247 | Test | ./services/gateway/src/auth.test.js | 247-252 |
-| createCorsMiddleware | Function | ./services/gateway/src/cors.js | 13-31 |
-| makeRes | Function | ./services/gateway/src/cors.test.js | 8-17 |
-| set | Function | ./services/gateway/src/cors.test.js | 13-13 |
-| status | Function | ./services/gateway/src/cors.test.js | 14-14 |
-| end | Function | ./services/gateway/src/cors.test.js | 15-15 |
+| createConfigResolver | Function | ./services/gateway/src/config-resolver.js | 21-54 |
+| makeReq | Function | ./services/gateway/src/config-resolver.test.js | 9-14 |
+| makeRes | Function | ./services/gateway/src/config-resolver.test.js | 16-25 |
+| set | Function | ./services/gateway/src/config-resolver.test.js | 21-21 |
+| status | Function | ./services/gateway/src/config-resolver.test.js | 22-22 |
 
-*... and 103 more members.*
+*... and 121 more members.*
 
 ## Execution Flows
 
@@ -76,7 +76,7 @@ Directory-based community: services/gateway
 - **requireAuthenticated** (criticality: 0.61, depth: 1)
 - **mintWorkspaceToken** (criticality: 0.59, depth: 3)
 - **createLocalizationRouter** (criticality: 0.49, depth: 2)
-- **createProxy** (criticality: 0.48, depth: 1)
+- **callJson** (criticality: 0.44, depth: 1)
 - **handleStream** (criticality: 0.44, depth: 1)
 - **handleWorkspaceStream** (criticality: 0.44, depth: 1)
 
@@ -84,36 +84,36 @@ Directory-based community: services/gateway
 
 ### Outgoing
 
-- `equal` (122 edge(s))
-- `String` (18 edge(s))
+- `equal` (136 edge(s))
+- `String` (21 edge(s))
+- `deepEqual` (18 edge(s))
 - `Boolean` (17 edge(s))
 - `trim` (14 edge(s))
-- `deepEqual` (13 edge(s))
+- `json` (13 edge(s))
+- `set` (12 edge(s))
 - `next` (11 edge(s))
-- `set` (11 edge(s))
+- `handler` (11 edge(s))
 - `maskKey` (11 edge(s))
+- `includes` (10 edge(s))
+- `status` (10 edge(s))
 - `ok` (10 edge(s))
 - `verifyStreamToken` (10 edge(s))
-- `includes` (9 edge(s))
-- `status` (9 edge(s))
-- `get` (8 edge(s))
-- `json` (8 edge(s))
-- `buildFirebaseAuthConfig` (8 edge(s))
+- `get` (9 edge(s))
 
 ### Incoming
 
-- `equal` (122 edge(s))
+- `equal` (136 edge(s))
 - `./services/gateway/src/routes/settings.js` (57 edge(s))
 - `./services/gateway/src/auth.test.js` (31 edge(s))
 - `./services/gateway/src/auth.js` (20 edge(s))
+- `deepEqual` (18 edge(s))
 - `./services/gateway/src/routes/codex.js` (17 edge(s))
+- `./services/gateway/src/config-resolver.test.js` (15 edge(s))
 - `./services/gateway/src/routes/businesses.js` (14 edge(s))
-- `deepEqual` (13 edge(s))
 - `./services/gateway/src/routes/issues.js` (11 edge(s))
 - `./services/gateway/src/sse.test.js` (11 edge(s))
 - `ok` (9 edge(s))
+- `createConfigResolver` (9 edge(s))
+- `handler` (9 edge(s))
 - `verifyStreamToken` (9 edge(s))
 - `buildFirebaseAuthConfig` (8 edge(s))
-- `./services/gateway/src/cors.test.js` (8 edge(s))
-- `./services/gateway/src/routes/claude.js` (8 edge(s))
-- `./services/gateway/src/routes/localization.js` (8 edge(s))

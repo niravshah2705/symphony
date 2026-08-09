@@ -23,10 +23,17 @@ from fastapi import APIRouter, Depends, status
 from app.api.deps import page_params
 from app.auth.dependencies import get_current_user, get_principal
 from app.authz.principal import Principal
+from app.core.config import get_settings
 from app.core.database import Uow, get_session
 from app.models.user import User
+from app.repositories.org_repo import OrgRepository
 from app.schemas.common import Page, PageParams
-from app.schemas.me import CreateOrgRequest, MeResponse, PersonalProjectResponse
+from app.schemas.me import (
+    CreateOrgRequest,
+    MeDeploymentResponse,
+    MeResponse,
+    PersonalProjectResponse,
+)
 from app.schemas.org import OrgResponse
 from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.services import onboarding_service, personal_project_service
@@ -43,6 +50,52 @@ async def get_me(user: User = Depends(get_current_user)):
         has_organization=user.org_id is not None,
         org_id=user.org_id,
         org_role=user.org_role.value if user.org_id is not None else None,
+    )
+
+
+@router.get("/deployment", response_model=MeDeploymentResponse)
+async def get_my_deployment(
+    user: User = Depends(get_current_user),
+    session: Uow = Depends(get_session),
+):
+    """Resolve which front-facing gateway the caller's workspace should use.
+
+    Server-authoritative: the org is derived from the authenticated principal
+    (``user`` loaded from Firestore) — never from a path/query/body org id — so a
+    caller can only ever learn their OWN org's deployment (cross-tenant isolation,
+    CLAUDE.md invariant #1). An org-less user is lazily given a shared pseudo
+    workspace here. Only ``gateway_url`` is browser-facing; planner/coder/org/
+    settings URLs are never returned to the client.
+    """
+    org = (
+        await onboarding_service.ensure_org_for_user(session, user)
+        if user.org_id is None
+        else await OrgRepository(session).get(user.org_id)
+    )
+    shared_url = get_settings().shared_gateway_url
+    if org is None:
+        # Defensive: an org_id with no org doc → treat as shared.
+        return MeDeploymentResponse(status="shared", gateway_url=shared_url, org_id=user.org_id)
+
+    deployments = org.deployments if isinstance(org.deployments, dict) else {}
+    raw_status = str(deployments.get("status") or "shared")
+    gateway = deployments.get("gateway") if isinstance(deployments.get("gateway"), dict) else {}
+    tenant_url = str(gateway.get("url") or "")
+
+    if raw_status == "provisioned" and tenant_url:
+        resolved_status, gateway_url = "provisioned", tenant_url
+    elif raw_status == "provisioning":
+        # A dedicated stack is coming up; the SPA keeps using — and polls — the
+        # shared gateway until it flips to provisioned.
+        resolved_status, gateway_url = "provisioning", shared_url
+    else:
+        resolved_status, gateway_url = "shared", shared_url
+
+    return MeDeploymentResponse(
+        status=resolved_status,
+        gateway_url=gateway_url,
+        org_id=org.id,
+        org_name=org.name,
     )
 
 

@@ -17,6 +17,20 @@ export function getApiBase() {
   return base.replace(/\/+$/, '');
 }
 
+/**
+ * Re-point the API base at runtime. The SPA bootstraps against the shared
+ * gateway (window.__API_BASE__ from config.js), then — after sign-in — resolves
+ * its per-org deployment via GET /api/config. When the caller's org has a
+ * dedicated per-tenant gateway, auth.js calls setApiBase() with that URL so ALL
+ * subsequent calls (REST + SSE, which read getApiBase()) target the tenant
+ * gateway. A falsy value keeps same-origin. This is reset on every page load
+ * (config.js reruns), so the per-org base is re-derived per session.
+ */
+export function setApiBase(url) {
+  if (typeof window === 'undefined') return;
+  window.__API_BASE__ = url ? String(url).replace(/\/+$/, '') : '';
+}
+
 function notifyAuthenticationRequired(error) {
   window.dispatchEvent(new CustomEvent('ai-fleet:auth-required', {
     detail: { message: error?.message || 'Authentication required' },
@@ -71,6 +85,11 @@ async function request(path, options = {}) {
 export const api = {
   // Authentication
   getCurrentUser: () => request('/auth/me'),
+
+  // Per-org deployment resolver. Returns { authenticated, status, gatewayUrl,
+  // orgName } — which front-facing gateway this session should use. Always
+  // fetched from the SHARED gateway (the bootstrap base) before any re-point.
+  getRuntimeConfig: () => request('/config'),
 
   // Settings
   getSettings: (options = {}) => request('/settings', options),

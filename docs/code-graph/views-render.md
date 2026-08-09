@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 404 nodes
-- **Cohesion**: 0.4861
+- **Size**: 406 nodes
+- **Cohesion**: 0.4857
 - **Dominant Language**: javascript
 
 ## Members
@@ -23,8 +23,9 @@ Directory-based community: public/js
 | agentPauseNotice | Function | ./public/js/agent-pause.js | 108-124 |
 | setAccessTokenProvider | Function | ./public/js/api.js | 5-7 |
 | getApiBase | Function | ./public/js/api.js | 15-18 |
-| notifyAuthenticationRequired | Function | ./public/js/api.js | 20-24 |
-| request | Function | ./public/js/api.js | 26-69 |
+| setApiBase | Function | ./public/js/api.js | 29-32 |
+| notifyAuthenticationRequired | Function | ./public/js/api.js | 34-38 |
+| request | Function | ./public/js/api.js | 40-83 |
 | currentRoute | Function | ./public/js/app.js | 71-78 |
 | applyMenuPermissions | Function | ./public/js/app.js | 82-93 |
 | maybeRefreshConnection | Function | ./public/js/app.js | 97-100 |
@@ -46,26 +47,25 @@ Directory-based community: public/js
 | renderAccessDenied | Function | ./public/js/app.js | 435-447 |
 | render | Function | ./public/js/app.js | 449-501 |
 | capitalize | Function | ./public/js/app.js | 503-506 |
-| setState | Function | ./public/js/auth.js | 39-42 |
-| withinSessionTimeout | Function | ./public/js/auth.js | 44-56 |
-| loadConfiguration | Function | ./public/js/auth.js | 58-87 |
-| firstAuthUser | Function | ./public/js/auth.js | 90-98 |
-| mergeDisplayProfile | Function | ./public/js/auth.js | 100-109 |
-| confirmIdentity | Function | ./public/js/auth.js | 113-121 |
-| initializeAuthentication | Function | ./public/js/auth.js | 123-168 |
-| getAuthenticationState | Function | ./public/js/auth.js | 170-172 |
-| expireAuthentication | Function | ./public/js/auth.js | 174-179 |
-| signIn | Function | ./public/js/auth.js | 181-200 |
-| signOut | Function | ./public/js/auth.js | 202-208 |
-| loadGisScript | Function | ./public/js/auth.js | 212-225 |
-| toHex | Function | ./public/js/auth.js | 227-229 |
-| randomNonce | Function | ./public/js/auth.js | 231-235 |
-| sha256Hex | Function | ./public/js/auth.js | 237-239 |
-| promptOneTap | Function | ./public/js/auth.js | 250-291 |
-| el | Function | ./public/js/dom.js | 4-21 |
-| esc | Function | ./public/js/dom.js | 24-30 |
+| setState | Function | ./public/js/auth.js | 44-47 |
+| withinSessionTimeout | Function | ./public/js/auth.js | 49-61 |
+| loadConfiguration | Function | ./public/js/auth.js | 63-92 |
+| firstAuthUser | Function | ./public/js/auth.js | 95-103 |
+| mergeDisplayProfile | Function | ./public/js/auth.js | 105-114 |
+| resolveDeployment | Function | ./public/js/auth.js | 122-132 |
+| confirmIdentity | Function | ./public/js/auth.js | 136-144 |
+| initializeAuthentication | Function | ./public/js/auth.js | 146-194 |
+| getAuthenticationState | Function | ./public/js/auth.js | 196-198 |
+| expireAuthentication | Function | ./public/js/auth.js | 200-205 |
+| signIn | Function | ./public/js/auth.js | 207-226 |
+| signOut | Function | ./public/js/auth.js | 228-234 |
+| loadGisScript | Function | ./public/js/auth.js | 238-251 |
+| toHex | Function | ./public/js/auth.js | 253-255 |
+| randomNonce | Function | ./public/js/auth.js | 257-261 |
+| sha256Hex | Function | ./public/js/auth.js | 263-265 |
+| promptOneTap | Function | ./public/js/auth.js | 276-317 |
 
-*... and 354 more members.*
+*... and 356 more members.*
 
 ## Execution Flows
 
@@ -74,7 +74,7 @@ Directory-based community: public/js
 - **render** (criticality: 0.75, depth: 6)
 - **promptOneTap** (criticality: 0.69, depth: 2)
 - **maybeRefreshConnection** (criticality: 0.68, depth: 3)
-- **initializeAuthentication** (criticality: 0.67, depth: 2)
+- **initializeAuthentication** (criticality: 0.65, depth: 2)
 - **maybeRefreshRole** (criticality: 0.65, depth: 3)
 - **applyServerEvent** (criticality: 0.63, depth: 5)
 - **renderBoard** (criticality: 0.54, depth: 4)
@@ -88,7 +88,7 @@ Directory-based community: public/js
 - `append` (140 edge(s))
 - `addEventListener` (102 edge(s))
 - `map` (91 edge(s))
-- `String` (81 edge(s))
+- `String` (82 edge(s))
 - `trim` (64 edge(s))
 - `setAttribute` (46 edge(s))
 - `push` (46 edge(s))
@@ -103,14 +103,14 @@ Directory-based community: public/js
 
 ### Incoming
 
-- `./public/js/api.js` (119 edge(s))
+- `./public/js/api.js` (121 edge(s))
 - `./public/js/views/agent.js` (79 edge(s))
 - `./public/js/app.js` (73 edge(s))
 - `./public/js/views/settings.js` (66 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (33 edge(s))
-- `./public/js/auth.js` (16 edge(s))
+- `./public/js/auth.js` (17 edge(s))
 - `./public/js/omnibox-router.mjs` (16 edge(s))
 - `./public/js/views/organization.js` (13 edge(s))
 - `./public/js/views/settings-policy.js` (12 edge(s))
