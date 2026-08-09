@@ -79,7 +79,7 @@ Directory-based community: services/org
 - **lifespan** (criticality: 0.73, depth: 4)
 - **create_user** (criticality: 0.70, depth: 1)
 - **create_org** (criticality: 0.69, depth: 2)
-- *... and 42 more flows.*
+- *... and 43 more flows.*
 
 ## Dependencies
 

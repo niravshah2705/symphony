@@ -527,56 +527,6 @@ router.post(
   })
 );
 
-function traceFromJob(job) {
-  const coding = job.kind === 'coding';
-  const title = coding
-    ? `${job.taskIdentifier || 'Coding task'}${job.taskTitle ? ` · ${job.taskTitle}` : ''}`
-    : job.projectName || 'Enrichment job';
-  return {
-    id: job.id,
-    title,
-    status: job.status,
-    startedAt: job.startedAt,
-    finishedAt: job.finishedAt,
-    summary: job.summary || job.error || null,
-    steps: job.steps || [],
-  };
-}
-
-function traceForAnalysis(body) {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    throw new localIntelligence.LocalIntelligenceError('A JSON request body is required.');
-  }
-  const hasJobId = Object.prototype.hasOwnProperty.call(body, 'jobId');
-  const hasTrace = Object.prototype.hasOwnProperty.call(body, 'trace');
-  if (hasJobId === hasTrace) {
-    throw new localIntelligence.LocalIntelligenceError('Provide exactly one of jobId or trace.');
-  }
-  if (hasTrace) return localIntelligence.normalizeTraceRequest(body);
-
-  if (typeof body.jobId !== 'string') {
-    throw new localIntelligence.LocalIntelligenceError('jobId must be a string.');
-  }
-  const jobId = body.jobId.trim();
-  if (!jobId || jobId.length > 128 || !/^[A-Za-z0-9_-]+$/.test(jobId)) {
-    throw new localIntelligence.LocalIntelligenceError('jobId is not valid.');
-  }
-  const job = listJobs().find((candidate) => candidate.id === jobId);
-  if (!job) throw new localIntelligence.LocalIntelligenceError('Job not found.', 404);
-  return localIntelligence.normalizeTrace(traceFromJob(job));
-}
-
-// POST /api/agent/analyze-trace — analyze an existing job by id, or a bounded
-// caller-supplied trace. The model sees fenced, untrusted data and has no tools.
-router.post(
-  '/analyze-trace',
-  asyncHandler(async (req, res) => {
-    const trace = traceForAnalysis(req.body);
-    const analysis = await localIntelligence.analyzeTrace({ trace, settings: getSettings() });
-    res.json({ analysis });
-  })
-);
-
 // POST /api/agent/settings-command — interpret a natural-language settings
 // request with the LOCAL model only, then apply the validated (non-secret) patch
 // to the store (data/store.json). Pass { apply: false } to preview without saving.

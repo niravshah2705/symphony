@@ -260,8 +260,6 @@ export const api = {
   deleteConversation: (id) => request(`/agent/conversations/${id}`, { method: 'DELETE' }),
   enrichInput: (payload) =>
     request('/agent/enrich-input', { method: 'POST', body: JSON.stringify(payload) }),
-  analyzeTrace: (payload) =>
-    request('/agent/analyze-trace', { method: 'POST', body: JSON.stringify(payload) }),
   settingsCommand: (payload) =>
     request('/agent/settings-command', { method: 'POST', body: JSON.stringify(payload) }),
   clearFinishedJobs: () => request('/agent/jobs', { method: 'DELETE' }),

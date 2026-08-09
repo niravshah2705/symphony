@@ -10,7 +10,6 @@ export const MENU_PERMISSIONS = Object.freeze({
   agent: { domain: 'workspace', level: 'read' },
   'agent-jobs': { domain: 'workspace', level: 'read' },
   calls: { domain: 'workspace', level: 'write' },
-  traces: { domain: 'workspace', level: 'write' },
   business: { domain: 'planning', level: 'read' },
   projects: { domain: 'planning', level: 'read' },
   board: { domain: 'planning', level: 'read' },
