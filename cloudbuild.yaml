@@ -33,6 +33,7 @@ substitutions:
   _FIREBASE_API_KEY: ""
   _FIREBASE_ALLOWED_DOMAIN: "" # empty = any verified user
   _SPA_ORIGIN: "https://storage.googleapis.com"
+  _SPA_OBFUSCATION_STRENGTH: "balanced" # light | balanced | maximum
 
 steps:
   # --- Build the three images (parallel) -------------------------------------
@@ -108,12 +109,30 @@ steps:
     waitFor: [build-coder, tf-bootstrap]
     args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/coder-control:${_IMAGE_TAG}"]
 
+  # --- Obfuscate the SPA's client JS before it is published ------------------
+  # Rewrites public/js/** in /workspace (shared across steps) so spa-publish
+  # rsyncs the obfuscated site. config.js is regenerated in spa-publish and
+  # vendor/ is left untouched. Keep the pinned version in sync with
+  # package.json's devDependency. See scripts/obfuscate-spa.js.
+  - id: spa-obfuscate
+    name: node:20-slim
+    waitFor: ["-"]
+    entrypoint: bash
+    env:
+      - "SPA_OBFUSCATION_STRENGTH=${_SPA_OBFUSCATION_STRENGTH}"
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        npm install --no-save --no-audit --no-fund --prefix /workspace/.obf-deps javascript-obfuscator@4.2.2
+        NODE_PATH=/workspace/.obf-deps/node_modules node scripts/obfuscate-spa.js --in-place
+
   # --- Publish the SPA to GCS ------------------------------------------------
   # Generate public/config.js with the gateway's deterministic URL (window.__API_BASE__
   # is read by the SPA at runtime), then rsync the static site to the bucket.
   - id: spa-publish
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    waitFor: [tf-bootstrap]
+    waitFor: [tf-bootstrap, spa-obfuscate]
     entrypoint: bash
     args:
       - -c

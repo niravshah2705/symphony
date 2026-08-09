@@ -6,8 +6,8 @@
 
 Directory-based community: services/planner
 
-- **Size**: 27 nodes
-- **Cohesion**: 0.2955
+- **Size**: 25 nodes
+- **Cohesion**: 0.3029
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,8 +20,6 @@ Directory-based community: services/planner
 | activeModelFor | Function | ./services/planner/src/routes/agent.js | 69-80 |
 | sanitizeLabels | Function | ./services/planner/src/routes/agent.js | 82-86 |
 | sanitizeConfig | Function | ./services/planner/src/routes/agent.js | 89-111 |
-| traceFromJob | Function | ./services/planner/src/routes/agent.js | 530-544 |
-| traceForAnalysis | Function | ./services/planner/src/routes/agent.js | 546-567 |
 | routeHandler | Function | ./services/planner/src/routes/agent.test.js | 10-14 |
 | handlerFor | Function | ./services/planner/src/routes/agent.test.js | 17-22 |
 | invoke | Function | ./services/planner/src/routes/agent.test.js | 24-28 |
@@ -55,22 +53,22 @@ Directory-based community: services/planner
 - `require` (11 edge(s))
 - `ok` (8 edge(s))
 - `after` (7 edge(s))
-- `find` (5 edge(s))
 - `filter` (4 edge(s))
 - `map` (4 edge(s))
+- `find` (4 edge(s))
 - `rejects` (4 edge(s))
 - `Number` (3 edge(s))
 - `handler` (3 edge(s))
 - `includes` (2 edge(s))
-- `isArray` (2 edge(s))
-- `trim` (2 edge(s))
-- `call` (2 edge(s))
+- `catch` (2 edge(s))
+- `toUpperCase` (2 edge(s))
+- `reject` (2 edge(s))
 
 ### Incoming
 
 - `equal` (46 edge(s))
 - `./services/planner/src/routes/agent.test.js` (19 edge(s))
-- `./services/planner/src/routes/agent.js` (14 edge(s))
+- `./services/planner/src/routes/agent.js` (11 edge(s))
 - `require` (11 edge(s))
 - `resolve` (7 edge(s))
 - `after` (7 edge(s))

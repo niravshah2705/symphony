@@ -60,7 +60,6 @@ export async function renderTroubleshooting(view) {
       el('h2', {}, 'Useful next steps'),
       el('div', { class: 'help-links' }, [
         el('a', { href: '#/settings' }, [el('strong', {}, 'Settings'), el('span', { class: 'muted' }, 'Models, SDK runtime, integrations, and LangSmith')]),
-        el('a', { href: '#/traces' }, [el('strong', {}, 'Trace analysis'), el('span', { class: 'muted' }, 'Explain a failed run with the BYoM model')]),
         el('a', { href: '#/analytics' }, [el('strong', {}, 'Analytics'), el('span', { class: 'muted' }, 'Inspect cost, latency, token use, and errors')]),
       ]),
     ])

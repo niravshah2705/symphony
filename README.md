@@ -77,7 +77,6 @@ The top-bar language picker intentionally shows a small suggestion set rather th
 - **Agent workspace** (`#/agent`) is an omnibox for workspace activity. It routes salutations directly; searches bounded README/docs, business records, projects, and run history; checks diagnostics and recent log signals for troubleshooting; and turns implementation changes into reviewable project-task drafts. Business requests move through fraud signals, revenue metrics, business memory, architecture, thinker/spec breakdown, a UI-design handoff, and the existing scheduler. The center stays conversational while route-specific evidence and confirmed actions appear in the side panel.
 - **Agent jobs** (`#/agent-jobs`) restores the complete operational history as separate planner and coding lists. It shows every retained job, lazily expands step activity, links to traces/tasks, refreshes live, and supports guarded per-job or finished-history cleanup.
 - **Call recorder** (`#/calls`) uses browser `MediaRecorder` APIs for screen/camera + microphone capture. The generated media stays in a local Blob URL for review/download. Only typed notes and small metadata such as duration are sent to local enrichment.
-- **Trace analysis** (`#/traces`) accepts pasted text logs or structured JSON traces. Input is bounded, fenced as untrusted data, and routed only through the configured local role. A deterministic evidence-based fallback is returned if the local model response is unavailable or malformed.
 
 ## Agent tab (project enrichment)
 
