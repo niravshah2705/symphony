@@ -6,8 +6,8 @@
 
 Directory-based community: services/gateway
 
-- **Size**: 171 nodes
-- **Cohesion**: 0.1427
+- **Size**: 176 nodes
+- **Cohesion**: 0.1402
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,8 +26,8 @@ Directory-based community: services/gateway
 | createAuthenticationMiddleware | Function | ./services/gateway/src/auth.js | 128-157 |
 | requirePermission | Function | ./services/gateway/src/auth.js | 166-176 |
 | requireAuthenticated | Function | ./services/gateway/src/auth.js | 184-191 |
-| publicAuthConfig | Function | ./services/gateway/src/auth.js | 194-213 |
-| authEnabled | Function | ./services/gateway/src/auth.js | 216-218 |
+| publicAuthConfig | Function | ./services/gateway/src/auth.js | 194-219 |
+| authEnabled | Function | ./services/gateway/src/auth.js | 222-224 |
 | firebaseConfig | Function | ./services/gateway/src/auth.test.js | 9-24 |
 | verifierReturning | Function | ./services/gateway/src/auth.test.js | 27-32 |
 | req | Function | ./services/gateway/src/auth.test.js | 35-37 |
@@ -39,33 +39,33 @@ Directory-based community: services/gateway
 | test:buildFirebaseAuthConfig: disabled by default (local, open)@L52 | Test | ./services/gateway/src/auth.test.js | 52-54 |
 | test:buildFirebaseAuthConfig: firebase mode derives issuer/audience/authDomain@L56 | Test | ./services/gateway/src/auth.test.js | 56-62 |
 | test:buildFirebaseAuthConfig: fails closed on missing project/api key and in production@L64 | Test | ./services/gateway/src/auth.test.js | 64-69 |
-| test:publicAuthConfig exposes only the public Firebase web config (no authz secrets)@L73 | Test | ./services/gateway/src/auth.test.js | 73-84 |
-| test:publicAuthConfig surfaces the public One Tap client id when configured@L86 | Test | ./services/gateway/src/auth.test.js | 86-89 |
-| test:publicAuthConfig collapses to disabled when auth is off@L91 | Test | ./services/gateway/src/auth.test.js | 91-93 |
-| test:disabled mode → open with full admin permissions@L97 | Test | ./services/gateway/src/auth.test.js | 97-105 |
-| test:firebase: verified user → authenticated with resolved role + permissions@L107 | Test | ./services/gateway/src/auth.test.js | 107-117 |
-| test:firebase: bootstrap admin email → admin role@L119 | Test | ./services/gateway/src/auth.test.js | 119-125 |
-| test:firebase: `role` custom claim is honored (operator)@L127 | Test | ./services/gateway/src/auth.test.js | 127-134 |
-| test:firebase: missing / invalid / unverified / out-of-domain token → PUBLIC (not denied)@L136 | Test | ./services/gateway/src/auth.test.js | 136-156 |
-| test:verifyFirebaseIdToken returns a frozen identity carrying the resolved role@L158 | Test | ./services/gateway/src/auth.test.js | 158-163 |
-| authed | Function | ./services/gateway/src/auth.test.js | 167-167 |
-| test:requirePermission: public may READ workspace (read-only Agent home)@L170 | Test | ./services/gateway/src/auth.test.js | 170-175 |
-| test:requirePermission: public WRITING workspace → 401 (prompt sign-in)@L177 | Test | ./services/gateway/src/auth.test.js | 177-185 |
-| test:requirePermission: public reaching planning/settings → 401@L187 | Test | ./services/gateway/src/auth.test.js | 187-193 |
-| test:requirePermission: viewer reads planning but is 403 on writes@L195 | Test | ./services/gateway/src/auth.test.js | 195-206 |
-| test:requirePermission: forced write level (codex/claude/roles) blocks a read-only settings user@L208 | Test | ./services/gateway/src/auth.test.js | 208-214 |
-| test:requirePermission: OPTIONS preflight is never gated@L216 | Test | ./services/gateway/src/auth.test.js | 216-220 |
-| test:requireAuthenticated: any signed-in user passes regardless of role@L224 | Test | ./services/gateway/src/auth.test.js | 224-230 |
-| test:requireAuthenticated: anonymous/public → 401@L232 | Test | ./services/gateway/src/auth.test.js | 232-239 |
-| test:requireAuthenticated: OPTIONS preflight is never gated@L241 | Test | ./services/gateway/src/auth.test.js | 241-245 |
-| test:buildFirebaseAuthConfig: One Tap client id from either env alias (public)@L247 | Test | ./services/gateway/src/auth.test.js | 247-252 |
-| createConfigResolver | Function | ./services/gateway/src/config-resolver.js | 21-54 |
-| makeReq | Function | ./services/gateway/src/config-resolver.test.js | 9-14 |
-| makeRes | Function | ./services/gateway/src/config-resolver.test.js | 16-25 |
-| set | Function | ./services/gateway/src/config-resolver.test.js | 21-21 |
-| status | Function | ./services/gateway/src/config-resolver.test.js | 22-22 |
+| test:publicAuthConfig exposes only the public Firebase web config (no authz secrets)@L73 | Test | ./services/gateway/src/auth.test.js | 73-88 |
+| test:publicAuthConfig surfaces the public One Tap client id when configured@L90 | Test | ./services/gateway/src/auth.test.js | 90-93 |
+| test:publicAuthConfig surfaces provider availability flags + Microsoft tenant (no secret)@L95 | Test | ./services/gateway/src/auth.test.js | 95-102 |
+| test:publicAuthConfig defaults google on / microsoft off when flags are absent@L104 | Test | ./services/gateway/src/auth.test.js | 104-109 |
+| test:publicAuthConfig collapses to disabled when auth is off@L111 | Test | ./services/gateway/src/auth.test.js | 111-113 |
+| test:disabled mode → open with full admin permissions@L117 | Test | ./services/gateway/src/auth.test.js | 117-125 |
+| test:firebase: verified user → authenticated with resolved role + permissions@L127 | Test | ./services/gateway/src/auth.test.js | 127-137 |
+| test:firebase: bootstrap admin email → admin role@L139 | Test | ./services/gateway/src/auth.test.js | 139-145 |
+| test:firebase: `role` custom claim is honored (operator)@L147 | Test | ./services/gateway/src/auth.test.js | 147-154 |
+| test:firebase: missing / invalid / unverified / out-of-domain token → PUBLIC (not denied)@L156 | Test | ./services/gateway/src/auth.test.js | 156-176 |
+| test:verifyFirebaseIdToken returns a frozen identity carrying the resolved role@L178 | Test | ./services/gateway/src/auth.test.js | 178-183 |
+| authed | Function | ./services/gateway/src/auth.test.js | 187-187 |
+| test:requirePermission: public may READ workspace (read-only Agent home)@L190 | Test | ./services/gateway/src/auth.test.js | 190-195 |
+| test:requirePermission: public WRITING workspace → 401 (prompt sign-in)@L197 | Test | ./services/gateway/src/auth.test.js | 197-205 |
+| test:requirePermission: public reaching planning/settings → 401@L207 | Test | ./services/gateway/src/auth.test.js | 207-213 |
+| test:requirePermission: viewer reads planning but is 403 on writes@L215 | Test | ./services/gateway/src/auth.test.js | 215-226 |
+| test:requirePermission: forced write level (codex/claude/roles) blocks a read-only settings user@L228 | Test | ./services/gateway/src/auth.test.js | 228-234 |
+| test:requirePermission: OPTIONS preflight is never gated@L236 | Test | ./services/gateway/src/auth.test.js | 236-240 |
+| test:requireAuthenticated: any signed-in user passes regardless of role@L244 | Test | ./services/gateway/src/auth.test.js | 244-250 |
+| test:requireAuthenticated: anonymous/public → 401@L252 | Test | ./services/gateway/src/auth.test.js | 252-259 |
+| test:requireAuthenticated: OPTIONS preflight is never gated@L261 | Test | ./services/gateway/src/auth.test.js | 261-265 |
+| test:buildFirebaseAuthConfig: One Tap client id from either env alias (public)@L267 | Test | ./services/gateway/src/auth.test.js | 267-272 |
+| test:buildFirebaseAuthConfig: provider flags default google on / microsoft off@L274 | Test | ./services/gateway/src/auth.test.js | 274-279 |
+| test:buildFirebaseAuthConfig: reads AUTH_MICROSOFT_ENABLED and Microsoft tenant (either alias)@L281 | Test | ./services/gateway/src/auth.test.js | 281-289 |
+| test:buildFirebaseAuthConfig: rejects a non-boolean provider flag@L291 | Test | ./services/gateway/src/auth.test.js | 291-296 |
 
-*... and 121 more members.*
+*... and 126 more members.*
 
 ## Execution Flows
 
@@ -84,36 +84,36 @@ Directory-based community: services/gateway
 
 ### Outgoing
 
-- `equal` (136 edge(s))
+- `equal` (149 edge(s))
 - `String` (21 edge(s))
+- `Boolean` (18 edge(s))
 - `deepEqual` (18 edge(s))
-- `Boolean` (17 edge(s))
 - `trim` (14 edge(s))
 - `json` (13 edge(s))
 - `set` (12 edge(s))
+- `buildFirebaseAuthConfig` (12 edge(s))
 - `next` (11 edge(s))
 - `handler` (11 edge(s))
 - `maskKey` (11 edge(s))
 - `includes` (10 edge(s))
 - `status` (10 edge(s))
+- `stringify` (10 edge(s))
 - `ok` (10 edge(s))
-- `verifyStreamToken` (10 edge(s))
-- `get` (9 edge(s))
 
 ### Incoming
 
-- `equal` (136 edge(s))
+- `equal` (149 edge(s))
 - `./services/gateway/src/routes/settings.js` (57 edge(s))
-- `./services/gateway/src/auth.test.js` (31 edge(s))
+- `./services/gateway/src/auth.test.js` (36 edge(s))
 - `./services/gateway/src/auth.js` (20 edge(s))
 - `deepEqual` (18 edge(s))
 - `./services/gateway/src/routes/codex.js` (17 edge(s))
 - `./services/gateway/src/config-resolver.test.js` (15 edge(s))
 - `./services/gateway/src/routes/businesses.js` (14 edge(s))
+- `buildFirebaseAuthConfig` (12 edge(s))
 - `./services/gateway/src/routes/issues.js` (11 edge(s))
 - `./services/gateway/src/sse.test.js` (11 edge(s))
 - `ok` (9 edge(s))
 - `createConfigResolver` (9 edge(s))
 - `handler` (9 edge(s))
 - `verifyStreamToken` (9 edge(s))
-- `buildFirebaseAuthConfig` (8 edge(s))

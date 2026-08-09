@@ -149,6 +149,17 @@ textarea:focus-visible, a:focus-visible, [tabindex]:focus-visible {
 .auth-user-copy small { color: var(--muted); font-size: 7px; }
 .auth-sign-in, .auth-sign-out { padding: 6px 9px; font-size: 9px; font-weight: 650; white-space: nowrap; }
 .auth-sign-in { color: var(--accent-2); }
+.auth-sign-in.microsoft, .auth-continue.microsoft { color: var(--text); }
+/* Microsoft glyph (four-square logo) so the second provider reads at a glance. */
+.auth-sign-in.microsoft::before, .auth-continue.microsoft::before {
+  content: ""; display: inline-block; width: 1em; height: 1em; margin-right: .5em;
+  vertical-align: -0.12em;
+  background:
+    linear-gradient(#f25022, #f25022) 0 0 / 45% 45% no-repeat,
+    linear-gradient(#7fba00, #7fba00) 100% 0 / 45% 45% no-repeat,
+    linear-gradient(#00a4ef, #00a4ef) 0 100% / 45% 45% no-repeat,
+    linear-gradient(#ffb900, #ffb900) 100% 100% / 45% 45% no-repeat;
+}
 
 .assumed-role {
   display: flex; align-items: center; gap: 7px; max-width: 190px; padding: 4px 9px 4px 5px;
@@ -300,7 +311,7 @@ body.sidebar-collapsed { --sidebar-width: 76px; }
   color: var(--accent-2); font-size: 8px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase;
 }
 .auth-copy { max-width: 420px; margin: 0 0 22px; color: var(--muted); font-size: 12px; line-height: 1.6; }
-.auth-actions { display: flex; align-items: center; min-height: 39px; }
+.auth-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-height: 39px; }
 .auth-continue { min-width: 155px; }
 .auth-progress { display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; }
 .auth-spinner {

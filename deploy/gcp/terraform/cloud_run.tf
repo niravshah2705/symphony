@@ -43,6 +43,11 @@ locals {
     var.firebase_auth_domain != "" ? { FIREBASE_AUTH_DOMAIN = var.firebase_auth_domain } : {},
     var.firebase_allowed_domain != "" ? { FIREBASE_ALLOWED_DOMAIN = var.firebase_allowed_domain } : {},
     var.auth_admin_emails != "" ? { AUTH_ADMIN_EMAILS = var.auth_admin_emails } : {},
+    # Sign-in providers. Both are public config (the Azure client secret lives only
+    # in the Firebase console). Only set the Microsoft flag when enabled so the
+    # gateway keeps its default (Google-only) otherwise.
+    var.auth_microsoft_enabled ? { AUTH_MICROSOFT_ENABLED = "true" } : {},
+    var.microsoft_tenant != "" ? { MICROSOFT_TENANT = var.microsoft_tenant } : {},
     # GOOGLE_ONE_TAP_CLIENT_ID is NOT here — it is delivered from Secret Manager
     # (google_secret_manager_secret.google_one_tap_client_id) as a secret env on
     # the gateway container below, only when a value is configured.

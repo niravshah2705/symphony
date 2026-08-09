@@ -6,8 +6,8 @@
 
 Directory-based community: e2e
 
-- **Size**: 36 nodes
-- **Cohesion**: 0.1106
+- **Size**: 38 nodes
+- **Cohesion**: 0.1087
 - **Dominant Language**: javascript
 
 ## Members
@@ -45,11 +45,13 @@ Directory-based community: e2e
 | page1 | Function | ./e2e/organization-flow.spec.js | 73-73 |
 | test:signed-in user: personal project → create org → org project → add person → add member@L136 | Test | ./e2e/organization-flow.spec.js | 136-188 |
 | json | Function | ./e2e/page-loading.spec.js | 5-11 |
-| test:settings renders task-model controls without a view error@L13 | Test | ./e2e/page-loading.spec.js | 13-30 |
-| test:workspace renders while optional Linear validation is stalled@L32 | Test | ./e2e/page-loading.spec.js | 32-87 |
-| test:authentication configuration failure locks the workspace before protected API calls@L89 | Test | ./e2e/page-loading.spec.js | 89-111 |
-| test:authenticated Firebase session adds a bearer token and ignores an unrelated provider 401@L113 | Test | ./e2e/page-loading.spec.js | 113-199 |
-| authorizedJson | Function | ./e2e/page-loading.spec.js | 115-120 |
+| test:settings renders task-model controls without a view error@L32 | Test | ./e2e/page-loading.spec.js | 32-49 |
+| test:workspace renders while optional Linear validation is stalled@L51 | Test | ./e2e/page-loading.spec.js | 51-106 |
+| test:authentication configuration failure locks the workspace before protected API calls@L108 | Test | ./e2e/page-loading.spec.js | 108-130 |
+| test:authenticated Firebase session adds a bearer token and ignores an unrelated provider 401@L132 | Test | ./e2e/page-loading.spec.js | 132-218 |
+| authorizedJson | Function | ./e2e/page-loading.spec.js | 134-139 |
+| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L220 | Test | ./e2e/page-loading.spec.js | 220-264 |
+| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L266 | Test | ./e2e/page-loading.spec.js | 266-289 |
 
 ## Execution Flows
 
@@ -59,35 +61,35 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (196 edge(s))
-- `locator` (122 edge(s))
-- `route` (77 edge(s))
-- `toBeVisible` (47 edge(s))
+- `expect` (207 edge(s))
+- `locator` (126 edge(s))
+- `route` (86 edge(s))
+- `toBeVisible` (48 edge(s))
 - `getByRole` (42 edge(s))
-- `toHaveCount` (36 edge(s))
-- `request` (33 edge(s))
-- `toContainText` (26 edge(s))
-- `click` (26 edge(s))
+- `toHaveCount` (38 edge(s))
+- `request` (34 edge(s))
+- `toContainText` (27 edge(s))
+- `click` (27 edge(s))
+- `toHaveText` (23 edge(s))
 - `toHaveAttribute` (20 edge(s))
-- `toHaveText` (20 edge(s))
-- `push` (19 edge(s))
+- `push` (20 edge(s))
+- `goto` (17 edge(s))
 - `postDataJSON` (16 edge(s))
-- `goto` (15 edge(s))
-- `method` (15 edge(s))
+- `fulfill` (15 edge(s))
 
 ### Incoming
 
-- `expect` (192 edge(s))
-- `locator` (120 edge(s))
-- `toBeVisible` (46 edge(s))
+- `expect` (203 edge(s))
+- `locator` (124 edge(s))
+- `toBeVisible` (47 edge(s))
+- `route` (42 edge(s))
 - `getByRole` (40 edge(s))
-- `toHaveCount` (36 edge(s))
-- `route` (33 edge(s))
-- `toContainText` (26 edge(s))
-- `click` (25 edge(s))
-- `toHaveText` (20 edge(s))
+- `toHaveCount` (38 edge(s))
+- `toContainText` (27 edge(s))
+- `click` (26 edge(s))
+- `toHaveText` (23 edge(s))
 - `toHaveAttribute` (19 edge(s))
-- `goto` (14 edge(s))
+- `goto` (16 edge(s))
 - `./e2e/agent-workspace.spec.js` (14 edge(s))
 - `getByText` (13 edge(s))
 - `toHaveLength` (11 edge(s))

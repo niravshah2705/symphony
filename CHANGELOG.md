@@ -4,6 +4,19 @@ All notable changes to AI Fleet (tech-symphony). Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project is not yet
 tagged by semver, so entries are grouped by the date they landed on `main`.
 
+## 2026-08-10
+
+### Added
+
+- **Sign in with Microsoft** — an optional **Continue with Microsoft** button
+  (`signInWithPopup(new OAuthProvider('microsoft.com'))`) alongside Google. Both
+  providers federate into the same Firebase session, so the gateway/Python token
+  verification is unchanged. Each provider is availability-gated by a flag in
+  `/api/auth/config` (`AUTH_GOOGLE_ENABLED`, default on; `AUTH_MICROSOFT_ENABLED`,
+  default off) with an optional `MICROSOFT_TENANT`/`AZURE_TENANT_ID`; when both are
+  on the card shows Google first, Microsoft below. The Azure client secret stays
+  in the Firebase console (never in env). See `docs/ACCESS_MODEL.md`.
+
 ## 2026-08-08
 
 A large multi-part release: the organization/access model, a new agent harness,
