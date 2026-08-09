@@ -20,10 +20,12 @@
     "test:e2e:debug": "PWDEBUG=1 playwright test --project=chrome",
     "docs:code": "bash scripts/gen-code-docs.sh",
     "graph:build": "bash scripts/build-graphs.sh",
+    "spa:obfuscate": "node scripts/obfuscate-spa.js",
     "hooks:install": "git config core.hooksPath .githooks && echo 'Git hooks enabled (core.hooksPath=.githooks)'"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.0"
+    "@playwright/test": "^1.62.0",
+    "javascript-obfuscator": "^4.2.2"
   },
   "overrides": {
     "@modelcontextprotocol/sdk": "^1.30.0",
