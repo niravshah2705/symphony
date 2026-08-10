@@ -69,17 +69,17 @@ Directory-based community: services/org
 
 ## Execution Flows
 
-- **refresh** (criticality: 0.85, depth: 3)
-- **login** (criticality: 0.84, depth: 3)
-- **__call__** (criticality: 0.83, depth: 4)
-- **register** (criticality: 0.80, depth: 3)
-- **change_password** (criticality: 0.75, depth: 1)
-- **get_project_context** (criticality: 0.74, depth: 1)
-- **verify_email** (criticality: 0.73, depth: 1)
-- **lifespan** (criticality: 0.73, depth: 4)
-- **create_user** (criticality: 0.70, depth: 1)
-- **create_org** (criticality: 0.69, depth: 2)
-- *... and 42 more flows.*
+- **lifespan** (criticality: 0.94, depth: 4)
+- **__call__** (criticality: 0.94, depth: 4)
+- **register** (criticality: 0.93, depth: 3)
+- **login** (criticality: 0.93, depth: 3)
+- **refresh** (criticality: 0.93, depth: 3)
+- **client** (criticality: 0.93, depth: 3)
+- **create_organization_for_user** (criticality: 0.92, depth: 2)
+- **create_org** (criticality: 0.92, depth: 2)
+- **create_user** (criticality: 0.91, depth: 1)
+- **get_project_context** (criticality: 0.87, depth: 1)
+- *... and 43 more flows.*
 
 ## Dependencies
 

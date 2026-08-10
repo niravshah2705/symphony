@@ -9,6 +9,7 @@ import {
   searchWorkspaceMemory,
   summarizeTroubleshooting,
 } from '../omnibox-router.mjs';
+import { scanSecrets } from '../secret-scan.mjs';
 import { state, setCurrentProject } from '../state.js';
 import { getAuthenticationState } from '../auth.js';
 
@@ -425,9 +426,30 @@ function buildComposer(stream, railBody) {
     if (!text) return;
     input.value = '';
     input.dispatchEvent(new Event('input'));
-    const user = { role: 'user', text };
+
+    // Best-effort client-side guard: strip anything that looks like a secret
+    // BEFORE it leaves the browser. `outgoing` is used for every downstream
+    // path (local echo, routing, search, persistence) so no channel leaks the
+    // original. The server redacts again — this is convenience, not a control.
+    const scan = scanSecrets(text);
+    const outgoing = scan.found ? scan.redacted : text;
+
+    const user = { role: 'user', text: outgoing };
     conversation.push(user);
     stream.append(renderConversationEntry(user, railBody));
+
+    if (scan.found) {
+      const types = scan.types.join(', ');
+      toast(`Removed secrets before sending: ${types}.`, 'err');
+      stream.append(
+        assistantMessage(
+          'Secrets removed before sending',
+          `Your message looked like it contained secrets (${types}). They were replaced with «redacted» before it left this browser and before anything was saved. Please rotate anything that was already exposed elsewhere.`,
+          [],
+          'notice'
+        )
+      );
+    }
 
     const pending = assistantMessage('Routing your request…', 'Identifying the safest, most useful workspace path and gathering only the details it needs.');
     pending.classList.add('is-pending');
@@ -438,14 +460,14 @@ function buildComposer(stream, railBody) {
     send.textContent = 'Thinking…';
 
     try {
-      const result = await resolveOmniboxRequest(text);
+      const result = await resolveOmniboxRequest(outgoing);
       const entry = { role: 'assistant', routeResult: result };
       conversation.push(entry);
       pending.replaceWith(renderConversationEntry(entry, railBody));
       scrollConversationToEnd();
       showRailResult(railBody, result);
       // Persist the turn server-side (lazily creating the thread on first send).
-      void persistTurn(text, result);
+      void persistTurn(outgoing, result);
       // A build request runs a guided, human-in-the-loop flow inline in the chat.
       if (result.route && result.route.intent === 'build') void startBuildFlow(result.route, stream, railBody);
     } catch (error) {

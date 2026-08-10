@@ -69,17 +69,17 @@ Directory-based community: services/settings
 
 ## Execution Flows
 
-- **__call__** (criticality: 0.83, depth: 4)
-- **resolve_for_caller** (criticality: 0.69, depth: 4)
-- **set_org_policy** (criticality: 0.68, depth: 3)
-- **set_project_policy** (criticality: 0.68, depth: 3)
-- **set_user_policy** (criticality: 0.68, depth: 3)
-- **client** (criticality: 0.68, depth: 3)
-- **get_project_context** (criticality: 0.66, depth: 1)
-- **resolve_config_for_caller** (criticality: 0.63, depth: 2)
-- **get_org_policy** (criticality: 0.60, depth: 3)
-- **get_project_policy** (criticality: 0.60, depth: 3)
-- *... and 17 more flows.*
+- **__call__** (criticality: 0.94, depth: 4)
+- **resolve_for_caller** (criticality: 0.94, depth: 4)
+- **set_org_policy** (criticality: 0.93, depth: 3)
+- **set_project_policy** (criticality: 0.93, depth: 3)
+- **set_user_policy** (criticality: 0.93, depth: 3)
+- **client** (criticality: 0.93, depth: 3)
+- **resolve_config_for_caller** (criticality: 0.88, depth: 2)
+- **get_org_policy** (criticality: 0.85, depth: 3)
+- **get_project_policy** (criticality: 0.85, depth: 3)
+- **get_user_policy** (criticality: 0.85, depth: 3)
+- *... and 9 more flows.*
 
 ## Dependencies
 

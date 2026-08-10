@@ -69,17 +69,17 @@ Directory-based community: packages/shared
 
 ## Execution Flows
 
-- **createLogin** (criticality: 0.61, depth: 1)
-- **consumeLogin** (criticality: 0.61, depth: 1)
-- **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
-- **refreshTokens** (criticality: 0.61, depth: 1)
-- **createLogin** (criticality: 0.61, depth: 1)
-- **consumeLogin** (criticality: 0.61, depth: 1)
-- **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
-- **refreshTokens** (criticality: 0.61, depth: 1)
-- **pushAuth** (criticality: 0.56, depth: 2)
-- **pendingCount** (criticality: 0.49, depth: 1)
-- *... and 66 more flows.*
+- **resume** (criticality: 0.66, depth: 6)
+- **loadAnalytics** (criticality: 0.64, depth: 4)
+- **preflightAndPause** (criticality: 0.64, depth: 4)
+- **prepareMessages** (criticality: 0.64, depth: 4)
+- **discoverModels** (criticality: 0.64, depth: 4)
+- **findReviewByBranch** (criticality: 0.64, depth: 4)
+- **run** (criticality: 0.64, depth: 4)
+- **executeAgentRuntime** (criticality: 0.64, depth: 4)
+- **startScheduler** (criticality: 0.64, depth: 4)
+- **resolveEffective** (criticality: 0.64, depth: 4)
+- *... and 74 more flows.*
 
 ## Dependencies
 
