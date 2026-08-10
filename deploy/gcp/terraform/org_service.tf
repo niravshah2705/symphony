@@ -123,13 +123,16 @@ resource "google_cloud_run_v2_service" "org" {
       }
       # Shared token the org service verifies on the provisioner's S2S write-back
       # (PATCH /internal/orgs/{id}/deployments). Same secret the provisioner uses.
+      # One env block per existing internal-api-token secret (0 or 1). Splat-driven
+      # for_each avoids a [0] index into a count=0 resource and the conditional
+      # for_each that Terraform 1.9.x mis-types as non-iterable.
       dynamic "env" {
-        for_each = var.provisioning_enabled && var.internal_api_token != "" ? [1] : []
+        for_each = toset(google_secret_manager_secret.internal_api_token[*].secret_id)
         content {
           name = "INTERNAL_API_TOKEN"
           value_source {
             secret_key_ref {
-              secret  = google_secret_manager_secret.internal_api_token[0].secret_id
+              secret  = env.value
               version = "latest"
             }
           }
