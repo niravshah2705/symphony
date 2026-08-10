@@ -43,6 +43,13 @@ function resolveEulaStatus(req, deps = {}) {
   const readUser = deps.readUser || getEulaUser;
   const version = deps.version || CONFIG.EULA_VERSION;
   const key = eulaUserKey(req);
+  // Local single-operator mode (AUTH_MODE=disabled) is the trusted, fully-open
+  // deployment — there is no login or organisation to gate. Treat it as accepted
+  // so the gate only applies to signed-in (Firebase) users, which is what the
+  // acceptance model targets.
+  if (req && req.auth && req.auth.mode === 'disabled') {
+    return { key, version, status: 'accepted', acceptedVersion: version, via: 'local', at: null, accepted: true };
+  }
   const record = readUser(key) || null;
   return {
     key,

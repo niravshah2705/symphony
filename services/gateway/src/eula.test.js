@@ -102,6 +102,27 @@ test('requireEulaAccepted 403s a stale-version acceptance (re-prompt on bump)', 
   assert.equal(res.statusCode, 403);
 });
 
+test('AUTH_MODE=disabled (local single operator) is treated as accepted', () => {
+  // No stored record, yet resolveEulaStatus reports accepted and the gate opens.
+  const request = { method: 'POST', auth: { mode: 'disabled', authenticated: true, user: null } };
+  const status = resolveEulaStatus(request, { readUser: readerFrom({}), version: VERSION });
+  assert.equal(status.accepted, true);
+  assert.equal(status.via, 'local');
+  const res = responseRecorder();
+  let called = false;
+  requireEulaAccepted({ readUser: readerFrom({}), version: VERSION })(request, res, () => { called = true; });
+  assert.equal(called, true);
+});
+
+test('firebase mode still gates an un-accepted user (boundary of the disabled exemption)', () => {
+  const request = { method: 'POST', auth: { mode: 'firebase', authenticated: true, user: { sub: 'u1' } } };
+  const res = responseRecorder();
+  let called = false;
+  requireEulaAccepted({ readUser: readerFrom({}), version: VERSION })(request, res, () => { called = true; });
+  assert.equal(called, false);
+  assert.equal(res.statusCode, 403);
+});
+
 test('requireEulaAccepted never gates a CORS preflight', () => {
   const gate = requireEulaAccepted({ readUser: readerFrom({}), version: VERSION });
   const res = responseRecorder();
