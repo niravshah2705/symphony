@@ -1,7 +1,7 @@
 'use strict';
 
 const { EventEmitter } = require('node:events');
-const { CONFIG } = require('../config');
+const { CONFIG, namespaceCollection } = require('../config');
 const log = require('../logger');
 
 /**
@@ -59,7 +59,10 @@ function getDb() {
   return db;
 }
 
-const EVENTS_ROOT = 'aifleet_events';
+// Namespaced per tenant (empty STORE_NAMESPACE → the shared 'aifleet_events'
+// root, unchanged). Isolates a per-tenant gateway's SSE event stream from other
+// tenants sharing the same Firestore database.
+const EVENTS_ROOT = namespaceCollection('aifleet_events');
 
 function stepsCollection(conversationId) {
   return getDb().collection(EVENTS_ROOT).doc(conversationId).collection('steps');

@@ -6,8 +6,8 @@
 
 Directory-based community: services/gateway
 
-- **Size**: 180 nodes
-- **Cohesion**: 0.1444
+- **Size**: 198 nodes
+- **Cohesion**: 0.1518
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: services/gateway
 | test:buildFirebaseAuthConfig: reads AUTH_MICROSOFT_ENABLED and Microsoft tenant (either alias)@L281 | Test | ./services/gateway/src/auth.test.js | 281-289 |
 | test:buildFirebaseAuthConfig: rejects a non-boolean provider flag@L291 | Test | ./services/gateway/src/auth.test.js | 291-296 |
 
-*... and 130 more members.*
+*... and 148 more members.*
 
 ## Execution Flows
 
@@ -76,7 +76,7 @@ Directory-based community: services/gateway
 - **requireAuthenticated** (criticality: 0.61, depth: 1)
 - **mintWorkspaceToken** (criticality: 0.59, depth: 3)
 - **createLocalizationRouter** (criticality: 0.49, depth: 2)
-- **createProxy** (criticality: 0.48, depth: 1)
+- **callJson** (criticality: 0.44, depth: 1)
 - **handleStream** (criticality: 0.44, depth: 1)
 - **handleWorkspaceStream** (criticality: 0.44, depth: 1)
 
@@ -84,36 +84,36 @@ Directory-based community: services/gateway
 
 ### Outgoing
 
-- `equal` (163 edge(s))
-- `String` (20 edge(s))
+- `equal` (177 edge(s))
+- `String` (23 edge(s))
 - `Boolean` (19 edge(s))
+- `deepEqual` (18 edge(s))
 - `trim` (14 edge(s))
+- `json` (14 edge(s))
 - `next` (13 edge(s))
-- `deepEqual` (13 edge(s))
+- `set` (12 edge(s))
 - `buildFirebaseAuthConfig` (12 edge(s))
-- `set` (11 edge(s))
+- `status` (11 edge(s))
+- `handler` (11 edge(s))
 - `maskKey` (11 edge(s))
-- `status` (10 edge(s))
-- `ok` (10 edge(s))
-- `verifyStreamToken` (10 edge(s))
-- `includes` (9 edge(s))
-- `json` (9 edge(s))
-- `get` (8 edge(s))
+- `includes` (10 edge(s))
+- `toLowerCase` (10 edge(s))
+- `stringify` (10 edge(s))
 
 ### Incoming
 
-- `equal` (163 edge(s))
+- `equal` (177 edge(s))
 - `./services/gateway/src/routes/settings.js` (57 edge(s))
 - `./services/gateway/src/auth.test.js` (36 edge(s))
 - `./services/gateway/src/auth.js` (20 edge(s))
+- `deepEqual` (18 edge(s))
 - `./services/gateway/src/eula.test.js` (18 edge(s))
 - `./services/gateway/src/routes/codex.js` (17 edge(s))
+- `./services/gateway/src/config-resolver.test.js` (15 edge(s))
 - `./services/gateway/src/routes/businesses.js` (14 edge(s))
-- `deepEqual` (13 edge(s))
 - `buildFirebaseAuthConfig` (12 edge(s))
 - `./services/gateway/src/routes/issues.js` (11 edge(s))
 - `./services/gateway/src/sse.test.js` (11 edge(s))
 - `ok` (9 edge(s))
-- `verifyStreamToken` (9 edge(s))
-- `throws` (8 edge(s))
-- `./services/gateway/src/cors.test.js` (8 edge(s))
+- `createConfigResolver` (9 edge(s))
+- `handler` (9 edge(s))

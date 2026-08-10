@@ -1,7 +1,7 @@
 'use strict';
 
 const { randomUUID } = require('node:crypto');
-const { CONFIG } = require('./config');
+const { CONFIG, namespaceCollection } = require('./config');
 const fileBackend = require('./store/file-backend');
 const firestoreBackend = require('./store/firestore-backend');
 const {
@@ -395,6 +395,10 @@ const STORE_COLLECTION_KEYS = ['jobs', 'memories', 'conversations', 'approvals']
 
 const backend = CONFIG.STORE_BACKEND === 'firestore'
   ? firestoreBackend.create({
+      // Namespaced per tenant (empty STORE_NAMESPACE → the shared 'aifleet' root,
+      // unchanged). Isolates a per-tenant gateway's store + sub-collections
+      // (jobs/memories/conversations/approvals) from other tenants on the same DB.
+      rootCollection: namespaceCollection('aifleet'),
       mainKeys: STORE_MAIN_KEYS,
       collectionKeys: STORE_COLLECTION_KEYS,
       normalize: normalizeStore,

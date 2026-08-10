@@ -4,117 +4,117 @@
 
 ## Overview
 
-Directory-based community: services/org
+Directory-based community: services/settings
 
-- **Size**: 443 nodes
-- **Cohesion**: 0.4591
+- **Size**: 245 nodes
+- **Cohesion**: 0.4432
 - **Dominant Language**: python
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| page_params | Function | ./services/org/app/api/deps.py | 9-13 |
-| _rate | Function | ./services/org/app/api/v1/routes_auth.py | 24-25 |
-| register | Function | ./services/org/app/api/v1/routes_auth.py | 30-35 |
-| login | Function | ./services/org/app/api/v1/routes_auth.py | 40-45 |
-| refresh | Function | ./services/org/app/api/v1/routes_auth.py | 50-55 |
-| logout | Function | ./services/org/app/api/v1/routes_auth.py | 59-64 |
-| verify_email | Function | ./services/org/app/api/v1/routes_auth.py | 68-73 |
-| me | Function | ./services/org/app/api/v1/routes_auth.py | 77-78 |
-| health | Function | ./services/org/app/api/v1/routes_health.py | 13-15 |
-| readiness | Function | ./services/org/app/api/v1/routes_health.py | 19-22 |
-| get_me | Function | ./services/org/app/api/v1/routes_me.py | 38-46 |
-| create_my_organization | Function | ./services/org/app/api/v1/routes_me.py | 50-55 |
-| list_my_projects | Function | ./services/org/app/api/v1/routes_me.py | 59-65 |
-| create_my_project | Function | ./services/org/app/api/v1/routes_me.py | 69-74 |
-| get_my_project | Function | ./services/org/app/api/v1/routes_me.py | 78-83 |
-| update_my_project | Function | ./services/org/app/api/v1/routes_me.py | 87-94 |
-| delete_my_project | Function | ./services/org/app/api/v1/routes_me.py | 98-104 |
-| list_members | Function | ./services/org/app/api/v1/routes_members.py | 26-42 |
-| add_member | Function | ./services/org/app/api/v1/routes_members.py | 46-52 |
-| update_member | Function | ./services/org/app/api/v1/routes_members.py | 56-62 |
-| remove_member | Function | ./services/org/app/api/v1/routes_members.py | 66-71 |
-| get_current | Function | ./services/org/app/api/v1/routes_org.py | 30-34 |
-| update_current | Function | ./services/org/app/api/v1/routes_org.py | 38-43 |
-| delete_current | Function | ./services/org/app/api/v1/routes_org.py | 47-51 |
-| list_current_org_tags | Function | ./services/org/app/api/v1/routes_org.py | 55-60 |
-| set_current_org_tags | Function | ./services/org/app/api/v1/routes_org.py | 64-70 |
-| detach_current_org_tag | Function | ./services/org/app/api/v1/routes_org.py | 74-80 |
-| create_org | Function | ./services/org/app/api/v1/routes_org.py | 86-91 |
-| list_orgs | Function | ./services/org/app/api/v1/routes_org.py | 95-101 |
-| get_org | Function | ./services/org/app/api/v1/routes_org.py | 105-110 |
-| update_org | Function | ./services/org/app/api/v1/routes_org.py | 114-120 |
-| delete_org | Function | ./services/org/app/api/v1/routes_org.py | 124-129 |
-| list_projects | Function | ./services/org/app/api/v1/routes_projects.py | 29-35 |
-| create_project | Function | ./services/org/app/api/v1/routes_projects.py | 39-44 |
-| get_project | Function | ./services/org/app/api/v1/routes_projects.py | 48-49 |
-| update_project | Function | ./services/org/app/api/v1/routes_projects.py | 53-58 |
-| delete_project | Function | ./services/org/app/api/v1/routes_projects.py | 62-66 |
-| list_project_tags | Function | ./services/org/app/api/v1/routes_projects.py | 70-71 |
-| attach_project_tag | Function | ./services/org/app/api/v1/routes_projects.py | 75-81 |
-| detach_project_tag | Function | ./services/org/app/api/v1/routes_projects.py | 85-90 |
-| list_tags | Function | ./services/org/app/api/v1/routes_tags.py | 21-27 |
-| create_tag | Function | ./services/org/app/api/v1/routes_tags.py | 31-36 |
-| get_tag | Function | ./services/org/app/api/v1/routes_tags.py | 40-45 |
-| update_tag | Function | ./services/org/app/api/v1/routes_tags.py | 49-55 |
-| delete_tag | Function | ./services/org/app/api/v1/routes_tags.py | 59-64 |
-| list_tasks | Function | ./services/org/app/api/v1/routes_tasks.py | 26-42 |
-| create_task | Function | ./services/org/app/api/v1/routes_tasks.py | 46-52 |
-| get_task | Function | ./services/org/app/api/v1/routes_tasks.py | 56-61 |
-| update_task | Function | ./services/org/app/api/v1/routes_tasks.py | 65-72 |
-| delete_task | Function | ./services/org/app/api/v1/routes_tasks.py | 76-89 |
+| health | Function | ./services/settings/app/api/v1/routes_health.py | 13-15 |
+| readiness | Function | ./services/settings/app/api/v1/routes_health.py | 19-22 |
+| get_effective_config | Function | ./services/settings/app/api/v1/routes_internal.py | 33-39 |
+| get_my_settings | Function | ./services/settings/app/api/v1/routes_me.py | 25-29 |
+| put_my_settings | Function | ./services/settings/app/api/v1/routes_me.py | 33-38 |
+| get_org_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 32-36 |
+| put_org_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 40-45 |
+| get_project_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 51-55 |
+| put_project_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 59-64 |
+| get_effective_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 70-75 |
+| get_universe | Function | ./services/settings/app/api/v1/routes_settings.py | 79-80 |
+| get_principal | Function | ./services/settings/app/auth/dependencies.py | 13-22 |
+| get_current_user | Function | ./services/settings/app/auth/dependencies.py | 25-33 |
+| _client | Function | ./services/settings/app/auth/idp.py | 23-28 |
+| reset_client | Function | ./services/settings/app/auth/idp.py | 31-34 |
+| is_idp_issuer | Function | ./services/settings/app/auth/idp.py | 37-39 |
+| decode_idp_token | Function | ./services/settings/app/auth/idp.py | 42-55 |
+| create_access_token | Function | ./services/settings/app/auth/jwt_local.py | 24-46 |
+| decode_access_token | Function | ./services/settings/app/auth/jwt_local.py | 49-62 |
+| get_unverified_issuer | Function | ./services/settings/app/auth/jwt_local.py | 65-75 |
+| ProjectContext | Class | ./services/settings/app/authz/guards.py | 24-32 |
+| require_org_admin | Function | ./services/settings/app/authz/guards.py | 35-38 |
+| get_project_context | Function | ./services/settings/app/authz/guards.py | 41-73 |
+| require_project_admin | Function | ./services/settings/app/authz/guards.py | 76-82 |
+| is_org_admin | Function | ./services/settings/app/authz/policy.py | 16-17 |
+| can_manage_project_settings | Function | ./services/settings/app/authz/policy.py | 20-23 |
+| Principal | Class | ./services/settings/app/authz/principal.py | 16-21 |
+| Settings | Class | ./services/settings/app/core/config.py | 28-87 |
+| _derive_and_validate | Function | ./services/settings/app/core/config.py | 66-78 |
+| plugins_catalog | Function | ./services/settings/app/core/config.py | 80-87 |
+| get_settings | Function | ./services/settings/app/core/config.py | 91-93 |
+| Uow | Class | ./services/settings/app/core/database.py | 23-72 |
+| __init__ | Function | ./services/settings/app/core/database.py | 24-26 |
+| tracked | Function | ./services/settings/app/core/database.py | 29-31 |
+| track | Function | ./services/settings/app/core/database.py | 33-36 |
+| track_all | Function | ./services/settings/app/core/database.py | 38-41 |
+| add | Function | ./services/settings/app/core/database.py | 43-46 |
+| forget | Function | ./services/settings/app/core/database.py | 48-49 |
+| flush | Function | ./services/settings/app/core/database.py | 52-57 |
+| get | Function | ./services/settings/app/core/database.py | 59-61 |
+| query | Function | ./services/settings/app/core/database.py | 63-65 |
+| count | Function | ./services/settings/app/core/database.py | 67-69 |
+| commit | Function | ./services/settings/app/core/database.py | 71-72 |
+| new_uow | Function | ./services/settings/app/core/database.py | 75-78 |
+| get_session | Function | ./services/settings/app/core/database.py | 81-86 |
+| Txn | Class | ./services/settings/app/core/firestore.py | 25-28 |
+| get | Function | ./services/settings/app/core/firestore.py | 26-26 |
+| set | Function | ./services/settings/app/core/firestore.py | 27-27 |
+| delete | Function | ./services/settings/app/core/firestore.py | 28-28 |
+| Db | Class | ./services/settings/app/core/firestore.py | 31-49 |
 
-*... and 393 more members.*
+*... and 195 more members.*
 
 ## Execution Flows
 
-- **refresh** (criticality: 0.85, depth: 3)
-- **login** (criticality: 0.84, depth: 3)
 - **__call__** (criticality: 0.83, depth: 4)
-- **register** (criticality: 0.80, depth: 3)
-- **change_password** (criticality: 0.75, depth: 1)
-- **get_project_context** (criticality: 0.74, depth: 1)
-- **verify_email** (criticality: 0.73, depth: 1)
-- **lifespan** (criticality: 0.73, depth: 4)
-- **create_user** (criticality: 0.70, depth: 1)
-- **create_org** (criticality: 0.69, depth: 2)
-- *... and 42 more flows.*
+- **resolve_for_caller** (criticality: 0.69, depth: 4)
+- **set_org_policy** (criticality: 0.68, depth: 3)
+- **set_project_policy** (criticality: 0.68, depth: 3)
+- **set_user_policy** (criticality: 0.68, depth: 3)
+- **client** (criticality: 0.68, depth: 3)
+- **get_project_context** (criticality: 0.66, depth: 1)
+- **resolve_config_for_caller** (criticality: 0.63, depth: 2)
+- **get_org_policy** (criticality: 0.60, depth: 3)
+- **get_project_policy** (criticality: 0.60, depth: 3)
+- *... and 17 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `Depends` (121 edge(s))
-- `get` (110 edge(s))
-- `str` (46 edge(s))
-- `json` (45 edge(s))
-- `post` (43 edge(s))
-- `BaseModel` (31 edge(s))
-- `from_doc` (24 edge(s))
-- `raises` (23 edge(s))
-- `query` (19 edge(s))
-- `add` (18 edge(s))
-- `delete` (17 edge(s))
-- `uuid4` (14 edge(s))
-- `create_user` (12 edge(s))
-- `patch` (11 edge(s))
-- `len` (10 edge(s))
+- `get` (74 edge(s))
+- `str` (31 edge(s))
+- `uuid4` (30 edge(s))
+- `Depends` (24 edge(s))
+- `put` (24 edge(s))
+- `json` (16 edge(s))
+- `list` (9 edge(s))
+- `ValueError` (8 edge(s))
+- `BaseModel` (8 edge(s))
+- `set` (7 edge(s))
+- `items` (6 edge(s))
+- `deepcopy` (6 edge(s))
+- `JSONResponse` (6 edge(s))
+- `bool` (5 edge(s))
+- `strip` (5 edge(s))
 
 ### Incoming
 
-- `json` (39 edge(s))
-- `post` (37 edge(s))
-- `get` (30 edge(s))
-- `raises` (23 edge(s))
-- `./services/org/app/errors.py` (18 edge(s))
-- `./services/org/tests/unit/test_services.py` (13 edge(s))
-- `./services/org/app/services/auth_service.py` (12 edge(s))
-- `create_user` (12 edge(s))
-- `./services/org/app/api/v1/routes_org.py` (11 edge(s))
-- `patch` (11 edge(s))
-- `./services/org/app/api/v1/routes_auth.py` (10 edge(s))
-- `./services/org/app/services/tag_service.py` (10 edge(s))
-- `delete` (10 edge(s))
-- `./services/org/app/core/firestore.py` (9 edge(s))
-- `./services/org/app/services/org_service.py` (9 edge(s))
+- `uuid4` (29 edge(s))
+- `get` (25 edge(s))
+- `put` (24 edge(s))
+- `./services/settings/app/errors.py` (18 edge(s))
+- `json` (16 edge(s))
+- `./services/settings/tests/unit/test_resolver.py` (16 edge(s))
+- `./services/settings/app/services/policy_service.py` (14 edge(s))
+- `./services/settings/app/schemas/policy.py` (11 edge(s))
+- `./services/settings/tests/integration/test_authz.py` (10 edge(s))
+- `./services/settings/app/core/firestore.py` (9 edge(s))
+- `./services/settings/app/domain/resolver.py` (9 edge(s))
+- `./services/settings/tests/integration/test_config_values.py` (9 edge(s))
+- `./services/settings/app/api/v1/routes_settings.py` (6 edge(s))
+- `./services/settings/app/main.py` (5 edge(s))
+- `./services/settings/app/middleware/auth.py` (5 edge(s))

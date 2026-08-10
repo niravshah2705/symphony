@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     superadmin_email: str = ""
     superadmin_password: str = ""
 
+    # Shared front-facing gateway URL returned by the deployment resolver
+    # (GET /api/v1/me/deployment) for pseudo/org-less workspaces and any org
+    # without a dedicated per-tenant stack. Empty locally (same-origin); set to
+    # the shared gateway's Cloud Run URL in the cloud.
+    shared_gateway_url: str = ""
+
     # Rate limiting
     auth_rate_limit: str = "10/minute"
 

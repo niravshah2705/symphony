@@ -10,7 +10,7 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
 } from '/vendor/firebase/firebase-auth.js';
-import { api, setAccessTokenProvider, getApiBase } from './api.js';
+import { api, setAccessTokenProvider, getApiBase, setApiBase } from './api.js';
 
 const AUTH_SESSION_TIMEOUT_MS = 15_000;
 // Google Identity Services (One Tap). Loaded on demand only when a public
@@ -34,6 +34,11 @@ let authState = Object.freeze({
   permissions: {},
   user: null,
   error: '',
+  // Per-org deployment (resolved after sign-in via GET /api/config): 'shared'
+  // (the shared stack), 'provisioning' (a dedicated stack is coming up), or
+  // 'provisioned' (using the per-tenant gateway). orgName is the workspace label.
+  deploymentStatus: 'shared',
+  orgName: null,
 });
 
 function setState(next) {
@@ -108,6 +113,24 @@ function mergeDisplayProfile(serverUser, browserUser) {
   });
 }
 
+// After sign-in, resolve which front-facing gateway this session should use.
+// A PROVISIONED per-tenant org re-points the API base at its own gateway (a full
+// gateway image that verifies the same Firebase token); a shared/pseudo
+// workspace stays on the shared gateway (the bootstrap base). Best-effort — any
+// failure leaves the SPA on the shared gateway. Runs after confirmIdentity so the
+// access-token provider is set (the /api/config call carries the bearer).
+async function resolveDeployment() {
+  try {
+    const cfg = await api.getRuntimeConfig();
+    if (cfg?.status === 'provisioned' && cfg.gatewayUrl) {
+      setApiBase(cfg.gatewayUrl);
+    }
+    return { deploymentStatus: cfg?.status || 'shared', orgName: cfg?.orgName || null };
+  } catch (_) {
+    return { deploymentStatus: 'shared', orgName: null };
+  }
+}
+
 // Confirm the signed-in user is accepted by the gateway (verified email +
 // any allowlist/domain gate). Provider-agnostic — Google and Microsoft both
 // resolve to the same Firebase session. Returns the server identity or throws.
@@ -157,6 +180,7 @@ export async function initializeAuthentication() {
     return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: error?.message || 'This account is not allowed.' });
   }
 
+  const deployment = await resolveDeployment();
   return setState({
     mode: 'firebase',
     enabled: true,
@@ -165,6 +189,8 @@ export async function initializeAuthentication() {
     permissions: identity.permissions || {},
     user: mergeDisplayProfile(identity.user, { name: user.displayName, email: user.email, picture: user.photoURL }),
     error: '',
+    deploymentStatus: deployment.deploymentStatus,
+    orgName: deployment.orgName,
   });
 }
 
