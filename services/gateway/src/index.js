@@ -127,6 +127,14 @@ app.get('/api/agent/workspace-stream-token', requirePermission('workspace', { le
   res.set('Cache-Control', 'no-store').json({ token: mintWorkspaceToken(), conversationId: WORKSPACE_CHANNEL });
 });
 
+// EULA gate applied to POST /api/issues only (task creation is "actual work";
+// board-drag PATCH and reads pass through). Kept here so all EULA gating lives
+// alongside the other gated routes (enqueue, business/prepare) below.
+const gateIssueWrites = (() => {
+  const gate = requireEulaAccepted();
+  return (req, res, next) => (req.method === 'POST' ? gate(req, res, next) : next());
+})();
+
 // User-facing API routes (owned by the gateway). Each is guarded by the
 // permission domain its feature area belongs to (see packages/shared/authz.js).
 // GET → 'read', mutations → 'write'. The codex/claude/roles config surfaces are
@@ -135,7 +143,9 @@ app.use('/api/settings', requirePermission('settings'), settingsRoutes);
 app.use('/api/settings/codex', requirePermission('settings', { level: 'write' }), codexRoutes);
 app.use('/api/settings/claude', requirePermission('settings', { level: 'write' }), claudeRoutes);
 app.use('/api/projects', requirePermission('planning'), projectsRoutes);
-app.use('/api/issues', requirePermission('planning'), issuesRoutes);
+// Creating an implementation task (POST) is "actual work" → EULA-gated; the
+// board-drag state change (PATCH) and reads are not. Gate only the create.
+app.use('/api/issues', requirePermission('planning'), gateIssueWrites, issuesRoutes);
 app.use('/api/businesses', requirePermission('planning'), businessesRoutes);
 app.use('/api/roles', requirePermission('settings', { level: 'write' }), rolesRoutes);
 app.use('/api/observability', requirePermission('insights'), observabilityRoutes);
