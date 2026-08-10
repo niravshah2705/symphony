@@ -109,11 +109,15 @@ resource "google_cloud_run_v2_service" "settings" {
           }
         }
       }
-      # KMS key for per-org secret envelope encryption. Unset => the in-memory
-      # KMS fake (local/dev); set => real Cloud KMS envelope encryption.
-      env {
-        name  = "KMS_KEY_NAME"
-        value = google_kms_crypto_key.org_secrets.id
+      # KMS key for per-org secret envelope encryption. Present only when the
+      # vault is enabled (var.secret_vault_kms_enabled); otherwise absent, so the
+      # settings service uses its in-memory KMS fake. Splat over the 0/1 key.
+      dynamic "env" {
+        for_each = google_kms_crypto_key.org_secrets[*].id
+        content {
+          name  = "KMS_KEY_NAME"
+          value = env.value
+        }
       }
       # Shared token the settings service requires on the proxy's per-org secret
       # resolve (GET /internal/s2s/orgs/{id}/secrets). Same value the proxy sends.
@@ -166,6 +170,7 @@ resource "google_cloud_run_v2_service" "settings" {
     google_secret_manager_secret_version.settings_jwt_secret,
     google_kms_crypto_key_iam_member.settings_org_secrets,
     google_secret_manager_secret_iam_member.settings_internal_token,
+    google_secret_manager_secret_iam_member.settings_managed_secrets,
   ]
 }
 

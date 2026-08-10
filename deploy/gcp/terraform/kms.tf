@@ -11,8 +11,16 @@
 # Rotation only re-wraps data keys (cheap); old records keep their key_version so
 # they still decrypt. The key is protected from destroy (losing it makes every
 # stored secret unrecoverable).
+#
+# GATED OFF by default (var.secret_vault_kms_enabled = false): provisioning a KMS
+# keyring requires the deployer service account to hold `roles/cloudkms.admin`
+# (cloudkms.keyRings.create), which the CD SA does not have out of the box. Until
+# an operator enables the encrypted vault (and grants that role), no KMS resource
+# is created and the settings service falls back to its in-memory KMS (the vault
+# is dev-only). Flip this on together with the egress-proxy vault feature.
 
 resource "google_kms_key_ring" "secrets" {
+  count    = var.secret_vault_kms_enabled ? 1 : 0
   project  = var.project_id
   name     = "aifleet-secrets"
   location = var.region
@@ -21,8 +29,9 @@ resource "google_kms_key_ring" "secrets" {
 }
 
 resource "google_kms_crypto_key" "org_secrets" {
+  count    = var.secret_vault_kms_enabled ? 1 : 0
   name     = "org-secrets"
-  key_ring = google_kms_key_ring.secrets.id
+  key_ring = google_kms_key_ring.secrets[0].id
   purpose  = "ENCRYPT_DECRYPT"
 
   # 90-day rotation of the primary version. Envelope design means rotation only
@@ -38,7 +47,8 @@ resource "google_kms_crypto_key" "org_secrets" {
 
 # settings-sa is the ONLY principal granted encrypt/decrypt on the key.
 resource "google_kms_crypto_key_iam_member" "settings_org_secrets" {
-  crypto_key_id = google_kms_crypto_key.org_secrets.id
+  count         = var.secret_vault_kms_enabled ? 1 : 0
+  crypto_key_id = google_kms_crypto_key.org_secrets[0].id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:${google_service_account.settings.email}"
 }

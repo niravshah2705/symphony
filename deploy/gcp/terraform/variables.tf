@@ -108,6 +108,12 @@ variable "egress_proxy_enabled" {
   default     = false
 }
 
+variable "secret_vault_kms_enabled" {
+  type        = bool
+  description = "Provision the Cloud KMS keyring/key for per-org secret envelope encryption and wire KMS_KEY_NAME into the settings service. OFF keeps the settings service on its in-memory KMS fake (the encrypted vault is dev-only). Turning it ON requires the deployer service account to hold roles/cloudkms.admin (cloudkms.keyRings.create)."
+  default     = false
+}
+
 variable "proxy_service_name" {
   type    = string
   default = "proxy"
