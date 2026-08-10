@@ -174,6 +174,7 @@ Use the default local backend for brokered GitHub/GitLab operation.
 ## Security notes
 
 - **Role assumption is enforced server-side** — enrich endpoints return `403` without an assumed role; the assumed member id is validated against the real workspace member list.
+- **EULA acceptance gates "actual work"** — the omnibox answers read-only RAG questions freely, but scheduling enrichment (`/api/agent/enqueue`), preparing a business (`/api/agent/business/prepare`), and creating an implementation task (`POST /api/issues`) return `403 EULA_REQUIRED` until the caller accepts the [EULA](./EULA.md). Acceptance is recorded per user (keyed by verified identity) and per organisation; **members of an organisation are considered already accepted**. Decisions (including rejections) persist in the shared store and the version is tracked, so a user is asked exactly once per EULA version. The API is the trust boundary — the gate is enforced server-side, not only in the SPA.
 - **Secrets stay on the server** — Linear/LangSmith keys, the optional **OMLX API key**, and **Codex/Claude OAuth tokens** live only in `data/store.json`, are masked in API responses, and are never sent to the browser. Ollama needs no key.
 - **Repository credentials are brokered** — stored GitHub/GitLab tokens never enter the code agent's `LocalShellBackend` environment, prompt, tool arguments, origin URL, or `.git/config`. Authenticated Git executes from a broker-private bare staging repository with a fixed host/repository/branch/refspec; PR/MR creation, check/review reads, and SHA-checked squash merge use the official GitHub/GitLab HTTP APIs. Provider redirects, arbitrary URLs/refspecs, force pushes, and broad GitHub MCP access are denied.
 - **Local shell trust boundary** — `LocalShellBackend` is a host shell rooted by convention, not an OS security sandbox. It runs with the coder service user's filesystem permissions and can read other paths that user can access (including the plaintext local store if it discovers its path). Environment sanitization and the repository broker prevent routine credential injection, but do not contain adversarial shell code. Run the coder only for trusted repositories/tickets in this local deployment; stronger isolation requires a separate container/VM or OS identity with a narrowly mounted workspace and an external secret broker.
@@ -391,6 +392,8 @@ rather than stuck in "running".
 | GET | `/healthz` | Public gateway liveness probe |
 | GET | `/api/auth/config` | Public, secret-free Firebase web config bootstrap |
 | GET | `/api/auth/me` | Current mesh-verified application identity |
+| GET | `/api/eula` | Caller's EULA acceptance status (public; anonymous → not accepted) |
+| POST | `/api/eula` | Record the caller's EULA decision `{ decision: accepted \| rejected }` (authenticated) |
 | GET | `/api/settings` | Whether a key is set (masked) |
 | PUT | `/api/settings` | Validate + save API key |
 | DELETE | `/api/settings` | Remove key |
@@ -452,3 +455,10 @@ rather than stuck in "running".
   **LM Studio**, or **OMLX** (local): install it, run it, and make a tool-capable model available — local inference is
   slower than a hosted API (expect tens of seconds per project depending on
   model/hardware). For **Codex**/**Claude**: complete the OAuth sign-in in Settings.
+
+## License
+
+AI Fleet is proprietary software licensed under the terms of the
+[End User License Agreement](./EULA.md). Installing or using it constitutes
+acceptance of that Agreement. Bundled third-party components remain under their
+own licenses (see the dependency manifests).
