@@ -104,6 +104,7 @@ function createGcpClients({ projectId, region }) {
       const src = spec.sourceName ? await sourceService(spec.sourceName) : {};
       const service = {
         ingress: spec.ingress,
+        labels: spec.labels,
         template: {
           serviceAccount: spec.serviceAccount,
           scaling: { minInstanceCount: 0 },
@@ -129,6 +130,7 @@ function createGcpClients({ projectId, region }) {
     async createJob(spec) {
       const src = spec.sourceName ? await sourceService(spec.sourceName) : {};
       const job = {
+        labels: spec.labels,
         template: {
           template: {
             serviceAccount: spec.serviceAccount,
@@ -152,9 +154,11 @@ function createGcpClients({ projectId, region }) {
         tolerate([ALREADY_EXISTS], err);
       }
     },
-    async createTopic(name) {
+    async createTopic(topic) {
+      const name = typeof topic === 'string' ? topic : topic.name;
+      const labels = typeof topic === 'string' ? undefined : topic.labels;
       try {
-        await getPubSub().createTopic(name);
+        await getPubSub().createTopic({ name, labels });
       } catch (err) {
         tolerate([ALREADY_EXISTS], err);
       }
@@ -167,6 +171,7 @@ function createGcpClients({ projectId, region }) {
         },
         ackDeadlineSeconds: 30,
       };
+      if (spec.labels) options.labels = spec.labels;
       if (spec.deadLetterTopic) {
         options.deadLetterPolicy = {
           deadLetterTopic: `projects/${projectId}/topics/${spec.deadLetterTopic}`,
