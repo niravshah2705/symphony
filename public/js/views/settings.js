@@ -316,8 +316,22 @@ const RECOMMENDED_SOFTWARE_DEV = {
   plugins: ['security', 'langsmith-tracing'],
   hooks: ['pre-code', 'post-code', 'pre-pr'],
 };
-const POLICY_CONFIG_KEYS = ['geminiApiKey'];
-const POLICY_CONFIG_LABELS = { geminiApiKey: 'Gemini API key (Gemini / Antigravity)' };
+// Provider secrets held in the per-org KMS vault (the source proxied agents
+// read). Each has a managed-vs-customer selection. Keys must be in the settings
+// service SECRET_KEYS allowlist (services/settings/app/models/secrets.py).
+const VAULT_SECRETS = [
+  { key: 'anthropicApiKey', label: 'Anthropic API key', hint: 'Used by the Claude provider (managed alternative to Sign in with Claude).' },
+  { key: 'openaiApiKey', label: 'OpenAI API key', hint: 'Used by the OpenAI provider (managed alternative to Sign in with ChatGPT).' },
+  { key: 'geminiApiKey', label: 'Gemini API key', hint: 'Used by the Gemini / Antigravity provider.' },
+  { key: 'huggingfaceApiKey', label: 'Hugging Face token', hint: 'Used by the Hugging Face (BYoM) provider.' },
+];
+
+function describeVaultStatus(isSet, source) {
+  if (source === 'customer') {
+    return isSet ? 'Customer key configured' : 'Customer selected — no key stored (agents fail closed)';
+  }
+  return 'Using platform-managed key';
+}
 
 function parsePolicyList(text) {
   return String(text || '').split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
@@ -358,7 +372,7 @@ function collectPolicyDomains(editors) {
   return { domains };
 }
 
-async function policyScopeCard(container, { title, hint, load, save, saveConfig, universe, enabled, disabledReason }) {
+async function policyScopeCard(container, { title, hint, load, save, universe, enabled, disabledReason, vault }) {
   const head = [el('div', { class: 'subhead' }, title), hint ? el('p', { class: 'muted' }, hint) : null].filter(Boolean);
   if (!enabled) {
     clear(container).append(...head, el('p', { class: 'muted' }, disabledReason || 'Not available for your role.'));
@@ -380,38 +394,83 @@ async function policyScopeCard(container, { title, hint, load, save, saveConfig,
     finally { saveBtn.disabled = false; }
   });
   clear(container).append(...head, form);
-  if (saveConfig) container.append(policyProviderKeysEditor(policy, saveConfig));
+  // Provider secrets live in the per-org vault, so they attach to the org scope only.
+  if (vault) container.append(vaultSecretsEditor());
 }
 
-function policyProviderKeysEditor(policy, saveConfig) {
-  const values = (policy && policy.values) || {};
-  const wrap = el('div', { class: 'policy-domain field' }, [
-    el('div', { class: 'subhead' }, 'Provider keys (write-only)'),
-    el('p', { class: 'muted' }, 'Stored server-side and never shown again. Lower scopes override higher ones.'),
-  ]);
-  for (const key of POLICY_CONFIG_KEYS) {
-    const isSet = Boolean(values[key] && values[key].set);
-    const status = el('span', { class: 'muted' }, isSet ? 'Configured' : 'Not set');
-    const input = pwd(isSet ? 'Configured — enter a new value to replace' : 'Not set — paste a key');
-    const saveKeyBtn = el('button', { type: 'button', class: 'btn' }, 'Save key');
-    const clearBtn = el('button', { type: 'button', class: 'btn' }, 'Clear');
-    const persist = async (value, okMessage, newStatus, button) => {
-      button.disabled = true;
-      try { await saveConfig({ [key]: value }); input.value = ''; status.textContent = newStatus; toast(okMessage, 'ok'); }
-      catch (err) { toast(err.message || 'Could not update key.', 'err'); }
-      finally { button.disabled = false; }
-    };
-    saveKeyBtn.addEventListener('click', () => {
-      const value = input.value.trim();
-      if (!value) return toast('Enter a key value to save.', 'err');
-      persist(value, 'Key saved.', 'Configured', saveKeyBtn);
-    });
-    clearBtn.addEventListener('click', () => persist('', 'Key cleared.', 'Not set', clearBtn));
-    wrap.append(
-      field([POLICY_CONFIG_LABELS[key] || key, ' — ', status], input),
-      el('div', { class: 'row' }, [saveKeyBtn, clearBtn]),
+/**
+ * Per-org secret-vault editor (org admin). For each provider key: a managed vs
+ * customer selection and a write-only customer key. This is the source proxied
+ * agents read; pasting a customer key auto-selects "customer" so it takes effect.
+ */
+function vaultSecretsEditor() {
+  const wrap = el('div', { class: 'policy-domain field vault-secrets' });
+  const render = (secrets) => {
+    clear(wrap).append(
+      el('div', { class: 'subhead' }, 'Provider keys (per-org vault)'),
+      el('p', { class: 'muted' }, 'KMS-encrypted and write-only — never shown again. “Managed” uses the platform key; “Customer” uses the key you paste here. Agents read from this vault.'),
     );
-  }
+    for (const item of VAULT_SECRETS) {
+      const entry = (secrets && secrets[item.key]) || { set: false, source: 'managed' };
+      let source = entry.source === 'customer' ? 'customer' : 'managed';
+      const status = el('span', { class: 'muted' }, describeVaultStatus(entry.set, source));
+      const input = pwd(entry.set ? 'Configured — paste a new key to replace' : 'Paste your key');
+      const saveBtn = el('button', { type: 'button', class: 'btn' }, 'Save customer key');
+      const clearBtn = el('button', { type: 'button', class: 'btn' }, 'Clear');
+      const managedBtn = el('button', { type: 'button', class: `btn btn-small${source === 'managed' ? ' primary' : ''}` }, 'Managed');
+      const customerBtn = el('button', { type: 'button', class: `btn btn-small${source === 'customer' ? ' primary' : ''}` }, 'Customer');
+      const reflect = () => {
+        managedBtn.classList.toggle('primary', source === 'managed');
+        customerBtn.classList.toggle('primary', source === 'customer');
+        status.textContent = describeVaultStatus(entry.set, source);
+      };
+      const setSource = async (mode) => {
+        managedBtn.disabled = customerBtn.disabled = true;
+        try { await api.settingsPolicy.setOrgSecretSelection({ [item.key]: mode }); source = mode; reflect(); toast(`Using ${mode} key.`, 'ok'); }
+        catch (err) { toast(err.message || 'Could not update selection.', 'err'); }
+        finally { managedBtn.disabled = customerBtn.disabled = false; }
+      };
+      managedBtn.addEventListener('click', () => setSource('managed'));
+      customerBtn.addEventListener('click', () => setSource('customer'));
+      saveBtn.addEventListener('click', async () => {
+        const value = input.value.trim();
+        if (!value) return toast('Paste a key value to save.', 'err');
+        saveBtn.disabled = true;
+        try {
+          await api.settingsPolicy.setOrgSecrets({ [item.key]: value });
+          entry.set = true; input.value = '';
+          // A stored customer key only takes effect once the org selects "customer".
+          if (source !== 'customer') { await api.settingsPolicy.setOrgSecretSelection({ [item.key]: 'customer' }); source = 'customer'; }
+          reflect();
+          toast('Customer key saved.', 'ok');
+        } catch (err) { toast(err.message || 'Could not save key.', 'err'); }
+        finally { saveBtn.disabled = false; }
+      });
+      clearBtn.addEventListener('click', async () => {
+        clearBtn.disabled = true;
+        try { await api.settingsPolicy.setOrgSecrets({ [item.key]: '' }); entry.set = false; input.value = ''; reflect(); toast('Customer key cleared.', 'ok'); }
+        catch (err) { toast(err.message || 'Could not clear key.', 'err'); }
+        finally { clearBtn.disabled = false; }
+      });
+      wrap.append(el('div', { class: 'vault-secret' }, [
+        el('div', { class: 'subhead policy-domain-head' }, [el('span', {}, item.label), status]),
+        item.hint ? el('p', { class: 'muted', style: 'margin:2px 0 6px;font-size:12px' }, item.hint) : null,
+        el('div', { class: 'row', style: 'gap:6px;align-items:center' }, [el('span', { class: 'muted', style: 'font-size:12px' }, 'Key source:'), managedBtn, customerBtn]),
+        field('Customer key', input),
+        el('div', { class: 'row' }, [saveBtn, clearBtn]),
+      ]));
+    }
+  };
+  wrap.append(loading('Loading provider keys…'));
+  void (async () => {
+    try { const res = await api.settingsPolicy.getOrgSecrets(); render((res && res.secrets) || {}); }
+    catch (err) {
+      clear(wrap).append(
+        el('div', { class: 'subhead' }, 'Provider keys (per-org vault)'),
+        el('div', { class: 'error-banner' }, err.message || 'Could not load provider keys.'),
+      );
+    }
+  })();
   return wrap;
 }
 
@@ -457,13 +516,12 @@ function policyGroup(ctx) {
         title: 'My settings (user scope)', hint: 'Your personal narrowing — applied last.',
         universe, enabled: true,
         load: () => api.settingsPolicy.getMyPolicy(), save: (b) => api.settingsPolicy.setMyPolicy(b),
-        saveConfig: (v) => api.settingsPolicy.setMyConfig(v),
       }),
       policyScopeCard(orgC, {
         title: 'Organization scope', hint: 'Applies to everyone in the org. An exclude here blocks project and user.',
         universe, enabled: isOrgAdmin, disabledReason: 'Organization admins only.',
         load: () => api.settingsPolicy.getOrgPolicy(), save: (b) => api.settingsPolicy.setOrgPolicy(b),
-        saveConfig: (v) => api.settingsPolicy.setOrgConfig(v),
+        vault: true,
       }),
       policyEffectiveCard(effC),
     ]);

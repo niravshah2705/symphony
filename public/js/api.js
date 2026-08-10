@@ -372,5 +372,16 @@ export const api = {
       request(`/settings-policy/settings/project/${projectId}`, { method: 'PUT', body: JSON.stringify({ values }) }),
     setMyConfig: (values) =>
       request('/settings-policy/me/settings', { method: 'PUT', body: JSON.stringify({ values }) }),
+
+    // Per-org KMS-encrypted secret VAULT (org admin). This is the credential
+    // source proxied agents read (via the settings service S2S resolver), with a
+    // per-key managed-vs-customer selection. Write-only: GET masks each key to
+    // `{set, source}`; PUT takes plaintext (empty string clears); selection sets
+    // managed|customer. Reached via the same /api/settings-policy proxy.
+    getOrgSecrets: () => request('/settings-policy/settings/org/secrets'),
+    setOrgSecrets: (values) =>
+      request('/settings-policy/settings/org/secrets', { method: 'PUT', body: JSON.stringify({ values }) }),
+    setOrgSecretSelection: (selection) =>
+      request('/settings-policy/settings/org/secrets/selection', { method: 'PUT', body: JSON.stringify({ selection }) }),
   },
 };
