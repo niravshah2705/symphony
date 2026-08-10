@@ -37,11 +37,21 @@ const businessPipeline = require('@ai-fleet/shared/agent/business-pipeline');
 const approvalGate = require('@ai-fleet/shared/agent/approval-gate');
 const conversations = require('@ai-fleet/shared/agent/conversations');
 const workspaceEvents = require('@ai-fleet/shared/agent/workspace-events');
+const { redactSecrets } = require('@ai-fleet/shared/agent/tools/exec');
 
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const CONV_ID_PATTERN = /^conv_[A-Za-z0-9_-]{1,64}$/;
 const GATE_ID_PATTERN = /^gate_[A-Za-z0-9_-]{1,64}$/;
 const GATE_STATUSES = Object.freeze(['awaiting-approval', 'approved', 'auto-approved', 'proceeded', 'superseded']);
+
+// Server-side defense-in-depth for secret leakage. The browser strips secrets
+// before sending (public/js/secret-scan.mjs), but the API is the real trust
+// boundary — client checks can be bypassed by calling this endpoint directly.
+// So every user-text field is scrubbed again with the shared redactor before it
+// is classified, searched, enriched, or persisted. Generous cap so ordinary
+// messages are never truncated; the 1mb express.json limit bounds the request.
+const MAX_REDACT_BYTES = 1_000_000;
+const redactUserText = (value) => redactSecrets(String(value == null ? '' : value), [], MAX_REDACT_BYTES);
 
 const router = express.Router();
 
@@ -271,7 +281,7 @@ router.get('/jobs', (req, res) => {
 router.post(
   '/message',
   asyncHandler(async (req, res) => {
-    const route = workspaceRouter.classifyIntent(req.body && req.body.input);
+    const route = workspaceRouter.classifyIntent(redactUserText(req.body && req.body.input));
     let enrichment = null;
     let warning = null;
     let memoryDraft = null;
@@ -308,7 +318,7 @@ router.post(
 // the workspace's README/docs corpus. It returns real relative paths and
 // snippets, never arbitrary files, absolute paths, credentials, or model prose.
 router.post('/knowledge-search', (req, res) => {
-  res.json(searchDocuments(req.body && (req.body.query || req.body.input)));
+  res.json(searchDocuments(redactUserText(req.body && (req.body.query || req.body.input))));
 });
 
 // POST /api/agent/memory-search — typed, read-only recall across the five memory
@@ -316,7 +326,7 @@ router.post('/knowledge-search', (req, res) => {
 // when not explicitly supplied. Never returns secrets or absolute paths.
 router.post('/memory-search', (req, res) => {
   const body = req.body || {};
-  const query = typeof body.query === 'string' ? body.query : typeof body.input === 'string' ? body.input : '';
+  const query = redactUserText(typeof body.query === 'string' ? body.query : typeof body.input === 'string' ? body.input : '');
   const requested = typeof body.scope === 'string' ? body.scope.toLowerCase() : '';
   const scope = memory.MEMORY_SCOPES.includes(requested) ? requested : memory.detectMemoryScope(query);
   const results = memory.searchMemories(query, listMemories(), { scope });
@@ -488,7 +498,8 @@ router.post('/conversations/:id/messages', (req, res) => {
   if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
   const existing = getConversation(id);
   if (!existing) return res.status(404).json({ error: 'Conversation not found.' });
-  const messages = conversations.normalizeMessages(req.body && req.body.messages);
+  const messages = conversations.normalizeMessages(req.body && req.body.messages)
+    .map((message) => ({ ...message, text: redactUserText(message.text) }));
   const updated = appendConversationMessages(id, messages);
   const untitled = !existing.title || existing.title === 'New conversation';
   const hadUser = (existing.messages || []).some((message) => message.role === 'user');

@@ -91,6 +91,11 @@ export const api = {
   // fetched from the SHARED gateway (the bootstrap base) before any re-point.
   getRuntimeConfig: () => request('/config'),
 
+  // End User License Agreement acceptance (gates "actual work" — see agent view).
+  getEulaStatus: () => request('/eula'),
+  recordEulaDecision: (decision, via = 'user') =>
+    request('/eula', { method: 'POST', body: JSON.stringify({ decision, via }) }),
+
   // Settings
   getSettings: (options = {}) => request('/settings', options),
   saveKey: (linearApiKey) =>
