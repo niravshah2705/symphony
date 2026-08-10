@@ -58,6 +58,7 @@ jobs:
             planner: ['services/planner/**', 'deploy/gcp/Dockerfile.planner']
             coder:   ['services/coder/**',   'deploy/gcp/Dockerfile.coder']
             provisioner: ['services/provisioner/**', 'deploy/gcp/Dockerfile.provisioner']
+            proxy:   ['services/proxy/**',   'deploy/gcp/Dockerfile.proxy']
             spa:     ['public/**', 'firebase.json']
             infra:    ['deploy/gcp/terraform/**']
             root:     ['package.json', 'package-lock.json']
@@ -73,6 +74,7 @@ jobs:
           PLANNER: ${{ steps.filter.outputs.planner }}
           CODER: ${{ steps.filter.outputs.coder }}
           PROVISIONER: ${{ steps.filter.outputs.provisioner }}
+          PROXY: ${{ steps.filter.outputs.proxy }}
           SPA: ${{ steps.filter.outputs.spa }}
           INFRA: ${{ steps.filter.outputs.infra }}
           ORG: ${{ steps.filter.outputs.org }}
@@ -109,7 +111,14 @@ jobs:
           # Terraform runs when infra changed OR any image was rebuilt (rolling a
           # new image is a `terraform apply`). A SPA-only or docs-only change skips it.
           run_tf=false
-          if [ "$FORCE_ALL" = "true" ] || [ "$INFRA" = "true" ] || [ "$services" != "[]" ]; then run_tf=true; fi
+          if [ "$FORCE_ALL" = "true" ] || [ "$INFRA" = "true" ] || [ "$PROXY" = "true" ] || [ "$services" != "[]" ]; then run_tf=true; fi
+
+          # Egress proxy sidecar image: built whenever terraform will run so the
+          # image the sidecar references ALWAYS exists at this SHA. Harmless when
+          # egress_proxy_enabled is off — terraform simply doesn't reference it.
+          # (Like the provisioner, it is built even while the feature can be off so
+          # turning it on is a one-var flip.)
+          if [ "$run_tf" = "true" ]; then push proxy proxy deploy/gcp/Dockerfile.proxy . ; fi
 
           {
             echo "services=$services"
@@ -258,6 +267,10 @@ jobs:
             echo "planner=$(resolve planner planner)"
             echo "coder=$(resolve coder coder-control)"
             echo "provisioner=$(resolve provisioner provisioner)"
+            # The proxy is a SIDECAR (no standalone Cloud Run service to query a
+            # live tag from), but it is built on every terraform-running deploy
+            # (see the plan step), so it always resolves to the current SHA here.
+            echo "proxy=$(resolve proxy proxy)"
             echo "org=$(resolve org org-service)"
             echo "settings=$(resolve settings settings-service)"
           } >> "$GITHUB_OUTPUT"
@@ -296,6 +309,7 @@ jobs:
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
           [ -n "${{ steps.tags.outputs.coder }}" ]   && apply_args+=(-var="coder_image_tag=${{ steps.tags.outputs.coder }}") || true
           [ -n "${{ steps.tags.outputs.provisioner }}" ] && apply_args+=(-var="provisioner_image_tag=${{ steps.tags.outputs.provisioner }}") || true
+          [ -n "${{ steps.tags.outputs.proxy }}" ] && apply_args+=(-var="proxy_image_tag=${{ steps.tags.outputs.proxy }}") || true
           [ -n "${{ steps.tags.outputs.org }}" ]     && apply_args+=(-var="org_image_tag=${{ steps.tags.outputs.org }}") || true
           [ -n "${{ steps.tags.outputs.settings }}" ] && apply_args+=(-var="settings_image_tag=${{ steps.tags.outputs.settings }}") || true
 
