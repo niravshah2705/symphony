@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { el, clear, toast, loading } from '../dom.js';
+import { brandIcon } from '../icons.js';
 
 export async function renderSettings(view) {
   view.append(loading('Loading settings…'));
@@ -24,7 +25,7 @@ export async function renderSettings(view) {
   if (!settings.codexModel) settings.codexModel = codexRes.model || codexRes.defaultModel || 'gpt-5.6-sol';
   if (!settings.claudeModel) settings.claudeModel = claudeRes.model || claudeRes.defaultModel || 'claude-opus-4-8';
 
-  const llm = llmSection({
+  const ctx = {
     settings,
     presets,
     discovery: Object.create(null),
@@ -32,28 +33,43 @@ export async function renderSettings(view) {
     codex: codexRes,
     claude: claudeRes,
     view,
-  });
+  };
+  const llm = llmSection(ctx);
+  const complexity = complexitySection(ctx);
+  // A model/param change inside a role card re-renders the LLM section via
+  // ctx.rebuild; extend it so the complexity slider re-derives its position too.
+  const baseRebuild = ctx.rebuild;
+  ctx.rebuild = () => {
+    baseRebuild();
+    if (ctx.refreshComplexity) ctx.refreshComplexity();
+  };
+
   const groups = [
-    settingsGroup('settings-models', 'Models & runtime', 'Choose where work runs and how agents coordinate.', [
+    settingsGroup('settings-models', 'Models & runtime', 'Pick a complexity level; every task model auto-tunes. Override any piece below.', [
+      complexity,
+      providerPickerSection(ctx),
       llm,
       runtimeSection({ settings, codex: codexRes, claude: claudeRes }),
     ]),
     settingsGroup('settings-connections', 'Connections', 'Connect planning, source control, and observability services.', [
+      pmPickerSection(settings),
       integrationsSection(settings),
       keysSection(settings),
     ]),
-    settingsGroup('settings-automation', 'Automation', 'Control schedules, limits, and automatic outputs.', [
+    settingsGroup('settings-policy-merged', 'Skills, tools, plugins & hooks', 'Curate what agents may use across your organization, project, and personal scopes.', [
+      policyGroup(ctx),
+    ]),
+    settingsGroup('settings-accounts', 'Accounts', 'Sign in to hosted model providers. Kept last — most setups never need it.', [
+      accountsSection(ctx),
+    ]),
+    settingsGroup('settings-advanced', 'Advanced', 'Automation, identity, and raw configuration.', [
       agentSection({
         config: configRes.config,
         intervals: modelsRes.intervals || [5, 10, 15],
         labels: labelsRes.labels || [],
         view,
       }),
-    ]),
-    settingsGroup('settings-identity', 'Identity', 'Choose the workspace member used for owned actions.', [
       roleSection({ members: membersRes.members || [], assumedRole: roleRes.assumedRole, view }),
-    ]),
-    settingsGroup('settings-json', 'Settings as JSON', 'Generate, edit, or describe your configuration; changes save to data/store.json.', [
       jsonSection({ view, doc: (jsonRes && jsonRes.settings) || {} }),
       settingsCommandCard({ view }),
     ]),
@@ -64,7 +80,7 @@ export async function renderSettings(view) {
       el('div', {}, [
         el('span', { class: 'settings-eyebrow' }, 'Workspace configuration'),
         el('h1', {}, 'Settings'),
-        el('p', { class: 'muted settings-page-intro' }, 'Set up models and connections first, then tune runtime and automation only when you need to.'),
+        el('p', { class: 'muted settings-page-intro' }, 'Set a complexity level, pick your provider and harness, then fine-tune only what you need.'),
       ]),
     ]),
     settingsOverview({ settings, codex: codexRes, claude: claudeRes }),
@@ -72,6 +88,387 @@ export async function renderSettings(view) {
       el('div', { class: 'settings-content' }, groups),
     ])
   );
+}
+
+/* ===================== Redesigned settings sections ===================== */
+
+// Provider picker: user-facing label + brand icon + backend provider id. BYoM
+// points at the local default (Ollama); vLLM/LM Studio/oMLX share the group.
+const PROVIDER_PICKER = Object.freeze([
+  { id: 'claude', label: 'Claude', icon: 'anthropic' },
+  { id: 'codex', label: 'OpenAI', icon: 'openai' },
+  { id: 'antigravity', label: 'Gemini', icon: 'gemini' },
+  { id: 'huggingface', label: 'Hugging Face', icon: 'huggingface' },
+  { id: 'ollama', label: 'BYoM', icon: 'byom', hint: 'vLLM / Ollama / LM Studio / oMLX' },
+]);
+
+function providerDisplay(provider) {
+  return PROVIDER_LABELS[provider] || provider;
+}
+
+// ---- Complexity slider ----------------------------------------------------
+
+function estimateMonthlyCostUsd(ctx) {
+  // Indicative: thinking + execution input/output cost against a fixed assumed
+  // monthly volume (millions of tokens). null when either model is unpriced.
+  const ASSUMED_INPUT = 20, ASSUMED_OUTPUT = 4;
+  let total = 0;
+  for (const role of ['thinking', 'execution']) {
+    const provider = roleProvider(ctx.settings, role);
+    const model = currentParameters(ctx.settings, provider).model;
+    const preset = findPresetForModel(ctx, provider, model);
+    const cost = preset && preset.cost;
+    if (!cost || !Number.isFinite(cost.inputPer1M) || !Number.isFinite(cost.outputPer1M)) return null;
+    total += ASSUMED_INPUT * cost.inputPer1M + ASSUMED_OUTPUT * cost.outputPer1M;
+  }
+  return Math.round(total);
+}
+
+function renderCostSummary(node, ctx) {
+  const est = estimateMonthlyCostUsd(ctx);
+  clear(node).append(
+    est === null
+      ? el('span', { class: 'muted' }, 'Indicative cost: self-hosted / varies (BYoM).')
+      : el('span', {}, [el('strong', {}, `~$${est}/mo`), el('span', { class: 'muted' }, ' indicative (Planner + Coder, assumed volume).')])
+  );
+}
+
+function complexitySection(ctx) {
+  const tiers = [...((ctx.presets && ctx.presets.complexityTiers) || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+  const body = el('div', { class: 'complexity-section' });
+  const render = () => {
+    clear(body);
+    if (!tiers.length) {
+      body.append(el('p', { class: 'muted' }, 'No complexity tiers are defined in the model catalog.'));
+      return;
+    }
+    const current = ctx.settings.complexityTier || 'custom';
+    const currentIdx = tiers.findIndex((t) => t.id === current);
+    const value = currentIdx >= 0 ? currentIdx : tiers.length; // last+1 → Custom
+    const slider = el('input', {
+      type: 'range', min: '0', max: String(tiers.length), step: '1', value: String(value),
+      class: 'complexity-slider', 'aria-label': 'Solution complexity',
+    });
+    const ticks = el('div', { class: 'tier-ticks' }, [
+      ...tiers.map((t) => el('span', { dataset: { i18nSkip: 'true' } }, t.label)),
+      el('span', {}, 'Custom'),
+    ]);
+    const active = el('div', { class: 'complexity-active' });
+    const summary = el('div', { class: 'settings-cost-summary' });
+    const describe = () => {
+      const tier = tiers[Number(slider.value)] || null;
+      clear(active).append(
+        el('strong', { dataset: { i18nSkip: 'true' } }, tier ? tier.label : 'Custom'),
+        el('span', { class: 'muted' }, tier ? ` — ${tier.description}` : ' — models were set individually'),
+      );
+      renderCostSummary(summary, ctx);
+    };
+    slider.addEventListener('input', describe);
+    slider.addEventListener('change', async () => {
+      const tier = tiers[Number(slider.value)];
+      if (!tier) { describe(); return; } // Custom position is never applied
+      slider.disabled = true;
+      try {
+        const res = await api.applyLlmTier(tier.id);
+        Object.assign(ctx.settings, res && res.settings ? res.settings : res);
+        toast(`Complexity set to ${tier.label}.`, 'ok');
+        if (ctx.rebuild) ctx.rebuild();
+      } catch (err) {
+        toast(err.message, 'err');
+        slider.disabled = false;
+      }
+    });
+    body.append(
+      el('p', { class: 'muted settings-section-intro' }, 'Move the slider from quick to complex and every task model auto-tunes. Override any model below; the slider then reads “Custom”.'),
+      slider, ticks, active, summary,
+    );
+    describe();
+  };
+  ctx.refreshComplexity = render;
+  render();
+  return section('Complexity', 'Quick → Complex', true, [body]);
+}
+
+// ---- Provider picker (icons) ----------------------------------------------
+
+async function cascadeProviderToAllRoles(ctx, provider) {
+  for (const entry of LLM_ROLES) {
+    await discoverProviderModels(ctx, entry.role, provider, false, () => {});
+    const recommended = recommendedModelEntry(ctx, provider);
+    if (!recommended) {
+      toast(`No models are configured for ${providerDisplay(provider)}.`, 'err');
+      return false;
+    }
+    const res = await api.applyLlmSelection({
+      role: entry.role, provider, model: recommended.id,
+      reasoningEffort: defaultReasoningFor(recommended, recommended.preset), mode: 'model',
+    });
+    Object.assign(ctx.settings, res && res.settings ? res.settings : res);
+  }
+  return true;
+}
+
+function providerPickerSection(ctx) {
+  const grid = el('div', { class: 'provider-picker icon-picker' });
+  const render = () => {
+    clear(grid);
+    const active = roleProvider(ctx.settings, 'execution');
+    for (const opt of PROVIDER_PICKER) {
+      const selected = opt.id === active || (opt.id === 'ollama' && ['ollama', 'lmstudio', 'omlx'].includes(active));
+      const btn = el('button', {
+        type: 'button',
+        class: `provider-chip icon-chip${selected ? ' selected' : ''}`,
+        'aria-pressed': selected ? 'true' : 'false',
+      }, [
+        brandIcon(opt.icon, { label: opt.label }),
+        el('span', { class: 'icon-chip-label' }, opt.label),
+        opt.hint ? el('span', { class: 'icon-chip-hint muted' }, opt.hint) : null,
+      ]);
+      btn.addEventListener('click', async () => {
+        [...grid.querySelectorAll('button')].forEach((b) => { b.disabled = true; });
+        try {
+          const ok = await cascadeProviderToAllRoles(ctx, opt.id);
+          if (ok) { toast(`All models set to ${opt.label}.`, 'ok'); if (ctx.rebuild) ctx.rebuild(); }
+        } catch (err) { toast(err.message, 'err'); }
+        render();
+      });
+      grid.append(btn);
+    }
+  };
+  render();
+  return section('Model provider', 'Applies to every task model', true, [
+    el('p', { class: 'muted settings-section-intro' }, 'Pick one provider for all task models, then fine-tune per role below. Default is Claude.'),
+    grid,
+  ]);
+}
+
+// ---- Project management tool (icons) --------------------------------------
+
+const PM_PICKER = Object.freeze([
+  { id: 'linear', label: 'Linear', icon: 'linear' },
+  { id: 'jira', label: 'JIRA', icon: 'jira' },
+]);
+
+function pmPickerSection(settings) {
+  const grid = el('div', { class: 'pm-picker icon-picker' });
+  let active = ['linear', 'jira', 'asana'].includes(settings.planningProvider) ? settings.planningProvider : 'linear';
+  const render = () => {
+    clear(grid);
+    for (const opt of PM_PICKER) {
+      const selected = opt.id === active;
+      const btn = el('button', {
+        type: 'button', class: `pm-chip icon-chip${selected ? ' selected' : ''}`,
+        'aria-pressed': selected ? 'true' : 'false',
+      }, [brandIcon(opt.icon, { label: opt.label }), el('span', { class: 'icon-chip-label' }, opt.label)]);
+      btn.addEventListener('click', async () => {
+        if (opt.id === active) return;
+        [...grid.querySelectorAll('button')].forEach((b) => { b.disabled = true; });
+        try {
+          await api.saveIntegrations({ planningProvider: opt.id });
+          active = opt.id;
+          toast(`Project management set to ${opt.label}.`, 'ok');
+        } catch (err) { toast(err.message, 'err'); }
+        render();
+      });
+      grid.append(btn);
+    }
+  };
+  render();
+  return section('Project management', 'Where issues are tracked', true, [
+    el('p', { class: 'muted settings-section-intro' }, 'Choose the issue tracker. Linear is fully wired; JIRA also needs its credentials below. Default is Linear.'),
+    grid,
+  ]);
+}
+
+// ---- Hosted account status + sign-in (Accounts, kept last) ----------------
+
+function hostedStatusPill(ctx, provider) {
+  const connected = provider === 'codex' ? Boolean(ctx.codex && ctx.codex.connected) : Boolean(ctx.claude && ctx.claude.connected);
+  return el('div', { class: `preset-status ${connected ? 'ok' : 'warn'}` },
+    connected ? `${providerDisplay(provider)} account connected.` : 'Not signed in — see Accounts at the bottom of Settings.');
+}
+
+function accountsSection(ctx) {
+  return section('Sign in with Claude / OpenAI', 'Hosted providers', false, [
+    el('p', { class: 'muted settings-section-intro' }, 'Only needed for the hosted OpenAI (ChatGPT) or Anthropic (Claude) providers. BYoM and Gemini use keys configured above.'),
+    el('div', { class: 'accounts-grid' }, [
+      el('div', { class: 'account-card' }, [el('div', { class: 'subhead' }, 'Anthropic · Claude'), claudeConnection(ctx)]),
+      el('div', { class: 'account-card' }, [el('div', { class: 'subhead' }, 'OpenAI · ChatGPT'), codexConnection(ctx)]),
+    ]),
+  ]);
+}
+
+// ---- Merged settings policy (harness/tools/skills/plugins/hooks) ----------
+
+const POLICY_DOMAINS = ['harness', 'tools', 'skills', 'plugins', 'hooks'];
+const POLICY_DOMAIN_LABELS = {
+  harness: 'Harness (agent runtimes)',
+  tools: 'Tools (developer-tool registry)',
+  skills: 'Skills (workflow skills)',
+  plugins: 'Plugins',
+  hooks: 'Hooks (lifecycle)',
+};
+// A curated "good default for software development" include set per domain.
+const RECOMMENDED_SOFTWARE_DEV = {
+  harness: ['deepagent'],
+  tools: ['docker', 'build', 'quality', 'codegen', 'playwright'],
+  skills: ['software-planning', 'commit', 'push', 'pull', 'land'],
+  plugins: ['security', 'langsmith-tracing'],
+  hooks: ['pre-code', 'post-code', 'pre-pr'],
+};
+const POLICY_CONFIG_KEYS = ['geminiApiKey'];
+const POLICY_CONFIG_LABELS = { geminiApiKey: 'Gemini API key (Gemini / Antigravity)' };
+
+function parsePolicyList(text) {
+  return String(text || '').split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+function policyDomainEditor(domain, policy, universe, editors) {
+  const dp = (policy && policy.domains && policy.domains[domain]) || { include: [], exclude: [] };
+  const items = (universe && universe[domain]) || [];
+  const include = el('textarea', { class: 'policy-input', rows: '2', placeholder: 'Empty = all. ids or globs (e.g. security:*)' });
+  include.value = (dp.include || []).join('\n');
+  const exclude = el('textarea', { class: 'policy-input', rows: '2', placeholder: 'ids or globs to block' });
+  exclude.value = (dp.exclude || []).join('\n');
+  editors[domain] = { include, exclude };
+  const useRecommended = el('button', { type: 'button', class: 'btn btn-small' }, 'Use recommended');
+  useRecommended.addEventListener('click', () => { include.value = (RECOMMENDED_SOFTWARE_DEV[domain] || []).join('\n'); });
+  // Available ids are catalog values; el() renders string children as text nodes.
+  const chips = items.length
+    ? items.map((id) => el('code', { class: 'param-chip' }, id))
+    : [el('em', { class: 'muted' }, 'none')];
+  return el('div', { class: 'policy-domain field' }, [
+    el('div', { class: 'subhead policy-domain-head' }, [
+      el('span', {}, POLICY_DOMAIN_LABELS[domain] || domain),
+      RECOMMENDED_SOFTWARE_DEV[domain] ? useRecommended : null,
+    ]),
+    el('div', { class: 'policy-chips' }, [el('span', { class: 'muted' }, 'Available: '), ...chips]),
+    el('label', {}, ['Include', include]),
+    el('label', {}, ['Exclude', exclude]),
+  ]);
+}
+
+function collectPolicyDomains(editors) {
+  const domains = {};
+  for (const domain of POLICY_DOMAINS) {
+    const e = editors[domain];
+    if (!e) continue;
+    domains[domain] = { include: parsePolicyList(e.include.value), exclude: parsePolicyList(e.exclude.value) };
+  }
+  return { domains };
+}
+
+async function policyScopeCard(container, { title, hint, load, save, saveConfig, universe, enabled, disabledReason }) {
+  const head = [el('div', { class: 'subhead' }, title), hint ? el('p', { class: 'muted' }, hint) : null].filter(Boolean);
+  if (!enabled) {
+    clear(container).append(...head, el('p', { class: 'muted' }, disabledReason || 'Not available for your role.'));
+    return;
+  }
+  let policy;
+  try { policy = await load(); }
+  catch (err) { clear(container).append(...head, el('div', { class: 'error-banner' }, err.message)); return; }
+  const editors = {};
+  const form = el('form', { class: 'policy-form' });
+  for (const domain of POLICY_DOMAINS) form.append(policyDomainEditor(domain, policy, universe, editors));
+  const saveBtn = el('button', { type: 'submit', class: 'btn primary' }, 'Save policy');
+  form.append(saveBtn);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    saveBtn.disabled = true;
+    try { await save(collectPolicyDomains(editors)); toast('Policy saved.', 'ok'); }
+    catch (err) { toast(err.message || 'Could not save policy.', 'err'); }
+    finally { saveBtn.disabled = false; }
+  });
+  clear(container).append(...head, form);
+  if (saveConfig) container.append(policyProviderKeysEditor(policy, saveConfig));
+}
+
+function policyProviderKeysEditor(policy, saveConfig) {
+  const values = (policy && policy.values) || {};
+  const wrap = el('div', { class: 'policy-domain field' }, [
+    el('div', { class: 'subhead' }, 'Provider keys (write-only)'),
+    el('p', { class: 'muted' }, 'Stored server-side and never shown again. Lower scopes override higher ones.'),
+  ]);
+  for (const key of POLICY_CONFIG_KEYS) {
+    const isSet = Boolean(values[key] && values[key].set);
+    const status = el('span', { class: 'muted' }, isSet ? 'Configured' : 'Not set');
+    const input = pwd(isSet ? 'Configured — enter a new value to replace' : 'Not set — paste a key');
+    const saveKeyBtn = el('button', { type: 'button', class: 'btn' }, 'Save key');
+    const clearBtn = el('button', { type: 'button', class: 'btn' }, 'Clear');
+    const persist = async (value, okMessage, newStatus, button) => {
+      button.disabled = true;
+      try { await saveConfig({ [key]: value }); input.value = ''; status.textContent = newStatus; toast(okMessage, 'ok'); }
+      catch (err) { toast(err.message || 'Could not update key.', 'err'); }
+      finally { button.disabled = false; }
+    };
+    saveKeyBtn.addEventListener('click', () => {
+      const value = input.value.trim();
+      if (!value) return toast('Enter a key value to save.', 'err');
+      persist(value, 'Key saved.', 'Configured', saveKeyBtn);
+    });
+    clearBtn.addEventListener('click', () => persist('', 'Key cleared.', 'Not set', clearBtn));
+    wrap.append(
+      field([POLICY_CONFIG_LABELS[key] || key, ' — ', status], input),
+      el('div', { class: 'row' }, [saveKeyBtn, clearBtn]),
+    );
+  }
+  return wrap;
+}
+
+async function policyEffectiveCard(container) {
+  let data;
+  try { data = await api.settingsPolicy.getEffective(); }
+  catch (err) {
+    clear(container).append(el('div', { class: 'subhead' }, 'Effective'), el('div', { class: 'error-banner' }, err.message));
+    return;
+  }
+  const rows = [el('div', { class: 'subhead' }, 'Effective (after the cascade)')];
+  for (const domain of POLICY_DOMAINS) {
+    const res = (data.domains && data.domains[domain]) || { effective: [] };
+    rows.push(el('div', { class: 'policy-effective' }, [
+      el('strong', {}, POLICY_DOMAIN_LABELS[domain] || domain),
+      el('div', { class: 'policy-chips' }, res.effective.length
+        ? res.effective.map((id) => el('code', { class: 'param-chip ok' }, id))
+        : [el('em', { class: 'muted' }, 'nothing allowed')]),
+    ]));
+  }
+  clear(container).append(...rows);
+}
+
+function policyGroup(ctx) {
+  const wrap = el('div', { class: 'policy-merged' });
+  const userC = el('div', { class: 'policy-scope' });
+  const orgC = el('div', { class: 'policy-scope' });
+  const effC = el('div', { class: 'policy-scope' });
+  wrap.append(loading('Loading policy…'));
+  void (async () => {
+    let universe;
+    try { universe = (await api.settingsPolicy.getUniverse()).domains; }
+    catch (err) { clear(wrap).append(el('div', { class: 'error-banner' }, err.message || 'Sign in to manage policy.')); return; }
+    let me = null;
+    try { me = await api.org.getMe(); } catch (_) { me = null; }
+    const isOrgAdmin = Boolean(me && me.org_role === 'ORG_ADMIN');
+    clear(wrap).append(
+      el('p', { class: 'muted settings-section-intro' }, 'Include/exclude what agents may use per scope. Lower scopes only narrow — an exclude higher up always wins. Empty include = allow all.'),
+      userC, orgC, effC,
+    );
+    await Promise.all([
+      policyScopeCard(userC, {
+        title: 'My settings (user scope)', hint: 'Your personal narrowing — applied last.',
+        universe, enabled: true,
+        load: () => api.settingsPolicy.getMyPolicy(), save: (b) => api.settingsPolicy.setMyPolicy(b),
+        saveConfig: (v) => api.settingsPolicy.setMyConfig(v),
+      }),
+      policyScopeCard(orgC, {
+        title: 'Organization scope', hint: 'Applies to everyone in the org. An exclude here blocks project and user.',
+        universe, enabled: isOrgAdmin, disabledReason: 'Organization admins only.',
+        load: () => api.settingsPolicy.getOrgPolicy(), save: (b) => api.settingsPolicy.setOrgPolicy(b),
+        saveConfig: (v) => api.settingsPolicy.setOrgConfig(v),
+      }),
+      policyEffectiveCard(effC),
+    ]);
+  })();
+  return wrap;
 }
 
 function settingsGroup(id, title, description, children) {
@@ -88,6 +485,7 @@ function settingsGroup(id, title, description, children) {
 function providerConfigured(settings, provider, codex, claude) {
   if (provider === 'codex') return Boolean(codex && codex.connected);
   if (provider === 'claude') return Boolean(claude && claude.connected);
+  if (provider === 'antigravity') return Boolean(settings.hasAntigravityApiKey && settings.antigravityModel);
   if (provider === 'lmstudio') return Boolean(settings.lmstudioHost && settings.lmstudioModel);
   if (provider === 'omlx') return Boolean(settings.omlxHost && settings.omlxModel);
   if (provider === 'huggingface') return Boolean(settings.hasHuggingfaceApiKey && settings.huggingfaceModel);
@@ -432,11 +830,12 @@ function keysSection(settings) {
       el('a', { href: 'https://linear.app/settings/api', target: '_blank', style: 'color:var(--accent-2)' }, 'linear.app/settings/api'),
       '.',
     ]),
-    el('div', { class: 'subhead' }, 'LangSmith Tracing'),
+    el('div', { class: 'subhead subhead-icon' }, [brandIcon('langsmith', { label: 'LangSmith' }), el('span', {}, 'Tracing')]),
+    el('label', { class: 'row', style: 'gap:8px;cursor:pointer;margin:4px 0 6px' }, [tracingInput, el('span', {}, 'Enable tracing')]),
+    el('p', { class: 'muted', style: 'margin:0 0 12px;font-size:12px' }, 'When on, agent runs are traced and stored in LangSmith for debugging and evaluation.'),
     field('LangSmith API Key', langsmithInput),
     field('Host / Endpoint', hostInput),
     field('Project', projectInput),
-    el('label', { class: 'row', style: 'gap:8px;cursor:pointer;margin-bottom:14px' }, [tracingInput, el('span', {}, 'Enable tracing')]),
     el('div', { class: 'row' }, [saveBtn, settings.hasKey ? removeLinear : null]),
     status,
     el('p', { class: 'muted', style: 'font-size:12px' }, 'All keys are stored server-side and never returned to the browser.'),
@@ -620,6 +1019,7 @@ function llmSection(ctx) {
     }
   };
 
+  ctx.rebuild = rebuild;
   rebuild();
   queueMicrotask(() => {
     for (const entry of LLM_ROLES) {
@@ -636,6 +1036,7 @@ const PROVIDER_LABELS = Object.freeze({
   codex: 'OpenAI',
   claude: 'Anthropic',
   huggingface: 'Hugging Face',
+  antigravity: 'Gemini',
 });
 
 const PROVIDER_DEPLOYMENT = Object.freeze({
@@ -645,6 +1046,7 @@ const PROVIDER_DEPLOYMENT = Object.freeze({
   huggingface: 'byom',
   codex: 'hosted',
   claude: 'hosted',
+  antigravity: 'hosted',
 });
 
 // Purpose-based model roles ("models as tasks"). Each role is provider-flexible
@@ -678,12 +1080,12 @@ const ROLE_FIELDS = Object.freeze(Object.fromEntries(
 const ROLE_META = Object.freeze(Object.fromEntries(
   LLM_ROLES.map((entry) => [entry.role, { heading: entry.heading, description: entry.description }])
 ));
-const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface']);
+const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity']);
 const ROLE_PROVIDERS = Object.freeze({
   // Legacy deployment slots, kept for any deployment-scoped callers. "byom"
   // (Bring Your Own Model) folds Hugging Face in with the local runtimes.
   byom: ['ollama', 'lmstudio', 'omlx', 'huggingface'],
-  hosted: ['codex', 'claude'],
+  hosted: ['codex', 'claude', 'antigravity'],
   // Purpose roles accept any provider (BYoM or hosted).
   thinking: ALL_PROVIDERS,
   execution: ALL_PROVIDERS,
@@ -747,6 +1149,7 @@ function providerConnected(ctx, provider) {
   if (provider === 'codex') return Boolean(ctx.codex && ctx.codex.connected);
   if (provider === 'claude') return Boolean(ctx.claude && ctx.claude.connected);
   if (provider === 'huggingface') return Boolean(ctx.settings && ctx.settings.hasHuggingfaceApiKey);
+  if (provider === 'antigravity') return Boolean(ctx.settings && ctx.settings.hasAntigravityApiKey);
   return true;
 }
 
@@ -897,7 +1300,7 @@ function presetSlot(ctx, role, rebuild) {
     const descriptionText = (selectedModel && selectedModel.description) || (preset && preset.description);
     children.push(
       descriptionText ? el('p', { class: 'preset-description' }, descriptionText) : null,
-      parameterSummary(params, reasoningOptions, currentReasoning),
+      parameterSummary(params, reasoningOptions, currentReasoning, selectedModel && selectedModel.cost),
       profilePreset && profilePreset.requirements ? el('p', { class: 'muted preset-requirement' }, [
         profilePreset.requirements,
         profilePreset.sourceUrl ? ' ' : null,
@@ -918,7 +1321,8 @@ function presetSlot(ctx, role, rebuild) {
   }
   children.push(status);
   if (provider === 'codex' || provider === 'claude') {
-    children.push(hostedConnection(ctx, provider));
+    // Full sign-in lives in the Accounts section at the bottom; show only status here.
+    children.push(hostedStatusPill(ctx, provider));
   }
   if (provider === 'huggingface' && editorPreset) {
     children.push(huggingfaceConnection(ctx, role, editorPreset, params, rebuild));
@@ -1037,6 +1441,7 @@ function modelEntryFromPreset(preset) {
     id: preset.model,
     label: preset.label || preset.model,
     description: preset.description || '',
+    cost: preset.cost || null,
     contextWindow: preset.limits && preset.limits.contextWindow,
     maxOutputTokens: preset.limits && preset.limits.maxOutputTokens,
     reasoningAdapter: preset.capabilities && preset.capabilities.reasoningAdapter,
@@ -1123,7 +1528,7 @@ function recommendedModelEntry(ctx, provider) {
 
 function modelSelectControl(entries, current) {
   const option = (entry) => el('option', { value: entry.id, selected: entry.id === current, dataset: { i18nSkip: 'true' } },
-    `${entry.recommended ? '★ ' : ''}${entry.label}${entry.label !== entry.id ? ` — ${entry.id}` : ''}`);
+    `${entry.recommended ? '★ ' : ''}${entry.label}${entry.label !== entry.id ? ` — ${entry.id}` : ''}${costSuffix(entry.cost)}`);
   const recommended = entries.filter((entry) => entry.recommended);
   const available = entries.filter((entry) => !entry.recommended && entry.available);
   const other = entries.filter((entry) => !entry.recommended && !entry.available);
@@ -1358,17 +1763,32 @@ function compactTokens(value) {
   return String(n);
 }
 
-function parameterSummary(params, reasoningOptions = [], effectiveReasoning = params.reasoningEffort) {
+function parameterSummary(params, reasoningOptions = [], effectiveReasoning = params.reasoningEffort, cost = null) {
   const temperature = typeof params.temperature === 'number' ? params.temperature : 'managed';
   const reasoning = reasoningOptions.some((option) => option.value === effectiveReasoning)
     ? reasoningLabel(effectiveReasoning)
     : 'Not selected';
+  const costChip = costChipText(cost);
   return el('div', { class: 'preset-params' }, [
     el('span', { class: 'param-chip' }, `Context ${compactTokens(params.contextWindow)}`),
     el('span', { class: 'param-chip' }, `Output ${compactTokens(params.maxOutputTokens)}`),
     el('span', { class: 'param-chip' }, `Reasoning ${reasoning}`),
     el('span', { class: 'param-chip' }, `Temperature ${temperature}`),
+    costChip ? el('span', { class: 'param-chip cost' }, costChip) : null,
   ]);
+}
+
+/** Indicative price, e.g. "$3 in · $15 out /1M". Empty when unpriced (BYoM/varies). */
+function costChipText(cost) {
+  if (!cost || !Number.isFinite(cost.inputPer1M) || !Number.isFinite(cost.outputPer1M)) return '';
+  if (cost.inputPer1M === 0 && cost.outputPer1M === 0) return 'Free (self-hosted)';
+  return `$${cost.inputPer1M} in · $${cost.outputPer1M} out /1M`;
+}
+
+/** Compact per-option cost suffix for a model dropdown; empty when unpriced. */
+function costSuffix(cost) {
+  const text = costChipText(cost);
+  return text ? `  ·  ${text}` : '';
 }
 
 function optionSelect(options, current) {

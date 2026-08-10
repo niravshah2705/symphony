@@ -15,6 +15,7 @@ const {
   filterToolsByPolicy,
   applyPolicyToWorkflow,
   filterSkillPaths,
+  filterHooksByPolicy,
   enforceHarness,
 } = require('./settings-policy');
 
@@ -24,8 +25,15 @@ function dp(include = [], exclude = []) {
   return { include, exclude };
 }
 
-test('DOMAINS are the four settings domains', () => {
-  assert.deepEqual([...DOMAINS], ['harness', 'tools', 'skills', 'plugins']);
+test('DOMAINS are the five settings domains', () => {
+  assert.deepEqual([...DOMAINS], ['harness', 'tools', 'skills', 'plugins', 'hooks']);
+});
+
+test('filterHooksByPolicy prunes hook ids to the effective hooks policy', () => {
+  const effective = { hooks: { effective: ['pre-code', 'post-code'] } };
+  assert.deepEqual(filterHooksByPolicy(['pre-code', 'pre-pr', 'post-code'], effective), ['pre-code', 'post-code']);
+  // Allow-all (no regression) when no hooks policy is present.
+  assert.deepEqual(filterHooksByPolicy(['pre-code'], {}), ['pre-code']);
 });
 
 test('globToRegExp matches literal, wildcard and char class', () => {

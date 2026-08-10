@@ -58,7 +58,9 @@ Directory-based community: services/proxy
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **buildInjection** (criticality: 0.62, depth: 2)
+- **fetchOrgSecrets** (criticality: 0.62, depth: 2)
+- **fetchManagedSecrets** (criticality: 0.62, depth: 2)
 
 ## Dependencies
 

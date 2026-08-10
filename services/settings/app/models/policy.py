@@ -28,8 +28,10 @@ from datetime import datetime
 
 from app.models.base import utcnow
 
-# The four settings domains, in stable display order.
-DOMAINS: tuple[str, ...] = ("harness", "tools", "skills", "plugins")
+# The settings domains, in stable display order. `hooks` governs lifecycle-hook
+# ids (config + catalog only today; no execution engine yet — see the JS mirror
+# settings-policy.js filterHooksByPolicy TODO).
+DOMAINS: tuple[str, ...] = ("harness", "tools", "skills", "plugins", "hooks")
 
 # Allow-listed CONFIG VALUE keys stored per scope. Deliberately small and
 # explicit (never free-form) so a policy document can only carry known provider

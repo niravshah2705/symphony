@@ -142,6 +142,43 @@ function validateCatalog(value) {
     } else {
       assert(params.contextMode === null, `${preset.id}: context mode only applies to OpenAI-compatible local providers`);
     }
+    // Optional indicative cost (manually maintained). Only validated when present
+    // so older catalogs without pricing still load.
+    if (preset.cost !== undefined) {
+      const cost = preset.cost;
+      assert(cost && typeof cost === 'object', `${preset.id}: cost must be an object`);
+      for (const field of ['inputPer1M', 'outputPer1M']) {
+        const value = cost[field];
+        assert(value === null || (Number.isFinite(value) && value >= 0), `${preset.id}: cost.${field} must be null or a non-negative number`);
+      }
+      assert(typeof cost.currency === 'string' && cost.currency.trim(), `${preset.id}: cost.currency is required`);
+      assert(typeof cost.source === 'string' && cost.source.trim(), `${preset.id}: cost.source is required`);
+      assert(/^\d{4}-\d{2}-\d{2}$/.test(cost.asOf || ''), `${preset.id}: cost.asOf must be YYYY-MM-DD`);
+    }
+  }
+
+  // Optional complexity tiers (each maps a preset per purpose role). Only
+  // validated when present so older catalogs still load.
+  if (value.complexityTiers !== undefined) {
+    assert(Array.isArray(value.complexityTiers), 'complexityTiers must be an array');
+    const tierIds = new Set();
+    for (const tier of value.complexityTiers) {
+      assert(tier && typeof tier === 'object', 'each complexity tier must be an object');
+      assert(/^[a-z0-9][a-z0-9-]{0,40}$/.test(tier.id || ''), `invalid complexity tier id "${tier.id || ''}"`);
+      assert(!tierIds.has(tier.id), `duplicate complexity tier id "${tier.id}"`);
+      tierIds.add(tier.id);
+      assert(typeof tier.label === 'string' && tier.label.trim(), `${tier.id}: tier label is required`);
+      assert(tier.picks && typeof tier.picks === 'object', `${tier.id}: tier picks are required`);
+      for (const role of MODEL_ROLES) {
+        const presetId = tier.picks[role];
+        assert(ids.has(presetId), `${tier.id}: pick for role ${role} references unknown preset "${presetId}"`);
+        if (tier.reasoningEffort && tier.reasoningEffort[role] !== undefined) {
+          const effort = tier.reasoningEffort[role];
+          const preset = value.presets.find((item) => item.id === presetId);
+          assert(preset.capabilities.reasoningEfforts.includes(effort), `${tier.id}: reasoning effort "${effort}" unsupported by ${presetId} for role ${role}`);
+        }
+      }
+    }
   }
 
   for (const deployment of ['byom', 'hosted']) {
@@ -157,6 +194,13 @@ function validateCatalog(value) {
 }
 
 validateCatalog(catalog);
+
+// Curated complexity tiers, derived from the validated catalog. Each tier maps a
+// preset to every purpose role; the slider applies one via settingsPatchForTier.
+const COMPLEXITY_TIERS = Object.freeze(
+  (catalog.complexityTiers || []).map((tier) => Object.freeze({ ...tier }))
+);
+const COMPLEXITY_TIER_IDS = Object.freeze(COMPLEXITY_TIERS.map((tier) => tier.id));
 
 const byId = new Map(catalog.presets.map((preset) => [preset.id, preset]));
 
@@ -375,6 +419,29 @@ function settingsPatchForPreset(preset, overrides = {}) {
     claudeReasoningAdapter: params.reasoningAdapter,
     claudeStreaming: params.streaming,
   };
+}
+
+/**
+ * Materialize a complexity tier into a settings patch: one preset per purpose
+ * role plus each role's provider/preset id. Returns null for an unknown tier or
+ * a tier that references a missing preset. Reuses settingsPatchForPreset, so the
+ * shared per-provider param block still applies (curate tiers so same-provider
+ * roles use the same model — see llm-presets.json complexityTiers).
+ */
+function settingsPatchForTier(tierId) {
+  const tier = COMPLEXITY_TIERS.find((entry) => entry.id === String(tierId || ''));
+  if (!tier) return null;
+  let patch = {};
+  for (const role of MODEL_ROLES) {
+    const preset = getPreset(tier.picks && tier.picks[role]);
+    if (!preset) return null;
+    const reasoningEffort = tier.reasoningEffort && tier.reasoningEffort[role];
+    patch = { ...patch, ...settingsPatchForPreset(preset, reasoningEffort ? { reasoningEffort } : {}) };
+    patch[`${role}LlmProvider`] = preset.provider;
+    patch[`${role}LlmPresetId`] = preset.id;
+  }
+  patch.complexityTier = tier.id;
+  return patch;
 }
 
 /** Return a request-safe model id, or an empty string for malformed input. */
@@ -716,6 +783,8 @@ module.exports = {
   ROLE_DEPLOYMENT,
   MODEL_ROLES,
   MODEL_ROLE_META,
+  COMPLEXITY_TIERS,
+  COMPLEXITY_TIER_IDS,
   isPurposeRole,
   validateCatalog,
   getPreset,
@@ -726,6 +795,7 @@ module.exports = {
   modelMatchesPreset,
   sanitizeModelId,
   settingsPatchForPreset,
+  settingsPatchForTier,
   settingsPatchForReasoning,
   customPresetForSettings,
   runtimePresetForProfile,

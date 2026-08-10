@@ -8,6 +8,8 @@ JS-side catalogs so the effective set means the same thing on both sides:
 - tools   — the developer-tool registry domains (packages/shared/src/agent/tools/index.js DOMAINS)
 - skills  — the vendored core-workflow skills (packages/shared/src/agent/skills/SKILLS.md)
 - plugins — an operator-configurable list (SETTINGS_PLUGINS_CATALOG)
+- hooks   — lifecycle-hook ids (config + catalog only; no execution engine yet —
+            see settings-policy.js filterHooksByPolicy TODO)
 
 Kept in sync manually and deliberately: this service is a standalone Python app
 and does not import the Node catalogs. If a runtime/tool/skill is added on the JS
@@ -43,6 +45,18 @@ SKILLS: tuple[str, ...] = (
     "land",
 )
 
+# Lifecycle-hook ids, keyed to the points a future execution engine will fire
+# them at. Config + catalog only today: the cascade governs which are allowed,
+# but nothing runs them yet (see settings-policy.js filterHooksByPolicy TODO).
+HOOKS: tuple[str, ...] = (
+    "pre-plan",
+    "post-plan",
+    "pre-code",
+    "post-code",
+    "pre-pr",
+    "post-merge",
+)
+
 
 def universe() -> dict[str, list[str]]:
     """The item universe for every domain. Plugins come from config."""
@@ -51,4 +65,5 @@ def universe() -> dict[str, list[str]]:
         "tools": list(TOOLS),
         "skills": list(SKILLS),
         "plugins": get_settings().plugins_catalog(),
+        "hooks": list(HOOKS),
     }

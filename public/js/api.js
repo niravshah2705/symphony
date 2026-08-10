@@ -129,6 +129,9 @@ export const api = {
     request('/settings/llm-preset', { method: 'PUT', body: JSON.stringify(payload) }),
   applyLlmSelection: (payload) =>
     request('/settings/llm-selection', { method: 'PUT', body: JSON.stringify(payload) }),
+  // Apply a curated complexity tier to every purpose role at once (the slider).
+  applyLlmTier: (tier) =>
+    request('/settings/complexity', { method: 'PUT', body: JSON.stringify({ tier }) }),
   saveLlm: (payload) => request('/settings/llm', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLmstudio: (payload) => request('/settings/lmstudio', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLangsmith: (payload) =>

@@ -32,7 +32,6 @@ import { renderWorkflows } from './views/workflows.js';
 import { renderTroubleshooting } from './views/troubleshooting.js';
 import { renderSettings } from './views/settings.js';
 import { renderOrganization } from './views/organization.js';
-import { renderSettingsPolicy } from './views/settings-policy.js';
 import { initThemeToggle } from './theme.js';
 import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 
@@ -48,7 +47,6 @@ const routes = {
   troubleshooting: renderTroubleshooting,
   settings: renderSettings,
   organization: renderOrganization,
-  'settings-policy': renderSettingsPolicy,
 };
 
 const routeMeta = {
@@ -63,7 +61,6 @@ const routeMeta = {
   troubleshooting: { titleKey: 'troubleshooting', eyebrowKey: 'system' },
   settings: { titleKey: 'settings', eyebrowKey: 'system' },
   organization: { titleKey: 'organization', eyebrowKey: 'workspace' },
-  'settings-policy': { titleKey: 'settingsPolicy', eyebrowKey: 'system' },
 };
 
 // These existing surfaces depend on the configured project-management connection.

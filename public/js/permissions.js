@@ -21,11 +21,9 @@ export const MENU_PERMISSIONS = Object.freeze({
   // signed-in user (even org-less); hidden for anonymous visitors. Create
   // actions inside are auth-only (/api/org/me/*), enforced server-side.
   organization: { domain: 'org', level: 'read' },
-  // Settings policy (settings service). Reuses the `org` permission domain (the
-  // gateway gates /api/settings-policy with requirePermission('org')). org:read
-  // → visible to any signed-in user; the service enforces org-admin / project-
-  // admin for tenant scopes and auth-only for the /me user scope.
-  'settings-policy': { domain: 'org', level: 'read' },
+  // The settings-policy surface was merged into the Settings page (see
+  // views/settings.js policyGroup); the gateway still gates /api/settings-policy
+  // with requirePermission('org') for org scope and auth-only for the /me scope.
 });
 
 // Where an unauthenticated visitor (or a signed-out session) lands.

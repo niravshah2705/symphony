@@ -11,11 +11,14 @@ const {
   presetForModel,
   modelMatchesPreset,
   settingsPatchForPreset,
+  settingsPatchForTier,
   settingsPatchForReasoning,
   customPresetForSettings,
   runtimePresetForProfile,
   neutralLocalPreset,
   MODEL_ROLES,
+  COMPLEXITY_TIERS,
+  COMPLEXITY_TIER_IDS,
 } = require('./model-presets');
 const { createChatModel } = require('./llm');
 const {
@@ -351,4 +354,72 @@ test('provider clients receive native reasoning parameters and safe temperatures
   });
   assert.notDeepEqual(claudeEffortOnly.thinking, { type: 'adaptive' });
   assert.deepEqual(claudeEffortOnly.outputConfig, { effort: 'high' });
+});
+
+test('every preset carries an indicative cost with a valid shape', () => {
+  const catalog = publicCatalog();
+  for (const preset of catalog.presets) {
+    assert.ok(preset.cost, `${preset.id} should define cost`);
+    for (const field of ['inputPer1M', 'outputPer1M']) {
+      const value = preset.cost[field];
+      assert.ok(value === null || (Number.isFinite(value) && value >= 0), `${preset.id}.cost.${field}`);
+    }
+    assert.equal(preset.cost.currency, 'USD');
+    assert.match(preset.cost.asOf, /^\d{4}-\d{2}-\d{2}$/);
+  }
+  // Self-hosted BYoM (true local inference) is free at inference time.
+  assert.equal(getPreset('ollama-gpt-oss-20b').cost.inputPer1M, 0);
+  assert.equal(getPreset('claude-opus-4-8').cost.outputPer1M, 75);
+});
+
+test('catalog validation is backward compatible when cost is absent', () => {
+  const stripped = JSON.parse(JSON.stringify(publicCatalog()));
+  for (const preset of stripped.presets) delete preset.cost;
+  delete stripped.complexityTiers;
+  assert.equal(validateCatalog(stripped), stripped);
+});
+
+test('catalog validation rejects a negative cost', () => {
+  const invalid = JSON.parse(JSON.stringify(publicCatalog()));
+  invalid.presets[0].cost.inputPer1M = -1;
+  assert.throws(() => validateCatalog(invalid), /cost\.inputPer1M/);
+});
+
+test('catalog validation rejects a tier that references an unknown preset', () => {
+  const invalid = JSON.parse(JSON.stringify(publicCatalog()));
+  invalid.complexityTiers[0].picks.execution = 'no-such-preset';
+  assert.throws(() => validateCatalog(invalid), /unknown preset/);
+});
+
+test('catalog validation rejects a tier reasoning effort the preset does not support', () => {
+  const invalid = JSON.parse(JSON.stringify(publicCatalog()));
+  // Haiku only supports 'none'; asking for 'max' must be rejected.
+  const quick = invalid.complexityTiers.find((tier) => tier.id === 'quick');
+  quick.reasoningEffort.thinking = 'max';
+  assert.throws(() => validateCatalog(invalid), /unsupported by/);
+});
+
+test('complexity tiers are ordered and exposed as ids', () => {
+  assert.ok(COMPLEXITY_TIERS.length >= 2);
+  assert.deepEqual(COMPLEXITY_TIER_IDS, COMPLEXITY_TIERS.map((tier) => tier.id));
+  assert.ok(COMPLEXITY_TIER_IDS.includes('balanced'));
+});
+
+test('settingsPatchForTier maps a preset to every purpose role', () => {
+  const patch = settingsPatchForTier('balanced');
+  assert.ok(patch, 'balanced tier should resolve');
+  assert.equal(patch.complexityTier, 'balanced');
+  for (const role of MODEL_ROLES) {
+    assert.equal(patch[`${role}LlmProvider`], 'claude');
+    assert.equal(patch[`${role}LlmPresetId`], 'claude-sonnet-5');
+  }
+  // The shared per-provider block reflects the tier's model + reasoning effort.
+  assert.equal(patch.claudeModel, 'claude-sonnet-5');
+  assert.equal(patch.claudeReasoningEffort, 'medium');
+});
+
+test('settingsPatchForTier returns null for an unknown tier', () => {
+  assert.equal(settingsPatchForTier('does-not-exist'), null);
+  assert.equal(settingsPatchForTier(''), null);
+  assert.equal(settingsPatchForTier(undefined), null);
 });

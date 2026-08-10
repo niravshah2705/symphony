@@ -36,7 +36,28 @@ const ICON_PATHS = Object.freeze({
   stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
 });
 
+// Filled brand/marker glyphs for provider / harness / tool pickers. These are
+// simple original geometric marks (NOT the vendors' trademarked logos), defined
+// locally so nothing is ever fetched from a remote host (CSP-safe). `currentColor`
+// fill lets them inherit the surrounding text color in light and dark themes.
+const BRAND_ICON_PATHS = Object.freeze({
+  // Providers
+  anthropic: '<path d="M14.4 3h-4L3.5 21h4l1.3-3.6h6.4L16.5 21h4L14.4 3Zm-4.2 11 1.8-5.1L13.8 14h-3.6Z"/>',
+  openai: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4.5A5.5 5.5 0 1 1 6.5 12 5.5 5.5 0 0 1 12 6.5Zm0 2.6A2.9 2.9 0 1 0 14.9 12 2.9 2.9 0 0 0 12 9.1Z"/>',
+  gemini: '<path d="M12 2c.6 4.9 4.5 8.8 9.4 9.4C16.5 12 12.6 15.9 12 20.8 11.4 15.9 7.5 12 2.6 11.4 7.5 10.8 11.4 6.9 12 2Z"/>',
+  huggingface: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM8.7 9.6a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8Zm6.6 0a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8ZM8 14.4h8a4 4 0 0 1-8 0Z"/>',
+  byom: '<rect x="4" y="4" width="16" height="4.5" rx="1"/><rect x="4" y="9.8" width="16" height="4.5" rx="1"/><rect x="4" y="15.6" width="16" height="4.5" rx="1"/>',
+  // Harnesses
+  deepagent: '<path d="M12 2 14 9 21 11 14 13 12 20 10 13 3 11 10 9 12 2Z"/>',
+  // Project management
+  linear: '<path d="M3.2 13.8 10.2 20.8A9 9 0 0 1 3.2 13.8ZM3.6 9.9 14.1 20.4A9 9 0 0 1 11.6 21L3 12.4A9 9 0 0 1 3.6 9.9ZM5.7 6 18 18.3A9 9 0 0 1 16 20L4 8A9 9 0 0 1 5.7 6ZM9.3 3.6A9 9 0 0 1 20.4 14.7Z"/>',
+  jira: '<path d="M12 2 3.5 10.8h4.2L12 6.3l4.3 4.5h4.2L12 2Zm0 20 8.5-8.8h-4.2L12 17.7l-4.3-4.5H3.5L12 22Z"/>',
+  // Observability
+  langsmith: '<circle cx="6" cy="7" r="2.2"/><circle cx="18" cy="9" r="2.2"/><circle cx="9.5" cy="18" r="2.2"/><path d="M7.6 8.2 16 8.9M8 9.3l1.2 6.6M16.2 10.8l-5.4 5.6" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+});
+
 export const iconNames = Object.freeze(Object.keys(ICON_PATHS));
+export const brandIconNames = Object.freeze(Object.keys(BRAND_ICON_PATHS));
 
 /** Build a consistent SVG icon node. Unknown names fall back to `info`. */
 export function icon(name, { className = 'icon', label = '', size = null } = {}) {
@@ -62,6 +83,28 @@ export function icon(name, { className = 'icon', label = '', size = null } = {})
     svg.setAttribute('aria-hidden', 'true');
   }
 
+  return svg;
+}
+
+/**
+ * Build a filled brand/marker glyph (see BRAND_ICON_PATHS). Unknown names fall
+ * back to the neutral `byom` mark. Markup is local and trusted — never derived
+ * from user input.
+ */
+export function brandIcon(name, { className = 'brand-icon', label = '', size = 20 } = {}) {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', className);
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.innerHTML = BRAND_ICON_PATHS[name] || BRAND_ICON_PATHS.byom;
+  if (label) {
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', label);
+  } else {
+    svg.setAttribute('aria-hidden', 'true');
+  }
   return svg;
 }
 

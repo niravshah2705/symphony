@@ -1,6 +1,6 @@
 {
-  "version": 4,
-  "updatedAt": "2026-08-07",
+  "version": 5,
+  "updatedAt": "2026-08-10",
   "defaults": {
     "byom": "ollama-gpt-oss-20b",
     "hosted": "claude-opus-4-8"
@@ -35,9 +35,44 @@
       "description": "Maximum reasoning with automatic task delegation."
     }
   },
+  "complexityTiers": [
+    {
+      "id": "quick",
+      "label": "Quick",
+      "order": 1,
+      "description": "Fastest, cheapest hosted models for simple, well-scoped changes.",
+      "picks": { "thinking": "claude-haiku-4-5", "execution": "claude-haiku-4-5", "testing": "claude-haiku-4-5" },
+      "reasoningEffort": { "thinking": "none", "execution": "none", "testing": "none" }
+    },
+    {
+      "id": "balanced",
+      "label": "Balanced",
+      "order": 2,
+      "description": "Sonnet for planning and execution. A good everyday default.",
+      "picks": { "thinking": "claude-sonnet-5", "execution": "claude-sonnet-5", "testing": "claude-sonnet-5" },
+      "reasoningEffort": { "thinking": "medium", "execution": "medium", "testing": "medium" }
+    },
+    {
+      "id": "thorough",
+      "label": "Thorough",
+      "order": 3,
+      "description": "Opus with high reasoning for demanding planning and coding.",
+      "picks": { "thinking": "claude-opus-4-8", "execution": "claude-opus-4-8", "testing": "claude-opus-4-8" },
+      "reasoningEffort": { "thinking": "high", "execution": "high", "testing": "high" }
+    },
+    {
+      "id": "complex",
+      "label": "Complex",
+      "order": 4,
+      "description": "Maximum reasoning for the hardest, highest-stakes work.",
+      "picks": { "thinking": "claude-opus-4-8", "execution": "claude-opus-4-8", "testing": "claude-opus-4-8" },
+      "reasoningEffort": { "thinking": "max", "execution": "max", "testing": "max" }
+    }
+  ],
   "presets": [
     {
       "id": "ollama-gpt-oss-20b",
+      "cost": { "inputPer1M": 0, "outputPer1M": 0, "currency": "USD", "unit": "per_1m_tokens", "source": "self-hosted", "asOf": "2026-08-10" },
       "label": "GPT-OSS 20B",
       "deployment": "byom",
       "provider": "ollama",
@@ -79,6 +114,7 @@
     },
     {
       "id": "ollama-qwen3-coder-30b",
+      "cost": { "inputPer1M": 0, "outputPer1M": 0, "currency": "USD", "unit": "per_1m_tokens", "source": "self-hosted", "asOf": "2026-08-10" },
       "label": "Qwen3 Coder 30B",
       "deployment": "byom",
       "provider": "ollama",
@@ -120,6 +156,7 @@
     },
     {
       "id": "ollama-gpt-oss-120b",
+      "cost": { "inputPer1M": 0, "outputPer1M": 0, "currency": "USD", "unit": "per_1m_tokens", "source": "self-hosted", "asOf": "2026-08-10" },
       "label": "GPT-OSS 120B",
       "deployment": "byom",
       "provider": "ollama",
@@ -161,6 +198,7 @@
     },
     {
       "id": "lmstudio-gpt-oss-20b",
+      "cost": { "inputPer1M": 0, "outputPer1M": 0, "currency": "USD", "unit": "per_1m_tokens", "source": "self-hosted", "asOf": "2026-08-10" },
       "label": "GPT-OSS 20B",
       "deployment": "byom",
       "provider": "lmstudio",
@@ -202,6 +240,7 @@
     },
     {
       "id": "lmstudio-qwen3-coder-30b",
+      "cost": { "inputPer1M": 0, "outputPer1M": 0, "currency": "USD", "unit": "per_1m_tokens", "source": "self-hosted", "asOf": "2026-08-10" },
       "label": "Qwen3 Coder 30B",
       "deployment": "byom",
       "provider": "lmstudio",
@@ -243,6 +282,7 @@
     },
     {
       "id": "omlx-gpt-oss-20b",
+      "cost": { "inputPer1M": 0, "outputPer1M": 0, "currency": "USD", "unit": "per_1m_tokens", "source": "self-hosted", "asOf": "2026-08-10" },
       "label": "GPT-OSS 20B",
       "deployment": "byom",
       "provider": "omlx",
@@ -284,6 +324,7 @@
     },
     {
       "id": "omlx-qwen3-coder-next",
+      "cost": { "inputPer1M": 0, "outputPer1M": 0, "currency": "USD", "unit": "per_1m_tokens", "source": "self-hosted", "asOf": "2026-08-10" },
       "label": "Qwen3 Coder Next",
       "deployment": "byom",
       "provider": "omlx",
@@ -325,6 +366,7 @@
     },
     {
       "id": "codex-gpt-5-6-sol",
+      "cost": { "inputPer1M": 1.25, "outputPer1M": 10, "currency": "USD", "unit": "per_1m_tokens", "source": "ChatGPT/Codex subscription (indicative per-token equivalent)", "asOf": "2026-08-10" },
       "label": "GPT-5.6 SOL",
       "deployment": "hosted",
       "provider": "codex",
@@ -358,6 +400,7 @@
     },
     {
       "id": "codex-gpt-5-6-terra",
+      "cost": { "inputPer1M": 1.25, "outputPer1M": 10, "currency": "USD", "unit": "per_1m_tokens", "source": "ChatGPT/Codex subscription (indicative per-token equivalent)", "asOf": "2026-08-10" },
       "label": "GPT-5.6 Terra",
       "deployment": "hosted",
       "provider": "codex",
@@ -391,6 +434,7 @@
     },
     {
       "id": "codex-gpt-5-6-luna",
+      "cost": { "inputPer1M": 1.25, "outputPer1M": 10, "currency": "USD", "unit": "per_1m_tokens", "source": "ChatGPT/Codex subscription (indicative per-token equivalent)", "asOf": "2026-08-10" },
       "label": "GPT-5.6 Luna",
       "deployment": "hosted",
       "provider": "codex",
@@ -424,6 +468,7 @@
     },
     {
       "id": "codex-gpt-5-5",
+      "cost": { "inputPer1M": 1.25, "outputPer1M": 10, "currency": "USD", "unit": "per_1m_tokens", "source": "ChatGPT/Codex subscription (indicative per-token equivalent)", "asOf": "2026-08-10" },
       "label": "GPT-5.5",
       "deployment": "hosted",
       "provider": "codex",
@@ -457,6 +502,7 @@
     },
     {
       "id": "codex-gpt-5-4",
+      "cost": { "inputPer1M": 1.25, "outputPer1M": 10, "currency": "USD", "unit": "per_1m_tokens", "source": "ChatGPT/Codex subscription (indicative per-token equivalent)", "asOf": "2026-08-10" },
       "label": "GPT-5.4",
       "deployment": "hosted",
       "provider": "codex",
@@ -490,6 +536,7 @@
     },
     {
       "id": "codex-gpt-5-4-mini",
+      "cost": { "inputPer1M": 0.25, "outputPer1M": 2, "currency": "USD", "unit": "per_1m_tokens", "source": "ChatGPT/Codex subscription (indicative per-token equivalent)", "asOf": "2026-08-10" },
       "label": "GPT-5.4 mini",
       "deployment": "hosted",
       "provider": "codex",
@@ -523,6 +570,7 @@
     },
     {
       "id": "claude-fable-5",
+      "cost": { "inputPer1M": 15, "outputPer1M": 75, "currency": "USD", "unit": "per_1m_tokens", "source": "https://www.anthropic.com/pricing", "asOf": "2026-08-10" },
       "label": "Claude Fable 5",
       "deployment": "hosted",
       "provider": "claude",
@@ -556,6 +604,7 @@
     },
     {
       "id": "claude-opus-4-8",
+      "cost": { "inputPer1M": 15, "outputPer1M": 75, "currency": "USD", "unit": "per_1m_tokens", "source": "https://www.anthropic.com/pricing", "asOf": "2026-08-10" },
       "label": "Claude Opus 4.8",
       "deployment": "hosted",
       "provider": "claude",
@@ -589,6 +638,7 @@
     },
     {
       "id": "claude-sonnet-5",
+      "cost": { "inputPer1M": 3, "outputPer1M": 15, "currency": "USD", "unit": "per_1m_tokens", "source": "https://www.anthropic.com/pricing", "asOf": "2026-08-10" },
       "label": "Claude Sonnet 5",
       "deployment": "hosted",
       "provider": "claude",
@@ -622,6 +672,7 @@
     },
     {
       "id": "claude-haiku-4-5",
+      "cost": { "inputPer1M": 0.8, "outputPer1M": 4, "currency": "USD", "unit": "per_1m_tokens", "source": "https://www.anthropic.com/pricing", "asOf": "2026-08-10" },
       "label": "Claude Haiku 4.5",
       "deployment": "hosted",
       "provider": "claude",
@@ -655,6 +706,7 @@
     },
     {
       "id": "huggingface-llama-3-3-70b",
+      "cost": { "inputPer1M": null, "outputPer1M": null, "currency": "USD", "unit": "per_1m_tokens", "source": "varies (billed to your Hugging Face account)", "asOf": "2026-08-10" },
       "label": "Llama 3.3 70B Instruct",
       "deployment": "byom",
       "provider": "huggingface",
@@ -688,6 +740,7 @@
     },
     {
       "id": "huggingface-qwen2-5-coder-32b",
+      "cost": { "inputPer1M": null, "outputPer1M": null, "currency": "USD", "unit": "per_1m_tokens", "source": "varies (billed to your Hugging Face account)", "asOf": "2026-08-10" },
       "label": "Qwen2.5 Coder 32B",
       "deployment": "byom",
       "provider": "huggingface",
@@ -721,6 +774,7 @@
     },
     {
       "id": "huggingface-kimi-k3",
+      "cost": { "inputPer1M": null, "outputPer1M": null, "currency": "USD", "unit": "per_1m_tokens", "source": "varies (billed to your Hugging Face account)", "asOf": "2026-08-10" },
       "label": "Kimi K3",
       "deployment": "byom",
       "provider": "huggingface",
@@ -754,6 +808,7 @@
     },
     {
       "id": "huggingface-deepseek-v3",
+      "cost": { "inputPer1M": null, "outputPer1M": null, "currency": "USD", "unit": "per_1m_tokens", "source": "varies (billed to your Hugging Face account)", "asOf": "2026-08-10" },
       "label": "DeepSeek V3",
       "deployment": "byom",
       "provider": "huggingface",
@@ -787,6 +842,7 @@
     },
     {
       "id": "huggingface-qwen2-5-72b",
+      "cost": { "inputPer1M": null, "outputPer1M": null, "currency": "USD", "unit": "per_1m_tokens", "source": "varies (billed to your Hugging Face account)", "asOf": "2026-08-10" },
       "label": "Qwen2.5 72B Instruct",
       "deployment": "byom",
       "provider": "huggingface",
@@ -820,6 +876,7 @@
     },
     {
       "id": "antigravity-gemini-2-5-flash",
+      "cost": { "inputPer1M": 0.3, "outputPer1M": 2.5, "currency": "USD", "unit": "per_1m_tokens", "source": "https://ai.google.dev/pricing", "asOf": "2026-08-10" },
       "label": "Gemini 2.5 Flash (Antigravity)",
       "deployment": "hosted",
       "provider": "antigravity",
@@ -853,6 +910,7 @@
     },
     {
       "id": "antigravity-gemini-2-5-pro",
+      "cost": { "inputPer1M": 1.25, "outputPer1M": 10, "currency": "USD", "unit": "per_1m_tokens", "source": "https://ai.google.dev/pricing", "asOf": "2026-08-10" },
       "label": "Gemini 2.5 Pro (Antigravity)",
       "deployment": "hosted",
       "provider": "antigravity",

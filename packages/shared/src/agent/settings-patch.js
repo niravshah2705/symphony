@@ -15,8 +15,12 @@
  */
 
 const { normalizeAgentRuntime, normalizeWorkflowPattern } = require('./runtimes');
+const { COMPLEXITY_TIER_IDS } = require('./model-presets');
 
 const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity']);
+// The complexity slider stores one of the catalog tiers, or 'custom' when the
+// roles were set individually and match no tier.
+const COMPLEXITY_TIER_VALUES = Object.freeze([...COMPLEXITY_TIER_IDS, 'custom']);
 // BYoM ("Bring Your Own Model") slot providers — the true local-inference
 // runtimes plus the Hugging Face hosted router (formerly the "local" providers).
 const BYOM_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'huggingface']);
@@ -143,6 +147,9 @@ const ALLOWED = Object.freeze({
   thinkingLlmPresetId: str(80),
   executionLlmPresetId: str(80),
   testingLlmPresetId: str(80),
+  // Complexity slider tier (or 'custom'). Metadata only — the per-role keys
+  // above drive model resolution.
+  complexityTier: oneOf(COMPLEXITY_TIER_VALUES),
 
   // Per-provider model/host/parameter blocks
   ...localParamKeys('ollama'),
@@ -240,6 +247,7 @@ function describeEditableSettings() {
     `- planningProvider: ${PLANNING_PROVIDERS.join(' | ')}`,
     `- repositoryProvider: ${REPOSITORY_PROVIDERS.join(' | ')}`,
     `- lmstudioContextMode / omlxContextMode / codexContextMode: ${CONTEXT_MODES.join(' | ')}`,
+    `- complexityTier: ${COMPLEXITY_TIER_VALUES.join(' | ')}`,
     '- langsmithTracing: true | false',
     '',
     'Numbers: temperature 0-2, topP 0-1; context windows and token limits are integers.',

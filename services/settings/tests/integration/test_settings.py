@@ -11,15 +11,16 @@ from tests.helpers import auth, make_user
 pytestmark = pytest.mark.asyncio
 
 
-async def test_universe_lists_all_four_domains(client):
+async def test_universe_lists_all_domains(client):
     _u, token = await make_user(email="u@x.com", org_id=uuid.uuid4())
     resp = await client.get("/api/v1/settings/universe", headers=auth(token))
     assert resp.status_code == 200
     domains = resp.json()["domains"]
-    assert set(domains) == {"harness", "tools", "skills", "plugins"}
+    assert set(domains) == {"harness", "tools", "skills", "plugins", "hooks"}
     assert "deepagent" in domains["harness"]
     assert "docker" in domains["tools"]
     assert "linear" in domains["skills"]
+    assert "pre-code" in domains["hooks"]
 
 
 async def test_org_policy_round_trips(client):
