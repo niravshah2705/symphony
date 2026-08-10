@@ -45,6 +45,42 @@ function firstText(values, maximum = 120) {
   return null;
 }
 
+const RESOURCE_MAX_ITEMS = 100;
+const TOP_RESOURCE_LIMIT = 10;
+
+/**
+ * Read a resource metadata field (skills/tools/plugins), tolerant of both the
+ * array shape this app writes and a comma-separated string. Returns a trimmed,
+ * de-duplicated, capped list of names.
+ */
+function resourceNames(value) {
+  const raw = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
+  const seen = new Set();
+  const out = [];
+  for (const entry of raw) {
+    const name = cleanText(entry, 120);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+    if (out.length >= RESOURCE_MAX_ITEMS) break;
+  }
+  return out;
+}
+
+/** Frequency rollup of a resource category across traces (used → configured). */
+function topResources(traces, usedKey, configuredKey, limit = TOP_RESOURCE_LIMIT) {
+  const counts = new Map();
+  for (const trace of traces) {
+    const resources = trace.resources || {};
+    const list = resources[usedKey] && resources[usedKey].length ? resources[usedKey] : resources[configuredKey] || [];
+    for (const name of list) counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, limit)
+    .map(([name, count]) => ({ name, count }));
+}
+
 function runtimeAndModel(run) {
   const metadata = metadataFor(run);
   const invocation = invocationFor(run);
@@ -132,6 +168,14 @@ function normalizeRun(run, options = {}) {
   const taskId = firstText([metadata['task-id'], metadata.task_id, metadata.taskId], 80);
   const sessionId = firstText([metadata.session, metadata.session_id, run.session_id], 120);
   const name = cleanText(run.name, 160) || 'Agent change';
+  const resources = {
+    skills: resourceNames(metadata.skills),
+    tools: resourceNames(metadata.tools),
+    plugins: resourceNames(metadata.plugins),
+    skillsUsed: resourceNames(metadata.skills_used),
+    toolsUsed: resourceNames(metadata.tools_used),
+    pluginsUsed: resourceNames(metadata.plugins_used),
+  };
 
   return {
     id: cleanText(run.id || run.trace_id, 120) || null,
@@ -143,6 +187,7 @@ function normalizeRun(run, options = {}) {
       taskId,
       sessionId,
     },
+    resources,
     startedAt: Number.isFinite(Date.parse(run.start_time)) ? new Date(run.start_time).toISOString() : null,
     finishedAt: Number.isFinite(Date.parse(run.end_time)) ? new Date(run.end_time).toISOString() : null,
     latencyMs: latencyMs(run),
@@ -211,6 +256,11 @@ function aggregateRuns(runs, options = {}) {
       averageLatencyMs: latencies.length ? latencyTotal / latencies.length : null,
       p95LatencyMs: percentile(latencies, 0.95),
       latencyCoverage: { reported: latencies.length, total: traces.length },
+      resourceUsage: {
+        tools: topResources(traces, 'toolsUsed', 'tools'),
+        skills: topResources(traces, 'skillsUsed', 'skills'),
+        plugins: topResources(traces, 'pluginsUsed', 'plugins'),
+      },
     },
     traces,
   };

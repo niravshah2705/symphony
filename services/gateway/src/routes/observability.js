@@ -13,6 +13,14 @@ function analyticsConfigured(result) {
   return !['tracing-disabled', 'api-key-missing', 'project-missing'].includes(result.reason);
 }
 
+// Prefer the actually-used names; fall back to the configured/available set.
+function preferUsed(resources, usedKey, configuredKey) {
+  const source = resources && typeof resources === 'object' ? resources : {};
+  const used = source[usedKey];
+  if (Array.isArray(used) && used.length) return used;
+  return Array.isArray(source[configuredKey]) ? source[configuredKey] : [];
+}
+
 function toAnalyticsPayload(result) {
   const sourceSummary = result.summary || {};
   const traces = Array.isArray(result.traces) ? result.traces : [];
@@ -30,6 +38,7 @@ function toAnalyticsPayload(result) {
       totalTokens: sourceSummary.totalTokens ?? null,
       avgLatencyMs: sourceSummary.averageLatencyMs ?? null,
       errorRate: sourceSummary.errorRate ?? null,
+      resourceUsage: sourceSummary.resourceUsage || { tools: [], skills: [], plugins: [] },
     },
     changes: traces.map((trace) => ({
       id: trace.id,
@@ -41,6 +50,9 @@ function toAnalyticsPayload(result) {
       latencyMs: trace.latencyMs,
       totalTokens: trace.tokens.total,
       totalCost: trace.cost.totalUsd,
+      tools: preferUsed(trace.resources, 'toolsUsed', 'tools'),
+      skills: preferUsed(trace.resources, 'skillsUsed', 'skills'),
+      plugins: preferUsed(trace.resources, 'pluginsUsed', 'plugins'),
       traceUrl: trace.traceUrl,
     })),
     coverage: result.summary

@@ -7,7 +7,7 @@ const { configureTracing } = require('./plan');
 const { prepareWorkspace, preparePlannedWorkspace } = require('./workspace');
 const framework = require('./framework');
 const tools = require('./tools');
-const { withAnnotations } = require('./trace-annotations');
+const { withAnnotations, withResources } = require('./trace-annotations');
 const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = require('./runtimes');
 const codingWorkflow = require('./workflows/coding.workflow');
 
@@ -161,6 +161,8 @@ async function executeCodingRuntime({
   });
   const skillPaths = framework.installSkills(workDir, codingWorkflow.skills);
   let deepAgentInvoke;
+  let resolvedTools = null;
+  let resolvedSkills = null;
 
   if (runtime !== requestedRuntime) {
     step(
@@ -179,7 +181,7 @@ async function executeCodingRuntime({
       repositoryBroker: Boolean(repositoryBroker),
     });
     if (repositoryBroker) extraTools.push(repositoryBroker.createTool());
-    const { agent } = framework.buildAgent({
+    const { agent, tools, skillPaths: builtSkills } = framework.buildAgent({
       workflow: codingWorkflow,
       llm,
       rootDir: workDir,
@@ -190,6 +192,8 @@ async function executeCodingRuntime({
       extraTools,
       env,
     });
+    resolvedTools = tools;
+    resolvedSkills = builtSkills;
     deepAgentInvoke = (runtimePrompt, tracedConfig) => {
       const childConfig = { ...tracedConfig };
       delete childConfig.runId;
@@ -200,6 +204,12 @@ async function executeCodingRuntime({
   step(
     `Running code-writer (runtime ${runtime}, pattern ${keys.workflowPattern || 'sequential'}, ` +
     `provider ${llm.provider}, model ${llm.model}, ${skillPaths.length} skills, max ${CONFIG.CODER.maxTurns} turns)…`
+  );
+  // Stamp the configured skills/tools/plugins onto the trace so coder runs are
+  // filterable/summarisable by which resources were made available.
+  const invokeConfigWithResources = withResources(
+    invokeConfig,
+    framework.configuredResourceNames({ workflow: codingWorkflow, effective: null, resolvedTools, resolvedSkills })
   );
   return executeAgentRuntime({
     runtime: requestedRuntime,
@@ -213,7 +223,7 @@ async function executeCodingRuntime({
     maxTurns: CONFIG.CODER.maxTurns,
     ctx: { apiKey, step },
     env,
-    invokeConfig,
+    invokeConfig: invokeConfigWithResources,
     tags: codingWorkflow.tags,
     deepAgentInvoke,
     lastText: framework.lastText,

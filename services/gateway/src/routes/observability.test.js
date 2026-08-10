@@ -46,6 +46,7 @@ test('observability analytics mapper exposes the stable UI contract', () => {
     totalTokens: 120,
     avgLatencyMs: 1500,
     errorRate: 0,
+    resourceUsage: { tools: [], skills: [], plugins: [] },
   });
   assert.deepEqual(payload.changes[0], {
     id: 'run-1',
@@ -57,8 +58,43 @@ test('observability analytics mapper exposes the stable UI contract', () => {
     latencyMs: 1500,
     totalTokens: 120,
     totalCost: 0.42,
+    tools: [],
+    skills: [],
+    plugins: [],
     traceUrl: 'https://smith.langchain.com/run-1',
   });
+});
+
+test('observability mapper surfaces resource usage, preferring used over configured', () => {
+  const payload = toAnalyticsPayload({
+    availability: 'available',
+    window: {},
+    summary: {
+      traceCount: 1,
+      resourceUsage: { tools: [{ name: 'docker_build', count: 3 }], skills: [], plugins: [] },
+    },
+    traces: [{
+      id: 'run-1',
+      name: 'Change',
+      change: { label: 'ENG-1 · Change' },
+      tokens: {},
+      cost: {},
+      resources: {
+        skills: ['commit', 'push'],
+        tools: ['docker_build', 'linear_graphql'],
+        plugins: ['linear'],
+        toolsUsed: ['docker_build'],
+        skillsUsed: [],
+        pluginsUsed: [],
+      },
+    }],
+  });
+
+  // Tools: used present → used wins. Skills/plugins: no used → fall back to configured.
+  assert.deepEqual(payload.changes[0].tools, ['docker_build']);
+  assert.deepEqual(payload.changes[0].skills, ['commit', 'push']);
+  assert.deepEqual(payload.changes[0].plugins, ['linear']);
+  assert.deepEqual(payload.summary.resourceUsage.tools, [{ name: 'docker_build', count: 3 }]);
 });
 
 test('observability mapper distinguishes missing configuration from provider outage', () => {

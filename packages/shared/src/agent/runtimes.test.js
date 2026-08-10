@@ -19,6 +19,8 @@ const {
   applyWorkflowPattern,
   executeAgentRuntime,
   claudePermissionGuard,
+  extractUsedResources,
+  usedResourceMetadata,
 } = require('./runtimes');
 
 function workspace(t) {
@@ -807,4 +809,61 @@ test('Claude permission guard denies credential-bearing shell and path escapes',
   assert.equal((await guard('Read', { file_path: path.join(root, 'README.md') })).behavior, 'allow');
   assert.equal((await guard('Read', { file_path: path.join(root, '..', 'secret') })).behavior, 'deny');
   assert.equal((await guard('Read', { file_path: path.join(root, 'outside-link', 'secret') })).behavior, 'deny');
+});
+
+// ---------------------------------------------------------------------------
+// extractUsedResources / usedResourceMetadata (actually-used skills/tools/plugins)
+// ---------------------------------------------------------------------------
+
+test('extractUsedResources reads LangGraph tool_calls, skill reads, and MCP plugins', () => {
+  const result = {
+    messages: [
+      { tool_calls: [{ name: 'docker_build', args: {} }, { name: 'read_file', args: { file_path: '/work/.agent-skills/commit/SKILL.md' } }] },
+      { tool_calls: [{ name: 'linear__create_issue', args: {} }] },
+      { additional_kwargs: { tool_calls: [{ function: { name: 'web_search', arguments: '{}' } }] } },
+    ],
+  };
+  const used = extractUsedResources(result);
+  assert.deepEqual(used.toolsUsed, ['docker_build', 'read_file', 'linear__create_issue', 'web_search']);
+  assert.deepEqual(used.skillsUsed, ['commit']);
+  assert.deepEqual(used.pluginsUsed, ['linear']);
+});
+
+test('extractUsedResources reads Claude tool_use content blocks and mcp__ prefixes', () => {
+  const result = {
+    messages: [
+      { type: 'assistant', message: { content: [
+        { type: 'text', text: 'ok' },
+        { type: 'tool_use', name: 'Read', input: { file_path: '/repo/skills/land/SKILL.md' } },
+        { type: 'tool_use', name: 'mcp__playwright__browser_click', input: {} },
+      ] } },
+    ],
+  };
+  const used = extractUsedResources(result);
+  assert.deepEqual(used.toolsUsed, ['Read', 'mcp__playwright__browser_click']);
+  assert.deepEqual(used.skillsUsed, ['land']);
+  assert.deepEqual(used.pluginsUsed, ['playwright']);
+});
+
+test('extractUsedResources de-duplicates repeated calls', () => {
+  const result = {
+    messages: [
+      { tool_calls: [{ name: 'docker_build' }, { name: 'docker_build' }] },
+      { tool_calls: [{ name: 'docker_build' }] },
+    ],
+  };
+  assert.deepEqual(extractUsedResources(result).toolsUsed, ['docker_build']);
+});
+
+test('extractUsedResources returns empty lists for missing/error results', () => {
+  for (const value of [null, undefined, {}, { messages: [] }, new Error('boom')]) {
+    const used = extractUsedResources(value);
+    assert.deepEqual(used, { toolsUsed: [], skillsUsed: [], pluginsUsed: [] });
+  }
+});
+
+test('usedResourceMetadata omits empty categories and stamps counts', () => {
+  const result = { messages: [{ tool_calls: [{ name: 'web_search' }] }] };
+  assert.deepEqual(usedResourceMetadata(result), { tools_used: ['web_search'], tools_used_count: 1 });
+  assert.deepEqual(usedResourceMetadata({ messages: [] }), {});
 });
