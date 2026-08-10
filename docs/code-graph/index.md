@@ -22,4 +22,4 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-back | 16 | [src-back.md](src-back.md) |
 | src-issue | 11 | [src-issue.md](src-issue.md) |
 | src-token | 93 | [src-token.md](src-token.md) |
-| views-render | 415 | [views-render.md](views-render.md) |
+| views-render | 418 | [views-render.md](views-render.md) |

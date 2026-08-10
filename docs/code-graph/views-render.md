@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 415 nodes
-- **Cohesion**: 0.4832
+- **Size**: 418 nodes
+- **Cohesion**: 0.4827
 - **Dominant Language**: javascript
 
 ## Members
@@ -49,23 +49,23 @@ Directory-based community: public/js
 | renderAccessDenied | Function | ./public/js/app.js | 469-481 |
 | render | Function | ./public/js/app.js | 483-535 |
 | capitalize | Function | ./public/js/app.js | 537-540 |
-| setState | Function | ./public/js/auth.js | 44-47 |
-| withinSessionTimeout | Function | ./public/js/auth.js | 49-61 |
-| loadConfiguration | Function | ./public/js/auth.js | 63-92 |
-| firstAuthUser | Function | ./public/js/auth.js | 95-103 |
-| mergeDisplayProfile | Function | ./public/js/auth.js | 105-114 |
-| resolveDeployment | Function | ./public/js/auth.js | 122-132 |
-| confirmIdentity | Function | ./public/js/auth.js | 137-145 |
-| initializeAuthentication | Function | ./public/js/auth.js | 147-195 |
-| getAuthenticationState | Function | ./public/js/auth.js | 197-199 |
-| getAuthProviders | Function | ./public/js/auth.js | 204-210 |
-| expireAuthentication | Function | ./public/js/auth.js | 212-217 |
-| completeSignIn | Function | ./public/js/auth.js | 224-245 |
-| signIn | Function | ./public/js/auth.js | 247-253 |
-| signInWithMicrosoft | Function | ./public/js/auth.js | 255-262 |
-| signOut | Function | ./public/js/auth.js | 264-270 |
+| setState | Function | ./public/js/auth.js | 45-48 |
+| withinSessionTimeout | Function | ./public/js/auth.js | 50-62 |
+| loadConfiguration | Function | ./public/js/auth.js | 64-93 |
+| firstAuthUser | Function | ./public/js/auth.js | 96-104 |
+| mergeDisplayProfile | Function | ./public/js/auth.js | 106-115 |
+| emitDeploymentStatus | Function | ./public/js/auth.js | 123-129 |
+| watchProvisioning | Function | ./public/js/auth.js | 135-151 |
+| resolveDeployment | Function | ./public/js/auth.js | 153-167 |
+| confirmIdentity | Function | ./public/js/auth.js | 172-180 |
+| initializeAuthentication | Function | ./public/js/auth.js | 182-230 |
+| getAuthenticationState | Function | ./public/js/auth.js | 232-234 |
+| getAuthProviders | Function | ./public/js/auth.js | 239-245 |
+| expireAuthentication | Function | ./public/js/auth.js | 247-252 |
+| completeSignIn | Function | ./public/js/auth.js | 259-280 |
+| signIn | Function | ./public/js/auth.js | 282-288 |
 
-*... and 365 more members.*
+*... and 368 more members.*
 
 ## Execution Flows
 
@@ -73,9 +73,9 @@ Directory-based community: public/js
 - **beginMicrosoftSignIn** (criticality: 0.80, depth: 7)
 - **beginSignOut** (criticality: 0.79, depth: 7)
 - **render** (criticality: 0.76, depth: 6)
+- **initializeAuthentication** (criticality: 0.73, depth: 3)
 - **promptOneTap** (criticality: 0.69, depth: 2)
 - **maybeRefreshConnection** (criticality: 0.68, depth: 3)
-- **initializeAuthentication** (criticality: 0.65, depth: 2)
 - **maybeRefreshRole** (criticality: 0.65, depth: 3)
 - **applyServerEvent** (criticality: 0.63, depth: 5)
 - **renderBoard** (criticality: 0.54, depth: 4)
@@ -93,7 +93,7 @@ Directory-based community: public/js
 - `push` (51 edge(s))
 - `setAttribute` (46 edge(s))
 - `filter` (45 edge(s))
-- `catch` (41 edge(s))
+- `catch` (42 edge(s))
 - `Boolean` (38 edge(s))
 - `isArray` (27 edge(s))
 - `slice` (27 edge(s))
@@ -110,7 +110,7 @@ Directory-based community: public/js
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (33 edge(s))
-- `./public/js/auth.js` (20 edge(s))
+- `./public/js/auth.js` (22 edge(s))
 - `./public/js/omnibox-router.mjs` (16 edge(s))
 - `./public/js/views/organization.js` (13 edge(s))
 - `./public/js/views/settings-policy.js` (12 edge(s))

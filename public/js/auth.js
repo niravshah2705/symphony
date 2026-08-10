@@ -11,6 +11,7 @@ import {
   signOut as firebaseSignOut,
 } from '/vendor/firebase/firebase-auth.js';
 import { api, setAccessTokenProvider, getApiBase, setApiBase } from './api.js';
+import { pollUntilResolved } from './deployment.js';
 
 const AUTH_SESSION_TIMEOUT_MS = 15_000;
 // Google Identity Services (One Tap). Loaded on demand only when a public
@@ -119,16 +120,50 @@ function mergeDisplayProfile(serverUser, browserUser) {
 // workspace stays on the shared gateway (the bootstrap base). Best-effort — any
 // failure leaves the SPA on the shared gateway. Runs after confirmIdentity so the
 // access-token provider is set (the /api/config call carries the bearer).
-async function resolveDeployment() {
+function emitDeploymentStatus(status) {
   try {
-    const cfg = await api.getRuntimeConfig();
-    if (cfg?.status === 'provisioned' && cfg.gatewayUrl) {
-      setApiBase(cfg.gatewayUrl);
-    }
-    return { deploymentStatus: cfg?.status || 'shared', orgName: cfg?.orgName || null };
+    window.dispatchEvent(new CustomEvent('ai-fleet:deployment-status', { detail: { status: status || 'shared' } }));
+  } catch (_) {
+    /* non-browser / no CustomEvent */
+  }
+}
+
+// While a dedicated stack is coming up, poll the SHARED gateway's resolver in the
+// background (init is NOT blocked). On 'provisioned' we re-point + reload so the
+// whole app re-boots against the tenant gateway; other terminal states just
+// surface via the status event.
+function watchProvisioning() {
+  emitDeploymentStatus('provisioning');
+  pollUntilResolved({
+    fetchConfig: () => api.getRuntimeConfig(),
+    onStatus: emitDeploymentStatus,
+  })
+    .then((cfg) => {
+      if (cfg && cfg.status === 'provisioned' && cfg.gatewayUrl) {
+        setApiBase(cfg.gatewayUrl);
+        emitDeploymentStatus('provisioned');
+        window.location.reload();
+      } else {
+        emitDeploymentStatus((cfg && cfg.status) || 'failed');
+      }
+    })
+    .catch(() => {});
+}
+
+async function resolveDeployment() {
+  let cfg;
+  try {
+    cfg = await api.getRuntimeConfig();
   } catch (_) {
     return { deploymentStatus: 'shared', orgName: null };
   }
+  const status = cfg?.status || 'shared';
+  if (status === 'provisioned' && cfg.gatewayUrl) {
+    setApiBase(cfg.gatewayUrl);
+  } else if (status === 'provisioning') {
+    watchProvisioning(); // background — do not await
+  }
+  return { deploymentStatus: status, orgName: cfg?.orgName || null };
 }
 
 // Confirm the signed-in user is accepted by the gateway (verified email +
