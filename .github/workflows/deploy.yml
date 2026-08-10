@@ -57,6 +57,7 @@ jobs:
             gateway: ['services/gateway/**', 'deploy/gcp/Dockerfile.gateway']
             planner: ['services/planner/**', 'deploy/gcp/Dockerfile.planner']
             coder:   ['services/coder/**',   'deploy/gcp/Dockerfile.coder']
+            provisioner: ['services/provisioner/**', 'deploy/gcp/Dockerfile.provisioner']
             spa:     ['public/**', 'firebase.json']
             infra:    ['deploy/gcp/terraform/**']
             root:     ['package.json', 'package-lock.json']
@@ -71,6 +72,7 @@ jobs:
           GATEWAY: ${{ steps.filter.outputs.gateway }}
           PLANNER: ${{ steps.filter.outputs.planner }}
           CODER: ${{ steps.filter.outputs.coder }}
+          PROVISIONER: ${{ steps.filter.outputs.provisioner }}
           SPA: ${{ steps.filter.outputs.spa }}
           INFRA: ${{ steps.filter.outputs.infra }}
           ORG: ${{ steps.filter.outputs.org }}
@@ -90,6 +92,10 @@ jobs:
           if [ "$all" = "true" ] || [ "$GATEWAY" = "true" ]; then push gateway gateway       deploy/gcp/Dockerfile.gateway . ; fi
           if [ "$all" = "true" ] || [ "$PLANNER" = "true" ]; then push planner planner       deploy/gcp/Dockerfile.planner . ; fi
           if [ "$all" = "true" ] || [ "$CODER"   = "true" ]; then push coder   coder-control deploy/gcp/Dockerfile.coder   . ; fi
+          # The provisioner is a Node service (rebuilds on shared/root/force too).
+          # Its image is built even while provisioning is disabled so enabling is a
+          # one-var flip; terraform only creates the service when provisioning_enabled.
+          if [ "$all" = "true" ] || [ "$PROVISIONER" = "true" ]; then push provisioner provisioner deploy/gcp/Dockerfile.provisioner . ; fi
           # The org service builds from its own directory (its Dockerfile expects
           # services/org as the build context).
           if [ "$FORCE_ALL" = "true" ] || [ "$ORG" = "true" ]; then push org org-service services/org/Dockerfile services/org ; fi
@@ -251,6 +257,7 @@ jobs:
             echo "gateway=$(resolve gateway gateway)"
             echo "planner=$(resolve planner planner)"
             echo "coder=$(resolve coder coder-control)"
+            echo "provisioner=$(resolve provisioner provisioner)"
             echo "org=$(resolve org org-service)"
             echo "settings=$(resolve settings settings-service)"
           } >> "$GITHUB_OUTPUT"
@@ -288,6 +295,7 @@ jobs:
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
           [ -n "${{ steps.tags.outputs.coder }}" ]   && apply_args+=(-var="coder_image_tag=${{ steps.tags.outputs.coder }}") || true
+          [ -n "${{ steps.tags.outputs.provisioner }}" ] && apply_args+=(-var="provisioner_image_tag=${{ steps.tags.outputs.provisioner }}") || true
           [ -n "${{ steps.tags.outputs.org }}" ]     && apply_args+=(-var="org_image_tag=${{ steps.tags.outputs.org }}") || true
           [ -n "${{ steps.tags.outputs.settings }}" ] && apply_args+=(-var="settings_image_tag=${{ steps.tags.outputs.settings }}") || true
 
