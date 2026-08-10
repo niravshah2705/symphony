@@ -128,7 +128,7 @@ variable "proxy_image_tag" {
 variable "managed_provider_secrets" {
   type        = map(string)
   description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
-  default     = { LINEAR_API_KEY = "linear-api-key" }
+  default     = { LINEAR_API_KEY = "linear-api-key", GITHUB_TOKEN = "github-token" }
 }
 
 # --- Per-tenant provisioning (Phase 1, gated OFF by default) ------------------
