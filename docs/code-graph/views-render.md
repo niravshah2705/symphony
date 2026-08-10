@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 412 nodes
-- **Cohesion**: 0.4851
+- **Size**: 413 nodes
+- **Cohesion**: 0.4837
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: public/js
 | loadGisScript | Function | ./public/js/auth.js | 248-261 |
 | toHex | Function | ./public/js/auth.js | 263-265 |
 
-*... and 362 more members.*
+*... and 363 more members.*
 
 ## Execution Flows
 
@@ -85,12 +85,12 @@ Directory-based community: public/js
 
 ### Outgoing
 
-- `append` (140 edge(s))
+- `append` (141 edge(s))
 - `addEventListener` (104 edge(s))
 - `map` (92 edge(s))
-- `String` (81 edge(s))
+- `String` (82 edge(s))
 - `trim` (64 edge(s))
-- `push` (50 edge(s))
+- `push` (51 edge(s))
 - `setAttribute` (46 edge(s))
 - `filter` (45 edge(s))
 - `catch` (41 edge(s))
@@ -99,7 +99,7 @@ Directory-based community: public/js
 - `slice` (27 edge(s))
 - `has` (26 edge(s))
 - `getElementById` (26 edge(s))
-- `replaceChildren` (24 edge(s))
+- `join` (24 edge(s))
 
 ### Incoming
 
@@ -115,6 +115,6 @@ Directory-based community: public/js
 - `./public/js/views/organization.js` (13 edge(s))
 - `./public/js/views/settings-policy.js` (12 edge(s))
 - `./public/js/dom.js` (9 edge(s))
+- `./public/js/secret-scan.test.mjs` (9 edge(s))
 - `./public/js/agent-pause.js` (7 edge(s))
 - `./public/js/views/analytics.js` (7 edge(s))
-- `./public/js/theme.js` (6 edge(s))
