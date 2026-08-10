@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "AI Fleet — a microservice-decomposed tool to manage Linear projects and run isolated planner + coder deep-agent services over a shared library.",
   "private": true,
+  "license": "SEE LICENSE IN EULA.md",
   "type": "commonjs",
   "workspaces": [
     "packages/*",

@@ -13,12 +13,14 @@ const businessesRoutes = require('./routes/businesses');
 const rolesRoutes = require('./routes/roles');
 const observabilityRoutes = require('./routes/observability');
 const localizationRoutes = require('./routes/localization');
+const eulaRoutes = require('./routes/eula');
 const { router: codexRoutes, callback: codexCallback } = require('./routes/codex');
 const { router: claudeRoutes } = require('./routes/claude');
 const { createProxy } = require('./proxy');
 const { blockInternalProxy } = require('./settings-internal-guard');
 const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig } = require('./auth');
 const { createConfigResolver } = require('./config-resolver');
+const { requireEulaAccepted } = require('./eula');
 const { createCorsMiddleware } = require('./cors');
 const { initStore, getConversation } = require('@ai-fleet/shared/store');
 const events = require('@ai-fleet/shared/messaging/events');
@@ -133,6 +135,14 @@ app.get('/api/agent/workspace-stream-token', requirePermission('workspace', { le
   res.set('Cache-Control', 'no-store').json({ token: mintWorkspaceToken(), conversationId: WORKSPACE_CHANNEL });
 });
 
+// EULA gate applied to POST /api/issues only (task creation is "actual work";
+// board-drag PATCH and reads pass through). Kept here so all EULA gating lives
+// alongside the other gated routes (enqueue, business/prepare) below.
+const gateIssueWrites = (() => {
+  const gate = requireEulaAccepted();
+  return (req, res, next) => (req.method === 'POST' ? gate(req, res, next) : next());
+})();
+
 // User-facing API routes (owned by the gateway). Each is guarded by the
 // permission domain its feature area belongs to (see packages/shared/authz.js).
 // GET → 'read', mutations → 'write'. The codex/claude/roles config surfaces are
@@ -141,17 +151,23 @@ app.use('/api/settings', requirePermission('settings'), settingsRoutes);
 app.use('/api/settings/codex', requirePermission('settings', { level: 'write' }), codexRoutes);
 app.use('/api/settings/claude', requirePermission('settings', { level: 'write' }), claudeRoutes);
 app.use('/api/projects', requirePermission('planning'), projectsRoutes);
-app.use('/api/issues', requirePermission('planning'), issuesRoutes);
+// Creating an implementation task (POST) is "actual work" → EULA-gated; the
+// board-drag state change (PATCH) and reads are not. Gate only the create.
+app.use('/api/issues', requirePermission('planning'), gateIssueWrites, issuesRoutes);
 app.use('/api/businesses', requirePermission('planning'), businessesRoutes);
 app.use('/api/roles', requirePermission('settings', { level: 'write' }), rolesRoutes);
 app.use('/api/observability', requirePermission('insights'), observabilityRoutes);
 // Locale is non-sensitive UI strings — available to public + authenticated.
 app.use('/api/locale', localizationRoutes);
+// EULA acceptance: GET status is public (anonymous → accepted:false); POST records
+// the caller's decision (authenticated only, enforced inside the router). The
+// gate below (requireEulaAccepted) enforces acceptance on the actual-work routes.
+app.use('/api/eula', eulaRoutes);
 
 // The two long-running request submissions are PUBLISHED (Pub/Sub) rather than
 // proxied — they return a conversationId the browser streams via SSE. Registered
 // before the proxies so these exact paths win. Both mutate → workspace:write.
-app.post('/api/agent/enqueue', requirePermission('workspace'), publish.enqueue);
+app.post('/api/agent/enqueue', requirePermission('workspace'), requireEulaAccepted(), publish.enqueue);
 app.post('/api/coder/run', requirePermission('workspace'), publish.coderRun);
 
 // All other agent surfaces are reverse-proxied to their isolated services.
@@ -164,6 +180,10 @@ const plannerProxy = createProxy(CONFIG.SERVICES.plannerUrl);
 // needs workspace:write. See docs/ACCESS_MODEL.md.
 app.post('/api/agent/knowledge-search', requirePermission('workspace', { level: 'read' }), plannerProxy);
 app.post('/api/agent/memory-search', requirePermission('workspace', { level: 'read' }), plannerProxy);
+// Preparing a business runs the real 6-stage pipeline (writes) — actual work, so
+// it needs EULA acceptance. Registered before the catch-all so this exact path
+// wins; everything else on /api/agent keeps the plain workspace:write gate.
+app.post('/api/agent/business/prepare', requirePermission('workspace'), requireEulaAccepted(), plannerProxy);
 app.use('/api/agent', requirePermission('workspace'), plannerProxy);
 app.use('/api/coder', requirePermission('workspace'), createProxy(CONFIG.SERVICES.coderUrl));
 

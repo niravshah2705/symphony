@@ -10,16 +10,16 @@ Auto-generated documentation from the code knowledge graph community structure.
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-model | 1502 | [agent-model.md](agent-model.md) |
+| agent-model | 1516 | [agent-model.md](agent-model.md) |
 | core-org | 479 | [core-org.md](core-org.md) |
 | core-project | 245 | [core-project.md](core-project.md) |
 | e2e-test:agent | 38 | [e2e-test-agent.md](e2e-test-agent.md) |
 | gcp-log | 10 | [gcp-log.md](gcp-log.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
-| routes-role | 25 | [routes-role.md](routes-role.md) |
+| routes-role | 27 | [routes-role.md](routes-role.md) |
 | scripts-obfuscate | 26 | [scripts-obfuscate.md](scripts-obfuscate.md) |
-| src-auth | 176 | [src-auth.md](src-auth.md) |
+| src-auth | 198 | [src-auth.md](src-auth.md) |
 | src-back | 16 | [src-back.md](src-back.md) |
 | src-issue | 11 | [src-issue.md](src-issue.md) |
 | src-token | 93 | [src-token.md](src-token.md) |
-| views-render | 414 | [views-render.md](views-render.md) |
+| views-render | 418 | [views-render.md](views-render.md) |
