@@ -70,6 +70,19 @@ steps:
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/coder-control:${_IMAGE_TAG}
       - .
 
+  # Built for parity so enabling per-tenant provisioning is a one-var flip; the
+  # provisioner service itself is only created by terraform when provisioning_enabled.
+  - id: build-provisioner
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - deploy/gcp/Dockerfile.provisioner
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/provisioner:${_IMAGE_TAG}
+      - .
+
   # --- Terraform: init + bootstrap (APIs + Artifact Registry only) -----------
   - id: tf-bootstrap
     name: hashicorp/terraform:1.9
@@ -108,6 +121,11 @@ steps:
     name: gcr.io/cloud-builders/docker
     waitFor: [build-coder, tf-bootstrap]
     args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/coder-control:${_IMAGE_TAG}"]
+
+  - id: push-provisioner
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-provisioner, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/provisioner:${_IMAGE_TAG}"]
 
   # --- Obfuscate the SPA's client JS before it is published ------------------
   # Rewrites public/js/** in /workspace (shared across steps) so spa-publish
@@ -151,7 +169,7 @@ steps:
   # --- Terraform: full apply (services, job, pubsub, scheduler, secrets, …) --
   - id: tf-apply
     name: hashicorp/terraform:1.9
-    waitFor: [push-gateway, push-planner, push-coder, spa-publish]
+    waitFor: [push-gateway, push-planner, push-coder, push-provisioner, spa-publish]
     entrypoint: sh
     args:
       - -c

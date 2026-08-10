@@ -97,12 +97,41 @@ resource "google_cloud_run_v2_service" "org" {
         name  = "IDP_FIREBASE_PROJECT"
         value = var.project_id
       }
+      # The deployment resolver (GET /api/v1/me/deployment) returns this as the
+      # shared front-facing gateway for pseudo/org-less/un-provisioned orgs.
+      env {
+        name  = "SHARED_GATEWAY_URL"
+        value = local.gateway_url
+      }
+      # Per-tenant provisioning trigger (gated; publishes to PROVISIONING_TOPIC).
+      env {
+        name  = "PROVISIONING_ENABLED"
+        value = tostring(var.provisioning_enabled)
+      }
+      env {
+        name  = "PROVISIONING_TOPIC"
+        value = var.provisioning_topic
+      }
       env {
         name = "JWT_SECRET"
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.org_jwt_secret.secret_id
             version = "latest"
+          }
+        }
+      }
+      # Shared token the org service verifies on the provisioner's S2S write-back
+      # (PATCH /internal/orgs/{id}/deployments). Same secret the provisioner uses.
+      dynamic "env" {
+        for_each = var.provisioning_enabled && var.internal_api_token != "" ? [1] : []
+        content {
+          name = "INTERNAL_API_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.internal_api_token[0].secret_id
+              version = "latest"
+            }
           }
         }
       }
@@ -124,7 +153,18 @@ resource "google_cloud_run_v2_service" "org" {
     google_project_iam_member.org_datastore,
     google_secret_manager_secret_iam_member.org_jwt_accessor,
     google_secret_manager_secret_version.org_jwt_secret,
+    google_secret_manager_secret_iam_member.org_internal_token,
   ]
+}
+
+# The org service reads the shared internal token (created in provisioner.tf) to
+# verify the provisioner's deployment write-back. Gated identically.
+resource "google_secret_manager_secret_iam_member" "org_internal_token" {
+  count     = var.provisioning_enabled && var.internal_api_token != "" ? 1 : 0
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.internal_api_token[0].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.org.email}"
 }
 
 # Only the gateway SA may invoke the org service (OIDC). No allUsers invoker.
