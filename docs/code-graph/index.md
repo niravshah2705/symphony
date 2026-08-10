@@ -10,7 +10,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-model | 1456 | [agent-model.md](agent-model.md) |
+| agent-model | 1470 | [agent-model.md](agent-model.md) |
 | core-project | 443 | [core-project.md](core-project.md) |
 | core-project | 245 | [core-project-2.md](core-project-2.md) |
 | e2e-test:agent | 38 | [e2e-test-agent.md](e2e-test-agent.md) |
@@ -18,7 +18,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
 | routes-role | 25 | [routes-role.md](routes-role.md) |
 | scripts-obfuscate | 26 | [scripts-obfuscate.md](scripts-obfuscate.md) |
-| src-auth | 158 | [src-auth.md](src-auth.md) |
+| src-auth | 178 | [src-auth.md](src-auth.md) |
 | src-issue | 11 | [src-issue.md](src-issue.md) |
 | src-token | 93 | [src-token.md](src-token.md) |
-| views-render | 409 | [views-render.md](views-render.md) |
+| views-render | 412 | [views-render.md](views-render.md) |

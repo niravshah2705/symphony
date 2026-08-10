@@ -4,6 +4,7 @@ const express = require('express');
 const { getApiKey } = require('@ai-fleet/shared/store');
 const linear = require('@ai-fleet/shared/linear');
 const { asyncHandler } = require('@ai-fleet/shared/util');
+const { requireEulaAccepted } = require('../eula');
 
 const router = express.Router();
 const taskRequests = new Map();
@@ -80,6 +81,7 @@ function pruneTaskRequests() {
 // and browser never receive a raw GraphQL write capability.
 router.post(
   '/',
+  requireEulaAccepted(),
   asyncHandler(async (req, res) => {
     const task = normalizeProjectTask(req.body);
     const requestKey = `${task.projectId}:${task.idempotencyKey}`;

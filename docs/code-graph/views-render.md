@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 409 nodes
-- **Cohesion**: 0.4854
+- **Size**: 412 nodes
+- **Cohesion**: 0.4851
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: public/js
 | loadGisScript | Function | ./public/js/auth.js | 248-261 |
 | toHex | Function | ./public/js/auth.js | 263-265 |
 
-*... and 359 more members.*
+*... and 362 more members.*
 
 ## Execution Flows
 
@@ -86,25 +86,25 @@ Directory-based community: public/js
 ### Outgoing
 
 - `append` (140 edge(s))
-- `addEventListener` (102 edge(s))
+- `addEventListener` (104 edge(s))
 - `map` (92 edge(s))
 - `String` (81 edge(s))
 - `trim` (64 edge(s))
 - `push` (50 edge(s))
 - `setAttribute` (46 edge(s))
 - `filter` (45 edge(s))
+- `catch` (41 edge(s))
 - `Boolean` (38 edge(s))
-- `catch` (38 edge(s))
 - `isArray` (27 edge(s))
 - `slice` (27 edge(s))
+- `has` (26 edge(s))
 - `getElementById` (26 edge(s))
-- `has` (25 edge(s))
 - `replaceChildren` (24 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (119 edge(s))
-- `./public/js/views/agent.js` (79 edge(s))
+- `./public/js/api.js` (121 edge(s))
+- `./public/js/views/agent.js` (82 edge(s))
 - `./public/js/app.js` (75 edge(s))
 - `./public/js/views/settings.js` (66 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
