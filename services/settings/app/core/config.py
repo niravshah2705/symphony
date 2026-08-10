@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     firestore_database: str = "(default)"
     firestore_namespace: str = "settings_service"
 
+    # --- Secret vault (GCP KMS envelope encryption) ---
+    # Full KMS crypto-key resource id
+    # (projects/P/locations/L/keyRings/R/cryptoKeys/K). Empty => the in-memory
+    # KMS fake is used (tests / local dev), mirroring the Firestore fake.
+    kms_key_name: str = ""
+
+    # --- Internal S2S ---
+    # Shared token required on the /api/v1/internal/s2s/* surface (the egress
+    # proxy has no forwarded user token; the token IS the authorization). Empty
+    # => that surface is refused (fail closed).
+    internal_api_token: str = ""
+
     # Local JWT — >=32 bytes recommended for HS256 (RFC 7518 3.2)
     jwt_secret: str = Field(min_length=32)
     jwt_issuer: str = "settings-service"

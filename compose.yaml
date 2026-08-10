@@ -1,0 +1,77 @@
+# Local emulation of the Cloud Run multi-container (sidecar) model.
+#
+# Google Cloud Run multi-container instances share the loopback network
+# namespace between containers. Docker Compose reproduces that exactly with
+# `network_mode: "service:proxy"`: the agent containers reach the proxy at
+# 127.0.0.1:4030, just like in the cloud. The agent containers hold NO raw
+# provider credentials — only the proxy does — and route all egress through it.
+#
+# Usage:
+#   cp .env.example .env         # fill in the proxy's real secrets locally
+#   docker compose up --build
+#
+# Verify the isolation holds:
+#   docker compose exec planner env | grep -iE 'TOKEN|KEY|SECRET'   # -> nothing
+#
+# Secrets live ONLY in the proxy service's environment (loaded from .env, which
+# is gitignored). See deploy/gcp/terraform/cloud_run.tf for the cloud wiring.
+
+services:
+  # -------- egress proxy sidecar (holds the credentials) --------------------
+  proxy:
+    build:
+      context: .
+      dockerfile: deploy/gcp/Dockerfile.proxy
+    environment:
+      PROXY_PORT: "4030"
+      # Managed platform keys (mirror store.js SECRET_ENV). Loaded from .env.
+      LINEAR_API_KEY: "${LINEAR_API_KEY:-}"
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      HUGGINGFACE_API_KEY: "${HUGGINGFACE_API_KEY:-}"
+      LANGSMITH_API_KEY: "${LANGSMITH_API_KEY:-}"
+      # Per-org vault (optional locally). When PROXY_ORG_ID + SETTINGS_URL are
+      # set, customer-selected keys are resolved from the settings service S2S.
+      PROXY_ORG_ID: "${PROXY_ORG_ID:-}"
+      SETTINGS_URL: "${SETTINGS_URL:-}"
+      INTERNAL_API_TOKEN: "${INTERNAL_API_TOKEN:-}"
+    healthcheck:
+      # node:alpine has no curl; use a tiny inline Node probe.
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://127.0.0.1:4030/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # -------- planner agent runtime (NO raw secrets) --------------------------
+  planner:
+    build:
+      context: .
+      dockerfile: deploy/gcp/Dockerfile.planner
+    # Share the proxy's network namespace so 127.0.0.1:4030 reaches the sidecar
+    # (the Compose analogue of Cloud Run's shared loopback).
+    network_mode: "service:proxy"
+    environment:
+      PLANNER_PORT: "8080"
+      EGRESS_PROXY_URL: "http://127.0.0.1:4030"
+      # NOTE: deliberately NO provider secrets here — the proxy injects them.
+    depends_on:
+      proxy:
+        condition: service_healthy
+
+  # -------- coder agent runtime (NO raw secrets) ----------------------------
+  coder:
+    build:
+      context: .
+      dockerfile: deploy/gcp/Dockerfile.coder
+    network_mode: "service:proxy"
+    environment:
+      CODER_SERVICE_PORT: "8081"
+      CODER_ROLE: "control"
+      EGRESS_PROXY_URL: "http://127.0.0.1:4030"
+    depends_on:
+      proxy:
+        condition: service_healthy

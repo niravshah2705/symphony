@@ -4,15 +4,15 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 13
+**Total communities**: 14
 
 ## Communities
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-model | 1549 | [agent-model.md](agent-model.md) |
+| agent-model | 1578 | [agent-model.md](agent-model.md) |
 | core-org | 483 | [core-org.md](core-org.md) |
-| core-project | 245 | [core-project.md](core-project.md) |
+| core-org | 335 | [core-org-2.md](core-org-2.md) |
 | e2e-test:agent | 38 | [e2e-test-agent.md](e2e-test-agent.md) |
 | gcp-log | 10 | [gcp-log.md](gcp-log.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
@@ -21,5 +21,6 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-auth | 200 | [src-auth.md](src-auth.md) |
 | src-back | 16 | [src-back.md](src-back.md) |
 | src-issue | 11 | [src-issue.md](src-issue.md) |
+| src-test:build | 41 | [src-test-build.md](src-test-build.md) |
 | src-token | 93 | [src-token.md](src-token.md) |
 | views-render | 418 | [views-render.md](views-render.md) |

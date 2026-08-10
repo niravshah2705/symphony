@@ -2,8 +2,33 @@
 
 const path = require('path');
 const { ROLES } = require('./authz');
+const { egressUrl, normalizeProxyBase } = require('./egress');
 
 const PORT = Number(process.env.PORT) || 4000;
+
+/**
+ * Egress proxy switch. When EGRESS_PROXY_URL is set (on the planner/coder/
+ * coder-worker containers, which run co-located with the proxy sidecar), every
+ * third-party base URL below defaults to `${EGRESS_PROXY_URL}<prefix>` instead
+ * of the real upstream, so the SDK/fetch calls go to the sidecar — which injects
+ * the real credential. The agent container therefore holds NO raw provider key.
+ * An explicit per-provider env override (e.g. CLAUDE_ANTHROPIC_BASE_URL) still
+ * wins over the proxy default. Empty (gateway / local) = today's direct behavior.
+ */
+const EGRESS_PROXY_URL = normalizeProxyBase(process.env.EGRESS_PROXY_URL);
+const proxied = (prefix, explicit, fallback) =>
+  egressUrl({ proxyBase: EGRESS_PROXY_URL, prefix, explicit, fallback });
+
+/**
+ * Opt-in: also route the NATIVE SDK runtimes (codex-sdk / claude-agent-sdk /
+ * antigravity) AND LangSmith tracing through the proxy. Off by default because
+ * the native SDKs need per-SDK base-URL overrides that not every version honors;
+ * the LangChain deep-agent path is proxied unconditionally by the base URLs
+ * above. Only meaningful when EGRESS_PROXY_URL is set.
+ */
+const EGRESS_PROXY_INCLUDE_SDK =
+  Boolean(EGRESS_PROXY_URL) &&
+  String(process.env.EGRESS_PROXY_INCLUDE_SDK || '').trim().toLowerCase() === 'true';
 
 // Application login modes: 'disabled' (local single-user workflow — open) and
 // 'firebase' (Google SSO via Firebase Authentication).
@@ -134,7 +159,7 @@ const OAUTH = Object.freeze({
   clientId: process.env.CODEX_OAUTH_CLIENT_ID || 'app_EMoamEEZ73f0CkXaXp7hrann',
   scope: process.env.CODEX_OAUTH_SCOPE || 'openid profile email offline_access',
   // OpenAI-compatible chat endpoint the access token is used against.
-  baseUrl: process.env.CODEX_OPENAI_BASE_URL || 'https://api.openai.com/v1',
+  baseUrl: proxied('/openai', process.env.CODEX_OPENAI_BASE_URL, 'https://api.openai.com/v1'),
   defaultModel: process.env.CODEX_OPENAI_MODEL || 'gpt-5-codex',
   /**
    * Codex request backend:
@@ -148,7 +173,7 @@ const OAUTH = Object.freeze({
    * it may change without notice.
    */
   backend: (process.env.CODEX_BACKEND || 'chatgpt').toLowerCase() === 'api' ? 'api' : 'chatgpt',
-  chatgptBaseUrl: process.env.CODEX_CHATGPT_BASE_URL || 'https://chatgpt.com/backend-api/codex',
+  chatgptBaseUrl: proxied('/codex', process.env.CODEX_CHATGPT_BASE_URL, 'https://chatgpt.com/backend-api/codex'),
   // The Codex models endpoint filters its response by client version. Keep this
   // overrideable so a newer server rollout can be adopted without a code change.
   clientVersion: process.env.CODEX_CLIENT_VERSION || '0.144.1',
@@ -197,7 +222,7 @@ const CLAUDE = Object.freeze({
   clientId: process.env.CLAUDE_OAUTH_CLIENT_ID || '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
   scope: process.env.CLAUDE_OAUTH_SCOPE || 'org:create_api_key user:profile user:inference',
   redirectUri: process.env.CLAUDE_OAUTH_REDIRECT_URI || 'https://console.anthropic.com/oauth/code/callback',
-  baseUrl: process.env.CLAUDE_ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
+  baseUrl: proxied('/anthropic', process.env.CLAUDE_ANTHROPIC_BASE_URL, 'https://api.anthropic.com'),
   defaultModel: process.env.CLAUDE_MODEL || 'claude-opus-4-8',
   // Beta header required for OAuth (subscription) bearer tokens on /v1/messages.
   betaHeader: process.env.CLAUDE_OAUTH_BETA || 'oauth-2025-04-20',
@@ -276,7 +301,7 @@ const OMLX = Object.freeze({
  * token. Targeted with the same ChatOpenAI client as Codex's metered backend.
  */
 const HUGGINGFACE = Object.freeze({
-  defaultHost: process.env.HUGGINGFACE_HOST || 'https://router.huggingface.co',
+  defaultHost: proxied('/hf', process.env.HUGGINGFACE_HOST, 'https://router.huggingface.co'),
   apiPath: process.env.HUGGINGFACE_API_PATH || '/v1',
   requestTimeoutMs: Number(process.env.HUGGINGFACE_REQUEST_TIMEOUT_MS) || 10 * 60 * 1000,
   maxRetries: Number.isFinite(Number(process.env.HUGGINGFACE_MAX_RETRIES)) ? Number(process.env.HUGGINGFACE_MAX_RETRIES) : 1,
@@ -301,7 +326,11 @@ const ANTIGRAVITY = Object.freeze({
   // Optional override to the Antigravity preview agent id (else the model above).
   agentId: process.env.ANTIGRAVITY_AGENT_ID || '',
   // OpenAI-compatible Gemini endpoint targeted by the ChatOpenAI-based deep-agent path.
-  openaiBaseUrl: process.env.GEMINI_OPENAI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai',
+  openaiBaseUrl: proxied('/gemini', process.env.GEMINI_OPENAI_BASE_URL, 'https://generativelanguage.googleapis.com/v1beta/openai'),
+  // Native @google/genai base URL (antigravity SDK runtime). Distinct from the
+  // OpenAI-compat endpoint above: native genai calls /v1beta/models/... with an
+  // x-goog-api-key header, so it uses its own proxy route (/gemini-native).
+  nativeBaseUrl: proxied('/gemini-native', process.env.GEMINI_NATIVE_BASE_URL, 'https://generativelanguage.googleapis.com'),
   requestTimeoutMs: Number(process.env.ANTIGRAVITY_REQUEST_TIMEOUT_MS) || 10 * 60 * 1000,
   maxRetries: Number.isFinite(Number(process.env.ANTIGRAVITY_MAX_RETRIES)) ? Number(process.env.ANTIGRAVITY_MAX_RETRIES) : 1,
 });
@@ -381,11 +410,11 @@ const CODER = Object.freeze({
 const MCP = Object.freeze({
   linear: Object.freeze({
     enabled: (process.env.LINEAR_MCP_ENABLED || 'false').toLowerCase() === 'true',
-    url: process.env.LINEAR_MCP_URL || 'https://mcp.linear.app/mcp',
+    url: proxied('/linear-mcp', process.env.LINEAR_MCP_URL, 'https://mcp.linear.app/mcp'),
   }),
   github: Object.freeze({
     enabled: Boolean(process.env.GITHUB_MCP_TOKEN),
-    url: process.env.GITHUB_MCP_URL || 'https://api.githubcopilot.com/mcp/',
+    url: proxied('/github-mcp', process.env.GITHUB_MCP_URL, 'https://api.githubcopilot.com/mcp/'),
     token: process.env.GITHUB_MCP_TOKEN || '',
   }),
   // Playwright MCP (local, stdio): interactive browser automation tools
@@ -557,7 +586,14 @@ const SKILLS = Object.freeze({
 /** Server configuration and shared constants. */
 const CONFIG = Object.freeze({
   PORT,
-  LINEAR_API_URL: 'https://api.linear.app/graphql',
+  // Egress proxy switch + the two REST/git origins the broker targets. In proxy
+  // mode these point at the sidecar prefixes so no raw token lives in the agent.
+  EGRESS_PROXY_URL,
+  // Also route the native SDK runtimes + LangSmith tracing through the proxy.
+  EGRESS_PROXY_INCLUDE_SDK,
+  LINEAR_API_URL: proxied('/linear', process.env.LINEAR_API_URL, 'https://api.linear.app/graphql'),
+  GITHUB_API_ORIGIN: proxied('/github-api', process.env.GITHUB_API_ORIGIN, 'https://api.github.com'),
+  GIT_HTTPS_ORIGIN: proxied('/git/github', process.env.GIT_HTTPS_ORIGIN, 'https://github.com'),
   DATA_DIR,
   STORE_FILE: path.join(DATA_DIR, 'store.json'),
   LOG_FILE: path.join(DATA_DIR, 'app.log'),

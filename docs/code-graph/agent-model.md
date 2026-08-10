@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1549 nodes
-- **Cohesion**: 0.1357
+- **Size**: 1578 nodes
+- **Cohesion**: 0.1339
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,55 +65,55 @@ Directory-based community: packages/shared
 | issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
 | applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-212 |
 
-*... and 1499 more members.*
+*... and 1528 more members.*
 
 ## Execution Flows
 
-- **createLogin** (criticality: 0.61, depth: 1)
-- **consumeLogin** (criticality: 0.61, depth: 1)
-- **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
-- **refreshTokens** (criticality: 0.61, depth: 1)
-- **createLogin** (criticality: 0.61, depth: 1)
-- **consumeLogin** (criticality: 0.61, depth: 1)
-- **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
-- **refreshTokens** (criticality: 0.61, depth: 1)
-- **pushAuth** (criticality: 0.56, depth: 2)
-- **pendingCount** (criticality: 0.49, depth: 1)
-- *... and 62 more flows.*
+- **resume** (criticality: 0.66, depth: 6)
+- **executeAgentRuntime** (criticality: 0.66, depth: 6)
+- **loadAnalytics** (criticality: 0.64, depth: 4)
+- **preflightAndPause** (criticality: 0.64, depth: 4)
+- **prepareMessages** (criticality: 0.64, depth: 4)
+- **discoverModels** (criticality: 0.64, depth: 4)
+- **findReviewByBranch** (criticality: 0.64, depth: 4)
+- **run** (criticality: 0.64, depth: 4)
+- **startScheduler** (criticality: 0.64, depth: 4)
+- **resolveEffective** (criticality: 0.64, depth: 4)
+- *... and 77 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (1117 edge(s))
+- `equal` (1161 edge(s))
 - `join` (221 edge(s))
-- `String` (209 edge(s))
-- `deepEqual` (197 edge(s))
-- `includes` (182 edge(s))
-- `push` (148 edge(s))
-- `map` (140 edge(s))
+- `String` (212 edge(s))
+- `deepEqual` (200 edge(s))
+- `includes` (184 edge(s))
+- `push` (149 edge(s))
+- `map` (144 edge(s))
+- `ok` (130 edge(s))
 - `strictEqual` (127 edge(s))
-- `ok` (124 edge(s))
-- `slice` (118 edge(s))
-- `trim` (104 edge(s))
-- `filter` (103 edge(s))
+- `slice` (119 edge(s))
+- `trim` (106 edge(s))
+- `filter` (105 edge(s))
 - `match` (103 edge(s))
 - `isArray` (98 edge(s))
 - `step` (75 edge(s))
 
 ### Incoming
 
-- `equal` (1110 edge(s))
-- `deepEqual` (195 edge(s))
+- `equal` (1154 edge(s))
+- `deepEqual` (198 edge(s))
 - `./packages/shared/src/store.js` (143 edge(s))
+- `ok` (130 edge(s))
 - `strictEqual` (127 edge(s))
-- `ok` (124 edge(s))
 - `join` (85 edge(s))
 - `match` (83 edge(s))
 - `./packages/shared/src/linear.js` (74 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (71 edge(s))
 - `./packages/shared/src/agent/runtimes.js` (67 edge(s))
-- `includes` (62 edge(s))
+- `includes` (64 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (56 edge(s))
 - `throws` (54 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (49 edge(s))

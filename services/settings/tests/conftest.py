@@ -12,6 +12,9 @@ import os
 os.environ.setdefault("JWT_SECRET", "test-secret-0123456789abcdef0123456789")
 os.environ.setdefault("IDP_ENABLED", "false")
 os.environ.setdefault("AUTH_RATE_LIMIT", "100000/minute")  # don't throttle tests
+# Known internal S2S token so the secret-resolve endpoint's X-Internal-Token
+# guard can be exercised. No KMS_KEY_NAME -> the in-memory KMS fake is used.
+os.environ.setdefault("INTERNAL_API_TOKEN", "test-internal-token-0123456789")
 # No GCP_PROJECT_ID -> get_db() returns the in-memory fake.
 os.environ.pop("GCP_PROJECT_ID", None)
 

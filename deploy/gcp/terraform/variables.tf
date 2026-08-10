@@ -100,6 +100,31 @@ variable "coder_job_name" {
   default     = "coder-worker"
 }
 
+# --- Egress proxy sidecar -----------------------------------------------------
+
+variable "egress_proxy_enabled" {
+  type        = bool
+  description = "Add the egress-proxy sidecar to planner/coder/coder-worker and route their third-party egress through it (via EGRESS_PROXY_URL). OFF keeps the direct pre-sidecar behavior. Requires the proxy image to be built + pushed."
+  default     = false
+}
+
+variable "proxy_service_name" {
+  type    = string
+  default = "proxy"
+}
+
+variable "proxy_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the egress proxy (Node)."
+  default     = ""
+}
+
+variable "managed_provider_secrets" {
+  type        = map(string)
+  description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
+  default     = { LINEAR_API_KEY = "linear-api-key" }
+}
+
 # --- Per-tenant provisioning (Phase 1, gated OFF by default) ------------------
 
 variable "provisioning_enabled" {
@@ -231,8 +256,8 @@ variable "coder_repo_url" {
 
 variable "extra_secret_ids" {
   type        = list(string)
-  description = "Additional Secret Manager secret IDs to create (provider OAuth, LangSmith, GitHub token, etc.). Versions are added out-of-band. planner-sa + coder-sa are granted accessor on these."
-  default     = ["github-token", "langsmith-api-key"]
+  description = "Additional Secret Manager secret IDs to create (provider OAuth, LangSmith, GitHub token, managed LLM keys, etc.). Versions are added out-of-band. planner-sa + coder-sa are granted accessor on these (and the proxy sidecar runs under those SAs). The managed LLM keys back the proxy's 'managed' credential option."
+  default     = ["github-token", "langsmith-api-key", "gemini-api-key", "huggingface-api-key", "anthropic-api-key", "openai-api-key"]
 }
 
 # --- SPA (GCS bucket) ---------------------------------------------------------

@@ -20,6 +20,11 @@ def org_settings_col(org_id: uuid.UUID) -> str:
     return f"{ORGS}/{org_id}/settings"
 
 
+def org_secrets_col(org_id: uuid.UUID) -> str:
+    """Per-org encrypted secret vault collection (holds a single vault doc)."""
+    return f"{ORGS}/{org_id}/secrets"
+
+
 def project_settings_col(org_id: uuid.UUID, project_id: uuid.UUID) -> str:
     return f"{ORGS}/{org_id}/projects/{project_id}/settings"
 

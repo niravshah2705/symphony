@@ -1,10 +1,16 @@
 'use strict';
 
 const { CONFIG } = require('./config');
+const { SENTINEL_TOKEN } = require('./egress');
 
 /**
  * Thin wrapper around the Linear GraphQL API.
  * Personal API keys are passed directly in the Authorization header.
+ *
+ * In egress-proxy mode (CONFIG.EGRESS_PROXY_URL set, on planner/coder), the
+ * agent holds no Linear key: CONFIG.LINEAR_API_URL points at the proxy, which
+ * injects the real key, so an absent key falls back to a sentinel that satisfies
+ * the "configured" guard without carrying any secret.
  */
 
 class LinearError extends Error {
@@ -16,7 +22,8 @@ class LinearError extends Error {
 }
 
 async function linearRequest(apiKey, query, variables = {}) {
-  if (!apiKey) {
+  const key = apiKey || (CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : '');
+  if (!key) {
     throw new LinearError('Linear API key is not configured. Add it in Settings.', 400);
   }
 
@@ -26,7 +33,7 @@ async function linearRequest(apiKey, query, variables = {}) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: apiKey,
+        Authorization: key,
       },
       body: JSON.stringify({ query, variables }),
     });

@@ -3,6 +3,7 @@
 const { provision, teardown } = require('./provisioner');
 const { buildPlan } = require('./plan');
 const { names, urls, assertSlug } = require('./naming');
+const { extractSourceService, extractSourceJob, cloneContainers } = require('./containers');
 
 /**
  * Real @google-cloud adapter for the provisioning executor.
@@ -63,22 +64,11 @@ function createGcpClients({ projectId, region }) {
   async function sourceService(name) {
     if (!srcCache.has(name)) {
       const [svc] = await services().getService({ name: `${parent}/services/${name}` });
-      const container = svc.template.containers[0];
-      srcCache.set(name, {
-        image: container.image,
-        secretEnv: (container.env || []).filter((e) => e.valueSource),
-        resources: container.resources,
-        volumeMounts: container.volumeMounts,
-        volumes: svc.template.volumes,
-        executionEnvironment: svc.template.executionEnvironment,
-      });
+      // Capture ALL containers (image + secret env + resources + mounts each) so
+      // an egress-proxy sidecar on the shared service propagates to tenant stacks.
+      srcCache.set(name, extractSourceService(svc));
     }
     return srcCache.get(name);
-  }
-
-  function envList(envObj, secretEnv) {
-    const plain = Object.entries(envObj || {}).map(([name, value]) => ({ name, value: String(value) }));
-    return [...plain, ...(secretEnv || [])];
   }
 
   async function setInvoker(spec) {
@@ -94,14 +84,14 @@ function createGcpClients({ projectId, region }) {
 
   return {
     async getServiceImage(name) {
-      return (await sourceService(name)).image;
+      return (await sourceService(name)).containers[0].image;
     },
     async getJobImage(name) {
       const [job] = await jobs().getJob({ name: `${parent}/jobs/${name}` });
       return job.template.template.containers[0].image;
     },
     async createService(spec) {
-      const src = spec.sourceName ? await sourceService(spec.sourceName) : {};
+      const src = spec.sourceName ? await sourceService(spec.sourceName) : { containers: [] };
       const service = {
         ingress: spec.ingress,
         labels: spec.labels,
@@ -110,13 +100,9 @@ function createGcpClients({ projectId, region }) {
           scaling: { minInstanceCount: 0 },
           executionEnvironment: src.executionEnvironment,
           volumes: src.volumes,
-          containers: [{
-            image: spec.image,
-            ports: [{ containerPort: spec.port || 8080 }],
-            env: envList(spec.env, src.secretEnv),
-            resources: src.resources,
-            volumeMounts: src.volumeMounts,
-          }],
+          // Clone EVERY source container (primary + any sidecar), overlaying the
+          // per-tenant env on the primary and `sidecarEnv` on the sidecars.
+          containers: cloneContainers(src.containers, spec, { withPorts: true }),
         },
       };
       try {
@@ -128,7 +114,7 @@ function createGcpClients({ projectId, region }) {
       await setInvoker(spec);
     },
     async createJob(spec) {
-      const src = spec.sourceName ? await sourceService(spec.sourceName) : {};
+      const src = spec.sourceName ? await sourceService(spec.sourceName) : { containers: [] };
       const job = {
         labels: spec.labels,
         template: {
@@ -138,12 +124,7 @@ function createGcpClients({ projectId, region }) {
             maxRetries: 1,
             executionEnvironment: src.executionEnvironment,
             volumes: src.volumes,
-            containers: [{
-              image: spec.image,
-              env: envList(spec.env, src.secretEnv),
-              resources: src.resources,
-              volumeMounts: src.volumeMounts,
-            }],
+            containers: cloneContainers(src.containers, spec, { withPorts: false }),
           },
         },
       };

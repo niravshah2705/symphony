@@ -452,12 +452,19 @@ function migrateAgentConfig(config) {
 /* --------------------------- Settings / secrets ------------------------- */
 
 /**
- * Secrets sourced from the environment (Cloud Run injects Secret Manager values
- * as env vars) take precedence over anything persisted in the store. This keeps
- * long-lived credentials out of Firestore/the JSON file in the cloud while local
- * dev (no env) keeps using the values entered in the Settings UI. Rotating OAuth
- * token SETS (codexTokens/claudeTokens) stay in the IAM-protected store because
- * they are rewritten on refresh.
+ * This is the MANAGED-key path: env-sourced secrets (Cloud Run injects Secret
+ * Manager values as env vars) take precedence over anything persisted in the
+ * store, exactly as the per-org vault treats a "managed" selection as the
+ * platform key. It keeps long-lived credentials out of Firestore/the JSON file
+ * in the cloud while local dev (no env) uses the Settings-UI (customer) values.
+ * Rotating OAuth token SETS (codexTokens/claudeTokens) stay in the IAM-protected
+ * store because they are rewritten on refresh.
+ *
+ * Consumers: the gateway (not proxied) and local dev read managed keys here. The
+ * planner/coder agent runtimes DON'T — in egress-proxy mode they hold no key and
+ * the proxy resolves managed vs customer through the settings service (the single
+ * managed-key source; see services/settings secrets_service.MANAGED_ENV, which
+ * this map mirrors). Keep the two maps aligned when adding a provider key.
  */
 const SECRET_ENV = Object.freeze({
   linearApiKey: 'LINEAR_API_KEY',
@@ -469,6 +476,9 @@ const SECRET_ENV = Object.freeze({
   omlxApiKey: 'OMLX_API_KEY',
   huggingfaceApiKey: 'HUGGINGFACE_API_KEY',
   antigravityApiKey: 'GEMINI_API_KEY',
+  // Managed LLM API keys (alternative to OAuth), matching the vault's managed set.
+  anthropicApiKey: 'ANTHROPIC_API_KEY',
+  openaiApiKey: 'OPENAI_API_KEY',
 });
 
 function secretOverlay() {

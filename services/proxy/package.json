@@ -1,0 +1,18 @@
+{
+  "name": "@ai-fleet/proxy",
+  "version": "1.0.0",
+  "description": "AI Fleet egress proxy sidecar — an authenticating reverse proxy that injects per-org credentials into outbound calls so the agent containers (planner/coder/coder-worker) hold no raw provider keys.",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env src/index.js",
+    "dev": "node --watch --env-file-if-exists=../../.env src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ai-fleet/shared": "*"
+  }
+}

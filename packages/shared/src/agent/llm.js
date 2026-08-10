@@ -2,10 +2,10 @@
 
 const crypto = require('crypto');
 const { CONFIG } = require('../config');
-const store = require('../store');
 const logger = require('../logger');
 const oauth = require('./oauth');
-const claudeOauth = require('./claude-oauth');
+const { SENTINEL_TOKEN } = require('../egress');
+const { ensureFreshCodexTokens, ensureFreshClaudeTokens } = require('./oauth-tokens');
 const { runWithRetry, streamWithRetry } = require('./llm-retry');
 
 // Hard cap on the configurable stream-retry count (mirrors settings-patch.js).
@@ -745,41 +745,9 @@ function createChatModel(llm, { json = false } = {}) {
   return new OllamaChatModel(opts);
 }
 
-/**
- * Return a valid Codex token set, refreshing (and persisting rotation) when the
- * access token is missing or near expiry. Throws (401) when no usable token
- * exists so the caller can prompt the operator to sign in again.
- */
-async function ensureFreshCodexTokens() {
-  const tokens = store.getCodexTokens();
-  if (!tokens || (!tokens.accessToken && !tokens.refreshToken)) {
-    const err = new Error('Sign in with Codex (OpenAI) in Settings → LLM.');
-    err.status = 401;
-    throw err;
-  }
-  if (!oauth.isExpired(tokens)) return tokens;
-  const refreshed = await oauth.refreshTokens(tokens);
-  store.setCodexTokens(refreshed);
-  return refreshed;
-}
-
-/**
- * Return a valid Claude token set, refreshing (and persisting rotation) when the
- * access token is missing or near expiry. Throws (401) when no usable token
- * exists so the caller can prompt the operator to sign in again.
- */
-async function ensureFreshClaudeTokens() {
-  const tokens = store.getClaudeTokens();
-  if (!tokens || (!tokens.accessToken && !tokens.refreshToken)) {
-    const err = new Error('Sign in with Claude in Settings → LLM.');
-    err.status = 401;
-    throw err;
-  }
-  if (!claudeOauth.isExpired(tokens)) return tokens;
-  const refreshed = await claudeOauth.refreshTokens(tokens);
-  store.setClaudeTokens(refreshed);
-  return refreshed;
-}
+// ensureFreshCodexTokens / ensureFreshClaudeTokens are provided by ./oauth-tokens
+// (extracted so the egress proxy sidecar shares the same refresh-race-safe logic).
+// They are re-exported below for the gateway's OAuth login/status routes.
 
 /**
  * Which provider name backs a given deep-agent role. Two kinds of roles exist:
@@ -821,12 +789,16 @@ async function resolveLlm(settings, role = 'global') {
   // Transient/in-stream retry count is a single knob applied to every provider.
   const streamRetries = clampStreamRetries(settings.llmStreamRetries);
   if (provider === 'claude') {
-    const tokens = await ensureFreshClaudeTokens();
+    // In egress-proxy mode the agent holds no token: the sidecar injects the
+    // real OAuth bearer. Otherwise refresh the token set from the store as usual.
+    const accessToken = CONFIG.EGRESS_PROXY_URL
+      ? SENTINEL_TOKEN
+      : (await ensureFreshClaudeTokens()).accessToken;
     return {
       provider: 'claude',
       model: settings.claudeModel || CONFIG.CLAUDE.defaultModel,
       baseUrl: CONFIG.CLAUDE.baseUrl,
-      accessToken: tokens.accessToken,
+      accessToken,
       numTokens: settings.claudeMaxTokens || 65536,
       temperature: settings.claudeTemperature ?? null,
       reasoningEffort: settings.claudeReasoningEffort ?? null,
@@ -836,10 +808,13 @@ async function resolveLlm(settings, role = 'global') {
     };
   }
   if (provider === 'codex') {
-    const tokens = await ensureFreshCodexTokens();
+    // Egress-proxy mode: no token in the agent (sidecar injects the bearer +
+    // chatgpt-account-id), so use the sentinel and skip the account-id check.
+    const proxied = Boolean(CONFIG.EGRESS_PROXY_URL);
+    const tokens = proxied ? null : await ensureFreshCodexTokens();
     if (CONFIG.OAUTH.backend === 'chatgpt') {
-      const accountId = oauth.accountIdFromIdToken(tokens.idToken);
-      if (!accountId) {
+      const accountId = proxied ? '' : oauth.accountIdFromIdToken(tokens.idToken);
+      if (!proxied && !accountId) {
         const err = new Error('Codex ChatGPT backend needs an account id from your sign-in; sign in with Codex again.');
         err.status = 401;
         throw err;
@@ -849,12 +824,13 @@ async function resolveLlm(settings, role = 'global') {
         backend: 'chatgpt',
         model: settings.codexModel || CONFIG.OAUTH.chatgptModel,
         baseUrl: CONFIG.OAUTH.chatgptBaseUrl,
-        accessToken: tokens.accessToken,
+        accessToken: proxied ? SENTINEL_TOKEN : tokens.accessToken,
         // The official Codex SDK consumes ChatGPT-managed credentials from
         // auth.json, not through its `apiKey` option. Keep this internal token
         // bundle on the per-run descriptor so the runtime can materialize an
-        // isolated auth cache without re-reading stale store state.
-        authTokens: { ...tokens },
+        // isolated auth cache without re-reading stale store state. Null in proxy
+        // mode (the native SDK path requires the deep-agent runtime instead).
+        authTokens: proxied ? null : { ...tokens },
         accountId,
         numTokens: settings.codexMaxTokens || 65536,
         contextWindow: Number(settings.codexContextWindow) || 0,
@@ -870,8 +846,8 @@ async function resolveLlm(settings, role = 'global') {
       backend: 'api',
       model: settings.codexModel || CONFIG.OAUTH.defaultModel,
       baseUrl: CONFIG.OAUTH.baseUrl,
-      accessToken: tokens.accessToken,
-      authTokens: { ...tokens },
+      accessToken: proxied ? SENTINEL_TOKEN : tokens.accessToken,
+      authTokens: proxied ? null : { ...tokens },
       numTokens: settings.codexMaxTokens || 65536,
       contextWindow: Number(settings.codexContextWindow) || 0,
       contextMode: settings.codexContextMode || 'trim',

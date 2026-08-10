@@ -36,6 +36,12 @@ PUBLIC_PATHS = frozenset(
         f"{API_PREFIX}/health/ready",
     }
 )
+# The S2S secret-resolve surface carries NO end-user token (the egress proxy acts
+# for an org); it is guarded instead by a constant-time X-Internal-Token compare
+# in the route (fail closed when unset) + Cloud Run IAM. So it is exempt from the
+# user-token requirement here. NOTE: only this sub-prefix is exempt —
+# /internal/effective-config still requires the forwarded principal.
+INTERNAL_S2S_PREFIX = f"{API_PREFIX}/internal/s2s"
 
 
 class _AuthFailure(Exception):
@@ -44,6 +50,9 @@ class _AuthFailure(Exception):
 
 def _requires_auth(path: str) -> bool:
     if not path.startswith(API_PREFIX):
+        return False
+    # Token-gated S2S surface: no user principal, so skip user authn here.
+    if path.startswith(INTERNAL_S2S_PREFIX):
         return False
     return path.rstrip("/") not in {p.rstrip("/") for p in PUBLIC_PATHS}
 

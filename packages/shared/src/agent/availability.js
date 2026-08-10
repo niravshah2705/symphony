@@ -1,6 +1,7 @@
 'use strict';
 
 const { CONFIG } = require('../config');
+const { SENTINEL_TOKEN } = require('../egress');
 const { discoverModels } = require('./model-discovery');
 const { repoParts } = require('./workspace');
 const { MODEL_ROLES } = require('./model-presets');
@@ -211,22 +212,27 @@ async function probeRepositoryAvailability(selection, dependencies = {}) {
   const provider = selection && selection.provider === 'gitlab' ? 'gitlab' : 'github';
   const context = { provider };
   const parts = repoParts(selection && selection.repoRef, provider);
-  if (!parts || !selection.token || typeof fetchImpl !== 'function') {
+  // Egress-proxy mode (github only): the agent has no PAT — probe through the
+  // sidecar with the sentinel, which injects the real token.
+  const proxied = provider === 'github' && Boolean(CONFIG.EGRESS_PROXY_URL);
+  const token = selection && selection.token ? selection.token : proxied ? SENTINEL_TOKEN : '';
+  if (!parts || !token || typeof fetchImpl !== 'function') {
     throw new AgentAvailabilityError('git', publicAvailabilityMessage('git', context), 400, 'git_not_configured');
   }
 
   const github = provider === 'github';
+  const apiOrigin = proxied ? CONFIG.GITHUB_API_ORIGIN : 'https://api.github.com';
   const url = github
-    ? `https://api.github.com/repos/${encodeURIComponent(parts.owner)}/${encodeURIComponent(parts.name)}`
+    ? `${apiOrigin}/repos/${encodeURIComponent(parts.owner)}/${encodeURIComponent(parts.name)}`
     : `https://gitlab.com/api/v4/projects/${encodeURIComponent(parts.fullName)}`;
   const headers = github
     ? {
         Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${selection.token}`,
+        Authorization: `Bearer ${token}`,
         'X-GitHub-Api-Version': '2022-11-28',
         'User-Agent': 'tech-symphony-readiness',
       }
-    : { Accept: 'application/json', 'PRIVATE-TOKEN': selection.token, 'User-Agent': 'tech-symphony-readiness' };
+    : { Accept: 'application/json', 'PRIVATE-TOKEN': token, 'User-Agent': 'tech-symphony-readiness' };
   try {
     const response = await fetchImpl(url, {
       headers,

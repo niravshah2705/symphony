@@ -44,7 +44,7 @@ Directory-based community: services/planner
 
 ## Execution Flows
 
-- **sanitizeConfig** (criticality: 0.53, depth: 1)
+No execution flows pass through this community.
 
 ## Dependencies
 
