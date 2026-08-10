@@ -100,6 +100,38 @@ variable "coder_job_name" {
   default     = "coder-worker"
 }
 
+# --- Per-tenant provisioning (Phase 1, gated OFF by default) ------------------
+
+variable "provisioning_enabled" {
+  type        = bool
+  description = "Create the provisioner service + its topic/subscription/IAM. OFF keeps every org on the shared stack (no per-tenant infra)."
+  default     = false
+}
+
+variable "provisioner_service_name" {
+  type    = string
+  default = "provisioner"
+}
+
+variable "provisioner_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the provisioner (Node)."
+  default     = ""
+}
+
+variable "provisioning_topic" {
+  type        = string
+  description = "Pub/Sub topic the org service publishes tenant-provision requests to."
+  default     = "tenant-provision-requests"
+}
+
+variable "internal_api_token" {
+  type        = string
+  description = "Shared secret guarding the org service's S2S deployment write-back (X-Internal-Token). Provisioner + org service must share it."
+  default     = ""
+  sensitive   = true
+}
+
 # --- Ingress / scaling --------------------------------------------------------
 
 variable "internal_ingress" {

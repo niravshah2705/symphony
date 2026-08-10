@@ -1,0 +1,263 @@
+'use strict';
+
+const { provision, teardown } = require('./provisioner');
+const { buildPlan } = require('./plan');
+const { names, urls, assertSlug } = require('./naming');
+
+/**
+ * Real @google-cloud adapter for the provisioning executor.
+ *
+ * Implements the small `clients` interface provisioner.js expects on top of the
+ * v2 Cloud Run, Pub/Sub, and Cloud Scheduler SDKs. All SDKs are required LAZILY
+ * so importing this module (e.g. for provision/teardown re-exports or tests of
+ * the pure core) never needs the GCP libraries installed. Every create/delete is
+ * idempotent (ALREADY_EXISTS / NOT_FOUND tolerated) so retried provisions and
+ * teardowns converge.
+ *
+ * "Reuse original builds": createService/createJob copy the image AND the secret
+ * env blocks, resource limits, execution environment, and skills volumes from the
+ * live SHARED source service, so a tenant service is the same build with the same
+ * secrets — only the per-tenant plain env (URLs/topics/STORE_NAMESPACE) differs.
+ */
+
+const ALREADY_EXISTS = 6; // gRPC ALREADY_EXISTS
+const NOT_FOUND = 5; // gRPC NOT_FOUND
+
+function tolerate(codes, err) {
+  if (err && codes.includes(err.code)) return;
+  throw err;
+}
+
+let runClients = null;
+function getRun() {
+  if (!runClients) {
+    const { ServicesClient, JobsClient } = require('@google-cloud/run').v2;
+    runClients = { services: new ServicesClient(), jobs: new JobsClient() };
+  }
+  return runClients;
+}
+let pubsubClient = null;
+function getPubSub() {
+  if (!pubsubClient) {
+    const { PubSub } = require('@google-cloud/pubsub');
+    pubsubClient = new PubSub();
+  }
+  return pubsubClient;
+}
+let schedulerClient = null;
+function getScheduler() {
+  if (!schedulerClient) {
+    const { CloudSchedulerClient } = require('@google-cloud/scheduler').v1;
+    schedulerClient = new CloudSchedulerClient();
+  }
+  return schedulerClient;
+}
+
+/** Build the executor's `clients` adapter bound to a project/region. */
+function createGcpClients({ projectId, region }) {
+  const parent = `projects/${projectId}/locations/${region}`;
+  const services = () => getRun().services;
+  const jobs = () => getRun().jobs;
+
+  const srcCache = new Map();
+  async function sourceService(name) {
+    if (!srcCache.has(name)) {
+      const [svc] = await services().getService({ name: `${parent}/services/${name}` });
+      const container = svc.template.containers[0];
+      srcCache.set(name, {
+        image: container.image,
+        secretEnv: (container.env || []).filter((e) => e.valueSource),
+        resources: container.resources,
+        volumeMounts: container.volumeMounts,
+        volumes: svc.template.volumes,
+        executionEnvironment: svc.template.executionEnvironment,
+      });
+    }
+    return srcCache.get(name);
+  }
+
+  function envList(envObj, secretEnv) {
+    const plain = Object.entries(envObj || {}).map(([name, value]) => ({ name, value: String(value) }));
+    return [...plain, ...(secretEnv || [])];
+  }
+
+  async function setInvoker(spec) {
+    const members = spec.allowUnauthenticated
+      ? ['allUsers']
+      : (spec.invokers || []).map((sa) => `serviceAccount:${sa}`);
+    if (!members.length) return;
+    await services().setIamPolicy({
+      resource: `${parent}/services/${spec.name}`,
+      policy: { bindings: [{ role: 'roles/run.invoker', members }] },
+    });
+  }
+
+  return {
+    async getServiceImage(name) {
+      return (await sourceService(name)).image;
+    },
+    async getJobImage(name) {
+      const [job] = await jobs().getJob({ name: `${parent}/jobs/${name}` });
+      return job.template.template.containers[0].image;
+    },
+    async createService(spec) {
+      const src = spec.sourceName ? await sourceService(spec.sourceName) : {};
+      const service = {
+        ingress: spec.ingress,
+        template: {
+          serviceAccount: spec.serviceAccount,
+          scaling: { minInstanceCount: 0 },
+          executionEnvironment: src.executionEnvironment,
+          volumes: src.volumes,
+          containers: [{
+            image: spec.image,
+            ports: [{ containerPort: spec.port || 8080 }],
+            env: envList(spec.env, src.secretEnv),
+            resources: src.resources,
+            volumeMounts: src.volumeMounts,
+          }],
+        },
+      };
+      try {
+        const [op] = await services().createService({ parent, serviceId: spec.name, service });
+        await op.promise();
+      } catch (err) {
+        tolerate([ALREADY_EXISTS], err);
+      }
+      await setInvoker(spec);
+    },
+    async createJob(spec) {
+      const src = spec.sourceName ? await sourceService(spec.sourceName) : {};
+      const job = {
+        template: {
+          template: {
+            serviceAccount: spec.serviceAccount,
+            timeout: { seconds: 86400 },
+            maxRetries: 1,
+            executionEnvironment: src.executionEnvironment,
+            volumes: src.volumes,
+            containers: [{
+              image: spec.image,
+              env: envList(spec.env, src.secretEnv),
+              resources: src.resources,
+              volumeMounts: src.volumeMounts,
+            }],
+          },
+        },
+      };
+      try {
+        const [op] = await jobs().createJob({ parent, jobId: spec.name, job });
+        await op.promise();
+      } catch (err) {
+        tolerate([ALREADY_EXISTS], err);
+      }
+    },
+    async createTopic(name) {
+      try {
+        await getPubSub().createTopic(name);
+      } catch (err) {
+        tolerate([ALREADY_EXISTS], err);
+      }
+    },
+    async createPushSubscription(spec) {
+      const options = {
+        pushConfig: {
+          pushEndpoint: spec.pushEndpoint,
+          oidcToken: { serviceAccountEmail: spec.oidcServiceAccount, audience: spec.audience },
+        },
+        ackDeadlineSeconds: 30,
+      };
+      if (spec.deadLetterTopic) {
+        options.deadLetterPolicy = {
+          deadLetterTopic: `projects/${projectId}/topics/${spec.deadLetterTopic}`,
+          maxDeliveryAttempts: 10,
+        };
+      }
+      try {
+        await getPubSub().topic(spec.topic).createSubscription(spec.name, options);
+      } catch (err) {
+        tolerate([ALREADY_EXISTS], err);
+      }
+    },
+    async createSchedulerJob(spec) {
+      try {
+        await getScheduler().createJob({
+          parent,
+          job: {
+            name: `${parent}/jobs/${spec.name}`,
+            schedule: spec.schedule,
+            httpTarget: {
+              uri: spec.uri,
+              httpMethod: 'POST',
+              oidcToken: { serviceAccountEmail: spec.oidcServiceAccount, audience: spec.audience },
+            },
+          },
+        });
+      } catch (err) {
+        tolerate([ALREADY_EXISTS], err);
+      }
+    },
+    async deleteService(name) {
+      try {
+        const [op] = await services().deleteService({ name: `${parent}/services/${name}` });
+        await op.promise();
+      } catch (err) {
+        tolerate([NOT_FOUND], err);
+      }
+    },
+    async deleteJob(name) {
+      try {
+        const [op] = await jobs().deleteJob({ name: `${parent}/jobs/${name}` });
+        await op.promise();
+      } catch (err) {
+        tolerate([NOT_FOUND], err);
+      }
+    },
+    async deleteTopic(name) {
+      try {
+        await getPubSub().topic(name).delete();
+      } catch (err) {
+        tolerate([NOT_FOUND], err);
+      }
+    },
+    async deleteSubscription(name) {
+      try {
+        await getPubSub().subscription(name).delete();
+      } catch (err) {
+        tolerate([NOT_FOUND], err);
+      }
+    },
+    async deleteSchedulerJob(name) {
+      try {
+        await getScheduler().deleteJob({ name: `${parent}/jobs/${name}` });
+      } catch (err) {
+        tolerate([NOT_FOUND], err);
+      }
+    },
+  };
+}
+
+/** Provision a tenant stack using real GCP clients. */
+async function provisionTenant(slug, cfg) {
+  assertSlug(slug);
+  return provision(slug, cfg, { clients: createGcpClients(cfg) });
+}
+
+/** Tear a tenant stack down using real GCP clients. */
+async function teardownTenant(slug, cfg) {
+  assertSlug(slug);
+  return teardown(slug, { clients: createGcpClients(cfg) });
+}
+
+module.exports = {
+  createGcpClients,
+  provisionTenant,
+  teardownTenant,
+  // Re-exports for the executor/pure core.
+  provision,
+  teardown,
+  buildPlan,
+  names,
+  urls,
+  assertSlug,
+};

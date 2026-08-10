@@ -7,7 +7,7 @@
 Directory-based community: services/provisioner
 
 - **Size**: 16 nodes
-- **Cohesion**: 0.1397
+- **Cohesion**: 0.1418
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,15 +15,15 @@ Directory-based community: services/provisioner
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | nowIso | Function | ./services/provisioner/src/handler.js | 17-19 |
-| handleMessage | Function | ./services/provisioner/src/handler.js | 21-54 |
+| handleMessage | Function | ./services/provisioner/src/handler.js | 21-53 |
 | deps | Function | ./services/provisioner/src/handler.test.js | 8-19 |
 | error | Function | ./services/provisioner/src/handler.test.js | 13-13 |
-| test:provision: calls provisionTenant then writes back the deployments map@L21 | Test | ./services/provisioner/src/handler.test.js | 21-29 |
-| test:action defaults to provision when omitted@L31 | Test | ./services/provisioner/src/handler.test.js | 31-36 |
-| test:teardown: calls teardownTenant then writes back shared@L38 | Test | ./services/provisioner/src/handler.test.js | 38-44 |
-| test:malformed message: no provision, no write-back@L46 | Test | ./services/provisioner/src/handler.test.js | 46-53 |
-| test:provision failure: records status=failed via write-back@L55 | Test | ./services/provisioner/src/handler.test.js | 55-62 |
-| test:write-back failure on the failure path is swallowed (no throw)@L64 | Test | ./services/provisioner/src/handler.test.js | 64-71 |
+| test:provision: calls provisionTenant then writes back the deployments map@L21 | Test | ./services/provisioner/src/handler.test.js | 21-28 |
+| test:action defaults to provision when omitted@L30 | Test | ./services/provisioner/src/handler.test.js | 30-35 |
+| test:teardown: calls teardownTenant then writes back shared@L37 | Test | ./services/provisioner/src/handler.test.js | 37-43 |
+| test:malformed message: no provision, no write-back@L45 | Test | ./services/provisioner/src/handler.test.js | 45-52 |
+| test:provision failure: records status=failed via write-back@L54 | Test | ./services/provisioner/src/handler.test.js | 54-61 |
+| test:write-back failure on the failure path is swallowed (no throw)@L63 | Test | ./services/provisioner/src/handler.test.js | 63-70 |
 | buildCfg | Function | ./services/provisioner/src/index.js | 28-52 |
 | resolveProjectNumber | Function | ./services/provisioner/src/index.js | 55-65 |
 | s2sAuthHeader | Function | ./services/provisioner/src/index.js | 69-78 |
@@ -39,7 +39,7 @@ Directory-based community: services/provisioner
 
 ### Outgoing
 
-- `equal` (15 edge(s))
+- `equal` (14 edge(s))
 - `handleMessage` (7 edge(s))
 - `error` (4 edge(s))
 - `writeBack` (3 edge(s))
@@ -57,7 +57,7 @@ Directory-based community: services/provisioner
 
 ### Incoming
 
-- `equal` (15 edge(s))
+- `equal` (14 edge(s))
 - `./services/provisioner/src/index.js` (10 edge(s))
 - `./services/provisioner/src/handler.test.js` (8 edge(s))
 - `handleMessage` (6 edge(s))

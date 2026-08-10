@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1476 nodes
-- **Cohesion**: 0.1359
+- **Size**: 1516 nodes
+- **Cohesion**: 0.1365
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared
 | applyAifail | Function | ./packages/shared/src/agent/apply.js | 307-328 |
 | startIssue | Function | ./packages/shared/src/agent/apply.js | 337-352 |
 
-*... and 1426 more members.*
+*... and 1466 more members.*
 
 ## Execution Flows
 
@@ -79,35 +79,35 @@ Directory-based community: packages/shared
 - **refreshTokens** (criticality: 0.61, depth: 1)
 - **pushAuth** (criticality: 0.56, depth: 2)
 - **pendingCount** (criticality: 0.49, depth: 1)
-- *... and 66 more flows.*
+- *... and 65 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (1062 edge(s))
+- `equal` (1111 edge(s))
 - `join` (221 edge(s))
-- `String` (204 edge(s))
-- `includes` (180 edge(s))
-- `deepEqual` (169 edge(s))
-- `map` (132 edge(s))
-- `push` (130 edge(s))
+- `String` (205 edge(s))
+- `includes` (181 edge(s))
+- `deepEqual` (172 edge(s))
+- `push` (142 edge(s))
+- `map` (136 edge(s))
 - `strictEqual` (125 edge(s))
-- `ok` (123 edge(s))
+- `ok` (124 edge(s))
 - `slice` (115 edge(s))
 - `trim` (104 edge(s))
 - `match` (102 edge(s))
-- `filter` (92 edge(s))
+- `filter` (100 edge(s))
 - `isArray` (90 edge(s))
 - `step` (75 edge(s))
 
 ### Incoming
 
-- `equal` (1055 edge(s))
-- `deepEqual` (167 edge(s))
+- `equal` (1104 edge(s))
+- `deepEqual` (170 edge(s))
 - `./packages/shared/src/store.js` (143 edge(s))
 - `strictEqual` (125 edge(s))
-- `ok` (123 edge(s))
+- `ok` (124 edge(s))
 - `join` (85 edge(s))
 - `match` (83 edge(s))
 - `./packages/shared/src/linear.js` (74 edge(s))
@@ -115,6 +115,6 @@ Directory-based community: packages/shared
 - `includes` (62 edge(s))
 - `./packages/shared/src/agent/runtimes.js` (60 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (56 edge(s))
-- `throws` (53 edge(s))
+- `throws` (54 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (49 edge(s))
 - `./packages/shared/src/agent/business-pipeline.js` (48 edge(s))

@@ -6,8 +6,8 @@
 
 Directory-based community: services/org
 
-- **Size**: 464 nodes
-- **Cohesion**: 0.4613
+- **Size**: 479 nodes
+- **Cohesion**: 0.4530
 - **Dominant Language**: python
 
 ## Members
@@ -24,6 +24,9 @@ Directory-based community: services/org
 | me | Function | ./services/org/app/api/v1/routes_auth.py | 77-78 |
 | health | Function | ./services/org/app/api/v1/routes_health.py | 13-15 |
 | readiness | Function | ./services/org/app/api/v1/routes_health.py | 19-22 |
+| DeploymentWriteback | Class | ./services/org/app/api/v1/routes_internal.py | 34-37 |
+| require_internal_token | Function | ./services/org/app/api/v1/routes_internal.py | 40-44 |
+| write_deployments | Function | ./services/org/app/api/v1/routes_internal.py | 48-60 |
 | get_me | Function | ./services/org/app/api/v1/routes_me.py | 45-53 |
 | get_my_deployment | Function | ./services/org/app/api/v1/routes_me.py | 57-99 |
 | create_my_organization | Function | ./services/org/app/api/v1/routes_me.py | 103-108 |
@@ -61,11 +64,8 @@ Directory-based community: services/org
 | update_tag | Function | ./services/org/app/api/v1/routes_tags.py | 49-55 |
 | delete_tag | Function | ./services/org/app/api/v1/routes_tags.py | 59-64 |
 | list_tasks | Function | ./services/org/app/api/v1/routes_tasks.py | 26-42 |
-| create_task | Function | ./services/org/app/api/v1/routes_tasks.py | 46-52 |
-| get_task | Function | ./services/org/app/api/v1/routes_tasks.py | 56-61 |
-| update_task | Function | ./services/org/app/api/v1/routes_tasks.py | 65-72 |
 
-*... and 414 more members.*
+*... and 429 more members.*
 
 ## Execution Flows
 
@@ -79,42 +79,42 @@ Directory-based community: services/org
 - **lifespan** (criticality: 0.73, depth: 4)
 - **create_user** (criticality: 0.70, depth: 1)
 - **create_org** (criticality: 0.69, depth: 2)
-- *... and 42 more flows.*
+- *... and 43 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (126 edge(s))
-- `Depends` (123 edge(s))
-- `str` (52 edge(s))
-- `json` (49 edge(s))
+- `get` (130 edge(s))
+- `Depends` (125 edge(s))
+- `str` (55 edge(s))
+- `json` (53 edge(s))
 - `post` (43 edge(s))
-- `BaseModel` (32 edge(s))
+- `BaseModel` (33 edge(s))
 - `from_doc` (24 edge(s))
 - `raises` (23 edge(s))
 - `query` (21 edge(s))
-- `add` (20 edge(s))
+- `add` (21 edge(s))
+- `uuid4` (17 edge(s))
 - `delete` (17 edge(s))
-- `len` (14 edge(s))
-- `uuid4` (14 edge(s))
-- `create_user` (12 edge(s))
-- `get_by_id` (11 edge(s))
+- `len` (16 edge(s))
+- `patch` (15 edge(s))
+- `setattr` (14 edge(s))
 
 ### Incoming
 
-- `json` (42 edge(s))
+- `json` (45 edge(s))
 - `post` (37 edge(s))
-- `get` (34 edge(s))
+- `get` (35 edge(s))
 - `raises` (23 edge(s))
 - `./services/org/app/errors.py` (18 edge(s))
+- `patch` (15 edge(s))
+- `setattr` (14 edge(s))
 - `./services/org/tests/unit/test_services.py` (13 edge(s))
 - `./services/org/app/services/auth_service.py` (12 edge(s))
 - `create_user` (12 edge(s))
 - `./services/org/app/api/v1/routes_org.py` (11 edge(s))
-- `patch` (11 edge(s))
+- `len` (11 edge(s))
+- `uuid4` (11 edge(s))
 - `./services/org/app/api/v1/routes_auth.py` (10 edge(s))
 - `./services/org/app/services/tag_service.py` (10 edge(s))
-- `delete` (10 edge(s))
-- `./services/org/tests/unit/test_onboarding.py` (10 edge(s))
-- `./services/org/app/core/firestore.py` (9 edge(s))

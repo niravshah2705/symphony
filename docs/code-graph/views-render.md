@@ -79,7 +79,7 @@ Directory-based community: public/js
 - **maybeRefreshRole** (criticality: 0.65, depth: 3)
 - **applyServerEvent** (criticality: 0.63, depth: 5)
 - **renderBoard** (criticality: 0.54, depth: 4)
-- *... and 16 more flows.*
+- *... and 15 more flows.*
 
 ## Dependencies
 

@@ -26,6 +26,7 @@ from app.core.timeutils import ensure_aware, utcnow
 from app.errors import ConflictError, UnauthorizedError, ValidationAppError
 from app.models.enums import AuthProvider, OrgRole
 from app.models.organization import Organization
+from app.services import provisioning_service
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.repositories.base import REFRESH_TOKENS, USERS
@@ -113,6 +114,8 @@ async def register(session: Uow, data: RegisterRequest) -> TokenResponse:
         email_verified=False,
     )
     await user_repo.add(user)
+    # Explicit org creation → provision a dedicated stack (no-op unless enabled).
+    await provisioning_service.trigger_provisioning(session, org)
 
     raw = await issue_email_verification(session, user)
     logger.info("Email verification token for %s: %s", email, raw)  # would be emailed

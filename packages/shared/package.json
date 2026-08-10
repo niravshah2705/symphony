@@ -14,7 +14,9 @@
     "./linear": "./src/linear.js",
     "./logger": "./src/logger.js",
     "./util": "./src/util.js",
-    "./agent/*": "./src/agent/*.js"
+    "./agent/*": "./src/agent/*.js",
+    "./provisioning": "./src/provisioning/index.js",
+    "./provisioning/*": "./src/provisioning/*.js"
   },
   "scripts": {
     "test": "node --test"
@@ -27,6 +29,7 @@
     "@google-cloud/firestore": "^7.11.0",
     "@google-cloud/pubsub": "^4.9.0",
     "@google-cloud/run": "^1.5.0",
+    "@google-cloud/scheduler": "^4.3.0",
     "@google-cloud/secret-manager": "^5.6.0",
     "@google/genai": "^2.16.0",
     "google-auth-library": "^9.15.0",

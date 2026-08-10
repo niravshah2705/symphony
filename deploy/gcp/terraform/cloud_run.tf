@@ -68,6 +68,13 @@ locals {
     PUBSUB_PUSH_AUDIENCE = local.coder_url
     PUBSUB_PUSH_SA       = google_service_account.pubsub_push.email
     CODER_REPO_URL       = var.coder_repo_url
+    # Peer-service URLs are PARAMETERS of the coder deployment (never browser-
+    # facing): the coder calls settings (effective config) and org/planner S2S.
+    # Without these the cloud coder falls back to localhost. A per-tenant coder is
+    # given its own PLANNER_URL + the SHARED ORG_URL/SETTINGS_URL the same way.
+    PLANNER_URL  = local.planner_url
+    ORG_URL      = local.org_url
+    SETTINGS_URL = local.settings_url
   }, local.skills_env)
 
   coder_worker_env = merge(local.common_env, {
@@ -78,6 +85,10 @@ locals {
     CODER_WORKSPACE_ROOT         = "/tmp/coder-workspaces"
     CODER_PLANNED_WORKSPACE_ROOT = "/tmp/coder-git-workspace"
     CODER_REPO_URL               = var.coder_repo_url
+    # The worker also resolves effective settings + org/planner S2S (see above).
+    PLANNER_URL  = local.planner_url
+    ORG_URL      = local.org_url
+    SETTINGS_URL = local.settings_url
     # ISSUE_ID (+ CONVERSATION_ID) are supplied per-execution by coder-control
     # as container overrides — see packages/shared/src/messaging/jobs.js.
   }, local.skills_env)
