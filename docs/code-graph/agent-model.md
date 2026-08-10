@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1520 nodes
-- **Cohesion**: 0.1366
+- **Size**: 1549 nodes
+- **Cohesion**: 0.1357
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,30 +20,35 @@ Directory-based community: packages/shared
 | metadataFor | Function | ./packages/shared/src/agent/analytics.js | 29-32 |
 | invocationFor | Function | ./packages/shared/src/agent/analytics.js | 34-38 |
 | firstText | Function | ./packages/shared/src/agent/analytics.js | 40-46 |
-| runtimeAndModel | Function | ./packages/shared/src/agent/analytics.js | 48-70 |
-| metricFromParts | Function | ./packages/shared/src/agent/analytics.js | 72-79 |
-| latencyMs | Function | ./packages/shared/src/agent/analytics.js | 81-86 |
-| isErrorRun | Function | ./packages/shared/src/agent/analytics.js | 88-91 |
-| safeTraceUrl | Function | ./packages/shared/src/agent/analytics.js | 93-112 |
-| normalizeRun | Function | ./packages/shared/src/agent/analytics.js | 114-167 |
-| sumAvailable | Function | ./packages/shared/src/agent/analytics.js | 169-179 |
-| percentile | Function | ./packages/shared/src/agent/analytics.js | 181-186 |
-| aggregateRuns | Function | ./packages/shared/src/agent/analytics.js | 188-217 |
-| unavailable | Function | ./packages/shared/src/agent/analytics.js | 219-234 |
-| normalizeOptions | Function | ./packages/shared/src/agent/analytics.js | 236-242 |
-| loadAnalytics | Function | ./packages/shared/src/agent/analytics.js | 249-312 |
-| test:analytics query options are bounded@L14 | Test | ./packages/shared/src/agent/analytics.test.js | 14-20 |
-| test:root runs aggregate cost, tokens, latency, errors, runtime, model, and change identity@L22 | Test | ./packages/shared/src/agent/analytics.test.js | 22-68 |
-| test:missing cost and token telemetry stays null instead of becoming zero@L70 | Test | ./packages/shared/src/agent/analytics.test.js | 70-76 |
-| test:trace links stay on the trusted LangSmith origin@L78 | Test | ./packages/shared/src/agent/analytics.test.js | 78-89 |
-| test:SDK trace metadata supplies usage and cost when LangSmith run totals are absent@L91 | Test | ./packages/shared/src/agent/analytics.test.js | 91-113 |
-| test:LangSmith query uses a bounded root-run window and limit@L115 | Test | ./packages/shared/src/agent/analytics.test.js | 115-135 |
-| listRuns | Function | ./packages/shared/src/agent/analytics.test.js | 160-160 |
-| test:LangSmith client construction has a bounded request timeout and retry count@L137 | Test | ./packages/shared/src/agent/analytics.test.js | 137-150 |
-| StubClient | Class | ./packages/shared/src/agent/analytics.test.js | 139-142 |
-| constructor | Function | ./packages/shared/src/agent/analytics.test.js | 140-140 |
-| listRuns | Function | ./packages/shared/src/agent/analytics.test.js | 141-141 |
-| test:analytics degrades honestly when tracing or LangSmith is unavailable@L152 | Test | ./packages/shared/src/agent/analytics.test.js | 152-164 |
+| resourceNames | Function | ./packages/shared/src/agent/analytics.js | 56-68 |
+| topResources | Function | ./packages/shared/src/agent/analytics.js | 71-82 |
+| runtimeAndModel | Function | ./packages/shared/src/agent/analytics.js | 84-106 |
+| metricFromParts | Function | ./packages/shared/src/agent/analytics.js | 108-115 |
+| latencyMs | Function | ./packages/shared/src/agent/analytics.js | 117-122 |
+| isErrorRun | Function | ./packages/shared/src/agent/analytics.js | 124-127 |
+| safeTraceUrl | Function | ./packages/shared/src/agent/analytics.js | 129-148 |
+| normalizeRun | Function | ./packages/shared/src/agent/analytics.js | 150-212 |
+| sumAvailable | Function | ./packages/shared/src/agent/analytics.js | 214-224 |
+| percentile | Function | ./packages/shared/src/agent/analytics.js | 226-231 |
+| aggregateRuns | Function | ./packages/shared/src/agent/analytics.js | 233-267 |
+| unavailable | Function | ./packages/shared/src/agent/analytics.js | 269-284 |
+| normalizeOptions | Function | ./packages/shared/src/agent/analytics.js | 286-292 |
+| loadAnalytics | Function | ./packages/shared/src/agent/analytics.js | 299-362 |
+| test:analytics query options are bounded@L15 | Test | ./packages/shared/src/agent/analytics.test.js | 15-21 |
+| test:root runs aggregate cost, tokens, latency, errors, runtime, model, and change identity@L23 | Test | ./packages/shared/src/agent/analytics.test.js | 23-69 |
+| test:missing cost and token telemetry stays null instead of becoming zero@L71 | Test | ./packages/shared/src/agent/analytics.test.js | 71-77 |
+| test:trace links stay on the trusted LangSmith origin@L79 | Test | ./packages/shared/src/agent/analytics.test.js | 79-90 |
+| test:SDK trace metadata supplies usage and cost when LangSmith run totals are absent@L92 | Test | ./packages/shared/src/agent/analytics.test.js | 92-114 |
+| test:LangSmith query uses a bounded root-run window and limit@L116 | Test | ./packages/shared/src/agent/analytics.test.js | 116-136 |
+| listRuns | Function | ./packages/shared/src/agent/analytics.test.js | 161-161 |
+| test:LangSmith client construction has a bounded request timeout and retry count@L138 | Test | ./packages/shared/src/agent/analytics.test.js | 138-151 |
+| StubClient | Class | ./packages/shared/src/agent/analytics.test.js | 140-143 |
+| constructor | Function | ./packages/shared/src/agent/analytics.test.js | 141-141 |
+| listRuns | Function | ./packages/shared/src/agent/analytics.test.js | 142-142 |
+| test:analytics degrades honestly when tracing or LangSmith is unavailable@L153 | Test | ./packages/shared/src/agent/analytics.test.js | 153-165 |
+| test:normalizeRun reads resource metadata from array values@L171 | Test | ./packages/shared/src/agent/analytics.test.js | 171-194 |
+| test:normalizeRun tolerates comma-separated resource metadata and de-dupes@L196 | Test | ./packages/shared/src/agent/analytics.test.js | 196-204 |
+| test:aggregateRuns rolls up top resource usage, preferring used over configured@L206 | Test | ./packages/shared/src/agent/analytics.test.js | 206-220 |
 | test:config exposes antigravity as a hosted Gemini-backed provider@L22 | Test | ./packages/shared/src/agent/antigravity.test.js | 22-26 |
 | test:resolveLlm builds a Gemini-key descriptor carrying the OpenAI-compatible endpoint@L28 | Test | ./packages/shared/src/agent/antigravity.test.js | 28-37 |
 | test:resolveLlm applies the config-driven agent-id override and model default@L39 | Test | ./packages/shared/src/agent/antigravity.test.js | 39-44 |
@@ -59,13 +64,8 @@ Directory-based community: packages/shared
 | makeModelLabelResolver | Function | ./packages/shared/src/agent/apply.js | 63-83 |
 | issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
 | applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-212 |
-| applyIssuesForMilestones | Function | ./packages/shared/src/agent/apply.js | 219-272 |
-| applyAidone | Function | ./packages/shared/src/agent/apply.js | 275-284 |
-| applyAiplanned | Function | ./packages/shared/src/agent/apply.js | 291-300 |
-| applyAifail | Function | ./packages/shared/src/agent/apply.js | 307-328 |
-| startIssue | Function | ./packages/shared/src/agent/apply.js | 337-352 |
 
-*... and 1470 more members.*
+*... and 1499 more members.*
 
 ## Execution Flows
 
@@ -87,33 +87,33 @@ Directory-based community: packages/shared
 
 - `equal` (1117 edge(s))
 - `join` (221 edge(s))
-- `String` (206 edge(s))
-- `includes` (181 edge(s))
-- `deepEqual` (178 edge(s))
-- `push` (142 edge(s))
-- `map` (137 edge(s))
-- `strictEqual` (125 edge(s))
+- `String` (209 edge(s))
+- `deepEqual` (197 edge(s))
+- `includes` (182 edge(s))
+- `push` (148 edge(s))
+- `map` (140 edge(s))
+- `strictEqual` (127 edge(s))
 - `ok` (124 edge(s))
-- `slice` (116 edge(s))
+- `slice` (118 edge(s))
 - `trim` (104 edge(s))
-- `match` (102 edge(s))
-- `filter` (100 edge(s))
-- `isArray` (90 edge(s))
+- `filter` (103 edge(s))
+- `match` (103 edge(s))
+- `isArray` (98 edge(s))
 - `step` (75 edge(s))
 
 ### Incoming
 
 - `equal` (1110 edge(s))
-- `deepEqual` (176 edge(s))
+- `deepEqual` (195 edge(s))
 - `./packages/shared/src/store.js` (143 edge(s))
-- `strictEqual` (125 edge(s))
+- `strictEqual` (127 edge(s))
 - `ok` (124 edge(s))
 - `join` (85 edge(s))
 - `match` (83 edge(s))
 - `./packages/shared/src/linear.js` (74 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (71 edge(s))
+- `./packages/shared/src/agent/runtimes.js` (67 edge(s))
 - `includes` (62 edge(s))
-- `./packages/shared/src/agent/runtimes.js` (60 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (56 edge(s))
 - `throws` (54 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (49 edge(s))

@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const { buildBackend, installSkills } = require('./framework');
+const { buildBackend, installSkills, configuredResourceNames } = require('./framework');
 const { resolveSkillsSrc } = require('../config');
 
 // Snapshot + restore the skills env so a test that pins SKILLS_ROOT/SKILLS_VERSION
@@ -164,4 +164,33 @@ test('LocalShellBackend receives only the sanitized allowlisted environment', as
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// configuredResourceNames (trace metadata: available skills/tools/plugins)
+// ---------------------------------------------------------------------------
+
+test('configuredResourceNames prefers a deepagent build’s resolved set', () => {
+  const workflow = { skills: ['ignored'], tools: ['ignored'], mcp: ['linear', 'playwright'] };
+  const resources = configuredResourceNames({
+    workflow,
+    effective: null,
+    resolvedTools: [{ name: 'linear_graphql' }, { name: 'docker_build' }, {}],
+    resolvedSkills: ['/.agent-skills/commit/', '/.agent-skills/push/'],
+  });
+  assert.deepEqual(resources, {
+    skills: ['commit', 'push'],
+    tools: ['linear_graphql', 'docker_build'],
+    plugins: ['linear', 'playwright'],
+  });
+});
+
+test('configuredResourceNames falls back to the workflow declaration when no build', () => {
+  const workflow = { skills: ['software-planning', 'web-research'], tools: ['web_search'], mcp: [] };
+  const resources = configuredResourceNames({ workflow, effective: null, resolvedTools: null, resolvedSkills: null });
+  assert.deepEqual(resources, {
+    skills: ['software-planning', 'web-research'],
+    tools: ['web_search'],
+    plugins: [],
+  });
 });

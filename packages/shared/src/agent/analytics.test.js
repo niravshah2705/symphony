@@ -7,6 +7,7 @@ const {
   MAX_TRACE_LIMIT,
   LANGSMITH_TIMEOUT_MS,
   normalizeOptions,
+  normalizeRun,
   aggregateRuns,
   loadAnalytics,
 } = require('./analytics');
@@ -161,4 +162,59 @@ test('analytics degrades honestly when tracing or LangSmith is unavailable', asy
   );
   assert.equal(failed.reason, 'provider-unavailable');
   assert.equal(JSON.stringify(failed).includes('do-not-leak'), false);
+});
+
+// ---------------------------------------------------------------------------
+// Resource metadata (skills / tools / plugins) — read side
+// ---------------------------------------------------------------------------
+
+test('normalizeRun reads resource metadata from array values', () => {
+  const trace = normalizeRun({
+    id: 'run-1',
+    name: 'Ship feature',
+    extra: {
+      metadata: {
+        skills: ['commit', 'push'],
+        tools: ['docker_build', 'linear_graphql'],
+        plugins: ['linear'],
+        tools_used: ['docker_build'],
+        skills_used: ['commit'],
+        plugins_used: ['linear'],
+      },
+    },
+  });
+  assert.deepEqual(trace.resources, {
+    skills: ['commit', 'push'],
+    tools: ['docker_build', 'linear_graphql'],
+    plugins: ['linear'],
+    skillsUsed: ['commit'],
+    toolsUsed: ['docker_build'],
+    pluginsUsed: ['linear'],
+  });
+});
+
+test('normalizeRun tolerates comma-separated resource metadata and de-dupes', () => {
+  const trace = normalizeRun({
+    id: 'run-2',
+    extra: { metadata: { tools: 'web_search, web_search ,docker_build' } },
+  });
+  assert.deepEqual(trace.resources.tools, ['web_search', 'docker_build']);
+  assert.deepEqual(trace.resources.skills, []);
+  assert.deepEqual(trace.resources.toolsUsed, []);
+});
+
+test('aggregateRuns rolls up top resource usage, preferring used over configured', () => {
+  const result = aggregateRuns([
+    { id: 'r1', extra: { metadata: { tools: ['a', 'b'], tools_used: ['a'] } } },
+    { id: 'r2', extra: { metadata: { tools: ['a', 'c'], tools_used: ['a', 'c'] } } },
+    { id: 'r3', extra: { metadata: { tools: ['b'] } } }, // no used → falls back to configured
+  ]);
+  // a: r1(used)+r2(used)=2 ; c: r2(used)=1 ; b: r3(configured)=1
+  assert.deepEqual(result.summary.resourceUsage.tools, [
+    { name: 'a', count: 2 },
+    { name: 'b', count: 1 },
+    { name: 'c', count: 1 },
+  ]);
+  assert.deepEqual(result.summary.resourceUsage.skills, []);
+  assert.deepEqual(result.summary.resourceUsage.plugins, []);
 });

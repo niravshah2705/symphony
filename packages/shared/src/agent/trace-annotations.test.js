@@ -3,7 +3,13 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { buildAnnotations, withAnnotations } = require('./trace-annotations');
+const {
+  buildAnnotations,
+  withAnnotations,
+  cleanList,
+  buildResourceAnnotations,
+  withResources,
+} = require('./trace-annotations');
 
 test('buildAnnotations stamps all three business fields into metadata and tags', () => {
   // Arrange
@@ -100,4 +106,107 @@ test('withAnnotations works with an empty config and empty business', () => {
   const merged = withAnnotations();
   assert.deepStrictEqual(merged.metadata, {});
   assert.deepStrictEqual(merged.tags, []);
+});
+
+// ---------------------------------------------------------------------------
+// Resource annotations (skills / tools / plugins)
+// ---------------------------------------------------------------------------
+
+test('cleanList accepts an array and returns trimmed, de-duplicated names', () => {
+  assert.deepStrictEqual(cleanList([' commit ', 'commit', 'push', '', null]), ['commit', 'push']);
+});
+
+test('cleanList accepts a comma-separated string', () => {
+  assert.deepStrictEqual(cleanList('commit, push ,commit'), ['commit', 'push']);
+});
+
+test('cleanList returns [] for null/undefined/blank', () => {
+  assert.deepStrictEqual(cleanList(null), []);
+  assert.deepStrictEqual(cleanList(undefined), []);
+  assert.deepStrictEqual(cleanList('   '), []);
+  assert.deepStrictEqual(cleanList([]), []);
+});
+
+test('cleanList caps the number of items and per-name length', () => {
+  const many = Array.from({ length: 10 }, (_, i) => `tool-${i}`);
+  assert.deepStrictEqual(cleanList(many, { maxItems: 3 }), ['tool-0', 'tool-1', 'tool-2']);
+  assert.strictEqual(cleanList(['abcdefghij'], { maxLen: 4 })[0], 'abcd');
+});
+
+test('buildResourceAnnotations stamps arrays, counts, and flat tags', () => {
+  // Arrange
+  const resources = {
+    skills: ['linear', 'commit'],
+    tools: ['linear_graphql', 'docker_build'],
+    plugins: ['linear', 'playwright'],
+  };
+
+  // Act
+  const { metadata, tags } = buildResourceAnnotations(resources);
+
+  // Assert
+  assert.deepStrictEqual(metadata, {
+    skills: ['linear', 'commit'],
+    skills_count: 2,
+    tools: ['linear_graphql', 'docker_build'],
+    tools_count: 2,
+    plugins: ['linear', 'playwright'],
+    plugins_count: 2,
+  });
+  assert.deepStrictEqual(tags, [
+    'skill:linear',
+    'skill:commit',
+    'tool:linear_graphql',
+    'tool:docker_build',
+    'plugin:linear',
+    'plugin:playwright',
+  ]);
+});
+
+test('buildResourceAnnotations omits empty categories and tolerates no argument', () => {
+  const { metadata, tags } = buildResourceAnnotations({ tools: ['web_search'], skills: [] });
+  assert.deepStrictEqual(metadata, { tools: ['web_search'], tools_count: 1 });
+  assert.deepStrictEqual(tags, ['tool:web_search']);
+
+  const empty = buildResourceAnnotations();
+  assert.deepStrictEqual(empty.metadata, {});
+  assert.deepStrictEqual(empty.tags, []);
+});
+
+test('withResources merges into existing config without mutating it', () => {
+  // Arrange
+  const config = {
+    runId: 'r1',
+    tags: ['enrich', 'project:OTA'],
+    metadata: { project: 'OTA' },
+  };
+  const originalTags = [...config.tags];
+  const originalMeta = { ...config.metadata };
+
+  // Act
+  const merged = withResources(config, { skills: ['commit'], tools: ['docker_build'] });
+
+  // Assert — merged output
+  assert.strictEqual(merged.runId, 'r1');
+  assert.deepStrictEqual(merged.metadata, {
+    project: 'OTA',
+    skills: ['commit'],
+    skills_count: 1,
+    tools: ['docker_build'],
+    tools_count: 1,
+  });
+  assert.deepStrictEqual(merged.tags, ['enrich', 'project:OTA', 'skill:commit', 'tool:docker_build']);
+
+  // Assert — input untouched (immutability rule)
+  assert.deepStrictEqual(config.tags, originalTags);
+  assert.deepStrictEqual(config.metadata, originalMeta);
+});
+
+test('withResources de-duplicates tags and works with empty inputs', () => {
+  const merged = withResources({ tags: ['tool:web_search'] }, { tools: ['web_search'] });
+  assert.deepStrictEqual(merged.tags, ['tool:web_search']);
+
+  const empty = withResources();
+  assert.deepStrictEqual(empty.metadata, {});
+  assert.deepStrictEqual(empty.tags, []);
 });

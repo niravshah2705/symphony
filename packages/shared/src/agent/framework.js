@@ -12,7 +12,8 @@ const { installSafeRead } = require('./safe-read');
 const { createFsArgNormalizerMiddleware } = require('./fs-arg-normalizer');
 const { buildSafeAgentEnv } = require('./repository-broker');
 const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = require('./runtimes');
-const { applyPolicyToWorkflow, filterSkillPaths } = require('./settings-policy');
+const { applyPolicyToWorkflow, filterSkillPaths, skillNameFromPath } = require('./settings-policy');
+const { withResources } = require('./trace-annotations');
 
 /**
  * Workflow-driven deep-agent framework.
@@ -253,6 +254,25 @@ function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, ext
 }
 
 /**
+ * Resolve the configured (available) skill/tool/plugin NAMES for a run, for
+ * trace metadata. Prefer the concrete set a deepagent build resolved
+ * (`resolvedTools`/`resolvedSkills`, already policy-narrowed); otherwise fall
+ * back to the workflow's policy-applied declaration so non-deepagent runtimes
+ * still record what they were configured with. Plugins are the workflow's MCP
+ * servers. Names only — never args or secrets.
+ */
+function configuredResourceNames({ workflow, effective, resolvedTools, resolvedSkills }) {
+  const declared = applyPolicyToWorkflow(workflow, effective, { toolDomains: toolRegistry.TOOL_DOMAIN }) || workflow;
+  const skills = Array.isArray(resolvedSkills)
+    ? resolvedSkills.map(skillNameFromPath).filter(Boolean)
+    : declared.skills || [];
+  const tools = Array.isArray(resolvedTools)
+    ? resolvedTools.map((tool) => tool && tool.name).filter(Boolean)
+    : declared.tools || [];
+  return { skills, tools, plugins: workflow.mcp || [] };
+}
+
+/**
  * Run a workflow agent to completion on a single user message and return the
  * result plus the final assistant text. For repo-less workflows (no backend
  * provided) a scratch dir is created and cleaned up automatically.
@@ -294,9 +314,13 @@ async function runWorkflow({
       ...invokeConfig,
     };
     let deepAgentInvoke;
+    let resolvedTools = null;
+    let resolvedSkills = null;
     if (runtimeId === 'deepagent') {
       const extraTools = await require('./mcp').loadMcpTools(workflow.mcp, ctx);
-      const { agent } = buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx, extraTools, env });
+      const { agent, tools, skillPaths: builtSkills } = buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx, extraTools, env });
+      resolvedTools = tools;
+      resolvedSkills = builtSkills;
       deepAgentInvoke = (prompt, tracedConfig) => {
         // The runtime wrapper owns the LangSmith root run id. Passing the same
         // id into the nested LangGraph invocation would create a duplicate run.
@@ -305,6 +329,12 @@ async function runWorkflow({
         return agent.invoke({ messages: [{ role: 'user', content: prompt }] }, childConfig);
       };
     }
+    // Stamp the configured skills/tools/plugins onto the trace so runs are
+    // filterable/summarisable by which resources were made available.
+    const configWithResources = withResources(
+      config,
+      configuredResourceNames({ workflow, effective: ctx.effectivePolicy || null, resolvedTools, resolvedSkills })
+    );
     return executeAgentRuntime({
       runtime: requestedRuntime,
       workflowPattern,
@@ -317,7 +347,7 @@ async function runWorkflow({
       maxTurns: workflow.recursionLimit || 24,
       ctx,
       env,
-      invokeConfig: config,
+      invokeConfig: configWithResources,
       tags: workflow.tags || [],
       deepAgentInvoke,
       lastText,
@@ -365,6 +395,7 @@ module.exports = {
   loadWorkflow,
   prepareScratch,
   buildAgent,
+  configuredResourceNames,
   runWorkflow,
   contentToText,
   messageText,

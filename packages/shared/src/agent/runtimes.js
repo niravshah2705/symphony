@@ -7,6 +7,7 @@ const { traceable, getCurrentRunTree } = require('langsmith/traceable');
 const { buildSafeAgentEnv } = require('./repository-broker');
 const { PATTERNS, patternId } = require('./workflow-patterns');
 const { enforceHarness } = require('./settings-policy');
+const { cleanList } = require('./trace-annotations');
 
 /**
  * Provider-neutral agent-runtime registry.
@@ -469,6 +470,115 @@ function reviewMetadata(review) {
   return metadata;
 }
 
+// ---------------------------------------------------------------------------
+// Actually-used resources (skills / tools / plugins)
+//
+// Derived post-run from the returned message history so one code path covers
+// every runtime that streams tool calls (deepagent's LangGraph messages and the
+// Claude Agent SDK's tool_use blocks). Codex/Antigravity carry no tool-call
+// history, so they contribute nothing here and keep the configured-set stamp
+// from the caller. NAMES ONLY — never tool args, results, prompts, or secrets.
+// ---------------------------------------------------------------------------
+
+/** Filesystem-read tool names whose path reveals which skill dir was consulted. */
+const READ_TOOL_NAMES = new Set(['read_file', 'Read', 'read']);
+/** `/.agent-skills/<name>/…` or `…/skills/<name>/…` → captures the skill name. */
+const SKILL_PATH_RE = /(?:\.agent-skills|skills)[/\\]([^/\\]+)[/\\]/;
+
+/** MCP tools are prefixed with `__` (server name); local tools never use `__`. */
+function mcpServerFromToolName(name) {
+  if (!name.includes('__')) return null;
+  const parts = name.split('__').filter(Boolean);
+  const server = parts[0] === 'mcp' ? parts[1] : parts[0];
+  return server || null;
+}
+
+/**
+ * Collect { name, args } for every tool call in a single message, tolerant of
+ * the shapes emitted by the different SDKs:
+ *  - LangGraph AIMessage: `tool_calls: [{ name, args }]`
+ *  - OpenAI-style: `additional_kwargs.tool_calls: [{ function: { name, arguments } }]`
+ *  - Claude Agent SDK: `{ message: { content: [{ type: 'tool_use', name, input }] } }`
+ */
+function toolCallsFromMessage(message) {
+  if (!message || typeof message !== 'object') return [];
+  const calls = [];
+  if (Array.isArray(message.tool_calls)) {
+    for (const call of message.tool_calls) {
+      if (call && call.name) calls.push({ name: String(call.name), args: call.args || {} });
+    }
+  }
+  const legacy = message.additional_kwargs && message.additional_kwargs.tool_calls;
+  if (Array.isArray(legacy)) {
+    for (const call of legacy) {
+      const fn = call && call.function;
+      if (fn && fn.name) calls.push({ name: String(fn.name), args: fn.arguments || {} });
+    }
+  }
+  const content = (message.message && message.message.content) || message.content;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (block && block.type === 'tool_use' && block.name) {
+        calls.push({ name: String(block.name), args: block.input || {} });
+      }
+    }
+  }
+  return calls;
+}
+
+/** The skill name a read tool consulted, or null for non-skill reads. */
+function skillFromReadCall(call) {
+  if (!READ_TOOL_NAMES.has(call.name)) return null;
+  const args = call.args && typeof call.args === 'object' ? call.args : {};
+  const filePath = args.file_path || args.path || args.filePath;
+  const match = typeof filePath === 'string' && filePath.match(SKILL_PATH_RE);
+  return match ? match[1] : null;
+}
+
+/**
+ * Derive the skills/tools/plugins a run actually exercised from its messages.
+ * @returns {{ toolsUsed: string[], skillsUsed: string[], pluginsUsed: string[] }}
+ */
+function extractUsedResources(resultOrError) {
+  const messages = resultOrError && Array.isArray(resultOrError.messages) ? resultOrError.messages : [];
+  const tools = new Set();
+  const skills = new Set();
+  const plugins = new Set();
+  for (const message of messages) {
+    for (const call of toolCallsFromMessage(message)) {
+      tools.add(call.name);
+      const server = mcpServerFromToolName(call.name);
+      if (server) plugins.add(server);
+      const skill = skillFromReadCall(call);
+      if (skill) skills.add(skill);
+    }
+  }
+  return {
+    toolsUsed: cleanList([...tools]),
+    skillsUsed: cleanList([...skills]),
+    pluginsUsed: cleanList([...plugins]),
+  };
+}
+
+/** Trace-metadata fragment for actually-used resources (omits empty categories). */
+function usedResourceMetadata(resultOrError) {
+  const { toolsUsed, skillsUsed, pluginsUsed } = extractUsedResources(resultOrError);
+  const metadata = {};
+  if (toolsUsed.length) {
+    metadata.tools_used = toolsUsed;
+    metadata.tools_used_count = toolsUsed.length;
+  }
+  if (skillsUsed.length) {
+    metadata.skills_used = skillsUsed;
+    metadata.skills_used_count = skillsUsed.length;
+  }
+  if (pluginsUsed.length) {
+    metadata.plugins_used = pluginsUsed;
+    metadata.plugins_used_count = pluginsUsed.length;
+  }
+  return metadata;
+}
+
 function traceMetadata(resultOrError) {
   const usage = resultOrError && resultOrError.usage;
   const costUsd = finiteNumber(resultOrError && resultOrError.costUsd);
@@ -490,7 +600,11 @@ function traceMetadata(resultOrError) {
     metadata.usage_reasoning_output_tokens = usage.reasoningOutputTokens;
   }
   if (costUsd !== null) metadata.cost_usd = costUsd;
-  return { ...metadata, ...reviewMetadata(resultOrError && resultOrError.review) };
+  return {
+    ...metadata,
+    ...usedResourceMetadata(resultOrError),
+    ...reviewMetadata(resultOrError && resultOrError.review),
+  };
 }
 
 function langSmithProvider(llm) {
@@ -1021,4 +1135,6 @@ module.exports = {
   executeAgentRuntime,
   // Exported for focused adapter tests; callers should use executeAgentRuntime.
   claudePermissionGuard,
+  extractUsedResources,
+  usedResourceMetadata,
 };
