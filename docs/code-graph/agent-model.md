@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1506 nodes
-- **Cohesion**: 0.1371
+- **Size**: 1520 nodes
+- **Cohesion**: 0.1366
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared
 | applyAifail | Function | ./packages/shared/src/agent/apply.js | 307-328 |
 | startIssue | Function | ./packages/shared/src/agent/apply.js | 337-352 |
 
-*... and 1456 more members.*
+*... and 1470 more members.*
 
 ## Execution Flows
 
@@ -85,31 +85,31 @@ Directory-based community: packages/shared
 
 ### Outgoing
 
-- `equal` (1102 edge(s))
+- `equal` (1117 edge(s))
 - `join` (221 edge(s))
 - `String` (206 edge(s))
 - `includes` (181 edge(s))
-- `deepEqual` (175 edge(s))
+- `deepEqual` (178 edge(s))
 - `push` (142 edge(s))
 - `map` (137 edge(s))
 - `strictEqual` (125 edge(s))
 - `ok` (124 edge(s))
 - `slice` (116 edge(s))
 - `trim` (104 edge(s))
-- `match` (101 edge(s))
+- `match` (102 edge(s))
 - `filter` (100 edge(s))
-- `isArray` (88 edge(s))
+- `isArray` (90 edge(s))
 - `step` (75 edge(s))
 
 ### Incoming
 
-- `equal` (1095 edge(s))
-- `deepEqual` (173 edge(s))
-- `./packages/shared/src/store.js` (133 edge(s))
+- `equal` (1110 edge(s))
+- `deepEqual` (176 edge(s))
+- `./packages/shared/src/store.js` (143 edge(s))
 - `strictEqual` (125 edge(s))
 - `ok` (124 edge(s))
 - `join` (85 edge(s))
-- `match` (82 edge(s))
+- `match` (83 edge(s))
 - `./packages/shared/src/linear.js` (74 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (71 edge(s))
 - `includes` (62 edge(s))
