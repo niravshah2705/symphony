@@ -28,7 +28,7 @@ Directory-based community: services/coder
 
 ## Execution Flows
 
-- **runTicket** (criticality: 0.63, depth: 3)
+No execution flows pass through this community.
 
 ## Dependencies
 

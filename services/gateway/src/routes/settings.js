@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { getApiKey, setApiKey, getSettings, patchSettings } = require('@ai-fleet/shared/store');
+const { getApiKey, setApiKey, getSettings, patchSettings, addSettingsHistory } = require('@ai-fleet/shared/store');
 const { getViewer } = require('@ai-fleet/shared/linear');
 const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
 const { CONFIG } = require('@ai-fleet/shared/config');
@@ -10,6 +10,7 @@ const {
   publicCatalog,
   presetForRole,
   settingsPatchForPreset,
+  settingsPatchForTier,
   settingsPatchForReasoning,
   customPresetForSettings,
   modelMatchesPreset,
@@ -45,6 +46,67 @@ const ROLE_KEYS = Object.freeze({
 // Hugging Face hosted router. Codex/Claude/Antigravity are the managed hosted providers.
 const BYOM_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'huggingface']);
 const HOSTED_PROVIDERS = Object.freeze(['codex', 'claude', 'antigravity']);
+
+// Purpose roles whose indicative cost is summed for the settings-history
+// estimate. `testing` is reserved (no consumer), so it is excluded here.
+const COSTED_ROLES = Object.freeze(['thinking', 'execution']);
+// Indicative monthly token volume, used ONLY to produce a comparative cost
+// figure for the tuning history trail. Not a billing number.
+const ASSUMED_MONTHLY_INPUT_TOKENS = 20_000_000;
+const ASSUMED_MONTHLY_OUTPUT_TOKENS = 4_000_000;
+
+/**
+ * True when `settings` still exactly matches the patch a tier would apply. Used
+ * to keep the slider honest: because provider param blocks are shared across
+ * roles, an unrelated change can diverge a tier without touching a role's keys,
+ * so the stored tier is only trusted while it still matches.
+ */
+function settingsMatchTier(settings, tierId) {
+  const patch = settingsPatchForTier(tierId);
+  if (!patch) return false;
+  return Object.entries(patch).every(([key, value]) => key === 'complexityTier' || settings[key] === value);
+}
+
+/** Resolve the effective tier: the stored one if it still matches, else 'custom'. */
+function effectiveComplexityTier(settings) {
+  const stored = settings.complexityTier || 'custom';
+  return stored !== 'custom' && settingsMatchTier(settings, stored) ? stored : 'custom';
+}
+
+/**
+ * Append a no-secret selection record for later tuning: the applied tier, each
+ * purpose role's provider/preset/model ids, an indicative monthly cost, and the
+ * harness. Never includes keys, tokens, or hosts.
+ */
+function recordSelectionHistory(complexityTier) {
+  const s = getSettings();
+  const byId = new Map(publicCatalog().presets.map((preset) => [preset.id, preset]));
+  const perRolePicks = {};
+  let estMonthlyCostUsd = 0;
+  let priced = true;
+  for (const role of ['thinking', 'execution', 'testing']) {
+    const provider = s[`${role}LlmProvider`] || null;
+    const presetId = s[`${role}LlmPresetId`] || null;
+    const preset = byId.get(presetId) || null;
+    const model = preset ? preset.model : (s[`${provider}Model`] || null);
+    perRolePicks[role] = { provider, presetId, model };
+    if (!COSTED_ROLES.includes(role)) continue;
+    const cost = preset && preset.cost;
+    if (cost && Number.isFinite(cost.inputPer1M) && Number.isFinite(cost.outputPer1M)) {
+      estMonthlyCostUsd += (ASSUMED_MONTHLY_INPUT_TOKENS / 1e6) * cost.inputPer1M
+        + (ASSUMED_MONTHLY_OUTPUT_TOKENS / 1e6) * cost.outputPer1M;
+    } else {
+      priced = false; // BYoM/self-hosted or unpriced — a $ figure would mislead.
+    }
+  }
+  addSettingsHistory({
+    orgId: process.env.AIFLEET_ORG_ID || 'default',
+    complexityTier,
+    perRolePicks,
+    estMonthlyCostUsd: priced ? Math.round(estMonthlyCostUsd * 100) / 100 : null,
+    harness: normalizeAgentRuntime(s.agentRuntime),
+  });
+}
 
 /** Canonicalize a request's role, or null when unrecognized. */
 function parseRole(value) {
@@ -104,6 +166,10 @@ function publicSettings() {
     executionLlmPresetId: s.executionLlmPresetId || 'custom',
     testingLlmProvider: s.testingLlmProvider || s.llmProvider || 'ollama',
     testingLlmPresetId: s.testingLlmPresetId || 'custom',
+    // Complexity slider tier. Derived: the stored tier is returned only while the
+    // current settings still match it, else 'custom' (a manual model/param change
+    // diverges it). Metadata only; the per-role fields above drive resolution.
+    complexityTier: effectiveComplexityTier(s),
     ollamaHost: s.ollamaHost,
     ollamaModel: s.ollamaModel,
     ollamaContextWindow: s.ollamaContextWindow,
@@ -429,6 +495,19 @@ router.put('/llm-selection', asyncHandler(async (req, res) => {
   patchSettings(patch);
   res.json(publicSettings());
 }));
+
+// PUT /api/settings/complexity — apply a curated complexity tier to every
+// purpose role at once (the settings slider). Only the tier id is read from the
+// body (no mass assignment); an unknown tier is rejected. A no-secret selection
+// record is appended for tuning.
+router.put('/complexity', (req, res) => {
+  const tier = String((req.body || {}).tier || '').trim();
+  const patch = settingsPatchForTier(tier);
+  if (!patch) return res.status(400).json({ error: 'Unknown complexity tier.' });
+  patchSettings(patch);
+  recordSelectionHistory(tier);
+  res.json(publicSettings());
+});
 
 // PUT /api/settings — validate the Linear key against Linear, then persist.
 router.put(

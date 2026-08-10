@@ -71,7 +71,9 @@ Directory-based community: packages/cli
 
 - **run** (criticality: 0.64, depth: 4)
 - **storedToken** (criticality: 0.63, depth: 3)
-- **run** (criticality: 0.62, depth: 2)
+- **save** (criticality: 0.61, depth: 1)
+- **clear** (criticality: 0.58, depth: 2)
+- **request** (criticality: 0.48, depth: 1)
 
 ## Dependencies
 

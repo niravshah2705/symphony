@@ -174,6 +174,11 @@ const DEFAULT_STORE = Object.freeze({
     executionLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
     testingLlmProvider: DEFAULT_HOSTED_PRESET.provider,
     testingLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
+    // Complexity tier last applied via the settings slider (see
+    // model-presets.js complexityTiers + settingsPatchForTier). 'custom' means
+    // the roles above were set individually and match no tier. Metadata only —
+    // resolveLlm reads the per-role keys, not this field.
+    complexityTier: 'custom',
     ollamaHost: 'http://localhost:11434',
     ...DEFAULT_OLLAMA_SETTINGS,
     // LM Studio (local, OpenAI-compatible API) — an alternative local provider for
@@ -270,6 +275,8 @@ const DEFAULT_STORE = Object.freeze({
   conversations: [], // agent workspace conversation threads (see agent/conversations.js)
   approvals: [], // requirement-evaluation approval gates (see agent/approval-gate.js)
   stackLinks: [], // open stacked-PR links awaiting blocker merge (see agent/stack-reconcile.js)
+  settingsHistory: [], // append-only model/tier selection + indicative cost records for tuning
+
   // End User License Agreement acceptance, keyed at two scopes. `users[key]` and
   // `orgs[orgId]` each hold { status:'accepted'|'rejected', version, via, at }.
   // Org membership itself implies acceptance (see services/gateway eula gate), so
@@ -338,6 +345,13 @@ function normalizeStore(parsed) {
       settings[presetKey] = settings.hostedLlmPresetId;
     }
   }
+  // The complexity tier is a slider convenience that did not exist before. A
+  // legacy store's roles were configured individually, so it is 'custom' until
+  // the operator moves the slider (base merge already defaults this; the guard
+  // documents intent, consistent with the preset-id migration above).
+  if (!Object.prototype.hasOwnProperty.call(storedSettings, 'complexityTier')) {
+    settings.complexityTier = 'custom';
+  }
   // Preserve explicitly configured legacy request shapes. When both hosted
   // reasoning fields are absent, however, activate the reviewed default for
   // the effective known model. This keeps the visible model-aware default and
@@ -372,6 +386,7 @@ function normalizeStore(parsed) {
     conversations: Array.isArray(source.conversations) ? source.conversations : [],
     approvals: Array.isArray(source.approvals) ? source.approvals : [],
     stackLinks: Array.isArray(source.stackLinks) ? source.stackLinks : [],
+    settingsHistory: Array.isArray(source.settingsHistory) ? source.settingsHistory : [],
     eula: normalizeEula(source.eula),
   };
 }
@@ -391,7 +406,7 @@ function seedStore() {
 // the growing arrays that each become a per-record sub-collection so no single
 // document approaches Firestore's 1 MB limit.
 const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig', 'eula'];
-const STORE_COLLECTION_KEYS = ['jobs', 'memories', 'conversations', 'approvals'];
+const STORE_COLLECTION_KEYS = ['jobs', 'memories', 'conversations', 'approvals', 'settingsHistory'];
 
 const backend = CONFIG.STORE_BACKEND === 'firestore'
   ? firestoreBackend.create({
@@ -784,6 +799,27 @@ function removeStackLink(id) {
   return removed;
 }
 
+/* ------------------------- Settings history ----------------------------- */
+
+// Append-only trail of model/tier selections + indicative cost, kept for future
+// reference and tuning. Capped so the sub-collection stays bounded. Records must
+// never contain secrets — only provider/preset/model ids, the tier, and cost.
+const MAX_SETTINGS_HISTORY = 500;
+
+/** Selection history, newest first. Legacy stores without the field read as []. */
+function listSettingsHistory() {
+  return readStore().settingsHistory || [];
+}
+
+/** Append a settings-selection record (newest first) with a generated id + ts. */
+function addSettingsHistory(record) {
+  const current = readStore();
+  const entry = { ...record, id: `sh_${randomUUID()}`, ts: new Date().toISOString() };
+  const settingsHistory = [entry, ...(current.settingsHistory || [])].slice(0, MAX_SETTINGS_HISTORY);
+  writeStore({ ...current, settingsHistory });
+  return entry;
+}
+
 /* --------------------------- Memories ----------------------------------- */
 
 const MAX_MEMORIES = 1000;
@@ -1014,6 +1050,9 @@ module.exports = {
   addStackLink,
   updateStackLink,
   removeStackLink,
+  MAX_SETTINGS_HISTORY,
+  listSettingsHistory,
+  addSettingsHistory,
   MAX_MEMORIES,
   listMemories,
   addMemory,

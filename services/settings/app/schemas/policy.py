@@ -2,7 +2,7 @@
 
 Every list and pattern is bounded so a policy document cannot grow unboundedly
 or carry control characters (api-security / injection checklists). Domain keys
-are restricted to the four known domains — unknown keys are rejected.
+are restricted to the known domains (models.policy.DOMAINS) — unknown keys are rejected.
 """
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ class PolicyUpdate(BaseModel):
     clobber each other:
 
     - ``domains``: when PROVIDED (even ``{}``) it REPLACES the scope's domains —
-      any subset of the four may be given and omitted domains become empty. When
+      any subset of the known domains may be given and omitted domains become empty. When
       the whole field is absent (``None``) the stored domains are left untouched.
     - ``values``: MERGE semantics (the browser can never read the stored secret
       back to resend it). ``None``/omitted leaves every stored value untouched; a

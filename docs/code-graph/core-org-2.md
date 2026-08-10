@@ -7,7 +7,7 @@
 Directory-based community: services/settings
 
 - **Size**: 335 nodes
-- **Cohesion**: 0.4235
+- **Cohesion**: 0.4232
 - **Dominant Language**: python
 
 ## Members
@@ -69,17 +69,17 @@ Directory-based community: services/settings
 
 ## Execution Flows
 
-- **__call__** (criticality: 0.94, depth: 4)
-- **resolve_for_caller** (criticality: 0.94, depth: 4)
-- **set_org_secrets** (criticality: 0.94, depth: 4)
-- **resolve_secrets_for_org** (criticality: 0.94, depth: 4)
-- **set_org_policy** (criticality: 0.93, depth: 3)
-- **set_project_policy** (criticality: 0.93, depth: 3)
-- **set_user_policy** (criticality: 0.93, depth: 3)
-- **set_selection** (criticality: 0.93, depth: 3)
-- **client** (criticality: 0.93, depth: 3)
-- **resolve_config_for_caller** (criticality: 0.88, depth: 2)
-- *... and 14 more flows.*
+- **set_selection** (criticality: 0.91, depth: 3)
+- **resolve_secrets_for_org** (criticality: 0.90, depth: 4)
+- **set_org_secrets** (criticality: 0.89, depth: 4)
+- **__call__** (criticality: 0.83, depth: 4)
+- **get_org_secrets** (criticality: 0.81, depth: 3)
+- **resolve_for_caller** (criticality: 0.69, depth: 4)
+- **set_org_policy** (criticality: 0.68, depth: 3)
+- **set_project_policy** (criticality: 0.68, depth: 3)
+- **set_user_policy** (criticality: 0.68, depth: 3)
+- **client** (criticality: 0.68, depth: 3)
+- *... and 27 more flows.*
 
 ## Dependencies
 
@@ -95,7 +95,7 @@ Directory-based community: services/settings
 - `BaseModel` (14 edge(s))
 - `items` (13 edge(s))
 - `set` (11 edge(s))
-- `list` (9 edge(s))
+- `list` (10 edge(s))
 - `len` (8 edge(s))
 - `cls` (8 edge(s))
 - `pop` (7 edge(s))

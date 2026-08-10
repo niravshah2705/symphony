@@ -17,7 +17,7 @@
  * `security:*`.
  */
 
-const DOMAINS = Object.freeze(['harness', 'tools', 'skills', 'plugins']);
+const DOMAINS = Object.freeze(['harness', 'tools', 'skills', 'plugins', 'hooks']);
 
 const EMPTY_SCOPE = Object.freeze({ include: [], exclude: [] });
 
@@ -196,6 +196,20 @@ function filterSkillPaths(skillPaths, effective) {
 }
 
 /**
+ * Prune a list of lifecycle-hook ids to the effective `hooks` policy (matched by
+ * id, like skills). Allow-all when no hooks policy is present.
+ *
+ * TODO(hooks): there is no hook execution engine yet, so this helper is NOT wired
+ * into the build path. Once hooks run, call it where the framework registers a
+ * workflow's hooks (framework.js buildAgent, alongside applyPolicyToWorkflow) so
+ * only allowed hook ids fire.
+ */
+function filterHooksByPolicy(hookIds, effective) {
+  if (!Array.isArray(hookIds) || !hasDomain(effective, 'hooks')) return hookIds;
+  return filterByPolicy(hookIds, effective.hooks.effective);
+}
+
+/**
  * Enforce the harness policy on a chosen runtime id. If the runtime is excluded,
  * fall back to the first allowed harness (preferring `deepagent`, the
  * provider-neutral default). When no harness policy is present, or nothing is
@@ -224,6 +238,7 @@ module.exports = {
   filterToolsByPolicy,
   applyPolicyToWorkflow,
   filterSkillPaths,
+  filterHooksByPolicy,
   skillNameFromPath,
   enforceHarness,
 };

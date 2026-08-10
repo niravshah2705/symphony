@@ -1514,3 +1514,66 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 .build-flow-actions button { min-height: 30px; padding: 6px 12px; border-radius: 8px; font-size: 9px; }
 .build-flow-actions button:not(.primary) { border: 1px solid var(--border-strong); background: var(--panel); color: var(--text); cursor: pointer; }
 .build-flow-actions button:not(.primary):hover { border-color: var(--accent); color: var(--accent-2); }
+
+/* ===================== Settings redesign ===================== */
+
+.settings-section-intro { margin: 0 0 12px; font-size: 13px; }
+
+/* Complexity slider */
+.complexity-section { display: grid; gap: 10px; }
+.complexity-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
+.tier-ticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+.tier-ticks span { flex: 1 1 0; text-align: center; }
+.tier-ticks span:first-child { text-align: left; }
+.tier-ticks span:last-child { text-align: right; }
+.complexity-active { font-size: 13px; }
+.complexity-active strong { color: var(--accent-2); }
+.settings-cost-summary { font-size: 13px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-subtle); }
+.settings-cost-summary strong { color: var(--green); }
+
+/* Icon pickers (provider / harness / project management) */
+.icon-picker { display: flex; flex-wrap: wrap; gap: 10px; }
+.icon-chip {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  min-width: 104px; padding: 12px 14px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer;
+}
+.icon-chip:hover:not(:disabled) { border-color: var(--accent); }
+.icon-chip:disabled { opacity: 0.55; cursor: default; }
+.icon-chip.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-2); }
+.icon-chip .brand-icon { width: 22px; height: 22px; }
+.icon-chip-label { font-size: 13px; font-weight: 600; }
+.icon-chip-hint { font-size: 10px; }
+
+/* Cost chip variant */
+.param-chip.cost { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 45%, var(--border)); }
+
+/* Subhead with an inline brand icon */
+.subhead-icon { display: flex; align-items: center; gap: 7px; }
+.subhead-icon .brand-icon { width: 16px; height: 16px; color: var(--accent-2); }
+
+/* Accounts (hosted sign-in) */
+.accounts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.account-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; background: var(--panel); }
+
+/* Merged settings policy */
+.policy-merged { display: grid; gap: 16px; }
+.policy-scope { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; background: var(--panel); }
+.policy-form { display: grid; gap: 14px; margin-top: 8px; }
+.policy-domain { display: grid; gap: 6px; }
+.policy-domain-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.policy-domain label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.policy-input {
+  width: 100%; padding: 7px 9px; border: 1px solid var(--border-strong); border-radius: 8px;
+  background: var(--panel-2); color: var(--text); font-size: 12px; font-family: var(--font-mono); resize: vertical;
+}
+.policy-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.policy-effective { display: grid; gap: 6px; margin: 8px 0; }
+.param-chip.ok { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, var(--border)); }
+.btn-small { padding: 4px 9px; font-size: 12px; }
+
+/* Per-org secret vault editor */
+.vault-secrets { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
+.vault-secret { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px dashed var(--border); }
+.vault-secret:last-child { border-bottom: none; }
+.vault-secret .btn.btn-small.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
