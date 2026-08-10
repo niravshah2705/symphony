@@ -109,6 +109,43 @@ resource "google_cloud_run_v2_service" "settings" {
           }
         }
       }
+      # KMS key for per-org secret envelope encryption. Unset => the in-memory
+      # KMS fake (local/dev); set => real Cloud KMS envelope encryption.
+      env {
+        name  = "KMS_KEY_NAME"
+        value = google_kms_crypto_key.org_secrets.id
+      }
+      # Shared token the settings service requires on the proxy's per-org secret
+      # resolve (GET /internal/s2s/orgs/{id}/secrets). Same value the proxy sends.
+      # One env block per existing internal-api-token secret (0 or 1) — splat
+      # avoids indexing a count=0 resource.
+      dynamic "env" {
+        for_each = toset(google_secret_manager_secret.internal_api_token[*].secret_id)
+        content {
+          name = "INTERNAL_API_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
+          }
+        }
+      }
+      # Platform-managed provider keys — the single managed-key source. The
+      # settings resolver returns these for a 'managed' selection so the proxy
+      # has one resolution path. Each id must have a version (else startup fails).
+      dynamic "env" {
+        for_each = var.managed_provider_secrets
+        content {
+          name = env.key
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
+          }
+        }
+      }
 
       resources {
         limits = {
@@ -127,7 +164,28 @@ resource "google_cloud_run_v2_service" "settings" {
     google_project_iam_member.settings_datastore,
     google_secret_manager_secret_iam_member.settings_jwt_accessor,
     google_secret_manager_secret_version.settings_jwt_secret,
+    google_kms_crypto_key_iam_member.settings_org_secrets,
+    google_secret_manager_secret_iam_member.settings_internal_token,
   ]
+}
+
+# The settings service reads the shared internal token to verify the egress
+# proxy's per-org secret resolve. Created whenever the token is configured.
+resource "google_secret_manager_secret_iam_member" "settings_internal_token" {
+  count     = var.internal_api_token != "" ? 1 : 0
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.internal_api_token[0].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.settings.email}"
+}
+
+# settings-sa reads the platform-managed provider keys it mounts + resolves.
+resource "google_secret_manager_secret_iam_member" "settings_managed_secrets" {
+  for_each  = toset(values(var.managed_provider_secrets))
+  project   = var.project_id
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.settings.email}"
 }
 
 # Only the gateway SA may invoke the settings service (OIDC). No allUsers invoker.

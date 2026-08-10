@@ -67,14 +67,19 @@ resource "google_service_account_iam_member" "provisioner_actas" {
   member             = "serviceAccount:${google_service_account.provisioner[0].email}"
 }
 
-# --- Shared internal write-back token (Secret Manager) ------------------------
-# The provisioner presents this as X-Internal-Token on the org write-back; the
-# org service must be given the SAME value in its env to verify it.
+# --- Shared internal S2S token (Secret Manager) -------------------------------
+# One shared token guards every token-scoped internal surface:
+#   - the provisioner's org write-back (PATCH /internal/orgs/{id}/deployments), and
+#   - the egress proxy's per-org secret resolve (GET /internal/s2s/orgs/{id}/secrets
+#     on the settings service).
+# It is therefore NOT gated on provisioning — it exists whenever a value is set,
+# so the proxy↔settings S2S works on the shared stack too. Only the
+# provisioner-sa accessor stays provisioning-gated (that SA exists only then).
 resource "google_secret_manager_secret" "internal_api_token" {
-  count     = local.provisioning_on && var.internal_api_token != "" ? 1 : 0
+  count     = var.internal_api_token != "" ? 1 : 0
   project   = var.project_id
   secret_id = "internal-api-token"
-  labels    = merge(local.common_labels, { component = "provisioner" })
+  labels    = merge(local.common_labels, { component = "shared" })
   replication {
     auto {}
   }
@@ -82,7 +87,7 @@ resource "google_secret_manager_secret" "internal_api_token" {
 }
 
 resource "google_secret_manager_secret_version" "internal_api_token" {
-  count       = local.provisioning_on && var.internal_api_token != "" ? 1 : 0
+  count       = var.internal_api_token != "" ? 1 : 0
   secret      = google_secret_manager_secret.internal_api_token[0].id
   secret_data = var.internal_api_token
 }

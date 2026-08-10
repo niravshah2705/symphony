@@ -4,6 +4,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { traceable, getCurrentRunTree } = require('langsmith/traceable');
+const { CONFIG } = require('../config');
+const { SENTINEL_TOKEN } = require('../egress');
 const { buildSafeAgentEnv } = require('./repository-broker');
 const { PATTERNS, patternId } = require('./workflow-patterns');
 const { enforceHarness } = require('./settings-policy');
@@ -734,7 +736,13 @@ async function executeCodex(options, prompt) {
     throw new AgentRuntimeError('The installed Codex SDK does not export Codex.', 'runtime_unavailable', 503);
   }
   const cwd = assertWorkingDirectory(options.rootDir);
-  const chatgptAuth = options.llm.backend === 'chatgpt';
+  // In include-SDK proxy mode the agent has no real ChatGPT tokens (accessToken
+  // is a sentinel, authTokens null), so the auth.json path can't be used. Route
+  // the ChatGPT backend through the proxy's /codex prefix with the sentinel via
+  // the base-URL client path instead (the proxy injects the real bearer +
+  // account id). Best-effort: verify against your installed @openai/codex-sdk.
+  const proxySdk = Boolean(CONFIG.EGRESS_PROXY_INCLUDE_SDK);
+  const chatgptAuth = options.llm.backend === 'chatgpt' && !proxySdk;
   let ephemeralAuth = null;
   try {
     let env = buildSafeAgentEnv(options.env || process.env, cwd);
@@ -844,6 +852,10 @@ async function executeClaude(options, prompt) {
   const credential = String(options.llm.accessToken || '');
   if (credential) env.CLAUDE_CODE_OAUTH_TOKEN = credential;
   env.CLAUDE_AGENT_SDK_CLIENT_APP = 'tech-symphony/1.0';
+  // Route the SDK's Anthropic calls through the egress proxy when enabled: the
+  // OAuth token is already the sentinel (resolveLlm proxy mode); the proxy
+  // injects the real bearer. baseUrl is the proxy's /anthropic prefix.
+  if (CONFIG.EGRESS_PROXY_INCLUDE_SDK) env.ANTHROPIC_BASE_URL = CONFIG.CLAUDE.baseUrl;
   const sdkTools = options.backendKind === 'filesystem'
     ? ['Read', 'Glob', 'Grep', ...(plannerWebSearchAllowed(options) ? ['WebSearch'] : [])]
     : credential
@@ -970,8 +982,13 @@ async function executeAntigravity(options, prompt) {
   // service (per the caller's org/project/user) wins; otherwise fall back to the
   // descriptor's key, which carries the GEMINI_API_KEY env / store value.
   const resolvedConfigKey = options.ctx && options.ctx.geminiApiKey;
+  // In include-SDK proxy mode the agent has no Gemini key — the proxy injects it
+  // (x-goog-api-key) — so the sentinel satisfies the "configured" guard.
+  const proxySdk = Boolean(CONFIG.EGRESS_PROXY_INCLUDE_SDK);
   const apiKey = String(
-    resolvedConfigKey || (options.llm && (options.llm.apiKey || options.llm.accessToken)) || ''
+    resolvedConfigKey ||
+      (options.llm && (options.llm.apiKey || options.llm.accessToken)) ||
+      (proxySdk ? SENTINEL_TOKEN : '')
   );
   if (!apiKey) {
     throw new AgentRuntimeError(
@@ -987,7 +1004,11 @@ async function executeAntigravity(options, prompt) {
   }
   const cwd = assertWorkingDirectory(options.rootDir);
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    // Route native genai through the proxy's /gemini-native prefix when enabled.
+    const genaiOptions = proxySdk
+      ? { apiKey, httpOptions: { baseUrl: CONFIG.ANTIGRAVITY.nativeBaseUrl } }
+      : { apiKey };
+    const ai = new GoogleGenAI(genaiOptions);
     // Config-driven target: the Antigravity preview agent id when provided, else a
     // stable Gemini model. The trusted workflow rules stay in the system prompt.
     const target = String(options.llm.agentId || options.llm.model || '');

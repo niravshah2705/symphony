@@ -1,30 +1,36 @@
-"""Internal service-to-service endpoints (UNMASKED config values).
+"""Internal service-to-service endpoints (UNMASKED secrets).
 
 This surface returns provider secrets in PLAINTEXT and must never be reachable
-from a browser. Two layers guard it:
+from a browser. Two families live here, guarded differently:
 
-1. It is mounted under ``/api/v1/internal/*``. The gateway is the only
-   browser-facing origin and it refuses to proxy any ``/internal/`` path, so a
-   browser can never route here (see services/gateway/src/index.js).
-2. The service is IAM-gated: only the gateway/planner service accounts can
-   invoke it at all (Cloud Run ``--no-allow-unauthenticated``).
+``/internal/effective-config`` — PRINCIPAL-SCOPED. Called by the gateway/planner
+WITH the end-user's forwarded token; scope derives from that principal (never a
+caller-supplied org id), identical to the browser-facing ``/effective`` endpoint.
+Guards: the gateway refuses to proxy any ``/internal/`` path (browser can't route
+here) + Cloud Run IAM (only allowed SAs invoke).
 
-Scope still derives from the AUTHENTICATED PRINCIPAL (the end-user's forwarded
-token), never from caller-supplied org ids — identical scoping to the
-browser-facing ``/effective`` endpoint, so a foreign project_id can never read
-another org's data (cross-tenant-isolation).
+``/internal/s2s/*`` — TOKEN-SCOPED (no user principal). Called by the egress
+proxy, which acts for an ORG and carries no end-user token. Guards add a shared
+``X-Internal-Token`` (constant-time compare; unset => refused, fail closed). The
+org id is a route param, safe because the token IS the authorization and the
+read is confined to the named org's vault (mirrors the org service's write-back).
+The auth middleware exempts ``/internal/s2s/*`` from the user-token requirement
+(app/middleware/auth.py); ``/internal/effective-config`` still requires it.
 """
 from __future__ import annotations
 
+import hmac
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
 from app.auth.dependencies import get_principal
 from app.authz.principal import Principal
+from app.core.config import get_settings
 from app.core.database import Uow, get_session
 from app.schemas.policy import InternalEffectiveConfigResponse
-from app.services import policy_service
+from app.schemas.secrets import InternalOrgSecretsResponse
+from app.services import policy_service, secrets_service
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -37,3 +43,30 @@ async def get_effective_config(
 ):
     """Return the caller's UNMASKED effective config values (S2S only)."""
     return await policy_service.resolve_config_for_caller(session, principal, project_id)
+
+
+def require_internal_token(x_internal_token: str | None = Header(default=None)) -> None:
+    expected = get_settings().internal_api_token
+    # Fail closed when unconfigured; constant-time compare otherwise.
+    if not expected or not x_internal_token or not hmac.compare_digest(x_internal_token, expected):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+
+@router.get("/s2s/orgs/{org_id}/secrets", response_model=InternalOrgSecretsResponse)
+async def resolve_org_secrets(
+    org_id: uuid.UUID,
+    _: None = Depends(require_internal_token),
+    session: Uow = Depends(get_session),
+):
+    """Return an org's UNMASKED resolved provider secrets for the egress proxy
+    (token-gated S2S; no user principal)."""
+    return await secrets_service.resolve_secrets_for_org(session, org_id)
+
+
+@router.get("/s2s/managed-secrets", response_model=InternalOrgSecretsResponse)
+async def resolve_managed_secrets(
+    _: None = Depends(require_internal_token),
+):
+    """Return the platform-managed provider keys with NO org (shared stack). Same
+    shape as the per-org resolve so the proxy uses one path."""
+    return await secrets_service.resolve_managed_secrets()

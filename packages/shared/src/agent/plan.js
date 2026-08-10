@@ -1,6 +1,8 @@
 'use strict';
 
 const crypto = require('crypto');
+const { CONFIG } = require('../config');
+const { SENTINEL_TOKEN } = require('../egress');
 const { PlanSchema, ViabilitySchema, ResumeSchema, normalizePlan } = require('./schema');
 const { webSearch, webSearchMany, formatResults } = require('./search');
 const { createChatModel } = require('./llm');
@@ -33,17 +35,25 @@ class AgentError extends Error {
 }
 
 function configureTracing(keys) {
-  const on = Boolean(keys.langsmithTracing && keys.langsmithApiKey);
+  // When EGRESS_PROXY_INCLUDE_SDK is on, LangSmith is reached through the proxy
+  // (which injects the real key), so the agent needs no key of its own — a
+  // sentinel + the proxy endpoint suffice. Otherwise tracing needs a real key.
+  const proxyLangsmith = Boolean(CONFIG.EGRESS_PROXY_INCLUDE_SDK);
+  const on = Boolean(keys.langsmithTracing && (keys.langsmithApiKey || proxyLangsmith));
   const flag = on ? 'true' : 'false';
   process.env.LANGSMITH_TRACING = flag;
   process.env.LANGCHAIN_TRACING_V2 = flag;
   if (on) {
-    process.env.LANGSMITH_API_KEY = keys.langsmithApiKey;
-    process.env.LANGCHAIN_API_KEY = keys.langsmithApiKey;
+    const key = keys.langsmithApiKey || (proxyLangsmith ? SENTINEL_TOKEN : '');
+    const endpoint = proxyLangsmith
+      ? `${CONFIG.EGRESS_PROXY_URL}/langsmith`
+      : keys.langsmithEndpoint || 'https://api.smith.langchain.com';
+    process.env.LANGSMITH_API_KEY = key;
+    process.env.LANGCHAIN_API_KEY = key;
     process.env.LANGSMITH_PROJECT = keys.langsmithProject || 'linear-manager';
     process.env.LANGCHAIN_PROJECT = keys.langsmithProject || 'linear-manager';
-    process.env.LANGSMITH_ENDPOINT = keys.langsmithEndpoint || 'https://api.smith.langchain.com';
-    process.env.LANGCHAIN_ENDPOINT = keys.langsmithEndpoint || 'https://api.smith.langchain.com';
+    process.env.LANGSMITH_ENDPOINT = endpoint;
+    process.env.LANGCHAIN_ENDPOINT = endpoint;
   }
   return on;
 }

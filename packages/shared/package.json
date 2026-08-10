@@ -7,6 +7,7 @@
   "exports": {
     ".": "./index.js",
     "./config": "./src/config.js",
+    "./egress": "./src/egress.js",
     "./authz": "./src/authz.js",
     "./store": "./src/store.js",
     "./store/*": "./src/store/*.js",

@@ -7,8 +7,18 @@ violating them is how bugs and vulnerabilities get introduced here.
 ## What this is
 
 A multi-tenant FastAPI backend: **Organizations → Projects → Tasks** with RBAC.
-Stack: FastAPI, async SQLAlchemy 2.0 + asyncpg (PostgreSQL), Alembic, Pydantic v2,
-PyJWT, passlib[argon2], slowapi. Python 3.12+.
+Stack: FastAPI, **Firestore-backed dataclass models** (`app/models/*` `to_doc`/
+`from_doc`; a small backend-agnostic `Db` in `app/core/firestore.py` with an
+in-memory fake for tests), Pydantic v2, PyJWT, passlib[argon2], slowapi.
+Python 3.12+.
+
+> ⚠️ Accuracy note: earlier revisions of this file (and `docker-compose.yml`)
+> described async SQLAlchemy 2.0 + asyncpg + Alembic. That is STALE — there is no
+> ORM/Alembic in the tree. Persistence is Firestore document CRUD via the `Db`
+> abstraction + a `Uow` unit-of-work (`app/core/database.py`). The "Async/ORM
+> gotchas" section below is retained only as historical context; ignore its
+> SQLAlchemy specifics. New org-owned data follows the Firestore subcollection
+> pattern `organizations/{org_id}/...` (`app/repositories/base.py`).
 
 The product spec and rationale live in `README.md`. This file is the *how to work
 in the code* companion.

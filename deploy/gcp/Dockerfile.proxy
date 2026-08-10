@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+#
+# Egress proxy sidecar image. Runs co-located with planner / coder / coder-worker
+# (Cloud Run multi-container, shared loopback) and injects per-org credentials so
+# the agent containers hold no raw provider keys.
+#
+# Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared:
+#   docker build -f deploy/gcp/Dockerfile.proxy -t <tag> .
+#
+# Base image is pinned by DIGEST (infrastructure-misconfig checklist) — the
+# multi-arch index digest for node:20-alpine.
+# VERIFY / UPDATE with: docker buildx imagetools inspect node:20-alpine
+ARG NODE_IMAGE=node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+
+# ---------------------------------------------------------------------------
+# Stage 1 — install production dependencies at the workspace root.
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS builder
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+COPY packages/ ./packages/
+COPY services/ ./services/
+
+RUN npm ci --omit=dev && npm cache clean --force
+
+# ---------------------------------------------------------------------------
+# Stage 2 — minimal runtime.
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    AI_FLEET_DATA_DIR=/tmp
+
+COPY --from=builder --chown=node:node /app /app
+
+# Non-root (infra-misconfig checklist).
+USER node
+
+# The proxy reads process.env.PROXY_PORT. As a Cloud Run sidecar it binds a
+# non-ingress port on the shared loopback (default 4030); the ingress container
+# keeps 8080.
+EXPOSE 4030
+
+CMD ["node", "services/proxy/src/index.js"]

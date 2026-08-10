@@ -68,6 +68,19 @@ function buildPlan(slug, cfg) {
     PUBSUB_CODER_TOPIC: n.coderTopic,
   };
 
+  // Per-tenant patch overlaid onto the cloned egress-proxy SIDECAR container
+  // (planner/coder/worker). It needs this tenant's store namespace (to read the
+  // tenant's OAuth token sets) and org id (to resolve the tenant's encrypted
+  // vault). The proxy's managed keys + SETTINGS_URL + INTERNAL_API_TOKEN are
+  // cloned from the shared source sidecar's own env.
+  const sidecarEnv = {
+    GCP_PROJECT_ID: cfg.projectId,
+    STORE_BACKEND: 'firestore',
+    MESSAGING_MODE: 'pubsub',
+    STORE_NAMESPACE: slug,
+    ...(cfg.orgId ? { PROXY_ORG_ID: cfg.orgId } : {}),
+  };
+
   const gateway = {
     name: n.gateway,
     sourceName: srcNames.gateway,
@@ -101,6 +114,7 @@ function buildPlan(slug, cfg) {
     port: 8080,
     serviceAccount: sa.planner,
     invokers: [sa.gateway, sa.pubsubPush].filter(Boolean),
+    sidecarEnv,
     env: {
       ...commonEnv,
       PLANNER_PORT: '8080',
@@ -119,6 +133,7 @@ function buildPlan(slug, cfg) {
     port: 8080,
     serviceAccount: sa.coder,
     invokers: [sa.gateway, sa.pubsubPush].filter(Boolean),
+    sidecarEnv,
     env: {
       ...commonEnv,
       CODER_SERVICE_PORT: '8080',
@@ -134,6 +149,7 @@ function buildPlan(slug, cfg) {
     sourceName: srcNames.worker,
     labels: withComponent('coder-worker'),
     serviceAccount: sa.coder,
+    sidecarEnv,
     env: {
       ...commonEnv,
       CODER_ROLE: 'worker',

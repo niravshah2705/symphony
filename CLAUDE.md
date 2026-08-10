@@ -80,7 +80,43 @@ first for orientation). graphify's community report is
 **AI Fleet** — a microservice-decomposed tool to manage Linear projects and run
 isolated planner + coder deep-agent services over a shared library. npm
 workspaces: `packages/*` (shared libs, CLI) and `services/*` (gateway, planner,
-coder, org, settings). Product docs and setup live in [`README.md`](./README.md).
+coder, org, settings, proxy). Product docs and setup live in [`README.md`](./README.md).
+
+## Egress isolation: the proxy sidecar (agents hold no raw secrets)
+
+The planner / coder-control / coder-worker containers must never hold a raw
+third-party credential (GitHub / Linear / LLM keys) — model-generated code in
+the coder could read `process.env` and exfiltrate it. Instead an **egress proxy
+sidecar** (`services/proxy`) runs co-located with each agent runtime (Cloud Run
+multi-container, shared loopback) and injects the real credential on every
+outbound call.
+
+- **Switch:** `EGRESS_PROXY_URL` (set on planner/coder/worker only — NOT the
+  gateway). When set, `packages/shared/src/config.js` points every provider base
+  URL at `${EGRESS_PROXY_URL}<prefix>` (see `packages/shared/src/egress.js` for
+  the canonical prefix→upstream map) and the agent sends a **sentinel** token;
+  the sidecar strips it and injects the real credential. Unset ⇒ today's direct
+  behavior (fully backward compatible).
+- **One resolution path (managed + customer):** the settings service is the single
+  secret source. Customer keys are stored **per organization, encrypted** (GCP KMS
+  envelope, `services/settings/app/crypto/` + vault doc
+  `organizations/{org_id}/secrets/vault`); platform-**managed** keys are mounted on
+  the settings service (`managed_provider_secrets`) and returned by the SAME
+  resolver. A per-org **managed-vs-customer** selection picks which. The proxy
+  resolves both S2S — `GET /internal/s2s/orgs/{org_id}/secrets` (per-tenant) or
+  `/internal/s2s/managed-secrets` (shared stack), `X-Internal-Token`-gated. The
+  `store.js` SECRET_ENV overlay is now only the managed path for the **non-proxied
+  gateway** + local dev; keep it aligned with settings `MANAGED_ENV`.
+- **Invariant:** never add a provider secret to an agent container's env — the
+  settings service holds managed keys, the vault holds customer keys. The runtime
+  provisioner clones ALL containers, so a sidecar on the shared service propagates
+  to per-tenant stacks (`packages/shared/src/provisioning/containers.js`).
+- **SDK runtimes + LangSmith:** the deep-agent runtime is proxied unconditionally.
+  Set `EGRESS_PROXY_INCLUDE_SDK=true` (with `EGRESS_PROXY_URL`) to also route the
+  NATIVE SDK runtimes (codex-sdk / claude-agent-sdk / antigravity) and LangSmith
+  tracing through the proxy via per-SDK base-URL overrides (`runtimes.js`,
+  `plan.js`). Off = deep-agent-only + direct tracing (the safety valve for SDKs
+  that can't take a base-URL override).
 
 ## Commands
 

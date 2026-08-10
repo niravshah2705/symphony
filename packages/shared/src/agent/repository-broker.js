@@ -7,6 +7,8 @@ const path = require('path');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { pathToFileURL } = require('url');
+const { CONFIG } = require('../config');
+const { SENTINEL_TOKEN } = require('../egress');
 
 const execFileP = promisify(execFile);
 
@@ -202,14 +204,24 @@ function validateRepository(repository, selectedProvider) {
   ) {
     throw new RepositoryBrokerError('Repository namespace is invalid.', 'invalid_repository');
   }
+  // In egress-proxy mode the REST + git traffic is routed at the sidecar (which
+  // injects the PAT) instead of straight to GitHub, so the agent holds no token.
+  // The INPUT repo URL is still validated as a real github.com URL above; only
+  // the effective apiOrigin/remote are retargeted (github only — the proxy has
+  // no GitLab route).
+  const proxied = provider === 'github' && Boolean(CONFIG.EGRESS_PROXY_URL);
+  const apiOrigin = proxied ? CONFIG.GITHUB_API_ORIGIN : expected.apiOrigin;
+  const https = proxied
+    ? `${CONFIG.GIT_HTTPS_ORIGIN}/${fullName}.git`
+    : `https://${expected.host}/${fullName}.git`;
   return Object.freeze({
     provider,
     host: expected.host,
-    apiOrigin: expected.apiOrigin,
+    apiOrigin,
     owner,
     name,
     fullName,
-    https: `https://${expected.host}/${fullName}.git`,
+    https,
   });
 }
 
@@ -493,7 +505,12 @@ class RepositoryBroker {
     }
     this.label = oneLine(label, 100);
     this.step = typeof step === 'function' ? step : () => {};
-    this.#token = String(token || '');
+    // Egress-proxy mode: the agent holds no PAT. Use the sentinel so the broker's
+    // `!token` gates pass; the sidecar injects the real credential on egress. The
+    // git credential helper is bound to `repository.host` (github.com) while the
+    // remote is the proxy origin, so the sentinel is never even offered — git
+    // sends no auth and the proxy adds it.
+    this.#token = String(token || '') || (CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : '');
     this.#fetchImpl = fetchImpl;
     this.#execFileImpl = execFileImpl;
     const privateRoot = path.resolve(stagingRoot || path.join(os.tmpdir(), 'techsymphony-repository-broker'));

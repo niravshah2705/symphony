@@ -33,12 +33,14 @@ locals {
   coder_tag    = var.coder_image_tag != "" ? var.coder_image_tag : var.image_tag
   org_tag      = var.org_image_tag != "" ? var.org_image_tag : var.image_tag
   settings_tag = var.settings_image_tag != "" ? var.settings_image_tag : var.image_tag
+  proxy_tag    = var.proxy_image_tag != "" ? var.proxy_image_tag : var.image_tag
 
   gateway_image  = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
   planner_image  = "${local.image_base}/${var.planner_service_name}:${local.planner_tag}"
   coder_image    = "${local.image_base}/${var.coder_service_name}:${local.coder_tag}"
   org_image      = "${local.image_base}/${var.org_service_name}:${local.org_tag}"
   settings_image = "${local.image_base}/${var.settings_service_name}:${local.settings_tag}"
+  proxy_image    = "${local.image_base}/${var.proxy_service_name}:${local.proxy_tag}"
 
   # Cloud Run's deterministic per-project URL:
   #   https://<service>-<project_number>.<region>.run.app

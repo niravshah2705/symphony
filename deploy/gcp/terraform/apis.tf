@@ -12,6 +12,7 @@ locals {
     "cloudscheduler.googleapis.com",
     "firestore.googleapis.com",
     "secretmanager.googleapis.com",
+    "cloudkms.googleapis.com",
     "cloudbuild.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",

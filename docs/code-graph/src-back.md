@@ -33,7 +33,7 @@ Directory-based community: services/provisioner
 
 ## Execution Flows
 
-- **writeBack** (criticality: 0.48, depth: 1)
+No execution flows pass through this community.
 
 ## Dependencies
 

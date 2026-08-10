@@ -69,17 +69,17 @@ Directory-based community: public/js
 
 ## Execution Flows
 
-- **beginSignIn** (criticality: 0.80, depth: 7)
-- **beginMicrosoftSignIn** (criticality: 0.80, depth: 7)
-- **beginSignOut** (criticality: 0.79, depth: 7)
-- **render** (criticality: 0.76, depth: 6)
-- **initializeAuthentication** (criticality: 0.73, depth: 3)
-- **promptOneTap** (criticality: 0.69, depth: 2)
-- **maybeRefreshConnection** (criticality: 0.68, depth: 3)
-- **maybeRefreshRole** (criticality: 0.65, depth: 3)
-- **applyServerEvent** (criticality: 0.63, depth: 5)
-- **renderBoard** (criticality: 0.54, depth: 4)
-- *... and 15 more flows.*
+- **beginSignIn** (criticality: 0.97, depth: 7)
+- **beginMicrosoftSignIn** (criticality: 0.97, depth: 7)
+- **beginSignOut** (criticality: 0.97, depth: 7)
+- **render** (criticality: 0.96, depth: 6)
+- **applyServerEvent** (criticality: 0.88, depth: 5)
+- **maybeRefreshRole** (criticality: 0.85, depth: 3)
+- **renderBoard** (criticality: 0.79, depth: 4)
+- **maybeRefreshConnection** (criticality: 0.78, depth: 3)
+- **initShellInteractions** (criticality: 0.78, depth: 3)
+- **closeAtBreakpoint** (criticality: 0.78, depth: 3)
+- *... and 16 more flows.*
 
 ## Dependencies
 
