@@ -72,6 +72,11 @@ export const api = {
   // Authentication
   getCurrentUser: () => request('/auth/me'),
 
+  // End User License Agreement acceptance (gates "actual work" — see agent view).
+  getEulaStatus: () => request('/eula'),
+  recordEulaDecision: (decision, via = 'user') =>
+    request('/eula', { method: 'POST', body: JSON.stringify({ decision, via }) }),
+
   // Settings
   getSettings: (options = {}) => request('/settings', options),
   saveKey: (linearApiKey) =>

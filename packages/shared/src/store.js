@@ -270,6 +270,11 @@ const DEFAULT_STORE = Object.freeze({
   conversations: [], // agent workspace conversation threads (see agent/conversations.js)
   approvals: [], // requirement-evaluation approval gates (see agent/approval-gate.js)
   stackLinks: [], // open stacked-PR links awaiting blocker merge (see agent/stack-reconcile.js)
+  // End User License Agreement acceptance, keyed at two scopes. `users[key]` and
+  // `orgs[orgId]` each hold { status:'accepted'|'rejected', version, via, at }.
+  // Org membership itself implies acceptance (see services/gateway eula gate), so
+  // `orgs` is the explicit organisation-level record when one is written.
+  eula: { users: {}, orgs: {} },
 });
 
 function cloneDefault() {
@@ -367,7 +372,15 @@ function normalizeStore(parsed) {
     conversations: Array.isArray(source.conversations) ? source.conversations : [],
     approvals: Array.isArray(source.approvals) ? source.approvals : [],
     stackLinks: Array.isArray(source.stackLinks) ? source.stackLinks : [],
+    eula: normalizeEula(source.eula),
   };
+}
+
+/** Coerce a raw `eula` blob into the current { users:{}, orgs:{} } shape. */
+function normalizeEula(source) {
+  const eula = source && typeof source === 'object' && !Array.isArray(source) ? source : {};
+  const asMap = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? { ...value } : {});
+  return { users: asMap(eula.users), orgs: asMap(eula.orgs) };
 }
 
 function seedStore() {
@@ -377,7 +390,7 @@ function seedStore() {
 // Top-level keys kept together in one Firestore document (small, singleton) vs.
 // the growing arrays that each become a per-record sub-collection so no single
 // document approaches Firestore's 1 MB limit.
-const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig'];
+const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig', 'eula'];
 const STORE_COLLECTION_KEYS = ['jobs', 'memories', 'conversations', 'approvals'];
 
 const backend = CONFIG.STORE_BACKEND === 'firestore'
@@ -591,6 +604,41 @@ function getAgentConfig() {
 function setAgentConfig(patch) {
   const current = readStore();
   return writeStore({ ...current, agentConfig: { ...current.agentConfig, ...patch } });
+}
+
+/* --------------------------- EULA acceptance ---------------------------- */
+
+/** The per-user EULA acceptance record for `key`, or null if none. */
+function getEulaUser(key) {
+  const eula = readStore().eula || { users: {}, orgs: {} };
+  return eula.users[key] || null;
+}
+
+/** The organisation-level EULA acceptance record for `orgId`, or null if none. */
+function getEulaOrg(orgId) {
+  const eula = readStore().eula || { users: {}, orgs: {} };
+  return eula.orgs[orgId] || null;
+}
+
+/**
+ * Record a EULA decision at user scope. `record` is { status, version, via? };
+ * the timestamp is authoritative. Returns the stored entry. Immutable write.
+ */
+function recordEulaDecision(key, record = {}) {
+  const current = readStore();
+  const eula = current.eula || { users: {}, orgs: {} };
+  const entry = { status: record.status, version: record.version || null, via: record.via || 'user', at: new Date().toISOString() };
+  writeStore({ ...current, eula: { ...eula, users: { ...eula.users, [key]: entry } } });
+  return entry;
+}
+
+/** Record a EULA decision at organisation scope (the org-level flag). */
+function recordEulaOrgDecision(orgId, record = {}) {
+  const current = readStore();
+  const eula = current.eula || { users: {}, orgs: {} };
+  const entry = { status: record.status, version: record.version || null, via: record.via || 'org', at: new Date().toISOString() };
+  writeStore({ ...current, eula: { ...eula, orgs: { ...eula.orgs, [orgId]: entry } } });
+  return entry;
 }
 
 /* --------------------------- Jobs --------------------------------------- */
@@ -936,6 +984,10 @@ module.exports = {
   setAssumedRole,
   getAgentConfig,
   setAgentConfig,
+  getEulaUser,
+  getEulaOrg,
+  recordEulaDecision,
+  recordEulaOrgDecision,
   listJobs,
   addJob,
   updateJob,

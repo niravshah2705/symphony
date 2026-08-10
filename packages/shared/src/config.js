@@ -560,6 +560,11 @@ const CONFIG = Object.freeze({
   ISSUE_PAGE_SIZE: 250,
   // Allowed scheduler cadences (minutes).
   INTERVAL_OPTIONS: [5, 10, 15],
+  // Version of the End User License Agreement (EULA.md) the workspace currently
+  // requires a user to accept before running actions (scheduling work, creating
+  // tasks, preparing a business). Acceptance is recorded per user/org against
+  // this version; bumping it re-prompts everyone. Trusted server-side config.
+  EULA_VERSION: String(process.env.EULA_VERSION || '1.0.0'),
   // Deep-agent LLM providers.
   LLM_PROVIDERS: ['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity'],
   // How each local provider constrains JSON output for the planner's structured

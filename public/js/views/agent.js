@@ -24,6 +24,7 @@ let latestJobs = [];
 let latestCoderStatus = null;
 let conversation = []; // in-memory entries for the ACTIVE thread (full routeResult fidelity)
 let activeConversationId = null; // the open thread; null = unsaved "new" state (lazy-created on first send)
+let eulaStatus = null; // cached { accepted, version } for this session; gates "actual work"
 const pauseSignatures = new WeakMap();
 const CONVERSATION_ID = /^conv_[A-Za-z0-9_-]{1,64}$/;
 const GATE_COUNTDOWN_TICK_MS = 1000; // refreshes only the countdown label; no network
@@ -56,6 +57,7 @@ function scrollConversationToEnd() {
 
 export async function renderAgent(view) {
   stopRefresh();
+  eulaStatus = null; // re-check acceptance on each mount (handles a signed-in identity change)
   railState = { mode: 'setup', result: null };
   const [status, jobsResponse, coderStatus] = await Promise.all([
     api.getAgentStatus().catch((error) => ({ unavailable: true, error: error.message, counts: {} })),
@@ -461,6 +463,22 @@ function buildComposer(stream, railBody) {
 
     try {
       const result = await resolveOmniboxRequest(outgoing);
+      // The request needs EULA acceptance — show the inline acceptance card and
+      // stop here. Accepting re-runs the exact same request; declining is recorded.
+      if (result.eulaRequired) {
+        pending.replaceWith(renderEulaGate({
+          version: result.eula && result.eula.version,
+          onAccept: async () => {
+            await api.recordEulaDecision('accepted');
+            eulaStatus = { accepted: true, version: result.eula && result.eula.version };
+            input.value = text;
+            await submit();
+          },
+          onReject: () => api.recordEulaDecision('rejected').catch(() => {}),
+        }));
+        scrollConversationToEnd();
+        return;
+      }
       const entry = { role: 'assistant', routeResult: result };
       conversation.push(entry);
       pending.replaceWith(renderConversationEntry(entry, railBody));
@@ -526,6 +544,38 @@ function buildComposer(stream, railBody) {
   ]);
 }
 
+// Intents that perform "actual work" (schedule enrichment, prepare a business,
+// create an implementation task) and therefore require EULA acceptance. The
+// read-only RAG intents (knowledge/troubleshooting/general/salutation) are never
+// gated, so a first-time user can still ask questions and search.
+const WORK_INTENTS = new Set(['business', 'build', 'implementation']);
+
+/**
+ * Whether the current user may run actions. A member of an organisation is
+ * considered to have already accepted (recorded once, up front). The result is
+ * cached for the session; the gateway re-checks on every mutation, so this only
+ * decides whether to show the acceptance prompt before doing the work.
+ */
+async function ensureEulaAccepted() {
+  if (eulaStatus && eulaStatus.accepted) return true;
+  try {
+    const status = await api.getEulaStatus();
+    if (status && status.accepted) { eulaStatus = status; return true; }
+    const me = await api.getMe().catch(() => null);
+    if (me && me.has_organization) {
+      await api.recordEulaDecision('accepted', 'org-member').catch(() => {});
+      eulaStatus = { accepted: true, version: status ? status.version : null };
+      return true;
+    }
+    eulaStatus = status || { accepted: false, version: null };
+    return false;
+  } catch (_) {
+    // Fail closed on the client (prompt to accept); the server gate is the real
+    // trust boundary and will still block the mutation if this is bypassed.
+    return false;
+  }
+}
+
 async function resolveOmniboxRequest(text) {
   let routed;
   // Anonymous visitors get BASIC RAG: the server router (POST /agent/message)
@@ -552,6 +602,13 @@ async function resolveOmniboxRequest(text) {
   }
   const route = routed.route || classifyOmniboxIntent(text);
   const base = { route, warning: routed.warning || null };
+
+  // Gate "actual work" behind EULA acceptance for signed-in users. RAG questions
+  // fall through untouched. Anonymous visitors are not prompted here — they hit
+  // the normal sign-in-required path when the server rejects the write.
+  if (session.authenticated && WORK_INTENTS.has(route.intent) && !(await ensureEulaAccepted())) {
+    return { ...base, eulaRequired: true, eula: { version: eulaStatus ? eulaStatus.version : null } };
+  }
 
   if (route.intent === 'knowledge') {
     const [documentsResponse, memoryResponse, businessesResponse, projectsResponse, jobsResponse] = await Promise.all([
@@ -1677,6 +1734,55 @@ function renderJobRail(host, job) {
         ])))
       : el('p', { class: 'rail-copy' }, 'No detailed activity has been recorded yet.')
   );
+}
+
+/**
+ * Inline EULA acceptance card, shown when a first-time user asks for "actual
+ * work". Accepting proceeds automatically (re-runs the request); declining is
+ * recorded and the user can keep asking questions. This is the acceptance
+ * prompt only — the gateway enforces acceptance on every mutation server-side.
+ */
+function renderEulaGate({ version, onAccept, onReject }) {
+  const note = el('p', { class: 'message-note' });
+  const accept = el('button', { class: 'primary', type: 'button' }, 'Accept & continue');
+  const decline = el('button', { type: 'button' }, 'Decline');
+  const busy = (on) => { accept.disabled = on; decline.disabled = on; };
+
+  const card = el('article', { class: 'conversation-message assistant eula-gate' }, [
+    el('div', { class: 'message-avatar' }, 'S'),
+    el('div', { class: 'message-copy' }, [
+      el('strong', { class: 'message-title' }, 'Accept the End User License Agreement to continue'),
+      el('p', {}, `Running actions — scheduling work, creating a task, or preparing a business — requires accepting the End User License Agreement${version ? ` (v${version})` : ''}. You can keep asking questions and searching the workspace without accepting.`),
+      el('div', { class: 'message-links' }, [accept, decline]),
+      note,
+    ]),
+  ]);
+
+  accept.addEventListener('click', async () => {
+    busy(true);
+    accept.textContent = 'Recording…';
+    note.classList.remove('error');
+    note.textContent = '';
+    try {
+      await onAccept();
+    } catch (error) {
+      busy(false);
+      accept.textContent = 'Accept & continue';
+      note.classList.add('error');
+      note.textContent = error.message || 'Could not record your acceptance. Try again.';
+    }
+  });
+  decline.addEventListener('click', async () => {
+    busy(true);
+    try { await onReject(); } catch (_) { /* recorded best-effort */ }
+    card.replaceWith(assistantMessage(
+      'Noted — the EULA was not accepted.',
+      'Your response has been recorded. You can still ask questions and search the workspace; accept the EULA anytime to run actions.'
+    ));
+    scrollConversationToEnd();
+  });
+
+  return card;
 }
 
 function assistantMessage(title, copy, links = [], kind = '') {

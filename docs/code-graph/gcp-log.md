@@ -27,8 +27,8 @@ Directory-based community: deploy/gcp
 
 ## Execution Flows
 
-- **seed** (criticality: 0.61, depth: 1)
-- **seed_secret** (criticality: 0.61, depth: 1)
+- **seed_secret** (criticality: 0.48, depth: 1)
+- **seed** (criticality: 0.44, depth: 1)
 
 ## Dependencies
 

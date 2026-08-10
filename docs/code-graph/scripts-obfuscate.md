@@ -43,7 +43,7 @@ Directory-based community: scripts
 
 ## Execution Flows
 
-- **run** (criticality: 0.63, depth: 3)
+No execution flows pass through this community.
 
 ## Dependencies
 

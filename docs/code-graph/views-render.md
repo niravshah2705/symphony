@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 410 nodes
-- **Cohesion**: 0.4840
+- **Size**: 413 nodes
+- **Cohesion**: 0.4837
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,20 +65,20 @@ Directory-based community: public/js
 | loadGisScript | Function | ./public/js/auth.js | 248-261 |
 | toHex | Function | ./public/js/auth.js | 263-265 |
 
-*... and 360 more members.*
+*... and 363 more members.*
 
 ## Execution Flows
 
-- **beginSignIn** (criticality: 0.97, depth: 7)
-- **beginMicrosoftSignIn** (criticality: 0.97, depth: 7)
-- **beginSignOut** (criticality: 0.97, depth: 7)
-- **render** (criticality: 0.96, depth: 6)
-- **applyServerEvent** (criticality: 0.88, depth: 5)
-- **maybeRefreshRole** (criticality: 0.85, depth: 3)
-- **renderBoard** (criticality: 0.79, depth: 4)
-- **maybeRefreshConnection** (criticality: 0.78, depth: 3)
-- **initShellInteractions** (criticality: 0.78, depth: 3)
-- **closeAtBreakpoint** (criticality: 0.78, depth: 3)
+- **beginSignIn** (criticality: 0.80, depth: 7)
+- **beginMicrosoftSignIn** (criticality: 0.80, depth: 7)
+- **beginSignOut** (criticality: 0.79, depth: 7)
+- **render** (criticality: 0.76, depth: 6)
+- **promptOneTap** (criticality: 0.69, depth: 2)
+- **maybeRefreshConnection** (criticality: 0.68, depth: 3)
+- **initializeAuthentication** (criticality: 0.67, depth: 2)
+- **maybeRefreshRole** (criticality: 0.65, depth: 3)
+- **applyServerEvent** (criticality: 0.63, depth: 5)
+- **renderBoard** (criticality: 0.54, depth: 4)
 - *... and 16 more flows.*
 
 ## Dependencies
@@ -86,25 +86,25 @@ Directory-based community: public/js
 ### Outgoing
 
 - `append` (141 edge(s))
-- `addEventListener` (102 edge(s))
+- `addEventListener` (104 edge(s))
 - `map` (92 edge(s))
 - `String` (82 edge(s))
 - `trim` (64 edge(s))
 - `push` (51 edge(s))
 - `setAttribute` (46 edge(s))
 - `filter` (45 edge(s))
+- `catch` (41 edge(s))
 - `Boolean` (38 edge(s))
-- `catch` (38 edge(s))
 - `isArray` (27 edge(s))
 - `slice` (27 edge(s))
+- `has` (26 edge(s))
 - `getElementById` (26 edge(s))
-- `has` (25 edge(s))
 - `join` (24 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (119 edge(s))
-- `./public/js/views/agent.js` (79 edge(s))
+- `./public/js/api.js` (121 edge(s))
+- `./public/js/views/agent.js` (82 edge(s))
 - `./public/js/app.js` (75 edge(s))
 - `./public/js/views/settings.js` (66 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))

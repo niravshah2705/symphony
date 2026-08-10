@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1456 nodes
-- **Cohesion**: 0.1360
+- **Size**: 1470 nodes
+- **Cohesion**: 0.1355
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,51 +65,51 @@ Directory-based community: packages/shared
 | applyAifail | Function | ./packages/shared/src/agent/apply.js | 307-328 |
 | startIssue | Function | ./packages/shared/src/agent/apply.js | 337-352 |
 
-*... and 1406 more members.*
+*... and 1420 more members.*
 
 ## Execution Flows
 
-- **resume** (criticality: 0.66, depth: 6)
-- **loadAnalytics** (criticality: 0.64, depth: 4)
-- **preflightAndPause** (criticality: 0.64, depth: 4)
-- **prepareMessages** (criticality: 0.64, depth: 4)
-- **discoverModels** (criticality: 0.64, depth: 4)
-- **findReviewByBranch** (criticality: 0.64, depth: 4)
-- **run** (criticality: 0.64, depth: 4)
-- **executeAgentRuntime** (criticality: 0.64, depth: 4)
-- **startScheduler** (criticality: 0.64, depth: 4)
-- **resolveEffective** (criticality: 0.64, depth: 4)
-- *... and 74 more flows.*
+- **createLogin** (criticality: 0.61, depth: 1)
+- **consumeLogin** (criticality: 0.61, depth: 1)
+- **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
+- **refreshTokens** (criticality: 0.61, depth: 1)
+- **createLogin** (criticality: 0.61, depth: 1)
+- **consumeLogin** (criticality: 0.61, depth: 1)
+- **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
+- **refreshTokens** (criticality: 0.61, depth: 1)
+- **pushAuth** (criticality: 0.56, depth: 2)
+- **pendingCount** (criticality: 0.49, depth: 1)
+- *... and 66 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (1038 edge(s))
+- `equal` (1053 edge(s))
 - `join` (221 edge(s))
 - `String` (204 edge(s))
 - `includes` (180 edge(s))
-- `deepEqual` (166 edge(s))
+- `deepEqual` (169 edge(s))
 - `map` (132 edge(s))
 - `push` (130 edge(s))
 - `strictEqual` (125 edge(s))
 - `ok` (123 edge(s))
 - `slice` (115 edge(s))
 - `trim` (103 edge(s))
-- `match` (101 edge(s))
+- `match` (102 edge(s))
 - `filter` (92 edge(s))
-- `isArray` (88 edge(s))
+- `isArray` (90 edge(s))
 - `step` (75 edge(s))
 
 ### Incoming
 
-- `equal` (1032 edge(s))
-- `deepEqual` (164 edge(s))
-- `./packages/shared/src/store.js` (133 edge(s))
+- `equal` (1047 edge(s))
+- `deepEqual` (167 edge(s))
+- `./packages/shared/src/store.js` (143 edge(s))
 - `strictEqual` (125 edge(s))
 - `ok` (123 edge(s))
 - `join` (85 edge(s))
-- `match` (82 edge(s))
+- `match` (83 edge(s))
 - `./packages/shared/src/linear.js` (74 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (71 edge(s))
 - `includes` (62 edge(s))
