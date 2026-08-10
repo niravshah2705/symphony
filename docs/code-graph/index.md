@@ -11,7 +11,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | Community | Size | Link |
 |-----------|------|------|
 | agent-model | 1516 | [agent-model.md](agent-model.md) |
-| core-org | 479 | [core-org.md](core-org.md) |
+| core-org | 483 | [core-org.md](core-org.md) |
 | core-project | 245 | [core-project.md](core-project.md) |
 | e2e-test:agent | 38 | [e2e-test-agent.md](e2e-test-agent.md) |
 | gcp-log | 10 | [gcp-log.md](gcp-log.md) |

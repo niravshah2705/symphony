@@ -40,6 +40,7 @@ async def update_current_org(
 
 async def delete_current_org(session: Uow, principal: Principal) -> None:
     org = await get_current_org(session, principal)
+    await provisioning_service.trigger_teardown(org)  # before delete — slug still available
     await OrgRepository(session).delete(org)
 
 
@@ -100,6 +101,7 @@ async def update_org(
 
 async def delete_org(session: Uow, org_id: uuid.UUID) -> None:
     org = await get_org(session, org_id)
+    await provisioning_service.trigger_teardown(org)  # before delete — slug still available
     await OrgRepository(session).delete(org)
 
 

@@ -48,6 +48,27 @@ async def trigger_provisioning(session: Uow, org: Organization) -> None:
     )
 
 
+async def trigger_teardown(org: Organization) -> None:
+    """Publish a teardown request for a deleted org's dedicated stack.
+
+    No-op unless provisioning is enabled AND the org actually had a dedicated
+    stack (status provisioning/provisioned/failed) — an org that only ever ran on
+    the shared stack has nothing to tear down. Called BEFORE the org is deleted
+    (its deployment_slug + id are still available).
+    """
+    settings = get_settings()
+    if not settings.provisioning_enabled:
+        return
+    deployments = org.deployments if isinstance(org.deployments, dict) else {}
+    if deployments.get("status") not in {"provisioning", "provisioned", "failed"}:
+        return
+    await _publish_provision_request(
+        settings.gcp_project_id,
+        settings.provisioning_topic,
+        {"org_id": str(org.id), "slug": org.deployment_slug, "action": "teardown"},
+    )
+
+
 async def _publish_provision_request(project_id: str, topic: str, message: dict) -> None:
     """Publish a provision request to Pub/Sub. Overridable in tests.
 

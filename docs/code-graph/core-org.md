@@ -6,8 +6,8 @@
 
 Directory-based community: services/org
 
-- **Size**: 479 nodes
-- **Cohesion**: 0.4530
+- **Size**: 483 nodes
+- **Cohesion**: 0.4498
 - **Dominant Language**: python
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: services/org
 | delete_tag | Function | ./services/org/app/api/v1/routes_tags.py | 59-64 |
 | list_tasks | Function | ./services/org/app/api/v1/routes_tasks.py | 26-42 |
 
-*... and 429 more members.*
+*... and 433 more members.*
 
 ## Execution Flows
 
@@ -79,15 +79,15 @@ Directory-based community: services/org
 - **lifespan** (criticality: 0.73, depth: 4)
 - **create_user** (criticality: 0.70, depth: 1)
 - **create_org** (criticality: 0.69, depth: 2)
-- *... and 43 more flows.*
+- *... and 46 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (130 edge(s))
+- `get` (131 edge(s))
 - `Depends` (125 edge(s))
-- `str` (55 edge(s))
+- `str` (57 edge(s))
 - `json` (53 edge(s))
 - `post` (43 edge(s))
 - `BaseModel` (33 edge(s))
@@ -95,11 +95,11 @@ Directory-based community: services/org
 - `raises` (23 edge(s))
 - `query` (21 edge(s))
 - `add` (21 edge(s))
+- `setattr` (21 edge(s))
+- `len` (17 edge(s))
 - `uuid4` (17 edge(s))
 - `delete` (17 edge(s))
-- `len` (16 edge(s))
 - `patch` (15 edge(s))
-- `setattr` (14 edge(s))
 
 ### Incoming
 
@@ -107,14 +107,14 @@ Directory-based community: services/org
 - `post` (37 edge(s))
 - `get` (35 edge(s))
 - `raises` (23 edge(s))
+- `setattr` (21 edge(s))
 - `./services/org/app/errors.py` (18 edge(s))
 - `patch` (15 edge(s))
-- `setattr` (14 edge(s))
 - `./services/org/tests/unit/test_services.py` (13 edge(s))
 - `./services/org/app/services/auth_service.py` (12 edge(s))
+- `len` (12 edge(s))
 - `create_user` (12 edge(s))
 - `./services/org/app/api/v1/routes_org.py` (11 edge(s))
-- `len` (11 edge(s))
 - `uuid4` (11 edge(s))
+- `./services/org/tests/unit/test_provisioning_trigger.py` (11 edge(s))
 - `./services/org/app/api/v1/routes_auth.py` (10 edge(s))
-- `./services/org/app/services/tag_service.py` (10 edge(s))
