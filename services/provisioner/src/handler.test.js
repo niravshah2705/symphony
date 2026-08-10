@@ -23,6 +23,7 @@ test('provision: calls provisionTenant then writes back the deployments map', as
   const r = await handleMessage({ org_id: 'org1', slug: 't3abc', action: 'provision' }, d);
   assert.deepEqual(r, { ok: true, action: 'provision' });
   assert.equal(d.calls.provision[0].slug, 't3abc');
+  assert.equal(d.calls.provision[0].cfg.orgId, 'org1'); // threaded for the organization label
   assert.equal(d.calls.writeBack[0].orgId, 'org1');
   assert.equal(d.calls.writeBack[0].deployments.status, 'provisioned');
 });

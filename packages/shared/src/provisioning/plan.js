@@ -2,6 +2,11 @@
 
 const { names, urls } = require('./naming');
 
+/** Coerce a value into a GCP-label-safe value: lowercase [a-z0-9_-], <=63 chars. */
+function labelValue(value) {
+  return String(value).toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 63);
+}
+
 /**
  * Build the full per-tenant resource inventory (plain data) for a deployment
  * slug. This mirrors deploy/gcp/terraform/{cloud_run,pubsub,scheduler}.tf but for
@@ -39,6 +44,18 @@ function buildPlan(slug, cfg) {
   // is cloned from (the GCP adapter reads these; "reuse original builds").
   const srcNames = cfg.sourceServiceNames || {};
 
+  // GCP labels stamped on every per-tenant resource so an org's stack is
+  // filterable/attributable in the console + billing export (and safe to
+  // identify for teardown). `organization` is the actual org id; `tenant` is the
+  // opaque slug. Label values must be [a-z0-9_-], <=63 chars — sanitized here.
+  const baseLabels = {
+    'managed-by': 'ai-fleet-provisioner',
+    tenancy: 'dedicated',
+    tenant: slug,
+    ...(cfg.orgId ? { organization: labelValue(cfg.orgId) } : {}),
+  };
+  const withComponent = (component) => ({ ...baseLabels, component });
+
   // Env shared by every per-tenant Node service/job (cloud profile).
   const commonEnv = {
     GCP_PROJECT_ID: cfg.projectId,
@@ -54,6 +71,7 @@ function buildPlan(slug, cfg) {
   const gateway = {
     name: n.gateway,
     sourceName: srcNames.gateway,
+    labels: withComponent('gateway'),
     url: u.gateway,
     ingress: 'INGRESS_TRAFFIC_ALL',
     allowUnauthenticated: true, // public origin, app-auth (Firebase) guarded
@@ -76,6 +94,7 @@ function buildPlan(slug, cfg) {
   const planner = {
     name: n.planner,
     sourceName: srcNames.planner,
+    labels: withComponent('planner'),
     url: u.planner,
     ingress: 'INGRESS_TRAFFIC_INTERNAL_ONLY',
     allowUnauthenticated: false,
@@ -93,6 +112,7 @@ function buildPlan(slug, cfg) {
   const coder = {
     name: n.coder,
     sourceName: srcNames.coder,
+    labels: withComponent('coder-control'),
     url: u.coder,
     ingress: 'INGRESS_TRAFFIC_INTERNAL_ONLY',
     allowUnauthenticated: false,
@@ -112,6 +132,7 @@ function buildPlan(slug, cfg) {
   const worker = {
     name: n.worker,
     sourceName: srcNames.worker,
+    labels: withComponent('coder-worker'),
     serviceAccount: sa.coder,
     env: {
       ...commonEnv,
@@ -122,11 +143,15 @@ function buildPlan(slug, cfg) {
     },
   };
 
-  const topics = [n.plannerTopic, n.coderTopic];
+  const topics = [
+    { name: n.plannerTopic, labels: withComponent('planner') },
+    { name: n.coderTopic, labels: withComponent('coder-control') },
+  ];
   const subscriptions = [
     {
       name: n.plannerPushSub,
       topic: n.plannerTopic,
+      labels: withComponent('planner'),
       pushEndpoint: `${u.planner}/pubsub/planner`,
       audience: u.planner,
       oidcServiceAccount: sa.pubsubPush,
@@ -135,6 +160,7 @@ function buildPlan(slug, cfg) {
     {
       name: n.coderPushSub,
       topic: n.coderTopic,
+      labels: withComponent('coder-control'),
       pushEndpoint: `${u.coder}/pubsub/coder`,
       audience: u.coder,
       oidcServiceAccount: sa.pubsubPush,

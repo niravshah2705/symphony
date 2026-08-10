@@ -8,7 +8,9 @@ const { buildPlan } = require('./plan');
 const { provision, teardown } = require('./provisioner');
 
 const SLUG = 't3f9a1b2c4d5';
+const ORG_ID = '3f9a1b2c-4d5e-6f70-8a90-b1c2d3e4f5a6';
 const CFG = {
+  orgId: ORG_ID,
   projectId: 'proj',
   projectNumber: '123456',
   region: 'us-central1',
@@ -77,7 +79,7 @@ test('plan encodes tenant isolation: STORE_NAMESPACE, per-tenant topics, shared 
     assert.equal(svc.env.PUBSUB_PLANNER_TOPIC, 'planner-' + SLUG);
   }
   // Per-tenant topics.
-  assert.deepEqual(plan.topics, ['planner-' + SLUG, 'coder-' + SLUG]);
+  assert.deepEqual(plan.topics.map((t) => t.name), ['planner-' + SLUG, 'coder-' + SLUG]);
   // Gateway: this tenant's planner/coder, SHARED org/settings.
   assert.equal(plan.services.gateway.env.PLANNER_URL, u.planner);
   assert.equal(plan.services.gateway.env.CODER_URL, u.coder);
@@ -106,6 +108,26 @@ test('plan: only the gateway is public; planner/coder internal + IAM invokers; s
   assert.equal(plannerSub.oidcServiceAccount, 'push@sa');
 });
 
+test('plan labels every resource with tenant + organization for attribution', () => {
+  const plan = buildPlan(SLUG, CFG);
+  const expectBase = { 'managed-by': 'ai-fleet-provisioner', tenancy: 'dedicated', tenant: SLUG, organization: ORG_ID };
+
+  assert.deepEqual(plan.services.gateway.labels, { ...expectBase, component: 'gateway' });
+  assert.deepEqual(plan.services.planner.labels, { ...expectBase, component: 'planner' });
+  assert.deepEqual(plan.services.coder.labels, { ...expectBase, component: 'coder-control' });
+  assert.deepEqual(plan.worker.labels, { ...expectBase, component: 'coder-worker' });
+  assert.equal(plan.topics[0].name, 'planner-' + SLUG);
+  assert.deepEqual(plan.topics[0].labels, { ...expectBase, component: 'planner' });
+  assert.deepEqual(plan.subscriptions[0].labels, { ...expectBase, component: 'planner' });
+});
+
+test('organization label is omitted when orgId is absent; slug still labeled', () => {
+  const plan = buildPlan(SLUG, { ...CFG, orgId: undefined });
+  assert.equal(plan.services.gateway.labels.organization, undefined);
+  assert.equal(plan.services.gateway.labels.tenant, SLUG);
+  assert.equal(plan.services.gateway.labels.tenancy, 'dedicated');
+});
+
 // --- provision ---------------------------------------------------------------
 
 test('provision reuses live images and creates the full stack, returning the deployments map', async () => {
@@ -119,6 +141,9 @@ test('provision reuses live images and creates the full stack, returning the dep
   assert.equal(byName['gw-' + SLUG].image, 'registry/gateway:sha256abc');
   assert.equal(byName['pl-' + SLUG].image, 'registry/planner:sha256abc');
   assert.equal(byName['cc-' + SLUG].image, 'registry/coder-control:sha256abc');
+  // The executor threads labels through to the create call.
+  assert.equal(byName['gw-' + SLUG].labels.organization, ORG_ID);
+  assert.equal(byName['gw-' + SLUG].labels.tenant, SLUG);
   assert.equal(clients.calls.createJob[0].image, 'registry/coder-worker:sha256abc');
   assert.equal(clients.calls.createJob[0].env.STORE_NAMESPACE, SLUG);
 

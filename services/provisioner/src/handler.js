@@ -36,7 +36,8 @@ async function handleMessage(message, deps) {
       await writeBack(orgId, { status: 'shared', slug, error: null, updated_at: nowIso() });
       return { ok: true, action };
     }
-    const deployments = await provisionTenant(slug, cfg);
+    // Thread the org id so per-tenant resources are labeled organization=<id>.
+    const deployments = await provisionTenant(slug, { ...cfg, orgId });
     await writeBack(orgId, deployments);
     return { ok: true, action };
   } catch (err) {

@@ -14,7 +14,7 @@ locals {
   # Labels merged onto every labelable resource. Each resource additionally sets
   # a `component` label (e.g. gateway/planner/spa) so billing can be broken down
   # per component in the console's cost-by-label view / BigQuery billing export.
-  common_labels = merge(var.labels, { environment = var.environment })
+  common_labels = merge(var.labels, { environment = var.environment, tenancy = "shared" })
 
   # Skills registry (skills.tf). Terraform CREATES the bucket; the name defaults to
   # a stable derived value so the operator no longer pre-creates it. An empty

@@ -62,6 +62,25 @@ tenant's store/conversations/events. Per-tenant Pub/Sub topics
 planner/coder are internal + IAM-gated (never `allUsers`); only the tenant gateway
 is public (app-auth guarded).
 
+## Resource labels (attribution)
+
+Every per-tenant resource the provisioner creates — Cloud Run services, the
+coder-worker Job, and the Pub/Sub topics + subscriptions — is stamped with GCP
+labels so an org's stack is filterable in the console and in the billing export:
+
+| Label | Value | Meaning |
+|-------|-------|---------|
+| `organization` | the org id (UUID, sanitized) | which org owns it |
+| `tenant` | the deployment slug (`t<hex>`) | opaque per-tenant id (also in the name) |
+| `tenancy` | `dedicated` | a provisioned per-tenant resource |
+| `component` | `gateway`/`planner`/`coder-control`/`coder-worker` | which service |
+| `managed-by` | `ai-fleet-provisioner` | created at runtime, not by Terraform |
+
+Shared-stack resources (Terraform) carry `tenancy = "shared"` (+ `environment` and
+`component`), so `tenancy` cleanly separates dedicated from shared in any
+label filter or cost query. (Cloud Scheduler jobs don't support labels; the
+per-tenant ticks are identified by their `<name>-<slug>` instead.)
+
 ## Enabling (production)
 
 Disabled by default (`provisioning_enabled=false` / `PROVISIONING_ENABLED=false`).
