@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 409 nodes
-- **Cohesion**: 0.4854
+- **Size**: 410 nodes
+- **Cohesion**: 0.4840
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,32 +65,32 @@ Directory-based community: public/js
 | loadGisScript | Function | ./public/js/auth.js | 248-261 |
 | toHex | Function | ./public/js/auth.js | 263-265 |
 
-*... and 359 more members.*
+*... and 360 more members.*
 
 ## Execution Flows
 
-- **beginSignIn** (criticality: 0.80, depth: 7)
-- **beginMicrosoftSignIn** (criticality: 0.80, depth: 7)
-- **beginSignOut** (criticality: 0.79, depth: 7)
-- **render** (criticality: 0.76, depth: 6)
-- **promptOneTap** (criticality: 0.69, depth: 2)
-- **maybeRefreshConnection** (criticality: 0.68, depth: 3)
-- **initializeAuthentication** (criticality: 0.67, depth: 2)
-- **maybeRefreshRole** (criticality: 0.65, depth: 3)
-- **applyServerEvent** (criticality: 0.63, depth: 5)
-- **renderBoard** (criticality: 0.54, depth: 4)
+- **beginSignIn** (criticality: 0.97, depth: 7)
+- **beginMicrosoftSignIn** (criticality: 0.97, depth: 7)
+- **beginSignOut** (criticality: 0.97, depth: 7)
+- **render** (criticality: 0.96, depth: 6)
+- **applyServerEvent** (criticality: 0.88, depth: 5)
+- **maybeRefreshRole** (criticality: 0.85, depth: 3)
+- **renderBoard** (criticality: 0.79, depth: 4)
+- **maybeRefreshConnection** (criticality: 0.78, depth: 3)
+- **initShellInteractions** (criticality: 0.78, depth: 3)
+- **closeAtBreakpoint** (criticality: 0.78, depth: 3)
 - *... and 16 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `append` (140 edge(s))
+- `append` (141 edge(s))
 - `addEventListener` (102 edge(s))
 - `map` (92 edge(s))
-- `String` (81 edge(s))
+- `String` (82 edge(s))
 - `trim` (64 edge(s))
-- `push` (50 edge(s))
+- `push` (51 edge(s))
 - `setAttribute` (46 edge(s))
 - `filter` (45 edge(s))
 - `Boolean` (38 edge(s))
@@ -99,7 +99,7 @@ Directory-based community: public/js
 - `slice` (27 edge(s))
 - `getElementById` (26 edge(s))
 - `has` (25 edge(s))
-- `replaceChildren` (24 edge(s))
+- `join` (24 edge(s))
 
 ### Incoming
 
@@ -115,6 +115,6 @@ Directory-based community: public/js
 - `./public/js/views/organization.js` (13 edge(s))
 - `./public/js/views/settings-policy.js` (12 edge(s))
 - `./public/js/dom.js` (9 edge(s))
+- `./public/js/secret-scan.test.mjs` (9 edge(s))
 - `./public/js/agent-pause.js` (7 edge(s))
 - `./public/js/views/analytics.js` (7 edge(s))
-- `./public/js/theme.js` (6 edge(s))

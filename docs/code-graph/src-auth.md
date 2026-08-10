@@ -70,15 +70,8 @@ Directory-based community: services/gateway
 ## Execution Flows
 
 - **createAuthenticationMiddleware** (criticality: 0.62, depth: 2)
+- **createLocalizationRouter** (criticality: 0.62, depth: 2)
 - **verifyStreamToken** (criticality: 0.62, depth: 2)
-- **defaultVerify** (criticality: 0.61, depth: 1)
-- **requirePermission** (criticality: 0.61, depth: 1)
-- **requireAuthenticated** (criticality: 0.61, depth: 1)
-- **mintWorkspaceToken** (criticality: 0.59, depth: 3)
-- **createLocalizationRouter** (criticality: 0.49, depth: 2)
-- **createProxy** (criticality: 0.48, depth: 1)
-- **handleStream** (criticality: 0.44, depth: 1)
-- **handleWorkspaceStream** (criticality: 0.44, depth: 1)
 
 ## Dependencies
 
