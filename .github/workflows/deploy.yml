@@ -304,6 +304,8 @@ jobs:
             -var="google_one_tap_client_id=${{ vars.GOOGLE_ONE_TAP_CLIENT_ID }}"
             -var="skills_bucket_name=${{ vars.SKILLS_BUCKET }}"
             -var="skills_version=${{ vars.SKILLS_VERSION || 'v1' }}"
+            -var="egress_proxy_enabled=true"
+            -var="internal_api_token=${{ secrets.INTERNAL_API_TOKEN }}"
           )
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
