@@ -160,10 +160,13 @@ resource "google_cloud_run_v2_service" "org" {
   ]
 }
 
-# The org service reads the shared internal token (created in provisioner.tf) to
-# verify the provisioner's deployment write-back. Gated identically.
+# The org service reads the shared internal token to verify the provisioner's
+# deployment write-back. Gated on the SECRET's existence (not provisioning_enabled)
+# because the org container mounts INTERNAL_API_TOKEN whenever the secret exists
+# (the splat env above) — the accessor must match, or the revision fails to mount
+# it. Mirrors settings_internal_token.
 resource "google_secret_manager_secret_iam_member" "org_internal_token" {
-  count     = var.provisioning_enabled && var.internal_api_token != "" ? 1 : 0
+  count     = var.internal_api_token != "" ? 1 : 0
   project   = var.project_id
   secret_id = google_secret_manager_secret.internal_api_token[0].secret_id
   role      = "roles/secretmanager.secretAccessor"
