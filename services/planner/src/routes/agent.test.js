@@ -313,3 +313,70 @@ test('enqueue is role-gated, validates projectId, and queues exactly one project
   assert.equal(enqueued[0].projectId, 'proj_1');
   assert.equal(enqueued[0].assumedRole.id, 'r1');
 });
+
+test('redacts secrets in inbound user text server-side across every ingest path (defense in depth)', async (t) => {
+  const modulePath = require.resolve('./agent');
+  const knowledgeSearch = require('@ai-fleet/shared/agent/knowledge-search');
+  const REDACTED = '«redacted»';
+  const GH = 'ghp_0123456789abcdefghijABCDEFGHIJ0123'; // fake, shape-valid GitHub token
+
+  const original = {
+    enrichInput: localIntelligence.enrichInput,
+    searchDocuments: knowledgeSearch.searchDocuments,
+    listMemories: store.listMemories,
+    getConversation: store.getConversation,
+    appendConversationMessages: store.appendConversationMessages,
+    updateConversation: store.updateConversation,
+  };
+
+  let enrichedInput = null;
+  localIntelligence.enrichInput = async ({ input }) => { enrichedInput = input; return { summary: 'stub' }; };
+  let searchedQuery = null;
+  knowledgeSearch.searchDocuments = (query) => { searchedQuery = query; return { results: [], indexedFiles: 0 }; };
+  store.listMemories = () => [];
+  let storedMessages = null;
+  store.getConversation = () => ({ id: 'conv_1', title: 'New conversation', messages: [] });
+  store.appendConversationMessages = (id, messages) => { storedMessages = messages; return { id, messages }; };
+  store.updateConversation = (id, patch) => ({ id, ...patch, messages: storedMessages });
+
+  delete require.cache[modulePath];
+  t.after(() => {
+    localIntelligence.enrichInput = original.enrichInput;
+    knowledgeSearch.searchDocuments = original.searchDocuments;
+    Object.assign(store, {
+      listMemories: original.listMemories,
+      getConversation: original.getConversation,
+      appendConversationMessages: original.appendConversationMessages,
+      updateConversation: original.updateConversation,
+    });
+    delete require.cache[modulePath];
+  });
+
+  const router = require('./agent');
+
+  // 1. POST /message — the classified route carries redacted input, not the secret.
+  const routed = await call(handlerFor(router, 'post', '/message'), { body: { input: `deploy with ${GH} now` } });
+  assert.ok(!JSON.stringify(routed.body).includes(GH), '/message response must not echo the raw secret');
+  assert.ok(routed.body.route.input.includes(REDACTED), '/message route input should be redacted');
+  assert.ok(enrichedInput && !enrichedInput.includes(GH), 'model enrichment must never receive the raw secret');
+
+  // 2. POST /knowledge-search — the query reaching the doc index is redacted.
+  await call(handlerFor(router, 'post', '/knowledge-search'), { body: { query: `find ${GH}` } });
+  assert.ok(searchedQuery && !searchedQuery.includes(GH), 'knowledge-search query must be redacted');
+  assert.ok(searchedQuery.includes(REDACTED));
+
+  // 3. POST /memory-search — the echoed query is redacted.
+  const mem = await call(handlerFor(router, 'post', '/memory-search'), { body: { query: `recall ${GH}` } });
+  assert.ok(!mem.body.query.includes(GH), 'memory-search echoed query must be redacted');
+  assert.ok(mem.body.query.includes(REDACTED));
+
+  // 4. POST /conversations/:id/messages — persisted text is redacted BEFORE storage.
+  const persisted = await call(handlerFor(router, 'post', '/conversations/:id/messages'), {
+    params: { id: 'conv_1' },
+    body: { messages: [{ role: 'user', text: `token ${GH}` }] },
+  });
+  assert.ok(storedMessages, 'append should have been called');
+  assert.ok(storedMessages.every((m) => !String(m.text).includes(GH)), 'stored message text must not contain the raw secret');
+  assert.ok(storedMessages.some((m) => String(m.text).includes(REDACTED)));
+  assert.ok(!JSON.stringify(persisted.body).includes(GH), 'persist response (incl. derived title) must not echo the secret');
+});

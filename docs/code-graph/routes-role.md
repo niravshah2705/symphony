@@ -6,8 +6,8 @@
 
 Directory-based community: services/planner
 
-- **Size**: 25 nodes
-- **Cohesion**: 0.3029
+- **Size**: 27 nodes
+- **Cohesion**: 0.2803
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,11 +15,12 @@ Directory-based community: services/planner
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | stream | Function | ./services/planner/src/pubsub.js | 22-24 |
-| requireAssumedRole | Function | ./services/planner/src/routes/agent.js | 53-60 |
-| clampInt | Function | ./services/planner/src/routes/agent.js | 62-66 |
-| activeModelFor | Function | ./services/planner/src/routes/agent.js | 69-80 |
-| sanitizeLabels | Function | ./services/planner/src/routes/agent.js | 82-86 |
-| sanitizeConfig | Function | ./services/planner/src/routes/agent.js | 89-111 |
+| redactUserText | Function | ./services/planner/src/routes/agent.js | 54-54 |
+| requireAssumedRole | Function | ./services/planner/src/routes/agent.js | 63-70 |
+| clampInt | Function | ./services/planner/src/routes/agent.js | 72-76 |
+| activeModelFor | Function | ./services/planner/src/routes/agent.js | 79-90 |
+| sanitizeLabels | Function | ./services/planner/src/routes/agent.js | 92-96 |
+| sanitizeConfig | Function | ./services/planner/src/routes/agent.js | 99-121 |
 | routeHandler | Function | ./services/planner/src/routes/agent.test.js | 10-14 |
 | handlerFor | Function | ./services/planner/src/routes/agent.test.js | 17-22 |
 | invoke | Function | ./services/planner/src/routes/agent.test.js | 24-28 |
@@ -39,6 +40,7 @@ Directory-based community: services/planner
 | test:conversation routes reject malformed ids and unknown threads@L272 | Test | ./services/planner/src/routes/agent.test.js | 272-278 |
 | test:enqueue is role-gated, validates projectId, and queues exactly one project@L280 | Test | ./services/planner/src/routes/agent.test.js | 280-315 |
 | role | Function | ./services/planner/src/routes/agent.test.js | 286-286 |
+| test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L317 | Test | ./services/planner/src/routes/agent.test.js | 317-382 |
 
 ## Execution Flows
 
@@ -49,35 +51,35 @@ Directory-based community: services/planner
 ### Outgoing
 
 - `equal` (46 edge(s))
-- `resolve` (11 edge(s))
-- `require` (11 edge(s))
-- `ok` (8 edge(s))
-- `after` (7 edge(s))
+- `ok` (19 edge(s))
+- `require` (13 edge(s))
+- `includes` (12 edge(s))
+- `resolve` (12 edge(s))
+- `after` (8 edge(s))
+- `String` (4 edge(s))
 - `filter` (4 edge(s))
 - `map` (4 edge(s))
 - `find` (4 edge(s))
 - `rejects` (4 edge(s))
 - `Number` (3 edge(s))
 - `handler` (3 edge(s))
-- `includes` (2 edge(s))
-- `catch` (2 edge(s))
-- `toUpperCase` (2 edge(s))
-- `reject` (2 edge(s))
+- `stringify` (3 edge(s))
+- `every` (3 edge(s))
 
 ### Incoming
 
 - `equal` (46 edge(s))
-- `./services/planner/src/routes/agent.test.js` (19 edge(s))
-- `./services/planner/src/routes/agent.js` (11 edge(s))
-- `require` (11 edge(s))
-- `resolve` (7 edge(s))
-- `after` (7 edge(s))
+- `./services/planner/src/routes/agent.test.js` (20 edge(s))
+- `./services/planner/src/routes/agent.js` (16 edge(s))
+- `ok` (16 edge(s))
+- `require` (13 edge(s))
+- `includes` (11 edge(s))
+- `resolve` (8 edge(s))
+- `after` (8 edge(s))
 - `./services/planner/src/pubsub.js` (6 edge(s))
-- `ok` (5 edge(s))
 - `rejects` (4 edge(s))
+- `stringify` (3 edge(s))
+- `every` (3 edge(s))
 - `filter` (3 edge(s))
-- `every` (2 edge(s))
+- `assign` (3 edge(s))
 - `map` (2 edge(s))
-- `assign` (2 edge(s))
-- `deepEqual` (1 edge(s))
-- `includes` (1 edge(s))
