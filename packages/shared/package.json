@@ -33,7 +33,6 @@
     "@google-cloud/pubsub": "^6.0.0",
     "@google-cloud/run": "^4.0.0",
     "@google-cloud/scheduler": "^6.0.0",
-    "@google-cloud/secret-manager": "^7.0.0",
     "@google/genai": "^2.16.0",
     "google-auth-library": "^11.0.1",
     "@langchain/anthropic": "^1.5.2",
