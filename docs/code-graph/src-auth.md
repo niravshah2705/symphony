@@ -7,7 +7,7 @@
 Directory-based community: services/gateway
 
 - **Size**: 221 nodes
-- **Cohesion**: 0.1525
+- **Cohesion**: 0.1524
 - **Dominant Language**: javascript
 
 ## Members
@@ -97,8 +97,8 @@ Directory-based community: services/gateway
 - `ok` (12 edge(s))
 - `handler` (12 edge(s))
 - `includes` (11 edge(s))
+- `get` (11 edge(s))
 - `stringify` (11 edge(s))
-- `Number` (11 edge(s))
 
 ### Incoming
 

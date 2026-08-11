@@ -28,6 +28,9 @@ async function idTokenHeader(audience) {
   }
   const client = idTokenClients.get(audience);
   const headers = await client.getRequestHeaders();
+  // google-auth-library v10+ returns a WHATWG Headers object here; v9 returned a
+  // plain object. Read via .get() when available so the S2S OIDC token survives.
+  if (typeof headers.get === 'function') return headers.get('authorization') || '';
   return headers.Authorization || headers.authorization || '';
 }
 

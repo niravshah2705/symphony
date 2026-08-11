@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@ai-fleet/shared": "*",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "google-auth-library": "^11.0.1"
   }
 }
