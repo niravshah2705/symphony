@@ -14,6 +14,14 @@ from app.core.logging import get_logger
 
 logger = get_logger("app.errors")
 
+# Firestore raises FAILED_PRECONDITION when a query needs a composite index that
+# does not exist yet (see deploy/gcp/terraform/firestore.tf). Import lazily so
+# test/dev envs without the client library still load this module.
+try:  # pragma: no cover - exercised only where google-cloud-firestore is present
+    from google.api_core import exceptions as _gcloud_exceptions
+except Exception:  # noqa: BLE001 - optional dependency
+    _gcloud_exceptions = None
+
 
 class AppError(Exception):
     """Base class for domain errors mapped to HTTP responses."""
@@ -91,6 +99,26 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=422,
             content={"error": {"code": "validation_error", "message": "Invalid request", "fields": errors}},
         )
+
+    if _gcloud_exceptions is not None:
+        @app.exception_handler(_gcloud_exceptions.FailedPrecondition)
+        async def _missing_index(_: Request, exc: Exception) -> JSONResponse:
+            # A composite index is missing or still building. Degrade to a clean,
+            # diagnosable 503 instead of an opaque 500, and log loudly for ops so
+            # the required index (firestore.tf) can be applied.
+            logger.error(
+                "Firestore FAILED_PRECONDITION (likely a missing/building composite "
+                "index — see deploy/gcp/terraform/firestore.tf): %s",
+                exc,
+            )
+            return JSONResponse(
+                status_code=503,
+                content=_envelope(
+                    "index_unavailable",
+                    "This list is temporarily unavailable while a database index finishes "
+                    "building. Please try again shortly.",
+                ),
+            )
 
     @app.exception_handler(Exception)
     async def _unhandled(_: Request, exc: Exception) -> JSONResponse:

@@ -178,7 +178,9 @@ async function resolveDeployment() {
 // resolve to the same Firebase session. Returns the server identity or throws.
 async function confirmIdentity() {
   currentUser = auth.currentUser;
-  setAccessTokenProvider(() => currentUser.getIdToken());
+  // `forceRefresh` (passed by api.js on an app-auth 401 retry) is forwarded to
+  // Firebase so the retry carries a freshly-minted token; omitted ⇒ cached.
+  setAccessTokenProvider((forceRefresh = false) => currentUser.getIdToken(forceRefresh));
   const identity = await api.getCurrentUser();
   if (!identity?.authenticated || !identity.user?.sub) {
     throw new Error('This account is not allowed.');
@@ -239,6 +241,25 @@ export async function initializeAuthentication() {
 
 export function getAuthenticationState() {
   return authState;
+}
+
+// Force a network refresh only when the token sits close to (or past) its own
+// expiry, so a session left idle across the token lifetime does not fire a burst
+// of 401s. `getIdToken(true)` throwing here would surface later as an app-auth
+// 401 (handled by the api.js retry), so this probe fails open and never blocks
+// navigation. A no-op for anonymous / auth-disabled sessions.
+const TOKEN_REFRESH_SKEW_MS = 2 * 60 * 1000;
+export async function ensureFreshToken() {
+  if (!auth || !currentUser) return;
+  try {
+    const result = await currentUser.getIdTokenResult();
+    const expiresAt = Date.parse(result?.expirationTime || '');
+    if (!Number.isFinite(expiresAt) || expiresAt - Date.now() <= TOKEN_REFRESH_SKEW_MS) {
+      await currentUser.getIdToken(true);
+    }
+  } catch (_) {
+    /* never block navigation on a token-freshness probe */
+  }
 }
 
 // Which sign-in buttons the SPA should render, from the public auth config.
