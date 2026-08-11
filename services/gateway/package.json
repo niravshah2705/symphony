@@ -14,7 +14,7 @@
   "dependencies": {
     "@ai-fleet/shared": "*",
     "express": "^5.2.1",
-    "firebase-admin": "^13.0.0",
+    "firebase-admin": "^14.2.0",
     "google-auth-library": "^11.0.1"
   }
 }
