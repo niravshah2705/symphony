@@ -30,6 +30,10 @@ const publish = require('./publish');
 const sse = require('./sse');
 const { mintStreamToken, mintWorkspaceToken } = require('./stream-token');
 const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared/messaging/events');
+const { configureTrustProxy } = require('./trust-proxy');
+const { enforcePinnedOrganization, requestContext, requireOrganizationContext } = require('./request-context');
+const { createContextValidationMiddleware } = require('./context-validator');
+const { createStoreContextMiddleware } = require('./store-context');
 
 /**
  * Gateway service — the single browser-facing origin. It serves the SPA, owns
@@ -42,6 +46,11 @@ const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared/messaging/events');
  * split.
  */
 const app = express();
+
+// Cloud Run is the one trusted reverse-proxy hop in the documented direct
+// browser -> gateway topology. This makes req.ip useful for advisory locale
+// recommendations without trusting an arbitrary leftmost X-Forwarded-For.
+configureTrustProxy(app);
 
 // True in the cloud (Pub/Sub) profile: the SPA is hosted on GCS and the gateway
 // is API-only, so it does not serve static files or trust localhost same-origin.
@@ -74,8 +83,8 @@ app.get('/api/auth/config', (req, res) => {
 // Disabled in the cloud (EVENTS_BACKEND=firestore fans out via onSnapshot).
 app.post('/internal/events', (req, res) => {
   if (CONFIG.EVENTS_BACKEND === 'firestore') return res.status(404).end();
-  const { conversationId, event } = req.body || {};
-  events.ingest(conversationId, event);
+  const { conversationId, event, context } = req.body || {};
+  events.ingest(conversationId, event, context);
   return res.status(204).end();
 });
 
@@ -85,8 +94,8 @@ app.post('/internal/events', (req, res) => {
 // SSE streams — mounted BEFORE the bearer auth middleware because EventSource
 // cannot send an Authorization header; they authorize via a signed stream token
 // in the query string instead (see sse.js / stream-token.js). The workspace
-// stream carries global status/jobs/coder/gate events (replaces SPA polling) and
-// is readable by the public read-only home.
+// stream carries selected-context status/jobs/coder/gate events (replaces SPA
+// polling). Tokens are minted only after authenticated context validation.
 app.get('/api/agent/stream', sse.handleStream);
 app.get('/api/agent/workspace-stream', sse.handleWorkspaceStream);
 
@@ -95,6 +104,14 @@ app.get('/api/agent/workspace-stream', sse.handleWorkspaceStream);
 // below, so unauthenticated visitors get exactly the public surface (read-only
 // Agent workspace) and 401/403 on anything else. Local dev is fully open.
 app.use('/api', createAuthenticationMiddleware());
+
+// A provisioned tenant gateway is pinned to one organization/store namespace.
+// Never let a client carry another organization selection into that stack.
+app.use('/api', enforcePinnedOrganization(CONFIG.BILLING.orgId));
+app.use('/api', createContextValidationMiddleware());
+// Select the store only after the org service has validated the browser's
+// requested pair. The middleware ignores raw headers and binds req.fleetContext.
+app.use('/api', createStoreContextMiddleware());
 
 // Authenticated identity + resolved permissions. 401 (not 200-with-null) when
 // unauthenticated so the SPA can distinguish signed-in from public.
@@ -123,18 +140,32 @@ app.get('/api/config', createConfigResolver());
 // all fleet:access operators share one store/conversations (see README), so there
 // is no per-user ownership boundary to enforce here. We still require the
 // conversation to EXIST so tokens can't be minted for arbitrary/guessed ids.
-app.get('/api/agent/stream-token', requirePermission('workspace'), (req, res) => {
+app.get('/api/agent/stream-token', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), (req, res) => {
   const conversationId = String(req.query.conversationId || '').trim();
   if (!conversationId) return res.status(400).json({ error: 'conversationId is required.' });
-  if (!getConversation(conversationId)) return res.status(404).json({ error: 'Unknown conversation.' });
-  return res.set('Cache-Control', 'no-store').json({ token: mintStreamToken(conversationId), conversationId });
+  const context = requestContext(req);
+  const conversation = getConversation(conversationId);
+  if (!conversation || !events.matchesEventContext(conversation, context)) {
+    return res.status(404).json({ error: 'Unknown conversation.' });
+  }
+  return res.set('Cache-Control', 'no-store').json({
+    token: mintStreamToken(conversationId, context),
+    conversationId,
+    organizationId: context.organizationId || null,
+    projectId: context.projectId || null,
+  });
 });
 
-// Mint a token for the GLOBAL workspace stream. workspace:READ (public) so the
-// read-only home can subscribe to live status/jobs/coder/gate updates. Bound to
-// the reserved channel id — no conversation to validate.
-app.get('/api/agent/workspace-stream-token', requirePermission('workspace', { level: 'read' }), (req, res) => {
-  res.set('Cache-Control', 'no-store').json({ token: mintWorkspaceToken(), conversationId: WORKSPACE_CHANNEL });
+// Mint a token for the selected workspace stream. Bound to the reserved channel
+// id and the authoritative organization/project context.
+app.get('/api/agent/workspace-stream-token', requireAuthenticated(), requirePermission('workspace', { level: 'read' }), requireOrganizationContext(), (req, res) => {
+  const context = requestContext(req);
+  res.set('Cache-Control', 'no-store').json({
+    token: mintWorkspaceToken(context),
+    conversationId: WORKSPACE_CHANNEL,
+    organizationId: context.organizationId || null,
+    projectId: context.projectId || null,
+  });
 });
 
 // EULA gate applied to POST /api/issues only (task creation is "actual work";
@@ -149,20 +180,22 @@ const gateIssueWrites = (() => {
 // permission domain its feature area belongs to (see packages/shared/authz.js).
 // GET → 'read', mutations → 'write'. The codex/claude/roles config surfaces are
 // admin-only (settings:write) since only the admin Settings view uses them.
-app.use('/api/settings', requirePermission('settings'), settingsRoutes);
-app.use('/api/settings/codex', requirePermission('settings', { level: 'write' }), codexRoutes);
-app.use('/api/settings/claude', requirePermission('settings', { level: 'write' }), claudeRoutes);
-app.use('/api/projects', requirePermission('planning'), projectsRoutes);
+app.use('/api/settings', requirePermission('settings'), requireOrganizationContext(), settingsRoutes);
+app.use('/api/settings/codex', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), codexRoutes);
+app.use('/api/settings/claude', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), claudeRoutes);
+app.use('/api/projects', requirePermission('planning'), requireOrganizationContext(), projectsRoutes);
 // Creating an implementation task (POST) is "actual work" → EULA-gated; the
 // board-drag state change (PATCH) and reads are not. Gate only the create.
-app.use('/api/issues', requirePermission('planning'), gateIssueWrites, issuesRoutes);
-app.use('/api/businesses', requirePermission('planning'), businessesRoutes);
-app.use('/api/roles', requirePermission('settings', { level: 'write' }), rolesRoutes);
-app.use('/api/observability', requirePermission('insights'), observabilityRoutes);
+app.use('/api/issues', requirePermission('planning'), requireOrganizationContext(), gateIssueWrites, issuesRoutes);
+app.use('/api/businesses', requirePermission('planning'), requireOrganizationContext(), businessesRoutes);
+app.use('/api/roles', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), rolesRoutes);
+app.use('/api/observability', requirePermission('insights'), requireOrganizationContext(), observabilityRoutes);
 // Cost-monitoring + billing. 'insights' is the coarse gate (GET → read,
 // mutations → write); the router additionally resolves the caller's org
 // server-side and requires org-admin for recharge/config (cross-tenant safe).
-app.use('/api/billing', requirePermission('insights'), billingRoutes);
+// Billing authorization is selected-org dependent (the router resolves member
+// vs ORG_ADMIN server-side), so the gateway performs authentication only.
+app.use('/api/billing', requireAuthenticated(), billingRoutes);
 // Locale is non-sensitive UI strings — available to public + authenticated.
 app.use('/api/locale', localizationRoutes);
 // EULA acceptance: GET status is public (anonymous → accepted:false); POST records
@@ -173,25 +206,24 @@ app.use('/api/eula', eulaRoutes);
 // The two long-running request submissions are PUBLISHED (Pub/Sub) rather than
 // proxied — they return a conversationId the browser streams via SSE. Registered
 // before the proxies so these exact paths win. Both mutate → workspace:write.
-app.post('/api/agent/enqueue', requirePermission('workspace'), requireEulaAccepted(), publish.enqueue);
-app.post('/api/coder/run', requirePermission('workspace'), publish.coderRun);
+app.post('/api/agent/enqueue', requirePermission('workspace'), requireOrganizationContext(), requireEulaAccepted(), publish.enqueue);
+app.post('/api/coder/run', requirePermission('workspace'), requireOrganizationContext(), publish.coderRun);
 
 // All other agent surfaces are reverse-proxied to their isolated services.
-// workspace:read (GET) is public — the read-only Agent home; writes need a role.
+// Tenant state (jobs, conversations, memories, status, and configured model
+// discovery) requires a signed-in identity. Only the reviewed documentation
+// search below is public; otherwise an empty public context could expose legacy
+// or another tenant's shared-stack records.
 const plannerProxy = createProxy(CONFIG.SERVICES.plannerUrl);
-// Basic RAG for ANONYMOUS visitors: these two POSTs are side-effect-free reads
-// (bounded lexical doc/memory retrieval), so they are authorized at
-// workspace:READ even though they are POST — mounted ahead of the catch-all
-// /api/agent (which maps POST → write). Everything else on /api/agent still
-// needs workspace:write. See docs/ACCESS_MODEL.md.
+// Basic RAG over the reviewed repository documentation is safe for anonymous
+// visitors even though it uses POST for a bounded query body.
 app.post('/api/agent/knowledge-search', requirePermission('workspace', { level: 'read' }), plannerProxy);
-app.post('/api/agent/memory-search', requirePermission('workspace', { level: 'read' }), plannerProxy);
 // Preparing a business runs the real 6-stage pipeline (writes) — actual work, so
 // it needs EULA acceptance. Registered before the catch-all so this exact path
 // wins; everything else on /api/agent keeps the plain workspace:write gate.
-app.post('/api/agent/business/prepare', requirePermission('workspace'), requireEulaAccepted(), plannerProxy);
-app.use('/api/agent', requirePermission('workspace'), plannerProxy);
-app.use('/api/coder', requirePermission('workspace'), createProxy(CONFIG.SERVICES.coderUrl));
+app.post('/api/agent/business/prepare', requirePermission('workspace'), requireOrganizationContext(), requireEulaAccepted(), plannerProxy);
+app.use('/api/agent', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), plannerProxy);
+app.use('/api/coder', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), createProxy(CONFIG.SERVICES.coderUrl));
 
 // Organization service (FastAPI + Firestore, services/org). It runs its own
 // Firebase-OIDC auth + org-scoped RBAC, so the gateway forwards the caller's
@@ -209,11 +241,12 @@ if (CONFIG.SERVICES.orgUrl) {
   // role-gated /api/org so this exact prefix wins. The org service enforces
   // owner-scoping regardless; this is only the coarse authentication gate.
   app.use('/api/org/me', requireAuthenticated(), orgProxy);
-  // Org tenant surface — needs the `org` permission domain (org:read for GETs,
-  // org:write for mutations). The org service enforces per-org RBAC.
-  app.use('/api/org', requirePermission('org'), orgProxy);
+  // Org roles vary with the selected organization, so a global Firebase role
+  // cannot be the authorization source here. Require identity at the gateway;
+  // the org service validates the selected membership and enforces per-org RBAC.
+  app.use('/api/org', requireAuthenticated(), orgProxy);
 } else {
-  app.use('/api/org', requirePermission('org'), (req, res) =>
+  app.use('/api/org', requireAuthenticated(), (req, res) =>
     res.status(501).json({ error: 'Organization service is not configured (ORG_URL unset).' }));
 }
 
@@ -267,12 +300,11 @@ if (CONFIG.SERVICES.settingsUrl) {
   // manage their own user-scope policy, even without an `org` role. Mounted
   // BEFORE the role-gated prefix so this exact path wins (mirrors /api/org/me).
   app.use('/api/settings-policy/me', requireAuthenticated(), settingsPolicyProxy);
-  // Org/project settings surface — needs the `org` permission domain; the
-  // settings service enforces org-admin / project-admin authorization, using the
-  // trusted x-org-* headers resolveOrgMembership injects.
-  app.use('/api/settings-policy', requirePermission('org'), resolveOrgMembership, settingsPolicyProxy);
+  // As above, selected org/project roles are context-dependent and resolved by
+  // the settings service from the canonical org service on every request.
+  app.use('/api/settings-policy', requireAuthenticated(), settingsPolicyProxy);
 } else {
-  app.use('/api/settings-policy', requirePermission('org'), (req, res) =>
+  app.use('/api/settings-policy', requireAuthenticated(), (req, res) =>
     res.status(501).json({ error: 'Settings service is not configured (SETTINGS_URL unset).' }));
 }
 

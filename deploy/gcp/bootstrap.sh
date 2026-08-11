@@ -25,7 +25,9 @@
 # Optional env: REGION (asia-south1), SPA_BUCKET (<project>-aifleet-spa),
 #   TF_STATE_BUCKET (<project>-tfstate), FIRESTORE_LOCATION (nam5),
 #   SPA_ORIGIN (https://<project>.web.app), FIREBASE_ALLOWED_DOMAIN,
-#   GITHUB_TOKEN, LANGSMITH_API_KEY, STREAM_TOKEN_SECRET (auto-generated if unset).
+#   GITHUB_TOKEN, LANGSMITH_API_KEY, STREAM_TOKEN_SECRET (auto-generated if unset),
+#   EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_SMTP_HOST, EMAIL_SMTP_PORT,
+#   EMAIL_SMTP_SECURE, EMAIL_SMTP_REQUIRE_TLS, EMAIL_FROM, EMAIL_PUBLIC_APP_URL.
 set -euo pipefail
 
 : "${PROJECT_ID:?set PROJECT_ID}"
@@ -37,8 +39,15 @@ TF_STATE_BUCKET="${TF_STATE_BUCKET:-${PROJECT_ID}-tfstate}"
 TF_STATE_PREFIX="${TF_STATE_PREFIX:-ai-fleet/gcp}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://${PROJECT_ID}.web.app}"
+EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://${PROJECT_ID}.web.app}"
 DEPLOYER="gh-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 TF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/terraform" && pwd)"
+
+if { [ -n "${EMAIL_SMTP_USER:-}" ] && [ -z "${EMAIL_SMTP_PASSWORD:-}" ]; } || \
+   { [ -z "${EMAIL_SMTP_USER:-}" ] && [ -n "${EMAIL_SMTP_PASSWORD:-}" ]; }; then
+  echo "ERROR: EMAIL_SMTP_USER and EMAIL_SMTP_PASSWORD must both be set (or both omitted)." >&2
+  exit 1
+fi
 
 log() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 
@@ -109,7 +118,8 @@ gcloud beta services identity create --service=pubsub.googleapis.com --project "
 log "Secret Manager values"
 ensure_secret() { gcloud secrets describe "$1" --project "$PROJECT_ID" >/dev/null 2>&1 \
   || gcloud secrets create "$1" --project "$PROJECT_ID" --replication-policy=automatic >/dev/null; }
-has_version() { gcloud secrets versions list "$1" --project "$PROJECT_ID" --format='value(name)' 2>/dev/null | grep -q .; }
+has_version() { gcloud secrets versions list "$1" --project "$PROJECT_ID" \
+  --filter='state=ENABLED' --format='value(name)' 2>/dev/null | grep -q .; }
 seed() { ensure_secret "$1"; if has_version "$1"; then echo "  $1: has a version (unchanged)";
   else printf '%s' "$2" | gcloud secrets versions add "$1" --project "$PROJECT_ID" --data-file=- >/dev/null; echo "  $1: seeded"; fi; }
 
@@ -120,6 +130,25 @@ if [ -n "${LINEAR_API_KEY:-}" ]; then seed linear-api-key "$LINEAR_API_KEY"
 else ensure_secret linear-api-key; echo "  linear-api-key: created EMPTY — add a version before deploy (services won't start without it)"; fi
 ensure_secret github-token;     [ -n "${GITHUB_TOKEN:-}" ]      && seed github-token     "$GITHUB_TOKEN"      || true
 ensure_secret langsmith-api-key;[ -n "${LANGSMITH_API_KEY:-}" ] && seed langsmith-api-key "$LANGSMITH_API_KEY" || true
+ensure_secret email-smtp-user
+ensure_secret email-smtp-password
+if [ -n "${EMAIL_SMTP_USER:-}" ]; then seed email-smtp-user "$EMAIL_SMTP_USER"; fi
+if [ -n "${EMAIL_SMTP_PASSWORD:-}" ]; then seed email-smtp-password "$EMAIL_SMTP_PASSWORD"; fi
+
+enabled_version() { gcloud secrets versions list "$1" --project "$PROJECT_ID" \
+  --filter='state=ENABLED' --limit=1 --format='value(name)'; }
+EMAIL_SMTP_USER_VERSION="$(enabled_version email-smtp-user)"
+EMAIL_SMTP_PASSWORD_VERSION="$(enabled_version email-smtp-password)"
+EMAIL_SMTP_AUTH_ENABLED=false
+EMAIL_SMTP_USER_READY=false
+EMAIL_SMTP_PASSWORD_READY=false
+[ -n "$EMAIL_SMTP_USER_VERSION" ] && EMAIL_SMTP_USER_READY=true
+[ -n "$EMAIL_SMTP_PASSWORD_VERSION" ] && EMAIL_SMTP_PASSWORD_READY=true
+if [ "$EMAIL_SMTP_USER_READY" != "$EMAIL_SMTP_PASSWORD_READY" ]; then
+  echo "ERROR: email-smtp-user and email-smtp-password must both have an enabled version (or neither may)." >&2
+  exit 1
+fi
+[ "$EMAIL_SMTP_USER_READY" = true ] && EMAIL_SMTP_AUTH_ENABLED=true
 
 # --- 7. GitHub repo secrets + variables -------------------------------------
 if command -v gh >/dev/null 2>&1; then
@@ -132,6 +161,13 @@ if command -v gh >/dev/null 2>&1; then
   gh variable set TF_STATE_BUCKET     --repo "$REPO" --body "$TF_STATE_BUCKET"
   gh variable set FIRESTORE_LOCATION  --repo "$REPO" --body "$FIRESTORE_LOCATION"
   gh variable set SPA_ORIGIN          --repo "$REPO" --body "$SPA_ORIGIN"
+  [ -n "${EMAIL_SMTP_HOST:-}" ] && gh variable set EMAIL_SMTP_HOST --repo "$REPO" --body "$EMAIL_SMTP_HOST" || true
+  gh variable set EMAIL_SMTP_PORT --repo "$REPO" --body "${EMAIL_SMTP_PORT:-587}"
+  gh variable set EMAIL_SMTP_SECURE --repo "$REPO" --body "${EMAIL_SMTP_SECURE:-false}"
+  gh variable set EMAIL_SMTP_REQUIRE_TLS --repo "$REPO" --body "${EMAIL_SMTP_REQUIRE_TLS:-true}"
+  [ -n "${EMAIL_FROM:-}" ] && gh variable set EMAIL_FROM --repo "$REPO" --body "$EMAIL_FROM" || true
+  gh variable set EMAIL_SMTP_AUTH_ENABLED --repo "$REPO" --body "$EMAIL_SMTP_AUTH_ENABLED"
+  gh variable set EMAIL_PUBLIC_APP_URL --repo "$REPO" --body "$EMAIL_PUBLIC_APP_URL"
   [ -n "${FIREBASE_ALLOWED_DOMAIN:-}" ] && gh variable set FIREBASE_ALLOWED_DOMAIN --repo "$REPO" --body "$FIREBASE_ALLOWED_DOMAIN" || true
   echo "  set (FIREBASE_API_KEY is NOT needed — Terraform derives it from the web app)"
 else
@@ -140,6 +176,7 @@ else
   echo "  secret GCP_DEPLOYER_SA  = $DEPLOYER"
   echo "  vars: GCP_PROJECT_ID=$PROJECT_ID GCP_REGION=$REGION SPA_BUCKET=$SPA_BUCKET"
   echo "        TF_STATE_BUCKET=$TF_STATE_BUCKET FIRESTORE_LOCATION=$FIRESTORE_LOCATION SPA_ORIGIN=$SPA_ORIGIN"
+  echo "        EMAIL_SMTP_AUTH_ENABLED=$EMAIL_SMTP_AUTH_ENABLED EMAIL_PUBLIC_APP_URL=$EMAIL_PUBLIC_APP_URL"
 fi
 
 # --- 8. Import seeded secrets into TF state (so first `git push` applies clean)
@@ -151,11 +188,14 @@ if command -v terraform >/dev/null 2>&1; then
     if terraform -chdir="$TF_DIR" state list 2>/dev/null | grep -qxF "$1"; then echo "  $1: already in state";
     else terraform -chdir="$TF_DIR" import -input=false \
       -var="project_id=${PROJECT_ID}" -var="region=${REGION}" -var="spa_bucket_name=${SPA_BUCKET}" \
+      -var="email_public_app_url=${EMAIL_PUBLIC_APP_URL}" \
       "$1" "$2" >/dev/null && echo "  $1: imported"; fi; }
   tfimport 'google_secret_manager_secret.stream_token_secret' "projects/${PROJECT_ID}/secrets/stream-token-secret"
   tfimport 'google_secret_manager_secret.linear_api_key'      "projects/${PROJECT_ID}/secrets/linear-api-key"
   tfimport 'google_secret_manager_secret.extra["github-token"]'     "projects/${PROJECT_ID}/secrets/github-token"
   tfimport 'google_secret_manager_secret.extra["langsmith-api-key"]' "projects/${PROJECT_ID}/secrets/langsmith-api-key"
+  tfimport 'google_secret_manager_secret.email_smtp_user' "projects/${PROJECT_ID}/secrets/email-smtp-user"
+  tfimport 'google_secret_manager_secret.email_smtp_password' "projects/${PROJECT_ID}/secrets/email-smtp-password"
 else
   log "terraform not found — skipping secret import"
   echo "  Run the first deploy with ./deploy/gcp/deploy.sh instead of git push"

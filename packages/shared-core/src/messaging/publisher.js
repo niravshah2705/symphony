@@ -16,6 +16,7 @@ const { CONFIG } = require('../config');
 function directRoute(topic) {
   if (topic === CONFIG.GCP.plannerTopic) return `${CONFIG.SERVICES.plannerUrl}/pubsub/planner`;
   if (topic === CONFIG.GCP.coderTopic) return `${CONFIG.SERVICES.coderUrl}/pubsub/coder`;
+  if (topic === CONFIG.GCP.emailTopic) return `${CONFIG.SERVICES.emailUrl}/pubsub/email`;
   return null;
 }
 

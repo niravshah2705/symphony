@@ -16,7 +16,11 @@ export const MENU_PERMISSIONS = Object.freeze({
   analytics: { domain: 'insights', level: 'read' },
   cost: { domain: 'insights', level: 'read' },
   troubleshooting: { domain: 'insights', level: 'read' },
-  settings: { domain: 'settings', level: 'write' },
+  // Signed-in viewers already have settings:read. The view renders a scoped
+  // policy-only surface for them, so selected ORG_ADMIN/PROJECT_ADMIN roles can
+  // administer their active context without requiring a global Firebase admin
+  // claim. Global operational controls remain settings:write-only.
+  settings: { domain: 'settings', level: 'read' },
   // Personal projects + organization (org service). org:read → visible to any
   // signed-in user (even org-less); hidden for anonymous visitors. Create
   // actions inside are auth-only (/api/org/me/*), enforced server-side.

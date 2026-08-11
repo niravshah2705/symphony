@@ -103,6 +103,16 @@ resource "google_cloud_run_v2_service" "org" {
         name  = "SHARED_GATEWAY_URL"
         value = local.gateway_url
       }
+      # Invitation links are rendered from the same fixed public origin as the
+      # email service; the org publisher only sends an opaque invitation token.
+      env {
+        name  = "PUBLIC_APP_URL"
+        value = local.email_public_app_url
+      }
+      env {
+        name  = "EMAIL_TOPIC"
+        value = google_pubsub_topic.email.name
+      }
       # Per-tenant provisioning trigger (gated; publishes to PROVISIONING_TOPIC).
       env {
         name  = "PROVISIONING_ENABLED"

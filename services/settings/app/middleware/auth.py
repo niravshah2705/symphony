@@ -18,8 +18,10 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.auth.idp import decode_idp_token, is_idp_issuer
 from app.auth.jwt_local import decode_access_token, get_unverified_issuer
+from app.auth.org_context import OrgContextError, resolve_org_context
 from app.authz.principal import Principal
 from app.core.database import new_uow
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.timeutils import ensure_aware
 from app.errors import ConflictError
@@ -57,32 +59,23 @@ def _requires_auth(path: str) -> bool:
     return path.rstrip("/") not in {p.rstrip("/") for p in PUBLIC_PATHS}
 
 
-def _org_override_from_headers(headers) -> tuple[uuid.UUID, OrgRole] | None:
-    """Org membership the gateway resolved from the AUTHORITATIVE org service and
-    forwarded as `X-Org-Id` / `X-Org-Role`. This service keeps its own user store
-    (a separate Firestore namespace) that never learns org membership, so without
-    this every browser user looks org-less and real org admins get 403 on the
-    org-scope surface. Trustworthy only because the service is IAM-gated to the
-    gateway SA and the gateway builds proxy headers from scratch (client-supplied
-    values are never forwarded). Returns None when absent/invalid so the caller
-    falls back to this service's own user record (the org-less default)."""
-    raw_id = headers.get("X-Org-Id")
-    raw_role = headers.get("X-Org-Role")
-    if not raw_id or not raw_role:
-        return None
-    try:
-        org_id = uuid.UUID(str(raw_id))
-        org_role = OrgRole(str(raw_role).upper())
-    except (ValueError, TypeError):
-        return None
-    return (org_id, org_role)
-
-
 def _unauthorized() -> JSONResponse:
     return JSONResponse(
         status_code=401,
         content={"error": {"code": "unauthorized", "message": "Authentication required"}},
         headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _context_error(exc: OrgContextError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": "invalid_context" if exc.status_code != 503 else "context_unavailable",
+                "message": str(exc),
+            }
+        },
     )
 
 
@@ -106,10 +99,16 @@ class AuthContextMiddleware:
             await _unauthorized()(scope, receive, send)
             return
         token = header[7:].strip()
-        org_override = _org_override_from_headers(request.headers)
 
         try:
-            principal = await self._authenticate(token, org_override)
+            principal = await self._authenticate(
+                token,
+                organization_id=request.headers.get("X-AI-Fleet-Organization-Id", ""),
+                project_id=request.headers.get("X-AI-Fleet-Project-Id", ""),
+            )
+        except OrgContextError as exc:
+            await _context_error(exc)(scope, receive, send)
+            return
         except (_AuthFailure, jwt.PyJWTError):
             await _unauthorized()(scope, receive, send)
             return
@@ -122,13 +121,29 @@ class AuthContextMiddleware:
         await self.app(scope, receive, send)
 
     async def _authenticate(
-        self, token: str, org_override: tuple[uuid.UUID, OrgRole] | None = None
+        self, token: str, *, organization_id: str = "", project_id: str = ""
     ) -> Principal:
         issuer = get_unverified_issuer(token)
         repo = UserRepository(new_uow())
 
         if is_idp_issuer(issuer):
             claims = decode_idp_token(token)
+            if get_settings().org_url:
+                context = await resolve_org_context(
+                    token,
+                    organization_id=organization_id.strip(),
+                    project_id=project_id.strip(),
+                )
+                return Principal(
+                    user_id=context.user_id,
+                    org_id=context.org_id,
+                    org_role=context.org_role,
+                    project_id=context.project_id,
+                    project_role=context.project_role,
+                    context_authoritative=True,
+                    is_super_admin=False,
+                    email=context.email or str(claims.get("email") or "").strip().lower(),
+                )
             # External (e.g. Firebase) users are matched by external_subject and,
             # if unknown, JIT-provisioned as an ORG-LESS user (org_id=None). An
             # org-less user is rejected by every tenant guard, so this grants
@@ -152,16 +167,13 @@ class AuthContextMiddleware:
             if issued < changed:
                 raise _AuthFailure()
 
-        # The gateway-forwarded membership (from the authoritative org service)
-        # wins over this service's own org-less user copy; absent/invalid → keep
-        # the local record (the org-less default). Only org scope is overridden;
-        # is_super_admin stays this service's own determination.
-        org_id, org_role = (org_override if org_override is not None
-                            else (user.org_id, user.org_role))
         return Principal(
             user_id=user.id,
-            org_id=org_id,
-            org_role=org_role,
+            org_id=user.org_id,
+            org_role=user.org_role,
+            project_id=None,
+            project_role=None,
+            context_authoritative=False,
             is_super_admin=user.is_super_admin,
             email=user.email,
         )

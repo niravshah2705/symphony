@@ -4,6 +4,10 @@ const { CONFIG } = require('../config');
 const store = require('../store');
 const codexOauth = require('./oauth');
 const claudeOauth = require('./claude-oauth');
+const {
+  currentWorkspaceContext,
+  workspaceCacheKey,
+} = require('../store/workspace-context');
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const DISCOVERY_TIMEOUT_MS = 5000;
@@ -220,23 +224,27 @@ function claudeFallbackModels() {
   }));
 }
 
-function seedCache() {
-  cache.set('codex:chatgpt', {
+function providerCacheKey(provider, backend = CONFIG.OAUTH.backend) {
+  return provider === 'codex' ? `codex:${backend === 'api' ? 'api' : 'chatgpt'}` : 'claude';
+}
+
+function cacheKey(provider, backend = CONFIG.OAUTH.backend, context = currentWorkspaceContext()) {
+  return `${workspaceCacheKey(context)}\0${providerCacheKey(provider, backend)}`;
+}
+
+function seedCache(context = {}) {
+  cache.set(cacheKey('codex', 'chatgpt', context), {
     models: codexFallbackModels('chatgpt'), source: 'fallback', refreshedAt: null, expiresAt: 0,
   });
-  cache.set('codex:api', {
+  cache.set(cacheKey('codex', 'api', context), {
     models: codexFallbackModels('api'), source: 'fallback', refreshedAt: null, expiresAt: 0,
   });
-  cache.set('claude', {
+  cache.set(cacheKey('claude', undefined, context), {
     models: claudeFallbackModels(), source: 'fallback', refreshedAt: null, expiresAt: 0,
   });
 }
 
 seedCache();
-
-function cacheKey(provider, backend = CONFIG.OAUTH.backend) {
-  return provider === 'codex' ? `codex:${backend === 'api' ? 'api' : 'chatgpt'}` : 'claude';
-}
 
 function fallbackModels(provider, backend = CONFIG.OAUTH.backend) {
   return provider === 'codex' ? codexFallbackModels(backend) : claudeFallbackModels();
@@ -524,8 +532,11 @@ function getCachedModel(provider, id) {
   if (!modelId) return null;
   const preferredKey = cacheKey(provider, CONFIG.OAUTH.backend);
   const keys = provider === 'codex'
-    ? [preferredKey, preferredKey === 'codex:api' ? 'codex:chatgpt' : 'codex:api']
-    : ['claude'];
+    ? [
+        preferredKey,
+        cacheKey('codex', CONFIG.OAUTH.backend === 'api' ? 'chatgpt' : 'api'),
+      ]
+    : [cacheKey('claude')];
   for (const key of keys) {
     const entry = cache.get(key);
     const model = entry && entry.models.find((candidate) => candidate.id === modelId);
@@ -551,5 +562,6 @@ module.exports = {
     mapClaudeModel,
     codexFallbackModels,
     claudeFallbackModels,
+    cacheKey,
   },
 };

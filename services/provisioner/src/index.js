@@ -36,6 +36,7 @@ function buildCfg(projectNumber) {
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID || CONFIG.GCP.projectId,
     firebaseApiKey: process.env.FIREBASE_API_KEY || '',
     deadLetterTopic: process.env.PUBSUB_DEADLETTER_TOPIC || 'agent-requests-deadletter',
+    emailTopic: process.env.EMAIL_TOPIC || 'email-delivery',
     serviceAccounts: {
       gateway: process.env.GATEWAY_SA || '',
       planner: process.env.PLANNER_SA || '',

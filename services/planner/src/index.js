@@ -9,6 +9,7 @@ const scheduler = require('@ai-fleet/shared/agent/scheduler');
 
 const agentRoutes = require('./routes/agent');
 const pubsubRoutes = require('./pubsub');
+const { createStoreContextMiddleware } = require('./store-context');
 
 /**
  * Planner agent service — the isolated software-design planner. It owns the
@@ -26,7 +27,7 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 app.use('/pubsub', pubsubRoutes);
-app.use('/api/agent', agentRoutes);
+app.use('/api/agent', createStoreContextMiddleware(), agentRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {

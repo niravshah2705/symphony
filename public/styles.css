@@ -161,6 +161,43 @@ textarea:focus-visible, a:focus-visible, [tabindex]:focus-visible {
 .auth-sign-in, .auth-sign-out { padding: 6px 9px; font-size: 9px; font-weight: 650; white-space: nowrap; }
 .auth-sign-in { color: var(--accent-2); }
 .auth-sign-in.microsoft, .auth-continue.microsoft { color: var(--text); }
+.account-context { position: relative; }
+.account-context > summary { list-style: none; cursor: pointer; user-select: none; }
+.account-context > summary::-webkit-details-marker { display: none; }
+.account-context-trigger { padding-right: 6px; }
+.account-context[open] .account-context-trigger {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+  background: var(--panel-2);
+}
+.account-context-chevron {
+  color: var(--muted); font-size: 11px; line-height: 1; transition: transform .12s ease;
+}
+.account-context[open] .account-context-chevron { transform: rotate(180deg); }
+.account-context-panel {
+  position: absolute; top: calc(100% + 8px); inset-inline-end: 0; z-index: 80;
+  width: min(350px, calc(100vw - 24px)); max-height: calc(100dvh - var(--topbar-height) - 18px);
+  display: flex; flex-direction: column; gap: 12px; padding: 14px; overflow: auto;
+  border: 1px solid var(--border-strong); border-radius: 12px; background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.account-context-identity { display: flex; align-items: center; gap: 10px; padding: 2px 2px 11px; border-bottom: 1px solid var(--border); }
+.account-context-identity-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.account-context-identity-copy :is(strong, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-context-identity-copy strong { font-size: 12px; }
+.account-context-identity-copy small { color: var(--muted); font-size: 9px; }
+.account-context-field { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 9px; font-weight: 680; }
+.account-context-field > select,
+.account-context-panel .language-select {
+  width: 100%; max-width: none; height: 36px; padding: 0 30px 0 9px;
+  border: 1px solid var(--border-strong); border-radius: 8px; background: var(--panel-2);
+  color: var(--text); font-size: 11px; font-weight: 500;
+}
+.account-context-field > select:disabled { opacity: .66; }
+.account-context-panel .language-control { width: 100%; display: flex; }
+.account-context-panel .language-warning { margin-inline-start: 3px; }
+.account-context-note { margin: 0; padding: 9px 10px; border-radius: 8px; background: var(--surface-subtle); color: var(--muted); font-size: 10px; }
+.account-context-sign-out { width: 100%; min-height: 34px; margin-top: 2px; border-color: var(--border-strong); }
+.invitation-card { margin: clamp(24px, 8vh, 84px) auto; }
 /* Microsoft glyph (four-square logo) so the second provider reads at a glance. */
 .auth-sign-in.microsoft::before, .auth-continue.microsoft::before {
   content: ""; display: inline-block; width: 1em; height: 1em; margin-right: .5em;
@@ -507,11 +544,12 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
   body.auth-locked .topbar { grid-template-columns: minmax(0, 1fr) auto; }
   .topbar-context { display: none; }
   .topbar-actions { gap: 7px; }
-  .language-select { max-width: 88px; }
+  .topbar-actions > .language-control .language-select { max-width: 88px; }
   .assumed-role { max-width: 32px; padding-right: 5px; }
   .assumed-role > span:last-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   .auth-user-copy { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   .auth-user { padding-right: 5px; }
+  .account-context-panel { position: fixed; top: calc(var(--topbar-height) - 1px); inset-inline: 8px; width: auto; max-height: calc(100dvh - var(--topbar-height) - 8px); }
   .conn #conn-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   .view-standard { padding: 22px 18px 42px; }
   .view-immersive { padding: 16px; }

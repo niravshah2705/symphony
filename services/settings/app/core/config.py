@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     # => that surface is refused (fail closed).
     internal_api_token: str = ""
 
+    # Canonical organization/membership source. External/Firebase requests are
+    # resolved through this service; settings owns policies, not membership.
+    org_url: str = ""
+    org_context_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+
     # Local JWT — >=32 bytes recommended for HS256 (RFC 7518 3.2)
     jwt_secret: str = Field(min_length=32)
     jwt_issuer: str = "settings-service"
@@ -87,6 +92,8 @@ class Settings(BaseSettings):
                 "IDP_ENABLED=true requires IDP_ISSUER + IDP_JWKS_URL + IDP_AUDIENCE "
                 "(or IDP_FIREBASE_PROJECT to derive them)"
             )
+        if self.app_env.lower() == "production" and self.idp_enabled and not self.org_url:
+            raise ValueError("ORG_URL is required for external identity context in production")
         return self
 
     def plugins_catalog(self) -> list[str]:

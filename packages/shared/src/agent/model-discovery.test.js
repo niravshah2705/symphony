@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { CONFIG } = require('../config');
 const { discoverModels, getCachedModel, _test } = require('./model-discovery');
 const { createChatModel } = require('./llm');
+const { runWithWorkspaceContext } = require('../store/workspace-context');
 
 function jsonResponse(body, status = 200) {
   return {
@@ -99,6 +100,35 @@ test('Codex discovery maps the live account catalog, filters hidden models, and 
   await discoverModels('codex', { ...options, refresh: true });
   assert.equal(calls, 2, 'refresh bypasses the live cache');
   assert.equal(getCachedModel('codex', 'gpt-5.6-sol').source, 'live');
+});
+
+test('live discovery caches are isolated by selected workspace', async () => {
+  const options = {
+    credentials: { accessToken: 'token', accountId: 'acct_1' },
+    fetchImpl: async () => jsonResponse({
+      models: [{
+        slug: 'gpt-5.6-sol', display_name: 'Org A private label',
+        supported_reasoning_levels: [{ effort: 'high' }],
+        visibility: 'list', supported_in_api: true,
+      }],
+    }),
+  };
+  await runWithWorkspaceContext(
+    { organizationId: 'org-a', projectId: 'project-a' },
+    () => discoverModels('codex', options),
+  );
+
+  const inA = runWithWorkspaceContext(
+    { organizationId: 'org-a', projectId: 'project-a' },
+    () => getCachedModel('codex', 'gpt-5.6-sol'),
+  );
+  const inB = runWithWorkspaceContext(
+    { organizationId: 'org-b', projectId: 'project-b' },
+    () => getCachedModel('codex', 'gpt-5.6-sol'),
+  );
+  assert.equal(inA.label, 'Org A private label');
+  assert.notEqual(inB.label, 'Org A private label');
+  assert.equal(inB.source, 'fallback');
 });
 
 test('metered OpenAI discovery merges fallbacks and never exposes Codex ultra effort', async () => {

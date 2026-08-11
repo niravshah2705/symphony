@@ -12,7 +12,7 @@ process.env.INITIAL_CREDIT_INR = '0';
 
 const store = require('../store');
 const ledger = require('./ledger');
-const { checkThresholdsAndNotify } = require('./notify');
+const { checkThresholdsAndNotify, sendEmail } = require('./notify');
 
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
@@ -56,4 +56,24 @@ test('re-arms after a recharge above the highest threshold', async () => {
 test('no thresholds configured → never alerts', async () => {
   const account = accountWith(-9999, []);
   assert.equal(await checkThresholdsAndNotify(account), null);
+});
+
+test('billing email publishes only the allow-listed central email contract', async () => {
+  const jobs = [];
+  const sent = await sendEmail(
+    { orgId: 'org-n', title: 'Billing balance low', message: 'Balance is low.' },
+    ['owner@example.com'],
+    { topic: 'email-delivery', publishRequest: async (topic, job) => jobs.push({ topic, job }) },
+  );
+  assert.equal(sent, true);
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].topic, 'email-delivery');
+  assert.equal(jobs[0].job.template, 'billing_alert');
+  assert.equal(jobs[0].job.to, 'owner@example.com');
+  assert.match(jobs[0].job.idempotencyKey, /^billing:[0-9a-f-]+$/);
+  assert.deepEqual(jobs[0].job.variables, {
+    subject: 'Billing balance low',
+    message: 'Balance is low.',
+    orgId: 'org-n',
+  });
 });

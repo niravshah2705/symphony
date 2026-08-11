@@ -23,6 +23,8 @@ test('reflects an allowlisted origin and calls next', () => {
   cors({ method: 'GET', get: (n) => (n === 'origin' ? 'https://spa.example.com' : '') }, res, () => { nexted += 1; });
   assert.equal(res.headers['access-control-allow-origin'], 'https://spa.example.com');
   assert.equal(res.headers.vary, 'Origin');
+  assert.match(res.headers['access-control-allow-headers'], /X-AI-Fleet-Organization-Id/);
+  assert.match(res.headers['access-control-allow-headers'], /X-AI-Fleet-Project-Id/);
   assert.equal(nexted, 1);
 });
 

@@ -1,5 +1,5 @@
 # =============================================================================
-# Cloud Build — build + push the three service images, publish the SPA to GCS,
+# Cloud Build — build + push the shared service images, publish the SPA to GCS,
 # and apply the Terraform stack.
 # =============================================================================
 # Bootstrapping note: Terraform OWNS the Artifact Registry repo, but images must
@@ -34,6 +34,14 @@ substitutions:
   _FIREBASE_ALLOWED_DOMAIN: "" # empty = any verified user
   _SPA_ORIGIN: "https://storage.googleapis.com"
   _SPA_OBFUSCATION_STRENGTH: "light" # light | balanced | maximum
+  _EMAIL_SMTP_HOST: ""
+  _EMAIL_SMTP_PORT: "587"
+  _EMAIL_SMTP_SECURE: "false"
+  _EMAIL_SMTP_REQUIRE_TLS: "true"
+  _EMAIL_FROM: ""
+  # Empty derives the URL of the GCS object published by this pipeline.
+  # Set an explicit HTTPS URL when a custom domain/CDN fronts the SPA.
+  _EMAIL_PUBLIC_APP_URL: ""
 
 steps:
   # --- Build the three images (parallel) -------------------------------------
@@ -70,6 +78,17 @@ steps:
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/coder-control:${_IMAGE_TAG}
       - .
 
+  - id: build-email
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - deploy/gcp/Dockerfile.email
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/email-service:${_IMAGE_TAG}
+      - .
+
   # Built for parity so enabling per-tenant provisioning is a one-var flip; the
   # provisioner service itself is only created by terraform when provisioning_enabled.
   - id: build-provisioner
@@ -83,7 +102,7 @@ steps:
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/provisioner:${_IMAGE_TAG}
       - .
 
-  # --- Terraform: init + bootstrap (APIs + Artifact Registry only) -----------
+  # --- Terraform: bootstrap (APIs, registry, SPA bucket, secret containers) --
   - id: tf-bootstrap
     name: hashicorp/terraform:1.9
     waitFor: ["-"]
@@ -99,12 +118,49 @@ steps:
         terraform apply -input=false -auto-approve \
           -target=google_project_service.services \
           -target=google_artifact_registry_repository.docker \
+          -target=google_secret_manager_secret.email_smtp_user \
+          -target=google_secret_manager_secret.email_smtp_password \
           -target=google_storage_bucket.spa \
           -target=google_storage_bucket_iam_member.spa_public_read \
           -var="project_id=$PROJECT_ID" \
           -var="region=${_REGION}" \
           -var="artifact_repo=${_REPO}" \
-          -var="spa_bucket_name=${_BUCKET}"
+          -var="spa_bucket_name=${_BUCKET}" \
+          -var="email_public_app_url=https://storage.googleapis.com/${_BUCKET}/index.html"
+
+  # Do not read SMTP values into Cloud Build or Terraform. Secret versions are
+  # operational data, seeded after the first bootstrap (or by bootstrap.sh).
+  # Only the non-secret, all-or-nothing mount decision crosses step boundaries.
+  - id: email-secret-state
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    waitFor: [tf-bootstrap]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        enabled_version() {
+          gcloud secrets versions list "$$1" \
+            --project "$PROJECT_ID" \
+            --filter='state=ENABLED' \
+            --limit=1 \
+            --format='value(name)'
+        }
+
+        USER_VERSION="$$(enabled_version email-smtp-user)"
+        PASSWORD_VERSION="$$(enabled_version email-smtp-password)"
+        USER_READY=false
+        PASSWORD_READY=false
+        [ -n "$$USER_VERSION" ] && USER_READY=true
+        [ -n "$$PASSWORD_VERSION" ] && PASSWORD_READY=true
+
+        if [ "$$USER_READY" != "$$PASSWORD_READY" ]; then
+          echo "ERROR: email-smtp-user and email-smtp-password must both have an enabled version (or neither may)." >&2
+          exit 1
+        fi
+
+        printf 'email_smtp_auth_enabled = %s\n' "$$USER_READY" > /workspace/email-auth.auto.tfvars
+        echo "SMTP auth secret pair ready: $$USER_READY (values were not accessed)"
 
   # --- Push images (after their build AND after the AR repo exists) ----------
   - id: push-gateway
@@ -121,6 +177,11 @@ steps:
     name: gcr.io/cloud-builders/docker
     waitFor: [build-coder, tf-bootstrap]
     args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/coder-control:${_IMAGE_TAG}"]
+
+  - id: push-email
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-email, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/email-service:${_IMAGE_TAG}"]
 
   - id: push-provisioner
     name: gcr.io/cloud-builders/docker
@@ -187,7 +248,7 @@ steps:
   # --- Terraform: full apply (services, job, pubsub, scheduler, secrets, …) --
   - id: tf-apply
     name: hashicorp/terraform:1.9
-    waitFor: [push-gateway, push-planner, push-coder, push-provisioner, spa-publish]
+    waitFor: [push-gateway, push-planner, push-coder, push-email, push-provisioner, spa-publish, email-secret-state]
     entrypoint: sh
     args:
       - -c
@@ -198,7 +259,12 @@ steps:
           -backend-config="bucket=${_TF_STATE_BUCKET}" \
           -backend-config="prefix=${_TF_STATE_PREFIX}"
         API_BASE_URL="$$(cat /workspace/gateway_url.txt)"
+        EMAIL_PUBLIC_APP_URL="${_EMAIL_PUBLIC_APP_URL}"
+        if [ -z "$${EMAIL_PUBLIC_APP_URL}" ]; then
+          EMAIL_PUBLIC_APP_URL="https://storage.googleapis.com/${_BUCKET}/index.html"
+        fi
         terraform apply -input=false -auto-approve \
+          -var-file=/workspace/email-auth.auto.tfvars \
           -var="project_id=$PROJECT_ID" \
           -var="region=${_REGION}" \
           -var="artifact_repo=${_REPO}" \
@@ -208,7 +274,13 @@ steps:
           -var="spa_origin=${_SPA_ORIGIN}" \
           -var="api_base_url=$${API_BASE_URL}" \
           -var="firebase_api_key=${_FIREBASE_API_KEY}" \
-          -var="firebase_allowed_domain=${_FIREBASE_ALLOWED_DOMAIN}"
+          -var="firebase_allowed_domain=${_FIREBASE_ALLOWED_DOMAIN}" \
+          -var="email_smtp_host=${_EMAIL_SMTP_HOST}" \
+          -var="email_smtp_port=${_EMAIL_SMTP_PORT}" \
+          -var="email_smtp_secure=${_EMAIL_SMTP_SECURE}" \
+          -var="email_smtp_require_tls=${_EMAIL_SMTP_REQUIRE_TLS}" \
+          -var="email_from=${_EMAIL_FROM}" \
+          -var="email_public_app_url=$${EMAIL_PUBLIC_APP_URL}"
 
 # Longer timeout: three npm ci builds + two terraform applies.
 timeout: 3600s

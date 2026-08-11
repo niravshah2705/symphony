@@ -6,8 +6,8 @@ Reachable by every signed-in user, including those who belong to no organization
 - **Personal projects** — single-owner projects scoped to the caller
   (``principal.user_id``); cross-user access is impossible (structural path
   isolation) and missing loads return 404.
-- **Create organization** — the org-less caller creates an org and becomes its
-  first ORG_ADMIN, unlocking the org tenant surface + member management.
+- **Create organization** — any authenticated caller creates another org and
+  becomes its first ORG_ADMIN, unlocking that selected tenant surface.
 
 At the gateway these are mounted at ``/api/org/me/*`` behind an
 authentication-only gate (not the ``org`` role), because personal workspace is
@@ -30,52 +30,64 @@ from app.repositories.org_repo import OrgRepository
 from app.schemas.common import Page, PageParams
 from app.schemas.me import (
     CreateOrgRequest,
+    MeContextResponse,
     MeDeploymentResponse,
     MeResponse,
     PersonalProjectResponse,
 )
 from app.schemas.org import OrgResponse
 from app.schemas.project import ProjectCreate, ProjectUpdate
-from app.services import onboarding_service, personal_project_service
+from app.services import context_service, onboarding_service, personal_project_service
 
 router = APIRouter(prefix="/me", tags=["me"])
 
 
 @router.get("", response_model=MeResponse)
-async def get_me(user: User = Depends(get_current_user)):
+async def get_me(
+    user: User = Depends(get_current_user),
+    principal: Principal = Depends(get_principal),
+):
     return MeResponse(
         user_id=user.id,
         email=user.email,
         full_name=user.full_name,
-        has_organization=user.org_id is not None,
-        org_id=user.org_id,
-        org_role=user.org_role.value if user.org_id is not None else None,
+        has_organization=principal.org_id is not None,
+        org_id=principal.org_id,
+        org_role=principal.org_role.value if principal.org_id is not None else None,
     )
+
+
+@router.get("/context", response_model=MeContextResponse)
+async def get_my_context(
+    principal: Principal = Depends(get_principal),
+    user: User = Depends(get_current_user),
+    session: Uow = Depends(get_session),
+):
+    return await context_service.get_context(session, principal, user)
 
 
 @router.get("/deployment", response_model=MeDeploymentResponse)
 async def get_my_deployment(
-    user: User = Depends(get_current_user),
+    principal: Principal = Depends(get_principal),
     session: Uow = Depends(get_session),
 ):
     """Resolve which front-facing gateway the caller's workspace should use.
 
     Server-authoritative: the org is derived from the authenticated principal
-    (``user`` loaded from Firestore) — never from a path/query/body org id — so a
-    caller can only ever learn their OWN org's deployment (cross-tenant isolation,
-    CLAUDE.md invariant #1). An org-less user is lazily given a shared pseudo
-    workspace here. Only ``gateway_url`` is browser-facing; planner/coder/org/
-    settings URLs are never returned to the client.
+    resolved from Firestore — never from a path/query/body org id — so a
+    caller can only ever learn their selected accessible org's deployment
+    (cross-tenant isolation, CLAUDE.md invariant #1). An org-less user remains
+    org-less and receives the shared gateway. Only ``gateway_url`` is
+    browser-facing; planner/coder/org/settings URLs are never returned.
     """
-    org = (
-        await onboarding_service.ensure_org_for_user(session, user)
-        if user.org_id is None
-        else await OrgRepository(session).get(user.org_id)
-    )
     shared_url = get_settings().shared_gateway_url
+    if principal.org_id is None:
+        return MeDeploymentResponse(status="shared", gateway_url=shared_url, org_id=None)
+
+    org = await OrgRepository(session).get(principal.org_id)
     if org is None:
         # Defensive: an org_id with no org doc → treat as shared.
-        return MeDeploymentResponse(status="shared", gateway_url=shared_url, org_id=user.org_id)
+        return MeDeploymentResponse(status="shared", gateway_url=shared_url, org_id=principal.org_id)
 
     deployments = org.deployments if isinstance(org.deployments, dict) else {}
     raw_status = str(deployments.get("status") or "shared")
@@ -100,6 +112,7 @@ async def get_my_deployment(
 
 
 @router.post("/organization", response_model=OrgResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/organizations", response_model=OrgResponse, status_code=status.HTTP_201_CREATED)
 async def create_my_organization(
     body: CreateOrgRequest,
     user: User = Depends(get_current_user),

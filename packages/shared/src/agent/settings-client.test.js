@@ -3,7 +3,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveEffectiveSettings, resolveOrgEffectivePolicy, authHeaders } = require('./settings-client');
+const {
+  resolveEffectiveSettings,
+  resolveOrgEffectivePolicy,
+  authHeaders,
+  isPolicyUnavailableError,
+} = require('./settings-client');
 
 function fakeFetch(routes) {
   const calls = [];
@@ -18,9 +23,13 @@ function fakeFetch(routes) {
 }
 
 test('authHeaders: S2S token in Authorization, user token forwarded', () => {
-  const h = authHeaders({ userToken: 'u', s2sToken: 's' });
+  const h = authHeaders({
+    userToken: 'u', s2sToken: 's', organizationId: 'org-1', projectId: 'project-1',
+  });
   assert.equal(h.authorization, 'Bearer s');
   assert.equal(h['x-forwarded-authorization'], 'Bearer u');
+  assert.equal(h['x-ai-fleet-organization-id'], 'org-1');
+  assert.equal(h['x-ai-fleet-project-id'], 'project-1');
 });
 
 test('authHeaders: direct user token when no S2S token', () => {
@@ -41,6 +50,7 @@ test('resolveEffectiveSettings returns the policy domains and the unmasked gemin
   const out = await resolveEffectiveSettings({
     baseUrl: 'http://settings',
     userToken: 'user-token',
+    organizationId: 'org-1',
     projectId: 'p1',
     fetchImpl,
   });
@@ -49,14 +59,55 @@ test('resolveEffectiveSettings returns the policy domains and the unmasked gemin
   assert.equal(out.geminiApiKey, 'plain-secret');
   // The project scope is forwarded as a query param on both calls.
   assert.ok(fetchImpl.calls.every((c) => c.url.includes('project_id=p1')));
+  assert.ok(fetchImpl.calls.every((c) => c.init.headers['x-ai-fleet-organization-id'] === 'org-1'));
+  assert.ok(fetchImpl.calls.every((c) => c.init.headers['x-ai-fleet-project-id'] === 'p1'));
 });
 
-test('resolveEffectiveSettings fails open (no throw) when the service is unavailable', async () => {
+test('resolveEffectiveSettings keeps empty local context allow-all when the service is unavailable', async () => {
   const fetchImpl = async () => ({ ok: false, status: 503, json: async () => ({}) });
   const out = await resolveEffectiveSettings({ baseUrl: 'http://settings', userToken: 'u', fetchImpl });
   assert.equal(out.effectivePolicy, null);
   assert.equal(out.geminiApiKey, '');
   assert.deepEqual(out.values, {});
+});
+
+test('resolveEffectiveSettings fails closed for a selected org on missing config, HTTP failure, or missing policy', async () => {
+  await assert.rejects(
+    () => resolveEffectiveSettings({ organizationId: 'org-1', baseUrl: '', fetchImpl: async () => ({}) }),
+    (error) => isPolicyUnavailableError(error) && error.status === 503,
+  );
+  await assert.rejects(
+    () => resolveEffectiveSettings({
+      organizationId: 'org-1',
+      baseUrl: 'http://settings',
+      fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({}) }),
+    }),
+    isPolicyUnavailableError,
+  );
+  await assert.rejects(
+    () => resolveEffectiveSettings({
+      organizationId: 'org-1',
+      baseUrl: 'http://settings',
+      fetchImpl: fakeFetch({
+        '/api/v1/settings/effective': { prefs: {} },
+        '/api/v1/internal/effective-config': { values: {} },
+      }),
+    }),
+    isPolicyUnavailableError,
+  );
+});
+
+test('resolveEffectiveSettings fails closed when selected-org config resolution fails after policy', async () => {
+  await assert.rejects(
+    () => resolveEffectiveSettings({
+      organizationId: 'org-1',
+      baseUrl: 'http://settings',
+      fetchImpl: fakeFetch({
+        '/api/v1/settings/effective': { domains: { harness: { effective: ['deepagent'] } } },
+      }),
+    }),
+    isPolicyUnavailableError,
+  );
 });
 
 test('resolveEffectiveSettings is a no-op without a baseUrl (local single-user)', async () => {
@@ -86,13 +137,34 @@ test('resolveOrgEffectivePolicy returns org effective domains, token-gated (S2S)
   assert.ok(call.url.includes('/orgs/org-1/effective-policy'));
 });
 
-test('resolveOrgEffectivePolicy fails open (null) without token/org and on error', async () => {
-  // Missing internal token → no call, allow-all.
-  const noTok = await resolveOrgEffectivePolicy({ baseUrl: 'http://settings', orgId: 'o', fetchImpl: async () => ({ ok: true, json: async () => ({}) }) });
-  assert.equal(noTok.effectivePolicy, null);
-  // Service error → allow-all (never throws).
-  const err = await resolveOrgEffectivePolicy({ baseUrl: 'http://settings', orgId: 'o', internalToken: 't', fetchImpl: async () => ({ ok: false, status: 403, json: async () => ({}) }) });
-  assert.equal(err.effectivePolicy, null);
+test('resolveOrgEffectivePolicy is local allow-all without org and selected-org fail-closed otherwise', async () => {
+  const local = await resolveOrgEffectivePolicy({ baseUrl: '', orgId: '', internalToken: '' });
+  assert.equal(local.effectivePolicy, null);
+
+  await assert.rejects(
+    () => resolveOrgEffectivePolicy({
+      baseUrl: 'http://settings', orgId: 'o', internalToken: '', fetchImpl: async () => ({}),
+    }),
+    isPolicyUnavailableError,
+  );
+  await assert.rejects(
+    () => resolveOrgEffectivePolicy({
+      baseUrl: 'http://settings',
+      orgId: 'o',
+      internalToken: 't',
+      fetchImpl: async () => ({ ok: false, status: 403, json: async () => ({}) }),
+    }),
+    isPolicyUnavailableError,
+  );
+  await assert.rejects(
+    () => resolveOrgEffectivePolicy({
+      baseUrl: 'http://settings',
+      orgId: 'o',
+      internalToken: 't',
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ prefs: {} }) }),
+    }),
+    isPolicyUnavailableError,
+  );
 });
 
 test('resolveEffectiveSettings surfaces resolved operational prefs', async () => {
@@ -109,7 +181,10 @@ test('resolveEffectiveSettings surfaces resolved operational prefs', async () =>
 
 test('resolveOrgEffectivePolicy surfaces org-resolved prefs', async () => {
   const fetchImpl = fakeFetch({
-    '/api/v1/internal/s2s/orgs/org-1/effective-policy': { domains: {}, prefs: { agentRuntime: 'deepagent' } },
+    '/api/v1/internal/s2s/orgs/org-1/effective-policy': {
+      domains: { harness: { effective: ['deepagent'] } },
+      prefs: { agentRuntime: 'deepagent' },
+    },
   });
   const out = await resolveOrgEffectivePolicy({ baseUrl: 'http://settings', orgId: 'org-1', internalToken: 'tok', fetchImpl });
   assert.deepEqual(out.prefs, { agentRuntime: 'deepagent' });

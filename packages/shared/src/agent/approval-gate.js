@@ -39,7 +39,7 @@ function resolveDeps(deps = {}) {
     saveMemory: deps.saveMemory || ((record) => storeImpl.addMemory(require('./memory').normalizeMemory(record))),
     getSettings: deps.getSettings || (() => storeImpl.getSettings()),
     getAssumedRole: deps.getAssumedRole || (() => storeImpl.getAssumedRole()),
-    resolveBusiness: deps.resolveBusiness || ((businessId) => defaultResolveBusiness(storeImpl, businessId)),
+    resolveBusiness: deps.resolveBusiness || ((businessId, context) => defaultResolveBusiness(storeImpl, businessId, context)),
     // Emit a gate transition to the global workspace channel so the SPA can drive
     // the terminal advance from SSE instead of polling the gate. Best-effort.
     publishGate: deps.publishGate || ((gateId, status) => require('./workspace-events').publishGate(gateId, status)),
@@ -47,10 +47,17 @@ function resolveDeps(deps = {}) {
   };
 }
 
-function defaultResolveBusiness(storeImpl, businessId) {
+function defaultResolveBusiness(storeImpl, businessId, context = {}) {
   if (!businessId || typeof storeImpl.readStore !== 'function') return null;
   try {
-    return (storeImpl.readStore().businesses || []).find((b) => b && b.id === businessId) || null;
+    const organizationId = String(context.organizationId || context.orgId || '').trim();
+    const projectId = String(context.projectId || context.nativeProjectId || '').trim();
+    return (storeImpl.readStore().businesses || []).find((business) => {
+      if (!business || business.id !== businessId) return false;
+      if (!organizationId) return true;
+      return String(business.orgId || business.organizationId || '') === organizationId
+        && String(business.nativeProjectId || business.projectId || '') === projectId;
+    }) || null;
   } catch (_) {
     return null;
   }
@@ -84,6 +91,8 @@ function createGate(fields, deps = {}) {
     proceededAt: null,
     jobId: null,
     attempts: Number.isFinite(Number(fields.attempts)) ? Number(fields.attempts) : 0,
+    ...(fields.orgId ? { orgId: String(fields.orgId) } : {}),
+    ...(fields.nativeProjectId ? { nativeProjectId: String(fields.nativeProjectId) } : {}),
   });
   return d.store.updateApprovalGate(record.id, { deadline: computeDeadline(record.createdAt, waitMinutes) });
 }
@@ -116,12 +125,18 @@ async function proceedGate(inputGate, decision = {}, deps = {}) {
   }
   const decided = store.getApprovalGate(gate.id) || gate;
   const effective = decided.decision || { by, note };
+  const gateContext = {
+    organizationId: gate.orgId,
+    projectId: gate.nativeProjectId,
+  };
 
   const business = await d.prepareBusiness({
     input: gate.requirement,
-    business: d.resolveBusiness(gate.businessId),
+    business: d.resolveBusiness(gate.businessId, gateContext),
     settings: d.getSettings(),
     assumedRole: d.getAssumedRole(),
+    ...(gate.orgId ? { orgId: gate.orgId } : {}),
+    ...(gate.nativeProjectId ? { nativeProjectId: gate.nativeProjectId } : {}),
   });
 
   // Document the decision durably — outlives the gate record.
@@ -132,6 +147,8 @@ async function proceedGate(inputGate, decision = {}, deps = {}) {
       title: effective.by === 'timeout' ? 'Requirement gate auto-approved (timeout)' : 'Requirement gate approved',
       text: `${effective.note} Requirement: ${String(gate.requirement || '').slice(0, 300)}`,
       source: 'approval-gate',
+      ...(gate.orgId ? { orgId: gate.orgId } : {}),
+      ...(gate.nativeProjectId ? { nativeProjectId: gate.nativeProjectId } : {}),
     });
   } catch (_) {
     // Best-effort documentation; never block proceeding on a memory-write failure.
@@ -141,7 +158,10 @@ async function proceedGate(inputGate, decision = {}, deps = {}) {
   const finalized = store.updateApprovalGate(gate.id, { status: 'proceeded', proceededAt: new Date(d.now()).toISOString(), jobId });
   // The gate advanced (human approve OR timeout auto-approve both land here) —
   // tell watching browsers so they run the pipeline without polling the gate.
-  d.publishGate(gate.id, 'proceeded');
+  d.publishGate(gate.id, 'proceeded', {
+    organizationId: gate.orgId,
+    projectId: gate.nativeProjectId,
+  });
   return { gate: finalized || { ...decided, status: 'proceeded' }, business };
 }
 
@@ -165,10 +185,23 @@ async function reevaluateGate(id, input, deps = {}) {
   if (!gate) throw new GateError('Approval gate not found.', 404);
   if (gate.status !== 'awaiting-approval') throw new GateError(`Gate is already ${gate.status}.`, 409);
 
-  const out = await d.evaluateRequirement({ input, settings: d.getSettings(), business: d.resolveBusiness(gate.businessId) });
+  const gateContext = {
+    organizationId: gate.orgId,
+    projectId: gate.nativeProjectId,
+  };
+  const out = await d.evaluateRequirement({
+    input,
+    settings: d.getSettings(),
+    business: d.resolveBusiness(gate.businessId, gateContext),
+    ...(gate.orgId ? { orgId: gate.orgId } : {}),
+    ...(gate.nativeProjectId ? { nativeProjectId: gate.nativeProjectId } : {}),
+  });
   d.store.updateApprovalGate(gate.id, { status: 'superseded' });
   // The gate a browser is watching is now terminal — tell it to stop the poll.
-  d.publishGate(gate.id, 'superseded');
+  d.publishGate(gate.id, 'superseded', {
+    organizationId: gate.orgId,
+    projectId: gate.nativeProjectId,
+  });
 
   if (out.blocked) return { evaluation: null, signal: out.signal, gate: null, blocked: true, answer: out.answer };
   if (out.signal === 'green') return { evaluation: out.evaluation, signal: 'green', gate: null };
@@ -181,6 +214,8 @@ async function reevaluateGate(id, input, deps = {}) {
     signal: out.signal,
     waitMinutes: gate.waitMinutes,
     attempts: (Number(gate.attempts) || 0) + 1,
+    orgId: gate.orgId,
+    nativeProjectId: gate.nativeProjectId,
   }, deps);
   return { evaluation: out.evaluation, signal: out.signal, gate: next };
 }

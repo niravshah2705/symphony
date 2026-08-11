@@ -114,7 +114,9 @@ async def test_orgless_user_creates_organization_and_becomes_admin(client):
 
 
 @pytest.mark.asyncio
-async def test_create_organization_conflicts_when_already_in_org(client):
+async def test_existing_member_can_create_another_organization(client):
     token = await register_org_admin(client, org_name="Acme", email="admin@acme.com")
     dup = await client.post("/api/v1/me/organization", headers=auth(token), json={"name": "Another"})
-    assert dup.status_code == 409
+    assert dup.status_code == 201
+    context = await client.get("/api/v1/me/context", headers=auth(token))
+    assert {org["name"] for org in context.json()["organizations"]} == {"Acme", "Another"}

@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 14
     email_verification_ttl_minutes: int = 60
+    # Email-service contract accepts 1..10080 minutes (up to seven days).
+    invitation_ttl_days: int = Field(default=7, ge=1, le=7)
+
+    # Optional Pub/Sub topic consumed by the platform email service. Empty keeps
+    # local/test operation side-effect free.
+    email_topic: str = ""
 
     # --- External IdP (OIDC/OAuth2) ---
     idp_enabled: bool = False
@@ -64,7 +70,7 @@ class Settings(BaseSettings):
     superadmin_password: str = ""
 
     # Shared front-facing gateway URL returned by the deployment resolver
-    # (GET /api/v1/me/deployment) for pseudo/org-less workspaces and any org
+    # (GET /api/v1/me/deployment) for org-less users and any org
     # without a dedicated per-tenant stack. Empty locally (same-origin); set to
     # the shared gateway's Cloud Run URL in the cloud.
     shared_gateway_url: str = ""

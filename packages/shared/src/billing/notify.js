@@ -1,19 +1,18 @@
 'use strict';
 
+const { randomUUID } = require('node:crypto');
 const log = require('../logger');
+const { CONFIG } = require('../config');
 const { paiseToInr } = require('./pricing');
 
 /**
  * Threshold notifications across three channels:
  *   - browser  — the existing workspace SSE push (no secret; always available)
- *   - email    — SMTP via nodemailer (optional dep + BILLING_SMTP_URL)
+ *   - email    — queued through the shared transactional email service
  *   - slack    — an incoming webhook URL
  *
- * Email/Slack connection creds are read from TRUSTED server-side env and are
- * OPTIONAL: a missing cred simply skips that channel (fail-open). NOTE: agent
- * containers (planner/coder) must not hold raw third-party secrets, so in
- * production the notifier should run on a non-proxied service (or resolve creds
- * from the settings vault). Browser notifications work from anywhere.
+ * SMTP credentials never enter an agent container. Email producers publish an
+ * allow-listed job; the shared email service alone owns SMTP and retries.
  */
 
 function sendBrowser(payload) {
@@ -49,30 +48,37 @@ async function sendSlack(payload, webhookUrl = process.env.BILLING_SLACK_WEBHOOK
   }
 }
 
-async function sendEmail(payload, recipients = [], smtpUrl = process.env.BILLING_SMTP_URL) {
-  if (!smtpUrl || !recipients.length) return false;
-  let nodemailer;
-  try {
-    nodemailer = require('nodemailer');
-  } catch (_) {
-    log.warn('billing notify (email) skipped: nodemailer not installed');
-    return false;
+async function sendEmail(payload, recipients = [], deps = {}) {
+  if (!recipients.length) return false;
+  const publishRequest = deps.publishRequest || require('../messaging/publisher').publishRequest;
+  const topic = deps.topic || CONFIG.GCP.emailTopic;
+  const subject = String(payload.title || 'Billing alert').trim().slice(0, 160);
+  const message = String(payload.message || '').trim().slice(0, 4000);
+  const orgId = /^[A-Za-z0-9._:-]{1,128}$/.test(String(payload.orgId || ''))
+    ? String(payload.orgId)
+    : undefined;
+  let published = 0;
+  for (const recipient of recipients) {
+    const job = {
+      template: 'billing_alert',
+      idempotencyKey: `billing:${randomUUID()}`,
+      to: String(recipient || '').trim(),
+      variables: { subject, message, ...(orgId ? { orgId } : {}) },
+    };
+    try {
+      await publishRequest(topic, job);
+      published += 1;
+    } catch (err) {
+      log.warn(`billing notify (email queue) failed: ${err && err.message ? err.message : err}`);
+    }
   }
-  try {
-    const from = process.env.BILLING_EMAIL_FROM || 'ai-fleet@localhost';
-    const transport = nodemailer.createTransport(smtpUrl);
-    await transport.sendMail({ from, to: recipients.join(','), subject: payload.title, text: payload.message });
-    return true;
-  } catch (err) {
-    log.warn(`billing notify (email) failed: ${err && err.message ? err.message : err}`);
-    return false;
-  }
+  return published === recipients.length;
 }
 
 /**
  * Fan a notification out to the channels enabled on the account. Browser is the
- * always-on baseline; email/slack fire only when both enabled AND their creds
- * are present. Returns the list of channels that succeeded.
+ * always-on baseline; email/slack fire only when enabled. Returns the list of
+ * channels that succeeded.
  */
 async function notify(account, payload) {
   const channels = (account && account.notifyChannels) || { browser: true };

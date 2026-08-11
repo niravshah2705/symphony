@@ -6,10 +6,19 @@ const { spawnSync } = require('node:child_process');
 
 const { createConfigResolver } = require('./config-resolver');
 
-function makeReq({ authenticated = true, authorization = 'Bearer usertoken' } = {}) {
+function makeReq({
+  authenticated = true,
+  authorization = 'Bearer usertoken',
+  organizationId = '',
+  projectId = '',
+} = {}) {
   return {
     auth: { authenticated },
-    get: (h) => (String(h).toLowerCase() === 'authorization' ? authorization : undefined),
+    get: (h) => ({
+      authorization,
+      'x-ai-fleet-organization-id': organizationId,
+      'x-ai-fleet-project-id': projectId,
+    })[String(h).toLowerCase()],
   };
 }
 
@@ -67,27 +76,31 @@ test('provisioning status keeps the SPA on the shared gateway', async () => {
   assert.equal(res.body.gatewayUrl, '');
 });
 
-test('provisioned WITHOUT a url falls back to same-origin (guard)', async () => {
+test('provisioned WITHOUT a url fails closed instead of guessing same-origin', async () => {
   const handler = createConfigResolver({
     callJson: async () => ({ status: 200, data: { status: 'provisioned' } }),
   });
   const res = makeRes();
   await handler(makeReq(), res);
-  assert.equal(res.body.gatewayUrl, '');
+  assert.equal(res.statusCode, 503);
+  assert.deepEqual(res.body, { error: 'Organization deployment context is temporarily unavailable.' });
 });
 
-test('derives org from the token only — no client-supplied org id, correct S2S path', async () => {
+test('forwards the already-validated selected context on the correct S2S path', async () => {
   const seen = [];
   const handler = createConfigResolver({
     callJson: async (baseUrl, path, opts) => { seen.push({ baseUrl, path, opts }); return { status: 200, data: { status: 'shared' } }; },
   });
-  await handler(makeReq({ authorization: 'Bearer THE-USER-TOKEN' }), makeRes());
+  await handler(makeReq({
+    authorization: 'Bearer THE-USER-TOKEN',
+    organizationId: 'org-1',
+    projectId: 'project-1',
+  }), makeRes());
 
   assert.equal(seen.length, 1);
   assert.equal(seen[0].path, '/api/v1/me/deployment');
   assert.equal(seen[0].opts.userAuth, 'Bearer THE-USER-TOKEN');
-  // The whole S2S call carries no org id anywhere (path has none, no body).
-  assert.equal(JSON.stringify(seen[0]).includes('orgId'), false);
+  assert.deepEqual(seen[0].opts.context, { organizationId: 'org-1', projectId: 'project-1' });
   assert.equal(seen[0].opts.body, undefined);
 });
 
@@ -108,18 +121,20 @@ test('never leaks internal service URLs to the browser', async () => {
   }
 });
 
-test('org-service error fails OPEN to the shared gateway', async () => {
+test('org-service error fails closed instead of guessing the shared gateway', async () => {
   const handler = createConfigResolver({ callJson: async () => ({ status: 502, data: null }) });
   const res = makeRes();
   await handler(makeReq(), res);
-  assert.deepEqual(res.body, { authenticated: true, status: 'shared', gatewayUrl: '' });
+  assert.equal(res.statusCode, 503);
+  assert.deepEqual(res.body, { error: 'Organization deployment context is temporarily unavailable.' });
 });
 
-test('callJson throwing fails OPEN to the shared gateway', async () => {
+test('callJson throwing fails closed instead of guessing the shared gateway', async () => {
   const handler = createConfigResolver({ callJson: async () => { throw new Error('network'); } });
   const res = makeRes();
   await handler(makeReq(), res);
-  assert.deepEqual(res.body, { authenticated: true, status: 'shared', gatewayUrl: '' });
+  assert.equal(res.statusCode, 503);
+  assert.deepEqual(res.body, { error: 'Organization deployment context is temporarily unavailable.' });
 });
 
 test('501 when ORG_URL is unset in production', () => {

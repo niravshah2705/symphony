@@ -269,7 +269,7 @@ function configuredResourceNames({ workflow, effective, resolvedTools, resolvedS
   const tools = Array.isArray(resolvedTools)
     ? resolvedTools.map((tool) => tool && tool.name).filter(Boolean)
     : declared.tools || [];
-  return { skills, tools, plugins: workflow.mcp || [] };
+  return { skills, tools, plugins: declared.mcp || [] };
 }
 
 /**
@@ -296,9 +296,17 @@ async function runWorkflow({
   settings,
   attribution,
 }) {
+  // Resolve resource governance once, before any skill installation or MCP
+  // connection. The same descriptor is then used for the build and trace
+  // metadata so denied plugins cannot be loaded or reported as available.
+  const effectiveWorkflow = applyPolicyToWorkflow(
+    workflow,
+    ctx.effectivePolicy || null,
+    { toolDomains: toolRegistry.TOOL_DOMAIN },
+  ) || workflow;
   let scratch = null;
   if (!backend && !rootDir) {
-    scratch = prepareScratch(workflow);
+    scratch = prepareScratch(effectiveWorkflow);
     rootDir = scratch.rootDir;
     skillPaths = scratch.skillPaths;
   }
@@ -306,20 +314,29 @@ async function runWorkflow({
     const requestedRuntime = normalizeAgentRuntime(runtime, { strict: true });
     const runtimeId = effectiveAgentRuntime(requestedRuntime, llm, {
       strict: true,
-      workflow: workflow.name,
+      workflow: effectiveWorkflow.name,
       effectivePolicy: ctx.effectivePolicy || null,
     });
     const config = {
-      recursionLimit: workflow.recursionLimit || 24,
-      tags: workflow.tags || [],
+      recursionLimit: effectiveWorkflow.recursionLimit || 24,
+      tags: effectiveWorkflow.tags || [],
       ...invokeConfig,
     };
     let deepAgentInvoke;
     let resolvedTools = null;
     let resolvedSkills = null;
     if (runtimeId === 'deepagent') {
-      const extraTools = await require('./mcp').loadMcpTools(workflow.mcp, ctx);
-      const { agent, tools, skillPaths: builtSkills } = buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx, extraTools, env });
+      const extraTools = await require('./mcp').loadMcpTools(effectiveWorkflow.mcp, ctx);
+      const { agent, tools, skillPaths: builtSkills } = buildAgent({
+        workflow: effectiveWorkflow,
+        llm,
+        backend,
+        skillPaths,
+        rootDir,
+        ctx,
+        extraTools,
+        env,
+      });
       resolvedTools = tools;
       resolvedSkills = builtSkills;
       deepAgentInvoke = (prompt, tracedConfig) => {
@@ -334,22 +351,27 @@ async function runWorkflow({
     // filterable/summarisable by which resources were made available.
     const configWithResources = withResources(
       config,
-      configuredResourceNames({ workflow, effective: ctx.effectivePolicy || null, resolvedTools, resolvedSkills })
+      configuredResourceNames({
+        workflow: effectiveWorkflow,
+        effective: ctx.effectivePolicy || null,
+        resolvedTools,
+        resolvedSkills,
+      })
     );
     return executeAgentRuntime({
       runtime: requestedRuntime,
       workflowPattern,
       prompt: userMessage,
-      workflow: workflow.name,
+      workflow: effectiveWorkflow.name,
       llm,
       rootDir,
-      backendKind: workflow.backend,
-      systemPrompt: workflow.systemPrompt,
-      maxTurns: workflow.recursionLimit || 24,
+      backendKind: effectiveWorkflow.backend,
+      systemPrompt: effectiveWorkflow.systemPrompt,
+      maxTurns: effectiveWorkflow.recursionLimit || 24,
       ctx,
       env,
       invokeConfig: configWithResources,
-      tags: workflow.tags || [],
+      tags: effectiveWorkflow.tags || [],
       deepAgentInvoke,
       lastText,
       // Optional RubricMiddleware completion review. Absent → no review runs.

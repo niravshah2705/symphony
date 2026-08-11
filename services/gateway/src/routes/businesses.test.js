@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { normalizeRepo, repositoryFields } = require('./businesses');
+const { normalizeRepo, repositoryFields, inWorkspace, contextFields } = require('./businesses');
 
 test('business repository normalization preserves provider-specific namespaces', () => {
   assert.equal(normalizeRepo('acme/widgets', 'github'), 'acme/widgets');
@@ -32,4 +32,14 @@ test('business repository updates retain their stored provider', () => {
     repo: 'acme/widgets',
     repoProvider: 'github',
   });
+});
+
+test('business records follow the exact selected native workspace', () => {
+  const req = { fleetContext: { organizationId: 'org-a', projectId: 'project-a' } };
+  assert.deepEqual(contextFields(req), { orgId: 'org-a', nativeProjectId: 'project-a' });
+  assert.equal(inWorkspace(req, { orgId: 'org-a', nativeProjectId: 'project-a' }), true);
+  assert.equal(inWorkspace(req, { orgId: 'org-a', nativeProjectId: 'project-b' }), false);
+  assert.equal(inWorkspace(req, { orgId: 'org-b', nativeProjectId: 'project-a' }), false);
+  assert.equal(inWorkspace(req, { id: 'legacy' }), false);
+  assert.equal(inWorkspace({}, { id: 'legacy' }), true, 'auth-disabled local mode remains backward compatible');
 });

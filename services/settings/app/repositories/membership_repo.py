@@ -1,8 +1,9 @@
 """Project-membership data access (org-scoped, structural isolation).
 
 Memberships live under ``organizations/{org_id}/memberships`` so a lookup for
-another org is unreachable from the caller's org path. Synced from the org
-service; the settings service only reads them (see app/models/membership.py)."""
+another org is unreachable from the caller's org path. This repository is a
+backward-compatible local-JWT path; Firebase callers use authoritative org
+context directly (see app/auth/org_context.py)."""
 from __future__ import annotations
 
 import uuid

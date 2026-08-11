@@ -189,6 +189,44 @@ test('memory-search detects scope from the query and returns scoped stored match
   assert.ok(res.body.results.every((r) => r.scope !== 'project')); // scoped away from project
 });
 
+test('memory records are stamped and isolated by selected organization/project', async (t) => {
+  const modulePath = require.resolve('./agent');
+  const original = { addMemory: store.addMemory, listMemories: store.listMemories, removeMemory: store.removeMemory };
+  let records = [{
+    id: 'mem_foreign', scope: 'business', title: 'Foreign', text: 'secret',
+    orgId: 'org-b', nativeProjectId: 'project-a',
+  }];
+  store.addMemory = (record) => { const saved = { ...record, id: 'mem_selected' }; records.unshift(saved); return saved; };
+  store.listMemories = () => records;
+  store.removeMemory = (id) => { const before = records.length; records = records.filter((record) => record.id !== id); return records.length < before; };
+  delete require.cache[modulePath];
+  t.after(() => { Object.assign(store, original); delete require.cache[modulePath]; });
+
+  const selected = {
+    get(name) {
+      return {
+        'x-ai-fleet-organization-id': 'org-a',
+        'x-ai-fleet-project-id': 'project-a',
+      }[name];
+    },
+  };
+  const router = require('./agent');
+  const created = await call(handlerFor(router, 'post', '/memory'), {
+    ...selected,
+    body: { scope: 'business', title: 'Selected', text: 'visible' },
+  });
+  assert.equal(created.body.memory.orgId, 'org-a');
+  assert.equal(created.body.memory.nativeProjectId, 'project-a');
+
+  const listed = await call(handlerFor(router, 'get', '/memory'), { ...selected, query: {} });
+  assert.deepEqual(listed.body.memories.map((record) => record.id), ['mem_selected']);
+  const foreignDelete = await call(handlerFor(router, 'delete', '/memory/:id'), {
+    ...selected, params: { id: 'mem_foreign' },
+  });
+  assert.equal(foreignDelete.status, 404);
+  assert.ok(records.some((record) => record.id === 'mem_foreign'));
+});
+
 test('message yields a confirmable memory draft and canPrepare, never auto-writing', async () => {
   const router = require('./agent');
   const draft = await call(handlerFor(router, 'post', '/message'), { body: { input: 'Remember that I prefer dark mode' } });
@@ -312,6 +350,126 @@ test('enqueue is role-gated, validates projectId, and queues exactly one project
   assert.equal(enqueued.length, 1);
   assert.equal(enqueued[0].projectId, 'proj_1');
   assert.equal(enqueued[0].assumedRole.id, 'r1');
+});
+
+test('planner job and status routes honor the exact selected organization and project', async (t) => {
+  const modulePath = require.resolve('./agent');
+  const scheduler = require('@ai-fleet/shared/agent/scheduler');
+  const workspaceEvents = require('@ai-fleet/shared/agent/workspace-events');
+  const original = {
+    listJobs: store.listJobs,
+    removeJob: store.removeJob,
+    clearFinishedJobs: store.clearFinishedJobs,
+    getSettings: store.getSettings,
+    getAgentConfig: store.getAgentConfig,
+    setAgentConfig: store.setAgentConfig,
+    getAssumedRole: store.getAssumedRole,
+    getStatus: scheduler.getStatus,
+    publishAgentStatus: workspaceEvents.publishAgentStatus,
+  };
+  let jobs = [
+    { id: 'a-running', kind: 'enrichment', orgId: 'org-a', nativeProjectId: 'project-a', status: 'running' },
+    { id: 'a-done', kind: 'enrichment', orgId: 'org-a', nativeProjectId: 'project-a', status: 'done' },
+    { id: 'a-error', kind: 'enrichment', orgId: 'org-a', nativeProjectId: 'project-a', status: 'error' },
+    { id: 'a-other-project', kind: 'enrichment', orgId: 'org-a', nativeProjectId: 'project-b', status: 'done' },
+    { id: 'b-done', kind: 'enrichment', orgId: 'org-b', nativeProjectId: 'project-a', status: 'done' },
+    { id: 'legacy', kind: 'enrichment', status: 'pending' },
+  ];
+  let localClearCalls = 0;
+  const statusContexts = [];
+  const published = [];
+  const config = {
+    parallelProcessing: 1,
+    maxConcurrentCoders: 1,
+    maxProjectsPerRun: 3,
+    maxMilestones: 4,
+    maxIssuesPerMilestone: 4,
+    intervalMinutes: 10,
+    enrichLabels: [],
+    scheduleEnabled: false,
+    autoAssignLead: false,
+    autoLabelNewProjects: false,
+    createIssues: false,
+    addDependencies: false,
+    evaluationApprovalWaitMinutes: 60,
+  };
+
+  store.listJobs = (kind) => jobs.filter((job) => !kind || (job.kind || 'enrichment') === kind);
+  store.removeJob = (id) => {
+    const previousLength = jobs.length;
+    jobs = jobs.filter((job) => job.id !== id);
+    return jobs.length !== previousLength;
+  };
+  store.clearFinishedJobs = () => {
+    localClearCalls += 1;
+    jobs = jobs.filter((job) => job.status === 'pending' || job.status === 'running');
+    return jobs;
+  };
+  store.getSettings = () => ({});
+  store.getAgentConfig = () => config;
+  store.setAgentConfig = (next) => next;
+  store.getAssumedRole = () => ({ id: 'role-1', name: 'Planner' });
+  scheduler.getStatus = (context) => {
+    statusContexts.push(context);
+    return { running: false, counts: { pending: 0, running: 1, done: 2, error: 1 } };
+  };
+  workspaceEvents.publishAgentStatus = (status, context) => published.push({ status, context });
+  delete require.cache[modulePath];
+  t.after(() => {
+    Object.assign(store, {
+      listJobs: original.listJobs,
+      removeJob: original.removeJob,
+      clearFinishedJobs: original.clearFinishedJobs,
+      getSettings: original.getSettings,
+      getAgentConfig: original.getAgentConfig,
+      setAgentConfig: original.setAgentConfig,
+      getAssumedRole: original.getAssumedRole,
+    });
+    scheduler.getStatus = original.getStatus;
+    workspaceEvents.publishAgentStatus = original.publishAgentStatus;
+    delete require.cache[modulePath];
+  });
+
+  const router = require('./agent');
+  const selected = {
+    get(name) {
+      return {
+        'x-ai-fleet-organization-id': 'org-a',
+        'x-ai-fleet-project-id': 'project-a',
+      }[name];
+    },
+  };
+
+  const listed = await call(handlerFor(router, 'get', '/jobs'), selected);
+  assert.deepEqual(listed.body.jobs.map((job) => job.id), ['a-running', 'a-done', 'a-error']);
+
+  await call(handlerFor(router, 'get', '/status'), selected);
+  assert.deepEqual(statusContexts.at(-1), { organizationId: 'org-a', projectId: 'project-a' });
+
+  await call(handlerFor(router, 'put', '/config'), { ...selected, body: {} });
+  assert.deepEqual(published.at(-1).context, { organizationId: 'org-a', projectId: 'project-a' });
+  assert.deepEqual(statusContexts.at(-1), { organizationId: 'org-a', projectId: 'project-a' });
+
+  const denied = await call(handlerFor(router, 'delete', '/jobs/:id'), { ...selected, params: { id: 'b-done' } });
+  assert.equal(denied.status, 404);
+  assert.ok(jobs.some((job) => job.id === 'b-done'));
+
+  const removed = await call(handlerFor(router, 'delete', '/jobs/:id'), { ...selected, params: { id: 'a-done' } });
+  assert.equal(removed.body.ok, true);
+  assert.ok(!jobs.some((job) => job.id === 'a-done'));
+
+  const cleared = await call(handlerFor(router, 'delete', '/jobs'), selected);
+  assert.deepEqual(cleared.body.jobs.map((job) => job.id), ['a-running']);
+  assert.ok(jobs.some((job) => job.id === 'a-other-project'));
+  assert.ok(jobs.some((job) => job.id === 'b-done'));
+  assert.equal(localClearCalls, 0);
+
+  // Direct/local installs have no context headers and retain the legacy global
+  // view + clear behavior. This also verifies direct handler mocks need no get().
+  const localList = await call(handlerFor(router, 'get', '/jobs'), {});
+  assert.deepEqual(localList.body.jobs.map((job) => job.id), jobs.map((job) => job.id));
+  await call(handlerFor(router, 'delete', '/jobs'), {});
+  assert.equal(localClearCalls, 1);
 });
 
 test('redacts secrets in inbound user text server-side across every ingest path (defense in depth)', async (t) => {

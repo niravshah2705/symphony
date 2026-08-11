@@ -12,12 +12,13 @@ const { providerForRole } = require('./llm');
 /**
  * A deliberately small, reviewed UI-language catalog. Tags follow BCP 47 and
  * are canonicalized by Intl before matching. The suggestion endpoint returns at
- * most five entries; this catalog is not intended to become an exhaustive
- * language picker.
+ * most five contextual entries; the browser renders the complete catalog in
+ * stable Regional/National/International/Other groups.
  */
 const LANGUAGE_CATALOG = Object.freeze([
   Object.freeze({ tag: 'en', label: 'English', nativeLabel: 'English', direction: 'ltr' }),
   Object.freeze({ tag: 'gu-IN', label: 'Gujarati', nativeLabel: 'ગુજરાતી', direction: 'ltr' }),
+  Object.freeze({ tag: 'mr-IN', label: 'Marathi', nativeLabel: 'मराठी', direction: 'ltr' }),
   Object.freeze({ tag: 'hi-IN', label: 'Hindi', nativeLabel: 'हिन्दी', direction: 'ltr' }),
   Object.freeze({ tag: 'es', label: 'Spanish', nativeLabel: 'Español', direction: 'ltr' }),
   Object.freeze({ tag: 'fr', label: 'French', nativeLabel: 'Français', direction: 'ltr' }),
@@ -33,7 +34,7 @@ const CATALOG_BY_LANGUAGE = new Map(
 );
 
 const COUNTRY_LANGUAGES = Object.freeze({
-  IN: ['hi-IN', 'gu-IN', 'en'],
+  IN: ['hi-IN', 'gu-IN', 'mr-IN', 'en'],
   US: ['en', 'es'],
   GB: ['en'],
   AU: ['en'],
@@ -154,14 +155,20 @@ function normalizeGeoResult(value) {
 }
 
 /**
- * Choose a maximum of five useful entries. English and Gujarati remain visible
- * so the picker is stable and Gujarati can always be selected, while browser and
- * coarse location signals determine the other choices and initial locale.
+ * Choose a maximum of five useful contextual entries. English remains selected
+ * by default: IP location is advisory and may only recommend/reorder an option.
  */
 function languageSuggestions({ browserLanguages = [], countryCode = null, region = null } = {}) {
   const browser = parseLanguageHints(browserLanguages);
   const country = normalizeCountryCode(countryCode);
   const locationTags = country && COUNTRY_LANGUAGES[country] ? COUNTRY_LANGUAGES[country] : [];
+  const normalizedRegion = cleanInline(region, LIMITS.regionChars).toLocaleLowerCase('en');
+  let recommendedLocale = 'en';
+  if (country === 'IN') {
+    if (normalizedRegion.includes('gujarat')) recommendedLocale = 'gu-IN';
+    else if (normalizedRegion.includes('maharashtra')) recommendedLocale = 'mr-IN';
+    else recommendedLocale = 'hi-IN';
+  }
   const ranked = [];
   const reasons = new Map();
 
@@ -172,27 +179,29 @@ function languageSuggestions({ browserLanguages = [], countryCode = null, region
     ranked.push(resolved);
   }
 
+  add(recommendedLocale, country ? 'location' : 'available');
   browser.forEach((tag) => add(tag, 'browser'));
   locationTags.forEach((tag) => add(tag, 'location'));
-  add('en', 'available');
-  add('gu-IN', 'available');
+  const requiredTags = ['en', 'gu-IN', 'mr-IN', 'hi-IN'];
+  requiredTags.forEach((tag) => add(tag, 'available'));
 
-  const locale = ranked[0] || 'en';
+  const locale = 'en';
   let selected = ranked.slice(0, LIMITS.suggestions);
-  for (const required of ['en', 'gu-IN']) {
-    if (selected.includes(required)) continue;
-    if (selected.length < LIMITS.suggestions) selected.push(required);
+  for (const requiredTag of requiredTags) {
+    if (selected.includes(requiredTag)) continue;
+    if (selected.length < LIMITS.suggestions) selected.push(requiredTag);
     else {
       const replaceAt = [...selected]
         .reverse()
-        .findIndex((tag) => tag !== locale && tag !== 'en' && tag !== 'gu-IN');
-      if (replaceAt !== -1) selected[selected.length - 1 - replaceAt] = required;
+        .findIndex((tag) => tag !== recommendedLocale && !requiredTags.includes(tag));
+      if (replaceAt !== -1) selected[selected.length - 1 - replaceAt] = requiredTag;
     }
   }
   selected = [...new Set(selected)].slice(0, LIMITS.suggestions);
 
   return {
     locale,
+    recommendedLocale,
     countryCode: country,
     region: cleanInline(region, LIMITS.regionChars) || null,
     suggestions: selected.map((tag) => {
@@ -203,6 +212,7 @@ function languageSuggestions({ browserLanguages = [], countryCode = null, region
         nativeLabel: language.nativeLabel,
         direction: language.direction,
         reason: reasons.get(tag) || 'available',
+        recommended: tag === recommendedLocale,
       };
     }),
   };

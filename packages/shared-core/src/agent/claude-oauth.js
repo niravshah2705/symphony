@@ -2,6 +2,7 @@
 
 const { CONFIG } = require('../config');
 const pkce = require('./pkce');
+const { normalizeWorkspaceContext } = require('../store/workspace-context');
 
 /**
  * Claude (Anthropic) OAuth 2.0 Authorization Code + PKCE (S256) helper —
@@ -52,12 +53,16 @@ function buildAuthorizeUrl({ state, codeChallenge }) {
  * Begin a login: generate state + PKCE, register them server-side, and return
  * the authorize URL to send the browser to.
  */
-function createLogin() {
+function createLogin(workspaceContext = {}) {
   prunePending();
   const state = pkce.generateState();
   const codeVerifier = pkce.generateVerifier();
   const codeChallenge = pkce.challengeFromVerifier(codeVerifier);
-  pendingLogins.set(state, { codeVerifier, expiresAt: Date.now() + CLAUDE.loginTtlMs });
+  pendingLogins.set(state, {
+    codeVerifier,
+    workspaceContext: normalizeWorkspaceContext(workspaceContext),
+    expiresAt: Date.now() + CLAUDE.loginTtlMs,
+  });
   return { state, authorizeUrl: buildAuthorizeUrl({ state, codeChallenge }) };
 }
 

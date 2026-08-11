@@ -1,16 +1,30 @@
 import { api } from '../api.js';
+import { getAuthenticationState } from '../auth.js';
 import { el, clear, toast, loading } from '../dom.js';
 import { brandIcon } from '../icons.js';
+import { permitted } from '../permissions.js';
+import {
+  activeWorkspaceOrganization,
+  activeWorkspaceProject,
+  getWorkspaceContext,
+} from '../workspace-context.js';
 import { state } from '../state.js';
 
 export async function renderSettings(view) {
   view.append(loading('Loading settings…'));
 
+  const session = getAuthenticationState();
+  const canWriteGlobal = !session.enabled || permitted(session.permissions, 'settings', 'write');
+  if (!canWriteGlobal) {
+    await renderScopedPolicySettings(view);
+    return;
+  }
+
   // The labels/members enrichment is Linear-backed and 401s when the saved key
   // was rejected. Skip it in that known-bad state so the settings page (the very
   // place to fix the key) doesn't spam the console with connected-tool 401s.
   const linearBroken = state.connectionValid === false;
-  const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes, jsonRes, meRes, projectsRes] = await Promise.all([
+  const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes, jsonRes, meRes] = await Promise.all([
     api.getSettings(),
     api.getLlmPresets(),
     api.getAgentConfig().catch(() => ({ config: {} })),
@@ -22,7 +36,6 @@ export async function renderSettings(view) {
     api.getClaudeStatus().catch(() => ({ connected: false })),
     api.getSettingsJson().catch(() => ({ settings: {} })),
     api.org.getMe().catch(() => null),
-    api.org.listPersonalProjects().catch(() => ({ projects: [] })),
   ]);
 
   // Older stores intentionally kept hosted model ids blank and relied on the
@@ -32,6 +45,7 @@ export async function renderSettings(view) {
   if (!settings.codexModel) settings.codexModel = codexRes.model || codexRes.defaultModel || 'gpt-5.6-sol';
   if (!settings.claudeModel) settings.claudeModel = claudeRes.model || claudeRes.defaultModel || 'claude-opus-4-8';
 
+  const identity = deriveIdentity(meRes, getWorkspaceContext());
   const ctx = {
     settings,
     presets,
@@ -41,6 +55,7 @@ export async function renderSettings(view) {
     claude: claudeRes,
     view,
     me: meRes,
+    identity,
     advanced: { configRes, modelsRes, labelsRes, membersRes, roleRes, jsonRes },
   };
   const llm = llmSection(ctx);
@@ -56,10 +71,12 @@ export async function renderSettings(view) {
   // the per-scope policy / effective / inheritance surfaces. Operational settings
   // (complexity/provider/roles/runtime/tracker) are still a single global store,
   // so they are labeled "Global" in the effective panel until per-scope lands.
-  const identity = deriveIdentity(meRes, projectsRes && projectsRes.projects);
   const scopeState = {
-    scope: identity.isOrgAdmin && identity.hasOrg ? 'org' : 'user',
+    scope: identity.isOrgAdmin && identity.hasOrg
+      ? 'org'
+      : identity.isProjectAdmin && identity.defaultProjectId ? 'project' : 'user',
     projectId: identity.defaultProjectId,
+    identity,
   };
 
   const render = () => {
@@ -85,31 +102,81 @@ export async function renderSettings(view) {
   render();
 }
 
+/**
+ * Selected-context administrators do not necessarily hold the legacy global
+ * Firebase admin role. Give those users the policy surface backed by the org
+ * and settings services, without loading or exposing mutable process-wide
+ * provider/runtime controls.
+ */
+async function renderScopedPolicySettings(view) {
+  const [presets, meRes] = await Promise.all([
+    api.getLlmPresets().catch(() => ({ presets: [], complexityTiers: [] })),
+    api.org.getMe().catch(() => null),
+  ]);
+  const identity = deriveIdentity(meRes, getWorkspaceContext());
+  const ctx = {
+    settings: {},
+    presets,
+    view,
+    me: meRes,
+    identity,
+  };
+  const scopeState = {
+    scope: identity.isOrgAdmin && identity.hasOrg
+      ? 'org'
+      : identity.isProjectAdmin && identity.defaultProjectId ? 'project' : 'user',
+    projectId: identity.defaultProjectId,
+    identity,
+  };
+  const render = () => {
+    clear(view).append(
+      el('div', { class: 'sx-root' }, [
+        sxHeader(),
+        scopeLadder(scopeState, identity, render),
+        editingBanner(scopeState, ctx),
+      ]),
+      el('div', { class: 'settings-layout settings-layout-policy-only' }, [
+        el('div', { class: 'settings-content' }, [
+          el('div', { class: 'notice' }, 'Operational models, connections, and runtime defaults require a global settings administrator. Context policy below follows the selected organization and project.'),
+          governanceSection(ctx, scopeState),
+          el('section', { class: 'sx-section' }, [
+            sxSecHead('Harness, tools & skills', 'Selected-context policy'),
+            policyGroup(ctx),
+          ]),
+        ]),
+      ]),
+    );
+  };
+  render();
+}
+
 /* ===================== Redesign: shell & scope ===================== */
 
-// Org-scope policy + the per-org secret vault are enforced by the SETTINGS
-// service. It keeps its own user store, so the gateway now forwards the caller's
-// org membership (resolved from the authoritative org service) as trusted x-org-*
-// headers — real org admins are recognized and the org-scope surface works. The
-// card is gated on the org role the org service reports, mirroring that check.
-
-// Best-effort identity for the scope ladder. `me` is /api/org/me (org-less
-// friendly); shapes vary, so read defensively and always leave org/user usable.
-function deriveIdentity(me, projects) {
-  // MeResponse exposes `has_organization` (bool) + `org_role`; older/other
-  // shapes may nest an org object — accept either so `hasOrg` is never wrong.
-  const org = (me && (me.organization || me.org)) || null;
-  const list = Array.isArray(projects) ? projects : [];
-  const first = list[0] || null;
+// Derive Settings Policy authority from the selected native AI Fleet context.
+// The Firebase/gateway identity can only carry one legacy org role, so it is not
+// authoritative when the user switches organizations. Personal/tracker projects
+// are intentionally excluded from this scope ladder.
+function deriveIdentity(me, workspace) {
+  const organization = activeWorkspaceOrganization(workspace);
+  const project = activeWorkspaceProject(workspace);
+  const orgRole = String(organization?.role || '').toUpperCase();
+  const projectRole = String(project?.role || '').toUpperCase();
   return {
-    hasOrg: Boolean(me && (me.has_organization || org)),
-    isOrgAdmin: Boolean(me && me.org_role === 'ORG_ADMIN'),
-    orgName: (org && (org.name || org.displayName)) || 'Organization',
-    userEmail: (me && (me.email || (me.user && me.user.email))) || 'Your settings',
-    projects: list,
-    defaultProjectId: first && (first.id || first.projectId) || null,
-    defaultProjectName: (first && (first.name || first.title)) || null,
+    hasOrg: Boolean(organization),
+    isOrgAdmin: orgRole === 'ORG_ADMIN',
+    isProjectAdmin: projectRole === 'PROJECT_ADMIN',
+    orgName: organization?.name || 'Organization',
+    userEmail: workspace?.user?.email || (me && (me.email || (me.user && me.user.email))) || 'Your settings',
+    projects: organization?.projects || [],
+    defaultProjectId: project?.id || null,
+    defaultProjectName: project?.name || null,
   };
+}
+
+function canEditPolicyScope(identity, scope) {
+  if (scope === 'org') return Boolean(identity?.isOrgAdmin);
+  if (scope === 'project') return Boolean(identity?.isOrgAdmin || identity?.isProjectAdmin);
+  return scope === 'user';
 }
 
 const SCOPE_META = {
@@ -146,6 +213,7 @@ function applyControlLocks(root, scopeState) {
 }
 
 function setScopePrefs(scopeState, prefs) {
+  if (!canEditPolicyScope(scopeState.identity, scopeState.scope)) return;
   const p = api.settingsPolicy;
   const call = scopeState.scope === 'org' ? p.setOrgPrefs(prefs)
     : scopeState.scope === 'project' && scopeState.projectId ? p.setProjectPrefs(scopeState.projectId, prefs)
@@ -165,8 +233,20 @@ function sxHeader() {
 function scopeLadder(scopeState, identity, rerender) {
   const projectName = identity.defaultProjectName || 'Project';
   const rows = [
-    { id: 'org', name: identity.orgName, meta: 'Boundary for every project', enabled: identity.hasOrg },
-    { id: 'project', name: projectName, meta: identity.defaultProjectId ? 'Narrows the org list' : 'No project selected', enabled: Boolean(identity.defaultProjectId) },
+    {
+      id: 'org',
+      name: identity.orgName,
+      meta: identity.isOrgAdmin ? 'Boundary for every project' : 'View only · organization admins edit',
+      enabled: identity.hasOrg,
+    },
+    {
+      id: 'project',
+      name: projectName,
+      meta: !identity.defaultProjectId
+        ? 'No AI Fleet project selected'
+        : identity.isOrgAdmin || identity.isProjectAdmin ? 'Narrows the org list' : 'View only · project admins edit',
+      enabled: Boolean(identity.defaultProjectId),
+    },
     { id: 'user', name: identity.userEmail, meta: 'Chooses inside what is left', enabled: true },
   ];
   const wrap = el('div', { class: 'sx-scopes' });
@@ -275,7 +355,7 @@ function locksCard(ctx, scopeState) {
   void (async () => {
     if (scope === 'org') {
       let locks = [];
-      let editable = true;
+      let editable = canEditPolicyScope(scopeState.identity, 'org');
       try { const p = await api.settingsPolicy.getOrgPolicy(); locks = (p && p.locks) || []; }
       catch (_) { editable = false; }
       const set = new Set(locks);
@@ -447,7 +527,9 @@ function governanceSection(ctx, scopeState) {
     const orgAllowed = new Set(models ? models.org : allIds);
     const projAllowed = new Set(models ? models.project : allIds);
     const userAllowed = new Set(models ? models.user : allIds);
-    let editable = !lockedByHigher && (scope !== 'project' || Boolean(scopeState.projectId));
+    let editable = !lockedByHigher
+      && canEditPolicyScope(scopeState.identity, scope)
+      && (scope !== 'project' || Boolean(scopeState.projectId));
     let policy = null;
     if (editable) {
       try {
@@ -1156,9 +1238,7 @@ function policyGroup(ctx) {
     let universe;
     try { universe = (await api.settingsPolicy.getUniverse()).domains; }
     catch (err) { clear(wrap).append(el('div', { class: 'error-banner' }, err.message || 'Sign in to manage policy.')); return; }
-    let me = null;
-    try { me = await api.org.getMe(); } catch (_) { me = null; }
-    const isOrgAdmin = Boolean(me && me.org_role === 'ORG_ADMIN');
+    const isOrgAdmin = Boolean(ctx.identity?.isOrgAdmin);
     clear(wrap).append(
       el('p', { class: 'muted settings-section-intro' }, 'Include/exclude what agents may use per scope. Lower scopes only narrow — an exclude higher up always wins. Empty include = allow all.'),
       userC, orgC, effC,
@@ -1171,8 +1251,6 @@ function policyGroup(ctx) {
       }),
       policyScopeCard(orgC, {
         title: 'Organization scope', hint: 'Applies to everyone in the org. An exclude here blocks project and user.',
-        // The gateway forwards the caller's org role (from the org service) to the
-        // settings service, so org admins can manage org-scope policy again.
         universe, enabled: isOrgAdmin, disabledReason: 'Organization admins only.',
         load: () => api.settingsPolicy.getOrgPolicy(), save: (b) => api.settingsPolicy.setOrgPolicy(b),
         vault: true,

@@ -19,3 +19,7 @@ class Principal:
     org_role: OrgRole
     is_super_admin: bool
     email: str
+    # Server-validated request context. ``org_id`` is the selected membership
+    # (or a backward-compatible default); ``project_id`` is only populated when
+    # the exact project-selection header was supplied and authorized.
+    project_id: uuid.UUID | None = None

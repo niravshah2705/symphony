@@ -9,6 +9,7 @@ const framework = require('./framework');
 const tools = require('./tools');
 const { withAnnotations, withResources } = require('./trace-annotations');
 const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = require('./runtimes');
+const { applyPolicyToWorkflow } = require('./settings-policy');
 const codingWorkflow = require('./workflows/coding.workflow');
 
 /**
@@ -155,10 +156,15 @@ async function executeCodingRuntime({
   settings,
   attribution,
 }) {
+  const effectivePolicy = (settings && settings.effectivePolicy) || null;
+  const effectiveWorkflow = applyPolicyToWorkflow(codingWorkflow, effectivePolicy, {
+    toolDomains: tools.TOOL_DOMAIN,
+  });
   const requestedRuntime = normalizeAgentRuntime(keys.agentRuntime || 'deepagent', { strict: true });
   const runtime = effectiveAgentRuntime(requestedRuntime, llm, {
     strict: true,
     workflow: codingWorkflow.name,
+    effectivePolicy,
   });
   const skillPaths = framework.installSkills(workDir, codingWorkflow.skills);
   let deepAgentInvoke;
@@ -175,7 +181,7 @@ async function executeCodingRuntime({
   if (runtime === 'deepagent') {
     // The Linear key stays behind linear_graphql. Repository auth stays behind
     // one branch/repo-scoped broker tool; neither secret enters ctx or shell env.
-    const extraTools = await require('./mcp').loadMcpTools(codingWorkflow.mcp, {
+    const extraTools = await require('./mcp').loadMcpTools(effectiveWorkflow.mcp, {
       apiKey,
       step,
       repositoryProvider,
@@ -183,13 +189,13 @@ async function executeCodingRuntime({
     });
     if (repositoryBroker) extraTools.push(repositoryBroker.createTool());
     const { agent, tools, skillPaths: builtSkills } = framework.buildAgent({
-      workflow: codingWorkflow,
+      workflow: effectiveWorkflow,
       llm,
       rootDir: workDir,
       skillPaths,
       // `cwd` scopes the developer tools (docker/build/env/…) to this isolated
       // workspace; they refuse to operate outside it.
-      ctx: { apiKey, step, cwd: workDir },
+      ctx: { apiKey, step, cwd: workDir, effectivePolicy },
       extraTools,
       env,
     });
@@ -210,7 +216,7 @@ async function executeCodingRuntime({
   // filterable/summarisable by which resources were made available.
   const invokeConfigWithResources = withResources(
     invokeConfig,
-    framework.configuredResourceNames({ workflow: codingWorkflow, effective: null, resolvedTools, resolvedSkills })
+    framework.configuredResourceNames({ workflow: effectiveWorkflow, effective: effectivePolicy, resolvedTools, resolvedSkills })
   );
   return executeAgentRuntime({
     runtime: requestedRuntime,
@@ -222,7 +228,7 @@ async function executeCodingRuntime({
     backendKind: codingWorkflow.backend,
     systemPrompt: codingWorkflow.systemPrompt,
     maxTurns: CONFIG.CODER.maxTurns,
-    ctx: { apiKey, step },
+    ctx: { apiKey, step, effectivePolicy },
     env,
     invokeConfig: invokeConfigWithResources,
     tags: codingWorkflow.tags,
@@ -243,7 +249,7 @@ async function executeCodingRuntime({
  * the coding-workflow agent rooted there via the framework, and invokes it.
  * @returns {Promise<{ workDir, finalText, messages, traced }>}
  */
-async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep }) {
+async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep, settings = {} }) {
   const step = typeof onStep === 'function' ? onStep : () => {};
   if (!isCoderLlmUsable(llm)) throw new CoderError('Configure the agent model in Settings → LLM.', 400);
   if (!apiKey) throw new CoderError('A Linear API key is required for the code-writer agent.', 400);
@@ -277,13 +283,15 @@ async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep }) {
         { project: issue.projectName, taskId: issue.identifier || issue.id, session: runId }
       ),
       attribution: {
-        projectId: issue.projectId || null,
+        orgId: issue.orgId || null,
+        projectId: issue.nativeProjectId || issue.projectId || null,
         projectName: issue.projectName || null,
         userId: issue.assigneeId || null,
         taskId: issue.id || null,
         taskIdentifier: issue.identifier || null,
         source: 'coder',
       },
+      settings,
     });
 
     const repositoryError = repositoryBroker && repositoryBroker.availabilityError();
@@ -324,6 +332,7 @@ async function runPlannedCoderLocal({
   llm,
   apiKey,
   keys = {},
+  settings = {},
   githubToken,
   repositoryToken,
   repositoryProvider,
@@ -389,13 +398,15 @@ async function runPlannedCoderLocal({
         { project: project.name || project.id, taskId: issue.identifier || issue.id, session: runId }
       ),
       attribution: {
-        projectId: project.id || null,
+        orgId: issue.orgId || settings.orgId || null,
+        projectId: issue.nativeProjectId || settings.nativeProjectId || project.id || null,
         projectName: project.name || null,
         userId: issue.assigneeId || null,
         taskId: issue.id || null,
         taskIdentifier: issue.identifier || null,
         source: 'coder',
       },
+      settings,
     });
 
     const repositoryError = repositoryBroker && repositoryBroker.availabilityError();

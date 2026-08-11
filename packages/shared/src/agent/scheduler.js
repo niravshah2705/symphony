@@ -8,57 +8,27 @@ const { generatePlan, generateIssuesForMilestones } = require('./plan');
 const { applyPlan, applyIssuesForMilestones, applyAiplanned, applyAifail } = require('./apply');
 const { llmReady, notReadyReason, resolveLlm, providerForRole } = require('./llm');
 const { isModelAvailabilityError, pauseReasonFor, probeModelAvailability } = require('./availability');
-const { fetchOrgEffectivePolicy } = require('./org-policy-client');
-const { enforceModel } = require('./settings-policy');
-const { publicCatalog } = require('./model-presets');
+const {
+  fetchOrgEffectivePolicy,
+  isOrganizationContextMismatch,
+  isPolicyUnavailableError,
+  PolicyUnavailableError,
+} = require('./org-policy-client');
+const {
+  enforceLlmModel,
+  applyOperationalPrefs,
+  isPolicyDeniedError,
+} = require('./policy-runtime');
 const workspaceEvents = require('./workspace-events');
 const { processBillingSweep } = require('../billing/sweep');
 const { billingStatus } = require('../billing/gate');
-
-/**
- * Same-provider model enforcement: if the resolved model is denied by the org's
- * effective `models` policy, swap it to an allowed preset of the SAME provider so
- * the descriptor's base URL / tokens stay valid. FAIL-OPEN: no policy, an
- * unmappable model, or no allowed same-provider alternative returns the
- * descriptor unchanged (never brick a run; cross-provider downgrade is out of
- * scope). Returns the (possibly new) llm descriptor.
- */
-function enforceLlmModel(llm, effectivePolicy, catalog = publicCatalog()) {
-  if (!llm || !effectivePolicy || !effectivePolicy.models) return llm;
-  const presets = Array.isArray(catalog) ? catalog : (catalog && catalog.presets) || [];
-  const current = presets.find((p) => p.provider === llm.provider && p.model === llm.model);
-  if (!current) return llm; // can't map model → preset id: fail-open
-  const candidates = presets.filter((p) => p.provider === llm.provider).map((p) => p.id);
-  const allowedId = enforceModel(current.id, effectivePolicy, { candidates });
-  if (allowedId === current.id) return llm;
-  const next = presets.find((p) => p.id === allowedId);
-  return next ? { ...llm, model: next.model } : llm;
-}
-
-/**
- * Overlay the org's resolved per-scope operational prefs onto the planner `keys`
- * for the three settings that flow through them: agentRuntime, workflowPattern,
- * and langsmithTracing. Prefs are strings (booleans as "true"/"false"), so the
- * tracing flag is coerced back to a boolean. Fail-open: unset prefs leave `keys`
- * unchanged, so a run without per-scope prefs behaves exactly as before.
- * (provider/complexity prefs are consumed elsewhere and are not overlaid here.)
- */
-function applyPrefsToKeys(keys, prefs, step = () => {}) {
-  const p = prefs || {};
-  const next = { ...keys };
-  if (p.agentRuntime && p.agentRuntime !== next.agentRuntime) {
-    step(`Agent runtime "${p.agentRuntime}" applied from organization settings.`);
-    next.agentRuntime = p.agentRuntime;
-  }
-  if (p.workflowPattern && p.workflowPattern !== next.workflowPattern) {
-    step(`Workflow pattern "${p.workflowPattern}" applied from organization settings.`);
-    next.workflowPattern = p.workflowPattern;
-  }
-  if (p.langsmithTracing === 'true' || p.langsmithTracing === 'false') {
-    next.langsmithTracing = p.langsmithTracing === 'true';
-  }
-  return next;
-}
+const {
+  normalizeWorkspaceContext,
+  currentWorkspaceContext,
+  runWithWorkspaceContext,
+  workspaceCacheKey,
+  pinnedWorkspaceOrganizationId,
+} = require('../store/workspace-context');
 
 const { CONFIG } = require('../config');
 
@@ -73,6 +43,15 @@ const { CONFIG } = require('../config');
 
 const DEFAULT_INTERVAL_MINUTES = 5;
 
+function hasEffectivePolicy(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && Object.keys(value).length,
+  );
+}
+
 /** Resolve the configured cadence, falling back to an allowed default. */
 function intervalMs(config) {
   const minutes = CONFIG.INTERVAL_OPTIONS.includes(Number(config.intervalMinutes))
@@ -81,16 +60,65 @@ function intervalMs(config) {
   return minutes * 60 * 1000;
 }
 
-const runtime = {
-  timer: null,
-  isTicking: false,
-  lastRunAt: null,
-  nextRunAt: null,
-  lastError: null,
-  pauseReason: null,
-};
+function createRuntime() {
+  return {
+    timer: null,
+    kickoffTimer: null,
+    isTicking: false,
+    lastRunAt: null,
+    nextRunAt: null,
+    lastError: null,
+    pauseReason: null,
+  };
+}
 
-function pauseForModel(error, settings, llm = null) {
+const runtimes = new Map();
+
+/** Canonical scheduler scope, falling back to a dedicated deployment's pin. */
+function schedulerContext(context) {
+  const selected = normalizeWorkspaceContext(
+    context === undefined ? currentWorkspaceContext() : context,
+  );
+  if (selected.organizationId) return selected;
+  const pinned = pinnedWorkspaceOrganizationId();
+  return pinned
+    ? normalizeWorkspaceContext({ organizationId: pinned })
+    : selected;
+}
+
+function runtimeFor(context) {
+  const selected = schedulerContext(context);
+  const key = workspaceCacheKey(selected);
+  let runtime = runtimes.get(key);
+  if (!runtime) {
+    runtime = createRuntime();
+    runtimes.set(key, runtime);
+  }
+  return runtime;
+}
+
+/** Authenticated shared deployments may only run autonomous work for a tenant. */
+function shouldSkipUnscopedSharedTick(context, options = {}) {
+  const selected = normalizeWorkspaceContext(
+    context === undefined ? currentWorkspaceContext() : context,
+  );
+  const authEnabled = options.authEnabled === undefined
+    ? Boolean(CONFIG.AUTH && CONFIG.AUTH.enabled)
+    : Boolean(options.authEnabled);
+  const storeNamespace = options.storeNamespace === undefined
+    ? CONFIG.STORE_NAMESPACE
+    : String(options.storeNamespace || '');
+  const pinnedOrganizationId = options.pinnedOrganizationId === undefined
+    ? pinnedWorkspaceOrganizationId()
+    : String(options.pinnedOrganizationId || '');
+  return authEnabled
+    && !storeNamespace
+    && !pinnedOrganizationId
+    && !selected.organizationId;
+}
+
+function pauseForModel(error, settings, llm = null, context) {
+  const runtime = runtimeFor(context);
   if (!runtime.pauseReason) {
     runtime.pauseReason = pauseReasonFor('model', error, {
       provider: (llm && llm.provider) || providerForRole(settings, 'thinking'),
@@ -102,24 +130,39 @@ function pauseForModel(error, settings, llm = null) {
   return runtime.pauseReason;
 }
 
-function clearModelPause() {
+function pauseForPolicy(context) {
+  const runtime = runtimeFor(context);
+  const reason = {
+    code: 'policy-unavailable',
+    resource: 'policy',
+    message: 'Workspace policy is temporarily unavailable. Agent jobs will retry automatically.',
+    since: new Date().toISOString(),
+  };
+  runtime.pauseReason = reason;
+  runtime.lastError = reason.message;
+  return reason;
+}
+
+function clearModelPause(context) {
+  const runtime = runtimeFor(context);
   const cleared = Boolean(runtime.pauseReason);
   runtime.pauseReason = null;
   if (cleared) log.info('Planner model availability pause cleared.');
 }
 
-async function verifyModelReadiness(settings, dependencies = {}) {
+async function verifyModelReadiness(settings, dependencies = {}, context) {
+  const runtime = runtimeFor(context);
   const resolve = dependencies.resolveLlm || resolveLlm;
   const probe = dependencies.probeModelAvailability || probeModelAvailability;
   let llm;
   try {
     llm = await resolve(settings, 'thinking');
     await probe(llm);
-    clearModelPause();
+    clearModelPause(context);
     runtime.lastError = null;
     return llm;
   } catch (error) {
-    pauseForModel(error, settings, llm);
+    pauseForModel(error, settings, llm, context);
     throw error;
   }
 }
@@ -129,19 +172,61 @@ async function verifyModelReadiness(settings, dependencies = {}) {
  * so the SPA updates live instead of polling /status + /jobs. Best-effort —
  * telemetry must never break enqueue or a running job.
  */
-function emitWorkspaceState() {
+function contextForJob(job, fallback) {
+  const selected = normalizeWorkspaceContext({
+    organizationId: job && job.orgId,
+    projectId: job && job.nativeProjectId,
+  });
+  return selected.organizationId ? selected : schedulerContext(fallback);
+}
+
+function emitWorkspaceState(job = null, context) {
   try {
-    workspaceEvents.publishJobsSnapshot();
-    workspaceEvents.publishAgentStatus({ ...getStatus(), assumedRole: store.getAssumedRole() });
+    const selected = contextForJob(job, context);
+    workspaceEvents.publishJobsSnapshot(selected);
+    workspaceEvents.publishAgentStatus(
+      { ...getStatus(selected), assumedRole: store.getAssumedRole() },
+      selected,
+    );
   } catch (_) {
     /* telemetry only */
   }
 }
 
 /** Queue a project for enrichment, skipping duplicates already in flight. */
-function enqueue({ projectId, projectName, assumedRole }) {
+function enqueue({ projectId, projectName, assumedRole, orgId = null, nativeProjectId = null }) {
+  const activeContext = schedulerContext();
+  const requestedContext = normalizeWorkspaceContext({
+    organizationId: orgId || activeContext.organizationId,
+    projectId: nativeProjectId || activeContext.projectId,
+  });
+  if (
+    activeContext.organizationId
+    && requestedContext.organizationId
+    && activeContext.organizationId !== requestedContext.organizationId
+  ) {
+    const error = new Error('Queued job organization does not match the active workspace.');
+    error.code = 'workspace_organization_mismatch';
+    error.status = 403;
+    throw error;
+  }
+  if (
+    activeContext.projectId
+    && requestedContext.projectId
+    && activeContext.projectId !== requestedContext.projectId
+  ) {
+    const error = new Error('Queued job project does not match the active workspace.');
+    error.code = 'workspace_project_mismatch';
+    error.status = 403;
+    throw error;
+  }
+  const selectedOrgId = requestedContext.organizationId || null;
+  const selectedProjectId = requestedContext.projectId || null;
   const active = store.listJobs('enrichment').some(
-    (j) => j.projectId === projectId && (j.status === 'pending' || j.status === 'running')
+    (j) => j.projectId === projectId
+      && (j.orgId || null) === selectedOrgId
+      && (j.nativeProjectId || null) === selectedProjectId
+      && (j.status === 'pending' || j.status === 'running')
   );
   if (active) return null;
 
@@ -150,6 +235,8 @@ function enqueue({ projectId, projectName, assumedRole }) {
     kind: 'enrichment',
     projectId,
     projectName: projectName || projectId,
+    ...(selectedOrgId ? { orgId: selectedOrgId } : {}),
+    ...(selectedProjectId ? { nativeProjectId: selectedProjectId } : {}),
     status: 'pending',
     assumedRole: assumedRole ? { id: assumedRole.id, name: assumedRole.name } : null,
     createdAt: new Date().toISOString(),
@@ -163,7 +250,7 @@ function enqueue({ projectId, projectName, assumedRole }) {
     steps: [],
   };
   store.addJob(job);
-  emitWorkspaceState();
+  emitWorkspaceState(job);
   return job;
 }
 
@@ -180,10 +267,10 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
   const getSettings = dependencies.getSettings || store.getSettings;
   // Resolve THIS org's effective policy (org→project cascade) so the planning
   // agent ENFORCES the harness/tools/skills allow-deny cascade (framework.js
-  // prunes tools/skills; runtimes.js downgrades a denied harness). The autonomous
-  // loop has no end-user token, so this is a token-gated S2S org resolve. Default
-  // fetchOrgEffectivePolicy is fail-open (null → allow-all, no regression) and is
-  // injectable for tests. (models/plugins enforce at model-resolution — future.)
+  // prunes tools/skills; runtimes.js rejects a denied harness). The autonomous
+  // loop has no end-user token, so this is a token-gated S2S org resolve. A
+  // selected organization fails closed when that policy is unavailable; only
+  // the legacy empty local context keeps its allow-all fallback.
   const resolvePolicyImpl = dependencies.resolvePolicy || fetchOrgEffectivePolicy;
   // Records a step both to the persistent log file and onto the job (for the UI).
   const step = (message, level = 'info') => {
@@ -193,7 +280,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
 
   const finish = (patch) => {
     const done = jobStore.updateJob(job.id, { status: 'done', finishedAt: new Date().toISOString(), error: null, ...patch });
-    emitWorkspaceState();
+    emitWorkspaceState(job);
     return done;
   };
 
@@ -203,29 +290,49 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
     error: null,
     pauseReason: null,
   });
-  emitWorkspaceState();
+  emitWorkspaceState(job);
   step('Enrichment started.');
   let phase = 'planning-provider';
   try {
     // Inspect existing milestones to decide: NEW plan vs RESUME (create issues).
     const { project, milestones } = await linearClient.getMilestonesWithIssueCounts(apiKey, job.projectId);
 
-    // Resolve the org's effective policy for enforcement. Fail-open: any error →
-    // null → allow-all (identical to today's behaviour).
+    // Resolve the org's effective policy for enforcement. A selected
+    // organization must never downgrade an outage to allow-all.
+    const selectedPolicyContext = contextForJob(job);
+    const policyOrgId = job.orgId || selectedPolicyContext.organizationId || null;
+    const policyProjectId = job.nativeProjectId || selectedPolicyContext.projectId || null;
     let resolved = null;
-    try { resolved = await resolvePolicyImpl(); } catch (_) { resolved = null; }
+    try {
+      resolved = await resolvePolicyImpl(policyOrgId || undefined, policyProjectId || undefined);
+    } catch (error) {
+      if (isOrganizationContextMismatch(error)) throw error;
+      if (policyOrgId) {
+        throw isPolicyUnavailableError(error)
+          ? error
+          : new PolicyUnavailableError(undefined, error);
+      }
+    }
     const effectivePolicy = (resolved && resolved.effectivePolicy) || null;
+    if (policyOrgId && !hasEffectivePolicy(effectivePolicy)) {
+      throw new PolicyUnavailableError();
+    }
     const opPrefs = (resolved && resolved.prefs) || {};
-    const policySettings = { effectivePolicy };
-    // Enforce the models policy on the resolved model (same-provider downgrade,
-    // fail-open). Keeps a denied model from actually running.
+    const policySettings = {
+      effectivePolicy,
+      orgId: policyOrgId,
+      nativeProjectId: policyProjectId,
+    };
+    // Enforce the models policy on the resolved model. A denied model may move
+    // only to an allowed same-provider preset; otherwise enforcement fails
+    // closed before any model-backed planning runs.
     const enforcedLlm = enforceLlmModel(llm, effectivePolicy);
     if (enforcedLlm.model !== llm.model) {
       step(`Model "${llm.model}" is denied by organization policy; using allowed "${enforcedLlm.model}".`, 'warn');
     }
     // Overlay the org's per-scope operational prefs (runtime/workflow/tracing)
     // onto the planner keys. Fail-open: unset prefs leave keys unchanged.
-    const runKeys = applyPrefsToKeys(keys, opPrefs, step);
+    const runKeys = applyOperationalPrefs(keys, opPrefs, step);
 
     if (milestones.length > 0) {
       // ---- RESUME: milestones already exist; ensure each has issues, then aidone.
@@ -269,8 +376,8 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
     step(`Done: ${summary.milestonesCreated} milestones, ${summary.issuesCreated} issues, ${summary.dependenciesCreated} deps${summary.warnings.length ? `, ${summary.warnings.length} warning(s)` : ''}.`);
     finish({ traceUrl: result.traceUrl, traced: result.traced, summary });
   } catch (err) {
-    if (phase === 'model' && isModelAvailabilityError(err)) {
-      const reason = pauseForModel(err, getSettings(), llm);
+    if (isPolicyUnavailableError(err)) {
+      const reason = pauseForPolicy(contextForJob(job));
       step(`Agent jobs paused: ${reason.message}`, 'warn');
       jobStore.updateJob(job.id, {
         status: 'pending',
@@ -279,7 +386,32 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
         error: reason.message,
         pauseReason: reason,
       });
-      emitWorkspaceState();
+      emitWorkspaceState(job);
+      return { paused: true, pauseReason: reason };
+    }
+    if (isPolicyDeniedError(err)) {
+      const message = err && err.message ? err.message : String(err);
+      step(`Failed: ${message}`, 'error');
+      jobStore.updateJob(job.id, {
+        status: 'error',
+        finishedAt: new Date().toISOString(),
+        error: message,
+        policyDenied: true,
+      });
+      emitWorkspaceState(job);
+      return { error: message, policyDenied: true };
+    }
+    if (phase === 'model' && isModelAvailabilityError(err)) {
+      const reason = pauseForModel(err, getSettings(), llm, contextForJob(job));
+      step(`Agent jobs paused: ${reason.message}`, 'warn');
+      jobStore.updateJob(job.id, {
+        status: 'pending',
+        startedAt: null,
+        finishedAt: null,
+        error: reason.message,
+        pauseReason: reason,
+      });
+      emitWorkspaceState(job);
       return { paused: true, pauseReason: reason };
     }
     const message = err && err.message ? err.message : String(err);
@@ -288,8 +420,9 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
       status: 'error',
       finishedAt: new Date().toISOString(),
       error: message,
+      ...(isPolicyDeniedError(err) ? { policyDenied: true } : {}),
     });
-    emitWorkspaceState();
+    emitWorkspaceState(job);
     return { error: message };
   }
   return { done: true };
@@ -302,18 +435,48 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
  * with milestones-but-no-issues stay labelled and are picked up for RESUME.
  * @returns {Promise<number>} count of newly queued projects
  */
-async function discover({ apiKey, assumedRole, config }) {
-  const candidates = await linear.getProjectsWithLabels(apiKey, config.enrichLabels);
+function jobMatchesContext(job, context) {
+  const selected = schedulerContext(context);
+  if (selected.organizationId && (job.orgId || null) !== selected.organizationId) {
+    const legacyDedicatedRecord = !job.orgId
+      && Boolean(CONFIG.STORE_NAMESPACE)
+      && pinnedWorkspaceOrganizationId() === selected.organizationId;
+    if (!legacyDedicatedRecord) return false;
+  }
+  if (selected.projectId && (job.nativeProjectId || null) !== selected.projectId) return false;
+  return true;
+}
+
+function jobsForContext(jobs, context) {
+  return (Array.isArray(jobs) ? jobs : []).filter((job) => jobMatchesContext(job, context));
+}
+
+function runJobInWorkspace(job, fallbackContext, task) {
+  const selected = contextForJob(job, fallbackContext);
+  return runWithWorkspaceContext(selected, () => task(selected));
+}
+
+async function discover({ apiKey, assumedRole, config, context }, dependencies = {}) {
+  const selected = schedulerContext(context);
+  const linearClient = dependencies.linear || linear;
+  const jobStore = dependencies.store || store;
+  const enqueueImpl = dependencies.enqueue || enqueue;
+  const candidates = await linearClient.getProjectsWithLabels(apiKey, config.enrichLabels);
   const inFlight = new Set(
-    store
-      .listJobs('enrichment')
+    jobsForContext(jobStore.listJobs('enrichment'), selected)
       .filter((j) => j.status === 'pending' || j.status === 'running')
       .map((j) => j.projectId)
   );
   let queued = 0;
   for (const project of candidates) {
     if (inFlight.has(project.id)) continue;
-    const job = enqueue({ projectId: project.id, projectName: project.name, assumedRole });
+    const job = enqueueImpl({
+      projectId: project.id,
+      projectName: project.name,
+      assumedRole,
+      orgId: selected.organizationId || null,
+      nativeProjectId: selected.projectId || null,
+    });
     if (job) {
       queued += 1;
       log.info(`Queued "${project.name}" for enrichment.`);
@@ -323,10 +486,27 @@ async function discover({ apiKey, assumedRole, config }) {
 }
 
 /** Process one tick: auto-discover by label, then enrich. Never overlaps. */
-async function processPending() {
+async function processPending(context, options = {}) {
+  const selected = schedulerContext(context);
+  const active = schedulerContext();
+  if (
+    context !== undefined
+    && workspaceCacheKey(selected) !== workspaceCacheKey(active)
+  ) {
+    return runWithWorkspaceContext(selected, async () => {
+      await store.initStore();
+      return processPending(undefined, options);
+    });
+  }
+  if (shouldSkipUnscopedSharedTick(selected, options.workspaceGuard)) {
+    log.warn('Scheduler tick skipped: an organization context is required in the shared deployment.');
+    return { skipped: 'workspace-context-required' };
+  }
+  const runtime = runtimeFor(selected);
   if (runtime.isTicking) return { skipped: 'already-running' };
   runtime.isTicking = true;
   runtime.lastRunAt = new Date().toISOString();
+  emitWorkspaceState(null, selected);
   log.info('Scheduler tick started.');
   try {
     const apiKey = store.getApiKey();
@@ -340,7 +520,12 @@ async function processPending() {
       return { skipped: 'missing-keys', reason: runtime.lastError };
     }
     if (!llmReady(settings, 'thinking')) {
-      const reason = pauseForModel(new Error(notReadyReason(settings, 'thinking')), settings);
+      const reason = pauseForModel(
+        new Error(notReadyReason(settings, 'thinking')),
+        settings,
+        null,
+        selected,
+      );
       log.warn(`Tick skipped: ${reason.message}`);
       return { skipped: 'paused', reason: reason.message, pauseReason: reason };
     }
@@ -351,7 +536,7 @@ async function processPending() {
     }
     // Negative-balance gate: pause enrichment when the org's credit is exhausted.
     // Inert unless billing is enabled + the account opts in (see billing/gate.js).
-    const billing = billingStatus();
+    const billing = billingStatus({ orgId: selected.organizationId || undefined });
     if (billing.blocked) {
       runtime.lastError = billing.reason;
       log.warn(`Tick skipped: ${billing.reason}`);
@@ -362,7 +547,7 @@ async function processPending() {
     // Resolve the active provider (refreshes the Codex OAuth token if needed).
     let llm;
     try {
-      llm = await verifyModelReadiness(settings);
+      llm = await verifyModelReadiness(settings, {}, selected);
     } catch (err) {
       const reason = runtime.pauseReason;
       log.warn(`Tick skipped: ${reason.message}`);
@@ -380,23 +565,29 @@ async function processPending() {
     // 1. Discover projects to enrich automatically (by label).
     let discovered = 0;
     try {
-      discovered = await discover({ apiKey, assumedRole, config });
+      discovered = await discover({ apiKey, assumedRole, config, context: selected });
     } catch (err) {
       runtime.lastError = `Discovery failed: ${err && err.message ? err.message : err}`;
     }
 
     // 2. Process the pending queue, bounded by config.
-    const pending = store.listJobs('enrichment').filter((j) => j.status === 'pending');
+    const pending = jobsForContext(store.listJobs('enrichment'), selected)
+      .filter((j) => j.status === 'pending');
     const batch = pending.slice(0, Math.max(1, config.maxProjectsPerRun));
     const concurrency = Math.max(1, Math.min(config.parallelProcessing || 1, batch.length || 1));
 
     log.info(`Tick: discovered ${discovered}, processing ${batch.length} (parallel ${concurrency}).`);
-    await runWithConcurrency(batch, concurrency, (job) =>
-      runtime.pauseReason
-        ? Promise.resolve({ skipped: 'paused' })
-        : runJob(job, { apiKey, keys, llm, config })
-    );
-    store.pruneJobs();
+    await runWithConcurrency(batch, concurrency, (job) => {
+      const jobContext = contextForJob(job, selected);
+      if (runtimeFor(jobContext).pauseReason) return Promise.resolve({ skipped: 'paused' });
+      return runJobInWorkspace(
+        job,
+        selected,
+        () => runJob(job, { apiKey, keys, llm, config }),
+      );
+    });
+    // A project-scoped tick must never prune another native project's history.
+    if (!selected.projectId) store.pruneJobs();
     log.info(`Tick finished (processed ${batch.length}).`);
     if (runtime.pauseReason) {
       return { discovered, processed: batch.length, paused: true, pauseReason: runtime.pauseReason };
@@ -408,6 +599,7 @@ async function processPending() {
     return { error: runtime.lastError };
   } finally {
     runtime.isTicking = false;
+    emitWorkspaceState(null, selected);
   }
 }
 
@@ -417,10 +609,38 @@ async function processPending() {
  * `processPending` — a missing Linear key must never stall auto-approval. Errors
  * are swallowed (logged) so a bad gate cannot break the scheduling loop.
  */
-async function processApprovalDeadlines(deps = {}) {
+function gateMatchesContext(gate, context) {
+  const selected = schedulerContext(context);
+  if (selected.organizationId && (gate.orgId || null) !== selected.organizationId) {
+    const legacyDedicatedRecord = !gate.orgId
+      && Boolean(CONFIG.STORE_NAMESPACE)
+      && pinnedWorkspaceOrganizationId() === selected.organizationId;
+    if (!legacyDedicatedRecord) return false;
+  }
+  if (selected.projectId && (gate.nativeProjectId || null) !== selected.projectId) return false;
+  return true;
+}
+
+function scopedApprovalStore(baseStore, context) {
+  const selected = schedulerContext(context);
+  if (!selected.organizationId) return baseStore;
+  const scoped = Object.create(baseStore);
+  scoped.listApprovalGates = (filter) => baseStore
+    .listApprovalGates(filter)
+    .filter((gate) => gateMatchesContext(gate, selected));
+  return scoped;
+}
+
+async function processApprovalDeadlines(deps = {}, context) {
+  const selected = schedulerContext(context);
   const sweep = deps.sweepExpiredGates || require('./approval-gate').sweepExpiredGates;
+  const baseStore = (deps.gateDeps && deps.gateDeps.store) || store;
+  const gateDeps = {
+    ...(deps.gateDeps || {}),
+    store: scopedApprovalStore(baseStore, selected),
+  };
   try {
-    return await sweep(Date.now(), deps.gateDeps || {});
+    return await sweep(Date.now(), gateDeps);
   } catch (err) {
     log.warn(`Approval-gate sweep failed: ${err && err.message ? err.message : err}`);
     return { error: true };
@@ -444,47 +664,95 @@ async function runWithConcurrency(items, limit, worker) {
  * changes (5/10/15) take effect on the next tick. Never runs immediately —
  * the cadence intentionally throttles processing.
  */
-function scheduleNext() {
+function scheduleNext(context) {
+  const selected = schedulerContext(context);
+  if (shouldSkipUnscopedSharedTick(selected)) return null;
+  const runtime = runtimeFor(selected);
+  if (runtime.timer) return runtime.timer;
   const ms = intervalMs(store.getAgentConfig());
   runtime.nextRunAt = new Date(Date.now() + ms).toISOString();
-  runtime.timer = setTimeout(async () => {
-    const config = store.getAgentConfig();
-    // The billing sweep runs every cadence INDEPENDENT of scheduleEnabled and of
-    // the billing gate (a recharge posted here is what unblocks a paused runner);
-    // it self-gates on CONFIG.BILLING.sweepEnabled and never throws into the loop.
-    await processBillingSweep().catch(() => {});
-    if (config.scheduleEnabled) {
-      // Approval deadlines first, independent of processPending's key/role guards.
-      await processApprovalDeadlines().catch(() => {});
-      await processPending().catch(() => {});
-    }
-    scheduleNext();
+  runtime.timer = setTimeout(() => {
+    runtime.timer = null;
+    Promise.resolve(runWithWorkspaceContext(selected, async () => {
+      await store.initStore();
+      const config = store.getAgentConfig();
+      // The billing sweep runs every cadence INDEPENDENT of scheduleEnabled and
+      // of the billing gate (a recharge posted here unblocks a paused runner).
+      await processBillingSweep().catch(() => {});
+      if (config.scheduleEnabled) {
+        // Approval deadlines first, independent of processPending's guards.
+        await processApprovalDeadlines().catch(() => {});
+        await processPending(selected).catch(() => {});
+      }
+    }))
+      .catch((error) => {
+        runtime.lastError = error && error.message ? error.message : String(error);
+        log.error(`Scheduler cycle failed: ${runtime.lastError}`);
+      })
+      .finally(() => {
+        scheduleNext(selected);
+      });
   }, ms);
+  return runtime.timer;
 }
 
 const RESTART_KICKOFF_MS = 4000;
 
-function startScheduler() {
+function reconcileRunningJobsForContext(context) {
+  const selected = schedulerContext(context);
+  if (!selected.projectId) return store.reconcileRunningJobs();
+  let count = 0;
+  const now = new Date().toISOString();
+  for (const job of jobsForContext(store.listJobs('enrichment'), selected)) {
+    if (job.status !== 'running') continue;
+    count += 1;
+    const step = { ts: now, level: 'error', message: 'Interrupted by server restart.' };
+    store.updateJob(job.id, {
+      status: 'error',
+      error: step.message,
+      finishedAt: now,
+      steps: [...(job.steps || []), step],
+    });
+  }
+  return count;
+}
+
+function startScheduler(context) {
+  const selected = schedulerContext(context);
+  if (shouldSkipUnscopedSharedTick(selected)) {
+    log.warn('Scheduler not started: shared authenticated deployments require tenant-scoped ticks.');
+    return { skipped: 'workspace-context-required' };
+  }
+  const runtime = runtimeFor(selected);
   if (runtime.timer) return;
-  const interrupted = store.reconcileRunningJobs();
+  const interrupted = reconcileRunningJobsForContext(selected);
   if (interrupted) log.warn(`Marked ${interrupted} interrupted job(s) as error after restart.`);
   const minutes = intervalMs(store.getAgentConfig()) / 60000;
   log.info(`Scheduler started (every ${minutes} min).`);
-  scheduleNext();
+  scheduleNext(selected);
   // On restart, promptly review existing milestones and resume issue creation.
-  setTimeout(() => {
-    if (store.getAgentConfig().scheduleEnabled) {
-      log.info('Restart resume pass…');
-      // Fire any approval deadlines that elapsed while the server was down.
-      processApprovalDeadlines().catch(() => {});
-      processPending().catch(() => {});
-    }
+  runtime.kickoffTimer = setTimeout(() => {
+    runtime.kickoffTimer = null;
+    Promise.resolve(runWithWorkspaceContext(selected, async () => {
+      await store.initStore();
+      if (store.getAgentConfig().scheduleEnabled) {
+        log.info('Restart resume pass…');
+        // Fire any approval deadlines that elapsed while the server was down.
+        await processApprovalDeadlines().catch(() => {});
+        await processPending(selected).catch(() => {});
+      }
+    })).catch((error) => {
+      runtime.lastError = error && error.message ? error.message : String(error);
+      log.error(`Restart resume pass failed: ${runtime.lastError}`);
+    });
   }, RESTART_KICKOFF_MS);
 }
 
-function getStatus() {
+function getStatus(context) {
+  const selected = schedulerContext(context);
+  const runtime = runtimeFor(selected);
   const config = store.getAgentConfig();
-  const jobs = store.listJobs('enrichment');
+  const jobs = jobsForContext(store.listJobs('enrichment'), selected);
   return {
     intervalMinutes: CONFIG.INTERVAL_OPTIONS.includes(Number(config.intervalMinutes))
       ? Number(config.intervalMinutes)
@@ -505,6 +773,25 @@ function getStatus() {
   };
 }
 
+function resetRuntime(context) {
+  const selected = schedulerContext(context);
+  const key = workspaceCacheKey(selected);
+  const runtime = runtimes.get(key);
+  if (!runtime) return false;
+  if (runtime.timer) clearTimeout(runtime.timer);
+  if (runtime.kickoffTimer) clearTimeout(runtime.kickoffTimer);
+  runtimes.delete(key);
+  return true;
+}
+
+function resetAllRuntimes() {
+  for (const runtime of runtimes.values()) {
+    if (runtime.timer) clearTimeout(runtime.timer);
+    if (runtime.kickoffTimer) clearTimeout(runtime.kickoffTimer);
+  }
+  runtimes.clear();
+}
+
 module.exports = {
   enqueue,
   processPending,
@@ -514,9 +801,23 @@ module.exports = {
   _test: {
     clearModelPause,
     pauseForModel,
+    pauseForPolicy,
     runJob,
     verifyModelReadiness,
     processApprovalDeadlines,
     enforceLlmModel,
+    schedulerContext,
+    runtimeFor,
+    resetRuntime,
+    resetAllRuntimes,
+    shouldSkipUnscopedSharedTick,
+    jobMatchesContext,
+    jobsForContext,
+    runJobInWorkspace,
+    gateMatchesContext,
+    scopedApprovalStore,
+    discover,
+    scheduleNext,
+    reconcileRunningJobsForContext,
   },
 };

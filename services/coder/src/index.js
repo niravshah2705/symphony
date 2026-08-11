@@ -9,6 +9,7 @@ const coderMonitor = require('@ai-fleet/shared/agent/coder-orchestrator');
 
 const coderRoutes = require('./routes/coder');
 const pubsubRoutes = require('./pubsub');
+const { createStoreContextMiddleware } = require('./store-context');
 
 /**
  * Coder agent service (coder-control). It owns the /api/coder surface (status,
@@ -26,7 +27,7 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 app.use('/pubsub', pubsubRoutes);
-app.use('/api/coder', coderRoutes);
+app.use('/api/coder', createStoreContextMiddleware(), coderRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {

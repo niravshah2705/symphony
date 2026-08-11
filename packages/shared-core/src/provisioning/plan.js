@@ -34,6 +34,7 @@ function labelValue(value) {
  * @param {string} cfg.firebaseProjectId
  * @param {string} cfg.firebaseApiKey
  * @param {string} cfg.deadLetterTopic     shared dead-letter topic id
+ * @param {string} cfg.emailTopic          shared transactional email topic id
  * @param {object} cfg.serviceAccounts     { gateway, planner, coder, pubsubPush } emails
  */
 function buildPlan(slug, cfg) {
@@ -66,6 +67,7 @@ function buildPlan(slug, cfg) {
     STORE_NAMESPACE: slug,
     PUBSUB_PLANNER_TOPIC: n.plannerTopic,
     PUBSUB_CODER_TOPIC: n.coderTopic,
+    ...(cfg.orgId ? { FLEET_ORG_ID: cfg.orgId } : {}),
   };
 
   // Per-tenant patch overlaid onto the cloned egress-proxy SIDECAR container
@@ -93,6 +95,7 @@ function buildPlan(slug, cfg) {
     env: {
       ...commonEnv,
       AUTH_MODE: 'firebase',
+      TRUST_PROXY_HOPS: '1',
       SPA_ORIGIN: cfg.spaOrigin || '',
       API_BASE_URL: u.gateway,
       PLANNER_URL: u.planner, // this tenant's planner
@@ -118,6 +121,9 @@ function buildPlan(slug, cfg) {
     env: {
       ...commonEnv,
       PLANNER_PORT: '8080',
+      // Transactional email stays shared; tenant planners publish billing
+      // alerts to the allow-listed queue rather than cloning an SMTP service.
+      EMAIL_TOPIC: cfg.emailTopic || 'email-delivery',
       PUBSUB_PUSH_AUDIENCE: u.planner,
       PUBSUB_PUSH_SA: sa.pubsubPush || '',
     },

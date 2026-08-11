@@ -26,11 +26,13 @@ from app.core.timeutils import ensure_aware, utcnow
 from app.errors import ConflictError, UnauthorizedError, ValidationAppError
 from app.models.enums import AuthProvider, OrgRole
 from app.models.organization import Organization
+from app.models.organization_membership import OrganizationMembership
 from app.services import provisioning_service
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.repositories.base import REFRESH_TOKENS, USERS
 from app.repositories.org_repo import OrgRepository
+from app.repositories.organization_membership_repo import OrganizationMembershipRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.services.common import allocate_org_slug, normalize_email
@@ -114,11 +116,16 @@ async def register(session: Uow, data: RegisterRequest) -> TokenResponse:
         email_verified=False,
     )
     await user_repo.add(user)
+    await OrganizationMembershipRepository(session).add(
+        OrganizationMembership(org_id=org.id, user_id=user.id, role=OrgRole.ORG_ADMIN)
+    )
     # Explicit org creation → provision a dedicated stack (no-op unless enabled).
     await provisioning_service.trigger_provisioning(session, org)
 
-    raw = await issue_email_verification(session, user)
-    logger.info("Email verification token for %s: %s", email, raw)  # would be emailed
+    await issue_email_verification(session, user)
+    # The raw verification token is intentionally never logged. A production
+    # mail adapter can receive it through an injected delivery boundary.
+    logger.info("Email verification requested for user_id=%s", user.id)
     return await _issue_tokens(session, user)
 
 

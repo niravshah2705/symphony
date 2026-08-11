@@ -42,6 +42,30 @@ test('subscribe returns a no-op unsubscribe when conversationId is missing', () 
   assert.doesNotThrow(() => unsub());
 });
 
+test('conversation channels isolate the selected organization and native project', () => {
+  const alpha = [];
+  const beta = [];
+  const otherOrg = [];
+  const alphaContext = { organizationId: 'org-a', projectId: 'project-a' };
+  const unsubAlpha = events.subscribe('context-conversation', (event) => alpha.push(event), alphaContext);
+  const unsubBeta = events.subscribe('context-conversation', (event) => beta.push(event), {
+    organizationId: 'org-a', projectId: 'project-b',
+  });
+  const unsubOther = events.subscribe('context-conversation', (event) => otherOrg.push(event), {
+    organizationId: 'org-b', projectId: 'project-a',
+  });
+
+  events.publishEvent('context-conversation', { message: 'alpha only' }, alphaContext);
+  assert.deepEqual(alpha, [{ message: 'alpha only' }]);
+  assert.deepEqual(beta, []);
+  assert.deepEqual(otherOrg, []);
+  assert.doesNotMatch(events.scopedChannelId('context-conversation', alphaContext), /org-a|project-a/);
+
+  unsubAlpha();
+  unsubBeta();
+  unsubOther();
+});
+
 /* ----------------------- Global workspace channel ----------------------- */
 
 test('subscribeWorkspace receives typed events published via publishWorkspace', () => {
@@ -77,6 +101,24 @@ test('ingest routes an http-sink workspace event onto the workspace channel', ()
   // channel rides the same path under its reserved id.
   events.ingest(events.WORKSPACE_CHANNEL, { type: 'gate', gateId: 'gate_x', status: 'proceeded' });
   assert.deepEqual(got.at(-1), { type: 'gate', gateId: 'gate_x', status: 'proceeded' });
+  unsub();
+});
+
+test('workspace subscribers receive exact-project and org-wide events only', () => {
+  const got = [];
+  const context = { organizationId: 'workspace-org-a', projectId: 'workspace-project-a' };
+  const unsub = events.subscribeWorkspace((event) => got.push(event), context);
+
+  events.publishWorkspace({ type: 'notification', marker: 'org' }, { organizationId: 'workspace-org-a' });
+  events.publishWorkspace({ type: 'jobs', marker: 'project' }, context);
+  events.publishWorkspace({ type: 'jobs', marker: 'sibling' }, {
+    organizationId: 'workspace-org-a', projectId: 'workspace-project-b',
+  });
+  events.publishWorkspace({ type: 'jobs', marker: 'other-org' }, {
+    organizationId: 'workspace-org-b', projectId: 'workspace-project-a',
+  });
+
+  assert.deepEqual(got.map((event) => event.marker), ['org', 'project']);
   unsub();
 });
 

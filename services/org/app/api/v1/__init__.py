@@ -10,6 +10,7 @@ from app.api.v1 import (
     routes_auth,
     routes_health,
     routes_internal,
+    routes_invitations,
     routes_me,
     routes_members,
     routes_org,
@@ -23,6 +24,7 @@ api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(routes_health.router)
 api_router.include_router(routes_auth.router)
 api_router.include_router(routes_internal.router)
+api_router.include_router(routes_invitations.router)
 api_router.include_router(routes_me.router)
 api_router.include_router(routes_org.router)
 api_router.include_router(routes_users.router)

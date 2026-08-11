@@ -24,6 +24,7 @@ locals {
   # blocks below via secret_key_ref.
   gateway_env = merge(local.common_env, {
     AUTH_MODE           = "firebase" # gateway verifies the Firebase ID token
+    TRUST_PROXY_HOPS    = "1"        # direct Cloud Run ingress; req.ip is advisory locale only
     SPA_ORIGIN          = var.spa_origin
     API_BASE_URL        = local.gateway_url
     PLANNER_URL         = local.planner_url # proxied read endpoints
@@ -74,6 +75,7 @@ locals {
   planner_env = merge(local.common_env, {
     # The planner listens on PLANNER_PORT, not PORT — bind Cloud Run's port.
     PLANNER_PORT         = "8080"
+    EMAIL_TOPIC          = google_pubsub_topic.email.name
     PUBSUB_PUSH_AUDIENCE = local.planner_url
     PUBSUB_PUSH_SA       = google_service_account.pubsub_push.email
   }, local.skills_env, local.egress_env)

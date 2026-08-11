@@ -23,6 +23,14 @@ test('token is bound to its conversationId (mismatch is rejected)', () => {
   assert.equal(verifyStreamToken(token, 'conv2'), false);
 });
 
+test('token is bound to the selected organization and native project', () => {
+  const context = { organizationId: 'org-1', projectId: 'project-1' };
+  const token = mintStreamToken('conv1', context);
+  assert.equal(verifyStreamToken(token, 'conv1', context), true);
+  assert.equal(verifyStreamToken(token, 'conv1', { organizationId: 'org-2', projectId: 'project-1' }), false);
+  assert.equal(verifyStreamToken(token, 'conv1'), false);
+});
+
 test('malformed or empty tokens are rejected', () => {
   assert.equal(verifyStreamToken('', 'c'), false);
   assert.equal(verifyStreamToken('abc', 'c'), false);

@@ -9,7 +9,7 @@
  * is used by the container CMD.
  */
 if (String(process.env.CODER_ROLE || '').trim() === 'worker') {
-  require('./job');
+  void require('./job').main();
 } else {
   require('./index');
 }

@@ -1,14 +1,8 @@
 'use strict';
 
-// Full org/projects journey: a signed-in user creates a personal project, then
-// creates an organization (becoming ORG_ADMIN), then creates an org project,
-// adds a person to the org, and adds them to the project as a member.
-//
-// Auth is stubbed the same way as page-loading.spec.js (vendored Firebase module
-// + /api/auth/*). The org service (/api/org/*) is stubbed statefully so the flow
-// is deterministic and needs no live backend — the org service's own behavior is
-// covered by its pytest suite (services/org/tests). This test asserts the SPA
-// wiring end to end: the right calls fire and the UI reflects each step.
+// Browser contract coverage for native AI Fleet organization/project context
+// and email invitations. The stateful routes model /api/org without requiring
+// the Python service, while still asserting the exact browser request shapes.
 
 const { test, expect } = require('@playwright/test');
 
@@ -19,22 +13,40 @@ function json(route, body, status = 200) {
 const TS = '2026-01-01T00:00:00Z';
 const uid = 'firebase|ada';
 
-// Stateful in-memory org backend shared across the stubbed routes.
 function makeOrgState() {
   return {
-    hasOrg: false,
-    org: { id: 'org-1', name: '', description: null, slug: 'acme-xyz', created_at: TS, updated_at: TS },
+    organizations: [],
+    userOrgIds: new Set(),
     personal: [],
-    orgProjects: [],
-    // The signed-in admin is the first org user.
-    users: [{ id: uid, email: 'ada@example.com', full_name: 'Ada Operator', org_role: 'ORG_ADMIN' }],
-    members: {}, // projectId -> [{ user_id, email, full_name, role }]
+    projectsByOrg: {},
+    usersByOrg: {},
+    invitationsByOrg: {},
+    members: {},
     seq: 0,
   };
 }
 
+function createStateOrg(state, name, { joined = true } = {}) {
+  const id = `org-${++state.seq}`;
+  const org = { id, name, description: null, slug: `${name.toLowerCase().replace(/\W+/g, '-')}-${state.seq}`, created_at: TS, updated_at: TS };
+  state.organizations.push(org);
+  state.projectsByOrg[id] = [];
+  state.usersByOrg[id] = joined
+    ? [{ id: uid, email: 'ada@example.com', full_name: 'Ada Operator', org_role: 'ORG_ADMIN' }]
+    : [];
+  state.invitationsByOrg[id] = [];
+  if (joined) state.userOrgIds.add(id);
+  return org;
+}
+
+function organizationIdFor(route, state) {
+  const selected = route.request().headers()['x-ai-fleet-organization-id'];
+  return state.organizations.some((org) => org.id === selected)
+    ? selected
+    : [...state.userOrgIds][0] || null;
+}
+
 async function installStubs(page, state) {
-  // --- Firebase (already signed-in Google user) + app auth ---
   await page.route('**/vendor/firebase/firebase-app.js', (route) => route.fulfill({
     status: 200, contentType: 'text/javascript', body: 'export function initializeApp() { return {}; }',
   }));
@@ -59,133 +71,205 @@ async function installStubs(page, state) {
     mode: 'firebase', enabled: true, provider: 'firebase',
     firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo.firebaseapp.com', projectId: 'demo' },
   }));
-  // Admin role so the Organization area (org domain) is accessible.
   await page.route('**/api/auth/me', (route) => json(route, {
     authenticated: true, role: 'admin',
     user: { sub: uid, name: 'Ada Operator', email: 'ada@example.com' },
     permissions: { workspace: 'write', planning: 'write', insights: 'write', settings: 'write', org: 'write' },
   }));
-  // Quiet the optional boot calls so they neither hang nor error the flow.
-  await page.route('**/api/locale/suggestions**', (route) => json(route, {
-    locale: 'en', suggestions: [{ tag: 'en', label: 'English', nativeLabel: 'English', direction: 'ltr' }],
+  await page.route('**/api/config', (route) => json(route, {
+    authenticated: true, status: 'shared', gatewayUrl: '', orgName: null,
   }));
   await page.route('**/api/settings', (route) => json(route, { hasKey: false, planningConfigured: false }));
   await page.route('**/api/roles/assumed', (route) => json(route, { assumedRole: null }));
 
-  // --- Org service (stateful) ---
   const page1 = (rows) => ({ data: rows, meta: { total: rows.length, page: 1, limit: 20 } });
 
-  await page.route('**/api/org/me', (route) => json(route, {
-    user_id: uid, email: 'ada@example.com', full_name: 'Ada Operator',
-    has_organization: state.hasOrg,
-    org_id: state.hasOrg ? state.org.id : null,
-    org_role: state.hasOrg ? 'ORG_ADMIN' : null,
+  await page.route('**/api/org/me/context', (route) => json(route, {
+    user: { id: uid, email: 'ada@example.com', full_name: 'Ada Operator' },
+    organizations: state.organizations
+      .filter((org) => state.userOrgIds.has(org.id))
+      .map((org) => ({
+        id: org.id,
+        name: org.name,
+        role: 'ORG_ADMIN',
+        projects: state.projectsByOrg[org.id].map((project) => ({
+          id: project.id, name: project.name, role: 'PROJECT_ADMIN',
+        })),
+      })),
   }));
-
+  await page.route('**/api/org/me', (route) => {
+    const firstOrgId = [...state.userOrgIds][0] || null;
+    return json(route, {
+      user_id: uid, email: 'ada@example.com', full_name: 'Ada Operator',
+      has_organization: Boolean(firstOrgId), org_id: firstOrgId,
+      // Deliberately stale: the UI must use /me/context roles, not this field.
+      org_role: firstOrgId ? 'MEMBER' : null,
+    });
+  });
   await page.route('**/api/org/me/projects', (route) => {
     if (route.request().method() === 'POST') {
       const body = route.request().postDataJSON() || {};
-      const proj = { id: `pp-${++state.seq}`, owner_id: uid, name: body.name, description: body.description || null, created_at: TS, updated_at: TS };
-      state.personal.push(proj);
-      return json(route, proj, 201);
+      const project = { id: `personal-${++state.seq}`, owner_id: uid, name: body.name, description: body.description || null, created_at: TS, updated_at: TS };
+      state.personal.push(project);
+      return json(route, project, 201);
     }
     return json(route, page1(state.personal));
   });
-
-  await page.route('**/api/org/me/organization', (route) => {
+  await page.route('**/api/org/me/organizations', (route) => {
     const body = route.request().postDataJSON() || {};
-    state.org = { ...state.org, name: body.name, description: body.description || null };
-    state.hasOrg = true;
-    return json(route, state.org, 201);
+    const org = createStateOrg(state, body.name || 'Untitled');
+    org.description = body.description || null;
+    return json(route, org, 201);
   });
-
-  await page.route('**/api/org/organizations/current', (route) => json(route, state.org));
-
+  await page.route('**/api/org/organizations/current', (route) => {
+    const orgId = organizationIdFor(route, state);
+    return json(route, state.organizations.find((org) => org.id === orgId) || { error: 'No organization' }, orgId ? 200 : 404);
+  });
   await page.route('**/api/org/projects', (route) => {
+    const orgId = organizationIdFor(route, state);
+    const projects = state.projectsByOrg[orgId] || [];
     if (route.request().method() === 'POST') {
       const body = route.request().postDataJSON() || {};
-      const proj = { id: `op-${++state.seq}`, org_id: state.org.id, name: body.name, description: body.description || null, tags: [], created_at: TS, updated_at: TS };
-      state.orgProjects.push(proj);
-      return json(route, proj, 201);
+      const project = { id: `project-${++state.seq}`, org_id: orgId, name: body.name, description: body.description || null, tags: [], created_at: TS, updated_at: TS };
+      projects.push(project);
+      return json(route, project, 201);
     }
-    return json(route, page1(state.orgProjects));
+    return json(route, page1(projects));
   });
-
   await page.route('**/api/org/users', (route) => {
-    if (route.request().method() === 'POST') {
-      const body = route.request().postDataJSON() || {};
-      const usr = { id: `u-${++state.seq}`, email: body.email, full_name: body.full_name || null, org_role: body.org_role || 'MEMBER' };
-      state.users.push(usr);
-      return json(route, usr, 201);
-    }
-    return json(route, page1(state.users));
+    const orgId = organizationIdFor(route, state);
+    return json(route, page1(state.usersByOrg[orgId] || []));
   });
-
-  await page.route('**/api/org/projects/*/members', (route) => {
-    const m = route.request().url().match(/\/projects\/([^/]+)\/members/);
-    const pid = m && m[1];
-    state.members[pid] = state.members[pid] || [];
-    if (route.request().method() === 'POST') {
-      const body = route.request().postDataJSON() || {};
-      const u = state.users.find((x) => x.id === body.user_id) || { id: body.user_id, email: body.user_id };
-      const member = { user_id: u.id, email: u.email, full_name: u.full_name, role: body.role };
-      state.members[pid].push(member);
-      return json(route, member, 201);
+  await page.route('**/api/org/invitations**', (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const orgId = organizationIdFor(route, state);
+    const list = state.invitationsByOrg[orgId] || [];
+    const accept = url.pathname.endsWith('/invitations/accept');
+    const resend = url.pathname.match(/\/invitations\/([^/]+)\/resend$/);
+    const item = url.pathname.match(/\/invitations\/([^/]+)$/);
+    if (request.method() === 'POST' && accept) {
+      const token = request.postDataJSON()?.token;
+      const invitation = Object.values(state.invitationsByOrg).flat().find((candidate) => candidate.token === token);
+      if (!invitation) return json(route, { error: 'Invalid invitation' }, 404);
+      state.userOrgIds.add(invitation.org_id);
+      state.usersByOrg[invitation.org_id].push({ id: uid, email: 'ada@example.com', full_name: 'Ada Operator', org_role: invitation.org_role });
+      invitation.status = 'ACCEPTED';
+      return json(route, { organization_id: invitation.org_id, status: 'ACCEPTED' });
     }
-    return json(route, state.members[pid]);
+    if (request.method() === 'POST' && resend) {
+      const invitation = list.find((candidate) => candidate.id === decodeURIComponent(resend[1]));
+      if (invitation) invitation.resend_count = (invitation.resend_count || 0) + 1;
+      return json(route, invitation || { error: 'Not found' }, invitation ? 200 : 404);
+    }
+    if (request.method() === 'DELETE' && item) {
+      const index = list.findIndex((candidate) => candidate.id === decodeURIComponent(item[1]));
+      if (index >= 0) list.splice(index, 1);
+      return route.fulfill({ status: 204, body: '' });
+    }
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() || {};
+      const invitation = {
+        id: `invitation-${++state.seq}`, token: `token-${state.seq}`,
+        org_id: orgId, email: body.email, org_role: body.org_role,
+        status: 'PENDING', created_at: TS,
+      };
+      list.push(invitation);
+      return json(route, invitation, 201);
+    }
+    // The org service invitation list contract is a bare array.
+    return json(route, list.filter((invitation) => invitation.status === 'PENDING'));
+  });
+  await page.route('**/api/org/projects/*/members', (route) => {
+    const match = new URL(route.request().url()).pathname.match(/\/projects\/([^/]+)\/members/);
+    const projectId = match && match[1];
+    state.members[projectId] = state.members[projectId] || [];
+    return json(route, state.members[projectId]);
   });
 }
 
-test('signed-in user: personal project → create org → org project → add person → add member', async ({ page }) => {
+test('user creates orgs and projects, then manages pending invitations', async ({ page }) => {
   const state = makeOrgState();
+  let invitationBody = null;
+  let reloads = 0;
+  page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) reloads += 1; });
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/org/invitations') {
+      invitationBody = request.postDataJSON();
+    }
+  });
   await page.addInitScript(() => localStorage.setItem('ai-fleet.locale', 'en'));
   await installStubs(page, state);
 
   await page.goto('/#/organization', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#view')).toHaveAttribute('aria-busy', 'false');
-  // Signed in as the stubbed Google user (header chip proves the auth path ran).
   await expect(page.locator('.auth-user')).toContainText('Ada Operator');
 
-  // --- Personal project (available with no org) ---
   await page.getByPlaceholder('New personal project name').fill('My first idea');
   await page.getByRole('button', { name: 'Create personal project' }).click();
   await expect(page.getByText('My first idea')).toBeVisible();
 
-  // --- Create organization (the org-less → admin upgrade) ---
-  await expect(page.getByPlaceholder('Organization name')).toBeVisible();
   await page.getByPlaceholder('Organization name').fill('Acme Inc');
-  await page.getByRole('button', { name: 'Create organization' }).click();
-
-  // Re-render as an org admin: org sections appear, the create-org form is gone.
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+    page.getByRole('button', { name: 'Create organization' }).click(),
+  ]);
   await expect(page.getByPlaceholder('New organization project name')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Add person' })).toBeVisible();
-  await expect(page.getByPlaceholder('Organization name')).toHaveCount(0);
+  // Legacy /me says MEMBER; selected /me/context says ORG_ADMIN and wins.
+  await expect(page.getByRole('button', { name: 'Send invitation' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create another organization' })).toBeVisible();
 
-  // --- Org project ---
   await page.getByPlaceholder('New organization project name').fill('Team project');
-  await page.getByRole('button', { name: 'Create org project' }).click();
-  await expect(page.getByText('Team project')).toBeVisible();
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+    page.getByRole('button', { name: 'Create org project' }).click(),
+  ]);
+  await expect(page.locator('#view').getByText('Team project', { exact: true })).toBeVisible();
 
-  // --- Add a person to the org ---
   await page.getByPlaceholder('person@company.com').fill('teammate@corp.com');
-  await page.getByPlaceholder('Temporary password (min 8)').fill('password123');
-  await page.getByRole('button', { name: 'Add person' }).click();
+  await page.getByRole('button', { name: 'Send invitation' }).click();
   await expect(page.getByText('teammate@corp.com')).toBeVisible();
+  expect(invitationBody).toEqual({ email: 'teammate@corp.com', org_role: 'MEMBER' });
+  expect(state.usersByOrg[state.organizations[0].id]).toHaveLength(1);
 
-  // --- Add that person to the project as a member ---
-  const membersBtn = page.getByRole('button', { name: 'Members', exact: true }).first();
-  await membersBtn.click();
-  const members = page.locator('.org-members');
-  await expect(members).toBeVisible();
-  await members.getByLabel('Org user').selectOption({ label: 'teammate@corp.com' });
-  await members.getByLabel('Project role').selectOption('DEVELOPER');
-  await members.getByRole('button', { name: 'Add member' }).click();
+  await page.getByRole('button', { name: 'Resend' }).click();
+  expect(state.invitationsByOrg[state.organizations[0].id][0].resend_count).toBe(1);
+  await page.getByRole('button', { name: 'Revoke' }).click();
+  await expect(page.getByText('No pending invitations.')).toBeVisible();
 
-  // Adding a member re-renders the view (which collapses the panel); re-open it
-  // to confirm the person is now listed as a project member.
-  await expect(page.locator('.org-members')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Members', exact: true }).first().click();
-  const membersAfter = page.locator('.org-members');
-  await expect(membersAfter.getByText('teammate@corp.com')).toBeVisible();
-  await expect(membersAfter.getByText('Role: DEVELOPER')).toBeVisible();
+  await page.getByPlaceholder('Organization name').fill('Second Org');
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+    page.getByRole('button', { name: 'Create another organization' }).click(),
+  ]);
+  await page.locator('.account-context-trigger').click();
+  await expect(page.locator('#account-organization-select option')).toHaveCount(2);
+  expect(reloads).toBeGreaterThanOrEqual(3);
+});
+
+test('fragment invitation requires an explicit accept and refreshes selectable context', async ({ page }) => {
+  const state = makeOrgState();
+  const org = createStateOrg(state, 'Invited Org', { joined: false });
+  state.invitationsByOrg[org.id].push({
+    id: 'invitation-1', token: 'opaque/token+value', org_id: org.id,
+    email: 'ada@example.com', org_role: 'MEMBER', status: 'PENDING', created_at: TS,
+  });
+  let accepted = false;
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/api/org/invitations/accept')) accepted = true;
+  });
+  await page.addInitScript(() => localStorage.setItem('ai-fleet.locale', 'en'));
+  await installStubs(page, state);
+
+  await page.goto('/#/invite?token=opaque%2Ftoken%2Bvalue', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.invitation-card')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Accept invitation' })).toBeEnabled();
+  expect(accepted).toBe(false);
+  expect(new URL(page.url()).search).toBe('');
+
+  await page.getByRole('button', { name: 'Accept invitation' }).click();
+  await expect(page).toHaveURL(/#\/organization$/);
+  await expect(page.getByRole('heading', { name: 'Invited Org', exact: true })).toBeVisible();
+  expect(accepted).toBe(true);
+  expect(page.url()).not.toContain('opaque');
 });

@@ -4,7 +4,7 @@ const events = require('../messaging/events');
 const store = require('../store');
 
 /**
- * Typed publishers for the GLOBAL workspace channel.
+ * Typed publishers for the selected native workspace channel.
  *
  * These replace the SPA's 5-second polling of GET /api/agent/status,
  * /api/agent/jobs and /api/coder: instead of the browser re-fetching on a timer,
@@ -20,10 +20,16 @@ function nowISO() {
   return new Date().toISOString();
 }
 
-/** Publish the current jobs snapshot (matches GET /api/agent/jobs `{ jobs }`). */
-function publishJobsSnapshot() {
+function normalizedContext(context = {}) {
+  return events.normalizeEventContext(context);
+}
+
+/** Publish the selected context's jobs snapshot (matches GET /api/agent/jobs `{ jobs }`). */
+function publishJobsSnapshot(context = {}) {
   try {
-    events.publishWorkspace({ type: 'jobs', jobs: store.listJobs(), ts: nowISO() });
+    const selected = normalizedContext(context);
+    const jobs = store.listJobs().filter((job) => events.matchesEventContext(job, selected));
+    events.publishWorkspace({ type: 'jobs', jobs, ts: nowISO() }, selected);
   } catch (_) {
     /* fire-and-forget */
   }
@@ -35,27 +41,27 @@ function publishJobsSnapshot() {
  * SPA MERGES it onto its seeded status, so a partial (counts + pause + schedule)
  * is enough and never clobbers the model/provider fields from the seed load.
  */
-function publishAgentStatus(status) {
+function publishAgentStatus(status, context = {}) {
   try {
-    events.publishWorkspace({ type: 'agent-status', status, ts: nowISO() });
+    events.publishWorkspace({ type: 'agent-status', status, ts: nowISO() }, normalizedContext(context));
   } catch (_) {
     /* fire-and-forget */
   }
 }
 
 /** Publish a coder monitor status snapshot (matches GET /api/coder). */
-function publishCoderStatus(coder) {
+function publishCoderStatus(coder, context = {}) {
   try {
-    events.publishWorkspace({ type: 'coder', coder, ts: nowISO() });
+    events.publishWorkspace({ type: 'coder', coder, ts: nowISO() }, normalizedContext(context));
   } catch (_) {
     /* fire-and-forget */
   }
 }
 
 /** Publish a requirement-gate transition (approve / auto-approve / supersede). */
-function publishGate(gateId, status) {
+function publishGate(gateId, status, context = {}) {
   try {
-    events.publishWorkspace({ type: 'gate', gateId, status, ts: nowISO() });
+    events.publishWorkspace({ type: 'gate', gateId, status, ts: nowISO() }, normalizedContext(context));
   } catch (_) {
     /* fire-and-forget */
   }
@@ -68,7 +74,10 @@ function publishGate(gateId, status) {
  */
 function publishNotification({ channel = 'general', level = 'info', title = '', message = '', orgId = null } = {}) {
   try {
-    events.publishWorkspace({ type: 'notification', channel, level, title, message, orgId, ts: nowISO() });
+    events.publishWorkspace(
+      { type: 'notification', channel, level, title, message, orgId, ts: nowISO() },
+      { organizationId: orgId }
+    );
   } catch (_) {
     /* fire-and-forget */
   }

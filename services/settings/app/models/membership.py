@@ -4,11 +4,10 @@ Firestore: `organizations/{org_id}/memberships/{project_id}:{user_id}`. Storing
 memberships under the org path makes tenant isolation structural: a membership
 for another org is unreachable from the caller's org path.
 
-The settings service does not create memberships itself — they are synced from
-the org service (the source of truth for the project/membership graph). See the
-integration note in `app/authz/guards.py`. ORG_ADMINs are elevated to
-PROJECT_ADMIN without needing a membership, so the primary flow (an org admin
-managing any project's settings in their org) works with no membership at all.
+The settings service does not create memberships itself. These records remain
+only for legacy local-JWT installations. Firebase callers resolve the selected
+project and role live from the org service (the source of truth), so no mirror
+sync is needed. ORG_ADMINs are elevated to PROJECT_ADMIN without a membership.
 """
 from __future__ import annotations
 

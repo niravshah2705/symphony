@@ -32,6 +32,12 @@ test('state is single-use: a second consume is rejected (replay guard)', () => {
   assert.equal(claude.consumeLogin(state), null);
 });
 
+test('state is bound to the workspace that initiated provider sign-in', () => {
+  const { state } = claude.createLogin({ orgId: 'org-a', nativeProjectId: 'project-a' });
+  const login = claude.consumeLogin(state);
+  assert.deepEqual(login.workspaceContext, { organizationId: 'org-a', projectId: 'project-a' });
+});
+
 test('unknown or empty state is rejected', () => {
   assert.equal(claude.consumeLogin('never-issued'), null);
   assert.equal(claude.consumeLogin(''), null);

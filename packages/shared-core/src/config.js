@@ -463,6 +463,7 @@ const PUBLIC_DIR = process.env.AI_FLEET_PUBLIC_DIR || path.join(REPO_ROOT, 'publ
  */
 const PLANNER_PORT = Number(process.env.PLANNER_PORT) || 4010;
 const CODER_SERVICE_PORT = Number(process.env.CODER_SERVICE_PORT) || 4020;
+const EMAIL_SERVICE_PORT = Number(process.env.EMAIL_SERVICE_PORT) || 4040;
 const ORG_SERVICE_PORT = Number(process.env.ORG_SERVICE_PORT) || 8000;
 // Settings-policy service (Python/FastAPI, Firestore). Local default 8100 so it
 // does not clash with the org service's 8000 when both run on one host.
@@ -471,9 +472,13 @@ const SERVICES = Object.freeze({
   gatewayPort: PORT,
   plannerPort: PLANNER_PORT,
   coderPort: CODER_SERVICE_PORT,
+  emailPort: EMAIL_SERVICE_PORT,
   settingsPort: SETTINGS_SERVICE_PORT,
   plannerUrl: process.env.PLANNER_URL || `http://localhost:${PLANNER_PORT}`,
   coderUrl: process.env.CODER_URL || `http://localhost:${CODER_SERVICE_PORT}`,
+  // Shared transactional email service. Producers publish allow-listed jobs to
+  // Pub/Sub in cloud mode and use this push-compatible endpoint in local mode.
+  emailUrl: process.env.EMAIL_URL || `http://localhost:${EMAIL_SERVICE_PORT}`,
   // Organization service (Python/FastAPI, Firestore). The gateway proxies
   // /api/org/* -> orgUrl/api/v1/* (see services/gateway/src/index.js). Empty
   // when unset so the gateway can 501 the org routes rather than crash.
@@ -518,6 +523,7 @@ const GCP = Object.freeze({
   region: process.env.GCP_REGION || 'us-central1',
   plannerTopic: process.env.PUBSUB_PLANNER_TOPIC || 'planner-requests',
   coderTopic: process.env.PUBSUB_CODER_TOPIC || 'coder-requests',
+  emailTopic: process.env.EMAIL_TOPIC || 'email-delivery',
   // Cloud Run Job launched (by coder-control) to run one coder ticket to completion.
   coderJobName: process.env.CODER_JOB_NAME || 'coder-worker',
   // Pub/Sub push OIDC verification (enforced only when MESSAGING_MODE=pubsub):

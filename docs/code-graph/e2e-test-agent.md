@@ -6,8 +6,8 @@
 
 Directory-based community: e2e
 
-- **Size**: 43 nodes
-- **Cohesion**: 0.0943
+- **Size**: 50 nodes
+- **Cohesion**: 0.0982
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,15 +15,15 @@ Directory-based community: e2e
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | json | Function | ./e2e/agent-jobs.spec.js | 5-11 |
-| mockShell | Function | ./e2e/agent-jobs.spec.js | 13-49 |
-| mixedJobs | Function | ./e2e/agent-jobs.spec.js | 51-84 |
-| test:Agent jobs restores complete grouped planner and coding history@L86 | Test | ./e2e/agent-jobs.spec.js | 86-153 |
-| test:Agent jobs exposes load failures and retries successfully@L155 | Test | ./e2e/agent-jobs.spec.js | 155-168 |
-| test:Agent jobs rejects a malformed successful response and retries@L170 | Test | ./e2e/agent-jobs.spec.js | 170-185 |
-| test:Agent jobs preserves row focus and defers refresh while delete is armed@L187 | Test | ./e2e/agent-jobs.spec.js | 187-238 |
-| test:Agent jobs route, menu, and pause notice use the selected Gujarati locale@L240 | Test | ./e2e/agent-jobs.spec.js | 240-274 |
-| test:Agent surfaces deduplicate Git pauses and explain recovery in plain language@L276 | Test | ./e2e/agent-jobs.spec.js | 276-332 |
-| test:Agent workspace clears a model pause from a workspace SSE agent-status event@L339 | Test | ./e2e/agent-jobs.spec.js | 339-422 |
+| mockShell | Function | ./e2e/agent-jobs.spec.js | 13-62 |
+| mixedJobs | Function | ./e2e/agent-jobs.spec.js | 64-97 |
+| test:Agent jobs restores complete grouped planner and coding history@L99 | Test | ./e2e/agent-jobs.spec.js | 99-166 |
+| test:Agent jobs exposes load failures and retries successfully@L168 | Test | ./e2e/agent-jobs.spec.js | 168-181 |
+| test:Agent jobs rejects a malformed successful response and retries@L183 | Test | ./e2e/agent-jobs.spec.js | 183-198 |
+| test:Agent jobs preserves row focus and defers refresh while delete is armed@L200 | Test | ./e2e/agent-jobs.spec.js | 200-251 |
+| test:Agent jobs route, menu, and pause notice use the selected Gujarati locale@L253 | Test | ./e2e/agent-jobs.spec.js | 253-287 |
+| test:Agent surfaces deduplicate Git pauses and explain recovery in plain language@L289 | Test | ./e2e/agent-jobs.spec.js | 289-353 |
+| test:Agent workspace clears a model pause from a workspace SSE agent-status event@L360 | Test | ./e2e/agent-jobs.spec.js | 360-443 |
 | json | Function | ./e2e/agent-workspace.spec.js | 7-13 |
 | defaultPreparedBusiness | Function | ./e2e/agent-workspace.spec.js | 15-48 |
 | mockAgentWorkspace | Function | ./e2e/agent-workspace.spec.js | 50-219 |
@@ -39,20 +39,27 @@ Directory-based community: e2e
 | test:remember phrasing surfaces a confirm-before-save memory draft@L389 | Test | ./e2e/agent-workspace.spec.js | 389-405 |
 | test:troubleshooting requests combine diagnostic checks with retained log signals@L407 | Test | ./e2e/agent-workspace.spec.js | 407-446 |
 | test:implementation drafts require project selection and explicit approval before task creation@L448 | Test | ./e2e/agent-workspace.spec.js | 448-495 |
-| json | Function | ./e2e/organization-flow.spec.js | 15-17 |
-| makeOrgState | Function | ./e2e/organization-flow.spec.js | 23-34 |
-| installStubs | Function | ./e2e/organization-flow.spec.js | 36-137 |
-| page1 | Function | ./e2e/organization-flow.spec.js | 76-76 |
-| test:signed-in user: personal project → create org → org project → add person → add member@L139 | Test | ./e2e/organization-flow.spec.js | 139-191 |
+| json | Function | ./e2e/organization-flow.spec.js | 9-11 |
+| makeOrgState | Function | ./e2e/organization-flow.spec.js | 16-27 |
+| createStateOrg | Function | ./e2e/organization-flow.spec.js | 29-40 |
+| organizationIdFor | Function | ./e2e/organization-flow.spec.js | 42-47 |
+| installStubs | Function | ./e2e/organization-flow.spec.js | 49-189 |
+| page1 | Function | ./e2e/organization-flow.spec.js | 85-85 |
+| test:user creates orgs and projects, then manages pending invitations@L191 | Test | ./e2e/organization-flow.spec.js | 191-248 |
+| test:fragment invitation requires an explicit accept and refreshes selectable context@L250 | Test | ./e2e/organization-flow.spec.js | 250-275 |
 | json | Function | ./e2e/page-loading.spec.js | 5-11 |
 | test:settings renders task-model controls without a view error@L39 | Test | ./e2e/page-loading.spec.js | 39-59 |
-| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-119 |
-| test:authentication configuration failure locks the workspace before protected API calls@L121 | Test | ./e2e/page-loading.spec.js | 121-147 |
-| test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L149 | Test | ./e2e/page-loading.spec.js | 149-183 |
-| test:authenticated Firebase session adds a bearer token and ignores an unrelated provider 401@L185 | Test | ./e2e/page-loading.spec.js | 185-284 |
-| authorizedJson | Function | ./e2e/page-loading.spec.js | 194-199 |
-| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L286 | Test | ./e2e/page-loading.spec.js | 286-330 |
-| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L332 | Test | ./e2e/page-loading.spec.js | 332-355 |
+| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
+| test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
+| test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148 | Test | ./e2e/page-loading.spec.js | 148-182 |
+| test:fixed language groups mark, but never auto-apply, the IP recommendation@L184 | Test | ./e2e/page-loading.spec.js | 184-219 |
+| test:authenticated Firebase session adds a bearer token and ignores an unrelated provider 401@L221 | Test | ./e2e/page-loading.spec.js | 221-369 |
+| authorizedJson | Function | ./e2e/page-loading.spec.js | 232-237 |
+| streamContext | Function | ./e2e/page-loading.spec.js | 351-351 |
+| test:Settings Policy uses the active native project and selected-context roles@L371 | Test | ./e2e/page-loading.spec.js | 371-433 |
+| test:selected organization admins can open scoped policy without global settings write@L435 | Test | ./e2e/page-loading.spec.js | 435-476 |
+| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L478 | Test | ./e2e/page-loading.spec.js | 478-527 |
+| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L529 | Test | ./e2e/page-loading.spec.js | 529-552 |
 | json | Function | ./e2e/route-loading.spec.js | 5-11 |
 | test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
 | test:a non-Agent hash never exposes or preloads the Agent scaffold@L107 | Test | ./e2e/route-loading.spec.js | 107-137 |
@@ -66,36 +73,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (256 edge(s))
-- `locator` (150 edge(s))
-- `route` (93 edge(s))
-- `toBeVisible` (54 edge(s))
-- `toHaveCount` (47 edge(s))
-- `getByRole` (42 edge(s))
-- `request` (37 edge(s))
-- `toContainText` (28 edge(s))
-- `click` (28 edge(s))
-- `push` (26 edge(s))
-- `toHaveAttribute` (25 edge(s))
-- `toHaveText` (23 edge(s))
-- `goto` (20 edge(s))
-- `toContain` (18 edge(s))
-- `method` (17 edge(s))
+- `expect` (294 edge(s))
+- `locator` (170 edge(s))
+- `route` (124 edge(s))
+- `toBeVisible` (58 edge(s))
+- `toHaveCount` (48 edge(s))
+- `getByRole` (46 edge(s))
+- `request` (38 edge(s))
+- `click` (33 edge(s))
+- `toContainText` (31 edge(s))
+- `push` (30 edge(s))
+- `toHaveAttribute` (27 edge(s))
+- `toHaveText` (26 edge(s))
+- `fulfill` (24 edge(s))
+- `goto` (24 edge(s))
+- `url` (24 edge(s))
 
 ### Incoming
 
-- `expect` (252 edge(s))
-- `locator` (148 edge(s))
-- `toBeVisible` (53 edge(s))
-- `route` (49 edge(s))
-- `toHaveCount` (47 edge(s))
-- `getByRole` (40 edge(s))
-- `toContainText` (28 edge(s))
-- `click` (27 edge(s))
-- `toHaveAttribute` (24 edge(s))
-- `toHaveText` (23 edge(s))
-- `goto` (19 edge(s))
-- `toContain` (18 edge(s))
-- `push` (14 edge(s))
-- `./e2e/agent-workspace.spec.js` (14 edge(s))
-- `url` (13 edge(s))
+- `expect` (290 edge(s))
+- `locator` (168 edge(s))
+- `route` (76 edge(s))
+- `toBeVisible` (57 edge(s))
+- `toHaveCount` (48 edge(s))
+- `getByRole` (44 edge(s))
+- `click` (32 edge(s))
+- `toContainText` (31 edge(s))
+- `toHaveAttribute` (26 edge(s))
+- `toHaveText` (26 edge(s))
+- `goto` (23 edge(s))
+- `url` (20 edge(s))
+- `toBe` (19 edge(s))
+- `toContain` (19 edge(s))
+- `push` (17 edge(s))

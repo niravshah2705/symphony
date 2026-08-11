@@ -785,13 +785,19 @@ test('Antigravity SDK resolves the key from settings (ctx) and falls back to env
   assert.equal(seen.apiKey, 'env-fallback-key');
 });
 
-test('effectiveAgentRuntime downgrades a policy-excluded harness (enforcement)', () => {
-  // codex is the provider so codex-sdk normally survives; the policy excludes it.
+test('effectiveAgentRuntime rejects a policy-excluded harness (enforcement)', () => {
+  // codex is the provider so codex-sdk normally survives; an explicit policy
+  // exclusion is a hard boundary rather than permission to pick another
+  // runtime with different capabilities.
   const llm = { provider: 'codex' };
   const excludesCodex = { harness: { effective: ['deepagent', 'claude-agent-sdk'] } };
-  assert.equal(
-    effectiveAgentRuntime('codex-sdk', llm, { strict: true, workflow: 'planning', effectivePolicy: excludesCodex }),
-    'deepagent'
+  assert.throws(
+    () => effectiveAgentRuntime('codex-sdk', llm, {
+      strict: true,
+      workflow: 'planning',
+      effectivePolicy: excludesCodex,
+    }),
+    (error) => error.code === 'policy_denied' && error.status === 403 && error.domain === 'harness',
   );
   // Without a policy, the provider-matched runtime is unchanged (no regression).
   assert.equal(

@@ -33,16 +33,12 @@ async def test_org_less_user_cannot_touch_org_settings(client):
     assert (await client.get("/api/v1/settings/org", headers=auth(token))).status_code == 403
 
 
-async def test_gateway_org_headers_grant_org_admin(client):
-    # This service knows the user only as ORG-LESS (its own user store), but the
-    # gateway resolved them as ORG_ADMIN from the authoritative org service and
-    # forwards it as trusted x-org-* headers → org-scope access is granted.
-    org = uuid.uuid4()
-    _u, token = await make_user(email="admin@x.com", org_id=None)
-    headers = {**auth(token), "X-Org-Id": str(org), "X-Org-Role": "ORG_ADMIN"}
-    assert (await client.get("/api/v1/settings/org", headers=headers)).status_code == 200
-
-
+# NOTE: feat-headers derives settings authority from the authenticated Principal
+# and the SELECTED workspace context (resolved by this service), NOT from
+# gateway-forwarded x-org-* headers. So a forwarded role can never GRANT access —
+# it is ignored entirely. The negative cases below assert that (kept as
+# defense-in-depth); main's "header grants org admin (200)" case was removed with
+# that org-forwarding design.
 async def test_gateway_org_headers_member_role_still_forbidden(client):
     # A forwarded MEMBER role must NOT grant org-admin access.
     org = uuid.uuid4()

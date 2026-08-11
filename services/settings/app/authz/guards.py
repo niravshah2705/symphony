@@ -58,11 +58,31 @@ async def get_project_context(
     if principal.org_id is None:
         raise NotFoundError("Project not found")
 
+    if principal.context_authoritative and principal.project_id is None:
+        raise NotFoundError("Project not found")
+
+    # A native project selected in the top bar is part of the authenticated
+    # request context. A different path id must never silently override it.
+    if principal.project_id is not None and principal.project_id != project_id:
+        raise NotFoundError("Project not found")
+
     if is_org_admin(principal):
         return ProjectContext(
             org_id=principal.org_id, project_id=project_id, role=ProjectRole.PROJECT_ADMIN
         )
 
+    # External/Firebase callers receive their selected project's role directly
+    # from the authoritative org service. No duplicated membership sync is
+    # needed for this path.
+    if principal.project_id is not None:
+        return ProjectContext(
+            org_id=principal.org_id,
+            project_id=project_id,
+            role=principal.project_role or ProjectRole.DEVELOPER,
+        )
+
+    # Legacy local-JWT installations keep the existing in-service membership
+    # records for backward compatibility.
     membership = await MembershipRepository(session).get(
         principal.org_id, project_id, principal.user_id
     )

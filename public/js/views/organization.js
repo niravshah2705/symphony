@@ -1,10 +1,15 @@
 import { api } from '../api.js';
 import { el, clear, loading, toast } from '../dom.js';
+import {
+  activeWorkspaceOrganization,
+  activeWorkspaceProject,
+  getWorkspaceContext,
+} from '../workspace-context.js';
 
 // Organization & projects view (org service via /api/org/*). Three tiers:
 //   - Personal projects: any signed-in user, private, single-owner.
-//   - Create organization: the org-less path to collaboration.
-//   - Organization: org projects, members, and people (ORG_ADMIN).
+//   - Create organization: every user can create another collaborative tenant.
+//   - Organization: selected-context projects, members, and people (ORG_ADMIN).
 // The gateway + org service enforce every rule; this view is UX only.
 
 function banner(message) {
@@ -110,20 +115,24 @@ async function renderPersonal(section, rerender) {
   ).childNodes));
 }
 
-async function renderCreateOrg(section, rerender) {
+async function renderCreateOrg(section, { hasOrganizations }) {
   section.replaceChildren();
   section.append(...Array.from(block(
-    'Create an organization',
-    'You are not part of an organization. Personal projects stay private; create an organization to share projects and invite people.',
+    hasOrganizations ? 'Create another organization' : 'Create an organization',
+    hasOrganizations
+      ? 'Start a separate organization. You will become its first administrator and can switch to it from the account menu.'
+      : 'Personal projects stay private; create an organization to share projects and invite people.',
     [
       createForm({
         placeholder: 'Organization name',
-        submitLabel: 'Create organization',
+        submitLabel: hasOrganizations ? 'Create another organization' : 'Create organization',
         extra: ['description'],
         onCreate: async (payload) => {
           await api.org.createOrganization(payload);
           toast('Organization created — you are now its admin.');
-          await rerender();
+          // Context is a sign-in snapshot. A full reload re-fetches /me/context
+          // so the new membership appears in the account switcher immediately.
+          window.location.reload();
         },
       }),
     ],
@@ -175,8 +184,9 @@ async function renderMembers(host, projectId, orgUsers, rerender) {
   ]));
 }
 
-async function renderOrgProjects(section, me, orgUsers, rerender) {
-  const isAdmin = me.org_role === 'ORG_ADMIN';
+async function renderOrgProjects(section, organization, orgUsers, rerender) {
+  const isAdmin = String(organization.role || '').toUpperCase() === 'ORG_ADMIN';
+  const activeProjectId = activeWorkspaceProject(getWorkspaceContext())?.id || null;
   let page;
   try {
     page = await api.org.listOrgProjects();
@@ -187,6 +197,11 @@ async function renderOrgProjects(section, me, orgUsers, rerender) {
   const projects = page.data || [];
   const rows = projects.length
     ? projects.map((project) => {
+        const contextProject = organization.projects.find((item) => item.id === project.id);
+        // The org API validates the path project against the top selection.
+        // Never offer a sibling-project action that would (correctly) 404.
+        const canManageMembers = project.id === activeProjectId
+          && (isAdmin || String(contextProject?.role || '').toUpperCase() === 'PROJECT_ADMIN');
         const membersHost = el('div', { class: 'org-members-host' });
         const toggle = el('button', { class: 'ghost', type: 'button' }, 'Members');
         let open = false;
@@ -197,7 +212,7 @@ async function renderOrgProjects(section, me, orgUsers, rerender) {
           await renderMembers(membersHost, project.id, orgUsers, rerender);
         });
         return el('div', { class: 'org-row-group' }, [
-          projectRow(project.name, project.description, isAdmin ? [toggle] : []),
+          projectRow(project.name, project.description, canManageMembers ? [toggle] : []),
           membersHost,
         ]);
       })
@@ -210,7 +225,9 @@ async function renderOrgProjects(section, me, orgUsers, rerender) {
       submitLabel: 'Create org project',
       onCreate: async (payload) => {
         await api.org.createOrgProject(payload);
-        await rerender();
+        // The account project picker is backed by /me/context, not this view's
+        // project list. Reload so the newly created project is selectable.
+        window.location.reload();
       },
     }));
   }
@@ -224,57 +241,104 @@ async function renderOrgProjects(section, me, orgUsers, rerender) {
 
 async function renderPeople(section, rerender) {
   let page;
+  let invitationPage;
   try {
-    page = await api.org.listOrgUsers();
+    [page, invitationPage] = await Promise.all([
+      api.org.listOrgUsers(),
+      api.org.listInvitations(),
+    ]);
   } catch (err) {
     section.replaceChildren(banner(err.message));
     return;
   }
   const users = page.data || [];
+  const invitations = Array.isArray(invitationPage)
+    ? invitationPage
+    : invitationPage.data || invitationPage.invitations || [];
   const rows = users.length
     ? users.map((u) => projectRow(u.email || u.full_name || u.id, `Role: ${u.org_role || 'MEMBER'}`))
     : [el('p', { class: 'muted' }, 'Just you so far.')];
 
+  const pendingInvitations = invitations.filter((invitation) => invitation.status === 'PENDING');
+  const invitationRows = pendingInvitations.length
+    ? pendingInvitations.map((invitation) => {
+        const invitationId = invitation.id || invitation.invitation_id;
+        const resend = el('button', { class: 'ghost', type: 'button' }, 'Resend');
+        const revoke = el('button', { class: 'ghost danger', type: 'button' }, 'Revoke');
+        resend.addEventListener('click', async () => {
+          resend.disabled = true;
+          try {
+            const delivery = await api.org.resendInvitation(invitationId);
+            toast(delivery?.delivery_status === 'failed'
+              ? 'Invitation saved, but its email could not be queued. Try resending shortly.'
+              : 'Invitation email queued again.');
+          } catch (err) {
+            toast(err.message || 'Could not resend the invitation.');
+          } finally {
+            resend.disabled = false;
+          }
+        });
+        revoke.addEventListener('click', async () => {
+          revoke.disabled = true;
+          try {
+            await api.org.revokeInvitation(invitationId);
+            toast('Invitation revoked.');
+            await rerender();
+          } catch (err) {
+            toast(err.message || 'Could not revoke the invitation.');
+            revoke.disabled = false;
+          }
+        });
+        return projectRow(
+          invitation.email || 'Pending invitation',
+          `Pending invitation · Role: ${invitation.org_role || invitation.role || 'MEMBER'}`,
+          invitationId ? [resend, revoke] : []
+        );
+      })
+    : [el('p', { class: 'muted' }, 'No pending invitations.')];
+
   const email = el('input', { type: 'email', placeholder: 'person@company.com', 'aria-label': 'Email' });
-  const fullName = el('input', { type: 'text', placeholder: 'Full name (optional)', 'aria-label': 'Full name' });
-  const password = el('input', { type: 'password', placeholder: 'Temporary password (min 8)', 'aria-label': 'Temporary password' });
   const role = el('select', { 'aria-label': 'Org role' }, [
     el('option', { value: 'MEMBER' }, 'Member'),
     el('option', { value: 'ORG_ADMIN' }, 'Org admin'),
   ]);
-  const addBtn = el('button', { class: 'primary', type: 'submit' }, 'Add person');
-  const form = el('form', { class: 'org-form org-form-wide' }, [email, fullName, password, role, addBtn]);
+  const addBtn = el('button', { class: 'primary', type: 'submit' }, 'Send invitation');
+  const form = el('form', { class: 'org-form org-form-wide' }, [email, role, addBtn]);
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!email.value.trim() || password.value.length < 8) {
-      toast('Enter an email and a temporary password of at least 8 characters.');
-      return;
-    }
+    if (!email.value.trim()) return;
     addBtn.disabled = true;
     try {
-      await api.org.createOrgUser({
+      const delivery = await api.org.createInvitation({
         email: email.value.trim(),
-        full_name: fullName.value.trim() || undefined,
-        password: password.value,
         org_role: role.value,
       });
-      toast('Person added to your organization.');
+      toast(delivery?.delivery_status === 'failed'
+        ? 'Invitation saved, but its email could not be queued. You can resend it below.'
+        : 'Invitation email queued. They will join only after accepting it.');
       await rerender();
     } catch (err) {
-      toast(err.message || 'Could not add the person.');
+      toast(err.message || 'Could not send the invitation.');
       addBtn.disabled = false;
     }
   });
 
   section.replaceChildren();
   section.append(...Array.from(block('People',
-    'Add people to your organization, then add them to projects as members.',
-    [form, el('div', { class: 'org-list' }, rows)]).childNodes));
+    'Invite people by email. They become members only after accepting the invitation.',
+    [
+      form,
+      el('div', { class: 'org-list' }, rows),
+      el('h3', {}, 'Pending invitations'),
+      el('div', { class: 'org-list', dataset: { invitationList: 'true' } }, invitationRows),
+    ]).childNodes));
 }
 
-async function renderOrg(section, me, rerender) {
-  if (!me.has_organization) {
-    await renderCreateOrg(section, rerender);
+async function renderOrg(section, organization, rerender) {
+  if (!organization) {
+    section.replaceChildren(el('div', { class: 'empty compact-empty' }, [
+      el('p', { class: 'muted' }, 'No organization is selected yet.'),
+    ]));
     return;
   }
   let org;
@@ -284,10 +348,13 @@ async function renderOrg(section, me, rerender) {
     section.replaceChildren(banner(err.message));
     return;
   }
-  const isAdmin = me.org_role === 'ORG_ADMIN';
+  const isAdmin = String(organization.role || '').toUpperCase() === 'ORG_ADMIN';
+  const hasProjectAdminRole = organization.projects.some(
+    (project) => String(project.role || '').toUpperCase() === 'PROJECT_ADMIN'
+  );
   const header = el('div', { class: 'org-block-head' }, [
-    el('h2', {}, org.name || 'Your organization'),
-    el('p', { class: 'muted' }, `Your role: ${me.org_role}${org.description ? ` · ${org.description}` : ''}`),
+    el('h2', {}, org.name || organization.name || 'Your organization'),
+    el('p', { class: 'muted' }, `Your role: ${organization.role || 'MEMBER'}${org.description ? ` · ${org.description}` : ''}`),
   ]);
 
   const projectsSection = el('section', { class: 'org-block' });
@@ -295,10 +362,10 @@ async function renderOrg(section, me, rerender) {
   section.replaceChildren(header, projectsSection, ...(peopleSection ? [peopleSection] : []));
 
   // People must load first so the members picker has candidates.
-  const orgUsers = isAdmin
+  const orgUsers = isAdmin || hasProjectAdminRole
     ? await api.org.listOrgUsers().then((p) => p.data || []).catch(() => [])
     : [];
-  await renderOrgProjects(projectsSection, me, orgUsers, rerender);
+  await renderOrgProjects(projectsSection, organization, orgUsers, rerender);
   if (peopleSection) await renderPeople(peopleSection, rerender);
 }
 
@@ -316,10 +383,14 @@ export async function renderOrganization(view) {
 
   const personalSection = el('section', { class: 'org-block' });
   const orgSection = el('section', { class: 'org-block' });
-  clear(view).append(pageHead(), personalSection, orgSection);
+  const createOrgSection = el('section', { class: 'org-block' });
+  const workspace = getWorkspaceContext();
+  const organization = activeWorkspaceOrganization(workspace);
+  clear(view).append(pageHead(), personalSection, orgSection, createOrgSection);
 
   await Promise.all([
     renderPersonal(personalSection, rerender),
-    renderOrg(orgSection, me, rerender),
+    renderOrg(orgSection, organization, rerender),
+    renderCreateOrg(createOrgSection, { hasOrganizations: workspace.organizations.length > 0 }),
   ]);
 }

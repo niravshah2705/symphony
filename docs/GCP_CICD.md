@@ -84,6 +84,14 @@ PROJECT_ID=my-proj REPO=owner/repo LINEAR_API_KEY=lin_... \
   ./deploy/gcp/bootstrap.sh
 ```
 
+When SMTP authentication is required, pass `EMAIL_SMTP_USER`,
+`EMAIL_SMTP_PASSWORD`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM` together. The
+bootstrap writes the credential pair only to Secret Manager; it stores only the
+non-secret `EMAIL_SMTP_AUTH_ENABLED` switch in GitHub Actions. It also sets
+`EMAIL_PUBLIC_APP_URL` to the Firebase Hosting URL deployed by this workflow
+(or to an explicit override), so invitation links cannot silently point at a
+different hosting channel.
+
 After it, only two console actions remain: **link a billing account** and
 **enable the Google sign-in provider** in the Firebase console (the one Firebase
 piece Terraform can't create). Then push to main (first run:
@@ -170,6 +178,9 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
 # Optional RBAC bootstrap: gh variable set AUTH_ADMIN_EMAILS --repo niravshah2705/symphony --body "you@corp.com"
 #   (admins at sign-in) and AUTH_DEFAULT_ROLE (default "viewer"). Other roles are
 #   assigned as Firebase custom claims via services/gateway/scripts/set-user-role.js.
+# Transactional email (normally set by bootstrap.sh):
+# gh variable set EMAIL_SMTP_AUTH_ENABLED --repo niravshah2705/symphony --body "true"
+# gh variable set EMAIL_PUBLIC_APP_URL --repo niravshah2705/symphony --body "https://adlc-9e72f.web.app"
 ```
 
 ## Prerequisites the pipeline assumes
@@ -184,6 +195,11 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
   `org-jwt-secret` is **Terraform-managed** (`random_password` + version) — created
   and seeded by the apply, no manual step. `google-one-tap-client-id` is likewise
   Terraform-managed from the `google_one_tap_client_id` var (only when set).
+- SMTP credential **values are not Terraform inputs**. The bootstrap creates and
+  seeds `email-smtp-user` and `email-smtp-password`, then enables their all-or-none
+  `latest` mounts through `EMAIL_SMTP_AUTH_ENABLED`. A missing half fails closed.
+  Rotation happens in Secret Manager, without exposing a value to GitHub or
+  Terraform state.
 - The `TF_STATE_BUCKET` exists (created by `deploy.sh` / the first manual apply).
 - Firebase console: Google provider enabled + gateway URL and SPA origin in
   **Authorized domains** (see docs/GCP_DEPLOY.md).

@@ -100,6 +100,12 @@ resource "google_cloud_run_v2_service" "settings" {
         name  = "IDP_FIREBASE_PROJECT"
         value = var.project_id
       }
+      # Membership and the selected native org/project context are authoritative
+      # in the org service; settings no longer relies on a duplicated user.org_id.
+      env {
+        name  = "ORG_URL"
+        value = local.org_url
+      }
       env {
         name = "JWT_SECRET"
         value_source {
@@ -200,4 +206,14 @@ resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_settings" {
   name     = google_cloud_run_v2_service.settings.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.gateway.email}"
+}
+
+# Settings resolves every Firebase caller's selected membership/project through
+# the canonical org service. No browser can invoke either internal service.
+resource "google_cloud_run_v2_service_iam_member" "settings_invokes_org" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.org.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.settings.email}"
 }

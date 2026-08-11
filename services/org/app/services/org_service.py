@@ -12,8 +12,10 @@ from app.core.security import hash_password
 from app.errors import ConflictError, NotFoundError
 from app.models.enums import AuthProvider, OrgRole
 from app.models.organization import Organization
+from app.models.organization_membership import OrganizationMembership
 from app.models.user import User
 from app.repositories.org_repo import OrgRepository
+from app.repositories.organization_membership_repo import OrganizationMembershipRepository
 from app.repositories.user_repo import UserRepository
 from app.services import provisioning_service
 from app.schemas.common import PageParams
@@ -60,17 +62,19 @@ async def create_org(session: Uow, data: OrgCreate) -> Organization:
         email = normalize_email(data.admin_email)
         if await user_repo.get_global_by_email(email) is not None:
             raise ConflictError("Admin email already registered")
-        await user_repo.add(
-            User(
-                org_id=org.id,
-                email=email,
-                password_hash=hash_password(data.admin_password),
-                auth_provider=AuthProvider.LOCAL,
-                org_role=OrgRole.ORG_ADMIN,
-                is_super_admin=False,
-                is_active=True,
-                email_verified=False,
-            )
+        admin = User(
+            org_id=org.id,
+            email=email,
+            password_hash=hash_password(data.admin_password),
+            auth_provider=AuthProvider.LOCAL,
+            org_role=OrgRole.ORG_ADMIN,
+            is_super_admin=False,
+            is_active=True,
+            email_verified=False,
+        )
+        await user_repo.add(admin)
+        await OrganizationMembershipRepository(session).add(
+            OrganizationMembership(org_id=org.id, user_id=admin.id, role=OrgRole.ORG_ADMIN)
         )
     # Explicit (super-admin) org creation → provision a dedicated stack (no-op
     # unless enabled).

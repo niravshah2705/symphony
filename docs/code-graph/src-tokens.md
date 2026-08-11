@@ -6,25 +6,25 @@
 
 Directory-based community: packages/shared-core
 
-- **Size**: 215 nodes
-- **Cohesion**: 0.2565
+- **Size**: 242 nodes
+- **Cohesion**: 0.2676
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| prunePending | Function | ./packages/shared-core/src/agent/claude-oauth.js | 32-36 |
-| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/claude-oauth.js | 39-49 |
-| createLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 55-62 |
-| consumeLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 65-73 |
-| pendingCount | Function | ./packages/shared-core/src/agent/claude-oauth.js | 76-79 |
-| parseCodeInput | Function | ./packages/shared-core/src/agent/claude-oauth.js | 85-99 |
-| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/claude-oauth.js | 102-114 |
-| postToken | Function | ./packages/shared-core/src/agent/claude-oauth.js | 116-137 |
-| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 140-150 |
-| refreshTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 153-165 |
-| isExpired | Function | ./packages/shared-core/src/agent/claude-oauth.js | 168-171 |
+| prunePending | Function | ./packages/shared-core/src/agent/claude-oauth.js | 33-37 |
+| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/claude-oauth.js | 40-50 |
+| createLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 56-67 |
+| consumeLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 70-78 |
+| pendingCount | Function | ./packages/shared-core/src/agent/claude-oauth.js | 81-84 |
+| parseCodeInput | Function | ./packages/shared-core/src/agent/claude-oauth.js | 90-104 |
+| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/claude-oauth.js | 107-119 |
+| postToken | Function | ./packages/shared-core/src/agent/claude-oauth.js | 121-142 |
+| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 145-155 |
+| refreshTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 158-170 |
+| isExpired | Function | ./packages/shared-core/src/agent/claude-oauth.js | 173-176 |
 | isLocalInference | Function | ./packages/shared-core/src/agent/model-presets.js | 24-24 |
 | isPurposeRole | Function | ./packages/shared-core/src/agent/model-presets.js | 43-43 |
 | assert | Function | ./packages/shared-core/src/agent/model-presets.js | 62-64 |
@@ -49,23 +49,23 @@ Directory-based community: packages/shared-core
 | settingsPatchForReasoning | Function | ./packages/shared-core/src/agent/model-presets.js | 574-585 |
 | customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 588-775 |
 | publicCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 777-779 |
-| coalesce | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 21-27 |
-| ensureFreshCodexTokens | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 34-49 |
-| ensureFreshClaudeTokens | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 56-71 |
-| prunePending | Function | ./packages/shared-core/src/agent/oauth.js | 32-36 |
-| createLogin | Function | ./packages/shared-core/src/agent/oauth.js | 42-50 |
-| consumeLogin | Function | ./packages/shared-core/src/agent/oauth.js | 53-61 |
-| pendingCount | Function | ./packages/shared-core/src/agent/oauth.js | 64-67 |
-| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/oauth.js | 70-80 |
-| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/oauth.js | 83-96 |
-| postToken | Function | ./packages/shared-core/src/agent/oauth.js | 98-119 |
-| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/oauth.js | 122-131 |
-| refreshTokens | Function | ./packages/shared-core/src/agent/oauth.js | 134-147 |
-| isExpired | Function | ./packages/shared-core/src/agent/oauth.js | 150-153 |
-| accountIdFromIdToken | Function | ./packages/shared-core/src/agent/oauth.js | 161-171 |
-| base64url | Function | ./packages/shared-core/src/agent/pkce.js | 12-14 |
+| refreshKey | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 22-24 |
+| coalesce | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 26-32 |
+| ensureFreshCodexTokens | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 39-54 |
+| ensureFreshClaudeTokens | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 61-76 |
+| prunePending | Function | ./packages/shared-core/src/agent/oauth.js | 33-37 |
+| createLogin | Function | ./packages/shared-core/src/agent/oauth.js | 43-56 |
+| consumeLogin | Function | ./packages/shared-core/src/agent/oauth.js | 59-67 |
+| pendingCount | Function | ./packages/shared-core/src/agent/oauth.js | 70-73 |
+| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/oauth.js | 76-86 |
+| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/oauth.js | 89-102 |
+| postToken | Function | ./packages/shared-core/src/agent/oauth.js | 104-125 |
+| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/oauth.js | 128-137 |
+| refreshTokens | Function | ./packages/shared-core/src/agent/oauth.js | 140-153 |
+| isExpired | Function | ./packages/shared-core/src/agent/oauth.js | 156-159 |
+| accountIdFromIdToken | Function | ./packages/shared-core/src/agent/oauth.js | 167-177 |
 
-*... and 165 more members.*
+*... and 192 more members.*
 
 ## Execution Flows
 
@@ -85,26 +85,27 @@ Directory-based community: packages/shared-core
 
 ### Outgoing
 
-- `String` (40 edge(s))
+- `String` (44 edge(s))
 - `includes` (30 edge(s))
-- `trim` (26 edge(s))
-- `isArray` (25 edge(s))
+- `trim` (29 edge(s))
+- `isArray` (27 edge(s))
 - `filter` (23 edge(s))
+- `set` (22 edge(s))
 - `map` (22 edge(s))
-- `set` (21 edge(s))
 - `slice` (20 edge(s))
 - `toISOString` (20 edge(s))
-- `call` (15 edge(s))
+- `call` (16 edge(s))
 - `isFinite` (14 edge(s))
 - `has` (14 edge(s))
-- `test` (11 edge(s))
+- `test` (12 edge(s))
+- `get` (11 edge(s))
 - `toLowerCase` (11 edge(s))
-- `find` (11 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/store.js` (168 edge(s))
+- `./packages/shared-core/src/store.js` (173 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (40 edge(s))
+- `./packages/shared-core/src/store/workspace-context.js` (27 edge(s))
 - `./packages/shared-core/src/config.js` (26 edge(s))
 - `./packages/shared-core/src/provisioning/index.js` (26 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (20 edge(s))
@@ -114,7 +115,6 @@ Directory-based community: packages/shared-core
 - `./packages/shared-core/src/agent/pkce.js` (8 edge(s))
 - `./packages/shared-core/src/authz.js` (8 edge(s))
 - `./packages/shared-core/src/messaging/publisher.js` (8 edge(s))
+- `./packages/shared-core/src/agent/oauth-tokens.js` (7 edge(s))
 - `./packages/shared-core/src/messaging/oidc.js` (7 edge(s))
 - `./packages/shared-core/src/egress.js` (6 edge(s))
-- `./packages/shared-core/src/provisioning/naming.js` (6 edge(s))
-- `./packages/shared-core/src/store/file-backend.js` (6 edge(s))
