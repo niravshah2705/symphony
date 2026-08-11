@@ -17,7 +17,7 @@
  * `security:*`.
  */
 
-const DOMAINS = Object.freeze(['harness', 'tools', 'skills', 'plugins', 'hooks']);
+const DOMAINS = Object.freeze(['harness', 'tools', 'skills', 'plugins', 'hooks', 'models']);
 
 const EMPTY_SCOPE = Object.freeze({ include: [], exclude: [] });
 
@@ -210,6 +210,27 @@ function filterHooksByPolicy(hookIds, effective) {
 }
 
 /**
+ * Filter task-model ids to the effective `models` policy (matched by id, like
+ * skills). The `models` universe is the task-model catalog (preset ids in
+ * llm-presets.json), so callers pass the catalog ids as universe when resolving.
+ * Allow-all when no models policy is present (fail-open — no regression).
+ */
+function filterModelsByPolicy(modelIds, effective) {
+  if (!Array.isArray(modelIds) || !hasDomain(effective, 'models')) return modelIds;
+  return filterByPolicy(modelIds, effective.models.effective);
+}
+
+/**
+ * True when `modelId` is permitted by the effective `models` policy. Allow-all
+ * (no regression) when no models policy is present, so a single-user/local run is
+ * never blocked. Use at model-resolution time to reject a denied model.
+ */
+function isModelAllowed(modelId, effective) {
+  if (!hasDomain(effective, 'models')) return true;
+  return effective.models.effective.includes(modelId);
+}
+
+/**
  * Enforce the harness policy on a chosen runtime id. If the runtime is excluded,
  * fall back to the first allowed harness (preferring `deepagent`, the
  * provider-neutral default). When no harness policy is present, or nothing is
@@ -239,6 +260,8 @@ module.exports = {
   applyPolicyToWorkflow,
   filterSkillPaths,
   filterHooksByPolicy,
+  filterModelsByPolicy,
+  isModelAllowed,
   skillNameFromPath,
   enforceHarness,
 };

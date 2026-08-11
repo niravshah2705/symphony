@@ -66,7 +66,7 @@ export async function renderSettings(view) {
       ]),
       el('div', { class: 'settings-layout' }, [
         el('div', { class: 'settings-content' }, [
-          governanceSection(ctx),
+          governanceSection(ctx, scopeState),
           modelsRuntimeSection(ctx, llm),
           connectionsSection(ctx),
           advancedGroup(ctx),
@@ -180,39 +180,167 @@ function providerLabel(id) {
   return PROVIDER_LABELS[id] || id;
 }
 
-function modelCatalogRow(preset) {
+function modelSpec(preset) {
   const provLabel = providerLabel(preset.provider);
-  const name = preset.name || preset.model || preset.id;
   const ctxTok = fmtTokens(preset.limits && preset.limits.contextWindow);
   const outTok = fmtTokens(preset.limits && preset.limits.maxOutputTokens);
-  const spec = `${provLabel} · ctx ${ctxTok} · out ${outTok} · ${modelPrice(preset)}`;
-  return el('div', { class: 'sx-row' }, [
-    el('span', { class: 'sx-badge', dataset: { i18nSkip: 'true' } }, (provLabel[0] || '?').toUpperCase()),
-    el('div', { style: 'min-width:0' }, [
-      el('div', { class: 'sx-row-name', dataset: { i18nSkip: 'true' } }, name),
-      el('div', { class: 'sx-row-spec', dataset: { i18nSkip: 'true' } }, spec),
-    ]),
-    el('span', { class: 'sx-tag ok' }, 'Allowed'),
+  return `${provLabel} · ctx ${ctxTok} · out ${outTok} · ${modelPrice(preset)}`;
+}
+
+function lockChip(label) {
+  return el('span', { class: 'sx-locked' }, [
+    el('span', { dataset: { i18nSkip: 'true' }, html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>' }),
+    label,
   ]);
 }
 
-function governanceSection(ctx) {
+// Interactive per-scope model catalog. Status comes from the backend-computed
+// effective breakdown (`models` domain — globs already applied); edits mutate this
+// scope's policy include/exclude and PUT the full domain set (so other domains are
+// preserved). Org/project DENY (exclude); the user SHORTLISTS (include). Falls back
+// to read-only when the scope's policy isn't editable (non-admin / no session).
+function governanceSection(ctx, scopeState) {
+  const scope = scopeState.scope;
   const catalog = (ctx.presets && ctx.presets.presets) || [];
-  const card = el('div', { class: 'sx-card' }, [
-    el('div', { class: 'sx-card-head bordered' }, [
-      el('div', { style: 'min-width:0' }, [
-        el('div', { class: 'sx-card-title' }, 'Model catalog'),
-        el('div', { class: 'sx-card-sub' }, 'Every model the agents can be pointed at.'),
-      ]),
-      el('span', { class: 'sx-src' }, `${catalog.length} models`),
-    ]),
-    ...catalog.map(modelCatalogRow),
-    el('div', { class: 'sx-card-foot' }, 'Per-scope allow / deny governance (org ceiling → project subtract → user shortlist) ships next — catalog shown read-only.'),
-  ]);
-  return el('section', { class: 'sx-section' }, [
+  const allIds = catalog.map((p) => p.id);
+  const card = el('div', { class: 'sx-card' });
+  const wrap = el('section', { class: 'sx-section' }, [
     sxSecHead('Allow & deny lists', 'Governs which models each scope may use'),
     card,
   ]);
+  let filter = 'all';
+  let data = null;
+
+  const statusOf = (id) => {
+    if (!data.orgAllowed.has(id)) return 'orgblock';
+    if (!data.projAllowed.has(id)) return 'projblock';
+    return 'allow';
+  };
+  const add = (arr, id) => { if (!arr.includes(id)) arr.push(id); return arr; };
+  const drop = (arr, id) => arr.filter((x) => x !== id);
+
+  const persist = async (nextModels) => {
+    const domains = {};
+    for (const [d, v] of Object.entries(data.domains)) {
+      domains[d] = { include: (v.include || []).slice(), exclude: (v.exclude || []).slice() };
+    }
+    domains.models = nextModels;
+    const body = { domains };
+    if (scope === 'org') await api.settingsPolicy.setOrgPolicy(body);
+    else if (scope === 'project') await api.settingsPolicy.setProjectPolicy(scopeState.projectId, body);
+    else await api.settingsPolicy.setMyPolicy(body);
+  };
+  const mutate = async (mutator, okMsg) => {
+    const base = data.domains.models || { include: [], exclude: [] };
+    const next = { include: (base.include || []).slice(), exclude: (base.exclude || []).slice() };
+    mutator(next);
+    try { await persist(next); toast(okMsg, 'ok'); await load(); }
+    catch (err) { toast(err.message || 'Could not update model policy.', 'err'); }
+  };
+
+  const controlFor = (preset) => {
+    const id = preset.id;
+    const s = statusOf(id);
+    if (!data.editable) return null;
+    if (scope === 'user') {
+      if (s !== 'allow') return lockChip(s === 'orgblock' ? 'Denied · org' : 'Denied · project');
+      const inShort = data.shortlisting && data.myInclude.has(id);
+      const b = el('button', { type: 'button', class: `sx-btn${inShort ? ' primary' : ''}` }, inShort ? 'On shortlist' : 'Add to shortlist');
+      b.addEventListener('click', () => mutate((m) => {
+        if (m.include.includes(id)) m.include = drop(m.include, id); else add(m.include, id);
+      }, inShort ? 'Removed from shortlist.' : 'Added to shortlist.'));
+      return b;
+    }
+    if (scope === 'project' && s === 'orgblock') return lockChip('Denied · org');
+    const denyActive = scope === 'org' ? !data.orgAllowed.has(id) : (data.orgAllowed.has(id) && !data.projAllowed.has(id));
+    const allow = el('button', { type: 'button', class: `sx-seg${!denyActive ? ' active ok' : ''}` }, 'Allow');
+    const deny = el('button', { type: 'button', class: `sx-seg${denyActive ? ' active bad' : ''}` }, 'Deny');
+    allow.addEventListener('click', () => { if (denyActive) mutate((m) => { m.exclude = drop(m.exclude, id); }, 'Model allowed.'); });
+    deny.addEventListener('click', () => { if (!denyActive) mutate((m) => { add(m.exclude, id); m.include = drop(m.include, id); }, 'Model denied.'); });
+    return el('div', { class: 'sx-seg-group' }, [allow, deny]);
+  };
+
+  const row = (preset) => {
+    const id = preset.id;
+    const s = statusOf(id);
+    const good = s === 'allow';
+    const provLabel = providerLabel(preset.provider);
+    const strike = s === 'orgblock' && scope !== 'org' ? 'line-through' : 'none';
+    return el('div', { class: 'sx-row' }, [
+      el('span', { class: 'sx-badge', dataset: { i18nSkip: 'true' } }, (provLabel[0] || '?').toUpperCase()),
+      el('div', { style: 'min-width:0' }, [
+        el('div', { class: 'sx-row-name', dataset: { i18nSkip: 'true' }, style: good ? '' : `color:var(--muted-2);text-decoration:${strike}` }, preset.name || preset.model || id),
+        el('div', { class: 'sx-row-spec', dataset: { i18nSkip: 'true' } }, modelSpec(preset)),
+      ]),
+      el('span', { class: `sx-tag ${good ? 'ok' : 'bad'}` }, good ? 'Allowed' : s === 'orgblock' ? 'Denied · org' : 'Denied · project'),
+      controlFor(preset) || el('span', { style: 'flex:none' }),
+    ]);
+  };
+
+  const paint = () => {
+    clear(card);
+    const denied = allIds.filter((id) => statusOf(id) !== 'allow').length;
+    const filterDefs = scope === 'user' ? ['all', 'allowed', 'denied', 'short'] : ['all', 'allowed', 'denied'];
+    const filters = el('div', { class: 'sx-catalog-filters' }, filterDefs.map((f) => {
+      const label = { all: 'All', allowed: 'Allowed', denied: 'Denied', short: 'Shortlist' }[f];
+      const b = el('button', { type: 'button', class: `sx-filter${filter === f ? ' active' : ''}` }, label);
+      b.addEventListener('click', () => { filter = f; paint(); });
+      return b;
+    }));
+    const rows = catalog.filter((p) => {
+      const s = statusOf(p.id);
+      if (filter === 'allowed') return s === 'allow';
+      if (filter === 'denied') return s !== 'allow';
+      if (filter === 'short') return data.shortlisting && data.myInclude.has(p.id);
+      return true;
+    });
+    const scopeWord = scope === 'user' ? 'on your shortlist basis' : scope === 'project' ? 'for this project' : 'org-wide';
+    const foot = data.editable
+      ? `${denied} of ${allIds.length} models denied ${scopeWord}.`
+      : `${(scope === 'org' ? 'Organization admins only — sign in to edit.' : scope === 'project' ? 'Select a project you administer to edit.' : 'Sign in to build your shortlist.')} · ${denied} of ${allIds.length} denied.`;
+    card.append(
+      el('div', { class: 'sx-card-head bordered' }, [
+        el('div', { style: 'min-width:0' }, [
+          el('div', { class: 'sx-card-title' }, 'Model catalog'),
+          el('div', { class: 'sx-card-sub' }, scope === 'org' ? 'Deny here and the model disappears everywhere below.' : scope === 'project' ? 'Org-denied models are struck out and cannot be re-enabled.' : 'Build a personal shortlist from what the project allows.'),
+        ]),
+        filters,
+      ]),
+      ...rows.map(row),
+      el('div', { class: 'sx-card-foot' }, foot),
+    );
+  };
+
+  const load = async () => {
+    clear(card).append(loading('Loading model policy…'));
+    let models = null;
+    try {
+      const eff = await api.settingsPolicy.getEffective(scopeState.projectId);
+      models = eff && eff.domains && eff.domains.models;
+    } catch (_) { models = null; }
+    const orgAllowed = new Set(models ? models.org : allIds);
+    const projAllowed = new Set(models ? models.project : allIds);
+    const userAllowed = new Set(models ? models.user : allIds);
+    let editable = scope !== 'project' || Boolean(scopeState.projectId);
+    let policy = null;
+    if (editable) {
+      try {
+        policy = scope === 'org' ? await api.settingsPolicy.getOrgPolicy()
+          : scope === 'project' ? await api.settingsPolicy.getProjectPolicy(scopeState.projectId)
+            : await api.settingsPolicy.getMyPolicy();
+      } catch (_) { editable = false; }
+    }
+    const domains = (policy && policy.domains) || {};
+    const myModels = domains.models || { include: [], exclude: [] };
+    data = {
+      orgAllowed, projAllowed, userAllowed, domains, editable,
+      myInclude: new Set(myModels.include || []),
+      shortlisting: scope === 'user' && (myModels.include || []).length > 0,
+    };
+    paint();
+  };
+  void load();
+  return wrap;
 }
 
 /* ===================== Redesign: models & runtime ===================== */

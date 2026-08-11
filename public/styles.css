@@ -1281,7 +1281,13 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 .sx-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .sx-btn.ghost { background: none; border-color: transparent; color: var(--muted); }
 .sx-save { width: 100%; }
-.sx-locked { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--muted-2); }
+.sx-locked { display: inline-flex; align-items: center; gap: 6px; flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--muted-2); }
+.sx-seg-group { display: flex; flex: none; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; }
+.sx-seg { padding: 5px 11px; border: 0; cursor: pointer; font-size: 12px; font-weight: 500; background: transparent; color: var(--muted); }
+.sx-seg:hover { background: var(--surface-subtle); }
+.sx-seg.active.ok { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); }
+.sx-seg.active.bad { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
+.sx-seg[disabled] { opacity: .5; cursor: not-allowed; }
 .settings-group { scroll-margin-top: 18px; margin-bottom: 36px; }
 .settings-group-head { margin-bottom: 12px; padding: 0 2px; }
 .settings-group-head h2 { margin: 0; font-family: var(--font-serif); font-size: 19px; letter-spacing: -.02em; }

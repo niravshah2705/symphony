@@ -16,11 +16,12 @@ async def test_universe_lists_all_domains(client):
     resp = await client.get("/api/v1/settings/universe", headers=auth(token))
     assert resp.status_code == 200
     domains = resp.json()["domains"]
-    assert set(domains) == {"harness", "tools", "skills", "plugins", "hooks"}
+    assert set(domains) == {"harness", "tools", "skills", "plugins", "hooks", "models"}
     assert "deepagent" in domains["harness"]
     assert "docker" in domains["tools"]
     assert "linear" in domains["skills"]
     assert "pre-code" in domains["hooks"]
+    assert "claude-opus-4-8" in domains["models"]
 
 
 async def test_org_policy_round_trips(client):

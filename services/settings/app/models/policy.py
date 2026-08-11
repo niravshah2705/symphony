@@ -30,8 +30,11 @@ from app.models.base import utcnow
 
 # The settings domains, in stable display order. `hooks` governs lifecycle-hook
 # ids (config + catalog only today; no execution engine yet — see the JS mirror
-# settings-policy.js filterHooksByPolicy TODO).
-DOMAINS: tuple[str, ...] = ("harness", "tools", "skills", "plugins", "hooks")
+# settings-policy.js filterHooksByPolicy TODO). `models` governs the task-model
+# catalog (allow/deny per model id or provider glob) — see universe.MODELS; its
+# ENFORCEMENT runs JS-side against the live catalog, so the Python universe mirror
+# only feeds the effective-set display.
+DOMAINS: tuple[str, ...] = ("harness", "tools", "skills", "plugins", "hooks", "models")
 
 # Allow-listed CONFIG VALUE keys stored per scope. Deliberately small and
 # explicit (never free-form) so a policy document can only carry known provider

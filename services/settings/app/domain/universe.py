@@ -57,6 +57,39 @@ HOOKS: tuple[str, ...] = (
     "post-merge",
 )
 
+# Task-model catalog ids — the preset ids in
+# packages/shared/src/agent/llm-presets.json. The `models` domain stores allow/deny
+# per model id (or a provider glob like ``claude-*``). ENFORCEMENT runs JS-side
+# against the LIVE catalog (settings-policy.js), so this mirror only feeds the
+# effective-set DISPLAY: a model missing here is still deny-able by a glob and still
+# enforced at model-resolution time. Keep in sync when the catalog changes.
+MODELS: tuple[str, ...] = (
+    "ollama-gpt-oss-20b",
+    "ollama-qwen3-coder-30b",
+    "ollama-gpt-oss-120b",
+    "lmstudio-gpt-oss-20b",
+    "lmstudio-qwen3-coder-30b",
+    "omlx-gpt-oss-20b",
+    "omlx-qwen3-coder-next",
+    "codex-gpt-5-6-sol",
+    "codex-gpt-5-6-terra",
+    "codex-gpt-5-6-luna",
+    "codex-gpt-5-5",
+    "codex-gpt-5-4",
+    "codex-gpt-5-4-mini",
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-sonnet-5",
+    "claude-haiku-4-5",
+    "huggingface-llama-3-3-70b",
+    "huggingface-qwen2-5-coder-32b",
+    "huggingface-kimi-k3",
+    "huggingface-deepseek-v3",
+    "huggingface-qwen2-5-72b",
+    "antigravity-gemini-2-5-flash",
+    "antigravity-gemini-2-5-pro",
+)
+
 
 def universe() -> dict[str, list[str]]:
     """The item universe for every domain. Plugins come from config."""
@@ -66,4 +99,5 @@ def universe() -> dict[str, list[str]]:
         "skills": list(SKILLS),
         "plugins": get_settings().plugins_catalog(),
         "hooks": list(HOOKS),
+        "models": list(MODELS),
     }

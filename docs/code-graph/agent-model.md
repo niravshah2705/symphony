@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1596 nodes
-- **Cohesion**: 0.1334
+- **Size**: 1600 nodes
+- **Cohesion**: 0.1336
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared
 | issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
 | applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-212 |
 
-*... and 1546 more members.*
+*... and 1550 more members.*
 
 ## Execution Flows
 
@@ -85,11 +85,11 @@ Directory-based community: packages/shared
 
 ### Outgoing
 
-- `equal` (1181 edge(s))
+- `equal` (1184 edge(s))
 - `join` (222 edge(s))
 - `String` (213 edge(s))
-- `deepEqual` (205 edge(s))
-- `includes` (186 edge(s))
+- `deepEqual` (208 edge(s))
+- `includes` (187 edge(s))
 - `push` (149 edge(s))
 - `map` (145 edge(s))
 - `ok` (135 edge(s))
@@ -98,13 +98,13 @@ Directory-based community: packages/shared
 - `trim` (109 edge(s))
 - `match` (106 edge(s))
 - `filter` (105 edge(s))
-- `isArray` (101 edge(s))
+- `isArray` (102 edge(s))
 - `step` (75 edge(s))
 
 ### Incoming
 
-- `equal` (1174 edge(s))
-- `deepEqual` (203 edge(s))
+- `equal` (1177 edge(s))
+- `deepEqual` (206 edge(s))
 - `./packages/shared/src/store.js` (147 edge(s))
 - `ok` (135 edge(s))
 - `strictEqual` (127 edge(s))

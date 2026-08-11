@@ -6,8 +6,8 @@
 
 Directory-based community: services/settings
 
-- **Size**: 335 nodes
-- **Cohesion**: 0.4232
+- **Size**: 337 nodes
+- **Cohesion**: 0.4270
 - **Dominant Language**: python
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: services/settings
 | commit | Function | ./services/settings/app/core/database.py | 71-72 |
 | new_uow | Function | ./services/settings/app/core/database.py | 75-78 |
 
-*... and 285 more members.*
+*... and 287 more members.*
 
 ## Execution Flows
 
@@ -94,8 +94,8 @@ Directory-based community: services/settings
 - `ValueError` (14 edge(s))
 - `BaseModel` (14 edge(s))
 - `items` (13 edge(s))
+- `list` (11 edge(s))
 - `set` (11 edge(s))
-- `list` (10 edge(s))
 - `len` (8 edge(s))
 - `cls` (8 edge(s))
 - `pop` (7 edge(s))
@@ -108,7 +108,7 @@ Directory-based community: services/settings
 - `put` (34 edge(s))
 - `json` (26 edge(s))
 - `./services/settings/app/errors.py` (18 edge(s))
-- `./services/settings/tests/unit/test_resolver.py` (16 edge(s))
+- `./services/settings/tests/unit/test_resolver.py` (18 edge(s))
 - `./services/settings/app/services/policy_service.py` (14 edge(s))
 - `./services/settings/tests/integration/test_secrets_vault.py` (12 edge(s))
 - `./services/settings/app/schemas/policy.py` (11 edge(s))
