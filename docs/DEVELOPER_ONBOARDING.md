@@ -19,7 +19,7 @@ explains what the software does, and points you at the code you'll be working in
 
 | Requirement | Notes |
 | ----------- | ----- |
-| **Node.js ≥ 18** | Repo is developed on Node 20. Check with `node -v`. |
+| **Node.js ≥ 22** | Services target Node 22 (the deploy images are `node:22-alpine`). Check with `node -v`. The `adlc` CLI still runs on Node 18+. |
 | **A Linear account + personal API key** | Create one at <https://linear.app/settings/api>. Required for every feature. |
 | **LLM routes** (for the agents only) | For full routing, configure one local preset (Ollama, LM Studio, or OMLX) and one hosted preset (OpenAI or Claude OAuth). Not needed just to browse projects/board. |
 | **git** | Required by the **code-writer** agent (it clones and pushes). |

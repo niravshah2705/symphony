@@ -133,7 +133,7 @@ steps:
   # vendor/ is left untouched. Keep the pinned version in sync with
   # package.json's devDependency. See scripts/obfuscate-spa.js.
   - id: spa-obfuscate
-    name: node:20-slim
+    name: node:22-slim
     waitFor: ["-"]
     entrypoint: bash
     env:
