@@ -7,11 +7,11 @@
 #
 # Base image is pinned by DIGEST (not just a mutable tag) per the
 # infrastructure-misconfig checklist. This is the multi-arch index digest for
-# node:20-alpine.
+# node:22-alpine.
 # VERIFY / UPDATE the digest on a base refresh, e.g.:
-#   docker buildx imagetools inspect node:20-alpine
+#   docker buildx imagetools inspect node:22-alpine
 # (or read the registry `Docker-Content-Digest` for the index manifest).
-ARG NODE_IMAGE=node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
 
 # ---------------------------------------------------------------------------
 # Stage 1 — install production dependencies at the workspace root.

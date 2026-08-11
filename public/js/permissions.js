@@ -14,6 +14,7 @@ export const MENU_PERMISSIONS = Object.freeze({
   projects: { domain: 'planning', level: 'read' },
   board: { domain: 'planning', level: 'read' },
   analytics: { domain: 'insights', level: 'read' },
+  cost: { domain: 'insights', level: 'read' },
   troubleshooting: { domain: 'insights', level: 'read' },
   settings: { domain: 'settings', level: 'write' },
   // Personal projects + organization (org service). org:read → visible to any

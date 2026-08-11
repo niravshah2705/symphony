@@ -61,4 +61,17 @@ function publishGate(gateId, status) {
   }
 }
 
-module.exports = { publishJobsSnapshot, publishAgentStatus, publishCoderStatus, publishGate };
+/**
+ * Publish a user-facing notification (e.g. a billing threshold alert) to the
+ * browser workspace channel. The SPA renders it as a toast + a native browser
+ * Notification (see public/js/notifications.js). Best-effort, like the others.
+ */
+function publishNotification({ channel = 'general', level = 'info', title = '', message = '', orgId = null } = {}) {
+  try {
+    events.publishWorkspace({ type: 'notification', channel, level, title, message, orgId, ts: nowISO() });
+  } catch (_) {
+    /* fire-and-forget */
+  }
+}
+
+module.exports = { publishJobsSnapshot, publishAgentStatus, publishCoderStatus, publishGate, publishNotification };

@@ -7,7 +7,7 @@
 Directory-based community: services/coder
 
 - **Size**: 11 nodes
-- **Cohesion**: 0.1644
+- **Cohesion**: 0.1733
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,16 +15,16 @@ Directory-based community: services/coder
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | main | Function | ./services/coder/src/job.js | 16-34 |
-| toIssue | Function | ./services/coder/src/run-ticket.js | 30-40 |
-| buildKeys | Function | ./services/coder/src/run-ticket.js | 42-52 |
-| httpError | Function | ./services/coder/src/run-ticket.js | 54-59 |
-| loadIssue | Function | ./services/coder/src/run-ticket.js | 61-66 |
-| makeStep | Function | ./services/coder/src/run-ticket.js | 69-74 |
-| runTicketInProcess | Function | ./services/coder/src/run-ticket.js | 81-129 |
-| run | Function | ./services/coder/src/run-ticket.js | 100-100 |
-| onError | Function | ./services/coder/src/run-ticket.js | 101-116 |
-| onDone | Function | ./services/coder/src/run-ticket.js | 117-121 |
-| runTicket | Function | ./services/coder/src/run-ticket.js | 136-150 |
+| toIssue | Function | ./services/coder/src/run-ticket.js | 31-41 |
+| buildKeys | Function | ./services/coder/src/run-ticket.js | 43-53 |
+| httpError | Function | ./services/coder/src/run-ticket.js | 55-60 |
+| loadIssue | Function | ./services/coder/src/run-ticket.js | 62-67 |
+| makeStep | Function | ./services/coder/src/run-ticket.js | 70-75 |
+| runTicketInProcess | Function | ./services/coder/src/run-ticket.js | 82-140 |
+| run | Function | ./services/coder/src/run-ticket.js | 111-111 |
+| onError | Function | ./services/coder/src/run-ticket.js | 112-127 |
+| onDone | Function | ./services/coder/src/run-ticket.js | 128-132 |
+| runTicket | Function | ./services/coder/src/run-ticket.js | 147-161 |
 
 ## Execution Flows
 

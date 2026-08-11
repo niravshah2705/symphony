@@ -153,6 +153,7 @@ async function executeCodingRuntime({
   rubricOptions,
   rubricMiddleware,
   settings,
+  attribution,
 }) {
   const requestedRuntime = normalizeAgentRuntime(keys.agentRuntime || 'deepagent', { strict: true });
   const runtime = effectiveAgentRuntime(requestedRuntime, llm, {
@@ -232,6 +233,8 @@ async function executeCodingRuntime({
     rubricOptions,
     rubricMiddleware,
     settings,
+    // Billing attribution for first-party usage metering (see billing/usage.js).
+    attribution,
   });
 }
 
@@ -273,6 +276,14 @@ async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep }) {
         { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id } },
         { project: issue.projectName, taskId: issue.identifier || issue.id, session: runId }
       ),
+      attribution: {
+        projectId: issue.projectId || null,
+        projectName: issue.projectName || null,
+        userId: issue.assigneeId || null,
+        taskId: issue.id || null,
+        taskIdentifier: issue.identifier || null,
+        source: 'coder',
+      },
     });
 
     const repositoryError = repositoryBroker && repositoryBroker.availabilityError();
@@ -377,6 +388,14 @@ async function runPlannedCoderLocal({
         { runId, recursionLimit: CONFIG.CODER.maxTurns, tags: codingWorkflow.tags, metadata: { issueId: issue.id, projectId: project.id, branch } },
         { project: project.name || project.id, taskId: issue.identifier || issue.id, session: runId }
       ),
+      attribution: {
+        projectId: project.id || null,
+        projectName: project.name || null,
+        userId: issue.assigneeId || null,
+        taskId: issue.id || null,
+        taskIdentifier: issue.identifier || null,
+        source: 'coder',
+      },
     });
 
     const repositoryError = repositoryBroker && repositoryBroker.availabilityError();

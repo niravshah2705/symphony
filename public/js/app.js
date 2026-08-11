@@ -28,10 +28,12 @@ import { renderAgent } from './views/agent.js';
 import { renderAgentJobs } from './views/agent-jobs.js';
 import { renderCalls } from './views/calls.js';
 import { renderAnalytics } from './views/analytics.js';
+import { renderCost } from './views/cost.js';
 import { renderTroubleshooting } from './views/troubleshooting.js';
 import { renderSettings } from './views/settings.js';
 import { renderOrganization } from './views/organization.js';
 import { initThemeToggle } from './theme.js';
+import { initNotifications } from './notifications.js';
 import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 
 const routes = {
@@ -42,6 +44,7 @@ const routes = {
   projects: renderProjects,
   board: renderBoard,
   analytics: renderAnalytics,
+  cost: renderCost,
   troubleshooting: renderTroubleshooting,
   settings: renderSettings,
   organization: renderOrganization,
@@ -55,6 +58,7 @@ const routeMeta = {
   projects: { titleKey: 'projects', eyebrowKey: 'planning' },
   board: { titleKey: 'board', eyebrowKey: 'planning' },
   analytics: { titleKey: 'analytics', eyebrowKey: 'insights' },
+  cost: { titleKey: 'cost', eyebrowKey: 'insights' },
   troubleshooting: { titleKey: 'troubleshooting', eyebrowKey: 'system' },
   settings: { titleKey: 'settings', eyebrowKey: 'system' },
   organization: { titleKey: 'organization', eyebrowKey: 'workspace' },
@@ -568,6 +572,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   await render();
   await readiness;
   if (session.authenticated && connectionRoutes.has(currentRoute())) await render();
+
+  // Signed-in users get global notifications (e.g. billing threshold alerts) over
+  // one workspace SSE stream, on any route. Best-effort; anonymous visitors have
+  // no org to bill so it is skipped for them.
+  if (session.authenticated) initNotifications();
 
   // Anonymous visitors: surface the compact Google One Tap card (the screenshot
   // shape). Non-blocking — the read-only workspace + basic RAG stay usable, and
