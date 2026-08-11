@@ -154,5 +154,15 @@ class InternalEffectiveConfigResponse(BaseModel):
     values: dict[str, str] = Field(default_factory=dict)
 
 
+class InternalEffectivePolicyResponse(BaseModel):
+    """Org-scoped effective policy for token-gated S2S callers (the autonomous
+    planner/coder, which act for an org and carry NO end-user token). Cascades
+    org → project only — there is no user scope. Carries NO config values (those
+    are the separate ``/internal/effective-config`` endpoint)."""
+
+    project_id: uuid.UUID | None = None
+    domains: dict[str, EffectiveDomainSchema]
+
+
 class UniverseResponse(BaseModel):
     domains: dict[str, list[str]]

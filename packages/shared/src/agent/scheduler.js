@@ -8,6 +8,7 @@ const { generatePlan, generateIssuesForMilestones } = require('./plan');
 const { applyPlan, applyIssuesForMilestones, applyAiplanned, applyAifail } = require('./apply');
 const { llmReady, notReadyReason, resolveLlm, providerForRole } = require('./llm');
 const { isModelAvailabilityError, pauseReasonFor, probeModelAvailability } = require('./availability');
+const { fetchOrgEffectivePolicy } = require('./org-policy-client');
 const workspaceEvents = require('./workspace-events');
 
 const { CONFIG } = require('../config');
@@ -128,6 +129,13 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
   const applyAiplannedImpl = dependencies.applyAiplanned || applyAiplanned;
   const applyAifailImpl = dependencies.applyAifail || applyAifail;
   const getSettings = dependencies.getSettings || store.getSettings;
+  // Resolve THIS org's effective policy (org→project cascade) so the planning
+  // agent ENFORCES the harness/tools/skills allow-deny cascade (framework.js
+  // prunes tools/skills; runtimes.js downgrades a denied harness). The autonomous
+  // loop has no end-user token, so this is a token-gated S2S org resolve. Default
+  // fetchOrgEffectivePolicy is fail-open (null → allow-all, no regression) and is
+  // injectable for tests. (models/plugins enforce at model-resolution — future.)
+  const resolvePolicyImpl = dependencies.resolvePolicy || fetchOrgEffectivePolicy;
   // Records a step both to the persistent log file and onto the job (for the UI).
   const step = (message, level = 'info') => {
     log[level] ? log[level](`[job ${job.id.slice(0, 8)} · ${job.projectName}] ${message}`) : log.info(message);
@@ -153,6 +161,12 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
     // Inspect existing milestones to decide: NEW plan vs RESUME (create issues).
     const { project, milestones } = await linearClient.getMilestonesWithIssueCounts(apiKey, job.projectId);
 
+    // Resolve the org's effective policy for enforcement. Fail-open: any error →
+    // null → allow-all (identical to today's behaviour).
+    let effectivePolicy = null;
+    try { effectivePolicy = await resolvePolicyImpl(); } catch (_) { effectivePolicy = null; }
+    const policySettings = { effectivePolicy };
+
     if (milestones.length > 0) {
       // ---- RESUME: milestones already exist; ensure each has issues, then aidone.
       const missing = milestones.filter((m) => m.issueCount === 0);
@@ -176,7 +190,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
 
     // ---- NEW: no milestones yet — viability + full business plan.
     phase = 'model';
-    const result = await generatePlanImpl({ project, assumedRole: job.assumedRole, config, llm, keys, onStep: step });
+    const result = await generatePlanImpl({ project, assumedRole: job.assumedRole, config, llm, keys, onStep: step, settings: policySettings });
     phase = 'planning-provider';
 
     if (!result.viable) {

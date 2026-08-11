@@ -104,3 +104,40 @@ async def test_effective_applies_project_layer(client):
     assert "claude-agent-sdk" not in harness["effective"]
     # Org level (no project layer) still contains it.
     assert "claude-agent-sdk" in harness["org"]
+
+
+INTERNAL_TOKEN = "test-internal-token-0123456789"
+
+
+async def test_s2s_org_effective_policy_reflects_org_denies(client):
+    """The autonomous planner/coder resolves its org's effective policy over the
+    token-gated S2S endpoint (no user scope). Mirrors the org-secrets S2S guard."""
+    org_id = uuid.uuid4()
+    _u, token = await make_user(
+        email="admin@x.com", org_id=org_id, org_role=OrgRole.ORG_ADMIN
+    )
+    put = await client.put(
+        "/api/v1/settings/org",
+        headers=auth(token),
+        json={
+            "domains": {
+                "models": {"include": [], "exclude": ["ollama-*"]},
+                "harness": {"include": [], "exclude": ["codex-sdk"]},
+            }
+        },
+    )
+    assert put.status_code == 200
+
+    url = f"/api/v1/internal/s2s/orgs/{org_id}/effective-policy"
+    assert (await client.get(url)).status_code == 403  # missing token
+    assert (
+        await client.get(url, headers={"X-Internal-Token": "nope"})
+    ).status_code == 403  # wrong token
+
+    resp = await client.get(url, headers={"X-Internal-Token": INTERNAL_TOKEN})
+    assert resp.status_code == 200
+    domains = resp.json()["domains"]
+    assert "ollama-gpt-oss-20b" not in domains["models"]["effective"]
+    assert "codex-sdk" not in domains["harness"]["effective"]
+    # No user scope in the S2S resolve → effective == the org-level allowed set.
+    assert domains["models"]["effective"] == domains["models"]["org"]

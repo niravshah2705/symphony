@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveEffectiveSettings, authHeaders } = require('./settings-client');
+const { resolveEffectiveSettings, resolveOrgEffectivePolicy, authHeaders } = require('./settings-client');
 
 function fakeFetch(routes) {
   const calls = [];
@@ -63,4 +63,34 @@ test('resolveEffectiveSettings is a no-op without a baseUrl (local single-user)'
   const out = await resolveEffectiveSettings({ userToken: 'u', fetchImpl: async () => ({ ok: true, json: async () => ({}) }) });
   assert.equal(out.effectivePolicy, null);
   assert.equal(out.geminiApiKey, '');
+});
+
+test('resolveOrgEffectivePolicy returns org effective domains, token-gated (S2S)', async () => {
+  const fetchImpl = fakeFetch({
+    '/api/v1/internal/s2s/orgs/org-1/effective-policy': {
+      domains: {
+        harness: { org: ['deepagent'], project: ['deepagent'], user: ['deepagent'], effective: ['deepagent'] },
+        models: { org: ['claude-opus-4-8'], project: ['claude-opus-4-8'], user: ['claude-opus-4-8'], effective: ['claude-opus-4-8'] },
+      },
+    },
+  });
+  const out = await resolveOrgEffectivePolicy({
+    baseUrl: 'http://settings', orgId: 'org-1', internalToken: 'tok', authBearer: 'Bearer oidc', fetchImpl,
+  });
+  assert.deepEqual(out.effectivePolicy.harness.effective, ['deepagent']);
+  assert.deepEqual(out.effectivePolicy.models.effective, ['claude-opus-4-8']);
+  // X-Internal-Token + OIDC bearer sent; org id is the route scope.
+  const call = fetchImpl.calls[0];
+  assert.equal(call.init.headers['x-internal-token'], 'tok');
+  assert.equal(call.init.headers.authorization, 'Bearer oidc');
+  assert.ok(call.url.includes('/orgs/org-1/effective-policy'));
+});
+
+test('resolveOrgEffectivePolicy fails open (null) without token/org and on error', async () => {
+  // Missing internal token → no call, allow-all.
+  const noTok = await resolveOrgEffectivePolicy({ baseUrl: 'http://settings', orgId: 'o', fetchImpl: async () => ({ ok: true, json: async () => ({}) }) });
+  assert.equal(noTok.effectivePolicy, null);
+  // Service error → allow-all (never throws).
+  const err = await resolveOrgEffectivePolicy({ baseUrl: 'http://settings', orgId: 'o', internalToken: 't', fetchImpl: async () => ({ ok: false, status: 403, json: async () => ({}) }) });
+  assert.equal(err.effectivePolicy, null);
 });

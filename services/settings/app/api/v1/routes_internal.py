@@ -28,7 +28,10 @@ from app.auth.dependencies import get_principal
 from app.authz.principal import Principal
 from app.core.config import get_settings
 from app.core.database import Uow, get_session
-from app.schemas.policy import InternalEffectiveConfigResponse
+from app.schemas.policy import (
+    InternalEffectiveConfigResponse,
+    InternalEffectivePolicyResponse,
+)
 from app.schemas.secrets import InternalOrgSecretsResponse
 from app.services import policy_service, secrets_service
 
@@ -70,3 +73,21 @@ async def resolve_managed_secrets(
     """Return the platform-managed provider keys with NO org (shared stack). Same
     shape as the per-org resolve so the proxy uses one path."""
     return await secrets_service.resolve_managed_secrets()
+
+
+@router.get(
+    "/s2s/orgs/{org_id}/effective-policy",
+    response_model=InternalEffectivePolicyResponse,
+)
+async def resolve_org_effective_policy(
+    org_id: uuid.UUID,
+    project_id: uuid.UUID | None = Query(default=None),
+    _: None = Depends(require_internal_token),
+    session: Uow = Depends(get_session),
+):
+    """Return an org's effective policy (org → project cascade, NO user scope) for
+    the autonomous planner/coder (token-gated S2S; no user principal). The org_id
+    route param is the authorization scope, safe because the shared token IS the
+    authorization and the read is confined to the named org (mirrors the org
+    secrets S2S resolver)."""
+    return await policy_service.resolve_policy_for_org(session, org_id, project_id)

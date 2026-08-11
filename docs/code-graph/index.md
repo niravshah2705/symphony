@@ -10,9 +10,9 @@ Auto-generated documentation from the code knowledge graph community structure.
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-model | 1600 | [agent-model.md](agent-model.md) |
+| agent-model | 1608 | [agent-model.md](agent-model.md) |
 | core-org | 483 | [core-org.md](core-org.md) |
-| core-org | 337 | [core-org-2.md](core-org-2.md) |
+| core-org | 341 | [core-org-2.md](core-org-2.md) |
 | e2e-test:agent | 38 | [e2e-test-agent.md](e2e-test-agent.md) |
 | gcp-log | 10 | [gcp-log.md](gcp-log.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |

@@ -37,6 +37,7 @@ from app.schemas.policy import (
     EffectiveDomainSchema,
     EffectiveResponse,
     InternalEffectiveConfigResponse,
+    InternalEffectivePolicyResponse,
     MaskedConfigValue,
     PolicyResponse,
     PolicyUpdate,
@@ -214,6 +215,35 @@ async def resolve_for_caller(
         },
         universe=universe,
         values=_mask_values(effective_values),
+    )
+
+
+async def resolve_policy_for_org(
+    session: Uow, org_id: uuid.UUID, project_id: uuid.UUID | None
+) -> InternalEffectivePolicyResponse:
+    """INTERNAL S2S ONLY. Resolve an ORG's effective policy (org → project
+    cascade, NO user scope) for the autonomous planner/coder, which act for an org
+    and carry no end-user token. Token-gated; the org_id route param IS the
+    authorization scope (mirrors the org-secrets S2S resolver). The absence of a
+    user scope means ``effective`` is the org(+project)-level allowed set."""
+    repo = PolicyRepository(session)
+    org_policy = await repo.get(org_settings_col(org_id))
+    project_policy = None
+    resolved_project_id: uuid.UUID | None = None
+    if project_id is not None:
+        project_policy = await repo.get(project_settings_col(org_id, project_id))
+        resolved_project_id = project_id
+
+    universe = universe_mod.universe()
+    resolution = resolve_effective(universe, org_policy, project_policy, None)
+    return InternalEffectivePolicyResponse(
+        project_id=resolved_project_id,
+        domains={
+            name: EffectiveDomainSchema(
+                org=res.org, project=res.project, user=res.user, effective=res.effective
+            )
+            for name, res in resolution.items()
+        },
     )
 
 

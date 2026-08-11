@@ -99,4 +99,42 @@ async function resolveEffectiveSettings(opts = {}) {
   return result;
 }
 
-module.exports = { resolveEffectiveSettings, authHeaders, EMPTY };
+/**
+ * Resolve an ORG's effective policy (org → project cascade, NO user scope) from
+ * the settings service's token-gated S2S endpoint, for the autonomous
+ * planner/coder which act for an org and carry no end-user token. Pure/testable:
+ * the caller supplies the base URL, org id, internal token, and (in Cloud) a
+ * pre-minted OIDC bearer.
+ *
+ * Fail-open: any missing input or transport/HTTP error resolves to
+ * `{ effectivePolicy: null }` (allow-all — no regression), never throws.
+ *
+ * @param {object} opts
+ * @param {string} opts.baseUrl        settings service origin (no trailing slash)
+ * @param {string} opts.orgId          the org whose policy to resolve (route scope)
+ * @param {string} opts.internalToken  shared X-Internal-Token (fail closed if unset)
+ * @param {string} [opts.authBearer]   Cloud Run OIDC bearer ("Bearer …") for IAM
+ * @param {string} [opts.projectId]    optional project overlay
+ * @param {Function} [opts.fetchImpl]  fetch implementation (defaults to global)
+ * @param {Function} [opts.logger]     optional logger with .warn
+ * @returns {Promise<{effectivePolicy: object|null}>}
+ */
+async function resolveOrgEffectivePolicy(opts = {}) {
+  const { baseUrl, orgId, projectId, internalToken, authBearer } = opts;
+  const fetchImpl = opts.fetchImpl || (typeof fetch === 'function' ? fetch : null);
+  if (!baseUrl || !orgId || !internalToken || !fetchImpl) return { effectivePolicy: null };
+
+  const base = String(baseUrl).replace(/\/$/, '');
+  const headers = { 'x-internal-token': internalToken };
+  if (authBearer) headers.authorization = authBearer;
+  const url = `${base}/api/v1/internal/s2s/orgs/${encodeURIComponent(orgId)}/effective-policy${projectQuery(projectId)}`;
+  try {
+    const data = await getJson(fetchImpl, url, headers);
+    return { effectivePolicy: (data && data.domains) || null };
+  } catch (err) {
+    if (opts.logger && opts.logger.warn) opts.logger.warn(`org policy resolve failed: ${err.message}`);
+    return { effectivePolicy: null };
+  }
+}
+
+module.exports = { resolveEffectiveSettings, resolveOrgEffectivePolicy, authHeaders, EMPTY };
