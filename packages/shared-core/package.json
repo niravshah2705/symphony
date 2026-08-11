@@ -1,0 +1,31 @@
+{
+  "name": "@ai-fleet/shared-core",
+  "version": "1.0.0",
+  "description": "Lightweight AI Fleet primitives with NO LLM / agent-SDK dependencies: config, egress routes, logger, authz, OAuth token plumbing, Pub/Sub messaging, and the runtime provisioner. Imported by the non-agent services (proxy, provisioner) so they never pull in the ~600 MB agent-SDK tree. The heavy @ai-fleet/shared depends on this package and re-exports these paths (thin shims) for backward compatibility.",
+  "private": true,
+  "exports": {
+    "./config": "./src/config.js",
+    "./egress": "./src/egress.js",
+    "./logger": "./src/logger.js",
+    "./authz": "./src/authz.js",
+    "./store": "./src/store.js",
+    "./store/*": "./src/store/*.js",
+    "./agent/*": "./src/agent/*.js",
+    "./messaging/*": "./src/messaging/*.js",
+    "./provisioning": "./src/provisioning/index.js",
+    "./provisioning/*": "./src/provisioning/*.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^8.7.1",
+    "@google-cloud/pubsub": "^6.0.0",
+    "@google-cloud/run": "^4.0.0",
+    "@google-cloud/scheduler": "^6.0.0",
+    "google-auth-library": "^11.0.1"
+  }
+}

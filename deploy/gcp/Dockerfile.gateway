@@ -28,6 +28,13 @@ COPY packages/ ./packages/
 COPY services/ ./services/
 
 # Reproducible install from the lockfile; --omit=dev keeps the image lean.
+#
+# This image installs the FULL workspace closure (COPY packages/ + services/
+# above) on purpose: the gateway depends on @ai-fleet/shared and its
+# observability route calls runDiagnostics (packages/shared/src/agent/
+# diagnostics.js), which dynamically imports both native SDKs to probe runtime
+# availability. Do NOT scope the copy to @ai-fleet/shared-core the way the proxy
+# & provisioner images do — it would break /observability diagnostics.
 RUN npm ci --omit=dev && npm cache clean --force
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@ai-fleet/shared": "*",
+    "@ai-fleet/shared-core": "*",
     "google-auth-library": "^11.0.1"
   }
 }

@@ -1,9 +1,59 @@
 # AI Fleet
 
-A simple Node.js UI (branded **AI Fleet**) to manage Linear projects:
+<p align="center">
+  <a href="./EULA.md"><img src="https://img.shields.io/badge/license-Proprietary%20(EULA)-red?style=flat-square" alt="License: Proprietary (EULA)"></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A5%2022-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="Node >= 22">
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-compatible-green?style=flat-square" alt="MCP compatible"></a>
+  <img src="https://img.shields.io/badge/built%20with-deepagents%20%C2%B7%20LangGraph-blue?style=flat-square" alt="Built with deepagents · LangGraph">
+  <img src="https://img.shields.io/badge/runtimes-DeepAgent%20%C2%B7%20Codex%20%C2%B7%20Claude-8A2BE2?style=flat-square" alt="Runtimes: DeepAgent · Codex · Claude">
+  <img src="https://img.shields.io/badge/tests-node%20%C2%B7%20Playwright%20%C2%B7%20pytest-blue?style=flat-square" alt="Tests: node · Playwright · pytest">
+</p>
+
+<!--
+  These badges are STATIC so they render on a private repo. When this repo becomes
+  public (and is registered on trendshift.io), you can add the live/trending badges:
+  [![Trendshift](https://trendshift.io/api/badge/repositories/XXXXX)](https://trendshift.io/repositories/XXXXX)
+  [![CI](https://github.com/niravshah2705/symphony/actions/workflows/checks.yml/badge.svg)](https://github.com/niravshah2705/symphony/actions/workflows/checks.yml)
+  [![Stars](https://img.shields.io/github/stars/niravshah2705/symphony?style=flat-square)](https://github.com/niravshah2705/symphony/stargazers)
+-->
+
+> **From a business idea to a merged pull request** — a fleet of deep agents that plan
+> the business and ship the code.
+
+**AI Fleet** is a microservice-decomposed Node.js app that manages Linear projects and
+runs two isolated **deep agents** over one shared library: a **business-owner planner**
+that turns a project into a validated plan (milestones, issues, dependencies), and a
+**code-writer** that drives a single ticket end-to-end to a pull request — each powered
+by local (Ollama / LM Studio / OMLX) or hosted (Codex / Claude) models.
 
 > **New here?** Start with the [Developer Onboarding guide](docs/DEVELOPER_ONBOARDING.md)
 > — prerequisites, start commands, first-run config, and the code map.
+
+## How it works
+
+<p align="center">
+  <img src="diagrams/how-it-works.png" width="100%"
+       alt="How AI Fleet works: a business idea (Linear project) flows to the Planner deep agent (viability gate, business plan, milestones/issues/dependencies), which writes to the Linear board; the Code-writer deep agent picks an active ticket, works in an isolated git clone, and pushes for checks/review, ending in a merged pull request.">
+</p>
+
+<sub>Diagram source: <a href="diagrams/how-it-works.excalidraw"><code>diagrams/how-it-works.excalidraw</code></a> (editable in <a href="https://excalidraw.com">Excalidraw</a>).</sub>
+
+The **planner** enriches labelled projects on a schedule; the **coder**'s board monitor
+polls active tickets and drives each to a PR. Everything is traced end-to-end (LangSmith)
+and every LLM write is schema-validated before it touches Linear.
+
+## Quick start
+
+```bash
+npm install        # installs all workspaces
+npm start          # boots gateway (:4000) + planner (:4010) + coder (:4020)
+```
+
+Then open <http://localhost:4000>, go to **Settings**, and paste a Linear **personal API
+key** (create one at <https://linear.app/settings/api>). See [Run](#run) for options and
+[Using it](#using-it) for the full first-run walkthrough.
+
+## Features
 
 - **Projects** — project list + a **milestone planning view** (timeline of milestones with issues grouped under each).
 - **Board** — Linear issues shown as a Kanban **board** by workflow state, with drag-and-drop to move issues between columns.
@@ -40,6 +90,13 @@ AI Fleet in action — from creating a business to shipping merged PRs:
 ![Merged pull requests](docs/demo-4-merged-prs.gif)
 
 ## Settings
+
+<p align="center">
+  <img src="diagrams/model-routing.png" width="100%"
+       alt="Task Models routing: the Thinking (planner), Execution (coder), and Testing roles each flow through the LLM router to any local provider (Ollama, LM Studio, OMLX) or hosted provider (OpenAI/Codex, Anthropic/Claude).">
+</p>
+
+<sub><b>Task Models</b> — each role (Thinking / Execution / Testing) can point at any local or hosted provider ("models as tasks").</sub>
 
 Collapsible sections:
 
@@ -123,7 +180,7 @@ in **Task Models** (each of Thinking / Execution / Testing picks any local Ollam
   scoped **`repository_broker`** tool for GitHub/GitLab fetch, push, review status,
   checks, and squash merge (the repository token also stays server-side), plus a
   set of **skills** (`linear`, `commit`, `push`, `pull`, `land`) loaded from
-  `packages/shared/src/agent/skills/`. Its system prompt is the **workflow** (ticket state
+  `packages/shared-core/src/agent/skills/`. Its system prompt is the **workflow** (ticket state
   machine + a single `## Workpad` comment as the source of truth).
 - **Board monitor** (`packages/shared/src/agent/coder-orchestrator.js`) — on a fixed cadence it
   polls the tracker for tickets in an **active state**
@@ -173,6 +230,11 @@ Use the default local backend for brokered GitHub/GitLab operation.
 
 ## Security notes
 
+<p align="center">
+  <img src="diagrams/egress-isolation.png" width="100%"
+       alt="Egress isolation: the agent container holds no raw secret and sends a sentinel token to a co-located egress proxy sidecar, which strips the sentinel and injects the real credential before calling third-party APIs (GitHub/GitLab, Linear, LLM providers); the proxy resolves the credential from the settings service's per-org KMS-encrypted vault or platform-managed keys.">
+</p>
+
 - **Role assumption is enforced server-side** — enrich endpoints return `403` without an assumed role; the assumed member id is validated against the real workspace member list.
 - **EULA acceptance gates "actual work"** — the omnibox answers read-only RAG questions freely, but scheduling enrichment (`/api/agent/enqueue`), preparing a business (`/api/agent/business/prepare`), and creating an implementation task (`POST /api/issues`) return `403 EULA_REQUIRED` until the caller accepts the [EULA](./EULA.md). Acceptance is recorded per user (keyed by verified identity) and per organisation; **members of an organisation are considered already accepted**. Decisions (including rejections) persist in the shared store and the version is tracked, so a user is asked exactly once per EULA version. The API is the trust boundary — the gate is enforced server-side, not only in the SPA.
 - **Secrets stay on the server** — Linear/LangSmith keys, the optional **OMLX API key**, and **Codex/Claude OAuth tokens** live only in `data/store.json`, are masked in API responses, and are never sent to the browser. Ollama needs no key.
@@ -185,6 +247,11 @@ Use the default local backend for brokered GitHub/GitLab operation.
 - **Runaway guards** — bounded output via `num_predict`, bounded agent recursion, a per-tick project cap, and the configurable cadence throttle processing.
 
 ## Architecture
+
+<p align="center">
+  <img src="diagrams/architecture.png" width="100%"
+       alt="AI Fleet architecture: the browser SPA calls the Gateway (:4000), which reverse-proxies to the Planner (:4010) and Coder (:4020) services; all three build on the @ai-fleet/shared library and reach external systems — Linear, GitHub/GitLab, and LLM providers.">
+</p>
 
 - See [Architecture Diagram](docs/ARCHITECTURE_DIAGRAM.md) for the visual system
   map covering preset-routed local and hosted inference, Linear ticket management,
@@ -455,6 +522,19 @@ rather than stuck in "running".
   **LM Studio**, or **OMLX** (local): install it, run it, and make a tool-capable model available — local inference is
   slower than a hosted API (expect tens of seconds per project depending on
   model/hardware). For **Codex**/**Claude**: complete the OAuth sign-in in Settings.
+
+## Contributing
+
+Contributions from authorized collaborators are welcome. Please read:
+
+- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev setup, tests, the code-map pre-commit
+  hook, commit conventions, and the PR flow.
+- [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) — expected behavior in the community.
+- [`SECURITY.md`](./SECURITY.md) — how to report a vulnerability **privately** (please
+  don't open public issues for security problems).
+
+AI Fleet is proprietary software, so contributions are governed by the
+[EULA](./EULA.md); outside contributors may be asked to sign a CLA.
 
 ## License
 

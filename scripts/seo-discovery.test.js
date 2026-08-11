@@ -72,9 +72,10 @@ test('compact ADLC launcher has four named, local-icon assistant links', () => {
   const assistants = [...html.matchAll(/data-ai-assistant="([^"]+)"/g)].map((match) => match[1]);
   const icons = [...html.matchAll(/data-brand-icon="([^"]+)"/g)].map((match) => match[1]);
 
-  assert.deepEqual(assistants, ['ChatGPT', 'Claude', 'Gemini', 'Perplexity']);
-  assert.deepEqual(icons, ['openai', 'anthropic', 'gemini', 'perplexity']);
+  assert.deepEqual(assistants, ['ChatGPT', 'Claude', 'Gemini', 'Perplexity', 'Grok']);
+  assert.deepEqual(icons, ['openai', 'anthropic', 'gemini', 'perplexity', 'grok']);
   assert.equal((html.match(/class="adlc-ai-links"/g) || []).length, 1);
   assert.match(html, /Explain ADLC \(Agentic Development Life Cycle\).*llms-full\.txt/);
-  assert.equal((html.match(/aria-label="Copy an ADLC prompt and open [^"]+"/g) || []).length, 4);
+  assert.equal((html.match(/aria-label="Search ADLC on [^"]+"/g) || []).length, 5);
+  assert.equal((html.match(/\?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services/g) || []).length, 5);
 });

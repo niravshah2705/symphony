@@ -71,19 +71,19 @@ GCS origin to Authentication → Settings → **Authorized domains**.
 
 ## Skills registry (versioned, GCS + gcsfuse)
 
-The deep-agent **skills** (`packages/shared/src/agent/skills/<skill>/SKILL.md`) can
+The deep-agent **skills** (`packages/shared-core/src/agent/skills/<skill>/SKILL.md`) can
 be served from a **GCS bucket** instead of only the copy baked into the image, so a
 skill edit ships without rebuilding/redeploying a service — and so multiple skill
 **versions coexist** and a running deployment stays pinned to a known-good one.
 
 **How it fits together**
 
-- **Manifest** — `packages/shared/src/agent/skills/skills-manifest.json` records the
+- **Manifest** — `packages/shared-core/src/agent/skills/skills-manifest.json` records the
   bundle `version`, `updatedAt`, and a per-skill `{ name, version }` list (mirrors
   `llm-presets.json`). The bundle `version` (e.g. `v1`) is the release token used
   everywhere below.
 - **CI publish** — `.github/workflows/publish-skills.yml` runs on any push touching
-  `packages/shared/src/agent/skills/**` (or `workflow_dispatch` with a `version`
+  `packages/shared-core/src/agent/skills/**` (or `workflow_dispatch` with a `version`
   input). It authenticates via WIF and `gsutil rsync`es the skills dir to
   `gs://<bucket>/<version>/` (plus the manifest object). It derives `<bucket>` from
   the `GCP_PROJECT_ID` repo variable the same way Terraform does
@@ -103,7 +103,7 @@ skill edit ships without rebuilding/redeploying a service — and so multiple sk
   `resolveSkillsSrc()` resolves the install source to `/skills/<version>`, and
   `installSkills()` copies from there. **Backward-compat:** when `SKILLS_ROOT` is
   unset (local/dev, or a project without the bucket) it falls back to the vendored
-  `packages/shared/src/agent/skills` — existing behavior, unchanged.
+  `packages/shared-core/src/agent/skills` — existing behavior, unchanged.
 
 **Cut a new skills version**
 
@@ -121,7 +121,7 @@ Set-up (one-off): nothing to pre-create — **Terraform creates the bucket** (na
 `var.skills_publisher_member` to the deployer SA. After the first `terraform apply`,
 publish an initial version by running the **Publish Skills Bundle** workflow
 (`workflow_dispatch`, `version = v1`) or by pushing a change under
-`packages/shared/src/agent/skills/**`. No `SKILLS_BUCKET` repo variable is
+`packages/shared-core/src/agent/skills/**`. No `SKILLS_BUCKET` repo variable is
 required — the workflow derives the name from `GCP_PROJECT_ID`.
 
 ## Roles & access control (RBAC)
