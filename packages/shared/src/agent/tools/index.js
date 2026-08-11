@@ -19,6 +19,7 @@ const security = require('./security');
 const quality = require('./quality');
 const codegen = require('./codegen');
 const playwright = require('./playwright');
+const billing = require('./billing');
 
 const DOMAINS = Object.freeze({
   docker: docker.FACTORIES,
@@ -29,6 +30,7 @@ const DOMAINS = Object.freeze({
   quality: quality.FACTORIES,
   codegen: codegen.FACTORIES,
   playwright: playwright.FACTORIES,
+  billing: billing.FACTORIES,
 });
 
 const TOOL_FACTORIES = Object.freeze(

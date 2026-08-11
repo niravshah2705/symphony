@@ -229,6 +229,12 @@ variable "coder_schedule" {
   default     = "*/2 * * * *"
 }
 
+variable "billing_schedule" {
+  type        = string
+  description = "Billing usage-aggregation sweep tick — POSTs to /pubsub/billing-tick."
+  default     = "*/5 * * * *"
+}
+
 variable "scheduler_time_zone" {
   type    = string
   default = "Etc/UTC"

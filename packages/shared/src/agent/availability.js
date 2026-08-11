@@ -45,6 +45,10 @@ function statusOf(error) {
 }
 
 function publicAvailabilityMessage(resource, context = {}) {
+  if (resource === 'billing') {
+    return context.message
+      || 'Billing balance exhausted — add credits (or enable auto-recharge) to resume runner activity.';
+  }
   if (resource === 'git') {
     const provider = context.provider === 'gitlab' ? 'GitLab' : 'GitHub';
     return `${provider} repository access is unavailable. Check the repository and token in Settings, then resume agent jobs.`;
