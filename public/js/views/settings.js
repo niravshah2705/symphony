@@ -200,11 +200,80 @@ function modelSpec(preset) {
   return `${provLabel} · ctx ${ctxTok} · out ${outTok} · ${modelPrice(preset)}`;
 }
 
+function lockGlyph() {
+  return el('span', { dataset: { i18nSkip: 'true' }, style: 'display:inline-flex', html: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>' });
+}
+
 function lockChip(label) {
-  return el('span', { class: 'sx-locked' }, [
-    el('span', { dataset: { i18nSkip: 'true' }, html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>' }),
-    label,
+  return el('span', { class: 'sx-locked' }, [lockGlyph(), label]);
+}
+
+// Operational pref keys an org can pin so lower scopes can't override them.
+// Keys mirror the settings-service PREF_KEYS; labels match the effective rail.
+const LOCKABLE_PREFS = Object.freeze([
+  ['complexityTier', 'Complexity'],
+  ['llmProvider', 'Provider'],
+  ['agentRuntime', 'Runtime'],
+  ['workflowPattern', 'Workflow'],
+  ['planningProvider', 'Issue tracker'],
+  ['langsmithTracing', 'Tracing'],
+]);
+
+// Configuration locks. At ORG scope: editable toggles that pin operational prefs
+// (org.locks) so projects/people can't override them. At project/user scope: a
+// read-only view of what a higher scope has locked (from the effective response).
+function locksCard(ctx, scopeState) {
+  const scope = scopeState.scope;
+  const card = el('div', { class: 'sx-card sx-card-pad' });
+  const head = (sub) => el('div', { class: 'sx-card-head' }, [
+    el('div', {}, [
+      el('div', { class: 'sx-card-title' }, 'Configuration locks'),
+      el('div', { class: 'sx-card-sub' }, sub),
+    ]),
   ]);
+  card.append(loading('Loading locks…'));
+
+  void (async () => {
+    if (scope === 'org') {
+      let locks = [];
+      let editable = true;
+      try { const p = await api.settingsPolicy.getOrgPolicy(); locks = (p && p.locks) || []; }
+      catch (_) { editable = false; }
+      const set = new Set(locks);
+      const paint = () => {
+        clear(card).append(
+          head('Pin a setting so projects and people can’t override the org default.'),
+          editable
+            ? el('div', { class: 'sx-lock-grid' }, LOCKABLE_PREFS.map(([key, label]) => {
+              const on = set.has(key);
+              const tile = el('button', { type: 'button', class: `sx-lock-tile${on ? ' active' : ''}` }, [lockGlyph(), el('span', {}, label)]);
+              tile.addEventListener('click', async () => {
+                const wasOn = set.has(key);
+                if (wasOn) set.delete(key); else set.add(key);
+                tile.disabled = true;
+                try { await api.settingsPolicy.setOrgLocks([...set]); toast(wasOn ? `${label} unlocked.` : `${label} locked.`, 'ok'); }
+                catch (err) { if (wasOn) set.add(key); else set.delete(key); toast(err.message || 'Could not update locks.', 'err'); }
+                finally { paint(); }
+              });
+              return tile;
+            }))
+            : el('p', { class: 'muted' }, 'Organization admins only.'),
+        );
+      };
+      paint();
+      return;
+    }
+    // project / user scope: read-only "locked by a higher scope" view.
+    let locked = [];
+    try { const eff = await api.settingsPolicy.getEffective(scopeState.projectId); locked = (eff && eff.locks) || []; }
+    catch (_) { locked = []; }
+    const lockedLabels = LOCKABLE_PREFS.filter(([k]) => locked.includes(k)).map(([, l]) => l);
+    clear(card).append(
+      head(lockedLabels.length ? 'These are pinned by your organization and can’t be changed here.' : 'Nothing is pinned by a higher scope — you can change everything below.'),
+      lockedLabels.length ? el('div', { class: 'sx-lock-chips' }, lockedLabels.map((l) => lockChip(l))) : null,
+    );
+  })();
+  return card;
 }
 
 // Interactive per-scope model catalog. Status comes from the backend-computed
@@ -361,6 +430,7 @@ function governanceSection(ctx, scopeState) {
 function modelsRuntimeSection(ctx, llm, scopeState) {
   return el('section', { class: 'sx-section', id: 'settings-models' }, [
     sxSecHead('Models & runtime', 'Complexity sets every task model. Override any piece below.'),
+    locksCard(ctx, scopeState),
     sxComplexity(ctx, scopeState),
     providerTiles(ctx, scopeState),
     el('div', { class: 'sx-card sx-card-pad' }, [

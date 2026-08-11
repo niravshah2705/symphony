@@ -395,6 +395,13 @@ export const api = {
     setMyPrefs: (prefs) =>
       request('/settings-policy/me/settings', { method: 'PUT', body: JSON.stringify({ prefs }) }),
 
+    // Per-scope pref LOCKS (REPLACE semantics — the full list replaces this
+    // scope's locks). A locked pref key can't be overridden by a lower scope.
+    setOrgLocks: (locks) =>
+      request('/settings-policy/settings/org', { method: 'PUT', body: JSON.stringify({ locks }) }),
+    setProjectLocks: (projectId, locks) =>
+      request(`/settings-policy/settings/project/${projectId}`, { method: 'PUT', body: JSON.stringify({ locks }) }),
+
     // Per-org KMS-encrypted secret VAULT (org admin). This is the credential
     // source proxied agents read (via the settings service S2S resolver), with a
     // per-key managed-vs-customer selection. Write-only: GET masks each key to
