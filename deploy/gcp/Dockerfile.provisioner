@@ -2,7 +2,7 @@
 #
 # Provisioner service image (INTERNAL Cloud Run service).
 #
-# Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared:
+# Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared-core:
 #   docker build -f deploy/gcp/Dockerfile.provisioner -t <tag> .
 #
 # Base image is pinned by DIGEST (infrastructure-misconfig checklist) — the
@@ -11,15 +11,22 @@
 ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
 
 # ---------------------------------------------------------------------------
-# Stage 1 — install production dependencies at the workspace root.
+# Stage 1 — install ONLY the provisioner's dependency closure.
 # ---------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 ENV NODE_ENV=production
 
+# The provisioner depends ONLY on @ai-fleet/shared-core (config, logger, Pub/Sub
+# messaging, and the runtime provisioner), NOT on @ai-fleet/shared (which drags
+# in the ~600 MB LLM / agent-SDK tree). Copy just those two workspaces + the root
+# manifests: `npm ci` then installs only this closure and simply skips the absent
+# coder/planner/gateway/shared workspaces, so the heavy agent SDKs are NEVER
+# installed — no post-install prune needed, and the install stays reproducible
+# from the committed lockfile.
 COPY package.json package-lock.json ./
-COPY packages/ ./packages/
-COPY services/ ./services/
+COPY packages/shared-core/ ./packages/shared-core/
+COPY services/provisioner/ ./services/provisioner/
 
 RUN npm ci --omit=dev && npm cache clean --force
 

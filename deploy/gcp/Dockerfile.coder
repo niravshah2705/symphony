@@ -25,6 +25,12 @@ COPY package.json package-lock.json ./
 COPY packages/ ./packages/
 COPY services/ ./services/
 
+# This image installs the FULL workspace closure (COPY packages/ + services/
+# above) on purpose: the coder depends on @ai-fleet/shared and RUNS the agent
+# runtime, invoking the native codex-sdk / claude-agent-sdk factory
+# (packages/shared/src/agent/runtimes.js). Do NOT scope the copy to
+# @ai-fleet/shared-core the way the proxy & provisioner images do — that would
+# surface as a runtime MODULE_NOT_FOUND when a specific SDK runtime is selected.
 RUN npm ci --omit=dev && npm cache clean --force
 
 # ---------------------------------------------------------------------------

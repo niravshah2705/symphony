@@ -1,7 +1,7 @@
 'use strict';
 
 const { Readable } = require('stream');
-const { matchRoute } = require('@ai-fleet/shared/egress');
+const { matchRoute } = require('@ai-fleet/shared-core/egress');
 const credentials = require('./credentials');
 
 /**
@@ -81,7 +81,7 @@ function sendJson(res, status, body) {
 function createProxyHandler(opts = {}) {
   const fetchImpl = opts.fetchImpl || (typeof fetch === 'function' ? fetch : null);
   const oauthManager = opts.oauthManager || require('./oauth-manager');
-  const log = opts.logger || require('@ai-fleet/shared/logger');
+  const log = opts.logger || require('@ai-fleet/shared-core/logger');
 
   return async function handle(req, res) {
     const matched = matchRoute(req.url);
