@@ -4,6 +4,67 @@ All notable changes to AI Fleet (tech-symphony). Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project is not yet
 tagged by semver, so entries are grouped by the date they landed on `main`.
 
+## 2026-08-11
+
+A dependency-modernization pass: reviewed every workspace's dependencies and
+executed the upgrades it surfaced, landing as focused PRs (numbers in
+parentheses). Verified end-to-end on Node 22 — 698 unit tests, Firestore v8 +
+Pub/Sub v6 against Docker emulators, and Cloud Run v4 / Scheduler v6 / Secret
+Manager v7 / firebase-admin v14 read-only against real GCP.
+
+### Changed
+
+- **Node runtime baseline 20 → 22** (#94) — the latest Google Cloud SDK,
+  `google-auth-library`, and `firebase-admin` majors all require Node ≥ 22.
+  Raised `engines.node` across root + `@ai-fleet/shared` + every Node service,
+  repinned the `deploy/gcp` Docker base images (`node:20-alpine` →
+  `node:22-alpine`, multi-arch digest), CI runners, and the cloudbuild
+  SPA-obfuscation step. The `adlc` CLI intentionally stays **Node 18+** (a
+  standalone distributable that only bundles `shared/config`).
+- **Google Cloud SDK + auth majors** (#96) — in `@ai-fleet/shared`:
+  `@google-cloud/run` 1→4, `@google-cloud/pubsub` 4→6, `@google-cloud/scheduler`
+  4→6, and `google-auth-library` 9→11. Also **declared `google-auth-library`
+  explicitly** in gateway/proxy/provisioner, which had been requiring it as a
+  phantom transitive dep (they were resolving an old v9 while shared used v11).
+- **Firestore data layer** (#97) — `@google-cloud/firestore` 7→8
+  (`@ai-fleet/shared`) and `firebase-admin` 13→14 (`@ai-fleet/gateway`), bumped
+  together since `firebase-admin` bundles Firestore, so the tree carries a single
+  Firestore major. No code changes (stable core Firestore + modular
+  `firebase-admin/app`+`/auth` APIs).
+- **In-range dependency refresh** (#94) — LangChain / deepagents / Anthropic
+  Agent SDK / Codex SDK / Playwright moved to their latest caret-compatible
+  versions (lockfile only). `langsmith` held at 0.7.x (capped by the `deepagents`
+  peer dependency).
+
+### Fixed
+
+- **`google-auth-library` v11 silently dropped the S2S OIDC token** (#96) — v10+
+  returns a WHATWG `Headers` object from `getRequestHeaders()`, so
+  `headers.Authorization` read `undefined` (the egress proxy would fail closed
+  with 5xx; the gateway and provisioner would lose IAM auth to internal
+  services). Read via `Headers.get()` with a plain-object fallback at the three
+  S2S call sites (gateway `service-client.js`, proxy `secrets-client.js`,
+  provisioner `index.js`).
+- **`node --test <dir>` hung the CI unit-test job on Node 22** (#94) — Node 22
+  runs a directory argument as an entry module instead of globbing test files, so
+  `services/gateway/src` resolved to `index.js` and booted the gateway server,
+  hanging the job indefinitely. Switched the command to explicit `*.test.js`
+  globs.
+
+### Removed
+
+- **Unused `@google-cloud/secret-manager`** (#102) — declared in
+  `@ai-fleet/shared` but never imported anywhere (secret resolution flows through
+  the settings service + KMS-encrypted vault + egress proxy, not this client).
+  Dropped it plus 3 orphaned transitives; zero code impact.
+
+### Infrastructure & Deploy
+
+- All five `deploy/gcp` Docker images now build on `node:22-alpine` (digest
+  pinned); CI (`checks.yml`, `deploy.yml`) and `cloudbuild.yaml` run on Node 22.
+  `engines.node >= 22` on all runtime workspaces; the `adlc` CLI release keeps
+  its Node-20 runner and `--target=node18` bundle.
+
 ## 2026-08-10
 
 ### Added
