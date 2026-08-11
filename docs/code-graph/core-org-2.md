@@ -6,8 +6,8 @@
 
 Directory-based community: services/settings
 
-- **Size**: 352 nodes
-- **Cohesion**: 0.4197
+- **Size**: 353 nodes
+- **Cohesion**: 0.4189
 - **Dominant Language**: python
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: services/settings
 | count | Function | ./services/settings/app/core/database.py | 67-69 |
 | commit | Function | ./services/settings/app/core/database.py | 71-72 |
 
-*... and 302 more members.*
+*... and 303 more members.*
 
 ## Execution Flows
 
@@ -85,15 +85,15 @@ Directory-based community: services/settings
 
 ### Outgoing
 
-- `get` (116 edge(s))
+- `get` (117 edge(s))
 - `str` (44 edge(s))
-- `uuid4` (43 edge(s))
-- `put` (40 edge(s))
+- `uuid4` (44 edge(s))
+- `put` (42 edge(s))
 - `Depends` (35 edge(s))
-- `json` (31 edge(s))
+- `json` (33 edge(s))
 - `ValueError` (19 edge(s))
+- `set` (17 edge(s))
 - `items` (16 edge(s))
-- `set` (15 edge(s))
 - `BaseModel` (15 edge(s))
 - `list` (13 edge(s))
 - `len` (10 edge(s))
@@ -103,10 +103,10 @@ Directory-based community: services/settings
 
 ### Incoming
 
-- `get` (44 edge(s))
-- `uuid4` (42 edge(s))
-- `put` (40 edge(s))
-- `json` (31 edge(s))
+- `get` (45 edge(s))
+- `uuid4` (43 edge(s))
+- `put` (42 edge(s))
+- `json` (33 edge(s))
 - `./services/settings/app/errors.py` (18 edge(s))
 - `./services/settings/tests/unit/test_resolver.py` (18 edge(s))
 - `./services/settings/app/services/policy_service.py` (16 edge(s))
@@ -116,5 +116,5 @@ Directory-based community: services/settings
 - `./services/settings/tests/integration/test_authz.py` (10 edge(s))
 - `./services/settings/app/core/firestore.py` (9 edge(s))
 - `./services/settings/tests/integration/test_config_values.py` (9 edge(s))
+- `./services/settings/tests/integration/test_settings.py` (9 edge(s))
 - `./services/settings/app/crypto/envelope.py` (8 edge(s))
-- `./services/settings/app/schemas/secrets.py` (8 edge(s))

@@ -21,7 +21,7 @@ from app.core.database import Uow
 from app.core.timeutils import utcnow
 from app.domain import universe as universe_mod
 from app.domain.resolver import (
-    locked_pref_keys,
+    locked_keys,
     resolve_effective,
     resolve_effective_prefs,
     resolve_effective_values,
@@ -247,7 +247,7 @@ async def resolve_for_caller(
         universe=universe,
         values=_mask_values(effective_values),
         prefs=effective_prefs,
-        locks=locked_pref_keys(org_policy, project_policy),
+        locks=locked_keys(org_policy, project_policy),
     )
 
 

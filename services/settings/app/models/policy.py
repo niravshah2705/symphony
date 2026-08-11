@@ -57,6 +57,11 @@ PREF_KEYS: tuple[str, ...] = (
     "langsmithTracing",
 )
 
+# Keys that can be LOCKED at a scope so scopes below can't change them: the
+# operational pref keys AND the policy domain names (a locked domain freezes that
+# domain's allow/deny at the locking scope — lower scopes can't narrow it further).
+LOCKABLE_KEYS: tuple[str, ...] = PREF_KEYS + DOMAINS
+
 # Firestore document id used for the single policy doc within each scope's
 # ``.../settings`` collection.
 POLICY_DOC_ID = "policy"
@@ -91,13 +96,13 @@ def clean_prefs(raw: dict | None) -> dict[str, str]:
 
 
 def clean_locks(raw) -> list[str]:
-    """Keep only allow-listed, de-duplicated pref keys from a locks list. A LOCK on
-    a key at some scope means the scopes BELOW it cannot override that pref (the
-    locking scope's value wins) — see resolver.resolve_effective_prefs."""
+    """Keep only allow-listed (LOCKABLE_KEYS), de-duplicated lock entries — pref
+    keys or domain names. A LOCK at some scope means the scopes BELOW it cannot
+    change that pref/domain (the locking scope wins). See resolver."""
     seen: list[str] = []
     for key in (raw or []):
         text = str(key)
-        if text in PREF_KEYS and text not in seen:
+        if text in LOCKABLE_KEYS and text not in seen:
             seen.append(text)
     return seen
 

@@ -25,6 +25,7 @@ from fnmatch import fnmatchcase
 from app.models.policy import (
     CONFIG_VALUE_KEYS,
     DOMAINS,
+    LOCKABLE_KEYS,
     PREF_KEYS,
     DomainPolicy,
     SettingsPolicy,
@@ -91,14 +92,22 @@ def resolve_effective(
     def scope(policy: SettingsPolicy | None, domain: str) -> DomainPolicy:
         return policy.domain(domain) if policy is not None else _EMPTY
 
+    org_locks = set(org_policy.locks) if org_policy is not None else set()
+    project_locks = set(project_policy.locks) if project_policy is not None else set()
+
     result: dict[str, DomainResolution] = {}
     for domain in DOMAINS:
         universe = universe_by_domain.get(domain, [])
+        # A domain LOCK freezes that domain at the locking scope: lower scopes are
+        # ignored so they can't narrow it further. (Org lock → project+user out;
+        # project lock → user out.)
+        project_scope = _EMPTY if domain in org_locks else scope(project_policy, domain)
+        user_scope = _EMPTY if domain in org_locks or domain in project_locks else scope(user_policy, domain)
         result[domain] = resolve_domain(
             universe,
             scope(org_policy, domain),
-            scope(project_policy, domain),
-            scope(user_policy, domain),
+            project_scope,
+            user_scope,
         )
     return result
 
@@ -132,18 +141,19 @@ def resolve_effective_values(
     return effective
 
 
-def locked_pref_keys(
+def locked_keys(
     org_policy: SettingsPolicy | None,
     project_policy: SettingsPolicy | None,
 ) -> list[str]:
-    """Pref keys a USER cannot override — the union of locks set at org and
-    project. Order-stable (PREF_KEYS order) so the response is deterministic."""
+    """Lock entries (pref keys and/or domain names) a USER cannot change — the
+    union of locks set at org and project. Order-stable (LOCKABLE_KEYS order) so
+    the response is deterministic."""
     locked: set[str] = set()
     if org_policy is not None:
         locked.update(org_policy.locks)
     if project_policy is not None:
         locked.update(project_policy.locks)
-    return [key for key in PREF_KEYS if key in locked]
+    return [key for key in LOCKABLE_KEYS if key in locked]
 
 
 def resolve_effective_prefs(

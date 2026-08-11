@@ -7,7 +7,7 @@
 Directory-based community: public/js
 
 - **Size**: 472 nodes
-- **Cohesion**: 0.4965
+- **Cohesion**: 0.4964
 - **Dominant Language**: javascript
 
 ## Members
@@ -99,7 +99,7 @@ Directory-based community: public/js
 - `Number` (31 edge(s))
 - `isArray` (30 edge(s))
 - `slice` (29 edge(s))
-- `includes` (28 edge(s))
+- `includes` (29 edge(s))
 
 ### Incoming
 
