@@ -58,7 +58,7 @@ export async function renderSettings(view) {
   // so they are labeled "Global" in the effective panel until per-scope lands.
   const identity = deriveIdentity(meRes, projectsRes && projectsRes.projects);
   const scopeState = {
-    scope: ORG_POLICY_MANAGEABLE && identity.isOrgAdmin && identity.hasOrg ? 'org' : 'user',
+    scope: identity.isOrgAdmin && identity.hasOrg ? 'org' : 'user',
     projectId: identity.defaultProjectId,
   };
 
@@ -88,15 +88,10 @@ export async function renderSettings(view) {
 /* ===================== Redesign: shell & scope ===================== */
 
 // Org-scope policy + the per-org secret vault are enforced by the SETTINGS
-// service, which keeps its OWN Firestore user store separate from the org
-// service. Org membership is not yet synced across the two, so the settings
-// service treats every browser user as org-less and answers 403 on
-// /settings-policy/settings/org*. Enabling the org policy card from the ORG
-// service's `org_role` therefore only fires calls that always 403 and spam the
-// browser console. Gate the whole org-scope surface off until the backend syncs
-// org membership into the settings service, then flip this (ideally to a signal
-// the settings service returns about the caller). TODO(org-membership-sync).
-const ORG_POLICY_MANAGEABLE = false;
+// service. It keeps its own user store, so the gateway now forwards the caller's
+// org membership (resolved from the authoritative org service) as trusted x-org-*
+// headers — real org admins are recognized and the org-scope surface works. The
+// card is gated on the org role the org service reports, mirroring that check.
 
 // Best-effort identity for the scope ladder. `me` is /api/org/me (org-less
 // friendly); shapes vary, so read defensively and always leave org/user usable.
@@ -170,7 +165,7 @@ function sxHeader() {
 function scopeLadder(scopeState, identity, rerender) {
   const projectName = identity.defaultProjectName || 'Project';
   const rows = [
-    { id: 'org', name: identity.orgName, meta: 'Boundary for every project', enabled: ORG_POLICY_MANAGEABLE && identity.hasOrg },
+    { id: 'org', name: identity.orgName, meta: 'Boundary for every project', enabled: identity.hasOrg },
     { id: 'project', name: projectName, meta: identity.defaultProjectId ? 'Narrows the org list' : 'No project selected', enabled: Boolean(identity.defaultProjectId) },
     { id: 'user', name: identity.userEmail, meta: 'Chooses inside what is left', enabled: true },
   ];
@@ -1176,11 +1171,9 @@ function policyGroup(ctx) {
       }),
       policyScopeCard(orgC, {
         title: 'Organization scope', hint: 'Applies to everyone in the org. An exclude here blocks project and user.',
-        // Gated by ORG_POLICY_MANAGEABLE: the settings service does not yet
-        // recognize org membership, so firing getOrgPolicy/getOrgSecrets here
-        // would always 403. Keep the card visible-but-disabled instead.
-        universe, enabled: ORG_POLICY_MANAGEABLE && isOrgAdmin,
-        disabledReason: 'Organization-scope policy isn’t available in this workspace yet.',
+        // The gateway forwards the caller's org role (from the org service) to the
+        // settings service, so org admins can manage org-scope policy again.
+        universe, enabled: isOrgAdmin, disabledReason: 'Organization admins only.',
         load: () => api.settingsPolicy.getOrgPolicy(), save: (b) => api.settingsPolicy.setOrgPolicy(b),
         vault: true,
       }),

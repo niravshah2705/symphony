@@ -12,13 +12,13 @@ Auto-generated documentation from the code knowledge graph community structure.
 |-----------|------|------|
 | agent-model | 1468 | [agent-model.md](agent-model.md) |
 | core-org | 484 | [core-org.md](core-org.md) |
-| core-org | 353 | [core-org-2.md](core-org-2.md) |
+| core-org | 357 | [core-org-2.md](core-org-2.md) |
 | e2e-test:agent | 43 | [e2e-test-agent.md](e2e-test-agent.md) |
 | gcp-log | 10 | [gcp-log.md](gcp-log.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
 | routes-role | 27 | [routes-role.md](routes-role.md) |
 | scripts-module | 32 | [scripts-module.md](scripts-module.md) |
-| src-auth | 221 | [src-auth.md](src-auth.md) |
+| src-auth | 222 | [src-auth.md](src-auth.md) |
 | src-back | 16 | [src-back.md](src-back.md) |
 | src-issue | 11 | [src-issue.md](src-issue.md) |
 | src-test:build | 41 | [src-test-build.md](src-test-build.md) |

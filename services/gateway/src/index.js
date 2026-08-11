@@ -19,7 +19,8 @@ const { router: codexRoutes, callback: codexCallback } = require('./routes/codex
 const { router: claudeRoutes } = require('./routes/claude');
 const { createProxy } = require('./proxy');
 const { blockInternalProxy } = require('./settings-internal-guard');
-const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig } = require('./auth');
+const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig, bearerToken } = require('./auth');
+const { callJson } = require('./service-client');
 const { createConfigResolver } = require('./config-resolver');
 const { requireEulaAccepted } = require('./eula');
 const { createCorsMiddleware } = require('./cors');
@@ -223,10 +224,40 @@ if (CONFIG.SERVICES.orgUrl) {
 // and rewrites /api/settings-policy/* -> /api/v1/*. The `org` permission domain
 // is the coarse gate (reused per the epic); the service enforces the real
 // per-org / per-project authorization.
+// The settings service keeps its OWN user store (separate Firestore namespace)
+// and would otherwise see every browser user as org-less, 403-ing real org admins
+// on the org-scope surface. The org service is the source of truth, so resolve the
+// caller's membership from it (same pull the billing route uses) and hand it to the
+// proxy as trusted x-org-* headers. Fail-safe: on any miss we inject nothing, so the
+// settings service stays org-less (403) — never a false grant. Never trusts client
+// input; org identity is keyed off the authenticated bearer.
+async function resolveOrgMembership(req, _res, next) {
+  try {
+    if (CONFIG.SERVICES.orgUrl) {
+      let bearer = '';
+      try { bearer = bearerToken(req); } catch (_) { bearer = ''; }
+      if (bearer) {
+        const { status, data } = await callJson(CONFIG.SERVICES.orgUrl, '/api/v1/me', { userAuth: bearer });
+        if (status === 200 && data && data.org_id) {
+          req.orgMembership = { orgId: String(data.org_id), orgRole: String(data.org_role || '') };
+        }
+      }
+    }
+  } catch (_) {
+    /* fail-safe: leave req.orgMembership unset → settings service stays org-less */
+  }
+  next();
+}
+
 if (CONFIG.SERVICES.settingsUrl) {
   const settingsPolicyProxy = createProxy(CONFIG.SERVICES.settingsUrl, {
     rewrite: { from: '/api/settings-policy', to: '/api/v1' },
     forwardUserAuth: true,
+    // Only present on the org-scoped mount (set by resolveOrgMembership); absent on
+    // the /me mount, so no header is injected there.
+    injectHeaders: (req) => (req.orgMembership
+      ? { 'x-org-id': req.orgMembership.orgId, 'x-org-role': req.orgMembership.orgRole }
+      : {}),
   });
   // The settings service's /api/v1/internal/* surface returns UNMASKED provider
   // secrets and must never be reachable from a browser. Refuse to proxy any
@@ -237,8 +268,9 @@ if (CONFIG.SERVICES.settingsUrl) {
   // BEFORE the role-gated prefix so this exact path wins (mirrors /api/org/me).
   app.use('/api/settings-policy/me', requireAuthenticated(), settingsPolicyProxy);
   // Org/project settings surface — needs the `org` permission domain; the
-  // settings service enforces org-admin / project-admin authorization.
-  app.use('/api/settings-policy', requirePermission('org'), settingsPolicyProxy);
+  // settings service enforces org-admin / project-admin authorization, using the
+  // trusted x-org-* headers resolveOrgMembership injects.
+  app.use('/api/settings-policy', requirePermission('org'), resolveOrgMembership, settingsPolicyProxy);
 } else {
   app.use('/api/settings-policy', requirePermission('org'), (req, res) =>
     res.status(501).json({ error: 'Settings service is not configured (SETTINGS_URL unset).' }));
