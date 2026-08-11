@@ -833,13 +833,21 @@ router.put('/json', (req, res) => {
 });
 
 // GET /api/settings/validate — test the currently stored Linear key.
+// A rejected key is a validation RESULT, not an authentication failure of THIS
+// API, so return 200 { ok:false, error } instead of propagating Linear's 401.
+// That lets the client guide the user to Settings without the browser logging a
+// console error for every probe. Missing key stays a 400 (nothing to test).
 router.get(
   '/validate',
   asyncHandler(async (req, res) => {
     const key = getApiKey();
     if (!key) return res.status(400).json({ error: 'No API key configured.' });
-    const { viewer, organization } = await getViewer(key);
-    res.json({ ok: true, viewer, organization });
+    try {
+      const { viewer, organization } = await getViewer(key);
+      res.json({ ok: true, viewer, organization });
+    } catch (err) {
+      res.json({ ok: false, error: err.message || 'The Linear key was rejected. Verify it in Settings.' });
+    }
   })
 );
 

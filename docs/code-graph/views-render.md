@@ -7,7 +7,7 @@
 Directory-based community: public/js
 
 - **Size**: 504 nodes
-- **Cohesion**: 0.4801
+- **Cohesion**: 0.4798
 - **Dominant Language**: javascript
 
 ## Members
@@ -44,23 +44,23 @@ Directory-based community: public/js
 | initShellInteractions | Function | ./public/js/app.js | 256-301 |
 | prepareNavigationTarget | Function | ./public/js/app.js | 271-274 |
 | closeAtBreakpoint | Function | ./public/js/app.js | 296-299 |
-| refreshConnection | Function | ./public/js/app.js | 303-342 |
-| refreshRole | Function | ./public/js/app.js | 345-363 |
-| freshView | Function | ./public/js/app.js | 367-376 |
-| setAuthenticationLocked | Function | ./public/js/app.js | 378-385 |
-| beginSignIn | Function | ./public/js/app.js | 387-395 |
-| beginMicrosoftSignIn | Function | ./public/js/app.js | 397-405 |
-| authProviderButtons | Function | ./public/js/app.js | 412-430 |
-| beginSignOut | Function | ./public/js/app.js | 432-440 |
-| renderAuthControl | Function | ./public/js/app.js | 442-474 |
-| renderAuthenticationGate | Function | ./public/js/app.js | 476-535 |
-| renderSignInRequired | Function | ./public/js/app.js | 540-562 |
-| renderAccessDenied | Function | ./public/js/app.js | 564-576 |
-| render | Function | ./public/js/app.js | 578-637 |
-| capitalize | Function | ./public/js/app.js | 639-642 |
-| scheduleOneTap | Function | ./public/js/app.js | 644-660 |
-| start | Function | ./public/js/app.js | 646-654 |
-| prompt | Function | ./public/js/app.js | 651-651 |
+| refreshConnection | Function | ./public/js/app.js | 303-352 |
+| refreshRole | Function | ./public/js/app.js | 355-373 |
+| freshView | Function | ./public/js/app.js | 377-386 |
+| setAuthenticationLocked | Function | ./public/js/app.js | 388-395 |
+| beginSignIn | Function | ./public/js/app.js | 397-405 |
+| beginMicrosoftSignIn | Function | ./public/js/app.js | 407-415 |
+| authProviderButtons | Function | ./public/js/app.js | 422-440 |
+| beginSignOut | Function | ./public/js/app.js | 442-450 |
+| renderAuthControl | Function | ./public/js/app.js | 452-484 |
+| renderAuthenticationGate | Function | ./public/js/app.js | 486-545 |
+| renderSignInRequired | Function | ./public/js/app.js | 550-572 |
+| renderAccessDenied | Function | ./public/js/app.js | 574-586 |
+| render | Function | ./public/js/app.js | 588-657 |
+| capitalize | Function | ./public/js/app.js | 659-662 |
+| scheduleOneTap | Function | ./public/js/app.js | 664-680 |
+| start | Function | ./public/js/app.js | 666-674 |
+| prompt | Function | ./public/js/app.js | 671-671 |
 | shouldRetryAuth | Function | ./public/js/auth-retry.mjs | 17-19 |
 | createSingleFlight | Function | ./public/js/auth-retry.mjs | 32-43 |
 | fn | Function | ./public/js/auth-retry.test.mjs | 73-76 |
@@ -96,8 +96,8 @@ Directory-based community: public/js
 - `catch` (47 edge(s))
 - `querySelector` (36 edge(s))
 - `has` (35 edge(s))
+- `t` (35 edge(s))
 - `Boolean` (35 edge(s))
-- `t` (34 edge(s))
 - `Number` (31 edge(s))
 - `isArray` (30 edge(s))
 

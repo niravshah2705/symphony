@@ -1,17 +1,22 @@
 import { api } from '../api.js';
 import { el, clear, toast, loading } from '../dom.js';
 import { brandIcon } from '../icons.js';
+import { state } from '../state.js';
 
 export async function renderSettings(view) {
   view.append(loading('Loading settings…'));
 
+  // The labels/members enrichment is Linear-backed and 401s when the saved key
+  // was rejected. Skip it in that known-bad state so the settings page (the very
+  // place to fix the key) doesn't spam the console with connected-tool 401s.
+  const linearBroken = state.connectionValid === false;
   const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes, jsonRes, meRes, projectsRes] = await Promise.all([
     api.getSettings(),
     api.getLlmPresets(),
     api.getAgentConfig().catch(() => ({ config: {} })),
     api.getAgentModels().catch(() => ({ intervals: [5, 10, 15] })),
-    api.getAgentLabels().catch(() => ({ labels: [] })),
-    api.getMembers().catch(() => ({ members: [] })),
+    linearBroken ? Promise.resolve({ labels: [] }) : api.getAgentLabels().catch(() => ({ labels: [] })),
+    linearBroken ? Promise.resolve({ members: [] }) : api.getMembers().catch(() => ({ members: [] })),
     api.getAssumedRole().catch(() => ({ assumedRole: null })),
     api.getCodexStatus().catch(() => ({ connected: false })),
     api.getClaudeStatus().catch(() => ({ connected: false })),
@@ -1388,11 +1393,17 @@ function keysSection(settings) {
     },
   }, 'Remove Linear key');
 
-  // Reflect current connection state.
+  // Reflect current connection state. validate() now returns 200 { ok:false }
+  // for a rejected key (instead of a 401), so handle that in the success path.
   if (settings.hasKey) {
     api
       .validate()
       .then((r) => {
+        if (r && r.ok === false) {
+          status.textContent = `Linear key not working: ${r.error || 'the key was rejected.'}`;
+          status.style.color = 'var(--red)';
+          return;
+        }
         const who = r.viewer ? r.viewer.name : 'your account';
         const org = r.organization ? ` @ ${r.organization.name}` : '';
         status.textContent = `Connected as ${who}${org}.`;
