@@ -1,3 +1,7 @@
+// Runtime deployment configuration is a module dependency, so it executes
+// before this client reads the API base without blocking the HTML parser.
+import '/config.js';
+
 // Thin fetch wrapper around the backend API.
 
 let accessTokenProvider = null;
@@ -39,7 +43,12 @@ function notifyAuthenticationRequired(error) {
 
 async function request(path, options = {}) {
   const headers = new Headers(options.headers || {});
-  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  // `application/json` is not a CORS-safelisted request header. Adding it to a
+  // bodyless anonymous GET forces an otherwise unnecessary OPTIONS preflight.
+  // Mutations that actually carry our JSON payload still advertise it.
+  if (options.body != null && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (accessTokenProvider) {
     try {
       const token = await accessTokenProvider();
@@ -84,15 +93,15 @@ async function request(path, options = {}) {
 
 export const api = {
   // Authentication
-  getCurrentUser: () => request('/auth/me'),
+  getCurrentUser: (options = {}) => request('/auth/me', options),
 
   // Per-org deployment resolver. Returns { authenticated, status, gatewayUrl,
   // orgName } — which front-facing gateway this session should use. Always
   // fetched from the SHARED gateway (the bootstrap base) before any re-point.
-  getRuntimeConfig: () => request('/config'),
+  getRuntimeConfig: (options = {}) => request('/config', options),
 
   // End User License Agreement acceptance (gates "actual work" — see agent view).
-  getEulaStatus: () => request('/eula'),
+  getEulaStatus: (options = {}) => request('/eula', options),
   recordEulaDecision: (decision, via = 'user') =>
     request('/eula', { method: 'POST', body: JSON.stringify({ decision, via }) }),
 
@@ -192,12 +201,12 @@ export const api = {
   getAgentConfig: () => request('/agent/config'),
   saveAgentConfig: (payload) =>
     request('/agent/config', { method: 'PUT', body: JSON.stringify(payload) }),
-  getAgentStatus: () => request('/agent/status'),
+  getAgentStatus: (options = {}) => request('/agent/status', options),
   getAgentModels: () => request('/agent/models'),
   getAgentLabels: () => request('/agent/labels'),
   getAgentCandidates: () => request('/agent/candidates'),
-  getJobs: () => request('/agent/jobs'),
-  getCoderStatus: () => request('/coder'),
+  getJobs: (options = {}) => request('/agent/jobs', options),
+  getCoderStatus: (options = {}) => request('/coder', options),
   runAgentNow: () => request('/agent/run-now', { method: 'POST' }),
   enqueueProject: (payload) => request('/agent/enqueue', { method: 'POST', body: JSON.stringify(payload) }),
   // Short-lived token authorizing an EventSource (which cannot send a bearer header).
@@ -276,10 +285,10 @@ export const api = {
   prepareBusiness: (payload) =>
     request('/agent/business/prepare', { method: 'POST', body: JSON.stringify(payload) }),
   // Conversation threads (agent workspace history).
-  listConversations: () => request('/agent/conversations'),
+  listConversations: (options = {}) => request('/agent/conversations', options),
   createConversation: (payload = {}) =>
     request('/agent/conversations', { method: 'POST', body: JSON.stringify(payload) }),
-  getConversation: (id) => request(`/agent/conversations/${id}`),
+  getConversation: (id, options = {}) => request(`/agent/conversations/${id}`, options),
   appendConversationMessages: (id, messages) =>
     request(`/agent/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify({ messages }) }),
   renameConversation: (id, title) =>
@@ -294,9 +303,9 @@ export const api = {
 
   // Locale suggestions use browser language hints plus best-effort server IP
   // geolocation. Translation always runs through the configured local model.
-  getLocaleSuggestions: (languages = []) => {
+  getLocaleSuggestions: (languages = [], options = {}) => {
     const query = new URLSearchParams({ languages: languages.join(',') });
-    return request(`/locale/suggestions?${query}`);
+    return request(`/locale/suggestions?${query}`, options);
   },
   translateUi: (payload) =>
     request('/locale/translate', { method: 'POST', body: JSON.stringify(payload) }),

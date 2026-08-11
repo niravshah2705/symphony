@@ -2,14 +2,6 @@ import { api } from '../api.js';
 import { el, clear, toast } from '../dom.js';
 import { t } from '../i18n.js';
 import { agentPauseCopy, agentPauseInfo, agentPauseNotice, hasAgentPauseContract } from '../agent-pause.js';
-import {
-  buildBusinessWorkspace,
-  buildImplementationTask,
-  classifyOmniboxIntent,
-  searchWorkspaceMemory,
-  summarizeTroubleshooting,
-} from '../omnibox-router.mjs';
-import { scanSecrets } from '../secret-scan.mjs';
 import { state, setCurrentProject } from '../state.js';
 import { getAuthenticationState } from '../auth.js';
 
@@ -25,11 +17,30 @@ let latestCoderStatus = null;
 let conversation = []; // in-memory entries for the ACTIVE thread (full routeResult fidelity)
 let activeConversationId = null; // the open thread; null = unsaved "new" state (lazy-created on first send)
 let eulaStatus = null; // cached { accepted, version } for this session; gates "actual work"
+let bootstrapController = null; // aborts the one-shot route seed when navigation replaces this view
+let renderGeneration = 0; // prevents a late response from painting into a newer Agent mount
+let omniboxRouterPromise = null;
+let secretScannerPromise = null;
 const pauseSignatures = new WeakMap();
 const CONVERSATION_ID = /^conv_[A-Za-z0-9_-]{1,64}$/;
 const GATE_COUNTDOWN_TICK_MS = 1000; // refreshes only the countdown label; no network
+const AGENT_BOOT_TIMEOUT_MS = 8000;
+
+function loadOmniboxRouter() {
+  if (!omniboxRouterPromise) omniboxRouterPromise = import('../omnibox-router.mjs');
+  return omniboxRouterPromise;
+}
+
+function loadSecretScanner() {
+  if (!secretScannerPromise) secretScannerPromise = import('../secret-scan.mjs');
+  return secretScannerPromise;
+}
 
 function stopRefresh() {
+  if (bootstrapController) {
+    bootstrapController.abort();
+    bootstrapController = null;
+  }
   if (workspaceStream) {
     try { workspaceStream.close(); } catch (_) { /* already closed */ }
     workspaceStream = null;
@@ -49,49 +60,206 @@ function agentRouteActive() {
   return location.hash === '#/agent' || location.hash.startsWith('#/agent/');
 }
 
+window.addEventListener('hashchange', () => {
+  if (!agentRouteActive()) {
+    renderGeneration += 1;
+    stopRefresh();
+  }
+});
+
 // Pin the view to the newest message (composer is sticky at the bottom).
 function scrollConversationToEnd() {
-  const reader = document.querySelector('.agent-reader');
-  if (reader) reader.scrollTop = reader.scrollHeight;
+  const lastMessage = document.querySelector('.agent-reader .conversation-stream')?.lastElementChild;
+  lastMessage?.scrollIntoView({ block: 'end' });
 }
 
 export async function renderAgent(view) {
   stopRefresh();
+  const generation = ++renderGeneration;
+  const controller = new AbortController();
+  bootstrapController = controller;
+  const timedRequest = () => {
+    const requestController = new AbortController();
+    const abortRequest = () => requestController.abort();
+    const timeout = setTimeout(abortRequest, AGENT_BOOT_TIMEOUT_MS);
+    if (controller.signal.aborted) abortRequest();
+    else controller.signal.addEventListener('abort', abortRequest, { once: true });
+    return {
+      options: { signal: requestController.signal },
+      dispose() {
+        clearTimeout(timeout);
+        controller.signal.removeEventListener('abort', abortRequest);
+      },
+    };
+  };
+  const seedRequest = timedRequest();
+  const requestOptions = seedRequest.options;
   eulaStatus = null; // re-check acceptance on each mount (handles a signed-in identity change)
   railState = { mode: 'setup', result: null };
-  const [status, jobsResponse, coderStatus] = await Promise.all([
-    api.getAgentStatus().catch((error) => ({ unavailable: true, error: error.message, counts: {} })),
-    api.getJobs().catch(() => ({ jobs: [] })),
-    api.getCoderStatus().catch(() => null),
-  ]);
+  latestAgentStatus = null;
+  latestJobs = [];
+  latestCoderStatus = null;
+  conversation = [];
 
-  // Load the active conversation thread (from the #/agent/<id> hash) + the thread
-  // list for the rail. Bare #/agent restores the most recent thread; #/agent/new
-  // (or a missing thread) starts an unsaved conversation created lazily on send.
-  const threadsResponse = await api.listConversations().catch(() => ({ conversations: [] }));
-  const summaries = threadsResponse.conversations || [];
-  const active = await resolveActiveConversation(parseWorkspaceId(), summaries);
-  activeConversationId = active ? active.id : null;
-  conversation = active ? hydrateMessages(active.messages) : [];
+  // The document contains this scaffold on the default route, so the hero can
+  // paint before JavaScript, auth, or API data. Deep links use the same shape.
+  const scaffold = ensureAgentScaffold(view, generation);
+  const { pauseHost, stream, railBody } = scaffold;
+  let toolbar = scaffold.toolbar;
+  let toolbarSignature = '';
+  const requestedWorkspaceId = parseWorkspaceId();
+  activeConversationId = requestedWorkspaceId && CONVERSATION_ID.test(requestedWorkspaceId)
+    ? requestedWorkspaceId
+    : null;
 
-  const pauseHost = el('div', { class: 'agent-pause-host' });
-  const stream = el('div', { class: 'conversation-stream', 'aria-live': 'polite' });
-  const railBody = el('div', { id: 'agent-details-panel', class: 'rail-content', role: 'tabpanel', 'aria-labelledby': 'agent-setup-tab' });
-  const composer = buildComposer(stream, railBody);
-  const jobs = jobsResponse.jobs || [];
-  latestAgentStatus = status;
-  latestJobs = jobs;
-  let toolbar = agentToolbar(status, view, railBody);
-  let toolbarSignature = agentToolbarSignature(status);
+  const isCurrentMount = () => generation === renderGeneration
+    && view.isConnected
+    && agentRouteActive();
 
-  clear(view).append(
-    el('section', { class: 'agent-workspace' }, [
-      buildThreadRail(summaries),
-      el('main', { class: 'scenario-reader agent-reader' }, [
-        toolbar,
+  const replaceToolbar = () => {
+    if (!latestAgentStatus || !isCurrentMount()) return;
+    const nextSignature = agentToolbarSignature(latestAgentStatus);
+    if (nextSignature === toolbarSignature) return;
+    const replacement = agentToolbar(latestAgentStatus, view, railBody, isCurrentMount);
+    replacement.dataset.agentToolbar = '';
+    toolbar.replaceWith(replacement);
+    toolbar = replacement;
+    toolbarSignature = nextSignature;
+  };
+
+  const refreshSeedChrome = () => {
+    if (!isCurrentMount()) return;
+    renderPauseNotices(pauseHost, ...pauseSources(latestAgentStatus, latestCoderStatus, latestJobs));
+    replaceToolbar();
+    if (railState.mode !== 'result') renderCurrentRail(railBody);
+  };
+
+  // Re-render the pause notices, toolbar, and rail from the latest state after
+  // an SSE update. Signatures keep stable controls out of the mutation path.
+  const applyWorkspaceUpdate = () => {
+    if (!isCurrentMount()) return;
+    renderPauseNotices(pauseHost, ...pauseSources(latestAgentStatus, latestCoderStatus, latestJobs));
+    replaceToolbar();
+    if (railState.mode !== 'result') renderCurrentRail(railBody);
+  };
+
+  // Start independent requests together. Each result patches only its own
+  // region so a slow conversations request never holds back status controls.
+  const statusPromise = api.getAgentStatus(requestOptions)
+    .catch((error) => ({ unavailable: true, error: error.message, counts: {} }))
+    .then((status) => {
+      if (isCurrentMount()) {
+        latestAgentStatus = status;
+        refreshSeedChrome();
+      }
+      return status;
+    });
+  const jobsPromise = api.getJobs(requestOptions)
+    .catch(() => ({ jobs: [] }))
+    .then((response) => {
+      if (isCurrentMount()) {
+        latestJobs = response.jobs || [];
+        refreshSeedChrome();
+      }
+      return response;
+    });
+  const coderPromise = api.getCoderStatus(requestOptions)
+    .catch(() => null)
+    .then((status) => {
+      if (isCurrentMount()) {
+        latestCoderStatus = status;
+        refreshSeedChrome();
+      }
+      return status;
+    });
+  const threadsPromise = api.listConversations(requestOptions)
+    .catch(() => ({ conversations: [] }))
+    .then((response) => {
+      if (isCurrentMount()) replaceThreadRail(scaffold, response.conversations || []);
+      return response;
+    });
+  const loadConversation = (id) => {
+    const detailRequest = timedRequest();
+    return api.getConversation(id, detailRequest.options)
+      .then((response) => response.conversation)
+      .catch(() => null)
+      .finally(detailRequest.dispose);
+  };
+  const activeConversationPromise = requestedWorkspaceId && CONVERSATION_ID.test(requestedWorkspaceId)
+    ? loadConversation(requestedWorkspaceId)
+    : !requestedWorkspaceId
+      ? threadsPromise.then((response) => {
+        const recentId = response.conversations?.[0]?.id;
+        return recentId ? loadConversation(recentId) : null;
+      })
+      : Promise.resolve(null);
+
+  try {
+    const [status, , , threadsResponse, active] = await Promise.all([
+      statusPromise,
+      jobsPromise,
+      coderPromise,
+      threadsPromise,
+      activeConversationPromise,
+    ]);
+    if (!isCurrentMount()) return;
+
+    const summaries = threadsResponse.conversations || [];
+    if (!requestedWorkspaceId && active) {
+      try { window.history.replaceState(null, '', `#/agent/${active.id}`); } catch (_) { /* ignore */ }
+    }
+
+    activeConversationId = active ? active.id : null;
+    conversation = active ? hydrateMessages(active.messages) : [];
+    replaceThreadRail(scaffold, summaries);
+
+    // Build the transcript off-DOM, then publish it in one mutation. This keeps
+    // large restored threads from repeatedly invalidating the reader layout.
+    const transcript = document.createDocumentFragment();
+    renderWelcome(transcript, status);
+    for (const entry of conversation) transcript.append(renderConversationEntry(entry, railBody));
+    stream.replaceChildren(transcript);
+    scaffold.root.removeAttribute('data-i18n-skip');
+    scaffold.root.dataset.agentScaffold = 'hydrated';
+    setComposerReady(scaffold.root, true);
+    requestAnimationFrame(scrollConversationToEnd);
+
+    // Live updates over SSE replace the old 5s polling of /status + /jobs + /coder.
+    // Initial state above is the one-shot seed; typed events keep it current.
+    void openWorkspaceStream((event) => {
+      if (!isCurrentMount()) return;
+      applyWorkspaceEvent(event, applyWorkspaceUpdate);
+    }, isCurrentMount);
+  } finally {
+    seedRequest.dispose();
+    if (bootstrapController === controller) bootstrapController = null;
+  }
+}
+
+/** Return the pre-rendered Agent shell, or create the same shell for a deep link. */
+function ensureAgentScaffold(view, generation) {
+  let root = view.querySelector('[data-agent-scaffold]');
+  const requiredSlots = [
+    '[data-agent-threads]',
+    '.agent-reader',
+    '[data-agent-toolbar]',
+    '.agent-pause-host',
+    '[data-agent-hero]',
+    '.conversation-stream',
+    '[data-agent-composer]',
+    '.scenario-rail',
+    '[data-agent-rail-tabs]',
+    '#agent-details-panel',
+  ];
+  if (root && !requiredSlots.every((selector) => root.querySelector(selector))) root = null;
+  if (!root) {
+    root = el('section', { class: 'agent-workspace', dataset: { agentScaffold: 'initial' } }, [
+      el('aside', { class: 'conversation-rail', 'aria-label': 'Conversations', dataset: { agentThreads: '' } }),
+      el('div', { class: 'scenario-reader agent-reader' }, [
+        el('div', { class: 'reader-toolbar agent-toolbar agent-toolbar-loading', dataset: { agentToolbar: '' }, 'aria-hidden': 'true' }),
         el('div', { class: 'conversation-wrap agent-omnibox-wrap' }, [
-          pauseHost,
-          el('header', { class: 'omnibox-hero' }, [
+          el('div', { class: 'agent-pause-host', hidden: true }),
+          el('header', { class: 'omnibox-hero', dataset: { agentHero: '' } }, [
             el('span', { class: 'omnibox-eyebrow' }, [
               el('span', { class: 'omnibox-spark', 'aria-hidden': 'true' }, '✳'),
               'One workspace for every request',
@@ -99,45 +267,60 @@ export async function renderAgent(view) {
             el('h1', {}, 'What should we move forward?'),
             el('p', {}, 'Ask a question, search workspace memory, pressure-test a business, troubleshoot a run, or turn an implementation change into a task.'),
           ]),
-          stream,
-          composer,
+          el('div', { class: 'conversation-stream', 'aria-live': 'polite' }, [
+            el('p', { class: 'agent-loading-copy' }, 'Loading recent workspace activity…'),
+          ]),
+          el('div', { class: 'chat-composer omnibox-composer agent-composer-loading', dataset: { agentComposer: '' }, 'aria-hidden': 'true' }),
         ]),
       ]),
       el('aside', { class: 'evidence-rail scenario-rail', 'aria-label': 'Agent details' }, [
-        buildRailTabs(railBody),
-        railBody,
+        el('div', { class: 'rail-tabs agent-rail-tabs', dataset: { agentRailTabs: '' }, 'aria-hidden': 'true' }),
+        el('div', {
+          id: 'agent-details-panel',
+          class: 'rail-content',
+          role: 'tabpanel',
+          'aria-labelledby': 'agent-setup-tab',
+        }),
       ]),
-    ])
-  );
+    ]);
+    clear(view).append(root);
+  }
 
-  latestCoderStatus = coderStatus;
-  renderPauseNotices(pauseHost, ...pauseSources(status, coderStatus, jobs));
-  renderWelcome(stream, status);
-  for (const entry of conversation) stream.append(renderConversationEntry(entry, railBody));
-  renderCurrentRail(railBody);
-  requestAnimationFrame(scrollConversationToEnd);
+  const pauseHost = root.querySelector('.agent-pause-host');
+  const stream = root.querySelector('.conversation-stream');
+  const railBody = root.querySelector('#agent-details-panel');
+  let toolbar = root.querySelector('[data-agent-toolbar]');
+  const composerSlot = root.querySelector('[data-agent-composer]');
+  const tabsSlot = root.querySelector('[data-agent-rail-tabs]');
 
-  // Re-render the pause notices, toolbar, and rail from the latest state after an
-  // SSE update. Same diffing as the old poll — the toolbar/notices only rebuild
-  // when their signature actually changed.
-  const applyWorkspaceUpdate = () => {
-    renderPauseNotices(pauseHost, ...pauseSources(latestAgentStatus, latestCoderStatus, latestJobs));
-    const nextToolbarSignature = agentToolbarSignature(latestAgentStatus);
-    if (nextToolbarSignature !== toolbarSignature) {
-      const replacement = agentToolbar(latestAgentStatus, view, railBody);
-      toolbar.replaceWith(replacement);
-      toolbar = replacement;
-      toolbarSignature = nextToolbarSignature;
-    }
-    if (railState.mode !== 'result') renderCurrentRail(railBody);
-  };
+  const composer = buildComposer(stream, railBody, generation);
+  composer.dataset.agentComposer = '';
+  composerSlot.replaceWith(composer);
+  setComposerReady(root, false);
+  const tabs = buildRailTabs(railBody);
+  tabs.dataset.agentRailTabs = '';
+  tabsSlot.replaceWith(tabs);
 
-  // Live updates over SSE replace the old 5s polling of /status + /jobs + /coder.
-  // Initial state above is the one-shot seed; typed events keep it current.
-  void openWorkspaceStream((event) => {
-    if (!agentRouteActive()) return stopRefresh();
-    applyWorkspaceEvent(event, applyWorkspaceUpdate);
-  });
+  if (!toolbar) {
+    toolbar = el('div', { class: 'reader-toolbar agent-toolbar agent-toolbar-loading', dataset: { agentToolbar: '' }, 'aria-hidden': 'true' });
+    root.querySelector('.agent-reader').prepend(toolbar);
+  }
+  return { root, pauseHost, stream, railBody, toolbar, threadRail: root.querySelector('[data-agent-threads]') };
+}
+
+function setComposerReady(root, ready) {
+  const composer = root.querySelector('[data-agent-composer]');
+  if (!composer) return;
+  composer.toggleAttribute('aria-busy', !ready);
+  for (const control of composer.querySelectorAll('button, textarea')) control.disabled = !ready;
+}
+
+function replaceThreadRail(scaffold, summaries) {
+  if (!scaffold.threadRail?.isConnected) scaffold.threadRail = scaffold.root.querySelector('[data-agent-threads]');
+  const replacement = buildThreadRail(summaries);
+  replacement.dataset.agentThreads = '';
+  scaffold.threadRail.replaceWith(replacement);
+  scaffold.threadRail = replacement;
 }
 
 /** Apply one typed workspace event onto the module state, then refresh the UI. */
@@ -163,7 +346,7 @@ function applyWorkspaceEvent(event, applyWorkspaceUpdate) {
  * Open the workspace SSE stream, closing any prior one and guarding against a
  * navigation that happened while the token request was in flight.
  */
-async function openWorkspaceStream(onEvent) {
+async function openWorkspaceStream(onEvent, isCurrent = agentRouteActive) {
   stopStreamOnly();
   let source;
   try {
@@ -171,7 +354,7 @@ async function openWorkspaceStream(onEvent) {
   } catch (_) {
     return; // best-effort; the initial seed load still populated the view
   }
-  if (!agentRouteActive()) {
+  if (!isCurrent()) {
     try { source.close(); } catch (_) { /* ignore */ }
     return;
   }
@@ -323,7 +506,7 @@ function agentToolbarSignature(status) {
   ]);
 }
 
-function agentToolbar(status, view, railBody) {
+function agentToolbar(status, view, railBody, isCurrentMount = () => view.isConnected && agentRouteActive()) {
   const configured = Boolean(status.scheduleEnabled);
   const pause = agentPauseInfo(status);
   const pauseCopy = agentPauseCopy(pause);
@@ -341,7 +524,7 @@ function agentToolbar(status, view, railBody) {
     try {
       await api.saveAgentConfig({ scheduleEnabled: !configured });
       toast(configured ? 'Automatic planning paused.' : 'Automatic planning resumed.', 'ok');
-      if (view.isConnected && agentRouteActive()) await renderAgent(clear(view));
+      if (isCurrentMount()) await renderAgent(clear(view));
     } catch (error) {
       toast(error.message, 'err');
       toggle.disabled = false;
@@ -363,7 +546,7 @@ function agentToolbar(status, view, railBody) {
       const response = await api.runAgentNow();
       const result = response.result || {};
       toast(result.error || `Found ${result.discovered || 0}; started ${result.processed || 0}.`, result.error ? 'err' : 'ok');
-      if (view.isConnected && agentRouteActive()) await renderAgent(clear(view));
+      if (isCurrentMount()) await renderAgent(clear(view));
     } catch (error) {
       toast(error.message, 'err');
       runNow.disabled = false;
@@ -413,7 +596,7 @@ function renderWelcome(stream, status) {
   }
 }
 
-function buildComposer(stream, railBody) {
+function buildComposer(stream, railBody, generation = renderGeneration) {
   const input = el('textarea', {
     rows: '3',
     maxlength: '8000',
@@ -422,19 +605,48 @@ function buildComposer(stream, railBody) {
   });
   const count = el('span', { class: 'composer-count' }, '0 / 8,000');
   const send = el('button', { class: 'primary scenario-submit', type: 'button' }, 'Send');
+  let persistenceQueue = Promise.resolve();
+  let persistedConversationId = null;
+  let submitting = false;
+  const isCurrentComposer = () => generation === renderGeneration
+    && agentRouteActive()
+    && stream.isConnected;
 
   const submit = async () => {
+    if (!isCurrentComposer() || submitting) return;
     const text = input.value.trim();
     if (!text) return;
+    submitting = true;
     input.value = '';
     input.dispatchEvent(new Event('input'));
+    send.disabled = true;
+    send.textContent = 'Checking…';
 
     // Best-effort client-side guard: strip anything that looks like a secret
     // BEFORE it leaves the browser. `outgoing` is used for every downstream
     // path (local echo, routing, search, persistence) so no channel leaks the
     // original. The server redacts again — this is convenience, not a control.
-    const scan = scanSecrets(text);
+    let scan;
+    try {
+      const { scanSecrets } = await loadSecretScanner();
+      scan = scanSecrets(text);
+    } catch (_) {
+      submitting = false;
+      if (isCurrentComposer()) {
+        input.value = text;
+        input.dispatchEvent(new Event('input'));
+        send.disabled = false;
+        send.textContent = 'Send';
+        toast('The browser safety check could not load. Your message was not sent.', 'err');
+      }
+      return;
+    }
+    if (!isCurrentComposer()) {
+      submitting = false;
+      return;
+    }
     const outgoing = scan.found ? scan.redacted : text;
+    const targetConversationId = activeConversationId || persistedConversationId;
 
     const user = { role: 'user', text: outgoing };
     conversation.push(user);
@@ -458,18 +670,20 @@ function buildComposer(stream, railBody) {
     pending.dataset.agentIntent = 'routing';
     stream.append(pending);
     scrollConversationToEnd();
-    send.disabled = true;
     send.textContent = 'Thinking…';
 
     try {
       const result = await resolveOmniboxRequest(outgoing);
+      if (!isCurrentComposer()) return;
       // The request needs EULA acceptance — show the inline acceptance card and
       // stop here. Accepting re-runs the exact same request; declining is recorded.
       if (result.eulaRequired) {
         pending.replaceWith(renderEulaGate({
           version: result.eula && result.eula.version,
           onAccept: async () => {
+            if (!isCurrentComposer()) return;
             await api.recordEulaDecision('accepted');
+            if (!isCurrentComposer()) return;
             eulaStatus = { accepted: true, version: result.eula && result.eula.version };
             input.value = text;
             await submit();
@@ -485,10 +699,19 @@ function buildComposer(stream, railBody) {
       scrollConversationToEnd();
       showRailResult(railBody, result);
       // Persist the turn server-side (lazily creating the thread on first send).
-      void persistTurn(outgoing, result);
+      persistenceQueue = persistenceQueue.then(async () => {
+        const persistedId = await persistTurn(
+          outgoing,
+          result,
+          generation,
+          targetConversationId || persistedConversationId
+        );
+        if (persistedId) persistedConversationId = persistedId;
+      });
       // A build request runs a guided, human-in-the-loop flow inline in the chat.
       if (result.route && result.route.intent === 'build') void startBuildFlow(result.route, stream, railBody);
     } catch (error) {
+      if (!isCurrentComposer()) return;
       pending.replaceWith(
         assistantMessage(
           'I couldn’t route that request.',
@@ -498,8 +721,11 @@ function buildComposer(stream, railBody) {
         )
       );
     } finally {
-      send.disabled = false;
-      send.textContent = 'Send';
+      submitting = false;
+      if (isCurrentComposer()) {
+        send.disabled = false;
+        send.textContent = 'Send';
+      }
     }
   };
 
@@ -577,6 +803,7 @@ async function ensureEulaAccepted() {
 }
 
 async function resolveOmniboxRequest(text) {
+  const router = await loadOmniboxRouter();
   let routed;
   // Anonymous visitors get BASIC RAG: the server router (POST /agent/message)
   // needs workspace:write, so for a public session we classify in the browser
@@ -584,7 +811,7 @@ async function resolveOmniboxRequest(text) {
   // also avoids a 401 that would otherwise churn the auth state mid-search.
   const session = getAuthenticationState();
   if (!session.authenticated) {
-    routed = { route: classifyOmniboxIntent(text), enrichment: null, offline: true };
+    routed = { route: router.classifyOmniboxIntent(text), enrichment: null, offline: true };
   } else {
     try {
       routed = await api.routeAgentMessage({ input: text });
@@ -593,14 +820,14 @@ async function resolveOmniboxRequest(text) {
       // classifier runs in the browser as a no-mutation fallback; server routing
       // remains the authoritative pre-model safety gate during normal operation.
       routed = {
-        route: classifyOmniboxIntent(text),
+        route: router.classifyOmniboxIntent(text),
         enrichment: null,
         offline: true,
         warning: error.message || 'The server router was unavailable, so a local no-action route was used.',
       };
     }
   }
-  const route = routed.route || classifyOmniboxIntent(text);
+  const route = routed.route || router.classifyOmniboxIntent(text);
   const base = { route, warning: routed.warning || null };
 
   // Gate "actual work" behind EULA acceptance for signed-in users. RAG questions
@@ -640,7 +867,7 @@ async function resolveOmniboxRequest(text) {
       payload: {
         sources,
         scope: memoryResponse.scope || 'all',
-        results: [...memoryResults, ...searchWorkspaceMemory(route.input, sources)],
+        results: [...memoryResults, ...router.searchWorkspaceMemory(route.input, sources)],
         unavailable: [documentsResponse.error, memoryResponse.error, businessesResponse.error, projectsResponse.error, jobsResponse.error].filter(Boolean),
       },
     };
@@ -654,7 +881,7 @@ async function resolveOmniboxRequest(text) {
     return {
       ...base,
       payload: {
-        ...summarizeTroubleshooting(diagnostics, jobsResponse.jobs || []),
+        ...router.summarizeTroubleshooting(diagnostics, jobsResponse.jobs || []),
         error: diagnostics.error || jobsResponse.error || null,
       },
     };
@@ -667,7 +894,7 @@ async function resolveOmniboxRequest(text) {
     return {
       ...base,
       canPrepare: !routed.offline,
-      payload: routed.offline ? buildBusinessWorkspace(route.input, {}) : null,
+      payload: routed.offline ? router.buildBusinessWorkspace(route.input, {}) : null,
     };
   }
 
@@ -676,7 +903,7 @@ async function resolveOmniboxRequest(text) {
     return {
       ...base,
       payload: {
-        task: buildImplementationTask(route.input),
+        task: router.buildImplementationTask(route.input),
         projects: projectsResponse.projects || [],
         error: projectsResponse.error || null,
       },
@@ -738,8 +965,9 @@ function renderConversationEntry(entry, railBody) {
   const message = assistantMessage(
     analysis.goal ? 'Here’s what I heard.' : 'I’ve organized that.',
     analysis.summary,
-    [{ label: 'View details', action: () => {
-      showRailResult(railBody, { route: classifyOmniboxIntent(analysis.goal || analysis.summary), analysis, payload: { analysis } });
+    [{ label: 'View details', action: async () => {
+      const router = await loadOmniboxRouter();
+      showRailResult(railBody, { route: router.classifyOmniboxIntent(analysis.goal || analysis.summary), analysis, payload: { analysis } });
     } }]
   );
   const body = message.querySelector('.message-copy');
@@ -830,22 +1058,6 @@ function parseWorkspaceId() {
   return parts[0] === 'agent' && parts[1] ? parts[1] : null;
 }
 
-async function resolveActiveConversation(workspaceId, summaries) {
-  if (workspaceId === 'new') return null;
-  if (workspaceId && CONVERSATION_ID.test(workspaceId)) {
-    const found = await api.getConversation(workspaceId).then((r) => r.conversation).catch(() => null);
-    if (found) return found;
-  }
-  if (!workspaceId && summaries.length) {
-    const recent = await api.getConversation(summaries[0].id).then((r) => r.conversation).catch(() => null);
-    if (recent) {
-      try { window.history.replaceState(null, '', `#/agent/${recent.id}`); } catch (_) { /* ignore */ }
-      return recent;
-    }
-  }
-  return null;
-}
-
 function hydrateMessages(messages) {
   return (messages || []).map((message) => (message.role === 'user'
     ? { role: 'user', text: message.text }
@@ -865,20 +1077,29 @@ function compactAssistant(userText, result) {
   };
 }
 
-async function persistTurn(userText, result) {
+async function persistTurn(userText, result, generation, conversationId) {
+  let targetConversationId = conversationId;
   try {
-    if (!activeConversationId) {
-      const created = await api.createConversation({});
-      activeConversationId = created.conversation.id;
-      try { window.history.replaceState(null, '', `#/agent/${activeConversationId}`); } catch (_) { /* ignore */ }
+    if (!targetConversationId && generation === renderGeneration && agentRouteActive()) {
+      targetConversationId = activeConversationId;
     }
-    await api.appendConversationMessages(activeConversationId, [
+    if (!targetConversationId) {
+      const created = await api.createConversation({});
+      targetConversationId = created.conversation.id;
+      if (generation === renderGeneration && agentRouteActive()) {
+        activeConversationId = targetConversationId;
+        try { window.history.replaceState(null, '', `#/agent/${targetConversationId}`); } catch (_) { /* ignore */ }
+      }
+    }
+    await api.appendConversationMessages(targetConversationId, [
       { role: 'user', text: userText },
       compactAssistant(userText, result),
     ]);
-    void refreshThreadRail();
+    if (generation === renderGeneration && agentRouteActive()) void refreshThreadRail();
+    return targetConversationId;
   } catch (_) {
     // A persistence failure should never break the live conversation.
+    return targetConversationId;
   }
 }
 
@@ -1098,7 +1319,12 @@ function renderBuildPlannerStep(body, ctx) {
 }
 
 function renderIntentRail(host, result) {
-  const route = result.route || classifyOmniboxIntent('');
+  const route = result.route || {
+    intent: 'general',
+    title: 'Workspace result',
+    label: 'Response',
+    answer: 'The workspace returned a result without routing details.',
+  };
   host.dataset.agentIntent = route.intent;
   if (route.intent === 'business') return renderBusinessRail(host, result);
   if (route.intent === 'knowledge') return renderKnowledgeRail(host, result);
@@ -1577,7 +1803,11 @@ function sandboxedDesignFrame(html) {
 
 function renderImplementationRail(host, result) {
   const payload = result.payload || {};
-  const draft = payload.task || buildImplementationTask(result.route?.input || 'Review implementation change');
+  const fallbackInput = result.route?.input || 'Review implementation change';
+  const draft = payload.task || {
+    title: fallbackInput.slice(0, 120),
+    description: `${fallbackInput}\n\nAcceptance criteria:\n- Confirm the requested behavior.\n- Add focused automated coverage.`,
+  };
   const projects = payload.projects || [];
   const project = el('select', { 'aria-label': 'Project for this task' }, [
     el('option', { value: '' }, projects.length ? 'Choose a project…' : 'No connected projects'),

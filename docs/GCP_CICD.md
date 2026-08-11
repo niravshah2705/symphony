@@ -14,9 +14,10 @@ are conditional on it:
 |---|---|
 | `services/gateway/**` (or its Dockerfile) | rebuild **gateway** image → `terraform apply` rolls **only** gateway |
 | `services/planner/**` / `services/coder/**` | rebuild that image → apply rolls **only** that service (coder ⇒ coder-control + the worker Job) |
-| `packages/shared/**`, root `package.json`/`package-lock.json` | rebuild **all three** images → apply rolls all |
+| `packages/shared/**` | rebuild **all three** images → apply rolls all |
+| root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
 | `deploy/gcp/terraform/**` | `terraform apply` **only** (no image rebuild) |
-| `public/**`, `firebase.json` | **Firebase Hosting** deploy only (no images, no Terraform) |
+| `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy only (no images, no Terraform) |
 | docs / anything else | nothing runs |
 
 How "roll only one service" works: each unchanged service keeps its
@@ -48,16 +49,23 @@ before the GCS rsync, so both served copies are obfuscated.
 
   | Preset | Adds | Size | Runtime cost |
   |---|---|---|---|
-  | `light` | rename locals only (strings stay clear-text) | ~0.9–1.1x | negligible |
-  | `balanced` *(default)* | + string-array encoding | ~1.5x | small |
+  | `light` *(default)* | rename locals only (strings stay clear-text) | ~0.9–1.1x | negligible |
+  | `balanced` | + string-array encoding | ~1.5x | small |
   | `maximum` | + control-flow flattening, dead-code injection, self-defending | ~4–5x | noticeable |
 
   Choose it with `--strength <preset>`, the `SPA_OBFUSCATION_STRENGTH` env var,
   or the defaults baked into the pipelines: the GitHub Actions `deploy-spa` job
   reads the **`SPA_OBFUSCATION_STRENGTH` repo variable** (Actions → Variables),
   and Cloud Build reads the **`_SPA_OBFUSCATION_STRENGTH` substitution**. Both
-  default to `balanced`. Preset definitions live in the `PRESETS` constant in
+  default to `light`. Preset definitions live in the `PRESETS` constant in
   `scripts/obfuscate-spa.js`.
+
+The generated `config.js` also starts a cross-origin `preconnect` to the
+gateway before the main module executes. Firebase Hosting, and the equivalent
+metadata applied by the alternate GCS publish, serve `/`, `/index.html`, and
+`config.js` without storage caching; native module and stylesheet assets remain
+revalidated with `Cache-Control: no-cache` until the SPA adopts fingerprinted
+filenames.
 
 > Obfuscation raises the effort to read the client bundle; it is **not** a
 > secret store. Anything that must stay private belongs server-side (the

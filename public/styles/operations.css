@@ -1,0 +1,171 @@
+/* Analytics, cost, troubleshooting, and Agent jobs routes. Loaded on demand. */
+/* Analytics, workflow, and troubleshooting views. */
+.operational-head > div:first-child { min-width: 0; }
+.operational-head p { margin: 5px 0 0; max-width: 760px; }
+.operational-notice {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 18px; padding: 12px 14px;
+  border: 1px solid var(--amber); border-radius: 10px; background: var(--amber-soft); font-size: 12px;
+}
+
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.metric-card {
+  min-width: 0; display: flex; flex-direction: column; gap: 7px; padding: 17px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel); box-shadow: 0 1px 3px rgba(23, 32, 51, .04);
+}
+.metric-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.metric-value { overflow: hidden; font-family: var(--font-serif); font-size: 25px; letter-spacing: -.025em; text-overflow: ellipsis; }
+.metric-note { color: var(--muted); font-size: 9px; }
+.operational-panel {
+  margin-bottom: 18px; padding: 18px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--panel); box-shadow: 0 1px 3px rgba(23, 32, 51, .04);
+}
+.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.panel-heading h2, .operational-panel > h2 { margin: 0; font-size: 16px; }
+.panel-heading p { margin: 4px 0 0; font-size: 11px; }
+.status-pill {
+  display: inline-flex; align-items: center; width: fit-content; padding: 3px 7px; border-radius: 999px;
+  background: var(--panel-2); color: var(--muted); font-size: 8px; font-weight: 730; text-transform: capitalize;
+}
+.status-pill.ok { background: var(--green-soft); color: var(--green); }
+.status-pill.warn { background: var(--amber-soft); color: var(--amber); }
+.status-pill.bad { background: var(--red-soft); color: var(--red); }
+.table-scroll { max-width: 100%; overflow: auto; }
+.operational-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.operational-table th { padding: 9px 10px; border-bottom: 1px solid var(--border-strong); color: var(--muted); font-size: 8px; text-align: left; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+.operational-table td { padding: 11px 10px; border-bottom: 1px solid var(--border); vertical-align: top; white-space: nowrap; }
+.operational-table tr:last-child td { border-bottom: 0; }
+.operational-table td:first-child { min-width: 210px; white-space: normal; }
+.table-sub { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
+.cost-cell { color: var(--accent-2); font-weight: 700; }
+.operational-empty { min-height: 380px; }
+
+.runtime-panel { display: grid; gap: 14px; }
+.runtime-picker { display: grid; grid-template-columns: minmax(190px, 260px) minmax(0, 1fr); gap: 14px; align-items: center; }
+.runtime-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.runtime-card { padding: 13px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel-2); }
+.runtime-card p { margin: 5px 0 0; font-size: 10px; line-height: 1.45; }
+.runtime-readiness { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }
+.runtime-readiness > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.runtime-readiness strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.runtime-readiness small { color: var(--muted); font-size: 8px; }
+.pattern-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pattern-card {
+  min-height: 155px; display: flex; flex-direction: column; align-items: stretch; gap: 11px; padding: 16px;
+  text-align: left; background: var(--panel-2); border-radius: 11px;
+}
+.pattern-card.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent); }
+.pattern-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pattern-card > .muted { font-size: 11px; line-height: 1.45; }
+.pattern-flow { display: flex; align-items: center; gap: 5px; margin-top: auto; overflow: hidden; }
+.pattern-step { padding: 4px 7px; border-radius: 6px; background: var(--panel); color: var(--text); font-size: 8px; white-space: nowrap; }
+.pattern-arrow { color: var(--muted); font-size: 10px; }
+.workflow-save-row { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 16px; }
+.workflow-save-row .muted { margin-right: auto; font-size: 10px; }
+
+.diagnostic-summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; padding: 14px 16px;
+  border: 1px solid var(--border); border-radius: 11px; background: var(--panel);
+}
+.diagnostic-summary .muted { font-size: 10px; }
+.diagnostic-list { display: grid; gap: 10px; margin-bottom: 18px; }
+.diagnostic-card {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 12px; padding: 15px;
+  border: 1px solid var(--border); border-radius: 11px; background: var(--panel);
+}
+.diagnostic-indicator { width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--muted) 12%, transparent); }
+.diagnostic-indicator.ok { background: var(--green); box-shadow: 0 0 0 4px var(--green-soft); }
+.diagnostic-indicator.warn { background: var(--amber); box-shadow: 0 0 0 4px var(--amber-soft); }
+.diagnostic-indicator.error { background: var(--red); box-shadow: 0 0 0 4px var(--red-soft); }
+.diagnostic-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.diagnostic-copy > p { margin: 6px 0 0; font-size: 11px; line-height: 1.5; }
+.diagnostic-action { color: var(--muted); }
+.diagnostic-details { margin-top: 9px; }
+.diagnostic-details summary { color: var(--accent-2); cursor: pointer; font-size: 9px; font-weight: 650; }
+.diagnostic-details pre { max-height: 220px; overflow: auto; padding: 10px; border-radius: 8px; background: var(--code-bg); font-size: 9px; }
+.troubleshooting-help { display: grid; gap: 13px; }
+.help-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.help-links a { display: flex; flex-direction: column; gap: 4px; padding: 13px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel-2); }
+.help-links a span { font-size: 9px; }
+
+
+/* Job step trace */
+.job { display: flex; flex-direction: column; gap: 0; }
+.job-steps {
+  margin: -2px 0 4px; padding: 10px 12px; background: var(--bg);
+  border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px;
+  display: grid; gap: 4px; font-size: 12px; max-height: 240px; overflow-y: auto;
+}
+.job-step { display: flex; gap: 10px; align-items: baseline; color: var(--text); }
+.job-step .ts { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.job-step.lvl-warn { color: var(--amber); }
+.job-step.lvl-error { color: var(--red); }
+
+/* Full Agent jobs history. The conversational Agent page intentionally stays
+   compact; this standard page restores the complete planner/coder lists. */
+.job-history-refresh-status { min-height: 22px; margin: -10px 0 10px; color: var(--muted); font-size: 10px; }
+.job-history-refresh-status.stale {
+  padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  border-radius: 8px; background: var(--amber-soft); color: var(--text);
+}
+.job-history-refresh-status.pending {
+  padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-radius: 8px; background: var(--accent-soft); color: var(--text);
+}
+.job-history-section { padding: 18px; }
+.job-history-list { display: grid; gap: 8px; }
+.job-history-row { min-width: 0; }
+.job-history-summary {
+  min-width: 0; display: grid; grid-template-columns: auto minmax(220px, 1fr) auto; gap: 13px;
+  align-items: start; padding: 13px 14px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--panel-2);
+}
+.job-history-copy { min-width: 0; }
+.job-history-copy > strong { display: block; overflow-wrap: anywhere; font-size: 12px; line-height: 1.4; }
+.job-history-copy > p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.job-history-meta { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 7px; color: var(--muted); font-size: 8px; }
+.job-history-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.job-history-actions :is(button, .btn) { min-height: 29px; padding: 5px 8px; font-size: 9px; white-space: nowrap; }
+.job-history-actions button[data-confirming='true'], .job-history-page-actions button[data-confirming='true'] {
+  border-color: var(--red); background: var(--red-soft); color: var(--red);
+}
+.job-history-steps { margin: -2px 8px 2px; border-radius: 0 0 8px 8px; }
+.job-history-steps[hidden] { display: none; }
+.job-history-step-list { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.job-history-step-list .job-step time { min-width: 128px; color: var(--muted); font-size: 9px; white-space: nowrap; }
+.job-history-step-list .job-step > span { min-width: 0; overflow-wrap: anywhere; }
+.job-history-no-steps { margin: 0; }
+
+
+/* Cost monitoring + billing (views/cost.js) */
+.seg-toggle { display: inline-flex; gap: 4px; }
+.seg-toggle .btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.link-button { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
+.link-button:hover { text-decoration: underline; }
+.form-grid { display: grid; gap: 12px; max-width: 640px; }
+.operational-table.subtable { font-size: 0.9em; }
+.operational-table tr.detail-row > td { background: var(--surface-2, rgba(127,127,127,0.06)); padding: 8px 12px; }
+.table-host { min-height: 48px; }
+
+/* Route-owned responsive rules stay after the route base rules. */
+@media (max-width: 1180px) {
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 780px) {
+  .runtime-picker, .runtime-cards, .runtime-readiness, .pattern-grid, .help-links { grid-template-columns: 1fr; }
+  .diagnostic-summary { align-items: flex-start; flex-direction: column; }
+  .job-history-summary { grid-template-columns: auto minmax(0, 1fr); }
+  .job-history-actions { grid-column: 2; justify-content: flex-start; }
+}
+@media (max-width: 620px) {
+  .metric-grid { grid-template-columns: 1fr; }
+  .operational-panel { padding: 14px; }
+  .workflow-save-row { align-items: stretch; flex-direction: column; }
+  .workflow-save-row button { width: 100%; }
+  .job-history-page-actions { width: 100%; }
+  .job-history-page-actions > * { flex: 1 1 auto; text-align: center; }
+  .job-history-summary { grid-template-columns: 1fr; }
+  .job-history-summary > .status-pill { grid-column: 1; }
+  .job-history-actions { grid-column: 1; justify-content: flex-start; }
+  .job-history-step-list .job-step { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .job-history-step-list .job-step time { min-width: 0; }
+}

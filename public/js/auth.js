@@ -1,15 +1,3 @@
-import { initializeApp } from '/vendor/firebase/firebase-app.js';
-import {
-  getAuth,
-  setPersistence,
-  browserLocalPersistence,
-  onAuthStateChanged,
-  GoogleAuthProvider,
-  OAuthProvider,
-  signInWithCredential,
-  signInWithPopup,
-  signOut as firebaseSignOut,
-} from '/vendor/firebase/firebase-auth.js';
 import { api, setAccessTokenProvider, getApiBase, setApiBase } from './api.js';
 import { pollUntilResolved } from './deployment.js';
 
@@ -22,6 +10,8 @@ let gisPromise = null;
 let auth = null;
 let currentUser = null;
 let configuration = null;
+let firebaseSdkPromise = null;
+let firebaseAuthSdk = null;
 // Full local access when auth is disabled; read-only Agent workspace for public.
 // Mirrors the server admin permission set (packages/shared/src/authz.js).
 const ADMIN_PERMISSIONS = Object.freeze({ workspace: 'write', planning: 'write', insights: 'write', settings: 'write', org: 'write' });
@@ -92,10 +82,27 @@ async function loadConfiguration() {
   return payload;
 }
 
+// Firebase is a sizeable optional dependency. Fetch the small public auth
+// configuration first, then load the SDK only for deployments that actually
+// enable Firebase. Keeping this as one cached promise also gives every later
+// sign-in path access to the exact module instance used during initialization.
+async function loadFirebaseSdk() {
+  if (!firebaseSdkPromise) {
+    firebaseSdkPromise = Promise.all([
+      import('/vendor/firebase/firebase-app.js'),
+      import('/vendor/firebase/firebase-auth.js'),
+    ]).then(([appSdk, authSdk]) => {
+      firebaseAuthSdk = authSdk;
+      return { appSdk, authSdk };
+    });
+  }
+  return firebaseSdkPromise;
+}
+
 // Resolve with the first known auth state (signed-in user or null).
-function firstAuthUser(authInstance) {
+function firstAuthUser(authInstance, authSdk) {
   return new Promise((resolve) => {
-    const unsubscribe = onAuthStateChanged(
+    const unsubscribe = authSdk.onAuthStateChanged(
       authInstance,
       (user) => { unsubscribe(); resolve(user || null); },
       () => { unsubscribe(); resolve(null); }
@@ -190,15 +197,16 @@ export async function initializeAuthentication() {
 
   const publicPermissions = configuration.publicPermissions || FALLBACK_PUBLIC_PERMISSIONS;
 
-  const app = initializeApp(configuration.firebase);
-  auth = getAuth(app);
-  try {
-    await setPersistence(auth, browserLocalPersistence);
-  } catch (_) {
-    // Persistence is best-effort; sign-in still works in-memory for this tab.
-  }
+  const { appSdk, authSdk } = await loadFirebaseSdk();
+  const app = appSdk.initializeApp(configuration.firebase);
+  // Do not provide a popup resolver here: Firebase otherwise has permission to
+  // initialize its hidden cross-origin iframe during app boot. Popup support is
+  // supplied explicitly only after a user clicks a provider button.
+  auth = authSdk.initializeAuth(app, {
+    persistence: authSdk.browserLocalPersistence,
+  });
 
-  const user = await withinSessionTimeout(firstAuthUser(auth));
+  const user = await withinSessionTimeout(firstAuthUser(auth, authSdk));
   if (!user) {
     // No signed-in user → public visitor (read-only Agent workspace).
     setAccessTokenProvider(null);
@@ -211,7 +219,7 @@ export async function initializeAuthentication() {
   } catch (error) {
     // Signed in but rejected (unverified / not allowed) → sign out, stay public.
     setAccessTokenProvider(null);
-    try { await firebaseSignOut(auth); } catch (_) { /* ignore */ }
+    try { await authSdk.signOut(auth); } catch (_) { /* ignore */ }
     return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: error?.message || 'This account is not allowed.' });
   }
 
@@ -258,7 +266,11 @@ export function expireAuthentication(message = '') {
 // nonce + PKCE exchange — we never handle those directly.
 async function completeSignIn(provider) {
   try {
-    await signInWithPopup(auth, provider);
+    await firebaseAuthSdk.signInWithPopup(
+      auth,
+      provider,
+      firebaseAuthSdk.browserPopupRedirectResolver
+    );
   } catch (error) {
     // Firebase's default "one account per email" rejects a second provider for
     // an email that already exists. Surface a friendly, provider-neutral hint.
@@ -271,7 +283,7 @@ async function completeSignIn(provider) {
     await confirmIdentity();
   } catch (error) {
     setAccessTokenProvider(null);
-    try { await firebaseSignOut(auth); } catch (_) { /* ignore */ }
+    try { await firebaseAuthSdk.signOut(auth); } catch (_) { /* ignore */ }
     throw error;
   }
   // The popup resolved in-page (unlike Auth0's redirect); reload so the boot
@@ -280,16 +292,16 @@ async function completeSignIn(provider) {
 }
 
 export async function signIn() {
-  if (!auth || !configuration?.enabled) throw new Error('Sign-in is not configured.');
-  const provider = new GoogleAuthProvider();
+  if (!auth || !configuration?.enabled || !firebaseAuthSdk) throw new Error('Sign-in is not configured.');
+  const provider = new firebaseAuthSdk.GoogleAuthProvider();
   const hostedDomain = configuration.firebase.hostedDomain;
   if (hostedDomain) provider.setCustomParameters({ hd: hostedDomain });
   return completeSignIn(provider);
 }
 
 export async function signInWithMicrosoft() {
-  if (!auth || !configuration?.enabled) throw new Error('Sign-in is not configured.');
-  const provider = new OAuthProvider('microsoft.com');
+  if (!auth || !configuration?.enabled || !firebaseAuthSdk) throw new Error('Sign-in is not configured.');
+  const provider = new firebaseAuthSdk.OAuthProvider('microsoft.com');
   // Optional Azure AD tenant scope ('common' when unset). Public, not a secret.
   const tenant = configuration.firebase.microsoftTenant;
   if (tenant) provider.setCustomParameters({ tenant });
@@ -298,8 +310,8 @@ export async function signInWithMicrosoft() {
 
 export async function signOut() {
   setAccessTokenProvider(null);
-  if (auth) {
-    try { await firebaseSignOut(auth); } catch (_) { /* ignore */ }
+  if (auth && firebaseAuthSdk) {
+    try { await firebaseAuthSdk.signOut(auth); } catch (_) { /* ignore */ }
   }
   window.location.reload();
 }
@@ -367,16 +379,16 @@ export async function promptOneTap() {
       use_fedcm_for_prompt: true,
       callback: async (response) => {
         try {
-          const credential = new OAuthProvider('google.com').credential({
+          const credential = new firebaseAuthSdk.OAuthProvider('google.com').credential({
             idToken: response.credential,
             rawNonce,
           });
-          await signInWithCredential(auth, credential);
+          await firebaseAuthSdk.signInWithCredential(auth, credential);
           await confirmIdentity(); // reject unverified / out-of-domain before entering
           window.location.reload();
         } catch (_) {
           setAccessTokenProvider(null);
-          try { await firebaseSignOut(auth); } catch (_) { /* ignore */ }
+          try { await firebaseAuthSdk.signOut(auth); } catch (_) { /* ignore */ }
         }
       },
     });

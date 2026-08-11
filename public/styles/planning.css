@@ -1,0 +1,69 @@
+/* Projects, board, and business planning routes. Loaded on demand. */
+/* Project cards */
+.project-card { cursor: pointer; display: flex; flex-direction: column; gap: 10px; }
+.project-card:hover { border-color: var(--accent); }
+.project-card h3 { margin: 0; font-size: 15px; }
+.progress { height: 6px; background: var(--panel-2); border-radius: 999px; overflow: hidden; }
+.progress > span { display: block; height: 100%; background: var(--green); }
+
+/* Milestone timeline */
+.timeline { position: relative; margin-left: 12px; padding-left: 24px; border-left: 2px solid var(--border); }
+.milestone { position: relative; margin-bottom: 22px; }
+.milestone::before {
+  content: ""; position: absolute; left: -31px; top: 4px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg);
+}
+.milestone .m-head { display: flex; align-items: baseline; gap: 10px; }
+.milestone h4 { margin: 0; font-size: 15px; }
+.milestone .date { color: var(--muted); font-size: 12px; }
+.milestone-issues { margin-top: 8px; display: grid; gap: 6px; }
+.mini-issue {
+  display: flex; gap: 8px; align-items: center; padding: 6px 10px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px; font-size: 13px;
+}
+.mini-issue .id { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Board */
+.board { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+.column {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  min-width: 280px; max-width: 300px; flex: 0 0 auto; display: flex; flex-direction: column;
+}
+.column-head {
+  display: flex; align-items: center; gap: 8px; padding: 12px 14px;
+  border-bottom: 1px solid var(--border); font-weight: 600; font-size: 13px;
+}
+.column-head .count { color: var(--muted); font-weight: 500; }
+.column-head .swatch { width: 10px; height: 10px; border-radius: 50%; }
+.column-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
+.column.drop-hover { border-color: var(--accent); }
+
+.issue-card {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; cursor: grab; display: flex; flex-direction: column; gap: 6px;
+}
+.issue-card:active { cursor: grabbing; }
+.issue-card.dragging { opacity: 0.4; }
+.issue-card .title { font-size: 13px; line-height: 1.35; }
+.issue-card .meta { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 11px; }
+.prio { font-size: 11px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--border); }
+.prio-1 { color: var(--red); } .prio-2 { color: var(--amber); } .prio-3 { color: var(--accent-2); }
+
+/* Business */
+.biz-row {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px;
+}
+.biz-row .biz-name { font-weight: 600; font-size: 15px; }
+.biz-row .link-info { color: var(--muted); font-size: 13px; }
+.biz-row .actions { display: flex; gap: 8px; margin-left: auto; }
+/* Modal */
+.modal-backdrop {
+  position: fixed; inset: 0; background: var(--overlay);
+  display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px;
+}
+.modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: 460px; max-width: 100%; box-shadow: var(--shadow); }
+.modal-head { padding: 16px 18px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.modal-body { padding: 18px; }
+.modal-foot { padding: 14px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }

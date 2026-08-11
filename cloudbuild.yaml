@@ -33,7 +33,7 @@ substitutions:
   _FIREBASE_API_KEY: ""
   _FIREBASE_ALLOWED_DOMAIN: "" # empty = any verified user
   _SPA_ORIGIN: "https://storage.googleapis.com"
-  _SPA_OBFUSCATION_STRENGTH: "balanced" # light | balanced | maximum
+  _SPA_OBFUSCATION_STRENGTH: "light" # light | balanced | maximum
 
 steps:
   # --- Build the three images (parallel) -------------------------------------
@@ -159,10 +159,26 @@ steps:
         PROJECT_NUMBER="$$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
         GATEWAY_URL="https://${_GATEWAY_SERVICE}-$${PROJECT_NUMBER}.${_REGION}.run.app"
         echo "Gateway URL: $${GATEWAY_URL}"
-        printf "window.__API_BASE__='%s';\n" "$${GATEWAY_URL}" > public/config.js
+        # Match the Firebase deploy path: api.js imports this runtime module,
+        # which exposes the API base and warms its origin before client calls.
+        printf '%s\n' \
+          "window.__API_BASE__='$${GATEWAY_URL}';" \
+          "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
+          > public/config.js
         # Persist for the Terraform step so API_BASE_URL matches config.js exactly.
         printf "%s" "$${GATEWAY_URL}" > /workspace/gateway_url.txt
         gsutil -m rsync -r -d public "gs://${_BUCKET}"
+        # Mirror Firebase Hosting's cache policy on the legacy GCS endpoint.
+        # The root website route serves index.html, so its object metadata covers
+        # both `/` and `/index.html`.
+        gsutil -m setmeta -h "Cache-Control:no-cache" \
+          "gs://${_BUCKET}/js/**" \
+          "gs://${_BUCKET}/vendor/**/*.js" \
+          "gs://${_BUCKET}/styles.css" \
+          "gs://${_BUCKET}/styles/**/*.css"
+        gsutil setmeta -h "Cache-Control:no-cache, no-store, must-revalidate" \
+          "gs://${_BUCKET}/index.html"
+        gsutil setmeta -h "Cache-Control:no-store" "gs://${_BUCKET}/config.js"
         # Ensure ES module content-type for .mjs assets.
         gsutil -m setmeta -h "Content-Type:text/javascript" "gs://${_BUCKET}/**/*.mjs" || true
 

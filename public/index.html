@@ -4,7 +4,84 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Fleet — Agent Workspace</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <style id="critical-css">
+      :root, :root[data-theme='dark'] {
+        color-scheme: dark; --bg: #11141a; --panel: #181c24; --panel-2: #20252f;
+        --sidebar: #151920; --topbar: #15181f; --surface-subtle: #1b2029;
+        --border: #2a303b; --border-strong: #363d49; --text: #edf0f5;
+        --muted: #9aa3b1; --accent: #7088ef; --accent-2: #91a4ff;
+        --accent-soft: #222d55; --green: #58b989; --green-soft: #1b3329;
+        --topbar-height: 60px; --sidebar-width: 255px;
+        --font-serif: Georgia, 'Times New Roman', serif;
+        --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      :root[data-theme='light'] {
+        color-scheme: light; --bg: #f6f5f1; --panel: #fff; --panel-2: #f1f0eb;
+        --sidebar: #f1f0eb; --topbar: #f8f7f4; --surface-subtle: #fbfbf9;
+        --border: #e3e4e0; --border-strong: #d4d6d3; --text: #172033;
+        --muted: #687083; --accent: #315cf5; --accent-2: #3158d8;
+        --accent-soft: #eef2ff; --green: #3f8b63; --green-soft: #e9f3ed;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; min-height: 100dvh; overflow: hidden; background: var(--bg); color: var(--text); font: 14px/1.45 var(--font-sans); }
+      a { color: inherit; text-decoration: none; }
+      button, textarea { font: inherit; }
+      .skip-link { position: fixed; z-index: 200; top: 8px; left: 50%; padding: 8px 12px; transform: translate(-50%,-150%); border-radius: 7px; background: var(--text); color: var(--panel); font-size: 12px; font-weight: 700; }
+      .skip-link:focus { transform: translate(-50%,0); }
+      html:not([data-initial-route='agent']) [data-initial-agent-view] { display: none; }
+      .topbar { height: var(--topbar-height); display: grid; grid-template-columns: var(--sidebar-width) minmax(180px,1fr) auto; align-items: center; padding: 0 18px; position: relative; z-index: 50; border-bottom: 1px solid var(--border-strong); background: var(--topbar); }
+      .brand-area, .brand, .topbar-actions, .topbar-context, .conn { min-width: 0; display: flex; align-items: center; }
+      .brand { gap: 10px; font-size: 15px; font-weight: 680; }
+      .brand-mark { width: 27px; height: 27px; display: flex; align-items: flex-end; gap: 2px; padding: 6px 5px; border-radius: 7px; background: var(--text); }
+      .brand-mark span { width: 4px; display: block; border-radius: 3px; background: var(--panel); }
+      .brand-mark span:nth-child(1) { height: 8px; } .brand-mark span:nth-child(2) { height: 14px; } .brand-mark span:nth-child(3) { height: 11px; }
+      .topbar-context { justify-self: center; gap: 8px; color: var(--muted); font-size: 11px; }
+      .topbar-context > span { font-size: 8px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+      .topbar-context > span::after { content: '/'; margin-left: 8px; color: var(--border-strong); }
+      .topbar-context strong { color: var(--text); font-size: 12px; }
+      .topbar-actions { justify-self: end; gap: 10px; }
+      .conn { gap: 7px; color: var(--muted); font-size: 10px; }
+      .conn .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+      .mobile-nav-button, .sidebar-backdrop { display: none; }
+      .app-frame { height: calc(100vh - var(--topbar-height)); height: calc(100dvh - var(--topbar-height)); display: grid; grid-template-columns: var(--sidebar-width) minmax(0,1fr); overflow: hidden; }
+      .app-sidebar { min-width: 0; display: flex; flex-direction: column; padding: 14px 12px 16px; overflow: hidden auto; border-inline-end: 1px solid var(--border-strong); background: var(--sidebar); }
+      .workspace-picker { min-height: 51px; border-bottom: 1px solid var(--border); }
+      .sidebar-nav { display: flex; flex: 1; flex-direction: column; gap: 14px; padding-top: 16px; }
+      .nav-section { display: flex; flex-direction: column; gap: 2px; } .nav-section-system { margin-top: auto; }
+      .nav-heading { padding: 0 10px 7px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
+      .sidebar-nav a { min-height: 45px; display: grid; grid-template-columns: 27px minmax(0,1fr); gap: 8px; align-items: center; padding: 5px 8px; color: var(--muted); }
+      .nav-link-copy { min-width: 0; display: flex; flex-direction: column; } .nav-link-copy small { font-size: 8px; } .nav-link-copy strong { font-size: 11px; }
+      .view { min-width: 0; min-height: 0; overflow: auto; background: var(--bg); }
+      #view[data-initial-agent-view] { padding: 0; overflow: hidden; background: var(--panel); }
+      .agent-workspace { width: 100%; height: 100%; display: grid; grid-template-columns: 248px minmax(0,1fr) 340px; overflow: hidden; background: var(--panel); }
+      .conversation-rail { min-width: 0; border-right: 1px solid var(--border-strong); background: var(--panel-2); }
+      .conversation-rail-head { display: flex; justify-content: space-between; padding: 16px 12px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
+      .scenario-reader { min-width: 0; min-height: 0; overflow: auto; background: var(--panel); }
+      .reader-toolbar { min-height: 49px; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 10px; }
+      .conversation-wrap { width: min(100%,900px); min-height: calc(100% - 49px); margin: 0 auto; padding: clamp(52px,8vh,96px) 58px 0; }
+      .omnibox-hero { max-width: 720px; margin: 0 auto 24px; text-align: center; }
+      .omnibox-eyebrow { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 13px; color: var(--accent-2); font-size: 9px; font-weight: 760; letter-spacing: .1em; text-transform: uppercase; }
+      .omnibox-spark { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; background: var(--accent-soft); font-size: 12px; }
+      .omnibox-hero h1 { margin: 0; font: 570 clamp(30px,4vw,46px)/1.08 var(--font-serif); letter-spacing: -.035em; }
+      .omnibox-hero p { max-width: 650px; margin: 13px auto 0; color: var(--muted); font: 14px/1.65 var(--font-serif); }
+      .conversation-stream { min-height: 8px; }
+      .chat-composer { margin: 0 auto; padding: 14px 0 20px; }
+      .composer-surface { padding: 13px 14px 11px; border: 1px solid var(--border-strong); border-radius: 16px; background: var(--panel); }
+      .composer-surface textarea { width: 100%; min-height: 68px; padding: 3px; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); }
+      .composer-actions { display: flex; align-items: center; gap: 7px; margin-top: 8px; color: var(--muted); font-size: 8px; }
+      .privacy-chip { padding: 3px 7px; border-radius: 99px; background: var(--green-soft); color: var(--green); }
+      .evidence-rail { min-width: 0; overflow: hidden; border-left: 1px solid var(--border-strong); background: var(--surface-subtle); }
+      .rail-tabs { min-height: 49px; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 10px; }
+      .rail-content { padding: 17px 14px; }
+      .initial-skeleton { height: 8px; margin: 10px; border-radius: 99px; background: var(--border); opacity: .65; }
+      .initial-skeleton.short { width: 52%; }
+      @media (max-width: 900px) { .topbar { grid-template-columns: minmax(0,1fr) auto auto; padding: 0 12px; } .mobile-nav-button { display: inline-grid; } .sidebar-collapse { display: none; } .app-frame { display: block; } .app-sidebar { width: min(88vw,310px); position: fixed; z-index: 46; top: var(--topbar-height); bottom: 0; inset-inline-start: 0; transform: translateX(-105%); } .app-sidebar.open { transform: translateX(0); } .sidebar-backdrop { position: fixed; z-index: 45; inset: var(--topbar-height) 0 0; display: block; padding: 0; border: 0; border-radius: 0; background: rgba(10,14,22,.54); } .sidebar-backdrop[hidden] { display: none; } .view { width: 100%; height: 100%; } }
+      @media (max-width: 780px) { .agent-workspace { height: auto; min-height: 100%; display: block; overflow: visible; } .conversation-rail { display: none; } .evidence-rail { min-height: 320px; border-top: 1px solid var(--border-strong); border-left: 0; } #view[data-initial-agent-view] { overflow: auto; } .conversation-wrap { padding: 42px 30px 0; } }
+      @media (max-width: 620px) { .topbar { grid-template-columns: minmax(0,1fr) auto; } .topbar-context { display: none; } .conversation-wrap { padding: 42px 20px 0; } .omnibox-hero p { font-size: 13px; } .evidence-rail { display: none; } }
+    </style>
+    <link rel="preload" href="/styles.css" as="style" />
+    <link rel="stylesheet" href="/styles.css" media="print" data-shared-style onload="this.media='all';this.dataset.loaded='true'" />
+    <noscript><link rel="stylesheet" href="/styles.css" /></noscript>
     <link
       rel="icon"
       href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>"
@@ -18,6 +95,23 @@
           var dark = p === 'dark' || (p === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
           document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
         } catch (e) {}
+      })();
+    </script>
+    <script>
+      (function () {
+        var isAgent = !window.location.hash || window.location.hash === '#/' || /^#\/agent(?:\/|$)/.test(window.location.hash);
+        document.documentElement.setAttribute('data-initial-route', isAgent ? 'agent' : 'other');
+        if (!isAgent) return;
+        var module = document.createElement('link');
+        module.rel = 'modulepreload';
+        module.href = '/js/views/agent.js';
+        module.fetchPriority = 'high';
+        document.head.appendChild(module);
+        var css = document.createElement('link');
+        css.rel = 'preload';
+        css.as = 'style';
+        css.href = '/styles/immersive.css';
+        document.head.appendChild(css);
       })();
     </script>
   </head>
@@ -163,14 +257,57 @@
         </div>
       </aside>
 
-      <main id="view" class="view" tabindex="-1"></main>
+      <main
+        id="view"
+        class="view view-immersive"
+        tabindex="-1"
+        aria-label="Agent workspace"
+        aria-busy="true"
+        data-initial-agent-view
+      >
+        <section class="agent-workspace" data-agent-scaffold="initial" data-i18n-skip>
+          <aside class="conversation-rail" data-agent-threads aria-label="Conversation history">
+            <div class="conversation-rail-head"><strong>Conversations</strong><span>New</span></div>
+            <div class="initial-skeleton"></div>
+            <div class="initial-skeleton short"></div>
+          </aside>
+
+          <div class="scenario-reader agent-reader">
+            <div class="reader-toolbar agent-toolbar" data-agent-toolbar>
+              <span>Workspace&nbsp; / &nbsp;<strong>Agent</strong></span>
+            </div>
+            <div class="conversation-wrap agent-omnibox-wrap">
+              <div class="agent-pause-host" hidden></div>
+              <header class="omnibox-hero" data-agent-hero>
+                <span class="omnibox-eyebrow"><span class="omnibox-spark" aria-hidden="true">✳</span>One workspace for every request</span>
+                <h1>What should we move forward?</h1>
+                <p>Ask a question, search workspace memory, pressure-test a business, troubleshoot a run, or turn an implementation change into a task.</p>
+              </header>
+              <div class="conversation-stream" aria-live="polite"></div>
+              <div class="chat-composer omnibox-composer" data-agent-composer>
+                <div class="composer-surface">
+                  <textarea disabled aria-label="Loading agent workspace" placeholder="Ask AI Fleet to move work forward…"></textarea>
+                  <div class="composer-actions"><span class="privacy-chip">Workspace private</span><span>Preparing your workspace…</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <aside class="evidence-rail scenario-rail" aria-label="Agent details">
+            <div class="rail-tabs agent-rail-tabs" data-agent-rail-tabs id="agent-setup-tab">Workspace details</div>
+            <div id="agent-details-panel" class="rail-content" role="tabpanel" aria-labelledby="agent-setup-tab">
+              <div class="initial-skeleton"></div>
+              <div class="initial-skeleton short"></div>
+            </div>
+          </aside>
+        </section>
+      </main>
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-    <!-- Sets window.__API_BASE__ before the app loads (same-origin locally; the
-         gateway Cloud Run URL when the SPA is hosted on GCS). -->
-    <script src="/config.js"></script>
+    <!-- api.js imports /config.js as a module dependency, keeping deployment
+         configuration ordered without a parser-blocking classic script. -->
     <script type="module" src="/js/app.js"></script>
   </body>
 </html>

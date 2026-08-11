@@ -18,14 +18,21 @@ function json(route, body, status = 200) {
 const FIREBASE_AUTH_STUB = `
   const user = { uid: 'firebase|max', displayName: 'Max Operator', email: 'max@example.com', photoURL: '', getIdToken: async () => 'browser-access-token' };
   const signedIn = () => localStorage.getItem('e2e.signedin') === '1';
-  export function getAuth() { return { get currentUser() { return signedIn() ? user : null; } }; }
-  export async function setPersistence() {}
   export const browserLocalPersistence = {};
+  export const browserPopupRedirectResolver = {};
+  export function initializeAuth(_app, options) {
+    if (options.persistence !== browserLocalPersistence || 'popupRedirectResolver' in options) throw new Error('unexpected eager auth initialization');
+    return { get currentUser() { return signedIn() ? user : null; } };
+  }
   export function onAuthStateChanged(_auth, cb) { Promise.resolve().then(() => cb(signedIn() ? user : null)); return () => {}; }
   export class GoogleAuthProvider { static credential() { return {}; } setCustomParameters() {} }
   export class OAuthProvider { constructor(id) { this.providerId = id; } credential() { return {}; } setCustomParameters() {} }
   export async function signInWithCredential() { localStorage.setItem('e2e.signedin', '1'); return { user }; }
-  export async function signInWithPopup() { localStorage.setItem('e2e.signedin', '1'); return { user }; }
+  export async function signInWithPopup(_auth, _provider, resolver) {
+    if (resolver !== browserPopupRedirectResolver) throw new Error('popup resolver was not supplied explicitly');
+    localStorage.setItem('e2e.signedin', '1');
+    return { user };
+  }
   export async function signOut() { localStorage.removeItem('e2e.signedin'); }
 `;
 
@@ -51,7 +58,7 @@ test('settings renders task-model controls without a view error', async ({ page 
   expect(browserErrors).toEqual([]);
 });
 
-test('workspace renders while optional Linear validation is stalled', async ({ page }) => {
+test('workspace renders while optional locale and Linear discovery are stalled', async ({ page }) => {
   const browserErrors = [];
   const failedAssets = [];
 
@@ -69,10 +76,13 @@ test('workspace renders while optional Linear validation is stalled', async ({ p
     localStorage.setItem('ai-fleet.locale', 'en');
     localStorage.setItem('lm.lastWorkspaceRoute', 'agent');
   });
-  await page.route('**/api/locale/suggestions**', (route) => json(route, {
-    locale: 'en',
-    suggestions: [{ tag: 'en', label: 'English', nativeLabel: 'English', direction: 'ltr' }],
-  }));
+  await page.route('**/api/locale/suggestions**', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    await json(route, {
+      locale: 'en',
+      suggestions: [{ tag: 'en', label: 'English', nativeLabel: 'English', direction: 'ltr' }],
+    });
+  });
   await page.route('**/api/settings/validate', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 5_000));
     await json(route, { ok: true });
@@ -99,8 +109,8 @@ test('workspace renders while optional Linear validation is stalled', async ({ p
   const response = await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
   expect(response && response.ok()).toBeTruthy();
 
-  // This is intentionally shorter than the delayed validation. The shell and
-  // useful route must paint without waiting on optional integration health.
+  // This is intentionally shorter than both delayed requests. The shell and
+  // useful route must paint without waiting on locale or integration discovery.
   await expect(page.locator('.agent-workspace')).toBeVisible({ timeout: 2_000 });
   await expect(page.locator('#view')).toHaveAttribute('aria-busy', 'false');
   await expect(page.locator('#route-title')).toHaveText('Agent workspace');
@@ -110,8 +120,10 @@ test('workspace renders while optional Linear validation is stalled', async ({ p
 
 test('authentication configuration failure locks the workspace before protected API calls', async ({ page }) => {
   const protectedRequests = [];
+  const firebaseRequests = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
+    if (url.pathname.startsWith('/vendor/firebase/')) firebaseRequests.push(url.pathname);
     if (url.pathname.startsWith('/api/') && url.pathname !== '/api/auth/config') {
       protectedRequests.push(`${request.method()} ${url.pathname}`);
     }
@@ -130,10 +142,55 @@ test('authentication configuration failure locks the workspace before protected 
   await expect(page.locator('.auth-continue')).toHaveText('Retry');
   await expect(page.locator('#view')).toHaveAttribute('aria-busy', 'false');
   expect(protectedRequests).toEqual([]);
+  // Validate the public config before paying the Firebase download/parse cost.
+  expect(firebaseRequests).toEqual([]);
+});
+
+test('disabled auth skips Firebase and bodyless API GETs omit the JSON content type', async ({ page }) => {
+  const firebaseRequests = [];
+  const getContentTypes = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith('/vendor/firebase/')) firebaseRequests.push(url.pathname);
+    if (request.method() === 'GET' && url.pathname.startsWith('/api/') && url.pathname !== '/api/auth/config') {
+      getContentTypes.push(request.headers()['content-type']);
+    }
+  });
+
+  await page.addInitScript(() => {
+    localStorage.setItem('ai-fleet.locale', 'en');
+    localStorage.setItem('lm.lastWorkspaceRoute', 'agent');
+  });
+  // Catch-all keeps this request-header regression test independent of local
+  // service data. The specific auth route is registered last so it wins.
+  await page.route('**/api/**', (route) => json(route, {}));
+  await page.route('**/api/auth/config', (route) => json(route, { mode: 'disabled', enabled: false }));
+
+  await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.agent-workspace')).toBeVisible();
+  expect(firebaseRequests).toEqual([]);
+  expect(getContentTypes.length).toBeGreaterThan(0);
+  expect(getContentTypes.every((value) => value === undefined)).toBe(true);
+
+  const mutation = page.waitForRequest((request) => (
+    request.method() === 'POST' && new URL(request.url()).pathname === '/api/eula'
+  ));
+  await page.evaluate(async () => {
+    const { api } = await import('/js/api.js');
+    await api.recordEulaDecision('accepted', 'user');
+  });
+  expect((await mutation).headers()['content-type']).toContain('application/json');
 });
 
 test('authenticated Firebase session adds a bearer token and ignores an unrelated provider 401', async ({ page }) => {
   const authenticatedRequests = [];
+  const authStartupRequests = [];
+  page.on('request', (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === '/api/auth/config' || pathname.startsWith('/vendor/firebase/')) {
+      authStartupRequests.push(pathname);
+    }
+  });
   const authorizedJson = (route, body, status = 200) => {
     const authorization = route.request().headers().authorization;
     authenticatedRequests.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
@@ -156,9 +213,12 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
     contentType: 'text/javascript',
     body: `
       const user = { uid: 'firebase|ada', displayName: 'Ada Operator', email: 'ada@example.com', photoURL: '', getIdToken: async () => 'browser-access-token' };
-      export function getAuth() { return { currentUser: user }; }
-      export async function setPersistence() {}
       export const browserLocalPersistence = {};
+      export const browserPopupRedirectResolver = {};
+      export function initializeAuth(_app, options) {
+        if (options.persistence !== browserLocalPersistence || 'popupRedirectResolver' in options) throw new Error('unexpected eager auth initialization');
+        return { currentUser: user };
+      }
       export function onAuthStateChanged(_auth, cb) { Promise.resolve().then(() => cb(user)); return () => {}; }
       export class GoogleAuthProvider { static credential() { return {}; } setCustomParameters() {} }
       export class OAuthProvider { credential() { return {}; } }
@@ -218,6 +278,9 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
   await expect(page.locator('.auth-card')).toHaveCount(0);
   expect(authenticatedRequests).toContain('GET /api/auth/me');
   expect(authenticatedRequests).toContain('GET /api/settings');
+  expect(authStartupRequests[0]).toBe('/api/auth/config');
+  expect(authStartupRequests).toContain('/vendor/firebase/firebase-app.js');
+  expect(authStartupRequests).toContain('/vendor/firebase/firebase-auth.js');
 });
 
 test('Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer', async ({ page }) => {

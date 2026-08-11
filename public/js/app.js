@@ -10,7 +10,7 @@ import {
 } from './state.js';
 import { el, initials } from './dom.js';
 import { hydrateIcons } from './icons.js';
-import { initializeI18n, localize, t } from './i18n.js';
+import * as i18n from './i18n.js';
 import {
   expireAuthentication,
   getAuthenticationState,
@@ -21,34 +21,72 @@ import {
   signInWithMicrosoft,
   signOut,
 } from './auth.js';
-import { renderProjects } from './views/projects.js';
-import { renderBoard } from './views/board.js';
-import { renderBusiness } from './views/business.js';
-import { renderAgent } from './views/agent.js';
-import { renderAgentJobs } from './views/agent-jobs.js';
-import { renderCalls } from './views/calls.js';
-import { renderAnalytics } from './views/analytics.js';
-import { renderCost } from './views/cost.js';
-import { renderTroubleshooting } from './views/troubleshooting.js';
-import { renderSettings } from './views/settings.js';
-import { renderOrganization } from './views/organization.js';
 import { initThemeToggle } from './theme.js';
 import { initNotifications } from './notifications.js';
 import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 
-const routes = {
-  agent: renderAgent,
-  'agent-jobs': renderAgentJobs,
-  calls: renderCalls,
-  business: renderBusiness,
-  projects: renderProjects,
-  board: renderBoard,
-  analytics: renderAnalytics,
-  cost: renderCost,
-  troubleshooting: renderTroubleshooting,
-  settings: renderSettings,
-  organization: renderOrganization,
-};
+const { initializeI18n, localize, t } = i18n;
+const stylesheetLoads = new Map();
+const SHARED_STYLESHEET = '/styles.css';
+
+function ensureStylesheet(href) {
+  if (stylesheetLoads.has(href)) return stylesheetLoads.get(href);
+
+  const absoluteHref = new URL(href, document.baseURI).href;
+  let link = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+    .find((candidate) => candidate.href === absoluteHref);
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    link.dataset.routeStyle = 'true';
+    document.head.append(link);
+  }
+
+  const load = link.dataset.loaded === 'true' || (link.sheet && link.media !== 'print')
+    ? Promise.resolve(link)
+    : new Promise((resolve, reject) => {
+      link.addEventListener('load', () => resolve(link), { once: true });
+      link.addEventListener('error', () => reject(new Error(`Could not load ${href}`)), { once: true });
+    });
+  stylesheetLoads.set(href, load);
+  return load;
+}
+
+function route(loader, exportName, styles = []) {
+  const routeStyles = [SHARED_STYLESHEET, ...styles];
+  let rendererLoad = null;
+  return Object.freeze({
+    styles: Object.freeze([...routeStyles]),
+    load() {
+      if (!rendererLoad) {
+        rendererLoad = Promise.all([
+          ...routeStyles.map(ensureStylesheet),
+          loader(),
+        ]).then((results) => {
+          const renderer = results.at(-1)?.[exportName];
+          if (typeof renderer !== 'function') throw new Error(`Route module is missing ${exportName}.`);
+          return renderer;
+        });
+      }
+      return rendererLoad;
+    },
+  });
+}
+
+const routes = Object.freeze({
+  agent: route(() => import('./views/agent.js'), 'renderAgent', ['/styles/immersive.css']),
+  'agent-jobs': route(() => import('./views/agent-jobs.js'), 'renderAgentJobs', ['/styles/operations.css']),
+  calls: route(() => import('./views/calls.js'), 'renderCalls', ['/styles/immersive.css']),
+  business: route(() => import('./views/business.js'), 'renderBusiness', ['/styles/planning.css']),
+  projects: route(() => import('./views/projects.js'), 'renderProjects', ['/styles/planning.css']),
+  board: route(() => import('./views/board.js'), 'renderBoard', ['/styles/planning.css']),
+  analytics: route(() => import('./views/analytics.js'), 'renderAnalytics', ['/styles/operations.css']),
+  cost: route(() => import('./views/cost.js'), 'renderCost', ['/styles/operations.css']),
+  troubleshooting: route(() => import('./views/troubleshooting.js'), 'renderTroubleshooting', ['/styles/operations.css']),
+  settings: route(() => import('./views/settings.js'), 'renderSettings', ['/styles/settings.css']),
+  organization: route(() => import('./views/organization.js'), 'renderOrganization'),
+});
 
 const routeMeta = {
   agent: { titleKey: 'agentWorkspace', eyebrowKey: 'workspace' },
@@ -198,6 +236,12 @@ function initShellInteractions() {
   navigation?.addEventListener('click', (event) => {
     if (event.target.closest('a[data-route]') && compactLayout.matches) syncSidebar(false);
   });
+  const prepareNavigationTarget = (event) => {
+    const name = event.target.closest('a[data-route]')?.dataset.route;
+    if (name && routes[name]) routes[name].load().catch(() => {});
+  };
+  navigation?.addEventListener('pointerover', prepareNavigationTarget);
+  navigation?.addEventListener('focusin', prepareNavigationTarget);
   skipLink?.addEventListener('click', (event) => {
     event.preventDefault();
     document.getElementById('view')?.focus({ preventScroll: true });
@@ -278,8 +322,9 @@ async function refreshRole() {
 
 let renderEpoch = 0;
 
-function freshView() {
+function freshView({ reuseInitialAgent = false } = {}) {
   const previous = document.getElementById('view');
+  if (reuseInitialAgent && previous?.hasAttribute('data-initial-agent-view')) return previous;
   const view = document.createElement('main');
   view.id = 'view';
   view.className = 'view';
@@ -494,7 +539,7 @@ async function render({ focus = false } = {}) {
     return;
   }
 
-  const view = freshView();
+  const view = freshView({ reuseInitialAgent: name === 'agent' });
   syncShell(name, view);
   syncSidebar(false);
   view.setAttribute('aria-busy', 'true');
@@ -519,13 +564,16 @@ async function render({ focus = false } = {}) {
   }
 
   try {
-    await routes[name](view);
+    const renderer = await routes[name].load();
+    if (epoch !== renderEpoch || !view.isConnected) return;
+    await renderer(view);
   } catch (err) {
     if (epoch === renderEpoch && view.isConnected) {
       view.replaceChildren(el('div', { class: 'error-banner' }, err.message || 'This view could not be loaded.'));
     }
   } finally {
     if (epoch !== renderEpoch || !view.isConnected) return;
+    view.removeAttribute('data-initial-agent-view');
     view.setAttribute('aria-busy', 'false');
     localize(view);
     if (focus) view.focus({ preventScroll: true });
@@ -537,6 +585,24 @@ function capitalize(value) {
   return text ? `${text[0].toUpperCase()}${text.slice(1)}` : '';
 }
 
+function scheduleOneTap() {
+  let started = false;
+  const start = () => {
+    if (started) return;
+    started = true;
+    window.removeEventListener('pointerdown', start);
+    window.removeEventListener('keydown', start);
+    const prompt = () => promptOneTap().catch(() => {});
+    if ('requestIdleCallback' in window) window.requestIdleCallback(prompt, { timeout: 2_000 });
+    else prompt();
+  };
+  // Google Identity Services is large and optional. Wait for real visitor
+  // intent so it cannot enter the initial network/CPU trace; the explicit
+  // provider buttons remain available before any interaction.
+  window.addEventListener('pointerdown', start, { passive: true });
+  window.addEventListener('keydown', start);
+}
+
 window.addEventListener('hashchange', () => render({ focus: true }));
 window.addEventListener('DOMContentLoaded', async () => {
   hydrateIcons();
@@ -544,22 +610,30 @@ window.addEventListener('DOMContentLoaded', async () => {
   initShellInteractions();
   syncSidebarCollapsed();
 
-  // Authentication is the only network dependency allowed to gate the
-  // workspace. Paint a useful status immediately while Firebase restores the
-  // signed-in session.
-  renderAuthenticationGate({ loading: true });
+  // Start the public Agent route while authentication restores. The server-
+  // rendered scaffold remains the LCP candidate and is hydrated in place once
+  // the session is known; non-Agent routes retain the explicit auth status.
+  const initialRoute = currentRoute();
+  const hasInitialAgentView = initialRoute === 'agent'
+    && document.getElementById('view')?.hasAttribute('data-initial-agent-view');
+  if (initialRoute === 'agent') routes.agent.load().catch(() => {});
+  if (!hasInitialAgentView) renderAuthenticationGate({ loading: true });
+
+  // Apply the saved/default locale immediately. Network-backed locale discovery
+  // is optional and starts only after the first useful route has completed.
+  const initialI18n = initializeI18n({ discover: false }).catch(() => null);
   let session;
   try {
     session = await initializeAuthentication();
   } catch (error) {
     // Hard configuration failure (Firebase web config unreachable) — show the
     // retry gate; there is no usable surface without it.
-    await initializeI18n({ discover: false });
+    await initialI18n;
     renderAuthControl();
     renderAuthenticationGate({ error: error.message });
     return;
   }
-  await initializeI18n({ discover: session.authenticated });
+  await initialI18n;
   renderAuthControl();
 
   // Public visitors AND signed-in users both get a first paint; render() applies
@@ -570,6 +644,17 @@ window.addEventListener('DOMContentLoaded', async () => {
     maybeRefreshRole(session),
   ]);
   await render();
+
+  // Suggestions can refine the already-usable language control in the
+  // background when the i18n module provides the refresh hook.
+  if (typeof i18n.refreshLocaleSuggestions === 'function') {
+    i18n.refreshLocaleSuggestions().catch(() => {});
+  }
+
+  // One Tap is intentionally absent from the critical route and starts only
+  // after visitor interaction, using an idle slice when the browser has one.
+  if (session.enabled && !session.authenticated) scheduleOneTap();
+
   await readiness;
   if (session.authenticated && connectionRoutes.has(currentRoute())) await render();
 
@@ -578,10 +663,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   // no org to bill so it is skipped for them.
   if (session.authenticated) initNotifications();
 
-  // Anonymous visitors: surface the compact Google One Tap card (the screenshot
-  // shape). Non-blocking — the read-only workspace + basic RAG stay usable, and
-  // it is a no-op when One Tap is not configured or a user is already signed in.
-  if (session.enabled && !session.authenticated) promptOneTap().catch(() => {});
 });
 
 window.addEventListener('ai-fleet:locale-changed', async () => {
