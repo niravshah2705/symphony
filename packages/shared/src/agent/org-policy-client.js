@@ -39,11 +39,12 @@ async function oidcBearer(audience) {
 /**
  * @param {string} [projectId] optional project overlay (org-only when omitted)
  * @param {object} [opts] { fetchImpl, logger }
- * @returns {Promise<object|null>} the effective-policy domains map, or null (allow-all)
+ * @returns {Promise<{effectivePolicy: object|null, prefs: object}>} the effective
+ *   policy domains map (null = allow-all) and the resolved operational prefs.
  */
 async function fetchOrgEffectivePolicy(projectId, opts = {}) {
   const baseUrl = CONFIG.SERVICES && CONFIG.SERVICES.settingsUrl;
-  if (!baseUrl || !INTERNAL_API_TOKEN || !ORG_ID) return null;
+  if (!baseUrl || !INTERNAL_API_TOKEN || !ORG_ID) return { effectivePolicy: null, prefs: {} };
 
   let origin = baseUrl;
   try { origin = new URL(baseUrl).origin; } catch (_) { /* keep baseUrl */ }
@@ -57,7 +58,7 @@ async function fetchOrgEffectivePolicy(projectId, opts = {}) {
     fetchImpl: opts.fetchImpl,
     logger: opts.logger,
   });
-  return (res && res.effectivePolicy) || null;
+  return { effectivePolicy: (res && res.effectivePolicy) || null, prefs: (res && res.prefs) || {} };
 }
 
 module.exports = { fetchOrgEffectivePolicy };
