@@ -277,6 +277,15 @@ const DEFAULT_STORE = Object.freeze({
   stackLinks: [], // open stacked-PR links awaiting blocker merge (see agent/stack-reconcile.js)
   settingsHistory: [], // append-only model/tier selection + indicative cost records for tuning
 
+  // Billing / cost metering (see packages/shared/src/billing/*). All amounts are
+  // integer paise. usageRecords are granular per-run events (pruned after a
+  // retention window); ledgerEntries are the append-only money source of truth;
+  // billingAccounts hold per-org config + a derived balance snapshot (id = orgId).
+  usageRecords: [],
+  ledgerEntries: [],
+  billingAccounts: [],
+  billing: { lastAggregatedAt: null }, // sweep watermark (see billing/sweep.js)
+
   // End User License Agreement acceptance, keyed at two scopes. `users[key]` and
   // `orgs[orgId]` each hold { status:'accepted'|'rejected', version, via, at }.
   // Org membership itself implies acceptance (see services/gateway eula gate), so
@@ -387,8 +396,18 @@ function normalizeStore(parsed) {
     approvals: Array.isArray(source.approvals) ? source.approvals : [],
     stackLinks: Array.isArray(source.stackLinks) ? source.stackLinks : [],
     settingsHistory: Array.isArray(source.settingsHistory) ? source.settingsHistory : [],
+    usageRecords: Array.isArray(source.usageRecords) ? source.usageRecords : [],
+    ledgerEntries: Array.isArray(source.ledgerEntries) ? source.ledgerEntries : [],
+    billingAccounts: Array.isArray(source.billingAccounts) ? source.billingAccounts : [],
+    billing: normalizeBilling(source.billing),
     eula: normalizeEula(source.eula),
   };
+}
+
+/** Coerce a raw `billing` blob into the current { lastAggregatedAt } shape. */
+function normalizeBilling(source) {
+  const billing = source && typeof source === 'object' && !Array.isArray(source) ? source : {};
+  return { lastAggregatedAt: typeof billing.lastAggregatedAt === 'string' ? billing.lastAggregatedAt : null };
 }
 
 /** Coerce a raw `eula` blob into the current { users:{}, orgs:{} } shape. */
@@ -405,8 +424,14 @@ function seedStore() {
 // Top-level keys kept together in one Firestore document (small, singleton) vs.
 // the growing arrays that each become a per-record sub-collection so no single
 // document approaches Firestore's 1 MB limit.
-const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig', 'eula'];
-const STORE_COLLECTION_KEYS = ['jobs', 'memories', 'conversations', 'approvals', 'settingsHistory'];
+const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig', 'eula', 'billing'];
+const STORE_COLLECTION_KEYS = [
+  'jobs', 'memories', 'conversations', 'approvals', 'settingsHistory',
+  // Billing: append-heavy records — each becomes one Firestore sub-collection doc
+  // keyed by `id`, so no single document approaches the 1 MB limit and concurrent
+  // appends never clobber one another (the ledger is the money source of truth).
+  'usageRecords', 'ledgerEntries', 'billingAccounts',
+];
 
 const backend = CONFIG.STORE_BACKEND === 'firestore'
   ? firestoreBackend.create({
@@ -799,6 +824,103 @@ function removeStackLink(id) {
   return removed;
 }
 
+/* --------------------------- Billing ------------------------------------ */
+
+// All amounts are INTEGER paise. The ledger (ledgerEntries) is append-only and
+// is the money source of truth; a per-org account (id = orgId) caches a derived
+// balance snapshot for the frequent runner gate. usageRecords are granular
+// per-run events feeding the cost page's per-project / per-user / per-task
+// drill-down; they are pruned after a retention window (the ledger persists).
+// See packages/shared/src/billing/* for the logic that uses these primitives.
+
+const MAX_USAGE_RECORDS = 20000;
+
+/** The sweep watermark ({ lastAggregatedAt }). */
+function getBillingState() {
+  return readStore().billing || { lastAggregatedAt: null };
+}
+
+/** Merge a partial patch into the billing watermark state. */
+function setBillingState(patch) {
+  const current = readStore();
+  const billing = { ...(current.billing || { lastAggregatedAt: null }), ...patch };
+  writeStore({ ...current, billing });
+  return billing;
+}
+
+/** Append a granular usage record (newest first), capped to bound growth. */
+function addUsageRecord(record) {
+  const current = readStore();
+  const now = new Date().toISOString();
+  const entry = { ...record, id: `use_${randomUUID()}`, createdAt: record.createdAt || now };
+  const usageRecords = [entry, ...current.usageRecords].slice(0, MAX_USAGE_RECORDS);
+  writeStore({ ...current, usageRecords });
+  return entry;
+}
+
+/** All usage records, newest first — optionally filtered by orgId. */
+function listUsageRecords(filter = {}) {
+  const { orgId } = filter || {};
+  const records = readStore().usageRecords;
+  return orgId ? records.filter((r) => r.orgId === orgId) : records;
+}
+
+/** Remove usage records created strictly before `beforeIso`. Returns count removed. */
+function pruneUsageRecords(beforeIso) {
+  if (!beforeIso) return 0;
+  const current = readStore();
+  const usageRecords = current.usageRecords.filter((r) => String(r.createdAt || '') >= beforeIso);
+  const removed = current.usageRecords.length - usageRecords.length;
+  if (removed) writeStore({ ...current, usageRecords });
+  return removed;
+}
+
+/** Append a ledger entry (newest first) with a generated id + createdAt. */
+function addLedgerEntry(entry) {
+  const current = readStore();
+  const now = new Date().toISOString();
+  const record = { ...entry, id: `led_${randomUUID()}`, createdAt: entry.createdAt || now };
+  writeStore({ ...current, ledgerEntries: [record, ...current.ledgerEntries] });
+  return record;
+}
+
+/** All ledger entries, newest first — optionally filtered by orgId. */
+function listLedgerEntries(filter = {}) {
+  const { orgId } = filter || {};
+  const entries = readStore().ledgerEntries;
+  return orgId ? entries.filter((e) => e.orgId === orgId) : entries;
+}
+
+/** The billing account for an org (id = orgId), or null. */
+function getBillingAccount(orgId) {
+  if (!orgId) return null;
+  return readStore().billingAccounts.find((a) => a.id === orgId) || null;
+}
+
+function listBillingAccounts() {
+  return readStore().billingAccounts;
+}
+
+/**
+ * Create or update a billing account keyed by orgId (its `id`). Immutable: a
+ * partial `patch` merges over any existing record; `id`/`orgId` are always
+ * authoritative and `updatedAt` is bumped. Returns the stored account.
+ */
+function upsertBillingAccount(orgId, patch = {}) {
+  if (!orgId) throw new Error('upsertBillingAccount requires an orgId');
+  const current = readStore();
+  const now = new Date().toISOString();
+  const existing = current.billingAccounts.find((a) => a.id === orgId) || null;
+  const merged = existing
+    ? { ...existing, ...patch, id: orgId, orgId, updatedAt: now }
+    : { createdAt: now, updatedAt: now, ...patch, id: orgId, orgId };
+  const billingAccounts = existing
+    ? current.billingAccounts.map((a) => (a.id === orgId ? merged : a))
+    : [merged, ...current.billingAccounts];
+  writeStore({ ...current, billingAccounts });
+  return merged;
+}
+
 /* ------------------------- Settings history ----------------------------- */
 
 // Append-only trail of model/tier selections + indicative cost, kept for future
@@ -1050,6 +1172,16 @@ module.exports = {
   addStackLink,
   updateStackLink,
   removeStackLink,
+  getBillingState,
+  setBillingState,
+  addUsageRecord,
+  listUsageRecords,
+  pruneUsageRecords,
+  addLedgerEntry,
+  listLedgerEntries,
+  getBillingAccount,
+  listBillingAccounts,
+  upsertBillingAccount,
   MAX_SETTINGS_HISTORY,
   listSettingsHistory,
   addSettingsHistory,

@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1596 nodes
-- **Cohesion**: 0.1334
+- **Size**: 1663 nodes
+- **Cohesion**: 0.1308
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared
 | issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
 | applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-212 |
 
-*... and 1546 more members.*
+*... and 1613 more members.*
 
 ## Execution Flows
 
@@ -79,40 +79,40 @@ Directory-based community: packages/shared
 - **consumeLogin** (criticality: 0.61, depth: 1)
 - **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
 - **refreshTokens** (criticality: 0.61, depth: 1)
-- *... and 52 more flows.*
+- *... and 51 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (1181 edge(s))
-- `join` (222 edge(s))
-- `String` (213 edge(s))
+- `equal` (1239 edge(s))
+- `join` (223 edge(s))
+- `String` (217 edge(s))
 - `deepEqual` (205 edge(s))
 - `includes` (186 edge(s))
-- `push` (149 edge(s))
-- `map` (145 edge(s))
-- `ok` (135 edge(s))
+- `push` (152 edge(s))
+- `map` (147 edge(s))
+- `ok` (139 edge(s))
 - `strictEqual` (127 edge(s))
-- `slice` (120 edge(s))
-- `trim` (109 edge(s))
-- `match` (106 edge(s))
-- `filter` (105 edge(s))
-- `isArray` (101 edge(s))
-- `step` (75 edge(s))
+- `slice` (121 edge(s))
+- `filter` (116 edge(s))
+- `trim` (110 edge(s))
+- `match` (107 edge(s))
+- `isArray` (105 edge(s))
+- `Number` (93 edge(s))
 
 ### Incoming
 
-- `equal` (1174 edge(s))
+- `equal` (1232 edge(s))
 - `deepEqual` (203 edge(s))
-- `./packages/shared/src/store.js` (147 edge(s))
-- `ok` (135 edge(s))
+- `./packages/shared/src/store.js` (168 edge(s))
+- `ok` (139 edge(s))
 - `strictEqual` (127 edge(s))
-- `match` (86 edge(s))
+- `match` (87 edge(s))
 - `join` (85 edge(s))
 - `./packages/shared/src/linear.js` (74 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (71 edge(s))
-- `./packages/shared/src/agent/runtimes.js` (67 edge(s))
+- `./packages/shared/src/agent/runtimes.js` (68 edge(s))
 - `includes` (65 edge(s))
 - `throws` (57 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (56 edge(s))

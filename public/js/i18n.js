@@ -63,6 +63,8 @@ const MESSAGES = Object.freeze({
     insights: 'Insights',
     analytics: 'Analytics',
     analyticsSub: 'Cost and performance',
+    cost: 'Cost',
+    costSub: 'Usage & billing',
     workflows: 'Workflows',
     workflowsSub: 'Patterns and orchestration',
     system: 'System',

@@ -17,7 +17,9 @@
     "./util": "./src/util.js",
     "./agent/*": "./src/agent/*.js",
     "./provisioning": "./src/provisioning/index.js",
-    "./provisioning/*": "./src/provisioning/*.js"
+    "./provisioning/*": "./src/provisioning/*.js",
+    "./billing": "./src/billing/index.js",
+    "./billing/*": "./src/billing/*.js"
   },
   "scripts": {
     "test": "node --test"

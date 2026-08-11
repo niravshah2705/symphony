@@ -14,7 +14,7 @@ Directory-based community: services/planner
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| stream | Function | ./services/planner/src/pubsub.js | 22-24 |
+| stream | Function | ./services/planner/src/pubsub.js | 23-25 |
 | redactUserText | Function | ./services/planner/src/routes/agent.js | 54-54 |
 | requireAssumedRole | Function | ./services/planner/src/routes/agent.js | 63-70 |
 | clampInt | Function | ./services/planner/src/routes/agent.js | 72-76 |

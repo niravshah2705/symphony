@@ -431,6 +431,8 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep, s
       invokeConfig: { runId, ...traceMeta },
       runtime: keys.agentRuntime || 'deepagent',
       workflowPattern: keys.workflowPattern || 'sequential',
+      // Billing attribution for first-party usage metering (see billing/usage.js).
+      attribution: { projectId: project.id || null, projectName: project.name || null, source: 'planner' },
     });
     draft = finalText;
     step(`Planning workflow draft ready (${draft.length} chars).`);

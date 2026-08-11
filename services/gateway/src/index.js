@@ -12,6 +12,7 @@ const issuesRoutes = require('./routes/issues');
 const businessesRoutes = require('./routes/businesses');
 const rolesRoutes = require('./routes/roles');
 const observabilityRoutes = require('./routes/observability');
+const billingRoutes = require('./routes/billing');
 const localizationRoutes = require('./routes/localization');
 const eulaRoutes = require('./routes/eula');
 const { router: codexRoutes, callback: codexCallback } = require('./routes/codex');
@@ -157,6 +158,10 @@ app.use('/api/issues', requirePermission('planning'), gateIssueWrites, issuesRou
 app.use('/api/businesses', requirePermission('planning'), businessesRoutes);
 app.use('/api/roles', requirePermission('settings', { level: 'write' }), rolesRoutes);
 app.use('/api/observability', requirePermission('insights'), observabilityRoutes);
+// Cost-monitoring + billing. 'insights' is the coarse gate (GET → read,
+// mutations → write); the router additionally resolves the caller's org
+// server-side and requires org-admin for recharge/config (cross-tenant safe).
+app.use('/api/billing', requirePermission('insights'), billingRoutes);
 // Locale is non-sensitive UI strings — available to public + authenticated.
 app.use('/api/locale', localizationRoutes);
 // EULA acceptance: GET status is public (anonymous → accepted:false); POST records

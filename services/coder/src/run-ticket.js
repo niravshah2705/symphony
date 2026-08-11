@@ -8,6 +8,7 @@ const { runCoder } = require('@ai-fleet/shared/agent/coder');
 const orchestrator = require('@ai-fleet/shared/agent/coder-orchestrator');
 const { publishEvent } = require('@ai-fleet/shared/messaging/events');
 const jobs = require('@ai-fleet/shared/messaging/jobs');
+const { billingStatus } = require('@ai-fleet/shared/billing/gate');
 
 /**
  * Shared coder dispatch — the single implementation used by the HTTP route
@@ -81,6 +82,16 @@ function makeStep(issue, conversationId) {
 async function runTicketInProcess({ issueId, conversationId = null, blocking = false }) {
   const settings = getSettings();
   const issue = await loadIssue(settings, issueId);
+
+  // Negative-balance gate for on-demand runs: refuse with the same 503 + pauseReason
+  // shape the readiness gate uses, so the SPA surfaces it identically.
+  const billing = billingStatus();
+  if (billing.blocked) {
+    throw httpError(billing.reason, 503, {
+      paused: true,
+      pauseReason: { code: 'billing-unavailable', resource: 'billing', message: billing.reason },
+    });
+  }
 
   let readiness;
   try {

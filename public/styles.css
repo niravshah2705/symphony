@@ -1577,3 +1577,13 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 .vault-secret { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px dashed var(--border); }
 .vault-secret:last-child { border-bottom: none; }
 .vault-secret .btn.btn-small.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Cost monitoring + billing (views/cost.js) */
+.seg-toggle { display: inline-flex; gap: 4px; }
+.seg-toggle .btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.link-button { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
+.link-button:hover { text-decoration: underline; }
+.form-grid { display: grid; gap: 12px; max-width: 640px; }
+.operational-table.subtable { font-size: 0.9em; }
+.operational-table tr.detail-row > td { background: var(--surface-2, rgba(127,127,127,0.06)); padding: 8px 12px; }
+.table-host { min-height: 48px; }

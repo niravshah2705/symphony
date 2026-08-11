@@ -294,6 +294,7 @@ async function runWorkflow({
   rubricOptions,
   rubricMiddleware,
   settings,
+  attribution,
 }) {
   let scratch = null;
   if (!backend && !rootDir) {
@@ -356,6 +357,9 @@ async function runWorkflow({
       rubricOptions,
       rubricMiddleware,
       settings,
+      // Billing attribution (see billing/usage.js). Prefer an explicit value;
+      // else fall back to ctx.attribution so callers can thread it either way.
+      attribution: attribution || ctx.attribution || null,
     });
   } finally {
     if (scratch) scratch.cleanup();
