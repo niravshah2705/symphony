@@ -304,7 +304,6 @@ export const api = {
   // Operational views backed by bounded LangSmith and local health queries.
   getAnalytics: () => request('/observability/analytics'),
   getTroubleshooting: () => request('/observability/troubleshooting'),
-  getWorkflowPatterns: () => request('/observability/workflows'),
 
   // Cost monitoring + billing (services/gateway/src/routes/billing.js). The org
   // is resolved SERVER-SIDE from the caller's token — the client never sends an

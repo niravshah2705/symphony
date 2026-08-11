@@ -5,17 +5,19 @@ import { brandIcon } from '../icons.js';
 export async function renderSettings(view) {
   view.append(loading('Loading settings…'));
 
-  const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes, jsonRes] = await Promise.all([
+  const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes, jsonRes, meRes, projectsRes] = await Promise.all([
     api.getSettings(),
     api.getLlmPresets(),
-    api.getAgentConfig(),
-    api.getAgentModels(),
+    api.getAgentConfig().catch(() => ({ config: {} })),
+    api.getAgentModels().catch(() => ({ intervals: [5, 10, 15] })),
     api.getAgentLabels().catch(() => ({ labels: [] })),
     api.getMembers().catch(() => ({ members: [] })),
     api.getAssumedRole().catch(() => ({ assumedRole: null })),
     api.getCodexStatus().catch(() => ({ connected: false })),
     api.getClaudeStatus().catch(() => ({ connected: false })),
     api.getSettingsJson().catch(() => ({ settings: {} })),
+    api.org.getMe().catch(() => null),
+    api.org.listPersonalProjects().catch(() => ({ projects: [] })),
   ]);
 
   // Older stores intentionally kept hosted model ids blank and relied on the
@@ -33,61 +35,560 @@ export async function renderSettings(view) {
     codex: codexRes,
     claude: claudeRes,
     view,
+    me: meRes,
+    advanced: { configRes, modelsRes, labelsRes, membersRes, roleRes, jsonRes },
   };
   const llm = llmSection(ctx);
-  const complexity = complexitySection(ctx);
   // A model/param change inside a role card re-renders the LLM section via
-  // ctx.rebuild; extend it so the complexity slider re-derives its position too.
+  // ctx.rebuild; extend it so the complexity dial re-derives its position too.
   const baseRebuild = ctx.rebuild;
   ctx.rebuild = () => {
     baseRebuild();
     if (ctx.refreshComplexity) ctx.refreshComplexity();
   };
 
-  const groups = [
-    settingsGroup('settings-models', 'Models & runtime', 'Pick a complexity level; every task model auto-tunes. Override any piece below.', [
-      complexity,
-      providerPickerSection(ctx),
-      llm,
-      runtimeSection({ settings, codex: codexRes, claude: claudeRes }),
-    ]),
-    settingsGroup('settings-connections', 'Connections', 'Connect planning, source control, and observability services.', [
-      pmPickerSection(settings),
-      integrationsSection(settings),
-      keysSection(settings),
-    ]),
-    settingsGroup('settings-policy-merged', 'Skills, tools, plugins & hooks', 'Curate what agents may use across your organization, project, and personal scopes.', [
-      policyGroup(ctx),
-    ]),
-    settingsGroup('settings-accounts', 'Accounts', 'Sign in to hosted model providers. Kept last — most setups never need it.', [
-      accountsSection(ctx),
-    ]),
-    settingsGroup('settings-advanced', 'Advanced', 'Automation, identity, and raw configuration.', [
-      agentSection({
-        config: configRes.config,
-        intervals: modelsRes.intervals || [5, 10, 15],
-        labels: labelsRes.labels || [],
-        view,
-      }),
-      roleSection({ members: membersRes.members || [], assumedRole: roleRes.assumedRole, view }),
-      jsonSection({ view, doc: (jsonRes && jsonRes.settings) || {} }),
-      settingsCommandCard({ view }),
-    ]),
-  ];
+  // Scope state — which level (org/project/user) the page is editing. It governs
+  // the per-scope policy / effective / inheritance surfaces. Operational settings
+  // (complexity/provider/roles/runtime/tracker) are still a single global store,
+  // so they are labeled "Global" in the effective panel until per-scope lands.
+  const identity = deriveIdentity(meRes, projectsRes && projectsRes.projects);
+  const scopeState = {
+    scope: identity.isOrgAdmin && identity.hasOrg ? 'org' : 'user',
+    projectId: identity.defaultProjectId,
+  };
 
-  clear(view).append(
-    el('header', { class: 'page-head settings-page-head' }, [
+  const render = () => {
+    clear(view).append(
+      el('div', { class: 'sx-root' }, [
+        sxHeader(),
+        scopeLadder(scopeState, identity, render),
+        editingBanner(scopeState, ctx),
+      ]),
+      el('div', { class: 'settings-layout' }, [
+        el('div', { class: 'settings-content' }, [
+          governanceSection(ctx),
+          modelsRuntimeSection(ctx, llm),
+          connectionsSection(ctx),
+          advancedGroup(ctx),
+        ]),
+        el('aside', { class: 'settings-rail' }, railCards(ctx, scopeState, identity)),
+      ]),
+    );
+  };
+  ctx.rerenderPage = render;
+  render();
+}
+
+/* ===================== Redesign: shell & scope ===================== */
+
+// Best-effort identity for the scope ladder. `me` is /api/org/me (org-less
+// friendly); shapes vary, so read defensively and always leave org/user usable.
+function deriveIdentity(me, projects) {
+  const org = (me && (me.organization || me.org)) || null;
+  const list = Array.isArray(projects) ? projects : [];
+  const first = list[0] || null;
+  return {
+    hasOrg: Boolean(org),
+    isOrgAdmin: Boolean(me && me.org_role === 'ORG_ADMIN'),
+    orgName: (org && (org.name || org.displayName)) || 'Organization',
+    userEmail: (me && (me.email || (me.user && me.user.email))) || 'Your settings',
+    projects: list,
+    defaultProjectId: first && (first.id || first.projectId) || null,
+    defaultProjectName: (first && (first.name || first.title)) || null,
+  };
+}
+
+const SCOPE_META = {
+  org: { kicker: 'Organization', ring: 'var(--amber)', srcClass: 'sx-src-org' },
+  project: { kicker: 'Project', ring: 'var(--accent)', srcClass: 'sx-src-project' },
+  user: { kicker: 'User', ring: 'var(--green)', srcClass: 'sx-src-user' },
+};
+
+function sxHeader() {
+  return el('header', { class: 'sx-head' }, [
+    el('p', { class: 'sx-eyebrow' }, 'Workspace configuration'),
+    el('h1', {}, 'Settings'),
+    el('p', {}, 'Configuration flows down: the organization sets the boundary, projects narrow it, people choose inside what is left. Pick the level you are editing, then open only the parts you want to change.'),
+  ]);
+}
+
+function scopeLadder(scopeState, identity, rerender) {
+  const projectName = identity.defaultProjectName || 'Project';
+  const rows = [
+    { id: 'org', name: identity.orgName, meta: 'Boundary for every project', enabled: identity.hasOrg },
+    { id: 'project', name: projectName, meta: identity.defaultProjectId ? 'Narrows the org list' : 'No project selected', enabled: Boolean(identity.defaultProjectId) },
+    { id: 'user', name: identity.userEmail, meta: 'Chooses inside what is left', enabled: true },
+  ];
+  const wrap = el('div', { class: 'sx-scopes' });
+  for (const r of rows) {
+    const active = r.id === scopeState.scope;
+    const btn = el('button', {
+      type: 'button',
+      class: `sx-scope${active ? ' active' : ''}`,
+      ...(r.enabled ? {} : { disabled: 'disabled' }),
+      'aria-pressed': active ? 'true' : 'false',
+    }, [
+      el('span', { class: 'sx-scope-kicker' }, [el('span', { class: 'sx-dot' }), SCOPE_META[r.id].kicker]),
+      el('span', { class: 'sx-scope-name', dataset: { i18nSkip: 'true' } }, r.name),
+      el('span', { class: 'sx-scope-meta' }, r.meta),
+    ]);
+    if (r.enabled) btn.addEventListener('click', () => { scopeState.scope = r.id; rerender(); });
+    wrap.append(btn);
+  }
+  return wrap;
+}
+
+function editingBanner(scopeState, ctx) {
+  const scope = scopeState.scope;
+  const note = scope === 'org'
+    ? 'Organization level. What you deny here can never be re-enabled by a project or a person.'
+    : scope === 'project'
+      ? 'Project level. You may narrow the organization list further, never widen it.'
+      : 'User level. Pick your working set from what the project allows.';
+  const catalog = (ctx.presets && ctx.presets.presets) || [];
+  const inherit = `${catalog.length} models in catalog · governed per scope`;
+  return el('div', { class: 'sx-editing' }, [
+    el('span', { class: 'sx-editing-tag' }, 'Editing'),
+    el('span', { class: 'sx-editing-note' }, note),
+    el('span', { class: 'sx-editing-inherit' }, inherit),
+  ]);
+}
+
+function sxSecHead(title, hint) {
+  return el('div', { class: 'sx-sec-head' }, [
+    el('h2', {}, title),
+    hint ? el('span', { class: 'sx-sec-hint' }, hint) : null,
+  ]);
+}
+
+/* ===================== Redesign: governance (model catalog) ===================== */
+
+function fmtTokens(n) {
+  if (!Number.isFinite(n)) return '—';
+  if (n >= 1e6) return `${+(n / 1e6).toFixed(n % 1e6 ? 1 : 0)}M`;
+  if (n >= 1e3) return `${+(n / 1e3).toFixed(n % 1e3 ? 1 : 0)}K`;
+  return String(n);
+}
+
+function modelPrice(preset) {
+  const c = preset.cost;
+  if (!c || !Number.isFinite(c.inputPer1M) || !Number.isFinite(c.outputPer1M)) return 'self-hosted';
+  return `$${c.inputPer1M} / $${c.outputPer1M} per 1M`;
+}
+
+function providerLabel(id) {
+  return PROVIDER_LABELS[id] || id;
+}
+
+function modelCatalogRow(preset) {
+  const provLabel = providerLabel(preset.provider);
+  const name = preset.name || preset.model || preset.id;
+  const ctxTok = fmtTokens(preset.limits && preset.limits.contextWindow);
+  const outTok = fmtTokens(preset.limits && preset.limits.maxOutputTokens);
+  const spec = `${provLabel} · ctx ${ctxTok} · out ${outTok} · ${modelPrice(preset)}`;
+  return el('div', { class: 'sx-row' }, [
+    el('span', { class: 'sx-badge', dataset: { i18nSkip: 'true' } }, (provLabel[0] || '?').toUpperCase()),
+    el('div', { style: 'min-width:0' }, [
+      el('div', { class: 'sx-row-name', dataset: { i18nSkip: 'true' } }, name),
+      el('div', { class: 'sx-row-spec', dataset: { i18nSkip: 'true' } }, spec),
+    ]),
+    el('span', { class: 'sx-tag ok' }, 'Allowed'),
+  ]);
+}
+
+function governanceSection(ctx) {
+  const catalog = (ctx.presets && ctx.presets.presets) || [];
+  const card = el('div', { class: 'sx-card' }, [
+    el('div', { class: 'sx-card-head bordered' }, [
+      el('div', { style: 'min-width:0' }, [
+        el('div', { class: 'sx-card-title' }, 'Model catalog'),
+        el('div', { class: 'sx-card-sub' }, 'Every model the agents can be pointed at.'),
+      ]),
+      el('span', { class: 'sx-src' }, `${catalog.length} models`),
+    ]),
+    ...catalog.map(modelCatalogRow),
+    el('div', { class: 'sx-card-foot' }, 'Per-scope allow / deny governance (org ceiling → project subtract → user shortlist) ships next — catalog shown read-only.'),
+  ]);
+  return el('section', { class: 'sx-section' }, [
+    sxSecHead('Allow & deny lists', 'Governs which models each scope may use'),
+    card,
+  ]);
+}
+
+/* ===================== Redesign: models & runtime ===================== */
+
+function modelsRuntimeSection(ctx, llm) {
+  return el('section', { class: 'sx-section', id: 'settings-models' }, [
+    sxSecHead('Models & runtime', 'Complexity sets every task model. Override any piece below.'),
+    sxComplexity(ctx),
+    providerTiles(ctx),
+    el('div', { class: 'sx-card sx-card-pad' }, [
+      el('div', { class: 'sx-card-head' }, [
+        el('div', {}, [
+          el('div', { class: 'sx-card-title' }, 'Task models'),
+          el('div', { class: 'sx-card-sub' }, 'Assign a provider, model, and reasoning depth per role.'),
+        ]),
+      ]),
+      llm,
+    ]),
+    runtimeTiles(ctx),
+  ]);
+}
+
+function sxComplexity(ctx) {
+  const tiers = [...((ctx.presets && ctx.presets.complexityTiers) || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+  const body = el('div', { class: 'sx-card sx-card-pad' });
+  const render = () => {
+    clear(body);
+    if (!tiers.length) {
+      body.append(el('p', { class: 'muted' }, 'No complexity tiers are defined in the model catalog.'));
+      return;
+    }
+    const current = ctx.settings.complexityTier || 'custom';
+    const currentIdx = tiers.findIndex((t) => t.id === current);
+    const value = currentIdx >= 0 ? currentIdx : tiers.length; // last+1 → Custom
+    const sourceChip = el('span', { class: 'sx-src' }, currentIdx >= 0 ? 'Applied' : 'Custom');
+    const slider = el('input', {
+      type: 'range', min: '0', max: String(tiers.length), step: '1', value: String(value),
+      style: 'width:100%', 'aria-label': 'Solution complexity',
+    });
+    const labels = el('div', { class: 'sx-cx-labels' }, [
+      ...tiers.map((t, i) => el('span', {
+        dataset: { i18nSkip: 'true' },
+        style: `text-align:${i === 0 ? 'left' : 'center'};color:${i === Number(slider.value) ? 'var(--accent-2)' : 'var(--muted-2)'}`,
+      }, t.label)),
+      el('span', { style: 'text-align:right' }, 'Custom'),
+    ]);
+    const est = estimateMonthlyCostUsd(ctx);
+    const execProvider = roleProvider(ctx.settings, 'execution');
+    const execModel = currentParameters(ctx.settings, execProvider).model || 'Choose model';
+    const execReason = currentParameters(ctx.settings, execProvider).reasoningEffort;
+    const stats = el('div', { class: 'sx-cx-stats' }, [
+      el('div', { class: 'sx-cx-stat' }, [el('div', { class: 'sx-cx-k' }, 'Est. spend'), el('div', { class: 'sx-cx-v', dataset: { i18nSkip: 'true' } }, est === null ? 'varies' : `~$${est}/mo`)]),
+      el('div', { class: 'sx-cx-stat' }, [el('div', { class: 'sx-cx-k' }, 'Reasoning'), el('div', { class: 'sx-cx-v', dataset: { i18nSkip: 'true' } }, (REASONING_META[execReason] && REASONING_META[execReason].label) || '—')]),
+      el('div', { class: 'sx-cx-stat' }, [el('div', { class: 'sx-cx-k' }, 'Execution model'), el('div', { class: 'sx-cx-v', dataset: { i18nSkip: 'true' } }, execModel)]),
+    ]);
+    const note = el('p', { class: 'sx-cx-note' });
+    const describe = () => {
+      const tier = tiers[Number(slider.value)] || null;
+      note.textContent = tier ? tier.description : 'Models were set individually — the dial reads Custom.';
+      [...labels.children].forEach((span, i) => { span.style.color = i === Number(slider.value) ? 'var(--accent-2)' : 'var(--muted-2)'; });
+    };
+    slider.addEventListener('input', describe);
+    slider.addEventListener('change', async () => {
+      const tier = tiers[Number(slider.value)];
+      if (!tier) { describe(); return; } // Custom position is never applied
+      slider.disabled = true;
+      try {
+        const res = await api.applyLlmTier(tier.id);
+        Object.assign(ctx.settings, res && res.settings ? res.settings : res);
+        toast(`Complexity set to ${tier.label}.`, 'ok');
+        if (ctx.rebuild) ctx.rebuild();
+        render();
+      } catch (err) { toast(err.message, 'err'); slider.disabled = false; }
+    });
+    body.append(
+      el('div', { class: 'sx-card-head' }, [
+        el('div', {}, [
+          el('div', { class: 'sx-card-title' }, 'Complexity'),
+          el('div', { class: 'sx-card-sub' }, 'One dial for model choice and reasoning depth across every role.'),
+        ]),
+        sourceChip,
+      ]),
+      slider, labels, stats, note,
+    );
+    describe();
+  };
+  ctx.refreshComplexity = render;
+  render();
+  return body;
+}
+
+function providerTiles(ctx) {
+  const card = el('div', { class: 'sx-card sx-card-pad' });
+  const render = () => {
+    clear(card);
+    const active = roleProvider(ctx.settings, 'execution');
+    const tiles = el('div', { class: 'sx-tiles' });
+    for (const opt of PROVIDER_PICKER) {
+      const selected = opt.id === active || (opt.id === 'ollama' && ['ollama', 'lmstudio', 'omlx'].includes(active));
+      const tile = el('button', { type: 'button', class: `sx-tile${selected ? ' active' : ''}`, 'aria-pressed': selected ? 'true' : 'false' }, [
+        brandIcon(opt.icon, { label: opt.label }),
+        el('span', { style: 'min-width:0' }, [
+          el('span', { class: 'sx-tile-name' }, opt.label),
+          el('span', { class: 'sx-tile-meta' }, opt.hint || 'Hosted'),
+        ]),
+      ]);
+      tile.addEventListener('click', async () => {
+        [...tiles.querySelectorAll('button')].forEach((b) => { b.disabled = true; });
+        try {
+          const ok = await cascadeProviderToAllRoles(ctx, opt.id);
+          if (ok) { toast(`All models set to ${opt.label}.`, 'ok'); if (ctx.rebuild) ctx.rebuild(); }
+        } catch (err) { toast(err.message, 'err'); }
+        render();
+      });
+      tiles.append(tile);
+    }
+    card.append(
+      el('div', { class: 'sx-card-head' }, [
+        el('div', {}, [
+          el('div', { class: 'sx-card-title' }, 'Default provider'),
+          el('div', { class: 'sx-card-sub' }, 'Applies to every task model unless a role overrides it.'),
+        ]),
+      ]),
+      tiles,
+    );
+  };
+  render();
+  return card;
+}
+
+const HARNESS_TILES = Object.freeze([
+  { id: 'deepagent', name: 'DeepAgent SDK' },
+  { id: 'codex-sdk', name: 'Codex SDK' },
+  { id: 'claude-agent-sdk', name: 'Claude SDK' },
+  { id: 'antigravity-sdk', name: 'Antigravity SDK' },
+]);
+
+function harnessMeta(id, ctx) {
+  if (id === 'codex-sdk') return ctx.codex && ctx.codex.connected ? 'Ready' : 'Sign-in needed';
+  if (id === 'claude-agent-sdk') return ctx.claude && ctx.claude.connected ? 'Ready' : 'Sign-in needed';
+  if (id === 'antigravity-sdk') return ctx.settings.hasAntigravityApiKey ? 'Ready' : 'Gemini API key needed';
+  return 'Ready';
+}
+
+function runtimeTiles(ctx) {
+  const card = el('div', { class: 'sx-card sx-card-pad' });
+  const render = () => {
+    clear(card);
+    const active = ctx.settings.agentRuntime || 'deepagent';
+    const tiles = el('div', { class: 'sx-tiles' });
+    for (const h of HARNESS_TILES) {
+      const selected = h.id === active;
+      const tile = el('button', { type: 'button', class: `sx-tile block${selected ? ' active' : ''}` }, [
+        el('span', { class: 'sx-tile-name' }, h.name),
+        el('span', { class: 'sx-tile-meta' }, harnessMeta(h.id, ctx)),
+      ]);
+      tile.addEventListener('click', async () => {
+        [...tiles.querySelectorAll('button')].forEach((b) => { b.disabled = true; });
+        try {
+          const res = await api.saveAgentRuntime({ agentRuntime: h.id, workflowPattern: ctx.settings.workflowPattern || 'sequential' });
+          Object.assign(ctx.settings, res && res.settings ? res.settings : res);
+          ctx.settings.agentRuntime = h.id;
+          toast(`Runtime set to ${h.name}.`, 'ok');
+        } catch (err) { toast(err.message, 'err'); }
+        render();
+      });
+      tiles.append(tile);
+    }
+    const workflow = el('select', { style: 'width:100%' }, [
+      ['sequential', 'Sequential'], ['parallel', 'Fan-out'], ['evaluator', 'Evaluator / retry'], ['supervisor', 'Supervisor handoff'],
+    ].map(([v, l]) => el('option', { value: v, ...((ctx.settings.workflowPattern || 'sequential') === v ? { selected: 'selected' } : {}) }, l)));
+    workflow.addEventListener('change', async () => {
+      try {
+        await api.saveAgentRuntime({ agentRuntime: ctx.settings.agentRuntime || 'deepagent', workflowPattern: workflow.value });
+        ctx.settings.workflowPattern = workflow.value;
+        toast('Workflow pattern saved.', 'ok');
+      } catch (err) { toast(err.message, 'err'); }
+    });
+    const tracing = el('select', { style: 'width:100%' }, [
+      ['on', 'LangSmith (on)'], ['off', 'Off'],
+    ].map(([v, l]) => el('option', { value: v, ...((ctx.settings.langsmithTracing ? 'on' : 'off') === v ? { selected: 'selected' } : {}) }, l)));
+    tracing.addEventListener('change', async () => {
+      try {
+        await api.saveLangsmith({ langsmithTracing: tracing.value === 'on' });
+        ctx.settings.langsmithTracing = tracing.value === 'on';
+        toast('Tracing preference saved.', 'ok');
+      } catch (err) { toast(err.message, 'err'); }
+    });
+    card.append(
+      el('div', { class: 'sx-card-head' }, [
+        el('div', {}, [
+          el('div', { class: 'sx-card-title' }, 'Agent runtime & workflow'),
+          el('div', { class: 'sx-card-sub' }, 'Harness for compatible runs. Credential-brokered coding stays on DeepAgent.'),
+        ]),
+      ]),
+      tiles,
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px' }, [
+        field('Workflow pattern', workflow),
+        field('Tracing', tracing),
+      ]),
+    );
+  };
+  render();
+  return card;
+}
+
+/* ===================== Redesign: connections ===================== */
+
+function connectionsSection(ctx) {
+  const settings = ctx.settings;
+  const trackerCard = el('div', { class: 'sx-card sx-card-pad' });
+  let activeTracker = ['linear', 'jira', 'asana'].includes(settings.planningProvider) ? settings.planningProvider : 'linear';
+  const renderTracker = () => {
+    clear(trackerCard);
+    const tiles = el('div', { class: 'sx-tiles' });
+    for (const opt of PM_PICKER) {
+      const selected = opt.id === activeTracker;
+      const tile = el('button', { type: 'button', class: `sx-tile${selected ? ' active' : ''}` }, [
+        brandIcon(opt.icon, { label: opt.label }),
+        el('span', { class: 'sx-tile-name' }, opt.label),
+      ]);
+      tile.addEventListener('click', async () => {
+        if (opt.id === activeTracker) return;
+        [...tiles.querySelectorAll('button')].forEach((b) => { b.disabled = true; });
+        try { await api.saveIntegrations({ planningProvider: opt.id }); activeTracker = opt.id; settings.planningProvider = opt.id; toast(`Issue tracker set to ${opt.label}.`, 'ok'); }
+        catch (err) { toast(err.message, 'err'); }
+        renderTracker();
+      });
+      tiles.append(tile);
+    }
+    trackerCard.append(
+      el('div', { class: 'sx-card-head' }, [
+        el('div', {}, [
+          el('div', { class: 'sx-card-title' }, 'Issue tracker'),
+          el('div', { class: 'sx-card-sub' }, 'Where planning reads and writes work items.'),
+        ]),
+      ]),
+      tiles,
+    );
+  };
+  renderTracker();
+
+  const planningReady = Boolean(settings.planningConfigured || settings.hasKey);
+  const repoReady = Boolean(settings.repositoryConfigured);
+  const trackerName = settings.planningProvider === 'jira' ? 'JIRA' : settings.planningProvider === 'asana' ? 'Asana' : 'Linear';
+  const services = [
+    { name: trackerName, meta: 'Issue tracker · live project views', ok: planningReady, status: planningReady ? 'Connected' : 'Needs credentials' },
+    { name: 'Repository', meta: settings.repositoryProvider === 'gitlab' ? 'GitLab · branches and merge requests' : 'GitHub · branches and pull requests', ok: repoReady, status: repoReady ? 'Connected' : 'Credentials missing' },
+    { name: 'LangSmith', meta: 'Tracing and evaluation', ok: Boolean(settings.hasLangsmithKey), status: settings.hasLangsmithKey ? 'Connected' : 'Not configured' },
+  ];
+  const servicesCard = el('div', { class: 'sx-card' }, services.map((s) => el('div', { class: 'sx-svc' }, [
+    el('div', { style: 'min-width:0' }, [
+      el('div', { class: 'sx-svc-name' }, s.name),
+      el('div', { class: 'sx-svc-meta' }, s.meta),
+    ]),
+    el('div', { class: 'sx-svc-status' }, [
+      el('span', { class: 'sx-dot', style: `background:${s.ok ? 'var(--green)' : 'var(--amber)'}` }),
+      el('span', {}, s.status),
+    ]),
+  ])));
+
+  return el('section', { class: 'sx-section', id: 'settings-connections' }, [
+    sxSecHead('Connections', 'Planning, source control, and observability'),
+    trackerCard,
+    servicesCard,
+    // Detailed credential editors reuse the existing collapsible sections.
+    integrationsSection(settings),
+    keysSection(settings),
+  ]);
+}
+
+/* ===================== Redesign: advanced (kept, collapsible) ===================== */
+
+function advancedGroup(ctx) {
+  const { configRes, modelsRes, labelsRes, membersRes, roleRes, jsonRes } = ctx.advanced;
+  return el('section', { class: 'sx-section', id: 'settings-advanced' }, [
+    sxSecHead('Accounts & advanced', 'Sign-ins, policy, automation & raw config'),
+    accountsSection(ctx),
+    policyGroup(ctx),
+    agentSection({ config: configRes.config, intervals: modelsRes.intervals || [5, 10, 15], labels: labelsRes.labels || [], view: ctx.view }),
+    roleSection({ members: membersRes.members || [], assumedRole: roleRes.assumedRole, view: ctx.view }),
+    jsonSection({ view: ctx.view, doc: (jsonRes && jsonRes.settings) || {} }),
+    settingsCommandCard({ view: ctx.view }),
+  ]);
+}
+
+/* ===================== Redesign: right rail ===================== */
+
+function sxScrollTo(id) {
+  const n = document.getElementById(id);
+  if (n) n.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function railCards(ctx, scopeState, identity) {
+  return [attentionCard(ctx), effectiveCard(ctx, scopeState), inheritanceCard(scopeState, identity)].filter(Boolean);
+}
+
+function attentionCard(ctx) {
+  const s = ctx.settings;
+  const tasks = [];
+  const usesClaude = ['thinking', 'execution', 'testing'].some((r) => roleProvider(s, r) === 'claude');
+  const usesCodex = ['thinking', 'execution', 'testing'].some((r) => roleProvider(s, r) === 'codex');
+  if (usesClaude && !(ctx.claude && ctx.claude.connected)) tasks.push({ title: 'Sign in to Anthropic', sub: "Hosted Claude models can't run until this account is connected.", action: 'Sign in', target: 'settings-advanced' });
+  if (usesCodex && !(ctx.codex && ctx.codex.connected)) tasks.push({ title: 'Sign in to OpenAI', sub: "Hosted OpenAI models can't run until this account is connected.", action: 'Sign in', target: 'settings-advanced' });
+  if (!(s.planningConfigured || s.hasKey)) tasks.push({ title: 'Connect the issue tracker', sub: 'Planning needs credentials to read and write work items.', action: 'Add credentials', target: 'settings-connections' });
+  if (!s.repositoryConfigured) tasks.push({ title: 'Add repository credentials', sub: 'Needed to read branches and open pull requests.', action: 'Add credentials', target: 'settings-connections' });
+  if (!tasks.length) return null;
+  return el('div', { class: 'sx-rail-card attention' }, [
+    el('div', { class: 'sx-rail-head attention' }, [
+      el('span', { class: 'sx-rail-kicker' }, tasks.length > 1 ? `${tasks.length} things need you` : 'One thing needs you'),
+    ]),
+    ...tasks.map((t) => el('div', { class: 'sx-task' }, [
+      el('div', { class: 'sx-task-title' }, t.title),
+      el('div', { class: 'sx-task-sub' }, t.sub),
+      el('button', { type: 'button', class: 'sx-btn primary', onclick: () => sxScrollTo(t.target) }, t.action),
+    ])),
+  ]);
+}
+
+function effectiveCard(ctx, scopeState) {
+  const s = ctx.settings;
+  const scope = scopeState.scope;
+  const forLine = scope === 'org' ? 'Applies to every project' : scope === 'project' ? 'Applies to everyone on the project' : 'Applies to your runs only';
+  const thinking = currentParameters(s, roleProvider(s, 'thinking')).model || '—';
+  const execution = currentParameters(s, roleProvider(s, 'execution')).model || '—';
+  const testing = currentParameters(s, roleProvider(s, 'testing')).model || '—';
+  const catalog = (ctx.presets && ctx.presets.presets) || [];
+  const runtimeName = (HARNESS_TILES.find((h) => h.id === (s.agentRuntime || 'deepagent')) || {}).name || 'DeepAgent SDK';
+  // Operational settings are global today → source "Global". Once per-scope
+  // persistence lands these gain org/project/user sources.
+  const rows = [
+    ['Complexity', s.complexityTier ? s.complexityTier : 'Custom', 'global'],
+    ['Provider', providerLabel(roleProvider(s, 'execution')), 'global'],
+    ['Thinking', thinking, 'global'],
+    ['Execution', execution, 'global'],
+    ['Testing', testing, 'global'],
+    ['Runtime', `${runtimeName} · ${s.workflowPattern || 'sequential'}`, 'global'],
+    ['Models', `${catalog.length} in catalog`, SCOPE_META[scope] ? scope : 'global'],
+  ];
+  return el('div', { class: 'sx-rail-card' }, [
+    el('div', { class: 'sx-rail-head' }, [
       el('div', {}, [
-        el('span', { class: 'settings-eyebrow' }, 'Workspace configuration'),
-        el('h1', {}, 'Settings'),
-        el('p', { class: 'muted settings-page-intro' }, 'Set a complexity level, pick your provider and harness, then fine-tune only what you need.'),
+        el('div', { class: 'sx-rail-kicker' }, 'Effective configuration'),
+        el('div', { class: 'sx-rail-for' }, forLine),
       ]),
     ]),
-    settingsOverview({ settings, codex: codexRes, claude: claudeRes }),
-    el('div', { class: 'settings-layout' }, [
-      el('div', { class: 'settings-content' }, groups),
-    ])
-  );
+    ...rows.map(([k, v, src]) => el('div', { class: 'sx-eff-row' }, [
+      el('span', { class: 'sx-eff-k' }, k),
+      el('span', { class: 'sx-eff-v', dataset: { i18nSkip: 'true' } }, v),
+      el('span', { class: `sx-eff-src sx-src-${src}` }, src === 'global' ? 'Global' : (SCOPE_META[src] ? SCOPE_META[src].kicker : src)),
+    ])),
+    el('div', { style: 'padding:12px 14px' }, [
+      el('button', { type: 'button', class: 'sx-btn primary sx-save', onclick: () => toast('Changes on this page save as you make them.', 'ok') }, `Save ${scope === 'org' ? 'org policy' : scope === 'project' ? 'project settings' : 'my settings'}`),
+    ]),
+  ]);
+}
+
+function inheritanceCard(scopeState, identity) {
+  const chain = [
+    { id: 'org', name: `Organization · ${identity.orgName}`, detail: 'Sets the boundary: model catalog, provider and runtime ceiling.' },
+    { id: 'project', name: `Project · ${identity.defaultProjectName || 'Project'}`, detail: 'Narrows the org list and picks defaults for the team.' },
+    { id: 'user', name: `You · ${identity.userEmail}`, detail: 'Chooses a personal working set inside what is left.' },
+  ];
+  return el('div', { class: 'sx-rail-card', style: 'padding:14px' }, [
+    el('div', { class: 'sx-rail-kicker', style: 'margin-bottom:10px' }, 'Inheritance'),
+    ...chain.map((c) => {
+      const active = c.id === scopeState.scope;
+      return el('div', { class: `sx-inh-step${active ? ' active' : ''}` }, [
+        el('span', { class: 'sx-inh-ring', style: `border-color:${SCOPE_META[c.id].ring};background:${active ? SCOPE_META[c.id].ring : 'transparent'}` }),
+        el('div', { style: 'min-width:0' }, [
+          el('div', { class: 'sx-inh-name', dataset: { i18nSkip: 'true' } }, c.name),
+          el('div', { class: 'sx-inh-detail' }, c.detail),
+        ]),
+      ]);
+    }),
+  ]);
 }
 
 /* ===================== Redesigned settings sections ===================== */
@@ -124,72 +625,7 @@ function estimateMonthlyCostUsd(ctx) {
   return Math.round(total);
 }
 
-function renderCostSummary(node, ctx) {
-  const est = estimateMonthlyCostUsd(ctx);
-  clear(node).append(
-    est === null
-      ? el('span', { class: 'muted' }, 'Indicative cost: self-hosted / varies (BYoM).')
-      : el('span', {}, [el('strong', {}, `~$${est}/mo`), el('span', { class: 'muted' }, ' indicative (Planner + Coder, assumed volume).')])
-  );
-}
-
-function complexitySection(ctx) {
-  const tiers = [...((ctx.presets && ctx.presets.complexityTiers) || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
-  const body = el('div', { class: 'complexity-section' });
-  const render = () => {
-    clear(body);
-    if (!tiers.length) {
-      body.append(el('p', { class: 'muted' }, 'No complexity tiers are defined in the model catalog.'));
-      return;
-    }
-    const current = ctx.settings.complexityTier || 'custom';
-    const currentIdx = tiers.findIndex((t) => t.id === current);
-    const value = currentIdx >= 0 ? currentIdx : tiers.length; // last+1 → Custom
-    const slider = el('input', {
-      type: 'range', min: '0', max: String(tiers.length), step: '1', value: String(value),
-      class: 'complexity-slider', 'aria-label': 'Solution complexity',
-    });
-    const ticks = el('div', { class: 'tier-ticks' }, [
-      ...tiers.map((t) => el('span', { dataset: { i18nSkip: 'true' } }, t.label)),
-      el('span', {}, 'Custom'),
-    ]);
-    const active = el('div', { class: 'complexity-active' });
-    const summary = el('div', { class: 'settings-cost-summary' });
-    const describe = () => {
-      const tier = tiers[Number(slider.value)] || null;
-      clear(active).append(
-        el('strong', { dataset: { i18nSkip: 'true' } }, tier ? tier.label : 'Custom'),
-        el('span', { class: 'muted' }, tier ? ` — ${tier.description}` : ' — models were set individually'),
-      );
-      renderCostSummary(summary, ctx);
-    };
-    slider.addEventListener('input', describe);
-    slider.addEventListener('change', async () => {
-      const tier = tiers[Number(slider.value)];
-      if (!tier) { describe(); return; } // Custom position is never applied
-      slider.disabled = true;
-      try {
-        const res = await api.applyLlmTier(tier.id);
-        Object.assign(ctx.settings, res && res.settings ? res.settings : res);
-        toast(`Complexity set to ${tier.label}.`, 'ok');
-        if (ctx.rebuild) ctx.rebuild();
-      } catch (err) {
-        toast(err.message, 'err');
-        slider.disabled = false;
-      }
-    });
-    body.append(
-      el('p', { class: 'muted settings-section-intro' }, 'Move the slider from quick to complex and every task model auto-tunes. Override any model below; the slider then reads “Custom”.'),
-      slider, ticks, active, summary,
-    );
-    describe();
-  };
-  ctx.refreshComplexity = render;
-  render();
-  return section('Complexity', 'Quick → Complex', true, [body]);
-}
-
-// ---- Provider picker (icons) ----------------------------------------------
+// ---- Provider picker cascade (used by the redesign's provider tiles) ------
 
 async function cascadeProviderToAllRoles(ctx, provider) {
   for (const entry of LLM_ROLES) {
@@ -208,77 +644,12 @@ async function cascadeProviderToAllRoles(ctx, provider) {
   return true;
 }
 
-function providerPickerSection(ctx) {
-  const grid = el('div', { class: 'provider-picker icon-picker' });
-  const render = () => {
-    clear(grid);
-    const active = roleProvider(ctx.settings, 'execution');
-    for (const opt of PROVIDER_PICKER) {
-      const selected = opt.id === active || (opt.id === 'ollama' && ['ollama', 'lmstudio', 'omlx'].includes(active));
-      const btn = el('button', {
-        type: 'button',
-        class: `provider-chip icon-chip${selected ? ' selected' : ''}`,
-        'aria-pressed': selected ? 'true' : 'false',
-      }, [
-        brandIcon(opt.icon, { label: opt.label }),
-        el('span', { class: 'icon-chip-label' }, opt.label),
-        opt.hint ? el('span', { class: 'icon-chip-hint muted' }, opt.hint) : null,
-      ]);
-      btn.addEventListener('click', async () => {
-        [...grid.querySelectorAll('button')].forEach((b) => { b.disabled = true; });
-        try {
-          const ok = await cascadeProviderToAllRoles(ctx, opt.id);
-          if (ok) { toast(`All models set to ${opt.label}.`, 'ok'); if (ctx.rebuild) ctx.rebuild(); }
-        } catch (err) { toast(err.message, 'err'); }
-        render();
-      });
-      grid.append(btn);
-    }
-  };
-  render();
-  return section('Model provider', 'Applies to every task model', true, [
-    el('p', { class: 'muted settings-section-intro' }, 'Pick one provider for all task models, then fine-tune per role below. Default is Claude.'),
-    grid,
-  ]);
-}
-
 // ---- Project management tool (icons) --------------------------------------
 
 const PM_PICKER = Object.freeze([
   { id: 'linear', label: 'Linear', icon: 'linear' },
   { id: 'jira', label: 'JIRA', icon: 'jira' },
 ]);
-
-function pmPickerSection(settings) {
-  const grid = el('div', { class: 'pm-picker icon-picker' });
-  let active = ['linear', 'jira', 'asana'].includes(settings.planningProvider) ? settings.planningProvider : 'linear';
-  const render = () => {
-    clear(grid);
-    for (const opt of PM_PICKER) {
-      const selected = opt.id === active;
-      const btn = el('button', {
-        type: 'button', class: `pm-chip icon-chip${selected ? ' selected' : ''}`,
-        'aria-pressed': selected ? 'true' : 'false',
-      }, [brandIcon(opt.icon, { label: opt.label }), el('span', { class: 'icon-chip-label' }, opt.label)]);
-      btn.addEventListener('click', async () => {
-        if (opt.id === active) return;
-        [...grid.querySelectorAll('button')].forEach((b) => { b.disabled = true; });
-        try {
-          await api.saveIntegrations({ planningProvider: opt.id });
-          active = opt.id;
-          toast(`Project management set to ${opt.label}.`, 'ok');
-        } catch (err) { toast(err.message, 'err'); }
-        render();
-      });
-      grid.append(btn);
-    }
-  };
-  render();
-  return section('Project management', 'Where issues are tracked', true, [
-    el('p', { class: 'muted settings-section-intro' }, 'Choose the issue tracker. Linear is fully wired; JIRA also needs its credentials below. Default is Linear.'),
-    grid,
-  ]);
-}
 
 // ---- Hosted account status + sign-in (Accounts, kept last) ----------------
 
@@ -527,137 +898,6 @@ function policyGroup(ctx) {
     ]);
   })();
   return wrap;
-}
-
-function settingsGroup(id, title, description, children) {
-  const headingId = `${id}-heading`;
-  return el('section', { class: 'settings-group', id, 'aria-labelledby': headingId }, [
-    el('div', { class: 'settings-group-head' }, [
-      el('h2', { id: headingId }, title),
-      el('p', { class: 'muted' }, description),
-    ]),
-    ...children,
-  ]);
-}
-
-function providerConfigured(settings, provider, codex, claude) {
-  if (provider === 'codex') return Boolean(codex && codex.connected);
-  if (provider === 'claude') return Boolean(claude && claude.connected);
-  if (provider === 'antigravity') return Boolean(settings.hasAntigravityApiKey && settings.antigravityModel);
-  if (provider === 'lmstudio') return Boolean(settings.lmstudioHost && settings.lmstudioModel);
-  if (provider === 'omlx') return Boolean(settings.omlxHost && settings.omlxModel);
-  if (provider === 'huggingface') return Boolean(settings.hasHuggingfaceApiKey && settings.huggingfaceModel);
-  return Boolean(settings.ollamaHost && settings.ollamaModel);
-}
-
-function settingsOverview({ settings, codex, claude }) {
-  // Show the two active task roles (Thinking = planner, Execution = coder);
-  // Testing is reserved and intentionally omitted from the health overview.
-  const roleCard = (role, label) => {
-    const provider = roleProvider(settings, role) || 'ollama';
-    const params = currentParameters(settings, provider);
-    return ['#settings-models', label, providerConfigured(settings, provider, codex, claude),
-      `${PROVIDER_LABELS[provider] || provider} · ${params.model || 'Choose model'}`];
-  };
-  const planningReady = Boolean(settings.planningConfigured || settings.hasKey);
-  const repositoryReady = Boolean(settings.repositoryConfigured);
-  const cards = [
-    roleCard('thinking', 'Thinking model'),
-    roleCard('execution', 'Execution model'),
-    ['#settings-connections', 'Planning', planningReady, settings.planningProvider === 'jira' ? 'Jira' : settings.planningProvider === 'asana' ? 'Asana' : 'Linear'],
-    ['#settings-connections', 'Repository', repositoryReady, settings.repositoryProvider === 'gitlab' ? 'GitLab' : 'GitHub'],
-  ];
-  return el('section', { class: 'settings-overview', 'aria-label': 'Configuration health' }, cards.map(([href, label, ready, value]) =>
-    el('a', { class: `settings-health-card ${ready ? 'ok' : 'warn'}`, href }, [
-      el('span', { class: 'settings-health-label' }, label),
-      el('strong', { dataset: { i18nSkip: 'true' } }, value),
-      el('small', {}, ready ? 'Configured' : 'Needs attention'),
-    ])
-  ));
-}
-
-/* ---------------------- Runtime & workflow pattern --------------------- */
-
-function runtimeSection({ settings, codex, claude }) {
-  const codexReady = codex.connected && settings.llmProvider === 'codex';
-  const claudeReady = claude.connected && settings.llmProvider === 'claude';
-  const antigravityReady = Boolean(settings.hasAntigravityApiKey) && settings.llmProvider === 'antigravity';
-  const runtimes = [
-    ['deepagent', 'DeepAgent SDK'],
-    ['codex-sdk', 'Codex SDK'],
-    ['claude-agent-sdk', 'Claude Agent SDK'],
-    ['antigravity-sdk', 'Antigravity SDK'],
-  ];
-  const patterns = [
-    ['sequential', 'Sequential'],
-    ['parallel', 'Parallel / fan-out'],
-    ['evaluator', 'Evaluator / retry'],
-    ['supervisor', 'Supervisor / handoff'],
-  ];
-  const runtime = el('select', {}, runtimes.map(([value, label]) =>
-    el('option', { value, ...(settings.agentRuntime === value ? { selected: 'selected' } : {}) }, label)
-  ));
-  const pattern = el('select', {}, patterns.map(([value, label]) =>
-    el('option', { value, ...((settings.workflowPattern || 'sequential') === value ? { selected: 'selected' } : {}) }, label)
-  ));
-  const status = el('span', { class: 'muted', role: 'status', style: 'font-size:11px' });
-  const save = el('button', { class: 'primary', type: 'button' }, 'Save runtime');
-  const readiness = el('div', { class: 'runtime-readiness' }, [
-    el('span', {}, [el('strong', {}, 'DeepAgent'), el('small', {}, 'Ready')]),
-    el('span', {}, [el('strong', {}, 'Codex SDK'), el('small', {}, codexReady ? 'Ready' : codex.connected ? 'Select Codex hosted slot' : 'Sign-in needed')]),
-    el('span', {}, [el('strong', {}, 'Claude SDK'), el('small', {}, claudeReady ? 'Ready' : claude.connected ? 'Select Claude hosted slot' : 'Sign-in needed')]),
-    el('span', {}, [el('strong', {}, 'Antigravity SDK'), el('small', {}, antigravityReady ? 'Ready' : settings.hasAntigravityApiKey ? 'Select Antigravity hosted slot' : 'Gemini API key needed')]),
-  ]);
-
-  const updateHint = () => {
-    if (runtime.value === 'codex-sdk') {
-      status.textContent = codexReady
-        ? 'Uses the hosted Codex slot for compatible planning runs; brokered coding stays on DeepAgent.'
-        : 'Choose Codex in the Hosted model slot and sign in; until then runs safely use DeepAgent.';
-    } else if (runtime.value === 'claude-agent-sdk') {
-      status.textContent = claudeReady
-        ? 'Uses the hosted Claude slot for compatible planning runs; brokered coding stays on DeepAgent.'
-        : 'Choose Claude in the Hosted model slot and sign in; until then runs safely use DeepAgent.';
-    } else if (runtime.value === 'antigravity-sdk') {
-      status.textContent = antigravityReady
-        ? 'Uses the hosted Antigravity (Gemini) slot for compatible planning runs; brokered coding stays on DeepAgent.'
-        : 'Choose Antigravity in the Hosted model slot and add a Gemini API key; until then runs safely use DeepAgent.';
-    } else {
-      status.textContent = 'Uses the existing skills-and-tools DeepAgent runtime.';
-    }
-  };
-  runtime.addEventListener('change', updateHint);
-  updateHint();
-
-  save.addEventListener('click', async () => {
-    save.disabled = true;
-    save.textContent = 'Saving…';
-    try {
-      const next = await api.saveAgentRuntime({
-        agentRuntime: runtime.value,
-        workflowPattern: pattern.value,
-      });
-      status.textContent = `Saved ${next.agentRuntime} with the ${next.workflowPattern} pattern. New runs will use this setup.`;
-      toast('Agent runtime saved.', 'ok');
-    } catch (err) {
-      status.textContent = err.message;
-      toast(err.message, 'err');
-    } finally {
-      save.disabled = false;
-      save.textContent = 'Save runtime';
-    }
-  });
-
-  const runtimeLabel = runtimes.find(([id]) => id === (settings.agentRuntime || 'deepagent'))?.[1] || 'DeepAgent SDK';
-  const patternLabel = patterns.find(([id]) => id === (settings.workflowPattern || 'sequential'))?.[1] || 'Sequential';
-  return section('Agent runtime & workflow', `${runtimeLabel} · ${patternLabel}`, true, [
-    el('p', { class: 'muted', style: 'font-size:12px;margin-top:0' }, 'Select the SDK for compatible planning work. Credential-brokered coding runs use DeepAgent. Every effective runtime creates a LangSmith root trace when tracing is enabled.'),
-    readiness,
-    field('Harness (agent SDK)', runtime, 'Execution harness for compatible runs: deepagent, codex, or claudecode. This value is tagged on every LangSmith trace.'),
-    field('Workflow pattern', pattern, 'Patterns are bounded orchestration guidance: sequential, fan-out, evaluator/retry, or supervisor/handoff.'),
-    el('div', { class: 'row' }, [save, status]),
-    el('a', { class: 'detail-link', href: '#/workflows' }, 'Compare workflow patterns'),
-  ]);
 }
 
 /* ----------------------------- Settings JSON ---------------------------- */

@@ -7,7 +7,7 @@
 Directory-based community: e2e
 
 - **Size**: 38 nodes
-- **Cohesion**: 0.1087
+- **Cohesion**: 0.1080
 - **Dominant Language**: javascript
 
 ## Members
@@ -45,13 +45,13 @@ Directory-based community: e2e
 | page1 | Function | ./e2e/organization-flow.spec.js | 73-73 |
 | test:signed-in user: personal project → create org → org project → add person → add member@L136 | Test | ./e2e/organization-flow.spec.js | 136-188 |
 | json | Function | ./e2e/page-loading.spec.js | 5-11 |
-| test:settings renders task-model controls without a view error@L32 | Test | ./e2e/page-loading.spec.js | 32-49 |
-| test:workspace renders while optional Linear validation is stalled@L51 | Test | ./e2e/page-loading.spec.js | 51-106 |
-| test:authentication configuration failure locks the workspace before protected API calls@L108 | Test | ./e2e/page-loading.spec.js | 108-130 |
-| test:authenticated Firebase session adds a bearer token and ignores an unrelated provider 401@L132 | Test | ./e2e/page-loading.spec.js | 132-218 |
-| authorizedJson | Function | ./e2e/page-loading.spec.js | 134-139 |
-| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L220 | Test | ./e2e/page-loading.spec.js | 220-264 |
-| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L266 | Test | ./e2e/page-loading.spec.js | 266-289 |
+| test:settings renders task-model controls without a view error@L32 | Test | ./e2e/page-loading.spec.js | 32-52 |
+| test:workspace renders while optional Linear validation is stalled@L54 | Test | ./e2e/page-loading.spec.js | 54-109 |
+| test:authentication configuration failure locks the workspace before protected API calls@L111 | Test | ./e2e/page-loading.spec.js | 111-133 |
+| test:authenticated Firebase session adds a bearer token and ignores an unrelated provider 401@L135 | Test | ./e2e/page-loading.spec.js | 135-221 |
+| authorizedJson | Function | ./e2e/page-loading.spec.js | 137-142 |
+| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L223 | Test | ./e2e/page-loading.spec.js | 223-267 |
+| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L269 | Test | ./e2e/page-loading.spec.js | 269-292 |
 
 ## Execution Flows
 
@@ -61,12 +61,12 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (207 edge(s))
-- `locator` (126 edge(s))
+- `expect` (209 edge(s))
+- `locator` (128 edge(s))
 - `route` (86 edge(s))
-- `toBeVisible` (48 edge(s))
+- `toBeVisible` (49 edge(s))
 - `getByRole` (42 edge(s))
-- `toHaveCount` (38 edge(s))
+- `toHaveCount` (39 edge(s))
 - `request` (34 edge(s))
 - `toContainText` (27 edge(s))
 - `click` (27 edge(s))
@@ -79,12 +79,12 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `expect` (203 edge(s))
-- `locator` (124 edge(s))
-- `toBeVisible` (47 edge(s))
+- `expect` (205 edge(s))
+- `locator` (126 edge(s))
+- `toBeVisible` (48 edge(s))
 - `route` (42 edge(s))
 - `getByRole` (40 edge(s))
-- `toHaveCount` (38 edge(s))
+- `toHaveCount` (39 edge(s))
 - `toContainText` (27 edge(s))
 - `click` (26 edge(s))
 - `toHaveText` (23 edge(s))

@@ -29,7 +29,6 @@ import { renderAgentJobs } from './views/agent-jobs.js';
 import { renderCalls } from './views/calls.js';
 import { renderAnalytics } from './views/analytics.js';
 import { renderCost } from './views/cost.js';
-import { renderWorkflows } from './views/workflows.js';
 import { renderTroubleshooting } from './views/troubleshooting.js';
 import { renderSettings } from './views/settings.js';
 import { renderOrganization } from './views/organization.js';
@@ -46,7 +45,6 @@ const routes = {
   board: renderBoard,
   analytics: renderAnalytics,
   cost: renderCost,
-  workflows: renderWorkflows,
   troubleshooting: renderTroubleshooting,
   settings: renderSettings,
   organization: renderOrganization,
@@ -61,7 +59,6 @@ const routeMeta = {
   board: { titleKey: 'board', eyebrowKey: 'planning' },
   analytics: { titleKey: 'analytics', eyebrowKey: 'insights' },
   cost: { titleKey: 'cost', eyebrowKey: 'insights' },
-  workflows: { titleKey: 'workflows', eyebrowKey: 'insights' },
   troubleshooting: { titleKey: 'troubleshooting', eyebrowKey: 'system' },
   settings: { titleKey: 'settings', eyebrowKey: 'system' },
   organization: { titleKey: 'organization', eyebrowKey: 'workspace' },

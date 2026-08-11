@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 447 nodes
-- **Cohesion**: 0.4933
+- **Size**: 457 nodes
+- **Cohesion**: 0.4969
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,29 +26,29 @@ Directory-based community: public/js
 | setApiBase | Function | ./public/js/api.js | 29-32 |
 | notifyAuthenticationRequired | Function | ./public/js/api.js | 34-38 |
 | request | Function | ./public/js/api.js | 40-83 |
-| currentRoute | Function | ./public/js/app.js | 74-81 |
-| applyMenuPermissions | Function | ./public/js/app.js | 85-96 |
-| maybeRefreshConnection | Function | ./public/js/app.js | 100-103 |
-| maybeRefreshRole | Function | ./public/js/app.js | 104-109 |
-| syncShell | Function | ./public/js/app.js | 111-136 |
-| syncSidebar | Function | ./public/js/app.js | 138-175 |
-| syncSidebarCollapsed | Function | ./public/js/app.js | 177-187 |
-| initShellInteractions | Function | ./public/js/app.js | 189-218 |
-| closeAtBreakpoint | Function | ./public/js/app.js | 213-216 |
-| refreshConnection | Function | ./public/js/app.js | 220-259 |
-| refreshRole | Function | ./public/js/app.js | 262-280 |
-| freshView | Function | ./public/js/app.js | 284-292 |
-| setAuthenticationLocked | Function | ./public/js/app.js | 294-301 |
-| beginSignIn | Function | ./public/js/app.js | 303-311 |
-| beginMicrosoftSignIn | Function | ./public/js/app.js | 313-321 |
-| authProviderButtons | Function | ./public/js/app.js | 328-346 |
-| beginSignOut | Function | ./public/js/app.js | 348-356 |
-| renderAuthControl | Function | ./public/js/app.js | 358-390 |
-| renderAuthenticationGate | Function | ./public/js/app.js | 392-451 |
-| renderSignInRequired | Function | ./public/js/app.js | 456-468 |
-| renderAccessDenied | Function | ./public/js/app.js | 470-482 |
-| render | Function | ./public/js/app.js | 484-536 |
-| capitalize | Function | ./public/js/app.js | 538-541 |
+| currentRoute | Function | ./public/js/app.js | 71-78 |
+| applyMenuPermissions | Function | ./public/js/app.js | 82-93 |
+| maybeRefreshConnection | Function | ./public/js/app.js | 97-100 |
+| maybeRefreshRole | Function | ./public/js/app.js | 101-106 |
+| syncShell | Function | ./public/js/app.js | 108-133 |
+| syncSidebar | Function | ./public/js/app.js | 135-172 |
+| syncSidebarCollapsed | Function | ./public/js/app.js | 174-184 |
+| initShellInteractions | Function | ./public/js/app.js | 186-215 |
+| closeAtBreakpoint | Function | ./public/js/app.js | 210-213 |
+| refreshConnection | Function | ./public/js/app.js | 217-256 |
+| refreshRole | Function | ./public/js/app.js | 259-277 |
+| freshView | Function | ./public/js/app.js | 281-289 |
+| setAuthenticationLocked | Function | ./public/js/app.js | 291-298 |
+| beginSignIn | Function | ./public/js/app.js | 300-308 |
+| beginMicrosoftSignIn | Function | ./public/js/app.js | 310-318 |
+| authProviderButtons | Function | ./public/js/app.js | 325-343 |
+| beginSignOut | Function | ./public/js/app.js | 345-353 |
+| renderAuthControl | Function | ./public/js/app.js | 355-387 |
+| renderAuthenticationGate | Function | ./public/js/app.js | 389-448 |
+| renderSignInRequired | Function | ./public/js/app.js | 453-465 |
+| renderAccessDenied | Function | ./public/js/app.js | 467-479 |
+| render | Function | ./public/js/app.js | 481-533 |
+| capitalize | Function | ./public/js/app.js | 535-538 |
 | setState | Function | ./public/js/auth.js | 45-48 |
 | withinSessionTimeout | Function | ./public/js/auth.js | 50-62 |
 | loadConfiguration | Function | ./public/js/auth.js | 64-93 |
@@ -65,7 +65,7 @@ Directory-based community: public/js
 | completeSignIn | Function | ./public/js/auth.js | 259-280 |
 | signIn | Function | ./public/js/auth.js | 282-288 |
 
-*... and 397 more members.*
+*... and 407 more members.*
 
 ## Execution Flows
 
@@ -85,28 +85,28 @@ Directory-based community: public/js
 
 ### Outgoing
 
-- `append` (159 edge(s))
-- `addEventListener` (117 edge(s))
+- `append` (160 edge(s))
+- `addEventListener` (116 edge(s))
 - `map` (101 edge(s))
 - `String` (88 edge(s))
 - `trim` (64 edge(s))
-- `push` (57 edge(s))
+- `push` (61 edge(s))
 - `setAttribute` (54 edge(s))
-- `filter` (48 edge(s))
-- `catch` (42 edge(s))
-- `Boolean` (38 edge(s))
+- `filter` (49 edge(s))
+- `catch` (45 edge(s))
+- `Boolean` (34 edge(s))
+- `Number` (31 edge(s))
 - `isArray` (30 edge(s))
-- `Number` (29 edge(s))
+- `getElementById` (27 edge(s))
 - `join` (27 edge(s))
 - `slice` (27 edge(s))
-- `has` (26 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (133 edge(s))
-- `./public/js/views/settings.js` (92 edge(s))
+- `./public/js/api.js` (132 edge(s))
+- `./public/js/views/settings.js` (106 edge(s))
 - `./public/js/views/agent.js` (82 edge(s))
-- `./public/js/app.js` (76 edge(s))
+- `./public/js/app.js` (75 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (33 edge(s))

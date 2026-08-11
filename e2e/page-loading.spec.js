@@ -45,6 +45,9 @@ test('settings renders task-model controls without a view error', async ({ page 
   await expect(page.locator('.settings-layout')).toBeVisible();
   await expect(page.locator('.settings-index')).toHaveCount(0);
   await expect(page.locator('#view > .error-banner')).toHaveCount(0);
+  // Redesign: scope ladder (org/project/user) + sticky right rail must render.
+  await expect(page.locator('.sx-scopes .sx-scope')).toHaveCount(3);
+  await expect(page.locator('.settings-rail')).toBeVisible();
   expect(browserErrors).toEqual([]);
 });
 
