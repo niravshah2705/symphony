@@ -35,6 +35,31 @@ function enforceLlmModel(llm, effectivePolicy, catalog = publicCatalog()) {
   return next ? { ...llm, model: next.model } : llm;
 }
 
+/**
+ * Overlay the org's resolved per-scope operational prefs onto the planner `keys`
+ * for the three settings that flow through them: agentRuntime, workflowPattern,
+ * and langsmithTracing. Prefs are strings (booleans as "true"/"false"), so the
+ * tracing flag is coerced back to a boolean. Fail-open: unset prefs leave `keys`
+ * unchanged, so a run without per-scope prefs behaves exactly as before.
+ * (provider/complexity prefs are consumed elsewhere and are not overlaid here.)
+ */
+function applyPrefsToKeys(keys, prefs, step = () => {}) {
+  const p = prefs || {};
+  const next = { ...keys };
+  if (p.agentRuntime && p.agentRuntime !== next.agentRuntime) {
+    step(`Agent runtime "${p.agentRuntime}" applied from organization settings.`);
+    next.agentRuntime = p.agentRuntime;
+  }
+  if (p.workflowPattern && p.workflowPattern !== next.workflowPattern) {
+    step(`Workflow pattern "${p.workflowPattern}" applied from organization settings.`);
+    next.workflowPattern = p.workflowPattern;
+  }
+  if (p.langsmithTracing === 'true' || p.langsmithTracing === 'false') {
+    next.langsmithTracing = p.langsmithTracing === 'true';
+  }
+  return next;
+}
+
 const { CONFIG } = require('../config');
 
 /**
@@ -187,8 +212,10 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
 
     // Resolve the org's effective policy for enforcement. Fail-open: any error →
     // null → allow-all (identical to today's behaviour).
-    let effectivePolicy = null;
-    try { effectivePolicy = await resolvePolicyImpl(); } catch (_) { effectivePolicy = null; }
+    let resolved = null;
+    try { resolved = await resolvePolicyImpl(); } catch (_) { resolved = null; }
+    const effectivePolicy = (resolved && resolved.effectivePolicy) || null;
+    const opPrefs = (resolved && resolved.prefs) || {};
     const policySettings = { effectivePolicy };
     // Enforce the models policy on the resolved model (same-provider downgrade,
     // fail-open). Keeps a denied model from actually running.
@@ -196,6 +223,9 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
     if (enforcedLlm.model !== llm.model) {
       step(`Model "${llm.model}" is denied by organization policy; using allowed "${enforcedLlm.model}".`, 'warn');
     }
+    // Overlay the org's per-scope operational prefs (runtime/workflow/tracing)
+    // onto the planner keys. Fail-open: unset prefs leave keys unchanged.
+    const runKeys = applyPrefsToKeys(keys, opPrefs, step);
 
     if (milestones.length > 0) {
       // ---- RESUME: milestones already exist; ensure each has issues, then aidone.
@@ -204,7 +234,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
       let summary = { milestonesCreated: 0, issuesCreated: 0, dependenciesCreated: 0, warnings: [], resumed: true };
       if (missing.length && config.createIssues) {
         phase = 'model';
-        const gen = await generateIssuesImpl({ project, milestones: missing, config, llm: enforcedLlm, keys, onStep: step });
+        const gen = await generateIssuesImpl({ project, milestones: missing, config, llm: enforcedLlm, keys: runKeys, onStep: step });
         phase = 'planning-provider';
         summary = await applyIssuesImpl(apiKey, { project, milestones: missing, generated: gen.milestones, config, onStep: step });
         await applyAiplannedImpl(apiKey, { project, onStep: step });
@@ -220,7 +250,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
 
     // ---- NEW: no milestones yet — viability + full business plan.
     phase = 'model';
-    const result = await generatePlanImpl({ project, assumedRole: job.assumedRole, config, llm: enforcedLlm, keys, onStep: step, settings: policySettings });
+    const result = await generatePlanImpl({ project, assumedRole: job.assumedRole, config, llm: enforcedLlm, keys: runKeys, onStep: step, settings: policySettings });
     phase = 'planning-provider';
 
     if (!result.viable) {
