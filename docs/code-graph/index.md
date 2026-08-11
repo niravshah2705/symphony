@@ -11,7 +11,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | Community | Size | Link |
 |-----------|------|------|
 | agent-model | 1468 | [agent-model.md](agent-model.md) |
-| core-org | 483 | [core-org.md](core-org.md) |
+| core-org | 484 | [core-org.md](core-org.md) |
 | core-org | 353 | [core-org-2.md](core-org-2.md) |
 | e2e-test:agent | 43 | [e2e-test-agent.md](e2e-test-agent.md) |
 | gcp-log | 10 | [gcp-log.md](gcp-log.md) |
@@ -24,4 +24,4 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-test:build | 41 | [src-test-build.md](src-test-build.md) |
 | src-token | 93 | [src-token.md](src-token.md) |
 | src-tokens | 215 | [src-tokens.md](src-tokens.md) |
-| views-render | 497 | [views-render.md](views-render.md) |
+| views-render | 504 | [views-render.md](views-render.md) |

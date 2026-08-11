@@ -23,8 +23,19 @@ variable "firestore_location" {
 
 variable "artifact_repo" {
   type        = string
-  description = "Artifact Registry Docker repository name (holds the gateway/planner/coder images)."
+  description = "Artifact Registry Docker repository name for all AI Fleet service images."
   default     = "ai-fleet"
+}
+
+variable "artifact_retention_count" {
+  type        = number
+  description = "Number of most recent versions to retain for each image package in the Artifact Registry repository. Older tagged and untagged versions are deleted by the cleanup policy."
+  default     = 10
+
+  validation {
+    condition     = var.artifact_retention_count >= 1 && floor(var.artifact_retention_count) == var.artifact_retention_count
+    error_message = "artifact_retention_count must be a positive integer."
+  }
 }
 
 variable "image_tag" {
