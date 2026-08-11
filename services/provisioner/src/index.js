@@ -1,11 +1,11 @@
 'use strict';
 
 const express = require('express');
-const { CONFIG } = require('@ai-fleet/shared/config');
-const log = require('@ai-fleet/shared/logger');
-const { decodePushMessage } = require('@ai-fleet/shared/messaging/publisher');
-const { pushAuth } = require('@ai-fleet/shared/messaging/oidc');
-const { provisionTenant, teardownTenant } = require('@ai-fleet/shared/provisioning');
+const { CONFIG } = require('@ai-fleet/shared-core/config');
+const log = require('@ai-fleet/shared-core/logger');
+const { decodePushMessage } = require('@ai-fleet/shared-core/messaging/publisher');
+const { pushAuth } = require('@ai-fleet/shared-core/messaging/oidc');
+const { provisionTenant, teardownTenant } = require('@ai-fleet/shared-core/provisioning');
 const { handleMessage } = require('./handler');
 
 /**

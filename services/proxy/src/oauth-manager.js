@@ -1,11 +1,11 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared/config');
-const oauth = require('@ai-fleet/shared/agent/oauth');
+const { CONFIG } = require('@ai-fleet/shared-core/config');
+const oauth = require('@ai-fleet/shared-core/agent/oauth');
 const {
   ensureFreshClaudeTokens,
   ensureFreshCodexTokens,
-} = require('@ai-fleet/shared/agent/oauth-tokens');
+} = require('@ai-fleet/shared-core/agent/oauth-tokens');
 
 /**
  * OAuth credential resolution for the egress proxy. The proxy OWNS the refresh

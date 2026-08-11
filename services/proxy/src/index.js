@@ -1,7 +1,7 @@
 'use strict';
 
 const http = require('http');
-const log = require('@ai-fleet/shared/logger');
+const log = require('@ai-fleet/shared-core/logger');
 const { createProxyHandler } = require('./proxy');
 
 /**

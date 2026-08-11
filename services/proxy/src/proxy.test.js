@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { EGRESS_ROUTES } = require('@ai-fleet/shared/egress');
+const { EGRESS_ROUTES } = require('@ai-fleet/shared-core/egress');
 const { buildUpstreamUrl, buildForwardHeaders, filterResponseHeaders } = require('./proxy');
 const credentials = require('./credentials');
 
