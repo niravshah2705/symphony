@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 450 nodes
-- **Cohesion**: 0.4899
+- **Size**: 451 nodes
+- **Cohesion**: 0.4894
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: public/js
 | completeSignIn | Function | ./public/js/auth.js | 259-280 |
 | signIn | Function | ./public/js/auth.js | 282-288 |
 
-*... and 400 more members.*
+*... and 401 more members.*
 
 ## Execution Flows
 
@@ -93,7 +93,7 @@ Directory-based community: public/js
 - `push` (57 edge(s))
 - `setAttribute` (54 edge(s))
 - `filter` (50 edge(s))
-- `catch` (45 edge(s))
+- `catch` (46 edge(s))
 - `Boolean` (35 edge(s))
 - `has` (31 edge(s))
 - `slice` (29 edge(s))
@@ -103,8 +103,8 @@ Directory-based community: public/js
 
 ### Incoming
 
-- `./public/js/api.js` (126 edge(s))
-- `./public/js/views/settings.js` (116 edge(s))
+- `./public/js/api.js` (129 edge(s))
+- `./public/js/views/settings.js` (117 edge(s))
 - `./public/js/views/agent.js` (82 edge(s))
 - `./public/js/app.js` (73 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))

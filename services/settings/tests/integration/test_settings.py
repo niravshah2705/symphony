@@ -141,3 +141,29 @@ async def test_s2s_org_effective_policy_reflects_org_denies(client):
     assert "codex-sdk" not in domains["harness"]["effective"]
     # No user scope in the S2S resolve → effective == the org-level allowed set.
     assert domains["models"]["effective"] == domains["models"]["org"]
+
+
+async def test_org_prefs_are_readable_and_resolve_into_effective(client):
+    """Operational prefs are per-scope, READABLE (unlike secret values), and are
+    resolved into the effective response (user > project > org)."""
+    org_id = uuid.uuid4()
+    _admin, token = await make_user(
+        email="prefs@x.com", org_id=org_id, org_role=OrgRole.ORG_ADMIN
+    )
+    put = await client.put(
+        "/api/v1/settings/org",
+        headers=auth(token),
+        json={"prefs": {"complexityTier": "balanced", "agentRuntime": "codex-sdk"}},
+    )
+    assert put.status_code == 200
+    # Prefs read back verbatim (secret values would mask to {set: bool}).
+    assert put.json()["prefs"] == {"complexityTier": "balanced", "agentRuntime": "codex-sdk"}
+    # An unknown pref key is rejected by the allow-list.
+    bad = await client.put(
+        "/api/v1/settings/org", headers=auth(token), json={"prefs": {"nope": "x"}}
+    )
+    assert bad.status_code == 422
+    # Effective resolves the org prefs (this admin has no user override).
+    eff = await client.get("/api/v1/settings/effective", headers=auth(token))
+    assert eff.status_code == 200
+    assert eff.json()["prefs"]["complexityTier"] == "balanced"

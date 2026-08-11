@@ -21,7 +21,7 @@
  * are NEVER logged.
  */
 
-const EMPTY = Object.freeze({ effectivePolicy: null, values: {}, geminiApiKey: '' });
+const EMPTY = Object.freeze({ effectivePolicy: null, values: {}, geminiApiKey: '', prefs: {} });
 
 /** Build the settings-service auth headers, mirroring the gateway proxy. */
 function authHeaders({ userToken, s2sToken }) {
@@ -76,11 +76,12 @@ async function resolveEffectiveSettings(opts = {}) {
   const headers = authHeaders({ userToken, s2sToken });
   const base = String(baseUrl).replace(/\/$/, '');
   const q = projectQuery(projectId);
-  const result = { effectivePolicy: null, values: {}, geminiApiKey: '' };
+  const result = { effectivePolicy: null, values: {}, geminiApiKey: '', prefs: {} };
 
   try {
     const effective = await getJson(fetchImpl, `${base}/api/v1/settings/effective${q}`, headers);
     if (effective && effective.domains) result.effectivePolicy = effective.domains;
+    if (effective && effective.prefs) result.prefs = effective.prefs;
   } catch (err) {
     if (opts.logger && opts.logger.warn) opts.logger.warn(`settings policy resolve failed: ${err.message}`);
   }
@@ -130,10 +131,10 @@ async function resolveOrgEffectivePolicy(opts = {}) {
   const url = `${base}/api/v1/internal/s2s/orgs/${encodeURIComponent(orgId)}/effective-policy${projectQuery(projectId)}`;
   try {
     const data = await getJson(fetchImpl, url, headers);
-    return { effectivePolicy: (data && data.domains) || null };
+    return { effectivePolicy: (data && data.domains) || null, prefs: (data && data.prefs) || {} };
   } catch (err) {
     if (opts.logger && opts.logger.warn) opts.logger.warn(`org policy resolve failed: ${err.message}`);
-    return { effectivePolicy: null };
+    return { effectivePolicy: null, prefs: {} };
   }
 }
 

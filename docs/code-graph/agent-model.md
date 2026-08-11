@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1612 nodes
-- **Cohesion**: 0.1330
+- **Size**: 1614 nodes
+- **Cohesion**: 0.1331
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared
 | issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
 | applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-212 |
 
-*... and 1562 more members.*
+*... and 1564 more members.*
 
 ## Execution Flows
 
@@ -79,7 +79,7 @@ Directory-based community: packages/shared
 - **consumeLogin** (criticality: 0.61, depth: 1)
 - **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
 - **refreshTokens** (criticality: 0.61, depth: 1)
-- *... and 51 more flows.*
+- *... and 50 more flows.*
 
 ## Dependencies
 
@@ -88,7 +88,7 @@ Directory-based community: packages/shared
 - `equal` (1200 edge(s))
 - `join` (222 edge(s))
 - `String` (214 edge(s))
-- `deepEqual` (211 edge(s))
+- `deepEqual` (214 edge(s))
 - `includes` (191 edge(s))
 - `push` (151 edge(s))
 - `map` (146 edge(s))
@@ -104,7 +104,7 @@ Directory-based community: packages/shared
 ### Incoming
 
 - `equal` (1193 edge(s))
-- `deepEqual` (209 edge(s))
+- `deepEqual` (212 edge(s))
 - `./packages/shared/src/store.js` (147 edge(s))
 - `ok` (136 edge(s))
 - `strictEqual` (127 edge(s))

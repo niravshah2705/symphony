@@ -67,8 +67,8 @@ export async function renderSettings(view) {
       el('div', { class: 'settings-layout' }, [
         el('div', { class: 'settings-content' }, [
           governanceSection(ctx, scopeState),
-          modelsRuntimeSection(ctx, llm),
-          connectionsSection(ctx),
+          modelsRuntimeSection(ctx, llm, scopeState),
+          connectionsSection(ctx, scopeState),
           advancedGroup(ctx),
         ]),
         el('aside', { class: 'settings-rail' }, railCards(ctx, scopeState, identity)),
@@ -103,6 +103,19 @@ const SCOPE_META = {
   project: { kicker: 'Project', ring: 'var(--accent)', srcClass: 'sx-src-project' },
   user: { kicker: 'User', ring: 'var(--green)', srcClass: 'sx-src-user' },
 };
+
+// Record an operational override at the ACTIVE scope's prefs (readable, merge).
+// Best-effort/additive: the control also writes the global store (today's source
+// of truth), so a settings-policy outage or insufficient role is swallowed. Once
+// the agent overlays prefs, these become the authoritative per-scope values.
+function setScopePrefs(scopeState, prefs) {
+  const p = api.settingsPolicy;
+  const call = scopeState.scope === 'org' ? p.setOrgPrefs(prefs)
+    : scopeState.scope === 'project' && scopeState.projectId ? p.setProjectPrefs(scopeState.projectId, prefs)
+      : scopeState.scope === 'user' ? p.setMyPrefs(prefs)
+        : null;
+  if (call && typeof call.catch === 'function') call.catch(() => {});
+}
 
 function sxHeader() {
   return el('header', { class: 'sx-head' }, [
@@ -345,11 +358,11 @@ function governanceSection(ctx, scopeState) {
 
 /* ===================== Redesign: models & runtime ===================== */
 
-function modelsRuntimeSection(ctx, llm) {
+function modelsRuntimeSection(ctx, llm, scopeState) {
   return el('section', { class: 'sx-section', id: 'settings-models' }, [
     sxSecHead('Models & runtime', 'Complexity sets every task model. Override any piece below.'),
-    sxComplexity(ctx),
-    providerTiles(ctx),
+    sxComplexity(ctx, scopeState),
+    providerTiles(ctx, scopeState),
     el('div', { class: 'sx-card sx-card-pad' }, [
       el('div', { class: 'sx-card-head' }, [
         el('div', {}, [
@@ -359,11 +372,11 @@ function modelsRuntimeSection(ctx, llm) {
       ]),
       llm,
     ]),
-    runtimeTiles(ctx),
+    runtimeTiles(ctx, scopeState),
   ]);
 }
 
-function sxComplexity(ctx) {
+function sxComplexity(ctx, scopeState) {
   const tiers = [...((ctx.presets && ctx.presets.complexityTiers) || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
   const body = el('div', { class: 'sx-card sx-card-pad' });
   const render = () => {
@@ -410,6 +423,7 @@ function sxComplexity(ctx) {
       try {
         const res = await api.applyLlmTier(tier.id);
         Object.assign(ctx.settings, res && res.settings ? res.settings : res);
+        setScopePrefs(scopeState, { complexityTier: tier.id });
         toast(`Complexity set to ${tier.label}.`, 'ok');
         if (ctx.rebuild) ctx.rebuild();
         render();
@@ -432,7 +446,7 @@ function sxComplexity(ctx) {
   return body;
 }
 
-function providerTiles(ctx) {
+function providerTiles(ctx, scopeState) {
   const card = el('div', { class: 'sx-card sx-card-pad' });
   const render = () => {
     clear(card);
@@ -451,7 +465,7 @@ function providerTiles(ctx) {
         [...tiles.querySelectorAll('button')].forEach((b) => { b.disabled = true; });
         try {
           const ok = await cascadeProviderToAllRoles(ctx, opt.id);
-          if (ok) { toast(`All models set to ${opt.label}.`, 'ok'); if (ctx.rebuild) ctx.rebuild(); }
+          if (ok) { setScopePrefs(scopeState, { llmProvider: opt.id }); toast(`All models set to ${opt.label}.`, 'ok'); if (ctx.rebuild) ctx.rebuild(); }
         } catch (err) { toast(err.message, 'err'); }
         render();
       });
@@ -485,7 +499,7 @@ function harnessMeta(id, ctx) {
   return 'Ready';
 }
 
-function runtimeTiles(ctx) {
+function runtimeTiles(ctx, scopeState) {
   const card = el('div', { class: 'sx-card sx-card-pad' });
   const render = () => {
     clear(card);
@@ -503,6 +517,7 @@ function runtimeTiles(ctx) {
           const res = await api.saveAgentRuntime({ agentRuntime: h.id, workflowPattern: ctx.settings.workflowPattern || 'sequential' });
           Object.assign(ctx.settings, res && res.settings ? res.settings : res);
           ctx.settings.agentRuntime = h.id;
+          setScopePrefs(scopeState, { agentRuntime: h.id });
           toast(`Runtime set to ${h.name}.`, 'ok');
         } catch (err) { toast(err.message, 'err'); }
         render();
@@ -516,6 +531,7 @@ function runtimeTiles(ctx) {
       try {
         await api.saveAgentRuntime({ agentRuntime: ctx.settings.agentRuntime || 'deepagent', workflowPattern: workflow.value });
         ctx.settings.workflowPattern = workflow.value;
+        setScopePrefs(scopeState, { workflowPattern: workflow.value });
         toast('Workflow pattern saved.', 'ok');
       } catch (err) { toast(err.message, 'err'); }
     });
@@ -526,6 +542,7 @@ function runtimeTiles(ctx) {
       try {
         await api.saveLangsmith({ langsmithTracing: tracing.value === 'on' });
         ctx.settings.langsmithTracing = tracing.value === 'on';
+        setScopePrefs(scopeState, { langsmithTracing: tracing.value === 'on' ? 'true' : 'false' });
         toast('Tracing preference saved.', 'ok');
       } catch (err) { toast(err.message, 'err'); }
     });
@@ -549,7 +566,7 @@ function runtimeTiles(ctx) {
 
 /* ===================== Redesign: connections ===================== */
 
-function connectionsSection(ctx) {
+function connectionsSection(ctx, scopeState) {
   const settings = ctx.settings;
   const trackerCard = el('div', { class: 'sx-card sx-card-pad' });
   let activeTracker = ['linear', 'jira', 'asana'].includes(settings.planningProvider) ? settings.planningProvider : 'linear';
@@ -565,7 +582,7 @@ function connectionsSection(ctx) {
       tile.addEventListener('click', async () => {
         if (opt.id === activeTracker) return;
         [...tiles.querySelectorAll('button')].forEach((b) => { b.disabled = true; });
-        try { await api.saveIntegrations({ planningProvider: opt.id }); activeTracker = opt.id; settings.planningProvider = opt.id; toast(`Issue tracker set to ${opt.label}.`, 'ok'); }
+        try { await api.saveIntegrations({ planningProvider: opt.id }); activeTracker = opt.id; settings.planningProvider = opt.id; setScopePrefs(scopeState, { planningProvider: opt.id }); toast(`Issue tracker set to ${opt.label}.`, 'ok'); }
         catch (err) { toast(err.message, 'err'); }
         renderTracker();
       });
@@ -669,33 +686,55 @@ function effectiveCard(ctx, scopeState) {
   const testing = currentParameters(s, roleProvider(s, 'testing')).model || '—';
   const catalog = (ctx.presets && ctx.presets.presets) || [];
   const runtimeName = (HARNESS_TILES.find((h) => h.id === (s.agentRuntime || 'deepagent')) || {}).name || 'DeepAgent SDK';
-  // Operational settings are global today → source "Global". Once per-scope
-  // persistence lands these gain org/project/user sources.
+  // Each operational row carries the pref key that overrides it (if any); the
+  // per-role model rows aren't pref-backed. Default source is "Global"; resolved
+  // per-scope prefs (loaded async below) flip the badge to the active scope.
   const rows = [
-    ['Complexity', s.complexityTier ? s.complexityTier : 'Custom', 'global'],
-    ['Provider', providerLabel(roleProvider(s, 'execution')), 'global'],
-    ['Thinking', thinking, 'global'],
-    ['Execution', execution, 'global'],
-    ['Testing', testing, 'global'],
-    ['Runtime', `${runtimeName} · ${s.workflowPattern || 'sequential'}`, 'global'],
-    ['Models', `${catalog.length} in catalog`, SCOPE_META[scope] ? scope : 'global'],
+    ['Complexity', s.complexityTier ? s.complexityTier : 'Custom', 'complexityTier'],
+    ['Provider', providerLabel(roleProvider(s, 'execution')), 'llmProvider'],
+    ['Thinking', thinking, null],
+    ['Execution', execution, null],
+    ['Testing', testing, null],
+    ['Runtime', `${runtimeName} · ${s.workflowPattern || 'sequential'}`, 'agentRuntime'],
+    ['Models', `${catalog.length} in catalog`, null, SCOPE_META[scope] ? scope : 'global'],
   ];
-  return el('div', { class: 'sx-rail-card' }, [
+  const srcSpans = Object.create(null);
+  const card = el('div', { class: 'sx-rail-card' }, [
     el('div', { class: 'sx-rail-head' }, [
       el('div', {}, [
         el('div', { class: 'sx-rail-kicker' }, 'Effective configuration'),
         el('div', { class: 'sx-rail-for' }, forLine),
       ]),
     ]),
-    ...rows.map(([k, v, src]) => el('div', { class: 'sx-eff-row' }, [
-      el('span', { class: 'sx-eff-k' }, k),
-      el('span', { class: 'sx-eff-v', dataset: { i18nSkip: 'true' } }, v),
-      el('span', { class: `sx-eff-src sx-src-${src}` }, src === 'global' ? 'Global' : (SCOPE_META[src] ? SCOPE_META[src].kicker : src)),
-    ])),
+    ...rows.map(([k, v, prefKey, fixedSrc]) => {
+      const src = fixedSrc || 'global';
+      const srcSpan = el('span', { class: `sx-eff-src sx-src-${src}` }, src === 'global' ? 'Global' : (SCOPE_META[src] ? SCOPE_META[src].kicker : src));
+      if (prefKey) srcSpans[prefKey] = srcSpan;
+      return el('div', { class: 'sx-eff-row' }, [
+        el('span', { class: 'sx-eff-k' }, k),
+        el('span', { class: 'sx-eff-v', dataset: { i18nSkip: 'true' } }, v),
+        srcSpan,
+      ]);
+    }),
     el('div', { style: 'padding:12px 14px' }, [
       el('button', { type: 'button', class: 'sx-btn primary sx-save', onclick: () => toast('Changes on this page save as you make them.', 'ok') }, `Save ${scope === 'org' ? 'org policy' : scope === 'project' ? 'project settings' : 'my settings'}`),
     ]),
   ]);
+  // Reflect resolved per-scope operational prefs onto the source badges (async;
+  // fail-open — leaves "Global" if the settings-policy service is unavailable).
+  void (async () => {
+    try {
+      const eff = await api.settingsPolicy.getEffective(scopeState.projectId);
+      const prefs = (eff && eff.prefs) || {};
+      const meta = SCOPE_META[scope];
+      for (const key of Object.keys(srcSpans)) {
+        if (!prefs[key] || !meta) continue;
+        srcSpans[key].className = `sx-eff-src ${meta.srcClass}`;
+        srcSpans[key].textContent = meta.kicker;
+      }
+    } catch (_) { /* leave Global */ }
+  })();
+  return card;
 }
 
 function inheritanceCard(scopeState, identity) {

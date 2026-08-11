@@ -20,12 +20,17 @@ from app.authz.principal import Principal
 from app.core.database import Uow
 from app.core.timeutils import utcnow
 from app.domain import universe as universe_mod
-from app.domain.resolver import resolve_effective, resolve_effective_values
+from app.domain.resolver import (
+    resolve_effective,
+    resolve_effective_prefs,
+    resolve_effective_values,
+)
 from app.models.policy import (
     CONFIG_VALUE_KEYS,
     DomainPolicy,
     SettingsPolicy,
     clean_config_values,
+    clean_prefs,
 )
 from app.repositories.base import (
     org_settings_col,
@@ -64,6 +69,20 @@ def _merge_values(current: dict[str, str], incoming: dict[str, str] | None) -> d
     return clean_config_values(merged)
 
 
+def _merge_prefs(current: dict[str, str], incoming: dict[str, str] | None) -> dict[str, str]:
+    """Merge operational prefs: same semantics as values (``None`` preserves;
+    non-empty sets; empty clears; unmentioned stay). Readable, non-secret."""
+    if incoming is None:
+        return clean_prefs(current)
+    merged = dict(clean_prefs(current))
+    for key, value in incoming.items():
+        if value:
+            merged[key] = value
+        else:
+            merged.pop(key, None)
+    return clean_prefs(merged)
+
+
 def _to_response(policy: SettingsPolicy) -> PolicyResponse:
     return PolicyResponse(
         scope_type=policy.scope_type,
@@ -73,6 +92,7 @@ def _to_response(policy: SettingsPolicy) -> PolicyResponse:
             for name, dp in policy.domains.items()
         },
         values=_mask_values(policy.values),
+        prefs=dict(policy.prefs),
         updated_at=policy.updated_at,
     )
 
@@ -96,6 +116,7 @@ def _apply_update(
         scope_id=scope_id,
         domains=domains,
         values=_merge_values(current.values if current else {}, body.values),
+        prefs=_merge_prefs(current.prefs if current else {}, body.prefs),
         updated_at=utcnow(),
     )
 
@@ -205,6 +226,7 @@ async def resolve_for_caller(
     universe = universe_mod.universe()
     resolution = resolve_effective(universe, org_policy, project_policy, user_policy)
     effective_values = resolve_effective_values(org_policy, project_policy, user_policy)
+    effective_prefs = resolve_effective_prefs(org_policy, project_policy, user_policy)
     return EffectiveResponse(
         project_id=resolved_project_id,
         domains={
@@ -215,6 +237,7 @@ async def resolve_for_caller(
         },
         universe=universe,
         values=_mask_values(effective_values),
+        prefs=effective_prefs,
     )
 
 
@@ -244,6 +267,7 @@ async def resolve_policy_for_org(
             )
             for name, res in resolution.items()
         },
+        prefs=resolve_effective_prefs(org_policy, project_policy, None),
     )
 
 

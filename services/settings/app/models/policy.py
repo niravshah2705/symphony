@@ -42,6 +42,21 @@ DOMAINS: tuple[str, ...] = ("harness", "tools", "skills", "plugins", "hooks", "m
 # mirror is packages/shared/src/agent/settings-policy.js CONFIG_VALUE_KEYS.
 CONFIG_VALUE_KEYS: tuple[str, ...] = ("geminiApiKey",)
 
+# Allow-listed OPERATIONAL preference keys stored per scope. Unlike
+# CONFIG_VALUE_KEYS (write-only secrets), prefs are NON-SECRET and READABLE — the
+# browser reads them back. Resolved with user > project > org precedence (a lower
+# scope OVERRIDES a higher one, like values — they are overrides, not
+# restrictions). Values are stored as strings (booleans as "true"/"false"). Keep
+# in sync with the JS mirror settings-policy.js PREF_KEYS.
+PREF_KEYS: tuple[str, ...] = (
+    "complexityTier",
+    "llmProvider",
+    "agentRuntime",
+    "workflowPattern",
+    "planningProvider",
+    "langsmithTracing",
+)
+
 # Firestore document id used for the single policy doc within each scope's
 # ``.../settings`` collection.
 POLICY_DOC_ID = "policy"
@@ -59,6 +74,20 @@ def clean_config_values(raw: dict | None) -> dict[str, str]:
         if text:
             values[key] = text
     return values
+
+
+def clean_prefs(raw: dict | None) -> dict[str, str]:
+    """Keep only allow-listed operational pref keys with non-empty values,
+    coerced to strings (booleans → "true"/"false"). Defensive against stale keys."""
+    prefs: dict[str, str] = {}
+    for key in PREF_KEYS:
+        candidate = (raw or {}).get(key)
+        if candidate is None:
+            continue
+        text = "true" if candidate is True else "false" if candidate is False else str(candidate)
+        if text:
+            prefs[key] = text
+    return prefs
 
 
 @dataclass
@@ -88,6 +117,8 @@ class SettingsPolicy:
     domains: dict[str, DomainPolicy] = field(default_factory=dict)
     # Allow-listed config values (secrets). Only keys in CONFIG_VALUE_KEYS.
     values: dict[str, str] = field(default_factory=dict)
+    # Allow-listed operational prefs (readable). Only keys in PREF_KEYS.
+    prefs: dict[str, str] = field(default_factory=dict)
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
 
@@ -101,6 +132,7 @@ class SettingsPolicy:
             "scope_id": self.scope_id,
             "domains": {name: self.domains[name].to_doc() for name in self.domains},
             "values": clean_config_values(self.values),
+            "prefs": clean_prefs(self.prefs),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -117,6 +149,7 @@ class SettingsPolicy:
                 if name in DOMAINS
             },
             values=clean_config_values(doc.get("values")),
+            prefs=clean_prefs(doc.get("prefs")),
             created_at=doc.get("created_at") or utcnow(),
             updated_at=doc.get("updated_at") or utcnow(),
         )
@@ -128,4 +161,5 @@ class SettingsPolicy:
             scope_id=scope_id,
             domains={name: DomainPolicy() for name in DOMAINS},
             values={},
+            prefs={},
         )

@@ -6,8 +6,8 @@
 
 Directory-based community: services/settings
 
-- **Size**: 341 nodes
-- **Cohesion**: 0.4249
+- **Size**: 348 nodes
+- **Cohesion**: 0.4230
 - **Dominant Language**: python
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: services/settings
 | count | Function | ./services/settings/app/core/database.py | 67-69 |
 | commit | Function | ./services/settings/app/core/database.py | 71-72 |
 
-*... and 291 more members.*
+*... and 298 more members.*
 
 ## Execution Flows
 
@@ -79,42 +79,42 @@ Directory-based community: services/settings
 - **set_org_policy** (criticality: 0.68, depth: 3)
 - **set_project_policy** (criticality: 0.68, depth: 3)
 - **set_user_policy** (criticality: 0.68, depth: 3)
-- *... and 28 more flows.*
+- *... and 29 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (110 edge(s))
-- `uuid4` (41 edge(s))
-- `str` (40 edge(s))
+- `get` (114 edge(s))
+- `str` (42 edge(s))
+- `uuid4` (42 edge(s))
+- `put` (37 edge(s))
 - `Depends` (35 edge(s))
-- `put` (35 edge(s))
-- `json` (27 edge(s))
+- `json` (29 edge(s))
+- `ValueError` (17 edge(s))
+- `items` (16 edge(s))
 - `BaseModel` (15 edge(s))
-- `ValueError` (14 edge(s))
-- `items` (14 edge(s))
+- `set` (12 edge(s))
 - `list` (11 edge(s))
-- `set` (11 edge(s))
-- `len` (8 edge(s))
+- `len` (9 edge(s))
+- `dict` (9 edge(s))
+- `pop` (8 edge(s))
 - `cls` (8 edge(s))
-- `pop` (7 edge(s))
-- `encrypt` (7 edge(s))
 
 ### Incoming
 
-- `get` (42 edge(s))
-- `uuid4` (40 edge(s))
-- `put` (35 edge(s))
-- `json` (27 edge(s))
+- `get` (43 edge(s))
+- `uuid4` (41 edge(s))
+- `put` (37 edge(s))
+- `json` (29 edge(s))
 - `./services/settings/app/errors.py` (18 edge(s))
 - `./services/settings/tests/unit/test_resolver.py` (18 edge(s))
-- `./services/settings/app/services/policy_service.py` (15 edge(s))
-- `./services/settings/app/schemas/policy.py` (12 edge(s))
+- `./services/settings/app/services/policy_service.py` (16 edge(s))
+- `./services/settings/app/schemas/policy.py` (13 edge(s))
 - `./services/settings/tests/integration/test_secrets_vault.py` (12 edge(s))
+- `./services/settings/app/domain/resolver.py` (11 edge(s))
 - `./services/settings/tests/integration/test_authz.py` (10 edge(s))
 - `./services/settings/app/core/firestore.py` (9 edge(s))
-- `./services/settings/app/domain/resolver.py` (9 edge(s))
 - `./services/settings/tests/integration/test_config_values.py` (9 edge(s))
 - `./services/settings/app/crypto/envelope.py` (8 edge(s))
 - `./services/settings/app/schemas/secrets.py` (8 edge(s))

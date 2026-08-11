@@ -94,3 +94,23 @@ test('resolveOrgEffectivePolicy fails open (null) without token/org and on error
   const err = await resolveOrgEffectivePolicy({ baseUrl: 'http://settings', orgId: 'o', internalToken: 't', fetchImpl: async () => ({ ok: false, status: 403, json: async () => ({}) }) });
   assert.equal(err.effectivePolicy, null);
 });
+
+test('resolveEffectiveSettings surfaces resolved operational prefs', async () => {
+  const fetchImpl = fakeFetch({
+    '/api/v1/settings/effective': { domains: {}, prefs: { complexityTier: 'balanced', agentRuntime: 'codex-sdk' } },
+    '/api/v1/internal/effective-config': { values: {} },
+  });
+  const out = await resolveEffectiveSettings({ baseUrl: 'http://settings', userToken: 'u', fetchImpl });
+  assert.deepEqual(out.prefs, { complexityTier: 'balanced', agentRuntime: 'codex-sdk' });
+  // Fail-open default is an empty prefs object.
+  const empty = await resolveEffectiveSettings({ baseUrl: 'http://settings', userToken: 'u', fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({}) }) });
+  assert.deepEqual(empty.prefs, {});
+});
+
+test('resolveOrgEffectivePolicy surfaces org-resolved prefs', async () => {
+  const fetchImpl = fakeFetch({
+    '/api/v1/internal/s2s/orgs/org-1/effective-policy': { domains: {}, prefs: { agentRuntime: 'deepagent' } },
+  });
+  const out = await resolveOrgEffectivePolicy({ baseUrl: 'http://settings', orgId: 'org-1', internalToken: 'tok', fetchImpl });
+  assert.deepEqual(out.prefs, { agentRuntime: 'deepagent' });
+});
