@@ -34,8 +34,16 @@ fi
   cd "$ROOT" || exit 0
   {
     echo "----- graph refresh (post-commit) -----"
-    command -v code-review-graph >/dev/null 2>&1 && code-review-graph update >/dev/null 2>&1 \
-      && echo "  code-review-graph: updated" || echo "  code-review-graph: skipped/failed"
+    if command -v code-review-graph >/dev/null 2>&1; then
+      # Bootstrap guard: `update` is incremental and needs an existing graph, so
+      # on a fresh clone (no graph.db yet) build from scratch instead. Keeps the
+      # first commit after cloning from logging a spurious "skipped/failed".
+      if [ -f "$CACHE/graph.db" ]; then crg_cmd="update"; else crg_cmd="build"; fi
+      code-review-graph "$crg_cmd" >/dev/null 2>&1 \
+        && echo "  code-review-graph: $crg_cmd ok" || echo "  code-review-graph: $crg_cmd failed"
+    else
+      echo "  code-review-graph: not installed"
+    fi
     command -v graphify >/dev/null 2>&1 && graphify update . >/dev/null 2>&1 \
       && echo "  graphify: updated" || echo "  graphify: skipped/failed"
   } >>"$LOG" 2>&1

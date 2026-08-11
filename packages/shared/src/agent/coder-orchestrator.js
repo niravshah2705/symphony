@@ -383,6 +383,16 @@ function pauseForRuntimeError(error, context = {}) {
 
 async function recoverPause(settings, dependencies = {}) {
   if (!pauseReason || !pauseContext) return true;
+  // Billing pause: re-check the balance on EVERY probe (cheap store read, no
+  // throttle) so a recharge (auto or manual) resumes the monitor promptly.
+  if (pauseContext.resource === 'billing') {
+    const gate = (dependencies.billingStatus || require('../billing/gate').billingStatus)();
+    if (!gate.blocked) {
+      clearPause('billing balance restored');
+      return true;
+    }
+    return false;
+  }
   const fingerprint = dependencies.readinessFingerprint || readinessFingerprint;
   const now = dependencies.now || Date.now;
   const resolve = dependencies.resolveLlm || resolveLlm;
@@ -639,6 +649,15 @@ async function pollOnce() {
   }
   if (pauseReason && !(await recoverPause(settings))) {
     return { skipped: 'paused', pauseReason };
+  }
+  // Negative-balance gate (deliberately simple): pause the monitor when the org's
+  // billing balance is exhausted. Reuses the existing pause machinery; the
+  // billing branch of recoverPause auto-clears it once a recharge restores the
+  // balance. Inert unless billing is enabled + the account opts in (billing/gate.js).
+  const billing = require('../billing/gate').billingStatus();
+  if (billing.blocked) {
+    const reason = pause('billing', new Error(billing.reason), { message: billing.reason });
+    return { skipped: 'paused', pauseReason: reason };
   }
   let projects;
   let tasksByProject;

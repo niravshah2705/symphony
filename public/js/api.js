@@ -305,6 +305,19 @@ export const api = {
   getAnalytics: () => request('/observability/analytics'),
   getTroubleshooting: () => request('/observability/troubleshooting'),
 
+  // Cost monitoring + billing (services/gateway/src/routes/billing.js). The org
+  // is resolved SERVER-SIDE from the caller's token — the client never sends an
+  // org id. Mutations require org-admin (enforced server-side).
+  billing: {
+    getSummary: () => request('/billing/summary'),
+    getUsage: (groupBy = 'project', period = 'week') =>
+      request(`/billing/usage?groupBy=${encodeURIComponent(groupBy)}&period=${encodeURIComponent(period)}`),
+    getTaskUsage: (taskId) => request(`/billing/usage/task/${encodeURIComponent(taskId)}`),
+    getLedger: (limit = 50) => request(`/billing/ledger?limit=${encodeURIComponent(limit)}`),
+    recharge: (amountInr) => request('/billing/recharge', { method: 'POST', body: JSON.stringify({ amountInr }) }),
+    updateConfig: (payload) => request('/billing/config', { method: 'PUT', body: JSON.stringify(payload) }),
+  },
+
   // Organization service (services/org via /api/org/*). The `me` surface is
   // available to any signed-in user (personal projects + create-org); the org
   // tenant surface needs an org role and the org service enforces per-org RBAC.

@@ -9,7 +9,7 @@
     "dev": "node --watch --env-file-if-exists=../../.env src/index.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "dependencies": {
     "@ai-fleet/shared": "*",

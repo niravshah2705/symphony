@@ -6,6 +6,7 @@ const { publishEvent } = require('@ai-fleet/shared/messaging/events');
 const { pushAuth } = require('@ai-fleet/shared/messaging/oidc');
 const log = require('@ai-fleet/shared/logger');
 const scheduler = require('@ai-fleet/shared/agent/scheduler');
+const { processBillingSweep } = require('@ai-fleet/shared/billing/sweep');
 
 /**
  * Planner Pub/Sub push surface:
@@ -54,8 +55,22 @@ router.post('/planner', pushAuth(), (req, res) => {
 });
 
 router.post('/planner-tick', pushAuth(), (req, res) => {
+  // The billing sweep piggybacks on the planner cadence so it runs in cloud
+  // (pubsub) mode without new infra; it self-gates on BILLING_SWEEP_ENABLED and
+  // is idempotent (watermark + in-process guard), so a dedicated billing-tick
+  // firing in the same window is harmless.
+  Promise.resolve(processBillingSweep()).catch((err) => {
+    log.error(`billing sweep (planner tick) failed: ${err && err.message ? err.message : err}`);
+  });
   Promise.resolve(scheduler.processPending()).catch((err) => {
     log.error(`planner tick failed: ${err && err.message ? err.message : err}`);
+  });
+  return res.status(204).end();
+});
+
+router.post('/billing-tick', pushAuth(), (req, res) => {
+  Promise.resolve(processBillingSweep()).catch((err) => {
+    log.error(`billing tick failed: ${err && err.message ? err.message : err}`);
   });
   return res.status(204).end();
 });

@@ -14,7 +14,7 @@ Directory-based community: scripts
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| resolve | Function | ./scripts/build-graphs.sh | 21-21 |
+| resolve | Function | ./scripts/build-graphs.sh | 36-36 |
 | main | Function | ./scripts/models-label-group.js | 21-38 |
 | resolveStrength | Function | ./scripts/obfuscate-spa.js | 132-138 |
 | collectJsFiles | Function | ./scripts/obfuscate-spa.js | 145-154 |

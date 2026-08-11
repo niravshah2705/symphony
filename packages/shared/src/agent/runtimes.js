@@ -1064,6 +1064,22 @@ const EXECUTORS = Object.freeze({
 });
 
 /**
+ * Persist first-party usage metering for a finished run (success or error). This
+ * is the single choke point where every SDK's { usage, costUsd } result returns,
+ * so it is the one place billing meters a run. Opt-in: only runs whose caller
+ * supplied `options.attribution` are metered (so nested/utility sub-runs don't
+ * double-count). Fail-open + lazy-required — billing must never break a run.
+ */
+function meterRun(options, resultOrError) {
+  try {
+    if (!options || !options.attribution) return;
+    require('../billing/usage').recordUsage(options.attribution, resultOrError || {}, options.llm || {});
+  } catch (_) {
+    /* metering is best-effort */
+  }
+}
+
+/**
  * Execute one workflow with a normalized result contract and one LangSmith root
  * span, regardless of the selected SDK. SDK-specific token/cost data is copied
  * into trace metadata and outputs for analytics.
@@ -1085,10 +1101,12 @@ async function executeAgentRuntime(options = {}) {
       const value = await runOnce(prompt);
       const reviewed = reviewEnabled ? await applyRubricMiddleware(options, value, prompt, runOnce) : value;
       annotateTrace(reviewed, options.getCurrentRunTree || getCurrentRunTree);
+      meterRun(options, reviewed);
       return reviewed;
     } catch (error) {
       const wrapped = wrapExecutionError(runtime, error);
       annotateTrace(wrapped, options.getCurrentRunTree || getCurrentRunTree);
+      meterRun(options, wrapped);
       throw wrapped;
     }
   };

@@ -17,13 +17,15 @@
     "./util": "./src/util.js",
     "./agent/*": "./src/agent/*.js",
     "./provisioning": "./src/provisioning/index.js",
-    "./provisioning/*": "./src/provisioning/*.js"
+    "./provisioning/*": "./src/provisioning/*.js",
+    "./billing": "./src/billing/index.js",
+    "./billing/*": "./src/billing/*.js"
   },
   "scripts": {
     "test": "node --test"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",

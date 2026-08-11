@@ -9,6 +9,8 @@ const { applyPlan, applyIssuesForMilestones, applyAiplanned, applyAifail } = req
 const { llmReady, notReadyReason, resolveLlm, providerForRole } = require('./llm');
 const { isModelAvailabilityError, pauseReasonFor, probeModelAvailability } = require('./availability');
 const workspaceEvents = require('./workspace-events');
+const { processBillingSweep } = require('../billing/sweep');
+const { billingStatus } = require('../billing/gate');
 
 const { CONFIG } = require('../config');
 
@@ -275,6 +277,14 @@ async function processPending() {
       log.warn(`Tick skipped: ${runtime.lastError}`);
       return { skipped: 'no-role', reason: runtime.lastError };
     }
+    // Negative-balance gate: pause enrichment when the org's credit is exhausted.
+    // Inert unless billing is enabled + the account opts in (see billing/gate.js).
+    const billing = billingStatus();
+    if (billing.blocked) {
+      runtime.lastError = billing.reason;
+      log.warn(`Tick skipped: ${billing.reason}`);
+      return { skipped: 'billing', reason: billing.reason };
+    }
     runtime.lastError = null;
 
     // Resolve the active provider (refreshes the Codex OAuth token if needed).
@@ -367,6 +377,10 @@ function scheduleNext() {
   runtime.nextRunAt = new Date(Date.now() + ms).toISOString();
   runtime.timer = setTimeout(async () => {
     const config = store.getAgentConfig();
+    // The billing sweep runs every cadence INDEPENDENT of scheduleEnabled and of
+    // the billing gate (a recharge posted here is what unblocks a paused runner);
+    // it self-gates on CONFIG.BILLING.sweepEnabled and never throws into the loop.
+    await processBillingSweep().catch(() => {});
     if (config.scheduleEnabled) {
       // Approval deadlines first, independent of processPending's key/role guards.
       await processApprovalDeadlines().catch(() => {});

@@ -583,6 +583,35 @@ const SKILLS = Object.freeze({
   src: resolveSkillsSrc(),
 });
 
+/**
+ * Billing / cost-metering knobs. All optional and INERT for local dev — billing
+ * only meters and sweeps when explicitly enabled. Money is handled in INTEGER
+ * paise everywhere (never floating INR) to avoid rounding drift.
+ *   BILLING_SWEEP_ENABLED  master switch for the periodic usage→ledger sweep and
+ *                          the negative-balance runner gate (default off).
+ *   USD_TO_INR             approximate FX rate applied to third-party LLM cost.
+ *   INITIAL_CREDIT_INR     starting credit seeded once per org account (500 INR).
+ *   FLEET_ORG_ID           the org this deployment bills to. Set on a DEDICATED
+ *                          per-tenant stack (falls back to PROXY_ORG_ID). Empty on
+ *                          the shared stack ⇒ usage attributes to the shared
+ *                          free-tier account (see billing/org-context.js).
+ *   BILLING_USAGE_RETENTION_DAYS  how long granular usage records are kept for
+ *                          per-task drill-down before the sweep prunes them.
+ */
+const toPositiveNumber = (value, fallback) =>
+  Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : fallback;
+const BILLING = Object.freeze({
+  sweepEnabled: String(process.env.BILLING_SWEEP_ENABLED || '').trim().toLowerCase() === 'true',
+  usdToInr: toPositiveNumber(process.env.USD_TO_INR, 87),
+  initialCreditPaise: Math.round(
+    (Number.isFinite(Number(process.env.INITIAL_CREDIT_INR)) && Number(process.env.INITIAL_CREDIT_INR) >= 0
+      ? Number(process.env.INITIAL_CREDIT_INR)
+      : 500) * 100,
+  ),
+  orgId: String(process.env.FLEET_ORG_ID || process.env.PROXY_ORG_ID || '').trim(),
+  usageRetentionDays: toPositiveNumber(process.env.BILLING_USAGE_RETENTION_DAYS, 90),
+});
+
 /** Server configuration and shared constants. */
 const CONFIG = Object.freeze({
   PORT,
@@ -655,6 +684,7 @@ const CONFIG = Object.freeze({
   TOOLS,
   AUTH,
   SKILLS,
+  BILLING,
 });
 
 /**
