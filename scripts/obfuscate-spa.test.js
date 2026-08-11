@@ -43,6 +43,9 @@ function makeFixture() {
   // Non-JS + vendor: must be copied verbatim, never obfuscated.
   fs.writeFileSync(path.join(root, 'config.js'), "window.__API_BASE__ = '';\n");
   fs.writeFileSync(path.join(root, 'index.html'), '<!doctype html><title>fixture</title>\n');
+  fs.writeFileSync(path.join(root, 'robots.txt'), 'User-agent: *\nAllow: /\n');
+  fs.writeFileSync(path.join(root, 'llms.txt'), '# Fixture AI index\n');
+  fs.writeFileSync(path.join(root, 'sitemap.xml'), '<urlset></urlset>\n');
   fs.writeFileSync(path.join(root, 'vendor', 'lib.js'), 'export const VENDOR = 1;\n');
   return root;
 }
@@ -77,6 +80,9 @@ test('copies non-JS assets and vendor code verbatim', () => {
   // Assert
   assert.equal(fs.readFileSync(path.join(out, 'config.js'), 'utf8'), "window.__API_BASE__ = '';\n");
   assert.equal(fs.readFileSync(path.join(out, 'index.html'), 'utf8'), '<!doctype html><title>fixture</title>\n');
+  assert.equal(fs.readFileSync(path.join(out, 'robots.txt'), 'utf8'), 'User-agent: *\nAllow: /\n');
+  assert.equal(fs.readFileSync(path.join(out, 'llms.txt'), 'utf8'), '# Fixture AI index\n');
+  assert.equal(fs.readFileSync(path.join(out, 'sitemap.xml'), 'utf8'), '<urlset></urlset>\n');
   assert.equal(fs.readFileSync(path.join(out, 'vendor', 'lib.js'), 'utf8'), 'export const VENDOR = 1;\n');
 });
 

@@ -45,6 +45,7 @@ const BRAND_ICON_PATHS = Object.freeze({
   anthropic: '<path d="M14.4 3h-4L3.5 21h4l1.3-3.6h6.4L16.5 21h4L14.4 3Zm-4.2 11 1.8-5.1L13.8 14h-3.6Z"/>',
   openai: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4.5A5.5 5.5 0 1 1 6.5 12 5.5 5.5 0 0 1 12 6.5Zm0 2.6A2.9 2.9 0 1 0 14.9 12 2.9 2.9 0 0 0 12 9.1Z"/>',
   gemini: '<path d="M12 2c.6 4.9 4.5 8.8 9.4 9.4C16.5 12 12.6 15.9 12 20.8 11.4 15.9 7.5 12 2.6 11.4 7.5 10.8 11.4 6.9 12 2Z"/>',
+  perplexity: '<path d="M5 3h8.2a6.5 6.5 0 0 1 0 13H9v5H5V3Zm4 4v5h4a2.5 2.5 0 1 0 0-5H9Z"/>',
   huggingface: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM8.7 9.6a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8Zm6.6 0a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8ZM8 14.4h8a4 4 0 0 1-8 0Z"/>',
   byom: '<rect x="4" y="4" width="16" height="4.5" rx="1"/><rect x="4" y="9.8" width="16" height="4.5" rx="1"/><rect x="4" y="15.6" width="16" height="4.5" rx="1"/>',
   // Harnesses
@@ -114,6 +115,12 @@ export function hydrateIcons(root = document) {
     const name = host.dataset.icon;
     const label = host.dataset.iconLabel || '';
     host.replaceChildren(icon(name, { label }));
+    if (!label) host.setAttribute('aria-hidden', 'true');
+  });
+  root.querySelectorAll('[data-brand-icon]').forEach((host) => {
+    const name = host.dataset.brandIcon;
+    const label = host.dataset.iconLabel || '';
+    host.replaceChildren(brandIcon(name, { label }));
     if (!label) host.setAttribute('aria-hidden', 'true');
   });
 }
