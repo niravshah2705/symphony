@@ -57,6 +57,27 @@ def _requires_auth(path: str) -> bool:
     return path.rstrip("/") not in {p.rstrip("/") for p in PUBLIC_PATHS}
 
 
+def _org_override_from_headers(headers) -> tuple[uuid.UUID, OrgRole] | None:
+    """Org membership the gateway resolved from the AUTHORITATIVE org service and
+    forwarded as `X-Org-Id` / `X-Org-Role`. This service keeps its own user store
+    (a separate Firestore namespace) that never learns org membership, so without
+    this every browser user looks org-less and real org admins get 403 on the
+    org-scope surface. Trustworthy only because the service is IAM-gated to the
+    gateway SA and the gateway builds proxy headers from scratch (client-supplied
+    values are never forwarded). Returns None when absent/invalid so the caller
+    falls back to this service's own user record (the org-less default)."""
+    raw_id = headers.get("X-Org-Id")
+    raw_role = headers.get("X-Org-Role")
+    if not raw_id or not raw_role:
+        return None
+    try:
+        org_id = uuid.UUID(str(raw_id))
+        org_role = OrgRole(str(raw_role).upper())
+    except (ValueError, TypeError):
+        return None
+    return (org_id, org_role)
+
+
 def _unauthorized() -> JSONResponse:
     return JSONResponse(
         status_code=401,
@@ -85,9 +106,10 @@ class AuthContextMiddleware:
             await _unauthorized()(scope, receive, send)
             return
         token = header[7:].strip()
+        org_override = _org_override_from_headers(request.headers)
 
         try:
-            principal = await self._authenticate(token)
+            principal = await self._authenticate(token, org_override)
         except (_AuthFailure, jwt.PyJWTError):
             await _unauthorized()(scope, receive, send)
             return
@@ -99,7 +121,9 @@ class AuthContextMiddleware:
         scope.setdefault("state", {})["principal"] = principal
         await self.app(scope, receive, send)
 
-    async def _authenticate(self, token: str) -> Principal:
+    async def _authenticate(
+        self, token: str, org_override: tuple[uuid.UUID, OrgRole] | None = None
+    ) -> Principal:
         issuer = get_unverified_issuer(token)
         repo = UserRepository(new_uow())
 
@@ -128,10 +152,16 @@ class AuthContextMiddleware:
             if issued < changed:
                 raise _AuthFailure()
 
+        # The gateway-forwarded membership (from the authoritative org service)
+        # wins over this service's own org-less user copy; absent/invalid → keep
+        # the local record (the org-less default). Only org scope is overridden;
+        # is_super_admin stays this service's own determination.
+        org_id, org_role = (org_override if org_override is not None
+                            else (user.org_id, user.org_role))
         return Principal(
             user_id=user.id,
-            org_id=user.org_id,
-            org_role=user.org_role,
+            org_id=org_id,
+            org_role=org_role,
             is_super_admin=user.is_super_admin,
             email=user.email,
         )
