@@ -1,9 +1,16 @@
 'use strict';
 
 const { randomUUID } = require('node:crypto');
+const path = require('node:path');
 const { CONFIG, namespaceCollection } = require('./config');
 const fileBackend = require('./store/file-backend');
 const firestoreBackend = require('./store/firestore-backend');
+const workspaceContext = require('./store/workspace-context');
+const {
+  currentWorkspaceContext,
+  workspaceOrganizationKey,
+  assertCompatibleWithPinnedOrganization,
+} = workspaceContext;
 const {
   getPreset,
   presetForModel,
@@ -426,39 +433,128 @@ function seedStore() {
 // document approaches Firestore's 1 MB limit.
 const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig', 'eula', 'billing'];
 const STORE_COLLECTION_KEYS = [
-  'jobs', 'memories', 'conversations', 'approvals', 'settingsHistory',
+  'jobs', 'memories', 'conversations', 'approvals', 'stackLinks', 'settingsHistory',
   // Billing: append-heavy records — each becomes one Firestore sub-collection doc
   // keyed by `id`, so no single document approaches the 1 MB limit and concurrent
   // appends never clobber one another (the ledger is the money source of truth).
   'usageRecords', 'ledgerEntries', 'billingAccounts',
 ];
 
-const backend = CONFIG.STORE_BACKEND === 'firestore'
-  ? firestoreBackend.create({
-      // Namespaced per tenant (empty STORE_NAMESPACE → the shared 'aifleet' root,
-      // unchanged). Isolates a per-tenant gateway's store + sub-collections
-      // (jobs/memories/conversations/approvals) from other tenants on the same DB.
-      rootCollection: namespaceCollection('aifleet'),
-      mainKeys: STORE_MAIN_KEYS,
-      collectionKeys: STORE_COLLECTION_KEYS,
-      normalize: normalizeStore,
-      seed: seedStore,
+const LEGACY_BACKEND_KEY = 'legacy';
+
+/**
+ * Build one physical backend. The legacy entry retains the exact historical
+ * file/Firestore location. Shared deployments create additional hashed org
+ * entries; raw organization ids never enter a path or Firestore collection.
+ */
+function createBackendEntry(key) {
+  const legacy = key === LEGACY_BACKEND_KEY;
+  const backend = CONFIG.STORE_BACKEND === 'firestore'
+    ? firestoreBackend.create({
+        rootCollection: legacy ? namespaceCollection('aifleet') : `aifleet_workspace_${key}`,
+        mainKeys: STORE_MAIN_KEYS,
+        collectionKeys: STORE_COLLECTION_KEYS,
+        normalize: normalizeStore,
+        seed: seedStore,
+      })
+    : fileBackend.create({
+        file: legacy
+          ? CONFIG.STORE_FILE
+          : path.join(CONFIG.DATA_DIR, 'workspaces', `${key}.json`),
+        dataDir: legacy ? CONFIG.DATA_DIR : path.join(CONFIG.DATA_DIR, 'workspaces'),
+        normalize: normalizeStore,
+        seed: seedStore,
+      });
+  return {
+    key,
+    backend,
+    initialized: CONFIG.STORE_BACKEND !== 'firestore',
+    initPromise: null,
+  };
+}
+
+// Registry entries own independent Firestore mirrors. AsyncLocalStorage picks
+// an entry per request/job, so concurrent org A/B work cannot switch a mutable
+// global backend out from underneath another async chain.
+const backendRegistry = new Map();
+const legacyBackendEntry = createBackendEntry(LEGACY_BACKEND_KEY);
+backendRegistry.set(LEGACY_BACKEND_KEY, legacyBackendEntry);
+
+function activeBackendKey() {
+  const context = assertCompatibleWithPinnedOrganization(currentWorkspaceContext());
+  // STORE_NAMESPACE is the physical marker for a dedicated deployment. A
+  // FLEET_ORG_ID can also be attached to an ephemeral job in the shared stack;
+  // it still validates the selected org above, but must not redirect that job
+  // to the shared legacy backend. Only an existing namespace retains the old
+  // physical location byte-for-byte.
+  if (CONFIG.STORE_NAMESPACE || !context.organizationId) {
+    return LEGACY_BACKEND_KEY;
+  }
+  return workspaceOrganizationKey(context);
+}
+
+function backendEntryForKey(key) {
+  let entry = backendRegistry.get(key);
+  if (!entry) {
+    entry = createBackendEntry(key);
+    backendRegistry.set(key, entry);
+  }
+  return entry;
+}
+
+function activeBackendEntry() {
+  return backendEntryForKey(activeBackendKey());
+}
+
+function assertInitialized(entry) {
+  if (CONFIG.STORE_BACKEND === 'firestore' && !entry.initialized) {
+    const error = new Error('Store backend is not initialized for this workspace; await initStore() inside its context.');
+    error.code = 'workspace_store_not_initialized';
+    throw error;
+  }
+}
+
+async function initializeBackendEntry(entry) {
+  if (entry.initialized) return;
+  if (entry.initPromise) return entry.initPromise;
+  entry.initPromise = Promise.resolve()
+    .then(() => (typeof entry.backend.init === 'function' ? entry.backend.init() : undefined))
+    .then(() => {
+      entry.initialized = true;
     })
-  : fileBackend.create({
-      file: CONFIG.STORE_FILE,
-      dataDir: CONFIG.DATA_DIR,
-      normalize: normalizeStore,
-      seed: seedStore,
+    .catch((error) => {
+      // A transient initialization failure may be retried. All concurrent
+      // callers share the same in-flight promise, preventing duplicate hydrate
+      // and onSnapshot registration races.
+      entry.initPromise = null;
+      throw error;
     });
+  return entry.initPromise;
+}
 
 /** Read the current store. Synchronous for both backends. */
 function readStore() {
-  return backend.read();
+  const entry = activeBackendEntry();
+  assertInitialized(entry);
+  return entry.backend.read();
 }
 
 /** Persist a new store and return it. */
 function writeStore(store) {
-  return backend.write(store);
+  const entry = activeBackendEntry();
+  assertInitialized(entry);
+  return entry.backend.write(store);
+}
+
+/** Global metadata APIs use this explicitly instead of the selected workspace. */
+function readLegacyStore() {
+  assertInitialized(legacyBackendEntry);
+  return legacyBackendEntry.backend.read();
+}
+
+function writeLegacyStore(store) {
+  assertInitialized(legacyBackendEntry);
+  return legacyBackendEntry.backend.write(store);
 }
 
 /**
@@ -467,7 +563,11 @@ function writeStore(store) {
  * listeners. Services should `await initStore()` on boot.
  */
 async function initStore() {
-  if (typeof backend.init === 'function') await backend.init();
+  // Billing/EULA are intentionally global, so ensure their legacy backend is
+  // hydrated even when this call occurs inside an organization context.
+  await initializeBackendEntry(legacyBackendEntry);
+  const entry = activeBackendEntry();
+  if (entry !== legacyBackendEntry) await initializeBackendEntry(entry);
 }
 
 /** Back-compat: convert legacy single `enrichLabel` into `enrichLabels[]`. */
@@ -664,13 +764,13 @@ function setAgentConfig(patch) {
 
 /** The per-user EULA acceptance record for `key`, or null if none. */
 function getEulaUser(key) {
-  const eula = readStore().eula || { users: {}, orgs: {} };
+  const eula = readLegacyStore().eula || { users: {}, orgs: {} };
   return eula.users[key] || null;
 }
 
 /** The organisation-level EULA acceptance record for `orgId`, or null if none. */
 function getEulaOrg(orgId) {
-  const eula = readStore().eula || { users: {}, orgs: {} };
+  const eula = readLegacyStore().eula || { users: {}, orgs: {} };
   return eula.orgs[orgId] || null;
 }
 
@@ -679,19 +779,19 @@ function getEulaOrg(orgId) {
  * the timestamp is authoritative. Returns the stored entry. Immutable write.
  */
 function recordEulaDecision(key, record = {}) {
-  const current = readStore();
+  const current = readLegacyStore();
   const eula = current.eula || { users: {}, orgs: {} };
   const entry = { status: record.status, version: record.version || null, via: record.via || 'user', at: new Date().toISOString() };
-  writeStore({ ...current, eula: { ...eula, users: { ...eula.users, [key]: entry } } });
+  writeLegacyStore({ ...current, eula: { ...eula, users: { ...eula.users, [key]: entry } } });
   return entry;
 }
 
 /** Record a EULA decision at organisation scope (the org-level flag). */
 function recordEulaOrgDecision(orgId, record = {}) {
-  const current = readStore();
+  const current = readLegacyStore();
   const eula = current.eula || { users: {}, orgs: {} };
   const entry = { status: record.status, version: record.version || null, via: record.via || 'org', at: new Date().toISOString() };
-  writeStore({ ...current, eula: { ...eula, orgs: { ...eula.orgs, [orgId]: entry } } });
+  writeLegacyStore({ ...current, eula: { ...eula, orgs: { ...eula.orgs, [orgId]: entry } } });
   return entry;
 }
 
@@ -837,68 +937,68 @@ const MAX_USAGE_RECORDS = 20000;
 
 /** The sweep watermark ({ lastAggregatedAt }). */
 function getBillingState() {
-  return readStore().billing || { lastAggregatedAt: null };
+  return readLegacyStore().billing || { lastAggregatedAt: null };
 }
 
 /** Merge a partial patch into the billing watermark state. */
 function setBillingState(patch) {
-  const current = readStore();
+  const current = readLegacyStore();
   const billing = { ...(current.billing || { lastAggregatedAt: null }), ...patch };
-  writeStore({ ...current, billing });
+  writeLegacyStore({ ...current, billing });
   return billing;
 }
 
 /** Append a granular usage record (newest first), capped to bound growth. */
 function addUsageRecord(record) {
-  const current = readStore();
+  const current = readLegacyStore();
   const now = new Date().toISOString();
   const entry = { ...record, id: `use_${randomUUID()}`, createdAt: record.createdAt || now };
   const usageRecords = [entry, ...current.usageRecords].slice(0, MAX_USAGE_RECORDS);
-  writeStore({ ...current, usageRecords });
+  writeLegacyStore({ ...current, usageRecords });
   return entry;
 }
 
 /** All usage records, newest first — optionally filtered by orgId. */
 function listUsageRecords(filter = {}) {
   const { orgId } = filter || {};
-  const records = readStore().usageRecords;
+  const records = readLegacyStore().usageRecords;
   return orgId ? records.filter((r) => r.orgId === orgId) : records;
 }
 
 /** Remove usage records created strictly before `beforeIso`. Returns count removed. */
 function pruneUsageRecords(beforeIso) {
   if (!beforeIso) return 0;
-  const current = readStore();
+  const current = readLegacyStore();
   const usageRecords = current.usageRecords.filter((r) => String(r.createdAt || '') >= beforeIso);
   const removed = current.usageRecords.length - usageRecords.length;
-  if (removed) writeStore({ ...current, usageRecords });
+  if (removed) writeLegacyStore({ ...current, usageRecords });
   return removed;
 }
 
 /** Append a ledger entry (newest first) with a generated id + createdAt. */
 function addLedgerEntry(entry) {
-  const current = readStore();
+  const current = readLegacyStore();
   const now = new Date().toISOString();
   const record = { ...entry, id: `led_${randomUUID()}`, createdAt: entry.createdAt || now };
-  writeStore({ ...current, ledgerEntries: [record, ...current.ledgerEntries] });
+  writeLegacyStore({ ...current, ledgerEntries: [record, ...current.ledgerEntries] });
   return record;
 }
 
 /** All ledger entries, newest first — optionally filtered by orgId. */
 function listLedgerEntries(filter = {}) {
   const { orgId } = filter || {};
-  const entries = readStore().ledgerEntries;
+  const entries = readLegacyStore().ledgerEntries;
   return orgId ? entries.filter((e) => e.orgId === orgId) : entries;
 }
 
 /** The billing account for an org (id = orgId), or null. */
 function getBillingAccount(orgId) {
   if (!orgId) return null;
-  return readStore().billingAccounts.find((a) => a.id === orgId) || null;
+  return readLegacyStore().billingAccounts.find((a) => a.id === orgId) || null;
 }
 
 function listBillingAccounts() {
-  return readStore().billingAccounts;
+  return readLegacyStore().billingAccounts;
 }
 
 /**
@@ -908,7 +1008,7 @@ function listBillingAccounts() {
  */
 function upsertBillingAccount(orgId, patch = {}) {
   if (!orgId) throw new Error('upsertBillingAccount requires an orgId');
-  const current = readStore();
+  const current = readLegacyStore();
   const now = new Date().toISOString();
   const existing = current.billingAccounts.find((a) => a.id === orgId) || null;
   const merged = existing
@@ -917,7 +1017,7 @@ function upsertBillingAccount(orgId, patch = {}) {
   const billingAccounts = existing
     ? current.billingAccounts.map((a) => (a.id === orgId ? merged : a))
     : [merged, ...current.billingAccounts];
-  writeStore({ ...current, billingAccounts });
+  writeLegacyStore({ ...current, billingAccounts });
   return merged;
 }
 
@@ -1007,6 +1107,8 @@ function addConversation(conversation = {}) {
   const record = {
     id: `conv_${randomUUID()}`,
     title: conversation.title || 'New conversation',
+    ...(conversation.orgId ? { orgId: String(conversation.orgId) } : {}),
+    ...(conversation.nativeProjectId ? { nativeProjectId: String(conversation.nativeProjectId) } : {}),
     createdAt: now,
     updatedAt: now,
     messages: Array.isArray(conversation.messages) ? conversation.messages.slice(0, MAX_MESSAGES_PER_CONVERSATION) : [],
@@ -1136,6 +1238,12 @@ module.exports = {
   readStore,
   writeStore,
   initStore,
+  normalizeWorkspaceContext: workspaceContext.normalizeWorkspaceContext,
+  runWithWorkspaceContext: workspaceContext.runWithWorkspaceContext,
+  currentWorkspaceContext: workspaceContext.currentWorkspaceContext,
+  workspaceOrganizationKey: workspaceContext.workspaceOrganizationKey,
+  workspaceProjectKey: workspaceContext.workspaceProjectKey,
+  workspaceCacheKey: workspaceContext.workspaceCacheKey,
   getApiKey,
   setApiKey,
   getSettings,

@@ -18,8 +18,10 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.auth.idp import decode_idp_token, is_idp_issuer
 from app.auth.jwt_local import decode_access_token, get_unverified_issuer
+from app.auth.org_context import OrgContextError, resolve_org_context
 from app.authz.principal import Principal
 from app.core.database import new_uow
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.timeutils import ensure_aware
 from app.errors import ConflictError
@@ -65,6 +67,18 @@ def _unauthorized() -> JSONResponse:
     )
 
 
+def _context_error(exc: OrgContextError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": "invalid_context" if exc.status_code != 503 else "context_unavailable",
+                "message": str(exc),
+            }
+        },
+    )
+
+
 class AuthContextMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -87,7 +101,14 @@ class AuthContextMiddleware:
         token = header[7:].strip()
 
         try:
-            principal = await self._authenticate(token)
+            principal = await self._authenticate(
+                token,
+                organization_id=request.headers.get("X-AI-Fleet-Organization-Id", ""),
+                project_id=request.headers.get("X-AI-Fleet-Project-Id", ""),
+            )
+        except OrgContextError as exc:
+            await _context_error(exc)(scope, receive, send)
+            return
         except (_AuthFailure, jwt.PyJWTError):
             await _unauthorized()(scope, receive, send)
             return
@@ -99,12 +120,30 @@ class AuthContextMiddleware:
         scope.setdefault("state", {})["principal"] = principal
         await self.app(scope, receive, send)
 
-    async def _authenticate(self, token: str) -> Principal:
+    async def _authenticate(
+        self, token: str, *, organization_id: str = "", project_id: str = ""
+    ) -> Principal:
         issuer = get_unverified_issuer(token)
         repo = UserRepository(new_uow())
 
         if is_idp_issuer(issuer):
             claims = decode_idp_token(token)
+            if get_settings().org_url:
+                context = await resolve_org_context(
+                    token,
+                    organization_id=organization_id.strip(),
+                    project_id=project_id.strip(),
+                )
+                return Principal(
+                    user_id=context.user_id,
+                    org_id=context.org_id,
+                    org_role=context.org_role,
+                    project_id=context.project_id,
+                    project_role=context.project_role,
+                    context_authoritative=True,
+                    is_super_admin=False,
+                    email=context.email or str(claims.get("email") or "").strip().lower(),
+                )
             # External (e.g. Firebase) users are matched by external_subject and,
             # if unknown, JIT-provisioned as an ORG-LESS user (org_id=None). An
             # org-less user is rejected by every tenant guard, so this grants
@@ -132,6 +171,9 @@ class AuthContextMiddleware:
             user_id=user.id,
             org_id=user.org_id,
             org_role=user.org_role,
+            project_id=None,
+            project_role=None,
+            context_authoritative=False,
             is_super_admin=user.is_super_admin,
             email=user.email,
         )

@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const { buildBackend, installSkills, configuredResourceNames } = require('./framework');
+const { buildBackend, installSkills, configuredResourceNames, runWorkflow } = require('./framework');
 const { resolveSkillsSrc } = require('../config');
 
 // Snapshot + restore the skills env so a test that pins SKILLS_ROOT/SKILLS_VERSION
@@ -193,4 +193,48 @@ test('configuredResourceNames falls back to the workflow declaration when no bui
     tools: ['web_search'],
     plugins: [],
   });
+});
+
+test('configuredResourceNames reports only policy-permitted MCP plugins', () => {
+  const workflow = { skills: [], tools: [], mcp: ['linear', 'playwright', 'github'] };
+  const effective = { plugins: { effective: ['linear', 'github'] } };
+  const resources = configuredResourceNames({
+    workflow,
+    effective,
+    resolvedTools: [],
+    resolvedSkills: [],
+  });
+  assert.deepEqual(resources.plugins, ['linear', 'github']);
+});
+
+test('runWorkflow filters denied plugins before the MCP loader is called', async (t) => {
+  const mcp = require('./mcp');
+  const original = mcp.loadMcpTools;
+  const sentinel = new Error('stop after observing governed MCP names');
+  let seen = null;
+  mcp.loadMcpTools = async (names) => {
+    seen = names;
+    throw sentinel;
+  };
+  t.after(() => { mcp.loadMcpTools = original; });
+
+  await assert.rejects(
+    () => runWorkflow({
+      workflow: {
+        name: 'policy-mcp-test',
+        backend: 'filesystem',
+        skills: [],
+        tools: [],
+        mcp: ['linear', 'playwright', 'github'],
+        systemPrompt: 'test',
+      },
+      llm: { provider: 'ollama', model: 'test' },
+      userMessage: 'test',
+      backend: {},
+      skillPaths: [],
+      ctx: { effectivePolicy: { plugins: { effective: ['linear', 'github'] } } },
+    }),
+    sentinel,
+  );
+  assert.deepEqual(seen, ['linear', 'github']);
 });

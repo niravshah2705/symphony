@@ -1,0 +1,21 @@
+{
+  "name": "@ai-fleet/email",
+  "version": "1.0.0",
+  "description": "Shared AI Fleet transactional email delivery service.",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env src/index.js",
+    "dev": "node --watch --env-file-if-exists=../../.env src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@ai-fleet/shared": "*",
+    "@google-cloud/firestore": "^8.7.1",
+    "express": "^5.2.1",
+    "nodemailer": "^7.0.11"
+  }
+}

@@ -6,7 +6,7 @@ const gate = require('./approval-gate');
 
 // In-memory store double mirroring the real store's approval-gate contract:
 // generated id, stamped createdAt/updatedAt, immutable patch preserving id/createdAt.
-function makeStore() {
+function makeStore(businesses = []) {
   const gates = [];
   let counter = 0;
   return {
@@ -28,6 +28,7 @@ function makeStore() {
     listApprovalGates(filter = {}) {
       return gates.filter((g) => (!filter.status || g.status === filter.status) && (!filter.businessId || g.businessId === filter.businessId));
     },
+    readStore() { return { businesses }; },
   };
 }
 
@@ -142,4 +143,50 @@ test('reevaluateGate supersedes the old gate; green returns no gate, amber creat
   assert.equal(amber.gate.attempts, 1);
   assert.equal(amber.gate.waitMinutes, 60); // inherits the wait from the superseded gate
   assert.equal(store.getApprovalGate(g2.id).status, 'superseded');
+});
+
+test('gate lifecycle preserves native context and publishes only to that workspace', async () => {
+  const store = makeStore();
+  const published = [];
+  const { calls, deps } = makeDeps(store, {
+    publishGate: (...args) => published.push(args),
+  });
+  const created = gate.createGate({
+    requirement: 'scoped', signal: 'amber', waitMinutes: 60,
+    orgId: 'org-a', nativeProjectId: 'project-a',
+  }, { store });
+  assert.equal(created.orgId, 'org-a');
+  assert.equal(created.nativeProjectId, 'project-a');
+
+  await gate.approveGate(created.id, deps);
+  assert.equal(calls.prepare[0].orgId, 'org-a');
+  assert.equal(calls.prepare[0].nativeProjectId, 'project-a');
+  assert.equal(calls.memory[0].orgId, 'org-a');
+  assert.equal(calls.memory[0].nativeProjectId, 'project-a');
+  assert.deepEqual(published.at(-1), [created.id, 'proceeded', {
+    organizationId: 'org-a', projectId: 'project-a',
+  }]);
+});
+
+test('default business resolution selects only the gate workspace when ids collide', async () => {
+  const store = makeStore([
+    { id: 'duplicate', name: 'Org A', orgId: 'org-a', nativeProjectId: 'project-a' },
+    { id: 'duplicate', name: 'Org B', orgId: 'org-b', nativeProjectId: 'project-b' },
+  ]);
+  let selected = null;
+  const created = gate.createGate({
+    requirement: 'scoped business', businessId: 'duplicate', signal: 'amber',
+    orgId: 'org-b', nativeProjectId: 'project-b',
+  }, { store });
+
+  await gate.proceedGate(created, { by: 'human' }, {
+    store,
+    prepareBusiness: async ({ business }) => { selected = business; return {}; },
+    saveMemory: () => null,
+    getSettings: () => ({}),
+    getAssumedRole: () => null,
+    publishGate: () => {},
+  });
+
+  assert.equal(selected.name, 'Org B');
 });

@@ -46,7 +46,10 @@ HTTP → AuthContextMiddleware (authn) → router (api/v1/*) → guard deps (aut
 
 - `app/middleware/auth.py` — **pure ASGI** auth middleware (not BaseHTTPMiddleware).
   Authenticates every `/api/v1/*` route except `PUBLIC_PATHS`; sets an immutable
-  `Principal` on `request.state`. Default-deny: unknown/new paths require auth.
+  `Principal` on `request.state`. It resolves the exact
+  `X-AI-Fleet-Organization-Id` / `X-AI-Fleet-Project-Id` headers against live
+  membership before attaching selected context. Default-deny: unknown/new paths
+  require auth.
 - `app/authz/` — `principal.py` (Principal), `policy.py` (capability predicates),
   `guards.py` (FastAPI dependencies: `require_super_admin`, `require_org_admin`,
   `require_org_member`, `get_project_context`, `require_project(predicate)`).
@@ -60,7 +63,8 @@ HTTP → AuthContextMiddleware (authn) → router (api/v1/*) → guard deps (aut
 
 1. **Org isolation.** Every query that touches org-owned data MUST filter by
    `principal.org_id`. Never trust an org/tenant/owner id from the path or body
-   for authorization — derive scope from the token/principal. Cross-org or
+   for authorization — derive scope from the middleware-validated principal.
+   Cross-org or
    no-access resources return **404** (not 403) to avoid an existence oracle.
    See `cross-tenant-isolation` rules; `guards.get_project_context` is the model.
 2. **Authorize every endpoint.** New routes are authenticated by the middleware,
@@ -85,10 +89,12 @@ HTTP → AuthContextMiddleware (authn) → router (api/v1/*) → guard deps (aut
 
 ## Data model (UUID PKs, timestamps on all)
 
-`Organization(name, description, slug)` · `User(org_id?, email, org_role,
-is_super_admin, auth_provider, external_subject, ...)` — one org per user, `org_id`
-NULL only for super-admins · `Project(org_id, ...)` · `ProjectMembership(project,
-user, role)` unique(project,user) — the developer↔project M2M with role ·
+`Organization(name, description, slug)` · global `User(org_id?, email, org_role,
+is_super_admin, auth_provider, external_subject, ...)` where `org_id/org_role` are
+legacy default context · `OrganizationMembership(org,user,role,status)` is the
+authoritative many-org relation with a per-user lookup index · `Project(org_id,
+...)` · `ProjectMembership(project,user,role)` unique(project,user) — the
+developer↔project M2M with role ·
 `Task(project_id, status, assignee_id?)` · `Tag(org_id, name)` unique(org,name) ·
 `RefreshToken(user, token_hash, family_id, ...)`. M2M: `org_tag`, `project_tag`,
 `task_tag`.
@@ -115,7 +121,7 @@ direct service unit tests).
 
 ## Testing conventions
 
-- `tests/conftest.py` provides `client` (httpx ASGI, in-memory SQLite) and
+- `tests/conftest.py` provides `client` (httpx ASGI, in-memory Firestore fake) and
   `db_session` (direct service-layer tests). Helpers in `tests/helpers.py`.
 - Use real-looking emails ending in `.com` — `.test`/`.example` are rejected by
   the email validator.

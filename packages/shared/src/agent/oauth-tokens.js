@@ -3,6 +3,7 @@
 const store = require('../store');
 const oauth = require('./oauth');
 const claudeOauth = require('./claude-oauth');
+const { workspaceCacheKey } = require('../store/workspace-context');
 
 /**
  * Fresh-token orchestration for the OAuth providers (Codex / Claude), extracted
@@ -17,6 +18,10 @@ const claudeOauth = require('./claude-oauth');
  */
 
 const inflight = new Map();
+
+function refreshKey(provider) {
+  return `${workspaceCacheKey()}\0${provider}`;
+}
 
 function coalesce(key, fn) {
   const existing = inflight.get(key);
@@ -39,7 +44,7 @@ async function ensureFreshCodexTokens() {
     throw err;
   }
   if (!oauth.isExpired(tokens)) return tokens;
-  return coalesce('codex', async () => {
+  return coalesce(refreshKey('codex'), async () => {
     const current = store.getCodexTokens() || tokens;
     if (!oauth.isExpired(current)) return current; // another caller just refreshed
     const refreshed = await oauth.refreshTokens(current);
@@ -61,7 +66,7 @@ async function ensureFreshClaudeTokens() {
     throw err;
   }
   if (!claudeOauth.isExpired(tokens)) return tokens;
-  return coalesce('claude', async () => {
+  return coalesce(refreshKey('claude'), async () => {
     const current = store.getClaudeTokens() || tokens;
     if (!claudeOauth.isExpired(current)) return current;
     const refreshed = await claudeOauth.refreshTokens(current);
@@ -70,4 +75,8 @@ async function ensureFreshClaudeTokens() {
   });
 }
 
-module.exports = { ensureFreshCodexTokens, ensureFreshClaudeTokens };
+module.exports = {
+  ensureFreshCodexTokens,
+  ensureFreshClaudeTokens,
+  _test: { refreshKey },
+};

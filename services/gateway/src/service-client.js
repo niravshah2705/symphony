@@ -2,6 +2,7 @@
 
 const { CONFIG } = require('@ai-fleet/shared/config');
 const log = require('@ai-fleet/shared/logger');
+const { contextHeaders } = require('./request-context');
 
 /**
  * Server-to-server client helpers shared by the reverse proxy (proxy.js) and the
@@ -51,13 +52,15 @@ function originOf(baseUrl) {
  *
  * @param {string} baseUrl  target service base URL (e.g. CONFIG.SERVICES.orgUrl)
  * @param {string} path     absolute path on the target (e.g. '/api/v1/me/deployment')
- * @param {{ method?: string, body?: unknown, userAuth?: string }} [opts]
+ * @param {{ method?: string, body?: unknown, userAuth?: string,
+ *   context?: {organizationId?: string, projectId?: string} }} [opts]
  * @returns {Promise<{ status: number, data: unknown }>}
  */
 async function callJson(baseUrl, path, opts = {}) {
   const { method = 'GET', body, userAuth } = opts;
   const target = `${baseUrl}${path}`;
   const headers = {};
+  Object.assign(headers, contextHeaders(opts.context));
   const init = { method, headers };
 
   if (body !== undefined && method !== 'GET' && method !== 'HEAD') {

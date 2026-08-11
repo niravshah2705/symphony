@@ -15,6 +15,7 @@ from app.auth.dependencies import get_principal
 from app.authz.guards import ProjectContext, require_org_admin, require_project_admin
 from app.authz.principal import Principal
 from app.core.database import Uow, get_session
+from app.errors import NotFoundError
 from app.schemas.policy import (
     EffectiveResponse,
     PolicyResponse,
@@ -72,6 +73,12 @@ async def get_effective_settings(
     principal: Principal = Depends(get_principal),
     session: Uow = Depends(get_session),
 ):
+    if principal.context_authoritative and principal.project_id is None and project_id is not None:
+        raise NotFoundError("Project not found")
+    if principal.project_id is not None and project_id is not None and principal.project_id != project_id:
+        raise NotFoundError("Project not found")
+    if project_id is None:
+        project_id = principal.project_id
     return await policy_service.resolve_for_caller(session, principal, project_id)
 
 

@@ -74,3 +74,19 @@ test('closing a workspace stream tears down its subscription', () => {
   events.publishWorkspace({ type: 'coder', coder: { running: false } });
   assert.equal(res.chunks.length, before);
 });
+
+test('SSE query context selects only the matching scoped relay', () => {
+  const context = { organizationId: 'sse-org', projectId: 'sse-project' };
+  const { req, res } = makeReqRes({ conversationId: 'sse-context', ...context });
+  sse.handleStream(req, res);
+
+  events.publishEvent('sse-context', { message: 'wrong project' }, {
+    organizationId: 'sse-org', projectId: 'other-project',
+  });
+  events.publishEvent('sse-context', { message: 'right project' }, context);
+
+  const frames = res.chunks.filter((chunk) => chunk.startsWith('data: '));
+  assert.equal(frames.length, 1);
+  assert.equal(JSON.parse(frames[0].slice(6).trim()).message, 'right project');
+  req.emit('close');
+});

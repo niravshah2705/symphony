@@ -67,6 +67,12 @@ variable "settings_image_tag" {
   default     = ""
 }
 
+variable "email_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the shared transactional email service."
+  default     = ""
+}
+
 # --- Cloud Run service / job names -------------------------------------------
 
 variable "gateway_service_name" {
@@ -92,6 +98,11 @@ variable "org_service_name" {
 variable "settings_service_name" {
   type    = string
   default = "settings-service"
+}
+
+variable "email_service_name" {
+  type    = string
+  default = "email-service"
 }
 
 variable "coder_job_name" {
@@ -198,6 +209,12 @@ variable "coder_topic" {
   default = "coder-requests"
 }
 
+variable "email_topic" {
+  type        = string
+  description = "Shared Pub/Sub topic carrying allow-listed transactional email jobs."
+  default     = "email-delivery"
+}
+
 variable "dead_letter_topic" {
   type    = string
   default = "agent-requests-deadletter"
@@ -207,6 +224,62 @@ variable "max_delivery_attempts" {
   type        = number
   description = "Push deliveries before a message is routed to the dead-letter topic."
   default     = 5
+}
+
+# --- Shared transactional email ----------------------------------------------
+
+variable "email_smtp_host" {
+  type        = string
+  description = "SMTP server hostname. Empty leaves the email service deployed but not ready."
+  default     = ""
+}
+
+variable "email_smtp_port" {
+  type        = number
+  description = "SMTP server port. Use 465 with email_smtp_secure=true or normally 587 with STARTTLS."
+  default     = 587
+  validation {
+    condition     = var.email_smtp_port >= 1 && var.email_smtp_port <= 65535
+    error_message = "email_smtp_port must be between 1 and 65535."
+  }
+}
+
+variable "email_smtp_secure" {
+  type        = bool
+  description = "Use implicit TLS for the SMTP connection (normally port 465)."
+  default     = false
+}
+
+variable "email_smtp_require_tls" {
+  type        = bool
+  description = "Require STARTTLS when implicit TLS is disabled."
+  default     = true
+}
+
+variable "email_smtp_auth_enabled" {
+  type        = bool
+  description = "Mount the latest email-smtp-user and email-smtp-password versions. Enable only after both secrets have an enabled version; values remain outside Terraform state."
+  default     = false
+}
+
+variable "email_from" {
+  type        = string
+  description = "Fixed From address used by every allow-listed email template. Empty makes readiness fail closed."
+  default     = ""
+}
+
+variable "email_public_app_url" {
+  type        = string
+  description = "HTTPS base URL of the SPA actually published by this deployment, used to construct invitation links. Entry points must set it explicitly."
+  default     = ""
+
+  validation {
+    condition = (
+      trimspace(var.email_public_app_url) == "" ||
+      can(regex("^https://[^/?#]+(/[^?#]*)?$", trimspace(var.email_public_app_url)))
+    )
+    error_message = "email_public_app_url must be empty during a targeted bootstrap or an absolute HTTPS URL without a query string or fragment."
+  }
 }
 
 variable "ack_deadline_seconds" {

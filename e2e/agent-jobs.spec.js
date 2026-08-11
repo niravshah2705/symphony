@@ -275,6 +275,14 @@ test('Agent jobs route, menu, and pause notice use the selected Gujarati locale'
 
 test('Agent surfaces deduplicate Git pauses and explain recovery in plain language', async ({ page }) => {
   await mockShell(page);
+  // Keep the test on its mocked HTTP snapshot. A live event from the local
+  // workspace stream can otherwise replace the pause between assertions.
+  await page.route('**/api/agent/workspace-stream-token**', (route) => json(route, { token: 'test-workspace-token' }));
+  await page.route('**/api/agent/workspace-stream**', (route) => route.fulfill({
+    status: 200,
+    headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
+    body: ': ok\n\n',
+  }));
   const rawReason = {
     code: 'git-unavailable',
     resource: 'git',

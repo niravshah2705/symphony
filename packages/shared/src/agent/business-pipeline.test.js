@@ -67,6 +67,23 @@ test('persists business memory and enqueues the linked project once', async () =
   assert.ok(payload.savedMemory.length >= 1);
 });
 
+test('business pipeline threads selected context into memory and scheduler records', async () => {
+  const deps = makeDeps();
+  await prepareBusiness({
+    input: 'A subscription marketplace for tutors',
+    business: { id: 'biz_ctx', name: 'TutorHub', projectId: 'tracker-project' },
+    assumedRole: { id: 'r1', name: 'Founder' },
+    settings: {},
+    orgId: 'org-a',
+    nativeProjectId: 'native-project-a',
+  }, deps);
+
+  assert.ok(deps.calls.saved.every((record) =>
+    record.orgId === 'org-a' && record.nativeProjectId === 'native-project-a'));
+  assert.equal(deps.calls.enqueue[0].orgId, 'org-a');
+  assert.equal(deps.calls.enqueue[0].nativeProjectId, 'native-project-a');
+});
+
 test('re-asserts the unsafe gate and blocks without side effects', async () => {
   const deps = makeDeps();
   const payload = await prepareBusiness({

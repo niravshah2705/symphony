@@ -20,6 +20,7 @@ const {
   isModelAllowed,
   enforceModel,
   enforceHarness,
+  isPolicyDeniedError,
 } = require('./settings-policy');
 
 const HARNESS = ['deepagent', 'codex-sdk', 'claude-agent-sdk'];
@@ -169,14 +170,17 @@ test('applyPolicyToWorkflow drops excluded tools (by domain) and excluded skills
     name: 'coding',
     tools: ['docker_build', 'run_pytest', 'web_search'],
     skills: ['linear', 'commit', 'push'],
+    mcp: ['linear', 'playwright'],
   };
   const effective = {
     tools: { effective: ['quality'] }, // docker excluded
     skills: { effective: ['linear', 'commit'] }, // push excluded
+    plugins: { effective: ['linear'] }, // playwright excluded
   };
   const out = applyPolicyToWorkflow(workflow, effective, { toolDomains: TOOL_DOMAINS });
   assert.deepEqual(out.tools, ['run_pytest', 'web_search']);
   assert.deepEqual(out.skills, ['linear', 'commit']);
+  assert.deepEqual(out.mcp, ['linear']);
   // Original workflow is not mutated (immutability).
   assert.deepEqual(workflow.tools, ['docker_build', 'run_pytest', 'web_search']);
 });
@@ -194,25 +198,30 @@ test('filterSkillPaths prunes installed skill dirs to the allowed skills', () =>
   assert.deepEqual(filterSkillPaths(paths, {}), paths);
 });
 
-test('enforceHarness downgrades an excluded harness to an allowed one (prefers deepagent)', () => {
+test('enforceHarness permits an allowed runtime and rejects an excluded runtime', () => {
   const effective = { harness: { effective: ['deepagent', 'claude-agent-sdk'] } };
-  // codex-sdk is excluded → falls back to the preferred deepagent.
-  assert.equal(enforceHarness('codex-sdk', effective), 'deepagent');
+  assert.throws(
+    () => enforceHarness('codex-sdk', effective),
+    (error) => isPolicyDeniedError(error) && error.domain === 'harness' && error.status === 403,
+  );
   // an allowed harness is kept as-is.
   assert.equal(enforceHarness('claude-agent-sdk', effective), 'claude-agent-sdk');
 });
 
-test('enforceHarness falls back to the first allowed when deepagent is excluded', () => {
+test('enforceHarness rejects an empty or denied governed harness selection', () => {
   const effective = { harness: { effective: ['codex-sdk', 'claude-agent-sdk'] } };
-  assert.equal(enforceHarness('antigravity-sdk', effective), 'codex-sdk');
+  assert.throws(() => enforceHarness('antigravity-sdk', effective), isPolicyDeniedError);
+  assert.throws(
+    () => enforceHarness('deepagent', { harness: { effective: [] } }),
+    isPolicyDeniedError,
+  );
 });
 
-test('enforceHarness is fail-open: no policy, or nothing allowed, keeps the runtime', () => {
+test('enforceHarness keeps local compatibility when no policy domain exists', () => {
   assert.equal(enforceHarness('codex-sdk', null), 'codex-sdk');
-  assert.equal(enforceHarness('codex-sdk', { harness: { effective: [] } }), 'codex-sdk');
 });
 
-test('enforceModel downgrades a denied id to an allowed candidate (fail-open)', () => {
+test('enforceModel downgrades only to an allowed candidate and otherwise fails closed', () => {
   const effective = { models: { effective: ['claude-sonnet-5', 'claude-haiku-4-5'] } };
   // Denied id → first allowed candidate.
   assert.equal(
@@ -226,8 +235,11 @@ test('enforceModel downgrades a denied id to an allowed candidate (fail-open)', 
   );
   // Already allowed → unchanged.
   assert.equal(enforceModel('claude-sonnet-5', effective, { candidates: ['claude-sonnet-5'] }), 'claude-sonnet-5');
-  // No allowed candidate → keep (fail-open, don't brick).
-  assert.equal(enforceModel('codex-gpt-5-5', effective, { candidates: ['codex-gpt-5-4'] }), 'codex-gpt-5-5');
+  // No allowed candidate → the denied model must not run.
+  assert.throws(
+    () => enforceModel('codex-gpt-5-5', effective, { candidates: ['codex-gpt-5-4'] }),
+    (error) => isPolicyDeniedError(error) && error.domain === 'model',
+  );
   // No models policy → unchanged (allow-all).
   assert.equal(enforceModel('anything', {}, { candidates: ['x'] }), 'anything');
 });

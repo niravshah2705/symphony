@@ -3,6 +3,7 @@
 const { CONFIG } = require('@ai-fleet/shared/config');
 const log = require('@ai-fleet/shared/logger');
 const { idTokenHeader, originOf } = require('./service-client');
+const { forwardRequestContext } = require('./request-context');
 
 /**
  * Minimal reverse proxy from the gateway to an isolated agent service.
@@ -32,6 +33,7 @@ function createProxy(baseUrl, opts = {}) {
     if (opts.rewrite) path = path.replace(opts.rewrite.from, opts.rewrite.to);
     const target = `${baseUrl}${path}`;
     const headers = {};
+    forwardRequestContext(req, headers);
     const init = { method: req.method, headers };
 
     const hasBody = req.method !== 'GET' && req.method !== 'HEAD';
@@ -66,7 +68,9 @@ function createProxy(baseUrl, opts = {}) {
       res.send(text);
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
-      log.error(`gateway proxy ${req.method} ${target} failed: ${message}`);
+      // Never log the target path/query: proxied request URLs may contain
+      // one-time credentials or other user-controlled sensitive values.
+      log.error(`gateway proxy ${req.method} to ${audience} failed: ${message}`);
       res.status(502).json({ error: `Agent service unavailable: ${message}` });
     }
   };

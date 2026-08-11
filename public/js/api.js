@@ -5,9 +5,37 @@ import '/config.js';
 // Thin fetch wrapper around the backend API.
 
 let accessTokenProvider = null;
+let requestContext = Object.freeze({ organizationId: '', projectId: '' });
 
 export function setAccessTokenProvider(provider) {
   accessTokenProvider = typeof provider === 'function' ? provider : null;
+}
+
+function contextId(value) {
+  const id = typeof value === 'string' ? value.trim() : '';
+  return id && id.length <= 160 && /^[A-Za-z0-9._:-]+$/.test(id) ? id : '';
+}
+
+/** Set the validated native AI Fleet org/project context applied to API calls. */
+export function setRequestContext(value) {
+  requestContext = Object.freeze({
+    organizationId: contextId(value && value.organizationId),
+    projectId: contextId(value && value.projectId),
+  });
+}
+
+export function getRequestContext() {
+  return requestContext;
+}
+
+/** EventSource cannot send custom headers, so its short-lived token-bound context
+ * is repeated in the URL. Normal fetch requests use the headers below. */
+export function requestContextQuerySuffix() {
+  const query = new URLSearchParams();
+  if (requestContext.organizationId) query.set('organizationId', requestContext.organizationId);
+  if (requestContext.projectId) query.set('projectId', requestContext.projectId);
+  const value = query.toString();
+  return value ? `&${value}` : '';
 }
 
 /**
@@ -43,6 +71,16 @@ function notifyAuthenticationRequired(error) {
 
 async function request(path, options = {}) {
   const headers = new Headers(options.headers || {});
+  // Context headers are application-owned. Replace rather than merge any
+  // caller-supplied values so every request carries the final validated choice.
+  headers.delete('X-AI-Fleet-Organization-Id');
+  headers.delete('X-AI-Fleet-Project-Id');
+  if (requestContext.organizationId) {
+    headers.set('X-AI-Fleet-Organization-Id', requestContext.organizationId);
+  }
+  if (requestContext.projectId) {
+    headers.set('X-AI-Fleet-Project-Id', requestContext.projectId);
+  }
   // `application/json` is not a CORS-safelisted request header. Adding it to a
   // bodyless anonymous GET forces an otherwise unnecessary OPTIONS preflight.
   // Mutations that actually carry our JSON payload still advertise it.
@@ -221,7 +259,7 @@ export const api = {
     } catch (_) {
       /* auth disabled locally → the stream token is optional */
     }
-    const url = `${getApiBase()}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token || '')}`;
+    const url = `${getApiBase()}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token || '')}${requestContextQuerySuffix()}`;
     const source = new EventSource(url);
     source.onmessage = (event) => {
       try {
@@ -246,7 +284,7 @@ export const api = {
     } catch (_) {
       /* auth disabled locally → the stream token is optional */
     }
-    const url = `${getApiBase()}/api/agent/workspace-stream?t=${encodeURIComponent(token || '')}`;
+    const url = `${getApiBase()}/api/agent/workspace-stream?t=${encodeURIComponent(token || '')}${requestContextQuerySuffix()}`;
     const source = new EventSource(url);
     source.onmessage = (event) => {
       try {
@@ -333,8 +371,9 @@ export const api = {
   org: {
     // Personal workspace (org-less friendly) — /api/org/me/*
     getMe: () => request('/org/me'),
+    getContext: () => request('/org/me/context'),
     createOrganization: (payload) =>
-      request('/org/me/organization', { method: 'POST', body: JSON.stringify(payload) }),
+      request('/org/me/organizations', { method: 'POST', body: JSON.stringify(payload) }),
     listPersonalProjects: () => request('/org/me/projects'),
     createPersonalProject: (payload) =>
       request('/org/me/projects', { method: 'POST', body: JSON.stringify(payload) }),
@@ -349,8 +388,15 @@ export const api = {
     createOrgProject: (payload) =>
       request('/org/projects', { method: 'POST', body: JSON.stringify(payload) }),
     listOrgUsers: () => request('/org/users'),
-    createOrgUser: (payload) =>
-      request('/org/users', { method: 'POST', body: JSON.stringify(payload) }),
+    listInvitations: () => request('/org/invitations'),
+    createInvitation: (payload) =>
+      request('/org/invitations', { method: 'POST', body: JSON.stringify(payload) }),
+    resendInvitation: (id) =>
+      request(`/org/invitations/${encodeURIComponent(id)}/resend`, { method: 'POST' }),
+    revokeInvitation: (id) =>
+      request(`/org/invitations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    acceptInvitation: (token) =>
+      request('/org/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
     listProjectMembers: (projectId) => request(`/org/projects/${projectId}/members`),
     addProjectMember: (projectId, payload) =>
       request(`/org/projects/${projectId}/members`, { method: 'POST', body: JSON.stringify(payload) }),

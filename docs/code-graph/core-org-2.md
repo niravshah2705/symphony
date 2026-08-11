@@ -6,8 +6,8 @@
 
 Directory-based community: services/settings
 
-- **Size**: 353 nodes
-- **Cohesion**: 0.4189
+- **Size**: 354 nodes
+- **Cohesion**: 0.4188
 - **Dominant Language**: python
 
 ## Members
@@ -16,22 +16,22 @@ Directory-based community: services/settings
 |------|------|------|-------|
 | health | Function | ./services/settings/app/api/v1/routes_health.py | 13-15 |
 | readiness | Function | ./services/settings/app/api/v1/routes_health.py | 19-22 |
-| get_effective_config | Function | ./services/settings/app/api/v1/routes_internal.py | 42-48 |
-| require_internal_token | Function | ./services/settings/app/api/v1/routes_internal.py | 51-55 |
-| resolve_org_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 59-66 |
-| resolve_managed_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 70-75 |
-| resolve_org_effective_policy | Function | ./services/settings/app/api/v1/routes_internal.py | 82-93 |
+| get_effective_config | Function | ./services/settings/app/api/v1/routes_internal.py | 43-55 |
+| require_internal_token | Function | ./services/settings/app/api/v1/routes_internal.py | 58-62 |
+| resolve_org_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 66-73 |
+| resolve_managed_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 77-82 |
+| resolve_org_effective_policy | Function | ./services/settings/app/api/v1/routes_internal.py | 89-100 |
 | get_my_settings | Function | ./services/settings/app/api/v1/routes_me.py | 25-29 |
 | put_my_settings | Function | ./services/settings/app/api/v1/routes_me.py | 33-38 |
 | get_org_secrets | Function | ./services/settings/app/api/v1/routes_secrets.py | 22-26 |
 | put_org_secrets | Function | ./services/settings/app/api/v1/routes_secrets.py | 30-35 |
 | put_org_secrets_selection | Function | ./services/settings/app/api/v1/routes_secrets.py | 39-44 |
-| get_org_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 32-36 |
-| put_org_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 40-45 |
-| get_project_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 51-55 |
-| put_project_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 59-64 |
-| get_effective_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 70-75 |
-| get_universe | Function | ./services/settings/app/api/v1/routes_settings.py | 79-80 |
+| get_org_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 33-37 |
+| put_org_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 41-46 |
+| get_project_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 52-56 |
+| put_project_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 60-65 |
+| get_effective_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 71-82 |
+| get_universe | Function | ./services/settings/app/api/v1/routes_settings.py | 86-87 |
 | get_principal | Function | ./services/settings/app/auth/dependencies.py | 13-22 |
 | get_current_user | Function | ./services/settings/app/auth/dependencies.py | 25-33 |
 | _client | Function | ./services/settings/app/auth/idp.py | 23-28 |
@@ -43,15 +43,15 @@ Directory-based community: services/settings
 | get_unverified_issuer | Function | ./services/settings/app/auth/jwt_local.py | 65-75 |
 | ProjectContext | Class | ./services/settings/app/authz/guards.py | 24-32 |
 | require_org_admin | Function | ./services/settings/app/authz/guards.py | 35-38 |
-| get_project_context | Function | ./services/settings/app/authz/guards.py | 41-73 |
-| require_project_admin | Function | ./services/settings/app/authz/guards.py | 76-82 |
+| get_project_context | Function | ./services/settings/app/authz/guards.py | 41-93 |
+| require_project_admin | Function | ./services/settings/app/authz/guards.py | 96-102 |
 | is_org_admin | Function | ./services/settings/app/authz/policy.py | 16-17 |
 | can_manage_project_settings | Function | ./services/settings/app/authz/policy.py | 20-23 |
-| Principal | Class | ./services/settings/app/authz/principal.py | 16-21 |
-| Settings | Class | ./services/settings/app/core/config.py | 28-99 |
-| _derive_and_validate | Function | ./services/settings/app/core/config.py | 78-90 |
-| plugins_catalog | Function | ./services/settings/app/core/config.py | 92-99 |
-| get_settings | Function | ./services/settings/app/core/config.py | 103-105 |
+| Principal | Class | ./services/settings/app/authz/principal.py | 16-24 |
+| Settings | Class | ./services/settings/app/core/config.py | 28-106 |
+| _derive_and_validate | Function | ./services/settings/app/core/config.py | 83-97 |
+| plugins_catalog | Function | ./services/settings/app/core/config.py | 99-106 |
+| get_settings | Function | ./services/settings/app/core/config.py | 110-112 |
 | Uow | Class | ./services/settings/app/core/database.py | 23-72 |
 | __init__ | Function | ./services/settings/app/core/database.py | 24-26 |
 | tracked | Function | ./services/settings/app/core/database.py | 29-31 |
@@ -65,14 +65,14 @@ Directory-based community: services/settings
 | count | Function | ./services/settings/app/core/database.py | 67-69 |
 | commit | Function | ./services/settings/app/core/database.py | 71-72 |
 
-*... and 303 more members.*
+*... and 304 more members.*
 
 ## Execution Flows
 
 - **set_selection** (criticality: 0.91, depth: 3)
 - **resolve_secrets_for_org** (criticality: 0.90, depth: 4)
 - **set_org_secrets** (criticality: 0.89, depth: 4)
-- **__call__** (criticality: 0.83, depth: 4)
+- **__call__** (criticality: 0.84, depth: 4)
 - **get_org_secrets** (criticality: 0.81, depth: 3)
 - **resolve_for_caller** (criticality: 0.69, depth: 4)
 - **resolve_policy_for_org** (criticality: 0.69, depth: 4)
@@ -85,20 +85,20 @@ Directory-based community: services/settings
 
 ### Outgoing
 
-- `get` (117 edge(s))
-- `str` (44 edge(s))
+- `get` (120 edge(s))
+- `str` (46 edge(s))
 - `uuid4` (44 edge(s))
 - `put` (42 edge(s))
 - `Depends` (35 edge(s))
 - `json` (33 edge(s))
-- `ValueError` (19 edge(s))
+- `ValueError` (20 edge(s))
 - `set` (17 edge(s))
 - `items` (16 edge(s))
 - `BaseModel` (15 edge(s))
 - `list` (13 edge(s))
+- `strip` (11 edge(s))
 - `len` (10 edge(s))
 - `dict` (9 edge(s))
-- `strip` (8 edge(s))
 - `pop` (8 edge(s))
 
 ### Incoming

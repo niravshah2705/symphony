@@ -27,8 +27,8 @@ class Organization:
     # resources. Used by the runtime provisioner to name per-tenant services and
     # as the STORE_NAMESPACE of a per-tenant gateway.
     deployment_slug: str = ""
-    # Per-tenant deployment registry. Empty for pseudo/org-less workspaces and any
-    # org on the shared stack — the resolver then returns the shared gateway URL.
+    # Per-tenant deployment registry. Empty for any org on the shared stack — the
+    # resolver then returns the shared gateway URL.
     # The runtime provisioner writes per-service URLs + a status machine here
     # (see docs plan): {status, error, gateway:{name,url,status}, planner:{…},
     # coder:{…}, worker:{name,status}, updated_at}. Kept a plain map (Firestore is

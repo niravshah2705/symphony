@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+#
+# Shared transactional email service image (INTERNAL Cloud Run service).
+# Build from the monorepo root so npm workspaces resolve @ai-fleet/shared.
+ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+
+FROM ${NODE_IMAGE} AS builder
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+COPY packages/ ./packages/
+COPY services/ ./services/
+
+RUN npm ci --omit=dev && npm cache clean --force
+
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    AI_FLEET_DATA_DIR=/tmp
+
+COPY --from=builder --chown=node:node /app /app
+
+USER node
+
+EXPOSE 8080
+
+CMD ["node", "services/email/src/index.js"]

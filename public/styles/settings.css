@@ -48,6 +48,7 @@
 .sx-editing-inherit { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 
 .settings-layout { max-width: 1280px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 26px; align-items: start; }
+.settings-layout-policy-only { grid-template-columns: minmax(0, 1fr); }
 .settings-content { min-width: 0; display: flex; flex-direction: column; gap: 32px; }
 .settings-rail { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 12px; }
 @media (max-width: 1024px) { .settings-layout { grid-template-columns: 1fr; } .settings-rail { position: static; } }

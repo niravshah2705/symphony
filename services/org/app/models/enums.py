@@ -9,6 +9,17 @@ class OrgRole(str, enum.Enum):
     MEMBER = "MEMBER"
 
 
+class MembershipStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+
+
+class InvitationStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    REVOKED = "REVOKED"
+    EXPIRED = "EXPIRED"
+
+
 class ProjectRole(str, enum.Enum):
     PROJECT_ADMIN = "PROJECT_ADMIN"
     TEAM_LEAD = "TEAM_LEAD"

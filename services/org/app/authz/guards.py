@@ -63,6 +63,11 @@ async def get_project_context(
     if principal.org_id is None:
         raise NotFoundError("Project not found")
 
+    # An explicit validated project selection narrows the request. A caller may
+    # not select one project and operate on another path id in the same org.
+    if principal.project_id is not None and principal.project_id != project_id:
+        raise NotFoundError("Project not found")
+
     # Path-scoped read: organizations/{caller_org}/projects/{id} — a project in
     # another org is unreachable, not merely filtered.
     project = await ProjectRepository(session).get(project_id, principal.org_id)

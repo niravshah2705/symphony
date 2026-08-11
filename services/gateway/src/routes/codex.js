@@ -2,7 +2,16 @@
 
 const express = require('express');
 const { CONFIG } = require('@ai-fleet/shared/config');
-const { getSettings, patchSettings, getCodexTokens, setCodexTokens, clearCodexTokens } = require('@ai-fleet/shared/store');
+const {
+  getSettings,
+  patchSettings,
+  getCodexTokens,
+  setCodexTokens,
+  clearCodexTokens,
+  initStore,
+  runWithWorkspaceContext,
+  currentWorkspaceContext,
+} = require('@ai-fleet/shared/store');
 const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
 const { createLogin, consumeLogin, exchangeCodeForTokens } = require('@ai-fleet/shared/agent/oauth');
 const { ensureFreshCodexTokens } = require('@ai-fleet/shared/agent/llm');
@@ -88,7 +97,7 @@ router.get(
 
 // GET /api/settings/codex/login — begin OAuth; returns the authorize URL to navigate to.
 router.get('/login', (req, res) => {
-  const { authorizeUrl } = createLogin();
+  const { authorizeUrl } = createLogin(currentWorkspaceContext());
   res.json({ authorizeUrl });
 });
 
@@ -214,19 +223,24 @@ const callback = asyncHandler(async (req, res) => {
     return page(res, 400, 'Sign-in failed', 'Missing authorization code.');
   }
 
-  try {
-    const tokens = await exchangeCodeForTokens({
-      code,
-      codeVerifier: login.codeVerifier,
-      redirectUri: login.redirectUri, // exact redirect_uri reuse
-    });
-    setCodexTokens(tokens);
-    log.info('Codex OAuth sign-in complete; tokens stored server-side.');
-    return page(res, 200, 'Signed in to Codex', 'You can close this tab and return to AI Fleet.');
-  } catch (err) {
-    log.error(`Codex token exchange failed: ${err && err.message ? err.message : err}`);
-    return page(res, 502, 'Sign-in failed', 'Could not complete the token exchange. Please try again.');
-  }
+  return runWithWorkspaceContext(login.workspaceContext || {}, async () => {
+    try {
+      // The redirect has no selected-context headers. Re-enter the exact
+      // workspace captured in the single-use state before hydrating or writing.
+      await initStore();
+      const tokens = await exchangeCodeForTokens({
+        code,
+        codeVerifier: login.codeVerifier,
+        redirectUri: login.redirectUri, // exact redirect_uri reuse
+      });
+      setCodexTokens(tokens);
+      log.info('Codex OAuth sign-in complete; tokens stored server-side.');
+      return page(res, 200, 'Signed in to Codex', 'You can close this tab and return to AI Fleet.');
+    } catch (err) {
+      log.error(`Codex token exchange failed: ${err && err.message ? err.message : err}`);
+      return page(res, 502, 'Sign-in failed', 'Could not complete the token exchange. Please try again.');
+    }
+  });
 });
 
 // Expose the pending-login count for diagnostics/tests (no secrets).

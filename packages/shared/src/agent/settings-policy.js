@@ -21,6 +21,22 @@ const DOMAINS = Object.freeze(['harness', 'tools', 'skills', 'plugins', 'hooks',
 
 const EMPTY_SCOPE = Object.freeze({ include: [], exclude: [] });
 
+class PolicyDeniedError extends Error {
+  constructor(domain, resource = '') {
+    const label = resource ? ` "${resource}"` : '';
+    super(`Workspace policy does not permit the selected ${domain}${label}.`);
+    this.name = 'PolicyDeniedError';
+    this.code = 'policy_denied';
+    this.status = 403;
+    this.domain = domain;
+    this.resource = resource || null;
+  }
+}
+
+function isPolicyDeniedError(error) {
+  return Boolean(error && error.code === 'policy_denied');
+}
+
 /** Translate a fnmatch-style glob into an anchored, case-sensitive RegExp. */
 function globToRegExp(pattern) {
   let out = '';
@@ -176,6 +192,9 @@ function applyPolicyToWorkflow(workflow, effective, { toolDomains } = {}) {
   if (hasDomain(effective, 'skills') && Array.isArray(workflow.skills)) {
     next.skills = filterByPolicy(workflow.skills, effective.skills.effective);
   }
+  if (hasDomain(effective, 'plugins') && Array.isArray(workflow.mcp)) {
+    next.mcp = filterByPolicy(workflow.mcp, effective.plugins.effective);
+  }
   return next;
 }
 
@@ -233,9 +252,9 @@ function isModelAllowed(modelId, effective) {
 /**
  * Enforce the models policy on a chosen model/preset id. If it is excluded, fall
  * back to the first allowed `candidate` (preferring `preferred` when allowed).
- * When no models policy is present, or nothing among the candidates is allowed,
- * the id is returned UNCHANGED (fail-open — never brick a run). Mirrors
- * enforceHarness; callers pass same-provider preset ids as candidates.
+ * When no models policy is present the id is returned unchanged. Once the
+ * domain is governed, a denied model with no permitted candidate fails closed.
+ * Callers pass same-provider preset ids as candidates.
  * @returns {string} the effective (possibly downgraded) model/preset id.
  */
 function enforceModel(modelId, effective, { candidates = [], preferred } = {}) {
@@ -244,34 +263,36 @@ function enforceModel(modelId, effective, { candidates = [], preferred } = {}) {
   if (allowed.includes(modelId)) return modelId;
   if (preferred && allowed.includes(preferred)) return preferred;
   const alt = (candidates || []).find((id) => allowed.includes(id));
-  return alt || modelId; // nothing allowed among candidates → keep (fail-open)
+  if (alt) return alt;
+  throw new PolicyDeniedError('model', modelId);
 }
 
 /**
- * Enforce the harness policy on a chosen runtime id. If the runtime is excluded,
- * fall back to the first allowed harness (preferring `deepagent`, the
- * provider-neutral default). When no harness policy is present, or nothing is
- * allowed, the runtime is returned unchanged (fail-open — no regression).
- * @returns {string} the effective (possibly downgraded) runtime id.
+ * Enforce the harness policy on a chosen runtime id. Harness changes alter the
+ * execution/security boundary, so an explicit policy must permit the resolved
+ * runtime exactly; empty or denied selections fail closed.
+ * @returns {string} the permitted runtime id.
  */
 function enforceHarness(runtimeId, effective, { preferred = 'deepagent' } = {}) {
+  void preferred;
   if (!hasDomain(effective, 'harness')) return runtimeId;
   const allowed = effective.harness.effective;
-  if (!allowed.length) return runtimeId; // policy allows nothing → don't brick the run
   if (allowed.includes(runtimeId)) return runtimeId;
-  if (allowed.includes(preferred)) return preferred;
-  return allowed[0];
+  throw new PolicyDeniedError('harness', runtimeId);
 }
 
 module.exports = {
   DOMAINS,
   CONFIG_VALUE_KEYS,
+  PolicyDeniedError,
+  isPolicyDeniedError,
   globToRegExp,
   matchesAny,
   applyScope,
   resolveDomain,
   resolveEffective,
   resolveEffectiveValues,
+  hasDomain,
   filterByPolicy,
   filterToolsByPolicy,
   applyPolicyToWorkflow,

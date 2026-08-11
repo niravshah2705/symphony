@@ -5,6 +5,18 @@ const linear = require('@ai-fleet/shared/linear');
 const log = require('@ai-fleet/shared/logger');
 const { resolveLlm } = require('@ai-fleet/shared/agent/llm');
 const { runCoder } = require('@ai-fleet/shared/agent/coder');
+const {
+  fetchOrgEffectivePolicy,
+  resolvePolicyOrganization,
+  isOrganizationContextMismatch,
+  isPolicyUnavailableError,
+  PolicyUnavailableError,
+} = require('@ai-fleet/shared/agent/org-policy-client');
+const {
+  enforceLlmModel,
+  applyOperationalPrefs,
+  isPolicyDeniedError,
+} = require('@ai-fleet/shared/agent/policy-runtime');
 const orchestrator = require('@ai-fleet/shared/agent/coder-orchestrator');
 const { publishEvent } = require('@ai-fleet/shared/messaging/events');
 const jobs = require('@ai-fleet/shared/messaging/jobs');
@@ -66,11 +78,24 @@ async function loadIssue(settings, issueId) {
   return toIssue(data.issue);
 }
 
-/** Emit a coder step to logs + (when present) the conversation SSE stream. */
-function makeStep(issue, conversationId) {
+function eventContext(organizationId, projectId) {
+  return { organizationId: organizationId || null, projectId: projectId || null };
+}
+
+function hasEffectivePolicy(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && Object.keys(value).length,
+  );
+}
+
+/** Emit a coder step to logs + (when present) the scoped conversation SSE stream. */
+function makeStep(issue, conversationId, context, publish = publishEvent) {
   return (message) => {
     log.info(`[coder ${issue.identifier}] ${message}`);
-    if (conversationId) publishEvent(conversationId, { level: 'info', message, ts: new Date().toISOString() });
+    if (conversationId) publish(conversationId, { level: 'info', message, ts: new Date().toISOString() }, context);
   };
 }
 
@@ -79,13 +104,39 @@ function makeStep(issue, conversationId) {
  * style summary immediately); pass `blocking: true` (the Cloud Run Job worker) to
  * await the full run and return its result.
  */
-async function runTicketInProcess({ issueId, conversationId = null, blocking = false }) {
-  const settings = getSettings();
-  const issue = await loadIssue(settings, issueId);
+async function runTicketInProcess({
+  issueId,
+  conversationId = null,
+  blocking = false,
+  orgId = null,
+  nativeProjectId = null,
+}, dependencies = {}) {
+  const getSettingsImpl = dependencies.getSettings || getSettings;
+  const loadIssueImpl = dependencies.loadIssue || loadIssue;
+  const billingStatusImpl = dependencies.billingStatus || billingStatus;
+  const resolvePolicyImpl = dependencies.resolvePolicy || fetchOrgEffectivePolicy;
+  const resolveLlmImpl = dependencies.resolveLlm || resolveLlm;
+  const preflightImpl = dependencies.preflightAndPause || orchestrator.preflightAndPause;
+  const runCoderImpl = dependencies.runCoder || runCoder;
+  const publish = dependencies.publishEvent || publishEvent;
+
+  // A dedicated runtime is pinned to one org. Shared runtimes use the org that
+  // the gateway/org service already validated. Resolve this before any policy or
+  // model work so a conflicting tenant context fails closed.
+  const effectiveOrgId = resolvePolicyOrganization(orgId);
+  const context = eventContext(effectiveOrgId, nativeProjectId);
+  const settings = getSettingsImpl();
+  const loadedIssue = await loadIssueImpl(settings, issueId);
+  const issue = {
+    ...loadedIssue,
+    ...(effectiveOrgId ? { orgId: effectiveOrgId } : {}),
+    ...(nativeProjectId ? { nativeProjectId } : {}),
+  };
+  const onStep = makeStep(issue, conversationId, context, publish);
 
   // Negative-balance gate for on-demand runs: refuse with the same 503 + pauseReason
   // shape the readiness gate uses, so the SPA surfaces it identically.
-  const billing = billingStatus();
+  const billing = billingStatusImpl({ orgId: effectiveOrgId || undefined });
   if (billing.blocked) {
     throw httpError(billing.reason, 503, {
       paused: true,
@@ -93,10 +144,42 @@ async function runTicketInProcess({ issueId, conversationId = null, blocking = f
     });
   }
 
+  // Resolve the selected org + native-project cascade before resolving/probing
+  // the execution model. A selected organization fails closed when its policy
+  // is unavailable; only the empty legacy local context remains allow-all.
+  let resolvedPolicy = null;
+  try {
+    resolvedPolicy = await resolvePolicyImpl(effectiveOrgId || undefined, nativeProjectId || undefined);
+  } catch (error) {
+    if (isOrganizationContextMismatch(error)) throw error;
+    if (effectiveOrgId) {
+      throw isPolicyUnavailableError(error)
+        ? error
+        : new PolicyUnavailableError(undefined, error);
+    }
+  }
+  const effectivePolicy = (resolvedPolicy && resolvedPolicy.effectivePolicy) || null;
+  if (effectiveOrgId && !hasEffectivePolicy(effectivePolicy)) {
+    throw new PolicyUnavailableError();
+  }
+  const keys = applyOperationalPrefs(buildKeys(settings), (resolvedPolicy && resolvedPolicy.prefs) || {}, onStep);
+
   let readiness;
   try {
-    readiness = await orchestrator.preflightAndPause(issue, (role) => resolveLlm(settings, role));
+    readiness = await preflightImpl(issue, async (role) => {
+      const candidate = await resolveLlmImpl(settings, role);
+      const enforced = enforceLlmModel(candidate, effectivePolicy);
+      if (candidate && enforced && candidate.model !== enforced.model) {
+        onStep(`Model "${candidate.model}" is denied by organization policy; using allowed "${enforced.model}".`);
+      }
+      return enforced;
+    });
   } catch (error) {
+    if (
+      isPolicyUnavailableError(error)
+      || isPolicyDeniedError(error)
+      || isOrganizationContextMismatch(error)
+    ) throw error;
     const reason = error && error.pauseReason;
     throw httpError(reason ? reason.message : 'Agent jobs are paused until the workspace is ready.', 503, {
       paused: true,
@@ -105,11 +188,27 @@ async function runTicketInProcess({ issueId, conversationId = null, blocking = f
   }
 
   const { llm } = readiness;
-  const onStep = makeStep(issue, conversationId);
   const summary = { accepted: true, issue: { id: issue.id, identifier: issue.identifier, state: issue.state }, provider: llm.provider, model: llm.model };
 
-  const run = () => runCoder({ issue, llm, apiKey: settings.linearApiKey, keys: buildKeys(settings), onStep });
+  const run = () => runCoderImpl({
+    issue,
+    llm,
+    apiKey: settings.linearApiKey,
+    keys,
+    onStep,
+    settings: {
+      effectivePolicy,
+      orgId: effectiveOrgId || null,
+      nativeProjectId: nativeProjectId || null,
+    },
+  });
   const onError = (err) => {
+    if (isPolicyUnavailableError(err) || isPolicyDeniedError(err)) {
+      const message = err && err.message ? err.message : String(err);
+      log.warn(`[coder ${issue.identifier}] blocked by workspace policy: ${message}`);
+      if (conversationId) publish(conversationId, { level: 'error', message: `Coder blocked by workspace policy: ${message}`, ts: new Date().toISOString() }, context);
+      return;
+    }
     const reason = orchestrator.pauseForRuntimeError(err, {
       task: issue,
       role: readiness.role,
@@ -118,17 +217,17 @@ async function runTicketInProcess({ issueId, conversationId = null, blocking = f
     });
     if (reason) {
       log.warn(`[coder ${issue.identifier}] Agent jobs paused: ${reason.message}`);
-      if (conversationId) publishEvent(conversationId, { level: 'warn', message: `Paused: ${reason.message}`, ts: new Date().toISOString() });
+      if (conversationId) publish(conversationId, { level: 'warn', message: `Paused: ${reason.message}`, ts: new Date().toISOString() }, context);
       return;
     }
     const message = err && err.message ? err.message : String(err);
     log.error(`[coder ${issue.identifier}] failed: ${message}`);
-    if (conversationId) publishEvent(conversationId, { level: 'error', message: `Coder failed: ${message}`, ts: new Date().toISOString() });
+    if (conversationId) publish(conversationId, { level: 'error', message: `Coder failed: ${message}`, ts: new Date().toISOString() }, context);
   };
   const onDone = (r) => {
     const message = `done: ${String((r && r.finalText) || '').slice(0, 160)}`;
     log.info(`[coder ${issue.identifier}] ${message}`);
-    if (conversationId) publishEvent(conversationId, { level: 'info', message, ts: new Date().toISOString() });
+    if (conversationId) publish(conversationId, { level: 'info', message, ts: new Date().toISOString() }, context);
   };
 
   if (blocking) {
@@ -144,20 +243,33 @@ async function runTicketInProcess({ issueId, conversationId = null, blocking = f
  * one-shot Cloud Run Job (long-running, scale-to-zero) and returns immediately;
  * locally it runs in-process (detached).
  */
-async function runTicket({ issueId, conversationId = null }) {
-  if (jobs.isCloudJobEnabled()) {
-    const settings = getSettings();
-    const issue = await loadIssue(settings, issueId);
-    const { execution } = await jobs.runCoderJob({
+async function runTicket({ issueId, conversationId = null, orgId = null, nativeProjectId = null }, dependencies = {}) {
+  const jobsImpl = dependencies.jobs || jobs;
+  const getSettingsImpl = dependencies.getSettings || getSettings;
+  const loadIssueImpl = dependencies.loadIssue || loadIssue;
+  const publish = dependencies.publishEvent || publishEvent;
+  const effectiveOrgId = resolvePolicyOrganization(orgId);
+  const context = eventContext(effectiveOrgId, nativeProjectId);
+  if (jobsImpl.isCloudJobEnabled()) {
+    const settings = getSettingsImpl();
+    const issue = await loadIssueImpl(settings, issueId);
+    const { execution } = await jobsImpl.runCoderJob({
       issueId: issue.id,
-      env: conversationId ? { CONVERSATION_ID: conversationId } : {},
+      env: {
+        ...(conversationId ? { CONVERSATION_ID: conversationId } : {}),
+        ...(effectiveOrgId ? { FLEET_ORG_ID: effectiveOrgId } : {}),
+        ...(nativeProjectId ? { AI_FLEET_PROJECT_CONTEXT: nativeProjectId } : {}),
+      },
     });
     if (conversationId) {
-      publishEvent(conversationId, { level: 'info', message: `Launched coder Job for ${issue.identifier}`, execution, ts: new Date().toISOString() });
+      publish(conversationId, { level: 'info', message: `Launched coder Job for ${issue.identifier}`, execution, ts: new Date().toISOString() }, context);
     }
     return { accepted: true, issue: { id: issue.id, identifier: issue.identifier, state: issue.state }, execution };
   }
-  return runTicketInProcess({ issueId, conversationId, blocking: false });
+  return runTicketInProcess(
+    { issueId, conversationId, blocking: false, orgId: effectiveOrgId, nativeProjectId },
+    dependencies,
+  );
 }
 
-module.exports = { runTicket, runTicketInProcess, loadIssue, buildKeys, toIssue, ISSUE_QUERY };
+module.exports = { runTicket, runTicketInProcess, loadIssue, buildKeys, toIssue, eventContext, ISSUE_QUERY };

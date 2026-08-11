@@ -68,6 +68,7 @@ jobs:
             root:     ['package.json', 'package-lock.json']
             org:      ['services/org/**']
             settings: ['services/settings/**']
+            email:    ['services/email/**', 'deploy/gcp/Dockerfile.email']
 
       - id: plan
         env:
@@ -83,6 +84,7 @@ jobs:
           INFRA: ${{ steps.filter.outputs.infra }}
           ORG: ${{ steps.filter.outputs.org }}
           SETTINGS: ${{ steps.filter.outputs.settings }}
+          EMAIL: ${{ steps.filter.outputs.email }}
         run: |
           set -euo pipefail
           # A shared-code / root-deps change (or a forced run) rebuilds the Node
@@ -98,6 +100,7 @@ jobs:
           if [ "$all" = "true" ] || [ "$GATEWAY" = "true" ]; then push gateway gateway       deploy/gcp/Dockerfile.gateway . ; fi
           if [ "$all" = "true" ] || [ "$PLANNER" = "true" ]; then push planner planner       deploy/gcp/Dockerfile.planner . ; fi
           if [ "$all" = "true" ] || [ "$CODER"   = "true" ]; then push coder   coder-control deploy/gcp/Dockerfile.coder   . ; fi
+          if [ "$all" = "true" ] || [ "$EMAIL"   = "true" ]; then push email   email-service deploy/gcp/Dockerfile.email   . ; fi
           # The provisioner is a Node service (rebuilds on shared/root/force too).
           # Its image is built even while provisioning is disabled so enabling is a
           # one-var flip; terraform only creates the service when provisioning_enabled.
@@ -282,6 +285,7 @@ jobs:
             echo "proxy=$(resolve proxy proxy)"
             echo "org=$(resolve org org-service)"
             echo "settings=$(resolve settings settings-service)"
+            echo "email=$(resolve email email-service)"
           } >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
@@ -315,6 +319,13 @@ jobs:
             -var="skills_version=${{ vars.SKILLS_VERSION || 'v1' }}"
             -var="egress_proxy_enabled=true"
             -var="internal_api_token=${{ secrets.INTERNAL_API_TOKEN }}"
+            -var="email_smtp_host=${{ vars.EMAIL_SMTP_HOST }}"
+            -var="email_smtp_port=${{ vars.EMAIL_SMTP_PORT || '587' }}"
+            -var="email_smtp_secure=${{ vars.EMAIL_SMTP_SECURE || 'false' }}"
+            -var="email_smtp_require_tls=${{ vars.EMAIL_SMTP_REQUIRE_TLS || 'true' }}"
+            -var="email_smtp_auth_enabled=${{ vars.EMAIL_SMTP_AUTH_ENABLED || 'false' }}"
+            -var="email_from=${{ vars.EMAIL_FROM }}"
+            -var="email_public_app_url=${{ vars.EMAIL_PUBLIC_APP_URL }}"
           )
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
@@ -323,6 +334,7 @@ jobs:
           [ -n "${{ steps.tags.outputs.proxy }}" ] && apply_args+=(-var="proxy_image_tag=${{ steps.tags.outputs.proxy }}") || true
           [ -n "${{ steps.tags.outputs.org }}" ]     && apply_args+=(-var="org_image_tag=${{ steps.tags.outputs.org }}") || true
           [ -n "${{ steps.tags.outputs.settings }}" ] && apply_args+=(-var="settings_image_tag=${{ steps.tags.outputs.settings }}") || true
+          [ -n "${{ steps.tags.outputs.email }}" ] && apply_args+=(-var="email_image_tag=${{ steps.tags.outputs.email }}") || true
 
           terraform apply -input=false -auto-approve "${apply_args[@]}"
 

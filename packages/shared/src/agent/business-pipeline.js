@@ -122,7 +122,11 @@ function buildDeps(deps) {
     callJson: deps.callJson || defaultCallJson,
     callText: deps.callText || defaultCallText,
     enqueue: deps.enqueue || ((args) => require('./scheduler').enqueue(args)),
-    saveMemory: deps.saveMemory || ((record) => require('../store').addMemory(normalizeMemory(record))),
+    saveMemory: deps.saveMemory || ((record) => require('../store').addMemory({
+      ...normalizeMemory(record),
+      ...(record.orgId ? { orgId: String(record.orgId) } : {}),
+      ...(record.nativeProjectId ? { nativeProjectId: String(record.nativeProjectId) } : {}),
+    })),
   };
 }
 
@@ -480,7 +484,7 @@ async function designMockup(goal, settings, deps, warnings) {
   }
 }
 
-function persistMemory(goal, revenue, business, deps, warnings) {
+function persistMemory(goal, revenue, business, deps, warnings, context = {}) {
   const refId = business && /^[A-Za-z0-9_-]{1,64}$/.test(String(business.id || '')) ? String(business.id) : null;
   const entries = [
     { title: 'Outcome', text: goal },
@@ -489,7 +493,11 @@ function persistMemory(goal, revenue, business, deps, warnings) {
   const saved = [];
   for (const entry of entries) {
     try {
-      const record = deps.saveMemory({ scope: 'business', refId, title: entry.title, text: entry.text, source: 'business-pipeline' });
+      const record = deps.saveMemory({
+        scope: 'business', refId, title: entry.title, text: entry.text, source: 'business-pipeline',
+        ...(context.orgId ? { orgId: context.orgId } : {}),
+        ...(context.nativeProjectId ? { nativeProjectId: context.nativeProjectId } : {}),
+      });
       if (record && record.id) saved.push(record.id);
     } catch (_) {
       warnings.push('Could not persist a business memory entry.');
@@ -504,12 +512,18 @@ function persistMemory(goal, revenue, business, deps, warnings) {
   return { memory, saved };
 }
 
-function schedulerStage(business, assumedRole, deps, warnings) {
+function schedulerStage(business, assumedRole, deps, warnings, context = {}) {
   const projectId = business && business.projectId;
   if (!projectId) return { status: 'ready', note: 'Link a project to this business to schedule work.' };
   if (!assumedRole) return { status: 'ready', note: 'Assume a role to schedule this project.' };
   try {
-    const job = deps.enqueue({ projectId, projectName: business.name || projectId, assumedRole });
+    const job = deps.enqueue({
+      projectId,
+      projectName: business.name || projectId,
+      assumedRole,
+      ...(context.orgId ? { orgId: context.orgId } : {}),
+      ...(context.nativeProjectId ? { nativeProjectId: context.nativeProjectId } : {}),
+    });
     if (!job) return { status: 'done', note: 'Already queued for the planner.' };
     return { status: 'done', jobId: job.id, note: 'Queued for the planner.' };
   } catch (_) {
@@ -552,6 +566,10 @@ async function prepareBusiness(args, deps = {}) {
   const business = (args && args.business) || null;
   const settings = (args && args.settings) || {};
   const assumedRole = (args && args.assumedRole) || null;
+  const context = {
+    orgId: (args && args.orgId) || null,
+    nativeProjectId: (args && args.nativeProjectId) || null,
+  };
   const resolved = buildDeps(deps || {});
   const warnings = [];
   const goal = clean(input, 400);
@@ -573,10 +591,10 @@ async function prepareBusiness(args, deps = {}) {
 
   // Steps 2-5 (analysis) then step 6 (schedule).
   const revenue = await analyzeRevenue(input, settings, resolved, warnings);
-  const { memory, saved } = persistMemory(goal, revenue, business, resolved, warnings);
+  const { memory, saved } = persistMemory(goal, revenue, business, resolved, warnings, context);
   const segments = await breakdownSpec(goal, settings, resolved, warnings);
   const { design, designHtml } = await designMockup(goal, settings, resolved, warnings);
-  const scheduler = schedulerStage(business, assumedRole, resolved, warnings);
+  const scheduler = schedulerStage(business, assumedRole, resolved, warnings, context);
 
   return {
     intent: 'business',

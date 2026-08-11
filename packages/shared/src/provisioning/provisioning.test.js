@@ -20,6 +20,7 @@ const CFG = {
   firebaseProjectId: 'proj',
   firebaseApiKey: 'fb-key',
   deadLetterTopic: 'agent-requests-deadletter',
+  emailTopic: 'email-delivery',
   serviceAccounts: { gateway: 'gw@sa', planner: 'pl@sa', coder: 'cc@sa', pubsubPush: 'push@sa' },
   sourceServiceNames: { gateway: 'gateway', planner: 'planner', coder: 'coder-control', worker: 'coder-worker' },
 };
@@ -78,6 +79,7 @@ test('plan encodes tenant isolation: STORE_NAMESPACE, per-tenant topics, shared 
     assert.equal(svc.env.STORE_BACKEND, 'firestore');
     assert.equal(svc.env.PUBSUB_PLANNER_TOPIC, 'planner-' + SLUG);
   }
+  assert.equal(plan.services.planner.env.EMAIL_TOPIC, 'email-delivery');
   // Per-tenant topics.
   assert.deepEqual(plan.topics.map((t) => t.name), ['planner-' + SLUG, 'coder-' + SLUG]);
   // Gateway: this tenant's planner/coder, SHARED org/settings.
@@ -86,6 +88,8 @@ test('plan encodes tenant isolation: STORE_NAMESPACE, per-tenant topics, shared 
   assert.equal(plan.services.gateway.env.ORG_URL, CFG.sharedOrgUrl);
   assert.equal(plan.services.gateway.env.SETTINGS_URL, CFG.sharedSettingsUrl);
   assert.equal(plan.services.gateway.env.API_BASE_URL, u.gateway);
+  assert.equal(plan.services.gateway.env.FLEET_ORG_ID, ORG_ID);
+  assert.equal(plan.services.gateway.env.TRUST_PROXY_HOPS, '1');
 });
 
 test('plan: only the gateway is public; planner/coder internal + IAM invokers; self-audiences', () => {

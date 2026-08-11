@@ -4,7 +4,7 @@
 #
 # Orchestrates the full deploy from an operator machine: enables APIs, creates
 # the Terraform state bucket, stages Secret Manager versions, builds + pushes the
-# three images, publishes the SPA to GCS, and applies Terraform. Idempotent —
+# shared images, publishes the SPA to GCS, and applies Terraform. Idempotent —
 # safe to re-run. (For CI, prefer cloudbuild.yaml; this is its local sibling.)
 #
 # The apply is STAGED to fix an ordering constraint: the SPA bucket and the
@@ -26,6 +26,10 @@
 #   SPA_ORIGIN (https://storage.googleapis.com), FIREBASE_ALLOWED_DOMAIN (empty =
 #   any verified user), STREAM_TOKEN_SECRET (auto-generated if unset),
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, SKIP_BUILD=1 (reuse existing images).
+#   Email delivery: EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, EMAIL_SMTP_SECURE,
+#   EMAIL_SMTP_REQUIRE_TLS, EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_FROM,
+#   EMAIL_PUBLIC_APP_URL. Its default is the GCS SPA entry point published here;
+#   empty SMTP host/from values deploy the email service in not-ready state.
 set -euo pipefail
 
 # --- Inputs -----------------------------------------------------------------
@@ -42,6 +46,20 @@ FIREBASE_ALLOWED_DOMAIN="${FIREBASE_ALLOWED_DOMAIN:-}"
 GOOGLE_ONE_TAP_CLIENT_ID="${GOOGLE_ONE_TAP_CLIENT_ID:-}"  # public OAuth Web client id for Google One Tap (optional)
 AUTH_ADMIN_EMAILS="${AUTH_ADMIN_EMAILS:-}"
 AUTH_DEFAULT_ROLE="${AUTH_DEFAULT_ROLE:-viewer}"
+EMAIL_SMTP_HOST="${EMAIL_SMTP_HOST:-}"
+EMAIL_SMTP_PORT="${EMAIL_SMTP_PORT:-587}"
+EMAIL_SMTP_SECURE="${EMAIL_SMTP_SECURE:-false}"
+EMAIL_SMTP_REQUIRE_TLS="${EMAIL_SMTP_REQUIRE_TLS:-true}"
+EMAIL_SMTP_USER="${EMAIL_SMTP_USER:-}"
+EMAIL_SMTP_PASSWORD="${EMAIL_SMTP_PASSWORD:-}"
+EMAIL_FROM="${EMAIL_FROM:-}"
+EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://storage.googleapis.com/${SPA_BUCKET}/index.html}"
+
+if { [ -n "$EMAIL_SMTP_USER" ] && [ -z "$EMAIL_SMTP_PASSWORD" ]; } || \
+   { [ -z "$EMAIL_SMTP_USER" ] && [ -n "$EMAIL_SMTP_PASSWORD" ]; }; then
+  echo "ERROR: EMAIL_SMTP_USER and EMAIL_SMTP_PASSWORD must both be set (or both omitted)." >&2
+  exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -80,6 +98,12 @@ TFVARS=(
   -var="google_one_tap_client_id=${GOOGLE_ONE_TAP_CLIENT_ID}"
   -var="auth_admin_emails=${AUTH_ADMIN_EMAILS}"
   -var="auth_default_role=${AUTH_DEFAULT_ROLE}"
+  -var="email_smtp_host=${EMAIL_SMTP_HOST}"
+  -var="email_smtp_port=${EMAIL_SMTP_PORT}"
+  -var="email_smtp_secure=${EMAIL_SMTP_SECURE}"
+  -var="email_smtp_require_tls=${EMAIL_SMTP_REQUIRE_TLS}"
+  -var="email_from=${EMAIL_FROM}"
+  -var="email_public_app_url=${EMAIL_PUBLIC_APP_URL}"
 )
 
 # --- 1. Enable APIs ---------------------------------------------------------
@@ -112,13 +136,16 @@ terraform -chdir="$TF_DIR" apply -input=false -auto-approve "${TFVARS[@]}" \
   -target=google_secret_manager_secret.stream_token_secret \
   -target=google_secret_manager_secret.linear_api_key \
   -target=google_secret_manager_secret.org_jwt_secret \
+  -target=google_secret_manager_secret.email_smtp_user \
+  -target=google_secret_manager_secret.email_smtp_password \
   -target=google_secret_manager_secret.extra \
   -target=google_storage_bucket.spa \
   -target=google_storage_bucket_iam_member.spa_public_read
 
 # --- 5. Secret versions (idempotent — only seed when a secret has none) ------
 log "Staging Secret Manager versions"
-has_version() { gcloud secrets versions list "$1" --project "$PROJECT_ID" --format='value(name)' 2>/dev/null | grep -q .; }
+has_version() { gcloud secrets versions list "$1" --project "$PROJECT_ID" \
+  --filter='state=ENABLED' --format='value(name)' 2>/dev/null | grep -q .; }
 seed_secret() { # id, value
   if has_version "$1"; then echo "  $1: already has a version (unchanged)";
   else printf '%s' "$2" | gcloud secrets versions add "$1" --project "$PROJECT_ID" --data-file=- >/dev/null; echo "  $1: seeded"; fi
@@ -131,6 +158,26 @@ seed_secret stream-token-secret "$STREAM_TOKEN_SECRET"
 [ -n "${LINEAR_API_KEY:-}" ]    && seed_secret linear-api-key   "$LINEAR_API_KEY"    || echo "  linear-api-key: LINEAR_API_KEY not provided"
 [ -n "${GITHUB_TOKEN:-}" ]      && seed_secret github-token     "$GITHUB_TOKEN"      || true
 [ -n "${LANGSMITH_API_KEY:-}" ] && seed_secret langsmith-api-key "$LANGSMITH_API_KEY" || true
+if [ -n "$EMAIL_SMTP_USER" ]; then seed_secret email-smtp-user "$EMAIL_SMTP_USER"; fi
+if [ -n "$EMAIL_SMTP_PASSWORD" ]; then seed_secret email-smtp-password "$EMAIL_SMTP_PASSWORD"; fi
+
+enabled_version() {
+  gcloud secrets versions list "$1" --project "$PROJECT_ID" \
+    --filter='state=ENABLED' --limit=1 --format='value(name)'
+}
+EMAIL_SMTP_USER_VERSION="$(enabled_version email-smtp-user)"
+EMAIL_SMTP_PASSWORD_VERSION="$(enabled_version email-smtp-password)"
+EMAIL_SMTP_AUTH_ENABLED=false
+EMAIL_SMTP_USER_READY=false
+EMAIL_SMTP_PASSWORD_READY=false
+[ -n "$EMAIL_SMTP_USER_VERSION" ] && EMAIL_SMTP_USER_READY=true
+[ -n "$EMAIL_SMTP_PASSWORD_VERSION" ] && EMAIL_SMTP_PASSWORD_READY=true
+if [ "$EMAIL_SMTP_USER_READY" != "$EMAIL_SMTP_PASSWORD_READY" ]; then
+  echo "ERROR: email-smtp-user and email-smtp-password must both have an enabled version (or neither may)." >&2
+  exit 1
+fi
+[ "$EMAIL_SMTP_USER_READY" = true ] && EMAIL_SMTP_AUTH_ENABLED=true
+TFVARS+=( -var="email_smtp_auth_enabled=${EMAIL_SMTP_AUTH_ENABLED}" )
 
 # linear-api-key is mounted as REQUIRED env — the revisions won't start without it.
 has_version linear-api-key || { echo "ERROR: secret 'linear-api-key' has no version. Re-run with LINEAR_API_KEY=... set."; exit 1; }
@@ -151,6 +198,7 @@ else
   build_push gateway       Dockerfile.gateway
   build_push planner       Dockerfile.planner
   build_push coder-control Dockerfile.coder   # dual-role image; also runs the worker Job
+  build_push email-service Dockerfile.email
 fi
 
 # --- 7. Publish the SPA to GCS ----------------------------------------------

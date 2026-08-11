@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Dev/prod convenience runner: boot all three AI Fleet services as separate
+ * Dev/prod convenience runner: boot the local AI Fleet services as separate
  * child processes from a single terminal, with prefixed output and coordinated
  * shutdown. In a real microservice deployment each service runs in its own
  * container; this just makes local `npm start` behave like the old monolith.
@@ -26,6 +26,7 @@ const watch = process.argv.includes('--watch');
 // Start the agent services first so the gateway's proxy targets are likely up
 // by the time the first browser request arrives (connections are lazy anyway).
 const SERVICES = [
+  { name: 'email', entry: 'services/email/src/index.js' },
   { name: 'planner', entry: 'services/planner/src/index.js' },
   { name: 'coder', entry: 'services/coder/src/index.js' },
   { name: 'gateway', entry: 'services/gateway/src/index.js' },

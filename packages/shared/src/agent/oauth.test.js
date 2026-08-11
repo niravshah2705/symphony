@@ -4,7 +4,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const oauth = require('./oauth');
+const oauthTokens = require('./oauth-tokens');
 const { CONFIG } = require('../config');
+const { runWithWorkspaceContext } = require('../store/workspace-context');
 
 test('PKCE challenge matches the RFC 7636 §A test vector (S256)', () => {
   // Appendix A reference: verifier -> challenge.
@@ -42,6 +44,12 @@ test('state is single-use: a second consume is rejected', () => {
   const first = oauth.consumeLogin(state);
   assert.ok(first && first.codeVerifier);
   assert.equal(oauth.consumeLogin(state), null); // replay rejected
+});
+
+test('state is bound to the workspace that initiated provider sign-in', () => {
+  const { state } = oauth.createLogin({ organizationId: 'org-a', projectId: 'project-a' });
+  const login = oauth.consumeLogin(state);
+  assert.deepEqual(login.workspaceContext, { organizationId: 'org-a', projectId: 'project-a' });
 });
 
 test('unknown or empty state is rejected', () => {
@@ -95,4 +103,17 @@ test('normalizeTokenResponse rotates refresh token but falls back to previous', 
   const kept = oauth.normalizeTokenResponse({ access_token: 'a3', expires_in: 60 }, { refreshToken: 'r1' });
   assert.equal(kept.refreshToken, 'r1'); // no new refresh -> keep old
   assert.ok(kept.expiresAt > Date.now());
+});
+
+test('refresh coalescing keys cannot merge token rotation across workspaces', () => {
+  const orgA = runWithWorkspaceContext(
+    { organizationId: 'org-a', projectId: 'project-a' },
+    () => oauthTokens._test.refreshKey('codex'),
+  );
+  const orgB = runWithWorkspaceContext(
+    { organizationId: 'org-b', projectId: 'project-b' },
+    () => oauthTokens._test.refreshKey('codex'),
+  );
+  assert.notEqual(orgA, orgB);
+  assert.doesNotMatch(orgA, /org-a|project-a/);
 });

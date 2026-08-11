@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.enums import MembershipStatus, OrgRole, ProjectRole
+
 
 class MeResponse(BaseModel):
     """The caller's identity plus whether they belong to an organization."""
@@ -34,11 +36,45 @@ class CreateOrgRequest(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
 
 
+class ContextUserResponse(BaseModel):
+    id: uuid.UUID
+    email: str
+    full_name: str | None = None
+    is_super_admin: bool
+
+
+class ContextProjectResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    role: ProjectRole
+    status: str = "ACTIVE"
+
+
+class ContextOrganizationResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    membership_id: uuid.UUID
+    role: OrgRole
+    status: MembershipStatus
+    projects: list[ContextProjectResponse]
+
+
+class SelectedContextResponse(BaseModel):
+    organization_id: uuid.UUID | None = None
+    project_id: uuid.UUID | None = None
+
+
+class MeContextResponse(BaseModel):
+    user: ContextUserResponse
+    organizations: list[ContextOrganizationResponse]
+    selected: SelectedContextResponse | None = None
+
+
 class MeDeploymentResponse(BaseModel):
     """Which front-facing deployment the caller's workspace should use.
 
     ``status`` is the resolved deployment state:
-      - ``shared``       — pseudo/org-less or any un-provisioned org → use the
+      - ``shared``       — org-less or any un-provisioned org → use the
                            shared gateway (``gateway_url``).
       - ``provisioning`` — a dedicated per-tenant stack is being created; the SPA
                            polls until it flips to ``provisioned``.

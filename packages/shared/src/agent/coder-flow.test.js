@@ -5,11 +5,14 @@ const assert = require('node:assert');
 
 const orchestrator = require('./coder-orchestrator');
 const { parseVerdict, preflightTask, preflightAndPause, pauseForRuntimeError, dispatchReadyTask, dispatch } = orchestrator;
-const { activeRepositoryBranch, assertOpenSweRepositoryProvider } = require('./coder');
+const { activeRepositoryBranch, assertOpenSweRepositoryProvider, executeCodingRuntime } = require('./coder');
+const framework = require('./framework');
 const { AgentAvailabilityError } = require('./availability');
 const { RepositoryBrokerError } = require('./repository-broker');
 const { AgentRuntimeError } = require('./runtimes');
+const { PolicyDeniedError } = require('./settings-policy');
 const { pickStateByType } = require('../linear');
+const workspaceEvents = require('./workspace-events');
 
 /* ------------------------------ parseVerdict ---------------------------- */
 
@@ -195,6 +198,197 @@ test('manual readiness guard establishes the same sanitized global pause', async
   assert.doesNotMatch(JSON.stringify(orchestrator.status()), /raw provider|secret|403/i);
 });
 
+test('manual readiness guard preserves policy denial without creating a model pause', async (t) => {
+  const context = { orgId: 'org-policy-denied', nativeProjectId: 'native-policy-denied' };
+  orchestrator._test.clearPause('test setup', context);
+  t.after(() => orchestrator._test.clearPause('test cleanup', context));
+  const task = {
+    id: 'issue-policy-denied',
+    identifier: 'ENG-POLICY',
+    labels: [],
+    project: { id: 'project-policy-denied', name: 'Project' },
+    ...context,
+  };
+
+  await assert.rejects(
+    () => preflightAndPause(
+      task,
+      async () => { throw new PolicyDeniedError('model', 'private-model'); },
+      {
+        context,
+        repositorySelectionForTask: () => ({ provider: 'github', repoRef: 'acme/app', token: 'secret' }),
+        cachedReadinessProbe: (_key, probe) => probe(),
+        probeRepositoryAvailability: async () => ({ available: true }),
+      },
+    ),
+    (error) => error.code === 'policy_denied' && error.status === 403,
+  );
+
+  assert.equal(orchestrator.status(context).paused, false);
+});
+
+test('runtime policy denial is never classified as a model availability pause', (t) => {
+  const context = { orgId: 'org-runtime-policy', nativeProjectId: 'native-runtime-policy' };
+  orchestrator._test.clearPause('test setup', context);
+  t.after(() => orchestrator._test.clearPause('test cleanup', context));
+
+  const reason = pauseForRuntimeError(
+    new PolicyDeniedError('harness', 'claude-agent-sdk'),
+    {
+      task: { id: 'policy-runtime-issue', identifier: 'POLICY-1', ...context },
+      role: 'execution',
+      llm: { provider: 'codex', model: 'gpt-5.6-terra' },
+    },
+  );
+
+  assert.equal(reason, null);
+  assert.equal(orchestrator.status(context).paused, false);
+});
+
+test('selected autonomous policy resolution rejects missing effective policy while local mode stays compatible', async () => {
+  const selected = { orgId: 'org-autonomous-policy', nativeProjectId: 'native-autonomous-policy' };
+  for (const response of [null, {}, { effectivePolicy: null, prefs: {} }]) {
+    await assert.rejects(
+      () => orchestrator._test.resolveAutonomousPolicy(
+        { agentRuntime: 'deepagent' },
+        selected,
+        {
+          resolvePolicy: async () => response,
+          resolveLlm: async () => ({ provider: 'ollama', host: 'http://localhost:11434', model: 'coder' }),
+        },
+      ),
+      (error) => error.code === 'policy_unavailable' && error.status === 503,
+    );
+  }
+
+  const local = await orchestrator._test.resolveAutonomousPolicy(
+    { agentRuntime: 'deepagent' },
+    {},
+    {
+      resolvePolicy: async () => null,
+      resolveLlm: async () => ({ provider: 'ollama', host: 'http://localhost:11434', model: 'coder' }),
+    },
+  );
+  assert.equal(local.effectivePolicy, null);
+});
+
+test('autonomous planned coder threads selected policy and loads only permitted MCP plugins', async (t) => {
+  const context = { orgId: 'org-autonomous-mcp', nativeProjectId: 'native-autonomous-mcp' };
+  const effectivePolicy = {
+    harness: { effective: ['deepagent'] },
+    plugins: { effective: ['linear'] },
+  };
+  const policyCalls = [];
+  const governed = await orchestrator._test.resolveAutonomousPolicy(
+    {
+      linearApiKey: 'linear-key',
+      agentRuntime: 'deepagent',
+      workflowPattern: 'sequential',
+      langsmithTracing: true,
+    },
+    context,
+    {
+      resolvePolicy: async (orgId, projectId) => {
+        policyCalls.push([orgId, projectId]);
+        return {
+          effectivePolicy,
+          prefs: { workflowPattern: 'parallel', langsmithTracing: 'false' },
+        };
+      },
+      resolveLlm: async () => ({ provider: 'ollama', host: 'http://localhost:11434', model: 'coder' }),
+    },
+  );
+  const llm = await governed.resolveRole('execution');
+  assert.deepEqual(policyCalls, [['org-autonomous-mcp', 'native-autonomous-mcp']]);
+  assert.equal(governed.keys.workflowPattern, 'parallel');
+  assert.equal(governed.keys.langsmithTracing, false);
+
+  const mcp = require('./mcp');
+  const originalLoadMcpTools = mcp.loadMcpTools;
+  const originalInstallSkills = framework.installSkills;
+  const sentinel = new Error('stop after governed MCP selection');
+  let loadedPlugins = null;
+  mcp.loadMcpTools = async (names) => {
+    loadedPlugins = names;
+    throw sentinel;
+  };
+  framework.installSkills = () => [];
+  t.after(() => {
+    mcp.loadMcpTools = originalLoadMcpTools;
+    framework.installSkills = originalInstallSkills;
+    orchestrator._test.clearPause('test cleanup', context);
+  });
+
+  const jobs = [];
+  const fakeStore = {
+    addJob(job) { jobs.push({ ...job }); return job; },
+    appendJobStep(id, step) {
+      const job = jobs.find((candidate) => candidate.id === id);
+      job.steps = [...(job.steps || []), step];
+    },
+    updateJob(id, patch) {
+      const job = jobs.find((candidate) => candidate.id === id);
+      Object.assign(job, patch);
+      return job;
+    },
+  };
+  let plannedSettings = null;
+  await dispatch(
+    {
+      id: 'issue-autonomous-mcp',
+      identifier: 'AUTO-1',
+      title: 'Govern MCP',
+      project: { id: 'linear-project-autonomous', name: 'Autonomous' },
+      ...context,
+    },
+    {
+      apiKey: 'linear-key',
+      keys: governed.keys,
+      settings: governed.settings,
+      llm,
+      role: 'execution',
+      repositoryProvider: 'github',
+      repositoryToken: 'token',
+      repositoryUrl: 'acme/app',
+      ...context,
+    },
+    {
+      store: fakeStore,
+      startIssue: async () => ({ name: 'In Progress' }),
+      runPlannedCoder: async (args) => {
+        plannedSettings = args.settings;
+        await assert.rejects(
+          () => executeCodingRuntime({
+            llm: args.llm,
+            keys: args.keys,
+            apiKey: args.apiKey,
+            step: () => {},
+            workDir: process.cwd(),
+            env: {},
+            repositoryProvider: args.repositoryProvider,
+            repositoryBroker: null,
+            prompt: 'test',
+            invokeConfig: {},
+            settings: args.settings,
+            attribution: {},
+          }),
+          (error) => error === sentinel,
+        );
+        return { finalText: '{"status":"completed","reason":"governed"}' };
+      },
+      finishIssue: async () => {},
+    },
+  );
+
+  assert.deepEqual(plannedSettings, {
+    effectivePolicy,
+    orgId: context.orgId,
+    nativeProjectId: context.nativeProjectId,
+  });
+  assert.deepEqual(loadedPlugins, ['linear']);
+  assert.equal(jobs[0].status, 'done');
+});
+
 test('runtime outage helper pauses direct runs on the execution role regardless of legacy size label', async (t) => {
   orchestrator._test.clearPause('test setup');
   t.after(() => orchestrator._test.clearPause('test cleanup'));
@@ -349,6 +543,63 @@ test('runtime repository unavailability pauses safely without finishing the Line
   assert.equal(orchestrator.status().pauseReason.resource, 'git');
 });
 
+test('planned runtime policy denial records a governed error without pausing or finalizing the issue', async (t) => {
+  const context = { orgId: 'org-planned-policy-denied', nativeProjectId: 'native-planned-policy-denied' };
+  orchestrator._test.clearPause('test setup', context);
+  t.after(() => orchestrator._test.clearPause('test cleanup', context));
+  const jobs = [];
+  const fakeStore = {
+    addJob(job) { jobs.push({ ...job }); return job; },
+    appendJobStep(id, step) {
+      const job = jobs.find((candidate) => candidate.id === id);
+      job.steps = [...(job.steps || []), step];
+    },
+    updateJob(id, patch) {
+      const job = jobs.find((candidate) => candidate.id === id);
+      Object.assign(job, patch);
+      return job;
+    },
+  };
+  let finishes = 0;
+
+  await dispatch(
+    {
+      id: 'issue-planned-policy-denied',
+      identifier: 'POLICY-PLANNED-1',
+      title: 'Denied planned runtime',
+      project: { id: 'linear-project-policy-denied', name: 'Policy' },
+      ...context,
+    },
+    {
+      apiKey: 'linear-key',
+      keys: { agentRuntime: 'deepagent' },
+      settings: {
+        effectivePolicy: { harness: { effective: ['deepagent'] } },
+        ...context,
+      },
+      role: 'execution',
+      llm: { provider: 'codex', model: 'gpt-5.6-terra' },
+      repositoryProvider: 'github',
+      repositoryToken: 'token',
+      repositoryUrl: 'acme/app',
+      ...context,
+    },
+    {
+      store: fakeStore,
+      startIssue: async () => ({ name: 'In Progress' }),
+      runPlannedCoder: async () => {
+        throw new PolicyDeniedError('harness', 'claude-agent-sdk');
+      },
+      finishIssue: async () => { finishes += 1; },
+    },
+  );
+
+  assert.equal(finishes, 0);
+  assert.equal(jobs[0].status, 'error');
+  assert.equal(jobs[0].policyDenied, true);
+  assert.equal(orchestrator.status(context).paused, false);
+});
+
 test('ordinary repository workflow errors finish as insufficient without pausing the monitor', async (t) => {
   orchestrator._test.clearPause('test setup');
   t.after(() => orchestrator._test.clearPause('test cleanup'));
@@ -404,6 +655,141 @@ test('ordinary repository workflow errors finish as insufficient without pausing
   assert.equal(jobs[0].status, 'done');
   assert.equal(jobs[0].summary.outcome, 'insufficient');
   assert.equal(orchestrator.status().paused, false);
+});
+
+test('duplicate external issue ids run independently and publish exact A/B workspace snapshots', async (t) => {
+  const jobs = [];
+  const fakeStore = {
+    addJob(job) { jobs.push({ ...job }); return job; },
+    appendJobStep(id, step) {
+      const job = jobs.find((candidate) => candidate.id === id);
+      job.steps = [...(job.steps || []), step];
+    },
+    updateJob(id, patch) {
+      const job = jobs.find((candidate) => candidate.id === id);
+      Object.assign(job, patch);
+      return job;
+    },
+  };
+  const coderEvents = [];
+  const jobEvents = [];
+  const originalPublishCoderStatus = workspaceEvents.publishCoderStatus;
+  const originalPublishJobsSnapshot = workspaceEvents.publishJobsSnapshot;
+  workspaceEvents.publishCoderStatus = (coder, context) => coderEvents.push({ coder, context });
+  workspaceEvents.publishJobsSnapshot = (context) => jobEvents.push(context);
+
+  const releases = new Map();
+  t.after(() => {
+    workspaceEvents.publishCoderStatus = originalPublishCoderStatus;
+    workspaceEvents.publishJobsSnapshot = originalPublishJobsSnapshot;
+    for (const release of releases.values()) release();
+    orchestrator._test.clearPause('test cleanup', { orgId: 'scope-org-a', nativeProjectId: 'native-a' });
+    orchestrator._test.clearPause('test cleanup', { orgId: 'scope-org-b', nativeProjectId: 'native-b' });
+  });
+
+  const sharedExternalTask = {
+    id: 'same-linear-issue-id',
+    identifier: 'ENG-42',
+    title: 'Same identifier in separate Linear workspaces',
+    labels: [],
+    project: { id: 'same-linear-project-id', name: 'App' },
+  };
+  const commonCtx = {
+    apiKey: 'linear-key',
+    keys: {},
+    role: 'execution',
+    llm: { provider: 'codex', model: 'gpt-test' },
+    repositoryProvider: 'github',
+    repositoryToken: 'secret',
+    repositoryUrl: 'acme/app',
+  };
+  const dependencies = {
+    store: fakeStore,
+    startIssue: async () => ({ name: 'In Progress' }),
+    runPlannedCoder: ({ issue }) => new Promise((resolve) => {
+      releases.set(issue.orgId, () => resolve({ finalText: '{"status":"completed","reason":"done"}' }));
+    }),
+    finishIssue: async () => {},
+  };
+  const contextA = { orgId: 'scope-org-a', nativeProjectId: 'native-a' };
+  const contextB = { orgId: 'scope-org-b', nativeProjectId: 'native-b' };
+
+  const runA = dispatch({ ...sharedExternalTask, ...contextA }, { ...commonCtx, ...contextA }, dependencies);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(orchestrator._test.hasCapacity(contextA, 1), false, 'A is at its selected-workspace cap');
+  assert.equal(orchestrator._test.hasCapacity(contextB, 1), true, 'A at cap must not block B');
+
+  const runB = dispatch({ ...sharedExternalTask, ...contextB }, { ...commonCtx, ...contextB }, dependencies);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(orchestrator.status({ organizationId: 'scope-org-a', projectId: 'native-a' }).inFlight.map((v) => v.identifier), ['ENG-42']);
+  assert.deepEqual(orchestrator.status(contextB).inFlight.map((v) => v.identifier), ['ENG-42']);
+  assert.deepEqual(orchestrator.status({ orgId: 'scope-org-a', nativeProjectId: 'native-b' }).inFlight, []);
+  assert.equal(jobs.length, 2);
+  assert.deepEqual(
+    jobs.map((job) => [job.orgId, job.nativeProjectId]).sort(),
+    [['scope-org-a', 'native-a'], ['scope-org-b', 'native-b']],
+  );
+
+  assert.ok(coderEvents.some(({ coder, context }) =>
+    context.organizationId === 'scope-org-a'
+      && context.projectId === 'native-a'
+      && coder.inFlight.length === 1));
+  assert.ok(coderEvents.some(({ coder, context }) =>
+    context.organizationId === 'scope-org-b'
+      && context.projectId === 'native-b'
+      && coder.inFlight.length === 1));
+  assert.ok(jobEvents.some((context) => context.organizationId === 'scope-org-a' && context.projectId === 'native-a'));
+  assert.ok(jobEvents.some((context) => context.organizationId === 'scope-org-b' && context.projectId === 'native-b'));
+
+  releases.get('scope-org-a')();
+  releases.get('scope-org-b')();
+  await Promise.all([runA, runB]);
+  assert.deepEqual(orchestrator.listInFlight(contextA), []);
+  assert.deepEqual(orchestrator.listInFlight(contextB), []);
+});
+
+test('availability pauses and readiness deduplication are isolated by exact workspace context', async (t) => {
+  const contextA = { orgId: 'pause-org-a', nativeProjectId: 'pause-project-a' };
+  const contextB = { orgId: 'pause-org-b', nativeProjectId: 'pause-project-b' };
+  t.after(() => {
+    orchestrator._test.clearPause('test cleanup', contextA);
+    orchestrator._test.clearPause('test cleanup', contextB);
+  });
+
+  orchestrator._test.pause('git', new Error('unavailable'), {
+    task: { id: 'same-id', identifier: 'A-1', project: { id: 'linear-project' }, ...contextA },
+  });
+  assert.equal(orchestrator.status(contextA).paused, true);
+  assert.equal(orchestrator.status(contextB).paused, false);
+
+  let probes = 0;
+  await Promise.all([
+    orchestrator._test.cachedReadinessProbe('same-fingerprint', async () => { probes += 1; }, contextA),
+    orchestrator._test.cachedReadinessProbe('same-fingerprint', async () => { probes += 1; }, contextA),
+    orchestrator._test.cachedReadinessProbe('same-fingerprint', async () => { probes += 1; }, contextB),
+  ]);
+  assert.equal(probes, 2, 'same-context probes deduplicate while A and B remain independent');
+});
+
+test('unscoped autonomous polling is disabled for shared authenticated runtimes only', () => {
+  assert.equal(
+    orchestrator._test.shouldSkipAutonomousPoll({}, { AUTH: { enabled: true } }),
+    true,
+  );
+  assert.equal(
+    orchestrator._test.shouldSkipAutonomousPoll({}, { AUTH: { enabled: false } }),
+    false,
+    'auth-disabled local mode retains empty-context compatibility',
+  );
+  assert.equal(
+    orchestrator._test.shouldSkipAutonomousPoll(
+      { organizationId: 'selected-org', projectId: 'selected-project' },
+      { AUTH: { enabled: true } },
+    ),
+    false,
+    'explicitly selected autonomous work remains enabled',
+  );
 });
 
 /* ----------------------------- pickStateByType -------------------------- */

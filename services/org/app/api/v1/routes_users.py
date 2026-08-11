@@ -11,6 +11,8 @@ from app.auth.dependencies import get_current_user, get_principal
 from app.authz.guards import require_org_admin, require_org_member
 from app.authz.principal import Principal
 from app.core.database import get_session
+from app.core.config import get_settings
+from app.errors import ForbiddenError
 from app.models.user import User
 from app.schemas.common import Page, PageParams
 from app.schemas.user import (
@@ -40,6 +42,11 @@ async def create_user(
     principal: Principal = Depends(require_org_admin),
     session: Uow = Depends(get_session),
 ):
+    # Cloud deployments use the external identity provider. Membership must be
+    # granted only through the explicit invitation/acceptance flow; retaining
+    # this legacy creator solely supports self-contained local-auth installs.
+    if get_settings().idp_enabled:
+        raise ForbiddenError("Use an organization invitation to add members")
     return await user_service.create_user(session, principal, body)
 
 

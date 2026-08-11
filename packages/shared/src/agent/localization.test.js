@@ -38,6 +38,12 @@ test('locale tags are canonical BCP 47 values resolved against a small catalog',
     nativeLabel: 'ગુજરાતી',
     direction: 'ltr',
   });
+  assert.deepEqual(LANGUAGE_CATALOG.find((item) => item.tag === 'mr-IN'), {
+    tag: 'mr-IN',
+    label: 'Marathi',
+    nativeLabel: 'मराठी',
+    direction: 'ltr',
+  });
 });
 
 test('language hints honor quality, canonicalize, deduplicate, and ignore unsupported tags', () => {
@@ -50,19 +56,34 @@ test('language hints honor quality, canonicalize, deduplicate, and ignore unsupp
   assert.ok(parseLanguageHints(Array.from({ length: 30 }, (_, index) => `en-${index}`)).length <= LIMITS.languageHints);
 });
 
-test('suggestions are ranked by browser and location but always keep English and Gujarati', () => {
+test('suggestions keep English selected and expose IP location as a recommendation only', () => {
   const result = languageSuggestions({
     browserLanguages: ['fr-FR', 'de-DE', 'ja-JP', 'ar'],
     countryCode: 'IN',
     region: ' Gujarat\n',
   });
-  assert.equal(result.locale, 'fr');
+  assert.equal(result.locale, 'en');
+  assert.equal(result.recommendedLocale, 'gu-IN');
   assert.equal(result.countryCode, 'IN');
   assert.equal(result.region, 'Gujarat');
   assert.ok(result.suggestions.length <= 5);
   assert.ok(result.suggestions.some((item) => item.tag === 'en'));
   assert.ok(result.suggestions.some((item) => item.tag === 'gu-IN'));
-  assert.equal(result.suggestions[0].reason, 'browser');
+  assert.ok(result.suggestions.some((item) => item.tag === 'mr-IN'));
+  assert.ok(result.suggestions.some((item) => item.tag === 'hi-IN'));
+  assert.equal(result.suggestions[0].reason, 'location');
+  assert.equal(result.suggestions[0].recommended, true);
+});
+
+test('Maharashtra recommends Marathi and the rest of India recommends Hindi', () => {
+  const maharashtra = languageSuggestions({ countryCode: 'IN', region: 'Maharashtra' });
+  assert.equal(maharashtra.locale, 'en');
+  assert.equal(maharashtra.recommendedLocale, 'mr-IN');
+  const india = languageSuggestions({ countryCode: 'IN', region: 'Karnataka' });
+  assert.equal(india.locale, 'en');
+  assert.equal(india.recommendedLocale, 'hi-IN');
+  const elsewhere = languageSuggestions({ countryCode: 'US', region: 'California' });
+  assert.equal(elsewhere.recommendedLocale, 'en');
 });
 
 test('IP handling accepts public addresses and rejects local or reserved addresses', () => {

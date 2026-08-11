@@ -31,13 +31,21 @@ function secret() {
   return SECRET;
 }
 
-function sign(conversationId, exp) {
-  return crypto.createHmac('sha256', secret()).update(`${conversationId}.${exp}`).digest('base64url');
+function contextKey(context = {}) {
+  const organizationId = String(context.organizationId || '').trim();
+  const projectId = String(context.projectId || '').trim();
+  return `${organizationId}.${projectId}`;
 }
 
-function mintStreamToken(conversationId) {
+function sign(conversationId, exp, context = {}) {
+  return crypto.createHmac('sha256', secret())
+    .update(`${conversationId}.${exp}.${contextKey(context)}`)
+    .digest('base64url');
+}
+
+function mintStreamToken(conversationId, context = {}) {
   const exp = Date.now() + TTL_MS;
-  return `${exp}.${sign(conversationId, exp)}`;
+  return `${exp}.${sign(conversationId, exp, context)}`;
 }
 
 /**
@@ -45,16 +53,16 @@ function mintStreamToken(conversationId) {
  * channel id (not a conversation), so the read-only home can stream workspace
  * status/jobs/coder/gate events without owning a conversation.
  */
-function mintWorkspaceToken() {
-  return mintStreamToken(WORKSPACE_CHANNEL);
+function mintWorkspaceToken(context = {}) {
+  return mintStreamToken(WORKSPACE_CHANNEL, context);
 }
 
-function verifyStreamToken(token, conversationId) {
+function verifyStreamToken(token, conversationId, context = {}) {
   if (!token || !conversationId) return false;
   const [expStr, sig] = String(token).split('.');
   const exp = Number(expStr);
   if (!Number.isFinite(exp) || exp < Date.now() || !sig) return false;
-  const expected = sign(conversationId, exp);
+  const expected = sign(conversationId, exp, context);
   const provided = Buffer.from(sig);
   const wanted = Buffer.from(expected);
   if (provided.length !== wanted.length) return false;

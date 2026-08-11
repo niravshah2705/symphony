@@ -3,6 +3,7 @@
 const { subscribe, subscribeWorkspace, WORKSPACE_CHANNEL } = require('@ai-fleet/shared/messaging/events');
 const { verifyStreamToken } = require('./stream-token');
 const { CONFIG } = require('@ai-fleet/shared/config');
+const { cleanContextId } = require('./request-context');
 
 /**
  * Server-Sent Events endpoints:
@@ -21,6 +22,14 @@ const { CONFIG } = require('@ai-fleet/shared/config');
  */
 
 const HEARTBEAT_MS = 15000;
+
+function queryContext(req) {
+  const query = (req && req.query) || {};
+  return {
+    organizationId: cleanContextId(query.organizationId),
+    projectId: cleanContextId(query.projectId),
+  };
+}
 
 /** Wire an open response to a channel subscription (headers, preamble, heartbeat, teardown). */
 function streamChannel(req, res, subscribeChannel) {
@@ -60,7 +69,7 @@ function streamChannel(req, res, subscribeChannel) {
 function tokenRejected(req, channelId) {
   if (!CONFIG.AUTH || !CONFIG.AUTH.enabled) return false;
   const token = String(req.query.t || req.query.token || '').trim();
-  return !verifyStreamToken(token, channelId);
+  return !verifyStreamToken(token, channelId, queryContext(req));
 }
 
 // GET /api/agent/stream — one conversation's event stream.
@@ -74,7 +83,8 @@ function handleStream(req, res) {
     res.status(401).json({ error: 'Invalid or expired stream token.' });
     return;
   }
-  streamChannel(req, res, (cb) => subscribe(conversationId, cb));
+  const context = queryContext(req);
+  streamChannel(req, res, (cb) => subscribe(conversationId, cb, context));
 }
 
 // GET /api/agent/workspace-stream — the global workspace event stream.
@@ -83,7 +93,8 @@ function handleWorkspaceStream(req, res) {
     res.status(401).json({ error: 'Invalid or expired stream token.' });
     return;
   }
-  streamChannel(req, res, subscribeWorkspace);
+  const context = queryContext(req);
+  streamChannel(req, res, (cb) => subscribeWorkspace(cb, context));
 }
 
 module.exports = { handleStream, handleWorkspaceStream, HEARTBEAT_MS };

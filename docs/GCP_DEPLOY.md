@@ -41,7 +41,7 @@ defaults to the project id, and `FIREBASE_ALLOWED_DOMAIN` is optional.
 
 `deploy/gcp/deploy.sh` does the whole thing from an operator machine (idempotent):
 enables APIs, creates the Terraform state bucket, stages Secret Manager versions
-(auto-generates `stream-token-secret`), builds + pushes the three images,
+(auto-generates `stream-token-secret`), builds + pushes the shared images,
 publishes the SPA to GCS, and applies Terraform in the correct staged order.
 
 ```bash
@@ -54,14 +54,35 @@ LINEAR_API_KEY=lin_... \                # required (services won't start without
 
 Optional env: `REGION`, `AR_REPO`, `IMAGE_TAG`, `FIRESTORE_LOCATION`, `SPA_ORIGIN`,
 `FIREBASE_ALLOWED_DOMAIN` (empty = any verified user), `GITHUB_TOKEN`,
-`LANGSMITH_API_KEY`, `SKIP_BUILD=1` (reuse pushed images). The script prints the
-gateway URL + SPA URL and the Firebase authorized domains to register.
+`LANGSMITH_API_KEY`, `SKIP_BUILD=1` (reuse pushed images), plus
+`EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`,
+`EMAIL_SMTP_PASSWORD`, and `EMAIL_FROM` for transactional email. The script
+defaults `EMAIL_PUBLIC_APP_URL` to the exact GCS `index.html` URL it publishes;
+override it only when a custom domain/CDN serves the SPA. It prints the gateway
+URL + SPA URL and the Firebase authorized domains to register.
 
 ### Deploy — CI (Cloud Build)
 
 `gcloud builds submit --config cloudbuild.yaml --substitutions=_BUCKET=...,_TF_STATE_BUCKET=...`
 runs the same build → SPA-publish → staged `terraform apply` in Cloud Build.
-Create the Secret Manager versions first (the script does this for you).
+Seed the required agent Secret Manager versions first (the one-shot/bootstrap
+scripts do this for you). SMTP credentials use the acyclic flow below.
+
+The Cloud Build bootstrap owns the empty `email-smtp-user` and
+`email-smtp-password` secret containers. It never reads SMTP values and never
+passes them through Terraform state. If both secrets already have an enabled
+version, the pipeline mounts both as `latest`; if neither does, it deploys with
+SMTP authentication disabled. A partial pair fails before the full apply. On a
+brand-new Cloud Build-only project, let the first build create the containers,
+add both versions with `gcloud secrets versions add`, then rerun the build. The
+`_EMAIL_PUBLIC_APP_URL` substitution defaults to the GCS `index.html` object
+published by that same build.
+
+For a direct Terraform apply, set `email_public_app_url` explicitly to the SPA
+that was actually published and set `email_smtp_auth_enabled=true` only after
+both SMTP secrets have an enabled version. Terraform intentionally fails the
+email-service plan when the public URL is empty, instead of guessing a Firebase
+Hosting URL.
 
 ### After either path
 

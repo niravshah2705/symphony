@@ -1,5 +1,8 @@
-"""User model. A regular user belongs to exactly one org; a platform
-super-admin has no org (org_id is None). Firestore: `users/{id}`.
+"""Global user identity.
+
+``org_id/org_role`` are retained as a backward-compatible default context;
+authoritative memberships are separate organization subcollection documents.
+Firestore: ``users/{id}``.
 """
 from __future__ import annotations
 
@@ -19,6 +22,10 @@ class User:
     password_hash: str | None = None
     auth_provider: AuthProvider = AuthProvider.LOCAL
     external_subject: str | None = None
+    # Legacy org-created local accounts may be disabled when their final
+    # membership in the creating org is removed. Invited/self-registered users
+    # remain global identities when a membership is removed.
+    managed_by_org_id: uuid.UUID | None = None
     org_role: OrgRole = OrgRole.MEMBER
     is_super_admin: bool = False
     is_active: bool = True
@@ -39,6 +46,7 @@ class User:
             "password_hash": self.password_hash,
             "auth_provider": self.auth_provider.value,
             "external_subject": self.external_subject,
+            "managed_by_org_id": uuid_str(self.managed_by_org_id),
             "org_role": self.org_role.value,
             "is_super_admin": self.is_super_admin,
             "is_active": self.is_active,
@@ -60,6 +68,7 @@ class User:
             password_hash=doc.get("password_hash"),
             auth_provider=AuthProvider(doc.get("auth_provider", AuthProvider.LOCAL.value)),
             external_subject=doc.get("external_subject"),
+            managed_by_org_id=to_uuid(doc.get("managed_by_org_id")),
             org_role=OrgRole(doc.get("org_role", OrgRole.MEMBER.value)),
             is_super_admin=bool(doc.get("is_super_admin", False)),
             is_active=bool(doc.get("is_active", True)),

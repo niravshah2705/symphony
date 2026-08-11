@@ -9,14 +9,16 @@ const { paiseToInr } = require('@ai-fleet/shared/billing/pricing');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared/billing/org-context');
 const { bearerToken } = require('../auth');
 const { callJson } = require('../service-client');
+const { requestContext } = require('../request-context');
 
 /**
  * Cost-monitoring + billing API (gateway-owned). Billing state lives in the
  * shared JS store; org/project/user *names* come from the usage records.
  *
- * CROSS-TENANT ISOLATION (critical): every read scopes to the caller's org,
- * resolved SERVER-SIDE from the org service (`GET /api/v1/me`) — never from a
- * query/body/route org id. Mutations additionally require org-admin. On the
+ * CROSS-TENANT ISOLATION (critical): every read scopes to the caller's selected
+ * org, resolved SERVER-SIDE from the org service (`GET /api/v1/me`). The header
+ * is only a requested selection; both gateway and org service validate it.
+ * Mutations additionally require org-admin. On the
  * shared free-tier account (SHARED_ORG_ID) the per-project/user drill-down is
  * additionally scoped to the caller's own user so personal tenants can't see
  * each other's project names. Money is integer paise internally; INR is exposed
@@ -57,7 +59,10 @@ async function resolveCallerOrg(req) {
   const deploymentOrg = CONFIG.BILLING.orgId || '';
   if (CONFIG.SERVICES.orgUrl && bearer) {
     try {
-      const { status, data } = await callJson(CONFIG.SERVICES.orgUrl, '/api/v1/me', { userAuth: bearer });
+      const { status, data } = await callJson(CONFIG.SERVICES.orgUrl, '/api/v1/me', {
+        userAuth: bearer,
+        context: requestContext(req),
+      });
       if (status === 200 && data) {
         const isAdmin = String(data.org_role || '').toUpperCase() === 'ORG_ADMIN';
         if (data.org_id) return { orgId: deploymentOrg || String(data.org_id), userId: data.user_id || null, isAdmin };

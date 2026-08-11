@@ -9,7 +9,11 @@ from __future__ import annotations
 import pytest
 
 from app.core.database import new_uow
+from app.core.security import hash_password
+from app.models.enums import AuthProvider, OrgRole
+from app.models.user import User
 from app.repositories.base import ORGS
+from app.repositories.user_repo import UserRepository
 from tests.helpers import auth, register_org_admin
 
 
@@ -42,6 +46,40 @@ async def test_org_member_defaults_to_shared(client):
     assert body["org_name"] == "Acme"
     # Never leaks internal service URLs to the browser.
     assert set(body.keys()) <= {"status", "gateway_url", "org_id", "org_name"}
+
+
+@pytest.mark.asyncio
+async def test_orgless_user_stays_orgless_on_deployment_lookup(client):
+    uow = new_uow()
+    await UserRepository(uow).add(
+        User(
+            email="orgless@deployment.example.com",
+            password_hash=hash_password("password123"),
+            auth_provider=AuthProvider.LOCAL,
+            org_id=None,
+            org_role=OrgRole.MEMBER,
+            email_verified=True,
+        )
+    )
+    await uow.commit()
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "orgless@deployment.example.com", "password": "password123"},
+    )
+    token = login.json()["access_token"]
+
+    deployment = await client.get("/api/v1/me/deployment", headers=auth(token))
+    assert deployment.status_code == 200
+    assert deployment.json() == {
+        "status": "shared",
+        "gateway_url": "",
+        "org_id": None,
+        "org_name": None,
+    }
+    context = await client.get("/api/v1/me/context", headers=auth(token))
+    assert context.json()["organizations"] == []
+    assert context.json()["selected"] is None
+    assert await new_uow().db.query(ORGS) == []
 
 
 @pytest.mark.asyncio

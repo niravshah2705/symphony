@@ -104,3 +104,18 @@ async def test_deactivated_user_loses_access(client):
     assert (await client.delete(f"/api/v1/users/{uid}", headers=auth(admin))).status_code == 204
     # The user's existing token no longer authenticates.
     assert (await client.get("/api/v1/auth/me", headers=auth(member))).status_code == 401
+
+
+async def test_last_organization_admin_cannot_be_demoted_or_removed(client):
+    admin = await register_org_admin(client)
+    me = await client.get("/api/v1/me/context", headers=auth(admin))
+    admin_id = me.json()["user"]["id"]
+
+    demote = await client.patch(
+        f"/api/v1/users/{admin_id}",
+        headers=auth(admin),
+        json={"org_role": "MEMBER"},
+    )
+    assert demote.status_code == 409
+    remove = await client.delete(f"/api/v1/users/{admin_id}", headers=auth(admin))
+    assert remove.status_code == 409

@@ -1,10 +1,8 @@
-"""User model. A regular user belongs to exactly one org; an org-less user
-(org_id is None) is a JIT-provisioned external identity with no tenant access.
-Firestore: `users/{id}`.
+"""Legacy local-JWT user model.
 
-The settings service does not own the user lifecycle (the org service does); it
-only needs enough of the record to resolve a Principal from a verified token and
-to JIT-provision an org-less external identity the same way the org service does.
+External/Firebase identities and their multi-organization memberships are
+resolved live from the organization service. This local record remains for
+standalone installations using the settings service's own JWT issuer.
 """
 from __future__ import annotations
 

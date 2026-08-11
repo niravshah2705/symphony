@@ -1,8 +1,8 @@
 """Collection-path helpers and pagination for the Firestore repositories.
 
 Tenant isolation is structural: org-owned entities live under
-``organizations/{org_id}/...``. Top-level ``users`` carries an ``org_id`` field
-(None only for super-admins). Uniqueness that matters for security (user email,
+``organizations/{org_id}/...``. Top-level ``users`` retains an ``org_id`` field
+as a backward-compatible default context. Uniqueness that matters for security (user email,
 external subject) is enforced with atomic guard docs; tag-name uniqueness is a
 best-effort query check (an admin-only action).
 """
@@ -19,10 +19,11 @@ USERS = "users"
 REFRESH_TOKENS = "refresh_tokens"
 UNIQUE_EMAILS = "unique_emails"
 UNIQUE_EXTERNAL_SUBJECTS = "unique_external_subjects"
-# One-org-per-user guard for auto-provisioned pseudo workspaces: an atomic
-# create-if-absent doc keyed by user id, so concurrent first requests can't each
-# mint an org (see onboarding_service.ensure_org_for_user).
+# Legacy guard documents from the removed pseudo-workspace auto-provisioner.
+# Retained only so deleting an old organization can clean up existing data.
 USER_ORG_LOCKS = "user_org_locks"
+INVITATION_TOKENS = "organization_invitation_tokens"
+PENDING_INVITATIONS = "organization_pending_invitations"
 
 
 def projects_col(org_id: uuid.UUID) -> str:
@@ -46,6 +47,18 @@ def tags_col(org_id: uuid.UUID) -> str:
 
 def memberships_col(org_id: uuid.UUID) -> str:
     return f"{ORGS}/{org_id}/memberships"
+
+
+def organization_members_col(org_id: uuid.UUID) -> str:
+    return f"{ORGS}/{org_id}/members"
+
+
+def user_organizations_col(user_id: uuid.UUID) -> str:
+    return f"{USERS}/{user_id}/organizations"
+
+
+def invitations_col(org_id: uuid.UUID) -> str:
+    return f"{ORGS}/{org_id}/invitations"
 
 
 async def paginate(

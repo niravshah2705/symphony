@@ -22,6 +22,16 @@ output "coder_control_uri" {
   value       = google_cloud_run_v2_service.coder_control.uri
 }
 
+output "email_service_uri" {
+  description = "Shared transactional email service URL — internal and Pub/Sub-invoked only."
+  value       = google_cloud_run_v2_service.email.uri
+}
+
+output "email_topic_name" {
+  description = "Pub/Sub topic that accepts allow-listed transactional email jobs."
+  value       = google_pubsub_topic.email.name
+}
+
 output "coder_worker_job" {
   description = "Cloud Run Job name launched per ticket by coder-control."
   value       = google_cloud_run_v2_job.coder_worker.name

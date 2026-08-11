@@ -2,7 +2,15 @@
 
 const express = require('express');
 const { CONFIG } = require('@ai-fleet/shared/config');
-const { getSettings, patchSettings, getClaudeTokens, setClaudeTokens, clearClaudeTokens } = require('@ai-fleet/shared/store');
+const {
+  getSettings,
+  patchSettings,
+  getClaudeTokens,
+  setClaudeTokens,
+  clearClaudeTokens,
+  currentWorkspaceContext,
+  normalizeWorkspaceContext,
+} = require('@ai-fleet/shared/store');
 const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
 const claudeOauth = require('@ai-fleet/shared/agent/claude-oauth');
 const { ensureFreshClaudeTokens, resolveLlm, createChatModel } = require('@ai-fleet/shared/agent/llm');
@@ -71,7 +79,7 @@ router.get(
 
 // GET /api/settings/claude/login — begin OAuth; returns the authorize URL to open.
 router.get('/login', (req, res) => {
-  const { authorizeUrl } = claudeOauth.createLogin();
+  const { authorizeUrl } = claudeOauth.createLogin(currentWorkspaceContext());
   res.json({ authorizeUrl });
 });
 
@@ -138,6 +146,11 @@ router.post(
     }
     if (!code) {
       return res.status(400).json({ error: 'Missing authorization code. Paste the full value from the Anthropic page.' });
+    }
+    const initiated = normalizeWorkspaceContext(login.workspaceContext || {});
+    const selected = normalizeWorkspaceContext(currentWorkspaceContext());
+    if (initiated.organizationId !== selected.organizationId || initiated.projectId !== selected.projectId) {
+      return res.status(403).json({ error: 'This sign-in request belongs to a different organization or project.' });
     }
     try {
       const tokens = await claudeOauth.exchangeCodeForTokens({ code, state, codeVerifier: login.codeVerifier });

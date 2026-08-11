@@ -37,6 +37,7 @@ const businessPipeline = require('@ai-fleet/shared/agent/business-pipeline');
 const approvalGate = require('@ai-fleet/shared/agent/approval-gate');
 const conversations = require('@ai-fleet/shared/agent/conversations');
 const workspaceEvents = require('@ai-fleet/shared/agent/workspace-events');
+const { normalizeEventContext, matchesEventContext } = require('@ai-fleet/shared/messaging/events');
 const { redactSecrets } = require('@ai-fleet/shared/agent/tools/exec');
 
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -54,6 +55,60 @@ const MAX_REDACT_BYTES = 1_000_000;
 const redactUserText = (value) => redactSecrets(String(value == null ? '' : value), [], MAX_REDACT_BYTES);
 
 const router = express.Router();
+
+function requestWorkspaceContext(req) {
+  const getHeader = (name) => {
+    if (req && typeof req.get === 'function') return req.get(name);
+    return req && req.headers ? req.headers[name] : undefined;
+  };
+  return normalizeEventContext({
+    organizationId: getHeader('x-ai-fleet-organization-id') || '',
+    projectId: getHeader('x-ai-fleet-project-id') || '',
+  });
+}
+
+function jobsForContext(context, kind) {
+  const jobs = listJobs(kind);
+  // Auth-disabled/local installs do not send selection headers. Preserve their
+  // existing single-workspace behavior instead of hiding legacy jobs.
+  if (!context.organizationId) return jobs;
+  return jobs.filter((job) => matchesEventContext(job, context));
+}
+
+function jobsForRequest(req, kind) {
+  return jobsForContext(requestWorkspaceContext(req), kind);
+}
+
+function recordsForRequest(req, records) {
+  const context = requestWorkspaceContext(req);
+  // No headers is the trusted, auth-disabled local-development contract.
+  if (!context.organizationId) return records;
+  return records.filter((record) => matchesEventContext(record, context));
+}
+
+function recordForRequest(req, records, id) {
+  return recordsForRequest(req, records).find((record) => record.id === id) || null;
+}
+
+function stampRequestContext(req, record = {}) {
+  const context = requestWorkspaceContext(req);
+  return {
+    ...record,
+    ...(context.organizationId ? { orgId: context.organizationId } : {}),
+    ...(context.projectId ? { nativeProjectId: context.projectId } : {}),
+  };
+}
+
+function schedulerStatusForContext(context) {
+  return scheduler.getStatus(context);
+}
+
+function conversationForRequest(req, id) {
+  const conversation = getConversation(id);
+  return conversation && matchesEventContext(conversation, requestWorkspaceContext(req))
+    ? conversation
+    : null;
+}
 
 /**
  * Enforce that a role is assumed before any enrichment action. This is the
@@ -221,12 +276,17 @@ router.put('/config', (req, res) => {
   setAgentConfig(next);
   // A schedule toggle / cadence change is a status transition — push it to the
   // workspace stream so every open workspace updates without polling /status.
-  workspaceEvents.publishAgentStatus({ ...scheduler.getStatus(), assumedRole: getAssumedRole() });
+  const context = requestWorkspaceContext(req);
+  workspaceEvents.publishAgentStatus(
+    { ...schedulerStatusForContext(context), assumedRole: getAssumedRole() },
+    context,
+  );
   res.json({ config: next });
 });
 
 // GET /api/agent/status — scheduler + readiness for the dashboard.
 router.get('/status', (req, res) => {
+  const context = requestWorkspaceContext(req);
   const settings = getSettings();
   const config = getAgentConfig();
   const codexTokens = settings.codexTokens;
@@ -235,7 +295,7 @@ router.get('/status', (req, res) => {
   const provider = providerForRole(settings, 'thinking');
   const byomProvider = settings.byomProvider || settings.llmProvider || 'ollama';
   res.json({
-    ...scheduler.getStatus(),
+    ...schedulerStatusForContext(context),
     assumedRole: getAssumedRole(),
     llmConfigured: llmReady(settings, 'thinking'),
     llmProvider: provider,
@@ -271,7 +331,7 @@ router.get(
 
 // GET /api/agent/jobs — enrichment job history.
 router.get('/jobs', (req, res) => {
-  res.json({ jobs: listJobs() });
+  res.json({ jobs: jobsForRequest(req) });
 });
 
 // POST /api/agent/message — deterministic intent and safety gate for the Agent
@@ -329,7 +389,7 @@ router.post('/memory-search', (req, res) => {
   const query = redactUserText(typeof body.query === 'string' ? body.query : typeof body.input === 'string' ? body.input : '');
   const requested = typeof body.scope === 'string' ? body.scope.toLowerCase() : '';
   const scope = memory.MEMORY_SCOPES.includes(requested) ? requested : memory.detectMemoryScope(query);
-  const results = memory.searchMemories(query, listMemories(), { scope });
+  const results = memory.searchMemories(query, recordsForRequest(req, listMemories()), { scope });
   // Blend reviewed docs for the workspace scope (or when the scope is ambiguous).
   if ((scope === 'workspace' || scope === 'all') && query.trim()) {
     try {
@@ -348,7 +408,7 @@ router.post('/memory-search', (req, res) => {
 // (scope allowlist, bounded fields, safe refId) happens in normalizeMemory;
 // a MemoryError carries a 400 to the central error handler.
 router.post('/memory', (req, res) => {
-  const record = addMemory(memory.normalizeMemory(req.body));
+  const record = addMemory(stampRequestContext(req, memory.normalizeMemory(req.body)));
   res.status(201).json({ memory: record });
 });
 
@@ -357,14 +417,16 @@ router.get('/memory', (req, res) => {
   const requested = typeof req.query.scope === 'string' ? req.query.scope.toLowerCase() : '';
   const scope = memory.MEMORY_SCOPES.includes(requested) ? requested : undefined;
   const refId = typeof req.query.refId === 'string' && REF_ID_PATTERN.test(req.query.refId) ? req.query.refId : undefined;
-  res.json({ memories: listMemories({ scope, refId }) });
+  res.json({ memories: recordsForRequest(req, listMemories({ scope, refId })) });
 });
 
 // DELETE /api/agent/memory/:id — remove one stored memory.
 router.delete('/memory/:id', (req, res) => {
   const id = String(req.params.id || '');
   if (!/^mem_[A-Za-z0-9-]{1,80}$/.test(id)) return res.status(400).json({ error: 'Invalid memory id.' });
-  if (!removeMemory(id)) return res.status(404).json({ error: 'Memory not found.' });
+  if (!recordForRequest(req, listMemories(), id) || !removeMemory(id)) {
+    return res.status(404).json({ error: 'Memory not found.' });
+  }
   res.json({ ok: true });
 });
 
@@ -377,13 +439,14 @@ router.post(
     const body = req.body || {};
     let business = null;
     if (typeof body.businessId === 'string' && REF_ID_PATTERN.test(body.businessId)) {
-      business = readStore().businesses.find((b) => b.id === body.businessId) || null;
+      business = recordForRequest(req, readStore().businesses, body.businessId);
     }
     const payload = await businessPipeline.prepareBusiness({
       input: typeof body.input === 'string' ? body.input : '',
       business,
       settings: getSettings(),
       assumedRole: getAssumedRole(),
+      ...stampRequestContext(req),
     });
     res.json({ business: payload });
   })
@@ -401,7 +464,7 @@ router.post(
     const body = req.body || {};
     let business = null;
     if (typeof body.businessId === 'string' && REF_ID_PATTERN.test(body.businessId)) {
-      business = readStore().businesses.find((b) => b.id === body.businessId) || null;
+      business = recordForRequest(req, readStore().businesses, body.businessId);
     }
     const conversationId = typeof body.conversationId === 'string' && CONV_ID_PATTERN.test(body.conversationId)
       ? body.conversationId
@@ -416,14 +479,14 @@ router.post(
     if (result.blocked) return res.json({ blocked: true, answer: result.answer, signal: result.signal });
     if (result.signal === 'green') return res.json({ evaluation: result.evaluation, signal: 'green', gate: null });
 
-    const gate = approvalGate.createGate({
+    const gate = approvalGate.createGate(stampRequestContext(req, {
       requirement: result.goal,
       businessId: business ? business.id : null,
       conversationId,
       evaluation: result.evaluation,
       signal: result.signal,
       waitMinutes: getAgentConfig().evaluationApprovalWaitMinutes,
-    });
+    }));
     res.json({ evaluation: result.evaluation, signal: result.signal, gate });
   })
 );
@@ -433,14 +496,14 @@ router.get('/business/gates', (req, res) => {
   const filter = {};
   if (typeof req.query.businessId === 'string' && REF_ID_PATTERN.test(req.query.businessId)) filter.businessId = req.query.businessId;
   if (typeof req.query.status === 'string' && GATE_STATUSES.includes(req.query.status)) filter.status = req.query.status;
-  res.json({ gates: listApprovalGates(filter) });
+  res.json({ gates: recordsForRequest(req, listApprovalGates(filter)) });
 });
 
 // GET /api/agent/business/gates/:id — one gate (front-end polls for the countdown
 // and to auto-advance when status flips to proceeded).
 router.get('/business/gates/:id', (req, res) => {
   if (!GATE_ID_PATTERN.test(req.params.id)) return res.status(400).json({ error: 'Invalid gate id.' });
-  const gate = getApprovalGate(req.params.id);
+  const gate = recordForRequest(req, listApprovalGates(), req.params.id);
   if (!gate) return res.status(404).json({ error: 'Approval gate not found.' });
   res.json({ gate });
 });
@@ -450,6 +513,9 @@ router.post(
   '/business/gates/:id/approve',
   asyncHandler(async (req, res) => {
     if (!GATE_ID_PATTERN.test(req.params.id)) return res.status(400).json({ error: 'Invalid gate id.' });
+    if (!recordForRequest(req, listApprovalGates(), req.params.id)) {
+      return res.status(404).json({ error: 'Approval gate not found.' });
+    }
     const { gate, business } = await approvalGate.approveGate(req.params.id);
     res.json({ gate, business });
   })
@@ -460,6 +526,9 @@ router.post(
   '/business/gates/:id/reevaluate',
   asyncHandler(async (req, res) => {
     if (!GATE_ID_PATTERN.test(req.params.id)) return res.status(400).json({ error: 'Invalid gate id.' });
+    if (!recordForRequest(req, listApprovalGates(), req.params.id)) {
+      return res.status(404).json({ error: 'Approval gate not found.' });
+    }
     const body = req.body || {};
     const out = await approvalGate.reevaluateGate(req.params.id, typeof body.input === 'string' ? body.input : '');
     res.json(out);
@@ -473,20 +542,30 @@ router.post(
 
 // GET /api/agent/conversations — thread summaries (no messages), newest-first.
 router.get('/conversations', (req, res) => {
-  res.json({ conversations: listConversations().map(conversations.summarizeConversation) });
+  const context = requestWorkspaceContext(req);
+  res.json({
+    conversations: listConversations()
+      .filter((conversation) => matchesEventContext(conversation, context))
+      .map(conversations.summarizeConversation),
+  });
 });
 
 // POST /api/agent/conversations — create an empty thread.
 router.post('/conversations', (req, res) => {
   const body = req.body || {};
   const title = typeof body.title === 'string' && body.title.trim() ? conversations.normalizeTitle(body.title) : undefined;
-  res.status(201).json({ conversation: addConversation(title ? { title } : {}) });
+  const context = requestWorkspaceContext(req);
+  res.status(201).json({ conversation: addConversation({
+    ...(title ? { title } : {}),
+    ...(context.organizationId ? { orgId: context.organizationId } : {}),
+    ...(context.projectId ? { nativeProjectId: context.projectId } : {}),
+  }) });
 });
 
 // GET /api/agent/conversations/:id — full thread with messages.
 router.get('/conversations/:id', (req, res) => {
   if (!CONV_ID_PATTERN.test(String(req.params.id || ''))) return res.status(400).json({ error: 'Invalid conversation id.' });
-  const conversation = getConversation(req.params.id);
+  const conversation = conversationForRequest(req, req.params.id);
   if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
   res.json({ conversation });
 });
@@ -496,7 +575,7 @@ router.get('/conversations/:id', (req, res) => {
 router.post('/conversations/:id/messages', (req, res) => {
   const id = String(req.params.id || '');
   if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
-  const existing = getConversation(id);
+  const existing = conversationForRequest(req, id);
   if (!existing) return res.status(404).json({ error: 'Conversation not found.' });
   const messages = conversations.normalizeMessages(req.body && req.body.messages)
     .map((message) => ({ ...message, text: redactUserText(message.text) }));
@@ -514,6 +593,7 @@ router.post('/conversations/:id/messages', (req, res) => {
 router.patch('/conversations/:id', (req, res) => {
   const id = String(req.params.id || '');
   if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+  if (!conversationForRequest(req, id)) return res.status(404).json({ error: 'Conversation not found.' });
   const conversation = updateConversation(id, { title: conversations.normalizeTitle(req.body && req.body.title) });
   if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
   res.json({ conversation });
@@ -523,6 +603,7 @@ router.patch('/conversations/:id', (req, res) => {
 router.delete('/conversations/:id', (req, res) => {
   const id = String(req.params.id || '');
   if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+  if (!conversationForRequest(req, id)) return res.status(404).json({ error: 'Conversation not found.' });
   if (!removeConversation(id)) return res.status(404).json({ error: 'Conversation not found.' });
   res.json({ ok: true });
 });
@@ -572,12 +653,24 @@ router.post(
 
 // DELETE /api/agent/jobs — clear all finished (done/error) jobs.
 router.delete('/jobs', (req, res) => {
-  const jobs = clearFinishedJobs();
+  const context = requestWorkspaceContext(req);
+  let jobs;
+  if (!context.organizationId) {
+    jobs = clearFinishedJobs();
+  } else {
+    for (const job of jobsForContext(context)) {
+      if (job.status === 'done' || job.status === 'error') removeJob(job.id);
+    }
+    jobs = jobsForContext(context);
+  }
   res.json({ jobs });
 });
 
 // DELETE /api/agent/jobs/:id — remove a single job.
 router.delete('/jobs/:id', (req, res) => {
+  const context = requestWorkspaceContext(req);
+  const job = jobsForContext(context).find((candidate) => candidate.id === req.params.id);
+  if (!job) return res.status(404).json({ error: 'Job not found.' });
   const removed = removeJob(req.params.id);
   if (!removed) return res.status(404).json({ error: 'Job not found.' });
   res.json({ ok: true });
@@ -595,10 +688,17 @@ router.post(
     const projectId = typeof body.projectId === 'string' ? body.projectId.trim() : '';
     if (!projectId || projectId.length > 200) return res.status(400).json({ error: 'projectId is required.' });
     const projectName = typeof body.projectName === 'string' ? body.projectName.slice(0, 200) : projectId;
-    const job = scheduler.enqueue({ projectId, projectName, assumedRole: req.assumedRole });
+    const context = requestWorkspaceContext(req);
+    const job = scheduler.enqueue({
+      projectId,
+      projectName,
+      assumedRole: req.assumedRole,
+      orgId: context.organizationId || null,
+      nativeProjectId: context.projectId || null,
+    });
     // Fire-and-forget tick; the queued job is processed on this (or the next) tick.
     Promise.resolve(scheduler.processPending()).catch(() => {});
-    res.json({ job, status: scheduler.getStatus() });
+    res.json({ job, status: schedulerStatusForContext(context) });
   })
 );
 
@@ -607,8 +707,9 @@ router.post(
   '/run-now',
   requireAssumedRole,
   asyncHandler(async (req, res) => {
+    const context = requestWorkspaceContext(req);
     const result = await scheduler.processPending();
-    res.json({ result, status: scheduler.getStatus() });
+    res.json({ result, status: schedulerStatusForContext(context) });
   })
 );
 

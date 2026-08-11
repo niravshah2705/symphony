@@ -73,14 +73,13 @@ test('workspace renders while optional locale and Linear discovery are stalled',
   });
 
   await page.addInitScript(() => {
-    localStorage.setItem('ai-fleet.locale', 'en');
     localStorage.setItem('lm.lastWorkspaceRoute', 'agent');
   });
   await page.route('**/api/locale/suggestions**', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 5_000));
     await json(route, {
       locale: 'en',
-      suggestions: [{ tag: 'en', label: 'English', nativeLabel: 'English', direction: 'ltr' }],
+      recommendedLocale: 'gu-IN',
     });
   });
   await page.route('**/api/settings/validate', async (route) => {
@@ -182,9 +181,48 @@ test('disabled auth skips Firebase and bodyless API GETs omit the JSON content t
   expect((await mutation).headers()['content-type']).toContain('application/json');
 });
 
+test('fixed language groups mark, but never auto-apply, the IP recommendation', async ({ page }) => {
+  let suggestionRequests = 0;
+  await page.route('**/api/**', (route) => json(route, {}));
+  await page.route('**/api/locale/translate', (route) => {
+    const body = route.request().postDataJSON() || {};
+    return json(route, { locale: body.locale, translations: body.texts || [] });
+  });
+  await page.route('**/api/locale/suggestions**', (route) => {
+    suggestionRequests += 1;
+    return json(route, { locale: 'en', recommendedLocale: 'mr-IN' });
+  });
+  await page.route('**/api/auth/config', (route) => json(route, { mode: 'disabled', enabled: false }));
+
+  await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
+  const select = page.locator('#language-select');
+  await expect(select).toHaveValue('en');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(select.locator('option[data-recommended="true"]')).toHaveText('मराठी — Recommended');
+  expect(await select.locator('optgroup').evaluateAll((groups) => groups.map((group) => group.label))).toEqual([
+    'Regional', 'National', 'International', 'Others',
+  ]);
+  expect(await select.locator('option').evaluateAll((options) => options.map((option) => option.value))).toEqual([
+    'mr-IN', 'gu-IN', 'hi-IN', 'en', 'es', 'fr', 'de', 'pt-BR', 'ja-JP', 'ar',
+  ]);
+
+  await select.selectOption('mr-IN');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'mr-IN');
+  await expect(page.locator('#route-title')).toHaveText('एजंट कार्यक्षेत्र');
+  expect(suggestionRequests).toBe(1);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#language-select')).toHaveValue('mr-IN');
+  await expect(page.locator('#route-title')).toHaveText('एजंट कार्यक्षेत्र');
+  // A saved locale is authoritative; VPN/IP recommendation lookup is skipped.
+  expect(suggestionRequests).toBe(1);
+});
+
 test('authenticated Firebase session adds a bearer token and ignores an unrelated provider 401', async ({ page }) => {
   const authenticatedRequests = [];
   const authStartupRequests = [];
+  let settingsContextHeaders = null;
+  let streamContext = null;
   page.on('request', (request) => {
     const pathname = new URL(request.url()).pathname;
     if (pathname === '/api/auth/config' || pathname.startsWith('/vendor/firebase/')) {
@@ -247,15 +285,26 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
     permissions: { workspace: 'write', planning: 'write', insights: 'write', settings: 'write', org: 'write' },
     user: { sub: 'firebase|ada', name: 'Ada Operator', email: 'ada@example.com' },
   }));
+  await page.route('**/api/org/me/context', (route) => authorizedJson(route, {
+    user: { id: 'firebase|ada', email: 'ada@example.com', full_name: 'Ada Operator' },
+    organizations: [{
+      id: 'org-primary', name: 'Primary Org', role: 'ORG_ADMIN',
+      projects: [{ id: 'fleet-project', name: 'Fleet Project', role: 'PROJECT_ADMIN' }],
+    }],
+  }));
+  await page.route('**/api/config', (route) => authorizedJson(route, {
+    authenticated: true, status: 'shared', gatewayUrl: '', orgName: 'Primary Org',
+  }));
   await page.route('**/api/locale/suggestions**', (route) => authorizedJson(route, {
     locale: 'en',
     suggestions: [{ tag: 'en', label: 'English', nativeLabel: 'English', direction: 'ltr' }],
   }));
   // This 401 belongs to the Linear connector, not application authentication.
   // It must update connection health without clearing the Firebase session.
-  await page.route('**/api/settings', (route) => authorizedJson(route, {
-    error: 'Linear credential needs attention',
-  }, 401));
+  await page.route('**/api/settings', (route) => {
+    settingsContextHeaders = route.request().headers();
+    return authorizedJson(route, { error: 'Linear credential needs attention' }, 401);
+  });
   await page.route('**/api/roles/assumed', (route) => authorizedJson(route, { assumedRole: null }));
   await page.route('**/api/agent/status', (route) => authorizedJson(route, {
     scheduleEnabled: false,
@@ -269,18 +318,161 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
     pauseReason: null,
     inFlight: [],
   }));
+  // EventSource cannot set headers. Its short-lived token is bound to the same
+  // selected context, repeated as query parameters on the stream URL.
+  await page.route('**/api/agent/workspace-stream**', (route) => {
+    const url = new URL(route.request().url());
+    streamContext = {
+      organizationId: url.searchParams.get('organizationId'),
+      projectId: url.searchParams.get('projectId'),
+    };
+    return route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
+      body: ': ready\n\n',
+    });
+  });
+  await page.route('**/api/agent/workspace-stream-token**', (route) => authorizedJson(route, {
+    token: 'context-bound-stream-token',
+  }));
 
   const response = await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
   expect(response && response.ok()).toBeTruthy();
   await expect(page.locator('.agent-workspace')).toBeVisible();
   await expect(page.locator('.auth-user')).toContainText('Ada Operator');
+  await page.locator('.account-context-trigger').click();
   await expect(page.locator('.auth-sign-out')).toBeVisible();
+  await expect(page.locator('#account-organization-select')).toHaveValue('org-primary');
+  await expect(page.locator('#account-project-select')).toHaveValue('fleet-project');
+  await expect(page.locator('#language-select optgroup')).toHaveCount(4);
   await expect(page.locator('.auth-card')).toHaveCount(0);
+  expect(settingsContextHeaders['x-ai-fleet-organization-id']).toBe('org-primary');
+  expect(settingsContextHeaders['x-ai-fleet-project-id']).toBe('fleet-project');
+  await expect.poll(() => streamContext).toEqual({
+    organizationId: 'org-primary',
+    projectId: 'fleet-project',
+  });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ai-fleet.context')))).toEqual({
+    version: 1,
+    users: {
+      'firebase|ada': {
+        organizationId: 'org-primary',
+        projectIdsByOrganization: { 'org-primary': 'fleet-project' },
+      },
+    },
+  });
   expect(authenticatedRequests).toContain('GET /api/auth/me');
   expect(authenticatedRequests).toContain('GET /api/settings');
   expect(authStartupRequests[0]).toBe('/api/auth/config');
   expect(authStartupRequests).toContain('/vendor/firebase/firebase-app.js');
   expect(authStartupRequests).toContain('/vendor/firebase/firebase-auth.js');
+});
+
+test('Settings Policy uses the active native project and selected-context roles', async ({ page }) => {
+  const policyRequests = [];
+  let personalProjectRequests = 0;
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith('/api/settings-policy/')) {
+      policyRequests.push({ url, headers: request.headers() });
+    }
+    if (url.pathname === '/api/org/me/projects') personalProjectRequests += 1;
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem('ai-fleet.locale', 'en');
+    localStorage.setItem('e2e.signedin', '1');
+  });
+  await page.route('**/api/**', (route) => json(route, {}));
+  await page.route('**/vendor/firebase/firebase-app.js', (route) => route.fulfill({
+    status: 200, contentType: 'text/javascript', body: 'export function initializeApp() { return {}; }',
+  }));
+  await page.route('**/vendor/firebase/firebase-auth.js', (route) => route.fulfill({
+    status: 200, contentType: 'text/javascript', body: FIREBASE_AUTH_STUB,
+  }));
+  await page.route('**/api/auth/config', (route) => json(route, {
+    mode: 'firebase', enabled: true, provider: 'firebase',
+    firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo-proj.firebaseapp.com', projectId: 'demo-proj' },
+  }));
+  await page.route('**/api/auth/me', (route) => json(route, {
+    authenticated: true, role: 'admin',
+    permissions: { workspace: 'write', settings: 'write', org: 'write' },
+    user: { sub: 'firebase|max', name: 'Max Operator', email: 'max@example.com' },
+  }));
+  await page.route('**/api/org/me/context', (route) => json(route, {
+    user: { id: 'firebase|max', email: 'max@example.com', full_name: 'Max Operator' },
+    organizations: [{
+      id: 'org-selected', name: 'Selected Org', role: 'MEMBER',
+      projects: [{ id: 'native-project', name: 'Native Fleet Project', role: 'PROJECT_ADMIN' }],
+    }],
+  }));
+  // This legacy role intentionally conflicts with the selected org role.
+  await page.route('**/api/org/me', (route) => json(route, {
+    user_id: 'firebase|max', email: 'max@example.com', has_organization: true,
+    org_id: 'legacy-org', org_role: 'ORG_ADMIN',
+  }));
+  await page.route('**/api/agent/config', (route) => json(route, { config: {} }));
+  await page.route('**/api/agent/models', (route) => json(route, { intervals: [5, 10, 15] }));
+  await page.route('**/api/agent/labels', (route) => json(route, { labels: [] }));
+
+  await page.goto('/#/settings', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#settings-models')).toBeVisible();
+  const activeScope = page.locator('.sx-scope.active');
+  await expect(activeScope).toContainText('Project');
+  await expect(activeScope).toContainText('Native Fleet Project');
+  await expect.poll(() => policyRequests.length).toBeGreaterThan(0);
+  expect(personalProjectRequests).toBe(0);
+  expect(policyRequests.some(({ url }) => url.pathname.endsWith('/settings/effective')
+    && url.searchParams.get('project_id') === 'native-project')).toBe(true);
+  for (const request of policyRequests) {
+    expect(request.headers['x-ai-fleet-organization-id']).toBe('org-selected');
+    expect(request.headers['x-ai-fleet-project-id']).toBe('native-project');
+  }
+
+  await page.locator('.sx-scope').filter({ hasText: 'Organization' }).click();
+  await expect(page.getByText('Organization admins only.').first()).toBeVisible();
+});
+
+test('selected organization admins can open scoped policy without global settings write', async ({ page }) => {
+  const policyRequests = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith('/api/settings-policy/')) policyRequests.push(url.pathname);
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem('ai-fleet.locale', 'en');
+    localStorage.setItem('e2e.signedin', '1');
+  });
+  await page.route('**/api/**', (route) => json(route, {}));
+  await page.route('**/vendor/firebase/firebase-app.js', (route) => route.fulfill({
+    status: 200, contentType: 'text/javascript', body: 'export function initializeApp() { return {}; }',
+  }));
+  await page.route('**/vendor/firebase/firebase-auth.js', (route) => route.fulfill({
+    status: 200, contentType: 'text/javascript', body: FIREBASE_AUTH_STUB,
+  }));
+  await page.route('**/api/auth/config', (route) => json(route, {
+    mode: 'firebase', enabled: true, provider: 'firebase',
+    firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo-proj.firebaseapp.com', projectId: 'demo-proj' },
+  }));
+  await page.route('**/api/auth/me', (route) => json(route, {
+    authenticated: true, role: 'viewer',
+    permissions: { workspace: 'read', settings: 'read', org: 'read' },
+    user: { sub: 'firebase|viewer-admin', name: 'Selected Admin', email: 'admin@example.com' },
+  }));
+  await page.route('**/api/org/me/context', (route) => json(route, {
+    user: { id: 'firebase|viewer-admin', email: 'admin@example.com', full_name: 'Selected Admin' },
+    organizations: [{
+      id: 'org-selected', name: 'Selected Org', role: 'ORG_ADMIN',
+      projects: [{ id: 'native-project', name: 'Native Fleet Project', role: 'PROJECT_ADMIN' }],
+    }],
+  }));
+
+  await page.goto('/#/settings', { waitUntil: 'domcontentloaded' });
+
+  await expect(page.locator('#tabs a[data-route="settings"]')).toBeVisible();
+  await expect(page.getByText(/Operational models, connections, and runtime defaults require/)).toBeVisible();
+  await expect(page.locator('.sx-scope.active')).toContainText('Organization');
+  await expect(page.getByText('Default provider')).toHaveCount(0);
+  await expect.poll(() => policyRequests.length).toBeGreaterThan(0);
 });
 
 test('Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer', async ({ page }) => {
@@ -314,6 +506,10 @@ test('Microsoft popup sign-in renders Google-first, federates into Firebase, and
       user: { sub: 'firebase|max', name: 'Max Operator', email: 'max@example.com' },
     });
   });
+  await page.route('**/api/org/me/context', (route) => json(route, {
+    user: { id: 'firebase|max', email: 'max@example.com', full_name: 'Max Operator' },
+    organizations: [{ id: 'org-max', name: 'Max Org', role: 'ORG_ADMIN', projects: [] }],
+  }));
 
   // /#/settings needs settings:write, so a signed-out visitor gets the sign-in card.
   await page.goto('/#/settings', { waitUntil: 'domcontentloaded' });
@@ -325,6 +521,7 @@ test('Microsoft popup sign-in renders Google-first, federates into Firebase, and
 
   await actions.nth(1).click(); // sign in with Microsoft → popup → confirm → reload
   await expect(page.locator('.auth-user')).toContainText('Max Operator');
+  await page.locator('.account-context-trigger').click();
   await expect(page.locator('#auth-control .auth-sign-out')).toBeVisible();
   expect(bearerSeen).toContain('Bearer browser-access-token');
 });

@@ -6,8 +6,26 @@ const { readStore, writeStore, getApiKey, getAgentConfig } = require('@ai-fleet/
 const { getProjects, createProject, getOrCreateProjectLabels } = require('@ai-fleet/shared/linear');
 const { asyncHandler } = require('@ai-fleet/shared/util');
 const { repoParts } = require('@ai-fleet/shared/agent/workspace');
+const { normalizeEventContext, matchesEventContext } = require('@ai-fleet/shared/messaging/events');
 
 const router = express.Router();
+
+function workspaceContext(req) {
+  return normalizeEventContext(req && req.fleetContext ? req.fleetContext : {});
+}
+
+function inWorkspace(req, record) {
+  const context = workspaceContext(req);
+  return !context.organizationId || matchesEventContext(record, context);
+}
+
+function contextFields(req) {
+  const context = workspaceContext(req);
+  return {
+    ...(context.organizationId ? { orgId: context.organizationId } : {}),
+    ...(context.projectId ? { nativeProjectId: context.projectId } : {}),
+  };
+}
 
 function slugify(name) {
   return String(name)
@@ -69,7 +87,7 @@ async function withProjects(businesses) {
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const businesses = readStore().businesses;
+    const businesses = readStore().businesses.filter((business) => inWorkspace(req, business));
     res.json({ businesses: await withProjects(businesses) });
   })
 );
@@ -121,9 +139,10 @@ router.post(
       // connector switch cannot reinterpret this project repository.
       repo: repository.repo,
       repoProvider: repository.repoProvider,
+      ...contextFields(req),
       createdAt: new Date().toISOString(),
     };
-    if (store.businesses.some((b) => b.id === business.id)) {
+    if (store.businesses.some((b) => b.id === business.id && inWorkspace(req, b))) {
       return res.status(409).json({ error: 'A business with that name already exists.' });
     }
 
@@ -139,7 +158,7 @@ router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const store = readStore();
-    const index = store.businesses.findIndex((b) => b.id === req.params.id);
+    const index = store.businesses.findIndex((b) => b.id === req.params.id && inWorkspace(req, b));
     if (index === -1) return res.status(404).json({ error: 'Business not found.' });
 
     const body = req.body || {};
@@ -168,7 +187,7 @@ router.put(
 // DELETE /api/businesses/:id — remove the local business mapping (leaves Linear untouched).
 router.delete('/:id', (req, res) => {
   const store = readStore();
-  const businesses = store.businesses.filter((b) => b.id !== req.params.id);
+  const businesses = store.businesses.filter((b) => b.id !== req.params.id || !inWorkspace(req, b));
   if (businesses.length === store.businesses.length) {
     return res.status(404).json({ error: 'Business not found.' });
   }
@@ -180,3 +199,5 @@ module.exports = router;
 module.exports.normalizeRepo = normalizeRepo;
 module.exports.normalizeRepoProvider = normalizeRepoProvider;
 module.exports.repositoryFields = repositoryFields;
+module.exports.inWorkspace = inWorkspace;
+module.exports.contextFields = contextFields;

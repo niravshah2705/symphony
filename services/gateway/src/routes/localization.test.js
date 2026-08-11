@@ -35,7 +35,8 @@ test('suggestions use browser hints and coarse IP location without returning the
     }
   );
   assert.equal(lookedUpIp, '8.8.8.8');
-  assert.equal(payload.locale, 'fr');
+  assert.equal(payload.locale, 'en');
+  assert.equal(payload.recommendedLocale, 'gu-IN');
   assert.equal(payload.countryCode, 'IN');
   assert.equal(payload.region, 'Gujarat');
   assert.ok(payload.suggestions.length <= 5);
@@ -49,7 +50,8 @@ test('suggestions remain usable when lookup is offline or the request address is
     { query: { languages: 'gu' }, headers: {}, ip: '1.1.1.1', socket: {} },
     { geolocate: async () => { throw new Error('offline'); } }
   );
-  assert.equal(offline.locale, 'gu-IN');
+  assert.equal(offline.locale, 'en');
+  assert.equal(offline.recommendedLocale, 'en');
   assert.equal(offline.countryCode, null);
   assert.equal(offline.region, null);
 
@@ -62,6 +64,7 @@ test('suggestions remain usable when lookup is offline or the request address is
     }
   );
   assert.equal(local.locale, 'en');
+  assert.equal(local.recommendedLocale, 'gu-IN');
   assert.equal(calls, 0);
   assert.equal(local.countryCode, 'IN');
   assert.equal(local.region, 'Gujarat');

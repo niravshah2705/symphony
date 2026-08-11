@@ -4,6 +4,7 @@ const { addConversation, getAssumedRole } = require('@ai-fleet/shared/store');
 const { publishRequest } = require('@ai-fleet/shared/messaging/publisher');
 const { CONFIG } = require('@ai-fleet/shared/config');
 const { asyncHandler } = require('@ai-fleet/shared/util');
+const { requestContext } = require('./request-context');
 
 /**
  * Gateway request publishers. Instead of proxying the two long-running request
@@ -22,13 +23,20 @@ const enqueue = asyncHandler(async (req, res) => {
   const assumedRole = getAssumedRole();
   if (!assumedRole) return res.status(400).json({ error: 'Assume a role before enqueuing planner work.' });
 
-  const conversation = addConversation({ title: `Planner: ${projectName}` });
+  const context = requestContext(req);
+  const conversation = addConversation({
+    title: `Planner: ${projectName}`,
+    orgId: context.organizationId || null,
+    nativeProjectId: context.projectId || null,
+  });
   await publishRequest(CONFIG.GCP.plannerTopic, {
     type: 'enqueue',
     projectId,
     projectName,
     assumedRole,
     conversationId: conversation.id,
+    orgId: context.organizationId || null,
+    nativeProjectId: context.projectId || null,
   });
   return res.status(202).json({ accepted: true, conversationId: conversation.id });
 });
@@ -39,8 +47,18 @@ const coderRun = asyncHandler(async (req, res) => {
   const issueId = typeof body.issueId === 'string' ? body.issueId.trim() : '';
   if (!issueId) return res.status(400).json({ error: 'issueId is required.' });
 
-  const conversation = addConversation({ title: `Coder: ${issueId}` });
-  await publishRequest(CONFIG.GCP.coderTopic, { issueId, conversationId: conversation.id });
+  const context = requestContext(req);
+  const conversation = addConversation({
+    title: `Coder: ${issueId}`,
+    orgId: context.organizationId || null,
+    nativeProjectId: context.projectId || null,
+  });
+  await publishRequest(CONFIG.GCP.coderTopic, {
+    issueId,
+    conversationId: conversation.id,
+    orgId: context.organizationId || null,
+    nativeProjectId: context.projectId || null,
+  });
   return res.status(202).json({ accepted: true, conversationId: conversation.id });
 });
 

@@ -37,10 +37,10 @@ Directory-based community: scripts
 | test:obfuscateCode surfaces a labelled error on invalid input@L170 | Test | ./scripts/obfuscate-spa.test.js | 170-172 |
 | main | Function | ./scripts/reset-aifail.js | 32-82 |
 | backlogStateFor | Function | ./scripts/reset-aifail.js | 49-57 |
-| envFor | Function | ./scripts/start-all.js | 42-50 |
-| prefixStream | Function | ./scripts/start-all.js | 52-63 |
-| startService | Function | ./scripts/start-all.js | 65-80 |
-| shutdown | Function | ./scripts/start-all.js | 82-89 |
+| envFor | Function | ./scripts/start-all.js | 43-51 |
+| prefixStream | Function | ./scripts/start-all.js | 53-64 |
+| startService | Function | ./scripts/start-all.js | 66-81 |
+| shutdown | Function | ./scripts/start-all.js | 83-90 |
 
 ## Execution Flows
 

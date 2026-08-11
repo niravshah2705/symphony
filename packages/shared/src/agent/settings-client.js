@@ -13,18 +13,51 @@
  *
  * The internal endpoint returns provider SECRETS in plaintext, so it is only
  * ever reachable server-side (the gateway refuses to proxy `/internal/` to the
- * browser, and the service is IAM-gated). Scope is derived by the service from
- * the forwarded end-user token — never from a caller-supplied org id.
+ * browser, and the service is IAM-gated). The selected context headers are only
+ * a request; settings resolves them against the forwarded end-user token via
+ * the authoritative org service.
  *
- * Fail-open: any error resolves to an empty result (no policy, no key) so the
- * caller defaults to allow-all + the GEMINI_API_KEY env/store fallback. Secrets
- * are NEVER logged.
+ * A selected organization fails closed when policy cannot be resolved. The
+ * empty local/single-user context retains the legacy allow-all fallback.
+ * Secrets are NEVER logged.
  */
 
 const EMPTY = Object.freeze({ effectivePolicy: null, values: {}, geminiApiKey: '', prefs: {} });
 
+class PolicyUnavailableError extends Error {
+  constructor(message = 'Workspace policy is temporarily unavailable.', cause = null) {
+    super(message);
+    this.name = 'PolicyUnavailableError';
+    this.code = 'policy_unavailable';
+    this.status = 503;
+    if (cause) this.cause = cause;
+  }
+}
+
+function isPolicyUnavailableError(error) {
+  return Boolean(error && error.code === 'policy_unavailable');
+}
+
+function policyUnavailable(cause = null) {
+  return isPolicyUnavailableError(cause) ? cause : new PolicyUnavailableError(undefined, cause);
+}
+
+function validEffectivePolicy(value) {
+  return Boolean(
+    value
+      && typeof value === 'object'
+      && !Array.isArray(value)
+      && Object.keys(value).length,
+  );
+}
+
 /** Build the settings-service auth headers, mirroring the gateway proxy. */
-function authHeaders({ userToken, s2sToken }) {
+function contextId(value) {
+  const id = typeof value === 'string' ? value.trim() : '';
+  return id && id.length <= 160 && /^[A-Za-z0-9._:-]+$/.test(id) ? id : '';
+}
+
+function authHeaders({ userToken, s2sToken, organizationId, projectId }) {
   const headers = {};
   const user = userToken ? `Bearer ${String(userToken).replace(/^Bearer\s+/i, '')}` : '';
   const s2s = s2sToken ? `Bearer ${String(s2sToken).replace(/^Bearer\s+/i, '')}` : '';
@@ -38,6 +71,10 @@ function authHeaders({ userToken, s2sToken }) {
   } else if (s2s) {
     headers.authorization = s2s;
   }
+  const org = contextId(organizationId);
+  const project = contextId(projectId);
+  if (org) headers['x-ai-fleet-organization-id'] = org;
+  if (project) headers['x-ai-fleet-project-id'] = project;
   return headers;
 }
 
@@ -57,23 +94,29 @@ async function getJson(fetchImpl, url, headers) {
 
 /**
  * Resolve the caller's effective policy + config values from the settings
- * service. Returns `{ effectivePolicy, values, geminiApiKey }`; on any failure
- * returns the empty (allow-all / no-key) result rather than throwing.
+ * service. Returns `{ effectivePolicy, values, geminiApiKey }`. A nonempty
+ * selected organization is fail-closed; empty local context remains allow-all.
  *
  * @param {object} opts
  * @param {string} opts.baseUrl        settings service origin (no trailing slash)
  * @param {string} [opts.userToken]    end-user bearer (Firebase / local JWT)
  * @param {string} [opts.s2sToken]     Cloud Run S2S OIDC token (pubsub mode)
- * @param {string} [opts.projectId]    optional project scope
+ * @param {string} [opts.organizationId] selected organization context
+ * @param {string} [opts.projectId]    selected native project scope
  * @param {Function} [opts.fetchImpl]  fetch implementation (defaults to global)
  * @param {Function} [opts.logger]     optional logger with .warn/.error
  */
 async function resolveEffectiveSettings(opts = {}) {
-  const { baseUrl, userToken, s2sToken, projectId } = opts;
+  const { baseUrl, userToken, s2sToken, organizationId, projectId } = opts;
   const fetchImpl = opts.fetchImpl || (typeof fetch === 'function' ? fetch : null);
-  if (!baseUrl || !fetchImpl) return { ...EMPTY };
+  const selectedOrgId = contextId(organizationId);
+  const failClosed = Boolean(selectedOrgId);
+  if (!baseUrl || !fetchImpl) {
+    if (failClosed) throw policyUnavailable();
+    return { ...EMPTY };
+  }
 
-  const headers = authHeaders({ userToken, s2sToken });
+  const headers = authHeaders({ userToken, s2sToken, organizationId, projectId });
   const base = String(baseUrl).replace(/\/$/, '');
   const q = projectQuery(projectId);
   const result = { effectivePolicy: null, values: {}, geminiApiKey: '', prefs: {} };
@@ -84,7 +127,9 @@ async function resolveEffectiveSettings(opts = {}) {
     if (effective && effective.prefs) result.prefs = effective.prefs;
   } catch (err) {
     if (opts.logger && opts.logger.warn) opts.logger.warn(`settings policy resolve failed: ${err.message}`);
+    if (failClosed) throw policyUnavailable(err);
   }
+  if (failClosed && !validEffectivePolicy(result.effectivePolicy)) throw policyUnavailable();
 
   try {
     const config = await getJson(fetchImpl, `${base}/api/v1/internal/effective-config${q}`, headers);
@@ -95,6 +140,7 @@ async function resolveEffectiveSettings(opts = {}) {
   } catch (err) {
     // Never log the secret; only the failure.
     if (opts.logger && opts.logger.warn) opts.logger.warn(`settings config resolve failed: ${err.message}`);
+    if (failClosed) throw policyUnavailable(err);
   }
 
   return result;
@@ -107,8 +153,9 @@ async function resolveEffectiveSettings(opts = {}) {
  * the caller supplies the base URL, org id, internal token, and (in Cloud) a
  * pre-minted OIDC bearer.
  *
- * Fail-open: any missing input or transport/HTTP error resolves to
- * `{ effectivePolicy: null }` (allow-all — no regression), never throws.
+ * A nonempty org is fail-closed: missing configuration, transport/HTTP errors,
+ * or a response without effective domains throws PolicyUnavailableError. An
+ * empty local org retains the legacy allow-all result.
  *
  * @param {object} opts
  * @param {string} opts.baseUrl        settings service origin (no trailing slash)
@@ -123,19 +170,32 @@ async function resolveEffectiveSettings(opts = {}) {
 async function resolveOrgEffectivePolicy(opts = {}) {
   const { baseUrl, orgId, projectId, internalToken, authBearer } = opts;
   const fetchImpl = opts.fetchImpl || (typeof fetch === 'function' ? fetch : null);
-  if (!baseUrl || !orgId || !internalToken || !fetchImpl) return { effectivePolicy: null };
+  const selectedOrgId = contextId(orgId);
+  if (!selectedOrgId) return { effectivePolicy: null, prefs: {} };
+  if (!baseUrl || !internalToken || !fetchImpl) throw policyUnavailable();
 
   const base = String(baseUrl).replace(/\/$/, '');
   const headers = { 'x-internal-token': internalToken };
   if (authBearer) headers.authorization = authBearer;
-  const url = `${base}/api/v1/internal/s2s/orgs/${encodeURIComponent(orgId)}/effective-policy${projectQuery(projectId)}`;
+  const url = `${base}/api/v1/internal/s2s/orgs/${encodeURIComponent(selectedOrgId)}/effective-policy${projectQuery(projectId)}`;
   try {
     const data = await getJson(fetchImpl, url, headers);
-    return { effectivePolicy: (data && data.domains) || null, prefs: (data && data.prefs) || {} };
+    const effectivePolicy = data && data.domains;
+    if (!validEffectivePolicy(effectivePolicy)) {
+      throw policyUnavailable();
+    }
+    return { effectivePolicy, prefs: (data && data.prefs) || {} };
   } catch (err) {
     if (opts.logger && opts.logger.warn) opts.logger.warn(`org policy resolve failed: ${err.message}`);
-    return { effectivePolicy: null, prefs: {} };
+    throw policyUnavailable(err);
   }
 }
 
-module.exports = { resolveEffectiveSettings, resolveOrgEffectivePolicy, authHeaders, EMPTY };
+module.exports = {
+  resolveEffectiveSettings,
+  resolveOrgEffectivePolicy,
+  authHeaders,
+  EMPTY,
+  PolicyUnavailableError,
+  isPolicyUnavailableError,
+};

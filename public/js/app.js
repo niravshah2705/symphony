@@ -24,8 +24,15 @@ import {
 import { initThemeToggle } from './theme.js';
 import { initNotifications } from './notifications.js';
 import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
+import {
+  activeWorkspaceOrganization,
+  activeWorkspaceProject,
+  changeWorkspaceOrganization,
+  changeWorkspaceProject,
+  getWorkspaceContext,
+} from './workspace-context.js';
 
-const { initializeI18n, localize, t } = i18n;
+const { initializeI18n, localize, renderLanguageControl, t } = i18n;
 const stylesheetLoads = new Map();
 const SHARED_STYLESHEET = '/styles.css';
 
@@ -86,6 +93,7 @@ const routes = Object.freeze({
   troubleshooting: route(() => import('./views/troubleshooting.js'), 'renderTroubleshooting', ['/styles/operations.css']),
   settings: route(() => import('./views/settings.js'), 'renderSettings', ['/styles/settings.css']),
   organization: route(() => import('./views/organization.js'), 'renderOrganization'),
+  invite: route(() => import('./views/invite.js'), 'renderInvitation'),
 });
 
 const routeMeta = {
@@ -100,6 +108,7 @@ const routeMeta = {
   troubleshooting: { titleKey: 'troubleshooting', eyebrowKey: 'system' },
   settings: { titleKey: 'settings', eyebrowKey: 'system' },
   organization: { titleKey: 'organization', eyebrowKey: 'workspace' },
+  invite: { titleKey: 'invitation', eyebrowKey: 'workspace' },
 };
 
 // These existing surfaces depend on the configured project-management connection.
@@ -108,7 +117,7 @@ const CONNECTION_TIMEOUT_MS = 8_000;
 
 function currentRoute() {
   const hash = window.location.hash.replace(/^#\//, '');
-  const [name] = hash.split('/');
+  const [name] = hash.split(/[/?]/);
   if (routes[name]) return name;
   const fallback = routes[state.lastWorkspaceRoute] ? state.lastWorkspaceRoute : 'agent';
   window.history.replaceState(null, '', `#/${fallback}`);
@@ -249,6 +258,17 @@ function initShellInteractions() {
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && state.sidebarOpen) syncSidebar(false, { restoreFocus: true });
+    if (event.key === 'Escape') {
+      const account = document.querySelector('.account-context[open]');
+      if (account) {
+        account.removeAttribute('open');
+        account.querySelector('summary')?.focus();
+      }
+    }
+  });
+  document.addEventListener('click', (event) => {
+    const account = document.querySelector('.account-context[open]');
+    if (account && !account.contains(event.target)) account.removeAttribute('open');
   });
 
   const closeAtBreakpoint = (event) => {
@@ -400,35 +420,134 @@ async function beginSignOut() {
 function renderAuthControl() {
   const host = document.getElementById('auth-control');
   if (!host) return;
+  const languageHost = document.getElementById('language-control');
+  const topbarActions = document.querySelector('.topbar-actions');
+  const theme = document.getElementById('theme-toggle');
   const session = getAuthenticationState();
   host.replaceChildren();
   host.hidden = !session.enabled;
-  if (!session.enabled) return;
-
-  if (!session.authenticated || !session.user) {
-    host.append(...authProviderButtons({ primary: false }));
+  if (!session.enabled) {
+    if (languageHost && topbarActions) topbarActions.insertBefore(languageHost, theme);
+    renderLanguageControl();
     return;
   }
 
-  const label = session.user.name || session.user.email || t('signedInUser');
-  const secondary = session.user.email && session.user.email !== label ? session.user.email : t('googleAccount');
-  host.append(
-    el('div', { class: 'auth-user', title: label, dataset: { userContent: 'true' } }, [
-      el('span', { class: 'avatar sm', 'aria-hidden': 'true' }, initials(label)),
-      el('span', { class: 'auth-user-copy' }, [
-        el('strong', {}, label),
-        el('small', {}, secondary),
-      ]),
+  if (!session.authenticated || !session.user) {
+    host.append(...authProviderButtons({ primary: false }));
+    if (languageHost && topbarActions) topbarActions.insertBefore(languageHost, theme);
+    renderLanguageControl();
+    return;
+  }
+
+  const context = getWorkspaceContext();
+  const organization = activeWorkspaceOrganization(context);
+  const project = activeWorkspaceProject(context);
+  const label = context.user?.fullName || session.user.name || session.user.email || t('signedInUser');
+  const email = context.user?.email || session.user.email || '';
+  const contextLabel = [organization?.name, project?.name].filter(Boolean).join(' · ') || email;
+  const account = el('details', { class: 'account-context' });
+  const trigger = el('summary', {
+    class: 'account-context-trigger auth-user',
+    title: t('accountAndContext'),
+    'aria-label': t('accountAndContext'),
+  }, [
+    el('span', { class: 'avatar sm', 'aria-hidden': 'true' }, initials(label)),
+    el('span', { class: 'auth-user-copy' }, [
+      el('strong', { dataset: { userContent: 'true' } }, label),
+      el('small', { dataset: { userContent: 'true' } }, contextLabel || t('accountAndContext')),
     ]),
-    el('button', {
-      class: 'auth-sign-out',
-      type: 'button',
-      title: t('signOut'),
-      'aria-label': t('signOut'),
-      onclick: beginSignOut,
-      dataset: { i18n: 'signOut', i18nAttr: 'aria-label' },
-    }, t('signOut'))
-  );
+    el('span', { class: 'account-context-chevron', 'aria-hidden': 'true' }, '⌄'),
+  ]);
+  const panel = el('div', { class: 'account-context-panel' });
+  panel.append(el('div', { class: 'account-context-identity' }, [
+    el('span', { class: 'avatar', 'aria-hidden': 'true' }, initials(label)),
+    el('span', { class: 'account-context-identity-copy' }, [
+      el('strong', { dataset: { userContent: 'true' } }, label),
+      email ? el('small', { dataset: { userContent: 'true' } }, email) : null,
+    ]),
+  ]));
+
+  if (context.status === 'error') {
+    panel.append(el('p', {
+      class: 'account-context-note',
+      role: 'status',
+      dataset: { i18n: 'contextUnavailable' },
+    }, t('contextUnavailable')));
+  } else {
+    const organizationSelect = el('select', {
+      id: 'account-organization-select',
+      disabled: context.organizations.length === 0,
+      'aria-label': t('organization'),
+    });
+    if (!context.organizations.length) {
+      organizationSelect.append(el('option', { value: '', selected: true }, t('noOrganization')));
+    } else {
+      for (const item of context.organizations) {
+        organizationSelect.append(el('option', {
+          value: item.id,
+          selected: item.id === context.organizationId,
+          dataset: { userContent: 'true' },
+        }, item.name));
+      }
+    }
+    organizationSelect.addEventListener('change', () => {
+      if (!changeWorkspaceOrganization(organizationSelect.value)) return;
+      panel.setAttribute('aria-busy', 'true');
+      organizationSelect.disabled = true;
+      window.setTimeout(() => window.location.reload(), 0);
+    });
+
+    const projects = organization?.projects || [];
+    const projectSelect = el('select', {
+      id: 'account-project-select',
+      disabled: projects.length === 0,
+      'aria-label': t('aiFleetProject'),
+    });
+    if (!projects.length) {
+      projectSelect.append(el('option', { value: '', selected: true }, t('noAiFleetProject')));
+    } else {
+      for (const item of projects) {
+        projectSelect.append(el('option', {
+          value: item.id,
+          selected: item.id === context.projectId,
+          dataset: { userContent: 'true' },
+        }, item.name));
+      }
+    }
+    projectSelect.addEventListener('change', () => {
+      if (!changeWorkspaceProject(projectSelect.value)) return;
+      panel.setAttribute('aria-busy', 'true');
+      projectSelect.disabled = true;
+      window.setTimeout(() => window.location.reload(), 0);
+    });
+
+    panel.append(
+      el('label', { class: 'account-context-field', for: 'account-organization-select' }, [
+        el('span', { dataset: { i18n: 'organization' } }, t('organization')),
+        organizationSelect,
+      ]),
+      el('label', { class: 'account-context-field', for: 'account-project-select' }, [
+        el('span', { dataset: { i18n: 'aiFleetProject' } }, t('aiFleetProject')),
+        projectSelect,
+      ])
+    );
+  }
+
+  if (languageHost) {
+    panel.append(el('label', { class: 'account-context-field', for: 'language-select' }, [
+      el('span', { dataset: { i18n: 'language' } }, t('language')),
+      languageHost,
+    ]));
+  }
+  panel.append(el('button', {
+    class: 'auth-sign-out account-context-sign-out',
+    type: 'button',
+    onclick: beginSignOut,
+    dataset: { i18n: 'signOut' },
+  }, t('signOut')));
+  account.append(trigger, panel);
+  host.append(account);
+  renderLanguageControl();
 }
 
 function renderAuthenticationGate({ loading = false, error = '' } = {}) {
@@ -533,6 +652,10 @@ async function render({ focus = false } = {}) {
 
   // Per-route authorization (mirrors the gateway). No permission → sign-in
   // prompt for public visitors, access-denied for signed-in users.
+  if (name === 'invite' && !session.authenticated) {
+    renderSignInRequired(name);
+    return;
+  }
   if (!canAccessRoute(permissions, name)) {
     if (!session.authenticated) renderSignInRequired(name);
     else renderAccessDenied(name);

@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');
 const { CONFIG, namespaceCollection } = require('../config');
 const log = require('../logger');
@@ -37,6 +38,41 @@ const buffers = new Map(); // conversationId -> event[]
  * collection — so it works across all three backends with no parallel code path.
  */
 const WORKSPACE_CHANNEL = '__workspace__';
+
+function cleanContextId(value) {
+  const id = typeof value === 'string' ? value.trim() : '';
+  return id && id.length <= 160 && /^[A-Za-z0-9._:-]+$/.test(id) ? id : '';
+}
+
+/** Normalize either browser-style or runtime-style native workspace context. */
+function normalizeEventContext(value = {}) {
+  const organizationId = cleanContextId(value.organizationId || value.orgId);
+  const projectId = organizationId
+    ? cleanContextId(value.projectId || value.nativeProjectId)
+    : '';
+  return Object.freeze({ organizationId, projectId });
+}
+
+/**
+ * Scope a relay channel without exposing tenant identifiers in Firestore paths.
+ * Empty context preserves the legacy channel for local/auth-disabled installs.
+ */
+function scopedChannelId(conversationId, context = {}) {
+  const normalized = normalizeEventContext(context);
+  if (!normalized.organizationId) return conversationId;
+  const digest = crypto.createHash('sha256')
+    .update(`${normalized.organizationId}\0${normalized.projectId}`)
+    .digest('hex')
+    .slice(0, 32);
+  return `${conversationId}--${digest}`;
+}
+
+function matchesEventContext(resource, context = {}) {
+  const actual = normalizeEventContext(resource);
+  const expected = normalizeEventContext(context);
+  return actual.organizationId === expected.organizationId
+    && actual.projectId === expected.projectId;
+}
 
 function memoryPublish(conversationId, event) {
   const buffer = buffers.get(conversationId) || [];
@@ -85,60 +121,77 @@ function firestoreSubscribe(conversationId, cb) {
     );
 }
 
-function httpPublish(conversationId, event) {
+function httpPublish(conversationId, event, context) {
   return fetch(CONFIG.EVENTS_SINK_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ conversationId, event }),
+    body: JSON.stringify({ conversationId, event, context: normalizeEventContext(context) }),
   });
 }
 
 /** Publish one event to a conversation stream. Fire-and-forget (never throws). */
-function publishEvent(conversationId, event) {
+function publishEvent(conversationId, event, context = {}) {
   if (!conversationId || !event) return;
+  const channelId = scopedChannelId(conversationId, context);
   if (CONFIG.EVENTS_BACKEND === 'firestore') {
-    Promise.resolve(firestorePublish(conversationId, event)).catch((err) => {
-      log.error(`events publish ${conversationId} failed: ${err && err.message ? err.message : err}`);
+    Promise.resolve(firestorePublish(channelId, event)).catch((err) => {
+      log.error(`events publish ${channelId} failed: ${err && err.message ? err.message : err}`);
     });
     return;
   }
   if (CONFIG.EVENTS_SINK_URL) {
-    Promise.resolve(httpPublish(conversationId, event)).catch((err) => {
-      log.error(`events sink POST ${conversationId} failed: ${err && err.message ? err.message : err}`);
+    Promise.resolve(httpPublish(conversationId, event, context)).catch((err) => {
+      log.error(`events sink POST ${channelId} failed: ${err && err.message ? err.message : err}`);
     });
     return;
   }
-  memoryPublish(conversationId, event);
+  memoryPublish(channelId, event);
 }
 
 /** Inject an event received over HTTP (gateway collector) into the local bus. */
-function ingest(conversationId, event) {
+function ingest(conversationId, event, context = {}) {
   if (!conversationId || !event) return;
-  memoryPublish(conversationId, event);
+  memoryPublish(scopedChannelId(conversationId, context), event);
 }
 
 /**
  * Subscribe to a conversation's events. Replays history, then streams new ones.
  * @returns {() => void} unsubscribe
  */
-function subscribe(conversationId, cb) {
+function subscribe(conversationId, cb, context = {}) {
   if (!conversationId || typeof cb !== 'function') return () => {};
+  const channelId = scopedChannelId(conversationId, context);
   return CONFIG.EVENTS_BACKEND === 'firestore'
-    ? firestoreSubscribe(conversationId, cb)
-    : memorySubscribe(conversationId, cb);
+    ? firestoreSubscribe(channelId, cb)
+    : memorySubscribe(channelId, cb);
 }
 
 /**
  * Publish a typed event to the GLOBAL workspace channel (drives the SPA's
  * workspace SSE stream: agent-status / jobs / coder / gate). Fire-and-forget.
  */
-function publishWorkspace(event) {
-  return publishEvent(WORKSPACE_CHANNEL, event);
+function publishWorkspace(event, context = {}) {
+  return publishEvent(WORKSPACE_CHANNEL, event, context);
 }
 
-/** Subscribe to the global workspace channel. Replays recent history, then streams. */
-function subscribeWorkspace(cb) {
-  return subscribe(WORKSPACE_CHANNEL, cb);
+/**
+ * Subscribe to exact project events plus organization-wide events. This lets a
+ * project selection receive its own snapshots and org-wide billing notices,
+ * without receiving another project's jobs or status.
+ */
+function subscribeWorkspace(cb, context = {}) {
+  const normalized = normalizeEventContext(context);
+  if (!normalized.organizationId || !normalized.projectId) {
+    return subscribe(WORKSPACE_CHANNEL, cb, normalized);
+  }
+  const unsubscribeOrganization = subscribe(WORKSPACE_CHANNEL, cb, {
+    organizationId: normalized.organizationId,
+  });
+  const unsubscribeProject = subscribe(WORKSPACE_CHANNEL, cb, normalized);
+  return () => {
+    unsubscribeOrganization();
+    unsubscribeProject();
+  };
 }
 
 module.exports = {
@@ -147,6 +200,9 @@ module.exports = {
   ingest,
   publishWorkspace,
   subscribeWorkspace,
+  normalizeEventContext,
+  matchesEventContext,
+  scopedChannelId,
   WORKSPACE_CHANNEL,
   MAX_BUFFER,
 };

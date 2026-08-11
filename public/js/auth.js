@@ -1,5 +1,6 @@
 import { api, setAccessTokenProvider, getApiBase, setApiBase } from './api.js';
 import { pollUntilResolved } from './deployment.js';
+import { clearWorkspaceContext, initializeWorkspaceContext } from './workspace-context.js';
 
 const AUTH_SESSION_TIMEOUT_MS = 15_000;
 // Google Identity Services (One Tap). Loaded on demand only when a public
@@ -124,9 +125,10 @@ function mergeDisplayProfile(serverUser, browserUser) {
 // After sign-in, resolve which front-facing gateway this session should use.
 // A PROVISIONED per-tenant org re-points the API base at its own gateway (a full
 // gateway image that verifies the same Firebase token); a shared/pseudo
-// workspace stays on the shared gateway (the bootstrap base). Best-effort — any
-// failure leaves the SPA on the shared gateway. Runs after confirmIdentity so the
-// access-token provider is set (the /api/config call carries the bearer).
+// workspace stays on the shared gateway (the bootstrap base). Resolution is
+// authoritative: an authenticated failure must lock bootstrap instead of
+// guessing "shared" and sending tenant requests to the wrong store namespace.
+// Runs after confirmIdentity so the /api/config call carries the bearer.
 function emitDeploymentStatus(status) {
   try {
     window.dispatchEvent(new CustomEvent('ai-fleet:deployment-status', { detail: { status: status || 'shared' } }));
@@ -158,12 +160,7 @@ function watchProvisioning() {
 }
 
 async function resolveDeployment() {
-  let cfg;
-  try {
-    cfg = await api.getRuntimeConfig();
-  } catch (_) {
-    return { deploymentStatus: 'shared', orgName: null };
-  }
+  const cfg = await api.getRuntimeConfig();
   const status = cfg?.status || 'shared';
   if (status === 'provisioned' && cfg.gatewayUrl) {
     setApiBase(cfg.gatewayUrl);
@@ -192,6 +189,7 @@ export async function initializeAuthentication() {
     // Auth disabled (local dev): fully open, single admin operator.
     auth = null;
     setAccessTokenProvider(null);
+    clearWorkspaceContext();
     return setState({ mode: 'disabled', enabled: false, authenticated: true, role: 'admin', permissions: ADMIN_PERMISSIONS, user: null, error: '' });
   }
 
@@ -210,6 +208,7 @@ export async function initializeAuthentication() {
   if (!user) {
     // No signed-in user → public visitor (read-only Agent workspace).
     setAccessTokenProvider(null);
+    clearWorkspaceContext();
     return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: '' });
   }
 
@@ -219,10 +218,19 @@ export async function initializeAuthentication() {
   } catch (error) {
     // Signed in but rejected (unverified / not allowed) → sign out, stay public.
     setAccessTokenProvider(null);
+    clearWorkspaceContext();
     try { await authSdk.signOut(auth); } catch (_) { /* ignore */ }
     return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: error?.message || 'This account is not allowed.' });
   }
 
+  // Validate the device-local org/project choice before any workspace calls.
+  // Fail closed when the authoritative context service is unavailable: sending
+  // headerless requests would let the gateway fall back to another accessible
+  // organization while the UI says the context is unknown.
+  const workspace = await initializeWorkspaceContext(identity.user);
+  if (workspace.status !== 'ready') {
+    throw new Error(workspace.error || 'Organization context is temporarily unavailable.');
+  }
   const deployment = await resolveDeployment();
   return setState({
     mode: 'firebase',
@@ -254,6 +262,7 @@ export function getAuthProviders() {
 
 export function expireAuthentication(message = '') {
   setAccessTokenProvider(null);
+  clearWorkspaceContext();
   // Drop back to the public surface rather than a locked state.
   const permissions = (configuration && configuration.publicPermissions) || FALLBACK_PUBLIC_PERMISSIONS;
   return setState({ authenticated: false, role: 'public', permissions, user: null, error: message });
@@ -310,6 +319,7 @@ export async function signInWithMicrosoft() {
 
 export async function signOut() {
   setAccessTokenProvider(null);
+  clearWorkspaceContext();
   if (auth && firebaseAuthSdk) {
     try { await firebaseAuthSdk.signOut(auth); } catch (_) { /* ignore */ }
   }

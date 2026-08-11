@@ -23,6 +23,7 @@ test.before(async () => {
   // Configure BEFORE the first require of config (via publisher).
   process.env.MESSAGING_MODE = 'direct';
   process.env.PLANNER_URL = `http://localhost:${port}`;
+  process.env.EMAIL_URL = `http://localhost:${port}`;
   publisher = require('./publisher');
 });
 
@@ -47,6 +48,14 @@ test('publishRequest (direct) POSTs a push envelope to /pubsub/planner', async (
   assert.equal(received.length, 1);
   assert.equal(received[0].url, '/pubsub/planner');
   assert.deepEqual(publisher.decodePushMessage(received[0].body), { hello: 'world' });
+});
+
+test('publishRequest (direct) uses the shared email push contract', async () => {
+  const { CONFIG } = require('../config');
+  const message = { template: 'billing_alert', to: 'owner@example.com', variables: { subject: 'Low', message: 'Low' } };
+  await publisher.publishRequest(CONFIG.GCP.emailTopic, message);
+  assert.equal(received.at(-1).url, '/pubsub/email');
+  assert.deepEqual(publisher.decodePushMessage(received.at(-1).body), message);
 });
 
 test('publishRequest (direct) throws for an unknown topic', async () => {

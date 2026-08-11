@@ -22,8 +22,10 @@ queries are scoped to the caller's organization.
 | Project | `TEAM_LEAD` | **Review** (read) the project, its tasks and members across the projects they lead. No task writes. |
 | Project | `DEVELOPER` | Task CRUD + tag attach within assigned projects; read project & members. |
 
-A user belongs to exactly one organization (`org_id`); a super-admin has no org.
-Developer↔project is many-to-many (via `ProjectMembership`, carrying the role).
+A global user identity can belong to multiple organizations. Authoritative
+memberships are dual-written under the organization and user; `User.org_id` /
+`org_role` remain only as a backward-compatible default context. Developer↔project
+is many-to-many (via `ProjectMembership`, carrying the role).
 
 ## Authentication (hybrid)
 
@@ -99,7 +101,10 @@ an end-to-end lifecycle. Coverage gate: **80%+**.
 - **Auth**: `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`,
   `POST /auth/logout`, `GET /auth/verify-email`, `GET /auth/me`
 - **Organizations (self-service)**: `GET|PATCH|DELETE /organizations/current`,
-  `GET|PUT /organizations/current/tags`, `DELETE /organizations/current/tags/{tag_id}`
+  `GET|PUT /organizations/current/tags`, `DELETE /organizations/current/tags/{tag_id}`,
+  `GET /me/context`, `POST /me/organizations` (`POST /me/organization` alias)
+- **Invitations**: `POST|GET /invitations`, `POST /invitations/{id}/resend`,
+  `DELETE /invitations/{id}`, authenticated `POST /invitations/{token}/accept`
 - **Organizations (super-admin)**: `POST|GET /organizations`,
   `GET|PATCH|DELETE /organizations/{org_id}`
 - **Users**: `GET|POST /users`, `GET|PATCH|DELETE /users/{user_id}`,
@@ -119,8 +124,9 @@ an end-to-end lifecycle. Coverage gate: **80%+**.
 
 ## Security highlights
 
-- **Org isolation**: every query scoped to `principal.org_id`; org/tenant IDs are
-  never taken from path/body for authorization; cross-org access returns 404.
+- **Org isolation**: every query is scoped to the middleware-validated selected
+  membership. `X-AI-Fleet-Organization-Id` and `X-AI-Fleet-Project-Id` are
+  independently revalidated; cross-org/no-access selection returns 404.
 - **RBAC**: enforced server-side per endpoint via capability predicates
   (`app/authz/policy.py`) and guard dependencies (`app/authz/guards.py`).
 - **JWT**: algorithm pinned; `exp`/`iat`/`iss`/`aud` required; secret from env;

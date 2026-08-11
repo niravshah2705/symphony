@@ -19,6 +19,17 @@ const {
   probeRepositoryAvailability,
   publicAvailabilityMessage,
 } = require('./availability');
+const {
+  fetchOrgEffectivePolicy,
+  isOrganizationContextMismatch,
+  isPolicyUnavailableError,
+  PolicyUnavailableError,
+} = require('./org-policy-client');
+const {
+  applyOperationalPrefs,
+  enforceLlmModel,
+  isPolicyDeniedError,
+} = require('./policy-runtime');
 const workspaceEvents = require('./workspace-events');
 
 /**
@@ -31,19 +42,24 @@ const workspaceEvents = require('./workspace-events');
  *     its own isolated per-task workspace at
  *     ~/git/workspace/<project>/<task>/ on its own branch,
  *   - up to `maxConcurrentCoders` (UI-configurable, env `CODER_MAX_CONCURRENT`
- *     as the default) run in parallel across all projects,
+ *     as the default) run in parallel across all projects in one selected
+ *     native workspace,
  *   - when a project has no open tasks left, it is marked `aidone`.
  *
  * Single-writer model: `running` is only mutated from the serialized poll tick +
  * run callbacks, so a task is never dispatched twice. State is in-memory only.
  */
 
-// issueId -> { identifier, projectId, startedAt }
+// `<orgId>\0<nativeProjectId>\0<issueId>` -> in-flight ticket. The external
+// issue id is not globally unique: two organizations may connect different
+// Linear workspaces that happen to use the same id/identifier.
 const running = new Map();
-let timer = null;
-let started = false;
-let pauseReason = null;
-let pauseContext = null;
+
+// Monitor lifecycle and availability pauses are tenant state. Keeping one
+// process-global flag meant an outage in organization A paused organization B,
+// while a status read in B exposed A's in-flight tickets. Empty context is kept
+// as the legacy local/single-user namespace.
+const monitorStates = new Map();
 
 // Readiness checks are intentionally much cheaper than a failed agent run.
 // Deduplicate only simultaneous checks: every later dispatch probes again so a
@@ -51,23 +67,139 @@ let pauseContext = null;
 const RECOVERY_PROBE_MS = 60 * 1000;
 const readinessCache = new Map();
 
+function cleanContextId(value) {
+  const id = typeof value === 'string' ? value.trim() : '';
+  return id && id.length <= 160 && /^[A-Za-z0-9._:-]+$/.test(id) ? id : '';
+}
+
+function contextMismatch(field) {
+  const error = new Error(`Coder ${field} context does not match the selected workspace.`);
+  error.code = 'workspace_context_mismatch';
+  error.status = 409;
+  return error;
+}
+
+/**
+ * Return the canonical runtime context for a task/request. A dedicated runtime's
+ * server-side org pin wins over an omitted selected org and rejects a conflict.
+ * `task.project.id` is deliberately NOT treated as nativeProjectId: it is the
+ * external Linear project id.
+ */
+function resolveRuntimeContext(task = {}, context = {}) {
+  const taskOrgId = cleanContextId(task.orgId || task.organizationId);
+  const selectedOrgId = cleanContextId(context.orgId || context.organizationId);
+  const pinnedOrgId = cleanContextId(CONFIG.BILLING && CONFIG.BILLING.orgId);
+  const organizations = new Set([taskOrgId, selectedOrgId, pinnedOrgId].filter(Boolean));
+  if (organizations.size > 1) throw contextMismatch('organization');
+
+  const taskProjectId = cleanContextId(task.nativeProjectId);
+  const selectedProjectId = cleanContextId(context.nativeProjectId || context.projectId);
+  const projects = new Set([taskProjectId, selectedProjectId].filter(Boolean));
+  if (projects.size > 1) throw contextMismatch('project');
+
+  const orgId = pinnedOrgId || selectedOrgId || taskOrgId || null;
+  const nativeProjectId = selectedProjectId || taskProjectId || null;
+  if (!orgId && nativeProjectId) throw contextMismatch('organization');
+  return Object.freeze({ orgId, nativeProjectId });
+}
+
+function eventContext(context = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  return { organizationId: selected.orgId, projectId: selected.nativeProjectId };
+}
+
+function contextKey(context = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  return `${selected.orgId || ''}\0${selected.nativeProjectId || ''}`;
+}
+
+function runningKey(task, context = {}) {
+  const selected = resolveRuntimeContext(task, context);
+  return `${contextKey(selected)}\0${String(task && task.id || '')}`;
+}
+
+function monitorState(context = {}, create = true) {
+  const key = contextKey(context);
+  let state = monitorStates.get(key);
+  if (!state && create) {
+    state = {
+      timer: null,
+      started: false,
+      pauseReason: null,
+      pauseContext: null,
+    };
+    monitorStates.set(key, state);
+  }
+  return state || null;
+}
+
+function contextualTask(task, context = {}) {
+  const selected = resolveRuntimeContext(task, context);
+  return {
+    ...task,
+    orgId: selected.orgId,
+    nativeProjectId: selected.nativeProjectId,
+  };
+}
+
+function matchesRuntimeContext(resource, context = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  const pinnedOrgId = cleanContextId(CONFIG.BILLING && CONFIG.BILLING.orgId);
+  const resourceOrgId = cleanContextId(resource && (resource.orgId || resource.organizationId))
+    || pinnedOrgId
+    || null;
+  // Persisted coder/business records use `projectId` for the external Linear
+  // project. Only nativeProjectId is the selected AI Fleet project scope.
+  const resourceProjectId = cleanContextId(resource && resource.nativeProjectId) || null;
+  return resourceOrgId === selected.orgId && resourceProjectId === selected.nativeProjectId;
+}
+
+function listInFlight(context = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  const key = contextKey(selected);
+  return [...running.values()]
+    .filter((entry) => contextKey(entry) === key)
+    .map((entry) => ({ identifier: entry.identifier, startedAt: entry.startedAt }));
+}
+
+function runningCount(context = {}) {
+  const key = contextKey(context);
+  let count = 0;
+  for (const entry of running.values()) {
+    if (contextKey(entry) === key) count += 1;
+  }
+  return count;
+}
+
+function hasCapacity(context = {}, cap = resolveMaxConcurrent()) {
+  return runningCount(context) < cap;
+}
+
+function clearReadinessContext(context = {}) {
+  const prefix = `${contextKey(context)}\0`;
+  for (const key of readinessCache.keys()) {
+    if (key.startsWith(prefix)) readinessCache.delete(key);
+  }
+}
+
 /**
  * Push coder state to the global workspace channel so the SPA reflects monitor
  * start/stop/pause and in-flight ticket changes without polling GET /api/coder.
  * Best-effort — telemetry must never break the poll or a dispatch.
  */
-function emitCoderStatus() {
+function emitCoderStatus(context = {}) {
   try {
-    workspaceEvents.publishCoderStatus(status());
+    const selected = resolveRuntimeContext({}, context);
+    workspaceEvents.publishCoderStatus(status(selected), eventContext(selected));
   } catch (_) {
     /* telemetry only */
   }
 }
 
 /** Push the jobs snapshot (a coding run shows in the same list as enrichment). */
-function emitCoderJobs() {
+function emitCoderJobs(context = {}) {
   try {
-    workspaceEvents.publishJobsSnapshot();
+    workspaceEvents.publishJobsSnapshot(eventContext(context));
   } catch (_) {
     /* telemetry only */
   }
@@ -186,7 +318,68 @@ function buildKeys(settings) {
   };
 }
 
-function readinessFingerprint() {
+function hasEffectivePolicy(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && Object.keys(value).length,
+  );
+}
+
+/** Resolve and validate the selected workspace policy before inspecting work. */
+async function resolveAutonomousPolicy(settings, context = {}, dependencies = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  const resolvePolicyImpl = dependencies.resolvePolicy || fetchOrgEffectivePolicy;
+  const resolveLlmImpl = dependencies.resolveLlm || resolveLlm;
+  let resolved = null;
+  try {
+    resolved = await resolvePolicyImpl(selected.orgId || undefined, selected.nativeProjectId || undefined);
+  } catch (error) {
+    if (
+      isOrganizationContextMismatch(error)
+      || isPolicyUnavailableError(error)
+      || isPolicyDeniedError(error)
+    ) throw error;
+    if (selected.orgId) throw new PolicyUnavailableError(undefined, error);
+  }
+
+  const effectivePolicy = resolved && resolved.effectivePolicy;
+  if (selected.orgId && !hasEffectivePolicy(effectivePolicy)) {
+    throw new PolicyUnavailableError();
+  }
+  const prefs = (resolved && resolved.prefs) || {};
+  const keys = applyOperationalPrefs(
+    buildKeys(settings),
+    prefs,
+    dependencies.onPolicyStep || (() => {}),
+  );
+  const roleLlm = new Map();
+  const resolveRole = (role) => {
+    if (!roleLlm.has(role)) {
+      roleLlm.set(
+        role,
+        Promise.resolve(resolveLlmImpl(settings, role))
+          .then((candidate) => enforceLlmModel(candidate, effectivePolicy || null)),
+      );
+    }
+    return roleLlm.get(role);
+  };
+  return {
+    effectivePolicy: effectivePolicy || null,
+    prefs,
+    keys,
+    resolveRole,
+    settings: {
+      effectivePolicy: effectivePolicy || null,
+      orgId: selected.orgId,
+      nativeProjectId: selected.nativeProjectId,
+    },
+  };
+}
+
+function readinessFingerprint(context = {}) {
+  const selected = resolveRuntimeContext({}, context);
   const data = store.readStore();
   const settings = data.settings || {};
   const relevant = {
@@ -213,7 +406,7 @@ function readinessFingerprint() {
     codexTokens: settings.codexTokens,
     claudeModel: settings.claudeModel,
     claudeTokens: settings.claudeTokens,
-    businesses: (data.businesses || []).map((business) => ({
+    businesses: (data.businesses || []).filter((business) => matchesRuntimeContext(business, selected)).map((business) => ({
       projectId: business.projectId,
       repo: business.repo,
       repoProvider: business.repoProvider,
@@ -225,7 +418,11 @@ function readinessFingerprint() {
 }
 
 function repositorySelectionForTask(task) {
-  const business = store.getBusinessByProjectId(task.project && task.project.id);
+  const selected = resolveRuntimeContext(task);
+  const business = (store.readStore().businesses || []).find(
+    (candidate) => candidate.projectId === (task.project && task.project.id)
+      && matchesRuntimeContext(candidate, selected),
+  ) || null;
   const repository = store.getRepositoryConfig();
   return resolvePlannedRepository({
     business,
@@ -239,15 +436,16 @@ function probeKey(resource, value) {
   return crypto.createHash('sha256').update(`${resource}:${JSON.stringify(value)}`).digest('hex');
 }
 
-async function cachedReadinessProbe(key, probe) {
-  const cached = readinessCache.get(key);
+async function cachedReadinessProbe(key, probe, context = {}) {
+  const scopedKey = `${contextKey(context)}\0${key}`;
+  const cached = readinessCache.get(scopedKey);
   if (cached) return cached;
   const promise = Promise.resolve().then(probe);
-  readinessCache.set(key, promise);
+  readinessCache.set(scopedKey, promise);
   try {
     return await promise;
   } finally {
-    if (readinessCache.get(key) === promise) readinessCache.delete(key);
+    if (readinessCache.get(scopedKey) === promise) readinessCache.delete(scopedKey);
   }
 }
 
@@ -257,6 +455,7 @@ async function cachedReadinessProbe(key, probe) {
  * a 403 from GitHub/GitLab therefore has no task or job side effects.
  */
 async function preflightTask(task, resolveRole, dependencies = {}) {
+  const selected = resolveRuntimeContext(task, dependencies.context || {});
   const role = modelRoleForTask(task);
   const selectionForTask = dependencies.repositorySelectionForTask || repositorySelectionForTask;
   const repositoryProbe = dependencies.probeRepositoryAvailability || probeRepositoryAvailability;
@@ -279,7 +478,7 @@ async function preflightTask(task, resolveRole, dependencies = {}) {
     repoRef: selection.repoRef,
     token: selection.token,
   });
-  await runProbe(gitKey, () => repositoryProbe(selection));
+  await runProbe(gitKey, () => repositoryProbe(selection), selected);
 
   const llm = await resolveRole(role);
   const modelKey = probeKey('model', {
@@ -291,16 +490,20 @@ async function preflightTask(task, resolveRole, dependencies = {}) {
     accessToken: llm.accessToken,
     accountId: llm.accountId,
   });
-  await runProbe(modelKey, () => modelProbe(llm));
+  await runProbe(modelKey, () => modelProbe(llm), selected);
   return { role, selection, llm };
 }
 
 async function dispatchReadyTask(task, resolveRole, ctx, dependencies = {}) {
-  const readiness = await preflightTask(task, resolveRole, dependencies);
+  const selected = resolveRuntimeContext(task, ctx);
+  const scopedTask = contextualTask(task, selected);
+  const readiness = await preflightTask(scopedTask, resolveRole, { ...dependencies, context: selected });
   if (typeof dependencies.beforeDispatch === 'function') dependencies.beforeDispatch(readiness);
   const dispatchImpl = dependencies.dispatch || dispatch;
-  const completion = dispatchImpl(task, {
+  const completion = dispatchImpl(scopedTask, {
     ...ctx,
+    orgId: selected.orgId,
+    nativeProjectId: selected.nativeProjectId,
     llm: readiness.llm,
     role: readiness.role,
     repositoryProvider: readiness.selection.provider,
@@ -317,9 +520,13 @@ async function dispatchReadyTask(task, resolveRole, ctx, dependencies = {}) {
  */
 async function preflightAndPause(task, resolveRole, dependencies = {}) {
   const role = modelRoleForTask(task || {});
+  const selected = resolveRuntimeContext(task || {}, dependencies.context || {});
   try {
-    return await preflightTask(task || {}, resolveRole, dependencies);
+    return await preflightTask(contextualTask(task || {}, selected), resolveRole, { ...dependencies, context: selected });
   } catch (error) {
+    // Governance failures are not provider-readiness failures. Preserve their
+    // typed 403/503 contract and do not create a misleading model pause.
+    if (isPolicyUnavailableError(error) || isPolicyDeniedError(error)) throw error;
     const resource = isRepositoryAvailabilityError(error) || (error && error.resource === 'git') ? 'git' : 'model';
     const repository = store.getRepositoryConfig();
     const reason = pause(resource, error, {
@@ -327,6 +534,8 @@ async function preflightAndPause(task, resolveRole, dependencies = {}) {
       taskIdentifier: task && task.identifier,
       role,
       provider: resource === 'git' ? repository.provider : undefined,
+      orgId: selected.orgId,
+      nativeProjectId: selected.nativeProjectId,
     });
     if (error && (typeof error === 'object' || typeof error === 'function')) {
       error.pauseReason = reason;
@@ -339,33 +548,41 @@ async function preflightAndPause(task, resolveRole, dependencies = {}) {
 }
 
 function pause(resource, error, context = {}) {
-  if (!pauseReason || pauseReason.resource !== resource) {
-    pauseReason = pauseReasonFor(resource, error, context);
+  const selected = resolveRuntimeContext(context.task || {}, context);
+  const runtime = monitorState(selected);
+  if (!runtime.pauseReason || runtime.pauseReason.resource !== resource) {
+    runtime.pauseReason = pauseReasonFor(resource, error, context);
   }
-  pauseContext = {
+  runtime.pauseContext = {
     resource,
-    task: context.task || null,
+    task: context.task ? contextualTask(context.task, selected) : null,
     role: context.role || null,
-    fingerprint: readinessFingerprint(),
+    fingerprint: readinessFingerprint(selected),
     nextProbeAt: Date.now() + RECOVERY_PROBE_MS,
   };
-  log.warn(`Code-writer paused: ${pauseReason.message}`);
-  emitCoderStatus();
-  return pauseReason;
+  log.warn(`Code-writer paused: ${runtime.pauseReason.message}`);
+  emitCoderStatus(selected);
+  return runtime.pauseReason;
 }
 
-function clearPause(source = 'manual resume') {
-  if (!pauseReason) return false;
+function clearPause(source = 'manual resume', context = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  const runtime = monitorState(selected, false);
+  if (!runtime || !runtime.pauseReason) return false;
   log.info(`Code-writer availability pause cleared (${source}).`);
-  pauseReason = null;
-  pauseContext = null;
-  readinessCache.clear();
-  emitCoderStatus();
+  runtime.pauseReason = null;
+  runtime.pauseContext = null;
+  clearReadinessContext(selected);
+  emitCoderStatus(selected);
   return true;
 }
 
 /** Convert only a genuine runtime Git/model outage into monitor pause state. */
 function pauseForRuntimeError(error, context = {}) {
+  // Governance failures carry their own stable 403/503 contract. In particular,
+  // PolicyDeniedError has status 403, which the generic availability detector
+  // would otherwise mistake for a provider outage and turn into a model pause.
+  if (isPolicyUnavailableError(error) || isPolicyDeniedError(error)) return null;
   const repositoryUnavailable = isRepositoryAvailabilityError(error);
   const modelUnavailable = !repositoryUnavailable && isModelAvailabilityError(error);
   if (!repositoryUnavailable && !modelUnavailable) return null;
@@ -378,17 +595,23 @@ function pauseForRuntimeError(error, context = {}) {
       ? context.repositoryProvider
       : context.llm && context.llm.provider,
     model: resource === 'model' && context.llm ? context.llm.model : undefined,
+    orgId: context.orgId || (context.task && context.task.orgId) || null,
+    nativeProjectId: context.nativeProjectId || (context.task && context.task.nativeProjectId) || null,
   });
 }
 
-async function recoverPause(settings, dependencies = {}) {
-  if (!pauseReason || !pauseContext) return true;
+async function recoverPause(settings, dependencies = {}, context = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  const runtime = monitorState(selected, false);
+  if (!runtime || !runtime.pauseReason || !runtime.pauseContext) return true;
   // Billing pause: re-check the balance on EVERY probe (cheap store read, no
   // throttle) so a recharge (auto or manual) resumes the monitor promptly.
-  if (pauseContext.resource === 'billing') {
-    const gate = (dependencies.billingStatus || require('../billing/gate').billingStatus)();
+  if (runtime.pauseContext.resource === 'billing') {
+    const gate = (dependencies.billingStatus || require('../billing/gate').billingStatus)({
+      orgId: selected.orgId || undefined,
+    });
     if (!gate.blocked) {
-      clearPause('billing balance restored');
+      clearPause('billing balance restored', selected);
       return true;
     }
     return false;
@@ -399,28 +622,32 @@ async function recoverPause(settings, dependencies = {}) {
   const modelProbe = dependencies.probeModelAvailability || probeModelAvailability;
   const selectionForTask = dependencies.repositorySelectionForTask || repositorySelectionForTask;
   const repositoryProbe = dependencies.probeRepositoryAvailability || probeRepositoryAvailability;
-  const changed = fingerprint() !== pauseContext.fingerprint;
-  if (!changed && now() < pauseContext.nextProbeAt) return false;
+  const changed = fingerprint(selected) !== runtime.pauseContext.fingerprint;
+  if (!changed && now() < runtime.pauseContext.nextProbeAt) return false;
 
   try {
-    if (pauseContext.resource === 'model') {
-      const llm = await resolve(settings, pauseContext.role || 'global');
+    if (runtime.pauseContext.resource === 'model') {
+      const llm = await resolve(settings, runtime.pauseContext.role || 'global');
       await modelProbe(llm);
     } else {
-      const selection = selectionForTask(pauseContext.task || {});
+      const selection = selectionForTask(runtime.pauseContext.task || {});
       await repositoryProbe(selection);
     }
-    clearPause(changed ? 'settings changed and readiness passed' : 'periodic readiness probe passed');
+    clearPause(
+      changed ? 'settings changed and readiness passed' : 'periodic readiness probe passed',
+      selected,
+    );
     return true;
   } catch (_) {
-    pauseContext.fingerprint = fingerprint();
-    pauseContext.nextProbeAt = now() + RECOVERY_PROBE_MS;
+    runtime.pauseContext.fingerprint = fingerprint(selected);
+    runtime.pauseContext.nextProbeAt = now() + RECOVERY_PROBE_MS;
     return false;
   }
 }
 
 /** Persist a coding-run job (kind 'coding') so it shows in the UI job list. */
-function createCodingJob(task, jobStore = store) {
+function createCodingJob(task, jobStore = store, context = {}) {
+  const selected = resolveRuntimeContext(task, context);
   const now = new Date().toISOString();
   const job = {
     id: crypto.randomUUID(),
@@ -430,6 +657,10 @@ function createCodingJob(task, jobStore = store) {
     taskIdentifier: task.identifier,
     taskTitle: task.title,
     taskUrl: task.url,
+    // Always persist both canonical scope fields. Null is retained only for the
+    // backward-compatible auth-disabled local workspace.
+    orgId: selected.orgId,
+    nativeProjectId: selected.nativeProjectId,
     status: 'running',
     createdAt: now,
     updatedAt: now,
@@ -456,6 +687,7 @@ function recordStackLink(task, run, ctx, jobStore = store) {
   const dependentBranch = stacked.dependentBranch || sanitizeBranch(task.identifier || task.id);
   const dependency = (task.dependencies || []).find((d) => sanitizeBranch(d.identifier) === stacked.branch);
   const parts = ctx.repositoryUrl ? repoParts(ctx.repositoryUrl, ctx.repositoryProvider) : null;
+  const selected = resolveRuntimeContext(task, ctx);
   return jobStore.addStackLink({
     projectId: task.project && task.project.id,
     provider: ctx.repositoryProvider,
@@ -466,6 +698,8 @@ function recordStackLink(task, run, ctx, jobStore = store) {
     defaultBase: stacked.defaultBase,
     dependentReviewId: null,
     dependentReviewUrl: null,
+    orgId: selected.orgId,
+    nativeProjectId: selected.nativeProjectId,
   });
 }
 
@@ -502,14 +736,23 @@ function dispatch(task, ctx, dependencies = {}) {
   const startIssueImpl = dependencies.startIssue || startIssue;
   const finishIssueImpl = dependencies.finishIssue || finishIssue;
   const runPlannedCoderImpl = dependencies.runPlannedCoder || runPlannedCoder;
-  running.set(task.id, { identifier: task.identifier, projectId: task.project.id, startedAt: Date.now() });
+  const selected = resolveRuntimeContext(task, ctx);
+  task = contextualTask(task, selected);
+  const ticketKey = runningKey(task, selected);
+  running.set(ticketKey, {
+    identifier: task.identifier,
+    projectId: task.project.id,
+    startedAt: Date.now(),
+    orgId: selected.orgId,
+    nativeProjectId: selected.nativeProjectId,
+  });
 
   // Track this coding run as a job (same store as enrichment jobs) so it is
   // visible in the UI with a live step trace, not just in the server log.
-  const job = createCodingJob(task, jobStore);
+  const job = createCodingJob(task, jobStore, selected);
   // In-flight ticket count + a new coding job — push both to the workspace stream.
-  emitCoderStatus();
-  emitCoderJobs();
+  emitCoderStatus(selected);
+  emitCoderJobs(selected);
   let phase = 'linear-start';
   const step = (message, level = 'info') => {
     (log[level] || log.info)(`[coder ${task.identifier}] ${message}`);
@@ -534,6 +777,7 @@ function dispatch(task, ctx, dependencies = {}) {
         llm: ctx.llm,
         apiKey: ctx.apiKey,
         keys: ctx.keys,
+        settings: ctx.settings,
         repositoryProvider: ctx.repositoryProvider,
         repositoryToken: ctx.repositoryToken,
         repositoryUrl: ctx.repositoryUrl,
@@ -542,6 +786,7 @@ function dispatch(task, ctx, dependencies = {}) {
       })
         .then((r) => ({ r, verdict: parseVerdict(r && r.finalText) }))
         .catch((err) => {
+          if (isPolicyUnavailableError(err) || isPolicyDeniedError(err)) throw err;
           // Availability failures are not task outcomes. Bubble them to the
           // outer handler so the monitor pauses and leaves the Linear issue in
           // progress for an operator-controlled retry.
@@ -580,7 +825,7 @@ function dispatch(task, ctx, dependencies = {}) {
           finalText: String((r && r.finalText) || '').slice(0, 2000),
         },
       });
-      emitCoderJobs();
+      emitCoderJobs(selected);
     })
     .catch((err) => {
       const reason = phase === 'agent'
@@ -601,27 +846,35 @@ function dispatch(task, ctx, dependencies = {}) {
           error: reason.message,
           summary: { coding: true, paused: true, pauseReason: reason },
         });
-        emitCoderJobs();
+        emitCoderJobs(selected);
         return;
       }
       // Linear-side failure (couldn't start or finalize the issue) — leave it for
       // the next poll to retry rather than losing the task.
       const message = err && err.message ? err.message : String(err);
       step(`Failed: ${message}`, 'error');
-      jobStore.updateJob(job.id, { status: 'error', finishedAt: new Date().toISOString(), error: message });
-      emitCoderJobs();
+      jobStore.updateJob(job.id, {
+        status: 'error',
+        finishedAt: new Date().toISOString(),
+        error: message,
+        ...(isPolicyDeniedError(err) ? { policyDenied: true } : {}),
+      });
+      emitCoderJobs(selected);
     })
     .finally(() => {
-      running.delete(task.id);
+      running.delete(ticketKey);
       // In-flight count dropped — refresh coder status + jobs on the stream.
-      emitCoderStatus();
-      emitCoderJobs();
+      emitCoderStatus(selected);
+      emitCoderJobs(selected);
     });
 }
 
 /** True when this project still has any task in flight (guards the aidone stamp). */
-function projectBusy(projectId) {
-  for (const r of running.values()) if (r.projectId === projectId) return true;
+function projectBusy(projectId, context = {}) {
+  const key = contextKey(context);
+  for (const r of running.values()) {
+    if (r.projectId === projectId && contextKey(r) === key) return true;
+  }
   return false;
 }
 
@@ -640,30 +893,67 @@ function resolveMaxConcurrent() {
   return CONFIG.CODER.maxConcurrent;
 }
 
+/**
+ * A cloud/shared runtime must never use a credential-bearing global store to
+ * discover arbitrary tenant work. Local auth-disabled installs retain their
+ * historical empty-context monitor, while dedicated deployments inherit their
+ * trusted server-side org pin through resolveRuntimeContext().
+ */
+function shouldSkipAutonomousPoll(context = {}, config = CONFIG) {
+  const selected = resolveRuntimeContext({}, context);
+  return Boolean(config.AUTH && config.AUTH.enabled) && !selected.orgId;
+}
+
 /** One poll+dispatch cycle. Serialized (never overlaps itself). */
-async function pollOnce() {
+async function pollOnce(context = {}, dependencies = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  if (shouldSkipAutonomousPoll(selected)) {
+    log.warn('Coder poll skipped: an organization/project context is required on the shared runtime.');
+    return { skipped: 'missing-workspace-context' };
+  }
+  const runtime = monitorState(selected);
   const settings = store.getSettings();
   if (!settings.linearApiKey) {
     log.warn('Coder poll skipped: add a Linear API key in Settings.');
     return { skipped: 'missing-linear-key' };
   }
-  if (pauseReason && !(await recoverPause(settings))) {
-    return { skipped: 'paused', pauseReason };
+  if (runtime.pauseReason && !(await recoverPause(settings, dependencies, selected))) {
+    return { skipped: 'paused', pauseReason: runtime.pauseReason };
   }
   // Negative-balance gate (deliberately simple): pause the monitor when the org's
   // billing balance is exhausted. Reuses the existing pause machinery; the
   // billing branch of recoverPause auto-clears it once a recharge restores the
   // balance. Inert unless billing is enabled + the account opts in (billing/gate.js).
-  const billing = require('../billing/gate').billingStatus();
+  const billingStatusImpl = dependencies.billingStatus || require('../billing/gate').billingStatus;
+  const billing = billingStatusImpl({ orgId: selected.orgId || undefined });
   if (billing.blocked) {
-    const reason = pause('billing', new Error(billing.reason), { message: billing.reason });
+    const reason = pause('billing', new Error(billing.reason), {
+      message: billing.reason,
+      orgId: selected.orgId,
+      nativeProjectId: selected.nativeProjectId,
+    });
     return { skipped: 'paused', pauseReason: reason };
   }
+  let governed;
+  try {
+    governed = await resolveAutonomousPolicy(settings, selected, dependencies);
+  } catch (err) {
+    if (isPolicyUnavailableError(err)) {
+      log.warn('Coder poll skipped: workspace policy is temporarily unavailable.');
+      return { skipped: 'policy-unavailable' };
+    }
+    if (isPolicyDeniedError(err)) {
+      log.warn(`Coder poll skipped: ${err.message}`);
+      return { skipped: 'policy-denied', policyDenied: true };
+    }
+    throw err;
+  }
+
   let projects;
   let tasksByProject;
   try {
-    projects = await fetchPlannedProjects(settings.linearApiKey);
-    tasksByProject = await fetchPlannedTasks(settings.linearApiKey);
+    projects = await (dependencies.fetchPlannedProjects || fetchPlannedProjects)(settings.linearApiKey);
+    tasksByProject = await (dependencies.fetchPlannedTasks || fetchPlannedTasks)(settings.linearApiKey);
   } catch (err) {
     log.warn(`Coder poll: fetch failed: ${err && err.message ? err.message : err}`);
     return { skipped: 'planning-provider-unavailable' };
@@ -672,20 +962,17 @@ async function pollOnce() {
   const repository = store.getRepositoryConfig();
   const ctx = {
     apiKey: settings.linearApiKey,
-    keys: buildKeys(settings),
+    keys: governed.keys,
+    settings: governed.settings,
+    orgId: selected.orgId,
+    nativeProjectId: selected.nativeProjectId,
     repositoryProvider: repository.provider,
     repositoryToken: repository.token,
     repositoryUrl: repository.url,
   };
-  // Resolve each role's provider at most once per tick, on demand — a task routes
-  // to 'local' or 'global' by its model label. Resolution can throw (e.g. an
-  // OAuth provider not signed in); we cache the promise and skip only the tasks
-  // that need an unavailable role rather than failing the whole poll.
-  const roleLlm = new Map();
-  const resolveRole = (role) => {
-    if (!roleLlm.has(role)) roleLlm.set(role, resolveLlm(settings, role));
-    return roleLlm.get(role);
-  };
+  // Model resolution is cached per role for this tick and policy-enforced before
+  // readiness probing or any Linear state transition.
+  const resolveRole = governed.resolveRole;
 
   const cap = resolveMaxConcurrent();
   for (const project of projects) {
@@ -693,23 +980,23 @@ async function pollOnce() {
     // No open tasks left → the project is fully coded; mark it aidone (once),
     // but only when nothing for it is still in flight.
     if (!tasks.length) {
-      if (!projectBusy(project.id)) {
+      if (!projectBusy(project.id, selected)) {
         applyAidone(settings.linearApiKey, { project, onStep: (m) => log.info(`[coder ${project.name}] ${m}`) })
           .then(() => log.info(`Project "${project.name}" fully coded → aidone.`))
           .catch((err) => log.warn(`aidone for "${project.name}" failed: ${err && err.message ? err.message : err}`));
       }
       continue;
     }
-    if (running.size >= cap) break; // global cap
+    if (!hasCapacity(selected, cap)) break;
 
-    // Dispatch every unblocked, not-already-running task in creation order, up to
-    // the global cap. Independent tasks of the same project now run concurrently,
+  // Dispatch every unblocked, not-already-running task in creation order, up to
+  // the selected workspace's cap. Independent tasks of the same project run concurrently,
     // each in its own isolated per-task workspace; a task blocked by a not-yet-Done
     // issue stays skipped until its blocker lands.
     let dispatchedForProject = 0;
     for (const next of tasks) {
-      if (running.size >= cap) break;
-      if (running.has(next.id) || (next.blockers && next.blockers.length)) continue;
+      if (!hasCapacity(selected, cap)) break;
+      if (running.has(runningKey(next, selected)) || (next.blockers && next.blockers.length)) continue;
       const role = modelRoleForTask(next);
       try {
         await dispatchReadyTask(next, resolveRole, ctx, {
@@ -719,28 +1006,45 @@ async function pollOnce() {
         });
         dispatchedForProject += 1;
       } catch (err) {
+        if (isPolicyUnavailableError(err)) {
+          log.warn('Coder poll skipped: workspace policy is temporarily unavailable.');
+          return { skipped: 'policy-unavailable' };
+        }
+        if (isPolicyDeniedError(err)) {
+          log.warn(`Coder poll skipped: ${err.message}`);
+          return { skipped: 'policy-denied', policyDenied: true };
+        }
         const resource = isRepositoryAvailabilityError(err) || (err && err.resource === 'git') ? 'git' : 'model';
         const reason = pause(resource, err, {
           task: next,
           taskIdentifier: next.identifier,
           role,
           provider: resource === 'git' ? store.getRepositoryConfig().provider : undefined,
+          orgId: selected.orgId,
+          nativeProjectId: selected.nativeProjectId,
         });
         return { skipped: 'paused', pauseReason: reason };
       }
     }
     // Nothing dispatched despite free capacity → the remaining tasks are blocked.
-    if (!dispatchedForProject && running.size < cap) {
-      const head = tasks.find((t) => t.blockers && t.blockers.length && !running.has(t.id));
+    if (!dispatchedForProject && hasCapacity(selected, cap)) {
+      const head = tasks.find(
+        (task) => task.blockers && task.blockers.length && !running.has(runningKey(task, selected)),
+      );
       if (head) log.info(`Project "${project.name}": next task ${head.identifier} blocked by ${head.blockers.join(', ')}.`);
     }
-    if (running.size >= cap) break; // cap reached; stop scanning further projects
+    if (!hasCapacity(selected, cap)) break; // selected workspace cap reached
   }
   // Retarget any stacked dependent PR whose blocker has since merged. Best-effort
   // and independent of dispatch: a failure here never pauses the monitor.
   try {
     const summary = await reconcileStacks({
-      resolveSelection: (projectId) => repositorySelectionForTask({ project: { id: projectId } }),
+      links: store.listStackLinks().filter((link) => matchesRuntimeContext(link, selected)),
+      resolveSelection: (projectId) => repositorySelectionForTask({
+        project: { id: projectId },
+        orgId: selected.orgId,
+        nativeProjectId: selected.nativeProjectId,
+      }),
     });
     if (summary && summary.retargeted) log.info(`Stack reconcile: retargeted ${summary.retargeted} PR(s) to their default base.`);
   } catch (err) {
@@ -750,46 +1054,57 @@ async function pollOnce() {
 }
 
 /** Start the board monitor (idempotent). Serializes ticks so they never overlap. */
-function start() {
-  const resumed = clearPause('monitor start requested');
-  if (started) return { started: true, already: true, resumed };
-  started = true;
+function start(context = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  if (shouldSkipAutonomousPoll(selected)) {
+    return { ...status(selected), started: false, skipped: 'missing-workspace-context' };
+  }
+  const runtime = monitorState(selected);
+  const resumed = clearPause('monitor start requested', selected);
+  if (runtime.started) return { started: true, already: true, resumed };
+  runtime.started = true;
   const tick = () => {
-    pollOnce().finally(() => {
-      if (started) timer = setTimeout(tick, CONFIG.CODER.pollIntervalMs);
+    pollOnce(selected).finally(() => {
+      if (runtime.started) runtime.timer = setTimeout(tick, CONFIG.CODER.pollIntervalMs);
     });
   };
   tick();
   log.info(`Code-writer monitor started (aiplanned flow, every ${CONFIG.CODER.pollIntervalMs} ms, max ${resolveMaxConcurrent()} concurrent).`);
-  emitCoderStatus();
+  emitCoderStatus(selected);
   return { started: true, resumed };
 }
 
-function resume() {
-  const resumed = clearPause('manual resume');
-  if (!started) start();
-  return { ...status(), resumed };
+function resume(context = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  const runtime = monitorState(selected);
+  const resumed = clearPause('manual resume', selected);
+  if (!runtime.started) start(selected);
+  return { ...status(selected), resumed };
 }
 
-function stop() {
-  started = false;
-  if (timer) clearTimeout(timer);
-  timer = null;
+function stop(context = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  const runtime = monitorState(selected);
+  runtime.started = false;
+  if (runtime.timer) clearTimeout(runtime.timer);
+  runtime.timer = null;
   log.info('Code-writer monitor stopped.');
-  emitCoderStatus();
+  emitCoderStatus(selected);
   return { started: false };
 }
 
 /** Snapshot for status endpoints. */
-function status() {
+function status(context = {}) {
+  const selected = resolveRuntimeContext({}, context);
+  const runtime = monitorState(selected, false);
   return {
-    running: started,
-    paused: Boolean(pauseReason),
-    pauseReason,
+    running: Boolean(runtime && runtime.started),
+    paused: Boolean(runtime && runtime.pauseReason),
+    pauseReason: (runtime && runtime.pauseReason) || null,
     plannedLabel: CONFIG.CODER.plannedLabel,
     backend: CONFIG.CODER.backend,
     maxConcurrent: resolveMaxConcurrent(),
-    inFlight: [...running.values()].map((r) => ({ identifier: r.identifier, startedAt: r.startedAt })),
+    inFlight: listInFlight(selected),
   };
 }
 
@@ -798,6 +1113,7 @@ module.exports = {
   stop,
   resume,
   status,
+  listInFlight,
   pollOnce,
   fetchPlannedProjects,
   fetchPlannedTasks,
@@ -813,6 +1129,13 @@ module.exports = {
     clearPause,
     pause,
     recoverPause,
+    cachedReadinessProbe,
+    createCodingJob,
+    runningCount,
+    hasCapacity,
+    resolveRuntimeContext,
+    shouldSkipAutonomousPoll,
+    resolveAutonomousPolicy,
     readinessFingerprint,
     resolveMaxConcurrent,
     dependencyLinks,

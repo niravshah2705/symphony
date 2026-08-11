@@ -25,6 +25,9 @@ from app.core.timeutils import ensure_aware
 from app.errors import ConflictError
 from app.models.enums import AuthProvider, OrgRole
 from app.models.user import User
+from app.repositories.base import ORGS, projects_col
+from app.repositories.membership_repo import MembershipRepository
+from app.repositories.organization_membership_repo import OrganizationMembershipRepository
 from app.repositories.user_repo import UserRepository
 
 logger = get_logger("app.auth.middleware")
@@ -46,6 +49,10 @@ class _AuthFailure(Exception):
     """Internal marker for any authentication failure (mapped to 401)."""
 
 
+class _ContextFailure(Exception):
+    """Invalid or inaccessible caller-supplied org/project context (mapped to 404)."""
+
+
 def _requires_auth(path: str) -> bool:
     if not path.startswith(API_PREFIX):
         return False
@@ -63,6 +70,13 @@ def _unauthorized() -> JSONResponse:
         status_code=401,
         content={"error": {"code": "unauthorized", "message": "Authentication required"}},
         headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _context_not_found() -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={"error": {"code": "not_found", "message": "Selected context not found"}},
     )
 
 
@@ -88,9 +102,16 @@ class AuthContextMiddleware:
         token = header[7:].strip()
 
         try:
-            principal = await self._authenticate(token)
+            principal = await self._authenticate(
+                token,
+                request.headers.get("X-AI-Fleet-Organization-Id"),
+                request.headers.get("X-AI-Fleet-Project-Id"),
+            )
         except (_AuthFailure, jwt.PyJWTError):
             await _unauthorized()(scope, receive, send)
+            return
+        except _ContextFailure:
+            await _context_not_found()(scope, receive, send)
             return
         except Exception as exc:  # never leak internals from the auth path
             logger.exception("Authentication error: %s", exc)
@@ -100,9 +121,12 @@ class AuthContextMiddleware:
         scope.setdefault("state", {})["principal"] = principal
         await self.app(scope, receive, send)
 
-    async def _authenticate(self, token: str) -> Principal:
+    async def _authenticate(
+        self, token: str, selected_org_header: str | None, selected_project_header: str | None
+    ) -> Principal:
         issuer = get_unverified_issuer(token)
-        repo = UserRepository(new_uow())
+        uow = new_uow()
+        repo = UserRepository(uow)
 
         if is_idp_issuer(issuer):
             claims = decode_idp_token(token)
@@ -131,13 +155,72 @@ class AuthContextMiddleware:
             if issued < changed:
                 raise _AuthFailure()
 
+        org_id, org_role = await self._resolve_organization_context(
+            uow, user, selected_org_header
+        )
+        project_id = await self._resolve_project_context(
+            uow, user.id, org_id, org_role, selected_project_header
+        )
+        await uow.commit()
+
         return Principal(
             user_id=user.id,
-            org_id=user.org_id,
-            org_role=user.org_role,
+            org_id=org_id,
+            org_role=org_role,
             is_super_admin=user.is_super_admin,
             email=user.email,
+            project_id=project_id,
         )
+
+    async def _resolve_organization_context(
+        self, uow, user: User, selected_header: str | None  # type: ignore[no-untyped-def]
+    ) -> tuple[uuid.UUID | None, OrgRole]:
+        memberships = OrganizationMembershipRepository(uow)
+        await memberships.ensure_legacy(user)
+
+        if selected_header:
+            try:
+                org_id = uuid.UUID(selected_header)
+            except (TypeError, ValueError):
+                raise _ContextFailure()
+            membership = await memberships.get(org_id, user.id)
+            if membership is None or await uow.get(ORGS, str(org_id)) is None:
+                raise _ContextFailure()
+            return org_id, membership.role
+
+        # The scalar fields remain a migration-compatible default only. If they
+        # are absent, choose the oldest accessible membership deterministically.
+        if user.org_id is not None:
+            membership = await memberships.get(user.org_id, user.id)
+            if membership is not None and await uow.get(ORGS, str(user.org_id)) is not None:
+                return user.org_id, membership.role
+        accessible = await memberships.list_for_user(user.id, legacy_user=user)
+        for membership in accessible:
+            if await uow.get(ORGS, str(membership.org_id)) is not None:
+                return membership.org_id, membership.role
+        return None, OrgRole.MEMBER
+
+    async def _resolve_project_context(
+        self,
+        uow,  # type: ignore[no-untyped-def]
+        user_id: uuid.UUID,
+        org_id: uuid.UUID | None,
+        org_role: OrgRole,
+        selected_header: str | None,
+    ) -> uuid.UUID | None:
+        if not selected_header:
+            return None
+        try:
+            project_id = uuid.UUID(selected_header)
+        except (TypeError, ValueError):
+            raise _ContextFailure()
+        if org_id is None or await uow.get(projects_col(org_id), str(project_id)) is None:
+            raise _ContextFailure()
+        if org_role != OrgRole.ORG_ADMIN:
+            project_membership = await MembershipRepository(uow).get(org_id, project_id, user_id)
+            if project_membership is None:
+                raise _ContextFailure()
+        return project_id
 
     async def _load_local_user(self, repo: UserRepository, subject) -> User | None:  # type: ignore[no-untyped-def]
         try:

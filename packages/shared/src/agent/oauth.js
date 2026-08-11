@@ -2,6 +2,7 @@
 
 const { CONFIG } = require('../config');
 const pkce = require('./pkce');
+const { normalizeWorkspaceContext } = require('../store/workspace-context');
 
 /**
  * OAuth 2.0 Authorization Code + PKCE (S256) helper for the Codex (OpenAI)
@@ -39,13 +40,18 @@ function prunePending(now = Date.now()) {
  * Begin a login: generate state + PKCE, register them server-side, and return
  * the authorize URL to send the browser to.
  */
-function createLogin() {
+function createLogin(workspaceContext = {}) {
   prunePending();
   const state = generateState();
   const codeVerifier = generateVerifier();
   const codeChallenge = challengeFromVerifier(codeVerifier);
   const redirectUri = OAUTH.redirectUri;
-  pendingLogins.set(state, { codeVerifier, redirectUri, expiresAt: Date.now() + OAUTH.loginTtlMs });
+  pendingLogins.set(state, {
+    codeVerifier,
+    redirectUri,
+    workspaceContext: normalizeWorkspaceContext(workspaceContext),
+    expiresAt: Date.now() + OAUTH.loginTtlMs,
+  });
   return { state, authorizeUrl: buildAuthorizeUrl({ state, codeChallenge, redirectUri }) };
 }
 

@@ -12,25 +12,45 @@
 const { initStore } = require('@ai-fleet/shared/store');
 const log = require('@ai-fleet/shared/logger');
 const { runTicketInProcess } = require('./run-ticket');
+const { runWithWorkspaceContext } = require('@ai-fleet/shared/store/workspace-context');
 
-async function main() {
-  const issueId = String(process.env.ISSUE_ID || '').trim();
-  const conversationId = process.env.CONVERSATION_ID ? String(process.env.CONVERSATION_ID) : null;
+async function main({
+  env = process.env,
+  initStoreImpl = initStore,
+  runTicketImpl = runTicketInProcess,
+  logImpl = log,
+  exit = (code) => process.exit(code),
+} = {}) {
+  const issueId = String(env.ISSUE_ID || '').trim();
+  const conversationId = env.CONVERSATION_ID ? String(env.CONVERSATION_ID) : null;
+  const orgId = env.FLEET_ORG_ID ? String(env.FLEET_ORG_ID) : null;
+  const nativeProjectId = env.AI_FLEET_PROJECT_CONTEXT
+    ? String(env.AI_FLEET_PROJECT_CONTEXT)
+    : null;
   if (!issueId) {
-    log.error('coder-worker: ISSUE_ID env is required');
-    process.exit(2);
-    return;
+    logImpl.error('coder-worker: ISSUE_ID env is required');
+    exit(2);
+    return 2;
   }
-  await initStore();
-  log.info(`coder-worker starting for issue ${issueId}`);
+  const contextInput = { organizationId: orgId, projectId: nativeProjectId };
   try {
-    await runTicketInProcess({ issueId, conversationId, blocking: true });
-    log.info(`coder-worker finished issue ${issueId}`);
-    process.exit(0);
+    return await runWithWorkspaceContext(contextInput, async () => {
+      // Dynamic Firestore workspaces must hydrate inside the selected ALS scope
+      // before any synchronous store accessor runs.
+      await initStoreImpl();
+      logImpl.info(`coder-worker starting for issue ${issueId}`);
+      await runTicketImpl({ issueId, conversationId, blocking: true, orgId, nativeProjectId });
+      logImpl.info(`coder-worker finished issue ${issueId}`);
+      exit(0);
+      return 0;
+    });
   } catch (err) {
-    log.error(`coder-worker failed for ${issueId}: ${err && err.message ? err.message : err}`);
-    process.exit(1);
+    logImpl.error(`coder-worker failed for ${issueId}: ${err && err.message ? err.message : err}`);
+    exit(1);
+    return 1;
   }
 }
 
-main();
+if (require.main === module) void main();
+
+module.exports = { main };

@@ -8,8 +8,7 @@ dedicated Cloud Run stack (reusing existing images), and writes the resolved
 URLs back via ``PATCH /api/v1/internal/orgs/{id}/deployments``.
 
 OFF by default (settings.provisioning_enabled) — a disabled deployment keeps
-every org on the shared stack: no status change, no publish, no infra. The auto
-pseudo-workspace path (onboarding_service.ensure_org_for_user) never calls this.
+every org on the shared stack: no status change, no publish, no infra.
 """
 from __future__ import annotations
 

@@ -2,19 +2,52 @@ import { api } from './api.js';
 
 const STORAGE_KEY = 'ai-fleet.locale';
 const DEFAULT_LOCALE = 'en';
-const MAX_SUGGESTIONS = 5;
 const RTL_LANGUAGES = new Set(['ar', 'fa', 'he', 'ur']);
 const TRANSLATABLE_ATTRIBUTES = Object.freeze(['placeholder', 'title', 'aria-label', 'aria-description', 'alt']);
 
-const FALLBACK_LOCALES = Object.freeze([
-  { tag: 'en', label: 'English', nativeLabel: 'English' },
-  { tag: 'gu-IN', label: 'Gujarati', nativeLabel: 'ગુજરાતી' },
-  { tag: 'hi-IN', label: 'Hindi', nativeLabel: 'हिन्दी' },
+export const LANGUAGE_GROUPS = Object.freeze([
+  Object.freeze({ key: 'regionalLanguages', items: Object.freeze([
+    Object.freeze({ tag: 'gu-IN', label: 'Gujarati', nativeLabel: 'ગુજરાતી' }),
+    Object.freeze({ tag: 'mr-IN', label: 'Marathi', nativeLabel: 'मराठी' }),
+  ]) }),
+  Object.freeze({ key: 'nationalLanguages', items: Object.freeze([
+    Object.freeze({ tag: 'hi-IN', label: 'Hindi', nativeLabel: 'हिन्दी' }),
+  ]) }),
+  Object.freeze({ key: 'internationalLanguages', items: Object.freeze([
+    Object.freeze({ tag: 'en', label: 'English', nativeLabel: 'English' }),
+  ]) }),
+  Object.freeze({ key: 'otherLanguages', items: Object.freeze([
+    Object.freeze({ tag: 'es', label: 'Spanish', nativeLabel: 'Español' }),
+    Object.freeze({ tag: 'fr', label: 'French', nativeLabel: 'Français' }),
+    Object.freeze({ tag: 'de', label: 'German', nativeLabel: 'Deutsch' }),
+    Object.freeze({ tag: 'pt-BR', label: 'Portuguese (Brazil)', nativeLabel: 'Português (Brasil)' }),
+    Object.freeze({ tag: 'ja-JP', label: 'Japanese', nativeLabel: '日本語' }),
+    Object.freeze({ tag: 'ar', label: 'Arabic', nativeLabel: 'العربية' }),
+  ]) }),
 ]);
+
+const ALL_LOCALES = Object.freeze(LANGUAGE_GROUPS.flatMap((group) => group.items));
 
 const MESSAGES = Object.freeze({
   en: {
     language: 'Language',
+    accountAndContext: 'Account and context',
+    aiFleetProject: 'AI Fleet project',
+    noOrganization: 'No organization available',
+    noAiFleetProject: 'No AI Fleet project available',
+    contextUnavailable: 'Organization context is temporarily unavailable.',
+    regionalLanguages: 'Regional',
+    nationalLanguages: 'National',
+    internationalLanguages: 'International',
+    otherLanguages: 'Others',
+    recommended: 'Recommended',
+    invitation: 'Invitation',
+    invitationTitle: 'Join this AI Fleet organization',
+    invitationBody: 'Review and accept the invitation to add this organization to your account.',
+    acceptInvitation: 'Accept invitation',
+    acceptingInvitation: 'Accepting invitation…',
+    invalidInvitation: 'This invitation link is missing or invalid.',
+    invitationAccepted: 'Invitation accepted. Refreshing your workspace…',
     skipWorkspace: 'Skip to workspace',
     openNavigation: 'Open navigation',
     closeNavigation: 'Close navigation',
@@ -101,6 +134,23 @@ const MESSAGES = Object.freeze({
   },
   gu: {
     language: 'ભાષા',
+    accountAndContext: 'એકાઉન્ટ અને સંદર્ભ',
+    aiFleetProject: 'AI Fleet પ્રોજેક્ટ',
+    noOrganization: 'કોઈ સંસ્થા ઉપલબ્ધ નથી',
+    noAiFleetProject: 'કોઈ AI Fleet પ્રોજેક્ટ ઉપલબ્ધ નથી',
+    contextUnavailable: 'સંસ્થાનો સંદર્ભ હાલમાં ઉપલબ્ધ નથી.',
+    regionalLanguages: 'પ્રાદેશિક',
+    nationalLanguages: 'રાષ્ટ્રીય',
+    internationalLanguages: 'આંતરરાષ્ટ્રીય',
+    otherLanguages: 'અન્ય',
+    recommended: 'ભલામણ કરેલ',
+    invitation: 'આમંત્રણ',
+    invitationTitle: 'આ AI Fleet સંસ્થામાં જોડાઓ',
+    invitationBody: 'આ સંસ્થાને તમારા ખાતામાં ઉમેરવા માટે આમંત્રણ તપાસો અને સ્વીકારો.',
+    acceptInvitation: 'આમંત્રણ સ્વીકારો',
+    acceptingInvitation: 'આમંત્રણ સ્વીકારી રહ્યું છે…',
+    invalidInvitation: 'આ આમંત્રણ લિંક ખૂટે છે અથવા અમાન્ય છે.',
+    invitationAccepted: 'આમંત્રણ સ્વીકારાયું. તમારું કાર્યસ્થળ રિફ્રેશ થઈ રહ્યું છે…',
     skipWorkspace: 'કાર્યસ્થળ પર જાઓ',
     openNavigation: 'નેવિગેશન ખોલો',
     closeNavigation: 'નેવિગેશન બંધ કરો',
@@ -185,6 +235,23 @@ const MESSAGES = Object.freeze({
   },
   hi: {
     language: 'भाषा',
+    accountAndContext: 'खाता और संदर्भ',
+    aiFleetProject: 'AI Fleet प्रोजेक्ट',
+    noOrganization: 'कोई संगठन उपलब्ध नहीं है',
+    noAiFleetProject: 'कोई AI Fleet प्रोजेक्ट उपलब्ध नहीं है',
+    contextUnavailable: 'संगठन संदर्भ अभी उपलब्ध नहीं है।',
+    regionalLanguages: 'क्षेत्रीय',
+    nationalLanguages: 'राष्ट्रीय',
+    internationalLanguages: 'अंतरराष्ट्रीय',
+    otherLanguages: 'अन्य',
+    recommended: 'सुझाया गया',
+    invitation: 'निमंत्रण',
+    invitationTitle: 'इस AI Fleet संगठन से जुड़ें',
+    invitationBody: 'इस संगठन को अपने खाते में जोड़ने के लिए निमंत्रण की समीक्षा करके उसे स्वीकार करें।',
+    acceptInvitation: 'निमंत्रण स्वीकार करें',
+    acceptingInvitation: 'निमंत्रण स्वीकार किया जा रहा है…',
+    invalidInvitation: 'यह निमंत्रण लिंक मौजूद नहीं है या अमान्य है।',
+    invitationAccepted: 'निमंत्रण स्वीकार हो गया। आपका कार्यक्षेत्र रीफ़्रेश हो रहा है…',
     skipWorkspace: 'कार्यक्षेत्र पर जाएँ',
     openNavigation: 'नेविगेशन खोलें',
     closeNavigation: 'नेविगेशन बंद करें',
@@ -267,10 +334,113 @@ const MESSAGES = Object.freeze({
     details: 'विवरण',
     retry: 'पुनः प्रयास करें',
   },
+  mr: {
+    language: 'भाषा',
+    accountAndContext: 'खाते आणि संदर्भ',
+    aiFleetProject: 'AI Fleet प्रकल्प',
+    noOrganization: 'कोणतीही संस्था उपलब्ध नाही',
+    noAiFleetProject: 'कोणताही AI Fleet प्रकल्प उपलब्ध नाही',
+    contextUnavailable: 'संस्थेचा संदर्भ सध्या उपलब्ध नाही.',
+    regionalLanguages: 'प्रादेशिक',
+    nationalLanguages: 'राष्ट्रीय',
+    internationalLanguages: 'आंतरराष्ट्रीय',
+    otherLanguages: 'इतर',
+    recommended: 'शिफारस केलेले',
+    invitation: 'आमंत्रण',
+    invitationTitle: 'या AI Fleet संस्थेत सामील व्हा',
+    invitationBody: 'ही संस्था तुमच्या खात्यात जोडण्यासाठी आमंत्रण तपासा आणि स्वीकारा.',
+    acceptInvitation: 'आमंत्रण स्वीकारा',
+    acceptingInvitation: 'आमंत्रण स्वीकारत आहोत…',
+    invalidInvitation: 'ही आमंत्रण लिंक उपलब्ध नाही किंवा अवैध आहे.',
+    invitationAccepted: 'आमंत्रण स्वीकारले. तुमचे कार्यक्षेत्र रीफ्रेश करत आहोत…',
+    skipWorkspace: 'कार्यक्षेत्रावर जा',
+    openNavigation: 'नेव्हिगेशन उघडा',
+    closeNavigation: 'नेव्हिगेशन बंद करा',
+    collapseNavigation: 'नेव्हिगेशन आकुंचित करा',
+    expandNavigation: 'नेव्हिगेशन विस्तृत करा',
+    primaryNavigation: 'मुख्य नेव्हिगेशन',
+    application: 'अनुप्रयोग',
+    workspace: 'कार्यक्षेत्र',
+    agentOperations: 'एजंट कार्ये',
+    workspaceSection: 'कार्यक्षेत्र',
+    agentWorkspace: 'एजंट कार्यक्षेत्र',
+    organization: 'संस्था',
+    settingsPolicy: 'सेटिंग्ज धोरण',
+    settingsPolicySub: 'हार्नेस, साधने, कौशल्ये, प्लगइन',
+    agentWorkspaceSub: 'कामाचे नियोजन करा आणि चालवा',
+    agentJobs: 'एजंट जॉब्स',
+    agentJobsSub: 'नियोजन आणि कोडिंगचा इतिहास',
+    agentJobsDelete: 'हटवा',
+    agentJobsConfirmDelete: 'हटवण्याची पुष्टी करा',
+    agentJobsClearFinished: 'पूर्ण झालेल्या जॉब्स साफ करा',
+    agentJobsConfirmClear: 'साफ करण्याची पुष्टी करा',
+    agentPaused: 'थांबलेले',
+    agentPlanningPaused: 'नियोजन थांबले आहे',
+    agentJobActivity: 'क्रियाकलाप पहा',
+    agentPauseGitTitle: 'स्वयंचलित काम कोड कनेक्शनची प्रतीक्षा करत आहे.',
+    agentPauseGitBody: 'GitHub किंवा GitLab जोडले जाऊन तयार होईपर्यंत नवीन काम सुरू होणार नाही. रांगेतील काम सुरक्षित आहे.',
+    agentPauseGitAction: 'कोड कनेक्शन तपासा',
+    agentPauseGitJob: 'कोड कनेक्शन उपलब्ध नसल्यामुळे ही जॉब थांबली.',
+    agentPauseModelTitle: 'स्वयंचलित काम AI मॉडेलची प्रतीक्षा करत आहे.',
+    agentPauseModelBody: 'निवडलेले मॉडेल उपलब्ध होईपर्यंत नवीन काम सुरू होणार नाही. रांगेतील काम सुरक्षित आहे.',
+    agentPauseModelAction: 'मॉडेल सेटअप तपासा',
+    agentPauseModelJob: 'निवडलेले मॉडेल उपलब्ध नसल्यामुळे ही जॉब थांबली.',
+    agentPauseTitle: 'स्वयंचलित काम सध्या थांबले आहे.',
+    agentPauseBody: 'कार्यक्षेत्र तयार होईपर्यंत नवीन काम सुरू होणार नाही. रांगेतील काम सुरक्षित आहे.',
+    agentPauseAction: 'कार्यक्षेत्राचा सेटअप तपासा',
+    agentPauseJob: 'कार्यक्षेत्र उपलब्ध नसल्यामुळे ही जॉब थांबली.',
+    callRecorder: 'कॉल रेकॉर्डर',
+    callRecorderSub: 'एजंट सत्रे रेकॉर्ड करा',
+    planning: 'नियोजन',
+    business: 'व्यवसाय',
+    businessSub: 'संदर्भ आणि भूमिका',
+    projects: 'प्रकल्प',
+    projectsSub: 'योजना आणि टप्पे',
+    board: 'बोर्ड',
+    boardSub: 'प्रगतीतील मुद्दे',
+    insights: 'अंतर्दृष्टी',
+    analytics: 'विश्लेषण',
+    analyticsSub: 'खर्च आणि कार्यक्षमता',
+    cost: 'खर्च',
+    costSub: 'वापर आणि बिलिंग',
+    system: 'प्रणाली',
+    troubleshooting: 'समस्या निवारण',
+    troubleshootingSub: 'कनेक्शनचे निदान करा',
+    settings: 'सेटिंग्ज',
+    settingsSub: 'मॉडेल आणि कनेक्शन',
+    workspaceReady: 'कार्यक्षेत्र तयार आहे',
+    localTools: 'BYoM आणि जोडलेली साधने',
+    checking: 'तपासत आहे…',
+    setupNeeded: 'सेटअप आवश्यक आहे',
+    needsAttention: 'लक्ष देणे आवश्यक आहे',
+    connected: 'जोडलेले',
+    translationUnavailable: 'स्थानिक भाषांतर तात्पुरते उपलब्ध नाही',
+    actingAs: '{name} म्हणून कार्यरत',
+    security: 'सुरक्षा',
+    authentication: 'प्रमाणीकरण',
+    signIn: 'Google ने साइन इन करा',
+    signInWithMicrosoft: 'Microsoft ने साइन इन करा',
+    signOut: 'साइन आउट',
+    signedInUser: 'साइन इन केलेला वापरकर्ता',
+    googleAccount: 'Google खाते',
+    protectedWorkspace: 'संरक्षित कार्यक्षेत्र',
+    authLoadingTitle: 'तुमचे सत्र तपासत आहोत',
+    authLoading: 'सुरक्षित सत्र पुनर्संचयित करत आहोत…',
+    authTitle: 'AI Fleet मध्ये साइन इन करा',
+    authDescription: 'या कार्यक्षेत्रात प्रवेश करण्यासाठी तुमच्या संस्थेचे खाते वापरा.',
+    continueWithGoogle: 'Google सह पुढे जा',
+    continueWithMicrosoft: 'Microsoft सह पुढे जा',
+    whySignIn: 'मला साइन इन का करावे लागते?',
+    authDetails: 'तुम्ही Firebase द्वारे Google किंवा Microsoft वापरून साइन इन करता; कार्यक्षेत्राची कोणतीही विनंती AI Fleet पर्यंत पोहोचण्यापूर्वी गेटवे तुमचे Firebase ID टोकन तपासतो.',
+    authenticationFailed: 'आम्ही तुमचे सत्र सत्यापित करू शकलो नाही. पुन्हा साइन इन करून पाहा.',
+    sessionExpired: 'तुमच्या सत्राची मुदत संपली आहे. पुढे जाण्यासाठी पुन्हा साइन इन करा.',
+    details: 'तपशील',
+    retry: 'पुन्हा प्रयत्न करा',
+  },
 });
 
 let locale = normalizeLocale(readSavedLocale()) || DEFAULT_LOCALE;
-let suggestions = [...FALLBACK_LOCALES];
+let recommendedLocale = '';
 let observer = null;
 let translationTimer = null;
 let translationGeneration = 0;
@@ -293,12 +463,16 @@ function readSavedLocale() {
   }
 }
 
+export function hasSavedLocale() {
+  return Boolean(normalizeLocale(readSavedLocale()));
+}
+
 export function normalizeLocale(value) {
   try {
     const [canonical] = Intl.getCanonicalLocales(String(value || '').trim());
     if (!canonical) return '';
     const language = new Intl.Locale(canonical).language;
-    return ({ en: 'en', gu: 'gu-IN', hi: 'hi-IN', es: 'es', fr: 'fr', de: 'de', pt: 'pt-BR', ja: 'ja-JP', ar: 'ar' })[language] || '';
+    return ({ en: 'en', gu: 'gu-IN', mr: 'mr-IN', hi: 'hi-IN', es: 'es', fr: 'fr', de: 'de', pt: 'pt-BR', ja: 'ja-JP', ar: 'ar' })[language] || '';
   } catch (_) {
     return '';
   }
@@ -566,7 +740,7 @@ export function localize(root = document) {
   translationTimer = window.setTimeout(() => translateDynamicText(root).catch(() => {}), 30);
 }
 
-function renderLanguageControl() {
+export function renderLanguageControl() {
   const host = document.getElementById('language-control');
   if (!host) return;
   host.dataset.i18nSkip = 'true';
@@ -575,27 +749,23 @@ function renderLanguageControl() {
   select.className = 'language-select';
   select.setAttribute('aria-label', t('language'));
 
-  const normalized = [];
-  const seen = new Set();
-  const saved = normalizeLocale(locale);
-  const candidates = [...(suggestions.length ? suggestions : FALLBACK_LOCALES)];
-  if (saved && !candidates.some((item) => normalizeLocale(item.tag) === saved)) {
-    candidates.unshift({ tag: saved, label: saved, nativeLabel: saved });
-  }
-  for (const item of candidates) {
-    const tag = normalizeLocale(item.tag);
-    if (!tag || seen.has(tag) || normalized.length >= MAX_SUGGESTIONS) continue;
-    seen.add(tag);
-    normalized.push({ ...item, tag });
-  }
-
-  for (const item of normalized) {
-    const option = document.createElement('option');
-    option.value = item.tag;
-    option.textContent = item.nativeLabel || item.label || item.tag;
-    option.title = item.label || item.tag;
-    option.selected = item.tag === locale;
-    select.append(option);
+  for (const group of LANGUAGE_GROUPS) {
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = t(group.key);
+    const items = [...group.items].sort((a, b) => (
+      Number(b.tag === recommendedLocale) - Number(a.tag === recommendedLocale)
+    ));
+    for (const item of items) {
+      const option = document.createElement('option');
+      const recommended = item.tag === recommendedLocale;
+      option.value = item.tag;
+      option.textContent = `${item.nativeLabel}${recommended ? ` — ${t('recommended')}` : ''}`;
+      option.title = `${item.label}${recommended ? ` — ${t('recommended')}` : ''}`;
+      option.selected = item.tag === locale;
+      if (recommended) option.dataset.recommended = 'true';
+      optgroup.append(option);
+    }
+    select.append(optgroup);
   }
   select.addEventListener('change', () => setLocale(select.value));
   const warning = translationDegraded
@@ -614,9 +784,6 @@ function renderLanguageControl() {
 
 export async function setLocale(value, { persist = true } = {}) {
   const next = normalizeLocale(value) || DEFAULT_LOCALE;
-  if (next === locale && document.documentElement.lang === next) return;
-  locale = next;
-  markTranslationHealthy();
   if (persist) {
     try {
       localStorage.setItem(STORAGE_KEY, next);
@@ -624,26 +791,28 @@ export async function setLocale(value, { persist = true } = {}) {
       // The in-memory selection remains active when browser storage is blocked.
     }
   }
+  if (next === locale && document.documentElement.lang === next) return;
+  locale = next;
+  markTranslationHealthy();
   applyDocumentLocale();
   renderLanguageControl();
   localize(document);
   window.dispatchEvent(new CustomEvent('ai-fleet:locale-changed', { detail: { locale } }));
 }
 
-async function loadSuggestions(options = {}) {
+async function loadRecommendation(options = {}) {
+  if (hasSavedLocale()) {
+    recommendedLocale = '';
+    return;
+  }
   try {
     const response = await api.getLocaleSuggestions(
       navigator.languages || [navigator.language],
       options
     );
-    if (Array.isArray(response.suggestions) && response.suggestions.length) {
-      suggestions = response.suggestions.slice(0, MAX_SUGGESTIONS);
-    }
-    if (!normalizeLocale(readSavedLocale()) && response.locale) {
-      locale = normalizeLocale(response.locale) || locale;
-    }
+    recommendedLocale = normalizeLocale(response.recommendedLocale) || '';
   } catch (_) {
-    suggestions = [...FALLBACK_LOCALES];
+    recommendedLocale = '';
   }
 }
 
@@ -654,17 +823,18 @@ async function loadSuggestions(options = {}) {
  * synchronized when the best-effort response arrives.
  */
 export function refreshLocaleSuggestions(options = {}) {
+  if (hasSavedLocale()) {
+    recommendedLocale = '';
+    renderLanguageControl();
+    return Promise.resolve({ locale, recommendedLocale, suggestions: [...ALL_LOCALES] });
+  }
   if (suggestionRefreshPromise) return suggestionRefreshPromise;
   suggestionRefreshPromise = (async () => {
-    const previousLocale = locale;
-    await loadSuggestions(options);
+    await loadRecommendation(options);
     applyDocumentLocale();
     renderLanguageControl();
     localize(document);
-    if (locale !== previousLocale) {
-      window.dispatchEvent(new CustomEvent('ai-fleet:locale-changed', { detail: { locale } }));
-    }
-    return { locale, suggestions: [...suggestions] };
+    return { locale, recommendedLocale, suggestions: [...ALL_LOCALES] };
   })().finally(() => {
     suggestionRefreshPromise = null;
   });
@@ -700,10 +870,10 @@ function watchDynamicContent() {
 
 export async function initializeI18n({ discover = true } = {}) {
   applyDocumentLocale();
-  if (discover) await loadSuggestions();
+  if (discover) await loadRecommendation();
   applyDocumentLocale();
   renderLanguageControl();
   localize(document);
   watchDynamicContent();
-  return { locale, suggestions: [...suggestions] };
+  return { locale, recommendedLocale, suggestions: [...ALL_LOCALES] };
 }
