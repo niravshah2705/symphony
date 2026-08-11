@@ -7,7 +7,7 @@
 Directory-based community: e2e
 
 - **Size**: 50 nodes
-- **Cohesion**: 0.0980
+- **Cohesion**: 0.0982
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,15 +15,15 @@ Directory-based community: e2e
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | json | Function | ./e2e/agent-jobs.spec.js | 5-11 |
-| mockShell | Function | ./e2e/agent-jobs.spec.js | 13-49 |
-| mixedJobs | Function | ./e2e/agent-jobs.spec.js | 51-84 |
-| test:Agent jobs restores complete grouped planner and coding history@L86 | Test | ./e2e/agent-jobs.spec.js | 86-153 |
-| test:Agent jobs exposes load failures and retries successfully@L155 | Test | ./e2e/agent-jobs.spec.js | 155-168 |
-| test:Agent jobs rejects a malformed successful response and retries@L170 | Test | ./e2e/agent-jobs.spec.js | 170-185 |
-| test:Agent jobs preserves row focus and defers refresh while delete is armed@L187 | Test | ./e2e/agent-jobs.spec.js | 187-238 |
-| test:Agent jobs route, menu, and pause notice use the selected Gujarati locale@L240 | Test | ./e2e/agent-jobs.spec.js | 240-274 |
-| test:Agent surfaces deduplicate Git pauses and explain recovery in plain language@L276 | Test | ./e2e/agent-jobs.spec.js | 276-340 |
-| test:Agent workspace clears a model pause from a workspace SSE agent-status event@L347 | Test | ./e2e/agent-jobs.spec.js | 347-430 |
+| mockShell | Function | ./e2e/agent-jobs.spec.js | 13-62 |
+| mixedJobs | Function | ./e2e/agent-jobs.spec.js | 64-97 |
+| test:Agent jobs restores complete grouped planner and coding history@L99 | Test | ./e2e/agent-jobs.spec.js | 99-166 |
+| test:Agent jobs exposes load failures and retries successfully@L168 | Test | ./e2e/agent-jobs.spec.js | 168-181 |
+| test:Agent jobs rejects a malformed successful response and retries@L183 | Test | ./e2e/agent-jobs.spec.js | 183-198 |
+| test:Agent jobs preserves row focus and defers refresh while delete is armed@L200 | Test | ./e2e/agent-jobs.spec.js | 200-251 |
+| test:Agent jobs route, menu, and pause notice use the selected Gujarati locale@L253 | Test | ./e2e/agent-jobs.spec.js | 253-287 |
+| test:Agent surfaces deduplicate Git pauses and explain recovery in plain language@L289 | Test | ./e2e/agent-jobs.spec.js | 289-353 |
+| test:Agent workspace clears a model pause from a workspace SSE agent-status event@L360 | Test | ./e2e/agent-jobs.spec.js | 360-443 |
 | json | Function | ./e2e/agent-workspace.spec.js | 7-13 |
 | defaultPreparedBusiness | Function | ./e2e/agent-workspace.spec.js | 15-48 |
 | mockAgentWorkspace | Function | ./e2e/agent-workspace.spec.js | 50-219 |
@@ -75,7 +75,7 @@ No execution flows pass through this community.
 
 - `expect` (294 edge(s))
 - `locator` (170 edge(s))
-- `route` (122 edge(s))
+- `route` (124 edge(s))
 - `toBeVisible` (58 edge(s))
 - `toHaveCount` (48 edge(s))
 - `getByRole` (46 edge(s))
@@ -85,9 +85,9 @@ No execution flows pass through this community.
 - `push` (30 edge(s))
 - `toHaveAttribute` (27 edge(s))
 - `toHaveText` (26 edge(s))
+- `fulfill` (24 edge(s))
 - `goto` (24 edge(s))
 - `url` (24 edge(s))
-- `fulfill` (23 edge(s))
 
 ### Incoming
 

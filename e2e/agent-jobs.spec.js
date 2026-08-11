@@ -46,6 +46,19 @@ async function mockShell(page, { locale = 'en' } = {}) {
     pauseReason: null,
     inFlight: [],
   }));
+  // Silence the live workspace SSE by default so a real server-published `jobs`
+  // or status snapshot can't overwrite the stubbed HTTP seed and wipe/detach the
+  // rows a test just asserted on. Register the broad stream route FIRST and the
+  // `-token` route LAST: Playwright checks the last-registered matching handler
+  // first, so the more specific `-token` route wins for the token request while
+  // the stream request falls through to the SSE stub. Tests that need a live
+  // event re-register these routes after mockShell(), which then take precedence.
+  await page.route('**/api/agent/workspace-stream**', (route) => route.fulfill({
+    status: 200,
+    headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
+    body: ': ok\n\n',
+  }));
+  await page.route('**/api/agent/workspace-stream-token**', (route) => json(route, { token: 'test-workspace-token' }));
 }
 
 function mixedJobs() {
