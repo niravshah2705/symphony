@@ -1,6 +1,6 @@
 name: Publish Skills Bundle
 
-# Publish the deep-agent skills (packages/shared/src/agent/skills/) to the GCS
+# Publish the deep-agent skills (packages/shared-core/src/agent/skills/) to the GCS
 # skills registry as a VERSIONED bundle:
 #   gs://<bucket>/<version>/<skill>/SKILL.md   (+ skills-manifest.json)
 # Terraform CREATES the bucket (deploy/gcp/terraform/skills.tf) with a derived name
@@ -21,7 +21,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "packages/shared/src/agent/skills/**"
+      - "packages/shared-core/src/agent/skills/**"
   workflow_dispatch:
     inputs:
       version:
@@ -40,7 +40,7 @@ permissions:
   id-token: write # required for Workload Identity Federation
 
 env:
-  SKILLS_DIR: packages/shared/src/agent/skills
+  SKILLS_DIR: packages/shared-core/src/agent/skills
 
 jobs:
   publish:

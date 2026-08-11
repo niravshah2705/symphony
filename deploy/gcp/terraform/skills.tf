@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # Versioned agent-skills registry (GCS bucket + gcsfuse mount).
 # -----------------------------------------------------------------------------
-# The deep-agent skills (packages/shared/src/agent/skills/<skill>/SKILL.md) are
+# The deep-agent skills (packages/shared-core/src/agent/skills/<skill>/SKILL.md) are
 # published as VERSIONED bundles to this bucket by .github/workflows/publish-skills.yml
 # (objects laid out as `<version>/<skill>/SKILL.md` plus a `skills-manifest.json`).
 # The planner + coder Cloud Run services mount it read-only via a gen2 GCS volume

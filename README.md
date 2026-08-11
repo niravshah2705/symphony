@@ -180,7 +180,7 @@ in **Task Models** (each of Thinking / Execution / Testing picks any local Ollam
   scoped **`repository_broker`** tool for GitHub/GitLab fetch, push, review status,
   checks, and squash merge (the repository token also stays server-side), plus a
   set of **skills** (`linear`, `commit`, `push`, `pull`, `land`) loaded from
-  `packages/shared/src/agent/skills/`. Its system prompt is the **workflow** (ticket state
+  `packages/shared-core/src/agent/skills/`. Its system prompt is the **workflow** (ticket state
   machine + a single `## Workpad` comment as the source of truth).
 - **Board monitor** (`packages/shared/src/agent/coder-orchestrator.js`) — on a fixed cadence it
   polls the tracker for tickets in an **active state**
