@@ -79,7 +79,7 @@ Directory-based community: packages/shared
 - **consumeLogin** (criticality: 0.61, depth: 1)
 - **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
 - **refreshTokens** (criticality: 0.61, depth: 1)
-- *... and 49 more flows.*
+- *... and 48 more flows.*
 
 ## Dependencies
 

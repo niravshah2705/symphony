@@ -1288,6 +1288,12 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 .sx-seg.active.ok { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); }
 .sx-seg.active.bad { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
 .sx-seg[disabled] { opacity: .5; cursor: not-allowed; }
+.sx-lock-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.sx-lock-tile { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 9px; cursor: pointer; font-size: 13px; background: var(--surface-inset); border: 1px solid var(--border-strong); color: var(--muted); }
+.sx-lock-tile:hover { border-color: var(--accent-2); }
+.sx-lock-tile.active { background: color-mix(in srgb, var(--amber) 12%, transparent); border-color: color-mix(in srgb, var(--amber) 45%, transparent); color: var(--amber); }
+.sx-lock-tile[disabled] { opacity: .5; cursor: progress; }
+.sx-lock-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .settings-group { scroll-margin-top: 18px; margin-bottom: 36px; }
 .settings-group-head { margin-bottom: 12px; padding: 0 2px; }
 .settings-group-head h2 { margin: 0; font-family: var(--font-serif); font-size: 19px; letter-spacing: -.02em; }

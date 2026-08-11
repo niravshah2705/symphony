@@ -63,6 +63,21 @@ def _validate_prefs(prefs: dict[str, str]) -> dict[str, str]:
     return cleaned
 
 
+def _validate_locks(locks: list[str]) -> list[str]:
+    """Locks are a de-duplicated list of allow-listed PREF keys (a locked key
+    can't be overridden by a lower scope). Reject unknown keys; bound the count."""
+    if len(locks) > len(PREF_KEYS):
+        raise ValueError("too many lock entries")
+    cleaned: list[str] = []
+    for value in locks:
+        key = str(value).strip()
+        if key not in PREF_KEYS:
+            raise ValueError(f"unknown lock key: {key!r}")
+        if key not in cleaned:
+            cleaned.append(key)
+    return cleaned
+
+
 def _validate_patterns(values: list[str]) -> list[str]:
     if len(values) > MAX_ITEMS_PER_LIST:
         raise ValueError(f"at most {MAX_ITEMS_PER_LIST} entries allowed")
@@ -124,6 +139,10 @@ class PolicyUpdate(BaseModel):
     # Operational prefs — MERGE semantics like values (None preserves; a provided
     # key sets; an empty string clears). Readable, non-secret.
     prefs: dict[str, str] | None = None
+    # Locked pref keys — REPLACE semantics like domains (None preserves; a provided
+    # list, even [], replaces this scope's locks). Scopes below can't override a
+    # locked key.
+    locks: list[str] | None = None
 
     @field_validator("domains")
     @classmethod
@@ -148,6 +167,13 @@ class PolicyUpdate(BaseModel):
             return None
         return _validate_prefs(prefs)
 
+    @field_validator("locks")
+    @classmethod
+    def _known_locks(cls, locks: list[str] | None) -> list[str] | None:
+        if locks is None:
+            return None
+        return _validate_locks(locks)
+
 
 class PolicyResponse(BaseModel):
     scope_type: str
@@ -157,6 +183,8 @@ class PolicyResponse(BaseModel):
     values: dict[str, MaskedConfigValue] = Field(default_factory=dict)
     # Operational prefs set at THIS scope (readable, non-secret).
     prefs: dict[str, str] = Field(default_factory=dict)
+    # Pref keys LOCKED at THIS scope (scopes below can't override them).
+    locks: list[str] = Field(default_factory=list)
     updated_at: datetime | None = None
 
 
@@ -178,6 +206,8 @@ class EffectiveResponse(BaseModel):
     values: dict[str, MaskedConfigValue] = Field(default_factory=dict)
     # Resolved effective operational prefs (user > project > org), readable.
     prefs: dict[str, str] = Field(default_factory=dict)
+    # Pref keys the caller (user) cannot override — locked by org and/or project.
+    locks: list[str] = Field(default_factory=list)
 
 
 class InternalEffectiveConfigResponse(BaseModel):

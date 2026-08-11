@@ -21,6 +21,7 @@ from app.core.database import Uow
 from app.core.timeutils import utcnow
 from app.domain import universe as universe_mod
 from app.domain.resolver import (
+    locked_pref_keys,
     resolve_effective,
     resolve_effective_prefs,
     resolve_effective_values,
@@ -30,6 +31,7 @@ from app.models.policy import (
     DomainPolicy,
     SettingsPolicy,
     clean_config_values,
+    clean_locks,
     clean_prefs,
 )
 from app.repositories.base import (
@@ -93,6 +95,7 @@ def _to_response(policy: SettingsPolicy) -> PolicyResponse:
         },
         values=_mask_values(policy.values),
         prefs=dict(policy.prefs),
+        locks=list(policy.locks),
         updated_at=policy.updated_at,
     )
 
@@ -111,12 +114,18 @@ def _apply_update(
             name: DomainPolicy(include=list(dp.include), exclude=list(dp.exclude))
             for name, dp in body.domains.items()
         }
+    # Locks REPLACE (like domains): absent → preserve; provided (even []) → replace.
+    if body.locks is None:
+        locks = list(current.locks) if current else []
+    else:
+        locks = clean_locks(body.locks)
     return SettingsPolicy(
         scope_type=scope_type,
         scope_id=scope_id,
         domains=domains,
         values=_merge_values(current.values if current else {}, body.values),
         prefs=_merge_prefs(current.prefs if current else {}, body.prefs),
+        locks=locks,
         updated_at=utcnow(),
     )
 
@@ -238,6 +247,7 @@ async def resolve_for_caller(
         universe=universe,
         values=_mask_values(effective_values),
         prefs=effective_prefs,
+        locks=locked_pref_keys(org_policy, project_policy),
     )
 
 

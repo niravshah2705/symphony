@@ -167,3 +167,34 @@ async def test_org_prefs_are_readable_and_resolve_into_effective(client):
     eff = await client.get("/api/v1/settings/effective", headers=auth(token))
     assert eff.status_code == 200
     assert eff.json()["prefs"]["complexityTier"] == "balanced"
+
+
+async def test_org_lock_pins_a_pref_against_user_override(client):
+    """A pref LOCKED at org wins over a lower scope, and the effective response
+    tells the user which keys they cannot override."""
+    org_id = uuid.uuid4()
+    _admin, token = await make_user(
+        email="lock@x.com", org_id=org_id, org_role=OrgRole.ORG_ADMIN
+    )
+    org = await client.put(
+        "/api/v1/settings/org",
+        headers=auth(token),
+        json={"prefs": {"agentRuntime": "deepagent"}, "locks": ["agentRuntime"]},
+    )
+    assert org.status_code == 200
+    assert org.json()["locks"] == ["agentRuntime"]
+    # The same admin, as a user, tries to override the locked pref.
+    me = await client.put(
+        "/api/v1/me/settings",
+        headers=auth(token),
+        json={"prefs": {"agentRuntime": "codex-sdk"}},
+    )
+    assert me.status_code == 200
+    eff = (await client.get("/api/v1/settings/effective", headers=auth(token))).json()
+    assert eff["prefs"]["agentRuntime"] == "deepagent"  # org lock wins
+    assert "agentRuntime" in eff["locks"]  # surfaced as un-overridable
+    # An unknown lock key is rejected by the allow-list.
+    bad = await client.put(
+        "/api/v1/settings/org", headers=auth(token), json={"locks": ["nope"]}
+    )
+    assert bad.status_code == 422

@@ -132,25 +132,46 @@ def resolve_effective_values(
     return effective
 
 
+def locked_pref_keys(
+    org_policy: SettingsPolicy | None,
+    project_policy: SettingsPolicy | None,
+) -> list[str]:
+    """Pref keys a USER cannot override — the union of locks set at org and
+    project. Order-stable (PREF_KEYS order) so the response is deterministic."""
+    locked: set[str] = set()
+    if org_policy is not None:
+        locked.update(org_policy.locks)
+    if project_policy is not None:
+        locked.update(project_policy.locks)
+    return [key for key in PREF_KEYS if key in locked]
+
+
 def resolve_effective_prefs(
     org_policy: SettingsPolicy | None,
     project_policy: SettingsPolicy | None,
     user_policy: SettingsPolicy | None,
 ) -> dict[str, str]:
-    """Resolve each allow-listed operational pref with **user > project > org**
-    precedence — a lower scope overrides a higher one (prefs are overrides, not
-    restrictions, like config values). Only keys set at some scope are returned."""
+    """Resolve each allow-listed operational pref. Default precedence is
+    **user > project > org** (a lower scope overrides a higher one). A LOCK
+    inverts that for the locked key: a key locked at ORG resolves from org only
+    (project/user ignored); locked at PROJECT resolves project→org (user ignored).
+    Only keys set at some considered scope are returned."""
 
-    def prefs(policy: SettingsPolicy | None) -> dict[str, str]:
-        return policy.prefs if policy is not None else {}
-
-    org_prefs = prefs(org_policy)
-    project_prefs = prefs(project_policy)
-    user_prefs = prefs(user_policy)
+    org_prefs = org_policy.prefs if org_policy is not None else {}
+    project_prefs = project_policy.prefs if project_policy is not None else {}
+    user_prefs = user_policy.prefs if user_policy is not None else {}
+    org_locks = set(org_policy.locks) if org_policy is not None else set()
+    project_locks = set(project_policy.locks) if project_policy is not None else set()
 
     effective: dict[str, str] = {}
     for key in PREF_KEYS:
-        for source in (user_prefs, project_prefs, org_prefs):
+        if key in org_locks:
+            sources = (org_prefs,)  # org pinned it — nothing below can override
+        elif key in project_locks:
+            sources = (project_prefs, org_prefs)  # project pinned it — user ignored
+        else:
+            sources = (user_prefs, project_prefs, org_prefs)  # default override order
+        for source in sources:
             candidate = source.get(key)
             if candidate:
                 effective[key] = candidate

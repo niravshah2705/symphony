@@ -90,6 +90,18 @@ def clean_prefs(raw: dict | None) -> dict[str, str]:
     return prefs
 
 
+def clean_locks(raw) -> list[str]:
+    """Keep only allow-listed, de-duplicated pref keys from a locks list. A LOCK on
+    a key at some scope means the scopes BELOW it cannot override that pref (the
+    locking scope's value wins) — see resolver.resolve_effective_prefs."""
+    seen: list[str] = []
+    for key in (raw or []):
+        text = str(key)
+        if text in PREF_KEYS and text not in seen:
+            seen.append(text)
+    return seen
+
+
 @dataclass
 class DomainPolicy:
     """include/exclude for one domain. Empty include means 'the whole universe'
@@ -119,6 +131,8 @@ class SettingsPolicy:
     values: dict[str, str] = field(default_factory=dict)
     # Allow-listed operational prefs (readable). Only keys in PREF_KEYS.
     prefs: dict[str, str] = field(default_factory=dict)
+    # Pref keys LOCKED at this scope: scopes below cannot override them.
+    locks: list[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
 
@@ -133,6 +147,7 @@ class SettingsPolicy:
             "domains": {name: self.domains[name].to_doc() for name in self.domains},
             "values": clean_config_values(self.values),
             "prefs": clean_prefs(self.prefs),
+            "locks": clean_locks(self.locks),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -150,6 +165,7 @@ class SettingsPolicy:
             },
             values=clean_config_values(doc.get("values")),
             prefs=clean_prefs(doc.get("prefs")),
+            locks=clean_locks(doc.get("locks")),
             created_at=doc.get("created_at") or utcnow(),
             updated_at=doc.get("updated_at") or utcnow(),
         )
@@ -162,4 +178,5 @@ class SettingsPolicy:
             domains={name: DomainPolicy() for name in DOMAINS},
             values={},
             prefs={},
+            locks=[],
         )

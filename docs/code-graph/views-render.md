@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 468 nodes
-- **Cohesion**: 0.4964
+- **Size**: 472 nodes
+- **Cohesion**: 0.4965
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: public/js
 | completeSignIn | Function | ./public/js/auth.js | 259-280 |
 | signIn | Function | ./public/js/auth.js | 282-288 |
 
-*... and 418 more members.*
+*... and 422 more members.*
 
 ## Execution Flows
 
@@ -85,26 +85,26 @@ Directory-based community: public/js
 
 ### Outgoing
 
-- `append` (162 edge(s))
-- `addEventListener` (120 edge(s))
-- `map` (103 edge(s))
+- `append` (165 edge(s))
+- `addEventListener` (121 edge(s))
+- `map` (106 edge(s))
 - `String` (88 edge(s))
 - `trim` (64 edge(s))
 - `push` (62 edge(s))
 - `setAttribute` (54 edge(s))
-- `filter` (52 edge(s))
+- `filter` (53 edge(s))
 - `catch` (46 edge(s))
 - `Boolean` (35 edge(s))
-- `has` (31 edge(s))
+- `has` (33 edge(s))
 - `Number` (31 edge(s))
 - `isArray` (30 edge(s))
 - `slice` (29 edge(s))
-- `getElementById` (27 edge(s))
+- `includes` (28 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (135 edge(s))
-- `./public/js/views/settings.js` (117 edge(s))
+- `./public/js/api.js` (137 edge(s))
+- `./public/js/views/settings.js` (122 edge(s))
 - `./public/js/views/agent.js` (82 edge(s))
 - `./public/js/app.js` (75 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))

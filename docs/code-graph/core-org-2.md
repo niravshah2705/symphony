@@ -6,8 +6,8 @@
 
 Directory-based community: services/settings
 
-- **Size**: 348 nodes
-- **Cohesion**: 0.4230
+- **Size**: 352 nodes
+- **Cohesion**: 0.4197
 - **Dominant Language**: python
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: services/settings
 | count | Function | ./services/settings/app/core/database.py | 67-69 |
 | commit | Function | ./services/settings/app/core/database.py | 71-72 |
 
-*... and 298 more members.*
+*... and 302 more members.*
 
 ## Execution Flows
 
@@ -79,38 +79,38 @@ Directory-based community: services/settings
 - **set_org_policy** (criticality: 0.68, depth: 3)
 - **set_project_policy** (criticality: 0.68, depth: 3)
 - **set_user_policy** (criticality: 0.68, depth: 3)
-- *... and 29 more flows.*
+- *... and 30 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (114 edge(s))
-- `str` (42 edge(s))
-- `uuid4` (42 edge(s))
-- `put` (37 edge(s))
+- `get` (116 edge(s))
+- `str` (44 edge(s))
+- `uuid4` (43 edge(s))
+- `put` (40 edge(s))
 - `Depends` (35 edge(s))
-- `json` (29 edge(s))
-- `ValueError` (17 edge(s))
+- `json` (31 edge(s))
+- `ValueError` (19 edge(s))
 - `items` (16 edge(s))
+- `set` (15 edge(s))
 - `BaseModel` (15 edge(s))
-- `set` (12 edge(s))
-- `list` (11 edge(s))
-- `len` (9 edge(s))
+- `list` (13 edge(s))
+- `len` (10 edge(s))
 - `dict` (9 edge(s))
+- `strip` (8 edge(s))
 - `pop` (8 edge(s))
-- `cls` (8 edge(s))
 
 ### Incoming
 
-- `get` (43 edge(s))
-- `uuid4` (41 edge(s))
-- `put` (37 edge(s))
-- `json` (29 edge(s))
+- `get` (44 edge(s))
+- `uuid4` (42 edge(s))
+- `put` (40 edge(s))
+- `json` (31 edge(s))
 - `./services/settings/app/errors.py` (18 edge(s))
 - `./services/settings/tests/unit/test_resolver.py` (18 edge(s))
 - `./services/settings/app/services/policy_service.py` (16 edge(s))
-- `./services/settings/app/schemas/policy.py` (13 edge(s))
+- `./services/settings/app/schemas/policy.py` (14 edge(s))
 - `./services/settings/tests/integration/test_secrets_vault.py` (12 edge(s))
 - `./services/settings/app/domain/resolver.py` (11 edge(s))
 - `./services/settings/tests/integration/test_authz.py` (10 edge(s))
