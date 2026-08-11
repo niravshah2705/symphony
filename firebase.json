@@ -30,6 +30,10 @@
       {
         "source": "**/*.@(css|json)",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "**/*.@(txt|xml)",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       }
     ]
   }

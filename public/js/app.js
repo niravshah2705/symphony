@@ -8,7 +8,7 @@ import {
   setSidebarOpen,
   setSidebarCollapsed,
 } from './state.js';
-import { el, initials } from './dom.js';
+import { el, initials, toast } from './dom.js';
 import { hydrateIcons } from './icons.js';
 import * as i18n from './i18n.js';
 import {
@@ -28,6 +28,7 @@ import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.j
 const { initializeI18n, localize, t } = i18n;
 const stylesheetLoads = new Map();
 const SHARED_STYLESHEET = '/styles.css';
+const ADLC_BRAND_TITLE = 'ADLC — Agentic Development Life Cycle';
 
 function ensureStylesheet(href) {
   if (stylesheetLoads.has(href)) return stylesheetLoads.get(href);
@@ -151,7 +152,7 @@ function syncShell(name, view) {
   setActiveRoute(name);
 
   document.body.dataset.route = name;
-  document.title = `AI Fleet — ${title}`;
+  document.title = name === 'agent' ? `${ADLC_BRAND_TITLE} | AI Fleet` : `${title} | ${ADLC_BRAND_TITLE}`;
   const routeEyebrow = document.getElementById('route-eyebrow');
   const routeTitle = document.getElementById('route-title');
   routeEyebrow.dataset.i18n = meta.eyebrowKey;
@@ -221,6 +222,36 @@ function syncSidebarCollapsed(collapsed = state.sidebarCollapsed) {
   button.title = state.sidebarCollapsed ? t('expandNavigation') : t('collapseNavigation');
 }
 
+function copyWithLegacyFallback(text) {
+  const field = document.createElement('textarea');
+  field.value = text;
+  field.setAttribute('readonly', '');
+  field.style.cssText = 'position:fixed;inset:auto auto 0 -9999px;opacity:0';
+  document.body.append(field);
+  field.select();
+  field.setSelectionRange(0, field.value.length);
+  try {
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    field.remove();
+  }
+}
+
+async function copyAdlcPrompt(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Older browsers and denied Clipboard API permissions can still support
+      // the user-gesture-based copy command below.
+    }
+  }
+  return copyWithLegacyFallback(text);
+}
+
 function initShellInteractions() {
   const toggle = document.getElementById('sidebar-toggle');
   const backdrop = document.getElementById('sidebar-backdrop');
@@ -245,6 +276,16 @@ function initShellInteractions() {
   skipLink?.addEventListener('click', (event) => {
     event.preventDefault();
     document.getElementById('view')?.focus({ preventScroll: true });
+  });
+  document.addEventListener('click', (event) => {
+    const link = event.target.closest('[data-ai-assistant]');
+    if (!link) return;
+    const prompt = link.closest('.adlc-ai-links')?.querySelector('[data-adlc-ai-prompt]')?.textContent?.trim();
+    if (!prompt) return;
+    copyAdlcPrompt(prompt).then((copied) => {
+      if (copied) toast(`ADLC prompt copied. Paste it into ${link.dataset.aiAssistant}.`, 'ok');
+      else toast(`Opened ${link.dataset.aiAssistant}. Copy the prompt from the ADLC source page.`, 'error');
+    });
   });
 
   document.addEventListener('keydown', (event) => {
@@ -436,7 +477,7 @@ function renderAuthenticationGate({ loading = false, error = '' } = {}) {
   const view = freshView();
   setAuthenticationLocked(true);
   document.body.dataset.route = 'authentication';
-  document.title = `AI Fleet — ${t('authentication')}`;
+  document.title = `${t('authentication')} | ${ADLC_BRAND_TITLE}`;
   view.className = 'view view-standard auth-view';
   view.setAttribute('aria-label', t('authentication'));
   view.setAttribute('aria-busy', String(loading));

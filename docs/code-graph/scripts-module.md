@@ -6,8 +6,8 @@
 
 Directory-based community: scripts
 
-- **Size**: 27 nodes
-- **Cohesion**: 0.0948
+- **Size**: 32 nodes
+- **Cohesion**: 0.0943
 - **Dominant Language**: javascript
 
 ## Members
@@ -23,20 +23,25 @@ Directory-based community: scripts
 | obfuscateTree | Function | ./scripts/obfuscate-spa.js | 196-212 |
 | run | Function | ./scripts/obfuscate-spa.js | 219-243 |
 | parseArgs | Function | ./scripts/obfuscate-spa.js | 249-263 |
-| makeFixture | Function | ./scripts/obfuscate-spa.test.js | 19-48 |
-| test:preserves ES-module export/import names while scrambling locals and strings@L50 | Test | ./scripts/obfuscate-spa.test.js | 50-67 |
-| test:copies non-JS assets and vendor code verbatim@L69 | Test | ./scripts/obfuscate-spa.test.js | 69-81 |
-| test:obfuscated module is still executable and behaviourally identical@L83 | Test | ./scripts/obfuscate-spa.test.js | 83-94 |
-| test:obfuscated build preserves a native dynamic-import module edge@L96 | Test | ./scripts/obfuscate-spa.test.js | 96-107 |
-| test:in-place mode rewrites source files without a copy@L109 | Test | ./scripts/obfuscate-spa.test.js | 109-121 |
-| test:every preset keeps the rename guards off so the module graph cannot break@L123 | Test | ./scripts/obfuscate-spa.test.js | 123-129 |
-| test:resolveStrength: flag > env var > default, and rejects unknown names@L131 | Test | ./scripts/obfuscate-spa.test.js | 131-148 |
-| test:light leaves strings in clear text; balanced and maximum encode them@L150 | Test | ./scripts/obfuscate-spa.test.js | 150-160 |
-| readBoard | Function | ./scripts/obfuscate-spa.test.js | 152-156 |
-| test:maximum preset still produces an executable, correct module@L162 | Test | ./scripts/obfuscate-spa.test.js | 162-168 |
-| test:obfuscateCode surfaces a labelled error on invalid input@L170 | Test | ./scripts/obfuscate-spa.test.js | 170-172 |
+| makeFixture | Function | ./scripts/obfuscate-spa.test.js | 19-51 |
+| test:preserves ES-module export/import names while scrambling locals and strings@L53 | Test | ./scripts/obfuscate-spa.test.js | 53-70 |
+| test:copies non-JS assets and vendor code verbatim@L72 | Test | ./scripts/obfuscate-spa.test.js | 72-87 |
+| test:obfuscated module is still executable and behaviourally identical@L89 | Test | ./scripts/obfuscate-spa.test.js | 89-100 |
+| test:obfuscated build preserves a native dynamic-import module edge@L102 | Test | ./scripts/obfuscate-spa.test.js | 102-113 |
+| test:in-place mode rewrites source files without a copy@L115 | Test | ./scripts/obfuscate-spa.test.js | 115-127 |
+| test:every preset keeps the rename guards off so the module graph cannot break@L129 | Test | ./scripts/obfuscate-spa.test.js | 129-135 |
+| test:resolveStrength: flag > env var > default, and rejects unknown names@L137 | Test | ./scripts/obfuscate-spa.test.js | 137-154 |
+| test:light leaves strings in clear text; balanced and maximum encode them@L156 | Test | ./scripts/obfuscate-spa.test.js | 156-166 |
+| readBoard | Function | ./scripts/obfuscate-spa.test.js | 158-162 |
+| test:maximum preset still produces an executable, correct module@L168 | Test | ./scripts/obfuscate-spa.test.js | 168-174 |
+| test:obfuscateCode surfaces a labelled error on invalid input@L176 | Test | ./scripts/obfuscate-spa.test.js | 176-178 |
 | main | Function | ./scripts/reset-aifail.js | 32-82 |
 | backlogStateFor | Function | ./scripts/reset-aifail.js | 49-57 |
+| readPublic | Function | ./scripts/seo-discovery.test.js | 9-9 |
+| test:SPA publishes complete ADLC search metadata and valid JSON-LD@L11 | Test | ./scripts/seo-discovery.test.js | 11-33 |
+| test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L35 | Test | ./scripts/seo-discovery.test.js | 35-50 |
+| test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-68 |
+| test:compact ADLC launcher has four named, local-icon assistant links@L70 | Test | ./scripts/seo-discovery.test.js | 70-80 |
 | envFor | Function | ./scripts/start-all.js | 42-50 |
 | prefixStream | Function | ./scripts/start-all.js | 52-63 |
 | startService | Function | ./scripts/start-all.js | 65-80 |
@@ -50,36 +55,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `join` (35 edge(s))
-- `equal` (11 edge(s))
+- `join` (42 edge(s))
+- `match` (23 edge(s))
+- `equal` (20 edge(s))
+- `readFileSync` (13 edge(s))
+- `writeFileSync` (11 edge(s))
 - `log` (9 edge(s))
-- `readFileSync` (9 edge(s))
-- `writeFileSync` (8 edge(s))
+- `doesNotMatch` (8 edge(s))
 - `mkdtempSync` (7 edge(s))
 - `tmpdir` (7 edge(s))
 - `run` (7 edge(s))
+- `deepEqual` (6 edge(s))
 - `resolveStrength` (5 edge(s))
+- `map` (5 edge(s))
 - `write` (4 edge(s))
-- `match` (4 edge(s))
-- `doesNotMatch` (4 edge(s))
 - `mkdirSync` (3 edge(s))
-- `deepEqual` (3 edge(s))
-- `on` (3 edge(s))
 
 ### Incoming
 
+- `match` (23 edge(s))
+- `equal` (20 edge(s))
+- `join` (18 edge(s))
 - `./scripts/obfuscate-spa.js` (15 edge(s))
-- `join` (15 edge(s))
 - `./scripts/obfuscate-spa.test.js` (12 edge(s))
-- `equal` (11 edge(s))
-- `readFileSync` (7 edge(s))
+- `readFileSync` (10 edge(s))
+- `doesNotMatch` (8 edge(s))
 - `./scripts/start-all.js` (7 edge(s))
 - `run` (6 edge(s))
+- `deepEqual` (6 edge(s))
 - `mkdtempSync` (5 edge(s))
 - `tmpdir` (5 edge(s))
 - `resolveStrength` (5 edge(s))
-- `match` (4 edge(s))
-- `doesNotMatch` (4 edge(s))
+- `./scripts/seo-discovery.test.js` (5 edge(s))
 - `./scripts/build-graphs.sh` (3 edge(s))
-- `deepEqual` (3 edge(s))
-- `./scripts/reset-aifail.js` (3 edge(s))

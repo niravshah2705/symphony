@@ -1,0 +1,27 @@
+# ADLC — Agentic Development Life Cycle
+
+> ADLC is a human-governed lifecycle in which AI agents help move work from intent through planning, implementation, verification, review, delivery, and operational learning. AI Fleet is the reference ADLC workspace at this origin.
+
+Canonical URL: https://adlc-9e72f.web.app/
+Language: English
+Last updated: 2026-08-11
+
+ADLC expands to Agentic Development Life Cycle. It augments software delivery
+with goal-directed agents while keeping people responsible for approvals,
+policy, and final outcomes. The reference workspace supports intent routing,
+planning, isolated implementation, tests and checks, review gates, pull-request
+delivery, and operational tracing. Public discovery documents describe the
+product; authenticated workspace data and `/api/` routes are not public source
+material.
+
+## Authoritative resources
+
+- [Full ADLC overview](https://adlc-9e72f.web.app/llms-full.txt): Definition, lifecycle, capabilities, controls, and citation guidance.
+- [ADLC workspace](https://adlc-9e72f.web.app/): Public product entry point and visible summary.
+- [AI Fleet source and documentation](https://github.com/niravshah2705/symphony): Implementation, architecture, and operator documentation.
+
+## Optional
+
+- [Architecture](https://github.com/niravshah2705/symphony/blob/main/docs/ARCHITECTURE_DIAGRAM.md): Service and agent execution boundaries.
+- [Access model](https://github.com/niravshah2705/symphony/blob/main/docs/ACCESS_MODEL.md): Authentication, permissions, and public-read boundaries.
+- [Request flow](https://github.com/niravshah2705/symphony/blob/main/docs/REQUEST_FLOW_DIAGRAM.md): Browser-to-agent request lifecycle.
