@@ -12,7 +12,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.policy import CONFIG_VALUE_KEYS, DOMAINS, PREF_KEYS
+from app.models.policy import CONFIG_VALUE_KEYS, DOMAINS, LOCKABLE_KEYS, PREF_KEYS
 
 MAX_ITEMS_PER_LIST = 200
 MAX_PATTERN_LENGTH = 200
@@ -64,14 +64,15 @@ def _validate_prefs(prefs: dict[str, str]) -> dict[str, str]:
 
 
 def _validate_locks(locks: list[str]) -> list[str]:
-    """Locks are a de-duplicated list of allow-listed PREF keys (a locked key
-    can't be overridden by a lower scope). Reject unknown keys; bound the count."""
-    if len(locks) > len(PREF_KEYS):
+    """Locks are a de-duplicated list of allow-listed LOCKABLE keys — pref keys or
+    domain names (a locked entry can't be changed by a lower scope). Reject unknown
+    keys; bound the count."""
+    if len(locks) > len(LOCKABLE_KEYS):
         raise ValueError("too many lock entries")
     cleaned: list[str] = []
     for value in locks:
         key = str(value).strip()
-        if key not in PREF_KEYS:
+        if key not in LOCKABLE_KEYS:
             raise ValueError(f"unknown lock key: {key!r}")
         if key not in cleaned:
             cleaned.append(key)

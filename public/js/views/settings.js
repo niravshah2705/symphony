@@ -208,8 +208,9 @@ function lockChip(label) {
   return el('span', { class: 'sx-locked' }, [lockGlyph(), label]);
 }
 
-// Operational pref keys an org can pin so lower scopes can't override them.
-// Keys mirror the settings-service PREF_KEYS; labels match the effective rail.
+// Lockable entries an org can pin so lower scopes can't change them. The
+// operational pref keys plus the `models` domain (freeze the model catalog).
+// Keys/labels mirror the settings-service LOCKABLE_KEYS + the effective rail.
 const LOCKABLE_PREFS = Object.freeze([
   ['complexityTier', 'Complexity'],
   ['llmProvider', 'Provider'],
@@ -217,6 +218,7 @@ const LOCKABLE_PREFS = Object.freeze([
   ['workflowPattern', 'Workflow'],
   ['planningProvider', 'Issue tracker'],
   ['langsmithTracing', 'Tracing'],
+  ['models', 'Model catalog'],
 ]);
 
 // Configuration locks. At ORG scope: editable toggles that pin operational prefs
@@ -379,7 +381,9 @@ function governanceSection(ctx, scopeState) {
     const scopeWord = scope === 'user' ? 'on your shortlist basis' : scope === 'project' ? 'for this project' : 'org-wide';
     const foot = data.editable
       ? `${denied} of ${allIds.length} models denied ${scopeWord}.`
-      : `${(scope === 'org' ? 'Organization admins only — sign in to edit.' : scope === 'project' ? 'Select a project you administer to edit.' : 'Sign in to build your shortlist.')} · ${denied} of ${allIds.length} denied.`;
+      : data.lockedByHigher
+        ? `🔒 The model catalog is locked by your organization — it can’t be changed here. · ${denied} of ${allIds.length} denied.`
+        : `${(scope === 'org' ? 'Organization admins only — sign in to edit.' : scope === 'project' ? 'Select a project you administer to edit.' : 'Sign in to build your shortlist.')} · ${denied} of ${allIds.length} denied.`;
     card.append(
       el('div', { class: 'sx-card-head bordered' }, [
         el('div', { style: 'min-width:0' }, [
@@ -396,14 +400,17 @@ function governanceSection(ctx, scopeState) {
   const load = async () => {
     clear(card).append(loading('Loading model policy…'));
     let models = null;
+    let lockedByHigher = false;
     try {
       const eff = await api.settingsPolicy.getEffective(scopeState.projectId);
       models = eff && eff.domains && eff.domains.models;
+      // The `models` domain is frozen by a higher scope → this scope can't edit it.
+      lockedByHigher = scope !== 'org' && ((eff && eff.locks) || []).includes('models');
     } catch (_) { models = null; }
     const orgAllowed = new Set(models ? models.org : allIds);
     const projAllowed = new Set(models ? models.project : allIds);
     const userAllowed = new Set(models ? models.user : allIds);
-    let editable = scope !== 'project' || Boolean(scopeState.projectId);
+    let editable = !lockedByHigher && (scope !== 'project' || Boolean(scopeState.projectId));
     let policy = null;
     if (editable) {
       try {
@@ -415,7 +422,7 @@ function governanceSection(ctx, scopeState) {
     const domains = (policy && policy.domains) || {};
     const myModels = domains.models || { include: [], exclude: [] };
     data = {
-      orgAllowed, projAllowed, userAllowed, domains, editable,
+      orgAllowed, projAllowed, userAllowed, domains, editable, lockedByHigher,
       myInclude: new Set(myModels.include || []),
       shortlisting: scope === 'user' && (myModels.include || []).length > 0,
     };

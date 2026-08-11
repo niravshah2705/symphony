@@ -198,3 +198,35 @@ async def test_org_lock_pins_a_pref_against_user_override(client):
         "/api/v1/settings/org", headers=auth(token), json={"locks": ["nope"]}
     )
     assert bad.status_code == 422
+
+
+async def test_org_domain_lock_freezes_models_against_user(client):
+    """Locking the `models` domain at org freezes it: a lower scope's narrowing
+    (shortlist / extra deny) is ignored, and the effective response reports it."""
+    org_id = uuid.uuid4()
+    _admin, token = await make_user(
+        email="dlock@x.com", org_id=org_id, org_role=OrgRole.ORG_ADMIN
+    )
+    org = await client.put(
+        "/api/v1/settings/org",
+        headers=auth(token),
+        json={
+            "domains": {"models": {"include": [], "exclude": ["ollama-gpt-oss-20b"]}},
+            "locks": ["models"],
+        },
+    )
+    assert org.status_code == 200
+    assert "models" in org.json()["locks"]
+    # User tries to shortlist a single model (would normally narrow to just it).
+    me = await client.put(
+        "/api/v1/me/settings",
+        headers=auth(token),
+        json={"domains": {"models": {"include": ["claude-opus-4-8"], "exclude": []}}},
+    )
+    assert me.status_code == 200
+    eff = (await client.get("/api/v1/settings/effective", headers=auth(token))).json()
+    models = eff["domains"]["models"]["effective"]
+    assert "claude-opus-4-8" in models  # frozen at org — user shortlist ignored
+    assert "claude-sonnet-5" in models  # still allowed despite the user's shortlist
+    assert "ollama-gpt-oss-20b" not in models  # org's deny holds
+    assert "models" in eff["locks"]
