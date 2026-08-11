@@ -7,7 +7,7 @@
 Directory-based community: services/provisioner
 
 - **Size**: 16 nodes
-- **Cohesion**: 0.1397
+- **Cohesion**: 0.1387
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,10 +26,10 @@ Directory-based community: services/provisioner
 | test:write-back failure on the failure path is swallowed (no throw)@L64 | Test | ./services/provisioner/src/handler.test.js | 64-71 |
 | buildCfg | Function | ./services/provisioner/src/index.js | 28-52 |
 | resolveProjectNumber | Function | ./services/provisioner/src/index.js | 55-65 |
-| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 69-78 |
-| writeBack | Function | ./services/provisioner/src/index.js | 80-93 |
-| createApp | Function | ./services/provisioner/src/index.js | 95-116 |
-| start | Function | ./services/provisioner/src/index.js | 118-126 |
+| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 69-81 |
+| writeBack | Function | ./services/provisioner/src/index.js | 83-96 |
+| createApp | Function | ./services/provisioner/src/index.js | 98-119 |
+| start | Function | ./services/provisioner/src/index.js | 121-129 |
 
 ## Execution Flows
 
@@ -50,10 +50,10 @@ Directory-based community: services/provisioner
 - `deepEqual` (2 edge(s))
 - `use` (2 edge(s))
 - `json` (2 edge(s))
+- `get` (2 edge(s))
 - `info` (2 edge(s))
 - `end` (2 edge(s))
 - `status` (2 edge(s))
-- `trim` (2 edge(s))
 
 ### Incoming
 

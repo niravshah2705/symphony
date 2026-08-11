@@ -7,7 +7,7 @@
 Directory-based community: services/proxy
 
 - **Size**: 41 nodes
-- **Cohesion**: 0.0816
+- **Cohesion**: 0.0813
 - **Dominant Language**: javascript
 
 ## Members
@@ -41,10 +41,10 @@ Directory-based community: services/proxy
 | test:buildInjection: native gemini uses x-goog-api-key scheme@L118 | Test | ./services/proxy/src/proxy.test.js | 118-124 |
 | test:buildInjection: claude route injects Bearer + anthropic-beta from oauth manager@L126 | Test | ./services/proxy/src/proxy.test.js | 126-134 |
 | test:buildInjection: codex chatgpt route injects Bearer + chatgpt-account-id@L136 | Test | ./services/proxy/src/proxy.test.js | 136-144 |
-| s2sAuthHeader | Function | ./services/proxy/src/secrets-client.js | 19-29 |
-| s2sGet | Function | ./services/proxy/src/secrets-client.js | 31-53 |
-| fetchOrgSecrets | Function | ./services/proxy/src/secrets-client.js | 56-59 |
-| fetchManagedSecrets | Function | ./services/proxy/src/secrets-client.js | 62-64 |
+| s2sAuthHeader | Function | ./services/proxy/src/secrets-client.js | 19-32 |
+| s2sGet | Function | ./services/proxy/src/secrets-client.js | 34-56 |
+| fetchOrgSecrets | Function | ./services/proxy/src/secrets-client.js | 59-62 |
+| fetchManagedSecrets | Function | ./services/proxy/src/secrets-client.js | 65-67 |
 | webStreamFromString | Function | ./services/proxy/src/server.test.js | 9-16 |
 | start | Function | ./services/proxy/src/server.test.js | 11-14 |
 | startServer | Function | ./services/proxy/src/server.test.js | 18-35 |
@@ -75,12 +75,12 @@ Directory-based community: services/proxy
 - `entries` (3 edge(s))
 - `require` (3 edge(s))
 - `buildUpstreamUrl` (3 edge(s))
+- `get` (3 edge(s))
 - `createProxyHandler` (3 edge(s))
 - `fetch` (3 edge(s))
 - `getCodexAuth` (2 edge(s))
 - `toString` (2 edge(s))
 - `from` (2 edge(s))
-- `String` (2 edge(s))
 
 ### Incoming
 
