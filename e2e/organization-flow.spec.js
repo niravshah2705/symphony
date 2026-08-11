@@ -41,9 +41,12 @@ async function installStubs(page, state) {
   await page.route('**/vendor/firebase/firebase-auth.js', (route) => route.fulfill({
     status: 200, contentType: 'text/javascript', body: `
       const user = { uid: '${uid}', displayName: 'Ada Operator', email: 'ada@example.com', photoURL: '', getIdToken: async () => 'browser-access-token' };
-      export function getAuth() { return { currentUser: user }; }
-      export async function setPersistence() {}
       export const browserLocalPersistence = {};
+      export const browserPopupRedirectResolver = {};
+      export function initializeAuth(_app, options) {
+        if (options.persistence !== browserLocalPersistence || 'popupRedirectResolver' in options) throw new Error('unexpected eager auth initialization');
+        return { currentUser: user };
+      }
       export function onAuthStateChanged(_a, cb) { Promise.resolve().then(() => cb(user)); return () => {}; }
       export class GoogleAuthProvider { static credential() { return {}; } setCustomParameters() {} }
       export class OAuthProvider { credential() { return {}; } }

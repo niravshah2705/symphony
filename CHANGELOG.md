@@ -35,6 +35,13 @@ Manager v7 / firebase-admin v14 read-only against real GCP.
   Agent SDK / Codex SDK / Playwright moved to their latest caret-compatible
   versions (lockfile only). `langsmith` held at 0.7.x (capped by the `deepagents`
   peer dependency).
+- **Lighthouse-focused frontend loading** — the Agent route now ships an
+  inline-critical static LCP scaffold, hydrates it in place, and lazy-loads
+  route-specific JavaScript and CSS. Firebase, Google One Tap, and network-backed
+  locale discovery are deferred off the critical path; bodyless GETs no longer
+  add `Content-Type` or trigger avoidable CORS preflights. Production obfuscation
+  now defaults to the lighter preset, SPA cache headers were corrected, and
+  unit/e2e coverage protects initial paint, lazy routing, and dynamic imports.
 
 ### Fixed
 

@@ -4,9 +4,10 @@ name: Deploy to GCP
 # only does the work it needs:
 #   • a service's code changed  → rebuild ONLY that image, then a per-service
 #                                  `terraform apply` rolls ONLY that service.
-#   • packages/shared or root deps changed → rebuild all three images.
+#   • packages/shared changed → rebuild all service images.
+#   • root deps changed → rebuild all service images + republish the SPA.
 #   • deploy/gcp/terraform/** changed → `terraform apply` only (no image rebuild).
-#   • public/** or firebase.json changed → Firebase Hosting deploy only.
+#   • SPA source, config, or release tooling changed → Firebase Hosting deploy.
 #   • docs / anything else → nothing runs.
 #
 # Auth is keyless via Workload Identity Federation — see docs/GCP_CICD.md.
@@ -59,7 +60,10 @@ jobs:
             coder:   ['services/coder/**',   'deploy/gcp/Dockerfile.coder']
             provisioner: ['services/provisioner/**', 'deploy/gcp/Dockerfile.provisioner']
             proxy:   ['services/proxy/**',   'deploy/gcp/Dockerfile.proxy']
-            spa:     ['public/**', 'firebase.json']
+            # A release-tooling change must publish the newly transformed SPA;
+            # otherwise an obfuscator/default change would wait for an unrelated
+            # public/** edit before reaching production.
+            spa:     ['public/**', 'firebase.json', 'scripts/obfuscate-spa.js', 'package.json', 'package-lock.json', '.github/workflows/deploy.yml']
             infra:    ['deploy/gcp/terraform/**']
             root:     ['package.json', 'package-lock.json']
             org:      ['services/org/**']
@@ -171,7 +175,7 @@ jobs:
           echo "Pushed $IMAGE"
 
   # --------------------------------------------------------------------------
-  # 2b. Deploy the SPA to Firebase Hosting — only when public/** changed.
+  # 2b. Deploy the SPA to Firebase Hosting when source or release tooling changed.
   # --------------------------------------------------------------------------
   deploy-spa:
     needs: changes
@@ -197,10 +201,10 @@ jobs:
       # this ephemeral checkout only (source in git stays readable); config.js is
       # regenerated below and vendor/ is left untouched. Strength preset is set by
       # the SPA_OBFUSCATION_STRENGTH repo variable (light|balanced|maximum),
-      # defaulting to balanced. See scripts/obfuscate-spa.js.
+      # defaulting to light. See scripts/obfuscate-spa.js.
       - name: Obfuscate SPA client JS
         env:
-          SPA_OBFUSCATION_STRENGTH: ${{ vars.SPA_OBFUSCATION_STRENGTH || 'balanced' }}
+          SPA_OBFUSCATION_STRENGTH: ${{ vars.SPA_OBFUSCATION_STRENGTH || 'light' }}
         run: |
           set -euo pipefail
           npm ci --no-audit --no-fund --ignore-scripts
@@ -211,7 +215,12 @@ jobs:
           set -euo pipefail
           PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
           GATEWAY_URL="https://${{ vars.GATEWAY_SERVICE_NAME || 'gateway' }}-${PROJECT_NUMBER}.${REGION}.run.app"
-          printf "window.__API_BASE__='%s';\n" "$GATEWAY_URL" > public/config.js
+          # api.js imports this runtime module before reading the base URL. Start
+          # the gateway connection here so DNS/TLS can overlap module evaluation.
+          printf '%s\n' \
+            "window.__API_BASE__='$GATEWAY_URL';" \
+            "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
+            > public/config.js
           npx --yes firebase-tools@13 deploy --only hosting \
             --project "${{ vars.GCP_PROJECT_ID }}" --non-interactive
 

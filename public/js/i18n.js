@@ -278,6 +278,7 @@ let localizationPasses = 0;
 let fallbackRetryTimer = null;
 let fallbackRetryAttempts = 0;
 let translationDegraded = false;
+let suggestionRefreshPromise = null;
 const textSources = new WeakMap();
 const textLocales = new WeakMap();
 const attributeSources = new WeakMap();
@@ -629,9 +630,12 @@ export async function setLocale(value, { persist = true } = {}) {
   window.dispatchEvent(new CustomEvent('ai-fleet:locale-changed', { detail: { locale } }));
 }
 
-async function loadSuggestions() {
+async function loadSuggestions(options = {}) {
   try {
-    const response = await api.getLocaleSuggestions(navigator.languages || [navigator.language]);
+    const response = await api.getLocaleSuggestions(
+      navigator.languages || [navigator.language],
+      options
+    );
     if (Array.isArray(response.suggestions) && response.suggestions.length) {
       suggestions = response.suggestions.slice(0, MAX_SUGGESTIONS);
     }
@@ -641,6 +645,30 @@ async function loadSuggestions() {
   } catch (_) {
     suggestions = [...FALLBACK_LOCALES];
   }
+}
+
+/**
+ * Refresh locale suggestions without making them part of the first-render
+ * critical path. It is safe to fire-and-forget this after initializeI18n():
+ * concurrent callers share one request, and the language control/document are
+ * synchronized when the best-effort response arrives.
+ */
+export function refreshLocaleSuggestions(options = {}) {
+  if (suggestionRefreshPromise) return suggestionRefreshPromise;
+  suggestionRefreshPromise = (async () => {
+    const previousLocale = locale;
+    await loadSuggestions(options);
+    applyDocumentLocale();
+    renderLanguageControl();
+    localize(document);
+    if (locale !== previousLocale) {
+      window.dispatchEvent(new CustomEvent('ai-fleet:locale-changed', { detail: { locale } }));
+    }
+    return { locale, suggestions: [...suggestions] };
+  })().finally(() => {
+    suggestionRefreshPromise = null;
+  });
+  return suggestionRefreshPromise;
 }
 
 function watchDynamicContent() {

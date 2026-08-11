@@ -35,6 +35,10 @@ function makeFixture() {
     path.join(js, 'pure.mjs'),
     "export function add(a, b) {\n  const tag = 'sum';\n  return { tag, value: a + b };\n}\n"
   );
+  fs.writeFileSync(
+    path.join(js, 'lazy.mjs'),
+    "export async function lazyAdd(a, b) {\n  const { add } = await import('./pure.mjs');\n  return add(a, b);\n}\n"
+  );
 
   // Non-JS + vendor: must be copied verbatim, never obfuscated.
   fs.writeFileSync(path.join(root, 'config.js'), "window.__API_BASE__ = '';\n");
@@ -49,12 +53,12 @@ test('preserves ES-module export/import names while scrambling locals and string
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'spa-obf-out-'));
 
   // Act
-  const summary = run({ src, out, inPlace: false });
+  const summary = run({ src, out, inPlace: false, strength: 'balanced' });
   const board = fs.readFileSync(path.join(out, 'js', 'views', 'board.js'), 'utf8');
   const original = fs.readFileSync(path.join(src, 'js', 'views', 'board.js'), 'utf8');
 
   // Assert — module graph intact
-  assert.equal(summary.files, 3, 'obfuscates all three JS/MJS files');
+  assert.equal(summary.files, 4, 'obfuscates all four JS/MJS files');
   assert.notEqual(board, original, 'output differs from source');
   assert.match(board, /export function renderBoard/, 'exported name preserved');
   assert.match(board, /import\s*\{\s*el\s*\}\s*from\s*['"]\.\.\/dom\.js['"]/, 'import binding + specifier preserved');
@@ -89,6 +93,19 @@ test('obfuscated module is still executable and behaviourally identical', async 
   assert.deepEqual(mod.add(2, 3), { tag: 'sum', value: 5 });
 });
 
+test('obfuscated build preserves a native dynamic-import module edge', async () => {
+  // This mirrors route-level code splitting in the browser: the entry module
+  // is obfuscated independently, then resolves another obfuscated file at run
+  // time using its unchanged relative specifier.
+  const src = makeFixture();
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'spa-obf-dynamic-'));
+  run({ src, out, inPlace: false });
+
+  const entry = await import(path.join(out, 'js', 'lazy.mjs'));
+
+  assert.deepEqual(await entry.lazyAdd(20, 22), { tag: 'sum', value: 42 });
+});
+
 test('in-place mode rewrites source files without a copy', () => {
   // Arrange
   const src = makeFixture();
@@ -115,6 +132,7 @@ test('resolveStrength: flag > env var > default, and rejects unknown names', () 
   const saved = process.env[STRENGTH_ENV_VAR];
   try {
     delete process.env[STRENGTH_ENV_VAR];
+    assert.equal(DEFAULT_STRENGTH, 'light', 'performance-safe preset is the default');
     assert.equal(resolveStrength(), DEFAULT_STRENGTH, 'falls back to default');
     assert.equal(resolveStrength('maximum'), 'maximum', 'explicit flag wins');
 

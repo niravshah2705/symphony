@@ -32,7 +32,7 @@
  * `dist/spa-obfuscated/` and never clobbers your source.
  *
  * Strength is chosen by (highest precedence first): the `--strength` flag, the
- * `SPA_OBFUSCATION_STRENGTH` env var, then the `balanced` default.
+ * `SPA_OBFUSCATION_STRENGTH` env var, then the `light` default.
  */
 
 const fs = require('fs');
@@ -52,7 +52,7 @@ const OBFUSCATABLE_EXTENSIONS = Object.freeze(['.js', '.mjs']);
 const DEFAULT_SRC = path.join(REPO_ROOT, 'public');
 const DEFAULT_OUT = path.join(REPO_ROOT, 'dist', 'spa-obfuscated');
 
-const DEFAULT_STRENGTH = 'balanced';
+const DEFAULT_STRENGTH = 'light';
 const STRENGTH_ENV_VAR = 'SPA_OBFUSCATION_STRENGTH';
 
 // Shared, load-bearing base for every preset. The two `rename*: false` flags are
@@ -72,9 +72,12 @@ const BASE_OPTIONS = Object.freeze({
 
 // Selectable strength presets, weakest → strongest. Trade-offs:
 //   light    — rename locals only; strings stay clear-text. ~1.1x, negligible cost.
-//   balanced — + string-array encoding; no control-flow flattening. ~1.5x. (default)
+//   balanced — + string-array encoding; no control-flow flattening. ~1.5x.
 //   maximum  — + control-flow flattening, dead-code injection, self-defending.
 //              ~2.5–4x and a real runtime slowdown; strongest deterrent.
+// `light` is deliberately the production default: it keeps the module graph
+// obscured without the string-decoder bootstrap and runtime work added by the
+// stronger presets. The stronger presets remain available for explicit use.
 // `debugProtection` stays OFF everywhere — it breaks legitimate devtools use.
 const PRESETS = Object.freeze({
   light: Object.freeze({

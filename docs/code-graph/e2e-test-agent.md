@@ -6,8 +6,8 @@
 
 Directory-based community: e2e
 
-- **Size**: 38 nodes
-- **Cohesion**: 0.1080
+- **Size**: 42 nodes
+- **Cohesion**: 0.0999
 - **Dominant Language**: javascript
 
 ## Members
@@ -41,17 +41,21 @@ Directory-based community: e2e
 | test:implementation drafts require project selection and explicit approval before task creation@L448 | Test | ./e2e/agent-workspace.spec.js | 448-495 |
 | json | Function | ./e2e/organization-flow.spec.js | 15-17 |
 | makeOrgState | Function | ./e2e/organization-flow.spec.js | 23-34 |
-| installStubs | Function | ./e2e/organization-flow.spec.js | 36-134 |
-| page1 | Function | ./e2e/organization-flow.spec.js | 73-73 |
-| test:signed-in user: personal project → create org → org project → add person → add member@L136 | Test | ./e2e/organization-flow.spec.js | 136-188 |
+| installStubs | Function | ./e2e/organization-flow.spec.js | 36-137 |
+| page1 | Function | ./e2e/organization-flow.spec.js | 76-76 |
+| test:signed-in user: personal project → create org → org project → add person → add member@L139 | Test | ./e2e/organization-flow.spec.js | 139-191 |
 | json | Function | ./e2e/page-loading.spec.js | 5-11 |
-| test:settings renders task-model controls without a view error@L32 | Test | ./e2e/page-loading.spec.js | 32-52 |
-| test:workspace renders while optional Linear validation is stalled@L54 | Test | ./e2e/page-loading.spec.js | 54-109 |
-| test:authentication configuration failure locks the workspace before protected API calls@L111 | Test | ./e2e/page-loading.spec.js | 111-133 |
-| test:authenticated Firebase session adds a bearer token and ignores an unrelated provider 401@L135 | Test | ./e2e/page-loading.spec.js | 135-221 |
-| authorizedJson | Function | ./e2e/page-loading.spec.js | 137-142 |
-| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L223 | Test | ./e2e/page-loading.spec.js | 223-267 |
-| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L269 | Test | ./e2e/page-loading.spec.js | 269-292 |
+| test:settings renders task-model controls without a view error@L39 | Test | ./e2e/page-loading.spec.js | 39-59 |
+| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-119 |
+| test:authentication configuration failure locks the workspace before protected API calls@L121 | Test | ./e2e/page-loading.spec.js | 121-147 |
+| test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L149 | Test | ./e2e/page-loading.spec.js | 149-183 |
+| test:authenticated Firebase session adds a bearer token and ignores an unrelated provider 401@L185 | Test | ./e2e/page-loading.spec.js | 185-284 |
+| authorizedJson | Function | ./e2e/page-loading.spec.js | 194-199 |
+| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L286 | Test | ./e2e/page-loading.spec.js | 286-330 |
+| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L332 | Test | ./e2e/page-loading.spec.js | 332-355 |
+| json | Function | ./e2e/route-loading.spec.js | 5-11 |
+| test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-70 |
+| test:a non-Agent hash never exposes or preloads the Agent scaffold@L72 | Test | ./e2e/route-loading.spec.js | 72-94 |
 
 ## Execution Flows
 
@@ -61,36 +65,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (209 edge(s))
-- `locator` (128 edge(s))
-- `route` (86 edge(s))
-- `toBeVisible` (49 edge(s))
+- `expect` (240 edge(s))
+- `locator` (140 edge(s))
+- `route` (93 edge(s))
+- `toBeVisible` (53 edge(s))
 - `getByRole` (42 edge(s))
-- `toHaveCount` (39 edge(s))
-- `request` (34 edge(s))
+- `toHaveCount` (42 edge(s))
+- `request` (37 edge(s))
 - `toContainText` (27 edge(s))
 - `click` (27 edge(s))
+- `push` (26 edge(s))
+- `toHaveAttribute` (24 edge(s))
 - `toHaveText` (23 edge(s))
-- `toHaveAttribute` (20 edge(s))
-- `push` (20 edge(s))
-- `goto` (17 edge(s))
-- `postDataJSON` (16 edge(s))
-- `fulfill` (15 edge(s))
+- `goto` (20 edge(s))
+- `method` (17 edge(s))
+- `fulfill` (16 edge(s))
 
 ### Incoming
 
-- `expect` (205 edge(s))
-- `locator` (126 edge(s))
-- `toBeVisible` (48 edge(s))
-- `route` (42 edge(s))
+- `expect` (236 edge(s))
+- `locator` (138 edge(s))
+- `toBeVisible` (52 edge(s))
+- `route` (49 edge(s))
+- `toHaveCount` (42 edge(s))
 - `getByRole` (40 edge(s))
-- `toHaveCount` (39 edge(s))
 - `toContainText` (27 edge(s))
 - `click` (26 edge(s))
+- `toHaveAttribute` (23 edge(s))
 - `toHaveText` (23 edge(s))
-- `toHaveAttribute` (19 edge(s))
-- `goto` (16 edge(s))
+- `goto` (19 edge(s))
+- `push` (14 edge(s))
 - `./e2e/agent-workspace.spec.js` (14 edge(s))
-- `getByText` (13 edge(s))
-- `toHaveLength` (11 edge(s))
-- `./e2e/agent-jobs.spec.js` (10 edge(s))
+- `toContain` (14 edge(s))
+- `url` (13 edge(s))

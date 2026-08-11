@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 473 nodes
-- **Cohesion**: 0.4962
+- **Size**: 494 nodes
+- **Cohesion**: 0.4838
 - **Dominant Language**: javascript
 
 ## Members
@@ -21,96 +21,96 @@ Directory-based community: public/js
 | agentPauseCopy | Function | ./public/js/agent-pause.js | 96-98 |
 | localized | Function | ./public/js/agent-pause.js | 100-105 |
 | agentPauseNotice | Function | ./public/js/agent-pause.js | 108-124 |
-| setAccessTokenProvider | Function | ./public/js/api.js | 5-7 |
-| getApiBase | Function | ./public/js/api.js | 15-18 |
-| setApiBase | Function | ./public/js/api.js | 29-32 |
-| notifyAuthenticationRequired | Function | ./public/js/api.js | 34-38 |
-| request | Function | ./public/js/api.js | 40-83 |
-| currentRoute | Function | ./public/js/app.js | 71-78 |
-| applyMenuPermissions | Function | ./public/js/app.js | 82-93 |
-| maybeRefreshConnection | Function | ./public/js/app.js | 97-100 |
-| maybeRefreshRole | Function | ./public/js/app.js | 101-106 |
-| syncShell | Function | ./public/js/app.js | 108-133 |
-| syncSidebar | Function | ./public/js/app.js | 135-172 |
-| syncSidebarCollapsed | Function | ./public/js/app.js | 174-184 |
-| initShellInteractions | Function | ./public/js/app.js | 186-215 |
-| closeAtBreakpoint | Function | ./public/js/app.js | 210-213 |
-| refreshConnection | Function | ./public/js/app.js | 217-256 |
-| refreshRole | Function | ./public/js/app.js | 259-277 |
-| freshView | Function | ./public/js/app.js | 281-289 |
-| setAuthenticationLocked | Function | ./public/js/app.js | 291-298 |
-| beginSignIn | Function | ./public/js/app.js | 300-308 |
-| beginMicrosoftSignIn | Function | ./public/js/app.js | 310-318 |
-| authProviderButtons | Function | ./public/js/app.js | 325-343 |
-| beginSignOut | Function | ./public/js/app.js | 345-353 |
-| renderAuthControl | Function | ./public/js/app.js | 355-387 |
-| renderAuthenticationGate | Function | ./public/js/app.js | 389-448 |
-| renderSignInRequired | Function | ./public/js/app.js | 453-465 |
-| renderAccessDenied | Function | ./public/js/app.js | 467-479 |
-| render | Function | ./public/js/app.js | 481-533 |
-| capitalize | Function | ./public/js/app.js | 535-538 |
-| setState | Function | ./public/js/auth.js | 45-48 |
-| withinSessionTimeout | Function | ./public/js/auth.js | 50-62 |
-| loadConfiguration | Function | ./public/js/auth.js | 64-93 |
-| firstAuthUser | Function | ./public/js/auth.js | 96-104 |
-| mergeDisplayProfile | Function | ./public/js/auth.js | 106-115 |
-| emitDeploymentStatus | Function | ./public/js/auth.js | 123-129 |
-| watchProvisioning | Function | ./public/js/auth.js | 135-151 |
-| resolveDeployment | Function | ./public/js/auth.js | 153-167 |
-| confirmIdentity | Function | ./public/js/auth.js | 172-180 |
-| initializeAuthentication | Function | ./public/js/auth.js | 182-230 |
-| getAuthenticationState | Function | ./public/js/auth.js | 232-234 |
-| getAuthProviders | Function | ./public/js/auth.js | 239-245 |
-| expireAuthentication | Function | ./public/js/auth.js | 247-252 |
-| completeSignIn | Function | ./public/js/auth.js | 259-280 |
-| signIn | Function | ./public/js/auth.js | 282-288 |
+| setAccessTokenProvider | Function | ./public/js/api.js | 9-11 |
+| getApiBase | Function | ./public/js/api.js | 19-22 |
+| setApiBase | Function | ./public/js/api.js | 33-36 |
+| notifyAuthenticationRequired | Function | ./public/js/api.js | 38-42 |
+| request | Function | ./public/js/api.js | 44-92 |
+| ensureStylesheet | Function | ./public/js/app.js | 32-54 |
+| route | Function | ./public/js/app.js | 56-75 |
+| load | Function | ./public/js/app.js | 61-73 |
+| currentRoute | Function | ./public/js/app.js | 109-116 |
+| applyMenuPermissions | Function | ./public/js/app.js | 120-131 |
+| maybeRefreshConnection | Function | ./public/js/app.js | 135-138 |
+| maybeRefreshRole | Function | ./public/js/app.js | 139-144 |
+| syncShell | Function | ./public/js/app.js | 146-171 |
+| syncSidebar | Function | ./public/js/app.js | 173-210 |
+| syncSidebarCollapsed | Function | ./public/js/app.js | 212-222 |
+| initShellInteractions | Function | ./public/js/app.js | 224-259 |
+| prepareNavigationTarget | Function | ./public/js/app.js | 239-242 |
+| closeAtBreakpoint | Function | ./public/js/app.js | 254-257 |
+| refreshConnection | Function | ./public/js/app.js | 261-300 |
+| refreshRole | Function | ./public/js/app.js | 303-321 |
+| freshView | Function | ./public/js/app.js | 325-334 |
+| setAuthenticationLocked | Function | ./public/js/app.js | 336-343 |
+| beginSignIn | Function | ./public/js/app.js | 345-353 |
+| beginMicrosoftSignIn | Function | ./public/js/app.js | 355-363 |
+| authProviderButtons | Function | ./public/js/app.js | 370-388 |
+| beginSignOut | Function | ./public/js/app.js | 390-398 |
+| renderAuthControl | Function | ./public/js/app.js | 400-432 |
+| renderAuthenticationGate | Function | ./public/js/app.js | 434-493 |
+| renderSignInRequired | Function | ./public/js/app.js | 498-510 |
+| renderAccessDenied | Function | ./public/js/app.js | 512-524 |
+| render | Function | ./public/js/app.js | 526-581 |
+| capitalize | Function | ./public/js/app.js | 583-586 |
+| scheduleOneTap | Function | ./public/js/app.js | 588-604 |
+| start | Function | ./public/js/app.js | 590-598 |
+| prompt | Function | ./public/js/app.js | 595-595 |
+| setState | Function | ./public/js/auth.js | 35-38 |
+| withinSessionTimeout | Function | ./public/js/auth.js | 40-52 |
+| loadConfiguration | Function | ./public/js/auth.js | 54-83 |
+| loadFirebaseSdk | Function | ./public/js/auth.js | 89-100 |
+| firstAuthUser | Function | ./public/js/auth.js | 103-111 |
+| mergeDisplayProfile | Function | ./public/js/auth.js | 113-122 |
+| emitDeploymentStatus | Function | ./public/js/auth.js | 130-136 |
+| watchProvisioning | Function | ./public/js/auth.js | 142-158 |
 
-*... and 423 more members.*
+*... and 444 more members.*
 
 ## Execution Flows
 
-- **beginSignIn** (criticality: 0.80, depth: 7)
-- **beginMicrosoftSignIn** (criticality: 0.80, depth: 7)
-- **beginSignOut** (criticality: 0.79, depth: 7)
-- **render** (criticality: 0.76, depth: 6)
+- **beginSignIn** (criticality: 0.87, depth: 4)
+- **beginMicrosoftSignIn** (criticality: 0.87, depth: 4)
+- **beginSignOut** (criticality: 0.86, depth: 4)
+- **render** (criticality: 0.78, depth: 3)
+- **start** (criticality: 0.74, depth: 4)
 - **initializeAuthentication** (criticality: 0.73, depth: 3)
-- **promptOneTap** (criticality: 0.69, depth: 2)
-- **maybeRefreshConnection** (criticality: 0.68, depth: 3)
-- **maybeRefreshRole** (criticality: 0.65, depth: 3)
+- **maybeRefreshConnection** (criticality: 0.69, depth: 1)
 - **applyServerEvent** (criticality: 0.63, depth: 5)
 - **hostedConnection** (criticality: 0.60, depth: 8)
+- **maybeRefreshRole** (criticality: 0.58, depth: 2)
 - *... and 17 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `append` (165 edge(s))
-- `addEventListener` (121 edge(s))
-- `map` (106 edge(s))
+- `append` (166 edge(s))
+- `addEventListener` (128 edge(s))
+- `map` (107 edge(s))
 - `String` (88 edge(s))
 - `trim` (64 edge(s))
 - `push` (62 edge(s))
 - `setAttribute` (54 edge(s))
 - `filter` (53 edge(s))
-- `catch` (46 edge(s))
+- `catch` (47 edge(s))
+- `has` (35 edge(s))
 - `Boolean` (35 edge(s))
-- `has` (34 edge(s))
+- `querySelector` (35 edge(s))
+- `t` (34 edge(s))
 - `Number` (31 edge(s))
 - `isArray` (30 edge(s))
-- `slice` (29 edge(s))
-- `includes` (29 edge(s))
 
 ### Incoming
 
 - `./public/js/api.js` (137 edge(s))
 - `./public/js/views/settings.js` (123 edge(s))
-- `./public/js/views/agent.js` (82 edge(s))
-- `./public/js/app.js` (75 edge(s))
+- `./public/js/views/agent.js` (96 edge(s))
+- `./public/js/app.js` (80 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
-- `./public/js/i18n.js` (33 edge(s))
-- `./public/js/auth.js` (22 edge(s))
+- `./public/js/i18n.js` (34 edge(s))
+- `./public/js/auth.js` (23 edge(s))
 - `./public/js/omnibox-router.mjs` (16 edge(s))
 - `./public/js/views/organization.js` (13 edge(s))
 - `./public/js/views/cost.js` (12 edge(s))
