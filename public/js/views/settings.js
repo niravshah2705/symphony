@@ -74,6 +74,7 @@ export async function renderSettings(view) {
         el('aside', { class: 'settings-rail' }, railCards(ctx, scopeState, identity)),
       ]),
     );
+    applyControlLocks(view, scopeState);
   };
   ctx.rerenderPage = render;
   render();
@@ -108,6 +109,29 @@ const SCOPE_META = {
 // Best-effort/additive: the control also writes the global store (today's source
 // of truth), so a settings-policy outage or insufficient role is swallowed. Once
 // the agent overlays prefs, these become the authoritative per-scope values.
+// After render, at USER scope, disable operational controls whose pref key is
+// locked by a higher scope (from effective.locks) and flag them. Fail-open: a
+// settings-policy outage leaves controls enabled (server-side still enforces).
+function applyControlLocks(root, scopeState) {
+  if (scopeState.scope !== 'user') return; // org edits its own locks; project handled server-side
+  void (async () => {
+    let locked = [];
+    try { const eff = await api.settingsPolicy.getEffective(scopeState.projectId); locked = (eff && eff.locks) || []; }
+    catch (_) { return; }
+    const set = new Set(locked);
+    root.querySelectorAll('[data-lock-key]').forEach((node) => {
+      if (!set.has(node.dataset.lockKey)) return;
+      node.classList.add('sx-control-locked');
+      node.querySelectorAll('button, input, select').forEach((c) => { c.disabled = true; });
+      if (!node.querySelector('.sx-lock-flag')) {
+        const flag = lockChip('Locked by organization');
+        flag.classList.add('sx-lock-flag');
+        node.appendChild(flag);
+      }
+    });
+  })();
+}
+
 function setScopePrefs(scopeState, prefs) {
   const p = api.settingsPolicy;
   const call = scopeState.scope === 'org' ? p.setOrgPrefs(prefs)
@@ -455,7 +479,7 @@ function modelsRuntimeSection(ctx, llm, scopeState) {
 
 function sxComplexity(ctx, scopeState) {
   const tiers = [...((ctx.presets && ctx.presets.complexityTiers) || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
-  const body = el('div', { class: 'sx-card sx-card-pad' });
+  const body = el('div', { class: 'sx-card sx-card-pad', dataset: { lockKey: 'complexityTier' } });
   const render = () => {
     clear(body);
     if (!tiers.length) {
@@ -528,7 +552,7 @@ function providerTiles(ctx, scopeState) {
   const render = () => {
     clear(card);
     const active = roleProvider(ctx.settings, 'execution');
-    const tiles = el('div', { class: 'sx-tiles' });
+    const tiles = el('div', { class: 'sx-tiles', dataset: { lockKey: 'llmProvider' } });
     for (const opt of PROVIDER_PICKER) {
       const selected = opt.id === active || (opt.id === 'ollama' && ['ollama', 'lmstudio', 'omlx'].includes(active));
       const tile = el('button', { type: 'button', class: `sx-tile${selected ? ' active' : ''}`, 'aria-pressed': selected ? 'true' : 'false' }, [
@@ -581,7 +605,7 @@ function runtimeTiles(ctx, scopeState) {
   const render = () => {
     clear(card);
     const active = ctx.settings.agentRuntime || 'deepagent';
-    const tiles = el('div', { class: 'sx-tiles' });
+    const tiles = el('div', { class: 'sx-tiles', dataset: { lockKey: 'agentRuntime' } });
     for (const h of HARNESS_TILES) {
       const selected = h.id === active;
       const tile = el('button', { type: 'button', class: `sx-tile block${selected ? ' active' : ''}` }, [
@@ -632,8 +656,8 @@ function runtimeTiles(ctx, scopeState) {
       ]),
       tiles,
       el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px' }, [
-        field('Workflow pattern', workflow),
-        field('Tracing', tracing),
+        el('div', { dataset: { lockKey: 'workflowPattern' } }, [field('Workflow pattern', workflow)]),
+        el('div', { dataset: { lockKey: 'langsmithTracing' } }, [field('Tracing', tracing)]),
       ]),
     );
   };
@@ -649,7 +673,7 @@ function connectionsSection(ctx, scopeState) {
   let activeTracker = ['linear', 'jira', 'asana'].includes(settings.planningProvider) ? settings.planningProvider : 'linear';
   const renderTracker = () => {
     clear(trackerCard);
-    const tiles = el('div', { class: 'sx-tiles' });
+    const tiles = el('div', { class: 'sx-tiles', dataset: { lockKey: 'planningProvider' } });
     for (const opt of PM_PICKER) {
       const selected = opt.id === activeTracker;
       const tile = el('button', { type: 'button', class: `sx-tile${selected ? ' active' : ''}` }, [
