@@ -231,6 +231,23 @@ function isModelAllowed(modelId, effective) {
 }
 
 /**
+ * Enforce the models policy on a chosen model/preset id. If it is excluded, fall
+ * back to the first allowed `candidate` (preferring `preferred` when allowed).
+ * When no models policy is present, or nothing among the candidates is allowed,
+ * the id is returned UNCHANGED (fail-open — never brick a run). Mirrors
+ * enforceHarness; callers pass same-provider preset ids as candidates.
+ * @returns {string} the effective (possibly downgraded) model/preset id.
+ */
+function enforceModel(modelId, effective, { candidates = [], preferred } = {}) {
+  if (!hasDomain(effective, 'models')) return modelId;
+  const allowed = effective.models.effective;
+  if (allowed.includes(modelId)) return modelId;
+  if (preferred && allowed.includes(preferred)) return preferred;
+  const alt = (candidates || []).find((id) => allowed.includes(id));
+  return alt || modelId; // nothing allowed among candidates → keep (fail-open)
+}
+
+/**
  * Enforce the harness policy on a chosen runtime id. If the runtime is excluded,
  * fall back to the first allowed harness (preferring `deepagent`, the
  * provider-neutral default). When no harness policy is present, or nothing is
@@ -262,6 +279,7 @@ module.exports = {
   filterHooksByPolicy,
   filterModelsByPolicy,
   isModelAllowed,
+  enforceModel,
   skillNameFromPath,
   enforceHarness,
 };

@@ -9,7 +9,29 @@ const { applyPlan, applyIssuesForMilestones, applyAiplanned, applyAifail } = req
 const { llmReady, notReadyReason, resolveLlm, providerForRole } = require('./llm');
 const { isModelAvailabilityError, pauseReasonFor, probeModelAvailability } = require('./availability');
 const { fetchOrgEffectivePolicy } = require('./org-policy-client');
+const { enforceModel } = require('./settings-policy');
+const { publicCatalog } = require('./model-presets');
 const workspaceEvents = require('./workspace-events');
+
+/**
+ * Same-provider model enforcement: if the resolved model is denied by the org's
+ * effective `models` policy, swap it to an allowed preset of the SAME provider so
+ * the descriptor's base URL / tokens stay valid. FAIL-OPEN: no policy, an
+ * unmappable model, or no allowed same-provider alternative returns the
+ * descriptor unchanged (never brick a run; cross-provider downgrade is out of
+ * scope). Returns the (possibly new) llm descriptor.
+ */
+function enforceLlmModel(llm, effectivePolicy, catalog = publicCatalog()) {
+  if (!llm || !effectivePolicy || !effectivePolicy.models) return llm;
+  const presets = Array.isArray(catalog) ? catalog : (catalog && catalog.presets) || [];
+  const current = presets.find((p) => p.provider === llm.provider && p.model === llm.model);
+  if (!current) return llm; // can't map model → preset id: fail-open
+  const candidates = presets.filter((p) => p.provider === llm.provider).map((p) => p.id);
+  const allowedId = enforceModel(current.id, effectivePolicy, { candidates });
+  if (allowedId === current.id) return llm;
+  const next = presets.find((p) => p.id === allowedId);
+  return next ? { ...llm, model: next.model } : llm;
+}
 
 const { CONFIG } = require('../config');
 
@@ -166,6 +188,12 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
     let effectivePolicy = null;
     try { effectivePolicy = await resolvePolicyImpl(); } catch (_) { effectivePolicy = null; }
     const policySettings = { effectivePolicy };
+    // Enforce the models policy on the resolved model (same-provider downgrade,
+    // fail-open). Keeps a denied model from actually running.
+    const enforcedLlm = enforceLlmModel(llm, effectivePolicy);
+    if (enforcedLlm.model !== llm.model) {
+      step(`Model "${llm.model}" is denied by organization policy; using allowed "${enforcedLlm.model}".`, 'warn');
+    }
 
     if (milestones.length > 0) {
       // ---- RESUME: milestones already exist; ensure each has issues, then aidone.
@@ -174,7 +202,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
       let summary = { milestonesCreated: 0, issuesCreated: 0, dependenciesCreated: 0, warnings: [], resumed: true };
       if (missing.length && config.createIssues) {
         phase = 'model';
-        const gen = await generateIssuesImpl({ project, milestones: missing, config, llm, keys, onStep: step });
+        const gen = await generateIssuesImpl({ project, milestones: missing, config, llm: enforcedLlm, keys, onStep: step });
         phase = 'planning-provider';
         summary = await applyIssuesImpl(apiKey, { project, milestones: missing, generated: gen.milestones, config, onStep: step });
         await applyAiplannedImpl(apiKey, { project, onStep: step });
@@ -190,7 +218,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
 
     // ---- NEW: no milestones yet — viability + full business plan.
     phase = 'model';
-    const result = await generatePlanImpl({ project, assumedRole: job.assumedRole, config, llm, keys, onStep: step, settings: policySettings });
+    const result = await generatePlanImpl({ project, assumedRole: job.assumedRole, config, llm: enforcedLlm, keys, onStep: step, settings: policySettings });
     phase = 'planning-provider';
 
     if (!result.viable) {
@@ -445,5 +473,6 @@ module.exports = {
     runJob,
     verifyModelReadiness,
     processApprovalDeadlines,
+    enforceLlmModel,
   },
 };

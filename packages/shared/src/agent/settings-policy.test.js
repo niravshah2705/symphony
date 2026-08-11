@@ -18,6 +18,7 @@ const {
   filterHooksByPolicy,
   filterModelsByPolicy,
   isModelAllowed,
+  enforceModel,
   enforceHarness,
 } = require('./settings-policy');
 
@@ -209,4 +210,24 @@ test('enforceHarness falls back to the first allowed when deepagent is excluded'
 test('enforceHarness is fail-open: no policy, or nothing allowed, keeps the runtime', () => {
   assert.equal(enforceHarness('codex-sdk', null), 'codex-sdk');
   assert.equal(enforceHarness('codex-sdk', { harness: { effective: [] } }), 'codex-sdk');
+});
+
+test('enforceModel downgrades a denied id to an allowed candidate (fail-open)', () => {
+  const effective = { models: { effective: ['claude-sonnet-5', 'claude-haiku-4-5'] } };
+  // Denied id → first allowed candidate.
+  assert.equal(
+    enforceModel('claude-opus-4-8', effective, { candidates: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'] }),
+    'claude-sonnet-5',
+  );
+  // `preferred` wins when allowed.
+  assert.equal(
+    enforceModel('claude-opus-4-8', effective, { candidates: ['claude-sonnet-5', 'claude-haiku-4-5'], preferred: 'claude-haiku-4-5' }),
+    'claude-haiku-4-5',
+  );
+  // Already allowed → unchanged.
+  assert.equal(enforceModel('claude-sonnet-5', effective, { candidates: ['claude-sonnet-5'] }), 'claude-sonnet-5');
+  // No allowed candidate → keep (fail-open, don't brick).
+  assert.equal(enforceModel('codex-gpt-5-5', effective, { candidates: ['codex-gpt-5-4'] }), 'codex-gpt-5-5');
+  // No models policy → unchanged (allow-all).
+  assert.equal(enforceModel('anything', {}, { candidates: ['x'] }), 'anything');
 });

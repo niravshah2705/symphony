@@ -191,3 +191,27 @@ test('runJob is fail-open when policy resolution throws (planning stays allow-al
   );
   assert.equal(seen.effectivePolicy, null);
 });
+
+test('enforceLlmModel downgrades a denied model to a same-provider allowed one (fail-open)', () => {
+  const catalog = { presets: [
+    { id: 'claude-opus-4-8', provider: 'claude', model: 'claude-opus-4-8' },
+    { id: 'claude-sonnet-5', provider: 'claude', model: 'claude-sonnet-5' },
+    { id: 'codex-gpt-5-5', provider: 'codex', model: 'gpt-5.5' },
+  ] };
+  const effective = { models: { effective: ['claude-sonnet-5', 'codex-gpt-5-5'] } }; // opus denied
+
+  const denied = { provider: 'claude', model: 'claude-opus-4-8', baseUrl: 'x', accessToken: 't' };
+  const out = scheduler._test.enforceLlmModel(denied, effective, catalog);
+  assert.equal(out.model, 'claude-sonnet-5'); // swapped to a same-provider allowed model
+  assert.equal(out.provider, 'claude');
+  assert.equal(out.baseUrl, 'x'); // rest of the descriptor preserved
+
+  // Already-allowed model → unchanged (same object).
+  const ok = { provider: 'claude', model: 'claude-sonnet-5' };
+  assert.equal(scheduler._test.enforceLlmModel(ok, effective, catalog), ok);
+  // No models policy → unchanged (allow-all).
+  assert.equal(scheduler._test.enforceLlmModel(denied, {}, catalog), denied);
+  // No same-provider allowed alternative → keep the denied model (fail-open, no brick).
+  const noClaude = { models: { effective: ['codex-gpt-5-5'] } };
+  assert.equal(scheduler._test.enforceLlmModel(denied, noClaude, catalog).model, 'claude-opus-4-8');
+});
