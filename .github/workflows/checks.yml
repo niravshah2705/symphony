@@ -22,7 +22,11 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test packages/shared/src/ services/gateway/src/
+      # Pass explicit *.test.js globs, not bare source dirs: on Node 22 `node
+      # --test <dir>` runs the directory as an entry module (globbing was the
+      # Node 20 behavior), which would execute services/gateway/src/index.js and
+      # boot the server → hang. Node expands the quoted globs (needs Node 21+).
+      - run: node --test "packages/shared/src/**/*.test.js" "services/gateway/src/**/*.test.js"
 
   e2e:
     name: Playwright E2E
