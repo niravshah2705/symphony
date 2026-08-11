@@ -6,8 +6,8 @@
 
 Directory-based community: services/org
 
-- **Size**: 483 nodes
-- **Cohesion**: 0.4498
+- **Size**: 484 nodes
+- **Cohesion**: 0.4494
 - **Dominant Language**: python
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: services/org
 | delete_tag | Function | ./services/org/app/api/v1/routes_tags.py | 59-64 |
 | list_tasks | Function | ./services/org/app/api/v1/routes_tasks.py | 26-42 |
 
-*... and 433 more members.*
+*... and 434 more members.*
 
 ## Execution Flows
 
@@ -108,7 +108,7 @@ Directory-based community: services/org
 - `get` (35 edge(s))
 - `raises` (23 edge(s))
 - `setattr` (21 edge(s))
-- `./services/org/app/errors.py` (18 edge(s))
+- `./services/org/app/errors.py` (19 edge(s))
 - `patch` (15 edge(s))
 - `./services/org/tests/unit/test_services.py` (13 edge(s))
 - `./services/org/app/services/auth_service.py` (12 edge(s))

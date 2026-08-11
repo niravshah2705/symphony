@@ -12,6 +12,7 @@ import { el, initials, toast } from './dom.js';
 import { hydrateIcons } from './icons.js';
 import * as i18n from './i18n.js';
 import {
+  ensureFreshToken,
   expireAuthentication,
   getAuthenticationState,
   getAuthProviders,
@@ -541,11 +542,21 @@ function renderSignInRequired(name) {
   syncShell(name, view);
   syncSidebar(false);
   view.className = 'view view-standard';
+  // When a session was dropped mid-use (token rejected → ai-fleet:auth-required),
+  // expireAuthentication() records why, so the panel explains "session expired"
+  // instead of the generic prompt an anonymous visitor sees.
+  const { error: sessionError } = getAuthenticationState();
+  const actions = [
+    ...authProviderButtons({ primary: true }),
+    // Honor "guide the user to Settings" — a secondary path to review
+    // credentials once signed back in (matches the app-wide #/settings CTA).
+    el('a', { class: 'btn', href: '#/settings' }, 'Open Settings'),
+  ];
   view.append(el('section', { class: 'auth-card', 'aria-labelledby': 'auth-title' }, [
     el('span', { class: 'auth-badge' }, t('protectedWorkspace')),
     el('h1', { id: 'auth-title' }, t('signInRequiredTitle', 'Sign in to continue')),
-    el('p', { class: 'auth-copy' }, t('signInRequiredBody', 'Sign in to open this area.')),
-    el('div', { class: 'auth-actions' }, authProviderButtons({ primary: true })),
+    el('p', { class: 'auth-copy' }, sessionError || t('signInRequiredBody', 'Sign in to open this area.')),
+    el('div', { class: 'auth-actions' }, actions),
   ]));
   localize(view);
 }
@@ -605,6 +616,10 @@ async function render({ focus = false } = {}) {
   }
 
   try {
+    // Proactively mint a fresh token before an authenticated view fires its
+    // initial data batch, so a token that expired while the tab sat idle does
+    // not produce a burst of 401s. No-op for anonymous/disabled; fail-open.
+    if (session.authenticated) await ensureFreshToken();
     const renderer = await routes[name].load();
     if (epoch !== renderEpoch || !view.isConnected) return;
     await renderer(view);
@@ -724,12 +739,14 @@ window.addEventListener('ai-fleet:locale-changed', async () => {
   localize(document);
 });
 
-window.addEventListener('ai-fleet:auth-required', (event) => {
+window.addEventListener('ai-fleet:auth-required', () => {
   const session = getAuthenticationState();
   // A connected tool can legitimately return 401 in local mode; only an
   // enabled application-auth session reacts to an app-auth failure.
   if (!session.enabled) return;
-  expireAuthentication(event.detail?.message || t('sessionExpired'));
+  // Every trigger of this event is an app-auth failure, so show the friendly,
+  // localized "session expired" copy rather than the raw gateway string.
+  expireAuthentication(t('sessionExpired'));
   renderAuthControl();
   // Drop back to the public surface: read-only Agent workspace, or a sign-in
   // prompt if the current route needs a role.

@@ -1,6 +1,7 @@
 // Runtime deployment configuration is a module dependency, so it executes
 // before this client reads the API base without blocking the HTML parser.
 import '/config.js';
+import { shouldRetryAuth, createSingleFlight } from './auth-retry.mjs';
 
 // Thin fetch wrapper around the backend API.
 
@@ -8,6 +9,29 @@ let accessTokenProvider = null;
 
 export function setAccessTokenProvider(provider) {
   accessTokenProvider = typeof provider === 'function' ? provider : null;
+}
+
+// A rejected app-auth 401 forces exactly one Firebase token refresh; a parallel
+// batch of failing calls coalesces onto that single refresh (see auth-retry).
+const runTokenRefresh = createSingleFlight();
+function refreshAccessToken() {
+  if (!accessTokenProvider) return Promise.resolve(null);
+  return runTokenRefresh(() => accessTokenProvider(true));
+}
+
+async function readJson(res) {
+  try {
+    return await res.json();
+  } catch (_) {
+    return {}; /* empty body */
+  }
+}
+
+// The gateway returns { error: "msg", code }; the org service returns a nested
+// envelope { error: { code, message } }. Read the error code from either shape.
+function errorCode(data) {
+  const nested = data && data.error && typeof data.error === 'object' ? data.error : null;
+  return (data && data.code) || (nested && nested.code) || '';
 }
 
 /**
@@ -62,28 +86,40 @@ async function request(path, options = {}) {
     }
   }
 
-  const res = await fetch(`${getApiBase()}/api${path}`, {
-    ...options,
-    headers,
-  });
-  let data = {};
-  try {
-    data = await res.json();
-  } catch (_) {
-    /* empty body */
+  let res = await fetch(`${getApiBase()}/api${path}`, { ...options, headers });
+  let data = await readJson(res);
+
+  // An app-auth 401 means our Firebase token was rejected mid-session (e.g.
+  // clock skew or an expiry the client had not detected). Force ONE token
+  // refresh and retry the request once; a parallel batch of failing calls
+  // coalesces onto the single refresh. Every other outcome — a connected-tool
+  // 401, 403, 500, or a network error — falls straight through untouched.
+  if (!res.ok && accessTokenProvider
+      && shouldRetryAuth({ status: res.status, code: errorCode(data), path })) {
+    let fresh = null;
+    try {
+      fresh = await refreshAccessToken();
+    } catch (_) {
+      fresh = null;
+    }
+    if (fresh) {
+      const retryHeaders = new Headers(headers);
+      retryHeaders.set('Authorization', `Bearer ${fresh}`);
+      res = await fetch(`${getApiBase()}/api${path}`, { ...options, headers: retryHeaders });
+      data = await readJson(res);
+    }
   }
+
   if (!res.ok) {
-    // The gateway returns { error: "msg", code }; the org service returns a
-    // nested envelope { error: { code, message } }. Support both shapes.
     const nested = data.error && typeof data.error === 'object' ? data.error : null;
     const message = nested ? nested.message : data.error;
     const error = new Error(message || `Request failed (${res.status})`);
     error.status = res.status;
-    error.code = data.code || (nested && nested.code) || '';
+    error.code = errorCode(data);
     // Connected tools can also return 401. Lock the whole workspace only when
     // the gateway identified an application-auth failure (or while confirming
     // the current application identity), not for an unrelated provider key.
-    if (res.status === 401 && (error.code === 'authentication_required' || path === '/auth/me')) {
+    if (shouldRetryAuth({ status: res.status, code: error.code, path })) {
       notifyAuthenticationRequired(error);
     }
     throw error;
