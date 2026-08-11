@@ -127,6 +127,71 @@ async function request(path, options = {}) {
   return data;
 }
 
+// SSE reconnection tuning. EventSource cannot send a bearer, so a short-lived
+// stream token rides in the URL (stream-token TTL ~5 min). The native reconnect
+// reuses the SAME token, which expires → 401 and the stream dies silently. So we
+// own reconnection: re-mint a fresh token (also self-healing a secret rotation)
+// and reopen with capped exponential backoff, giving up after a bounded run of
+// consecutive failures (reset once a connection opens).
+const STREAM_RECONNECT_BASE_MS = 1_000;
+const STREAM_RECONNECT_MAX_MS = 30_000;
+const STREAM_MAX_CONSECUTIVE_FAILURES = 6;
+
+/**
+ * Open an SSE stream that owns its reconnection, and return a `{ close() }`
+ * controller. `mintToken()` resolves to `{ token }`; `buildUrl(token)` returns the
+ * SSE URL; `onEvent(parsed)` receives each JSON message.
+ */
+async function openStream({ mintToken, buildUrl, onEvent }) {
+  let source = null;
+  let stopped = false;
+  let failures = 0;
+  let retryTimer = null;
+
+  const scheduleReconnect = () => {
+    if (stopped || failures >= STREAM_MAX_CONSECUTIVE_FAILURES) return;
+    const delay = Math.min(STREAM_RECONNECT_BASE_MS * 2 ** failures, STREAM_RECONNECT_MAX_MS);
+    failures += 1;
+    retryTimer = setTimeout(() => { retryTimer = null; connect(); }, delay);
+  };
+
+  async function connect() {
+    if (stopped) return;
+    let token = '';
+    try {
+      ({ token } = await mintToken());
+    } catch (_) {
+      /* auth disabled locally → the stream token is optional */
+    }
+    if (stopped) return;
+    source = new EventSource(buildUrl(token || ''));
+    source.onopen = () => { failures = 0; }; // a live connection resets the backoff
+    source.onmessage = (event) => {
+      try {
+        onEvent(JSON.parse(event.data));
+      } catch (_) {
+        /* comments/keepalives are not JSON */
+      }
+    };
+    source.onerror = () => {
+      // The native reconnect would reuse the (soon-)expired token, so take over:
+      // close and re-mint after a backoff rather than let the stream die.
+      if (stopped) return;
+      try { source.close(); } catch (_) { /* ignore */ }
+      scheduleReconnect();
+    };
+  }
+
+  await connect();
+  return {
+    close() {
+      stopped = true;
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      if (source) { try { source.close(); } catch (_) { /* ignore */ } }
+    },
+  };
+}
+
 export const api = {
   // Authentication
   getCurrentUser: (options = {}) => request('/auth/me', options),
@@ -249,51 +314,24 @@ export const api = {
   getStreamToken: (conversationId) =>
     request(`/agent/stream-token?conversationId=${encodeURIComponent(conversationId)}`),
   // Open an SSE stream of a conversation's intermittent agent responses. Returns
-  // the EventSource so callers can close() it; onEvent receives each parsed event.
-  openAgentStream: async (conversationId, onEvent, onError) => {
-    let token = '';
-    try {
-      ({ token } = await api.getStreamToken(conversationId));
-    } catch (_) {
-      /* auth disabled locally → the stream token is optional */
-    }
-    const url = `${getApiBase()}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token || '')}`;
-    const source = new EventSource(url);
-    source.onmessage = (event) => {
-      try {
-        onEvent(JSON.parse(event.data));
-      } catch (_) {
-        /* comments/keepalives are not JSON */
-      }
-    };
-    if (typeof onError === 'function') source.onerror = onError;
-    return source;
-  },
+  // a { close() } controller; onEvent receives each parsed event. Reconnection
+  // (with a freshly-minted token) is handled internally — see openStream.
+  openAgentStream: (conversationId, onEvent) => openStream({
+    mintToken: () => api.getStreamToken(conversationId),
+    buildUrl: (token) => `${getApiBase()}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token)}`,
+    onEvent,
+  }),
   // Short-lived token authorizing the GLOBAL workspace EventSource. workspace:read,
   // so the public read-only home can subscribe.
   getWorkspaceStreamToken: () => request('/agent/workspace-stream-token'),
   // Open the workspace SSE stream — typed status/jobs/coder/gate snapshots that
-  // replace the old 5s polling loops. Returns the EventSource so callers can
-  // close() it; onEvent receives each parsed event.
-  openWorkspaceStream: async (onEvent, onError) => {
-    let token = '';
-    try {
-      ({ token } = await api.getWorkspaceStreamToken());
-    } catch (_) {
-      /* auth disabled locally → the stream token is optional */
-    }
-    const url = `${getApiBase()}/api/agent/workspace-stream?t=${encodeURIComponent(token || '')}`;
-    const source = new EventSource(url);
-    source.onmessage = (event) => {
-      try {
-        onEvent(JSON.parse(event.data));
-      } catch (_) {
-        /* comments/keepalives are not JSON */
-      }
-    };
-    if (typeof onError === 'function') source.onerror = onError;
-    return source;
-  },
+  // replace the old 5s polling loops. Returns a { close() } controller; onEvent
+  // receives each parsed event. Reconnection is handled internally (openStream).
+  openWorkspaceStream: (onEvent) => openStream({
+    mintToken: () => api.getWorkspaceStreamToken(),
+    buildUrl: (token) => `${getApiBase()}/api/agent/workspace-stream?t=${encodeURIComponent(token)}`,
+    onEvent,
+  }),
   routeAgentMessage: (payload) =>
     request('/agent/message', { method: 'POST', body: JSON.stringify(payload) }),
   searchAgentKnowledge: (payload) =>

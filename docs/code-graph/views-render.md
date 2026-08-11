@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 504 nodes
-- **Cohesion**: 0.4798
+- **Size**: 508 nodes
+- **Cohesion**: 0.4792
 - **Dominant Language**: javascript
 
 ## Members
@@ -29,6 +29,10 @@ Directory-based community: public/js
 | setApiBase | Function | ./public/js/api.js | 57-60 |
 | notifyAuthenticationRequired | Function | ./public/js/api.js | 62-66 |
 | request | Function | ./public/js/api.js | 68-128 |
+| openStream | Function | ./public/js/api.js | 145-193 |
+| scheduleReconnect | Function | ./public/js/api.js | 151-156 |
+| connect | Function | ./public/js/api.js | 158-183 |
+| close | Function | ./public/js/api.js | 187-191 |
 | ensureStylesheet | Function | ./public/js/app.js | 34-56 |
 | route | Function | ./public/js/app.js | 58-77 |
 | load | Function | ./public/js/app.js | 63-75 |
@@ -60,12 +64,8 @@ Directory-based community: public/js
 | capitalize | Function | ./public/js/app.js | 659-662 |
 | scheduleOneTap | Function | ./public/js/app.js | 664-680 |
 | start | Function | ./public/js/app.js | 666-674 |
-| prompt | Function | ./public/js/app.js | 671-671 |
-| shouldRetryAuth | Function | ./public/js/auth-retry.mjs | 17-19 |
-| createSingleFlight | Function | ./public/js/auth-retry.mjs | 32-43 |
-| fn | Function | ./public/js/auth-retry.test.mjs | 73-76 |
 
-*... and 454 more members.*
+*... and 458 more members.*
 
 ## Execution Flows
 
@@ -79,7 +79,7 @@ Directory-based community: public/js
 - **applyServerEvent** (criticality: 0.63, depth: 5)
 - **hostedConnection** (criticality: 0.60, depth: 8)
 - **maybeRefreshRole** (criticality: 0.58, depth: 2)
-- *... and 17 more flows.*
+- *... and 18 more flows.*
 
 ## Dependencies
 
@@ -103,7 +103,7 @@ Directory-based community: public/js
 
 ### Incoming
 
-- `./public/js/api.js` (141 edge(s))
+- `./public/js/api.js` (147 edge(s))
 - `./public/js/views/settings.js` (123 edge(s))
 - `./public/js/views/agent.js` (97 edge(s))
 - `./public/js/app.js` (82 edge(s))

@@ -24,4 +24,4 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-test:build | 41 | [src-test-build.md](src-test-build.md) |
 | src-token | 93 | [src-token.md](src-token.md) |
 | src-tokens | 215 | [src-tokens.md](src-tokens.md) |
-| views-render | 504 | [views-render.md](views-render.md) |
+| views-render | 508 | [views-render.md](views-render.md) |

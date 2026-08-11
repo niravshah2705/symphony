@@ -79,7 +79,7 @@ Directory-based community: packages/shared
 - **prepareWorkspace** (criticality: 0.45, depth: 3)
 - **normalizeDesign** (criticality: 0.45, depth: 1)
 - **getViewer** (criticality: 0.45, depth: 1)
-- *... and 30 more flows.*
+- *... and 29 more flows.*
 
 ## Dependencies
 
