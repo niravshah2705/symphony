@@ -8,10 +8,11 @@ import {
   setSidebarOpen,
   setSidebarCollapsed,
 } from './state.js';
-import { el, initials } from './dom.js';
+import { el, initials, toast } from './dom.js';
 import { hydrateIcons } from './icons.js';
 import * as i18n from './i18n.js';
 import {
+  ensureFreshToken,
   expireAuthentication,
   getAuthenticationState,
   getAuthProviders,
@@ -35,6 +36,7 @@ import {
 const { initializeI18n, localize, renderLanguageControl, t } = i18n;
 const stylesheetLoads = new Map();
 const SHARED_STYLESHEET = '/styles.css';
+const ADLC_BRAND_TITLE = 'ADLC — Agentic Development Life Cycle';
 
 function ensureStylesheet(href) {
   if (stylesheetLoads.has(href)) return stylesheetLoads.get(href);
@@ -160,7 +162,7 @@ function syncShell(name, view) {
   setActiveRoute(name);
 
   document.body.dataset.route = name;
-  document.title = `AI Fleet — ${title}`;
+  document.title = name === 'agent' ? `${ADLC_BRAND_TITLE} | AI Fleet` : `${title} | ${ADLC_BRAND_TITLE}`;
   const routeEyebrow = document.getElementById('route-eyebrow');
   const routeTitle = document.getElementById('route-title');
   routeEyebrow.dataset.i18n = meta.eyebrowKey;
@@ -230,6 +232,36 @@ function syncSidebarCollapsed(collapsed = state.sidebarCollapsed) {
   button.title = state.sidebarCollapsed ? t('expandNavigation') : t('collapseNavigation');
 }
 
+function copyWithLegacyFallback(text) {
+  const field = document.createElement('textarea');
+  field.value = text;
+  field.setAttribute('readonly', '');
+  field.style.cssText = 'position:fixed;inset:auto auto 0 -9999px;opacity:0';
+  document.body.append(field);
+  field.select();
+  field.setSelectionRange(0, field.value.length);
+  try {
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    field.remove();
+  }
+}
+
+async function copyAdlcPrompt(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Older browsers and denied Clipboard API permissions can still support
+      // the user-gesture-based copy command below.
+    }
+  }
+  return copyWithLegacyFallback(text);
+}
+
 function initShellInteractions() {
   const toggle = document.getElementById('sidebar-toggle');
   const backdrop = document.getElementById('sidebar-backdrop');
@@ -254,6 +286,16 @@ function initShellInteractions() {
   skipLink?.addEventListener('click', (event) => {
     event.preventDefault();
     document.getElementById('view')?.focus({ preventScroll: true });
+  });
+  document.addEventListener('click', (event) => {
+    const link = event.target.closest('[data-ai-assistant]');
+    if (!link) return;
+    const prompt = link.closest('.adlc-ai-links')?.querySelector('[data-adlc-ai-prompt]')?.textContent?.trim();
+    if (!prompt) return;
+    copyAdlcPrompt(prompt).then((copied) => {
+      if (copied) toast(`ADLC prompt copied. Paste it into ${link.dataset.aiAssistant}.`, 'ok');
+      else toast(`Opened ${link.dataset.aiAssistant}. Copy the prompt from the ADLC source page.`, 'error');
+    });
   });
 
   document.addEventListener('keydown', (event) => {
@@ -555,7 +597,7 @@ function renderAuthenticationGate({ loading = false, error = '' } = {}) {
   const view = freshView();
   setAuthenticationLocked(true);
   document.body.dataset.route = 'authentication';
-  document.title = `AI Fleet — ${t('authentication')}`;
+  document.title = `${t('authentication')} | ${ADLC_BRAND_TITLE}`;
   view.className = 'view view-standard auth-view';
   view.setAttribute('aria-label', t('authentication'));
   view.setAttribute('aria-busy', String(loading));
@@ -619,11 +661,21 @@ function renderSignInRequired(name) {
   syncShell(name, view);
   syncSidebar(false);
   view.className = 'view view-standard';
+  // When a session was dropped mid-use (token rejected → ai-fleet:auth-required),
+  // expireAuthentication() records why, so the panel explains "session expired"
+  // instead of the generic prompt an anonymous visitor sees.
+  const { error: sessionError } = getAuthenticationState();
+  const actions = [
+    ...authProviderButtons({ primary: true }),
+    // Honor "guide the user to Settings" — a secondary path to review
+    // credentials once signed back in (matches the app-wide #/settings CTA).
+    el('a', { class: 'btn', href: '#/settings' }, 'Open Settings'),
+  ];
   view.append(el('section', { class: 'auth-card', 'aria-labelledby': 'auth-title' }, [
     el('span', { class: 'auth-badge' }, t('protectedWorkspace')),
     el('h1', { id: 'auth-title' }, t('signInRequiredTitle', 'Sign in to continue')),
-    el('p', { class: 'auth-copy' }, t('signInRequiredBody', 'Sign in to open this area.')),
-    el('div', { class: 'auth-actions' }, authProviderButtons({ primary: true })),
+    el('p', { class: 'auth-copy' }, sessionError || t('signInRequiredBody', 'Sign in to open this area.')),
+    el('div', { class: 'auth-actions' }, actions),
   ]));
   localize(view);
 }
@@ -687,6 +739,10 @@ async function render({ focus = false } = {}) {
   }
 
   try {
+    // Proactively mint a fresh token before an authenticated view fires its
+    // initial data batch, so a token that expired while the tab sat idle does
+    // not produce a burst of 401s. No-op for anonymous/disabled; fail-open.
+    if (session.authenticated) await ensureFreshToken();
     const renderer = await routes[name].load();
     if (epoch !== renderEpoch || !view.isConnected) return;
     await renderer(view);
@@ -806,12 +862,14 @@ window.addEventListener('ai-fleet:locale-changed', async () => {
   localize(document);
 });
 
-window.addEventListener('ai-fleet:auth-required', (event) => {
+window.addEventListener('ai-fleet:auth-required', () => {
   const session = getAuthenticationState();
   // A connected tool can legitimately return 401 in local mode; only an
   // enabled application-auth session reacts to an app-auth failure.
   if (!session.enabled) return;
-  expireAuthentication(event.detail?.message || t('sessionExpired'));
+  // Every trigger of this event is an app-auth failure, so show the friendly,
+  // localized "session expired" copy rather than the raw gateway string.
+  expireAuthentication(t('sessionExpired'));
   renderAuthControl();
   // Drop back to the public surface: read-only Agent workspace, or a sign-in
   // prompt if the current route needs a role.

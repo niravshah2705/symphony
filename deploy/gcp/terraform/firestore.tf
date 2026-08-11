@@ -21,3 +21,27 @@ resource "google_firestore_database" "default" {
 
   depends_on = [google_project_service.services]
 }
+
+# Composite index for the org-service "list users in org" query, which filters
+# `org_id ==` and orders by `created_at DESC` (services/org: user_repo.list_in_org
+# → repositories/base.paginate). Firestore requires a composite index for an
+# equality filter combined with an order-by on a different field; without it the
+# query raises FAILED_PRECONDITION and the endpoint returns 500 (GET /api/org/users).
+# Single-field indexes (used by count and the subcollection lists) are automatic.
+resource "google_firestore_index" "org_users_by_created_at" {
+  project     = var.project_id
+  database    = google_firestore_database.default.name
+  collection  = "users"
+  query_scope = "COLLECTION"
+
+  fields {
+    field_path = "org_id"
+    order      = "ASCENDING"
+  }
+  fields {
+    field_path = "created_at"
+    order      = "DESCENDING"
+  }
+
+  depends_on = [google_firestore_database.default]
+}

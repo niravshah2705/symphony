@@ -110,7 +110,7 @@ test('Agent jobs restores complete grouped planner and coding history', async ({
   expect(response && response.ok()).toBeTruthy();
   await expect(page.locator('#view')).toHaveAttribute('aria-busy', 'false');
   await expect(page.locator('#route-title')).toHaveText('Agent jobs');
-  await expect(page).toHaveTitle('AI Fleet — Agent jobs');
+  await expect(page).toHaveTitle('Agent jobs | ADLC — Agentic Development Life Cycle');
   await expect(page.locator('#tabs a[data-route="agent-jobs"]')).toHaveAttribute('aria-current', 'page');
 
   await expect(page.locator('.job-history-row')).toHaveCount(11);

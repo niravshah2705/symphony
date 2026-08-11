@@ -236,7 +236,9 @@ steps:
           "gs://${_BUCKET}/js/**" \
           "gs://${_BUCKET}/vendor/**/*.js" \
           "gs://${_BUCKET}/styles.css" \
-          "gs://${_BUCKET}/styles/**/*.css"
+          "gs://${_BUCKET}/styles/**/*.css" \
+          "gs://${_BUCKET}/**/*.txt" \
+          "gs://${_BUCKET}/**/*.xml"
         gsutil setmeta -h "Cache-Control:no-cache, no-store, must-revalidate" \
           "gs://${_BUCKET}/index.html"
         gsutil setmeta -h "Cache-Control:no-store" "gs://${_BUCKET}/config.js"

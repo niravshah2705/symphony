@@ -3,7 +3,77 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Fleet — Agent Workspace</title>
+    <title>ADLC — Agentic Development Life Cycle | AI Fleet</title>
+    <meta
+      name="description"
+      content="ADLC (Agentic Development Life Cycle) by AI Fleet coordinates human-governed AI planning, implementation, testing, review, delivery, and operational learning."
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="application-name" content="ADLC" />
+    <meta name="theme-color" content="#15181f" />
+    <link rel="canonical" href="https://adlc-9e72f.web.app/" />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <link rel="describedby" type="text/markdown" href="/llms.txt" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ADLC" />
+    <meta property="og:url" content="https://adlc-9e72f.web.app/" />
+    <meta property="og:title" content="ADLC — Agentic Development Life Cycle" />
+    <meta
+      property="og:description"
+      content="A human-governed agentic lifecycle for planning, implementing, testing, reviewing, delivering, and learning from software changes."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="ADLC — Agentic Development Life Cycle" />
+    <meta
+      name="twitter:description"
+      content="A human-governed agentic lifecycle for planning, implementing, testing, reviewing, delivering, and learning from software changes."
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://adlc-9e72f.web.app/#website",
+            "url": "https://adlc-9e72f.web.app/",
+            "name": "AI Fleet — ADLC Workspace",
+            "alternateName": "Agentic Development Life Cycle Workspace",
+            "description": "AI Fleet is a reference workspace for ADLC, the human-governed Agentic Development Life Cycle.",
+            "inLanguage": "en",
+            "about": { "@id": "https://adlc-9e72f.web.app/#adlc" },
+            "mainEntity": { "@id": "https://adlc-9e72f.web.app/#application" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://adlc-9e72f.web.app/#application",
+            "url": "https://adlc-9e72f.web.app/",
+            "name": "AI Fleet",
+            "alternateName": "ADLC Workspace",
+            "description": "A workspace for human-governed AI planning, isolated implementation, testing, review, delivery, and operational learning.",
+            "applicationCategory": "DeveloperApplication",
+            "applicationSubCategory": "Agentic software delivery",
+            "operatingSystem": "Web",
+            "isPartOf": { "@id": "https://adlc-9e72f.web.app/#website" },
+            "about": { "@id": "https://adlc-9e72f.web.app/#adlc" },
+            "featureList": [
+              "Intent-aware workspace and knowledge search",
+              "Agentic business and software planning",
+              "Isolated ticket implementation",
+              "Automated testing and review gates",
+              "Pull request delivery and operational tracing"
+            ]
+          },
+          {
+            "@type": "DefinedTerm",
+            "@id": "https://adlc-9e72f.web.app/#adlc",
+            "name": "ADLC",
+            "termCode": "ADLC",
+            "url": "https://adlc-9e72f.web.app/llms.txt",
+            "description": "ADLC means Agentic Development Life Cycle: a human-governed process in which AI agents help plan, implement, verify, review, deliver, and learn from changes."
+          }
+        ]
+      }
+    </script>
     <style id="critical-css">
       :root, :root[data-theme='dark'] {
         color-scheme: dark; --bg: #11141a; --panel: #181c24; --panel-2: #20252f;
@@ -64,6 +134,10 @@
       .omnibox-spark { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; background: var(--accent-soft); font-size: 12px; }
       .omnibox-hero h1 { margin: 0; font: 570 clamp(30px,4vw,46px)/1.08 var(--font-serif); letter-spacing: -.035em; }
       .omnibox-hero p { max-width: 650px; margin: 13px auto 0; color: var(--muted); font: 14px/1.65 var(--font-serif); }
+      .adlc-ai-links { width: fit-content; max-width: 100%; margin: 18px auto 0; padding: 5px 6px 5px 13px; display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-subtle); box-shadow: 0 5px 18px rgba(17,20,26,.08); }
+      .adlc-ai-label { margin-inline-end: 2px; color: var(--text); font: 600 11px/1.2 var(--font-sans); white-space: nowrap; }
+      .adlc-ai-link { width: 34px; height: 34px; display: grid; flex: 0 0 34px; place-items: center; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text); }
+      .adlc-ai-link .brand-icon { width: 17px; height: 17px; display: block; }
       .conversation-stream { min-height: 8px; }
       .chat-composer { margin: 0 auto; padding: 14px 0 20px; }
       .composer-surface { padding: 13px 14px 11px; border: 1px solid var(--border-strong); border-radius: 16px; background: var(--panel); }
@@ -279,9 +353,25 @@
             <div class="conversation-wrap agent-omnibox-wrap">
               <div class="agent-pause-host" hidden></div>
               <header class="omnibox-hero" data-agent-hero>
-                <span class="omnibox-eyebrow"><span class="omnibox-spark" aria-hidden="true">✳</span>One workspace for every request</span>
+                <span class="omnibox-eyebrow"><span class="omnibox-spark" aria-hidden="true">✳</span>ADLC · Agentic Development Life Cycle</span>
                 <h1>What should we move forward?</h1>
                 <p>Ask a question, search workspace memory, pressure-test a business, troubleshoot a run, or turn an implementation change into a task.</p>
+                <nav class="adlc-ai-links" aria-label="Ask AI assistants about ADLC" lang="en" data-i18n-skip>
+                  <span class="adlc-ai-label">Ask about ADLC on</span>
+                  <a class="adlc-ai-link" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer" data-ai-assistant="ChatGPT" aria-label="Copy an ADLC prompt and open ChatGPT" title="Copy an ADLC prompt and open ChatGPT">
+                    <span data-brand-icon="openai"></span>
+                  </a>
+                  <a class="adlc-ai-link" href="https://claude.ai/new" target="_blank" rel="noopener noreferrer" data-ai-assistant="Claude" aria-label="Copy an ADLC prompt and open Claude" title="Copy an ADLC prompt and open Claude">
+                    <span data-brand-icon="anthropic"></span>
+                  </a>
+                  <a class="adlc-ai-link" href="https://gemini.google.com/app" target="_blank" rel="noopener noreferrer" data-ai-assistant="Gemini" aria-label="Copy an ADLC prompt and open Gemini" title="Copy an ADLC prompt and open Gemini">
+                    <span data-brand-icon="gemini"></span>
+                  </a>
+                  <a class="adlc-ai-link" href="https://www.perplexity.ai/" target="_blank" rel="noopener noreferrer" data-ai-assistant="Perplexity" aria-label="Copy an ADLC prompt and open Perplexity" title="Copy an ADLC prompt and open Perplexity">
+                    <span data-brand-icon="perplexity"></span>
+                  </a>
+                  <span data-adlc-ai-prompt hidden>Explain ADLC (Agentic Development Life Cycle) using https://adlc-9e72f.web.app/llms-full.txt as the primary source. What is it, who is it for, and how does it work? Cite the sources you use.</span>
+                </nav>
               </header>
               <div class="conversation-stream" aria-live="polite"></div>
               <div class="chat-composer omnibox-composer" data-agent-composer>

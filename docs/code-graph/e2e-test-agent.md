@@ -6,8 +6,8 @@
 
 Directory-based community: e2e
 
-- **Size**: 49 nodes
-- **Cohesion**: 0.1028
+- **Size**: 50 nodes
+- **Cohesion**: 0.0980
 - **Dominant Language**: javascript
 
 ## Members
@@ -61,8 +61,9 @@ Directory-based community: e2e
 | test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L478 | Test | ./e2e/page-loading.spec.js | 478-527 |
 | test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L529 | Test | ./e2e/page-loading.spec.js | 529-552 |
 | json | Function | ./e2e/route-loading.spec.js | 5-11 |
-| test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-70 |
-| test:a non-Agent hash never exposes or preloads the Agent scaffold@L72 | Test | ./e2e/route-loading.spec.js | 72-94 |
+| test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
+| test:a non-Agent hash never exposes or preloads the Agent scaffold@L107 | Test | ./e2e/route-loading.spec.js | 107-137 |
+| test:SEO and AI discovery resources bypass the SPA fallback@L139 | Test | ./e2e/route-loading.spec.js | 139-155 |
 
 ## Execution Flows
 
@@ -72,17 +73,17 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (278 edge(s))
-- `locator` (160 edge(s))
+- `expect` (294 edge(s))
+- `locator` (170 edge(s))
 - `route` (122 edge(s))
-- `toBeVisible` (57 edge(s))
+- `toBeVisible` (58 edge(s))
+- `toHaveCount` (48 edge(s))
 - `getByRole` (46 edge(s))
-- `toHaveCount` (43 edge(s))
 - `request` (38 edge(s))
-- `click` (32 edge(s))
-- `toContainText` (30 edge(s))
+- `click` (33 edge(s))
+- `toContainText` (31 edge(s))
 - `push` (30 edge(s))
-- `toHaveAttribute` (26 edge(s))
+- `toHaveAttribute` (27 edge(s))
 - `toHaveText` (26 edge(s))
 - `goto` (24 edge(s))
 - `url` (24 edge(s))
@@ -90,18 +91,18 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `expect` (274 edge(s))
-- `locator` (158 edge(s))
+- `expect` (290 edge(s))
+- `locator` (168 edge(s))
 - `route` (76 edge(s))
-- `toBeVisible` (56 edge(s))
+- `toBeVisible` (57 edge(s))
+- `toHaveCount` (48 edge(s))
 - `getByRole` (44 edge(s))
-- `toHaveCount` (43 edge(s))
-- `click` (31 edge(s))
-- `toContainText` (30 edge(s))
+- `click` (32 edge(s))
+- `toContainText` (31 edge(s))
+- `toHaveAttribute` (26 edge(s))
 - `toHaveText` (26 edge(s))
-- `toHaveAttribute` (25 edge(s))
 - `goto` (23 edge(s))
 - `url` (20 edge(s))
+- `toBe` (19 edge(s))
+- `toContain` (19 edge(s))
 - `push` (17 edge(s))
-- `toBe` (17 edge(s))
-- `on` (16 edge(s))

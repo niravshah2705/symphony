@@ -42,6 +42,12 @@ Manager v7 / firebase-admin v14 read-only against real GCP.
   add `Content-Type` or trigger avoidable CORS preflights. Production obfuscation
   now defaults to the lighter preset, SPA cache headers were corrected, and
   unit/e2e coverage protects initial paint, lazy routing, and dynamic imports.
+- **ADLC search and AI discovery** — expanded ADLC as Agentic Development Life
+  Cycle in visible and structured content, added canonical/search/social
+  metadata, valid `robots.txt` + `sitemap.xml`, and concise/full `llms.txt`
+  resources with explicit OpenAI, Anthropic, Google, and Perplexity crawler
+  policy. The Agent hero now includes an accessible compact launcher that opens
+  each assistant and copies an authoritative, source-linked ADLC prompt.
 
 ### Fixed
 

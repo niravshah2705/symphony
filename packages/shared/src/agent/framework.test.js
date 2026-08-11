@@ -10,6 +10,16 @@ const { execFileSync } = require('child_process');
 const { buildBackend, installSkills, configuredResourceNames, runWorkflow } = require('./framework');
 const { resolveSkillsSrc } = require('../config');
 
+// The vendored default skills live next to config.js, which now resides in
+// @ai-fleet/shared-core (the split that keeps the agent SDKs out of the
+// non-agent images). Derive the expected path from where config actually
+// resolves so this test stays correct regardless of the package layout.
+const VENDORED_SKILLS = path.join(
+  path.dirname(require.resolve('@ai-fleet/shared-core/config')),
+  'agent',
+  'skills',
+);
+
 // Snapshot + restore the skills env so a test that pins SKILLS_ROOT/SKILLS_VERSION
 // never leaks the versioned mount into the vendored-default tests (they run in
 // the same process). Returns a restore fn to register with t.after.
@@ -97,8 +107,8 @@ test('installSkills reads the vendored default skills when SKILLS_ROOT is unset 
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  // resolveSkillsSrc falls back to the vendored packages/shared/src/agent/skills.
-  assert.equal(resolveSkillsSrc(), path.join(__dirname, 'skills'));
+  // resolveSkillsSrc falls back to the vendored skills in @ai-fleet/shared-core.
+  assert.equal(resolveSkillsSrc(), VENDORED_SKILLS);
 
   const paths = installSkills(root, ['software-planning']);
   assert.deepEqual(paths, ['/.agent-skills/software-planning/']);
@@ -136,7 +146,7 @@ test('installSkills honors SKILLS_ROOT + SKILLS_VERSION and installs from the pi
 test('resolveSkillsSrc pins the mount root directly when SKILLS_VERSION is unset', () => {
   assert.equal(resolveSkillsSrc({ SKILLS_ROOT: '/skills' }), path.join('/skills'));
   assert.equal(resolveSkillsSrc({ SKILLS_ROOT: '/skills', SKILLS_VERSION: 'v2' }), path.join('/skills', 'v2'));
-  assert.equal(resolveSkillsSrc({}), path.join(__dirname, 'skills'));
+  assert.equal(resolveSkillsSrc({}), VENDORED_SKILLS);
 });
 
 test('resolveSkillsSrc rejects a SKILLS_VERSION that is not a single safe path segment', () => {
