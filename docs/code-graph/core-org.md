@@ -7,7 +7,7 @@
 Directory-based community: services/org
 
 - **Size**: 484 nodes
-- **Cohesion**: 0.4494
+- **Cohesion**: 0.4495
 - **Dominant Language**: python
 
 ## Members

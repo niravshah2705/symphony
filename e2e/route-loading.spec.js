@@ -55,8 +55,8 @@ test('Agent scaffold survives auth restore and inactive route assets stay lazy',
   const aiLauncher = page.locator('.adlc-ai-links');
   await expect(hero).toBeVisible();
   await expect(aiLauncher).toBeVisible();
-  await expect(aiLauncher.locator('a[data-ai-assistant]')).toHaveCount(4);
-  await expect(aiLauncher.locator('.brand-icon')).toHaveCount(4);
+  await expect(aiLauncher.locator('a[data-ai-assistant]')).toHaveCount(5);
+  await expect(aiLauncher.locator('.brand-icon')).toHaveCount(5);
   const initialHero = await hero.elementHandle();
   const initialAiLauncher = await aiLauncher.elementHandle();
   expect(initialHero).toBeTruthy();
@@ -78,7 +78,7 @@ test('Agent scaffold survives auth restore and inactive route assets stay lazy',
   await chatGptLink.evaluate((link) => link.addEventListener('click', (event) => event.preventDefault(), { once: true }));
   await chatGptLink.click();
   await expect.poll(() => page.evaluate(() => window.__adlcCopiedPrompt)).toContain('Agentic Development Life Cycle');
-  await expect(page.locator('#toast')).toContainText('ADLC prompt copied');
+  await expect(page.locator('#toast')).toContainText('Searching ADLC on ChatGPT');
 
   const initialViewModules = [...new Set(assets.filter((path) => path.startsWith('/js/views/')))];
   expect(initialViewModules).toEqual(['/js/views/agent.js']);
@@ -132,8 +132,8 @@ test('a non-Agent hash never exposes or preloads the Agent scaffold', async ({ p
   await page.evaluate(() => { window.location.hash = '#/agent/new'; });
   await expect(page.locator('body')).toHaveAttribute('data-route', 'agent');
   await expect(page.locator('.adlc-ai-links')).toHaveCount(1);
-  await expect(page.locator('.adlc-ai-links a[data-ai-assistant]')).toHaveCount(4);
-  await expect(page.locator('.adlc-ai-links .brand-icon')).toHaveCount(4);
+  await expect(page.locator('.adlc-ai-links a[data-ai-assistant]')).toHaveCount(5);
+  await expect(page.locator('.adlc-ai-links .brand-icon')).toHaveCount(5);
 });
 
 test('SEO and AI discovery resources bypass the SPA fallback', async ({ request }) => {

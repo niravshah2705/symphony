@@ -10,6 +10,11 @@ export const state = {
   hasKey: false,
   planningConfigured: false,
   planningProvider: 'linear',
+  // Whether the configured planning key actually works (validated against the
+  // provider). A present-but-rejected key is hasKey:true + connectionValid:false,
+  // which the connection-dependent routes treat like "not connected" and guide
+  // the user to Settings instead of firing calls that would 401.
+  connectionValid: true,
   currentProjectId: localStorage.getItem(KEY_PROJECT) || '',
   activeRoute: '',
   sidebarOpen: false,

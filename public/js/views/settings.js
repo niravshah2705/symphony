@@ -1,17 +1,22 @@
 import { api } from '../api.js';
 import { el, clear, toast, loading } from '../dom.js';
 import { brandIcon } from '../icons.js';
+import { state } from '../state.js';
 
 export async function renderSettings(view) {
   view.append(loading('Loading settings…'));
 
+  // The labels/members enrichment is Linear-backed and 401s when the saved key
+  // was rejected. Skip it in that known-bad state so the settings page (the very
+  // place to fix the key) doesn't spam the console with connected-tool 401s.
+  const linearBroken = state.connectionValid === false;
   const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes, jsonRes, meRes, projectsRes] = await Promise.all([
     api.getSettings(),
     api.getLlmPresets(),
     api.getAgentConfig().catch(() => ({ config: {} })),
     api.getAgentModels().catch(() => ({ intervals: [5, 10, 15] })),
-    api.getAgentLabels().catch(() => ({ labels: [] })),
-    api.getMembers().catch(() => ({ members: [] })),
+    linearBroken ? Promise.resolve({ labels: [] }) : api.getAgentLabels().catch(() => ({ labels: [] })),
+    linearBroken ? Promise.resolve({ members: [] }) : api.getMembers().catch(() => ({ members: [] })),
     api.getAssumedRole().catch(() => ({ assumedRole: null })),
     api.getCodexStatus().catch(() => ({ connected: false })),
     api.getClaudeStatus().catch(() => ({ connected: false })),
@@ -53,7 +58,7 @@ export async function renderSettings(view) {
   // so they are labeled "Global" in the effective panel until per-scope lands.
   const identity = deriveIdentity(meRes, projectsRes && projectsRes.projects);
   const scopeState = {
-    scope: ORG_POLICY_MANAGEABLE && identity.isOrgAdmin && identity.hasOrg ? 'org' : 'user',
+    scope: identity.isOrgAdmin && identity.hasOrg ? 'org' : 'user',
     projectId: identity.defaultProjectId,
   };
 
@@ -83,15 +88,10 @@ export async function renderSettings(view) {
 /* ===================== Redesign: shell & scope ===================== */
 
 // Org-scope policy + the per-org secret vault are enforced by the SETTINGS
-// service, which keeps its OWN Firestore user store separate from the org
-// service. Org membership is not yet synced across the two, so the settings
-// service treats every browser user as org-less and answers 403 on
-// /settings-policy/settings/org*. Enabling the org policy card from the ORG
-// service's `org_role` therefore only fires calls that always 403 and spam the
-// browser console. Gate the whole org-scope surface off until the backend syncs
-// org membership into the settings service, then flip this (ideally to a signal
-// the settings service returns about the caller). TODO(org-membership-sync).
-const ORG_POLICY_MANAGEABLE = false;
+// service. It keeps its own user store, so the gateway now forwards the caller's
+// org membership (resolved from the authoritative org service) as trusted x-org-*
+// headers — real org admins are recognized and the org-scope surface works. The
+// card is gated on the org role the org service reports, mirroring that check.
 
 // Best-effort identity for the scope ladder. `me` is /api/org/me (org-less
 // friendly); shapes vary, so read defensively and always leave org/user usable.
@@ -165,7 +165,7 @@ function sxHeader() {
 function scopeLadder(scopeState, identity, rerender) {
   const projectName = identity.defaultProjectName || 'Project';
   const rows = [
-    { id: 'org', name: identity.orgName, meta: 'Boundary for every project', enabled: ORG_POLICY_MANAGEABLE && identity.hasOrg },
+    { id: 'org', name: identity.orgName, meta: 'Boundary for every project', enabled: identity.hasOrg },
     { id: 'project', name: projectName, meta: identity.defaultProjectId ? 'Narrows the org list' : 'No project selected', enabled: Boolean(identity.defaultProjectId) },
     { id: 'user', name: identity.userEmail, meta: 'Chooses inside what is left', enabled: true },
   ];
@@ -1171,11 +1171,9 @@ function policyGroup(ctx) {
       }),
       policyScopeCard(orgC, {
         title: 'Organization scope', hint: 'Applies to everyone in the org. An exclude here blocks project and user.',
-        // Gated by ORG_POLICY_MANAGEABLE: the settings service does not yet
-        // recognize org membership, so firing getOrgPolicy/getOrgSecrets here
-        // would always 403. Keep the card visible-but-disabled instead.
-        universe, enabled: ORG_POLICY_MANAGEABLE && isOrgAdmin,
-        disabledReason: 'Organization-scope policy isn’t available in this workspace yet.',
+        // The gateway forwards the caller's org role (from the org service) to the
+        // settings service, so org admins can manage org-scope policy again.
+        universe, enabled: isOrgAdmin, disabledReason: 'Organization admins only.',
         load: () => api.settingsPolicy.getOrgPolicy(), save: (b) => api.settingsPolicy.setOrgPolicy(b),
         vault: true,
       }),
@@ -1388,11 +1386,17 @@ function keysSection(settings) {
     },
   }, 'Remove Linear key');
 
-  // Reflect current connection state.
+  // Reflect current connection state. validate() now returns 200 { ok:false }
+  // for a rejected key (instead of a 401), so handle that in the success path.
   if (settings.hasKey) {
     api
       .validate()
       .then((r) => {
+        if (r && r.ok === false) {
+          status.textContent = `Linear key not working: ${r.error || 'the key was rejected.'}`;
+          status.style.color = 'var(--red)';
+          return;
+        }
         const who = r.viewer ? r.viewer.name : 'your account';
         const org = r.organization ? ` @ ${r.organization.name}` : '';
         status.textContent = `Connected as ${who}${org}.`;
