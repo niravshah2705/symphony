@@ -304,7 +304,6 @@ export const api = {
   // Operational views backed by bounded LangSmith and local health queries.
   getAnalytics: () => request('/observability/analytics'),
   getTroubleshooting: () => request('/observability/troubleshooting'),
-  getWorkflowPatterns: () => request('/observability/workflows'),
 
   // Organization service (services/org via /api/org/*). The `me` surface is
   // available to any signed-in user (personal projects + create-org); the org
