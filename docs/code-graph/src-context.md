@@ -6,8 +6,8 @@
 
 Directory-based community: services/gateway
 
-- **Size**: 277 nodes
-- **Cohesion**: 0.1491
+- **Size**: 278 nodes
+- **Cohesion**: 0.1485
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: services/gateway
 | test:buildFirebaseAuthConfig: reads AUTH_MICROSOFT_ENABLED and Microsoft tenant (either alias)@L281 | Test | ./services/gateway/src/auth.test.js | 281-289 |
 | test:buildFirebaseAuthConfig: rejects a non-boolean provider flag@L291 | Test | ./services/gateway/src/auth.test.js | 291-296 |
 
-*... and 227 more members.*
+*... and 228 more members.*
 
 ## Execution Flows
 
@@ -87,16 +87,16 @@ Directory-based community: services/gateway
 
 - `equal` (236 edge(s))
 - `deepEqual` (40 edge(s))
-- `String` (34 edge(s))
+- `String` (36 edge(s))
+- `next` (23 edge(s))
 - `json` (23 edge(s))
-- `next` (22 edge(s))
 - `status` (22 edge(s))
 - `Boolean` (19 edge(s))
 - `trim` (19 edge(s))
+- `toLowerCase` (14 edge(s))
 - `includes` (13 edge(s))
 - `get` (13 edge(s))
 - `set` (13 edge(s))
-- `toLowerCase` (13 edge(s))
 - `verifyStreamToken` (13 edge(s))
 - `buildFirebaseAuthConfig` (12 edge(s))
 - `ok` (12 edge(s))

@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 537 nodes
-- **Cohesion**: 0.4776
+- **Size**: 541 nodes
+- **Cohesion**: 0.4767
 - **Dominant Language**: javascript
 
 ## Members
@@ -33,6 +33,10 @@ Directory-based community: public/js
 | setApiBase | Function | ./public/js/api.js | 85-88 |
 | notifyAuthenticationRequired | Function | ./public/js/api.js | 90-94 |
 | request | Function | ./public/js/api.js | 96-166 |
+| openStream | Function | ./public/js/api.js | 183-231 |
+| scheduleReconnect | Function | ./public/js/api.js | 189-194 |
+| connect | Function | ./public/js/api.js | 196-221 |
+| close | Function | ./public/js/api.js | 225-229 |
 | ensureStylesheet | Function | ./public/js/app.js | 41-63 |
 | route | Function | ./public/js/app.js | 65-84 |
 | load | Function | ./public/js/app.js | 70-82 |
@@ -48,24 +52,20 @@ Directory-based community: public/js
 | initShellInteractions | Function | ./public/js/app.js | 265-321 |
 | prepareNavigationTarget | Function | ./public/js/app.js | 280-283 |
 | closeAtBreakpoint | Function | ./public/js/app.js | 316-319 |
-| refreshConnection | Function | ./public/js/app.js | 323-362 |
-| refreshRole | Function | ./public/js/app.js | 365-383 |
-| freshView | Function | ./public/js/app.js | 387-396 |
-| setAuthenticationLocked | Function | ./public/js/app.js | 398-405 |
-| beginSignIn | Function | ./public/js/app.js | 407-415 |
-| beginMicrosoftSignIn | Function | ./public/js/app.js | 417-425 |
-| authProviderButtons | Function | ./public/js/app.js | 432-450 |
-| beginSignOut | Function | ./public/js/app.js | 452-460 |
-| renderAuthControl | Function | ./public/js/app.js | 462-593 |
-| renderAuthenticationGate | Function | ./public/js/app.js | 595-654 |
-| renderSignInRequired | Function | ./public/js/app.js | 659-681 |
-| renderAccessDenied | Function | ./public/js/app.js | 683-695 |
-| render | Function | ./public/js/app.js | 697-760 |
-| capitalize | Function | ./public/js/app.js | 762-765 |
-| scheduleOneTap | Function | ./public/js/app.js | 767-783 |
-| start | Function | ./public/js/app.js | 769-777 |
+| refreshConnection | Function | ./public/js/app.js | 323-372 |
+| refreshRole | Function | ./public/js/app.js | 375-393 |
+| freshView | Function | ./public/js/app.js | 397-406 |
+| setAuthenticationLocked | Function | ./public/js/app.js | 408-415 |
+| beginSignIn | Function | ./public/js/app.js | 417-425 |
+| beginMicrosoftSignIn | Function | ./public/js/app.js | 427-435 |
+| authProviderButtons | Function | ./public/js/app.js | 442-460 |
+| beginSignOut | Function | ./public/js/app.js | 462-470 |
+| renderAuthControl | Function | ./public/js/app.js | 472-603 |
+| renderAuthenticationGate | Function | ./public/js/app.js | 605-664 |
+| renderSignInRequired | Function | ./public/js/app.js | 669-691 |
+| renderAccessDenied | Function | ./public/js/app.js | 693-705 |
 
-*... and 487 more members.*
+*... and 491 more members.*
 
 ## Execution Flows
 
@@ -79,7 +79,7 @@ Directory-based community: public/js
 - **render** (criticality: 0.72, depth: 5)
 - **maybeRefreshConnection** (criticality: 0.69, depth: 1)
 - **applyServerEvent** (criticality: 0.63, depth: 5)
-- *... and 17 more flows.*
+- *... and 18 more flows.*
 
 ## Dependencies
 
@@ -94,7 +94,7 @@ Directory-based community: public/js
 - `setAttribute` (58 edge(s))
 - `filter` (57 edge(s))
 - `catch` (48 edge(s))
-- `t` (42 edge(s))
+- `t` (43 edge(s))
 - `querySelector` (40 edge(s))
 - `isArray` (39 edge(s))
 - `Boolean` (37 edge(s))
@@ -103,7 +103,7 @@ Directory-based community: public/js
 
 ### Incoming
 
-- `./public/js/api.js` (152 edge(s))
+- `./public/js/api.js` (158 edge(s))
 - `./public/js/views/settings.js` (126 edge(s))
 - `./public/js/views/agent.js` (97 edge(s))
 - `./public/js/app.js` (83 edge(s))

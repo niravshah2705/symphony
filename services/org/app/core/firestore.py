@@ -217,10 +217,15 @@ class FirestoreDb:
 
     async def count(self, collection: str, filters: list[tuple[str, Any]] | None = None) -> int:
         # Small, org-scoped collections — a bounded stream count is fine.
+        # NB: the builtin sum() cannot consume an async generator
+        # ('async_generator' object is not iterable), so accumulate explicitly.
         q = self._col(collection)
         for field, value in filters or []:
             q = q.where(field, "==", value)
-        return sum(1 async for _ in q.stream())
+        total = 0
+        async for _ in q.stream():
+            total += 1
+        return total
 
     async def run_transaction(self, fn: Callable[[Txn], Awaitable[Any]]) -> Any:
         transaction = self._client.transaction()

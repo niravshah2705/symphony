@@ -59,6 +59,17 @@ function createProxy(baseUrl, opts = {}) {
       headers.authorization = incomingAuth;
     }
 
+    // Trusted headers the gateway derives server-side (e.g. resolved org
+    // membership). Safe: this service is reachable only via the gateway SA
+    // (Cloud Run IAM) and `headers` starts from {} — client-supplied values are
+    // never copied through, so these cannot be spoofed by the browser.
+    if (typeof opts.injectHeaders === 'function') {
+      const injected = opts.injectHeaders(req) || {};
+      for (const [key, value] of Object.entries(injected)) {
+        if (value !== undefined && value !== null && value !== '') headers[key.toLowerCase()] = String(value);
+      }
+    }
+
     try {
       const resp = await fetch(target, init);
       const text = await resp.text();

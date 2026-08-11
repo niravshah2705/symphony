@@ -7,7 +7,7 @@
 Directory-based community: services/org
 
 - **Size**: 563 nodes
-- **Cohesion**: 0.4428
+- **Cohesion**: 0.4429
 - **Dominant Language**: python
 
 ## Members
@@ -79,7 +79,7 @@ Directory-based community: services/org
 - **lifespan** (criticality: 0.73, depth: 4)
 - **resend_invitation** (criticality: 0.72, depth: 3)
 - **create_invitation** (criticality: 0.71, depth: 2)
-- *... and 51 more flows.*
+- *... and 50 more flows.*
 
 ## Dependencies
 

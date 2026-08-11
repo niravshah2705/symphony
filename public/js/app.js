@@ -333,6 +333,7 @@ async function refreshConnection() {
     state.hasKey = Boolean(settings.hasKey);
     state.planningConfigured = Boolean(settings.planningConfigured || settings.hasKey);
     state.planningProvider = settings.planningProvider || 'linear';
+    state.connectionValid = true;
     if (!state.planningConfigured) {
       conn.className = 'conn';
       text.dataset.i18n = 'setupNeeded';
@@ -341,8 +342,17 @@ async function refreshConnection() {
     }
     // The legacy validation endpoint is Linear-specific. Other planning
     // providers are already represented by the normalized settings status.
+    // validate() now returns 200 { ok:false } for a rejected key (not a 401),
+    // so a bad key surfaces as "needs attention" without a console error.
     if (!settings.planningProvider || settings.planningProvider === 'linear') {
-      await api.validate({ signal: controller.signal });
+      const result = await api.validate({ signal: controller.signal });
+      if (result && result.ok === false) {
+        state.connectionValid = false;
+        conn.className = 'conn bad';
+        text.dataset.i18n = 'needsAttention';
+        text.textContent = t('needsAttention');
+        return;
+      }
     }
     conn.className = 'conn ok';
     if (settings.planningProvider) {
@@ -721,15 +731,25 @@ async function render({ focus = false } = {}) {
   if (focus) view.focus({ preventScroll: true });
 
   // Keep connection-dependent routes useful by explaining the single next step.
-  if (session.authenticated && !state.hasKey && connectionRoutes.has(name)) {
+  // Fires when no key is configured OR the configured Linear key was rejected —
+  // both mean "no usable live connection", so guide to Settings rather than
+  // firing project/board/issue calls that would 401 into the console.
+  const keyRejected = state.hasKey && state.connectionValid === false;
+  if (session.authenticated && connectionRoutes.has(name) && (!state.hasKey || keyRejected)) {
     const selectedElsewhere = state.planningConfigured && state.planningProvider !== 'linear';
+    const heading = keyRejected
+      ? 'Reconnect your planning workspace'
+      : (selectedElsewhere ? `${capitalize(state.planningProvider)} is configured` : 'Connect your planning workspace');
+    const body = keyRejected
+      ? 'Linear rejected the saved API key. Update it in Settings, then come back here to load live projects and issues.'
+      : (selectedElsewhere
+        ? 'This live project and board view currently reads Linear. Add a Linear key as well, or use the local Agent, Call, and Trace workspaces.'
+        : 'Add a Linear key in Settings, then come back here to load live projects and issues.');
     view.append(
       el('div', { class: 'empty connection-empty' }, [
         el('span', { class: 'empty-mark', 'aria-hidden': 'true' }, '✦'),
-        el('h2', {}, selectedElsewhere ? `${capitalize(state.planningProvider)} is configured` : 'Connect your planning workspace'),
-        el('p', { class: 'muted' }, selectedElsewhere
-          ? 'This live project and board view currently reads Linear. Add a Linear key as well, or use the local Agent, Call, and Trace workspaces.'
-          : 'Add a Linear key in Settings, then come back here to load live projects and issues.'),
+        el('h2', {}, heading),
+        el('p', { class: 'muted' }, body),
         el('a', { class: 'btn primary', href: '#/settings' }, 'Open Settings'),
       ])
     );
