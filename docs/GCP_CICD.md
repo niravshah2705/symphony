@@ -213,6 +213,6 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
 - No untrusted event input (PR/commit text, `head_ref`) is used in any `run:` step.
 - Path filters read only file paths (`dorny/paths-filter`), never event text.
 - Skills are published by a **separate** workflow (`publish-skills.yml`), also WIF
-  keyless, triggered by changes under `packages/shared/src/agent/skills/**`. It only
+  keyless, triggered by changes under `packages/shared-core/src/agent/skills/**`. It only
   writes GCS objects (never applies Terraform); roll a new version forward by bumping
   `skills_version`. See docs/GCP_DEPLOY.md ("Skills registry").

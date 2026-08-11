@@ -293,8 +293,8 @@ function initShellInteractions() {
     const prompt = link.closest('.adlc-ai-links')?.querySelector('[data-adlc-ai-prompt]')?.textContent?.trim();
     if (!prompt) return;
     copyAdlcPrompt(prompt).then((copied) => {
-      if (copied) toast(`ADLC prompt copied. Paste it into ${link.dataset.aiAssistant}.`, 'ok');
-      else toast(`Opened ${link.dataset.aiAssistant}. Copy the prompt from the ADLC source page.`, 'error');
+      if (copied) toast(`Searching ADLC on ${link.dataset.aiAssistant}. A fuller prompt is copied to your clipboard.`, 'ok');
+      else toast(`Searching ADLC on ${link.dataset.aiAssistant}. Copy the prompt from the ADLC source page.`, 'error');
     });
   });
 

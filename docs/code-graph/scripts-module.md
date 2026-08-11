@@ -7,7 +7,7 @@
 Directory-based community: scripts
 
 - **Size**: 32 nodes
-- **Cohesion**: 0.0943
+- **Cohesion**: 0.0935
 - **Dominant Language**: javascript
 
 ## Members
@@ -41,7 +41,7 @@ Directory-based community: scripts
 | test:SPA publishes complete ADLC search metadata and valid JSON-LD@L11 | Test | ./scripts/seo-discovery.test.js | 11-33 |
 | test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L35 | Test | ./scripts/seo-discovery.test.js | 35-50 |
 | test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-68 |
-| test:compact ADLC launcher has four named, local-icon assistant links@L70 | Test | ./scripts/seo-discovery.test.js | 70-80 |
+| test:compact ADLC launcher has four named, local-icon assistant links@L70 | Test | ./scripts/seo-discovery.test.js | 70-81 |
 | envFor | Function | ./scripts/start-all.js | 43-51 |
 | prefixStream | Function | ./scripts/start-all.js | 53-64 |
 | startService | Function | ./scripts/start-all.js | 66-81 |
@@ -56,8 +56,8 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `join` (42 edge(s))
-- `match` (23 edge(s))
-- `equal` (20 edge(s))
+- `match` (24 edge(s))
+- `equal` (21 edge(s))
 - `readFileSync` (13 edge(s))
 - `writeFileSync` (11 edge(s))
 - `log` (9 edge(s))
@@ -73,8 +73,8 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `match` (23 edge(s))
-- `equal` (20 edge(s))
+- `match` (24 edge(s))
+- `equal` (21 edge(s))
 - `join` (18 edge(s))
 - `./scripts/obfuscate-spa.js` (15 edge(s))
 - `./scripts/obfuscate-spa.test.js` (12 edge(s))
