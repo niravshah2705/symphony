@@ -146,3 +146,72 @@ test('processApprovalDeadlines delegates to the sweep and swallows errors', asyn
   });
   assert.deepEqual(res, { error: true }); // a failing sweep cannot break the scheduling loop
 });
+
+test('runJob threads the resolved org effectivePolicy into generatePlan (enforcement wiring)', async () => {
+  const job = { id: 'job-enf', projectId: 'p1', projectName: 'Proj', assumedRole: null, status: 'pending', steps: [] };
+  const fakeStore = {
+    addJob() {},
+    updateJob(id, patch) { Object.assign(job, patch); return job; },
+    appendJobStep(id, step) { job.steps.push(step); },
+  };
+  const effectivePolicy = { harness: { effective: ['deepagent'] }, tools: { effective: ['quality'] } };
+  let seen = null;
+  await scheduler._test.runJob(
+    job,
+    { apiKey: 'k', keys: {}, llm: { provider: 'codex', model: 'm' }, config: { createIssues: true } },
+    {
+      store: fakeStore,
+      getSettings: () => ({ llmProvider: 'codex' }),
+      linear: { getMilestonesWithIssueCounts: async () => ({ project: { id: 'p1' }, milestones: [] }) },
+      resolvePolicy: async () => effectivePolicy,
+      generatePlan: async (args) => { seen = args.settings; return { viable: true, plan: {}, traceUrl: null, traced: false, runId: 'r' }; },
+      applyPlan: async () => ({ milestonesCreated: 1, issuesCreated: 1, dependenciesCreated: 0, warnings: [] }),
+      applyAiplanned: async () => {},
+    }
+  );
+  assert.deepEqual(seen.effectivePolicy, effectivePolicy);
+});
+
+test('runJob is fail-open when policy resolution throws (planning stays allow-all)', async () => {
+  const job = { id: 'job-fo', projectId: 'p1', projectName: 'Proj', assumedRole: null, status: 'pending', steps: [] };
+  const fakeStore = { addJob() {}, updateJob(id, p) { Object.assign(job, p); return job; }, appendJobStep(id, s) { job.steps.push(s); } };
+  let seen = 'unset';
+  await scheduler._test.runJob(
+    job,
+    { apiKey: 'k', keys: {}, llm: { provider: 'codex', model: 'm' }, config: { createIssues: true } },
+    {
+      store: fakeStore,
+      getSettings: () => ({ llmProvider: 'codex' }),
+      linear: { getMilestonesWithIssueCounts: async () => ({ project: { id: 'p1' }, milestones: [] }) },
+      resolvePolicy: async () => { throw new Error('settings down'); },
+      generatePlan: async (args) => { seen = args.settings; return { viable: true, plan: {}, traceUrl: null, traced: false, runId: 'r' }; },
+      applyPlan: async () => ({ milestonesCreated: 0, issuesCreated: 0, dependenciesCreated: 0, warnings: [] }),
+      applyAiplanned: async () => {},
+    }
+  );
+  assert.equal(seen.effectivePolicy, null);
+});
+
+test('enforceLlmModel downgrades a denied model to a same-provider allowed one (fail-open)', () => {
+  const catalog = { presets: [
+    { id: 'claude-opus-4-8', provider: 'claude', model: 'claude-opus-4-8' },
+    { id: 'claude-sonnet-5', provider: 'claude', model: 'claude-sonnet-5' },
+    { id: 'codex-gpt-5-5', provider: 'codex', model: 'gpt-5.5' },
+  ] };
+  const effective = { models: { effective: ['claude-sonnet-5', 'codex-gpt-5-5'] } }; // opus denied
+
+  const denied = { provider: 'claude', model: 'claude-opus-4-8', baseUrl: 'x', accessToken: 't' };
+  const out = scheduler._test.enforceLlmModel(denied, effective, catalog);
+  assert.equal(out.model, 'claude-sonnet-5'); // swapped to a same-provider allowed model
+  assert.equal(out.provider, 'claude');
+  assert.equal(out.baseUrl, 'x'); // rest of the descriptor preserved
+
+  // Already-allowed model → unchanged (same object).
+  const ok = { provider: 'claude', model: 'claude-sonnet-5' };
+  assert.equal(scheduler._test.enforceLlmModel(ok, effective, catalog), ok);
+  // No models policy → unchanged (allow-all).
+  assert.equal(scheduler._test.enforceLlmModel(denied, {}, catalog), denied);
+  // No same-provider allowed alternative → keep the denied model (fail-open, no brick).
+  const noClaude = { models: { effective: ['codex-gpt-5-5'] } };
+  assert.equal(scheduler._test.enforceLlmModel(denied, noClaude, catalog).model, 'claude-opus-4-8');
+});

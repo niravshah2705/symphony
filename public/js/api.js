@@ -385,6 +385,16 @@ export const api = {
     setMyConfig: (values) =>
       request('/settings-policy/me/settings', { method: 'PUT', body: JSON.stringify({ values }) }),
 
+    // Per-scope OPERATIONAL prefs (readable, non-secret; merge semantics). These
+    // are the scope-ladder overrides for complexity/provider/runtime/tracker/
+    // tracing; the effective response resolves them user > project > org.
+    setOrgPrefs: (prefs) =>
+      request('/settings-policy/settings/org', { method: 'PUT', body: JSON.stringify({ prefs }) }),
+    setProjectPrefs: (projectId, prefs) =>
+      request(`/settings-policy/settings/project/${projectId}`, { method: 'PUT', body: JSON.stringify({ prefs }) }),
+    setMyPrefs: (prefs) =>
+      request('/settings-policy/me/settings', { method: 'PUT', body: JSON.stringify({ prefs }) }),
+
     // Per-org KMS-encrypted secret VAULT (org admin). This is the credential
     // source proxied agents read (via the settings service S2S resolver), with a
     // per-key managed-vs-customer selection. Write-only: GET masks each key to

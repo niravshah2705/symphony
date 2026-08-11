@@ -17,7 +17,7 @@
  * `security:*`.
  */
 
-const DOMAINS = Object.freeze(['harness', 'tools', 'skills', 'plugins', 'hooks']);
+const DOMAINS = Object.freeze(['harness', 'tools', 'skills', 'plugins', 'hooks', 'models']);
 
 const EMPTY_SCOPE = Object.freeze({ include: [], exclude: [] });
 
@@ -210,6 +210,44 @@ function filterHooksByPolicy(hookIds, effective) {
 }
 
 /**
+ * Filter task-model ids to the effective `models` policy (matched by id, like
+ * skills). The `models` universe is the task-model catalog (preset ids in
+ * llm-presets.json), so callers pass the catalog ids as universe when resolving.
+ * Allow-all when no models policy is present (fail-open — no regression).
+ */
+function filterModelsByPolicy(modelIds, effective) {
+  if (!Array.isArray(modelIds) || !hasDomain(effective, 'models')) return modelIds;
+  return filterByPolicy(modelIds, effective.models.effective);
+}
+
+/**
+ * True when `modelId` is permitted by the effective `models` policy. Allow-all
+ * (no regression) when no models policy is present, so a single-user/local run is
+ * never blocked. Use at model-resolution time to reject a denied model.
+ */
+function isModelAllowed(modelId, effective) {
+  if (!hasDomain(effective, 'models')) return true;
+  return effective.models.effective.includes(modelId);
+}
+
+/**
+ * Enforce the models policy on a chosen model/preset id. If it is excluded, fall
+ * back to the first allowed `candidate` (preferring `preferred` when allowed).
+ * When no models policy is present, or nothing among the candidates is allowed,
+ * the id is returned UNCHANGED (fail-open — never brick a run). Mirrors
+ * enforceHarness; callers pass same-provider preset ids as candidates.
+ * @returns {string} the effective (possibly downgraded) model/preset id.
+ */
+function enforceModel(modelId, effective, { candidates = [], preferred } = {}) {
+  if (!hasDomain(effective, 'models')) return modelId;
+  const allowed = effective.models.effective;
+  if (allowed.includes(modelId)) return modelId;
+  if (preferred && allowed.includes(preferred)) return preferred;
+  const alt = (candidates || []).find((id) => allowed.includes(id));
+  return alt || modelId; // nothing allowed among candidates → keep (fail-open)
+}
+
+/**
  * Enforce the harness policy on a chosen runtime id. If the runtime is excluded,
  * fall back to the first allowed harness (preferring `deepagent`, the
  * provider-neutral default). When no harness policy is present, or nothing is
@@ -239,6 +277,9 @@ module.exports = {
   applyPolicyToWorkflow,
   filterSkillPaths,
   filterHooksByPolicy,
+  filterModelsByPolicy,
+  isModelAllowed,
+  enforceModel,
   skillNameFromPath,
   enforceHarness,
 };

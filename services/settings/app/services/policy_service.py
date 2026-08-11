@@ -20,12 +20,17 @@ from app.authz.principal import Principal
 from app.core.database import Uow
 from app.core.timeutils import utcnow
 from app.domain import universe as universe_mod
-from app.domain.resolver import resolve_effective, resolve_effective_values
+from app.domain.resolver import (
+    resolve_effective,
+    resolve_effective_prefs,
+    resolve_effective_values,
+)
 from app.models.policy import (
     CONFIG_VALUE_KEYS,
     DomainPolicy,
     SettingsPolicy,
     clean_config_values,
+    clean_prefs,
 )
 from app.repositories.base import (
     org_settings_col,
@@ -37,6 +42,7 @@ from app.schemas.policy import (
     EffectiveDomainSchema,
     EffectiveResponse,
     InternalEffectiveConfigResponse,
+    InternalEffectivePolicyResponse,
     MaskedConfigValue,
     PolicyResponse,
     PolicyUpdate,
@@ -63,6 +69,20 @@ def _merge_values(current: dict[str, str], incoming: dict[str, str] | None) -> d
     return clean_config_values(merged)
 
 
+def _merge_prefs(current: dict[str, str], incoming: dict[str, str] | None) -> dict[str, str]:
+    """Merge operational prefs: same semantics as values (``None`` preserves;
+    non-empty sets; empty clears; unmentioned stay). Readable, non-secret."""
+    if incoming is None:
+        return clean_prefs(current)
+    merged = dict(clean_prefs(current))
+    for key, value in incoming.items():
+        if value:
+            merged[key] = value
+        else:
+            merged.pop(key, None)
+    return clean_prefs(merged)
+
+
 def _to_response(policy: SettingsPolicy) -> PolicyResponse:
     return PolicyResponse(
         scope_type=policy.scope_type,
@@ -72,6 +92,7 @@ def _to_response(policy: SettingsPolicy) -> PolicyResponse:
             for name, dp in policy.domains.items()
         },
         values=_mask_values(policy.values),
+        prefs=dict(policy.prefs),
         updated_at=policy.updated_at,
     )
 
@@ -95,6 +116,7 @@ def _apply_update(
         scope_id=scope_id,
         domains=domains,
         values=_merge_values(current.values if current else {}, body.values),
+        prefs=_merge_prefs(current.prefs if current else {}, body.prefs),
         updated_at=utcnow(),
     )
 
@@ -204,6 +226,7 @@ async def resolve_for_caller(
     universe = universe_mod.universe()
     resolution = resolve_effective(universe, org_policy, project_policy, user_policy)
     effective_values = resolve_effective_values(org_policy, project_policy, user_policy)
+    effective_prefs = resolve_effective_prefs(org_policy, project_policy, user_policy)
     return EffectiveResponse(
         project_id=resolved_project_id,
         domains={
@@ -214,6 +237,37 @@ async def resolve_for_caller(
         },
         universe=universe,
         values=_mask_values(effective_values),
+        prefs=effective_prefs,
+    )
+
+
+async def resolve_policy_for_org(
+    session: Uow, org_id: uuid.UUID, project_id: uuid.UUID | None
+) -> InternalEffectivePolicyResponse:
+    """INTERNAL S2S ONLY. Resolve an ORG's effective policy (org → project
+    cascade, NO user scope) for the autonomous planner/coder, which act for an org
+    and carry no end-user token. Token-gated; the org_id route param IS the
+    authorization scope (mirrors the org-secrets S2S resolver). The absence of a
+    user scope means ``effective`` is the org(+project)-level allowed set."""
+    repo = PolicyRepository(session)
+    org_policy = await repo.get(org_settings_col(org_id))
+    project_policy = None
+    resolved_project_id: uuid.UUID | None = None
+    if project_id is not None:
+        project_policy = await repo.get(project_settings_col(org_id, project_id))
+        resolved_project_id = project_id
+
+    universe = universe_mod.universe()
+    resolution = resolve_effective(universe, org_policy, project_policy, None)
+    return InternalEffectivePolicyResponse(
+        project_id=resolved_project_id,
+        domains={
+            name: EffectiveDomainSchema(
+                org=res.org, project=res.project, user=res.user, effective=res.effective
+            )
+            for name, res in resolution.items()
+        },
+        prefs=resolve_effective_prefs(org_policy, project_policy, None),
     )
 
 

@@ -6,8 +6,8 @@
 
 Directory-based community: services/settings
 
-- **Size**: 335 nodes
-- **Cohesion**: 0.4232
+- **Size**: 348 nodes
+- **Cohesion**: 0.4230
 - **Dominant Language**: python
 
 ## Members
@@ -16,10 +16,11 @@ Directory-based community: services/settings
 |------|------|------|-------|
 | health | Function | ./services/settings/app/api/v1/routes_health.py | 13-15 |
 | readiness | Function | ./services/settings/app/api/v1/routes_health.py | 19-22 |
-| get_effective_config | Function | ./services/settings/app/api/v1/routes_internal.py | 39-45 |
-| require_internal_token | Function | ./services/settings/app/api/v1/routes_internal.py | 48-52 |
-| resolve_org_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 56-63 |
-| resolve_managed_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 67-72 |
+| get_effective_config | Function | ./services/settings/app/api/v1/routes_internal.py | 42-48 |
+| require_internal_token | Function | ./services/settings/app/api/v1/routes_internal.py | 51-55 |
+| resolve_org_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 59-66 |
+| resolve_managed_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 70-75 |
+| resolve_org_effective_policy | Function | ./services/settings/app/api/v1/routes_internal.py | 82-93 |
 | get_my_settings | Function | ./services/settings/app/api/v1/routes_me.py | 25-29 |
 | put_my_settings | Function | ./services/settings/app/api/v1/routes_me.py | 33-38 |
 | get_org_secrets | Function | ./services/settings/app/api/v1/routes_secrets.py | 22-26 |
@@ -63,9 +64,8 @@ Directory-based community: services/settings
 | query | Function | ./services/settings/app/core/database.py | 63-65 |
 | count | Function | ./services/settings/app/core/database.py | 67-69 |
 | commit | Function | ./services/settings/app/core/database.py | 71-72 |
-| new_uow | Function | ./services/settings/app/core/database.py | 75-78 |
 
-*... and 285 more members.*
+*... and 298 more members.*
 
 ## Execution Flows
 
@@ -75,46 +75,46 @@ Directory-based community: services/settings
 - **__call__** (criticality: 0.83, depth: 4)
 - **get_org_secrets** (criticality: 0.81, depth: 3)
 - **resolve_for_caller** (criticality: 0.69, depth: 4)
+- **resolve_policy_for_org** (criticality: 0.69, depth: 4)
 - **set_org_policy** (criticality: 0.68, depth: 3)
 - **set_project_policy** (criticality: 0.68, depth: 3)
 - **set_user_policy** (criticality: 0.68, depth: 3)
-- **client** (criticality: 0.68, depth: 3)
-- *... and 27 more flows.*
+- *... and 29 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (105 edge(s))
-- `str` (40 edge(s))
-- `uuid4` (40 edge(s))
-- `put` (34 edge(s))
-- `Depends` (33 edge(s))
-- `json` (26 edge(s))
-- `ValueError` (14 edge(s))
-- `BaseModel` (14 edge(s))
-- `items` (13 edge(s))
-- `set` (11 edge(s))
-- `list` (10 edge(s))
-- `len` (8 edge(s))
+- `get` (114 edge(s))
+- `str` (42 edge(s))
+- `uuid4` (42 edge(s))
+- `put` (37 edge(s))
+- `Depends` (35 edge(s))
+- `json` (29 edge(s))
+- `ValueError` (17 edge(s))
+- `items` (16 edge(s))
+- `BaseModel` (15 edge(s))
+- `set` (12 edge(s))
+- `list` (11 edge(s))
+- `len` (9 edge(s))
+- `dict` (9 edge(s))
+- `pop` (8 edge(s))
 - `cls` (8 edge(s))
-- `pop` (7 edge(s))
-- `encrypt` (7 edge(s))
 
 ### Incoming
 
-- `uuid4` (39 edge(s))
-- `get` (39 edge(s))
-- `put` (34 edge(s))
-- `json` (26 edge(s))
+- `get` (43 edge(s))
+- `uuid4` (41 edge(s))
+- `put` (37 edge(s))
+- `json` (29 edge(s))
 - `./services/settings/app/errors.py` (18 edge(s))
-- `./services/settings/tests/unit/test_resolver.py` (16 edge(s))
-- `./services/settings/app/services/policy_service.py` (14 edge(s))
+- `./services/settings/tests/unit/test_resolver.py` (18 edge(s))
+- `./services/settings/app/services/policy_service.py` (16 edge(s))
+- `./services/settings/app/schemas/policy.py` (13 edge(s))
 - `./services/settings/tests/integration/test_secrets_vault.py` (12 edge(s))
-- `./services/settings/app/schemas/policy.py` (11 edge(s))
+- `./services/settings/app/domain/resolver.py` (11 edge(s))
 - `./services/settings/tests/integration/test_authz.py` (10 edge(s))
 - `./services/settings/app/core/firestore.py` (9 edge(s))
-- `./services/settings/app/domain/resolver.py` (9 edge(s))
 - `./services/settings/tests/integration/test_config_values.py` (9 edge(s))
 - `./services/settings/app/crypto/envelope.py` (8 edge(s))
 - `./services/settings/app/schemas/secrets.py` (8 edge(s))

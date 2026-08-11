@@ -16,6 +16,9 @@ const {
   applyPolicyToWorkflow,
   filterSkillPaths,
   filterHooksByPolicy,
+  filterModelsByPolicy,
+  isModelAllowed,
+  enforceModel,
   enforceHarness,
 } = require('./settings-policy');
 
@@ -25,8 +28,32 @@ function dp(include = [], exclude = []) {
   return { include, exclude };
 }
 
-test('DOMAINS are the five settings domains', () => {
-  assert.deepEqual([...DOMAINS], ['harness', 'tools', 'skills', 'plugins', 'hooks']);
+test('DOMAINS are the six settings domains', () => {
+  assert.deepEqual([...DOMAINS], ['harness', 'tools', 'skills', 'plugins', 'hooks', 'models']);
+});
+
+test('models domain cascades: org/project deny then user shortlist', () => {
+  const universe = {
+    models: ['claude-opus-4-8', 'claude-sonnet-5', 'codex-gpt-5-5', 'ollama-gpt-oss-20b'],
+  };
+  const org = { domains: { models: dp([], ['ollama-*']) } };
+  const project = { domains: { models: dp([], ['codex-gpt-5-5']) } };
+  const user = { domains: { models: dp(['claude-*', 'codex-gpt-5-5'], []) } };
+  const eff = resolveEffective(universe, { org, project, user });
+  assert.deepEqual(eff.models.effective, ['claude-opus-4-8', 'claude-sonnet-5']);
+});
+
+test('filterModelsByPolicy / isModelAllowed enforce the effective models set (fail-open)', () => {
+  const effective = { models: { effective: ['claude-opus-4-8', 'claude-sonnet-5'] } };
+  assert.deepEqual(
+    filterModelsByPolicy(['claude-opus-4-8', 'codex-gpt-5-5', 'claude-sonnet-5'], effective),
+    ['claude-opus-4-8', 'claude-sonnet-5'],
+  );
+  assert.equal(isModelAllowed('claude-opus-4-8', effective), true);
+  assert.equal(isModelAllowed('codex-gpt-5-5', effective), false);
+  // No models policy → allow-all (no regression).
+  assert.equal(isModelAllowed('anything', {}), true);
+  assert.deepEqual(filterModelsByPolicy(['a', 'b'], {}), ['a', 'b']);
 });
 
 test('filterHooksByPolicy prunes hook ids to the effective hooks policy', () => {
@@ -183,4 +210,24 @@ test('enforceHarness falls back to the first allowed when deepagent is excluded'
 test('enforceHarness is fail-open: no policy, or nothing allowed, keeps the runtime', () => {
   assert.equal(enforceHarness('codex-sdk', null), 'codex-sdk');
   assert.equal(enforceHarness('codex-sdk', { harness: { effective: [] } }), 'codex-sdk');
+});
+
+test('enforceModel downgrades a denied id to an allowed candidate (fail-open)', () => {
+  const effective = { models: { effective: ['claude-sonnet-5', 'claude-haiku-4-5'] } };
+  // Denied id → first allowed candidate.
+  assert.equal(
+    enforceModel('claude-opus-4-8', effective, { candidates: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'] }),
+    'claude-sonnet-5',
+  );
+  // `preferred` wins when allowed.
+  assert.equal(
+    enforceModel('claude-opus-4-8', effective, { candidates: ['claude-sonnet-5', 'claude-haiku-4-5'], preferred: 'claude-haiku-4-5' }),
+    'claude-haiku-4-5',
+  );
+  // Already allowed → unchanged.
+  assert.equal(enforceModel('claude-sonnet-5', effective, { candidates: ['claude-sonnet-5'] }), 'claude-sonnet-5');
+  // No allowed candidate → keep (fail-open, don't brick).
+  assert.equal(enforceModel('codex-gpt-5-5', effective, { candidates: ['codex-gpt-5-4'] }), 'codex-gpt-5-5');
+  // No models policy → unchanged (allow-all).
+  assert.equal(enforceModel('anything', {}, { candidates: ['x'] }), 'anything');
 });

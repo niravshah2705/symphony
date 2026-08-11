@@ -25,6 +25,7 @@ from fnmatch import fnmatchcase
 from app.models.policy import (
     CONFIG_VALUE_KEYS,
     DOMAINS,
+    PREF_KEYS,
     DomainPolicy,
     SettingsPolicy,
 )
@@ -124,6 +125,32 @@ def resolve_effective_values(
     for key in CONFIG_VALUE_KEYS:
         # Lowest scope with a value wins.
         for source in (user_values, project_values, org_values):
+            candidate = source.get(key)
+            if candidate:
+                effective[key] = candidate
+                break
+    return effective
+
+
+def resolve_effective_prefs(
+    org_policy: SettingsPolicy | None,
+    project_policy: SettingsPolicy | None,
+    user_policy: SettingsPolicy | None,
+) -> dict[str, str]:
+    """Resolve each allow-listed operational pref with **user > project > org**
+    precedence — a lower scope overrides a higher one (prefs are overrides, not
+    restrictions, like config values). Only keys set at some scope are returned."""
+
+    def prefs(policy: SettingsPolicy | None) -> dict[str, str]:
+        return policy.prefs if policy is not None else {}
+
+    org_prefs = prefs(org_policy)
+    project_prefs = prefs(project_policy)
+    user_prefs = prefs(user_policy)
+
+    effective: dict[str, str] = {}
+    for key in PREF_KEYS:
+        for source in (user_prefs, project_prefs, org_prefs):
             candidate = source.get(key)
             if candidate:
                 effective[key] = candidate

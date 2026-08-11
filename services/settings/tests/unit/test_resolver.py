@@ -137,6 +137,48 @@ def test_missing_policies_are_treated_as_empty():
     assert resolution["harness"].effective == HARNESS
 
 
+# ---- models domain (task-model catalog governance) --------------------------
+
+def test_models_is_a_known_domain():
+    from app.models.policy import DOMAINS
+
+    assert "models" in DOMAINS
+
+
+def test_models_cascade_org_project_deny_then_user_shortlist():
+    # Design semantics: org/project DENY (exclude) models — org is the ceiling,
+    # project subtracts more — and the user SHORTLISTS (include) from what is left.
+    # A lower scope can only narrow; provider globs like ``claude-*`` are honoured.
+    models = [
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-haiku-4-5",
+        "codex-gpt-5-5",
+        "ollama-gpt-oss-20b",
+    ]
+    org = SettingsPolicy(
+        scope_type="org",
+        scope_id="o1",
+        domains={"models": dp(exclude=["ollama-*"])},  # org bans local BYoM
+    )
+    project = SettingsPolicy(
+        scope_type="project",
+        scope_id="p1",
+        domains={"models": dp(exclude=["codex-gpt-5-5"])},  # project bans one more
+    )
+    user = SettingsPolicy(
+        scope_type="user",
+        scope_id="u1",
+        # shortlist claude models; trying to re-add the project-denied codex is a no-op.
+        domains={"models": dp(include=["claude-*", "codex-gpt-5-5"])},
+    )
+    res = resolve_effective({"models": models}, org, project, user)["models"]
+
+    assert "ollama-gpt-oss-20b" not in res.effective  # org-denied everywhere below
+    assert "codex-gpt-5-5" not in res.effective  # project-denied; user cannot re-add
+    assert res.effective == ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"]
+
+
 # ---- resolve_effective_values (config value override precedence) ------------
 
 def sp(scope_type, values) -> SettingsPolicy:

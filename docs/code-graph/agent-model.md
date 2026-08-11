@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1663 nodes
-- **Cohesion**: 0.1308
+- **Size**: 1681 nodes
+- **Cohesion**: 0.1306
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared
 | issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
 | applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-212 |
 
-*... and 1613 more members.*
+*... and 1631 more members.*
 
 ## Execution Flows
 
@@ -79,41 +79,41 @@ Directory-based community: packages/shared
 - **consumeLogin** (criticality: 0.61, depth: 1)
 - **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
 - **refreshTokens** (criticality: 0.61, depth: 1)
-- *... and 51 more flows.*
+- *... and 49 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (1239 edge(s))
+- `equal` (1258 edge(s))
 - `join` (223 edge(s))
-- `String` (217 edge(s))
-- `deepEqual` (205 edge(s))
-- `includes` (186 edge(s))
-- `push` (152 edge(s))
-- `map` (147 edge(s))
-- `ok` (139 edge(s))
+- `String` (218 edge(s))
+- `deepEqual` (214 edge(s))
+- `includes` (191 edge(s))
+- `push` (154 edge(s))
+- `map` (148 edge(s))
+- `ok` (140 edge(s))
 - `strictEqual` (127 edge(s))
 - `slice` (121 edge(s))
-- `filter` (116 edge(s))
+- `filter` (117 edge(s))
 - `trim` (110 edge(s))
+- `isArray` (107 edge(s))
 - `match` (107 edge(s))
-- `isArray` (105 edge(s))
 - `Number` (93 edge(s))
 
 ### Incoming
 
-- `equal` (1232 edge(s))
-- `deepEqual` (203 edge(s))
+- `equal` (1251 edge(s))
+- `deepEqual` (212 edge(s))
 - `./packages/shared/src/store.js` (168 edge(s))
-- `ok` (139 edge(s))
+- `ok` (140 edge(s))
 - `strictEqual` (127 edge(s))
 - `match` (87 edge(s))
 - `join` (85 edge(s))
 - `./packages/shared/src/linear.js` (74 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (71 edge(s))
 - `./packages/shared/src/agent/runtimes.js` (68 edge(s))
-- `includes` (65 edge(s))
+- `includes` (66 edge(s))
 - `throws` (57 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (56 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (49 edge(s))

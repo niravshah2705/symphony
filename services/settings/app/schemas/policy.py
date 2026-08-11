@@ -12,7 +12,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.policy import CONFIG_VALUE_KEYS, DOMAINS
+from app.models.policy import CONFIG_VALUE_KEYS, DOMAINS, PREF_KEYS
 
 MAX_ITEMS_PER_LIST = 200
 MAX_PATTERN_LENGTH = 200
@@ -37,6 +37,27 @@ def _validate_config_values(values: dict[str, str]) -> dict[str, str]:
             raise ValueError(f"config value {key!r} is too long")
         if _CONTROL_CHARS_RE.search(text):
             raise ValueError(f"config value {key!r} contains control characters")
+        # Empty string is a meaningful CLEAR; keep it so callers can unset a key.
+        cleaned[key] = text
+    return cleaned
+
+
+MAX_PREF_VALUE_LENGTH = 200
+
+
+def _validate_prefs(prefs: dict[str, str]) -> dict[str, str]:
+    """Operational prefs are READABLE (non-secret) allow-listed scalars. Reject
+    unknown keys; bound length; strip control chars (no CR/LF log forging / NUL)."""
+    unknown = set(prefs) - set(PREF_KEYS)
+    if unknown:
+        raise ValueError(f"unknown pref key(s): {', '.join(sorted(unknown))}")
+    cleaned: dict[str, str] = {}
+    for key, raw in prefs.items():
+        text = str(raw).strip()
+        if len(text) > MAX_PREF_VALUE_LENGTH:
+            raise ValueError(f"pref {key!r} is too long")
+        if _CONTROL_CHARS_RE.search(text):
+            raise ValueError(f"pref {key!r} contains control characters")
         # Empty string is a meaningful CLEAR; keep it so callers can unset a key.
         cleaned[key] = text
     return cleaned
@@ -100,6 +121,9 @@ class PolicyUpdate(BaseModel):
 
     domains: dict[str, DomainPolicySchema] | None = None
     values: dict[str, str] | None = None
+    # Operational prefs — MERGE semantics like values (None preserves; a provided
+    # key sets; an empty string clears). Readable, non-secret.
+    prefs: dict[str, str] | None = None
 
     @field_validator("domains")
     @classmethod
@@ -117,6 +141,13 @@ class PolicyUpdate(BaseModel):
             return None
         return _validate_config_values(values)
 
+    @field_validator("prefs")
+    @classmethod
+    def _known_prefs(cls, prefs: dict[str, str] | None) -> dict[str, str] | None:
+        if prefs is None:
+            return None
+        return _validate_prefs(prefs)
+
 
 class PolicyResponse(BaseModel):
     scope_type: str
@@ -124,6 +155,8 @@ class PolicyResponse(BaseModel):
     domains: dict[str, DomainPolicySchema]
     # Masked config values for every allow-listed key ({set: bool}); never plaintext.
     values: dict[str, MaskedConfigValue] = Field(default_factory=dict)
+    # Operational prefs set at THIS scope (readable, non-secret).
+    prefs: dict[str, str] = Field(default_factory=dict)
     updated_at: datetime | None = None
 
 
@@ -143,6 +176,8 @@ class EffectiveResponse(BaseModel):
     universe: dict[str, list[str]]
     # Masked effective config values ({set: bool}) — browser-facing, never plaintext.
     values: dict[str, MaskedConfigValue] = Field(default_factory=dict)
+    # Resolved effective operational prefs (user > project > org), readable.
+    prefs: dict[str, str] = Field(default_factory=dict)
 
 
 class InternalEffectiveConfigResponse(BaseModel):
@@ -152,6 +187,18 @@ class InternalEffectiveConfigResponse(BaseModel):
 
     project_id: uuid.UUID | None = None
     values: dict[str, str] = Field(default_factory=dict)
+
+
+class InternalEffectivePolicyResponse(BaseModel):
+    """Org-scoped effective policy for token-gated S2S callers (the autonomous
+    planner/coder, which act for an org and carry NO end-user token). Cascades
+    org → project only — there is no user scope. Carries NO config values (those
+    are the separate ``/internal/effective-config`` endpoint)."""
+
+    project_id: uuid.UUID | None = None
+    domains: dict[str, EffectiveDomainSchema]
+    # Resolved effective operational prefs (org → project; no user scope in S2S).
+    prefs: dict[str, str] = Field(default_factory=dict)
 
 
 class UniverseResponse(BaseModel):

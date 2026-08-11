@@ -8,9 +8,32 @@ const { generatePlan, generateIssuesForMilestones } = require('./plan');
 const { applyPlan, applyIssuesForMilestones, applyAiplanned, applyAifail } = require('./apply');
 const { llmReady, notReadyReason, resolveLlm, providerForRole } = require('./llm');
 const { isModelAvailabilityError, pauseReasonFor, probeModelAvailability } = require('./availability');
+const { fetchOrgEffectivePolicy } = require('./org-policy-client');
+const { enforceModel } = require('./settings-policy');
+const { publicCatalog } = require('./model-presets');
 const workspaceEvents = require('./workspace-events');
 const { processBillingSweep } = require('../billing/sweep');
 const { billingStatus } = require('../billing/gate');
+
+/**
+ * Same-provider model enforcement: if the resolved model is denied by the org's
+ * effective `models` policy, swap it to an allowed preset of the SAME provider so
+ * the descriptor's base URL / tokens stay valid. FAIL-OPEN: no policy, an
+ * unmappable model, or no allowed same-provider alternative returns the
+ * descriptor unchanged (never brick a run; cross-provider downgrade is out of
+ * scope). Returns the (possibly new) llm descriptor.
+ */
+function enforceLlmModel(llm, effectivePolicy, catalog = publicCatalog()) {
+  if (!llm || !effectivePolicy || !effectivePolicy.models) return llm;
+  const presets = Array.isArray(catalog) ? catalog : (catalog && catalog.presets) || [];
+  const current = presets.find((p) => p.provider === llm.provider && p.model === llm.model);
+  if (!current) return llm; // can't map model → preset id: fail-open
+  const candidates = presets.filter((p) => p.provider === llm.provider).map((p) => p.id);
+  const allowedId = enforceModel(current.id, effectivePolicy, { candidates });
+  if (allowedId === current.id) return llm;
+  const next = presets.find((p) => p.id === allowedId);
+  return next ? { ...llm, model: next.model } : llm;
+}
 
 const { CONFIG } = require('../config');
 
@@ -130,6 +153,13 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
   const applyAiplannedImpl = dependencies.applyAiplanned || applyAiplanned;
   const applyAifailImpl = dependencies.applyAifail || applyAifail;
   const getSettings = dependencies.getSettings || store.getSettings;
+  // Resolve THIS org's effective policy (org→project cascade) so the planning
+  // agent ENFORCES the harness/tools/skills allow-deny cascade (framework.js
+  // prunes tools/skills; runtimes.js downgrades a denied harness). The autonomous
+  // loop has no end-user token, so this is a token-gated S2S org resolve. Default
+  // fetchOrgEffectivePolicy is fail-open (null → allow-all, no regression) and is
+  // injectable for tests. (models/plugins enforce at model-resolution — future.)
+  const resolvePolicyImpl = dependencies.resolvePolicy || fetchOrgEffectivePolicy;
   // Records a step both to the persistent log file and onto the job (for the UI).
   const step = (message, level = 'info') => {
     log[level] ? log[level](`[job ${job.id.slice(0, 8)} · ${job.projectName}] ${message}`) : log.info(message);
@@ -155,6 +185,18 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
     // Inspect existing milestones to decide: NEW plan vs RESUME (create issues).
     const { project, milestones } = await linearClient.getMilestonesWithIssueCounts(apiKey, job.projectId);
 
+    // Resolve the org's effective policy for enforcement. Fail-open: any error →
+    // null → allow-all (identical to today's behaviour).
+    let effectivePolicy = null;
+    try { effectivePolicy = await resolvePolicyImpl(); } catch (_) { effectivePolicy = null; }
+    const policySettings = { effectivePolicy };
+    // Enforce the models policy on the resolved model (same-provider downgrade,
+    // fail-open). Keeps a denied model from actually running.
+    const enforcedLlm = enforceLlmModel(llm, effectivePolicy);
+    if (enforcedLlm.model !== llm.model) {
+      step(`Model "${llm.model}" is denied by organization policy; using allowed "${enforcedLlm.model}".`, 'warn');
+    }
+
     if (milestones.length > 0) {
       // ---- RESUME: milestones already exist; ensure each has issues, then aidone.
       const missing = milestones.filter((m) => m.issueCount === 0);
@@ -162,7 +204,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
       let summary = { milestonesCreated: 0, issuesCreated: 0, dependenciesCreated: 0, warnings: [], resumed: true };
       if (missing.length && config.createIssues) {
         phase = 'model';
-        const gen = await generateIssuesImpl({ project, milestones: missing, config, llm, keys, onStep: step });
+        const gen = await generateIssuesImpl({ project, milestones: missing, config, llm: enforcedLlm, keys, onStep: step });
         phase = 'planning-provider';
         summary = await applyIssuesImpl(apiKey, { project, milestones: missing, generated: gen.milestones, config, onStep: step });
         await applyAiplannedImpl(apiKey, { project, onStep: step });
@@ -178,7 +220,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
 
     // ---- NEW: no milestones yet — viability + full business plan.
     phase = 'model';
-    const result = await generatePlanImpl({ project, assumedRole: job.assumedRole, config, llm, keys, onStep: step });
+    const result = await generatePlanImpl({ project, assumedRole: job.assumedRole, config, llm: enforcedLlm, keys, onStep: step, settings: policySettings });
     phase = 'planning-provider';
 
     if (!result.viable) {
@@ -445,5 +487,6 @@ module.exports = {
     runJob,
     verifyModelReadiness,
     processApprovalDeadlines,
+    enforceLlmModel,
   },
 };
