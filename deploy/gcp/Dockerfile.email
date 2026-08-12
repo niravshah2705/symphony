@@ -1,18 +1,27 @@
 # syntax=docker/dockerfile:1
 #
 # Shared transactional email service image (INTERNAL Cloud Run service).
-# Build from the monorepo root so npm workspaces resolve @ai-fleet/shared.
+# Build from the monorepo root so npm workspaces resolve @ai-fleet/shared-core.
 ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
 
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 ENV NODE_ENV=production
 
+# The email service uses only the lightweight shared primitives (logging and
+# Pub/Sub push handling). Keep the agent-oriented @ai-fleet/shared workspace out
+# of this build: it would install Codex, Claude, LangChain, and other LLM SDKs
+# that are never loaded by email delivery.
+#
+# Copy manifests first so source-only changes retain the dependency cache.
 COPY package.json package-lock.json ./
-COPY packages/ ./packages/
-COPY services/ ./services/
+COPY packages/shared-core/package.json ./packages/shared-core/package.json
+COPY services/email/package.json ./services/email/package.json
 
 RUN npm ci --omit=dev && npm cache clean --force
+
+COPY packages/shared-core/ ./packages/shared-core/
+COPY services/email/ ./services/email/
 
 FROM ${NODE_IMAGE} AS runtime
 WORKDIR /app
