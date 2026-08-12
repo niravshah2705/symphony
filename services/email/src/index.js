@@ -1,6 +1,6 @@
 'use strict';
 
-const log = require('@ai-fleet/shared/logger');
+const log = require('@ai-fleet/shared-core/logger');
 const { loadConfig } = require('./config');
 const { createMailer } = require('./mailer');
 const { createApp } = require('./app');
