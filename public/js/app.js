@@ -85,6 +85,7 @@ function route(loader, exportName, styles = []) {
 
 const routes = Object.freeze({
   agent: route(() => import('./views/agent.js'), 'renderAgent', ['/styles/immersive.css']),
+  workflows: route(() => import('./views/workflows.js'), 'renderWorkflows', ['/styles/workflows.css']),
   'agent-jobs': route(() => import('./views/agent-jobs.js'), 'renderAgentJobs', ['/styles/operations.css']),
   calls: route(() => import('./views/calls.js'), 'renderCalls', ['/styles/immersive.css']),
   business: route(() => import('./views/business.js'), 'renderBusiness', ['/styles/planning.css']),
@@ -100,6 +101,7 @@ const routes = Object.freeze({
 
 const routeMeta = {
   agent: { titleKey: 'agentWorkspace', eyebrowKey: 'workspace' },
+  workflows: { titleKey: 'workflows', eyebrowKey: 'workspace' },
   'agent-jobs': { titleKey: 'agentJobs', eyebrowKey: 'workspace' },
   calls: { titleKey: 'callRecorder', eyebrowKey: 'workspace' },
   business: { titleKey: 'business', eyebrowKey: 'planning' },

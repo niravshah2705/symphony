@@ -4,7 +4,7 @@ const KEY_PROJECT = 'lm.currentProjectId';
 const KEY_WORKSPACE_ROUTE = 'lm.lastWorkspaceRoute';
 const KEY_SIDEBAR_COLLAPSED = 'lm.sidebarCollapsed';
 
-export const IMMERSIVE_ROUTES = Object.freeze(['agent', 'calls']);
+export const IMMERSIVE_ROUTES = Object.freeze(['agent', 'calls', 'workflows']);
 
 export const state = {
   hasKey: false,

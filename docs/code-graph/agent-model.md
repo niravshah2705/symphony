@@ -79,19 +79,19 @@ Directory-based community: packages/shared
 - **prepareWorkspace** (criticality: 0.45, depth: 3)
 - **discoverModels** (criticality: 0.45, depth: 4)
 - **normalizeDesign** (criticality: 0.45, depth: 1)
-- *... and 17 more flows.*
+- *... and 14 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (1398 edge(s))
-- `deepEqual` (261 edge(s))
+- `equal` (1408 edge(s))
+- `deepEqual` (262 edge(s))
 - `join` (222 edge(s))
 - `String` (197 edge(s))
 - `push` (179 edge(s))
 - `includes` (167 edge(s))
-- `ok` (149 edge(s))
+- `ok` (150 edge(s))
 - `map` (134 edge(s))
 - `strictEqual` (127 edge(s))
 - `match` (115 edge(s))
@@ -103,9 +103,9 @@ Directory-based community: packages/shared
 
 ### Incoming
 
-- `equal` (1391 edge(s))
-- `deepEqual` (259 edge(s))
-- `ok` (149 edge(s))
+- `equal` (1401 edge(s))
+- `deepEqual` (260 edge(s))
+- `ok` (150 edge(s))
 - `strictEqual` (127 edge(s))
 - `match` (95 edge(s))
 - `join` (87 edge(s))
@@ -116,5 +116,5 @@ Directory-based community: packages/shared
 - `includes` (70 edge(s))
 - `./packages/shared/src/agent/harnesses/contract.js` (60 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (55 edge(s))
+- `rejects` (54 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (53 edge(s))
-- `rejects` (51 edge(s))

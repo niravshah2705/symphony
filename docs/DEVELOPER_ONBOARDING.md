@@ -130,6 +130,7 @@ The SPA (`public/js/app.js`) hash-routes between workspace views; the core plann
 | **Board** | Kanban board of a project's issues by workflow state, drag-and-drop to move. | `public/js/views/board.js` |
 | **Agent** | Conversational planning workspace, local enrichment, and a five-item recent-work preview. | `public/js/views/agent.js` |
 | **Agent jobs** | Complete planner and coding history with status, trace/task links, expandable steps, and cleanup controls. | `public/js/views/agent-jobs.js` |
+| **Workflows** | Organization-scoped, browser-local ADLC diagram designer with curated/custom agents, contexts, approvals, disconnected lanes, and five seeded examples. It does not execute workflows. | `public/js/views/workflows.js` |
 | **Settings** | Everything in §3. | `public/js/views/settings.js` |
 
 ---
