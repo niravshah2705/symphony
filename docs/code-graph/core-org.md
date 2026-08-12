@@ -6,7 +6,7 @@
 
 Directory-based community: services/settings
 
-- **Size**: 372 nodes
+- **Size**: 388 nodes
 - **Cohesion**: 0.4194
 - **Dominant Language**: python
 
@@ -65,7 +65,7 @@ Directory-based community: services/settings
 | get_settings | Function | ./services/settings/app/core/config.py | 110-112 |
 | Uow | Class | ./services/settings/app/core/database.py | 23-72 |
 
-*... and 322 more members.*
+*... and 338 more members.*
 
 ## Execution Flows
 
@@ -97,7 +97,7 @@ Directory-based community: services/settings
 - `BaseModel` (15 edge(s))
 - `list` (13 edge(s))
 - `strip` (12 edge(s))
-- `len` (10 edge(s))
+- `len` (11 edge(s))
 - `dict` (9 edge(s))
 - `pop` (8 edge(s))
 

@@ -11,11 +11,11 @@ Auto-generated documentation from the code knowledge graph community structure.
 | Community | Size | Link |
 |-----------|------|------|
 | agent-model | 1582 | [agent-model.md](agent-model.md) |
-| core-org | 372 | [core-org.md](core-org.md) |
+| core-org | 388 | [core-org.md](core-org.md) |
 | e2e-test:agent | 50 | [e2e-test-agent.md](e2e-test-agent.md) |
 | gcp-version | 12 | [gcp-version.md](gcp-version.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
-| repositories-org | 563 | [repositories-org.md](repositories-org.md) |
+| repositories-org | 579 | [repositories-org.md](repositories-org.md) |
 | routes-context | 68 | [routes-context.md](routes-context.md) |
 | scripts-module | 32 | [scripts-module.md](scripts-module.md) |
 | src-back | 16 | [src-back.md](src-back.md) |
