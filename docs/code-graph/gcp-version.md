@@ -14,12 +14,12 @@ Directory-based community: deploy/gcp
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| log | Function | ./deploy/gcp/bootstrap.sh | 52-52 |
-| ensure_secret | Function | ./deploy/gcp/bootstrap.sh | 119-120 |
-| has_version | Function | ./deploy/gcp/bootstrap.sh | 121-122 |
-| seed | Function | ./deploy/gcp/bootstrap.sh | 123-124 |
-| enabled_version | Function | ./deploy/gcp/bootstrap.sh | 138-139 |
-| tfimport | Function | ./deploy/gcp/bootstrap.sh | 187-192 |
+| log | Function | ./deploy/gcp/bootstrap.sh | 54-54 |
+| ensure_secret | Function | ./deploy/gcp/bootstrap.sh | 126-127 |
+| has_version | Function | ./deploy/gcp/bootstrap.sh | 128-129 |
+| seed | Function | ./deploy/gcp/bootstrap.sh | 130-131 |
+| enabled_version | Function | ./deploy/gcp/bootstrap.sh | 145-146 |
+| tfimport | Function | ./deploy/gcp/bootstrap.sh | 194-199 |
 | log | Function | ./deploy/gcp/deploy.sh | 71-71 |
 | cleanup | Function | ./deploy/gcp/deploy.sh | 74-74 |
 | has_version | Function | ./deploy/gcp/deploy.sh | 147-148 |

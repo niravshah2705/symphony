@@ -87,6 +87,12 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`.
    with a short test plan.
 5. Make sure the **Checks** workflow is green before requesting review.
 
+Merging into `main` integrates the change but does not deploy it. Automation
+keeps a separate `main` → `release` promotion PR open; production workflows run
+only after that protected PR is reviewed and merged. Maintainers should follow
+the [release promotion process](./docs/RELEASE_PROCESS.md), including its
+merge-commit requirement.
+
 ## Security
 
 Please do **not** open public issues for security vulnerabilities. See

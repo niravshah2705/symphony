@@ -88,12 +88,13 @@ To turn it on:
 
 1. **Build the provisioner image.** A `services/provisioner/**` or `packages/shared/**`
    change builds it automatically; otherwise run the deploy workflow with
-   `deploy_all=true` (or a full `cloudbuild.yaml` run).
+   `deploy_all=true` from the `release` ref (or a full `cloudbuild.yaml` run).
 2. **Set an internal token.** Terraform var `internal_api_token` (a strong random
    string). This creates the `internal-api-token` secret and grants both the
    provisioner and the org service accessor.
 3. **Flip the flag.** Terraform var `provisioning_enabled=true`, then apply
-   (a `deploy_all=true` run applies it). This creates `provisioner-sa` (+ its
+   (a `deploy_all=true` run from `release` applies it). This creates
+   `provisioner-sa` (+ its
    least-privilege roles), the `tenant-provision-requests` topic + push
    subscription + DLQ, and the internal provisioner service; it also injects
    `PROVISIONING_ENABLED=true` + `INTERNAL_API_TOKEN` into the org service.

@@ -37,7 +37,7 @@ Firebase web config (`FIREBASE_API_KEY` / `FIREBASE_AUTH_DOMAIN`) is injected by
 Terraform from the managed web app — no manual key needed; `FIREBASE_PROJECT_ID`
 defaults to the project id, and `FIREBASE_ALLOWED_DOMAIN` is optional.
 
-### Deploy — one-shot script (recommended)
+### Deploy — one-shot script (break glass / bootstrap)
 
 `deploy/gcp/deploy.sh` does the whole thing from an operator machine (idempotent):
 enables APIs, creates the Terraform state bucket, stages Secret Manager versions
@@ -61,10 +61,19 @@ defaults `EMAIL_PUBLIC_APP_URL` to the exact GCS `index.html` URL it publishes;
 override it only when a custom domain/CDN serves the SPA. It prints the gateway
 URL + SPA URL and the Firebase authorized domains to register.
 
+Routine production releases use the protected GitHub
+[`main` → `release` promotion flow](./RELEASE_PROCESS.md). This script bypasses
+that review gate, so restrict its credentials and reserve it for bootstrap or
+incident recovery.
+
 ### Deploy — CI (Cloud Build)
 
 `gcloud builds submit --config cloudbuild.yaml --substitutions=_BUCKET=...,_TF_STATE_BUCKET=...`
 runs the same build → SPA-publish → staged `terraform apply` in Cloud Build.
+Cloud Build is an alternative to the GitHub Actions CD workflow, not a second
+automatic pipeline: disable its trigger when Actions owns production. Otherwise
+configure the external trigger for exact branch `^release$` and apply equivalent
+approval/IAM controls.
 Seed the required agent Secret Manager versions first (the one-shot/bootstrap
 scripts do this for you). SMTP credentials use the acyclic flow below.
 
@@ -103,14 +112,16 @@ skill edit ships without rebuilding/redeploying a service — and so multiple sk
   bundle `version`, `updatedAt`, and a per-skill `{ name, version }` list (mirrors
   `llm-presets.json`). The bundle `version` (e.g. `v1`) is the release token used
   everywhere below.
-- **CI publish** — `.github/workflows/publish-skills.yml` runs on any push touching
-  `packages/shared-core/src/agent/skills/**` (or `workflow_dispatch` with a `version`
-  input). It authenticates via WIF and `gsutil rsync`es the skills dir to
-  `gs://<bucket>/<version>/` (plus the manifest object). It derives `<bucket>` from
-  the `GCP_PROJECT_ID` repo variable the same way Terraform does
-  (`<project_id>-aifleet-skills`) — no `SKILLS_BUCKET` repo var is needed. On a push
-  the version is read from the manifest; each version lives under its own prefix, so
-  publishing a new one **never touches** an older prefix.
+- **CI publish** — `.github/workflows/publish-skills.yml` runs after a merged
+  `main` → `release` promotion PR touching
+  `packages/shared-core/src/agent/skills/**` (or `workflow_dispatch` from the
+  `release` ref with a `version` input). It authenticates via WIF and `gsutil`
+  rsyncs the skills dir to `gs://<bucket>/<version>/` (plus the manifest object).
+  It derives `<bucket>` from the `GCP_PROJECT_ID` repo variable the same way
+  Terraform does (`<project_id>-aifleet-skills`) — no `SKILLS_BUCKET` repo var is
+  needed. On a promotion the version is read from the manifest; each version
+  lives under its own prefix, so publishing a new one **never touches** an older
+  prefix.
 - **Mount** — `deploy/gcp/terraform/skills.tf` **CREATES and owns** the bucket (name
   derived as `<project_id>-aifleet-skills`; override with `var.skills_bucket_name`,
   toggle the whole feature with `var.skills_enabled`, default `true`). It has
@@ -130,9 +141,9 @@ skill edit ships without rebuilding/redeploying a service — and so multiple sk
 
 1. Edit the skills and bump the manifest `version` (e.g. `v1` → `v2`) + the touched
    per-skill `version`; update `updatedAt`.
-2. Merge to `main`. `publish-skills.yml` publishes the new bundle to
-   `gs://<bucket>/v2/` — `v1` stays intact, so every deployment still pinned
-   to `v1` keeps working.
+2. Merge to `main`, then review and merge the generated promotion PR into
+   `release`. `publish-skills.yml` publishes the new bundle to `gs://<bucket>/v2/`
+   — `v1` stays intact, so every deployment still pinned to `v1` keeps working.
 3. Roll the deployment forward by bumping **`skills_version`** (Terraform var /
    `gh variable set SKILLS_VERSION`) and applying. Only then do planner/coder read
    `v2`. To roll back, set it to `v1` again — the objects are still there.
@@ -141,9 +152,9 @@ Set-up (one-off): nothing to pre-create — **Terraform creates the bucket** (na
 `<project_id>-aifleet-skills`) and grants the CI deployer write access when you set
 `var.skills_publisher_member` to the deployer SA. After the first `terraform apply`,
 publish an initial version by running the **Publish Skills Bundle** workflow
-(`workflow_dispatch`, `version = v1`) or by pushing a change under
-`packages/shared-core/src/agent/skills/**`. No `SKILLS_BUCKET` repo variable is
-required — the workflow derives the name from `GCP_PROJECT_ID`.
+from the `release` ref (`workflow_dispatch`, `version = v1`) or by promoting a
+change under `packages/shared-core/src/agent/skills/**`. No `SKILLS_BUCKET` repo
+variable is required — the workflow derives the name from `GCP_PROJECT_ID`.
 
 ## Roles & access control (RBAC)
 

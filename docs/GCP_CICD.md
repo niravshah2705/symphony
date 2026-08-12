@@ -1,7 +1,12 @@
-# GitHub Actions CD (deploy on merge to main)
+# GitHub Actions CD (deploy on release promotion)
 
-`.github/workflows/deploy.yml` runs on every merge to `main`, but it is
-**path-filtered** — a merge only does the work its diff actually requires.
+`.github/workflows/release-pr.yml` turns changes integrated on `main` into a
+reviewable PR targeting the protected `release` branch. `deploy.yml` runs only
+after that same-repository `main` → `release` PR is merged, and remains
+**path-filtered** — a release only does the work its aggregate diff requires.
+Closing the PR or directly pushing `release` does not deploy. See
+[`RELEASE_PROCESS.md`](./RELEASE_PROCESS.md) for branch/environment setup and
+the operator flow.
 Auth is **keyless** via Workload Identity Federation (WIF) — no service-account
 key is stored in GitHub.
 
@@ -14,7 +19,7 @@ are conditional on it:
 |---|---|
 | `services/gateway/**` (or its Dockerfile) | rebuild **gateway** image → `terraform apply` rolls **only** gateway |
 | `services/planner/**` / `services/coder/**` | rebuild that image → apply rolls **only** that service (coder ⇒ coder-control + the worker Job) |
-| `packages/shared/**` | rebuild **all three** images → apply rolls all |
+| `packages/shared/**` or `packages/shared-core/**` | rebuild all Node service images → apply rolls all |
 | root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
 | `deploy/gcp/terraform/**` | `terraform apply` **only** (no image rebuild) |
 | `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy only (no images, no Terraform) |
@@ -28,7 +33,12 @@ everything except the service that changed (see the per-service
 
 Need a full rebuild + apply of everything (e.g. after a manual hotfix or to
 re-converge state)? Trigger the workflow manually with **`deploy_all: true`**
-(Actions → Deploy to GCP → Run workflow).
+(Actions → Deploy to GCP → Run workflow) and explicitly select the `release`
+ref. Runs selected from any other ref skip all production jobs:
+
+```bash
+gh workflow run deploy.yml --ref release -f deploy_all=true
+```
 
 ## SPA obfuscation (release-time)
 
@@ -76,8 +86,8 @@ filenames.
 **`deploy/gcp/bootstrap.sh` does §1–§3 + the secret prerequisites in one run** —
 enable APIs, create the state bucket, create the deployer SA + roles, set up WIF,
 create the Pub/Sub service agent, seed Secret Manager, and set the GitHub
-secrets/variables (then imports the secrets into TF state so the first `git push`
-applies cleanly):
+secrets/variables (then imports the secrets into TF state so the first release
+promotion applies cleanly):
 
 ```bash
 PROJECT_ID=my-proj REPO=owner/repo LINEAR_API_KEY=lin_... \
@@ -92,10 +102,13 @@ non-secret `EMAIL_SMTP_AUTH_ENABLED` switch in GitHub Actions. It also sets
 (or to an explicit override), so invitation links cannot silently point at a
 different hosting channel.
 
-After it, only two console actions remain: **link a billing account** and
+After it, the GCP console actions remain: **link a billing account** and
 **enable the Google sign-in provider** in the Firebase console (the one Firebase
-piece Terraform can't create). Then push to main (first run:
-`gh workflow run deploy.yml -f deploy_all=true`).
+piece Terraform can't create). Complete the one-time `release` branch, ruleset,
+`production` environment, and WIF restrictions in
+[`RELEASE_PROCESS.md`](./RELEASE_PROCESS.md). For a first full reconciliation,
+run `gh workflow run deploy.yml --ref release -f deploy_all=true` after the first
+promotion PR is merged.
 
 The manual equivalents are documented below for reference / customization.
 
@@ -124,7 +137,7 @@ for role in \
 done
 ```
 
-## 2. Workload Identity Federation (bind the SA to this repo)
+## 2. Workload Identity Federation (bind the SA to release automation)
 
 ```bash
 PROJECT=adlc-9e72f; PROJNUM=819642330335; REPO=niravshah2705/symphony
@@ -138,9 +151,9 @@ gcloud iam workload-identity-pools providers create-oidc github-oidc \
   --display-name "GitHub OIDC" \
   --issuer-uri "https://token.actions.githubusercontent.com" \
   --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository" \
-  --attribute-condition "assertion.repository=='${REPO}'"
+  --attribute-condition "assertion.repository=='${REPO}' && assertion.ref=='refs/heads/release'"
 
-# Only this repo may impersonate the deployer SA.
+# Only release-ref workflows in this repo satisfy the provider condition.
 gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER" --project "$PROJECT" \
   --role roles/iam.workloadIdentityUser \
   --member "principalSet://iam.googleapis.com/projects/${PROJNUM}/locations/global/workloadIdentityPools/github/attribute.repository/${REPO}"
@@ -207,12 +220,15 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
 ## Notes
 
 - Keyless (WIF) — no static SA key in GitHub (cicd-pipeline checklist).
-- `concurrency: gcp-deploy` serializes applies so two merges never race the state.
+- A merged, same-repository `main` → `release` PR is the normal production gate;
+  direct pushes and closed-without-merge PRs do not start deployment.
+- `concurrency: gcp-deploy` serializes applies so two releases never race the state.
 - A rebuilt service's image tag is the commit SHA, so it rolls a fresh Cloud Run
   revision; unchanged services keep their live tag and are left untouched.
 - No untrusted event input (PR/commit text, `head_ref`) is used in any `run:` step.
 - Path filters read only file paths (`dorny/paths-filter`), never event text.
 - Skills are published by a **separate** workflow (`publish-skills.yml`), also WIF
-  keyless, triggered by changes under `packages/shared-core/src/agent/skills/**`. It only
-  writes GCS objects (never applies Terraform); roll a new version forward by bumping
-  `skills_version`. See docs/GCP_DEPLOY.md ("Skills registry").
+  keyless and gated by the same merged release PR when it changes
+  `packages/shared-core/src/agent/skills/**`. It only writes GCS objects (never
+  applies Terraform); roll a new version forward by bumping `skills_version`.
+  See docs/GCP_DEPLOY.md ("Skills registry").

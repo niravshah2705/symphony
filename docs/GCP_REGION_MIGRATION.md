@@ -38,8 +38,8 @@ gh variable set GCP_REGION --repo niravshah2705/symphony --body "asia-south1"
 
 # Rebuild ALL images into the new-region registry AND terraform-apply the move.
 # A normal merge only builds changed services, so use the deploy_all escape hatch:
-#   GitHub → Actions → "Deploy to GCP" → Run workflow → deploy_all: true
-gh workflow run deploy.yml -f deploy_all=true --repo niravshah2705/symphony
+#   GitHub → Actions → "Deploy to GCP" → Run workflow → branch: release → deploy_all: true
+gh workflow run deploy.yml --ref release -f deploy_all=true --repo niravshah2705/symphony
 ```
 
 The single apply destroys the `us-central1` Cloud Run services / Job / AR repo /
@@ -65,7 +65,7 @@ gcloud firestore databases delete --database="(default)" --project adlc-9e72f
 
 # 2) Tell CD to create Firestore in India, then re-apply.
 gh variable set FIRESTORE_LOCATION --repo niravshah2705/symphony --body "asia-south1"
-gh workflow run deploy.yml -f deploy_all=true --repo niravshah2705/symphony
+gh workflow run deploy.yml --ref release -f deploy_all=true --repo niravshah2705/symphony
 ```
 
 ### Option C — Migrate the data (export → import, preserves data)
@@ -82,7 +82,7 @@ gcloud firestore export "$BUCKET/pre-india" --project "$PROJECT"
 # 2) Recreate (default) in India (deletes the nam5 DB — data is safe in the export).
 gcloud firestore databases delete --database="(default)" --project "$PROJECT"
 gh variable set FIRESTORE_LOCATION --repo niravshah2705/symphony --body "asia-south1"
-gh workflow run deploy.yml -f deploy_all=true --repo niravshah2705/symphony   # creates the India DB
+gh workflow run deploy.yml --ref release -f deploy_all=true --repo niravshah2705/symphony   # creates the India DB
 
 # 3) Import into the new India database.
 gcloud firestore import "$BUCKET/pre-india" --project "$PROJECT"
@@ -102,7 +102,7 @@ gcloud firestore import "$BUCKET/pre-india" --project "$PROJECT"
 
 ```bash
 gh variable set GCP_REGION --repo niravshah2705/symphony --body "us-central1"
-gh workflow run deploy.yml -f deploy_all=true --repo niravshah2705/symphony
+gh workflow run deploy.yml --ref release -f deploy_all=true --repo niravshah2705/symphony
 ```
 
 (If you migrated Firestore, also reverse `FIRESTORE_LOCATION` and re-run the

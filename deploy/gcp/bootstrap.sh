@@ -8,15 +8,17 @@
 # Terraform state bucket, the keyless deployer SA + roles, Workload Identity
 # Federation, the Pub/Sub service agent, seeded Secret Manager values, and the
 # GitHub repo secrets/variables. It also imports the seeded secrets into TF state
-# so the very first `git push` deploys cleanly (no chicken-and-egg on secret
+# so the first release promotion deploys cleanly (no chicken-and-egg on secret
 # versions).
 #
-# After this, only TWO things remain manual (both console-only):
+# After this, two GCP tasks remain manual (both console-only):
 #   1. Link a BILLING account to the project.
 #   2. Firebase console -> Authentication -> enable the Google sign-in provider
 #      (creates the Google OAuth client; there is no API/Terraform to create it).
-# Then: push to main (first run: Actions -> Deploy to GCP -> Run workflow with
-# deploy_all=true so all images build), and CD does the rest.
+# Repository release controls are a separate one-time setup. Complete
+# docs/RELEASE_PROCESS.md, merge main -> release, and (for the
+# first reconciliation) run Deploy to GCP from the release ref with
+# deploy_all=true so all images build.
 #
 # Usage:
 #   PROJECT_ID=my-proj REPO=owner/repo LINEAR_API_KEY=lin_... \
@@ -87,8 +89,8 @@ for role in \
 done
 echo "  granted 15 roles"
 
-# --- 4. Workload Identity Federation (bind the repo to the deployer SA) ------
-log "Workload Identity Federation for ${REPO}"
+# --- 4. Workload Identity Federation (release ref -> deployer SA) ------------
+log "Workload Identity Federation for ${REPO} release automation"
 gcloud iam workload-identity-pools describe github \
   --project "$PROJECT_ID" --location global >/dev/null 2>&1 \
   || gcloud iam workload-identity-pools create github \
@@ -100,7 +102,12 @@ gcloud iam workload-identity-pools providers describe github-oidc \
        --display-name "GitHub OIDC" \
        --issuer-uri "https://token.actions.githubusercontent.com" \
        --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository" \
-       --attribute-condition "assertion.repository=='${REPO}'"
+       --attribute-condition "assertion.repository=='${REPO}' && assertion.ref=='refs/heads/release'"
+# Keep existing providers aligned too; `create-oidc` above is intentionally a
+# no-op when the provider already exists.
+gcloud iam workload-identity-pools providers update-oidc github-oidc \
+  --project "$PROJECT_ID" --location global --workload-identity-pool github \
+  --attribute-condition "assertion.repository=='${REPO}' && assertion.ref=='refs/heads/release'" >/dev/null
 gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER" --project "$PROJECT_ID" \
   --role roles/iam.workloadIdentityUser \
   --member "principalSet://iam.googleapis.com/projects/${PROJNUM}/locations/global/workloadIdentityPools/github/attribute.repository/${REPO}" >/dev/null
@@ -216,7 +223,8 @@ TWO manual steps remain (console only):
      (Terraform manages the web app, Hosting and authorized domains; only the
       Google OAuth client must be created via this console toggle.)
 
-Then deploy: push to main. For the FIRST run, trigger it with all images built:
-  gh workflow run deploy.yml -f deploy_all=true --repo ${REPO}
+Then complete docs/RELEASE_PROCESS.md and merge the first main -> release PR.
+For the FIRST full reconciliation, trigger the workflow from the release ref:
+  gh workflow run deploy.yml --ref release -f deploy_all=true --repo ${REPO}
 ────────────────────────────────────────────────────────────────────────────
 EOF

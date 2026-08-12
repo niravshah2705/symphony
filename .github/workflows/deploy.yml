@@ -1,10 +1,11 @@
 name: Deploy to GCP
 
-# Continuous deployment on every merge to main — but PATH-FILTERED so a merge
-# only does the work it needs:
+# Production deployment after an approved main -> release promotion PR merges.
+# Closing the PR without merging, merging any other head, or directly pushing the
+# release branch does not start this workflow. The work remains PATH-FILTERED:
 #   • a service's code changed  → rebuild ONLY that image, then a per-service
 #                                  `terraform apply` rolls ONLY that service.
-#   • packages/shared changed → rebuild all service images.
+#   • shared workspace code changed → rebuild all service images.
 #   • root deps changed → rebuild all service images + republish the SPA.
 #   • deploy/gcp/terraform/** changed → `terraform apply` only (no image rebuild).
 #   • SPA source, config, or release tooling changed → Firebase Hosting deploy.
@@ -12,8 +13,9 @@ name: Deploy to GCP
 #
 # Auth is keyless via Workload Identity Federation — see docs/GCP_CICD.md.
 on:
-  push:
-    branches: [main]
+  pull_request:
+    types: [closed]
+    branches: [release]
   workflow_dispatch:
     inputs:
       deploy_all:
@@ -28,7 +30,7 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write # required for Workload Identity Federation
+  pull-requests: read # required by paths-filter for the merged release PR
 
 env:
   REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
@@ -42,6 +44,18 @@ jobs:
   #    rebuild + whether the SPA / Terraform steps need to run at all).
   # --------------------------------------------------------------------------
   changes:
+    # The manual path is a release-ref-only redeploy escape hatch. The normal path
+    # accepts only a merged, same-repository main -> release promotion PR.
+    if: |
+      github.ref == 'refs/heads/release' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.head.ref == 'main' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        )
+      )
     runs-on: ubuntu-latest
     outputs:
       services: ${{ steps.plan.outputs.services }} # JSON array of {id,image,dockerfile}
@@ -53,8 +67,14 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          # Ignored for pull_request events (the action reads that PR's file list).
+          # For a manual run on this non-default long-lived branch, compare with
+          # the prior release commit instead of the repository default (`main`).
+          base: ${{ github.ref }}
           filters: |
-            shared:  ['packages/shared/**']
+            # Both workspaces are copied into the Node service images. Skills also
+            # publish separately, but rebuilding keeps the vendored fallback aligned.
+            shared:  ['packages/shared/**', 'packages/shared-core/**']
             gateway: ['services/gateway/**', 'deploy/gcp/Dockerfile.gateway']
             planner: ['services/planner/**', 'deploy/gcp/Dockerfile.planner']
             coder:   ['services/coder/**',   'deploy/gcp/Dockerfile.coder']
@@ -143,6 +163,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.services != '[]'
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # required for Workload Identity Federation
     name: build ${{ matrix.svc.id }}
     strategy:
       fail-fast: true
@@ -184,6 +208,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.spa == 'true'
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # required for Workload Identity Federation
     steps:
       - uses: actions/checkout@v4
 
@@ -239,6 +267,10 @@ jobs:
       needs.changes.outputs.run_terraform == 'true' &&
       needs.build.result != 'failure' && needs.build.result != 'cancelled'
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # required for Workload Identity Federation
     steps:
       - uses: actions/checkout@v4
 

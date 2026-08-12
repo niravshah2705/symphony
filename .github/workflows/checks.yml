@@ -1,6 +1,7 @@
 name: Checks
 
-# Runs the test suites as required checks on every PR and on pushes to main.
+# Runs the test suites as required checks on every PR and on integration pushes
+# to main. This includes the automated main -> release promotion PR.
 # (Deploy/release live in their own workflows; this one only verifies.)
 on:
   pull_request:

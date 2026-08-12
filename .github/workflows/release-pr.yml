@@ -1,0 +1,103 @@
+name: Prepare Release PR
+
+# `main` remains the integration branch. After each merge to main, keep exactly
+# one same-repository promotion PR open from main -> release. Production
+# workflows run only when that PR is merged; this workflow never deploys.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-promotion
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  INTEGRATION_BRANCH: main
+  RELEASE_BRANCH: release
+
+jobs:
+  open-release-pr:
+    name: Open release promotion PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open or reuse the release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if ! gh api \
+            "repos/${GITHUB_REPOSITORY}/branches/${RELEASE_BRANCH}" \
+            --silent; then
+            echo "::error::The '${RELEASE_BRANCH}' branch does not exist. Create it at the currently deployed commit and protect it before enabling release promotion."
+            exit 1
+          fi
+
+          open_pr_url="$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "$RELEASE_BRANCH" \
+            --head "$INTEGRATION_BRANCH" \
+            --state open \
+            --json isCrossRepository,url \
+            --jq '[.[] | select(.isCrossRepository == false)][0].url // ""')"
+
+          if [ -n "$open_pr_url" ]; then
+            echo "Release promotion PR already open: $open_pr_url"
+            echo "Release promotion PR: $open_pr_url" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          ahead_by="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/compare/${RELEASE_BRANCH}...${INTEGRATION_BRANCH}" \
+            --jq '.ahead_by')"
+
+          if [ "$ahead_by" -eq 0 ]; then
+            echo "${INTEGRATION_BRANCH} has no unreleased commits."
+            echo "No release PR needed; ${INTEGRATION_BRANCH} is fully promoted." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          body_file="${RUNNER_TEMP}/release-pr.md"
+          {
+            echo "## Release promotion"
+            echo
+            echo "This PR promotes the current \`${INTEGRATION_BRANCH}\` integration state to the protected \`${RELEASE_BRANCH}\` production branch."
+            echo
+            echo "- Review the aggregate diff and wait for all required checks."
+            echo "- New commits merged into \`${INTEGRATION_BRANCH}\` automatically update this PR."
+            echo "- Merge with **Create a merge commit** (never squash/rebase) so future promotions contain only new commits."
+            echo "- Merging this PR starts the production deployment and any affected skills publication."
+            echo "- Closing it without merging does not run a production workflow."
+            echo
+            echo "Triggered by \`${GITHUB_SHA}\`."
+          } > "$body_file"
+
+          if ! pr_url="$(gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "$RELEASE_BRANCH" \
+              --head "$INTEGRATION_BRANCH" \
+              --title "chore(release): promote main to production" \
+              --body-file "$body_file")"; then
+            # A superseded run can finish its API request while cancellation is
+            # propagating. Treat that duplicate-create race as success only when
+            # the expected same-repository PR now exists.
+            pr_url="$(gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "$RELEASE_BRANCH" \
+              --head "$INTEGRATION_BRANCH" \
+              --state open \
+              --json isCrossRepository,url \
+              --jq '[.[] | select(.isCrossRepository == false)][0].url // ""')"
+            if [ -z "$pr_url" ]; then
+              echo "::error::Could not create or find the release promotion PR."
+              exit 1
+            fi
+          fi
+
+          echo "Opened release promotion PR: $pr_url"
+          echo "Release promotion PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
