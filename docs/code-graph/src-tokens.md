@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared-core
 
-- **Size**: 242 nodes
-- **Cohesion**: 0.2676
+- **Size**: 243 nodes
+- **Cohesion**: 0.2671
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared-core
 | isExpired | Function | ./packages/shared-core/src/agent/oauth.js | 156-159 |
 | accountIdFromIdToken | Function | ./packages/shared-core/src/agent/oauth.js | 167-177 |
 
-*... and 192 more members.*
+*... and 193 more members.*
 
 ## Execution Flows
 
@@ -89,25 +89,25 @@ Directory-based community: packages/shared-core
 - `includes` (30 edge(s))
 - `trim` (29 edge(s))
 - `isArray` (27 edge(s))
+- `set` (23 edge(s))
 - `filter` (23 edge(s))
-- `set` (22 edge(s))
 - `map` (22 edge(s))
 - `slice` (20 edge(s))
 - `toISOString` (20 edge(s))
 - `call` (16 edge(s))
+- `has` (15 edge(s))
 - `isFinite` (14 edge(s))
-- `has` (14 edge(s))
+- `get` (12 edge(s))
 - `test` (12 edge(s))
-- `get` (11 edge(s))
 - `toLowerCase` (11 edge(s))
 
 ### Incoming
 
 - `./packages/shared-core/src/store.js` (173 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (40 edge(s))
+- `./packages/shared-core/src/provisioning/index.js` (27 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (27 edge(s))
 - `./packages/shared-core/src/config.js` (26 edge(s))
-- `./packages/shared-core/src/provisioning/index.js` (26 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (20 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (20 edge(s))
 - `./packages/shared-core/src/store/firestore-backend.js` (13 edge(s))

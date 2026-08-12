@@ -40,12 +40,13 @@ function extractContainers(containers) {
   });
 }
 
-/** Extract all containers + template volumes/exec-env from a v2 SERVICE. */
+/** Extract all containers + template settings needed to clone a v2 SERVICE. */
 function extractSourceService(svc) {
   return {
     containers: extractContainers(svc.template.containers),
     volumes: svc.template.volumes,
     executionEnvironment: svc.template.executionEnvironment,
+    maxInstanceRequestConcurrency: svc.template.maxInstanceRequestConcurrency,
   };
 }
 
