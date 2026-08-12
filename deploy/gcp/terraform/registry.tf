@@ -10,8 +10,9 @@
 #   gs://<bucket>/registry-manifest.json   newest-version pointer
 #
 # This mirrors the skills registry (skills.tf): Terraform CREATES and OWNS the
-# bucket, the name defaults to a stable derived value
-# ("<project_id>-aifleet-registry"; override with registry_bucket_name), and the
+# bucket. Unlike the skills bucket, the name is a FIXED value from
+# var.registry_bucket_name (default "aifleet-registry", NOT derived from
+# project_id) — GCS names are globally unique, so override it if taken. The
 # whole feature is gated by var.registry_enabled. The planner/coder SAs get
 # read-only access so a future runtime loader can consume generic/skills the same
 # way it consumes the skills bucket; publishing is done by the CI deployer SA.
@@ -19,7 +20,7 @@
 resource "google_storage_bucket" "registry" {
   count    = var.registry_enabled ? 1 : 0
   project  = var.project_id
-  name     = local.registry_bucket_name
+  name     = var.registry_bucket_name
   location = var.region
   labels   = merge(local.common_labels, { component = "registry" })
 

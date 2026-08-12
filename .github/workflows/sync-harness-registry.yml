@@ -9,8 +9,8 @@ name: Sync Harness Registry
 # sources.json), shallow-clones each marketplace at its pinned ref, converts every
 # selected resource to the generic pattern, verifies NO secrets slipped through,
 # then publishes. Terraform CREATES the bucket (deploy/gcp/terraform/registry.tf)
-# with a derived name ("<GCP_PROJECT_ID>-aifleet-registry"); this workflow derives
-# the SAME name, so there is no REGISTRY_BUCKET repo-var dependency for the name.
+# with a FIXED name ("aifleet-registry", var.registry_bucket_name); this workflow
+# uses that same fixed name (override via the optional REGISTRY_BUCKET repo var).
 #
 # Auth is keyless via Workload Identity Federation (same provider/SA as deploy.yml
 # and publish-skills.yml). SECURITY: no untrusted github.event.* value is
@@ -73,32 +73,23 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Resolved registry version: $VERSION"
 
-      - name: Configure git auth for private marketplaces
-        # Some marketplaces (e.g. UiPath/skills-internal) are private. Inject a
-        # read-only token via git's insteadOf ONLY when the secret is set; public
-        # marketplaces need nothing. The token is read from env (a secret), never
-        # interpolated into the script body.
-        env:
-          MARKETPLACE_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -n "${MARKETPLACE_TOKEN:-}" ]; then
-            git config --global url."https://x-access-token:${MARKETPLACE_TOKEN}@github.com/".insteadOf "https://github.com/"
-            echo "Configured token auth for github.com clones."
-          else
-            echo "No MARKETPLACE_TOKEN set — private marketplaces will fail to clone (public ones are fine)."
-          fi
-
       - name: Pre-flight — validate sources + print plan
         run: node scripts/build-harness-registry.js --sources "$SOURCES" --dry-run
 
       - name: Build dual (original + generic) bundle
+        # Only public marketplaces are cloned (no auth is configured). GIT_TERMINAL_PROMPT=0
+        # makes a private/unreachable clone fail fast instead of hanging, and
+        # --allow-incomplete skips it (with a warning) rather than failing the whole
+        # weekly run, so the reachable marketplaces still publish.
+        env:
+          GIT_TERMINAL_PROMPT: "0"
         run: |
           set -euo pipefail
           node scripts/build-harness-registry.js \
             --sources "$SOURCES" \
             --out "$RUNNER_TEMP/registry" \
-            --work "$RUNNER_TEMP/clones"
+            --work "$RUNNER_TEMP/clones" \
+            --allow-incomplete
 
       - name: Secret-leak guard (fail before publish)
         env:
@@ -135,22 +126,14 @@ jobs:
 
       - name: Publish versioned bundle to GCS
         env:
-          # Both are repo VARS (trusted config), never untrusted github.event.* —
-          # read via env only. GCP_PROJECT_ID derives the Terraform-created bucket
-          # name; REGISTRY_BUCKET is an OPTIONAL override (matches var.registry_bucket_name).
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          # REGISTRY_BUCKET is an OPTIONAL repo VAR (trusted config) overriding the
+          # FIXED default bucket name (must match var.registry_bucket_name). Read via
+          # env only — never untrusted github.event.*.
           REGISTRY_BUCKET_OVERRIDE: ${{ vars.REGISTRY_BUCKET }}
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
           set -euo pipefail
-          BUCKET="${REGISTRY_BUCKET_OVERRIDE:-}"
-          if [ -z "$BUCKET" ]; then
-            if [ -z "${GCP_PROJECT_ID:-}" ]; then
-              echo "GCP_PROJECT_ID repo variable is not set — cannot derive the registry bucket name." >&2
-              exit 1
-            fi
-            BUCKET="${GCP_PROJECT_ID}-aifleet-registry"
-          fi
+          BUCKET="${REGISTRY_BUCKET_OVERRIDE:-aifleet-registry}"
           SRC="$RUNNER_TEMP/registry/${VERSION}"
           test -d "$SRC" || { echo "Built bundle missing at $SRC" >&2; exit 1; }
           DEST="gs://${BUCKET}/${VERSION}"
@@ -168,10 +151,9 @@ jobs:
 
       - name: Post — sanity list
         env:
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           REGISTRY_BUCKET_OVERRIDE: ${{ vars.REGISTRY_BUCKET }}
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
           set -euo pipefail
-          BUCKET="${REGISTRY_BUCKET_OVERRIDE:-${GCP_PROJECT_ID}-aifleet-registry}"
+          BUCKET="${REGISTRY_BUCKET_OVERRIDE:-aifleet-registry}"
           gsutil ls -r "gs://${BUCKET}/${VERSION}" | head -50

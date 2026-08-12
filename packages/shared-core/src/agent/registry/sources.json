@@ -1,7 +1,7 @@
 {
   "version": "v1",
   "updatedAt": "2026-08-12",
-  "_note": "Source-of-truth for the weekly harness-registry sync. Marketplaces are cloned at the pinned `ref` (full sha). NOTE: UiPath/skills-internal is a PRIVATE repo — the GitHub Action needs a token (MARKETPLACE_TOKEN) with read access to clone it; public marketplaces need none.",
+  "_note": "Source-of-truth for the weekly harness-registry sync. Marketplaces are cloned at the pinned `ref` (full sha). The workflow clones PUBLIC marketplaces only (no auth configured for now); UiPath/skills-internal is private and is skipped with a warning by --allow-incomplete until private-clone auth is re-added.",
   "marketplaces": {
     "uipath-claude-marketplace": {
       "repo": "UiPath/skills-internal",

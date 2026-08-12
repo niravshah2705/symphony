@@ -451,8 +451,8 @@ variable "registry_enabled" {
 
 variable "registry_bucket_name" {
   type        = string
-  description = "OPTIONAL override for the registry bucket name. Empty ('') derives a stable default of '<project_id>-aifleet-registry' (see locals.tf). Terraform CREATES this bucket — it is NOT assumed to pre-exist. Ignored when registry_enabled = false."
-  default     = ""
+  description = "Fixed name of the harness-registry GCS bucket (NOT derived from project_id). Terraform CREATES this bucket — it is NOT assumed to pre-exist. GCS bucket names are GLOBALLY unique, so override this if the default is already taken. The sync-harness-registry CI workflow uses this same fixed name (REGISTRY_BUCKET repo-var override). Ignored when registry_enabled = false."
+  default     = "aifleet-registry"
 }
 
 variable "registry_bucket_force_destroy" {

@@ -23,12 +23,6 @@ locals {
   # publish workflow (derived the same way) — no repo-var dependency for the name.
   skills_bucket_name = var.skills_bucket_name != "" ? var.skills_bucket_name : "${var.project_id}-aifleet-skills"
 
-  # Harness registry (registry.tf). Same derivation as the skills bucket — an
-  # empty var.registry_bucket_name → "<project_id>-aifleet-registry". The
-  # sync-harness-registry CI workflow derives the SAME name, so there is no
-  # repo-var dependency for it.
-  registry_bucket_name = var.registry_bucket_name != "" ? var.registry_bucket_name : "${var.project_id}-aifleet-registry"
-
   # Artifact Registry image references. Each service resolves its own tag,
   # falling back to var.image_tag when no per-service override is set — this is
   # what lets the CD pipeline roll ONE service (its tag = new SHA) while every
