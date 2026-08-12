@@ -77,10 +77,10 @@ jobs:
         run: node scripts/build-harness-registry.js --sources "$SOURCES" --dry-run
 
       - name: Build dual (original + generic) bundle
-        # Only public marketplaces are cloned (no auth is configured). GIT_TERMINAL_PROMPT=0
-        # makes a private/unreachable clone fail fast instead of hanging, and
-        # --allow-incomplete skips it (with a warning) rather than failing the whole
-        # weekly run, so the reachable marketplaces still publish.
+        # All marketplaces in sources.json are public (no clone auth needed).
+        # GIT_TERMINAL_PROMPT=0 makes any unreachable clone fail fast instead of
+        # hanging; the build fails loudly (no --allow-incomplete) if a pinned plugin
+        # cannot be resolved, so a broken ref surfaces immediately.
         env:
           GIT_TERMINAL_PROMPT: "0"
         run: |
@@ -88,8 +88,7 @@ jobs:
           node scripts/build-harness-registry.js \
             --sources "$SOURCES" \
             --out "$RUNNER_TEMP/registry" \
-            --work "$RUNNER_TEMP/clones" \
-            --allow-incomplete
+            --work "$RUNNER_TEMP/clones"
 
       - name: Secret-leak guard (fail before publish)
         env:

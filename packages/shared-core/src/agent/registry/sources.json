@@ -1,12 +1,8 @@
 {
   "version": "v1",
   "updatedAt": "2026-08-12",
-  "_note": "Source-of-truth for the weekly harness-registry sync. Marketplaces are cloned at the pinned `ref` (full sha). The workflow clones PUBLIC marketplaces only (no auth configured for now); UiPath/skills-internal is private and is skipped with a warning by --allow-incomplete until private-clone auth is re-added.",
+  "_note": "Source-of-truth for the weekly harness-registry sync. Marketplaces are cloned at the pinned `ref` (full sha). All marketplaces here are PUBLIC — no clone auth is needed.",
   "marketplaces": {
-    "uipath-claude-marketplace": {
-      "repo": "UiPath/skills-internal",
-      "ref": "a6de72a79be3f0d404e8baafdd68bae25b850df3"
-    },
     "ecc": {
       "url": "https://github.com/affaan-m/everything-claude-code.git",
       "ref": "b39d2244cf93d2e39eb7e3dfc375b737b75ca14d"
@@ -30,7 +26,6 @@
     { "name": "web-research", "vendored": true }
   ],
   "plugins": [
-    { "name": "security", "marketplace": "uipath-claude-marketplace", "version": "1.6.2" },
     { "name": "ecc", "marketplace": "ecc", "version": "2.0.0-rc.1" },
     { "name": "security-guidance", "marketplace": "claude-plugins-official", "version": "2.0.0" },
     { "name": "playwright", "marketplace": "claude-plugins-official", "version": "latest" },
