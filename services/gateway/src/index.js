@@ -15,7 +15,7 @@ const observabilityRoutes = require('./routes/observability');
 const billingRoutes = require('./routes/billing');
 const localizationRoutes = require('./routes/localization');
 const eulaRoutes = require('./routes/eula');
-const { router: codexRoutes, callback: codexCallback } = require('./routes/codex');
+const { router: codexRoutes } = require('./routes/codex');
 const { router: claudeRoutes } = require('./routes/claude');
 const { createProxy } = require('./proxy');
 const { blockInternalProxy } = require('./settings-internal-guard');
@@ -307,9 +307,6 @@ if (CONFIG.SERVICES.settingsUrl) {
   app.use('/api/settings-policy', requireAuthenticated(), (req, res) =>
     res.status(501).json({ error: 'Settings service is not configured (SETTINGS_URL unset).' }));
 }
-
-// Codex OAuth redirect target — must be registered before the SPA fallback.
-app.get('/auth/callback', codexCallback);
 
 // Static frontend — served by the gateway only in local dev. In the cloud the
 // SPA is hosted on GCS and the gateway is API-only.

@@ -4,7 +4,7 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 16
+**Total communities**: 17
 
 ## Communities
 
@@ -13,13 +13,14 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-model | 1595 | [agent-model.md](agent-model.md) |
 | core-org | 388 | [core-org.md](core-org.md) |
 | e2e-test:agent | 50 | [e2e-test-agent.md](e2e-test-agent.md) |
+| gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
 | gcp-version | 12 | [gcp-version.md](gcp-version.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
 | routes-context | 68 | [routes-context.md](routes-context.md) |
 | scripts-module | 32 | [scripts-module.md](scripts-module.md) |
 | src-back | 16 | [src-back.md](src-back.md) |
-| src-context | 278 | [src-context.md](src-context.md) |
+| src-context | 276 | [src-context.md](src-context.md) |
 | src-context | 65 | [src-context-2.md](src-context-2.md) |
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
 | src-test:build | 41 | [src-test-build.md](src-test-build.md) |

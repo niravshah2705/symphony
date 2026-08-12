@@ -79,7 +79,7 @@ Directory-based community: packages/shared
 - **prepareWorkspace** (criticality: 0.45, depth: 3)
 - **discoverModels** (criticality: 0.45, depth: 4)
 - **normalizeDesign** (criticality: 0.45, depth: 1)
-- *... and 17 more flows.*
+- *... and 16 more flows.*
 
 ## Dependencies
 

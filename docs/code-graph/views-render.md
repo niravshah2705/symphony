@@ -103,7 +103,7 @@ Directory-based community: public/js
 
 ### Incoming
 
-- `./public/js/api.js` (158 edge(s))
+- `./public/js/api.js` (157 edge(s))
 - `./public/js/views/settings.js` (126 edge(s))
 - `./public/js/views/agent.js` (97 edge(s))
 - `./public/js/app.js` (83 edge(s))
