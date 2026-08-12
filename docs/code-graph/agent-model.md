@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1582 nodes
-- **Cohesion**: 0.1196
+- **Size**: 1595 nodes
+- **Cohesion**: 0.1168
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,10 +65,12 @@ Directory-based community: packages/shared
 | issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
 | applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-212 |
 
-*... and 1532 more members.*
+*... and 1545 more members.*
 
 ## Execution Flows
 
+- **executeClaude** (criticality: 0.61, depth: 1)
+- **executeAgentRuntime** (criticality: 0.54, depth: 2)
 - **requestIp** (criticality: 0.48, depth: 1)
 - **applySettingsPatch** (criticality: 0.48, depth: 1)
 - **createIssue** (criticality: 0.48, depth: 1)
@@ -77,33 +79,31 @@ Directory-based community: packages/shared
 - **prepareWorkspace** (criticality: 0.45, depth: 3)
 - **discoverModels** (criticality: 0.45, depth: 4)
 - **normalizeDesign** (criticality: 0.45, depth: 1)
-- **getViewer** (criticality: 0.45, depth: 1)
-- **getTeams** (criticality: 0.45, depth: 1)
-- *... and 16 more flows.*
+- *... and 17 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (1389 edge(s))
+- `equal` (1398 edge(s))
 - `deepEqual` (261 edge(s))
 - `join` (222 edge(s))
 - `String` (197 edge(s))
-- `push` (178 edge(s))
-- `includes` (166 edge(s))
+- `push` (179 edge(s))
+- `includes` (167 edge(s))
 - `ok` (149 edge(s))
 - `map` (134 edge(s))
 - `strictEqual` (127 edge(s))
 - `match` (115 edge(s))
 - `slice` (104 edge(s))
 - `filter` (102 edge(s))
-- `trim` (93 edge(s))
+- `trim` (94 edge(s))
 - `isArray` (88 edge(s))
 - `Number` (86 edge(s))
 
 ### Incoming
 
-- `equal` (1382 edge(s))
+- `equal` (1391 edge(s))
 - `deepEqual` (259 edge(s))
 - `ok` (149 edge(s))
 - `strictEqual` (127 edge(s))
@@ -113,8 +113,8 @@ Directory-based community: packages/shared
 - `./packages/shared/src/linear.js` (74 edge(s))
 - `throws` (71 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (71 edge(s))
-- `includes` (69 edge(s))
-- `./packages/shared/src/agent/runtimes.js` (68 edge(s))
+- `includes` (70 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (60 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (55 edge(s))
-- `rejects` (54 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (53 edge(s))
+- `rejects` (51 edge(s))
