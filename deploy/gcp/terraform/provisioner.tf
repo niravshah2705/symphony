@@ -163,7 +163,9 @@ resource "google_cloud_run_v2_service" "provisioner" {
   deletion_protection = false
 
   template {
-    service_account = google_service_account.provisioner[0].email
+    service_account                  = google_service_account.provisioner[0].email
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    max_instance_request_concurrency = 1
     scaling {
       min_instance_count = 0
       max_instance_count = 2
@@ -219,7 +221,7 @@ resource "google_cloud_run_v2_service" "provisioner" {
       }
 
       resources {
-        limits   = { cpu = "1", memory = "512Mi" }
+        limits   = { cpu = var.cloud_run_service_cpu, memory = "512Mi" }
         cpu_idle = true
       }
     }
