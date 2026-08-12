@@ -23,6 +23,13 @@ Status legend: ✅ done · 🔜 next · ⏳ needs live-stack verification
   `agent/claude-oauth`, `agent/model-presets`) now import from `shared-core`
   directly (zero behavior change). Files: `routes/codex.js`, `routes/claude.js`,
   `routes/settings.js`.
+- ✅ **Codex OAuth browser redirect REMOVED** — `/login` + `/auth/callback` +
+  `/_pending` deleted from `routes/codex.js` / `index.js` (+ frontend trigger);
+  archived in `codex-oauth-redirect.js`. Codex tokens are provisioned out-of-band.
+- ✅ **SDK-free utilities moved to `@ai-fleet/shared-core`** (with shims in
+  `shared/agent`): `workflow-patterns`, `diagnostics`, and `repoParts` (extracted
+  to `shared-core/agent/repo-url.js`). Gateway `routes/observability.js`,
+  `routes/businesses.js`, `routes/settings.js` now import them from `shared-core`.
 
 Remaining gateway → agent imports to remove (grep `@ai-fleet/shared/agent` under
 `services/gateway/src/routes/`):

@@ -5,7 +5,7 @@ const { getApiKey, setApiKey, getSettings, patchSettings, addSettingsHistory } =
 const { getViewer } = require('@ai-fleet/shared/linear');
 const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
 const { CONFIG } = require('@ai-fleet/shared/config');
-const { repoParts } = require('@ai-fleet/shared/agent/workspace');
+const { repoParts } = require('@ai-fleet/shared-core/agent/repo-url');
 const {
   publicCatalog,
   presetForRole,

@@ -4,8 +4,8 @@ const express = require('express');
 const { getSettings } = require('@ai-fleet/shared/store');
 const { asyncHandler } = require('@ai-fleet/shared/util');
 const { loadAnalytics } = require('@ai-fleet/shared/agent/analytics');
-const { runDiagnostics } = require('@ai-fleet/shared/agent/diagnostics');
-const { catalog, validateWorkflowPattern } = require('@ai-fleet/shared/agent/workflow-patterns');
+const { runDiagnostics } = require('@ai-fleet/shared-core/agent/diagnostics');
+const { catalog, validateWorkflowPattern } = require('@ai-fleet/shared-core/agent/workflow-patterns');
 
 const router = express.Router();
 

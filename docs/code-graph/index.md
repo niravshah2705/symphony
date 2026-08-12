@@ -10,13 +10,13 @@ Auto-generated documentation from the code knowledge graph community structure.
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-model | 1595 | [agent-model.md](agent-model.md) |
+| agent-model | 1570 | [agent-model.md](agent-model.md) |
 | core-org | 388 | [core-org.md](core-org.md) |
 | e2e-json | 62 | [e2e-json.md](e2e-json.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
 | gcp-version | 12 | [gcp-version.md](gcp-version.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
-| registry-plugin | 392 | [registry-plugin.md](registry-plugin.md) |
+| registry-plugin | 417 | [registry-plugin.md](registry-plugin.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
 | routes-context | 68 | [routes-context.md](routes-context.md) |
 | scripts-module | 34 | [scripts-module.md](scripts-module.md) |

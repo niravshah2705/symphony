@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1595 nodes
-- **Cohesion**: 0.1168
+- **Size**: 1570 nodes
+- **Cohesion**: 0.1154
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared
 | issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
 | applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-212 |
 
-*... and 1545 more members.*
+*... and 1520 more members.*
 
 ## Execution Flows
 
@@ -73,13 +73,13 @@ Directory-based community: packages/shared
 - **executeAgentRuntime** (criticality: 0.54, depth: 2)
 - **requestIp** (criticality: 0.48, depth: 1)
 - **applySettingsPatch** (criticality: 0.48, depth: 1)
+- **prepareWorkspace** (criticality: 0.48, depth: 1)
 - **createIssue** (criticality: 0.48, depth: 1)
+- **preparePlannedWorkspace** (criticality: 0.45, depth: 2)
 - **getOpenProjects** (criticality: 0.45, depth: 2)
 - **getAllProjectLabels** (criticality: 0.45, depth: 2)
-- **prepareWorkspace** (criticality: 0.45, depth: 3)
 - **discoverModels** (criticality: 0.45, depth: 4)
-- **normalizeDesign** (criticality: 0.45, depth: 1)
-- *... and 14 more flows.*
+- *... and 15 more flows.*
 
 ## Dependencies
 
@@ -87,19 +87,19 @@ Directory-based community: packages/shared
 
 - `equal` (1408 edge(s))
 - `deepEqual` (262 edge(s))
-- `join` (222 edge(s))
-- `String` (197 edge(s))
-- `push` (179 edge(s))
-- `includes` (167 edge(s))
+- `join` (220 edge(s))
+- `String` (189 edge(s))
+- `push` (171 edge(s))
+- `includes` (164 edge(s))
 - `ok` (150 edge(s))
-- `map` (134 edge(s))
+- `map` (128 edge(s))
 - `strictEqual` (127 edge(s))
-- `match` (115 edge(s))
-- `slice` (104 edge(s))
-- `filter` (102 edge(s))
-- `trim` (94 edge(s))
-- `isArray` (88 edge(s))
-- `Number` (86 edge(s))
+- `match` (112 edge(s))
+- `slice` (102 edge(s))
+- `filter` (96 edge(s))
+- `trim` (91 edge(s))
+- `isArray` (86 edge(s))
+- `Number` (83 edge(s))
 
 ### Incoming
 
