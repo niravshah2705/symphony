@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared-core
 
-- **Size**: 379 nodes
-- **Cohesion**: 0.1938
+- **Size**: 392 nodes
+- **Cohesion**: 0.1875
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared-core
 | isExpired | Function | ./packages/shared-core/src/agent/oauth.js | 156-159 |
 | accountIdFromIdToken | Function | ./packages/shared-core/src/agent/oauth.js | 167-177 |
 
-*... and 329 more members.*
+*... and 342 more members.*
 
 ## Execution Flows
 
@@ -85,36 +85,36 @@ Directory-based community: packages/shared-core
 
 ### Outgoing
 
-- `join` (105 edge(s))
-- `equal` (102 edge(s))
-- `String` (67 edge(s))
-- `map` (49 edge(s))
+- `join` (116 edge(s))
+- `equal` (112 edge(s))
+- `String` (69 edge(s))
+- `map` (50 edge(s))
+- `push` (47 edge(s))
 - `includes` (45 edge(s))
-- `push` (43 edge(s))
-- `trim` (42 edge(s))
-- `isArray` (36 edge(s))
+- `trim` (44 edge(s))
+- `isArray` (39 edge(s))
+- `ok` (32 edge(s))
 - `slice` (31 edge(s))
-- `ok` (30 edge(s))
 - `filter` (29 edge(s))
-- `set` (24 edge(s))
+- `set` (25 edge(s))
+- `deepEqual` (25 edge(s))
 - `has` (24 edge(s))
-- `existsSync` (21 edge(s))
-- `deepEqual` (21 edge(s))
+- `existsSync` (22 edge(s))
 
 ### Incoming
 
 - `./packages/shared-core/src/store.js` (173 edge(s))
-- `equal` (102 edge(s))
-- `join` (59 edge(s))
+- `equal` (112 edge(s))
+- `join` (64 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (40 edge(s))
-- `ok` (30 edge(s))
+- `ok` (32 edge(s))
 - `./packages/shared-core/src/provisioning/index.js` (27 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (27 edge(s))
 - `./packages/shared-core/src/config.js` (26 edge(s))
-- `deepEqual` (21 edge(s))
+- `deepEqual` (25 edge(s))
+- `throws` (21 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (20 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (20 edge(s))
 - `./packages/shared-core/src/agent/registry/native-reader.js` (20 edge(s))
-- `throws` (19 edge(s))
-- `existsSync` (18 edge(s))
+- `existsSync` (19 edge(s))
 - `./packages/shared-core/src/agent/registry/frontmatter.js` (14 edge(s))
