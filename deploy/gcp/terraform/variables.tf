@@ -30,7 +30,7 @@ variable "artifact_repo" {
 variable "artifact_retention_count" {
   type        = number
   description = "Number of most recent versions to retain for each image package in the Artifact Registry repository. Older tagged and untagged versions are deleted by the cleanup policy."
-  default     = 10
+  default     = 2
 
   validation {
     condition     = var.artifact_retention_count >= 1 && floor(var.artifact_retention_count) == var.artifact_retention_count
