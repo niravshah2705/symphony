@@ -12,9 +12,9 @@ const {
   normalizeWorkspaceContext,
 } = require('@ai-fleet/shared/store');
 const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
-const claudeOauth = require('@ai-fleet/shared/agent/claude-oauth');
+const claudeOauth = require('@ai-fleet/shared-core/agent/claude-oauth');
 const { ensureFreshClaudeTokens, resolveLlm, createChatModel } = require('@ai-fleet/shared/agent/llm');
-const { presetForModel } = require('@ai-fleet/shared/agent/model-presets');
+const { presetForModel } = require('@ai-fleet/shared-core/agent/model-presets');
 const { discoverModels } = require('@ai-fleet/shared/agent/model-discovery');
 const log = require('@ai-fleet/shared/logger');
 
