@@ -19,7 +19,7 @@ const {
   runtimePresetForProfile,
   neutralLocalPreset,
   isPurposeRole,
-} = require('@ai-fleet/shared/agent/model-presets');
+} = require('@ai-fleet/shared-core/agent/model-presets');
 const {
   normalizeAgentRuntime,
   normalizeWorkflowPattern,

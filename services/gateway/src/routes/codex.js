@@ -13,11 +13,11 @@ const {
   currentWorkspaceContext,
 } = require('@ai-fleet/shared/store');
 const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
-const { createLogin, consumeLogin, exchangeCodeForTokens } = require('@ai-fleet/shared/agent/oauth');
+const { createLogin, consumeLogin, exchangeCodeForTokens } = require('@ai-fleet/shared-core/agent/oauth');
 const { ensureFreshCodexTokens } = require('@ai-fleet/shared/agent/llm');
-const { presetForModel } = require('@ai-fleet/shared/agent/model-presets');
+const { presetForModel } = require('@ai-fleet/shared-core/agent/model-presets');
 const { discoverModels } = require('@ai-fleet/shared/agent/model-discovery');
-const oauthLib = require('@ai-fleet/shared/agent/oauth');
+const oauthLib = require('@ai-fleet/shared-core/agent/oauth');
 const log = require('@ai-fleet/shared/logger');
 
 /**
