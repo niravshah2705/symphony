@@ -155,4 +155,9 @@ jobs:
         run: |
           set -euo pipefail
           BUCKET="${REGISTRY_BUCKET_OVERRIDE:-aifleet-registry}"
-          gsutil ls -r "gs://${BUCKET}/${VERSION}" | head -50
+          # List to a file first — piping `gsutil ls` straight into `head` makes
+          # gsutil hit a BrokenPipe (exit 120) when head closes early, which under
+          # `set -o pipefail` would fail this step even though the publish succeeded.
+          gsutil ls -r "gs://${BUCKET}/${VERSION}" > "$RUNNER_TEMP/listing.txt"
+          echo "Published objects: $(wc -l < "$RUNNER_TEMP/listing.txt")"
+          head -50 "$RUNNER_TEMP/listing.txt"
