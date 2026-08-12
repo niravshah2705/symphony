@@ -35,6 +35,47 @@ function enforceLlmModel(llm, effectivePolicy, catalog = publicCatalog()) {
 }
 
 /**
+ * Per-pipeline-stage harness-override pref key. A scope may set ONE default
+ * harness (`agentRuntime`, "the org's one harness does everything") and,
+ * optionally, a per-stage override. Keyed by the workflow/stage name each
+ * service runs under: planner→planning, coder→coding, tester→testing,
+ * deployer→deployment. Keep in sync with the settings service PREF_KEYS
+ * (services/settings/app/models/policy.py).
+ */
+const STAGE_HARNESS_PREF = Object.freeze({
+  planning: 'planHarness',
+  coding: 'codeHarness',
+  testing: 'testHarness',
+  deployment: 'deployHarness',
+});
+
+/**
+ * Pick the harness id for a pipeline stage by precedence:
+ *   explicit per-request selection → per-stage pref → scope default
+ *   (`agentRuntime`) → provided default → 'deepagent'.
+ *
+ * This is a PURE picker: it does NOT normalize or enforce. Governance stays at
+ * the single existing enforcement point — `effectiveAgentRuntime`/`enforceHarness`
+ * inside `executeAgentRuntime` (and the gateway preflight, which asks the
+ * settings service). Returns a trimmed id string.
+ */
+function resolveHarnessForStage(stage, { requestSelection, prefs = {}, defaultHarness } = {}) {
+  const source = prefs || {};
+  const stageKey = STAGE_HARNESS_PREF[stage];
+  const trimmed = (value) => {
+    const id = typeof value === 'string' ? value.trim() : '';
+    return id || null;
+  };
+  return (
+    trimmed(requestSelection) ||
+    (stageKey && trimmed(source[stageKey])) ||
+    trimmed(source.agentRuntime) ||
+    trimmed(defaultHarness) ||
+    'deepagent'
+  );
+}
+
+/**
  * Apply the non-secret operational preferences that affect an already-resolved
  * planner/coder run. Values arrive from the settings service as strings.
  * Missing preferences preserve the process-local defaults.
@@ -45,6 +86,15 @@ function applyOperationalPrefs(keys, prefs, step = () => {}) {
   if (source.agentRuntime && source.agentRuntime !== next.agentRuntime) {
     step(`Agent runtime "${source.agentRuntime}" applied from organization settings.`);
     next.agentRuntime = source.agentRuntime;
+  }
+  // Carry per-stage harness overrides through onto the run keys so each stage's
+  // dispatch can pass them to resolveHarnessForStage. Absent keys are untouched,
+  // so a run with no per-stage override behaves exactly as before (agentRuntime).
+  for (const stageKey of Object.values(STAGE_HARNESS_PREF)) {
+    if (source[stageKey] && source[stageKey] !== next[stageKey]) {
+      step(`Stage harness "${source[stageKey]}" applied from organization settings (${stageKey}).`);
+      next[stageKey] = source[stageKey];
+    }
   }
   if (source.workflowPattern && source.workflowPattern !== next.workflowPattern) {
     step(`Workflow pattern "${source.workflowPattern}" applied from organization settings.`);
@@ -59,6 +109,8 @@ function applyOperationalPrefs(keys, prefs, step = () => {}) {
 module.exports = {
   enforceLlmModel,
   applyOperationalPrefs,
+  resolveHarnessForStage,
+  STAGE_HARNESS_PREF,
   PolicyDeniedError,
   isPolicyDeniedError,
 };

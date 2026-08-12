@@ -52,6 +52,14 @@ PREF_KEYS: tuple[str, ...] = (
     "complexityTier",
     "llmProvider",
     "agentRuntime",
+    # Per-pipeline-stage harness overrides. `agentRuntime` is the scope's single
+    # default ("one harness does everything"); these optionally override it for a
+    # specific stage. Keyed to the JS STAGE_HARNESS_PREF map in
+    # packages/shared/src/agent/policy-runtime.js (planning/coding/testing/deployment).
+    "planHarness",
+    "codeHarness",
+    "testHarness",
+    "deployHarness",
     "workflowPattern",
     "planningProvider",
     "langsmithTracing",
