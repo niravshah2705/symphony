@@ -65,7 +65,9 @@ resource "google_cloud_run_v2_service" "settings" {
   deletion_protection = false
 
   template {
-    service_account = google_service_account.settings.email
+    service_account                  = google_service_account.settings.email
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    max_instance_request_concurrency = 1
 
     scaling {
       min_instance_count = 0
@@ -159,7 +161,7 @@ resource "google_cloud_run_v2_service" "settings" {
 
       resources {
         limits = {
-          cpu    = "1"
+          cpu    = var.cloud_run_service_cpu
           memory = "512Mi"
         }
         cpu_idle          = true

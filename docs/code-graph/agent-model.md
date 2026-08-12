@@ -7,7 +7,7 @@
 Directory-based community: packages/shared
 
 - **Size**: 1582 nodes
-- **Cohesion**: 0.1197
+- **Cohesion**: 0.1196
 - **Dominant Language**: javascript
 
 ## Members
@@ -85,14 +85,14 @@ Directory-based community: packages/shared
 
 ### Outgoing
 
-- `equal` (1388 edge(s))
-- `deepEqual` (257 edge(s))
+- `equal` (1389 edge(s))
+- `deepEqual` (261 edge(s))
 - `join` (222 edge(s))
 - `String` (197 edge(s))
 - `push` (178 edge(s))
 - `includes` (166 edge(s))
 - `ok` (149 edge(s))
-- `map` (133 edge(s))
+- `map` (134 edge(s))
 - `strictEqual` (127 edge(s))
 - `match` (115 edge(s))
 - `slice` (104 edge(s))
@@ -103,8 +103,8 @@ Directory-based community: packages/shared
 
 ### Incoming
 
-- `equal` (1381 edge(s))
-- `deepEqual` (255 edge(s))
+- `equal` (1382 edge(s))
+- `deepEqual` (259 edge(s))
 - `ok` (149 edge(s))
 - `strictEqual` (127 edge(s))
 - `match` (95 edge(s))

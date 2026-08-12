@@ -208,6 +208,18 @@ variable "max_instances" {
   default     = 3
 }
 
+variable "cloud_run_service_cpu" {
+  type        = string
+  description = "vCPU limit for Cloud Run service app containers. The fractional default is paired with request concurrency 1, request-based billing, and gen1; agent services use 1 vCPU when the optional gen2 skills mount is enabled."
+  default     = "0.5"
+}
+
+variable "cloud_run_proxy_cpu" {
+  type        = string
+  description = "vCPU limit for egress-proxy sidecars on Cloud Run services. Cloud Run Jobs use coder_job_proxy_cpu because job containers require at least 1 vCPU."
+  default     = "0.5"
+}
+
 # --- Pub/Sub topics -----------------------------------------------------------
 
 variable "planner_topic" {
@@ -333,8 +345,15 @@ variable "coder_job_task_timeout" {
 }
 
 variable "coder_job_cpu" {
-  type    = string
-  default = "2"
+  type        = string
+  description = "vCPU limit for the coder-worker app container. Cloud Run Job containers require at least 1 vCPU."
+  default     = "1"
+}
+
+variable "coder_job_proxy_cpu" {
+  type        = string
+  description = "vCPU limit for the coder-worker egress-proxy sidecar. Kept independent so increasing worker CPU does not overprovision the proxy; Cloud Run Job containers require at least 1 vCPU."
+  default     = "1"
 }
 
 variable "coder_job_memory" {

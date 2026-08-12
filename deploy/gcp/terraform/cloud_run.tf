@@ -15,6 +15,11 @@ locals {
   # mount requires the bucket, so it is ANDed with skills_enabled.
   skills_enabled       = var.skills_enabled
   skills_mount_enabled = var.skills_mount_enabled && var.skills_enabled
+  # Fractional CPU is supported only by the gen1 service environment. Keep the
+  # optional gcsfuse/gen2 path valid by raising agent app + sidecar containers
+  # back to Cloud Run's 1-vCPU gen2 minimum when that mount is enabled.
+  agent_service_cpu = local.skills_mount_enabled ? "1" : var.cloud_run_service_cpu
+  agent_proxy_cpu   = local.skills_mount_enabled ? "1" : var.cloud_run_proxy_cpu
   skills_env = local.skills_mount_enabled ? {
     SKILLS_ROOT    = "/skills"
     SKILLS_VERSION = var.skills_version
@@ -197,7 +202,9 @@ resource "google_cloud_run_v2_service" "gateway" {
   deletion_protection = false
 
   template {
-    service_account = google_service_account.gateway.email
+    service_account                  = google_service_account.gateway.email
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    max_instance_request_concurrency = 1
 
     scaling {
       min_instance_count = 0
@@ -256,7 +263,7 @@ resource "google_cloud_run_v2_service" "gateway" {
 
       resources {
         limits = {
-          cpu    = "1"
+          cpu    = var.cloud_run_service_cpu
           memory = "512Mi"
         }
         cpu_idle          = true # throttle CPU when idle → no idle cost
@@ -298,9 +305,10 @@ resource "google_cloud_run_v2_service" "planner" {
   template {
     service_account = google_service_account.planner.email
 
-    # gcsfuse GCS volume mounts run on the gen2 execution environment. null (the
-    # platform default) when the skills registry is disabled.
-    execution_environment = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
+    # Fractional CPU requires gen1. The optional gcsfuse mount requires gen2,
+    # in which case local.agent_*_cpu also raises both containers to 1 vCPU.
+    execution_environment            = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : "EXECUTION_ENVIRONMENT_GEN1"
+    max_instance_request_concurrency = local.skills_mount_enabled ? null : 1
 
     scaling {
       min_instance_count = 0
@@ -363,7 +371,7 @@ resource "google_cloud_run_v2_service" "planner" {
 
       resources {
         limits = {
-          cpu    = "1"
+          cpu    = local.agent_service_cpu
           memory = "512Mi"
         }
         cpu_idle          = true
@@ -401,7 +409,7 @@ resource "google_cloud_run_v2_service" "planner" {
         }
         resources {
           limits = {
-            cpu    = "1"
+            cpu    = local.agent_proxy_cpu
             memory = "512Mi"
           }
           cpu_idle = true
@@ -431,9 +439,10 @@ resource "google_cloud_run_v2_service" "coder_control" {
   template {
     service_account = google_service_account.coder.email
 
-    # gcsfuse GCS volume mounts run on the gen2 execution environment. null (the
-    # platform default) when the skills registry is disabled.
-    execution_environment = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
+    # Fractional CPU requires gen1. The optional gcsfuse mount requires gen2,
+    # in which case local.agent_*_cpu also raises both containers to 1 vCPU.
+    execution_environment            = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : "EXECUTION_ENVIRONMENT_GEN1"
+    max_instance_request_concurrency = local.skills_mount_enabled ? null : 1
 
     scaling {
       min_instance_count = 0
@@ -496,7 +505,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
 
       resources {
         limits = {
-          cpu    = "1"
+          cpu    = local.agent_service_cpu
           memory = "512Mi"
         }
         cpu_idle          = true
@@ -531,7 +540,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
         }
         resources {
           limits = {
-            cpu    = "1"
+            cpu    = local.agent_proxy_cpu
             memory = "512Mi"
           }
           cpu_idle = true
@@ -657,7 +666,7 @@ resource "google_cloud_run_v2_job" "coder_worker" {
           }
           resources {
             limits = {
-              cpu    = var.coder_job_cpu
+              cpu    = var.coder_job_proxy_cpu
               memory = var.coder_job_memory
             }
           }
