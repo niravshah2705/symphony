@@ -222,9 +222,11 @@ class FirestoreDb:
         return sum(1 async for _ in q.stream())
 
     async def run_transaction(self, fn: Callable[[Txn], Awaitable[Any]]) -> Any:
+        from google.cloud import firestore
+
         transaction = self._client.transaction()
 
-        @self._client.transactional  # type: ignore[misc]
+        @firestore.async_transactional
         async def _run(txn):  # type: ignore[no-untyped-def]
             return await fn(_FirestoreTxn(self, txn))
 
