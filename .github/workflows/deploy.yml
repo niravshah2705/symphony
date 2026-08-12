@@ -4,7 +4,7 @@ name: Deploy to GCP
 # only does the work it needs:
 #   • a service's code changed  → rebuild ONLY that image, then a per-service
 #                                  `terraform apply` rolls ONLY that service.
-#   • packages/shared changed → rebuild all service images.
+#   • shared packages changed → rebuild all service images.
 #   • root deps changed → rebuild all service images + republish the SPA.
 #   • deploy/gcp/terraform/** changed → `terraform apply` only (no image rebuild).
 #   • SPA source, config, or release tooling changed → Firebase Hosting deploy.
@@ -54,7 +54,7 @@ jobs:
         id: filter
         with:
           filters: |
-            shared:  ['packages/shared/**']
+            shared:  ['packages/shared/**', 'packages/shared-core/**']
             gateway: ['services/gateway/**', 'deploy/gcp/Dockerfile.gateway']
             planner: ['services/planner/**', 'deploy/gcp/Dockerfile.planner']
             coder:   ['services/coder/**',   'deploy/gcp/Dockerfile.coder']

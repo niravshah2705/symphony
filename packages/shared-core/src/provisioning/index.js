@@ -16,9 +16,9 @@ const { extractSourceService, extractSourceJob, cloneContainers } = require('./c
  * teardowns converge.
  *
  * "Reuse original builds": createService/createJob copy the image AND the secret
- * env blocks, resource limits, execution environment, and skills volumes from the
- * live SHARED source service, so a tenant service is the same build with the same
- * secrets — only the per-tenant plain env (URLs/topics/STORE_NAMESPACE) differs.
+ * env blocks, resource limits, execution environment, concurrency, and skills
+ * volumes from the live SHARED source service/job, so a tenant runtime is the
+ * same build with the same secrets — only its per-tenant plain env differs.
  */
 
 const ALREADY_EXISTS = 6; // gRPC ALREADY_EXISTS
@@ -60,15 +60,26 @@ function createGcpClients({ projectId, region }) {
   const services = () => getRun().services;
   const jobs = () => getRun().jobs;
 
-  const srcCache = new Map();
+  const serviceSrcCache = new Map();
+  const jobSrcCache = new Map();
   async function sourceService(name) {
-    if (!srcCache.has(name)) {
+    if (!serviceSrcCache.has(name)) {
       const [svc] = await services().getService({ name: `${parent}/services/${name}` });
       // Capture ALL containers (image + secret env + resources + mounts each) so
       // an egress-proxy sidecar on the shared service propagates to tenant stacks.
-      srcCache.set(name, extractSourceService(svc));
+      serviceSrcCache.set(name, extractSourceService(svc));
     }
-    return srcCache.get(name);
+    return serviceSrcCache.get(name);
+  }
+
+  async function sourceJob(name) {
+    if (!jobSrcCache.has(name)) {
+      const [job] = await jobs().getJob({ name: `${parent}/jobs/${name}` });
+      // Jobs have a different template nesting than services. Read the shared
+      // worker Job so its app + proxy resources are inherited independently.
+      jobSrcCache.set(name, extractSourceJob(job));
+    }
+    return jobSrcCache.get(name);
   }
 
   async function setInvoker(spec) {
@@ -87,8 +98,7 @@ function createGcpClients({ projectId, region }) {
       return (await sourceService(name)).containers[0].image;
     },
     async getJobImage(name) {
-      const [job] = await jobs().getJob({ name: `${parent}/jobs/${name}` });
-      return job.template.template.containers[0].image;
+      return (await sourceJob(name)).containers[0].image;
     },
     async createService(spec) {
       const src = spec.sourceName ? await sourceService(spec.sourceName) : { containers: [] };
@@ -99,6 +109,7 @@ function createGcpClients({ projectId, region }) {
           serviceAccount: spec.serviceAccount,
           scaling: { minInstanceCount: 0 },
           executionEnvironment: src.executionEnvironment,
+          maxInstanceRequestConcurrency: src.maxInstanceRequestConcurrency,
           volumes: src.volumes,
           // Clone EVERY source container (primary + any sidecar), overlaying the
           // per-tenant env on the primary and `sidecarEnv` on the sidecars.
@@ -114,7 +125,7 @@ function createGcpClients({ projectId, region }) {
       await setInvoker(spec);
     },
     async createJob(spec) {
-      const src = spec.sourceName ? await sourceService(spec.sourceName) : { containers: [] };
+      const src = spec.sourceName ? await sourceJob(spec.sourceName) : { containers: [] };
       const job = {
         labels: spec.labels,
         template: {

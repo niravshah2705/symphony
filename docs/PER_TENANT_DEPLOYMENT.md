@@ -107,6 +107,9 @@ To turn it on:
 - **Runtime-created, imperative.** Per-tenant resources live **outside** Terraform
   state (only the provisioner service itself is in TF). Do not `terraform destroy`
   expecting tenant stacks to be cleaned up — org deletion tears them down.
+- **Create-only reconciliation.** Shared template changes (including container CPU
+  limits) are inherited by newly provisioned tenants. Existing dedicated stacks
+  are left unchanged until they are deliberately torn down and reprovisioned.
 - **Shared SAs + shared secrets.** Per-tenant services reuse the 4 shared service
   accounts and shared Secret Manager secrets (Linear key, stream-token secret).
   This adds no IAM-level tenant isolation and is safe only under the shared-Firestore

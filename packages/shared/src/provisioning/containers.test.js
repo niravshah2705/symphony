@@ -13,7 +13,8 @@ const {
 const SOURCE_SVC = {
   template: {
     volumes: [{ name: 'skills' }],
-    executionEnvironment: 'EXECUTION_ENVIRONMENT_GEN2',
+    executionEnvironment: 'EXECUTION_ENVIRONMENT_GEN1',
+    maxInstanceRequestConcurrency: 1,
     containers: [
       {
         image: 'registry/planner:sha',
@@ -22,7 +23,7 @@ const SOURCE_SVC = {
           { name: 'PLANNER_PORT', value: '8080' },
           { name: 'LINEAR_API_KEY', valueSource: { secretKeyRef: { secret: 'linear-api-key', version: 'latest' } } },
         ],
-        resources: { limits: { cpu: '1' } },
+        resources: { limits: { cpu: '0.5', memory: '512Mi' } },
         volumeMounts: [{ name: 'skills', mountPath: '/skills' }],
       },
       {
@@ -34,7 +35,7 @@ const SOURCE_SVC = {
           { name: 'GITHUB_TOKEN', valueSource: { secretKeyRef: { secret: 'github-token', version: 'latest' } } },
           { name: 'INTERNAL_API_TOKEN', valueSource: { secretKeyRef: { secret: 'internal-api-token', version: 'latest' } } },
         ],
-        resources: { limits: { cpu: '1' } },
+        resources: { limits: { cpu: '0.25', memory: '256Mi' } },
       },
     ],
   },
@@ -51,7 +52,8 @@ test('extractSourceService captures ALL containers + volumes', () => {
   const src = extractSourceService(SOURCE_SVC);
   assert.equal(src.containers.length, 2);
   assert.equal(src.volumes[0].name, 'skills');
-  assert.equal(src.executionEnvironment, 'EXECUTION_ENVIRONMENT_GEN2');
+  assert.equal(src.executionEnvironment, 'EXECUTION_ENVIRONMENT_GEN1');
+  assert.equal(src.maxInstanceRequestConcurrency, 1);
 });
 
 test('cloneContainers propagates the sidecar to the tenant stack', () => {
@@ -73,6 +75,7 @@ test('cloneContainers propagates the sidecar to the tenant stack', () => {
   // Primary: tenant env + ports + its own secret env.
   const primary = containers[0];
   assert.deepEqual(primary.ports, [{ containerPort: 8080 }]);
+  assert.deepEqual(primary.resources, { limits: { cpu: '0.5', memory: '512Mi' } });
   const primaryEnv = Object.fromEntries(primary.env.filter((e) => !e.valueSource).map((e) => [e.name, e.value]));
   assert.equal(primaryEnv.STORE_NAMESPACE, 'tabc123');
   assert.ok(primary.env.some((e) => e.name === 'LINEAR_API_KEY' && e.valueSource));
@@ -82,6 +85,7 @@ test('cloneContainers propagates the sidecar to the tenant stack', () => {
   const sidecar = containers[1];
   assert.equal(sidecar.ports, undefined);
   assert.equal(sidecar.image, 'registry/proxy:sha');
+  assert.deepEqual(sidecar.resources, { limits: { cpu: '0.25', memory: '256Mi' } });
   const sidecarEnv = Object.fromEntries(sidecar.env.filter((e) => !e.valueSource).map((e) => [e.name, e.value]));
   assert.equal(sidecarEnv.SETTINGS_URL, 'https://settings.shared');
   assert.equal(sidecarEnv.PROXY_ORG_ID, 'org-uuid');
@@ -91,13 +95,21 @@ test('cloneContainers propagates the sidecar to the tenant stack', () => {
 });
 
 test('cloneContainers for a JOB gives the primary no ports', () => {
+  const jobContainers = SOURCE_SVC.template.containers.map((container, index) => ({
+    ...container,
+    resources: index === 0
+      ? { limits: { cpu: '2', memory: '4Gi' } }
+      : { limits: { cpu: '1', memory: '512Mi' } },
+  }));
   const jobSource = {
-    template: { template: { volumes: [], containers: SOURCE_SVC.template.containers } },
+    template: { template: { volumes: [], executionEnvironment: 'EXECUTION_ENVIRONMENT_GEN2', containers: jobContainers } },
   };
   const src = extractSourceJob(jobSource);
   const containers = cloneContainers(src.containers, { image: 'registry/coder:sha', env: {}, sidecarEnv: {} }, { withPorts: false });
   assert.equal(containers.length, 2);
   assert.equal(containers[0].ports, undefined);
+  assert.deepEqual(containers[0].resources, { limits: { cpu: '2', memory: '4Gi' } });
+  assert.deepEqual(containers[1].resources, { limits: { cpu: '1', memory: '512Mi' } });
 });
 
 test('single-container source (no sidecar) still clones cleanly', () => {
