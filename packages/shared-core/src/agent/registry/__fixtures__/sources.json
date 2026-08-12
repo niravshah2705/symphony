@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "updatedAt": "2026-08-12",
+  "marketplaces": {
+    "test-marketplace": { "repo": "test/marketplace", "ref": "0000000000000000000000000000000000000000" }
+  },
+  "skills": [
+    { "name": "web-research", "vendored": true }
+  ],
+  "plugins": [
+    { "name": "security", "marketplace": "test-marketplace", "version": "1.6.2" }
+  ],
+  "hooks": []
+}

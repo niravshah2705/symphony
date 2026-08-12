@@ -1,0 +1,13 @@
+{
+  "name": "test-marketplace",
+  "owner": { "name": "Test", "email": "t@example.com" },
+  "plugins": [
+    {
+      "name": "security",
+      "source": "./plugins/security",
+      "description": "RAVEN security framework",
+      "author": { "name": "Test" },
+      "category": "security"
+    }
+  ]
+}

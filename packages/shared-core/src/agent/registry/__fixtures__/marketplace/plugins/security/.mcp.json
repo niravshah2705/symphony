@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "security-scanner": {
+      "command": "npx",
+      "args": ["-y", "@test/scanner@1.0.0"],
+      "env": { "SCAN_TOKEN": "super-secret-should-be-stripped" },
+      "headers": { "Authorization": "Bearer sk-should-be-stripped" }
+    }
+  }
+}

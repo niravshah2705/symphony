@@ -6,8 +6,8 @@
 
 Directory-based community: scripts
 
-- **Size**: 32 nodes
-- **Cohesion**: 0.0935
+- **Size**: 34 nodes
+- **Cohesion**: 0.0878
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,6 +15,8 @@ Directory-based community: scripts
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | resolve | Function | ./scripts/build-graphs.sh | 36-36 |
+| parseArgs | Function | ./scripts/build-harness-registry.js | 39-56 |
+| main | Function | ./scripts/build-harness-registry.js | 58-115 |
 | main | Function | ./scripts/models-label-group.js | 21-38 |
 | resolveStrength | Function | ./scripts/obfuscate-spa.js | 135-141 |
 | collectJsFiles | Function | ./scripts/obfuscate-spa.js | 148-157 |
@@ -55,21 +57,21 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `join` (42 edge(s))
+- `join` (47 edge(s))
 - `match` (24 edge(s))
+- `write` (21 edge(s))
 - `equal` (21 edge(s))
 - `readFileSync` (13 edge(s))
 - `writeFileSync` (11 edge(s))
 - `log` (9 edge(s))
+- `mkdtempSync` (8 edge(s))
+- `tmpdir` (8 edge(s))
 - `doesNotMatch` (8 edge(s))
-- `mkdtempSync` (7 edge(s))
-- `tmpdir` (7 edge(s))
+- `map` (7 edge(s))
 - `run` (7 edge(s))
 - `deepEqual` (6 edge(s))
 - `resolveStrength` (5 edge(s))
-- `map` (5 edge(s))
-- `write` (4 edge(s))
-- `mkdirSync` (3 edge(s))
+- `exit` (4 edge(s))
 
 ### Incoming
 

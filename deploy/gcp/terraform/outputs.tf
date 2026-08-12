@@ -62,6 +62,11 @@ output "skills_version_pinned" {
   value       = local.skills_enabled ? var.skills_version : null
 }
 
+output "registry_bucket" {
+  description = "Terraform-created GCS bucket holding the versioned dual-format harness registry (null when registry_enabled = false). Fixed name from var.registry_bucket_name (default 'aifleet-registry'). The sync-harness-registry workflow publishes here (<version>/original + <version>/generic)."
+  value       = one(google_storage_bucket.registry[*].name)
+}
+
 output "artifact_registry_repo" {
   description = "Artifact Registry Docker repo path (images are pushed here as <repo>/<service>:<tag>)."
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}"
