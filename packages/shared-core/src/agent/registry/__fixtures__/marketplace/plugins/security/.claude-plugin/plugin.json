@@ -1,0 +1,8 @@
+{
+  "name": "security",
+  "version": "1.6.2",
+  "description": "RAVEN security framework",
+  "author": { "name": "Test", "email": "t@example.com" },
+  "hooks": { "PreToolUse": { "matcher": "*" } },
+  "mcpServers": "./.mcp.json"
+}

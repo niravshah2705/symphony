@@ -23,6 +23,7 @@
     "docs:code": "bash scripts/gen-code-docs.sh",
     "docs:agents": "bash scripts/link-agent-docs.sh",
     "graph:build": "bash scripts/build-graphs.sh",
+    "registry:build": "node scripts/build-harness-registry.js",
     "spa:obfuscate": "node scripts/obfuscate-spa.js",
     "hooks:install": "git config core.hooksPath .githooks && echo 'Git hooks enabled (core.hooksPath=.githooks)'"
   },

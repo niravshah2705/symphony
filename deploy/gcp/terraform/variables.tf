@@ -437,6 +437,36 @@ variable "skills_publisher_member" {
   default     = ""
 }
 
+# --- Harness registry bucket (see registry.tf) -------------------------------
+# The weekly sync-harness-registry workflow publishes a versioned dual-format
+# (original + generic) bundle here. Terraform CREATES and OWNS the bucket; the
+# name defaults to "<project_id>-aifleet-registry". registry_bucket_name is an
+# optional override for a custom globally-unique name.
+
+variable "registry_enabled" {
+  type        = bool
+  description = "Create the Terraform-managed harness-registry GCS bucket (+ IAM). true creates and owns the bucket; false disables the feature entirely."
+  default     = true
+}
+
+variable "registry_bucket_name" {
+  type        = string
+  description = "OPTIONAL override for the registry bucket name. Empty ('') derives a stable default of '<project_id>-aifleet-registry' (see locals.tf). Terraform CREATES this bucket — it is NOT assumed to pre-exist. Ignored when registry_enabled = false."
+  default     = ""
+}
+
+variable "registry_bucket_force_destroy" {
+  type        = bool
+  description = "Allow `terraform destroy` to delete the registry bucket even if it still holds objects."
+  default     = false
+}
+
+variable "registry_publisher_member" {
+  type        = string
+  description = "Optional IAM member (e.g. serviceAccount:gh-deployer@PROJECT.iam.gserviceaccount.com) granted objectAdmin on the registry bucket so the sync-harness-registry CI workflow can push new bundles. Empty = no grant (manage the deployer SA's write access out-of-band)."
+  default     = ""
+}
+
 # --- Gateway public URL / Firebase auth --------------------------------------
 
 variable "api_base_url" {

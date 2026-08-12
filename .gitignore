@@ -37,5 +37,9 @@ test-results/
 .playwright-mcp/
 graphify-out/
 agent-layout.png
+# Harness-registry build output — built in CI and published to GCS, never committed
+# (may contain third-party plugin payloads). The sources.json + converter code IS committed.
+registry-bundle-out/
+registry-bundle/
 # Added by code-review-graph
 .code-review-graph/
