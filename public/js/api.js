@@ -317,7 +317,6 @@ export const api = {
   setProvider: (llmProvider, role = 'global') =>
     request('/settings/provider', { method: 'PUT', body: JSON.stringify({ llmProvider, role }) }),
   getCodexStatus: () => request('/settings/codex'),
-  startCodexLogin: () => request('/settings/codex/login'),
   saveCodex: (payload) => request('/settings/codex', { method: 'POST', body: JSON.stringify(payload) }),
   logoutCodex: () => request('/settings/codex', { method: 'DELETE' }),
   testCodex: () => request('/settings/codex/test', { method: 'POST' }),

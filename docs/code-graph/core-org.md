@@ -79,7 +79,7 @@ Directory-based community: services/settings
 - **set_org_policy** (criticality: 0.68, depth: 3)
 - **set_project_policy** (criticality: 0.68, depth: 3)
 - **set_user_policy** (criticality: 0.68, depth: 3)
-- *... and 28 more flows.*
+- *... and 27 more flows.*
 
 ## Dependencies
 

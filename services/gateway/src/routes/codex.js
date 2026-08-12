@@ -5,31 +5,21 @@ const { CONFIG } = require('@ai-fleet/shared/config');
 const {
   getSettings,
   patchSettings,
-  getCodexTokens,
-  setCodexTokens,
   clearCodexTokens,
-  initStore,
-  runWithWorkspaceContext,
-  currentWorkspaceContext,
 } = require('@ai-fleet/shared/store');
 const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
-const { createLogin, consumeLogin, exchangeCodeForTokens } = require('@ai-fleet/shared-core/agent/oauth');
 const { ensureFreshCodexTokens } = require('@ai-fleet/shared/agent/llm');
 const { presetForModel } = require('@ai-fleet/shared-core/agent/model-presets');
 const { discoverModels } = require('@ai-fleet/shared/agent/model-discovery');
-const oauthLib = require('@ai-fleet/shared-core/agent/oauth');
-const log = require('@ai-fleet/shared/logger');
 
 /**
- * Codex (OpenAI) OAuth 2.0 Authorization Code + PKCE endpoints.
+ * Codex (OpenAI) provider settings endpoints: masked status, model catalog,
+ * model/params config, sign-out, and a live token test.
  *
- * Security posture (oauth-oidc checklist):
- *   - provider URLs + client id are trusted server-side config (CONFIG.OAUTH),
- *     never read from the request;
- *   - PKCE S256 + a single-use, short-lived, server-issued `state` guard the
- *     callback against CSRF and code injection;
- *   - the authorization code is exchanged once, bound to the same redirect_uri
- *     and verifier; tokens are stored server-side only and masked in responses.
+ * The browser OAuth redirect/login flow (authorize URL + /auth/callback token
+ * exchange) was REMOVED from the gateway — see
+ * archive/gateway-agent-endpoints/codex-oauth-redirect.js. Codex tokens are
+ * provided out-of-band; these routes only read/validate them.
  */
 
 const router = express.Router();
@@ -94,12 +84,6 @@ router.get(
     res.json(await discoverModels('codex', { refresh: req.query.refresh === '1' }));
   })
 );
-
-// GET /api/settings/codex/login — begin OAuth; returns the authorize URL to navigate to.
-router.get('/login', (req, res) => {
-  const { authorizeUrl } = createLogin(currentWorkspaceContext());
-  res.json({ authorizeUrl });
-});
 
 // POST /api/settings/codex — save model + output-token budget (NOT provider URLs).
 router.post('/', (req, res) => {
@@ -186,64 +170,4 @@ router.post(
   })
 );
 
-/* ------------------------------ callback -------------------------------- */
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-function page(res, status, title, message) {
-  const backLink = '<p><a href="/#/settings">Return to AI Fleet settings</a></p>';
-  res.status(status).type('html').send(
-    `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>` +
-      '<style>body{font-family:system-ui,sans-serif;max-width:560px;margin:64px auto;padding:0 20px;color:#111}' +
-      'h1{font-size:20px}a{color:#2563eb}</style></head><body>' +
-      `<h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>${backLink}</body></html>`
-  );
-}
-
-/**
- * OAuth redirect handler. Mounted at the server-registered redirect URI
- * (`/auth/callback`). Validates state (single-use), then exchanges the code.
- */
-const callback = asyncHandler(async (req, res) => {
-  const { code, state, error, error_description: errorDescription } = req.query;
-
-  if (error) {
-    log.warn(`Codex OAuth error: ${error}`);
-    return page(res, 400, 'Sign-in failed', String(errorDescription || error));
-  }
-
-  // Validate + consume the state BEFORE touching the code (CSRF / replay guard).
-  const login = consumeLogin(typeof state === 'string' ? state : '');
-  if (!login) {
-    return page(res, 403, 'Sign-in failed', 'Invalid or expired sign-in request. Please start again.');
-  }
-  if (!code || typeof code !== 'string') {
-    return page(res, 400, 'Sign-in failed', 'Missing authorization code.');
-  }
-
-  return runWithWorkspaceContext(login.workspaceContext || {}, async () => {
-    try {
-      // The redirect has no selected-context headers. Re-enter the exact
-      // workspace captured in the single-use state before hydrating or writing.
-      await initStore();
-      const tokens = await exchangeCodeForTokens({
-        code,
-        codeVerifier: login.codeVerifier,
-        redirectUri: login.redirectUri, // exact redirect_uri reuse
-      });
-      setCodexTokens(tokens);
-      log.info('Codex OAuth sign-in complete; tokens stored server-side.');
-      return page(res, 200, 'Signed in to Codex', 'You can close this tab and return to AI Fleet.');
-    } catch (err) {
-      log.error(`Codex token exchange failed: ${err && err.message ? err.message : err}`);
-      return page(res, 502, 'Sign-in failed', 'Could not complete the token exchange. Please try again.');
-    }
-  });
-});
-
-// Expose the pending-login count for diagnostics/tests (no secrets).
-router.get('/_pending', (req, res) => res.json({ pending: oauthLib.pendingCount() }));
-
-module.exports = { router, callback, codexPublic };
+module.exports = { router, codexPublic };

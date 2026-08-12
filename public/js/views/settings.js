@@ -2723,14 +2723,10 @@ function codexConnection(ctx) {
   const info = el('div', { class: 'muted preset-save-info', role: 'status', 'aria-live': 'polite' });
   const status = c.connected
     ? `Connected · token ${c.maskedToken || '••••'}${c.expiresAt ? ` · expires ${new Date(c.expiresAt).toLocaleString()}` : ''}`
-    : 'Not connected. Sign in to use this hosted preset.';
-  const signIn = el('button', { class: 'primary', onclick: async () => {
-    try {
-      const { authorizeUrl } = await api.startCodexLogin();
-      window.location.href = authorizeUrl;
-    } catch (err) { toast(err.message, 'err'); }
-  } }, c.connected ? 'Re-authenticate' : 'Sign in with ChatGPT');
-  const buttons = [signIn];
+    : 'Not connected. Codex credentials are provisioned out-of-band for this hosted preset.';
+  // The gateway browser sign-in (ChatGPT OAuth redirect) was removed; keep
+  // test/sign-out for a connection established out-of-band.
+  const buttons = [];
   if (c.connected) {
     buttons.push(
       el('button', { onclick: async () => {
