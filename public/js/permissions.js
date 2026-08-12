@@ -8,6 +8,7 @@
 // `write` = the view performs actions (so read-only roles don't see it).
 export const MENU_PERMISSIONS = Object.freeze({
   agent: { domain: 'workspace', level: 'read' },
+  workflows: { domain: 'org', level: 'read' },
   'agent-jobs': { domain: 'workspace', level: 'read' },
   calls: { domain: 'workspace', level: 'write' },
   business: { domain: 'planning', level: 'read' },

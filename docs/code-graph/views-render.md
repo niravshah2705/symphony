@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 541 nodes
-- **Cohesion**: 0.4767
+- **Size**: 667 nodes
+- **Cohesion**: 0.4764
 - **Dominant Language**: javascript
 
 ## Members
@@ -40,73 +40,76 @@ Directory-based community: public/js
 | ensureStylesheet | Function | ./public/js/app.js | 41-63 |
 | route | Function | ./public/js/app.js | 65-84 |
 | load | Function | ./public/js/app.js | 70-82 |
-| currentRoute | Function | ./public/js/app.js | 120-127 |
-| applyMenuPermissions | Function | ./public/js/app.js | 131-142 |
-| maybeRefreshConnection | Function | ./public/js/app.js | 146-149 |
-| maybeRefreshRole | Function | ./public/js/app.js | 150-155 |
-| syncShell | Function | ./public/js/app.js | 157-182 |
-| syncSidebar | Function | ./public/js/app.js | 184-221 |
-| syncSidebarCollapsed | Function | ./public/js/app.js | 223-233 |
-| copyWithLegacyFallback | Function | ./public/js/app.js | 235-250 |
-| copyAdlcPrompt | Function | ./public/js/app.js | 252-263 |
-| initShellInteractions | Function | ./public/js/app.js | 265-321 |
-| prepareNavigationTarget | Function | ./public/js/app.js | 280-283 |
-| closeAtBreakpoint | Function | ./public/js/app.js | 316-319 |
-| refreshConnection | Function | ./public/js/app.js | 323-372 |
-| refreshRole | Function | ./public/js/app.js | 375-393 |
-| freshView | Function | ./public/js/app.js | 397-406 |
-| setAuthenticationLocked | Function | ./public/js/app.js | 408-415 |
-| beginSignIn | Function | ./public/js/app.js | 417-425 |
-| beginMicrosoftSignIn | Function | ./public/js/app.js | 427-435 |
-| authProviderButtons | Function | ./public/js/app.js | 442-460 |
-| beginSignOut | Function | ./public/js/app.js | 462-470 |
-| renderAuthControl | Function | ./public/js/app.js | 472-603 |
-| renderAuthenticationGate | Function | ./public/js/app.js | 605-664 |
-| renderSignInRequired | Function | ./public/js/app.js | 669-691 |
-| renderAccessDenied | Function | ./public/js/app.js | 693-705 |
+| currentRoute | Function | ./public/js/app.js | 122-129 |
+| applyMenuPermissions | Function | ./public/js/app.js | 133-144 |
+| maybeRefreshConnection | Function | ./public/js/app.js | 148-151 |
+| maybeRefreshRole | Function | ./public/js/app.js | 152-157 |
+| syncShell | Function | ./public/js/app.js | 159-184 |
+| syncSidebar | Function | ./public/js/app.js | 186-223 |
+| syncSidebarCollapsed | Function | ./public/js/app.js | 225-235 |
+| copyWithLegacyFallback | Function | ./public/js/app.js | 237-252 |
+| copyAdlcPrompt | Function | ./public/js/app.js | 254-265 |
+| initShellInteractions | Function | ./public/js/app.js | 267-323 |
+| prepareNavigationTarget | Function | ./public/js/app.js | 282-285 |
+| closeAtBreakpoint | Function | ./public/js/app.js | 318-321 |
+| refreshConnection | Function | ./public/js/app.js | 325-374 |
+| refreshRole | Function | ./public/js/app.js | 377-395 |
+| freshView | Function | ./public/js/app.js | 399-408 |
+| setAuthenticationLocked | Function | ./public/js/app.js | 410-417 |
+| beginSignIn | Function | ./public/js/app.js | 419-427 |
+| beginMicrosoftSignIn | Function | ./public/js/app.js | 429-437 |
+| authProviderButtons | Function | ./public/js/app.js | 444-462 |
+| beginSignOut | Function | ./public/js/app.js | 464-472 |
+| renderAuthControl | Function | ./public/js/app.js | 474-605 |
+| renderAuthenticationGate | Function | ./public/js/app.js | 607-666 |
+| renderSignInRequired | Function | ./public/js/app.js | 671-693 |
+| renderAccessDenied | Function | ./public/js/app.js | 695-707 |
 
-*... and 491 more members.*
+*... and 617 more members.*
 
 ## Execution Flows
 
+- **renderWorkflows** (criticality: 0.82, depth: 5)
 - **beginSignIn** (criticality: 0.81, depth: 6)
 - **beginMicrosoftSignIn** (criticality: 0.81, depth: 6)
 - **start** (criticality: 0.81, depth: 6)
 - **initializeAuthentication** (criticality: 0.80, depth: 4)
 - **beginSignOut** (criticality: 0.80, depth: 6)
 - **render** (criticality: 0.79, depth: 3)
+- **onMove** (criticality: 0.79, depth: 9)
+- **onUp** (criticality: 0.76, depth: 6)
 - **hostedConnection** (criticality: 0.75, depth: 8)
-- **render** (criticality: 0.72, depth: 5)
-- **maybeRefreshConnection** (criticality: 0.69, depth: 1)
-- **applyServerEvent** (criticality: 0.63, depth: 5)
-- *... and 18 more flows.*
+- *... and 23 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `append` (180 edge(s))
-- `addEventListener` (135 edge(s))
-- `map` (111 edge(s))
-- `String` (96 edge(s))
-- `trim` (67 edge(s))
-- `push` (61 edge(s))
-- `setAttribute` (58 edge(s))
-- `filter` (57 edge(s))
+- `append` (194 edge(s))
+- `addEventListener` (191 edge(s))
+- `map` (142 edge(s))
+- `String` (108 edge(s))
+- `push` (80 edge(s))
+- `filter` (76 edge(s))
+- `trim` (72 edge(s))
+- `setAttribute` (60 edge(s))
+- `isArray` (58 edge(s))
+- `has` (56 edge(s))
 - `catch` (48 edge(s))
+- `querySelector` (46 edge(s))
 - `t` (43 edge(s))
-- `querySelector` (40 edge(s))
-- `isArray` (39 edge(s))
-- `Boolean` (37 edge(s))
-- `has` (36 edge(s))
-- `Number` (32 edge(s))
+- `slice` (43 edge(s))
+- `find` (39 edge(s))
 
 ### Incoming
 
 - `./public/js/api.js` (158 edge(s))
+- `./public/js/workflow-designer-model.mjs` (145 edge(s))
 - `./public/js/views/settings.js` (126 edge(s))
 - `./public/js/views/agent.js` (97 edge(s))
-- `./public/js/app.js` (83 edge(s))
+- `./public/js/workflow-designer-model.test.mjs` (89 edge(s))
+- `./public/js/app.js` (84 edge(s))
+- `./public/js/views/workflows.js` (63 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (35 edge(s))
@@ -115,6 +118,3 @@ Directory-based community: public/js
 - `./public/js/auth-retry.test.mjs` (15 edge(s))
 - `./public/js/views/organization.js` (13 edge(s))
 - `./public/js/workspace-context.mjs` (13 edge(s))
-- `./public/js/views/cost.js` (12 edge(s))
-- `./public/js/workspace-context.test.mjs` (11 edge(s))
-- `./public/js/workspace-context.js` (10 edge(s))
