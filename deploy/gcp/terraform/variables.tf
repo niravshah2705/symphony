@@ -237,14 +237,14 @@ variable "container_concurrency" {
 
 variable "cloud_run_service_cpu" {
   type        = string
-  description = "vCPU limit for Cloud Run service app containers. The fractional default is paired with request concurrency 1, request-based billing, and gen1; agent services use 1 vCPU when the optional gen2 skills mount is enabled."
-  default     = "0.5"
+  description = "vCPU limit for Cloud Run service app containers. The 1-vCPU default supports container_concurrency > 1; fractional overrides require container_concurrency = 1 and gen1."
+  default     = "1"
 }
 
 variable "cloud_run_proxy_cpu" {
   type        = string
-  description = "vCPU limit for egress-proxy sidecars on Cloud Run services. Cloud Run Jobs use coder_job_proxy_cpu because job containers require at least 1 vCPU."
-  default     = "0.5"
+  description = "vCPU limit for egress-proxy sidecars on Cloud Run services. Cloud Run Jobs use coder_job_proxy_cpu."
+  default     = "1"
 }
 
 # --- Pub/Sub topics -----------------------------------------------------------
