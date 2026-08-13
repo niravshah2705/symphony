@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "harnesses": [
+    {
+      "id": "deepagent",
+      "label": "DeepAgent",
+      "harnessName": "deepagent",
+      "packageName": "deepagents",
+      "requiresProvider": null,
+      "availability": "available",
+      "capabilities": ["planning", "coding", "testing", "deployment", "streaming", "subagents"],
+      "stages": ["planning", "coding", "testing", "deployment"],
+      "brokeredStages": ["planning", "coding", "testing", "deployment"]
+    },
+    {
+      "id": "codex-sdk",
+      "label": "Codex SDK",
+      "harnessName": "codex",
+      "packageName": "@openai/codex-sdk",
+      "requiresProvider": "codex",
+      "availability": "available",
+      "capabilities": ["planning", "coding", "testing"],
+      "stages": ["planning", "coding", "testing"],
+      "brokeredStages": ["planning", "testing"]
+    },
+    {
+      "id": "claude-agent-sdk",
+      "label": "Claude Agent SDK",
+      "harnessName": "claudecode",
+      "packageName": "@anthropic-ai/claude-agent-sdk",
+      "requiresProvider": "claude",
+      "availability": "available",
+      "capabilities": ["planning", "coding", "testing", "streaming", "subagents"],
+      "stages": ["planning", "coding", "testing"],
+      "brokeredStages": ["planning", "testing"]
+    },
+    {
+      "id": "antigravity-sdk",
+      "label": "Antigravity SDK",
+      "harnessName": "antigravity",
+      "packageName": "@google/genai",
+      "requiresProvider": "antigravity",
+      "availability": "available",
+      "capabilities": ["planning"],
+      "stages": ["planning"],
+      "brokeredStages": ["planning"]
+    },
+    {
+      "id": "opencode",
+      "label": "OpenCode",
+      "harnessName": "opencode",
+      "packageName": "@opencode-ai/sdk + opencode-ai",
+      "requiresProvider": null,
+      "availability": "experimental",
+      "capabilities": ["planning", "coding", "testing"],
+      "stages": ["planning", "coding", "testing"],
+      "brokeredStages": []
+    },
+    {
+      "id": "pi",
+      "label": "Pi",
+      "harnessName": "pi",
+      "packageName": "@earendil-works/pi-coding-agent",
+      "requiresProvider": null,
+      "availability": "experimental",
+      "capabilities": ["planning", "coding", "testing"],
+      "stages": ["planning", "coding", "testing"],
+      "brokeredStages": []
+    },
+    {
+      "id": "oh-my-pi",
+      "label": "Oh My Pi",
+      "harnessName": "ohmypi",
+      "packageName": "omp --mode rpc",
+      "requiresProvider": null,
+      "availability": "experimental",
+      "capabilities": ["planning", "coding", "testing"],
+      "stages": ["planning", "coding", "testing"],
+      "brokeredStages": []
+    }
+  ]
+}

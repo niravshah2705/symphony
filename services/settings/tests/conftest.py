@@ -15,6 +15,9 @@ os.environ.setdefault("AUTH_RATE_LIMIT", "100000/minute")  # don't throttle test
 # Known internal S2S token so the secret-resolve endpoint's X-Internal-Token
 # guard can be exercised. No KMS_KEY_NAME -> the in-memory KMS fake is used.
 os.environ.setdefault("INTERNAL_API_TOKEN", "test-internal-token-0123456789")
+os.environ.setdefault(
+    "ORG_S2S_SIGNING_KEY", "test-org-signing-key-0123456789abcdef"
+)
 # No GCP_PROJECT_ID -> get_db() returns the in-memory fake.
 os.environ.pop("GCP_PROJECT_ID", None)
 

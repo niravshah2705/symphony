@@ -5,10 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Copy the source BEFORE installing: `pip install .` builds the project from
-# pyproject.toml, which needs the `app` package present (otherwise
-# "package directory 'app' does not exist").
-COPY . .
+# Build from the monorepo root. The settings service consumes the canonical,
+# versioned harness catalog owned by shared-core without copying a second source
+# file into the Python package.
+COPY services/settings/ .
+COPY packages/shared-core/src/agent/harness-catalog.json ./app/domain/harness-catalog.json
 RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
 
 EXPOSE 8000

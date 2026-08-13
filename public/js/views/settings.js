@@ -14,6 +14,8 @@ export async function renderSettings(view) {
   view.append(loading('Loading settings…'));
 
   const session = getAuthenticationState();
+  const workspace = getWorkspaceContext();
+  const selectedProject = activeWorkspaceProject(workspace);
   const canWriteGlobal = !session.enabled || permitted(session.permissions, 'settings', 'write');
   if (!canWriteGlobal) {
     await renderScopedPolicySettings(view);
@@ -24,7 +26,7 @@ export async function renderSettings(view) {
   // was rejected. Skip it in that known-bad state so the settings page (the very
   // place to fix the key) doesn't spam the console with connected-tool 401s.
   const linearBroken = state.connectionValid === false;
-  const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes, jsonRes, meRes] = await Promise.all([
+  const [settings, presets, configRes, modelsRes, labelsRes, membersRes, roleRes, codexRes, claudeRes, jsonRes, meRes, universeRes, effectiveRes, codexPreflight] = await Promise.all([
     api.getSettings(),
     api.getLlmPresets(),
     api.getAgentConfig().catch(() => ({ config: {} })),
@@ -36,7 +38,18 @@ export async function renderSettings(view) {
     api.getClaudeStatus().catch(() => ({ connected: false })),
     api.getSettingsJson().catch(() => ({ settings: {} })),
     api.org.getMe().catch(() => null),
+    api.settingsPolicy.getUniverse().catch(() => ({ schemaVersion: 0, harnesses: [] })),
+    api.settingsPolicy.getEffective(selectedProject && selectedProject.id).catch(() => ({ prefs: {} })),
+    api.settingsPolicy.preflight({ stages: ['plan'], harnesses: { plan: 'codex-sdk' } }).catch(() => null),
   ]);
+
+  const codexDecision = codexPreflight && Array.isArray(codexPreflight.stages)
+    ? codexPreflight.stages.find((entry) => entry.stage === 'plan')
+    : null;
+  if (codexDecision && codexDecision.credential) {
+    codexRes.connected = codexDecision.credential.ready === true;
+    codexRes.credentialSource = codexDecision.credential.source || null;
+  }
 
   // Older stores intentionally kept hosted model ids blank and relied on the
   // provider defaults. Seed those effective ids into the in-memory public view
@@ -45,7 +58,7 @@ export async function renderSettings(view) {
   if (!settings.codexModel) settings.codexModel = codexRes.model || codexRes.defaultModel || 'gpt-5.6-sol';
   if (!settings.claudeModel) settings.claudeModel = claudeRes.model || claudeRes.defaultModel || 'claude-opus-4-8';
 
-  const identity = deriveIdentity(meRes, getWorkspaceContext());
+  const identity = deriveIdentity(meRes, workspace);
   const ctx = {
     settings,
     presets,
@@ -56,6 +69,8 @@ export async function renderSettings(view) {
     view,
     me: meRes,
     identity,
+    harnessCatalog: Array.isArray(universeRes.harnesses) ? universeRes.harnesses : [],
+    effectivePrefs: (effectiveRes && effectiveRes.prefs) || {},
     advanced: { configRes, modelsRes, labelsRes, membersRes, roleRes, jsonRes },
   };
   const llm = llmSection(ctx);
@@ -212,14 +227,15 @@ function applyControlLocks(root, scopeState) {
   })();
 }
 
-function setScopePrefs(scopeState, prefs) {
-  if (!canEditPolicyScope(scopeState.identity, scopeState.scope)) return;
+function setScopePrefs(scopeState, prefs, { strict = false } = {}) {
+  if (!canEditPolicyScope(scopeState.identity, scopeState.scope)) return Promise.resolve(null);
   const p = api.settingsPolicy;
   const call = scopeState.scope === 'org' ? p.setOrgPrefs(prefs)
     : scopeState.scope === 'project' && scopeState.projectId ? p.setProjectPrefs(scopeState.projectId, prefs)
       : scopeState.scope === 'user' ? p.setMyPrefs(prefs)
         : null;
-  if (call && typeof call.catch === 'function') call.catch(() => {});
+  const result = call || Promise.resolve(null);
+  return strict ? result : result.catch(() => null);
 }
 
 function sxHeader() {
@@ -332,6 +348,10 @@ const LOCKABLE_PREFS = Object.freeze([
   ['complexityTier', 'Complexity'],
   ['llmProvider', 'Provider'],
   ['agentRuntime', 'Runtime'],
+  ['planHarness', 'Planning harness'],
+  ['codeHarness', 'Coding harness'],
+  ['testHarness', 'Testing harness'],
+  ['deployHarness', 'Deployment harness'],
   ['workflowPattern', 'Workflow'],
   ['planningProvider', 'Issue tracker'],
   ['langsmithTracing', 'Tracing'],
@@ -681,15 +701,33 @@ function providerTiles(ctx, scopeState) {
   return card;
 }
 
-const HARNESS_TILES = Object.freeze([
-  { id: 'deepagent', name: 'DeepAgent SDK' },
-  { id: 'codex-sdk', name: 'Codex SDK' },
-  { id: 'claude-agent-sdk', name: 'Claude SDK' },
-  { id: 'antigravity-sdk', name: 'Antigravity SDK' },
+const FALLBACK_HARNESSES = Object.freeze([
+  { id: 'deepagent', label: 'DeepAgent', availability: 'available', stages: ['planning', 'coding', 'testing', 'deployment'], brokeredStages: ['planning', 'coding', 'testing', 'deployment'] },
+  { id: 'codex-sdk', label: 'Codex SDK', availability: 'available', stages: ['planning', 'coding', 'testing'], brokeredStages: ['planning', 'testing'] },
+  { id: 'claude-agent-sdk', label: 'Claude Agent SDK', availability: 'available', stages: ['planning', 'coding', 'testing'], brokeredStages: ['planning', 'testing'] },
+  { id: 'antigravity-sdk', label: 'Antigravity SDK', availability: 'available', stages: ['planning'], brokeredStages: ['planning'] },
 ]);
 
+const PIPELINE_HARNESS_STAGES = Object.freeze([
+  { id: 'plan', workflow: 'planning', pref: 'planHarness', label: 'Planning', hint: 'Turns a request into an executable plan.' },
+  { id: 'code', workflow: 'coding', pref: 'codeHarness', label: 'Coding', hint: 'Writes changes through the credential broker.', brokerRequired: true },
+  { id: 'test', workflow: 'testing', pref: 'testHarness', label: 'Testing', hint: 'Verifies the change and records evidence.' },
+  { id: 'deploy', workflow: 'deployment', pref: 'deployHarness', label: 'Deployment', hint: 'Follows the repository release instructions after tests pass.', brokerRequired: true },
+]);
+
+function availableHarnesses(ctx) {
+  const catalog = Array.isArray(ctx.harnessCatalog) && ctx.harnessCatalog.length
+    ? ctx.harnessCatalog
+    : FALLBACK_HARNESSES;
+  return catalog.filter((entry) => entry && entry.availability === 'available');
+}
+
+function harnessLabel(id, ctx) {
+  return (availableHarnesses(ctx).find((entry) => entry.id === id) || {}).label || id || 'DeepAgent';
+}
+
 function harnessMeta(id, ctx) {
-  if (id === 'codex-sdk') return ctx.codex && ctx.codex.connected ? 'Ready' : 'Sign-in needed';
+  if (id === 'codex-sdk') return ctx.codex && ctx.codex.connected ? 'Ready' : 'Admin token import needed';
   if (id === 'claude-agent-sdk') return ctx.claude && ctx.claude.connected ? 'Ready' : 'Sign-in needed';
   if (id === 'antigravity-sdk') return ctx.settings.hasAntigravityApiKey ? 'Ready' : 'Gemini API key needed';
   return 'Ready';
@@ -701,10 +739,11 @@ function runtimeTiles(ctx, scopeState) {
     clear(card);
     const active = ctx.settings.agentRuntime || 'deepagent';
     const tiles = el('div', { class: 'sx-tiles', dataset: { lockKey: 'agentRuntime' } });
-    for (const h of HARNESS_TILES) {
+    const harnesses = availableHarnesses(ctx);
+    for (const h of harnesses) {
       const selected = h.id === active;
       const tile = el('button', { type: 'button', class: `sx-tile block${selected ? ' active' : ''}` }, [
-        el('span', { class: 'sx-tile-name' }, h.name),
+        el('span', { class: 'sx-tile-name' }, h.label),
         el('span', { class: 'sx-tile-meta' }, harnessMeta(h.id, ctx)),
       ]);
       tile.addEventListener('click', async () => {
@@ -713,12 +752,47 @@ function runtimeTiles(ctx, scopeState) {
           const res = await api.saveAgentRuntime({ agentRuntime: h.id, workflowPattern: ctx.settings.workflowPattern || 'sequential' });
           Object.assign(ctx.settings, res && res.settings ? res.settings : res);
           ctx.settings.agentRuntime = h.id;
+          ctx.effectivePrefs.agentRuntime = h.id;
           setScopePrefs(scopeState, { agentRuntime: h.id });
-          toast(`Runtime set to ${h.name}.`, 'ok');
+          toast(`Runtime set to ${h.label}.`, 'ok');
         } catch (err) { toast(err.message, 'err'); }
         render();
       });
       tiles.append(tile);
+    }
+    const stageGrid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:16px' });
+    for (const stage of PIPELINE_HARNESS_STAGES) {
+      const compatible = harnesses.filter((h) => {
+        if (!Array.isArray(h.stages) || !h.stages.includes(stage.workflow)) return false;
+        return !stage.brokerRequired || (Array.isArray(h.brokeredStages) && h.brokeredStages.includes(stage.workflow));
+      });
+      const inherited = ctx.effectivePrefs[stage.pref] || ctx.effectivePrefs.agentRuntime || active;
+      const supported = compatible.some((h) => h.id === inherited);
+      const options = compatible.map((h) => el('option', {
+        value: h.id,
+        ...(h.id === inherited ? { selected: 'selected' } : {}),
+      }, h.label));
+      if (!supported) {
+        options.unshift(el('option', { value: inherited, selected: 'selected', disabled: 'disabled' }, `${harnessLabel(inherited, ctx)} (unsupported for this stage)`));
+      }
+      const select = el('select', { style: 'width:100%' }, options);
+      select.addEventListener('change', async () => {
+        select.disabled = true;
+        try {
+          await setScopePrefs(scopeState, { [stage.pref]: select.value }, { strict: true });
+          ctx.effectivePrefs[stage.pref] = select.value;
+          toast(`${stage.label} harness set to ${harnessLabel(select.value, ctx)}.`, 'ok');
+        } catch (err) {
+          toast(err.message || `Could not save the ${stage.label.toLowerCase()} harness.`, 'err');
+          render();
+        } finally {
+          select.disabled = false;
+        }
+      });
+      stageGrid.append(el('div', { dataset: { lockKey: stage.pref } }, [
+        field(`${stage.label} harness`, select),
+        el('div', { class: 'sx-tile-meta' }, stage.hint),
+      ]));
     }
     const workflow = el('select', { style: 'width:100%' }, [
       ['sequential', 'Sequential'], ['parallel', 'Fan-out'], ['evaluator', 'Evaluator / retry'], ['supervisor', 'Supervisor handoff'],
@@ -746,10 +820,11 @@ function runtimeTiles(ctx, scopeState) {
       el('div', { class: 'sx-card-head' }, [
         el('div', {}, [
           el('div', { class: 'sx-card-title' }, 'Agent runtime & workflow'),
-          el('div', { class: 'sx-card-sub' }, 'Harness for compatible runs. Credential-brokered coding stays on DeepAgent.'),
+          el('div', { class: 'sx-card-sub' }, 'Choose a default, then override individual pipeline stages. Only compatible broker-safe choices are offered.'),
         ]),
       ]),
       tiles,
+      stageGrid,
       el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px' }, [
         el('div', { dataset: { lockKey: 'workflowPattern' } }, [field('Workflow pattern', workflow)]),
         el('div', { dataset: { lockKey: 'langsmithTracing' } }, [field('Tracing', tracing)]),
@@ -757,6 +832,10 @@ function runtimeTiles(ctx, scopeState) {
     );
   };
   render();
+  void api.settingsPolicy.getEffective(scopeState.projectId).then((effective) => {
+    ctx.effectivePrefs = (effective && effective.prefs) || {};
+    render();
+  }).catch(() => {});
   return card;
 }
 
@@ -854,10 +933,10 @@ function railCards(ctx, scopeState, identity) {
 function attentionCard(ctx) {
   const s = ctx.settings;
   const tasks = [];
-  const usesClaude = ['thinking', 'execution', 'testing'].some((r) => roleProvider(s, r) === 'claude');
-  const usesCodex = ['thinking', 'execution', 'testing'].some((r) => roleProvider(s, r) === 'codex');
+  const usesClaude = ['thinking', 'execution', 'testing', 'deployment'].some((r) => roleProvider(s, r) === 'claude');
+  const usesCodex = ['thinking', 'execution', 'testing', 'deployment'].some((r) => roleProvider(s, r) === 'codex');
   if (usesClaude && !(ctx.claude && ctx.claude.connected)) tasks.push({ title: 'Sign in to Anthropic', sub: "Hosted Claude models can't run until this account is connected.", action: 'Sign in', target: 'settings-advanced' });
-  if (usesCodex && !(ctx.codex && ctx.codex.connected)) tasks.push({ title: 'Sign in to OpenAI', sub: "Hosted OpenAI models can't run until this account is connected.", action: 'Sign in', target: 'settings-advanced' });
+  if (usesCodex && !(ctx.codex && ctx.codex.connected)) tasks.push({ title: 'Import OpenAI tokens', sub: "Hosted OpenAI models can't run until an administrator imports a token bundle.", action: 'View setup', target: 'settings-advanced' });
   if (!(s.planningConfigured || s.hasKey)) tasks.push({ title: 'Connect the issue tracker', sub: 'Planning needs credentials to read and write work items.', action: 'Add credentials', target: 'settings-connections' });
   if (!s.repositoryConfigured) tasks.push({ title: 'Add repository credentials', sub: 'Needed to read branches and open pull requests.', action: 'Add credentials', target: 'settings-connections' });
   if (!tasks.length) return null;
@@ -880,8 +959,9 @@ function effectiveCard(ctx, scopeState) {
   const thinking = currentParameters(s, roleProvider(s, 'thinking')).model || '—';
   const execution = currentParameters(s, roleProvider(s, 'execution')).model || '—';
   const testing = currentParameters(s, roleProvider(s, 'testing')).model || '—';
+  const deployment = currentParameters(s, roleProvider(s, 'deployment')).model || '—';
   const catalog = (ctx.presets && ctx.presets.presets) || [];
-  const runtimeName = (HARNESS_TILES.find((h) => h.id === (s.agentRuntime || 'deepagent')) || {}).name || 'DeepAgent SDK';
+  const runtimeName = harnessLabel(s.agentRuntime || 'deepagent', ctx);
   // Each operational row carries the pref key that overrides it (if any); the
   // per-role model rows aren't pref-backed. Default source is "Global"; resolved
   // per-scope prefs (loaded async below) flip the badge to the active scope.
@@ -891,7 +971,13 @@ function effectiveCard(ctx, scopeState) {
     ['Thinking', thinking, null],
     ['Execution', execution, null],
     ['Testing', testing, null],
+    ['Deployment', deployment, null],
     ['Runtime', `${runtimeName} · ${s.workflowPattern || 'sequential'}`, 'agentRuntime'],
+    ...PIPELINE_HARNESS_STAGES.map((stage) => [
+      `${stage.label} harness`,
+      harnessLabel((ctx.effectivePrefs && (ctx.effectivePrefs[stage.pref] || ctx.effectivePrefs.agentRuntime)) || s.agentRuntime || 'deepagent', ctx),
+      stage.pref,
+    ]),
     ['Models', `${catalog.length} in catalog`, null, SCOPE_META[scope] ? scope : 'global'],
   ];
   const srcSpans = Object.create(null);
@@ -973,11 +1059,11 @@ function providerDisplay(provider) {
 // ---- Complexity slider ----------------------------------------------------
 
 function estimateMonthlyCostUsd(ctx) {
-  // Indicative: thinking + execution input/output cost against a fixed assumed
-  // monthly volume (millions of tokens). null when either model is unpriced.
+  // Indicative: every active task role
+  // against a fixed monthly volume. null when any active model is unpriced.
   const ASSUMED_INPUT = 20, ASSUMED_OUTPUT = 4;
   let total = 0;
-  for (const role of ['thinking', 'execution']) {
+  for (const role of ['thinking', 'execution', 'testing', 'deployment']) {
     const provider = roleProvider(ctx.settings, role);
     const model = currentParameters(ctx.settings, provider).model;
     const preset = findPresetForModel(ctx, provider, model);
@@ -1714,8 +1800,8 @@ const PROVIDER_DEPLOYMENT = Object.freeze({
   antigravity: 'hosted',
 });
 
-// Purpose-based model roles ("models as tasks"). Each role is provider-flexible
-// (any of the four providers) and maps to its own settings fields.
+// Task-model roles. Each role is provider-flexible and maps to its own settings
+// fields; deployment is the release-stage model, not a provider-class slot.
 const LLM_ROLES = Object.freeze([
   {
     role: 'thinking',
@@ -1735,8 +1821,15 @@ const LLM_ROLES = Object.freeze([
     role: 'testing',
     provider: 'testingLlmProvider',
     preset: 'testingLlmPresetId',
-    heading: 'Testing · tool calling',
-    description: 'Reserved for tool-calling / test agents — not used yet.',
+    heading: 'Testing · verification',
+    description: 'Used by the tester to verify changes and produce evidence.',
+  },
+  {
+    role: 'deployment',
+    provider: 'deploymentLlmProvider',
+    preset: 'deploymentLlmPresetId',
+    heading: 'Deployment · release',
+    description: 'Used by the deployer after a successful full test stage and approval.',
   },
 ]);
 const ROLE_FIELDS = Object.freeze(Object.fromEntries(
@@ -1747,14 +1840,15 @@ const ROLE_META = Object.freeze(Object.fromEntries(
 ));
 const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity']);
 const ROLE_PROVIDERS = Object.freeze({
-  // Legacy deployment slots, kept for any deployment-scoped callers. "byom"
+  // Legacy provider-class slots, kept for provider-scoped callers. "byom"
   // (Bring Your Own Model) folds Hugging Face in with the local runtimes.
   byom: ['ollama', 'lmstudio', 'omlx', 'huggingface'],
   hosted: ['codex', 'claude', 'antigravity'],
-  // Purpose roles accept any provider (BYoM or hosted).
+  // Task roles accept any provider (BYoM or hosted).
   thinking: ALL_PROVIDERS,
   execution: ALL_PROVIDERS,
   testing: ALL_PROVIDERS,
+  deployment: ALL_PROVIDERS,
 });
 
 // Providers that truly run on the operator's own machine. Narrower than the BYoM
@@ -1779,9 +1873,7 @@ function buildLlmSection(ctx, rebuild) {
     const name = entry.heading.split(' · ')[0];
     return `${name}: ${PROVIDER_LABELS[provider] || provider} · ${model}`;
   }).join(' · ');
-  // The reserved "testing" role never blocks the section — it is not wired to a
-  // consumer yet, so an unconfigured testing model is expected.
-  const incomplete = LLM_ROLES.filter((entry) => entry.role !== 'testing').some((entry) => {
+  const incomplete = LLM_ROLES.some((entry) => {
     const provider = roleProvider(ctx.settings, entry.role);
     return !currentParameters(ctx.settings, provider).model || !providerConnected(ctx, provider);
   });
@@ -1820,7 +1912,7 @@ function providerConnected(ctx, provider) {
 
 function presetSlot(ctx, role, rebuild) {
   const slotProvider = roleProvider(ctx.settings, role);
-  // A purpose role's deployment follows whichever provider it names.
+  // A task role's provider class follows whichever provider it names.
   const deployment = PROVIDER_DEPLOYMENT[slotProvider] || 'hosted';
   const preset = findPreset(ctx, selectedPresetId(ctx.settings, role), deployment);
   const provider = preset ? preset.provider : slotProvider;
@@ -2722,26 +2814,18 @@ function codexConnection(ctx) {
   const c = ctx.codex || { connected: false };
   const info = el('div', { class: 'muted preset-save-info', role: 'status', 'aria-live': 'polite' });
   const status = c.connected
-    ? `Connected · token ${c.maskedToken || '••••'}${c.expiresAt ? ` · expires ${new Date(c.expiresAt).toLocaleString()}` : ''}`
-    : 'Not connected. Sign in to use this hosted preset.';
-  const signIn = el('button', { class: 'primary', onclick: async () => {
-    try {
-      const { authorizeUrl } = await api.startCodexLogin();
-      window.location.href = authorizeUrl;
-    } catch (err) { toast(err.message, 'err'); }
-  } }, c.connected ? 'Re-authenticate' : 'Sign in with ChatGPT');
-  const buttons = [signIn];
+    ? `Connected${c.credentialSource ? ` · ${c.credentialSource}` : ''}`
+    : 'Not connected. An organization admin must import Codex credentials with `adlc admin codex import`.';
+  // Browser OAuth and browser deletion were removed. Import/delete are direct,
+  // IAM-gated operator actions against the settings service.
+  const buttons = [];
   if (c.connected) {
     buttons.push(
       el('button', { onclick: async () => {
         info.textContent = 'Testing…';
         try { const r = await api.testCodex(); info.textContent = `Connection OK · ${r.model || c.model}`; info.style.color = 'var(--green)'; }
         catch (err) { info.textContent = err.message; info.style.color = 'var(--red)'; }
-      } }, 'Test connection'),
-      el('button', { class: 'danger', onclick: async () => {
-        try { await api.logoutCodex(); toast('Signed out of Codex.'); renderSettings(clear(ctx.view)); }
-        catch (err) { toast(err.message, 'err'); }
-      } }, 'Sign out')
+      } }, 'Test connection')
     );
   }
   return el('div', { class: 'preset-connection' }, [

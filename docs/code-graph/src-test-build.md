@@ -6,96 +6,109 @@
 
 Directory-based community: services/proxy
 
-- **Size**: 41 nodes
-- **Cohesion**: 0.0813
+- **Size**: 62 nodes
+- **Cohesion**: 0.0687
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| FailClosed | Class | ./services/proxy/src/credentials.js | 33-39 |
-| constructor | Function | ./services/proxy/src/credentials.js | 34-38 |
-| resolveSecrets | Function | ./services/proxy/src/credentials.js | 49-56 |
-| clearCache | Function | ./services/proxy/src/credentials.js | 58-60 |
-| managedValue | Function | ./services/proxy/src/credentials.js | 62-65 |
-| resolveStaticKey | Function | ./services/proxy/src/credentials.js | 73-85 |
-| buildInjection | Function | ./services/proxy/src/credentials.js | 91-136 |
-| getClaudeAuth | Function | ./services/proxy/src/oauth-manager.js | 18-21 |
-| getCodexAuth | Function | ./services/proxy/src/oauth-manager.js | 23-29 |
-| buildUpstreamUrl | Function | ./services/proxy/src/proxy.js | 34-37 |
-| buildForwardHeaders | Function | ./services/proxy/src/proxy.js | 40-56 |
-| filterResponseHeaders | Function | ./services/proxy/src/proxy.js | 59-67 |
-| sendJson | Function | ./services/proxy/src/proxy.js | 69-72 |
-| createProxyHandler | Function | ./services/proxy/src/proxy.js | 81-129 |
+| configuredProxyOrgId | Function | ./services/proxy/src/credentials.js | 33-40 |
+| FailClosed | Class | ./services/proxy/src/credentials.js | 45-51 |
+| constructor | Function | ./services/proxy/src/credentials.js | 46-50 |
+| resolveSecrets | Function | ./services/proxy/src/credentials.js | 62-69 |
+| clearCache | Function | ./services/proxy/src/credentials.js | 71-73 |
+| managedValue | Function | ./services/proxy/src/credentials.js | 75-78 |
+| resolveStaticKey | Function | ./services/proxy/src/credentials.js | 86-98 |
+| buildInjection | Function | ./services/proxy/src/credentials.js | 104-170 |
+| getClaudeAuth | Function | ./services/proxy/src/oauth-manager.js | 20-23 |
+| getCodexAuth | Function | ./services/proxy/src/oauth-manager.js | 25-31 |
+| parseBundle | Function | ./services/proxy/src/oauth-manager.js | 35-44 |
+| ensureFreshOrgCodexTokens | Function | ./services/proxy/src/oauth-manager.js | 46-79 |
+| test:org Codex resolver consumes a fresh encrypted-vault bundle without legacy store access@L8 | Test | ./services/proxy/src/oauth-manager.test.js | 8-43 |
+| fetchImpl | Function | ./services/proxy/src/oauth-manager.test.js | 117-128 |
+| json | Function | ./services/proxy/src/oauth-manager.test.js | 120-127 |
+| test:org Codex resolver honors the fleet org pin used by static credential resolution@L45 | Test | ./services/proxy/src/oauth-manager.test.js | 45-82 |
+| test:org Codex resolver rejects conflicting proxy and fleet organization pins@L84 | Test | ./services/proxy/src/oauth-manager.test.js | 84-92 |
+| test:org Codex resolver fails closed for an explicitly missing customer bundle@L94 | Test | ./services/proxy/src/oauth-manager.test.js | 94-114 |
+| test:org Codex resolver fails closed for a malformed customer bundle@L116 | Test | ./services/proxy/src/oauth-manager.test.js | 116-136 |
+| test:parseBundle rejects invalid vault values@L138 | Test | ./services/proxy/src/oauth-manager.test.js | 138-141 |
+| buildUpstreamUrl | Function | ./services/proxy/src/proxy.js | 37-40 |
+| buildForwardHeaders | Function | ./services/proxy/src/proxy.js | 43-59 |
+| filterResponseHeaders | Function | ./services/proxy/src/proxy.js | 62-70 |
+| sendJson | Function | ./services/proxy/src/proxy.js | 72-75 |
+| createProxyHandler | Function | ./services/proxy/src/proxy.js | 84-132 |
 | test:buildUpstreamUrl appends the path remainder@L9 | Test | ./services/proxy/src/proxy.test.js | 9-17 |
-| test:buildForwardHeaders strips inbound auth and retargets Host@L19 | Test | ./services/proxy/src/proxy.test.js | 19-43 |
-| test:filterResponseHeaders drops body-frame + hop-by-hop but keeps content-type@L45 | Test | ./services/proxy/src/proxy.test.js | 45-60 |
-| test:resolveStaticKey: managed value from the settings payload (one path)@L64 | Test | ./services/proxy/src/proxy.test.js | 64-70 |
-| test:resolveStaticKey: falls back to the platform env only when no payload@L72 | Test | ./services/proxy/src/proxy.test.js | 72-75 |
-| test:buildInjection: managed static key injects the settings-resolved value (Bearer)@L77 | Test | ./services/proxy/src/proxy.test.js | 77-82 |
-| test:buildInjection: customer static key uses the vault plaintext@L84 | Test | ./services/proxy/src/proxy.test.js | 84-90 |
-| test:buildInjection: customer-selected but missing key FAILS CLOSED@L92 | Test | ./services/proxy/src/proxy.test.js | 92-100 |
-| test:buildInjection: git route builds x-access-token Basic auth@L102 | Test | ./services/proxy/src/proxy.test.js | 102-108 |
-| test:buildInjection: langsmith uses x-api-key scheme@L110 | Test | ./services/proxy/src/proxy.test.js | 110-116 |
-| test:buildInjection: native gemini uses x-goog-api-key scheme@L118 | Test | ./services/proxy/src/proxy.test.js | 118-124 |
-| test:buildInjection: claude route injects Bearer + anthropic-beta from oauth manager@L126 | Test | ./services/proxy/src/proxy.test.js | 126-134 |
-| test:buildInjection: codex chatgpt route injects Bearer + chatgpt-account-id@L136 | Test | ./services/proxy/src/proxy.test.js | 136-144 |
-| s2sAuthHeader | Function | ./services/proxy/src/secrets-client.js | 19-32 |
-| s2sGet | Function | ./services/proxy/src/secrets-client.js | 34-56 |
-| fetchOrgSecrets | Function | ./services/proxy/src/secrets-client.js | 59-62 |
-| fetchManagedSecrets | Function | ./services/proxy/src/secrets-client.js | 65-67 |
-| webStreamFromString | Function | ./services/proxy/src/server.test.js | 9-16 |
-| start | Function | ./services/proxy/src/server.test.js | 11-14 |
-| startServer | Function | ./services/proxy/src/server.test.js | 18-35 |
-| test:routes a request to the upstream, injecting the credential, and streams the body back@L37 | Test | ./services/proxy/src/server.test.js | 37-77 |
-| fetchImpl | Function | ./services/proxy/src/server.test.js | 39-49 |
-| error | Function | ./services/proxy/src/server.test.js | 96-96 |
-| info | Function | ./services/proxy/src/server.test.js | 84-84 |
-| warn | Function | ./services/proxy/src/server.test.js | 84-84 |
-| test:unknown path is rejected with 404 (no open relay)@L79 | Test | ./services/proxy/src/server.test.js | 79-93 |
-| test:healthz returns ok@L95 | Test | ./services/proxy/src/server.test.js | 95-105 |
+| test:buildForwardHeaders strips inbound auth and retargets Host@L19 | Test | ./services/proxy/src/proxy.test.js | 19-44 |
+| test:buildForwardHeaders cannot smuggle an OAuth beta header into API-key auth@L46 | Test | ./services/proxy/src/proxy.test.js | 46-54 |
+| test:filterResponseHeaders drops body-frame + hop-by-hop but keeps content-type@L56 | Test | ./services/proxy/src/proxy.test.js | 56-71 |
+| test:resolveStaticKey: managed value from the settings payload (one path)@L75 | Test | ./services/proxy/src/proxy.test.js | 75-81 |
+| test:resolveStaticKey: falls back to the platform env only when no payload@L83 | Test | ./services/proxy/src/proxy.test.js | 83-86 |
+| test:proxy credential scope accepts a dedicated fleet org but rejects conflicting pins@L88 | Test | ./services/proxy/src/proxy.test.js | 88-95 |
+| test:buildInjection: managed static key injects the settings-resolved value (Bearer)@L97 | Test | ./services/proxy/src/proxy.test.js | 97-102 |
+| test:buildInjection: customer static key uses the vault plaintext@L104 | Test | ./services/proxy/src/proxy.test.js | 104-110 |
+| test:buildInjection: customer-selected but missing key FAILS CLOSED@L112 | Test | ./services/proxy/src/proxy.test.js | 112-120 |
+| test:buildInjection: git route builds x-access-token Basic auth@L122 | Test | ./services/proxy/src/proxy.test.js | 122-128 |
+| test:buildInjection: langsmith uses x-api-key scheme@L130 | Test | ./services/proxy/src/proxy.test.js | 130-136 |
+| test:buildInjection: native gemini uses x-goog-api-key scheme@L138 | Test | ./services/proxy/src/proxy.test.js | 138-144 |
+| test:buildInjection: claude route injects Bearer + anthropic-beta from oauth manager@L146 | Test | ./services/proxy/src/proxy.test.js | 146-156 |
+| test:buildInjection: Anthropic route uses a selected static key without OAuth headers@L158 | Test | ./services/proxy/src/proxy.test.js | 158-165 |
+| test:buildInjection: metered OpenAI route uses its selected static key@L167 | Test | ./services/proxy/src/proxy.test.js | 167-174 |
+| test:buildInjection: metered OpenAI route honors the preflight-preferred org token bundle@L176 | Test | ./services/proxy/src/proxy.test.js | 176-188 |
+| test:buildInjection: codex chatgpt route injects Bearer + chatgpt-account-id@L190 | Test | ./services/proxy/src/proxy.test.js | 190-198 |
+| s2sAuthHeader | Function | ./services/proxy/src/secrets-client.js | 22-35 |
+| s2sRequest | Function | ./services/proxy/src/secrets-client.js | 37-81 |
+| s2sGet | Function | ./services/proxy/src/secrets-client.js | 83-85 |
+| fetchOrgSecrets | Function | ./services/proxy/src/secrets-client.js | 88-94 |
+| fetchManagedSecrets | Function | ./services/proxy/src/secrets-client.js | 97-99 |
+| rotateOrgCodexTokens | Function | ./services/proxy/src/secrets-client.js | 101-109 |
+| test:organization secret resolution uses the organization-bound bearer@L8 | Test | ./services/proxy/src/secrets-client.test.js | 8-19 |
+
+*... and 12 more members.*
 
 ## Execution Flows
 
+- **fetchOrgSecrets** (criticality: 0.63, depth: 3)
+- **fetchManagedSecrets** (criticality: 0.63, depth: 3)
 - **buildInjection** (criticality: 0.62, depth: 2)
-- **fetchOrgSecrets** (criticality: 0.62, depth: 2)
-- **fetchManagedSecrets** (criticality: 0.62, depth: 2)
+- **getCodexAuth** (criticality: 0.62, depth: 2)
+- **rotateOrgCodexTokens** (criticality: 0.62, depth: 2)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (38 edge(s))
-- `buildInjection` (9 edge(s))
+- `equal` (54 edge(s))
+- `buildInjection` (12 edge(s))
+- `String` (7 edge(s))
+- `deepEqual` (7 edge(s))
+- `stringify` (5 edge(s))
+- `ensureFreshOrgCodexTokens` (5 edge(s))
+- `rejects` (5 edge(s))
 - `end` (5 edge(s))
+- `trim` (4 edge(s))
+- `fetchOrgSecrets` (4 edge(s))
+- `configuredProxyOrgId` (4 edge(s))
+- `get` (4 edge(s))
 - `toLowerCase` (4 edge(s))
 - `writeHead` (4 edge(s))
 - `close` (4 edge(s))
-- `entries` (3 edge(s))
-- `require` (3 edge(s))
-- `buildUpstreamUrl` (3 edge(s))
-- `get` (3 edge(s))
-- `createProxyHandler` (3 edge(s))
-- `fetch` (3 edge(s))
-- `getCodexAuth` (2 edge(s))
-- `toString` (2 edge(s))
-- `from` (2 edge(s))
 
 ### Incoming
 
-- `equal` (38 edge(s))
+- `equal` (54 edge(s))
+- `./services/proxy/src/proxy.test.js` (18 edge(s))
+- `./services/proxy/src/credentials.js` (15 edge(s))
+- `./services/proxy/src/oauth-manager.test.js` (14 edge(s))
 - `./services/proxy/src/server.test.js` (14 edge(s))
-- `./services/proxy/src/proxy.test.js` (13 edge(s))
-- `./services/proxy/src/credentials.js` (12 edge(s))
+- `buildInjection` (11 edge(s))
 - `./services/proxy/src/proxy.js` (9 edge(s))
-- `buildInjection` (8 edge(s))
-- `./services/proxy/src/secrets-client.js` (6 edge(s))
-- `./services/proxy/src/oauth-manager.js` (4 edge(s))
+- `./services/proxy/src/secrets-client.js` (9 edge(s))
+- `./services/proxy/src/oauth-manager.js` (8 edge(s))
+- `deepEqual` (7 edge(s))
+- `ensureFreshOrgCodexTokens` (5 edge(s))
+- `rejects` (5 edge(s))
+- `match` (3 edge(s))
 - `buildUpstreamUrl` (3 edge(s))
-- `createProxyHandler` (3 edge(s))
-- `fetch` (3 edge(s))
-- `close` (3 edge(s))
-- `resolveStaticKey` (2 edge(s))
-- `get` (2 edge(s))
-- `buildForwardHeaders` (1 edge(s))
+- `configuredProxyOrgId` (3 edge(s))

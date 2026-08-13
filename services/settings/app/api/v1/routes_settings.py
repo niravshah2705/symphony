@@ -22,6 +22,7 @@ from app.schemas.policy import (
     PolicyUpdate,
     UniverseResponse,
 )
+from app.schemas.preflight import PreflightRequest, PreflightResponse
 from app.services import policy_service
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -85,3 +86,18 @@ async def get_effective_settings(
 @router.get("/universe", response_model=UniverseResponse)
 async def get_universe(_principal: Principal = Depends(get_principal)):
     return policy_service.get_universe()
+
+
+@router.post("/preflight", response_model=PreflightResponse)
+async def preflight_pipeline(
+    body: PreflightRequest,
+    principal: Principal = Depends(get_principal),
+    session: Uow = Depends(get_session),
+):
+    """Resolve a user-scoped, secret-free pipeline execution decision."""
+    project_id = body.project_id
+    if principal.context_authoritative and principal.project_id is None and project_id is not None:
+        raise NotFoundError("Project not found")
+    if principal.project_id is not None and project_id is not None and principal.project_id != project_id:
+        raise NotFoundError("Project not found")
+    return await policy_service.preflight_for_caller(session, principal, body)

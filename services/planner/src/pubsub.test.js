@@ -199,6 +199,9 @@ test('planner autonomous ticks fail closed only on an unpinned shared cloud runt
   assert.equal(shouldRunAutonomousTick(empty, {
     messagingMode: 'direct', pinnedOrganizationId: '',
   }), true);
+  assert.equal(shouldRunAutonomousTick(selected, {
+    messagingMode: 'pubsub', pinnedOrganizationId: 'org-pinned', orchestratorEnabled: true,
+  }), false, 'orchestrator rollout disables the legacy planner chain');
 
   let billingSweeps = 0;
   let autonomousRuns = 0;
@@ -214,4 +217,22 @@ test('planner autonomous ticks fail closed only on an unpinned shared cloud runt
     assert.equal(billingSweeps, 1, 'global billing sweep remains enabled');
     assert.equal(autonomousRuns, 0, 'tenant queue must not run without context');
   });
+});
+
+test('planner orchestrator rollout keeps billing sweeps but suppresses autonomous planning', async () => {
+  const { dispatchPlannerTick } = require('./pubsub');
+  let billingSweeps = 0;
+  let autonomousRuns = 0;
+  const result = dispatchPlannerTick({ organizationId: 'org-a', projectId: 'project-a' }, {
+    processBillingSweepImpl: () => { billingSweeps += 1; },
+    processPending: () => { autonomousRuns += 1; },
+    logImpl: { error() {}, warn() {} },
+    messagingMode: 'pubsub',
+    pinnedOrganizationId: 'org-a',
+    orchestratorEnabled: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(result, { autonomous: false });
+  assert.equal(billingSweeps, 1);
+  assert.equal(autonomousRuns, 0);
 });

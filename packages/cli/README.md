@@ -30,9 +30,17 @@ npm install && adlc status             # after install links the `adlc` bin
 | `adlc monitor start\|stop\|resume\|status` | Control the coder board monitor |
 | `adlc jobs` | Enrichment/coder job history |
 | `adlc run` | End-to-end: business → plan → coder |
+| `adlc admin codex import\|delete` | Manage organization Codex credentials through the IAM-gated settings service |
+| `adlc admin deploy approve` | Approve the exact tested commit/tree for a waiting deployment run |
 
 Run `adlc <command> --help` for command-specific flags. Every command accepts
 `--api <url>` and (where it prints structured data) `--json`.
+
+`adlc admin deploy approve` first reads the authenticated, organization/project-
+scoped pipeline status from the gateway. It approves only the pending test
+command's exact commit SHA, tree SHA, and immutable preflight digest, then sends
+that descriptor directly to the IAM-gated settings service. The operator never
+supplies or edits those lineage fields.
 
 ## Authentication
 
@@ -75,7 +83,7 @@ Releases are cut by GitHub Actions (`.github/workflows/cli-release.yml`), which
 runs the unit tests, then packages and publishes a GitHub Release with three
 assets:
 
-- `adlc.js` — a **self-contained bundle** (esbuild); runs on any Node ≥18 with
+- `adlc.js` — a **self-contained bundle** (esbuild); runs on any Node ≥22 with
   no `npm install` (`chmod +x adlc.js && ./adlc.js status`)
 - `ai-fleet-cli-<version>.tgz` — the npm tarball (`bin/` + `src/`)
 - `SHA256SUMS` — checksums for both
@@ -96,9 +104,9 @@ The version must be semver (`MAJOR.MINOR.PATCH`); the tag form is `adlc-v<versio
 
 ```bash
 npm ci
-node --test packages/cli/src/                        # unit tests
+node --test "packages/cli/src/**/*.test.js"          # unit tests (Node 22+ glob)
 npm pack -w @ai-fleet/cli --dry-run                  # inspect tarball contents
 npx --yes esbuild@0.24.2 packages/cli/bin/adlc.js \
-  --bundle --platform=node --target=node18 --format=cjs --outfile=dist/adlc.js
+  --bundle --platform=node --target=node22 --format=cjs --outfile=dist/adlc.js
 node dist/adlc.js --help                             # bundle smoke test
 ```

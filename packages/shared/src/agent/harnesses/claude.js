@@ -133,14 +133,6 @@ async function executeClaude(options, prompt) {
   };
 }
 
-registry.register({
-  id: ID,
-  label: LABEL,
-  harnessName: 'claudecode',
-  packageName: PACKAGE,
-  requiresProvider: 'claude',
-  capabilities: { coding: true, planning: true, streaming: true, subagents: true },
-  createExecutor: () => executeClaude,
-});
+registry.register(registry.builtinDefinition(ID, () => executeClaude));
 
 module.exports = { executeClaude, claudePermissionGuard };

@@ -3,7 +3,12 @@
 const { provision, teardown } = require('./provisioner');
 const { buildPlan } = require('./plan');
 const { names, urls, assertSlug } = require('./naming');
-const { extractSourceService, extractSourceJob, cloneContainers } = require('./containers');
+const {
+  extractSourceService,
+  extractSourceJob,
+  mergeServiceScaling,
+  cloneContainers,
+} = require('./containers');
 
 /**
  * Real @google-cloud adapter for the provisioning executor.
@@ -16,9 +21,10 @@ const { extractSourceService, extractSourceJob, cloneContainers } = require('./c
  * teardowns converge.
  *
  * "Reuse original builds": createService/createJob copy the image AND the secret
- * env blocks, resource limits, execution environment, concurrency, and skills
- * volumes from the live SHARED source service/job, so a tenant runtime is the
- * same build with the same secrets — only its per-tenant plain env differs.
+ * env blocks, resource limits, execution environment, scaling, concurrency,
+ * and skills volumes from the live SHARED source service/job. Explicit
+ * per-service safety overrides (such as the pipeline's max-one ceiling) are
+ * applied after the source profile.
  */
 
 const ALREADY_EXISTS = 6; // gRPC ALREADY_EXISTS
@@ -27,6 +33,12 @@ const NOT_FOUND = 5; // gRPC NOT_FOUND
 function tolerate(codes, err) {
   if (err && codes.includes(err.code)) return;
   throw err;
+}
+
+function iamMember(value) {
+  const member = String(value || '').trim();
+  if (!member) return '';
+  return member.includes(':') ? member : `serviceAccount:${member}`;
 }
 
 let runClients = null;
@@ -102,12 +114,23 @@ function createGcpClients({ projectId, region }) {
     },
     async createService(spec) {
       const src = spec.sourceName ? await sourceService(spec.sourceName) : { containers: [] };
+      if (spec.requireSecretFreePrimary && src.containers[0] && src.containers[0].secretEnv.length) {
+        throw new Error(`${spec.name} source app container contains secret env; pipeline agents require sidecar-only credentials`);
+      }
+      if (spec.requireEgressProxy && src.containers.length < 2) {
+        throw new Error(`${spec.name} source service has no egress-proxy sidecar`);
+      }
       const service = {
         ingress: spec.ingress,
         labels: spec.labels,
         template: {
           serviceAccount: spec.serviceAccount,
-          scaling: { minInstanceCount: 0 },
+          // Preserve the source service's parameterized scaling profile while
+          // allowing pipeline stages to apply their stricter explicit ceiling.
+          scaling: mergeServiceScaling(src.scaling, spec.maxInstanceCount),
+          ...(spec.requestTimeoutSeconds != null
+            ? { timeout: { seconds: spec.requestTimeoutSeconds } }
+            : {}),
           executionEnvironment: src.executionEnvironment,
           maxInstanceRequestConcurrency: src.maxInstanceRequestConcurrency,
           volumes: src.volumes,
@@ -149,10 +172,20 @@ function createGcpClients({ projectId, region }) {
     async createTopic(topic) {
       const name = typeof topic === 'string' ? topic : topic.name;
       const labels = typeof topic === 'string' ? undefined : topic.labels;
+      const handle = getPubSub().topic(name);
       try {
         await getPubSub().createTopic({ name, labels });
       } catch (err) {
         tolerate([ALREADY_EXISTS], err);
+      }
+      const publishers = typeof topic === 'string' ? [] : (topic.publishers || []);
+      if (publishers.length) {
+        await handle.iam.setPolicy({
+          bindings: [{
+            role: 'roles/pubsub.publisher',
+            members: publishers.map(iamMember).filter(Boolean),
+          }],
+        });
       }
     },
     async createPushSubscription(spec) {
@@ -161,7 +194,7 @@ function createGcpClients({ projectId, region }) {
           pushEndpoint: spec.pushEndpoint,
           oidcToken: { serviceAccountEmail: spec.oidcServiceAccount, audience: spec.audience },
         },
-        ackDeadlineSeconds: 30,
+        ackDeadlineSeconds: spec.ackDeadlineSeconds || 30,
       };
       if (spec.labels) options.labels = spec.labels;
       if (spec.deadLetterTopic) {
@@ -174,6 +207,14 @@ function createGcpClients({ projectId, region }) {
         await getPubSub().topic(spec.topic).createSubscription(spec.name, options);
       } catch (err) {
         tolerate([ALREADY_EXISTS], err);
+      }
+      if (spec.deadLetterSubscriber) {
+        await getPubSub().subscription(spec.name).iam.setPolicy({
+          bindings: [{
+            role: 'roles/pubsub.subscriber',
+            members: [iamMember(spec.deadLetterSubscriber)].filter(Boolean),
+          }],
+        });
       }
     },
     async createSchedulerJob(spec) {

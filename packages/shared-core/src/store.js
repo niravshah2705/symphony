@@ -174,13 +174,16 @@ const DEFAULT_STORE = Object.freeze({
     // providers and reuses that provider's shared config block below. New
     // installs point every role at the hosted slot; an operator can independently
     // repoint any role (including at a local provider). Consumers:
-    //   thinking  → the planner, execution → the coder, testing → reserved.
+    //   thinking → planner, execution → coder, testing → tester,
+    //   deployment → deployer.
     thinkingLlmProvider: DEFAULT_HOSTED_PRESET.provider,
     thinkingLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
     executionLlmProvider: DEFAULT_HOSTED_PRESET.provider,
     executionLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
     testingLlmProvider: DEFAULT_HOSTED_PRESET.provider,
     testingLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
+    deploymentLlmProvider: DEFAULT_HOSTED_PRESET.provider,
+    deploymentLlmPresetId: DEFAULT_HOSTED_PRESET_ID,
     // Complexity tier last applied via the settings slider (see
     // model-presets.js complexityTiers + settingsPatchForTier). 'custom' means
     // the roles above were set individually and match no tier. Metadata only —

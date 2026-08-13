@@ -6,15 +6,17 @@ const {
   splitEnv,
   extractSourceService,
   extractSourceJob,
+  mergeServiceScaling,
   cloneContainers,
 } = require('./containers');
 
 // A shared source service with an ingress container + an egress-proxy sidecar.
 const SOURCE_SVC = {
   template: {
+    scaling: { minInstanceCount: 0, maxInstanceCount: 1 },
     volumes: [{ name: 'skills' }],
     executionEnvironment: 'EXECUTION_ENVIRONMENT_GEN1',
-    maxInstanceRequestConcurrency: 1,
+    maxInstanceRequestConcurrency: 10,
     containers: [
       {
         image: 'registry/planner:sha',
@@ -23,7 +25,7 @@ const SOURCE_SVC = {
           { name: 'PLANNER_PORT', value: '8080' },
           { name: 'LINEAR_API_KEY', valueSource: { secretKeyRef: { secret: 'linear-api-key', version: 'latest' } } },
         ],
-        resources: { limits: { cpu: '0.5', memory: '512Mi' } },
+        resources: { limits: { cpu: '1', memory: '512Mi' } },
         volumeMounts: [{ name: 'skills', mountPath: '/skills' }],
       },
       {
@@ -35,7 +37,7 @@ const SOURCE_SVC = {
           { name: 'GITHUB_TOKEN', valueSource: { secretKeyRef: { secret: 'github-token', version: 'latest' } } },
           { name: 'INTERNAL_API_TOKEN', valueSource: { secretKeyRef: { secret: 'internal-api-token', version: 'latest' } } },
         ],
-        resources: { limits: { cpu: '0.25', memory: '256Mi' } },
+        resources: { limits: { cpu: '1', memory: '256Mi' } },
       },
     ],
   },
@@ -51,9 +53,20 @@ test('splitEnv separates secret (value-source) env from plain env', () => {
 test('extractSourceService captures ALL containers + volumes', () => {
   const src = extractSourceService(SOURCE_SVC);
   assert.equal(src.containers.length, 2);
+  assert.deepEqual(src.scaling, { minInstanceCount: 0, maxInstanceCount: 1 });
   assert.equal(src.volumes[0].name, 'skills');
   assert.equal(src.executionEnvironment, 'EXECUTION_ENVIRONMENT_GEN1');
-  assert.equal(src.maxInstanceRequestConcurrency, 1);
+  assert.equal(src.maxInstanceRequestConcurrency, 10);
+});
+
+test('mergeServiceScaling preserves source scaling and applies an explicit pipeline cap', () => {
+  const source = { minInstanceCount: 0, maxInstanceCount: 5 };
+  assert.deepEqual(mergeServiceScaling(source), source);
+  assert.deepEqual(
+    mergeServiceScaling(source, 1),
+    { minInstanceCount: 0, maxInstanceCount: 1 },
+  );
+  assert.deepEqual(mergeServiceScaling(undefined), { minInstanceCount: 0 });
 });
 
 test('cloneContainers propagates the sidecar to the tenant stack', () => {
@@ -75,7 +88,7 @@ test('cloneContainers propagates the sidecar to the tenant stack', () => {
   // Primary: tenant env + ports + its own secret env.
   const primary = containers[0];
   assert.deepEqual(primary.ports, [{ containerPort: 8080 }]);
-  assert.deepEqual(primary.resources, { limits: { cpu: '0.5', memory: '512Mi' } });
+  assert.deepEqual(primary.resources, { limits: { cpu: '1', memory: '512Mi' } });
   const primaryEnv = Object.fromEntries(primary.env.filter((e) => !e.valueSource).map((e) => [e.name, e.value]));
   assert.equal(primaryEnv.STORE_NAMESPACE, 'tabc123');
   assert.ok(primary.env.some((e) => e.name === 'LINEAR_API_KEY' && e.valueSource));
@@ -85,7 +98,7 @@ test('cloneContainers propagates the sidecar to the tenant stack', () => {
   const sidecar = containers[1];
   assert.equal(sidecar.ports, undefined);
   assert.equal(sidecar.image, 'registry/proxy:sha');
-  assert.deepEqual(sidecar.resources, { limits: { cpu: '0.25', memory: '256Mi' } });
+  assert.deepEqual(sidecar.resources, { limits: { cpu: '1', memory: '256Mi' } });
   const sidecarEnv = Object.fromEntries(sidecar.env.filter((e) => !e.valueSource).map((e) => [e.name, e.value]));
   assert.equal(sidecarEnv.SETTINGS_URL, 'https://settings.shared');
   assert.equal(sidecarEnv.PROXY_ORG_ID, 'org-uuid');

@@ -37,13 +37,19 @@ function nowIso() {
 async function provision(slug, cfg, { clients }) {
   const plan = buildPlan(slug, cfg);
   const src = cfg.sourceServiceNames || {};
+  const pipelineEnabled = cfg.pipelineOrchestratorEnabled === true;
 
   // 1. Reuse the ORIGINAL images from the live SHARED services (no rebuild).
-  const [gatewayImage, plannerImage, coderImage, workerImage] = await Promise.all([
+  const [gatewayImage, plannerImage, coderImage, workerImage, ...pipelineImages] = await Promise.all([
     clients.getServiceImage(src.gateway),
     clients.getServiceImage(src.planner),
     clients.getServiceImage(src.coder),
     clients.getJobImage(src.worker),
+    ...(pipelineEnabled ? [
+      clients.getServiceImage(src.orchestrator),
+      clients.getServiceImage(src.tester),
+      clients.getServiceImage(src.deployer),
+    ] : []),
   ]);
 
   // 2. Per-tenant topics (before subscriptions).
@@ -52,6 +58,11 @@ async function provision(slug, cfg, { clients }) {
   // 3. Internal agent services first (their URLs back the subs/scheduler/gateway).
   await clients.createService({ ...plan.services.planner, image: plannerImage });
   await clients.createService({ ...plan.services.coder, image: coderImage });
+  if (pipelineEnabled) {
+    await clients.createService({ ...plan.services.orchestrator, image: pipelineImages[0] });
+    await clients.createService({ ...plan.services.tester, image: pipelineImages[1] });
+    await clients.createService({ ...plan.services.deployer, image: pipelineImages[2] });
+  }
   // 4. Worker Job (coder-control launches it by name).
   await clients.createJob({ ...plan.worker, image: workerImage });
   // 5. Public gateway (front-facing origin).
@@ -68,6 +79,11 @@ async function provision(slug, cfg, { clients }) {
     planner: { name: plan.services.planner.name, url: plan.deploymentUrls.planner, status: 'provisioned' },
     coder: { name: plan.services.coder.name, url: plan.deploymentUrls.coder, status: 'provisioned' },
     worker: { name: plan.worker.name, status: 'provisioned' },
+    ...(pipelineEnabled ? {
+      orchestrator: { name: plan.services.orchestrator.name, url: plan.deploymentUrls.orchestrator, status: 'provisioned' },
+      tester: { name: plan.services.tester.name, url: plan.deploymentUrls.tester, status: 'provisioned' },
+      deployer: { name: plan.services.deployer.name, url: plan.deploymentUrls.deployer, status: 'provisioned' },
+    } : {}),
     error: null,
     updated_at: nowIso(),
   };
@@ -82,10 +98,34 @@ async function teardown(slug, { clients }) {
   // Scheduler + subs first (they reference service URLs), then services/job,
   // then topics. IAM bindings vanish with their resource.
   for (const job of [n.plannerTick, n.coderTick]) await clients.deleteSchedulerJob(job);
-  for (const sub of [n.plannerPushSub, n.coderPushSub]) await clients.deleteSubscription(sub);
-  for (const svc of [n.gateway, n.planner, n.coder]) await clients.deleteService(svc);
+  for (const sub of [
+    n.plannerPushSub,
+    n.coderPushSub,
+    n.pipelinePlanPushSub,
+    n.pipelineCodePushSub,
+    n.pipelineTestPushSub,
+    n.pipelineDeployPushSub,
+    n.pipelinePlanResultsPushSub,
+    n.pipelineCodeResultsPushSub,
+    n.pipelineTestResultsPushSub,
+    n.pipelineDeployResultsPushSub,
+  ]) await clients.deleteSubscription(sub);
+  for (const svc of [n.gateway, n.planner, n.coder, n.orchestrator, n.tester, n.deployer]) {
+    await clients.deleteService(svc);
+  }
   await clients.deleteJob(n.worker);
-  for (const topic of [n.plannerTopic, n.coderTopic]) await clients.deleteTopic(topic);
+  for (const topic of [
+    n.plannerTopic,
+    n.coderTopic,
+    n.pipelinePlanTopic,
+    n.pipelineCodeTopic,
+    n.pipelineTestTopic,
+    n.pipelineDeployTopic,
+    n.pipelinePlanResultsTopic,
+    n.pipelineCodeResultsTopic,
+    n.pipelineTestResultsTopic,
+    n.pipelineDeployResultsTopic,
+  ]) await clients.deleteTopic(topic);
   return { status: 'torn_down', slug, updated_at: nowIso() };
 }
 

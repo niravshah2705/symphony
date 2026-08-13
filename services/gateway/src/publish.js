@@ -1,65 +1,117 @@
 'use strict';
 
-const { addConversation, getAssumedRole } = require('@ai-fleet/shared/store');
-const { publishRequest } = require('@ai-fleet/shared/messaging/publisher');
-const { CONFIG } = require('@ai-fleet/shared/config');
-const { asyncHandler } = require('@ai-fleet/shared/util');
+const { CONFIG } = require('@ai-fleet/shared-core/config');
+const store = require('@ai-fleet/shared-core/store');
+const { publishRequest } = require('@ai-fleet/shared-core/messaging/publisher');
+const { asyncHandler } = require('@ai-fleet/shared-core/util');
+const { PipelineAdmissionError, createPipelineAdmission } = require('./pipeline-admission');
 const { requestContext } = require('./request-context');
 
 /**
- * Gateway request publishers. Instead of proxying the two long-running request
- * submissions to the agent services, the gateway creates a conversation thread
- * (the SSE stream target), publishes the request to Pub/Sub, and returns the
- * conversationId the browser opens an EventSource against. Read-only agent
- * endpoints keep flowing through the reverse proxy.
+ * Compatibility adapters for the former self-contained planner/coder request
+ * publishers. The rollout switch keeps their legacy publishers as the safe
+ * default; once enabled they enter the same durable admission path as
+ * POST /api/pipeline/runs. The planner compatibility action includes code and
+ * test because the legacy coder label poller is intentionally disabled during
+ * rollout; stopping at plan would strand the existing Run-now workflow.
  */
 
-// POST /api/agent/enqueue — publish an enrichment planning request.
-const enqueue = asyncHandler(async (req, res) => {
-  const body = req.body || {};
-  const projectId = typeof body.projectId === 'string' ? body.projectId.trim() : '';
-  if (!projectId || projectId.length > 200) return res.status(400).json({ error: 'projectId is required.' });
-  const projectName = typeof body.projectName === 'string' ? body.projectName.slice(0, 200) : projectId;
-  const assumedRole = getAssumedRole();
-  if (!assumedRole) return res.status(400).json({ error: 'Assume a role before enqueuing planner work.' });
+function requiredString(body, field, maxLength = 200) {
+  const value = body && typeof body[field] === 'string' ? body[field].trim() : '';
+  if (!value || value.length > maxLength) {
+    throw new PipelineAdmissionError(`${field} is required.`, 400, 'invalid_pipeline_request');
+  }
+  return value;
+}
 
-  const context = requestContext(req);
-  const conversation = addConversation({
-    title: `Planner: ${projectName}`,
-    orgId: context.organizationId || null,
-    nativeProjectId: context.projectId || null,
+function createCompatibilityHandlers({
+  admission = createPipelineAdmission(),
+  orchestratorEnabled = CONFIG.PIPELINE && CONFIG.PIPELINE.orchestratorEnabled === true,
+  addConversation = store.addConversation,
+  getAssumedRole = store.getAssumedRole,
+  publish = publishRequest,
+  plannerTopic = CONFIG.GCP.plannerTopic,
+  coderTopic = CONFIG.GCP.coderTopic,
+} = {}) {
+  const enqueue = asyncHandler(async (req, res) => {
+    if (!orchestratorEnabled) {
+      const body = req.body || {};
+      const projectId = typeof body.projectId === 'string' ? body.projectId.trim() : '';
+      if (!projectId || projectId.length > 200) {
+        return res.status(400).json({ error: 'projectId is required.' });
+      }
+      const projectName = typeof body.projectName === 'string' ? body.projectName.slice(0, 200) : projectId;
+      const assumedRole = getAssumedRole();
+      if (!assumedRole) {
+        return res.status(400).json({ error: 'Assume a role before enqueuing planner work.' });
+      }
+      const context = requestContext(req);
+      const conversation = addConversation({
+        title: `Planner: ${projectName}`,
+        orgId: context.organizationId || null,
+        nativeProjectId: context.projectId || null,
+      });
+      await publish(plannerTopic, {
+        type: 'enqueue',
+        projectId,
+        projectName,
+        assumedRole,
+        conversationId: conversation.id,
+        orgId: context.organizationId || null,
+        nativeProjectId: context.projectId || null,
+      });
+      return res.status(202).json({ accepted: true, conversationId: conversation.id });
+    }
+    const result = await admission.submit(req, {
+      stages: ['plan', 'code', 'test'],
+      title: (body) => `Planner: ${String(body.projectName || body.projectId || '').slice(0, 200)}`,
+      adaptRequest: (body) => {
+        const projectId = requiredString(body, 'projectId');
+        const projectName = typeof body.projectName === 'string' && body.projectName.trim()
+          ? body.projectName.trim().slice(0, 200)
+          : projectId;
+        const assumedRole = getAssumedRole();
+        if (!assumedRole) {
+          throw new PipelineAdmissionError(
+            'Assume a role before enqueuing planner work.',
+            400,
+            'invalid_pipeline_request',
+          );
+        }
+        return { projectId, projectName, assumedRole };
+      },
+    });
+    return res.status(202).json(result);
   });
-  await publishRequest(CONFIG.GCP.plannerTopic, {
-    type: 'enqueue',
-    projectId,
-    projectName,
-    assumedRole,
-    conversationId: conversation.id,
-    orgId: context.organizationId || null,
-    nativeProjectId: context.projectId || null,
-  });
-  return res.status(202).json({ accepted: true, conversationId: conversation.id });
-});
 
-// POST /api/coder/run — publish a coder run request.
-const coderRun = asyncHandler(async (req, res) => {
-  const body = req.body || {};
-  const issueId = typeof body.issueId === 'string' ? body.issueId.trim() : '';
-  if (!issueId) return res.status(400).json({ error: 'issueId is required.' });
-
-  const context = requestContext(req);
-  const conversation = addConversation({
-    title: `Coder: ${issueId}`,
-    orgId: context.organizationId || null,
-    nativeProjectId: context.projectId || null,
+  const coderRun = asyncHandler(async (req, res) => {
+    if (!orchestratorEnabled) {
+      const body = req.body || {};
+      const issueId = typeof body.issueId === 'string' ? body.issueId.trim() : '';
+      if (!issueId) return res.status(400).json({ error: 'issueId is required.' });
+      const context = requestContext(req);
+      const conversation = addConversation({
+        title: `Coder: ${issueId}`,
+        orgId: context.organizationId || null,
+        nativeProjectId: context.projectId || null,
+      });
+      await publish(coderTopic, {
+        issueId,
+        conversationId: conversation.id,
+        orgId: context.organizationId || null,
+        nativeProjectId: context.projectId || null,
+      });
+      return res.status(202).json({ accepted: true, conversationId: conversation.id });
+    }
+    const result = await admission.submit(req, {
+      stages: ['code'],
+      title: (body) => `Coder: ${String(body.issueId || '').slice(0, 200)}`,
+      adaptRequest: (body) => ({ issueId: requiredString(body, 'issueId') }),
+    });
+    return res.status(202).json(result);
   });
-  await publishRequest(CONFIG.GCP.coderTopic, {
-    issueId,
-    conversationId: conversation.id,
-    orgId: context.organizationId || null,
-    nativeProjectId: context.projectId || null,
-  });
-  return res.status(202).json({ accepted: true, conversationId: conversation.id });
-});
 
-module.exports = { enqueue, coderRun };
+  return { enqueue, coderRun };
+}
+
+module.exports = { createCompatibilityHandlers, requiredString };

@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # proxy has no forwarded user token; the token IS the authorization). Empty
     # => that surface is refused (fail closed).
     internal_api_token: str = ""
+    # HMAC key used to validate per-organization proxy credentials. Unlike the
+    # shared internal token, this key is mounted only on settings + provisioner;
+    # agent service accounts cannot derive another tenant's bearer.
+    org_s2s_signing_key: str = ""
 
     # Canonical organization/membership source. External/Firebase requests are
     # resolved through this service; settings owns policies, not membership.

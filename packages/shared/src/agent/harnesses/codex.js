@@ -233,14 +233,6 @@ async function executeCodex(options, prompt) {
   }
 }
 
-registry.register({
-  id: ID,
-  label: LABEL,
-  harnessName: 'codex',
-  packageName: PACKAGE,
-  requiresProvider: 'codex',
-  capabilities: { coding: true, planning: true, streaming: false, subagents: false },
-  createExecutor: () => executeCodex,
-});
+registry.register(registry.builtinDefinition(ID, () => executeCodex));
 
 module.exports = { executeCodex, prepareCodexChatgptHome };

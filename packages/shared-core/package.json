@@ -1,17 +1,21 @@
 {
   "name": "@ai-fleet/shared-core",
   "version": "1.0.0",
-  "description": "Lightweight AI Fleet primitives with NO LLM / agent-SDK dependencies: config, egress routes, logger, authz, OAuth token plumbing, Pub/Sub messaging, and the runtime provisioner. Imported by the non-agent services (proxy, provisioner) so they never pull in the ~600 MB agent-SDK tree. The heavy @ai-fleet/shared depends on this package and re-exports these paths (thin shims) for backward compatibility.",
+  "description": "Lightweight AI Fleet primitives with NO LLM / agent-SDK dependencies: config, egress routes, logger, authz, store, billing, messaging, OAuth token plumbing, and the runtime provisioner. Imported by non-agent services so they never pull in the agent-SDK tree. The heavy @ai-fleet/shared depends on this package and re-exports these paths for backward compatibility.",
   "private": true,
   "exports": {
     "./config": "./src/config.js",
     "./egress": "./src/egress.js",
     "./logger": "./src/logger.js",
+    "./util": "./src/util.js",
     "./authz": "./src/authz.js",
     "./store": "./src/store.js",
     "./store/*": "./src/store/*.js",
+    "./pipeline/*": "./src/pipeline/*.js",
     "./agent/*": "./src/agent/*.js",
+    "./agent/harness-catalog.json": "./src/agent/harness-catalog.json",
     "./messaging/*": "./src/messaging/*.js",
+    "./billing/*": "./src/billing/*.js",
     "./provisioning": "./src/provisioning/index.js",
     "./provisioning/*": "./src/provisioning/*.js"
   },

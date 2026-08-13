@@ -9,6 +9,7 @@ const { promisify } = require('util');
 const { pathToFileURL } = require('url');
 const { CONFIG } = require('../config');
 const { SENTINEL_TOKEN } = require('../egress');
+const { copySecretFreeJson, isSecretFieldName } = require('@ai-fleet/shared-core/pipeline/contracts');
 
 const execFileP = promisify(execFile);
 
@@ -61,6 +62,13 @@ const BROKER_TOKEN_ENV = 'TECHSYMPHONY_BROKER_GIT_TOKEN';
 const BROKER_HOST_ENV = 'TECHSYMPHONY_BROKER_GIT_HOST';
 const BROKER_USER_ENV = 'TECHSYMPHONY_BROKER_GIT_USER';
 const FRAMEWORK_SKILLS_EXCLUDE = '/.agent-skills/';
+const DEPLOYMENT_MANIFEST = '.ai-fleet/deployment.json';
+const DEPLOYMENT_MANIFEST_MAX_BYTES = 32 * 1024;
+const DEPLOYMENT_KEY_RE = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+const SECRET_FIELD_RE = /(?:^|[_-])(?:token|secret|password|passwd|pwd|credential|authorization|auth|cookie|session|bearer|pat|key)(?:$|[_-])/i;
+const GITHUB_SHA_RE = /^[0-9a-f]{40}$/;
+const SHA256_RE = /^[0-9a-f]{64}$/;
+const COMMAND_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/;
 const AVAILABILITY_ERROR_CODES = new Set(['missing_token', 'provider_unavailable']);
 const REMOTE_GIT_FAILURE = /(?:authentication failed|could not resolve host|could not read username|could not read from remote repository|unable to access|connection (?:refused|reset|timed?\s*out)|network (?:is unreachable|error)|remote:\s*[^\r\n]*(?:permission denied|not allowed|forbidden)|permission to [^\r\n]+ denied|repository not found|not authorized|requested url returned error:\s*(?:401|403|404|408|429|5\d\d)|http\s*(?:401|403|404|408|429|5\d\d))\b/i;
 
@@ -160,6 +168,107 @@ function validateBranch(value, name = 'branch') {
     throw new RepositoryBrokerError(`${name} is not a safe Git branch name.`, 'invalid_branch');
   }
   return branch;
+}
+
+function isPlainObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function deploymentScalar(value, field) {
+  if (!['string', 'number', 'boolean'].includes(typeof value) || (typeof value === 'number' && !Number.isFinite(value))) {
+    throw new RepositoryBrokerError(`${field} must be a string, finite number, or boolean.`, 'invalid_deployment_manifest');
+  }
+  const text = String(value);
+  if (text.length > 500 || /-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(text)) {
+    throw new RepositoryBrokerError(`${field} is not a safe bounded CI/CD input.`, 'invalid_deployment_manifest');
+  }
+  return value;
+}
+
+function deploymentSecretField(key) {
+  return isSecretFieldName(key) || SECRET_FIELD_RE.test(String(key));
+}
+
+/** Validate one fixed repository-owned CI/CD allowlist entry. Repository JSON
+ * is data, not a command: no executable, arbitrary URL, ref override, or secret
+ * field can enter the deployment broker. */
+function normalizeDeploymentManifest(raw, { provider, environment, baseBranch } = {}) {
+  if (provider !== 'github') {
+    throw new RepositoryBrokerError(
+      'Deployment requires the brokered GitHub egress path.',
+      'repository_provider_not_brokered',
+    );
+  }
+  if (!isPlainObject(raw) || raw.schemaVersion !== 1 || !isPlainObject(raw.environments)) {
+    throw new RepositoryBrokerError('Deployment manifest must use schemaVersion 1 with an environments map.', 'invalid_deployment_manifest');
+  }
+  const selectedEnvironment = String(environment || '').trim().toLowerCase();
+  if (!/^[a-z][a-z0-9_-]{0,39}$/.test(selectedEnvironment)) {
+    throw new RepositoryBrokerError('Deployment environment is invalid.', 'invalid_deployment_environment');
+  }
+  const entry = raw.environments[selectedEnvironment];
+  if (!isPlainObject(entry)) {
+    throw new RepositoryBrokerError(`Environment "${selectedEnvironment}" is not allowlisted by ${DEPLOYMENT_MANIFEST}.`, 'deployment_environment_denied');
+  }
+  const expectedProvider = 'github-actions';
+  if (entry.provider !== expectedProvider) {
+    throw new RepositoryBrokerError(`Deployment provider must be ${expectedProvider}.`, 'invalid_deployment_manifest');
+  }
+  const ref = validateBranch(entry.ref || baseBranch, 'deployment ref');
+  if (!baseBranch || ref !== baseBranch) {
+    throw new RepositoryBrokerError('Deployment ref must equal the broker-scoped base branch.', 'deployment_ref_denied');
+  }
+  const workflow = String(entry.workflow || '').trim();
+  if (!/^[A-Za-z0-9_.-]{1,120}$/.test(workflow) || !/\.ya?ml$/i.test(workflow)) {
+    throw new RepositoryBrokerError('GitHub deployment workflow must be a workflow YAML filename.', 'invalid_deployment_manifest');
+  }
+  const inputs = {};
+  if (entry.inputs !== undefined && !isPlainObject(entry.inputs)) {
+    throw new RepositoryBrokerError('Deployment inputs must be an object.', 'invalid_deployment_manifest');
+  }
+  for (const [key, value] of Object.entries(entry.inputs || {})) {
+    if (!DEPLOYMENT_KEY_RE.test(key) || deploymentSecretField(key)) {
+      throw new RepositoryBrokerError('Deployment input key is not allowlisted.', 'invalid_deployment_manifest');
+    }
+    try {
+      inputs[key] = deploymentScalar(copySecretFreeJson(value, `deployment.inputs.${key}`), `inputs.${key}`);
+    } catch (_) {
+      throw new RepositoryBrokerError('Deployment input contains forbidden credential material.', 'invalid_deployment_manifest');
+    }
+  }
+  const environmentInput = entry.environmentInput == null ? null : String(entry.environmentInput);
+  const idempotencyInput = entry.idempotencyInput == null ? null : String(entry.idempotencyInput);
+  for (const [field, key] of [['environmentInput', environmentInput], ['idempotencyInput', idempotencyInput]]) {
+    if (key && (!DEPLOYMENT_KEY_RE.test(key) || deploymentSecretField(key))) {
+      throw new RepositoryBrokerError(`${field} is invalid.`, 'invalid_deployment_manifest');
+    }
+  }
+  if (!idempotencyInput) {
+    throw new RepositoryBrokerError(
+      'Deployment entries must declare an idempotencyInput for the pipeline command id.',
+      'invalid_deployment_manifest',
+    );
+  }
+  if (environmentInput && environmentInput === idempotencyInput) {
+    throw new RepositoryBrokerError(
+      'environmentInput and idempotencyInput must use distinct workflow inputs.',
+      'invalid_deployment_manifest',
+    );
+  }
+  const timeoutSeconds = Math.min(1_800, Math.max(30, Number(entry.timeoutSeconds) || 900));
+  return Object.freeze({
+    schemaVersion: 1,
+    environment: selectedEnvironment,
+    provider: expectedProvider,
+    workflow,
+    ref,
+    inputs: Object.freeze(inputs),
+    environmentInput,
+    idempotencyInput,
+    timeoutSeconds,
+  });
 }
 
 function validateRepository(repository, selectedProvider) {
@@ -291,6 +400,7 @@ function normalizeReview(provider, value) {
       sourceBranch: value.head && value.head.ref,
       targetBranch: value.base && value.base.ref,
       headSha: value.head && value.head.sha,
+      mergedSha: typeof value.merge_commit_sha === 'string' ? value.merge_commit_sha.toLowerCase() : null,
       draft: Boolean(value.draft),
       mergeable: value.mergeable == null ? null : Boolean(value.mergeable),
       labels: (Array.isArray(value.labels) ? value.labels : [])
@@ -314,6 +424,98 @@ function normalizeReview(provider, value) {
       value.blocking_discussions_resolved == null ? null : Boolean(value.blocking_discussions_resolved),
     labels: (Array.isArray(value.labels) ? value.labels : []).map((label) => oneLine(label, 100)).filter(Boolean),
   };
+}
+
+function githubSha(value, field = 'GitHub commit SHA') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!GITHUB_SHA_RE.test(normalized)) {
+    throw new RepositoryBrokerError(`${field} is not an immutable GitHub SHA.`, 'invalid_artifact_revision');
+  }
+  return normalized;
+}
+
+function receiptIdentifier(value, field, max, { optional = false } = {}) {
+  if ((value === null || value === undefined) && optional) return null;
+  const normalized = String(value || '').trim();
+  if (!normalized || normalized.length > max || /[\u0000-\u001f\u007f]/.test(normalized)) {
+    throw new RepositoryBrokerError(`${field} is invalid.`, 'invalid_merge_receipt');
+  }
+  return normalized;
+}
+
+function receiptReviewUrl(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const normalized = receiptIdentifier(value, 'Review URL', 1_000);
+  try {
+    const url = new URL(normalized);
+    if (url.protocol !== 'https:' || url.username || url.password) throw new Error('unsafe URL');
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch (_) {
+    throw new RepositoryBrokerError('Review URL is invalid.', 'invalid_merge_receipt');
+  }
+}
+
+function mergeReceiptPayload(value) {
+  const repository = receiptIdentifier(value.repository, 'Receipt repository', 240);
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
+    throw new RepositoryBrokerError('Receipt repository is invalid.', 'invalid_merge_receipt');
+  }
+  const commandId = receiptIdentifier(value.commandId, 'Receipt command id', 180, { optional: true });
+  if (commandId !== null && !COMMAND_ID_RE.test(commandId)) {
+    throw new RepositoryBrokerError('Receipt command id is invalid.', 'invalid_merge_receipt');
+  }
+  return {
+    schemaVersion: 1,
+    kind: 'repository-merge-receipt',
+    source: 'repository-broker',
+    provider: 'github',
+    repository,
+    commandId,
+    workItemId: receiptIdentifier(value.workItemId, 'Receipt work item id', 200, { optional: true }),
+    branch: validateBranch(value.branch, 'receipt branch'),
+    baseBranch: validateBranch(value.baseBranch, 'receipt base branch'),
+    reviewId: Number(value.reviewId),
+    reviewUrl: receiptReviewUrl(value.reviewUrl),
+    headSha: githubSha(value.headSha, 'Review head SHA'),
+    mergedSha: githubSha(value.mergedSha, 'Merged commit SHA'),
+    commitSha: githubSha(value.commitSha || value.mergedSha, 'Artifact commit SHA'),
+    treeSha: githubSha(value.treeSha, 'Artifact tree SHA'),
+    reused: value.reused === true,
+  };
+}
+
+function mergeReceiptDigest(value) {
+  return crypto.createHash('sha256').update(JSON.stringify(mergeReceiptPayload(value))).digest('hex');
+}
+
+/** Validate the server-owned receipt again at every trust-boundary crossing.
+ * The digest is an integrity guard against accidental projection drift; receipt
+ * authority still comes from the in-process broker, never from model output. */
+function validateMergeReceipt(value, expected = {}) {
+  if (!isPlainObject(value)) {
+    throw new RepositoryBrokerError('A broker merge receipt is required.', 'merge_receipt_required');
+  }
+  const payload = mergeReceiptPayload(value);
+  if (!payload.repository || !payload.branch || !payload.baseBranch) {
+    throw new RepositoryBrokerError('The broker merge receipt scope is incomplete.', 'invalid_merge_receipt');
+  }
+  if (!Number.isSafeInteger(payload.reviewId) || payload.reviewId < 1) {
+    throw new RepositoryBrokerError('The broker merge receipt review id is invalid.', 'invalid_merge_receipt');
+  }
+  if (payload.commitSha !== payload.mergedSha) {
+    throw new RepositoryBrokerError('The broker artifact does not equal the merged commit.', 'invalid_merge_receipt');
+  }
+  if (!SHA256_RE.test(String(value.receiptDigest || '')) || value.receiptDigest !== mergeReceiptDigest(payload)) {
+    throw new RepositoryBrokerError('The broker merge receipt digest is invalid.', 'invalid_merge_receipt');
+  }
+  for (const [field, expectedValue] of Object.entries(expected || {})) {
+    if (expectedValue !== undefined && expectedValue !== null && payload[field] !== expectedValue) {
+      throw new RepositoryBrokerError(`The broker merge receipt ${field} does not match its command scope.`, 'merge_receipt_scope_mismatch');
+    }
+  }
+  return Object.freeze({ ...payload, receiptDigest: value.receiptDigest });
 }
 
 /** Provider REST path prefix for a repository (owner/repo for GitHub, project for GitLab). */
@@ -466,6 +668,11 @@ class RepositoryBroker {
   #remoteEmpty = false;
   #stackCandidates = [];
   #stackedOn = null;
+  #sleep;
+  #deploymentReceipt = null;
+  #artifactContext = Object.freeze({ commandId: null, workItemId: null });
+  #artifactReceipt = null;
+  #pinnedRevision = null;
 
   constructor({
     provider,
@@ -479,6 +686,7 @@ class RepositoryBroker {
     step,
     fetchImpl = global.fetch,
     execFileImpl = execFileP,
+    sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
     stagingRoot,
   }) {
     this.repository = validateRepository(repository, provider);
@@ -513,6 +721,7 @@ class RepositoryBroker {
     this.#token = String(token || '') || (CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : '');
     this.#fetchImpl = fetchImpl;
     this.#execFileImpl = execFileImpl;
+    this.#sleep = sleep;
     const privateRoot = path.resolve(stagingRoot || path.join(os.tmpdir(), 'techsymphony-repository-broker'));
     fs.mkdirSync(privateRoot, { recursive: true, mode: 0o700 });
     this.stagingDir = fs.mkdtempSync(path.join(privateRoot, 'scope-'));
@@ -537,6 +746,398 @@ class RepositoryBroker {
    */
   availabilityError() {
     return this.#availabilityError;
+  }
+
+  deploymentReceipt() {
+    return this.#deploymentReceipt ? JSON.parse(JSON.stringify(this.#deploymentReceipt)) : null;
+  }
+
+  /** Bind receipts to server-owned pipeline identity before the model receives
+   * the broker tool. Autonomous/non-pipeline callers may leave this unbound,
+   * but fixed-pipeline completion requires both values at its outer boundary. */
+  bindArtifactContext({ commandId, workItemId } = {}) {
+    this.#assertActive();
+    const normalizedCommandId = String(commandId || '').trim();
+    const normalizedWorkItemId = String(workItemId || '').trim();
+    if (!COMMAND_ID_RE.test(normalizedCommandId) || !normalizedWorkItemId || normalizedWorkItemId.length > 200) {
+      throw new RepositoryBrokerError('A valid command and work item are required for artifact receipts.', 'invalid_artifact_context');
+    }
+    if (this.#artifactReceipt) {
+      throw new RepositoryBrokerError('Artifact context cannot change after a merge receipt exists.', 'artifact_context_locked');
+    }
+    this.#artifactContext = Object.freeze({ commandId: normalizedCommandId, workItemId: normalizedWorkItemId });
+    return { ...this.#artifactContext };
+  }
+
+  artifactReceipt() {
+    return this.#artifactReceipt ? JSON.parse(JSON.stringify(this.#artifactReceipt)) : null;
+  }
+
+  pinnedRevision() {
+    return this.#pinnedRevision ? { ...this.#pinnedRevision } : null;
+  }
+
+  async #recordMergeReceipt(review, mergedSha, { reused = false } = {}) {
+    if (this.repository.provider !== 'github') {
+      throw new RepositoryBrokerError('Immutable pipeline receipts currently require GitHub.', 'repository_provider_not_brokered');
+    }
+    const commitSha = githubSha(mergedSha, 'Merged commit SHA');
+    const commit = await this.#request('GET', `${this.#apiPath()}/commits/${commitSha}`);
+    const confirmedCommit = githubSha(commit && commit.sha, 'Confirmed merged commit SHA');
+    const treeSha = githubSha(commit && commit.commit && commit.commit.tree && commit.commit.tree.sha, 'Merged tree SHA');
+    if (confirmedCommit !== commitSha) {
+      throw new RepositoryBrokerError('GitHub confirmed a different merged commit.', 'merge_receipt_mismatch');
+    }
+    const payload = mergeReceiptPayload({
+      repository: this.repository.fullName,
+      commandId: this.#artifactContext.commandId,
+      workItemId: this.#artifactContext.workItemId,
+      branch: review.sourceBranch || this.branch,
+      baseBranch: review.targetBranch || this.baseBranch,
+      reviewId: review.id,
+      reviewUrl: review.url || null,
+      headSha: review.headSha,
+      mergedSha: commitSha,
+      commitSha,
+      treeSha,
+      reused,
+    });
+    this.#artifactReceipt = Object.freeze({ ...payload, receiptDigest: mergeReceiptDigest(payload) });
+    return this.artifactReceipt();
+  }
+
+  /** Refresh the broker-private mirror, prove the immutable commit/tree pair is
+   * reachable from the scoped base, then detach the workspace at exactly it. */
+  async pinRevision(revision) {
+    this.#assertActive();
+    if (this.repository.provider !== 'github') {
+      throw new RepositoryBrokerError('Immutable pipeline revisions currently require GitHub.', 'repository_provider_not_brokered');
+    }
+    if (!this.baseBranch) {
+      throw new RepositoryBrokerError('Repository broker must be prepared before pinning.', 'repository_not_prepared');
+    }
+    const commitSha = githubSha(revision && revision.commitSha, 'Artifact commit SHA');
+    const treeSha = githubSha(revision && revision.treeSha, 'Artifact tree SHA');
+    await this.#prepareBare();
+    const commitType = await this.#bare(['cat-file', '-t', commitSha], { allowFailure: true, outputLimit: 100 });
+    if (commitType !== 'commit') {
+      throw new RepositoryBrokerError('The approved artifact commit is unavailable from the remote.', 'artifact_revision_unavailable');
+    }
+    const actualTree = githubSha(await this.#bare(['rev-parse', `${commitSha}^{tree}`], { outputLimit: 100 }), 'Resolved artifact tree SHA');
+    if (actualTree !== treeSha) {
+      throw new RepositoryBrokerError('The approved artifact tree does not match its commit.', 'artifact_tree_mismatch');
+    }
+    const contained = await this.#bare(
+      ['merge-base', '--is-ancestor', commitSha, `refs/remotes/origin/${this.baseBranch}`],
+      { allowFailure: true, outputLimit: 100 },
+    );
+    if (contained === null) {
+      throw new RepositoryBrokerError('The approved artifact is not reachable from the scoped base branch.', 'artifact_revision_untrusted');
+    }
+    await this.#exportRemoteRefs();
+    const dirty = await this.#workspaceStatus();
+    if (dirty) {
+      throw new RepositoryBrokerError('The workspace must be clean before pinning an artifact.', 'workspace_dirty');
+    }
+    await this.#workspace(['checkout', '--detach', commitSha]);
+    const checkedCommit = githubSha(await this.#workspace(['rev-parse', 'HEAD']), 'Checked out artifact SHA');
+    const checkedTree = githubSha(await this.#workspace(['rev-parse', 'HEAD^{tree}']), 'Checked out artifact tree SHA');
+    if (checkedCommit !== commitSha || checkedTree !== treeSha) {
+      throw new RepositoryBrokerError('The workspace did not pin the approved artifact exactly.', 'artifact_checkout_mismatch');
+    }
+    this.#pinnedRevision = Object.freeze({ commitSha, treeSha });
+    this.step(`Repository broker pinned immutable revision ${commitSha.slice(0, 12)}.`);
+    return { ...this.#pinnedRevision };
+  }
+
+  async #deploymentPlan(environment, revision = this.#pinnedRevision) {
+    this.#assertActive();
+    this.#assertWorkspace();
+    if (!this.baseBranch) {
+      throw new RepositoryBrokerError('Repository broker must be prepared before deployment.', 'repository_not_prepared');
+    }
+    const commitSha = githubSha(revision && revision.commitSha, 'Approved deployment commit SHA');
+    const treeSha = githubSha(revision && revision.treeSha, 'Approved deployment tree SHA');
+    if (!this.#pinnedRevision || this.#pinnedRevision.commitSha !== commitSha || this.#pinnedRevision.treeSha !== treeSha) {
+      throw new RepositoryBrokerError('Deployment revision must equal the broker-pinned tested artifact.', 'deployment_revision_mismatch');
+    }
+    // The model can mutate its checkout even with a filesystem-only backend.
+    // Read the allowlist exclusively from the immutable, broker-verified commit;
+    // neither a modified worktree nor a later base-branch update is authority.
+    const trustedRef = commitSha;
+    const treeEntry = await this.#bare(
+      ['ls-tree', trustedRef, '--', DEPLOYMENT_MANIFEST],
+      { allowFailure: true, outputLimit: 1_024 },
+    );
+    if (!treeEntry) {
+      throw new RepositoryBrokerError(`Repository does not contain ${DEPLOYMENT_MANIFEST}.`, 'deployment_manifest_missing');
+    }
+    const match = /^100(?:644|755) blob ([0-9a-f]{40,64})\t\.ai-fleet\/deployment\.json$/.exec(treeEntry);
+    if (!match) {
+      throw new RepositoryBrokerError('Deployment manifest must be a regular blob in the trusted base ref.', 'invalid_deployment_manifest');
+    }
+    const blobSize = Number(await this.#bare(['cat-file', '-s', match[1]], { outputLimit: 100 }));
+    if (!Number.isSafeInteger(blobSize) || blobSize < 1 || blobSize > DEPLOYMENT_MANIFEST_MAX_BYTES) {
+      throw new RepositoryBrokerError('Deployment manifest is not a safe bounded regular file.', 'invalid_deployment_manifest');
+    }
+    const manifestText = await this.#bare(
+      ['show', `${trustedRef}:${DEPLOYMENT_MANIFEST}`],
+      { outputLimit: DEPLOYMENT_MANIFEST_MAX_BYTES + 1 },
+    );
+    let raw;
+    try {
+      raw = JSON.parse(manifestText);
+    } catch (_) {
+      throw new RepositoryBrokerError('Deployment manifest is not valid JSON.', 'invalid_deployment_manifest');
+    }
+    const plan = normalizeDeploymentManifest(raw, {
+      provider: this.repository.provider,
+      environment,
+      baseBranch: this.baseBranch,
+    });
+    return Object.freeze({ ...plan, commitSha, treeSha, sourceRef: plan.ref });
+  }
+
+  #deploymentInputs(plan, commandId) {
+    const inputs = { ...plan.inputs };
+    if (plan.environmentInput) inputs[plan.environmentInput] = plan.environment;
+    if (plan.idempotencyInput) inputs[plan.idempotencyInput] = commandId;
+    return inputs;
+  }
+
+  #deploymentTag(commandId, commitSha) {
+    const correlation = crypto.createHash('sha256')
+      .update(`${this.repository.fullName}\0${commandId}\0${commitSha}`)
+      .digest('hex')
+      .slice(0, 20);
+    return `ai-fleet-deploy-${commitSha.slice(0, 12)}-${correlation}`;
+  }
+
+  async #deploymentRef(tag, commitSha, { create = false } = {}) {
+    const endpoint = `${this.#apiPath()}/git/ref/tags/${encodeURIComponent(tag)}`;
+    let current = await this.#request('GET', endpoint, undefined, { allow404: true });
+    if (!current && create) {
+      let creationError = null;
+      try {
+        await this.#request('POST', `${this.#apiPath()}/git/refs`, {
+          ref: `refs/tags/${tag}`,
+          sha: commitSha,
+        });
+      } catch (error) {
+        // Another broker instance may have won the create-if-absent race. The
+        // provider ref itself is authority: accept only if a fresh read proves
+        // that the exact deterministic tag now points at the approved commit.
+        creationError = error;
+      }
+      current = await this.#request('GET', endpoint, undefined, { allow404: true });
+      if (!current) {
+        if (creationError) throw creationError;
+        throw new RepositoryBrokerError(
+          'GitHub did not confirm the immutable deployment ref.',
+          'deployment_ref_unavailable',
+        );
+      }
+    }
+    if (!current) return null;
+    const object = current.object || {};
+    if (object.type !== 'commit' || githubSha(object.sha, 'Deployment ref SHA') !== commitSha) {
+      throw new RepositoryBrokerError('The immutable deployment ref does not match the approved commit.', 'deployment_revision_mismatch');
+    }
+    return tag;
+  }
+
+  async #immutableDeploymentPlan(plan, commandId) {
+    const tag = this.#deploymentTag(commandId, plan.commitSha);
+    await this.#deploymentRef(tag, plan.commitSha, { create: true });
+    return Object.freeze({ ...plan, ref: tag, commandId });
+  }
+
+  async #githubWorkflowRuns(plan) {
+    const api = this.#apiPath();
+    const query = new URLSearchParams({
+      event: 'workflow_dispatch',
+      branch: plan.ref,
+      per_page: '100',
+    });
+    const data = await this.#request(
+      'GET',
+      `${api}/actions/workflows/${encodeURIComponent(plan.workflow)}/runs?${query}`,
+    );
+    return Array.isArray(data && data.workflow_runs) ? data.workflow_runs : [];
+  }
+
+  async #waitForGithubDeployment(plan, state) {
+    const deadline = Date.now() + plan.timeoutSeconds * 1_000;
+    let runId = state.runId || null;
+    while (Date.now() <= deadline) {
+      if (!runId) {
+        const runs = await this.#githubWorkflowRuns(plan);
+        const discovered = runs.find((run) => (
+          run
+          && !state.beforeIds.includes(String(run.id))
+          && String(run.head_branch || '') === plan.ref
+          && String(run.head_sha || '').toLowerCase() === plan.commitSha
+        ));
+        if (discovered) runId = Number(discovered.id);
+      }
+      if (runId) {
+        const run = await this.#request('GET', `${this.#apiPath()}/actions/runs/${runId}`);
+        if (String(run && run.head_sha || '').toLowerCase() !== plan.commitSha) {
+          throw new RepositoryBrokerError('GitHub ran the deployment at a different commit.', 'deployment_revision_mismatch');
+        }
+        if (run && run.status === 'completed') {
+          await this.#deploymentRef(plan.ref, plan.commitSha);
+          const receipt = {
+            provider: 'github-actions',
+            environment: plan.environment,
+            workflow: plan.workflow,
+            ref: plan.ref,
+            sourceRef: plan.sourceRef,
+            commandId: plan.commandId,
+            commitSha: plan.commitSha,
+            treeSha: plan.treeSha,
+            runId,
+            url: run.html_url || null,
+            status: run.conclusion === 'success' ? 'succeeded' : 'failed',
+            conclusion: oneLine(run.conclusion || 'unknown', 80),
+          };
+          this.#deploymentReceipt = receipt;
+          if (receipt.status !== 'succeeded') {
+            throw new RepositoryBrokerError(`Allowlisted deployment completed with ${receipt.conclusion}.`, 'deployment_failed');
+          }
+          return receipt;
+        }
+      }
+      await this.#sleep(2_000);
+    }
+    const error = new RepositoryBrokerError('Timed out waiting for the allowlisted deployment workflow.', 'deployment_timeout');
+    error.retryable = true;
+    throw error;
+  }
+
+  async #runDeployment(environment, commandId, revision) {
+    if (this.#deploymentReceipt && ['succeeded', 'failed'].includes(this.#deploymentReceipt.status)) {
+      if (
+        this.#deploymentReceipt.commandId !== commandId
+        || this.#deploymentReceipt.environment !== environment
+        || this.#deploymentReceipt.commitSha !== revision.commitSha
+        || this.#deploymentReceipt.treeSha !== revision.treeSha
+      ) {
+        throw new RepositoryBrokerError('A deployment receipt exists for a different command or revision.', 'deployment_revision_mismatch');
+      }
+      if (this.#deploymentReceipt.status === 'succeeded') {
+        return { ...this.#deploymentReceipt, reused: true };
+      }
+      throw new RepositoryBrokerError(
+        `Allowlisted deployment already completed with ${this.#deploymentReceipt.conclusion || 'failure'}.`,
+        'deployment_failed',
+      );
+    }
+    if (!this.#token) throw new RepositoryBrokerError('No repository token is configured.', 'missing_token');
+    const trustedPlan = await this.#deploymentPlan(environment, revision);
+    if (this.repository.provider === 'github') {
+      const plan = await this.#immutableDeploymentPlan(trustedPlan, commandId);
+      let state = this.#deploymentReceipt;
+      if (state && state.status === 'waiting' && (
+        state.commandId !== commandId
+        || state.commitSha !== plan.commitSha
+        || state.treeSha !== plan.treeSha
+        || state.environment !== plan.environment
+        || state.workflow !== plan.workflow
+        || state.ref !== plan.ref
+      )) {
+        throw new RepositoryBrokerError(
+          'A deployment is already correlated to a different command or revision.',
+          'deployment_revision_mismatch',
+        );
+      }
+      if (!state || state.provider !== 'github-actions' || state.status !== 'waiting') {
+        const before = await this.#githubWorkflowRuns(plan);
+        const existing = before.find((run) => (
+          run
+          && String(run.head_branch || '') === plan.ref
+          && String(run.head_sha || '').toLowerCase() === plan.commitSha
+          && Number.isSafeInteger(Number(run.id))
+        ));
+        state = {
+          provider: 'github-actions',
+          environment: plan.environment,
+          workflow: plan.workflow,
+          ref: plan.ref,
+          sourceRef: plan.sourceRef,
+          commandId,
+          commitSha: plan.commitSha,
+          treeSha: plan.treeSha,
+          runId: existing ? Number(existing.id) : null,
+          status: 'waiting',
+          beforeIds: before.map((run) => String(run.id)),
+        };
+        this.#deploymentReceipt = state;
+        if (!existing) {
+          await this.#request(
+            'POST',
+            `${this.#apiPath()}/actions/workflows/${encodeURIComponent(plan.workflow)}/dispatches`,
+            { ref: plan.ref, inputs: this.#deploymentInputs(plan, commandId) },
+          );
+        }
+      }
+      return this.#waitForGithubDeployment(plan, state);
+    }
+    throw new RepositoryBrokerError('Deployment requires the brokered GitHub egress path.', 'repository_provider_not_brokered');
+  }
+
+  /** A separate, deployment-only tool. The ordinary repository_broker exposed
+   * to coders intentionally does not gain CI/CD mutation actions. */
+  createDeploymentTool({ environment, commandId, revision }) {
+    if (this.repository.provider !== 'github') {
+      throw new RepositoryBrokerError(
+        'Deployment requires the brokered GitHub egress path.',
+        'repository_provider_not_brokered',
+      );
+    }
+    const selectedEnvironment = String(environment || '').trim().toLowerCase();
+    const idempotencyKey = String(commandId || '').trim();
+    if (!COMMAND_ID_RE.test(idempotencyKey)) {
+      throw new RepositoryBrokerError('A valid pipeline command id is required.', 'invalid_deployment_command');
+    }
+    const approvedRevision = {
+      commitSha: githubSha(revision && revision.commitSha, 'Approved deployment commit SHA'),
+      treeSha: githubSha(revision && revision.treeSha, 'Approved deployment tree SHA'),
+    };
+    if (
+      !this.#pinnedRevision
+      || this.#pinnedRevision.commitSha !== approvedRevision.commitSha
+      || this.#pinnedRevision.treeSha !== approvedRevision.treeSha
+    ) {
+      throw new RepositoryBrokerError('Deployment requires the exact broker-pinned tested revision.', 'deployment_revision_mismatch');
+    }
+    const { tool } = require('@langchain/core/tools');
+    const { z } = require('zod');
+    return tool(
+      async ({ action }) => {
+        try {
+          const value = await this.#enqueue(async () => {
+            const plan = await this.#deploymentPlan(selectedEnvironment, approvedRevision);
+            if (action === 'inspect') {
+              return { ...plan, inputs: Object.keys(plan.inputs) };
+            }
+            return this.#runDeployment(selectedEnvironment, idempotencyKey, approvedRevision);
+          });
+          const receipt = value;
+          return JSON.stringify({ ok: true, ...receipt });
+        } catch (error) {
+          if (isAvailabilityFailure(error)) this.#availabilityError = error;
+          return JSON.stringify({ ok: false, code: error && error.code, error: this.#safeError(error) });
+        }
+      },
+      {
+        name: 'repository_deployment',
+        description:
+          'Inspect or execute the single server-scoped, repository-allowlisted CI/CD deployment. ' +
+          'The repository, environment, workflow, base ref, inputs, and pipeline command id are fixed; no shell or credential is exposed.',
+        schema: z.object({ action: z.enum(['inspect', 'deploy']) }).strict(),
+      },
+    );
   }
 
   #assertActive() {
@@ -1487,7 +2088,14 @@ class RepositoryBroker {
     const status = await this.#reviewStatus({ cursor: 0 }, false);
     if (!status.exists) throw new RepositoryBrokerError('No review exists for the scoped branch.', 'review_missing');
     if (!['open', 'opened'].includes(status.state)) {
-      if (status.state === 'merged') return { ...status, merged: true, reused: true };
+      if (status.state === 'merged') {
+        const localSha = await this.#assertCurrentBranch();
+        if (!await this.#mergedReviewHasNoNewWork(status, localSha)) {
+          throw new RepositoryBrokerError('The merged review does not contain the current scoped work.', 'merge_receipt_required');
+        }
+        const receipt = await this.#recordMergeReceipt(status, status.mergedSha, { reused: true });
+        return { ...status, merged: true, reused: true, artifactReceipt: receipt };
+      }
       throw new RepositoryBrokerError('The scoped review is not open.', 'review_not_open');
     }
     const localSha = await this.#assertCurrentBranch();
@@ -1520,7 +2128,13 @@ class RepositoryBroker {
     // Re-fetch the provider record immediately before mutation. The list result
     // and earlier status snapshot are not authority if a review was retargeted.
     const finalReview = await this.#reviewDetails(status);
-    if (finalReview.state === 'merged') return { ...status, ...finalReview, merged: true, reused: true };
+    if (finalReview.state === 'merged') {
+      if (!await this.#mergedReviewHasNoNewWork(finalReview, localSha)) {
+        throw new RepositoryBrokerError('The merged review does not contain the current scoped work.', 'merge_receipt_required');
+      }
+      const receipt = await this.#recordMergeReceipt(finalReview, finalReview.mergedSha, { reused: true });
+      return { ...status, ...finalReview, merged: true, reused: true, artifactReceipt: receipt };
+    }
     if (!['open', 'opened'].includes(finalReview.state)) {
       throw new RepositoryBrokerError('The scoped review is no longer open.', 'review_not_open');
     }
@@ -1546,7 +2160,14 @@ class RepositoryBroker {
       if (!merged || merged.merged !== true) {
         throw new RepositoryBrokerError(oneLine(merged && merged.message, 500) || 'GitHub did not merge the pull request.', 'merge_failed');
       }
-      return { ...status, merged: true, mergedSha: merged.sha || null, message: oneLine(merged.message, 500) };
+      const receipt = await this.#recordMergeReceipt(finalReview, merged.sha);
+      return {
+        ...status,
+        merged: true,
+        mergedSha: receipt.mergedSha,
+        message: oneLine(merged.message, 500),
+        artifactReceipt: receipt,
+      };
     }
     merged = await this.#request('PUT', `${api}/merge_requests/${finalReview.id}/merge`, {
       sha: finalReview.headSha,
@@ -1571,18 +2192,22 @@ class RepositoryBroker {
     throw new RepositoryBrokerError('Unknown repository broker action.', 'invalid_action');
   }
 
-  execute(input) {
+  #enqueue(operation) {
     const run = async () => {
       this.#assertActive();
       this.#calls += 1;
       if (this.#calls > LIMITS.toolCalls) {
         throw new RepositoryBrokerError('Repository broker call limit reached for this run.', 'call_limit');
       }
-      return this.#performAction(input || {});
+      return operation();
     };
     const pending = this.#queue.then(run, run);
     this.#queue = pending.then(() => undefined, () => undefined);
     return pending;
+  }
+
+  execute(input) {
+    return this.#enqueue(() => this.#performAction(input || {}));
   }
 
   createTool() {
@@ -1648,6 +2273,7 @@ module.exports = {
   LIMITS,
   PROVIDERS,
   SAFE_ENV_KEYS,
+  DEPLOYMENT_MANIFEST,
   RepositoryBroker,
   RepositoryBrokerError,
   buildSafeAgentEnv,
@@ -1658,4 +2284,8 @@ module.exports = {
   findReviewByBranch,
   repoApiPath,
   normalizeReview,
+  normalizeDeploymentManifest,
+  githubSha,
+  mergeReceiptDigest,
+  validateMergeReceipt,
 };

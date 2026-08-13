@@ -1,0 +1,40 @@
+# syntax=docker/dockerfile:1
+# Brokered tester stage. Provider/repository credentials are injected only by
+# the co-located egress proxy; the app container has no secret env.
+ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+
+FROM ${NODE_IMAGE} AS sandbox-builder
+RUN apk add --no-cache gcc musl-dev libseccomp-dev
+COPY packages/shared/src/agent/tools/network-sandbox.c /src/network-sandbox.c
+RUN mkdir -p /out \
+    && cc -Os -fPIE -pie -Wall -Wextra -Werror \
+      /src/network-sandbox.c -lseccomp -o /out/ai-fleet-network-sandbox
+
+FROM ${NODE_IMAGE} AS builder
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+COPY packages/shared-core/ ./packages/shared-core/
+COPY packages/shared/ ./packages/shared/
+COPY services/tester/ ./services/tester/
+RUN npm ci --omit=dev \
+      --workspace=@ai-fleet/shared-core \
+      --workspace=@ai-fleet/shared \
+      --workspace=@ai-fleet/tester \
+      --include-workspace-root=false \
+    && npm cache clean --force
+
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+RUN apk add --no-cache git openssh-client ca-certificates bash libseccomp
+ENV NODE_ENV=production \
+    AI_FLEET_DATA_DIR=/tmp \
+    HOME=/tmp
+# Application/runtime files stay root-owned and read-only to the non-root app
+# user. Repository commands share that UID, so writable source would let a test
+# persist code into the service after its network sandbox exits.
+COPY --from=builder /app /app
+COPY --from=sandbox-builder /out/ai-fleet-network-sandbox /usr/local/bin/ai-fleet-network-sandbox
+USER node
+EXPOSE 8080
+CMD ["node", "services/tester/src/index.js"]

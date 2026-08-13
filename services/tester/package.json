@@ -1,0 +1,20 @@
+{
+  "name": "@ai-fleet/tester",
+  "version": "1.0.0",
+  "description": "AI Fleet fixed-pipeline verification stage service.",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env src/index.js",
+    "dev": "node --watch --env-file-if-exists=../../.env src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@ai-fleet/shared": "*",
+    "@ai-fleet/shared-core": "*",
+    "express": "^5.2.1"
+  }
+}

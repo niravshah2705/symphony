@@ -1,7 +1,7 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared/config');
-const log = require('@ai-fleet/shared/logger');
+const { CONFIG } = require('@ai-fleet/shared-core/config');
+const log = require('@ai-fleet/shared-core/logger');
 const { callJson: defaultCallJson } = require('./service-client');
 const { requestContext } = require('./request-context');
 

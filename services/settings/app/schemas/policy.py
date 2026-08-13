@@ -232,5 +232,19 @@ class InternalEffectivePolicyResponse(BaseModel):
     prefs: dict[str, str] = Field(default_factory=dict)
 
 
+class HarnessCatalogEntry(BaseModel):
+    id: str
+    label: str
+    harnessName: str
+    packageName: str
+    requiresProvider: str | None = None
+    availability: str
+    capabilities: list[str] = Field(default_factory=list)
+    stages: list[str] = Field(default_factory=list)
+    brokeredStages: list[str] = Field(default_factory=list)
+
+
 class UniverseResponse(BaseModel):
     domains: dict[str, list[str]]
+    schemaVersion: int = 1
+    harnesses: list[HarnessCatalogEntry] = Field(default_factory=list)

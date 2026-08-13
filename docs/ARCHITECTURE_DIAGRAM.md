@@ -1,12 +1,18 @@
 # AI Fleet Architecture Diagram
 
-This diagram shows the preset-routed DeepAgent architecture, decomposed into
-**three isolated services over one shared library**: a browser-facing **gateway**
-(SPA + user API + OAuth) that reverse-proxies the two isolated agent services
-(**planner** and **coder**). Linear is the ticket system, Ollama/LM Studio/OMLX provide
+This diagram shows the preset-routed agent architecture. The browser-facing,
+SDK-free **gateway** retains browser/domain APIs and proxies isolated agent
+services. The rollout-gated durable control plane adds an SDK-free
+**orchestrator** plus **tester** and approval-gated **deployer** alongside the
+existing **planner** and **coder**. Linear is the ticket system, Ollama/LM Studio/OMLX provide
 the local route, OpenAI/Claude provide the hosted route, and the DeepAgent runtime
 (shipped once in `@ai-fleet/shared`) uses skills plus Linear/GitHub tools to plan
 and execute work.
+
+The browser-local workflow canvas is deliberately not executable. The one
+canonical runtime graph is the versioned `plan → code → test → deploy` pipeline;
+Firestore PipelineRun/StageRun records and LangGraph checkpoints are its source
+of truth. Linear terminal labels are projections, not the control bus.
 
 ```mermaid
 flowchart LR
@@ -53,7 +59,7 @@ flowchart LR
   end
 
   subgraph HostedLlm["Hosted LLM providers"]
-    OpenAI["OpenAI GPT-5.5<br/>ChatGPT / Codex OAuth"]
+    OpenAI["OpenAI GPT-5.5<br/>org-admin provisioned Codex token"]
     Claude["Claude Opus 4.8<br/>Anthropic OAuth"]
   end
 

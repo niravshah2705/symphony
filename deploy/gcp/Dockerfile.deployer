@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+# Brokered deployer stage. It can invoke only repository-declared, allow-listed
+# CI/CD workflows and receives credentials solely through the egress sidecar.
+ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+
+FROM ${NODE_IMAGE} AS builder
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+COPY packages/shared-core/ ./packages/shared-core/
+COPY packages/shared/ ./packages/shared/
+COPY services/deployer/ ./services/deployer/
+RUN npm ci --omit=dev \
+      --workspace=@ai-fleet/shared-core \
+      --workspace=@ai-fleet/shared \
+      --workspace=@ai-fleet/deployer \
+      --include-workspace-root=false \
+    && npm cache clean --force
+
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+RUN apk add --no-cache git openssh-client ca-certificates bash
+ENV NODE_ENV=production \
+    AI_FLEET_DATA_DIR=/tmp \
+    HOME=/tmp
+COPY --from=builder --chown=node:node /app /app
+USER node
+EXPOSE 8080
+CMD ["node", "services/deployer/src/index.js"]

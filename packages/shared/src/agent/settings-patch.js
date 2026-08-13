@@ -130,23 +130,29 @@ function hostedParamKeys(p, { contextMode = false } = {}) {
 const ALLOWED = Object.freeze({
   // Harness (agent runtime) + workflow pattern
   agentRuntime: runtimeCoerce,
+  planHarness: runtimeCoerce,
+  codeHarness: runtimeCoerce,
+  testHarness: runtimeCoerce,
+  deployHarness: runtimeCoerce,
   workflowPattern: patternCoerce,
 
   // Retry an LLM stream this many times on a transient/in-stream error. Applies
   // to every provider (0 disables). See CONFIG.LLM_STREAM_RETRIES.
   llmStreamRetries: int(0, MAX_LLM_STREAM_RETRIES),
 
-  // Provider slots (legacy) + purpose roles (thinking/execution/testing)
+  // Provider slots (legacy) + purpose roles
   llmProvider: oneOf(ALL_PROVIDERS),
   byomProvider: oneOf(BYOM_PROVIDERS),
   thinkingLlmProvider: oneOf(ALL_PROVIDERS),
   executionLlmProvider: oneOf(ALL_PROVIDERS),
   testingLlmProvider: oneOf(ALL_PROVIDERS),
+  deploymentLlmProvider: oneOf(ALL_PROVIDERS),
   hostedLlmPresetId: str(80),
   byomPresetId: str(80),
   thinkingLlmPresetId: str(80),
   executionLlmPresetId: str(80),
   testingLlmPresetId: str(80),
+  deploymentLlmPresetId: str(80),
   // Complexity slider tier (or 'custom'). Metadata only — the per-role keys
   // above drive model resolution.
   complexityTier: oneOf(COMPLEXITY_TIER_VALUES),
@@ -242,7 +248,7 @@ function describeEditableSettings() {
     'Enum values:',
     `- agentRuntime (harness): ${RUNTIME_IDS.join(' | ')} (deepagent=DeepAgent, codex-sdk=Codex, claude-agent-sdk=ClaudeCode, antigravity-sdk=Antigravity)`,
     `- workflowPattern: ${WORKFLOW_PATTERN_IDS.join(' | ')}`,
-    `- llmProvider / thinkingLlmProvider / executionLlmProvider / testingLlmProvider: ${ALL_PROVIDERS.join(' | ')}`,
+    `- llmProvider / thinkingLlmProvider / executionLlmProvider / testingLlmProvider / deploymentLlmProvider: ${ALL_PROVIDERS.join(' | ')}`,
     `- byomProvider: ${BYOM_PROVIDERS.join(' | ')}`,
     `- planningProvider: ${PLANNING_PROVIDERS.join(' | ')}`,
     `- repositoryProvider: ${REPOSITORY_PROVIDERS.join(' | ')}`,

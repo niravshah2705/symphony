@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 669 nodes
-- **Cohesion**: 0.4764
+- **Size**: 671 nodes
+- **Cohesion**: 0.4757
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: public/js
 | renderAuthControl | Function | ./public/js/app.js | 495-626 |
 | renderAuthenticationGate | Function | ./public/js/app.js | 628-687 |
 
-*... and 619 more members.*
+*... and 621 more members.*
 
 ## Execution Flows
 
@@ -79,33 +79,33 @@ Directory-based community: public/js
 - **render** (criticality: 0.77, depth: 3)
 - **onUp** (criticality: 0.76, depth: 6)
 - **hostedConnection** (criticality: 0.75, depth: 8)
-- *... and 23 more flows.*
+- *... and 20 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `append` (194 edge(s))
-- `addEventListener` (191 edge(s))
-- `map` (142 edge(s))
+- `append` (195 edge(s))
+- `addEventListener` (192 edge(s))
+- `map` (144 edge(s))
 - `String` (108 edge(s))
 - `push` (80 edge(s))
-- `filter` (76 edge(s))
+- `filter` (77 edge(s))
 - `trim` (73 edge(s))
+- `isArray` (63 edge(s))
 - `setAttribute` (60 edge(s))
-- `isArray` (58 edge(s))
 - `has` (57 edge(s))
-- `catch` (49 edge(s))
+- `catch` (53 edge(s))
 - `querySelector` (46 edge(s))
 - `t` (43 edge(s))
 - `slice` (43 edge(s))
-- `Boolean` (39 edge(s))
+- `find` (40 edge(s))
 
 ### Incoming
 
 - `./public/js/api.js` (159 edge(s))
 - `./public/js/workflow-designer-model.mjs` (145 edge(s))
-- `./public/js/views/settings.js` (126 edge(s))
+- `./public/js/views/settings.js` (128 edge(s))
 - `./public/js/views/agent.js` (97 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (89 edge(s))
 - `./public/js/app.js` (86 edge(s))

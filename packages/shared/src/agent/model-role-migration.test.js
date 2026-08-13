@@ -42,6 +42,8 @@ test('readStore preserves explicitly-configured purpose roles', () => {
     executionLlmPresetId: 'ollama-qwen3-coder-30b',
     testingLlmProvider: 'lmstudio',
     testingLlmPresetId: 'custom',
+    deploymentLlmProvider: 'claude',
+    deploymentLlmPresetId: 'claude-haiku-4-5',
   });
   const store = readStore();
   assert.equal(store.settings.thinkingLlmProvider, 'codex');
@@ -49,6 +51,8 @@ test('readStore preserves explicitly-configured purpose roles', () => {
   assert.equal(store.settings.executionLlmProvider, 'ollama');
   assert.equal(store.settings.executionLlmPresetId, 'ollama-qwen3-coder-30b');
   assert.equal(store.settings.testingLlmProvider, 'lmstudio');
+  assert.equal(store.settings.deploymentLlmProvider, 'claude');
+  assert.equal(store.settings.deploymentLlmPresetId, 'claude-haiku-4-5');
 });
 
 test.after(() => {

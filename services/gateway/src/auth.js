@@ -1,6 +1,6 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared/config');
+const { CONFIG } = require('@ai-fleet/shared-core/config');
 const {
   resolveRole,
   permissionsForRole,
@@ -8,7 +8,7 @@ const {
   requiredLevel,
   PUBLIC_PERMISSIONS,
   ADMIN_PERMISSIONS,
-} = require('@ai-fleet/shared/authz');
+} = require('@ai-fleet/shared-core/authz');
 
 /**
  * Application authentication — Firebase Google SSO.

@@ -41,6 +41,17 @@ SECRET_KEYS: tuple[str, ...] = (
     "openaiApiKey",
     "huggingfaceApiKey",
     "langsmithApiKey",
+    # JSON-encoded OpenAI/Codex OAuth token bundle. Provisioned only through the
+    # direct org-admin operator surface; never accepted by the browser gateway.
+    "codexTokenBundle",
+)
+
+# Browser-facing org-admin secret CRUD is intentionally narrower than the
+# storage/resolver allowlist. OAuth bundles must pass the typed, direct
+# operator-only import flow; accepting their opaque JSON through generic secret
+# CRUD would bypass token validation and that separate IAM boundary.
+BROWSER_WRITABLE_SECRET_KEYS: tuple[str, ...] = tuple(
+    key for key in SECRET_KEYS if key != "codexTokenBundle"
 )
 
 # Who owns each provider's key. "managed" => platform key (proxy-mounted);

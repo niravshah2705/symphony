@@ -10,7 +10,7 @@ until you opt in.
 | Tenant | What runs it | When |
 |--------|--------------|------|
 | **Pseudo-workspace (shared)** | the SHARED gateway/planner/coder | a signed-in user with no org — auto-given a `"<Name>'s Workspace"` org that points at the shared stack. **No provisioning.** |
-| **Provisioned org (dedicated)** | a per-tenant `gateway + planner + coder-control + coder-worker` (reusing the existing images, no rebuild) | a user **explicitly** creates a named organization |
+| **Provisioned org (dedicated)** | a per-tenant `gateway + orchestrator + planner + coder-control + coder-worker + tester + deployer` (reusing existing images, no rebuild) | a user **explicitly** creates a named organization |
 
 `org-service`, `settings-service`, and Firestore stay **shared** — they are the
 tenant registry. Only the agent stack is per-tenant. The per-tenant **gateway**
@@ -57,10 +57,15 @@ Per-tenant stacks share one Firestore DB, so the Node runtime store + SSE events
 are namespaced by **`STORE_NAMESPACE=<deployment_slug>`** (empty = the shared
 `aifleet`/`aifleet_events` collections, unchanged). **This is the load-bearing
 isolation control** — without it, per-tenant gateways would commingle every
-tenant's store/conversations/events. Per-tenant Pub/Sub topics
-(`planner-<slug>`/`coder-<slug>`) prevent cross-tenant message fan-out. Per-tenant
-planner/coder are internal + IAM-gated (never `allUsers`); only the tenant gateway
-is public (app-auth guarded).
+tenant's store/conversations/events. Legacy per-tenant topics plus dedicated
+pipeline topics prevent cross-tenant message fan-out. Per-tenant agent services
+and orchestrator are internal + IAM-gated (never `allUsers`); only the tenant
+gateway is public (app-auth guarded). Commands use four
+`pipeline-{plan,code,test,deploy}-<slug>` topics and results use four
+`pipeline-{plan,code,test,deploy}-results-<slug>` topics. Result publisher IAM
+is stage-specific, and each subscription pushes to the matching
+`/pubsub/pipeline-stage-results/{stage}` route, preventing one compromised stage
+service from forging a later stage's result.
 
 ## Resource labels (attribution)
 
@@ -73,7 +78,7 @@ labels so an org's stack is filterable in the console and in the billing export:
 | `organization` | the org id (UUID, sanitized) | which org owns it |
 | `tenant` | the deployment slug (`t<hex>`) | opaque per-tenant id (also in the name) |
 | `tenancy` | `dedicated` | a provisioned per-tenant resource |
-| `component` | `gateway`/`planner`/`coder-control`/`coder-worker` | which service |
+| `component` | `gateway`/`orchestrator`/`planner`/`coder-control`/`coder-worker`/`tester`/`deployer` | which service |
 | `managed-by` | `ai-fleet-provisioner` | created at runtime, not by Terraform |
 
 Shared-stack resources (Terraform) carry `tenancy = "shared"` (+ `environment` and
@@ -91,7 +96,9 @@ To turn it on:
    `deploy_all=true` (or a full `cloudbuild.yaml` run).
 2. **Set an internal token.** Terraform var `internal_api_token` (a strong random
    string). This creates the `internal-api-token` secret and grants both the
-   provisioner and the org service accessor.
+   provisioner and the org service accessor. Terraform separately generates an
+   organization-token HMAC root that only settings and the provisioner can read;
+   each cloned proxy receives only its own derived organization bearer.
 3. **Flip the flag.** Terraform var `provisioning_enabled=true`, then apply
    (a `deploy_all=true` run applies it). This creates `provisioner-sa` (+ its
    least-privilege roles), the `tenant-provision-requests` topic + push

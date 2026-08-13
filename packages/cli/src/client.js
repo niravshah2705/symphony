@@ -6,7 +6,8 @@ const { version: VERSION } = require('../package.json');
 
 /**
  * Thin HTTP client for the AI Fleet gateway — the only intended client-facing
- * origin. Uses global fetch (Node 18+), matching the rest of the codebase
+ * origin. Uses global fetch (Node 22+), matching the supported runtime for
+ * this workspace
  * (no axios/node-fetch anywhere). The gateway owns auth/RBAC and reverse-proxies
  * /api/agent/* → planner and /api/coder/* → coder, so the CLI never talks to the
  * agent services directly.
@@ -43,7 +44,7 @@ function createClient(options = {}) {
   const token = options.token || null;
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== 'function') {
-    throw new Error('global fetch is unavailable — Node 18+ is required.');
+    throw new Error('global fetch is unavailable — Node 22+ is required.');
   }
 
   /** Default headers for every request: version identifiers + optional bearer. */
@@ -57,8 +58,18 @@ function createClient(options = {}) {
    * Perform a JSON request. Resolves to the parsed body; throws an Error whose
    * message is the server's `{ error }` (already sanitized server-side) on non-2xx.
    */
-  async function request(method, path, body) {
+  async function request(method, path, body, options = {}) {
+    const extraHeaders = options && options.headers && typeof options.headers === 'object'
+      ? options.headers
+      : {};
     const h = headers({ Accept: 'application/json' });
+    // Scope is the only supported per-request header customization. Keep auth
+    // and version headers owned by the client so a call site cannot replace
+    // those trust signals accidentally.
+    for (const name of ['x-ai-fleet-organization-id', 'x-ai-fleet-project-id']) {
+      const value = extraHeaders[name];
+      if (typeof value === 'string' && /^[A-Za-z0-9._:-]{1,160}$/.test(value)) h[name] = value;
+    }
     const init = { method, headers: h };
     if (body !== undefined) {
       h['Content-Type'] = 'application/json';

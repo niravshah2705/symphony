@@ -15,6 +15,7 @@
     "./linear": "./src/linear.js",
     "./logger": "./src/logger.js",
     "./util": "./src/util.js",
+    "./internal-auth": "./src/internal-auth.js",
     "./agent/*": "./src/agent/*.js",
     "./provisioning": "./src/provisioning/index.js",
     "./provisioning/*": "./src/provisioning/*.js",

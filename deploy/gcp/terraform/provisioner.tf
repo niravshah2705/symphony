@@ -56,12 +56,19 @@ resource "google_project_iam_member" "provisioner_scheduler_admin" {
 # serviceAccountUser on each runtime SA: deploying a service that runs AS that SA
 # requires actAs on it. Scoped per-SA (least privilege), not project-wide.
 resource "google_service_account_iam_member" "provisioner_actas" {
-  for_each = local.provisioning_on ? {
-    gateway = google_service_account.gateway.name
-    planner = google_service_account.planner.name
-    coder   = google_service_account.coder.name
-    push    = google_service_account.pubsub_push.name
-  } : {}
+  for_each = local.provisioning_on ? merge(
+    {
+      gateway = google_service_account.gateway.name
+      planner = google_service_account.planner.name
+      coder   = google_service_account.coder.name
+      push    = google_service_account.pubsub_push.name
+    },
+    local.pipeline_on ? {
+      orchestrator = google_service_account.orchestrator[0].name
+      tester       = google_service_account.tester[0].name
+      deployer     = google_service_account.deployer[0].name
+    } : {},
+  ) : {}
   service_account_id = each.value
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.provisioner[0].email}"
@@ -96,6 +103,14 @@ resource "google_secret_manager_secret_iam_member" "provisioner_internal_token" 
   count     = local.provisioning_on && var.internal_api_token != "" ? 1 : 0
   project   = var.project_id
   secret_id = google_secret_manager_secret.internal_api_token[0].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.provisioner[0].email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "provisioner_org_s2s_signing_key" {
+  count     = local.provisioning_on ? 1 : 0
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.org_s2s_signing_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.provisioner[0].email}"
 }
@@ -165,42 +180,65 @@ resource "google_cloud_run_v2_service" "provisioner" {
   template {
     service_account                  = google_service_account.provisioner[0].email
     execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
-    max_instance_request_concurrency = 1
+    max_instance_request_concurrency = var.container_concurrency
     scaling {
-      min_instance_count = 0
-      max_instance_count = 2
+      min_instance_count = var.min_instances
+      max_instance_count = var.max_instances
     }
 
     containers {
       image = local.provisioner_image
 
       dynamic "env" {
-        for_each = merge(local.common_env, {
-          PROVISIONING_ENABLED    = "true"
-          MESSAGING_MODE          = "pubsub"
-          GCP_PROJECT_ID          = var.project_id
-          GCP_REGION              = var.region
-          ORG_URL                 = local.org_url
-          SETTINGS_URL            = local.settings_url
-          SPA_ORIGIN              = var.spa_origin
-          FIREBASE_PROJECT_ID     = var.project_id
-          PUBSUB_PUSH_AUDIENCE    = local.provisioner_url
-          PUBSUB_PUSH_SA          = google_service_account.pubsub_push.email
-          PUBSUB_DEADLETTER_TOPIC = var.dead_letter_topic
-          EMAIL_TOPIC             = google_pubsub_topic.email.name
-          # Names of the SHARED services to clone images/secrets/config from.
-          GATEWAY_SERVICE_NAME = var.gateway_service_name
-          PLANNER_SERVICE_NAME = var.planner_service_name
-          CODER_SERVICE_NAME   = var.coder_service_name
-          CODER_JOB_NAME       = var.coder_job_name
-          # Runtime SAs the per-tenant services run as.
-          GATEWAY_SA = google_service_account.gateway.email
-          PLANNER_SA = google_service_account.planner.email
-          CODER_SA   = google_service_account.coder.email
-        })
+        for_each = merge(
+          local.common_env,
+          {
+            PROVISIONING_ENABLED    = "true"
+            MESSAGING_MODE          = "pubsub"
+            GCP_PROJECT_ID          = var.project_id
+            GCP_REGION              = var.region
+            ORG_URL                 = local.org_url
+            SETTINGS_URL            = local.settings_url
+            SPA_ORIGIN              = var.spa_origin
+            FIREBASE_PROJECT_ID     = var.project_id
+            PUBSUB_PUSH_AUDIENCE    = local.provisioner_url
+            PUBSUB_PUSH_SA          = google_service_account.pubsub_push.email
+            PUBSUB_DEADLETTER_TOPIC = var.dead_letter_topic
+            EMAIL_TOPIC             = google_pubsub_topic.email.name
+            # Names of the SHARED services to clone images/secrets/config from.
+            GATEWAY_SERVICE_NAME      = var.gateway_service_name
+            PLANNER_SERVICE_NAME      = var.planner_service_name
+            CODER_SERVICE_NAME        = var.coder_service_name
+            CODER_JOB_NAME            = var.coder_job_name
+            ORCHESTRATOR_SERVICE_NAME = var.orchestrator_service_name
+            TESTER_SERVICE_NAME       = var.tester_service_name
+            DEPLOYER_SERVICE_NAME     = var.deployer_service_name
+            EGRESS_PROXY_ENABLED      = tostring(var.egress_proxy_enabled)
+            INTERNAL_INGRESS          = var.internal_ingress
+            # Runtime SAs the per-tenant services run as.
+            GATEWAY_SA = google_service_account.gateway.email
+            PLANNER_SA = google_service_account.planner.email
+            CODER_SA   = google_service_account.coder.email
+          },
+          local.pipeline_on ? {
+            ORCHESTRATOR_SA = google_service_account.orchestrator[0].email
+            TESTER_SA       = google_service_account.tester[0].email
+            DEPLOYER_SA     = google_service_account.deployer[0].email
+          } : {},
+        )
         content {
           name  = env.key
           value = env.value
+        }
+      }
+
+      env {
+        name = "ORG_S2S_SIGNING_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.org_s2s_signing_key.secret_id
+            version = "latest"
+          }
         }
       }
 
@@ -231,5 +269,7 @@ resource "google_cloud_run_v2_service" "provisioner" {
     google_project_iam_member.provisioner_run_admin,
     google_project_iam_member.provisioner_pubsub_admin,
     google_project_iam_member.provisioner_scheduler_admin,
+    google_service_account_iam_member.provisioner_actas,
+    google_secret_manager_secret_iam_member.provisioner_org_s2s_signing_key,
   ]
 }
