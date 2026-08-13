@@ -86,7 +86,7 @@ Directory-based community: packages/shared
 ### Outgoing
 
 - `equal` (1408 edge(s))
-- `deepEqual` (262 edge(s))
+- `deepEqual` (263 edge(s))
 - `join` (222 edge(s))
 - `String` (197 edge(s))
 - `push` (179 edge(s))
@@ -104,7 +104,7 @@ Directory-based community: packages/shared
 ### Incoming
 
 - `equal` (1401 edge(s))
-- `deepEqual` (260 edge(s))
+- `deepEqual` (261 edge(s))
 - `ok` (150 edge(s))
 - `strictEqual` (127 edge(s))
 - `match` (95 edge(s))

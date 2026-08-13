@@ -202,10 +202,37 @@ variable "internal_ingress" {
   default     = "INGRESS_TRAFFIC_ALL"
 }
 
+variable "min_instances" {
+  type        = number
+  description = "Minimum Cloud Run instances per service. Keep at 0 for scale-to-zero / no idle cost."
+  default     = 0
+
+  validation {
+    condition     = var.min_instances >= 0 && floor(var.min_instances) == var.min_instances
+    error_message = "min_instances must be a non-negative integer."
+  }
+}
+
 variable "max_instances" {
   type        = number
-  description = "Per-service max Cloud Run instances (min is always 0 for scale-to-zero / no idle cost)."
-  default     = 3
+  description = "Maximum Cloud Run instances per service."
+  default     = 1
+
+  validation {
+    condition     = var.max_instances >= 1 && floor(var.max_instances) == var.max_instances
+    error_message = "max_instances must be a positive integer."
+  }
+}
+
+variable "container_concurrency" {
+  type        = number
+  description = "Maximum concurrent requests per Cloud Run service instance. Values above 1 require service containers with at least 1 vCPU."
+  default     = 10
+
+  validation {
+    condition     = var.container_concurrency >= 1 && var.container_concurrency <= 1000 && floor(var.container_concurrency) == var.container_concurrency
+    error_message = "container_concurrency must be an integer from 1 through 1000."
+  }
 }
 
 variable "cloud_run_service_cpu" {

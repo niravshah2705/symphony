@@ -44,6 +44,7 @@ function extractContainers(containers) {
 function extractSourceService(svc) {
   return {
     containers: extractContainers(svc.template.containers),
+    scaling: svc.template.scaling,
     volumes: svc.template.volumes,
     executionEnvironment: svc.template.executionEnvironment,
     maxInstanceRequestConcurrency: svc.template.maxInstanceRequestConcurrency,
