@@ -1,7 +1,7 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared/config');
-const log = require('@ai-fleet/shared/logger');
+const { CONFIG } = require('@ai-fleet/shared-core/config');
+const log = require('@ai-fleet/shared-core/logger');
 const { idTokenHeader, originOf } = require('./service-client');
 const { forwardRequestContext } = require('./request-context');
 
@@ -45,6 +45,12 @@ function createProxy(baseUrl, opts = {}) {
     const incomingAuth = (req.get && req.get('authorization')) || '';
     if (opts.forwardUserAuth && incomingAuth) {
       headers['x-forwarded-authorization'] = incomingAuth;
+    }
+    if (CONFIG.MESSAGING_MODE !== 'pubsub') {
+      const internalToken = typeof opts.internalToken === 'string'
+        ? opts.internalToken
+        : String(process.env.INTERNAL_API_TOKEN || '').trim();
+      if (internalToken) headers['x-internal-token'] = internalToken;
     }
 
     if (CONFIG.MESSAGING_MODE === 'pubsub') {

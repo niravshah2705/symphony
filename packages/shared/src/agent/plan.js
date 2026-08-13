@@ -8,6 +8,8 @@ const { webSearch, webSearchMany, formatResults } = require('./search');
 const { createChatModel } = require('./llm');
 const { withAnnotations } = require('./trace-annotations');
 const framework = require('./framework');
+const { AgentRuntimeError } = require('./runtimes');
+const { isPolicyDeniedError, resolveHarnessForStage } = require('./policy-runtime');
 
 /**
  * Software-design planning agent, built on the workflow-driven agent framework.
@@ -32,6 +34,13 @@ class AgentError extends Error {
     this.status = status;
     this.code = code;
   }
+}
+
+/** A selected harness or policy decision is authoritative. The draft itself is
+ * best-effort, but these failures must stop the run instead of silently falling
+ * through to the direct structured-model call with a different execution path. */
+function isMandatoryPlanningWorkflowError(error) {
+  return isPolicyDeniedError(error) || error instanceof AgentRuntimeError;
 }
 
 function configureTracing(keys) {
@@ -423,13 +432,17 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep, s
   step('Drafting software design (planning workflow: skills + web_search)…');
   try {
     const workflow = framework.loadWorkflow('planning');
+    const planningHarness = resolveHarnessForStage('planning', {
+      requestSelection: keys.requestHarnesses && keys.requestHarnesses.plan,
+      prefs: keys,
+    });
     const { finalText } = await framework.runWorkflow({
       workflow,
       llm,
       userMessage: buildDraftPrompt({ project, today, config }),
       ctx: { step, ...policyCtx },
       invokeConfig: { runId, ...traceMeta },
-      runtime: keys.agentRuntime || 'deepagent',
+      runtime: planningHarness,
       workflowPattern: keys.workflowPattern || 'sequential',
       // Billing attribution for first-party usage metering (see billing/usage.js).
       attribution: {
@@ -442,6 +455,7 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep, s
     draft = finalText;
     step(`Planning workflow draft ready (${draft.length} chars).`);
   } catch (err) {
+    if (isMandatoryPlanningWorkflowError(err)) throw err;
     draft = '';
     step(`Planning workflow skipped: ${err && err.message ? err.message.slice(0, 120) : err}`, 'warn');
   }
@@ -489,4 +503,10 @@ async function resolveTraceUrl(runId, keys) {
   }
 }
 
-module.exports = { AgentError, generatePlan, generateIssuesForMilestones, configureTracing };
+module.exports = {
+  AgentError,
+  generatePlan,
+  generateIssuesForMilestones,
+  configureTracing,
+  isMandatoryPlanningWorkflowError,
+};

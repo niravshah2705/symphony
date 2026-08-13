@@ -6,7 +6,7 @@ const { fetchOrgSecrets, fetchManagedSecrets } = require('./secrets-client');
  * Resolve the credential to inject for a given egress route.
  *
  * Two credential families:
- *   - Static keys (Linear/GitHub/Gemini/HF/LangSmith) — resolved through the
+ *   - Static keys (Linear/GitHub/Gemini/HF/LangSmith/Anthropic/OpenAI) — resolved through the
  *     settings service via ONE path (managed and customer alike). PROXY_ORG_ID
  *     set => the per-org resolve (managed + customer merged); unset (shared stack)
  *     => the no-org managed resolve. The settings service supplies the value for
@@ -14,8 +14,9 @@ const { fetchOrgSecrets, fetchManagedSecrets } = require('./secrets-client');
  *     ("managed") are resolved the same way. Customer selected but missing =>
  *     FAIL CLOSED. A mounted platform env is used only as a last-resort fallback
  *     when the settings resolve is unavailable (resilience), never as the primary.
- *   - OAuth (Claude/Codex) — resolved by the oauth-manager (store token sets +
- *     refresh), independent of the vault.
+ *   - OAuth (Claude/Codex) — resolved by the oauth-manager (store/vault token
+ *     sets + refresh). Anthropic and the metered OpenAI route prefer a selected
+ *     static key when present; otherwise they use the matching OAuth path.
  */
 
 // Platform-managed keys mounted on the sidecar (mirror store.js SECRET_ENV names).
@@ -23,11 +24,22 @@ const MANAGED_ENV = Object.freeze({
   linearApiKey: 'LINEAR_API_KEY',
   githubToken: 'GITHUB_TOKEN',
   geminiApiKey: 'GEMINI_API_KEY',
+  anthropicApiKey: 'ANTHROPIC_API_KEY',
+  openaiApiKey: 'OPENAI_API_KEY',
   huggingfaceApiKey: 'HUGGINGFACE_API_KEY',
   langsmithApiKey: 'LANGSMITH_API_KEY',
 });
 
-const ORG_ID = String(process.env.PROXY_ORG_ID || '').trim();
+function configuredProxyOrgId(env = process.env) {
+  const proxyOrgId = String(env.PROXY_ORG_ID || '').trim();
+  const fleetOrgId = String(env.FLEET_ORG_ID || '').trim();
+  if (proxyOrgId && fleetOrgId && proxyOrgId !== fleetOrgId) {
+    throw new Error('PROXY_ORG_ID and FLEET_ORG_ID must identify the same organization.');
+  }
+  return proxyOrgId || fleetOrgId;
+}
+
+const ORG_ID = configuredProxyOrgId();
 const CACHE_TTL_MS = Number(process.env.PROXY_SECRETS_TTL_MS) || 60000;
 
 class FailClosed extends Error {
@@ -43,7 +55,8 @@ let cache = { at: 0, data: null };
 /**
  * Fetch (and briefly cache) the resolved secrets from the settings S2S. Uses the
  * per-org resolve when PROXY_ORG_ID is set (per-tenant stack), else the no-org
- * managed resolve (shared stack). Returns null on transport failure so the
+ * managed resolve (shared stack). Per-org calls require the provisioner-derived
+ * ORG_INTERNAL_API_TOKEN. Returns null on transport failure so the
  * caller can apply the platform-env fallback.
  */
 async function resolveSecrets({ fetchImpl, now = Date.now() } = {}) {
@@ -89,11 +102,18 @@ function resolveStaticKey(secretKey, resolved, env = process.env) {
  * caller applies these over the forwarded headers (after stripping inbound auth).
  */
 async function buildInjection(route, opts = {}) {
-  const { fetchImpl, oauthManager } = opts;
+  const { fetchImpl, oauthManager, env = process.env } = opts;
   const headers = {};
 
   switch (route.auth) {
     case 'claude': {
+      const resolved =
+        opts.resolved !== undefined ? opts.resolved : await resolveSecrets({ fetchImpl });
+      const apiKey = resolveStaticKey('anthropicApiKey', resolved, env);
+      if (apiKey) {
+        headers['x-api-key'] = apiKey;
+        return headers;
+      }
       const { accessToken, betaHeader } = await oauthManager.getClaudeAuth();
       headers.authorization = `Bearer ${accessToken}`;
       if (betaHeader) headers['anthropic-beta'] = betaHeader;
@@ -106,6 +126,20 @@ async function buildInjection(route, opts = {}) {
       return headers;
     }
     case 'codex-api': {
+      const resolved =
+        opts.resolved !== undefined ? opts.resolved : await resolveSecrets({ fetchImpl });
+      const bundle = resolved && resolved.secrets && resolved.secrets.codexTokenBundle;
+      // An explicitly available org token bundle wins because settings
+      // preflight chooses it before the API key. Otherwise the metered OpenAI
+      // route uses its selected static key, falling back to legacy OAuth only
+      // when neither resolver entry nor managed env provides one.
+      if (!(bundle && bundle.value)) {
+        const apiKey = resolveStaticKey('openaiApiKey', resolved, env);
+        if (apiKey) {
+          headers.authorization = `Bearer ${apiKey}`;
+          return headers;
+        }
+      }
       const { accessToken } = await oauthManager.getCodexAuth();
       headers.authorization = `Bearer ${accessToken}`;
       return headers;
@@ -113,7 +147,7 @@ async function buildInjection(route, opts = {}) {
     case 'git': {
       const resolved =
         opts.resolved !== undefined ? opts.resolved : await resolveSecrets({ fetchImpl });
-      const pat = resolveStaticKey(route.secretKey, resolved);
+      const pat = resolveStaticKey(route.secretKey, resolved, env);
       if (pat) {
         const basic = Buffer.from(`x-access-token:${pat}`).toString('base64');
         headers.authorization = `Basic ${basic}`;
@@ -124,7 +158,7 @@ async function buildInjection(route, opts = {}) {
     default: {
       const resolved =
         opts.resolved !== undefined ? opts.resolved : await resolveSecrets({ fetchImpl });
-      const key = resolveStaticKey(route.secretKey, resolved);
+      const key = resolveStaticKey(route.secretKey, resolved, env);
       if (!key) return headers; // forward unauthenticated → upstream rejects
       if (route.scheme === 'raw') headers.authorization = key;
       else if (route.scheme === 'x-api-key') headers['x-api-key'] = key;
@@ -137,6 +171,7 @@ async function buildInjection(route, opts = {}) {
 
 module.exports = {
   MANAGED_ENV,
+  configuredProxyOrgId,
   FailClosed,
   resolveSecrets,
   clearCache,

@@ -10,8 +10,8 @@ const assert = require('node:assert/strict');
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-billing-'));
 process.env.AI_FLEET_DATA_DIR = TMP_DIR;
 
-const store = require('@ai-fleet/shared/store');
-const { SHARED_ORG_ID } = require('@ai-fleet/shared/billing/org-context');
+const store = require('@ai-fleet/shared-core/store');
+const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
 const billingRoute = require('./billing');
 
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });

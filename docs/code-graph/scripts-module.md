@@ -44,10 +44,10 @@ Directory-based community: scripts
 | test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L35 | Test | ./scripts/seo-discovery.test.js | 35-50 |
 | test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-68 |
 | test:compact ADLC launcher has four named, local-icon assistant links@L70 | Test | ./scripts/seo-discovery.test.js | 70-81 |
-| envFor | Function | ./scripts/start-all.js | 43-51 |
-| prefixStream | Function | ./scripts/start-all.js | 53-64 |
-| startService | Function | ./scripts/start-all.js | 66-81 |
-| shutdown | Function | ./scripts/start-all.js | 83-90 |
+| envFor | Function | ./scripts/start-all.js | 55-63 |
+| prefixStream | Function | ./scripts/start-all.js | 65-76 |
+| startService | Function | ./scripts/start-all.js | 78-93 |
+| shutdown | Function | ./scripts/start-all.js | 95-102 |
 
 ## Execution Flows
 

@@ -11,6 +11,7 @@ import uuid
 
 import pytest
 
+from app.api.v1.routes_internal import derive_org_internal_token
 from app.models.enums import OrgRole
 from tests.helpers import auth, make_user
 
@@ -24,7 +25,9 @@ ANTHROPIC = "sk-ant-exampleAnthropicKeyValue0123456789"
 def _s2s(org_id, token=INTERNAL_TOKEN):
     headers = {}
     if token is not None:
-        headers["X-Internal-Token"] = token
+        headers["X-Org-Internal-Token"] = (
+            derive_org_internal_token(org_id) if token == INTERNAL_TOKEN else token
+        )
     return f"/api/v1/internal/s2s/orgs/{org_id}/secrets", headers
 
 
@@ -51,12 +54,27 @@ async def test_s2s_requires_internal_token(client):
     org = uuid.uuid4()
     url, _ = _s2s(org)
 
-    missing = await client.get(url)  # no X-Internal-Token
+    missing = await client.get(url)  # no X-Org-Internal-Token
     assert missing.status_code == 403
-    wrong = await client.get(url, headers={"X-Internal-Token": "nope"})
+    wrong = await client.get(url, headers={"X-Org-Internal-Token": "nope"})
     assert wrong.status_code == 403
-    ok = await client.get(url, headers={"X-Internal-Token": INTERNAL_TOKEN})
+    ok = await client.get(
+        url, headers={"X-Org-Internal-Token": derive_org_internal_token(org)}
+    )
     assert ok.status_code == 200
+
+
+async def test_s2s_org_token_cannot_cross_organization_boundary(client):
+    org_a = uuid.uuid4()
+    org_b = uuid.uuid4()
+    url_b, _ = _s2s(org_b)
+
+    response = await client.get(
+        url_b,
+        headers={"X-Org-Internal-Token": derive_org_internal_token(org_a)},
+    )
+
+    assert response.status_code == 403
 
 
 async def test_managed_resolves_the_platform_value_from_env(client, monkeypatch):
@@ -169,6 +187,28 @@ async def test_unknown_secret_key_rejected(client):
         json={"values": {"totallyUnknownKey": "x"}},
     )
     assert resp.status_code == 422
+
+
+async def test_browser_secret_crud_rejects_operator_only_codex_bundle(client):
+    org = uuid.uuid4()
+    _u, token = await make_user(
+        email="admin@a.com", org_id=org, org_role=OrgRole.ORG_ADMIN
+    )
+    raw_bundle = '{"accessToken":"unvalidated","expiresAt":1,"obtainedAt":1}'
+
+    write = await client.put(
+        "/api/v1/settings/org/secrets",
+        headers=auth(token),
+        json={"values": {"codexTokenBundle": raw_bundle}},
+    )
+    select = await client.put(
+        "/api/v1/settings/org/secrets/selection",
+        headers=auth(token),
+        json={"selection": {"codexTokenBundle": "customer"}},
+    )
+
+    assert write.status_code == 422
+    assert select.status_code == 422
 
 
 async def test_non_admin_cannot_access_org_secrets(client):

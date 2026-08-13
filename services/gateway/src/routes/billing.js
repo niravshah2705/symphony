@@ -1,12 +1,12 @@
 'use strict';
 
 const express = require('express');
-const { CONFIG } = require('@ai-fleet/shared/config');
-const { asyncHandler } = require('@ai-fleet/shared/util');
-const store = require('@ai-fleet/shared/store');
-const ledger = require('@ai-fleet/shared/billing/ledger');
-const { paiseToInr } = require('@ai-fleet/shared/billing/pricing');
-const { SHARED_ORG_ID } = require('@ai-fleet/shared/billing/org-context');
+const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { asyncHandler } = require('@ai-fleet/shared-core/util');
+const store = require('@ai-fleet/shared-core/store');
+const ledger = require('@ai-fleet/shared-core/billing/ledger');
+const { paiseToInr } = require('@ai-fleet/shared-core/billing/pricing');
+const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
 const { bearerToken } = require('../auth');
 const { callJson } = require('../service-client');
 const { requestContext } = require('../request-context');

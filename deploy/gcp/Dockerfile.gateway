@@ -2,7 +2,7 @@
 #
 # Gateway service image (PUBLIC Cloud Run service, API-only).
 #
-# Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared:
+# Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared-core:
 #   docker build -f deploy/gcp/Dockerfile.gateway -t <tag> .
 #
 # Base image is pinned by DIGEST (not just a mutable tag) per the
@@ -14,28 +14,26 @@
 ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
 
 # ---------------------------------------------------------------------------
-# Stage 1 — install production dependencies at the workspace root.
+# Stage 1 — install ONLY the gateway's production dependency closure.
 # ---------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy manifests first for a cacheable dependency layer, then the sources.
-# All workspace package.json files must be present for `npm ci` to resolve the
-# @ai-fleet/* symlinks; copying packages/ + services/ wholesale is simplest.
+# The gateway is deliberately agent-free. Copy only its workspace and
+# @ai-fleet/shared-core so npm never sees or installs @ai-fleet/shared,
+# LangChain, DeepAgent, or native agent SDK packages.
 COPY package.json package-lock.json ./
-COPY packages/ ./packages/
-COPY services/ ./services/
+COPY packages/shared-core/ ./packages/shared-core/
+COPY services/gateway/ ./services/gateway/
 
-# Reproducible install from the lockfile; --omit=dev keeps the image lean.
-#
-# This image installs the FULL workspace closure (COPY packages/ + services/
-# above) on purpose: the gateway depends on @ai-fleet/shared and its
-# observability route calls runDiagnostics (packages/shared/src/agent/
-# diagnostics.js), which dynamically imports both native SDKs to probe runtime
-# availability. Do NOT scope the copy to @ai-fleet/shared-core the way the proxy
-# & provisioner images do — it would break /observability diagnostics.
-RUN npm ci --omit=dev && npm cache clean --force
+# Reproducible production-only install, explicitly scoped even though only the
+# two permitted workspaces are present in this build context layer.
+RUN npm ci --omit=dev \
+      --workspace=@ai-fleet/shared-core \
+      --workspace=@ai-fleet/gateway \
+      --include-workspace-root=false \
+    && npm cache clean --force
 
 # ---------------------------------------------------------------------------
 # Stage 2 — minimal runtime.

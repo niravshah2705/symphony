@@ -6,8 +6,8 @@
 
 Directory-based community: deploy/gcp
 
-- **Size**: 12 nodes
-- **Cohesion**: 0.0316
+- **Size**: 13 nodes
+- **Cohesion**: 0.0286
 - **Dominant Language**: bash
 
 ## Members
@@ -20,12 +20,13 @@ Directory-based community: deploy/gcp
 | seed | Function | ./deploy/gcp/bootstrap.sh | 123-124 |
 | enabled_version | Function | ./deploy/gcp/bootstrap.sh | 138-139 |
 | tfimport | Function | ./deploy/gcp/bootstrap.sh | 187-192 |
-| log | Function | ./deploy/gcp/deploy.sh | 71-71 |
-| cleanup | Function | ./deploy/gcp/deploy.sh | 74-74 |
-| has_version | Function | ./deploy/gcp/deploy.sh | 147-148 |
-| seed_secret | Function | ./deploy/gcp/deploy.sh | 149-152 |
-| enabled_version | Function | ./deploy/gcp/deploy.sh | 164-167 |
-| build_push | Function | ./deploy/gcp/deploy.sh | 194-197 |
+| log | Function | ./deploy/gcp/deploy.sh | 87-87 |
+| cleanup | Function | ./deploy/gcp/deploy.sh | 90-90 |
+| has_version | Function | ./deploy/gcp/deploy.sh | 167-168 |
+| seed_secret | Function | ./deploy/gcp/deploy.sh | 169-172 |
+| enabled_version | Function | ./deploy/gcp/deploy.sh | 184-187 |
+| build_push | Function | ./deploy/gcp/deploy.sh | 214-217 |
+| build_push_context | Function | ./deploy/gcp/deploy.sh | 218-221 |
 
 ## Execution Flows
 
@@ -38,13 +39,13 @@ Directory-based community: deploy/gcp
 - `gcloud` (8 edge(s))
 - `echo` (6 edge(s))
 - `printf` (4 edge(s))
+- `docker` (4 edge(s))
 - `grep` (3 edge(s))
 - `terraform` (2 edge(s))
-- `docker` (2 edge(s))
 - `git` (1 edge(s))
 - `true` (1 edge(s))
 
 ### Incoming
 
+- `./deploy/gcp/deploy.sh` (38 edge(s))
 - `./deploy/gcp/bootstrap.sh` (35 edge(s))
-- `./deploy/gcp/deploy.sh` (30 edge(s))

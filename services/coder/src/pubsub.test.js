@@ -112,6 +112,9 @@ test('coder autonomous ticks fail closed only on an unpinned shared cloud runtim
   assert.equal(shouldRunAutonomousTick(empty, {
     messagingMode: 'direct', pinnedOrganizationId: '',
   }), true);
+  assert.equal(shouldRunAutonomousTick(selected, {
+    messagingMode: 'pubsub', pinnedOrganizationId: 'org-pinned', orchestratorEnabled: true,
+  }), false, 'orchestrator rollout disables the legacy label poller');
 
   let autonomousRuns = 0;
   const result = dispatchCoderTick(empty, {
@@ -124,4 +127,19 @@ test('coder autonomous ticks fail closed only on an unpinned shared cloud runtim
     assert.deepEqual(result, { autonomous: false });
     assert.equal(autonomousRuns, 0, 'board polling must not run without context');
   });
+});
+
+test('coder orchestrator rollout suppresses autonomous polling', async () => {
+  const { dispatchCoderTick } = require('./pubsub');
+  let autonomousRuns = 0;
+  const result = dispatchCoderTick({ organizationId: 'org-a', projectId: 'project-a' }, {
+    pollOnce: () => { autonomousRuns += 1; },
+    logImpl: { error() {}, warn() {} },
+    messagingMode: 'pubsub',
+    pinnedOrganizationId: 'org-a',
+    orchestratorEnabled: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(result, { autonomous: false });
+  assert.equal(autonomousRuns, 0);
 });

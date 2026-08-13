@@ -22,6 +22,40 @@ output "coder_control_uri" {
   value       = google_cloud_run_v2_service.coder_control.uri
 }
 
+output "pipeline_orchestrator_uri" {
+  description = "IAM-gated durable pipeline control-plane URL (null while the rollout flag is off)."
+  value       = one(google_cloud_run_v2_service.orchestrator[*].uri)
+}
+
+output "pipeline_tester_uri" {
+  description = "IAM-gated brokered tester URL (null while the rollout flag is off)."
+  value       = one(google_cloud_run_v2_service.tester[*].uri)
+}
+
+output "pipeline_deployer_uri" {
+  description = "IAM-gated brokered deployer URL (null while the rollout flag is off)."
+  value       = one(google_cloud_run_v2_service.deployer[*].uri)
+}
+
+output "pipeline_topics" {
+  description = "Dedicated durable pipeline topics. Empty while the rollout flag is off."
+  value = var.pipeline_orchestrator_enabled ? {
+    plan           = google_pubsub_topic.pipeline_plan[0].name
+    code           = google_pubsub_topic.pipeline_code[0].name
+    test           = google_pubsub_topic.pipeline_test[0].name
+    deploy         = google_pubsub_topic.pipeline_deploy[0].name
+    plan_results   = google_pubsub_topic.pipeline_results["plan"].name
+    code_results   = google_pubsub_topic.pipeline_results["code"].name
+    test_results   = google_pubsub_topic.pipeline_results["test"].name
+    deploy_results = google_pubsub_topic.pipeline_results["deploy"].name
+  } : {}
+}
+
+output "settings_operator_url" {
+  description = "IAM-gated settings URL used by the direct operator CLI. This is never granted to allUsers."
+  value       = google_cloud_run_v2_service.settings.uri
+}
+
 output "email_service_uri" {
   description = "Shared transactional email service URL — internal and Pub/Sub-invoked only."
   value       = google_cloud_run_v2_service.email.uri

@@ -4,25 +4,29 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 16
+**Total communities**: 20
 
 ## Communities
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-model | 1595 | [agent-model.md](agent-model.md) |
-| core-org | 388 | [core-org.md](core-org.md) |
+| agent-model | 1758 | [agent-model.md](agent-model.md) |
+| core-org | 456 | [core-org.md](core-org.md) |
 | e2e-json | 62 | [e2e-json.md](e2e-json.md) |
-| gcp-version | 12 | [gcp-version.md](gcp-version.md) |
+| gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
+| gcp-image | 26 | [gcp-image.md](gcp-image.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
-| registry-plugin | 392 | [registry-plugin.md](registry-plugin.md) |
+| pipeline-stage | 616 | [pipeline-stage.md](pipeline-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
-| routes-context | 68 | [routes-context.md](routes-context.md) |
+| routes-test:planner | 179 | [routes-test-planner.md](routes-test-planner.md) |
 | scripts-module | 34 | [scripts-module.md](scripts-module.md) |
-| src-back | 16 | [src-back.md](src-back.md) |
-| src-context | 278 | [src-context.md](src-context.md) |
-| src-context | 65 | [src-context-2.md](src-context-2.md) |
+| src-auth | 294 | [src-auth.md](src-auth.md) |
+| src-back | 17 | [src-back.md](src-back.md) |
+| src-body | 17 | [src-body.md](src-body.md) |
+| src-body | 17 | [src-body-2.md](src-body-2.md) |
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
-| src-test:build | 41 | [src-test-build.md](src-test-build.md) |
-| src-token | 93 | [src-token.md](src-token.md) |
-| views-render | 667 | [views-render.md](views-render.md) |
+| src-stage | 179 | [src-stage.md](src-stage.md) |
+| src-test:build | 62 | [src-test-build.md](src-test-build.md) |
+| src-test:coder | 102 | [src-test-coder.md](src-test-coder.md) |
+| src-token | 109 | [src-token.md](src-token.md) |
+| views-render | 669 | [views-render.md](views-render.md) |

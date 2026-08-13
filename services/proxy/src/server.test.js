@@ -37,6 +37,15 @@ function startServer(handler) {
 test('routes a request to the upstream, injecting the credential, and streams the body back', async () => {
   let captured = null;
   const fetchImpl = async (url, init) => {
+    if (String(url).includes('/api/v1/internal/s2s/managed-secrets')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          secrets: { anthropicApiKey: { source: 'managed', value: null } },
+        }),
+      };
+    }
     captured = { url, headers: init.headers, method: init.method };
     return {
       status: 200,

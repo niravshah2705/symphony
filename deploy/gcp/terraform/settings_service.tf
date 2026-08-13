@@ -14,6 +14,16 @@ resource "google_service_account" "settings" {
   display_name = "Settings policy service"
 }
 
+check "settings_operator_ingress" {
+  assert {
+    condition = (
+      trimspace(var.settings_operator_invoker) == "" ||
+      var.settings_ingress == "INGRESS_TRAFFIC_ALL"
+    )
+    error_message = "A direct settings_operator_invoker requires settings_ingress=INGRESS_TRAFFIC_ALL; Cloud Run IAM remains the authorization boundary."
+  }
+}
+
 resource "google_project_iam_member" "settings_datastore" {
   project = var.project_id
   role    = "roles/datastore.user"
@@ -56,11 +66,46 @@ resource "google_secret_manager_secret_iam_member" "settings_jwt_accessor" {
   member    = "serviceAccount:${google_service_account.settings.email}"
 }
 
+# Root HMAC key for deriving one bearer per organization. Only settings verifies
+# and the provisioner derives these values; agent/proxy service accounts never
+# receive the root key and therefore cannot forge a different tenant's token.
+resource "random_password" "org_s2s_signing_key" {
+  length  = 64
+  special = false
+}
+
+resource "google_secret_manager_secret" "org_s2s_signing_key" {
+  project   = var.project_id
+  secret_id = "org-s2s-signing-key"
+  labels    = merge(local.common_labels, { component = "settings" })
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+resource "google_secret_manager_secret_version" "org_s2s_signing_key" {
+  secret      = google_secret_manager_secret.org_s2s_signing_key.id
+  secret_data = random_password.org_s2s_signing_key.result
+}
+
+resource "google_secret_manager_secret_iam_member" "settings_org_s2s_signing_key" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.org_s2s_signing_key.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.settings.email}"
+}
+
 resource "google_cloud_run_v2_service" "settings" {
-  project             = var.project_id
-  name                = var.settings_service_name
-  location            = var.region
-  ingress             = var.internal_ingress # IAM-gated; only the gateway SA invokes it
+  project  = var.project_id
+  name     = var.settings_service_name
+  location = var.region
+  # The direct operator CLI reaches this run.app endpoint with a Cloud Run OIDC
+  # token. Network ingress is therefore independent from authorization: there
+  # is still deliberately no allUsers binding below.
+  ingress             = var.settings_ingress
   labels              = merge(local.common_labels, { component = "settings" })
   deletion_protection = false
 
@@ -113,6 +158,15 @@ resource "google_cloud_run_v2_service" "settings" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.settings_jwt_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "ORG_S2S_SIGNING_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.org_s2s_signing_key.secret_id
             version = "latest"
           }
         }
@@ -175,6 +229,8 @@ resource "google_cloud_run_v2_service" "settings" {
     google_firestore_database.default,
     google_project_iam_member.settings_datastore,
     google_secret_manager_secret_iam_member.settings_jwt_accessor,
+    google_secret_manager_secret_iam_member.settings_org_s2s_signing_key,
+    google_secret_manager_secret_version.org_s2s_signing_key,
     google_secret_manager_secret_version.settings_jwt_secret,
     google_kms_crypto_key_iam_member.settings_org_secrets,
     google_secret_manager_secret_iam_member.settings_internal_token,
@@ -208,6 +264,18 @@ resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_settings" {
   name     = google_cloud_run_v2_service.settings.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.gateway.email}"
+}
+
+# Optional human/group/service identity used by `adlc admin codex import`.
+# Reaching the URL still requires Cloud Run IAM, and the settings application
+# independently verifies the forwarded Firebase principal + operator role.
+resource "google_cloud_run_v2_service_iam_member" "operator_invokes_settings" {
+  count    = trimspace(var.settings_operator_invoker) != "" ? 1 : 0
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.settings.name
+  role     = "roles/run.invoker"
+  member   = trimspace(var.settings_operator_invoker)
 }
 
 # Settings resolves every Firebase caller's selected membership/project through

@@ -59,10 +59,11 @@ function runMessageInWorkspace(message, task) {
 function shouldRunAutonomousTick(context, {
   messagingMode = CONFIG.MESSAGING_MODE,
   pinnedOrganizationId = CONFIG.BILLING.orgId,
+  orchestratorEnabled = CONFIG.PIPELINE.orchestratorEnabled,
 } = {}) {
-  return messagingMode !== 'pubsub'
+  return !orchestratorEnabled && (messagingMode !== 'pubsub'
     || Boolean(pinnedOrganizationId)
-    || Boolean(context && context.organizationId);
+    || Boolean(context && context.organizationId));
 }
 
 function dispatchPlannerTick(context, {
@@ -71,15 +72,22 @@ function dispatchPlannerTick(context, {
   logImpl = log,
   messagingMode = CONFIG.MESSAGING_MODE,
   pinnedOrganizationId = CONFIG.BILLING.orgId,
+  orchestratorEnabled = CONFIG.PIPELINE.orchestratorEnabled,
 } = {}) {
   Promise.resolve().then(() => processBillingSweepImpl()).catch((err) => {
     logImpl.error(`billing sweep (planner tick) failed: ${err && err.message ? err.message : err}`);
   });
-  const autonomous = shouldRunAutonomousTick(context, { messagingMode, pinnedOrganizationId });
+  const autonomous = shouldRunAutonomousTick(context, {
+    messagingMode,
+    pinnedOrganizationId,
+    orchestratorEnabled,
+  });
   if (autonomous) {
     Promise.resolve().then(() => processPending()).catch((err) => {
       logImpl.error(`planner tick failed: ${err && err.message ? err.message : err}`);
     });
+  } else if (orchestratorEnabled) {
+    logImpl.warn('planner tick skipped: the durable pipeline orchestrator owns sequencing');
   } else {
     logImpl.warn('planner tick skipped: shared cloud runtime requires an organization context');
   }

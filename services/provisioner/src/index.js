@@ -26,6 +26,10 @@ const INTERNAL_API_TOKEN = String(process.env.INTERNAL_API_TOKEN || '').trim();
 
 // Provisioning config assembled from env (mirrors deploy/gcp/terraform).
 function buildCfg(projectNumber) {
+  const enabled = (name, fallback = false) => {
+    const value = process.env[name];
+    return value == null || value === '' ? fallback : String(value).trim().toLowerCase() === 'true';
+  };
   return {
     projectId: CONFIG.GCP.projectId,
     projectNumber,
@@ -37,10 +41,19 @@ function buildCfg(projectNumber) {
     firebaseApiKey: process.env.FIREBASE_API_KEY || '',
     deadLetterTopic: process.env.PUBSUB_DEADLETTER_TOPIC || 'agent-requests-deadletter',
     emailTopic: process.env.EMAIL_TOPIC || 'email-delivery',
+    internalIngress: process.env.INTERNAL_INGRESS || 'INGRESS_TRAFFIC_ALL',
+    pipelineOrchestratorEnabled: enabled('PIPELINE_ORCHESTRATOR_ENABLED', false),
+    pipelineDeploymentEnabled: enabled('PIPELINE_DEPLOYMENT_ENABLED', false),
+    egressProxyEnabled: enabled('EGRESS_PROXY_ENABLED', Boolean(process.env.EGRESS_PROXY_URL)),
+    egressProxyIncludeSdk: enabled('EGRESS_PROXY_INCLUDE_SDK', false),
+    orgS2sSigningKey: process.env.ORG_S2S_SIGNING_KEY || '',
     serviceAccounts: {
       gateway: process.env.GATEWAY_SA || '',
       planner: process.env.PLANNER_SA || '',
       coder: process.env.CODER_SA || '',
+      orchestrator: process.env.ORCHESTRATOR_SA || '',
+      tester: process.env.TESTER_SA || '',
+      deployer: process.env.DEPLOYER_SA || '',
       pubsubPush: process.env.PUBSUB_PUSH_SA || '',
     },
     sourceServiceNames: {
@@ -48,6 +61,9 @@ function buildCfg(projectNumber) {
       planner: process.env.PLANNER_SERVICE_NAME || 'planner',
       coder: process.env.CODER_SERVICE_NAME || 'coder-control',
       worker: process.env.CODER_JOB_NAME || 'coder-worker',
+      orchestrator: process.env.ORCHESTRATOR_SERVICE_NAME || 'pipeline-orchestrator',
+      tester: process.env.TESTER_SERVICE_NAME || 'pipeline-tester',
+      deployer: process.env.DEPLOYER_SERVICE_NAME || 'pipeline-deployer',
     },
   };
 }

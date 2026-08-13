@@ -463,6 +463,9 @@ const PUBLIC_DIR = process.env.AI_FLEET_PUBLIC_DIR || path.join(REPO_ROOT, 'publ
  */
 const PLANNER_PORT = Number(process.env.PLANNER_PORT) || 4010;
 const CODER_SERVICE_PORT = Number(process.env.CODER_SERVICE_PORT) || 4020;
+const TESTER_SERVICE_PORT = Number(process.env.TESTER_SERVICE_PORT) || 4050;
+const DEPLOYER_SERVICE_PORT = Number(process.env.DEPLOYER_SERVICE_PORT) || 4060;
+const ORCHESTRATOR_SERVICE_PORT = Number(process.env.ORCHESTRATOR_SERVICE_PORT) || 4070;
 const EMAIL_SERVICE_PORT = Number(process.env.EMAIL_SERVICE_PORT) || 4040;
 const ORG_SERVICE_PORT = Number(process.env.ORG_SERVICE_PORT) || 8000;
 // Settings-policy service (Python/FastAPI, Firestore). Local default 8100 so it
@@ -472,10 +475,16 @@ const SERVICES = Object.freeze({
   gatewayPort: PORT,
   plannerPort: PLANNER_PORT,
   coderPort: CODER_SERVICE_PORT,
+  testerPort: TESTER_SERVICE_PORT,
+  deployerPort: DEPLOYER_SERVICE_PORT,
+  orchestratorPort: ORCHESTRATOR_SERVICE_PORT,
   emailPort: EMAIL_SERVICE_PORT,
   settingsPort: SETTINGS_SERVICE_PORT,
   plannerUrl: process.env.PLANNER_URL || `http://localhost:${PLANNER_PORT}`,
   coderUrl: process.env.CODER_URL || `http://localhost:${CODER_SERVICE_PORT}`,
+  testerUrl: process.env.TESTER_URL || `http://localhost:${TESTER_SERVICE_PORT}`,
+  deployerUrl: process.env.DEPLOYER_URL || `http://localhost:${DEPLOYER_SERVICE_PORT}`,
+  orchestratorUrl: process.env.ORCHESTRATOR_URL || `http://localhost:${ORCHESTRATOR_SERVICE_PORT}`,
   // Shared transactional email service. Producers publish allow-listed jobs to
   // Pub/Sub in cloud mode and use this push-compatible endpoint in local mode.
   emailUrl: process.env.EMAIL_URL || `http://localhost:${EMAIL_SERVICE_PORT}`,
@@ -523,6 +532,19 @@ const GCP = Object.freeze({
   region: process.env.GCP_REGION || 'us-central1',
   plannerTopic: process.env.PUBSUB_PLANNER_TOPIC || 'planner-requests',
   coderTopic: process.env.PUBSUB_CODER_TOPIC || 'coder-requests',
+  testerTopic: process.env.PUBSUB_TESTER_TOPIC || 'tester-requests',
+  deployerTopic: process.env.PUBSUB_DEPLOYER_TOPIC || 'deployer-requests',
+  orchestratorTopic: process.env.PUBSUB_ORCHESTRATOR_TOPIC || 'orchestrator-requests',
+  // StageCommandV1 uses dedicated topics. Never reuse the legacy planner/coder
+  // request topics: those subscriptions expect different wire contracts.
+  pipelinePlanTopic: process.env.PUBSUB_PIPELINE_PLAN_TOPIC || 'pipeline-plan-commands',
+  pipelineCodeTopic: process.env.PUBSUB_PIPELINE_CODE_TOPIC || 'pipeline-code-commands',
+  pipelineTestTopic: process.env.PUBSUB_PIPELINE_TEST_TOPIC || 'pipeline-test-commands',
+  pipelineDeployTopic: process.env.PUBSUB_PIPELINE_DEPLOY_TOPIC || 'pipeline-deploy-commands',
+  pipelinePlanResultsTopic: process.env.PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC || 'pipeline-plan-results',
+  pipelineCodeResultsTopic: process.env.PUBSUB_PIPELINE_CODE_RESULTS_TOPIC || 'pipeline-code-results',
+  pipelineTestResultsTopic: process.env.PUBSUB_PIPELINE_TEST_RESULTS_TOPIC || 'pipeline-test-results',
+  pipelineDeployResultsTopic: process.env.PUBSUB_PIPELINE_DEPLOY_RESULTS_TOPIC || 'pipeline-deploy-results',
   emailTopic: process.env.EMAIL_TOPIC || 'email-delivery',
   // Cloud Run Job launched (by coder-control) to run one coder ticket to completion.
   coderJobName: process.env.CODER_JOB_NAME || 'coder-worker',
@@ -536,6 +558,17 @@ const GCP = Object.freeze({
   spaOrigins: String(process.env.SPA_ORIGIN || '').split(',').map((value) => value.trim()).filter(Boolean),
   // Absolute base URL of the gateway API, injected into the SPA at deploy time.
   apiBaseUrl: String(process.env.API_BASE_URL || '').trim(),
+});
+
+/**
+ * Durable pipeline rollout switch.  When enabled, the dedicated orchestrator
+ * owns stage sequencing and the planner/coder cadence loops must not discover
+ * Linear-label work independently (which would double-dispatch the same work).
+ * Default OFF is the rollback path for existing deployments.
+ */
+const PIPELINE = Object.freeze({
+  orchestratorEnabled: boolEnv(process.env, 'PIPELINE_ORCHESTRATOR_ENABLED', false),
+  deploymentEnabled: boolEnv(process.env, 'PIPELINE_DEPLOYMENT_ENABLED', false),
 });
 
 /**
@@ -640,6 +673,7 @@ const CONFIG = Object.freeze({
   EVENTS_SINK_URL,
   STORE_NAMESPACE,
   GCP,
+  PIPELINE,
   // Number of records to request from Linear in list queries.
   PAGE_SIZE: 100,
   ISSUE_PAGE_SIZE: 250,

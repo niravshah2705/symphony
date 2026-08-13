@@ -6,8 +6,8 @@
 
 Directory-based community: services/provisioner
 
-- **Size**: 16 nodes
-- **Cohesion**: 0.1387
+- **Size**: 17 nodes
+- **Cohesion**: 0.1575
 - **Dominant Language**: javascript
 
 ## Members
@@ -24,12 +24,13 @@ Directory-based community: services/provisioner
 | test:malformed message: no provision, no write-back@L46 | Test | ./services/provisioner/src/handler.test.js | 46-53 |
 | test:provision failure: records status=failed via write-back@L55 | Test | ./services/provisioner/src/handler.test.js | 55-62 |
 | test:write-back failure on the failure path is swallowed (no throw)@L64 | Test | ./services/provisioner/src/handler.test.js | 64-71 |
-| buildCfg | Function | ./services/provisioner/src/index.js | 28-53 |
-| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 56-66 |
-| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 70-82 |
-| writeBack | Function | ./services/provisioner/src/index.js | 84-97 |
-| createApp | Function | ./services/provisioner/src/index.js | 99-120 |
-| start | Function | ./services/provisioner/src/index.js | 122-130 |
+| buildCfg | Function | ./services/provisioner/src/index.js | 28-69 |
+| enabled | Function | ./services/provisioner/src/index.js | 29-32 |
+| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 72-82 |
+| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 86-98 |
+| writeBack | Function | ./services/provisioner/src/index.js | 100-113 |
+| createApp | Function | ./services/provisioner/src/index.js | 115-136 |
+| start | Function | ./services/provisioner/src/index.js | 138-146 |
 
 ## Execution Flows
 
@@ -43,9 +44,10 @@ Directory-based community: services/provisioner
 - `handleMessage` (7 edge(s))
 - `error` (4 edge(s))
 - `writeBack` (3 edge(s))
+- `String` (3 edge(s))
 - `push` (3 edge(s))
+- `trim` (3 edge(s))
 - `stringify` (2 edge(s))
-- `String` (2 edge(s))
 - `match` (2 edge(s))
 - `deepEqual` (2 edge(s))
 - `use` (2 edge(s))
@@ -53,12 +55,11 @@ Directory-based community: services/provisioner
 - `get` (2 edge(s))
 - `info` (2 edge(s))
 - `end` (2 edge(s))
-- `status` (2 edge(s))
 
 ### Incoming
 
 - `equal` (15 edge(s))
-- `./services/provisioner/src/index.js` (10 edge(s))
+- `./services/provisioner/src/index.js` (11 edge(s))
 - `./services/provisioner/src/handler.test.js` (8 edge(s))
 - `handleMessage` (6 edge(s))
 - `./services/provisioner/src/handler.js` (3 edge(s))

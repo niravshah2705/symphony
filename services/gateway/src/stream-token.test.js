@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 
 const { mintStreamToken, mintWorkspaceToken, verifyStreamToken } = require('./stream-token');
-const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared/messaging/events');
+const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared-core/messaging/events');
 
 test('mint + verify roundtrip for the same conversationId', () => {
   const token = mintStreamToken('conv1');

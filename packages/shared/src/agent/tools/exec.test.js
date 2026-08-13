@@ -12,6 +12,8 @@ const {
   runCommand,
   commandExists,
   runSequence,
+  execTool,
+  networkSandboxInvocation,
 } = require('./exec');
 
 test('sanitizedToolEnv strips credential-looking variables but keeps toolchain vars', () => {
@@ -103,6 +105,22 @@ test('runCommand captures a non-zero exit code without throwing', async () => {
   assert.equal(result.notFound, false);
 });
 
+test('network-isolated commands use the fail-closed Linux seccomp launcher', () => {
+  const invocation = networkSandboxInvocation('npm', ['test'], {
+    cwd: '/source/repository',
+    isolateNetwork: true,
+    platform: 'linux',
+  });
+  assert.equal(invocation.command, 'ai-fleet-network-sandbox');
+  assert.deepEqual(invocation.args, ['npm', 'test']);
+  assert.throws(
+    () => networkSandboxInvocation('npm', ['test'], {
+      cwd: '/workspace', isolateNetwork: true, platform: 'darwin',
+    }),
+    /require a Linux worker/,
+  );
+});
+
 test('commandExists is true for node and false for a missing binary', async () => {
   assert.equal(await commandExists(process.execPath), true);
   assert.equal(await commandExists('definitely-not-a-real-binary-xyz'), false);
@@ -123,4 +141,19 @@ test('runSequence stops at the first failing step', async () => {
   assert.equal(ok, false);
   assert.match(output, /first/);
   assert.doesNotMatch(output, /third/);
+});
+
+test('tool execution fails closed when the requested network sandbox is unavailable', async () => {
+  const invocation = {
+    ctx: { cwd: process.cwd(), isolateNetwork: true },
+    label: 'isolated probe',
+    command: process.execPath,
+    args: ['-e', 'process.exit(0)'],
+  };
+  if (process.platform === 'linux') {
+    const output = await execTool(invocation);
+    assert.match(output, /not installed|exit 127/);
+  } else {
+    await assert.rejects(() => execTool(invocation), /network-isolated commands require a Linux worker/);
+  }
 });

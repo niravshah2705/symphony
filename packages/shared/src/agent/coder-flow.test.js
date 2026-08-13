@@ -5,7 +5,12 @@ const assert = require('node:assert');
 
 const orchestrator = require('./coder-orchestrator');
 const { parseVerdict, preflightTask, preflightAndPause, pauseForRuntimeError, dispatchReadyTask, dispatch } = orchestrator;
-const { activeRepositoryBranch, assertOpenSweRepositoryProvider, executeCodingRuntime } = require('./coder');
+const {
+  activeRepositoryArtifactReceipt,
+  activeRepositoryBranch,
+  assertOpenSweRepositoryProvider,
+  executeCodingRuntime,
+} = require('./coder');
 const framework = require('./framework');
 const { AgentAvailabilityError } = require('./availability');
 const { RepositoryBrokerError } = require('./repository-broker');
@@ -72,6 +77,19 @@ test('coder results report the broker branch after an automatic retry rotation',
   const broker = { publicInfo: () => ({ branch: 'task-123-retry-17' }) };
   assert.strictEqual(activeRepositoryBranch('task-123', broker), 'task-123-retry-17');
   assert.strictEqual(activeRepositoryBranch('task-123', null), 'task-123');
+});
+
+test('planned coder results export the broker-authoritative artifact receipt', () => {
+  const receipt = {
+    source: 'repository-broker',
+    commandId: 'run-1:code:1',
+    commitSha: 'a'.repeat(40),
+    treeSha: 'b'.repeat(40),
+  };
+  const broker = { artifactReceipt: () => receipt };
+
+  assert.strictEqual(activeRepositoryArtifactReceipt(broker), receipt);
+  assert.strictEqual(activeRepositoryArtifactReceipt(null), null);
 });
 
 test('Git 403 preflight stops before model resolution, job creation, or issue transition', async () => {
@@ -789,6 +807,14 @@ test('unscoped autonomous polling is disabled for shared authenticated runtimes 
     ),
     false,
     'explicitly selected autonomous work remains enabled',
+  );
+  assert.equal(
+    orchestrator._test.shouldSkipAutonomousPoll(
+      { organizationId: 'selected-org', projectId: 'selected-project' },
+      { AUTH: { enabled: true }, PIPELINE: { orchestratorEnabled: true } },
+    ),
+    true,
+    'the durable orchestrator disables Linear-label auto-discovery even when scoped',
   );
 });
 

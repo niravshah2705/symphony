@@ -1,8 +1,8 @@
 'use strict';
 
-const { subscribe, subscribeWorkspace, WORKSPACE_CHANNEL } = require('@ai-fleet/shared/messaging/events');
+const { subscribe, subscribeWorkspace, WORKSPACE_CHANNEL } = require('@ai-fleet/shared-core/messaging/events');
 const { verifyStreamToken } = require('./stream-token');
-const { CONFIG } = require('@ai-fleet/shared/config');
+const { CONFIG } = require('@ai-fleet/shared-core/config');
 const { cleanContextId } = require('./request-context');
 
 /**

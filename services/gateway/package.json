@@ -1,7 +1,7 @@
 {
   "name": "@ai-fleet/gateway",
   "version": "1.0.0",
-  "description": "AI Fleet gateway service — serves the SPA, the user-facing REST API and OAuth flows, and reverse-proxies the planner and coder agent services.",
+  "description": "Agent-free AI Fleet API gateway — browser auth, billing, EULA, SSE, publishing, and authorized reverse proxies.",
   "private": true,
   "main": "src/index.js",
   "scripts": {
@@ -12,7 +12,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@ai-fleet/shared": "*",
+    "@ai-fleet/shared-core": "*",
     "express": "^5.2.1",
     "firebase-admin": "^14.2.0",
     "google-auth-library": "^11.0.1"

@@ -29,7 +29,12 @@ function forwardedContextInput(req) {
 function createStoreContextMiddleware({ initStore = store.initStore } = {}) {
   return function bindForwardedStoreContext(req, res, next) {
     try {
-      return Promise.resolve(runWithWorkspaceContext(forwardedContextInput(req), async () => {
+      const input = forwardedContextInput(req);
+      const context = normalizeWorkspaceContext(input);
+      // Downstream domain routers use req.fleetContext for record filtering;
+      // only the gateway-derived internal headers are authoritative here.
+      req.fleetContext = context;
+      return Promise.resolve(runWithWorkspaceContext(input, async () => {
         await initStore();
         return next();
       })).catch(next);

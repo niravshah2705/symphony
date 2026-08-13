@@ -6,6 +6,7 @@ const {
   splitEnv,
   extractSourceService,
   extractSourceJob,
+  mergeServiceScaling,
   cloneContainers,
 } = require('./containers');
 
@@ -56,6 +57,16 @@ test('extractSourceService captures ALL containers + volumes', () => {
   assert.equal(src.volumes[0].name, 'skills');
   assert.equal(src.executionEnvironment, 'EXECUTION_ENVIRONMENT_GEN1');
   assert.equal(src.maxInstanceRequestConcurrency, 10);
+});
+
+test('mergeServiceScaling preserves source scaling and applies an explicit pipeline cap', () => {
+  const source = { minInstanceCount: 0, maxInstanceCount: 5 };
+  assert.deepEqual(mergeServiceScaling(source), source);
+  assert.deepEqual(
+    mergeServiceScaling(source, 1),
+    { minInstanceCount: 0, maxInstanceCount: 1 },
+  );
+  assert.deepEqual(mergeServiceScaling(undefined), { minInstanceCount: 0 });
 });
 
 test('cloneContainers propagates the sidecar to the tenant stack', () => {

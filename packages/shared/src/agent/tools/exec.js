@@ -52,6 +52,31 @@ const NONINTERACTIVE_ENV = Object.freeze({
 });
 
 /**
+ * Cloud Run exposes the revision service identity through a link-local metadata
+ * server. A repository-native test script is untrusted code, so letting that
+ * child reach metadata would turn the tester's Firestore/PubSub identity into a
+ * credential-exfiltration path. Linux production workers therefore wrap trusted
+ * repository commands with a tiny seccomp launcher that permits only AF_UNIX
+ * sockets and denies internet/link-local socket creation. Unlike namespace
+ * sandboxes, this works without capabilities or user namespaces in Cloud Run.
+ * The wrapper is mandatory when `isolateNetwork` is requested; a missing or
+ * unsupported sandbox fails closed instead of silently executing with network.
+ */
+const NETWORK_SANDBOX_COMMAND = 'ai-fleet-network-sandbox';
+
+function networkSandboxInvocation(command, args, opts = {}) {
+  if (opts.isolateNetwork !== true) return { command, args };
+  const platform = opts.platform || process.platform;
+  if (platform !== 'linux') {
+    throw new Error('network-isolated commands require a Linux worker');
+  }
+  return {
+    command: opts.networkSandboxCommand || NETWORK_SANDBOX_COMMAND,
+    args: [command, ...args],
+  };
+}
+
+/**
  * Split a base environment into the env a tool subprocess may see and the list
  * of secret values to redact from its output. Inherit-then-strip: keep every
  * variable a real toolchain needs, drop anything that looks like a credential.
@@ -137,8 +162,9 @@ async function runCommand(command, args = [], opts = {}) {
   const limits = toolLimits();
   const timeoutSec = Number(opts.timeoutSec) || limits.timeoutSec;
   const { env } = opts.env ? { env: opts.env } : sanitizedToolEnv();
+  const invocation = networkSandboxInvocation(command, args, opts);
   try {
-    const { stdout, stderr } = await execFileP(command, args, {
+    const { stdout, stderr } = await execFileP(invocation.command, invocation.args, {
       cwd: opts.cwd,
       env,
       shell: false,
@@ -187,7 +213,12 @@ async function execTool({ ctx = {}, label, command, args, dir, timeoutSec, notFo
   const { env, secrets } = sanitizedToolEnv();
   const printable = `${command} ${args.join(' ')}`.trim();
   step(`🛠️  ${label}: ${printable.slice(0, 120)}`);
-  const result = await runCommand(command, args, { cwd, timeoutSec, env });
+  const result = await runCommand(command, args, {
+    cwd,
+    timeoutSec,
+    env,
+    isolateNetwork: ctx.isolateNetwork === true,
+  });
   if (result.notFound) {
     return `❌ ${label}: \`${command}\` is not installed / not on PATH.\n${notFoundHint || `Install the ${command} CLI (this tool delegates to it) and retry.`}`;
   }
@@ -228,7 +259,12 @@ async function runSequence({ ctx = {}, dir, steps = [], timeoutSec }) {
   const chunks = [];
   for (const s of steps) {
     step(`🛠️  ${s.label}: ${s.command} ${s.args.join(' ')}`.slice(0, 140));
-    const result = await runCommand(s.command, s.args, { cwd, env, timeoutSec: s.timeoutSec || timeoutSec });
+    const result = await runCommand(s.command, s.args, {
+      cwd,
+      env,
+      timeoutSec: s.timeoutSec || timeoutSec,
+      isolateNetwork: ctx.isolateNetwork === true,
+    });
     if (result.notFound) {
       chunks.push(`❌ ${s.label}: \`${s.command}\` is not installed / not on PATH.\n${s.notFoundHint || `Install ${s.command} and retry.`}`);
       return { ok: false, output: chunks.join('\n\n') };
@@ -284,6 +320,8 @@ module.exports = {
   truncate,
   resolveWorkdir,
   runCommand,
+  networkSandboxInvocation,
+  NETWORK_SANDBOX_COMMAND,
   platformCmd,
   commandExists,
   runSequence,

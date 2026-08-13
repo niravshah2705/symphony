@@ -2,6 +2,49 @@
 
 This diagram describes both deployment modes: local development (direct service calls and a JSON store) and the deployed Google Cloud path (Firebase Hosting SPA, Cloud Run, Pub/Sub, Firestore, and Cloud Run Jobs).
 
+> The diagrams below document the legacy compatibility path while
+> `PIPELINE_ORCHESTRATOR_ENABLED=false`. With the rollout flag enabled, the
+> durable flow below is authoritative and planner/coder label polling is off.
+
+## Durable pipeline flow
+
+```mermaid
+sequenceDiagram
+  actor U as Initiating user
+  participant G as SDK-free gateway
+  participant S as Settings policy
+  participant O as LangGraph orchestrator
+  participant F as Firestore
+  participant Q as Dedicated Pub/Sub topics
+  participant A as Planner / Coder / Tester / Deployer
+  participant P as Egress proxy
+
+  U->>G: POST /api/pipeline/runs
+  G->>G: EULA + billing + tenant checks
+  G->>S: User-token preflight (stages, harnesses, providers, models)
+  S-->>G: Secret-free user-scoped policy + readiness decision
+  G->>O: PipelineStart v1 + immutable decision snapshot
+  O->>F: PipelineRun + PreflightSnapshot + checkpoint
+  loop requested stages in canonical order
+    O->>Q: StageCommandV1 (runId/stage/attempt/idempotencyKey)
+    Q->>A: OIDC push /pubsub/pipeline-stage
+    A->>P: Credentialed provider/repository traffic via sentinel
+    A->>Q: StageResultV1 to its stage-only result topic
+    Q->>O: OIDC push /pubsub/pipeline-stage-results/{stage}
+    O->>F: Transactional StageRun completion + checkpoint
+  end
+  O-->>G: Durable status
+  G-->>U: Scoped run/stage status
+```
+
+Each stage has a separate command topic and a separate result topic. Publisher
+IAM lets each worker publish only its own stage result, and the stage-bound
+orchestrator route rejects a body whose `result.stage` differs from the route.
+Legacy planner/coder topics are never reused for typed commands. Labels such as `aiplanned`, `aidone`, `aitested`, and
+`aideployed` are best-effort projections only. Deployment is separately
+default-off, production requires a server-side approval, and the deployer can
+invoke only repository-allowlisted CI/CD through its broker.
+
 ```mermaid
 flowchart TB
   User["User browser"]

@@ -901,13 +901,18 @@ function resolveMaxConcurrent() {
  */
 function shouldSkipAutonomousPoll(context = {}, config = CONFIG) {
   const selected = resolveRuntimeContext({}, context);
-  return Boolean(config.AUTH && config.AUTH.enabled) && !selected.orgId;
+  return Boolean(config.PIPELINE && config.PIPELINE.orchestratorEnabled)
+    || (Boolean(config.AUTH && config.AUTH.enabled) && !selected.orgId);
 }
 
 /** One poll+dispatch cycle. Serialized (never overlaps itself). */
 async function pollOnce(context = {}, dependencies = {}) {
   const selected = resolveRuntimeContext({}, context);
   if (shouldSkipAutonomousPoll(selected)) {
+    if (CONFIG.PIPELINE && CONFIG.PIPELINE.orchestratorEnabled) {
+      log.warn('Coder poll skipped: the durable pipeline orchestrator owns sequencing.');
+      return { skipped: 'orchestrator-enabled' };
+    }
     log.warn('Coder poll skipped: an organization/project context is required on the shared runtime.');
     return { skipped: 'missing-workspace-context' };
   }
@@ -1057,7 +1062,13 @@ async function pollOnce(context = {}, dependencies = {}) {
 function start(context = {}) {
   const selected = resolveRuntimeContext({}, context);
   if (shouldSkipAutonomousPoll(selected)) {
-    return { ...status(selected), started: false, skipped: 'missing-workspace-context' };
+    return {
+      ...status(selected),
+      started: false,
+      skipped: CONFIG.PIPELINE && CONFIG.PIPELINE.orchestratorEnabled
+        ? 'orchestrator-enabled'
+        : 'missing-workspace-context',
+    };
   }
   const runtime = monitorState(selected);
   const resumed = clearPause('monitor start requested', selected);

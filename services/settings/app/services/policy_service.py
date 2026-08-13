@@ -13,6 +13,8 @@ MASKS them to ``{set: bool}``. The plaintext is returned only by
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 
 from app.authz.guards import ProjectContext
@@ -49,6 +51,12 @@ from app.schemas.policy import (
     PolicyResponse,
     PolicyUpdate,
     UniverseResponse,
+)
+from app.schemas.preflight import (
+    CredentialReadiness,
+    PreflightRequest,
+    PreflightResponse,
+    StageDecision,
 )
 
 
@@ -191,7 +199,12 @@ async def set_user_policy(
 # ---- cascade / universe -----------------------------------------------------
 
 def get_universe() -> UniverseResponse:
-    return UniverseResponse(domains=universe_mod.universe())
+    catalog = universe_mod.harness_catalog()
+    return UniverseResponse(
+        domains=universe_mod.universe(),
+        schemaVersion=catalog["schemaVersion"],
+        harnesses=universe_mod.harness_metadata(),
+    )
 
 
 async def _load_scoped_policies(
@@ -294,4 +307,168 @@ async def resolve_config_for_caller(
     effective_values = resolve_effective_values(org_policy, project_policy, user_policy)
     return InternalEffectiveConfigResponse(
         project_id=resolved_project_id, values=effective_values
+    )
+
+
+_PIPELINE_TO_WORKFLOW = {
+    "plan": "planning",
+    "code": "coding",
+    "test": "testing",
+    "deploy": "deployment",
+}
+_STAGE_PREF = {
+    "plan": "planHarness",
+    "code": "codeHarness",
+    "test": "testHarness",
+    "deploy": "deployHarness",
+}
+_PROVIDER_SECRETS = {
+    "codex": ("codexTokenBundle", "openaiApiKey"),
+    "claude": ("anthropicApiKey",),
+    "antigravity": ("geminiApiKey",),
+    "huggingface": ("huggingfaceApiKey",),
+}
+_KNOWN_MODEL_PROVIDERS = {
+    "ollama",
+    "lmstudio",
+    "omlx",
+    *_PROVIDER_SECRETS.keys(),
+}
+
+
+async def preflight_for_caller(
+    session: Uow,
+    principal: Principal,
+    body: PreflightRequest,
+) -> PreflightResponse:
+    """Resolve a secret-free, user-scoped pipeline execution decision."""
+    from app.services import secrets_service
+
+    project_id = body.project_id or principal.project_id
+    org_policy, project_policy, user_policy, resolved_project_id = (
+        await _load_scoped_policies(session, principal, project_id)
+    )
+    universe = universe_mod.universe()
+    effective = resolve_effective(universe, org_policy, project_policy, user_policy)
+    prefs = resolve_effective_prefs(org_policy, project_policy, user_policy)
+    allowed_harnesses = set(effective["harness"].effective)
+    allowed_models = set(effective["models"].effective)
+    known_models = set(universe.get("models", []))
+    metadata = {item["id"]: item for item in universe_mod.harness_metadata()}
+    readiness = await secrets_service.credential_readiness_for_org(
+        session, principal.org_id
+    )
+
+    decisions: list[StageDecision] = []
+    for stage in body.stages:
+        workflow = _PIPELINE_TO_WORKFLOW[stage]
+        selected = (
+            body.harnesses.get(stage)
+            or prefs.get(_STAGE_PREF[stage])
+            or prefs.get("agentRuntime")
+            or "deepagent"
+        ).strip().lower()
+        definition = metadata.get(selected)
+        errors: list[str] = []
+        available = bool(definition and definition.get("availability") == "available")
+        allowed = selected in allowed_harnesses
+        supported = bool(definition and workflow in definition.get("stages", []))
+        broker_required = workflow in {"coding", "deployment"}
+        brokered = bool(
+            definition
+            and (not broker_required or workflow in definition.get("brokeredStages", []))
+        )
+        if definition is None:
+            errors.append("unknown_harness")
+        elif not available:
+            errors.append("harness_unavailable")
+        if not allowed:
+            errors.append("harness_denied")
+        if definition is not None and not supported:
+            errors.append("stage_unsupported")
+        if definition is not None and not brokered:
+            errors.append("brokered_stage_unsupported")
+
+        selected_provider = body.providers.get(stage)
+        required_provider = definition.get("requiresProvider") if definition else None
+        provider = selected_provider or required_provider
+        if provider is None and selected == "deepagent":
+            provider = prefs.get("llmProvider") or None
+        if provider is None:
+            errors.append("provider_selection_missing")
+        elif provider not in _KNOWN_MODEL_PROVIDERS:
+            errors.append("unknown_provider")
+        if required_provider and provider and required_provider != provider:
+            errors.append("harness_provider_mismatch")
+
+        model = body.models.get(stage)
+        if body.models and model is None:
+            errors.append("model_selection_missing")
+        elif model is not None:
+            if model not in known_models:
+                errors.append("unknown_model")
+            elif model not in allowed_models:
+                errors.append("model_denied")
+
+        credential = CredentialReadiness(ready=True, source=None, kind=None)
+        candidates = _PROVIDER_SECRETS.get(provider or "", ())
+        if candidates:
+            ready_candidate = next(
+                (
+                    (key, readiness[key])
+                    for key in candidates
+                    if readiness.get(key, {}).get("ready")
+                ),
+                None,
+            )
+            credential = CredentialReadiness(
+                ready=ready_candidate is not None,
+                source=(
+                    str(ready_candidate[1].get("source"))
+                    if ready_candidate
+                    else None
+                ),
+                kind=ready_candidate[0] if ready_candidate else None,
+            )
+            if not credential.ready:
+                errors.append("provider_credential_unavailable")
+
+        decisions.append(
+            StageDecision(
+                stage=stage,
+                workflow=workflow,
+                harness=selected,
+                provider=provider,
+                model=model,
+                allowed=allowed,
+                available=available,
+                supported=supported,
+                brokered=brokered,
+                credential=credential,
+                errors=errors,
+            )
+        )
+
+    effective_domains = {
+        name: list(resolution.effective) for name, resolution in effective.items()
+    }
+    material = {
+        "schema_version": 1,
+        "project_id": str(resolved_project_id) if resolved_project_id else None,
+        "prefs": prefs,
+        "locks": locked_keys(org_policy, project_policy),
+        "domains": effective_domains,
+        "stages": [decision.model_dump(mode="json") for decision in decisions],
+    }
+    decision_id = hashlib.sha256(
+        json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:24]
+    return PreflightResponse(
+        decision_id=decision_id,
+        project_id=resolved_project_id,
+        ready=all(not decision.errors for decision in decisions),
+        prefs=prefs,
+        locks=material["locks"],
+        domains=effective_domains,
+        stages=decisions,
     )

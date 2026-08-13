@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 
-const events = require('@ai-fleet/shared/messaging/events');
+const events = require('@ai-fleet/shared-core/messaging/events');
 const sse = require('./sse');
 
 function makeReqRes(query) {

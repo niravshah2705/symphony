@@ -61,6 +61,15 @@ function extractSourceJob(job) {
   };
 }
 
+/** Preserve source scaling while applying an explicit per-service maximum. */
+function mergeServiceScaling(sourceScaling, maxInstanceCount) {
+  return {
+    minInstanceCount: 0,
+    ...(sourceScaling || {}),
+    ...(maxInstanceCount != null ? { maxInstanceCount } : {}),
+  };
+}
+
 function toEnvList(obj) {
   return Object.entries(obj || {}).map(([name, value]) => ({ name, value: String(value) }));
 }
@@ -103,6 +112,7 @@ module.exports = {
   extractContainers,
   extractSourceService,
   extractSourceJob,
+  mergeServiceScaling,
   toEnvList,
   cloneContainers,
 };

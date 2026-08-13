@@ -16,9 +16,10 @@
     "test": "node --test"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "dependencies": {
-    "@ai-fleet/shared": "*"
+    "@ai-fleet/shared": "*",
+    "google-auth-library": "^11.0.1"
   }
 }

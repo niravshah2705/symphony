@@ -10,6 +10,7 @@ const tools = require('./tools');
 const { withAnnotations, withResources } = require('./trace-annotations');
 const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = require('./runtimes');
 const { applyPolicyToWorkflow } = require('./settings-policy');
+const { resolveHarnessForStage } = require('./policy-runtime');
 const codingWorkflow = require('./workflows/coding.workflow');
 
 /**
@@ -96,6 +97,11 @@ function activeRepositoryBranch(initialBranch, repositoryBroker) {
   return (info && info.branch) || initialBranch;
 }
 
+function activeRepositoryArtifactReceipt(repositoryBroker) {
+  if (!repositoryBroker) return null;
+  return repositoryBroker.artifactReceipt();
+}
+
 /**
  * Resolve a planned project's repository without letting a business-scoped
  * namespace inherit a later global provider change. Missing provider metadata
@@ -160,7 +166,11 @@ async function executeCodingRuntime({
   const effectiveWorkflow = applyPolicyToWorkflow(codingWorkflow, effectivePolicy, {
     toolDomains: tools.TOOL_DOMAIN,
   });
-  const requestedRuntime = normalizeAgentRuntime(keys.agentRuntime || 'deepagent', { strict: true });
+  const selectedHarness = resolveHarnessForStage('coding', {
+    requestSelection: keys.requestHarnesses && keys.requestHarnesses.code,
+    prefs: keys,
+  });
+  const requestedRuntime = normalizeAgentRuntime(selectedHarness, { strict: true });
   const runtime = effectiveAgentRuntime(requestedRuntime, llm, {
     strict: true,
     workflow: codingWorkflow.name,
@@ -337,6 +347,7 @@ async function runPlannedCoderLocal({
   repositoryToken,
   repositoryProvider,
   repositoryUrl,
+  pipelineCommandId,
   dependencies = [],
   onStep,
 }) {
@@ -383,6 +394,12 @@ async function runPlannedCoderLocal({
     onStep: step,
   });
   try {
+    if (repositoryBroker && pipelineCommandId) {
+      repositoryBroker.bindArtifactContext({
+        commandId: pipelineCommandId,
+        workItemId: issue.id || issue.identifier,
+      });
+    }
     const execution = await executeCodingRuntime({
       llm,
       keys,
@@ -413,8 +430,16 @@ async function runPlannedCoderLocal({
     if (repositoryError) throw repositoryError;
 
     const finalBranch = activeRepositoryBranch(branch, repositoryBroker);
+    const artifactReceipt = activeRepositoryArtifactReceipt(repositoryBroker);
     step(`Planned coder finished on ${finalBranch} (${execution.messages.length} messages, monorepo ${slug}).`);
-    return { workDir, branch: finalBranch, stackedOn: stackedOn || null, ...execution, traced };
+    return {
+      ...execution,
+      workDir,
+      branch: finalBranch,
+      stackedOn: stackedOn || null,
+      artifactReceipt,
+      traced,
+    };
   } finally {
     if (repositoryBroker) repositoryBroker.dispose();
   }
@@ -450,6 +475,7 @@ module.exports = {
   isCoderLlmUsable,
   assertOpenSweRepositoryProvider,
   activeRepositoryBranch,
+  activeRepositoryArtifactReceipt,
   resolvePlannedRepository,
   executeCodingRuntime,
   buildTicketPrompt,

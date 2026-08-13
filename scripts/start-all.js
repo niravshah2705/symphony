@@ -18,17 +18,29 @@
  */
 
 const path = require('path');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const watch = process.argv.includes('--watch');
+// Direct-mode services have no Cloud Run IAM edge. Give the complete local
+// fleet one ephemeral S2S credential when the operator did not configure one,
+// preserving zero-config `npm start` without making internal routes public.
+const localInternalToken = String(process.env.INTERNAL_API_TOKEN || '').trim()
+  || crypto.randomBytes(32).toString('base64url');
 
 // Start the agent services first so the gateway's proxy targets are likely up
 // by the time the first browser request arrives (connections are lazy anyway).
+const pipelineEnabled = String(process.env.PIPELINE_ORCHESTRATOR_ENABLED || '').trim().toLowerCase() === 'true';
 const SERVICES = [
   { name: 'email', entry: 'services/email/src/index.js' },
   { name: 'planner', entry: 'services/planner/src/index.js' },
   { name: 'coder', entry: 'services/coder/src/index.js' },
+  ...(pipelineEnabled ? [
+    { name: 'tester', entry: 'services/tester/src/index.js' },
+    { name: 'deployer', entry: 'services/deployer/src/index.js' },
+    { name: 'orchestrator', entry: 'services/orchestrator/src/index.js' },
+  ] : []),
   { name: 'gateway', entry: 'services/gateway/src/index.js' },
 ];
 
@@ -41,7 +53,7 @@ let shuttingDown = false;
  * processes; the gateway reads its own in-process bus (no self-sink).
  */
 function envFor(name) {
-  const env = { ...process.env };
+  const env = { ...process.env, INTERNAL_API_TOKEN: localInternalToken };
   if (String(env.EVENTS_BACKEND || 'memory').toLowerCase() === 'firestore') return env;
   const gatewayPort = Number(env.PORT) || 4000;
   const sink = `http://localhost:${gatewayPort}/internal/events`;
