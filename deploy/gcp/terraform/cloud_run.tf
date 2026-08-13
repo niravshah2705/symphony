@@ -207,10 +207,6 @@ resource "google_cloud_run_v2_service" "gateway" {
       condition     = var.min_instances <= var.max_instances
       error_message = "min_instances must be less than or equal to max_instances."
     }
-    precondition {
-      condition     = var.container_concurrency == 1 || try(tonumber(var.cloud_run_service_cpu) >= 1, false)
-      error_message = "container_concurrency values above 1 require cloud_run_service_cpu to be at least 1 vCPU."
-    }
   }
 
   template {
@@ -313,13 +309,6 @@ resource "google_cloud_run_v2_service" "planner" {
   ingress             = var.internal_ingress # IAM-gated; see note above
   labels              = merge(local.common_labels, { component = "planner" })
   deletion_protection = false
-
-  lifecycle {
-    precondition {
-      condition     = !local.proxy_enabled || var.container_concurrency == 1 || try(tonumber(local.agent_proxy_cpu) >= 1, false)
-      error_message = "container_concurrency values above 1 require cloud_run_proxy_cpu to be at least 1 vCPU when the egress proxy is enabled."
-    }
-  }
 
   template {
     service_account = google_service_account.planner.email
