@@ -289,6 +289,7 @@ textarea:focus-visible, a:focus-visible, [tabindex]:focus-visible {
   align-items: center; padding: 5px 8px; border: 1px solid transparent; border-radius: 8px;
   color: var(--muted); transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
+.sidebar-nav a[hidden] { display: none; }
 .sidebar-nav a:hover { background: color-mix(in srgb, var(--panel) 55%, transparent); color: var(--text); }
 .sidebar-nav a.active {
   border-color: color-mix(in srgb, var(--border) 82%, transparent); background: var(--panel);

@@ -9,7 +9,7 @@ only mirrors it to hide UI).
 
 | Tier | How you get here | What you can do |
 |---|---|---|
-| **Anonymous** | Just open the app — no sign-in | Read-only Agent workspace + **basic RAG** (lexical doc/memory search) |
+| **Anonymous** | Just open the app — no sign-in | Read-only Agent workspace + **basic RAG** over reviewed documentation |
 | **Authenticated (no org)** | Sign in with Google (One Tap) or Microsoft | Everything anonymous can do **plus** create/manage **personal projects** |
 | **Organization member** | Create or be added to an organization | Org projects, members, tasks, tags, org RBAC (ORG_ADMIN / MEMBER) |
 
@@ -28,19 +28,17 @@ backs the omnibox:
 - `POST /api/agent/knowledge-search` — lexical search over the workspace
   README/docs corpus (bounded; returns relative paths + snippets, never secrets
   or absolute paths).
-- `POST /api/agent/memory-search` — typed memory recall blended with reviewed
-  docs.
+This is a **side-effect-free read**, so the gateway authorizes it at
+`workspace:read` even though it is `POST` (a per-path carve-out mounted ahead of
+the authenticated catch-all `/api/agent` proxy).
 
-Both are **side-effect-free reads**, so the gateway authorizes them at
-`workspace:read` even though they are `POST` (a per-path carve-out mounted ahead
-of the catch-all `/api/agent` proxy, which otherwise maps `POST → write`).
-
-**Not** opened to anonymous: `POST /api/agent/message` (can trigger LLM
-enrichment), `POST /api/agent/memory` (write), `POST /api/agent/enqueue`,
-`/api/coder/*`, and every planning/insights/settings/org route. For anonymous
-users the SPA classifies omnibox intent **client-side** (`omnibox-router.mjs`) and
-calls the two read endpoints directly, so it never depends on the write-gated
-`/message` route.
+**Not** opened to anonymous: tenant memory reads/writes, conversation history,
+workspace status/jobs/SSE, `POST /api/agent/message` (can trigger LLM
+enrichment), `POST /api/agent/enqueue`, `/api/coder/*`, and every
+planning/insights/settings/org route. For anonymous users the SPA classifies
+omnibox intent **client-side** (`omnibox-router.mjs`) and calls only the reviewed
+documentation endpoint, so it never depends on the authenticated `/agent`
+surface.
 
 > There is no semantic/vector RAG in the repo — retrieval is lexical. Embeddings
 > RAG would be net-new and tenant-scoped per the cross-tenant-isolation rules.

@@ -1,7 +1,11 @@
 // Runtime deployment configuration is a module dependency, so it executes
 // before this client reads the API base without blocking the HTML parser.
 import '/config.js';
-import { shouldRetryAuth, createSingleFlight } from './auth-retry.mjs';
+import {
+  shouldNotifyAuthenticationRequired,
+  shouldRetryAuth,
+  createSingleFlight,
+} from './auth-retry.mjs';
 
 // Thin fetch wrapper around the backend API.
 
@@ -157,7 +161,12 @@ async function request(path, options = {}) {
     // Connected tools can also return 401. Lock the whole workspace only when
     // the gateway identified an application-auth failure (or while confirming
     // the current application identity), not for an unrelated provider key.
-    if (shouldRetryAuth({ status: res.status, code: error.code, path })) {
+    if (shouldNotifyAuthenticationRequired({
+      status: res.status,
+      code: error.code,
+      path,
+      hasAccessTokenProvider: Boolean(accessTokenProvider),
+    })) {
       notifyAuthenticationRequired(error);
     }
     throw error;
@@ -383,8 +392,7 @@ export const api = {
     buildUrl: (token) => `${getApiBase()}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token)}${requestContextQuerySuffix()}`,
     onEvent,
   }),
-  // Short-lived token authorizing the GLOBAL workspace EventSource. workspace:read,
-  // so the public read-only home can subscribe.
+  // Short-lived token authorizing the authenticated workspace EventSource.
   getWorkspaceStreamToken: () => request('/agent/workspace-stream-token'),
   // Open the workspace SSE stream — typed status/jobs/coder/gate snapshots that
   // replace the old 5s polling loops. Returns a { close() } controller; onEvent

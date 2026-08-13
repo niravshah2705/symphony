@@ -33,6 +33,7 @@ export const MENU_PERMISSIONS = Object.freeze({
 
 // Where an unauthenticated visitor (or a signed-out session) lands.
 export const DEFAULT_PUBLIC_ROUTE = 'agent';
+const AUTHENTICATED_ONLY_ROUTES = new Set(['agent-jobs']);
 
 const LEVEL_RANK = { read: 1, write: 2 };
 
@@ -42,7 +43,9 @@ export function permitted(permissions, domain, level) {
   return (LEVEL_RANK[have] || 0) >= (LEVEL_RANK[level] || 0);
 }
 
-export function canAccessRoute(permissions, route) {
+export function canAccessRoute(session, route) {
+  if (AUTHENTICATED_ONLY_ROUTES.has(route) && !session?.authenticated) return false;
+  const permissions = session?.permissions || {};
   const need = MENU_PERMISSIONS[route];
   if (!need) return true; // routes without an entry are not permission-gated
   return permitted(permissions, need.domain, need.level);
