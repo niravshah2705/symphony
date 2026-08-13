@@ -16,9 +16,10 @@ const { extractSourceService, extractSourceJob, cloneContainers } = require('./c
  * teardowns converge.
  *
  * "Reuse original builds": createService/createJob copy the image AND the secret
- * env blocks, resource limits, execution environment, concurrency, and skills
- * volumes from the live SHARED source service/job, so a tenant runtime is the
- * same build with the same secrets — only its per-tenant plain env differs.
+ * env blocks, resource limits, execution environment, scaling, concurrency,
+ * and skills volumes from the live SHARED source service/job, so a tenant
+ * runtime is the same build with the same secrets — only its per-tenant plain
+ * env differs.
  */
 
 const ALREADY_EXISTS = 6; // gRPC ALREADY_EXISTS
@@ -107,7 +108,9 @@ function createGcpClients({ projectId, region }) {
         labels: spec.labels,
         template: {
           serviceAccount: spec.serviceAccount,
-          scaling: { minInstanceCount: 0 },
+          // Preserve the source service's parameterized min/max scaling profile
+          // when cloning a dedicated tenant stack.
+          scaling: src.scaling,
           executionEnvironment: src.executionEnvironment,
           maxInstanceRequestConcurrency: src.maxInstanceRequestConcurrency,
           volumes: src.volumes,

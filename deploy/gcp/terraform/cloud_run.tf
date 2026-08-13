@@ -2,8 +2,9 @@
 # Cloud Run — gateway (public), planner (internal), coder-control (internal),
 # and the coder-worker Job.
 # -----------------------------------------------------------------------------
-# All services scale to zero (min_instance_count = 0) and idle CPU is throttled,
-# so an idle deployment costs nothing.
+# By default all services scale from zero to one instance, accept up to ten
+# concurrent requests per instance, and throttle idle CPU. The defaults remain
+# configurable through the scaling/concurrency variables in variables.tf.
 
 locals {
   # Skills registry (skills.tf). Terraform CREATES the bucket when skills_enabled.
@@ -201,13 +202,24 @@ resource "google_cloud_run_v2_service" "gateway" {
   # stateless per-service; state lives in Firestore, not the Cloud Run resource.
   deletion_protection = false
 
+  lifecycle {
+    precondition {
+      condition     = var.min_instances <= var.max_instances
+      error_message = "min_instances must be less than or equal to max_instances."
+    }
+    precondition {
+      condition     = var.container_concurrency == 1 || try(tonumber(var.cloud_run_service_cpu) >= 1, false)
+      error_message = "container_concurrency values above 1 require cloud_run_service_cpu to be at least 1 vCPU."
+    }
+  }
+
   template {
     service_account                  = google_service_account.gateway.email
     execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
-    max_instance_request_concurrency = 1
+    max_instance_request_concurrency = var.container_concurrency
 
     scaling {
-      min_instance_count = 0
+      min_instance_count = var.min_instances
       max_instance_count = var.max_instances
     }
 
@@ -302,16 +314,23 @@ resource "google_cloud_run_v2_service" "planner" {
   labels              = merge(local.common_labels, { component = "planner" })
   deletion_protection = false
 
+  lifecycle {
+    precondition {
+      condition     = !local.proxy_enabled || var.container_concurrency == 1 || try(tonumber(local.agent_proxy_cpu) >= 1, false)
+      error_message = "container_concurrency values above 1 require cloud_run_proxy_cpu to be at least 1 vCPU when the egress proxy is enabled."
+    }
+  }
+
   template {
     service_account = google_service_account.planner.email
 
     # Fractional CPU requires gen1. The optional gcsfuse mount requires gen2,
     # in which case local.agent_*_cpu also raises both containers to 1 vCPU.
     execution_environment            = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : "EXECUTION_ENVIRONMENT_GEN1"
-    max_instance_request_concurrency = local.skills_mount_enabled ? null : 1
+    max_instance_request_concurrency = var.container_concurrency
 
     scaling {
-      min_instance_count = 0
+      min_instance_count = var.min_instances
       max_instance_count = var.max_instances
     }
 
@@ -442,10 +461,10 @@ resource "google_cloud_run_v2_service" "coder_control" {
     # Fractional CPU requires gen1. The optional gcsfuse mount requires gen2,
     # in which case local.agent_*_cpu also raises both containers to 1 vCPU.
     execution_environment            = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : "EXECUTION_ENVIRONMENT_GEN1"
-    max_instance_request_concurrency = local.skills_mount_enabled ? null : 1
+    max_instance_request_concurrency = var.container_concurrency
 
     scaling {
-      min_instance_count = 0
+      min_instance_count = var.min_instances
       max_instance_count = var.max_instances
     }
 
