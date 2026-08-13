@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseFrame, drainFrames, formatEvent } = require('./stream');
+const { follow, parseFrame, drainFrames, formatEvent } = require('./stream');
 
 test('parseFrame extracts a JSON event from a data frame', () => {
   const event = parseFrame('data: {"level":"info","message":"hello"}');
@@ -33,4 +33,24 @@ test('drainFrames splits complete frames and keeps the remainder buffered', () =
 test('formatEvent renders level + message', () => {
   assert.equal(formatEvent({ level: 'warn', message: 'careful' }), '  [WARN] careful');
   assert.equal(formatEvent({ message: 'default level' }), '  [INFO] default level');
+});
+
+test('follow fails closed when token minting returns no usable token', async () => {
+  let streamRequests = 0;
+  const client = {
+    base: 'https://gateway.example',
+    headers: () => ({}),
+    request: async () => ({ token: '   ' }),
+  };
+
+  await assert.rejects(
+    follow(client, 'conversation-1', {
+      fetchImpl: async () => {
+        streamRequests += 1;
+        throw new Error('the SSE request must not be opened');
+      },
+    }),
+    (error) => error.code === 'stream_token_missing' && error.message === 'Stream token is unavailable.'
+  );
+  assert.equal(streamRequests, 0);
 });

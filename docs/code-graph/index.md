@@ -12,7 +12,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 |-----------|------|------|
 | agent-model | 1595 | [agent-model.md](agent-model.md) |
 | core-org | 388 | [core-org.md](core-org.md) |
-| e2e-json | 62 | [e2e-json.md](e2e-json.md) |
+| e2e-json | 69 | [e2e-json.md](e2e-json.md) |
 | gcp-version | 12 | [gcp-version.md](gcp-version.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
 | registry-plugin | 392 | [registry-plugin.md](registry-plugin.md) |
@@ -24,5 +24,5 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-context | 65 | [src-context-2.md](src-context-2.md) |
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
 | src-test:build | 41 | [src-test-build.md](src-test-build.md) |
-| src-token | 93 | [src-token.md](src-token.md) |
-| views-render | 667 | [views-render.md](views-render.md) |
+| src-token | 94 | [src-token.md](src-token.md) |
+| views-render | 669 | [views-render.md](views-render.md) |

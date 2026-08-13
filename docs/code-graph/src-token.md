@@ -6,8 +6,8 @@
 
 Directory-based community: packages/cli
 
-- **Size**: 93 nodes
-- **Cohesion**: 0.0825
+- **Size**: 94 nodes
+- **Cohesion**: 0.0816
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/cli
 | list | Function | ./packages/cli/src/commands/role.js | 16-21 |
 | assume | Function | ./packages/cli/src/commands/role.js | 23-28 |
 
-*... and 43 more members.*
+*... and 44 more members.*
 
 ## Execution Flows
 
@@ -79,7 +79,7 @@ Directory-based community: packages/cli
 
 ### Outgoing
 
-- `equal` (42 edge(s))
+- `equal` (43 edge(s))
 - `kv` (36 edge(s))
 - `request` (32 edge(s))
 - `heading` (16 edge(s))
@@ -97,7 +97,7 @@ Directory-based community: packages/cli
 
 ### Incoming
 
-- `equal` (42 edge(s))
+- `equal` (43 edge(s))
 - `./packages/cli/src/client.test.js` (20 edge(s))
 - `./packages/cli/src/output.js` (16 edge(s))
 - `./packages/cli/src/credentials.js` (14 edge(s))
@@ -109,6 +109,6 @@ Directory-based community: packages/cli
 - `./packages/cli/src/commands/auth.js` (8 edge(s))
 - `createClient` (7 edge(s))
 - `request` (7 edge(s))
+- `./packages/cli/src/stream.test.js` (7 edge(s))
 - `./packages/cli/src/commands/role.js` (6 edge(s))
 - `./packages/cli/src/commands/run.js` (6 edge(s))
-- `./packages/cli/src/credentials.test.js` (6 edge(s))

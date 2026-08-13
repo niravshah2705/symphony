@@ -386,14 +386,15 @@ test('organization members can inspect workflows but cannot mutate the local cop
   await expectNoWorkflowBackendCalls(recording);
 });
 
-test('an authenticated user without an organization gets a contextual empty state', async ({ page }) => {
+test('an authenticated user without an organization is routed to organization onboarding', async ({ page }) => {
   const recording = await installDesignerStubs(page, { organizations: [] });
 
-  await openDesigner(page);
+  const response = await page.goto('/#/workflows', { waitUntil: 'domcontentloaded' });
+  expect(response && response.ok()).toBeTruthy();
 
-  await expect(page.getByRole('heading', { name: 'Select an organization to design workflows' })).toBeVisible();
-  await expect(page.getByText('Workflow drafts are isolated by organization.')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open Organization', exact: true })).toHaveAttribute('href', '#/organization');
+  await expect(page).toHaveURL(/#\/organization$/);
+  await expect(page.getByRole('heading', { name: 'Organization & projects' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create an organization' })).toBeVisible();
   await expect(page.locator('.workflow-designer')).toHaveCount(0);
 
   await expectNoWorkflowBackendCalls(recording);
