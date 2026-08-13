@@ -21,12 +21,17 @@ const { executeClaude, claudePermissionGuard } = require('./claude');
 require('./antigravity');
 void executeCodex; void executeClaude; // referenced for clarity; registered via side effect
 
+// Bootstrap is now complete. No later registration may make the live registry
+// disagree with the legacy compatibility snapshots constructed below.
+registry.seal();
+const definitions = registry.list();
+
 /**
  * Back-compat shape of the old frozen RUNTIMES map (id -> { id, label,
  * packageName }), derived from the live registry so it never drifts.
  */
 const RUNTIMES = Object.freeze(Object.fromEntries(
-  registry.list().map((definition) => [definition.id, Object.freeze({
+  definitions.map((definition) => [definition.id, Object.freeze({
     id: definition.id,
     label: definition.label,
     packageName: definition.packageName,
@@ -35,7 +40,7 @@ const RUNTIMES = Object.freeze(Object.fromEntries(
 
 /** Back-compat id -> friendly harness name map. */
 const HARNESS_LABELS = Object.freeze(Object.fromEntries(
-  registry.list().map((definition) => [definition.id, definition.harnessName])
+  definitions.map((definition) => [definition.id, definition.harnessName])
 ));
 
 module.exports = {

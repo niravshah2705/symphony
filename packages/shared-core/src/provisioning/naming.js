@@ -34,11 +34,30 @@ function names(slug) {
     gateway: `gw-${slug}`,
     planner: `pl-${slug}`,
     coder: `cc-${slug}`, // coder-control service
+    orchestrator: `po-${slug}`,
+    tester: `pt-${slug}`,
+    deployer: `pd-${slug}`,
     worker: `cw-${slug}`, // coder-worker Cloud Run Job
     plannerTopic: `planner-${slug}`,
     coderTopic: `coder-${slug}`,
     plannerPushSub: `planner-${slug}-push`,
     coderPushSub: `coder-${slug}-push`,
+    pipelinePlanTopic: `pipeline-plan-${slug}`,
+    pipelineCodeTopic: `pipeline-code-${slug}`,
+    pipelineTestTopic: `pipeline-test-${slug}`,
+    pipelineDeployTopic: `pipeline-deploy-${slug}`,
+    pipelinePlanResultsTopic: `pipeline-plan-results-${slug}`,
+    pipelineCodeResultsTopic: `pipeline-code-results-${slug}`,
+    pipelineTestResultsTopic: `pipeline-test-results-${slug}`,
+    pipelineDeployResultsTopic: `pipeline-deploy-results-${slug}`,
+    pipelinePlanPushSub: `pipeline-plan-${slug}-push`,
+    pipelineCodePushSub: `pipeline-code-${slug}-push`,
+    pipelineTestPushSub: `pipeline-test-${slug}-push`,
+    pipelineDeployPushSub: `pipeline-deploy-${slug}-push`,
+    pipelinePlanResultsPushSub: `pipeline-plan-results-${slug}-push`,
+    pipelineCodeResultsPushSub: `pipeline-code-results-${slug}-push`,
+    pipelineTestResultsPushSub: `pipeline-test-results-${slug}-push`,
+    pipelineDeployResultsPushSub: `pipeline-deploy-results-${slug}-push`,
     plannerTick: `planner-tick-${slug}`,
     coderTick: `coder-tick-${slug}`,
   };
@@ -56,6 +75,9 @@ function urls(slug, { projectNumber, region }) {
     gateway: `https://${n.gateway}-${suffix}`,
     planner: `https://${n.planner}-${suffix}`,
     coder: `https://${n.coder}-${suffix}`,
+    orchestrator: `https://${n.orchestrator}-${suffix}`,
+    tester: `https://${n.tester}-${suffix}`,
+    deployer: `https://${n.deployer}-${suffix}`,
   };
 }
 

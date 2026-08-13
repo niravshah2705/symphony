@@ -8,6 +8,7 @@
 
 module.exports = {
   auth: require('./auth'),
+  admin: require('./admin'),
   status: require('./status'),
   business: require('./business'),
   role: require('./role'),

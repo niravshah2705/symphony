@@ -8,10 +8,17 @@ variables. Nothing GCP-specific is required for local development.
 - **SPA** → static files on a **GCS bucket** (free-tier hosting). The SPA calls
   the gateway API cross-origin; `public/config.js` carries the gateway URL.
 - **gateway** → public **Cloud Run** service (API-only, scale-to-zero). Verifies
-  the **Firebase ID token** on every request, publishes planner/coder requests to
-  **Pub/Sub**, and serves **SSE** fed by **Firestore** `onSnapshot`.
+  the **Firebase ID token** on every request, performs EULA/billing/user-scoped
+  pipeline preflight, and serves **SSE** fed by **Firestore** `onSnapshot`.
+- **orchestrator** → internal Cloud Run control plane. It imports only
+  `@ai-fleet/shared-core` + LangGraph, persists PipelineRun/StageRun state and a
+  Firestore checkpointer, and publishes dedicated per-stage commands.
 - **planner** / **coder-control** → internal Cloud Run services (scale-to-zero),
   woken by Pub/Sub push + Cloud Scheduler ticks.
+- **tester** / **deployer** → internal, scale-to-zero stage services. Their
+  agent containers use egress-proxy sidecars and never receive raw provider,
+  tracker, repository, or CI credentials. The deployer can invoke only
+  repository-allowlisted CI/CD after server policy/approval gates.
 - **coder-worker** → a Cloud Run **Job** (one ticket per run, up to 24h) launched
   by coder-control.
 - **Firestore** replaces `data/store.json` and relays SSE events. **Secret
@@ -31,11 +38,54 @@ in-process and worker events reach the gateway's SSE via the local collector
 
 Set the env vars documented in `.env.example` (GCP section) on each service:
 `STORE_BACKEND=firestore`, `MESSAGING_MODE=pubsub`, `EVENTS_BACKEND=firestore`,
-`AUTH_MODE=firebase`, project/region, topic names, push audience + SA, and the
+`AUTH_MODE=firebase`, project/region, dedicated pipeline topic names, push audience + SA, and the
 gateway's `SPA_ORIGIN` / `API_BASE_URL` / `STREAM_TOKEN_SECRET`. The public
 Firebase web config (`FIREBASE_API_KEY` / `FIREBASE_AUTH_DOMAIN`) is injected by
 Terraform from the managed web app — no manual key needed; `FIREBASE_PROJECT_ID`
 defaults to the project id, and `FIREBASE_ALLOWED_DOMAIN` is optional.
+
+### Durable pipeline prerequisites
+
+Production planner, coder, tester, and deployer revisions must set
+`PIPELINE_STAGE_STORE_BACKEND=firestore`. Terraform does this when the pipeline
+rollout is enabled. A worker transactionally claims each `StageCommandV1`
+idempotency key and stores the final `StageResultV1` before publication. A
+redelivery after restart therefore replays the stored result; an expired lease
+is recorded as a terminal unknown outcome instead of risking duplicate model,
+repository, or deployment side effects.
+
+The tester image compiles and installs `ai-fleet-network-sandbox`, a
+capability-free seccomp launcher used for every repository-native command. It
+blocks network and metadata-server sockets while retaining local Unix-socket
+IPC. Do not remove the launcher, `libseccomp`, or the production
+`isolateNetwork` wiring: the tester app and credential sidecar necessarily share
+one Cloud Run service identity, so this fail-closed subprocess boundary prevents
+repository tests from minting workload credentials.
+
+The pipeline uses four command topics and four result topics. Each service
+account can publish only its own result topic (`planner → plan`, `coder → code`,
+`tester → test`, `deployer → deploy`), and each result subscription pushes to
+the matching `/pubsub/pipeline-stage-results/{stage}` route. Do not collapse
+these into a shared result topic: the split is the capability boundary that
+prevents a compromised earlier-stage service from forging later-stage results.
+
+The shared agent proxy can resolve only platform-managed credentials because it
+is not pinned to one organization. Gateway admission therefore rejects a
+customer-selected provider on the shared stack. Customer credentials are
+supported by a dedicated stack only, where `FLEET_ORG_ID` matches the request
+organization and the sidecar carries the corresponding `PROXY_ORG_ID`.
+
+For a platform-managed hosted LLM, add its environment name and Secret Manager
+secret id to `managed_provider_secrets`, and create an enabled secret version
+before applying Terraform. The required names are `GEMINI_API_KEY` for
+Gemini/Antigravity, `HUGGINGFACE_API_KEY` for Hugging Face,
+`ANTHROPIC_API_KEY` for Claude key mode, and `OPENAI_API_KEY` for OpenAI/Codex
+API-key mode. The default map contains only Linear and GitHub credentials, so a
+hosted model is intentionally not ready until its LLM secret is configured.
+Mount managed keys on the settings service only—never on an agent app container.
+`CODEX_BACKEND=chatgpt` does not accept `OPENAI_API_KEY`; it requires an
+organization-scoped imported Codex token bundle and therefore a matching
+dedicated stack. To use a platform-managed OpenAI key, set `CODEX_BACKEND=api`.
 
 ### Deploy — one-shot script (recommended)
 
@@ -179,6 +229,9 @@ permission domains (`packages/shared/src/authz.js`):
   request (Google's public keys) and fails closed on a missing/invalid token.
 - Pub/Sub push and Cloud Scheduler calls carry **OIDC tokens** verified on
   `/pubsub/*` (audience + expected SA).
+- The durable pipeline is fail-safe off until
+  `PIPELINE_ORCHESTRATOR_ENABLED=true`; deployment has the separate
+  `PIPELINE_DEPLOYMENT_ENABLED=false` default and production approval gate.
 - **CORS** reflects only the exact `SPA_ORIGIN` (never `*` with credentials).
 - Secrets live in **Secret Manager**, never in images or committed files
   (`data/` stays gitignored).

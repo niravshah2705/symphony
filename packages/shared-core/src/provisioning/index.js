@@ -29,6 +29,12 @@ function tolerate(codes, err) {
   throw err;
 }
 
+function iamMember(value) {
+  const member = String(value || '').trim();
+  if (!member) return '';
+  return member.includes(':') ? member : `serviceAccount:${member}`;
+}
+
 let runClients = null;
 function getRun() {
   if (!runClients) {
@@ -102,12 +108,24 @@ function createGcpClients({ projectId, region }) {
     },
     async createService(spec) {
       const src = spec.sourceName ? await sourceService(spec.sourceName) : { containers: [] };
+      if (spec.requireSecretFreePrimary && src.containers[0] && src.containers[0].secretEnv.length) {
+        throw new Error(`${spec.name} source app container contains secret env; pipeline agents require sidecar-only credentials`);
+      }
+      if (spec.requireEgressProxy && src.containers.length < 2) {
+        throw new Error(`${spec.name} source service has no egress-proxy sidecar`);
+      }
       const service = {
         ingress: spec.ingress,
         labels: spec.labels,
         template: {
           serviceAccount: spec.serviceAccount,
-          scaling: { minInstanceCount: 0 },
+          scaling: {
+            minInstanceCount: 0,
+            ...(spec.maxInstanceCount ? { maxInstanceCount: spec.maxInstanceCount } : {}),
+          },
+          ...(spec.requestTimeoutSeconds
+            ? { timeout: { seconds: spec.requestTimeoutSeconds } }
+            : {}),
           executionEnvironment: src.executionEnvironment,
           maxInstanceRequestConcurrency: src.maxInstanceRequestConcurrency,
           volumes: src.volumes,
@@ -149,10 +167,20 @@ function createGcpClients({ projectId, region }) {
     async createTopic(topic) {
       const name = typeof topic === 'string' ? topic : topic.name;
       const labels = typeof topic === 'string' ? undefined : topic.labels;
+      const handle = getPubSub().topic(name);
       try {
         await getPubSub().createTopic({ name, labels });
       } catch (err) {
         tolerate([ALREADY_EXISTS], err);
+      }
+      const publishers = typeof topic === 'string' ? [] : (topic.publishers || []);
+      if (publishers.length) {
+        await handle.iam.setPolicy({
+          bindings: [{
+            role: 'roles/pubsub.publisher',
+            members: publishers.map(iamMember).filter(Boolean),
+          }],
+        });
       }
     },
     async createPushSubscription(spec) {
@@ -161,7 +189,7 @@ function createGcpClients({ projectId, region }) {
           pushEndpoint: spec.pushEndpoint,
           oidcToken: { serviceAccountEmail: spec.oidcServiceAccount, audience: spec.audience },
         },
-        ackDeadlineSeconds: 30,
+        ackDeadlineSeconds: spec.ackDeadlineSeconds || 30,
       };
       if (spec.labels) options.labels = spec.labels;
       if (spec.deadLetterTopic) {
@@ -174,6 +202,14 @@ function createGcpClients({ projectId, region }) {
         await getPubSub().topic(spec.topic).createSubscription(spec.name, options);
       } catch (err) {
         tolerate([ALREADY_EXISTS], err);
+      }
+      if (spec.deadLetterSubscriber) {
+        await getPubSub().subscription(spec.name).iam.setPolicy({
+          bindings: [{
+            role: 'roles/pubsub.subscriber',
+            members: [iamMember(spec.deadLetterSubscriber)].filter(Boolean),
+          }],
+        });
       }
     },
     async createSchedulerJob(spec) {

@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const { CONFIG } = require('../config');
 const log = require('../logger');
 
@@ -12,8 +13,8 @@ const log = require('../logger');
  * expected pusher service account) before acting on the push — never trust an
  * unauthenticated POST to /pubsub/*.
  *
- * In local/direct mode (MESSAGING_MODE !== 'pubsub') there is no token and no
- * metadata server, so `pushAuth` is a no-op — `npm start` needs no GCP.
+ * In local/direct mode there is no Google token or metadata server, so the
+ * shared internal token authenticates the same HTTP compatibility route.
  */
 
 let client = null;
@@ -54,13 +55,32 @@ async function verifyPushToken(req, { audience, allowedEmails } = {}) {
  */
 function pushAuth(opts = {}) {
   const enforce = CONFIG.MESSAGING_MODE === 'pubsub';
+  const internalToken = String(
+    Object.prototype.hasOwnProperty.call(opts, 'internalToken')
+      ? opts.internalToken
+      : process.env.INTERNAL_API_TOKEN || '',
+  ).trim();
   const audience = opts.audience || CONFIG.GCP.pushAudience || undefined;
   const allowedEmails = opts.allowedEmails
     || (CONFIG.GCP.pushServiceAccount ? [CONFIG.GCP.pushServiceAccount] : []);
   return async function verify(req, res, next) {
     if (!enforce) {
-      next();
-      return;
+      if (!internalToken) {
+        return res.status(503).json({
+          error: 'Direct push authentication is not configured.',
+          code: 'push_auth_unconfigured',
+        });
+      }
+      const supplied = String((req.get && req.get('x-internal-token')) || '');
+      const expectedBytes = Buffer.from(internalToken);
+      const suppliedBytes = Buffer.from(supplied);
+      if (
+        expectedBytes.length !== suppliedBytes.length
+        || !crypto.timingSafeEqual(expectedBytes, suppliedBytes)
+      ) {
+        return res.status(401).json({ error: 'Unauthorized', code: 'push_unauthorized' });
+      }
+      return next();
     }
     try {
       req.pushToken = await verifyPushToken(req, { audience, allowedEmails });

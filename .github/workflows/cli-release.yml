@@ -5,7 +5,7 @@ name: Release adlc CLI
 #   • run this workflow manually and pass the version.
 #
 # It tests, packs an npm tarball, builds a self-contained single-file bundle
-# (adlc.js — runs with just Node 18+, no `npm install`), writes SHA256SUMS, and
+# (adlc.js — runs with just Node 22+, no `npm install`), writes SHA256SUMS, and
 # publishes a GitHub Release with all three attached.
 #
 # Security posture (see the CI/CD checklist): no pull_request trigger, so no PR
@@ -33,7 +33,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "22"
 
 jobs:
   # 1. Gate the release on the CLI's own unit tests.
@@ -47,7 +47,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Unit tests (adlc CLI)
-        run: node --test packages/cli/src/
+        run: node --test "packages/cli/src/**/*.test.js"
 
   # 2. Package the artifacts and publish the GitHub Release.
   release:
@@ -110,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           npx --yes esbuild@0.24.2 packages/cli/bin/adlc.js \
-            --bundle --platform=node --target=node18 --format=cjs \
+            --bundle --platform=node --target=node22 --format=cjs \
             --outfile=dist/adlc.js
           chmod +x dist/adlc.js
           node dist/adlc.js --help >/dev/null && echo "bundle smoke test: ok"

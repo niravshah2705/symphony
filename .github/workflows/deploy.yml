@@ -58,6 +58,9 @@ jobs:
             gateway: ['services/gateway/**', 'deploy/gcp/Dockerfile.gateway']
             planner: ['services/planner/**', 'deploy/gcp/Dockerfile.planner']
             coder:   ['services/coder/**',   'deploy/gcp/Dockerfile.coder']
+            orchestrator: ['services/orchestrator/**', 'deploy/gcp/Dockerfile.orchestrator']
+            tester:       ['services/tester/**',       'deploy/gcp/Dockerfile.tester']
+            deployer:     ['services/deployer/**',     'deploy/gcp/Dockerfile.deployer']
             provisioner: ['services/provisioner/**', 'deploy/gcp/Dockerfile.provisioner']
             proxy:   ['services/proxy/**',   'deploy/gcp/Dockerfile.proxy']
             # A release-tooling change must publish the newly transformed SPA;
@@ -78,6 +81,10 @@ jobs:
           GATEWAY: ${{ steps.filter.outputs.gateway }}
           PLANNER: ${{ steps.filter.outputs.planner }}
           CODER: ${{ steps.filter.outputs.coder }}
+          ORCHESTRATOR: ${{ steps.filter.outputs.orchestrator }}
+          TESTER: ${{ steps.filter.outputs.tester }}
+          DEPLOYER: ${{ steps.filter.outputs.deployer }}
+          PIPELINE_ENABLED: ${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}
           PROVISIONER: ${{ steps.filter.outputs.provisioner }}
           PROXY: ${{ steps.filter.outputs.proxy }}
           SPA: ${{ steps.filter.outputs.spa }}
@@ -100,6 +107,9 @@ jobs:
           if [ "$all" = "true" ] || [ "$GATEWAY" = "true" ]; then push gateway gateway       deploy/gcp/Dockerfile.gateway . ; fi
           if [ "$all" = "true" ] || [ "$PLANNER" = "true" ]; then push planner planner       deploy/gcp/Dockerfile.planner . ; fi
           if [ "$all" = "true" ] || [ "$CODER"   = "true" ]; then push coder   coder-control deploy/gcp/Dockerfile.coder   . ; fi
+          if [ "$all" = "true" ] || [ "$ORCHESTRATOR" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push orchestrator pipeline-orchestrator deploy/gcp/Dockerfile.orchestrator . ; fi
+          if [ "$all" = "true" ] || [ "$TESTER" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push tester pipeline-tester deploy/gcp/Dockerfile.tester . ; fi
+          if [ "$all" = "true" ] || [ "$DEPLOYER" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push deployer pipeline-deployer deploy/gcp/Dockerfile.deployer . ; fi
           if [ "$all" = "true" ] || [ "$EMAIL"   = "true" ]; then push email   email-service deploy/gcp/Dockerfile.email   . ; fi
           # The provisioner is a Node service (rebuilds on shared/root/force too).
           # Its image is built even while provisioning is disabled so enabling is a
@@ -108,9 +118,9 @@ jobs:
           # The org service builds from its own directory (its Dockerfile expects
           # services/org as the build context).
           if [ "$FORCE_ALL" = "true" ] || [ "$ORG" = "true" ]; then push org org-service services/org/Dockerfile services/org ; fi
-          # The settings service is an independent Python app that builds from its
-          # own directory (its Dockerfile expects services/settings as the context).
-          if [ "$FORCE_ALL" = "true" ] || [ "$SETTINGS" = "true" ]; then push settings settings-service services/settings/Dockerfile services/settings ; fi
+          # Settings consumes the canonical shared-core harness catalog, so a
+          # shared/root dependency change must rebuild it from the repo root too.
+          if [ "$all" = "true" ] || [ "$SETTINGS" = "true" ]; then push settings settings-service services/settings/Dockerfile . ; fi
 
           spa=false
           if [ "$FORCE_ALL" = "true" ] || [ "$SPA" = "true" ]; then spa=true; fi
@@ -259,6 +269,8 @@ jobs:
         id: tags
         env:
           SERVICES: ${{ needs.changes.outputs.services }}
+          PIPELINE_ENABLED: ${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}
+          PROVISIONING_ENABLED: ${{ vars.PROVISIONING_ENABLED || 'false' }}
         run: |
           set -euo pipefail
           PROJECT="${{ vars.GCP_PROJECT_ID }}"
@@ -266,26 +278,71 @@ jobs:
           # A service that was rebuilt this run deploys at the new SHA; one that
           # was NOT rebuilt keeps whatever tag is live now (→ apply no-op for it).
           built() { printf '%s' "$SERVICES" | jq -e --arg id "$1" 'any(.[]; .id == $id)' >/dev/null; }
+          release_tag() { # <tag> <source-description>
+            if [[ ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Refusing non-immutable image tag from $2" >&2
+              return 1
+            fi
+            printf '%s\n' "$1"
+          }
           live_tag() {
-            gcloud run services describe "$1" --project "$PROJECT" --region "$REGION" \
-              --format='value(spec.template.spec.containers[0].image)' 2>/dev/null | sed 's#.*:##'
+            local image tag
+            image="$(gcloud run services describe "$1" --project "$PROJECT" --region "$REGION" \
+              --format='value(spec.template.spec.containers[0].image)')"
+            tag="${image##*:}"
+            if [ -z "$image" ] || [ -z "$tag" ] || [ "$tag" = "$image" ]; then
+              echo "Unable to resolve immutable live image tag for $1" >&2
+              return 1
+            fi
+            release_tag "$tag" "live Cloud Run service $1"
           }
           resolve() { # <plan-id> <cloud-run-service-name>
-            if built "$1"; then echo "$GITHUB_SHA"; else live_tag "$2"; fi
+            if built "$1"; then release_tag "$GITHUB_SHA" "current GitHub revision"; else live_tag "$2"; fi
+          }
+          resolve_optional() { # <plan-id> <cloud-run-service-name> <enabled>
+            if built "$1"; then
+              release_tag "$GITHUB_SHA" "current GitHub revision"
+              return
+            fi
+            case "$3" in
+              true) live_tag "$2" ;;
+              false)
+                # Terraform does not dereference this placeholder while the
+                # optional resource has count=0. Keep it syntactically and
+                # semantically equivalent to every other release tag anyway.
+                release_tag "$GITHUB_SHA" "disabled optional service $2"
+                ;;
+              *)
+                echo "Invalid enablement flag for optional service $2: $3" >&2
+                return 1
+                ;;
+            esac
+          }
+          write_tag() { # <output-name> <resolver> [resolver-args...]
+            local output_name="$1" tag
+            shift
+            if ! tag="$("$@")"; then
+              echo "Unable to resolve image tag output $output_name" >&2
+              return 1
+            fi
+            printf '%s=%s\n' "$output_name" "$tag"
           }
 
           {
-            echo "gateway=$(resolve gateway gateway)"
-            echo "planner=$(resolve planner planner)"
-            echo "coder=$(resolve coder coder-control)"
-            echo "provisioner=$(resolve provisioner provisioner)"
+            write_tag gateway resolve gateway gateway
+            write_tag planner resolve planner planner
+            write_tag coder resolve coder coder-control
+            write_tag orchestrator resolve_optional orchestrator pipeline-orchestrator "$PIPELINE_ENABLED"
+            write_tag tester resolve_optional tester pipeline-tester "$PIPELINE_ENABLED"
+            write_tag deployer resolve_optional deployer pipeline-deployer "$PIPELINE_ENABLED"
+            write_tag provisioner resolve_optional provisioner provisioner "$PROVISIONING_ENABLED"
             # The proxy is a SIDECAR (no standalone Cloud Run service to query a
             # live tag from), but it is built on every terraform-running deploy
             # (see the plan step), so it always resolves to the current SHA here.
-            echo "proxy=$(resolve proxy proxy)"
-            echo "org=$(resolve org org-service)"
-            echo "settings=$(resolve settings settings-service)"
-            echo "email=$(resolve email email-service)"
+            write_tag proxy resolve proxy proxy
+            write_tag org resolve org org-service
+            write_tag settings resolve settings settings-service
+            write_tag email resolve email email-service
           } >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
@@ -297,12 +354,16 @@ jobs:
 
       - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}
+        env:
+          # Sensitive Terraform input stays out of the command line and logs.
+          TF_VAR_internal_api_token: ${{ secrets.INTERNAL_API_TOKEN }}
         run: |
           set -euo pipefail
           PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
           GATEWAY_URL="https://${{ vars.GATEWAY_SERVICE_NAME || 'gateway' }}-${PROJECT_NUMBER}.${REGION}.run.app"
 
-          # Per-service tags: empty ones fall back to var.image_tag (locals.tf).
+          # Every service tag above is either this run's immutable SHA or a
+          # successfully resolved live tag. An unresolved tag aborts deployment.
           apply_args=(
             -var="project_id=${{ vars.GCP_PROJECT_ID }}"
             -var="region=${REGION}"
@@ -318,7 +379,10 @@ jobs:
             -var="skills_bucket_name=${{ vars.SKILLS_BUCKET }}"
             -var="skills_version=${{ vars.SKILLS_VERSION || 'v1' }}"
             -var="egress_proxy_enabled=true"
-            -var="internal_api_token=${{ secrets.INTERNAL_API_TOKEN }}"
+            -var="provisioning_enabled=${{ vars.PROVISIONING_ENABLED || 'false' }}"
+            -var="pipeline_orchestrator_enabled=${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}"
+            -var="pipeline_deployment_enabled=${{ vars.PIPELINE_DEPLOYMENT_ENABLED || 'false' }}"
+            -var="settings_operator_invoker=${{ vars.SETTINGS_OPERATOR_INVOKER }}"
             -var="email_smtp_host=${{ vars.EMAIL_SMTP_HOST }}"
             -var="email_smtp_port=${{ vars.EMAIL_SMTP_PORT || '587' }}"
             -var="email_smtp_secure=${{ vars.EMAIL_SMTP_SECURE || 'false' }}"
@@ -330,6 +394,9 @@ jobs:
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
           [ -n "${{ steps.tags.outputs.coder }}" ]   && apply_args+=(-var="coder_image_tag=${{ steps.tags.outputs.coder }}") || true
+          [ -n "${{ steps.tags.outputs.orchestrator }}" ] && apply_args+=(-var="orchestrator_image_tag=${{ steps.tags.outputs.orchestrator }}") || true
+          [ -n "${{ steps.tags.outputs.tester }}" ] && apply_args+=(-var="tester_image_tag=${{ steps.tags.outputs.tester }}") || true
+          [ -n "${{ steps.tags.outputs.deployer }}" ] && apply_args+=(-var="deployer_image_tag=${{ steps.tags.outputs.deployer }}") || true
           [ -n "${{ steps.tags.outputs.provisioner }}" ] && apply_args+=(-var="provisioner_image_tag=${{ steps.tags.outputs.provisioner }}") || true
           [ -n "${{ steps.tags.outputs.proxy }}" ] && apply_args+=(-var="proxy_image_tag=${{ steps.tags.outputs.proxy }}") || true
           [ -n "${{ steps.tags.outputs.org }}" ]     && apply_args+=(-var="org_image_tag=${{ steps.tags.outputs.org }}") || true

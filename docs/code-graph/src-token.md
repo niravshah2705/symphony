@@ -6,8 +6,8 @@
 
 Directory-based community: packages/cli
 
-- **Size**: 93 nodes
-- **Cohesion**: 0.0825
+- **Size**: 109 nodes
+- **Cohesion**: 0.0757
 - **Dominant Language**: javascript
 
 ## Members
@@ -25,51 +25,52 @@ Directory-based community: packages/cli
 | test:mixes positionals and flags in any order@L35 | Test | ./packages/cli/src/args.test.js | 35-39 |
 | test:everything after a lone -- is positional@L41 | Test | ./packages/cli/src/args.test.js | 41-45 |
 | test:empty argv yields empty result@L47 | Test | ./packages/cli/src/args.test.js | 47-50 |
-| resolveBaseUrl | Function | ./packages/cli/src/client.js | 19-25 |
-| resolveToken | Function | ./packages/cli/src/client.js | 33-36 |
-| createClient | Function | ./packages/cli/src/client.js | 41-99 |
-| headers | Function | ./packages/cli/src/client.js | 50-54 |
-| request | Function | ./packages/cli/src/client.js | 60-96 |
+| resolveBaseUrl | Function | ./packages/cli/src/client.js | 20-26 |
+| resolveToken | Function | ./packages/cli/src/client.js | 34-37 |
+| createClient | Function | ./packages/cli/src/client.js | 42-110 |
+| headers | Function | ./packages/cli/src/client.js | 51-55 |
+| request | Function | ./packages/cli/src/client.js | 61-107 |
 | fakeResponse | Function | ./packages/cli/src/client.test.js | 13-20 |
 | withEnv | Function | ./packages/cli/src/client.test.js | 22-32 |
 | test:resolveBaseUrl prefers the --api flag and strips trailing slashes@L34 | Test | ./packages/cli/src/client.test.js | 34-36 |
 | test:resolveBaseUrl falls back to $ADLC_API_URL@L38 | Test | ./packages/cli/src/client.test.js | 38-42 |
 | test:resolveToken reads ADLC_TOKEN from the environment only@L44 | Test | ./packages/cli/src/client.test.js | 44-51 |
 | test:request sends a bearer Authorization header when a token is set@L53 | Test | ./packages/cli/src/client.test.js | 53-64 |
-| fetchImpl | Function | ./packages/cli/src/client.test.js | 124-124 |
+| fetchImpl | Function | ./packages/cli/src/client.test.js | 145-145 |
 | test:request omits Authorization when no token is configured@L66 | Test | ./packages/cli/src/client.test.js | 66-75 |
 | test:request serializes a JSON body and sets Content-Type@L77 | Test | ./packages/cli/src/client.test.js | 77-87 |
-| test:non-2xx throws with the server error message and status@L89 | Test | ./packages/cli/src/client.test.js | 89-101 |
-| test:a network failure surfaces a reachability hint@L103 | Test | ./packages/cli/src/client.test.js | 103-109 |
-| test:every request carries the adlc version (User-Agent + X-Adlc-Version)@L111 | Test | ./packages/cli/src/client.test.js | 111-121 |
-| test:a 401 attaches a re-login hint@L123 | Test | ./packages/cli/src/client.test.js | 123-134 |
-| test:resolveToken prefers $ADLC_TOKEN, else the stored credential@L136 | Test | ./packages/cli/src/client.test.js | 136-155 |
+| test:request accepts caller context headers without replacing auth or version headers@L89 | Test | ./packages/cli/src/client.test.js | 89-108 |
+| test:non-2xx throws with the server error message and status@L110 | Test | ./packages/cli/src/client.test.js | 110-122 |
+| test:a network failure surfaces a reachability hint@L124 | Test | ./packages/cli/src/client.test.js | 124-130 |
+| test:every request carries the adlc version (User-Agent + X-Adlc-Version)@L132 | Test | ./packages/cli/src/client.test.js | 132-142 |
+| test:a 401 attaches a re-login hint@L144 | Test | ./packages/cli/src/client.test.js | 144-155 |
+| test:resolveToken prefers $ADLC_TOKEN, else the stored credential@L157 | Test | ./packages/cli/src/client.test.js | 157-176 |
+| jwtExpiry | Function | ./packages/cli/src/commands/admin.js | 34-43 |
+| normalizeBundle | Function | ./packages/cli/src/commands/admin.js | 45-66 |
+| readBundle | Function | ./packages/cli/src/commands/admin.js | 68-82 |
+| operatorUrl | Function | ./packages/cli/src/commands/admin.js | 84-96 |
+| iamHeader | Function | ./packages/cli/src/commands/admin.js | 98-106 |
+| requestOperator | Function | ./packages/cli/src/commands/admin.js | 108-148 |
+| pendingDeploymentApproval | Function | ./packages/cli/src/commands/admin.js | 150-193 |
+| run | Function | ./packages/cli/src/commands/admin.js | 195-251 |
+| test:operator URL permits loopback HTTP but rejects remote plaintext and embedded credentials@L8 | Test | ./packages/cli/src/commands/admin.test.js | 8-21 |
+| test:normalizeBundle accepts Codex CLI auth.json shape without retaining unrelated fields@L23 | Test | ./packages/cli/src/commands/admin.test.js | 23-43 |
+| test:operator request separates Cloud Run IAM and forwarded user identity@L45 | Test | ./packages/cli/src/commands/admin.test.js | 45-66 |
+| test:operator request supports a run-bound deployment approval path@L68 | Test | ./packages/cli/src/commands/admin.test.js | 68-86 |
+| test:deployment approval lineage is derived from the authenticated, scoped pipeline status@L88 | Test | ./packages/cli/src/commands/admin.test.js | 88-135 |
+| request | Function | ./packages/cli/src/commands/admin.test.js | 141-156 |
+| test:deployment approval refuses a mismatched pending scope@L137 | Test | ./packages/cli/src/commands/admin.test.js | 137-166 |
 | promptSecret | Function | ./packages/cli/src/commands/auth.js | 32-47 |
 | write | Function | ./packages/cli/src/commands/auth.js | 35-37 |
 | resolveInputToken | Function | ./packages/cli/src/commands/auth.js | 50-65 |
 | login | Function | ./packages/cli/src/commands/auth.js | 67-102 |
-| status | Function | ./packages/cli/src/commands/auth.js | 104-131 |
-| logout | Function | ./packages/cli/src/commands/auth.js | 133-136 |
-| run | Function | ./packages/cli/src/commands/auth.js | 138-144 |
-| printBusiness | Function | ./packages/cli/src/commands/business.js | 24-27 |
-| list | Function | ./packages/cli/src/commands/business.js | 29-34 |
-| create | Function | ./packages/cli/src/commands/business.js | 36-57 |
-| run | Function | ./packages/cli/src/commands/business.js | 59-64 |
-| run | Function | ./packages/cli/src/commands/candidates.js | 12-21 |
-| run | Function | ./packages/cli/src/commands/code.js | 17-31 |
-| statusMark | Function | ./packages/cli/src/commands/jobs.js | 12-17 |
-| run | Function | ./packages/cli/src/commands/jobs.js | 19-31 |
-| printStatus | Function | ./packages/cli/src/commands/monitor.js | 16-24 |
-| run | Function | ./packages/cli/src/commands/monitor.js | 26-41 |
-| run | Function | ./packages/cli/src/commands/plan.js | 19-35 |
-| list | Function | ./packages/cli/src/commands/role.js | 16-21 |
-| assume | Function | ./packages/cli/src/commands/role.js | 23-28 |
 
-*... and 43 more members.*
+*... and 59 more members.*
 
 ## Execution Flows
 
 - **run** (criticality: 0.64, depth: 4)
+- **run** (criticality: 0.63, depth: 3)
 - **storedToken** (criticality: 0.63, depth: 3)
 - **save** (criticality: 0.61, depth: 1)
 - **clear** (criticality: 0.58, depth: 2)
@@ -79,36 +80,36 @@ Directory-based community: packages/cli
 
 ### Outgoing
 
-- `equal` (42 edge(s))
+- `equal` (55 edge(s))
 - `kv` (36 edge(s))
-- `request` (32 edge(s))
+- `request` (34 edge(s))
+- `String` (26 edge(s))
+- `trim` (18 edge(s))
+- `ok` (17 edge(s))
 - `heading` (16 edge(s))
 - `line` (14 edge(s))
-- `ok` (14 edge(s))
+- `deepEqual` (14 edge(s))
+- `createClient` (11 edge(s))
 - `join` (11 edge(s))
-- `deepEqual` (11 edge(s))
+- `test` (11 edge(s))
 - `parseArgs` (10 edge(s))
-- `createClient` (10 edge(s))
-- `String` (8 edge(s))
-- `json` (8 edge(s))
-- `slice` (7 edge(s))
-- `log` (7 edge(s))
-- `stringify` (6 edge(s))
+- `parse` (9 edge(s))
+- `Number` (8 edge(s))
 
 ### Incoming
 
-- `equal` (42 edge(s))
-- `./packages/cli/src/client.test.js` (20 edge(s))
+- `equal` (55 edge(s))
+- `./packages/cli/src/client.test.js` (22 edge(s))
 - `./packages/cli/src/output.js` (16 edge(s))
+- `deepEqual` (14 edge(s))
+- `./packages/cli/src/commands/admin.js` (14 edge(s))
 - `./packages/cli/src/credentials.js` (14 edge(s))
-- `deepEqual` (11 edge(s))
 - `./packages/cli/src/stream.js` (10 edge(s))
 - `parseArgs` (9 edge(s))
 - `./packages/cli/src/args.test.js` (8 edge(s))
 - `./packages/cli/src/client.js` (8 edge(s))
+- `createClient` (8 edge(s))
+- `request` (8 edge(s))
+- `./packages/cli/src/commands/admin.test.js` (8 edge(s))
 - `./packages/cli/src/commands/auth.js` (8 edge(s))
-- `createClient` (7 edge(s))
-- `request` (7 edge(s))
 - `./packages/cli/src/commands/role.js` (6 edge(s))
-- `./packages/cli/src/commands/run.js` (6 edge(s))
-- `./packages/cli/src/credentials.test.js` (6 edge(s))

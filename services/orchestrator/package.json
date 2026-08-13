@@ -1,0 +1,21 @@
+{
+  "name": "@ai-fleet/orchestrator",
+  "version": "1.0.0",
+  "description": "Durable fixed-stage AI Fleet pipeline control plane.",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env src/index.js",
+    "dev": "node --watch --env-file-if-exists=../../.env src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@ai-fleet/shared-core": "*",
+    "@langchain/langgraph": "^1.4.8",
+    "express": "^5.2.1",
+    "google-auth-library": "^11.0.1"
+  }
+}

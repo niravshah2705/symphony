@@ -86,6 +86,27 @@ test('request serializes a JSON body and sets Content-Type', async () => {
   assert.equal(seen.body, JSON.stringify({ projectId: 'p1' }));
 });
 
+test('request accepts caller context headers without replacing auth or version headers', async () => {
+  let seen = null;
+  const fetchImpl = async (_url, init) => {
+    seen = init;
+    return fakeResponse({ body: { ok: true } });
+  };
+  const client = createClient({ baseUrl: 'http://gw', token: 'secret-token', fetchImpl });
+  await client.request('GET', '/api/pipeline/runs/run-1', undefined, {
+    headers: {
+      'x-ai-fleet-organization-id': 'org-1',
+      'x-ai-fleet-project-id': 'project-1',
+      Authorization: 'Bearer attacker',
+      'X-Adlc-Version': 'attacker',
+    },
+  });
+  assert.equal(seen.headers.Authorization, 'Bearer secret-token');
+  assert.equal(seen.headers['X-Adlc-Version'], VERSION);
+  assert.equal(seen.headers['x-ai-fleet-organization-id'], 'org-1');
+  assert.equal(seen.headers['x-ai-fleet-project-id'], 'project-1');
+});
+
 test('non-2xx throws with the server error message and status', async () => {
   const fetchImpl = async () =>
     fakeResponse({ ok: false, status: 400, body: { error: 'Assume a role before enqueuing planner work.' } });

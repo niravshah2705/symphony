@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1
+# Durable pipeline control plane. This image intentionally contains only
+# @ai-fleet/shared-core + LangGraph; it must never acquire the heavy agent SDK
+# dependency tree or provider credentials.
+ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+
+FROM ${NODE_IMAGE} AS builder
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+COPY packages/shared-core/ ./packages/shared-core/
+COPY services/orchestrator/ ./services/orchestrator/
+
+RUN npm ci --omit=dev \
+      --workspace=@ai-fleet/shared-core \
+      --workspace=@ai-fleet/orchestrator \
+      --include-workspace-root=false \
+    && npm cache clean --force
+
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    AI_FLEET_DATA_DIR=/tmp
+COPY --from=builder --chown=node:node /app /app
+USER node
+EXPOSE 8080
+CMD ["node", "services/orchestrator/src/index.js"]

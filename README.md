@@ -103,9 +103,9 @@ Collapsible sections:
 
 1. **API Keys & Connection** — the Linear and LangSmith keys together, plus the LangSmith **host/endpoint**, project, and tracing toggle. One **Save keys** button; the Linear key is validated on save and connection status is shown.
 2. **Tool integrations** — choose a planning connector (**Linear / Jira / Asana**) and repository host (**GitHub / GitLab**), then save the matching connection details. Tokens are masked and stored only on the server. The code agent receives a provider-neutral, repository/branch-scoped broker tool; the token is never copied into its shell environment or checkout configuration.
-3. **Task Models** — choose **Provider**, **Model**, and **Reasoning** for each task role ("models as tasks"): **Thinking** (task planning — used by the planner), **Execution** (coder — used by the code-writer), and **Testing** (tool calling — reserved, not used yet). Each role picks any provider — local (Ollama / LM Studio / OMLX) or hosted (OpenAI / Anthropic). Selecting a model atomically applies its recommended context, output, sampling, and provider-native reasoning defaults. Expand **Customize parameters** to change supported numeric values later.
+3. **Task Models** — choose **Provider**, **Model**, and **Reasoning** for each task role ("models as tasks"): **Thinking** (planner), **Execution** (coder), **Testing** (tester), and **Deployment** (deployer). Each role picks any provider — local (Ollama / LM Studio / OMLX) or hosted (OpenAI / Anthropic). Selecting a model atomically applies its recommended context, output, sampling, and provider-native reasoning defaults. Expand **Customize parameters** to change supported numeric values later.
    - **Ollama / LM Studio / OMLX (local)** — the page renders immediately, discovers available models asynchronously, and offers a refresh action. Ollama and LM Studio require no key. OMLX authentication is optional: leave the key empty for an unsecured local server or save its API key server-side. LM Studio's configured context must match the context used when loading the model, and its output budget is capped at half that context so prompt and output fit together.
-   - **OpenAI / Codex OAuth** — **Sign in with ChatGPT** using OAuth 2.0 Authorization Code + PKCE. The model list is refreshed from the signed-in Codex account with a bundled current fallback. Reasoning choices are model-specific: for example, GPT-5.6 Sol and Terra expose Low through Ultra, while GPT-5.5 exposes Low through Extra high. `ultra` is sent only to the ChatGPT/Codex backend.
+   - **OpenAI / Codex** — browser OAuth is intentionally disabled. An organization administrator imports a Codex token bundle out of band with `adlc admin codex import --org-id <uuid> --settings-url <url>` (stdin by default, or `--token-file`); the IAM-gated settings service encrypts it in the org vault. The browser exposes status/model selection only and never receives the bundle.
    - **Anthropic / Claude OAuth** — **Sign in with Claude**, approve in the opened tab, then paste the returned `code#state`. Available models are queried from Anthropic with bundled fallbacks, and only each model's advertised adaptive-thinking effort values are shown.
 
 The committed source of truth is [`packages/shared/src/agent/llm-presets.json`](packages/shared/src/agent/llm-presets.json). It separates model limits from request defaults and records the exact reasoning adapter used by each provider.
@@ -116,7 +116,7 @@ accepts either that origin or `http://127.0.0.1:8000/v1` and stores the normaliz
 origin. Model discovery calls the server's OpenAI-compatible `GET /v1/models`
 endpoint. If the server was started with API-key protection, enter the key in the
 OMLX connection card; it remains masked and server-side.
-4. **Agent runtime & workflow** — select **DeepAgent**, **Codex SDK**, or **Claude Agent SDK**, and choose bounded sequential/fan-out/evaluator/supervisor guidance. DeepAgent remains the full brokered Linear + GitHub/GitLab lifecycle. SDK runtimes operate only with a compatible hosted provider and do not receive application-owned tracker or repository credentials; locally routed work stays on DeepAgent.
+4. **Agent runtime & workflow** — select a default and optional per-stage harness for planning, coding, testing, and deployment, then choose bounded sequential/fan-out/evaluator/supervisor guidance. Only catalog entries marked available are selectable; OpenCode, Pi, and Oh My Pi remain experimental metadata until real reviewed adapters exist. DeepAgent remains the full brokered Linear + GitHub/GitLab lifecycle. SDK runtimes operate only with a compatible hosted provider and never receive application-owned tracker or repository credentials.
 5. **Assume Role** — pick a workspace member (validated server-side). The assumed role owns enriched projects and is shown in the **top toolbar**.
 6. **Deep Agent** — **enrich labels** (multi-select dropdown of your Linear project labels), **scheduler cadence** (5 / 10 / 15 minutes), parallelism, and per-run/milestone/issue caps, plus toggles.
 
@@ -125,10 +125,71 @@ The top-bar language picker intentionally shows a small suggestion set rather th
 ## Agent SDKs, workflows, and tracing
 
 - **DeepAgent** is the default and the only runtime that receives the private Linear MCP and provider-neutral repository broker tools required for the unattended ticket-to-merged-review lifecycle.
-- **Codex SDK** runs official server-side Codex threads in the prepared workspace. ChatGPT OAuth is staged in a per-run private home and removed after the run; model-initiated shells do not inherit the credential.
+- **Codex SDK** runs official server-side Codex threads in the prepared workspace. The admin-imported org token bundle is staged in a per-run private home and removed after the run; model-initiated shells do not inherit the credential.
 - **Claude Agent SDK** runs the official Claude loop with persistent sessions disabled. Its built-in Bash tool is withheld when OAuth is present so the credential cannot leak into model-initiated commands.
 - **Workflow patterns** are bounded orchestration guidance applied to one runtime session. Capable SDKs may delegate independent investigation, but the setting does not promise concurrent workers, automatic evaluator retries, or brokered handoffs.
 - **LangSmith tracing** wraps each effective runtime at the root and records provider/model/runtime/pattern plus available token usage. Claude-reported cost is attached directly; otherwise LangSmith can calculate cost when it has matching model pricing. Unknown cost remains unavailable (`—`), never synthetic `$0.00`.
+
+## Durable fixed pipeline
+
+When `PIPELINE_ORCHESTRATOR_ENABLED=true`, new starts use a versioned, durable
+`plan → code → test → deploy` control plane. The gateway performs EULA, billing,
+user-scoped policy, harness, model, and credential-readiness preflight once, then
+persists only the secret-free decision. The LangGraph orchestrator advances from
+typed `StageCommandV1`/`StageResultV1` messages with stable run, attempt, and
+idempotency identifiers. Firestore stores pipeline/stage state and graph
+checkpoints in Cloud Run; Linear labels are best-effort visibility projections,
+not completion events. Each worker also claims the command idempotency key in a
+durable execution store and persists its typed result before publishing it, so
+a restart replays the same result instead of rerunning side effects. An expired
+execution lease is terminally recovered as an unknown outcome; it is never
+blindly reacquired. Local development uses an atomic JSON file (memory under
+unit tests), while production workers fail startup unless the backend is
+Firestore.
+
+The wire contract caps raw `StageCommandV1` JSON at 256 KiB, caller request data
+at 64 KiB, a stage-result output at 32 KiB, and a whole result at 48 KiB. Worker
+HTTP parser limits include the calculated base64 expansion plus bounded Pub/Sub
+envelope headroom. Commands and results each use four stage-specific topics;
+publisher IAM grants a worker only its own result topic, whose subscription is
+bound to `/pubsub/pipeline-stage-results/{stage}`.
+
+Repository-native tester commands run through the image's
+`ai-fleet-network-sandbox` launcher. Its no-new-privileges seccomp policy permits
+local Unix-socket IPC but denies internet, link-local metadata, packet, raw, and
+netlink sockets for the complete descendant process tree. The same launcher is
+mandatory for the server-owned first test pass and every tester model tool; a
+missing or unsupported launcher fails the check closed. This is the workload-
+identity boundary between untrusted repository scripts and the tester/proxy
+Cloud Run service account.
+
+The rollout flag defaults off and preserves the legacy planner/coder paths. When
+enabled, legacy label polling is disabled to prevent double dispatch. Deployment
+has a second default-off gate (`PIPELINE_DEPLOYMENT_ENABLED=false`), accepts only
+the exact full four-stage sequence, requires a successful tester result, and
+uses a server approval for production plus repository-owned, allowlisted CI/CD
+from `.ai-fleet/deployment.json`. The deployer receives neither raw CI credentials
+nor an unrestricted deployment shell. The local Workflows canvas remains a
+non-executable draft designer and is not a second pipeline schema.
+
+When a run reaches `awaiting_approval`, an organization administrator can run
+`adlc admin deploy approve` with the run, project, repository, environment, and
+settings URL. The CLI reads the scoped run status and binds the approval to the
+exact successful test command, commit/tree SHAs, and preflight digest before the
+orchestrator can claim the deploy command.
+
+Shared-stack pipeline admission accepts platform-managed provider credentials
+only. A customer-selected credential is admitted only on the matching dedicated
+deployment (`FLEET_ORG_ID`, with its proxy pinned by `PROXY_ORG_ID`), because a
+shared proxy has no trustworthy per-request organization selector. Managed
+hosted LLMs require the corresponding enabled Secret Manager version mounted on
+the settings service through `managed_provider_secrets`.
+
+Dedicated tenant proxies also receive a one-organization S2S bearer derived by
+the provisioner. Settings verifies that bearer against the organization in the
+vault route; the HMAC root exists only in settings and the provisioner, never in
+an agent or proxy container. A compromised tenant runtime therefore cannot use
+its proxy identity to resolve or rotate another organization's credentials.
 
 ## Local workspace scenarios
 
@@ -242,7 +303,7 @@ Use the default local backend for brokered GitHub/GitLab operation.
 - **Secrets stay on the server** — Linear/LangSmith keys, the optional **OMLX API key**, and **Codex/Claude OAuth tokens** live only in `data/store.json`, are masked in API responses, and are never sent to the browser. Ollama needs no key.
 - **Repository credentials are brokered** — stored GitHub/GitLab tokens never enter the code agent's `LocalShellBackend` environment, prompt, tool arguments, origin URL, or `.git/config`. Authenticated Git executes from a broker-private bare staging repository with a fixed host/repository/branch/refspec; PR/MR creation, check/review reads, and SHA-checked squash merge use the official GitHub/GitLab HTTP APIs. Provider redirects, arbitrary URLs/refspecs, force pushes, and broad GitHub MCP access are denied.
 - **Local shell trust boundary** — `LocalShellBackend` is a host shell rooted by convention, not an OS security sandbox. It runs with the coder service user's filesystem permissions and can read other paths that user can access (including the plaintext local store if it discovers its path). Environment sanitization and the repository broker prevent routine credential injection, but do not contain adversarial shell code. Run the coder only for trusted repositories/tickets in this local deployment; stronger isolation requires a separate container/VM or OS identity with a narrowly mounted workspace and an external secret broker.
-- **Codex OAuth** — Authorization Code + **PKCE (S256, never `plain`)**; a cryptographically-random, server-issued, **single-use** `state` guards the callback against CSRF/replay; the `redirect_uri` is server-derived and reused exact-match in the code exchange; **refresh tokens rotate** on use. Provider endpoint URLs + client id are trusted server-side config and are **not** accepted from request bodies. Browser-settable preset overrides are allowlisted, normalized, and model-family checked.
+- **Codex credentials** — browser OAuth/login and sign-out routes are tombstoned. The operator CLI sends a bounded token bundle directly to the IAM-gated settings service, which requires an authenticated org-admin principal and encrypts the bundle in the organization vault. Refresh rotation uses compare-and-swap so a stale worker cannot overwrite newer tokens. Browser-settable model overrides remain allowlisted and model-family checked.
 - **Claude OAuth** — the same Authorization Code + **PKCE (S256)** guarantees: a single-use, server-issued `state` is echoed back inside the pasted `code#state` and matched against a login we issued (CSRF/replay guard); provider URLs, client id, and scope are trusted server-side config (env-overridable via `CLAUDE_OAUTH_*`) and are **not** taken from the browser. Tokens are stored server-side, refreshed automatically, and sent as `Authorization: Bearer` with the `anthropic-beta: oauth-2025-04-20` header (never `x-api-key`).
 - **Local inference hosts** — operator-configured settings are restricted to `http`/`https`, normalized on save, and never accepted from an agent inference call. This is a local single-user tool, so localhost is the intended target.
 - **Prompt-injection defenses** — Linear-sourced project text is fenced in a `<project_context>` block and treated strictly as data; LLM output is schema-validated and clamped (milestone/issue caps, date ordering, dependency indices re-checked before any write).
@@ -418,9 +479,10 @@ npm run test:e2e:debug         # headed Playwright inspector
    create a new project for it (choose a team). Add more businesses the same way;
    each maps to one Linear project. Use the **Planning** / **Board** buttons to jump
    straight to that business's project views.
-5. **Settings** → in **Task Models** pick a model for the **Thinking** (planner) and **Execution** (coder) roles.
-   Start Ollama, LM Studio, or OMLX for the local route; for Codex click **Sign in with
-   ChatGPT**, or for Claude click **Sign in with Claude** and paste back the `code#state`.
+5. **Settings** → in **Task Models** pick a model for the **Thinking**, **Execution**, **Testing**, and **Deployment** roles.
+   Start Ollama, LM Studio, or OMLX for a local route. For Codex, an organization
+   administrator provisions the token bundle with the IAM-authenticated `adlc admin codex import`
+   command; for Claude, use **Sign in with Claude** and paste back the `code#state`.
    Recommended parameters are applied automatically; customization is optional.
    optionally add the LangSmith key +
    host in **API Keys**; in **Assume Role** pick a member (it appears in the
@@ -480,7 +542,7 @@ rather than stuck in "running".
 | PUT | `/api/settings/llm` | Save Ollama config (host, model, num_ctx, num_predict) |
 | PUT | `/api/settings/lmstudio` | Save legacy/custom LM Studio config |
 | PUT | `/api/settings/langsmith` | Save LangSmith config (key masked) |
-| GET/POST/DELETE | `/api/settings/codex[...]` | Codex provider status / model / sign-out (`/login`, `/exchange` for OAuth) |
+| GET/POST | `/api/settings/codex[...]` | Codex provider status and model selection. Browser login/callback/pending/sign-out endpoints return `410`; org admins provision/delete bundles through the IAM-gated settings operator API via `adlc admin codex`. |
 | GET/POST/DELETE | `/api/settings/claude[...]` | Claude provider status / model / sign-out (`/login`, `/exchange`, `/test` for OAuth) |
 | PUT | `/api/settings/runtime` | Select the agent SDK and workflow guidance pattern |
 | GET | `/api/locale/suggestions` | Return at most five BCP 47 language suggestions from browser/coarse location signals |
@@ -504,6 +566,9 @@ rather than stuck in "running".
 | GET | `/api/coder` | Code-writer monitor status + in-flight tickets |
 | POST | `/api/coder/run` | Run the code-writer on one ticket `{ issueId }` |
 | POST | `/api/coder/monitor` | Start/stop the board monitor `{ action }` |
+| POST | `/api/pipeline/runs` | Start an explicit ordered durable pipeline (`plan`, `code`, `test`, optional `deploy`) when rollout is enabled |
+| GET | `/api/pipeline/runs/:runId` | Read durable run/stage status in the caller's organization/project scope |
+| POST | `/api/pipeline/runs/:runId/cancel` | Cancel a durable run in the caller's scope |
 
 ## Notes
 

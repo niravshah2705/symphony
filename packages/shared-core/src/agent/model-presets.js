@@ -29,16 +29,18 @@ const isLocalInference = (provider) => LOCAL_INFERENCE_PROVIDERS.has(provider);
  * role may select ANY provider — local or hosted:
  *   thinking  — task-planning models (used by the planner),
  *   execution — coder models (used by the code-writer),
- *   testing   — tool-calling models (reserved; not wired to a consumer yet).
+ *   testing   — verification models (used by the tester),
+ *   deployment — release models (used by the deployer).
  * Each purpose role names one of the four providers and reuses that provider's
  * shared settings block, so two roles pointing at the same provider share that
  * provider's model/params (last write wins).
  */
-const MODEL_ROLES = Object.freeze(['thinking', 'execution', 'testing']);
+const MODEL_ROLES = Object.freeze(['thinking', 'execution', 'testing', 'deployment']);
 const MODEL_ROLE_META = Object.freeze({
   thinking: { label: 'Thinking', description: 'Task planning models (used by the planner).' },
   execution: { label: 'Execution', description: 'Coder models (used by the code-writer).' },
-  testing: { label: 'Testing', description: 'Tool-calling models (reserved; not used yet).' },
+  testing: { label: 'Testing', description: 'Verification models (used by the tester).' },
+  deployment: { label: 'Deployment', description: 'Release models (used by the deployer).' },
 });
 const isPurposeRole = (role) => MODEL_ROLES.includes(role);
 const REASONING_ADAPTERS = new Set([

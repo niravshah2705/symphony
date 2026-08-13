@@ -27,22 +27,28 @@ locals {
   # falling back to var.image_tag when no per-service override is set — this is
   # what lets the CD pipeline roll ONE service (its tag = new SHA) while every
   # other service keeps its currently-deployed tag, making apply a no-op for them.
-  image_base   = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}"
-  gateway_tag  = var.gateway_image_tag != "" ? var.gateway_image_tag : var.image_tag
-  planner_tag  = var.planner_image_tag != "" ? var.planner_image_tag : var.image_tag
-  coder_tag    = var.coder_image_tag != "" ? var.coder_image_tag : var.image_tag
-  org_tag      = var.org_image_tag != "" ? var.org_image_tag : var.image_tag
-  settings_tag = var.settings_image_tag != "" ? var.settings_image_tag : var.image_tag
-  email_tag    = var.email_image_tag != "" ? var.email_image_tag : var.image_tag
-  proxy_tag    = var.proxy_image_tag != "" ? var.proxy_image_tag : var.image_tag
+  image_base       = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}"
+  gateway_tag      = var.gateway_image_tag != "" ? var.gateway_image_tag : var.image_tag
+  planner_tag      = var.planner_image_tag != "" ? var.planner_image_tag : var.image_tag
+  coder_tag        = var.coder_image_tag != "" ? var.coder_image_tag : var.image_tag
+  orchestrator_tag = var.orchestrator_image_tag != "" ? var.orchestrator_image_tag : var.image_tag
+  tester_tag       = var.tester_image_tag != "" ? var.tester_image_tag : var.image_tag
+  deployer_tag     = var.deployer_image_tag != "" ? var.deployer_image_tag : var.image_tag
+  org_tag          = var.org_image_tag != "" ? var.org_image_tag : var.image_tag
+  settings_tag     = var.settings_image_tag != "" ? var.settings_image_tag : var.image_tag
+  email_tag        = var.email_image_tag != "" ? var.email_image_tag : var.image_tag
+  proxy_tag        = var.proxy_image_tag != "" ? var.proxy_image_tag : var.image_tag
 
-  gateway_image  = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
-  planner_image  = "${local.image_base}/${var.planner_service_name}:${local.planner_tag}"
-  coder_image    = "${local.image_base}/${var.coder_service_name}:${local.coder_tag}"
-  org_image      = "${local.image_base}/${var.org_service_name}:${local.org_tag}"
-  settings_image = "${local.image_base}/${var.settings_service_name}:${local.settings_tag}"
-  email_image    = "${local.image_base}/${var.email_service_name}:${local.email_tag}"
-  proxy_image    = "${local.image_base}/${var.proxy_service_name}:${local.proxy_tag}"
+  gateway_image      = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
+  planner_image      = "${local.image_base}/${var.planner_service_name}:${local.planner_tag}"
+  coder_image        = "${local.image_base}/${var.coder_service_name}:${local.coder_tag}"
+  orchestrator_image = "${local.image_base}/${var.orchestrator_service_name}:${local.orchestrator_tag}"
+  tester_image       = "${local.image_base}/${var.tester_service_name}:${local.tester_tag}"
+  deployer_image     = "${local.image_base}/${var.deployer_service_name}:${local.deployer_tag}"
+  org_image          = "${local.image_base}/${var.org_service_name}:${local.org_tag}"
+  settings_image     = "${local.image_base}/${var.settings_service_name}:${local.settings_tag}"
+  email_image        = "${local.image_base}/${var.email_service_name}:${local.email_tag}"
+  proxy_image        = "${local.image_base}/${var.proxy_service_name}:${local.proxy_tag}"
 
   # Cloud Run's deterministic per-project URL:
   #   https://<service>-<project_number>.<region>.run.app
@@ -52,13 +58,16 @@ locals {
   # scheduler OIDC audiences identical to what the service expects.
   # If your project still gets legacy hash-style run.app URLs, set the relevant
   # override variable (api_base_url) and adjust as needed.
-  run_url_suffix = "${local.project_number}.${var.region}.run.app"
-  gateway_url    = var.api_base_url != "" ? var.api_base_url : "https://${var.gateway_service_name}-${local.run_url_suffix}"
-  planner_url    = "https://${var.planner_service_name}-${local.run_url_suffix}"
-  coder_url      = "https://${var.coder_service_name}-${local.run_url_suffix}"
-  org_url        = "https://${var.org_service_name}-${local.run_url_suffix}"
-  settings_url   = "https://${var.settings_service_name}-${local.run_url_suffix}"
-  email_url      = "https://${var.email_service_name}-${local.run_url_suffix}"
+  run_url_suffix   = "${local.project_number}.${var.region}.run.app"
+  gateway_url      = var.api_base_url != "" ? var.api_base_url : "https://${var.gateway_service_name}-${local.run_url_suffix}"
+  planner_url      = "https://${var.planner_service_name}-${local.run_url_suffix}"
+  coder_url        = "https://${var.coder_service_name}-${local.run_url_suffix}"
+  orchestrator_url = "https://${var.orchestrator_service_name}-${local.run_url_suffix}"
+  tester_url       = "https://${var.tester_service_name}-${local.run_url_suffix}"
+  deployer_url     = "https://${var.deployer_service_name}-${local.run_url_suffix}"
+  org_url          = "https://${var.org_service_name}-${local.run_url_suffix}"
+  settings_url     = "https://${var.settings_service_name}-${local.run_url_suffix}"
+  email_url        = "https://${var.email_service_name}-${local.run_url_suffix}"
 
   # Pub/Sub's Google-managed service agent — needs publisher on the dead-letter
   # topic, subscriber on the source subscriptions, and token-creator on the push
@@ -67,15 +76,21 @@ locals {
 
   # Env shared by every service/job (packages/shared/src/config.js cloud profile).
   common_env = {
-    NODE_ENV             = "production"
-    STORE_BACKEND        = "firestore"
-    MESSAGING_MODE       = "pubsub"
-    EVENTS_BACKEND       = "firestore"
-    GCP_PROJECT_ID       = var.project_id
-    GCP_REGION           = var.region
-    PUBSUB_PLANNER_TOPIC = var.planner_topic
-    PUBSUB_CODER_TOPIC   = var.coder_topic
-    AI_FLEET_DATA_DIR    = "/tmp"
+    NODE_ENV                      = "production"
+    STORE_BACKEND                 = "firestore"
+    MESSAGING_MODE                = "pubsub"
+    EVENTS_BACKEND                = "firestore"
+    GCP_PROJECT_ID                = var.project_id
+    GCP_REGION                    = var.region
+    PUBSUB_PLANNER_TOPIC          = var.planner_topic
+    PUBSUB_CODER_TOPIC            = var.coder_topic
+    PUBSUB_PIPELINE_PLAN_TOPIC    = var.pipeline_plan_topic
+    PUBSUB_PIPELINE_CODE_TOPIC    = var.pipeline_code_topic
+    PUBSUB_PIPELINE_TEST_TOPIC    = var.pipeline_test_topic
+    PUBSUB_PIPELINE_DEPLOY_TOPIC  = var.pipeline_deploy_topic
+    PIPELINE_ORCHESTRATOR_ENABLED = tostring(var.pipeline_orchestrator_enabled)
+    PIPELINE_DEPLOYMENT_ENABLED   = tostring(var.pipeline_deployment_enabled)
+    AI_FLEET_DATA_DIR             = "/tmp"
     # The shared config (packages/shared/src/config.js) requires AUTH_MODE=firebase
     # when NODE_ENV=production and validates the Firebase web config at load. Only
     # the gateway actually enforces app-auth, but planner/coder/worker import the

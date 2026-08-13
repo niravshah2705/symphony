@@ -19,7 +19,7 @@ explains what the software does, and points you at the code you'll be working in
 
 | Requirement | Notes |
 | ----------- | ----- |
-| **Node.js ≥ 22** | Services target Node 22 (the deploy images are `node:22-alpine`). Check with `node -v`. The `adlc` CLI still runs on Node 18+. |
+| **Node.js ≥ 22** | Services and the `adlc` CLI target Node 22 (the deploy images are `node:22-alpine`). Check with `node -v`. |
 | **A Linear account + personal API key** | Create one at <https://linear.app/settings/api>. Required for every feature. |
 | **LLM routes** (for the agents only) | For full routing, configure one local preset (Ollama, LM Studio, or OMLX) and one hosted preset (OpenAI or Claude OAuth). Not needed just to browse projects/board. |
 | **git** | Required by the **code-writer** agent (it clones and pushes). |
@@ -92,9 +92,8 @@ required for normal use. Secrets are validated and stored **server-side** in
    validated against Linear on save; the header shows connection status.
    (Optional: add a **LangSmith** key + host to trace agent runs.)
 2. **Task Models** → assign a model to each task role ("models as tasks"):
-   **Thinking** (task planning — used by the planner), **Execution** (coder —
-   used by the code-writer), and **Testing** (tool calling — reserved, not used
-   yet). Each role picks any provider — local (Ollama / LM Studio / OMLX) or
+   **Thinking** (planner), **Execution** (coder), **Testing** (tester), and
+   **Deployment** (deployer). Each role picks any provider — local (Ollama / LM Studio / OMLX) or
    hosted (OpenAI / Anthropic). Selecting a preset applies its model,
    context/output budgets, sampling, JSON mode, and native reasoning control
    together. Expand **Customize parameters** only for an override; **Reset to
@@ -106,9 +105,10 @@ required for normal use. Secrets are validated and stored **server-side** in
      either the origin or a trailing `/v1`, discovers models from `GET /v1/models`,
      and only needs a key when its server has API-key protection enabled. LM
      Studio's context must match the loaded model context.
-   - **Hosted providers (OpenAI / Anthropic)** — for OpenAI, click **Sign in with
-     ChatGPT**. For Claude, click **Sign in with Claude** and paste back the
-     `code#state` Anthropic gives you.
+   - **Hosted providers (OpenAI / Anthropic)** — provision Codex out of band with
+     the IAM-authenticated `adlc admin codex import --org-id <uuid>
+     --settings-url <url>` command. Browser login is removed. For Claude, click
+     **Sign in with Claude** and paste back the `code#state` Anthropic gives you.
 3. **Assume Role** → pick a workspace member. The business-owner agent's enrich
    endpoints are **403 until a role is assumed** (server-enforced). The assumed
    member shows in the top toolbar.
@@ -135,18 +135,19 @@ The SPA (`public/js/app.js`) hash-routes between workspace views; the core plann
 
 ---
 
-## 5. The two deep agents (developer mental model)
+## 5. Agent stages and durable orchestration (developer mental model)
 
-Each agent runs in its **own service** (`services/planner`, `services/coder`),
-but both are built from the SAME **workflow-driven framework** that lives once in
+Each execution stage runs in an isolated service (`services/planner`,
+`services/coder`, `services/tester`, `services/deployer`). They are built from
+the SAME **workflow-driven framework** that lives once in
 the shared library (`packages/shared/src/agent/framework.js`), configured by a
 declarative *workflow file* (`agent/workflows/*.workflow.js`). A workflow declares
 its **skills**, **tools**, backend, and system prompt; the framework installs the
 skills, builds the `deepagents` agent (FilesystemBackend for the planner,
 LocalShellBackend for the coder), and runs it. Both share the LLM provider factory
 (`agent/llm.js` → `resolveLlm`), which resolves a model by **task role**: the
-planner runs on the **`thinking`** role and the coder on the **`execution`** role
-(`testing` is reserved for tool-calling agents and not wired to a consumer yet).
+planner runs on **`thinking`**, coder on **`execution`**, tester on **`testing`**,
+and deployer on **`deployment`**.
 Each role independently names any provider — local (Ollama / LM Studio) or hosted
 (OpenAI / Anthropic) — and reuses that provider's shared config block. Repoint a
 role in **Settings → Task Models** to change which model runs that task.
@@ -164,9 +165,14 @@ role in **Settings → Task Models** to change which model runs that task.
   groups** (`mcp.js`) — Linear MCP + GitHub MCP — attach when enabled
   (`LINEAR_MCP_ENABLED`, `GITHUB_MCP_TOKEN`); off by default.
 
-The 3-step pipeline: **idea → project (+labels)** (businesses route, deterministic)
-→ **software-design issues (AI-labeled)** (planner) → **coding on unblocked AI
-tickets** (coder, scheduled + parallel).
+The rollout-gated durable pipeline is **plan → code → test → deploy**. It uses
+versioned secret-free commands/results, Firestore PipelineRun/StageRun state, and
+a LangGraph checkpointer. Linear labels are visibility projections only. With
+the rollout flag off, the legacy scheduled planner/coder chain remains active.
+Production tester commands, including model-selected test/build tools, execute
+below the `ai-fleet-network-sandbox` seccomp launcher. It blocks internet and
+metadata sockets without requiring container capabilities and fails closed when
+unavailable; local non-production tests do not use it unless explicitly requested.
 
 ### 5.1 Software-design planner (auto-runs on a schedule)
 - **Files:** `workflows/planning.workflow.js` + `skills/software-planning`,
@@ -232,16 +238,19 @@ packages/shared/              @ai-fleet/shared — ONE copy of all business logi
       oauth.js pkce.js claude-oauth.js trace-annotations.js
       *.test.js                 the whole test suite (node --test finds it here)
 
-services/                     each an isolated Express process importing @ai-fleet/shared
-  gateway/src/                :4000 — SPA + user API + OAuth; proxies /api/agent, /api/coder
+services/                     isolated processes with explicit dependency boundaries
+  gateway/src/                :4000 — SDK-free browser/domain API + pipeline admission
     index.js  proxy.js  routes/ (settings · projects · issues · businesses · roles · codex · claude)
   planner/src/                :4010 — mounts /api/agent, boots scheduler
     index.js  routes/agent.js
   coder/src/                  :4020 — mounts /api/coder, boots board monitor
     index.js  routes/coder.js
+  tester/src/                 :4050 — typed testing-stage consumer
+  deployer/src/               :4060 — approval/policy-gated deployment consumer
+  orchestrator/src/           :4070 — SDK-free durable LangGraph control plane
 
 scripts/
-  start-all.js                boot all three services from one terminal
+  start-all.js                boot legacy services; adds pipeline services when rollout is enabled
   models-label-group.js       one-off: create the Linear "Models" label group
 public/                       index.html · styles.css · js/ (app.js router · api.js · dom.js · state.js · views/)
 data/                         store.json (secrets/config/jobs) + app.log   ← git-ignored
@@ -292,6 +301,9 @@ The full table lives in the root `README.md` (§ *API*). Most-used endpoints:
 | GET | `/api/coder` | Code-writer monitor status + in-flight tickets |
 | POST | `/api/coder/run` | Run the code-writer on one ticket `{ issueId }` |
 | POST | `/api/coder/monitor` | Start/stop the board monitor `{ action }` |
+| POST | `/api/pipeline/runs` | Start an explicit durable ordered pipeline (rollout-gated) |
+| GET | `/api/pipeline/runs/:runId` | Read scoped durable run/stage status |
+| POST | `/api/pipeline/runs/:runId/cancel` | Cancel a scoped durable run |
 
 ---
 

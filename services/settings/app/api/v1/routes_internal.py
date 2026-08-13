@@ -9,16 +9,18 @@ caller-supplied org id), identical to the browser-facing ``/effective`` endpoint
 Guards: the gateway refuses to proxy any ``/internal/`` path (browser can't route
 here) + Cloud Run IAM (only allowed SAs invoke).
 
-``/internal/s2s/*`` — TOKEN-SCOPED (no user principal). Called by the egress
-proxy, which acts for an ORG and carries no end-user token. Guards add a shared
-``X-Internal-Token`` (constant-time compare; unset => refused, fail closed). The
-org id is a route param, safe because the token IS the authorization and the
-read is confined to the named org's vault (mirrors the org service's write-back).
+``/internal/s2s/*`` — TOKEN-SCOPED (no user principal). Shared, secret-free
+control calls use ``X-Internal-Token``. Plaintext organization credential reads
+and Codex rotation require ``X-Org-Internal-Token``, an HMAC-derived bearer
+bound to the path organization and issued only to that tenant's proxy sidecar.
+Both guards compare in constant time and fail closed when unconfigured.
 The auth middleware exempts ``/internal/s2s/*`` from the user-token requirement
 (app/middleware/auth.py); ``/internal/effective-config`` still requires it.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import hmac
 import uuid
 
@@ -34,7 +36,14 @@ from app.schemas.policy import (
     InternalEffectivePolicyResponse,
 )
 from app.schemas.secrets import InternalOrgSecretsResponse
-from app.services import policy_service, secrets_service
+from app.schemas.codex_tokens import CodexTokenRotateRequest, CodexTokenRotateResponse
+from app.schemas.deployment_approval import (
+    DeploymentApprovalConsumeRequest,
+    DeploymentApprovalResponse,
+    validate_run_id,
+)
+from app.errors import ValidationAppError
+from app.services import deployment_approval_service, policy_service, secrets_service
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -62,14 +71,44 @@ def require_internal_token(x_internal_token: str | None = Header(default=None)) 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
 
+_ORG_TOKEN_CONTEXT = b"ai-fleet-org-s2s-v1\x00"
+
+
+def derive_org_internal_token(org_id: uuid.UUID) -> str:
+    key = get_settings().org_s2s_signing_key
+    if not key:
+        return ""
+    digest = hmac.new(
+        key.encode("utf-8"),
+        _ORG_TOKEN_CONTEXT + str(org_id).encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def require_org_internal_token(
+    org_id: uuid.UUID,
+    x_org_internal_token: str | None = Header(
+        default=None, alias="X-Org-Internal-Token"
+    ),
+) -> None:
+    expected = derive_org_internal_token(org_id)
+    if (
+        not expected
+        or not x_org_internal_token
+        or not hmac.compare_digest(x_org_internal_token, expected)
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+
 @router.get("/s2s/orgs/{org_id}/secrets", response_model=InternalOrgSecretsResponse)
 async def resolve_org_secrets(
     org_id: uuid.UUID,
-    _: None = Depends(require_internal_token),
+    _: None = Depends(require_org_internal_token),
     session: Uow = Depends(get_session),
 ):
     """Return an org's UNMASKED resolved provider secrets for the egress proxy
-    (token-gated S2S; no user principal)."""
+    (organization-bound token-gated S2S; no user principal)."""
     return await secrets_service.resolve_secrets_for_org(session, org_id)
 
 
@@ -98,3 +137,38 @@ async def resolve_org_effective_policy(
     authorization and the read is confined to the named org (mirrors the org
     secrets S2S resolver)."""
     return await policy_service.resolve_policy_for_org(session, org_id, project_id)
+
+
+@router.put(
+    "/s2s/orgs/{org_id}/codex-tokens",
+    response_model=CodexTokenRotateResponse,
+)
+async def rotate_org_codex_tokens(
+    org_id: uuid.UUID,
+    body: CodexTokenRotateRequest,
+    _: None = Depends(require_org_internal_token),
+    session: Uow = Depends(get_session),
+):
+    """Atomically persist proxy-refreshed rotation; never browser reachable."""
+    return await secrets_service.rotate_codex_tokens(session, org_id, body)
+
+
+@router.post(
+    "/s2s/orgs/{org_id}/deployment-approvals/{run_id}/consume",
+    response_model=DeploymentApprovalResponse,
+)
+async def consume_deployment_approval(
+    org_id: uuid.UUID,
+    run_id: str,
+    body: DeploymentApprovalConsumeRequest,
+    _: None = Depends(require_internal_token),
+    session: Uow = Depends(get_session),
+):
+    """Atomically consume (or idempotently replay) a post-test approval."""
+    try:
+        normalized_run_id = validate_run_id(run_id)
+    except ValueError as exc:
+        raise ValidationAppError(str(exc)) from exc
+    return await deployment_approval_service.consume(
+        session, org_id, normalized_run_id, body
+    )

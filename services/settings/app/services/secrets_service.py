@@ -2,9 +2,9 @@
 
 Scope always derives from the authenticated Principal (``principal.org_id``) for
 the browser-facing routes — never a path/body org id. The internal S2S resolve
-takes an ``org_id`` path param because it carries no user identity: the
-X-Internal-Token IS the authorization and the read is confined to that one org's
-vault (mirrors the org service's write-back endpoint).
+takes an ``org_id`` path param because it carries no user identity. Its
+``X-Org-Internal-Token`` is derived for that exact organization; a tenant proxy
+cannot use its bearer to select another vault.
 
 Secrets are write-only over the browser surface (masked to ``{set, source}``);
 plaintext is produced only by ``resolve_secrets_for_org`` for the internal S2S
@@ -12,6 +12,7 @@ endpoint. Encryption/decryption goes through the single ``app.crypto`` vault.
 """
 from __future__ import annotations
 
+import json
 import os
 import uuid
 
@@ -19,7 +20,7 @@ from app.authz.principal import Principal
 from app.core.database import Uow
 from app.core.timeutils import utcnow
 from app.crypto.vault import get_vault
-from app.models.secrets import SECRET_KEYS, OrgSecrets, clean_selection
+from app.models.secrets import SECRET_KEYS, SECRETS_DOC_ID, OrgSecrets, clean_selection
 from app.repositories.base import org_secrets_col
 from app.repositories.secrets_repo import SecretsRepository
 from app.schemas.secrets import (
@@ -29,6 +30,13 @@ from app.schemas.secrets import (
     SecretsResponse,
     SecretsUpdate,
     SelectionUpdate,
+)
+from app.schemas.codex_tokens import (
+    CodexTokenBundle,
+    CodexTokenImportRequest,
+    CodexTokenRotateRequest,
+    CodexTokenRotateResponse,
+    CodexTokenStatus,
 )
 
 
@@ -46,6 +54,9 @@ MANAGED_ENV = {
     "openaiApiKey": "OPENAI_API_KEY",
     "huggingfaceApiKey": "HUGGINGFACE_API_KEY",
     "langsmithApiKey": "LANGSMITH_API_KEY",
+    # OAuth bundles have no environment fallback. Platform operators may still
+    # import a managed bundle through the same encrypted vault if desired.
+    "codexTokenBundle": "",
 }
 
 
@@ -54,6 +65,26 @@ def _managed_value(key: str) -> str | None:
     env_name = MANAGED_ENV.get(key)
     value = os.environ.get(env_name, "") if env_name else ""
     return value or None
+
+
+async def credential_readiness_for_org(
+    session: Uow, org_id: uuid.UUID | None
+) -> dict[str, dict[str, str | bool | None]]:
+    """Return presence/source only for preflight; never decrypt customer values."""
+    if org_id is None:
+        return {
+            key: {"ready": bool(_managed_value(key)), "source": "managed"}
+            for key in SECRET_KEYS
+        }
+    stored = await SecretsRepository(session).get(org_secrets_col(org_id)) or OrgSecrets.empty(
+        str(org_id)
+    )
+    readiness: dict[str, dict[str, str | bool | None]] = {}
+    for key in SECRET_KEYS:
+        source = stored.selection_for(key)
+        ready = key in stored.secrets if source == "customer" else bool(_managed_value(key))
+        readiness[key] = {"ready": ready, "source": source}
+    return readiness
 
 
 def _mask(secrets: OrgSecrets) -> dict[str, MaskedSecret]:
@@ -178,3 +209,104 @@ async def resolve_managed_secrets() -> InternalOrgSecretsResponse:
         key: ResolvedSecret(source="managed", value=_managed_value(key)) for key in SECRET_KEYS
     }
     return InternalOrgSecretsResponse(org_id=None, secrets=resolved)
+
+
+def _bundle_json(bundle: CodexTokenBundle) -> str:
+    return json.dumps(
+        bundle.model_dump(by_alias=True), sort_keys=True, separators=(",", ":")
+    )
+
+
+def _parse_bundle(value: str) -> CodexTokenBundle:
+    return CodexTokenBundle.model_validate(json.loads(value))
+
+
+async def import_codex_tokens(
+    session: Uow, principal: Principal, body: CodexTokenImportRequest
+) -> CodexTokenStatus:
+    """Encrypt an operator-supplied bundle and select it for this organization."""
+    org_id = principal.org_id
+    col = org_secrets_col(org_id)
+    repo = SecretsRepository(session)
+    current = await repo.get(col) or OrgSecrets.empty(str(org_id))
+    encrypted = get_vault().encrypt_map(
+        {"codexTokenBundle": _bundle_json(body.tokens)}
+    )["codexTokenBundle"]
+    updated = OrgSecrets(
+        scope_id=str(org_id),
+        secrets={**current.secrets, "codexTokenBundle": encrypted},
+        selection={**current.selection, "codexTokenBundle": "customer"},
+        created_at=current.created_at,
+        updated_at=utcnow(),
+    )
+    await repo.upsert(col, updated)
+    return CodexTokenStatus(
+        configured=True,
+        source="customer",
+        updated_at=updated.updated_at.isoformat(),
+    )
+
+
+async def delete_codex_tokens(
+    session: Uow, principal: Principal
+) -> CodexTokenStatus:
+    org_id = principal.org_id
+    col = org_secrets_col(org_id)
+    repo = SecretsRepository(session)
+    current = await repo.get(col) or OrgSecrets.empty(str(org_id))
+    next_secrets = dict(current.secrets)
+    next_secrets.pop("codexTokenBundle", None)
+    updated = OrgSecrets(
+        scope_id=str(org_id),
+        secrets=next_secrets,
+        selection={**current.selection, "codexTokenBundle": "customer"},
+        created_at=current.created_at,
+        updated_at=utcnow(),
+    )
+    await repo.upsert(col, updated)
+    return CodexTokenStatus(
+        configured=False,
+        source="customer",
+        updated_at=updated.updated_at.isoformat(),
+    )
+
+
+async def rotate_codex_tokens(
+    session: Uow, org_id: uuid.UUID, body: CodexTokenRotateRequest
+) -> CodexTokenRotateResponse:
+    """Compare-and-swap a refreshed token set across proxy instances."""
+    col = org_secrets_col(org_id)
+    replacement = get_vault().encrypt_map(
+        {"codexTokenBundle": _bundle_json(body.tokens)}
+    )["codexTokenBundle"]
+
+    async def update(txn):
+        doc = await txn.get(col, SECRETS_DOC_ID)
+        current = OrgSecrets.from_doc(doc) if doc else OrgSecrets.empty(str(org_id))
+        encrypted = current.secrets.get("codexTokenBundle")
+        if encrypted is None:
+            # Only operator import may establish an initial credential.
+            return None
+        plaintext = get_vault().decrypt_map({"codexTokenBundle": encrypted})[
+            "codexTokenBundle"
+        ]
+        existing = _parse_bundle(plaintext)
+        if existing.obtained_at != body.expected_obtained_at:
+            return (False, existing)
+        next_record = OrgSecrets(
+            scope_id=str(org_id),
+            secrets={**current.secrets, "codexTokenBundle": replacement},
+            selection={**current.selection, "codexTokenBundle": "customer"},
+            created_at=current.created_at,
+            updated_at=utcnow(),
+        )
+        txn.set(col, SECRETS_DOC_ID, next_record.to_doc())
+        return (True, body.tokens)
+
+    resolved = await session.db.run_transaction(update)
+    if resolved is None:
+        from app.errors import NotFoundError
+
+        raise NotFoundError("Codex credentials are not configured")
+    updated, tokens = resolved
+    return CodexTokenRotateResponse(updated=updated, tokens=tokens)

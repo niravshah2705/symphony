@@ -1,6 +1,6 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared/config');
+const { CONFIG } = require('@ai-fleet/shared-core/config');
 
 /**
  * CORS for the GCS-hosted SPA calling the gateway API cross-origin.

@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared-core
 
-- **Size**: 417 nodes
-- **Cohesion**: 0.1895
+- **Size**: 419 nodes
+- **Cohesion**: 0.1913
 - **Dominant Language**: javascript
 
 ## Members
@@ -41,31 +41,31 @@ Directory-based community: packages/shared-core
 | reportStatus | Function | ./packages/shared-core/src/agent/diagnostics.js | 285-289 |
 | runDiagnostics | Function | ./packages/shared-core/src/agent/diagnostics.js | 292-315 |
 | isLocalInference | Function | ./packages/shared-core/src/agent/model-presets.js | 24-24 |
-| isPurposeRole | Function | ./packages/shared-core/src/agent/model-presets.js | 43-43 |
-| assert | Function | ./packages/shared-core/src/agent/model-presets.js | 62-64 |
-| validateCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 66-194 |
-| getPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 207-209 |
-| presetsForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 211-216 |
-| presetForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 218-223 |
-| presetForModel | Function | ./packages/shared-core/src/agent/model-presets.js | 225-227 |
-| clampInt | Function | ./packages/shared-core/src/agent/model-presets.js | 229-233 |
-| clampNumber | Function | ./packages/shared-core/src/agent/model-presets.js | 235-239 |
-| clampTemperature | Function | ./packages/shared-core/src/agent/model-presets.js | 241-246 |
-| cleanModel | Function | ./packages/shared-core/src/agent/model-presets.js | 248-253 |
-| normalizedModel | Function | ./packages/shared-core/src/agent/model-presets.js | 255-257 |
-| modelMatchesPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 260-272 |
-| normalizeParameters | Function | ./packages/shared-core/src/agent/model-presets.js | 274-334 |
-| settingsPatchForPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 337-422 |
-| settingsPatchForTier | Function | ./packages/shared-core/src/agent/model-presets.js | 431-445 |
-| sanitizeModelId | Function | ./packages/shared-core/src/agent/model-presets.js | 448-450 |
-| effortValuesFromProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 452-458 |
-| runtimePresetForProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 465-531 |
-| neutralLocalPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 538-571 |
-| settingsPatchForReasoning | Function | ./packages/shared-core/src/agent/model-presets.js | 574-585 |
-| customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 588-775 |
-| publicCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 777-779 |
+| isPurposeRole | Function | ./packages/shared-core/src/agent/model-presets.js | 45-45 |
+| assert | Function | ./packages/shared-core/src/agent/model-presets.js | 64-66 |
+| validateCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 68-196 |
+| getPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 209-211 |
+| presetsForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 213-218 |
+| presetForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 220-225 |
+| presetForModel | Function | ./packages/shared-core/src/agent/model-presets.js | 227-229 |
+| clampInt | Function | ./packages/shared-core/src/agent/model-presets.js | 231-235 |
+| clampNumber | Function | ./packages/shared-core/src/agent/model-presets.js | 237-241 |
+| clampTemperature | Function | ./packages/shared-core/src/agent/model-presets.js | 243-248 |
+| cleanModel | Function | ./packages/shared-core/src/agent/model-presets.js | 250-255 |
+| normalizedModel | Function | ./packages/shared-core/src/agent/model-presets.js | 257-259 |
+| modelMatchesPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 262-274 |
+| normalizeParameters | Function | ./packages/shared-core/src/agent/model-presets.js | 276-336 |
+| settingsPatchForPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 339-424 |
+| settingsPatchForTier | Function | ./packages/shared-core/src/agent/model-presets.js | 433-447 |
+| sanitizeModelId | Function | ./packages/shared-core/src/agent/model-presets.js | 450-452 |
+| effortValuesFromProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 454-460 |
+| runtimePresetForProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 467-533 |
+| neutralLocalPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 540-573 |
+| settingsPatchForReasoning | Function | ./packages/shared-core/src/agent/model-presets.js | 576-587 |
+| customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 590-777 |
+| publicCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 779-781 |
 
-*... and 367 more members.*
+*... and 369 more members.*
 
 ## Execution Flows
 
@@ -87,13 +87,13 @@ Directory-based community: packages/shared-core
 
 - `join` (118 edge(s))
 - `equal` (112 edge(s))
-- `String` (77 edge(s))
-- `map` (56 edge(s))
+- `String` (86 edge(s))
+- `map` (58 edge(s))
 - `push` (55 edge(s))
-- `includes` (48 edge(s))
-- `trim` (47 edge(s))
+- `trim` (50 edge(s))
+- `filter` (50 edge(s))
+- `includes` (49 edge(s))
 - `isArray` (41 edge(s))
-- `filter` (35 edge(s))
 - `slice` (33 edge(s))
 - `ok` (32 edge(s))
 - `set` (25 edge(s))
@@ -108,9 +108,9 @@ Directory-based community: packages/shared-core
 - `join` (64 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (40 edge(s))
 - `ok` (32 edge(s))
-- `./packages/shared-core/src/provisioning/index.js` (27 edge(s))
+- `./packages/shared-core/src/config.js` (28 edge(s))
+- `./packages/shared-core/src/provisioning/index.js` (28 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (27 edge(s))
-- `./packages/shared-core/src/config.js` (26 edge(s))
 - `deepEqual` (25 edge(s))
 - `./packages/shared-core/src/agent/diagnostics.js` (23 edge(s))
 - `throws` (21 edge(s))

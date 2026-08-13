@@ -21,6 +21,9 @@ const DROP_REQUEST_HEADERS = new Set([
   'accept-encoding',
   // Inbound auth is never forwarded — the proxy injects its own credential.
   'authorization', 'x-internal-token', 'x-forwarded-authorization', 'cookie',
+  // OAuth-only; credentials.buildInjection re-adds it for a Claude OAuth
+  // selection and omits it for an Anthropic API-key selection.
+  'anthropic-beta',
 ]);
 
 const DROP_RESPONSE_HEADERS = new Set([

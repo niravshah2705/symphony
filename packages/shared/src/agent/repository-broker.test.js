@@ -13,6 +13,9 @@ const {
   buildSafeAgentEnv,
   validateRepository,
   normalizeReview,
+  normalizeDeploymentManifest,
+  mergeReceiptDigest,
+  validateMergeReceipt,
 } = require('./repository-broker');
 
 test('normalizeReview treats a GitHub list-endpoint merged PR (merged_at, no `merged`) as merged', () => {
@@ -31,7 +34,41 @@ test('normalizeReview treats a GitHub list-endpoint merged PR (merged_at, no `me
 });
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
+const TREE_SHA = '89abcdef0123456789abcdef0123456789abcdef';
 const execFileP = promisify(execFile);
+
+test('merge receipt validation equality-binds command, work item, and immutable revision', () => {
+  const payload = {
+    schemaVersion: 1,
+    kind: 'repository-merge-receipt',
+    source: 'repository-broker',
+    provider: 'github',
+    repository: 'acme/widgets',
+    commandId: 'run-1:code:1',
+    workItemId: 'issue-1',
+    branch: 'task-123',
+    baseBranch: 'main',
+    reviewId: 42,
+    reviewUrl: 'https://github.com/acme/widgets/pull/42',
+    headSha: 'a'.repeat(40),
+    mergedSha: SHA,
+    commitSha: SHA,
+    treeSha: TREE_SHA,
+    reused: false,
+  };
+  const receipt = { ...payload, receiptDigest: mergeReceiptDigest(payload) };
+  assert.deepEqual(validateMergeReceipt(receipt, {
+    repository: 'acme/widgets', commandId: 'run-1:code:1', workItemId: 'issue-1', branch: 'task-123',
+  }), receipt);
+  assert.throws(
+    () => validateMergeReceipt({ ...receipt, treeSha: 'b'.repeat(40) }),
+    (error) => error.code === 'invalid_merge_receipt',
+  );
+  assert.throws(
+    () => validateMergeReceipt(receipt, { commandId: 'run-2:code:1' }),
+    (error) => error.code === 'merge_receipt_scope_mismatch',
+  );
+});
 
 function response(status, data, headers = {}) {
   return {
@@ -141,6 +178,7 @@ function createScope(t, {
     return { stdout: '' };
   };
 
+  const providerFetch = fetchImpl || (async () => response(500, { message: 'unexpected request' }));
   const broker = new RepositoryBroker({
     provider,
     repository,
@@ -149,7 +187,12 @@ function createScope(t, {
     workDir,
     branch: 'task-123',
     label: 'techsymphony',
-    fetchImpl: fetchImpl || (async () => response(500, { message: 'unexpected request' })),
+    fetchImpl: async (url, options) => {
+      if (options.method === 'GET' && new RegExp(`/commits/${SHA}$`).test(url)) {
+        return response(200, { sha: SHA, commit: { tree: { sha: TREE_SHA } } });
+      }
+      return providerFetch(url, options);
+    },
     execFileImpl,
   });
   broker.baseBranch = 'main';
@@ -158,6 +201,112 @@ function createScope(t, {
     fs.rmSync(root, { recursive: true, force: true });
   });
   return { broker, gitCalls, repository, token, workDir };
+}
+
+function deploymentManifest(workflow = 'deploy.yml', inputs = { channel: 'stable' }) {
+  return {
+    schemaVersion: 1,
+    environments: {
+      staging: {
+        provider: 'github-actions',
+        workflow,
+        ref: 'main',
+        inputs,
+        environmentInput: 'target_environment',
+        idempotencyInput: 'pipeline_command_id',
+        timeoutSeconds: 30,
+      },
+    },
+  };
+}
+
+function createPreparedDeploymentScope(t, {
+  trustedManifest = deploymentManifest(),
+  sleep,
+  conclusion = 'success',
+} = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repository-broker-deploy-'));
+  const seed = path.join(root, 'seed');
+  const remote = path.join(root, 'remote.git');
+  const workspaceRoot = path.join(root, 'workspaces');
+  const workDir = path.join(workspaceRoot, 'ticket');
+  fs.mkdirSync(path.join(seed, '.ai-fleet'), { recursive: true });
+  execFileSync('git', ['init', '-b', 'main'], { cwd: seed });
+  execFileSync('git', ['config', 'user.name', 'Test'], { cwd: seed });
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: seed });
+  fs.writeFileSync(path.join(seed, '.ai-fleet', 'deployment.json'), JSON.stringify(trustedManifest), 'utf8');
+  execFileSync('git', ['add', '.ai-fleet/deployment.json'], { cwd: seed });
+  execFileSync('git', ['commit', '-m', 'allow deployment'], { cwd: seed });
+  const commitSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: seed, encoding: 'utf8' }).trim();
+  const treeSha = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: seed, encoding: 'utf8' }).trim();
+  const artifact = { commitSha, treeSha };
+  execFileSync('git', ['clone', '--bare', seed, remote], { cwd: root });
+
+  const execFileImpl = async (command, inputArgs, options) => {
+    const args = [...inputArgs];
+    const privateBareCommand = args.some((arg) => String(arg).startsWith('--git-dir='));
+    if (args.includes('ls-remote') || (privateBareCommand && args.includes('fetch'))) {
+      const origin = args.indexOf('origin');
+      if (origin >= 0) args[origin] = remote;
+    }
+    return execFileP(command, args, options);
+  };
+  const requests = [];
+  let runListCalls = 0;
+  let deploymentTag = null;
+  const fetchImpl = async (url, options) => {
+    requests.push({ url, options });
+    if (options.method === 'GET' && url.includes('/git/ref/tags/')) {
+      return deploymentTag
+        ? response(200, { ref: `refs/tags/${deploymentTag}`, object: { type: 'commit', sha: commitSha } })
+        : response(404, { message: 'not found' });
+    }
+    if (options.method === 'POST' && url.endsWith('/git/refs')) {
+      const body = JSON.parse(options.body);
+      deploymentTag = String(body.ref).replace(/^refs\/tags\//, '');
+      assert.equal(body.sha, commitSha);
+      return response(201, { ref: body.ref, object: { type: 'commit', sha: commitSha } });
+    }
+    if (options.method === 'GET' && url.includes('/actions/workflows/deploy.yml/runs?')) {
+      runListCalls += 1;
+      return response(200, runListCalls === 1 ? { workflow_runs: [] } : {
+        workflow_runs: [{ id: 42, head_sha: commitSha, head_branch: deploymentTag }],
+      });
+    }
+    if (options.method === 'POST' && url.endsWith('/actions/workflows/deploy.yml/dispatches')) {
+      return response(204, null);
+    }
+    if (options.method === 'GET' && url.endsWith('/actions/runs/42')) {
+      return response(200, {
+        id: 42,
+        head_sha: commitSha,
+        head_branch: deploymentTag,
+        status: 'completed',
+        conclusion,
+        html_url: 'https://github.com/acme/widgets/actions/runs/42',
+      });
+    }
+    return response(500, { message: 'unexpected request' });
+  };
+  const broker = new RepositoryBroker({
+    provider: 'github',
+    repository: {
+      provider: 'github', owner: 'acme', name: 'widgets',
+      fullName: 'acme/widgets', https: 'https://github.com/acme/widgets.git',
+    },
+    token: 'stored-secret-token',
+    workspaceRoot,
+    workDir,
+    branch: 'task-123',
+    execFileImpl,
+    fetchImpl,
+    sleep: sleep || (async () => {}),
+  });
+  t.after(() => {
+    broker.dispose();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  return { broker, requests, workDir, artifact };
 }
 
 test('safe shell environment allowlists operational values and drops all ambient secrets', () => {
@@ -196,6 +345,145 @@ test('safe shell environment allowlists operational values and drops all ambient
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('deployment manifests require a fixed provider/ref and an idempotency input', () => {
+  assert.equal(normalizeDeploymentManifest(deploymentManifest(), {
+    provider: 'github', environment: 'staging', baseBranch: 'main',
+  }).idempotencyInput, 'pipeline_command_id');
+  assert.throws(
+    () => normalizeDeploymentManifest({
+      schemaVersion: 1,
+      environments: { staging: { provider: 'github-actions', workflow: 'deploy.yml', ref: 'main' } },
+    }, { provider: 'github', environment: 'staging', baseBranch: 'main' }),
+    (error) => error.code === 'invalid_deployment_manifest' && /idempotencyInput/.test(error.message),
+  );
+  assert.throws(
+    () => normalizeDeploymentManifest(deploymentManifest('deploy.yml'), {
+      provider: 'gitlab', environment: 'staging', baseBranch: 'main',
+    }),
+    (error) => error.code === 'repository_provider_not_brokered',
+  );
+  const collidingInputs = deploymentManifest();
+  collidingInputs.environments.staging.environmentInput = 'pipeline_command_id';
+  assert.throws(
+    () => normalizeDeploymentManifest(collidingInputs, {
+      provider: 'github', environment: 'staging', baseBranch: 'main',
+    }),
+    (error) => error.code === 'invalid_deployment_manifest' && /distinct/.test(error.message),
+  );
+  assert.throws(
+    () => normalizeDeploymentManifest(deploymentManifest('deploy.yml', { release_key: 'opaque' }), {
+      provider: 'github', environment: 'staging', baseBranch: 'main',
+    }),
+    (error) => error.code === 'invalid_deployment_manifest',
+  );
+  assert.throws(
+    () => normalizeDeploymentManifest(deploymentManifest('deploy.yml', { apiKey: 'opaque' }), {
+      provider: 'github', environment: 'staging', baseBranch: 'main',
+    }),
+    (error) => error.code === 'invalid_deployment_manifest',
+  );
+  assert.throws(
+    () => normalizeDeploymentManifest(deploymentManifest('deploy.yml', { channel: 'Bearer abcdefghijklmnop' }), {
+      provider: 'github', environment: 'staging', baseBranch: 'main',
+    }),
+    (error) => error.code === 'invalid_deployment_manifest' && /credential/.test(error.message),
+  );
+});
+
+test('deployment tool rejects providers without the brokered egress path', (t) => {
+  const { broker } = createScope(t, { provider: 'gitlab' });
+  assert.throws(
+    () => broker.createDeploymentTool({ environment: 'staging', commandId: 'run-1:deploy:1' }),
+    (error) => error.code === 'repository_provider_not_brokered',
+  );
+});
+
+test('deployment uses the trusted tested-revision manifest, not a modified worktree copy', async (t) => {
+  const { broker, requests, workDir, artifact } = createPreparedDeploymentScope(t);
+  await broker.prepare();
+  await broker.pinRevision(artifact);
+  fs.writeFileSync(
+    path.join(workDir, '.ai-fleet', 'deployment.json'),
+    JSON.stringify(deploymentManifest('attacker.yml', { injected: true })),
+    'utf8',
+  );
+
+  const output = JSON.parse(await broker.createDeploymentTool({
+    environment: 'staging', commandId: 'run-1:deploy:1', revision: artifact,
+  }).invoke({ action: 'deploy' }));
+
+  assert.equal(output.ok, true);
+  assert.equal(output.workflow, 'deploy.yml');
+  const dispatch = requests.find(({ url, options }) => (
+    options.method === 'POST' && url.endsWith('/actions/workflows/deploy.yml/dispatches')
+  ));
+  assert.match(dispatch.url, /\/actions\/workflows\/deploy\.yml\/dispatches$/);
+  assert.doesNotMatch(dispatch.url, /attacker/);
+  assert.deepEqual(JSON.parse(dispatch.options.body), {
+    ref: output.ref,
+    inputs: {
+      channel: 'stable',
+      target_environment: 'staging',
+      pipeline_command_id: 'run-1:deploy:1',
+    },
+  });
+});
+
+test('revision pinning rejects a commit/tree mismatch before deployment', async (t) => {
+  const { broker, artifact } = createPreparedDeploymentScope(t);
+  await broker.prepare();
+  await assert.rejects(
+    () => broker.pinRevision({ ...artifact, treeSha: 'f'.repeat(40) }),
+    (error) => error.code === 'artifact_tree_mismatch',
+  );
+  assert.equal(broker.pinnedRevision(), null);
+});
+
+test('concurrent deployment tool calls serialize and dispatch the command once', async (t) => {
+  const { broker, requests, artifact } = createPreparedDeploymentScope(t);
+  await broker.prepare();
+  await broker.pinRevision(artifact);
+  const tool = broker.createDeploymentTool({
+    environment: 'staging', commandId: 'run-1:deploy:1', revision: artifact,
+  });
+  const [first, second] = await Promise.all([
+    tool.invoke({ action: 'deploy' }),
+    tool.invoke({ action: 'deploy' }),
+  ]);
+  const outputs = [JSON.parse(first), JSON.parse(second)];
+
+  assert.ok(outputs.every((output) => output.ok === true && output.status === 'succeeded'));
+  assert.equal(requests.filter(({ url, options }) => (
+    options.method === 'POST' && url.endsWith('/actions/workflows/deploy.yml/dispatches')
+  )).length, 1);
+  assert.equal(outputs.some((output) => output.reused === true), true);
+
+  const mismatchedCommand = JSON.parse(await broker.createDeploymentTool({
+    environment: 'staging', commandId: 'run-2:deploy:1', revision: artifact,
+  }).invoke({ action: 'deploy' }));
+  assert.equal(mismatchedCommand.ok, false);
+  assert.equal(mismatchedCommand.code, 'deployment_revision_mismatch');
+});
+
+test('a terminal failed deployment is reported again without implicit redispatch', async (t) => {
+  const { broker, requests, artifact } = createPreparedDeploymentScope(t, { conclusion: 'failure' });
+  await broker.prepare();
+  await broker.pinRevision(artifact);
+  const tool = broker.createDeploymentTool({
+    environment: 'staging', commandId: 'run-1:deploy:1', revision: artifact,
+  });
+  const first = JSON.parse(await tool.invoke({ action: 'deploy' }));
+  const second = JSON.parse(await tool.invoke({ action: 'deploy' }));
+
+  assert.equal(first.ok, false);
+  assert.equal(first.code, 'deployment_failed');
+  assert.equal(second.ok, false);
+  assert.equal(second.code, 'deployment_failed');
+  assert.equal(requests.filter(({ url, options }) => (
+    options.method === 'POST' && url.endsWith('/actions/workflows/deploy.yml/dispatches')
+  )).length, 1);
 });
 
 test('repository scope rejects cross-provider hosts and nested GitHub namespaces', () => {
@@ -516,6 +804,7 @@ test('existing GitHub review is reused only after reapplying the required label'
     return response(500, { message: 'unexpected request' });
   };
   const { broker } = createScope(t, { fetchImpl });
+  broker.bindArtifactContext({ commandId: 'run-1:code:1', workItemId: 'issue-1' });
   const result = await broker.execute({ action: 'open_review', title: 'Fix widgets' });
 
   assert.equal(result.reused, true);
@@ -837,6 +1126,7 @@ test('GitHub merge requires every feedback cursor window to be consumed in this 
     return response(500, { message: 'unexpected request' });
   };
   const { broker } = createScope(t, { fetchImpl });
+  broker.bindArtifactContext({ commandId: 'run-1:code:1', workItemId: 'issue-1' });
   const outOfOrder = await broker.execute({ action: 'review_status', cursor: 20 });
   assert.equal(outOfOrder.feedbackReadComplete, false);
   assert.equal(outOfOrder.expectedFeedbackCursor, 0);
@@ -860,6 +1150,12 @@ test('GitHub merge requires every feedback cursor window to be consumed in this 
   assert.equal(final.feedbackReadComplete, true);
   const merged = await broker.execute({ action: 'merge_review' });
   assert.equal(merged.merged, true);
+  assert.deepEqual(broker.artifactReceipt(), merged.artifactReceipt);
+  assert.equal(merged.artifactReceipt.commandId, 'run-1:code:1');
+  assert.equal(merged.artifactReceipt.workItemId, 'issue-1');
+  assert.equal(merged.artifactReceipt.commitSha, SHA);
+  assert.equal(merged.artifactReceipt.treeSha, TREE_SHA);
+  assert.match(merged.artifactReceipt.receiptDigest, /^[0-9a-f]{64}$/);
   assert.equal(mergeCalls, 1);
 });
 

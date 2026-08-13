@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1570 nodes
-- **Cohesion**: 0.1154
+- **Size**: 1757 nodes
+- **Cohesion**: 0.1250
 - **Dominant Language**: javascript
 
 ## Members
@@ -63,58 +63,58 @@ Directory-based community: packages/shared
 | makeLabelResolver | Function | ./packages/shared/src/agent/apply.js | 40-55 |
 | makeModelLabelResolver | Function | ./packages/shared/src/agent/apply.js | 63-83 |
 | issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
-| applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-212 |
+| applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-222 |
 
-*... and 1520 more members.*
+*... and 1707 more members.*
 
 ## Execution Flows
 
 - **executeClaude** (criticality: 0.61, depth: 1)
-- **executeAgentRuntime** (criticality: 0.54, depth: 2)
+- **internalServiceAuth** (criticality: 0.61, depth: 1)
 - **requestIp** (criticality: 0.48, depth: 1)
+- **pipelineStageAuth** (criticality: 0.48, depth: 1)
 - **applySettingsPatch** (criticality: 0.48, depth: 1)
 - **prepareWorkspace** (criticality: 0.48, depth: 1)
 - **createIssue** (criticality: 0.48, depth: 1)
+- **normalizeDeploymentManifest** (criticality: 0.46, depth: 1)
+- **createRuntimeDispatcher** (criticality: 0.45, depth: 2)
 - **preparePlannedWorkspace** (criticality: 0.45, depth: 2)
-- **getOpenProjects** (criticality: 0.45, depth: 2)
-- **getAllProjectLabels** (criticality: 0.45, depth: 2)
-- **discoverModels** (criticality: 0.45, depth: 4)
-- *... and 15 more flows.*
+- *... and 4 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (1408 edge(s))
-- `deepEqual` (262 edge(s))
-- `join` (220 edge(s))
-- `String` (189 edge(s))
-- `push` (171 edge(s))
-- `includes` (164 edge(s))
-- `ok` (150 edge(s))
-- `map` (128 edge(s))
-- `strictEqual` (127 edge(s))
-- `match` (112 edge(s))
-- `slice` (102 edge(s))
-- `filter` (96 edge(s))
-- `trim` (91 edge(s))
-- `isArray` (86 edge(s))
-- `Number` (83 edge(s))
+- `equal` (1550 edge(s))
+- `deepEqual` (311 edge(s))
+- `String` (251 edge(s))
+- `join` (239 edge(s))
+- `includes` (187 edge(s))
+- `push` (183 edge(s))
+- `ok` (151 edge(s))
+- `trim` (136 edge(s))
+- `map` (135 edge(s))
+- `strictEqual` (132 edge(s))
+- `match` (117 edge(s))
+- `slice` (108 edge(s))
+- `isArray` (105 edge(s))
+- `filter` (100 edge(s))
+- `throws` (96 edge(s))
 
 ### Incoming
 
-- `equal` (1401 edge(s))
-- `deepEqual` (260 edge(s))
-- `ok` (150 edge(s))
-- `strictEqual` (127 edge(s))
-- `match` (95 edge(s))
-- `join` (87 edge(s))
+- `equal` (1540 edge(s))
+- `deepEqual` (309 edge(s))
+- `ok` (151 edge(s))
+- `strictEqual` (132 edge(s))
+- `match` (99 edge(s))
+- `throws` (96 edge(s))
+- `./packages/shared/src/agent/repository-broker.js` (96 edge(s))
+- `join` (92 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (80 edge(s))
 - `./packages/shared/src/linear.js` (74 edge(s))
-- `throws` (71 edge(s))
-- `./packages/shared/src/agent/repository-broker.js` (71 edge(s))
 - `includes` (70 edge(s))
+- `rejects` (64 edge(s))
 - `./packages/shared/src/agent/harnesses/contract.js` (60 edge(s))
-- `./packages/shared/src/agent/scheduler.js` (55 edge(s))
-- `rejects` (54 edge(s))
-- `./packages/shared/src/agent/coder-flow.test.js` (53 edge(s))
+- `./packages/shared/src/agent/repository-broker.test.js` (60 edge(s))
+- `./packages/shared/src/agent/coder-flow.test.js` (55 edge(s))

@@ -19,9 +19,156 @@ async def test_universe_lists_all_domains(client):
     assert set(domains) == {"harness", "tools", "skills", "plugins", "hooks", "models"}
     assert "deepagent" in domains["harness"]
     assert "docker" in domains["tools"]
+    assert "billing" in domains["tools"]
     assert "linear" in domains["skills"]
     assert "pre-code" in domains["hooks"]
     assert "claude-opus-4-8" in domains["models"]
+    catalog = resp.json()["harnesses"]
+    assert resp.json()["schemaVersion"] == 1
+    assert next(item for item in catalog if item["id"] == "deepagent")["availability"] == "available"
+    # Experimental adapters are discoverable but cannot be selected by policy.
+    assert next(item for item in catalog if item["id"] == "opencode")["availability"] == "experimental"
+    assert "opencode" not in domains["harness"]
+
+
+async def test_preflight_resolves_request_stage_global_precedence_and_broker_guard(client):
+    org = uuid.uuid4()
+    _admin, token = await make_user(
+        email="preflight@a.com", org_id=org, org_role=OrgRole.ORG_ADMIN
+    )
+    put = await client.put(
+        "/api/v1/settings/org",
+        headers=auth(token),
+        json={
+            "prefs": {
+                "agentRuntime": "deepagent",
+                "planHarness": "antigravity-sdk",
+                "codeHarness": "codex-sdk",
+                "llmProvider": "ollama",
+            }
+        },
+    )
+    assert put.status_code == 200
+
+    response = await client.post(
+        "/api/v1/settings/preflight",
+        headers=auth(token),
+        json={
+            "stages": ["plan", "code"],
+            "harnesses": {"plan": "deepagent"},
+            "providers": {"plan": "ollama", "code": "codex"},
+            "models": {
+                "plan": "ollama-gpt-oss-20b",
+                "code": "codex-gpt-5-6-sol",
+            },
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["decision_id"]) == 24
+    assert body["stages"][0]["harness"] == "deepagent"  # request wins
+    assert body["stages"][0]["provider"] == "ollama"
+    assert body["stages"][0]["model"] == "ollama-gpt-oss-20b"
+    assert body["stages"][1]["harness"] == "codex-sdk"  # per-stage pref
+    assert "brokered_stage_unsupported" in body["stages"][1]["errors"]
+    assert body["domains"]["models"]
+    assert body["ready"] is False
+
+
+async def test_preflight_snapshots_initiating_user_model_policy(client):
+    org = uuid.uuid4()
+    _user, token = await make_user(email="preflight-user@a.com", org_id=org)
+    narrowed = await client.put(
+        "/api/v1/me/settings",
+        headers=auth(token),
+        json={
+            "domains": {
+                "models": {
+                    "include": ["ollama-gpt-oss-20b"],
+                    "exclude": [],
+                }
+            }
+        },
+    )
+    assert narrowed.status_code == 200
+
+    response = await client.post(
+        "/api/v1/settings/preflight",
+        headers=auth(token),
+        json={
+            "stages": ["plan"],
+            "providers": {"plan": "codex"},
+            "models": {"plan": "codex-gpt-5-6-sol"},
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["domains"]["models"] == ["ollama-gpt-oss-20b"]
+    assert "model_denied" in body["stages"][0]["errors"]
+    assert body["ready"] is False
+
+
+async def test_preflight_identifies_the_managed_static_llm_credential_kind(
+    client, monkeypatch
+):
+    org = uuid.uuid4()
+    _user, token = await make_user(email="credential-kind@a.com", org_id=org)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-managed")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-managed")
+
+    codex = await client.post(
+        "/api/v1/settings/preflight",
+        headers=auth(token),
+        json={
+            "stages": ["plan"],
+            "providers": {"plan": "codex"},
+            "models": {"plan": "codex-gpt-5-6-sol"},
+        },
+    )
+    assert codex.status_code == 200
+    assert codex.json()["stages"][0]["credential"] == {
+        "ready": True,
+        "source": "managed",
+        "kind": "openaiApiKey",
+    }
+
+    claude = await client.post(
+        "/api/v1/settings/preflight",
+        headers=auth(token),
+        json={
+            "stages": ["plan"],
+            "providers": {"plan": "claude"},
+            "models": {"plan": "claude-opus-4-8"},
+        },
+    )
+    assert claude.status_code == 200
+    assert claude.json()["stages"][0]["credential"] == {
+        "ready": True,
+        "source": "managed",
+        "kind": "anthropicApiKey",
+    }
+
+
+@pytest.mark.parametrize(
+    "stages",
+    [
+        ["plan", "deploy"],
+        ["test", "deploy"],
+        ["plan", "test", "deploy"],
+        ["code", "test", "deploy"],
+    ],
+)
+async def test_preflight_rejects_deploy_without_exact_full_pipeline(client, stages):
+    org = uuid.uuid4()
+    _admin, token = await make_user(
+        email="invalid-run@a.com", org_id=org, org_role=OrgRole.ORG_ADMIN
+    )
+    response = await client.post(
+        "/api/v1/settings/preflight",
+        headers=auth(token),
+        json={"stages": stages},
+    )
+    assert response.status_code == 422
 
 
 async def test_org_policy_round_trips(client):

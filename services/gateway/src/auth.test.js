@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildFirebaseAuthConfig } = require('@ai-fleet/shared/config');
+const { buildFirebaseAuthConfig } = require('@ai-fleet/shared-core/config');
 const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig, verifyFirebaseIdToken } = require('./auth');
 
 function firebaseConfig(overrides = {}) {

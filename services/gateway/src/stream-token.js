@@ -1,8 +1,8 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { CONFIG } = require('@ai-fleet/shared/config');
-const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared/messaging/events');
+const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared-core/messaging/events');
 
 /**
  * Short-lived, HMAC-signed stream tokens.

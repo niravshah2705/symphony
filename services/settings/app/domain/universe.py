@@ -17,10 +17,51 @@ side, add it here too (and the resolver will start governing it).
 """
 from __future__ import annotations
 
+import json
+from functools import lru_cache
+from pathlib import Path
+
 from app.core.config import get_settings
 
-# Agent-runtime ids (RUNTIMES keys in runtimes.js).
-HARNESS: tuple[str, ...] = ("deepagent", "codex-sdk", "claude-agent-sdk", "antigravity-sdk")
+
+def _catalog_path() -> Path:
+    """Resolve the one versioned harness catalog in source and image layouts."""
+    bundled = Path(__file__).with_name("harness-catalog.json")
+    if bundled.is_file():
+        return bundled
+    repo_catalog = (
+        Path(__file__).resolve().parents[4]
+        / "packages"
+        / "shared-core"
+        / "src"
+        / "agent"
+        / "harness-catalog.json"
+    )
+    if not repo_catalog.is_file():
+        raise RuntimeError("canonical harness catalog is missing")
+    return repo_catalog
+
+
+@lru_cache(maxsize=1)
+def harness_catalog() -> dict:
+    raw = json.loads(_catalog_path().read_text(encoding="utf-8"))
+    if raw.get("schemaVersion") != 1 or not isinstance(raw.get("harnesses"), list):
+        raise RuntimeError("unsupported harness catalog schema")
+    return raw
+
+
+def harness_metadata() -> list[dict]:
+    """Return copies so response serialization cannot mutate the cached asset."""
+    return [dict(item) for item in harness_catalog()["harnesses"]]
+
+
+# Only fully available adapters are selectable. Experimental adapters remain
+# discoverable in metadata but cannot enter an effective policy.
+HARNESS: tuple[str, ...] = tuple(
+    item["id"]
+    for item in harness_catalog()["harnesses"]
+    if item.get("availability") == "available"
+)
 
 # Developer-tool registry domain names (DOMAINS keys in tools/index.js).
 TOOLS: tuple[str, ...] = (
@@ -32,6 +73,7 @@ TOOLS: tuple[str, ...] = (
     "quality",
     "codegen",
     "playwright",
+    "billing",
 )
 
 # Vendored core-workflow skill ids (skills/SKILLS.md, section 1).

@@ -37,16 +37,19 @@ test('providerForRole: purpose roles read their own provider slot', () => {
     thinkingLlmProvider: 'codex',
     executionLlmProvider: 'ollama',
     testingLlmProvider: 'lmstudio',
+    deploymentLlmProvider: 'claude',
   };
   assert.strictEqual(providerForRole(settings, 'thinking'), 'codex');
   assert.strictEqual(providerForRole(settings, 'execution'), 'ollama');
   assert.strictEqual(providerForRole(settings, 'testing'), 'lmstudio');
+  assert.strictEqual(providerForRole(settings, 'deployment'), 'claude');
 });
 
 test('providerForRole: purpose roles fall back to the hosted slot, then ollama', () => {
   assert.strictEqual(providerForRole({ llmProvider: 'claude' }, 'thinking'), 'claude');
   assert.strictEqual(providerForRole({ llmProvider: 'codex' }, 'execution'), 'codex');
   assert.strictEqual(providerForRole({}, 'testing'), 'ollama');
+  assert.strictEqual(providerForRole({}, 'deployment'), 'ollama');
 });
 
 /* ----------------------------- modelRoleForTask ------------------------ */

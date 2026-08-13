@@ -6,13 +6,10 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { resolveSkillsSrc } = require('../config');
-const { createChatModel } = require('./llm');
 const toolRegistry = require('./tools');
-const { installSafeRead } = require('./safe-read');
-const { createFsArgNormalizerMiddleware } = require('./fs-arg-normalizer');
-const { buildSafeAgentEnv } = require('./repository-broker');
 const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = require('./runtimes');
-const { applyPolicyToWorkflow, filterSkillPaths, skillNameFromPath } = require('./settings-policy');
+const deepAgentHarness = require('./harnesses/deepagent');
+const { applyPolicyToWorkflow, skillNameFromPath } = require('./settings-policy');
 const { withResources } = require('./trace-annotations');
 
 /**
@@ -21,9 +18,8 @@ const { withResources } = require('./trace-annotations');
  * Both the planning and coding agents are the SAME machine configured by a
  * declarative *workflow file* (server/agent/workflows/<name>.workflow.js). A
  * workflow declares which SKILLS to load, which TOOLS to attach, the backend
- * kind, the system prompt, and run limits. This module turns that descriptor
- * into a live `deepagents` agent and runs it, so the deepagents wiring lives in
- * one place instead of being copy-pasted per agent.
+ * kind, the system prompt, and run limits. This module owns generic workflow
+ * orchestration; the DeepAgent harness owns its SDK-specific construction.
  *
  * Backends:
  *   - 'filesystem' — FilesystemBackend (read/write files, NO shell). Used by the
@@ -184,17 +180,9 @@ function isDir(p) {
   }
 }
 
-/** Build the backend for a workflow kind, rooted at `rootDir`. */
+/** Back-compat wrapper; DeepAgent backend construction is harness-owned. */
 function buildBackend(kind, rootDir, opts = {}) {
-  const { FilesystemBackend, LocalShellBackend } = require('deepagents');
-  if (kind === 'shell') {
-    // The shell never inherits the service environment. Re-sanitize even an
-    // explicitly supplied env so repository/API credentials cannot reach agent
-    // commands through a future caller by mistake.
-    const env = buildSafeAgentEnv(opts.env || process.env, rootDir);
-    return new LocalShellBackend({ rootDir, env, inheritEnv: false, timeout: opts.timeout || 600 });
-  }
-  return new FilesystemBackend({ rootDir });
+  return deepAgentHarness.buildBackend(kind, rootDir, opts);
 }
 
 /** Load a workflow descriptor by name from workflows/<name>.workflow.js. */
@@ -219,38 +207,9 @@ function prepareScratch(workflow) {
   return { rootDir, skillPaths, cleanup };
 }
 
-/**
- * Build a deep agent from a workflow. Callers either pass a prepared
- * `{ backend, skillPaths }` (the coder, rooted at its git workspace) or a
- * `rootDir` for the framework to root a fresh backend + install skills into.
- */
-function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, extraTools = [], env }) {
-  const { createDeepAgent } = require('deepagents');
-  let skills = skillPaths;
-  let be = backend;
-  if (!be) {
-    if (!rootDir) throw new Error('buildAgent needs a backend or a rootDir.');
-    skills = skills || installSkills(rootDir, workflow.skills);
-    be = buildBackend(workflow.backend, rootDir, { timeout: workflow.shellTimeoutSec, env });
-  }
-  // Guard read_file against Anthropic's content-block rules: unrecognized/binary
-  // files must not be sent as non-PDF `document` blocks (invalid_request_error).
-  be = installSafeRead(be);
-  // Settings-service ENFORCEMENT: prune this workflow's tools/skills by the
-  // caller's EFFECTIVE include/exclude policy (services/settings resolves the
-  // org→project→user cascade; `ctx.effectivePolicy` is threaded in by the
-  // caller). Absent policy → allow-all (local single-user; no regression).
-  const effective = ctx.effectivePolicy;
-  const effectiveWorkflow = applyPolicyToWorkflow(workflow, effective, { toolDomains: toolRegistry.TOOL_DOMAIN });
-  skills = filterSkillPaths(skills, effective);
-  const tools = [...toolRegistry.buildMany(effectiveWorkflow.tools, ctx), ...(extraTools || [])];
-  const systemPrompt = typeof workflow.systemPrompt === 'function' ? workflow.systemPrompt(ctx) : workflow.systemPrompt;
-  // Repair mis-keyed filesystem tool calls (e.g. read_file with `path` instead
-  // of `file_path`) before they hit the tool's schema — a single wrong key
-  // otherwise aborts the whole deep-agent run. See fs-arg-normalizer.js.
-  const middleware = [createFsArgNormalizerMiddleware()];
-  const agent = createDeepAgent({ model: createChatModel(llm), backend: be, skills, tools, systemPrompt, middleware });
-  return { agent, backend: be, skillPaths: skills, tools };
+/** Back-compat wrapper; DeepAgent graph/model/middleware wiring is harness-owned. */
+function buildAgent(options) {
+  return deepAgentHarness.buildAgent(options, { installSkills });
 }
 
 /**
@@ -295,6 +254,7 @@ async function runWorkflow({
   rubricMiddleware,
   settings,
   attribution,
+  extraTools = [],
 }) {
   // Resolve resource governance once, before any skill installation or MCP
   // connection. The same descriptor is then used for the build and trace
@@ -326,7 +286,7 @@ async function runWorkflow({
     let resolvedTools = null;
     let resolvedSkills = null;
     if (runtimeId === 'deepagent') {
-      const extraTools = await require('./mcp').loadMcpTools(effectiveWorkflow.mcp, ctx);
+      const mcpTools = await require('./mcp').loadMcpTools(effectiveWorkflow.mcp, ctx);
       const { agent, tools, skillPaths: builtSkills } = buildAgent({
         workflow: effectiveWorkflow,
         llm,
@@ -334,7 +294,7 @@ async function runWorkflow({
         skillPaths,
         rootDir,
         ctx,
-        extraTools,
+        extraTools: [...mcpTools, ...extraTools],
         env,
       });
       resolvedTools = tools;

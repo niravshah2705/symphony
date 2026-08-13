@@ -1,63 +1,41 @@
-# archive/gateway-agent-endpoints
+# Archived gateway agent endpoints
 
-Holding area for gateway route code being **moved off the gateway** as it becomes
-a pure router + config-gate (see the plan: "Router gateway + LangGraph pipeline
-orchestrator"). Files here are **not imported by the running gateway** and this
-directory is **outside the gateway build path**, so nothing here ships in the
-gateway image. Kept (not deleted) for reference during the migration, per the
-project decision to archive removed gateway agent code.
+This directory is historical reference only. Nothing here is imported by or
+copied into the gateway image.
 
-## Why the gateway is being stripped
+The gateway decoupling is complete: browser authentication/authorization,
+billing, EULA enforcement, request publishing, SSE, and reverse-proxy routing
+remain in `services/gateway`; model/SDK-aware handlers execute in the planner.
+The browser-facing URLs did not change.
 
-The gateway should authenticate, run a cheap **config preflight** (harness
-allowed + provider key connected + billing OK — resolved from the settings
-service), and **proxy** to the right stage/orchestrator. It must import **no
-agent/harness code** so its image and closure reduce to `@ai-fleet/shared-core`.
+| Public gateway surface | Execution owner |
+| --- | --- |
+| Live `/api/settings/*` handlers (including Codex and Claude) | planner |
+| `/api/observability/*` | planner |
+| `/api/locale/*` | planner |
+| `/api/projects`, `/api/issues`, `/api/businesses`, `/api/roles` | planner |
+| `/api/agent/*` | planner |
+| `/api/coder/*` | coder |
 
-## Phase 2 relocation checklist (endpoint → new home)
+The former Codex browser credential-management endpoints are intentionally
+gone. The gateway returns explicit `Cache-Control: no-store` HTTP 410 responses
+for:
 
-Status legend: ✅ done · 🔜 next · ⏳ needs live-stack verification
+- `GET /api/settings/codex/login`
+- `GET /api/settings/codex/_pending`
+- `GET /auth/callback`
+- `DELETE /api/settings/codex` (the old browser sign-out)
 
-- ✅ **SDK-free shim imports repointed to `@ai-fleet/shared-core`** — the gateway
-  OAuth/preset imports that were already shims (`agent/oauth`,
-  `agent/claude-oauth`, `agent/model-presets`) now import from `shared-core`
-  directly (zero behavior change). Files: `routes/codex.js`, `routes/claude.js`,
-  `routes/settings.js`.
-- ✅ **Codex OAuth browser redirect REMOVED** — `/login` + `/auth/callback` +
-  `/_pending` deleted from `routes/codex.js` / `index.js` (+ frontend trigger);
-  archived in `codex-oauth-redirect.js`. Codex tokens are provisioned out-of-band.
-- ✅ **SDK-free utilities moved to `@ai-fleet/shared-core`** (with shims in
-  `shared/agent`): `workflow-patterns`, `diagnostics`, and `repoParts` (extracted
-  to `shared-core/agent/repo-url.js`). Gateway `routes/observability.js`,
-  `routes/businesses.js`, `routes/settings.js` now import them from `shared-core`.
+`codex-oauth-redirect.js` records the removed implementation for archaeology;
+it is not a restoration plan. Codex credentials are imported and deleted only
+through the separate privileged settings-service operator surface, which the
+browser-facing gateway refuses to proxy.
 
-Remaining gateway → agent imports to remove (grep `@ai-fleet/shared/agent` under
-`services/gateway/src/routes/`):
+The enforced boundary is:
 
-- ⏳ **OAuth flows** — `routes/codex.js`, `routes/claude.js` still import
-  `agent/llm` (`ensureFresh*Tokens`, `resolveLlm`, `createChatModel` → pulls
-  `@langchain/*`) and `agent/model-discovery`. Move the token-refresh helpers
-  (SDK-free) to `shared-core`; relocate model-discovery + `createChatModel`
-  behind the planner and have the gateway **proxy** `/api/codex/*` and
-  `/api/claude/*`. **Preserve the exact OAuth redirect URIs** (Codex needs port
-  1455 — see memory `codex-login-requires-port-1455`). Verify the browser
-  redirect round-trip on the live stack before merge.
-- ⏳ **Settings catalog + model-discovery** — `routes/settings.js` still imports
-  `agent/runtimes` (harness catalog — serve from the settings-service
-  `/universe` + `runtimeCatalog`), `agent/settings-patch`, `agent/model-discovery`
-  (lazy), and `agent/workspace` (`repoParts`). Move `repoParts` to `shared-core`;
-  serve the catalog/patch surface from the settings service; gateway proxies.
-- ⏳ **Observability** — `routes/observability.js` imports `agent/analytics`,
-  `agent/diagnostics` (SDK-free — probes via `require.resolve`), and
-  `agent/workflow-patterns` (SDK-free). Move diagnostics + workflow-patterns
-  catalog to `shared-core` (or proxy to the orchestrator); relocate analytics.
-- ⏳ **Businesses** — `routes/businesses.js` only needs `repoParts` — resolves
-  once `repoParts` moves to `shared-core`.
-- ⏳ **Localization** — `routes/localization.js` imports `agent/localization`
-  (LLM-backed) — proxy to the planner.
-
-## Definition of done for Phase 2
-
-`grep -r "@ai-fleet/shared/agent" services/gateway/src` returns nothing, the
-gateway boots importing only `@ai-fleet/shared-core`, and every relocated
-endpoint still answers through the gateway proxy (OAuth round-trip verified).
+- `services/gateway` declares only `@ai-fleet/shared-core` among AI Fleet
+  packages;
+- gateway source does not import `@ai-fleet/shared`, LangChain, DeepAgent, or an
+  agent SDK;
+- `deploy/gcp/Dockerfile.gateway` copies only the gateway and shared-core
+  workspaces.

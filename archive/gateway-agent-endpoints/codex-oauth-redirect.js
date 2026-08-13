@@ -1,19 +1,18 @@
 'use strict';
 
 /**
- * ARCHIVED — removed from services/gateway/src/routes/codex.js and
- * services/gateway/src/index.js. NOT imported by the running gateway.
+ * ARCHIVED — removed during gateway decoupling. Public legacy paths now return
+ * explicit no-store HTTP 410 tombstones. NOT imported by the running gateway.
  *
  * This was the Codex (OpenAI) ChatGPT OAuth 2.0 Authorization Code + PKCE
  * browser redirect flow: `GET /api/settings/codex/login` returned an authorize
  * URL, and `GET /auth/callback` (the provider-registered redirect URI) validated
  * the single-use `state`, exchanged the code, and stored tokens server-side.
  *
- * Removed per request (the port-1455 redirect-URI constraint made relocating it
- * behind the router impractical). Codex tokens are now provided out-of-band; the
- * remaining codex.js routes only read/validate them. Restore from here if the
- * browser sign-in flow is reintroduced (re-mount `callback` at /auth/callback and
- * re-add the `/login` route). Was mounted in index.js as:
+ * Removed per request. Codex tokens are provisioned through a privileged
+ * settings-service operator surface; active routes only read/validate them.
+ * This file is historical context, not an active restoration plan. It was
+ * mounted in index.js as:
  *     app.get('/auth/callback', codexCallback);
  *
  * Dependencies it used (from the gateway route module):

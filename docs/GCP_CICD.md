@@ -14,7 +14,9 @@ are conditional on it:
 |---|---|
 | `services/gateway/**` (or its Dockerfile) | rebuild **gateway** image → `terraform apply` rolls **only** gateway |
 | `services/planner/**` / `services/coder/**` | rebuild that image → apply rolls **only** that service (coder ⇒ coder-control + the worker Job) |
-| `packages/shared/**` | rebuild **all three** images → apply rolls all |
+| `services/orchestrator/**` / `services/tester/**` / `services/deployer/**` | rebuild and roll only the corresponding durable-pipeline service |
+| `packages/shared-core/**` | rebuild every consumer, including the SDK-free gateway/orchestrator and agent stages |
+| `packages/shared/**` | rebuild planner, coder, tester, and deployer images |
 | root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
 | `deploy/gcp/terraform/**` | `terraform apply` **only** (no image rebuild) |
 | `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy only (no images, no Terraform) |

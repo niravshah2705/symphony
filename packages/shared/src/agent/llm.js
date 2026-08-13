@@ -760,7 +760,8 @@ function createChatModel(llm, { json = false } = {}) {
  *   Purpose roles (provider-flexible; see MODEL_ROLES):
  *     'thinking'  — planner model (settings.thinkingLlmProvider),
  *     'execution' — coder model (settings.executionLlmProvider),
- *     'testing'   — tool-calling model (settings.testingLlmProvider; reserved).
+ *     'testing'   — verification model (settings.testingLlmProvider),
+ *     'deployment' — release model (settings.deploymentLlmProvider).
  * A purpose role falls back to the hosted slot when unset (matching how new
  * roles are seeded from the hosted slot on migration).
  */
@@ -771,6 +772,7 @@ const ROLE_PROVIDER_KEYS = Object.freeze({
   thinking: 'thinkingLlmProvider',
   execution: 'executionLlmProvider',
   testing: 'testingLlmProvider',
+  deployment: 'deploymentLlmProvider',
 });
 
 function providerForRole(settings, role) {

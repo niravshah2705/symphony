@@ -16,14 +16,14 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.secrets import SECRET_KEYS, SELECTION_MODES
+from app.models.secrets import BROWSER_WRITABLE_SECRET_KEYS, SECRET_KEYS, SELECTION_MODES
 from app.schemas.policy import MAX_CONFIG_VALUE_LENGTH, _CONTROL_CHARS_RE
 
 SelectionMode = Literal["managed", "customer"]
 
 
 def _validate_secret_values(values: dict[str, str]) -> dict[str, str]:
-    unknown = set(values) - set(SECRET_KEYS)
+    unknown = set(values) - set(BROWSER_WRITABLE_SECRET_KEYS)
     if unknown:
         raise ValueError(f"unknown secret key(s): {', '.join(sorted(unknown))}")
     cleaned: dict[str, str] = {}
@@ -39,7 +39,7 @@ def _validate_secret_values(values: dict[str, str]) -> dict[str, str]:
 
 
 def _validate_selection(selection: dict[str, str]) -> dict[str, str]:
-    unknown = set(selection) - set(SECRET_KEYS)
+    unknown = set(selection) - set(BROWSER_WRITABLE_SECRET_KEYS)
     if unknown:
         raise ValueError(f"unknown secret key(s): {', '.join(sorted(unknown))}")
     for key, mode in selection.items():
@@ -107,8 +107,8 @@ class ResolvedSecret(BaseModel):
 
 class InternalOrgSecretsResponse(BaseModel):
     """UNMASKED resolved secrets. Returned ONLY by the internal S2S endpoints
-    (never browser-reachable, IAM + X-Internal-Token gated). ``org_id`` is null
-    for the no-org managed resolve (shared stack)."""
+    (never browser-reachable, IAM + organization-bound token gated). ``org_id``
+    is null for the shared managed-only resolve, which uses the shared token."""
 
     org_id: uuid.UUID | None = None
     secrets: dict[str, ResolvedSecret] = Field(default_factory=dict)

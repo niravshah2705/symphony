@@ -2,44 +2,40 @@
 
 const express = require('express');
 const path = require('path');
-const { CONFIG } = require('@ai-fleet/shared/config');
-const { sendError } = require('@ai-fleet/shared/util');
-const log = require('@ai-fleet/shared/logger');
+const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { sendError } = require('@ai-fleet/shared-core/util');
+const log = require('@ai-fleet/shared-core/logger');
 
-const settingsRoutes = require('./routes/settings');
-const projectsRoutes = require('./routes/projects');
-const issuesRoutes = require('./routes/issues');
-const businessesRoutes = require('./routes/businesses');
-const rolesRoutes = require('./routes/roles');
-const observabilityRoutes = require('./routes/observability');
 const billingRoutes = require('./routes/billing');
-const localizationRoutes = require('./routes/localization');
 const eulaRoutes = require('./routes/eula');
-const { router: codexRoutes } = require('./routes/codex');
-const { router: claudeRoutes } = require('./routes/claude');
+const { createPipelineRouter } = require('./routes/pipeline');
 const { createProxy } = require('./proxy');
 const { blockInternalProxy } = require('./settings-internal-guard');
+const { mountRemovedAgentRouteTombstones } = require('./removed-agent-routes');
 const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig, bearerToken } = require('./auth');
 const { callJson } = require('./service-client');
 const { createConfigResolver } = require('./config-resolver');
 const { requireEulaAccepted } = require('./eula');
 const { createCorsMiddleware } = require('./cors');
-const { initStore, getConversation } = require('@ai-fleet/shared/store');
-const events = require('@ai-fleet/shared/messaging/events');
-const publish = require('./publish');
+const { initStore, getConversation } = require('@ai-fleet/shared-core/store');
+const events = require('@ai-fleet/shared-core/messaging/events');
+const { createCompatibilityHandlers } = require('./publish');
 const sse = require('./sse');
 const { mintStreamToken, mintWorkspaceToken } = require('./stream-token');
-const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared/messaging/events');
+const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared-core/messaging/events');
 const { configureTrustProxy } = require('./trust-proxy');
 const { enforcePinnedOrganization, requestContext, requireOrganizationContext } = require('./request-context');
 const { createContextValidationMiddleware } = require('./context-validator');
 const { createStoreContextMiddleware } = require('./store-context');
 
+const { PipelineAdmissionError, createPipelineAdmission } = require('./pipeline-admission');
+const pipelineAdmission = createPipelineAdmission();
+const publish = createCompatibilityHandlers({ admission: pipelineAdmission });
+
 /**
  * Gateway service — the single browser-facing origin. It serves the SPA, owns
- * the user-facing REST API (settings, projects, issues, businesses, roles) and
- * the OAuth flows (Codex/Claude), and reverse-proxies the two agent surfaces to
- * their isolated services:
+ * the user-facing auth, billing, EULA, publishing, and SSE boundaries, and
+ * reverse-proxies model/agent/domain APIs to their isolated services:
  *   /api/agent/*  → planner service (CONFIG.SERVICES.plannerUrl)
  *   /api/coder/*  → coder service   (CONFIG.SERVICES.coderUrl)
  * The frontend keeps calling same-origin /api/* paths and is unaware of the
@@ -77,6 +73,11 @@ app.get('/healthz', (req, res) => res.json({ status: 'ok' }));
 app.get('/api/auth/config', (req, res) => {
   res.set('Cache-Control', 'no-store').json(publicAuthConfig());
 });
+
+// Removed Codex browser credential routes (OAuth and sign-out) must never fall
+// through to auth, a proxy, or the local SPA. Stable no-store 410s tell old
+// clients to stop retrying.
+mountRemovedAgentRouteTombstones(app);
 
 // Local multi-process event collector: worker services POST their conversation
 // events here and the gateway injects them into its in-process bus for SSE.
@@ -176,20 +177,29 @@ const gateIssueWrites = (() => {
   return (req, res, next) => (req.method === 'POST' ? gate(req, res, next) : next());
 })();
 
-// User-facing API routes (owned by the gateway). Each is guarded by the
-// permission domain its feature area belongs to (see packages/shared/authz.js).
-// GET → 'read', mutations → 'write'. The codex/claude/roles config surfaces are
-// admin-only (settings:write) since only the admin Settings view uses them.
-app.use('/api/settings', requirePermission('settings'), requireOrganizationContext(), settingsRoutes);
-app.use('/api/settings/codex', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), codexRoutes);
-app.use('/api/settings/claude', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), claudeRoutes);
-app.use('/api/projects', requirePermission('planning'), requireOrganizationContext(), projectsRoutes);
+const plannerProxy = createProxy(CONFIG.SERVICES.plannerUrl);
+const localeProxy = createProxy(CONFIG.SERVICES.plannerUrl, {
+  // The planner otherwise sees the gateway socket and loses coarse locale
+  // discovery. Only server-derived, bounded values are injected.
+  injectHeaders: (req) => ({
+    'x-ai-fleet-client-ip': req.ip || '',
+    'accept-language': String((req.get && req.get('accept-language')) || '').slice(0, 512),
+  }),
+});
+
+// The gateway owns browser authentication/authorization; the planner owns the
+// heavy implementations. Public URLs remain unchanged. Mount provider routes
+// before the general settings prefix so their stricter write-only gate wins.
+app.use('/api/settings/codex', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), plannerProxy);
+app.use('/api/settings/claude', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), plannerProxy);
+app.use('/api/settings', requirePermission('settings'), requireOrganizationContext(), plannerProxy);
+app.use('/api/projects', requirePermission('planning'), requireOrganizationContext(), plannerProxy);
 // Creating an implementation task (POST) is "actual work" → EULA-gated; the
 // board-drag state change (PATCH) and reads are not. Gate only the create.
-app.use('/api/issues', requirePermission('planning'), requireOrganizationContext(), gateIssueWrites, issuesRoutes);
-app.use('/api/businesses', requirePermission('planning'), requireOrganizationContext(), businessesRoutes);
-app.use('/api/roles', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), rolesRoutes);
-app.use('/api/observability', requirePermission('insights'), requireOrganizationContext(), observabilityRoutes);
+app.use('/api/issues', requirePermission('planning'), requireOrganizationContext(), gateIssueWrites, plannerProxy);
+app.use('/api/businesses', requirePermission('planning'), requireOrganizationContext(), plannerProxy);
+app.use('/api/roles', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), plannerProxy);
+app.use('/api/observability', requirePermission('insights'), requireOrganizationContext(), plannerProxy);
 // Cost-monitoring + billing. 'insights' is the coarse gate (GET → read,
 // mutations → write); the router additionally resolves the caller's org
 // server-side and requires org-admin for recharge/config (cross-tenant safe).
@@ -197,15 +207,23 @@ app.use('/api/observability', requirePermission('insights'), requireOrganization
 // vs ORG_ADMIN server-side), so the gateway performs authentication only.
 app.use('/api/billing', requireAuthenticated(), billingRoutes);
 // Locale is non-sensitive UI strings — available to public + authenticated.
-app.use('/api/locale', localizationRoutes);
+// Translation is model-backed, so both locale routes execute in the planner.
+app.use('/api/locale', localeProxy);
 // EULA acceptance: GET status is public (anonymous → accepted:false); POST records
 // the caller's decision (authenticated only, enforced inside the router). The
 // gate below (requireEulaAccepted) enforces acceptance on the actual-work routes.
 app.use('/api/eula', eulaRoutes);
 
-// The two long-running request submissions are PUBLISHED (Pub/Sub) rather than
-// proxied — they return a conversationId the browser streams via SSE. Registered
-// before the proxies so these exact paths win. Both mutate → workspace:write.
+// Canonical durable pipeline control plane. All starts pass through settings
+// preflight and the SDK-free local billing gate before S2S dispatch.
+app.use('/api/pipeline', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), createPipelineRouter({
+  admission: pipelineAdmission,
+  startMiddleware: requireEulaAccepted(),
+}));
+
+// Compatibility starts retain their legacy publishers until the orchestrator
+// rollout switch is enabled, then use fixed plan-only/code-only admission.
+// Registered before the proxies so these exact paths win.
 app.post('/api/agent/enqueue', requirePermission('workspace'), requireOrganizationContext(), requireEulaAccepted(), publish.enqueue);
 app.post('/api/coder/run', requirePermission('workspace'), requireOrganizationContext(), publish.coderRun);
 
@@ -214,7 +232,6 @@ app.post('/api/coder/run', requirePermission('workspace'), requireOrganizationCo
 // discovery) requires a signed-in identity. Only the reviewed documentation
 // search below is public; otherwise an empty public context could expose legacy
 // or another tenant's shared-stack records.
-const plannerProxy = createProxy(CONFIG.SERVICES.plannerUrl);
 // Basic RAG over the reviewed repository documentation is safe for anonymous
 // visitors even though it uses POST for a bounded query body.
 app.post('/api/agent/knowledge-search', requirePermission('workspace', { level: 'read' }), plannerProxy);
@@ -292,9 +309,9 @@ if (CONFIG.SERVICES.settingsUrl) {
       ? { 'x-org-id': req.orgMembership.orgId, 'x-org-role': req.orgMembership.orgRole }
       : {}),
   });
-  // The settings service's /api/v1/internal/* surface returns UNMASKED provider
-  // secrets and must never be reachable from a browser. Refuse to proxy any
-  // `internal` path segment (see settings-internal-guard.js).
+  // The settings service's /api/v1/internal/* and /api/v1/operator/* surfaces
+  // are privileged and must never be reachable from a browser. Refuse to proxy
+  // either path segment (see settings-internal-guard.js).
   app.use('/api/settings-policy', blockInternalProxy);
   // Personal settings (/api/settings-policy/me/*): every SIGNED-IN user may
   // manage their own user-scope policy, even without an `org` role. Mounted
@@ -321,6 +338,13 @@ if (!IS_CLOUD) {
 // Central JSON error handler.
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
+  if (err instanceof PipelineAdmissionError) {
+    return res.status(err.status || 500).json({
+      error: err.message || 'Server error.',
+      code: err.code,
+      ...(err.details !== undefined ? { details: err.details } : {}),
+    });
+  }
   sendError(res, err);
 });
 

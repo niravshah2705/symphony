@@ -14,7 +14,7 @@ test.before(async () => {
     let body = '';
     req.on('data', (chunk) => { body += chunk; });
     req.on('end', () => {
-      received.push({ url: req.url, body: JSON.parse(body || '{}') });
+      received.push({ url: req.url, headers: req.headers, body: JSON.parse(body || '{}') });
       res.writeHead(204).end();
     });
   });
@@ -22,6 +22,7 @@ test.before(async () => {
   const { port } = server.address();
   // Configure BEFORE the first require of config (via publisher).
   process.env.MESSAGING_MODE = 'direct';
+  process.env.INTERNAL_API_TOKEN = 'local-publisher-token';
   process.env.PLANNER_URL = `http://localhost:${port}`;
   process.env.EMAIL_URL = `http://localhost:${port}`;
   publisher = require('./publisher');
@@ -47,6 +48,7 @@ test('publishRequest (direct) POSTs a push envelope to /pubsub/planner', async (
   await publisher.publishRequest(CONFIG.GCP.plannerTopic, { hello: 'world' });
   assert.equal(received.length, 1);
   assert.equal(received[0].url, '/pubsub/planner');
+  assert.equal(received[0].headers['x-internal-token'], 'local-publisher-token');
   assert.deepEqual(publisher.decodePushMessage(received[0].body), { hello: 'world' });
 });
 

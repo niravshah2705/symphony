@@ -57,7 +57,12 @@ async function publishRequest(topic, message) {
   if (!target) throw new Error(`No direct route configured for topic "${topic}"`);
   const resp = await fetch(target, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      ...(process.env.INTERNAL_API_TOKEN
+        ? { 'x-internal-token': String(process.env.INTERNAL_API_TOKEN) }
+        : {}),
+    },
     body: JSON.stringify(toPushEnvelope(message)),
   });
   if (!resp.ok) throw new Error(`Direct publish to ${target} failed (${resp.status})`);

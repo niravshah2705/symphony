@@ -104,7 +104,16 @@ async function issueLabelIds(resolveLabel, resolveModelLabel, taskLabelId, size)
 async function applyPlan(apiKey, { project, plan, assumedRole, config, onStep }) {
   const step = typeof onStep === 'function' ? onStep : () => {};
   const warnings = [];
-  const summary = { milestonesCreated: 0, issuesCreated: 0, dependenciesCreated: 0, warnings };
+  const summary = {
+    milestonesCreated: 0,
+    issuesCreated: 0,
+    dependenciesCreated: 0,
+    warnings,
+    // Command-bound membership evidence for the durable planner. Callers must
+    // never infer newly planned work by diffing an eventually-consistent project
+    // issue list, which can include concurrent unrelated creations.
+    createdIssueIds: [],
+  };
 
   const { team } = await linear.getProjectTeam(apiKey, project.id);
   step(`Applying plan to Linear (team ${team.key || team.name}).`);
@@ -173,6 +182,7 @@ async function applyPlan(apiKey, { project, plan, assumedRole, config, onStep })
             labelIds: labelIds.length ? labelIds : undefined,
           });
           issueIds.push(created.id);
+          summary.createdIssueIds.push(created.id);
           summary.issuesCreated += 1;
         } catch (err) {
           issueIds.push(null);
@@ -219,7 +229,14 @@ async function applyPlan(apiKey, { project, plan, assumedRole, config, onStep })
 async function applyIssuesForMilestones(apiKey, { project, milestones, generated, config, onStep }) {
   const step = typeof onStep === 'function' ? onStep : () => {};
   const warnings = [];
-  const summary = { milestonesCreated: 0, issuesCreated: 0, dependenciesCreated: 0, warnings, resumed: true };
+  const summary = {
+    milestonesCreated: 0,
+    issuesCreated: 0,
+    dependenciesCreated: 0,
+    warnings,
+    resumed: true,
+    createdIssueIds: [],
+  };
   if (!config.createIssues) return summary;
 
   const { team } = await linear.getProjectTeam(apiKey, project.id);
@@ -250,7 +267,7 @@ async function applyIssuesForMilestones(apiKey, { project, milestones, generated
     for (const issue of issues) {
       try {
         const labelIds = await issueLabelIds(resolveLabel, resolveModelLabel, taskLabelId, issue.tshirtSize);
-        await linear.createIssue(apiKey, {
+        const createdIssue = await linear.createIssue(apiKey, {
           teamId: team.id,
           projectId: project.id,
           projectMilestoneId: milestone.id,
@@ -261,6 +278,7 @@ async function applyIssuesForMilestones(apiKey, { project, milestones, generated
         });
         created += 1;
         summary.issuesCreated += 1;
+        summary.createdIssueIds.push(createdIssue.id);
       } catch (err) {
         warnings.push(`Issue "${issue.title}" failed: ${errMsg(err)}`);
         step(`Issue "${issue.title}" failed: ${errMsg(err)}`, 'warn');

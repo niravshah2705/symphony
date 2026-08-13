@@ -4,117 +4,107 @@
 
 ## Overview
 
-Directory-based community: services/gateway
+Directory-based community: services/coder
 
-- **Size**: 276 nodes
-- **Cohesion**: 0.1486
+- **Size**: 66 nodes
+- **Cohesion**: 0.1419
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| main | Function | ./services/gateway/scripts/set-user-role.js | 23-48 |
-| authError | Function | ./services/gateway/src/auth.js | 25-30 |
-| authorizationError | Function | ./services/gateway/src/auth.js | 32-37 |
-| boundedClaim | Function | ./services/gateway/src/auth.js | 39-44 |
-| bearerToken | Function | ./services/gateway/src/auth.js | 46-51 |
-| denyAccess | Function | ./services/gateway/src/auth.js | 53-61 |
-| getFirebaseAuth | Function | ./services/gateway/src/auth.js | 66-73 |
-| defaultVerify | Function | ./services/gateway/src/auth.js | 75-77 |
-| verifyFirebaseIdToken | Function | ./services/gateway/src/auth.js | 83-111 |
-| createAuthenticationMiddleware | Function | ./services/gateway/src/auth.js | 128-157 |
-| requirePermission | Function | ./services/gateway/src/auth.js | 166-176 |
-| requireAuthenticated | Function | ./services/gateway/src/auth.js | 184-191 |
-| publicAuthConfig | Function | ./services/gateway/src/auth.js | 194-219 |
-| authEnabled | Function | ./services/gateway/src/auth.js | 222-224 |
-| firebaseConfig | Function | ./services/gateway/src/auth.test.js | 9-24 |
-| verifierReturning | Function | ./services/gateway/src/auth.test.js | 27-32 |
-| req | Function | ./services/gateway/src/auth.test.js | 35-37 |
-| responseRecorder | Function | ./services/gateway/src/auth.test.js | 38-47 |
-| status | Function | ./services/gateway/src/auth.test.js | 43-43 |
-| set | Function | ./services/gateway/src/auth.test.js | 44-44 |
-| json | Function | ./services/gateway/src/auth.test.js | 45-45 |
-| tick | Function | ./services/gateway/src/auth.test.js | 48-48 |
-| test:buildFirebaseAuthConfig: disabled by default (local, open)@L52 | Test | ./services/gateway/src/auth.test.js | 52-54 |
-| test:buildFirebaseAuthConfig: firebase mode derives issuer/audience/authDomain@L56 | Test | ./services/gateway/src/auth.test.js | 56-62 |
-| test:buildFirebaseAuthConfig: fails closed on missing project/api key and in production@L64 | Test | ./services/gateway/src/auth.test.js | 64-69 |
-| test:publicAuthConfig exposes only the public Firebase web config (no authz secrets)@L73 | Test | ./services/gateway/src/auth.test.js | 73-88 |
-| test:publicAuthConfig surfaces the public One Tap client id when configured@L90 | Test | ./services/gateway/src/auth.test.js | 90-93 |
-| test:publicAuthConfig surfaces provider availability flags + Microsoft tenant (no secret)@L95 | Test | ./services/gateway/src/auth.test.js | 95-102 |
-| test:publicAuthConfig defaults google on / microsoft off when flags are absent@L104 | Test | ./services/gateway/src/auth.test.js | 104-109 |
-| test:publicAuthConfig collapses to disabled when auth is off@L111 | Test | ./services/gateway/src/auth.test.js | 111-113 |
-| test:disabled mode → open with full admin permissions@L117 | Test | ./services/gateway/src/auth.test.js | 117-125 |
-| test:firebase: verified user → authenticated with resolved role + permissions@L127 | Test | ./services/gateway/src/auth.test.js | 127-137 |
-| test:firebase: bootstrap admin email → admin role@L139 | Test | ./services/gateway/src/auth.test.js | 139-145 |
-| test:firebase: `role` custom claim is honored (operator)@L147 | Test | ./services/gateway/src/auth.test.js | 147-154 |
-| test:firebase: missing / invalid / unverified / out-of-domain token → PUBLIC (not denied)@L156 | Test | ./services/gateway/src/auth.test.js | 156-176 |
-| test:verifyFirebaseIdToken returns a frozen identity carrying the resolved role@L178 | Test | ./services/gateway/src/auth.test.js | 178-183 |
-| authed | Function | ./services/gateway/src/auth.test.js | 187-187 |
-| test:requirePermission: public may READ workspace (read-only Agent home)@L190 | Test | ./services/gateway/src/auth.test.js | 190-195 |
-| test:requirePermission: public WRITING workspace → 401 (prompt sign-in)@L197 | Test | ./services/gateway/src/auth.test.js | 197-205 |
-| test:requirePermission: public reaching planning/settings → 401@L207 | Test | ./services/gateway/src/auth.test.js | 207-213 |
-| test:requirePermission: viewer reads planning but is 403 on writes@L215 | Test | ./services/gateway/src/auth.test.js | 215-226 |
-| test:requirePermission: forced write level (codex/claude/roles) blocks a read-only settings user@L228 | Test | ./services/gateway/src/auth.test.js | 228-234 |
-| test:requirePermission: OPTIONS preflight is never gated@L236 | Test | ./services/gateway/src/auth.test.js | 236-240 |
-| test:requireAuthenticated: any signed-in user passes regardless of role@L244 | Test | ./services/gateway/src/auth.test.js | 244-250 |
-| test:requireAuthenticated: anonymous/public → 401@L252 | Test | ./services/gateway/src/auth.test.js | 252-259 |
-| test:requireAuthenticated: OPTIONS preflight is never gated@L261 | Test | ./services/gateway/src/auth.test.js | 261-265 |
-| test:buildFirebaseAuthConfig: One Tap client id from either env alias (public)@L267 | Test | ./services/gateway/src/auth.test.js | 267-272 |
-| test:buildFirebaseAuthConfig: provider flags default google on / microsoft off@L274 | Test | ./services/gateway/src/auth.test.js | 274-279 |
-| test:buildFirebaseAuthConfig: reads AUTH_MICROSOFT_ENABLED and Microsoft tenant (either alias)@L281 | Test | ./services/gateway/src/auth.test.js | 281-289 |
-| test:buildFirebaseAuthConfig: rejects a non-boolean provider flag@L291 | Test | ./services/gateway/src/auth.test.js | 291-296 |
+| main | Function | ./services/coder/src/job.js | 17-52 |
+| pause | Function | ./services/coder/src/job.test.js | 8-8 |
+| test:coder workers bind their job context across init and execution concurrently@L10 | Test | ./services/coder/src/job.test.js | 10-55 |
+| run | Function | ./services/coder/src/job.test.js | 14-31 |
+| info | Function | ./services/coder/src/job.test.js | 63-63 |
+| error | Function | ./services/coder/src/job.test.js | 63-63 |
+| byOrganization | Function | ./services/coder/src/job.test.js | 35-35 |
+| context | Function | ./services/coder/src/job.test.js | 43-43 |
+| input | Function | ./services/coder/src/job.test.js | 44-44 |
+| test:coder worker without context keeps legacy empty-workspace behavior@L57 | Test | ./services/coder/src/job.test.js | 57-68 |
+| exit | Function | ./services/coder/src/job.test.js | 64-64 |
+| messageWorkspaceContext | Function | ./services/coder/src/pubsub.js | 30-32 |
+| messageWorkspaceContextInput | Function | ./services/coder/src/pubsub.js | 34-39 |
+| runMessageInWorkspace | Function | ./services/coder/src/pubsub.js | 41-46 |
+| shouldRunAutonomousTick | Function | ./services/coder/src/pubsub.js | 48-56 |
+| dispatchCoderTick | Function | ./services/coder/src/pubsub.js | 58-81 |
+| isRejectedWorkspaceMessage | Function | ./services/coder/src/pubsub.js | 83-85 |
+| coderHandler | Function | ./services/coder/src/pubsub.test.js | 9-13 |
+| invoke | Function | ./services/coder/src/pubsub.test.js | 15-22 |
+| test:coder Pub/Sub binds concurrent decoded contexts for the full async dispatch@L24 | Test | ./services/coder/src/pubsub.test.js | 24-73 |
+| test:coder Pub/Sub missing context retains the legacy empty workspace@L75 | Test | ./services/coder/src/pubsub.test.js | 75-97 |
+| test:coder autonomous ticks fail closed only on an unpinned shared cloud runtime@L99 | Test | ./services/coder/src/pubsub.test.js | 99-130 |
+| error | Function | ./services/coder/src/pubsub.test.js | 137-137 |
+| warn | Function | ./services/coder/src/pubsub.test.js | 137-137 |
+| test:coder orchestrator rollout suppresses autonomous polling@L132 | Test | ./services/coder/src/pubsub.test.js | 132-145 |
+| requestWorkspaceContext | Function | ./services/coder/src/routes/coder.js | 21-27 |
+| getHeader | Function | ./services/coder/src/routes/coder.js | 22-22 |
+| postHandler | Function | ./services/coder/src/routes/coder.test.js | 9-15 |
+| invoke | Function | ./services/coder/src/routes/coder.test.js | 17-24 |
+| routeHandler | Function | ./services/coder/src/routes/coder.test.js | 26-32 |
+| test:manual coder route forwards the gateway-validated organization and native project@L34 | Test | ./services/coder/src/routes/coder.test.js | 34-67 |
+| get | Function | ./services/coder/src/routes/coder.test.js | 52-57 |
+| test:coder status and monitor lifecycle use the exact selected context@L69 | Test | ./services/coder/src/routes/coder.test.js | 69-108 |
+| request | Function | ./services/coder/src/routes/coder.test.js | 93-96 |
+| toIssue | Function | ./services/coder/src/run-ticket.js | 43-53 |
+| buildKeys | Function | ./services/coder/src/run-ticket.js | 55-65 |
+| httpError | Function | ./services/coder/src/run-ticket.js | 67-72 |
+| loadIssue | Function | ./services/coder/src/run-ticket.js | 74-79 |
+| eventContext | Function | ./services/coder/src/run-ticket.js | 81-83 |
+| hasEffectivePolicy | Function | ./services/coder/src/run-ticket.js | 85-92 |
+| makeStep | Function | ./services/coder/src/run-ticket.js | 95-100 |
+| runTicketInProcess | Function | ./services/coder/src/run-ticket.js | 107-239 |
+| run | Function | ./services/coder/src/run-ticket.js | 193-204 |
+| onError | Function | ./services/coder/src/run-ticket.js | 205-226 |
+| onDone | Function | ./services/coder/src/run-ticket.js | 227-231 |
+| runTicket | Function | ./services/coder/src/run-ticket.js | 246-273 |
+| baseDependencies | Function | ./services/coder/src/run-ticket.test.js | 20-34 |
+| test:in-process coder resolves selected scope before model preflight and enforces policy + prefs@L36 | Test | ./services/coder/src/run-ticket.test.js | 36-108 |
+| test:legacy empty-context coder remains allow-all when policy resolution is unavailable@L110 | Test | ./services/coder/src/run-ticket.test.js | 110-130 |
+| test:selected-organization coder fails closed when policy resolution is unavailable@L132 | Test | ./services/coder/src/run-ticket.test.js | 132-148 |
 
-*... and 226 more members.*
+*... and 16 more members.*
 
 ## Execution Flows
 
-- **mintWorkspaceToken** (criticality: 0.63, depth: 3)
-- **createAuthenticationMiddleware** (criticality: 0.62, depth: 2)
-- **forwardRequestContext** (criticality: 0.62, depth: 2)
-- **enforcePinnedOrganization** (criticality: 0.62, depth: 2)
-- **requireOrganizationContext** (criticality: 0.62, depth: 2)
-- **verifyStreamToken** (criticality: 0.62, depth: 2)
-- **defaultVerify** (criticality: 0.61, depth: 1)
-- **requirePermission** (criticality: 0.61, depth: 1)
-- **requireAuthenticated** (criticality: 0.61, depth: 1)
-- **createLocalizationRouter** (criticality: 0.49, depth: 2)
-- *... and 2 more flows.*
+- **createStoreContextMiddleware** (criticality: 0.45, depth: 2)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (236 edge(s))
-- `deepEqual` (40 edge(s))
-- `String` (35 edge(s))
-- `next` (23 edge(s))
-- `json` (23 edge(s))
-- `status` (21 edge(s))
-- `Boolean` (19 edge(s))
-- `trim` (19 edge(s))
-- `toLowerCase` (14 edge(s))
-- `includes` (13 edge(s))
-- `get` (13 edge(s))
-- `set` (13 edge(s))
-- `verifyStreamToken` (13 edge(s))
-- `buildFirebaseAuthConfig` (12 edge(s))
-- `ok` (12 edge(s))
+- `equal` (33 edge(s))
+- `deepEqual` (23 edge(s))
+- `push` (11 edge(s))
+- `resolve` (11 edge(s))
+- `String` (9 edge(s))
+- `currentWorkspaceContext` (9 edge(s))
+- `require` (6 edge(s))
+- `publish` (6 edge(s))
+- `toISOString` (6 edge(s))
+- `runTicketInProcess` (6 edge(s))
+- `setImmediate` (5 edge(s))
+- `sort` (5 edge(s))
+- `catch` (5 edge(s))
+- `after` (5 edge(s))
+- `shouldRunAutonomousTick` (5 edge(s))
 
 ### Incoming
 
-- `equal` (236 edge(s))
-- `./services/gateway/src/routes/settings.js` (62 edge(s))
-- `deepEqual` (40 edge(s))
-- `./services/gateway/src/auth.test.js` (36 edge(s))
-- `./services/gateway/src/routes/billing.js` (25 edge(s))
-- `./services/gateway/src/routes/businesses.js` (24 edge(s))
-- `./services/gateway/src/auth.js` (20 edge(s))
-- `./services/gateway/src/eula.test.js` (18 edge(s))
-- `./services/gateway/src/config-resolver.test.js` (15 edge(s))
-- `./services/gateway/src/context-validator.test.js` (14 edge(s))
-- `./services/gateway/src/request-context.js` (13 edge(s))
-- `buildFirebaseAuthConfig` (12 edge(s))
-- `./services/gateway/src/sse.test.js` (12 edge(s))
-- `verifyStreamToken` (12 edge(s))
-- `throws` (11 edge(s))
+- `equal` (33 edge(s))
+- `deepEqual` (23 edge(s))
+- `./services/coder/src/pubsub.js` (18 edge(s))
+- `./services/coder/src/run-ticket.js` (18 edge(s))
+- `./services/coder/src/job.test.js` (12 edge(s))
+- `./services/coder/src/pubsub.test.js` (10 edge(s))
+- `./services/coder/src/run-ticket.test.js` (9 edge(s))
+- `push` (8 edge(s))
+- `./services/coder/src/routes/coder.test.js` (7 edge(s))
+- `./services/coder/src/store-context.js` (7 edge(s))
+- `require` (6 edge(s))
+- `./services/coder/src/routes/coder.js` (6 edge(s))
+- `runTicketInProcess` (6 edge(s))
+- `./services/coder/src/store-context.test.js` (6 edge(s))
+- `currentWorkspaceContext` (5 edge(s))

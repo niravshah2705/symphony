@@ -41,32 +41,32 @@
       "label": "Quick",
       "order": 1,
       "description": "Fastest, cheapest hosted models for simple, well-scoped changes.",
-      "picks": { "thinking": "claude-haiku-4-5", "execution": "claude-haiku-4-5", "testing": "claude-haiku-4-5" },
-      "reasoningEffort": { "thinking": "none", "execution": "none", "testing": "none" }
+      "picks": { "thinking": "claude-haiku-4-5", "execution": "claude-haiku-4-5", "testing": "claude-haiku-4-5", "deployment": "claude-haiku-4-5" },
+      "reasoningEffort": { "thinking": "none", "execution": "none", "testing": "none", "deployment": "none" }
     },
     {
       "id": "balanced",
       "label": "Balanced",
       "order": 2,
       "description": "Sonnet for planning and execution. A good everyday default.",
-      "picks": { "thinking": "claude-sonnet-5", "execution": "claude-sonnet-5", "testing": "claude-sonnet-5" },
-      "reasoningEffort": { "thinking": "medium", "execution": "medium", "testing": "medium" }
+      "picks": { "thinking": "claude-sonnet-5", "execution": "claude-sonnet-5", "testing": "claude-sonnet-5", "deployment": "claude-sonnet-5" },
+      "reasoningEffort": { "thinking": "medium", "execution": "medium", "testing": "medium", "deployment": "medium" }
     },
     {
       "id": "thorough",
       "label": "Thorough",
       "order": 3,
       "description": "Opus with high reasoning for demanding planning and coding.",
-      "picks": { "thinking": "claude-opus-4-8", "execution": "claude-opus-4-8", "testing": "claude-opus-4-8" },
-      "reasoningEffort": { "thinking": "high", "execution": "high", "testing": "high" }
+      "picks": { "thinking": "claude-opus-4-8", "execution": "claude-opus-4-8", "testing": "claude-opus-4-8", "deployment": "claude-opus-4-8" },
+      "reasoningEffort": { "thinking": "high", "execution": "high", "testing": "high", "deployment": "high" }
     },
     {
       "id": "complex",
       "label": "Complex",
       "order": 4,
       "description": "Maximum reasoning for the hardest, highest-stakes work.",
-      "picks": { "thinking": "claude-opus-4-8", "execution": "claude-opus-4-8", "testing": "claude-opus-4-8" },
-      "reasoningEffort": { "thinking": "max", "execution": "max", "testing": "max" }
+      "picks": { "thinking": "claude-opus-4-8", "execution": "claude-opus-4-8", "testing": "claude-opus-4-8", "deployment": "claude-opus-4-8" },
+      "reasoningEffort": { "thinking": "max", "execution": "max", "testing": "max", "deployment": "max" }
     }
   ],
   "presets": [

@@ -34,6 +34,7 @@ locals {
     API_BASE_URL        = local.gateway_url
     PLANNER_URL         = local.planner_url # proxied read endpoints
     CODER_URL           = local.coder_url
+    ORCHESTRATOR_URL    = local.orchestrator_url
     ORG_URL             = local.org_url      # org service (proxied at /api/org/*)
     SETTINGS_URL        = local.settings_url # settings service (proxied at /api/settings-policy/*)
     FIREBASE_PROJECT_ID = var.project_id
@@ -77,30 +78,48 @@ locals {
     SETTINGS_URL = local.settings_url
   })
 
-  planner_env = merge(local.common_env, {
-    # The planner listens on PLANNER_PORT, not PORT — bind Cloud Run's port.
-    PLANNER_PORT         = "8080"
-    EMAIL_TOPIC          = google_pubsub_topic.email.name
-    PUBSUB_PUSH_AUDIENCE = local.planner_url
-    PUBSUB_PUSH_SA       = google_service_account.pubsub_push.email
-  }, local.skills_env, local.egress_env)
+  planner_env = merge(
+    local.common_env,
+    {
+      # The planner listens on PLANNER_PORT, not PORT — bind Cloud Run's port.
+      PLANNER_PORT         = "8080"
+      EMAIL_TOPIC          = google_pubsub_topic.email.name
+      PUBSUB_PUSH_AUDIENCE = local.planner_url
+      PUBSUB_PUSH_SA       = google_service_account.pubsub_push.email
+      ORCHESTRATOR_URL     = local.orchestrator_url
+      }, local.pipeline_on ? {
+      PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC = var.pipeline_plan_results_topic
+      PIPELINE_STAGE_STORE_BACKEND       = "firestore"
+    } : {},
+    local.skills_env,
+    local.egress_env,
+  )
 
-  coder_control_env = merge(local.common_env, {
-    # The coder-control listens on CODER_SERVICE_PORT, not PORT.
-    CODER_SERVICE_PORT   = "8080"
-    CODER_ROLE           = "control"
-    CODER_JOB_NAME       = var.coder_job_name
-    PUBSUB_PUSH_AUDIENCE = local.coder_url
-    PUBSUB_PUSH_SA       = google_service_account.pubsub_push.email
-    CODER_REPO_URL       = var.coder_repo_url
-    # Peer-service URLs are PARAMETERS of the coder deployment (never browser-
-    # facing): the coder calls settings (effective config) and org/planner S2S.
-    # Without these the cloud coder falls back to localhost. A per-tenant coder is
-    # given its own PLANNER_URL + the SHARED ORG_URL/SETTINGS_URL the same way.
-    PLANNER_URL  = local.planner_url
-    ORG_URL      = local.org_url
-    SETTINGS_URL = local.settings_url
-  }, local.skills_env, local.egress_env)
+  coder_control_env = merge(
+    local.common_env,
+    {
+      # The coder-control listens on CODER_SERVICE_PORT, not PORT.
+      CODER_SERVICE_PORT   = "8080"
+      CODER_ROLE           = "control"
+      CODER_JOB_NAME       = var.coder_job_name
+      PUBSUB_PUSH_AUDIENCE = local.coder_url
+      PUBSUB_PUSH_SA       = google_service_account.pubsub_push.email
+      CODER_REPO_URL       = var.coder_repo_url
+      # Peer-service URLs are PARAMETERS of the coder deployment (never browser-
+      # facing): the coder calls settings (effective config) and org/planner S2S.
+      # Without these the cloud coder falls back to localhost. A per-tenant coder is
+      # given its own PLANNER_URL + the SHARED ORG_URL/SETTINGS_URL the same way.
+      PLANNER_URL      = local.planner_url
+      ORG_URL          = local.org_url
+      SETTINGS_URL     = local.settings_url
+      ORCHESTRATOR_URL = local.orchestrator_url
+      }, local.pipeline_on ? {
+      PUBSUB_PIPELINE_CODE_RESULTS_TOPIC = var.pipeline_code_results_topic
+      PIPELINE_STAGE_STORE_BACKEND       = "firestore"
+    } : {},
+    local.skills_env,
+    local.egress_env,
+  )
 
   coder_worker_env = merge(local.common_env, {
     CODER_ROLE = "worker"
@@ -245,7 +264,6 @@ resource "google_cloud_run_v2_service" "gateway" {
           }
         }
       }
-
       # Public Google One Tap client id, delivered from Secret Manager only when
       # configured. Absent → the SPA uses the Firebase Google popup.
       dynamic "env" {
@@ -304,6 +322,7 @@ resource "google_cloud_run_v2_service" "planner" {
 
   template {
     service_account = google_service_account.planner.email
+    timeout         = local.pipeline_on ? "3600s" : null
 
     # Fractional CPU requires gen1. The optional gcsfuse mount requires gen2,
     # in which case local.agent_*_cpu also raises both containers to 1 vCPU.
@@ -312,7 +331,7 @@ resource "google_cloud_run_v2_service" "planner" {
 
     scaling {
       min_instance_count = 0
-      max_instance_count = var.max_instances
+      max_instance_count = local.pipeline_on ? 1 : var.max_instances
     }
 
     # Versioned skills bundle mounted read-only via gcsfuse (skills.tf). Only
@@ -343,7 +362,6 @@ resource "google_cloud_run_v2_service" "planner" {
           value = env.value
         }
       }
-
       # Direct mode keeps the Linear key on the agent; proxy mode relocates it to
       # the sidecar so this container holds no provider secret.
       dynamic "env" {
@@ -438,6 +456,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
 
   template {
     service_account = google_service_account.coder.email
+    timeout         = local.pipeline_on ? "3600s" : null
 
     # Fractional CPU requires gen1. The optional gcsfuse mount requires gen2,
     # in which case local.agent_*_cpu also raises both containers to 1 vCPU.
@@ -446,7 +465,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
 
     scaling {
       min_instance_count = 0
-      max_instance_count = var.max_instances
+      max_instance_count = local.pipeline_on ? 1 : var.max_instances
     }
 
     # Versioned skills bundle mounted read-only via gcsfuse (skills.tf). Only
@@ -477,7 +496,6 @@ resource "google_cloud_run_v2_service" "coder_control" {
           value = env.value
         }
       }
-
       # Direct mode keeps the Linear key on the agent; proxy mode relocates it to
       # the sidecar so this container holds no provider secret.
       dynamic "env" {

@@ -66,6 +66,24 @@ variable "coder_image_tag" {
   default     = ""
 }
 
+variable "orchestrator_image_tag" {
+  type        = string
+  description = "Per-service image tag for the lightweight durable pipeline orchestrator."
+  default     = ""
+}
+
+variable "tester_image_tag" {
+  type        = string
+  description = "Per-service image tag for the brokered pipeline tester."
+  default     = ""
+}
+
+variable "deployer_image_tag" {
+  type        = string
+  description = "Per-service image tag for the brokered pipeline deployer."
+  default     = ""
+}
+
 variable "org_image_tag" {
   type        = string
   description = "Per-service image tag override for the org service (FastAPI/Firestore)."
@@ -101,6 +119,21 @@ variable "coder_service_name" {
   default = "coder-control"
 }
 
+variable "orchestrator_service_name" {
+  type    = string
+  default = "pipeline-orchestrator"
+}
+
+variable "tester_service_name" {
+  type    = string
+  default = "pipeline-tester"
+}
+
+variable "deployer_service_name" {
+  type    = string
+  default = "pipeline-deployer"
+}
+
 variable "org_service_name" {
   type    = string
   default = "org-service"
@@ -126,7 +159,7 @@ variable "coder_job_name" {
 
 variable "egress_proxy_enabled" {
   type        = bool
-  description = "Add the egress-proxy sidecar to planner/coder/coder-worker and route their third-party egress through it (via EGRESS_PROXY_URL). OFF keeps the direct pre-sidecar behavior. Requires the proxy image to be built + pushed."
+  description = "Add the egress-proxy sidecar to planner/coder/coder-worker and route their third-party egress through it (via EGRESS_PROXY_URL). The durable tester/deployer require it. OFF keeps the legacy direct behavior only while the durable pipeline is disabled. Requires the proxy image to be built + pushed."
   default     = false
 }
 
@@ -149,7 +182,7 @@ variable "proxy_image_tag" {
 
 variable "managed_provider_secrets" {
   type        = map(string)
-  description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
+  description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Hosted LLMs require the matching GEMINI_API_KEY, HUGGINGFACE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY entry. Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
   default     = { LINEAR_API_KEY = "linear-api-key", GITHUB_TOKEN = "github-token" }
 }
 
@@ -202,6 +235,31 @@ variable "internal_ingress" {
   default     = "INGRESS_TRAFFIC_ALL"
 }
 
+variable "settings_ingress" {
+  type        = string
+  description = "Ingress for the IAM-gated settings service. ALL permits the direct operator CLI over run.app; the service still has no allUsers invoker binding."
+  default     = "INGRESS_TRAFFIC_ALL"
+
+  validation {
+    condition     = contains(["INGRESS_TRAFFIC_ALL", "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER", "INGRESS_TRAFFIC_INTERNAL_ONLY"], var.settings_ingress)
+    error_message = "settings_ingress must be a valid Cloud Run v2 ingress value."
+  }
+}
+
+variable "settings_operator_invoker" {
+  type        = string
+  description = "Optional IAM member allowed to invoke the settings service directly for operator-only CLI calls (for example user:admin@example.com or group:platform@example.com). Empty grants nobody."
+  default     = ""
+
+  validation {
+    condition = (
+      trimspace(var.settings_operator_invoker) == "" ||
+      can(regex("^(user|group|serviceAccount):[^[:space:]]+$", trimspace(var.settings_operator_invoker)))
+    )
+    error_message = "settings_operator_invoker must be empty or a user:, group:, or serviceAccount: IAM member."
+  }
+}
+
 variable "max_instances" {
   type        = number
   description = "Per-service max Cloud Run instances (min is always 0 for scale-to-zero / no idle cost)."
@@ -230,6 +288,61 @@ variable "planner_topic" {
 variable "coder_topic" {
   type    = string
   default = "coder-requests"
+}
+
+# Durable pipeline command/result topics are deliberately distinct from the
+# legacy planner/coder request topics. Reusing either legacy topic would fan a
+# typed StageCommand into the autonomous-label handlers.
+variable "pipeline_plan_topic" {
+  type    = string
+  default = "pipeline-plan-commands"
+}
+
+variable "pipeline_code_topic" {
+  type    = string
+  default = "pipeline-code-commands"
+}
+
+variable "pipeline_test_topic" {
+  type    = string
+  default = "pipeline-test-commands"
+}
+
+variable "pipeline_deploy_topic" {
+  type    = string
+  default = "pipeline-deploy-commands"
+}
+
+variable "pipeline_plan_results_topic" {
+  type    = string
+  default = "pipeline-plan-results"
+}
+
+variable "pipeline_code_results_topic" {
+  type    = string
+  default = "pipeline-code-results"
+}
+
+variable "pipeline_test_results_topic" {
+  type    = string
+  default = "pipeline-test-results"
+}
+
+variable "pipeline_deploy_results_topic" {
+  type    = string
+  default = "pipeline-deploy-results"
+}
+
+variable "pipeline_orchestrator_enabled" {
+  type        = bool
+  description = "Create and enable the durable fixed-stage pipeline topology. False preserves the legacy autonomous label flow and creates no pipeline Cloud Run/Pub/Sub resources."
+  default     = false
+}
+
+variable "pipeline_deployment_enabled" {
+  type        = bool
+  description = "Allow the deploy stage after the full plan/code/test/deploy sequence. False is the fail-closed default."
+  default     = false
 }
 
 variable "email_topic" {
@@ -307,7 +420,7 @@ variable "email_public_app_url" {
 
 variable "ack_deadline_seconds" {
   type        = number
-  description = "Push ack deadline. Handlers ack immediately and do work out-of-band (job/scheduler), so this stays small."
+  description = "Push ack deadline for short control-plane handlers. Synchronous pipeline command subscriptions use the Pub/Sub maximum (600s) separately."
   default     = 30
 }
 

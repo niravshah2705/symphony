@@ -7,6 +7,7 @@ from app.api.v1 import (
     routes_health,
     routes_internal,
     routes_me,
+    routes_operator,
     routes_secrets,
     routes_settings,
 )
@@ -16,6 +17,7 @@ api_router.include_router(routes_health.router)
 api_router.include_router(routes_me.router)
 api_router.include_router(routes_settings.router)
 api_router.include_router(routes_secrets.router)
+api_router.include_router(routes_operator.router)
 api_router.include_router(routes_internal.router)
 
 __all__ = ["api_router"]

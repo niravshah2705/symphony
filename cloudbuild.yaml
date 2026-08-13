@@ -29,8 +29,6 @@ substitutions:
   _TF_STATE_BUCKET: "REPLACE_ME_tf_state_bucket" # REQUIRED — override
   _TF_STATE_PREFIX: "ai-fleet/gcp"
   _FIRESTORE_LOCATION: "nam5"
-  # Firebase web config is PUBLIC (apiKey is non-secret; exposed via /api/auth/config).
-  _FIREBASE_API_KEY: ""
   _FIREBASE_ALLOWED_DOMAIN: "" # empty = any verified user
   _SPA_ORIGIN: "https://storage.googleapis.com"
   _SPA_OBFUSCATION_STRENGTH: "light" # light | balanced | maximum
@@ -39,6 +37,9 @@ substitutions:
   _EMAIL_SMTP_SECURE: "false"
   _EMAIL_SMTP_REQUIRE_TLS: "true"
   _EMAIL_FROM: ""
+  _PIPELINE_ORCHESTRATOR_ENABLED: "false"
+  _PIPELINE_DEPLOYMENT_ENABLED: "false"
+  _SETTINGS_OPERATOR_INVOKER: ""
   # Empty derives the URL of the GCS object published by this pipeline.
   # Set an explicit HTTPS URL when a custom domain/CDN fronts the SPA.
   _EMAIL_PUBLIC_APP_URL: ""
@@ -78,6 +79,50 @@ steps:
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/coder-control:${_IMAGE_TAG}
       - .
 
+  - id: build-orchestrator
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - deploy/gcp/Dockerfile.orchestrator
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-orchestrator:${_IMAGE_TAG}
+      - .
+
+  - id: build-tester
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - deploy/gcp/Dockerfile.tester
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-tester:${_IMAGE_TAG}
+      - .
+
+  - id: build-deployer
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - deploy/gcp/Dockerfile.deployer
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-deployer:${_IMAGE_TAG}
+      - .
+
+  - id: build-proxy
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - deploy/gcp/Dockerfile.proxy
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/proxy:${_IMAGE_TAG}
+      - .
+
   - id: build-email
     name: gcr.io/cloud-builders/docker
     waitFor: ["-"]
@@ -87,6 +132,28 @@ steps:
       - deploy/gcp/Dockerfile.email
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/email-service:${_IMAGE_TAG}
+      - .
+
+  - id: build-org
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - services/org/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/org-service:${_IMAGE_TAG}
+      - services/org
+
+  - id: build-settings
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - services/settings/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/settings-service:${_IMAGE_TAG}
       - .
 
   # Built for parity so enabling per-tenant provisioning is a one-var flip; the
@@ -162,6 +229,34 @@ steps:
         printf 'email_smtp_auth_enabled = %s\n' "$$USER_READY" > /workspace/email-auth.auto.tfvars
         echo "SMTP auth secret pair ready: $$USER_READY (values were not accessed)"
 
+  # Keep the shared internal S2S token stable without putting it in a Cloud
+  # Build substitution or log. On first pipeline enable, generate it in the
+  # ephemeral workspace and let Terraform create the secret/version. On later
+  # runs, reuse the enabled version so Terraform never rotates or destroys it.
+  - id: pipeline-secret-state
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    # Do not create the ephemeral plaintext tfvars until every Docker build/push
+    # has finished; otherwise it could enter the root Docker build context.
+    waitFor: [push-gateway, push-planner, push-coder, push-orchestrator, push-tester, push-deployer, push-proxy, push-email, push-org, push-settings, push-provisioner, spa-publish, email-secret-state]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        umask 077
+        TOKEN=""
+        VERSION="$$(gcloud secrets versions list internal-api-token \
+          --project "$PROJECT_ID" --filter='state=ENABLED' --limit=1 \
+          --format='value(name)' 2>/dev/null || true)"
+        if [ -n "$$VERSION" ]; then
+          TOKEN="$$(gcloud secrets versions access "$$VERSION" \
+            --secret=internal-api-token --project "$PROJECT_ID")"
+        elif [ "${_PIPELINE_ORCHESTRATOR_ENABLED}" = "true" ]; then
+          TOKEN="$$(dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 | tr -d '\n')"
+        fi
+        printf '{"internal_api_token":"%s"}\n' "$$TOKEN" > /workspace/pipeline-secret.auto.tfvars.json
+        echo "Internal S2S token ready: $$([ -n "$$TOKEN" ] && echo true || echo false) (value was not printed)"
+
   # --- Push images (after their build AND after the AR repo exists) ----------
   - id: push-gateway
     name: gcr.io/cloud-builders/docker
@@ -178,10 +273,40 @@ steps:
     waitFor: [build-coder, tf-bootstrap]
     args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/coder-control:${_IMAGE_TAG}"]
 
+  - id: push-orchestrator
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-orchestrator, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-orchestrator:${_IMAGE_TAG}"]
+
+  - id: push-tester
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-tester, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-tester:${_IMAGE_TAG}"]
+
+  - id: push-deployer
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-deployer, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-deployer:${_IMAGE_TAG}"]
+
+  - id: push-proxy
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-proxy, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/proxy:${_IMAGE_TAG}"]
+
   - id: push-email
     name: gcr.io/cloud-builders/docker
     waitFor: [build-email, tf-bootstrap]
     args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/email-service:${_IMAGE_TAG}"]
+
+  - id: push-org
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-org, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/org-service:${_IMAGE_TAG}"]
+
+  - id: push-settings
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-settings, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/settings-service:${_IMAGE_TAG}"]
 
   - id: push-provisioner
     name: gcr.io/cloud-builders/docker
@@ -248,12 +373,13 @@ steps:
   # --- Terraform: full apply (services, job, pubsub, scheduler, secrets, …) --
   - id: tf-apply
     name: hashicorp/terraform:1.9
-    waitFor: [push-gateway, push-planner, push-coder, push-email, push-provisioner, spa-publish, email-secret-state]
+    waitFor: [push-gateway, push-planner, push-coder, push-orchestrator, push-tester, push-deployer, push-proxy, push-email, push-org, push-settings, push-provisioner, spa-publish, email-secret-state, pipeline-secret-state]
     entrypoint: sh
     args:
       - -c
       - |
         set -euo pipefail
+        trap 'rm -f /workspace/pipeline-secret.auto.tfvars.json' EXIT
         cd "${_TF_DIR}"
         terraform init -input=false \
           -backend-config="bucket=${_TF_STATE_BUCKET}" \
@@ -265,16 +391,24 @@ steps:
         fi
         terraform apply -input=false -auto-approve \
           -var-file=/workspace/email-auth.auto.tfvars \
+          -var-file=/workspace/pipeline-secret.auto.tfvars.json \
           -var="project_id=$PROJECT_ID" \
           -var="region=${_REGION}" \
           -var="artifact_repo=${_REPO}" \
           -var="image_tag=${_IMAGE_TAG}" \
+          -var="orchestrator_image_tag=${_IMAGE_TAG}" \
+          -var="tester_image_tag=${_IMAGE_TAG}" \
+          -var="deployer_image_tag=${_IMAGE_TAG}" \
+          -var="proxy_image_tag=${_IMAGE_TAG}" \
           -var="spa_bucket_name=${_BUCKET}" \
           -var="firestore_location=${_FIRESTORE_LOCATION}" \
           -var="spa_origin=${_SPA_ORIGIN}" \
           -var="api_base_url=$${API_BASE_URL}" \
-          -var="firebase_api_key=${_FIREBASE_API_KEY}" \
           -var="firebase_allowed_domain=${_FIREBASE_ALLOWED_DOMAIN}" \
+          -var="egress_proxy_enabled=${_PIPELINE_ORCHESTRATOR_ENABLED}" \
+          -var="pipeline_orchestrator_enabled=${_PIPELINE_ORCHESTRATOR_ENABLED}" \
+          -var="pipeline_deployment_enabled=${_PIPELINE_DEPLOYMENT_ENABLED}" \
+          -var="settings_operator_invoker=${_SETTINGS_OPERATOR_INVOKER}" \
           -var="email_smtp_host=${_EMAIL_SMTP_HOST}" \
           -var="email_smtp_port=${_EMAIL_SMTP_PORT}" \
           -var="email_smtp_secure=${_EMAIL_SMTP_SECURE}" \
@@ -282,7 +416,7 @@ steps:
           -var="email_from=${_EMAIL_FROM}" \
           -var="email_public_app_url=$${EMAIL_PUBLIC_APP_URL}"
 
-# Longer timeout: three npm ci builds + two terraform applies.
+# Longer timeout: parallel service builds + two terraform applies.
 timeout: 3600s
 
 options:

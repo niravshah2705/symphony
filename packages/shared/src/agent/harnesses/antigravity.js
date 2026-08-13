@@ -155,14 +155,6 @@ async function executeAntigravity(options, prompt) {
   }
 }
 
-registry.register({
-  id: ID,
-  label: LABEL,
-  harnessName: 'antigravity',
-  packageName: PACKAGE,
-  requiresProvider: 'antigravity',
-  capabilities: { coding: false, planning: true, streaming: false, subagents: false },
-  createExecutor: () => executeAntigravity,
-});
+registry.register(registry.builtinDefinition(ID, () => executeAntigravity));
 
 module.exports = { executeAntigravity };

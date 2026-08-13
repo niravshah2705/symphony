@@ -22,6 +22,7 @@ test('buildForwardHeaders strips inbound auth and retargets Host', () => {
       authorization: 'Bearer egress-proxy-sentinel',
       'x-internal-token': 'secret',
       'x-forwarded-authorization': 'Bearer user',
+      'anthropic-beta': 'caller-controlled',
       cookie: 'session=abc',
       'content-type': 'application/json',
       host: '127.0.0.1:4030',
@@ -40,6 +41,16 @@ test('buildForwardHeaders strips inbound auth and retargets Host', () => {
   // Host is retargeted to the upstream, not the proxy loopback.
   assert.equal(out.host, 'api.anthropic.com');
   assert.equal(out['content-type'], 'application/json');
+});
+
+test('buildForwardHeaders cannot smuggle an OAuth beta header into API-key auth', () => {
+  const out = buildForwardHeaders(
+    { 'anthropic-beta': 'oauth-2025-04-20' },
+    'https://api.anthropic.com/v1/messages',
+    { 'x-api-key': 'managed-key' },
+  );
+  assert.equal(out['anthropic-beta'], undefined);
+  assert.equal(out['x-api-key'], 'managed-key');
 });
 
 test('filterResponseHeaders drops body-frame + hop-by-hop but keeps content-type', () => {
@@ -72,6 +83,15 @@ test('resolveStaticKey: managed value from the settings payload (one path)', () 
 test('resolveStaticKey: falls back to the platform env only when no payload', () => {
   const env = { GITHUB_TOKEN: 'ghp_env' };
   assert.equal(credentials.resolveStaticKey('githubToken', null, env), 'ghp_env');
+});
+
+test('proxy credential scope accepts a dedicated fleet org but rejects conflicting pins', () => {
+  assert.equal(credentials.configuredProxyOrgId({ FLEET_ORG_ID: 'org-1' }), 'org-1');
+  assert.equal(credentials.configuredProxyOrgId({ PROXY_ORG_ID: 'org-1', FLEET_ORG_ID: 'org-1' }), 'org-1');
+  assert.throws(
+    () => credentials.configuredProxyOrgId({ PROXY_ORG_ID: 'org-1', FLEET_ORG_ID: 'org-2' }),
+    /must identify the same organization/,
+  );
 });
 
 test('buildInjection: managed static key injects the settings-resolved value (Bearer)', async () => {
@@ -125,12 +145,46 @@ test('buildInjection: native gemini uses x-goog-api-key scheme', async () => {
 
 test('buildInjection: claude route injects Bearer + anthropic-beta from oauth manager', async () => {
   const headers = await credentials.buildInjection(EGRESS_ROUTES.anthropic, {
+    resolved: { secrets: { anthropicApiKey: { source: 'managed', value: null } } },
+    env: {},
     oauthManager: {
       getClaudeAuth: async () => ({ accessToken: 'acc', betaHeader: 'oauth-2025-04-20' }),
     },
   });
   assert.equal(headers.authorization, 'Bearer acc');
   assert.equal(headers['anthropic-beta'], 'oauth-2025-04-20');
+});
+
+test('buildInjection: Anthropic route uses a selected static key without OAuth headers', async () => {
+  const headers = await credentials.buildInjection(EGRESS_ROUTES.anthropic, {
+    resolved: { secrets: { anthropicApiKey: { source: 'managed', value: 'sk-ant-managed' } } },
+    env: {},
+    oauthManager: { getClaudeAuth: async () => { throw new Error('must not use OAuth'); } },
+  });
+  assert.deepEqual(headers, { 'x-api-key': 'sk-ant-managed' });
+});
+
+test('buildInjection: metered OpenAI route uses its selected static key', async () => {
+  const headers = await credentials.buildInjection(EGRESS_ROUTES.openai, {
+    resolved: { secrets: { openaiApiKey: { source: 'customer', value: 'sk-openai-customer' } } },
+    env: {},
+    oauthManager: { getCodexAuth: async () => { throw new Error('must not use OAuth'); } },
+  });
+  assert.deepEqual(headers, { authorization: 'Bearer sk-openai-customer' });
+});
+
+test('buildInjection: metered OpenAI route honors the preflight-preferred org token bundle', async () => {
+  const headers = await credentials.buildInjection(EGRESS_ROUTES.openai, {
+    resolved: {
+      secrets: {
+        codexTokenBundle: { source: 'customer', value: '{"accessToken":"vault"}' },
+        openaiApiKey: { source: 'managed', value: 'sk-managed' },
+      },
+    },
+    env: {},
+    oauthManager: { getCodexAuth: async () => ({ accessToken: 'oauth-access' }) },
+  });
+  assert.deepEqual(headers, { authorization: 'Bearer oauth-access' });
 });
 
 test('buildInjection: codex chatgpt route injects Bearer + chatgpt-account-id', async () => {

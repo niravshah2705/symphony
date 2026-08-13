@@ -14,10 +14,10 @@ Directory-based community: archive/gateway-agent-endpoints
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| loginRoute | Function | ./archive/gateway-agent-endpoints/codex-oauth-redirect.js | 27-32 |
-| escapeHtml | Function | ./archive/gateway-agent-endpoints/codex-oauth-redirect.js | 34-36 |
-| page | Function | ./archive/gateway-agent-endpoints/codex-oauth-redirect.js | 38-46 |
-| makeCallback | Function | ./archive/gateway-agent-endpoints/codex-oauth-redirect.js | 52-89 |
+| loginRoute | Function | ./archive/gateway-agent-endpoints/codex-oauth-redirect.js | 26-31 |
+| escapeHtml | Function | ./archive/gateway-agent-endpoints/codex-oauth-redirect.js | 33-35 |
+| page | Function | ./archive/gateway-agent-endpoints/codex-oauth-redirect.js | 37-45 |
+| makeCallback | Function | ./archive/gateway-agent-endpoints/codex-oauth-redirect.js | 51-88 |
 
 ## Execution Flows
 

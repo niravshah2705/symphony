@@ -488,6 +488,8 @@ export const api = {
     getUniverse: () => request('/settings-policy/settings/universe'),
     getEffective: (projectId) =>
       request(`/settings-policy/settings/effective${projectId ? `?project_id=${projectId}` : ''}`),
+    preflight: (payload) =>
+      request('/settings-policy/settings/preflight', { method: 'POST', body: JSON.stringify(payload) }),
 
     // Org-scope policy (org admin).
     getOrgPolicy: () => request('/settings-policy/settings/org'),

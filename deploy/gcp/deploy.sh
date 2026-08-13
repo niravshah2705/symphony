@@ -54,6 +54,22 @@ EMAIL_SMTP_USER="${EMAIL_SMTP_USER:-}"
 EMAIL_SMTP_PASSWORD="${EMAIL_SMTP_PASSWORD:-}"
 EMAIL_FROM="${EMAIL_FROM:-}"
 EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://storage.googleapis.com/${SPA_BUCKET}/index.html}"
+PIPELINE_ORCHESTRATOR_ENABLED="${PIPELINE_ORCHESTRATOR_ENABLED:-false}"
+PIPELINE_DEPLOYMENT_ENABLED="${PIPELINE_DEPLOYMENT_ENABLED:-false}"
+EGRESS_PROXY_ENABLED="${EGRESS_PROXY_ENABLED:-$PIPELINE_ORCHESTRATOR_ENABLED}"
+SETTINGS_OPERATOR_INVOKER="${SETTINGS_OPERATOR_INVOKER:-}"
+INTERNAL_API_TOKEN="${INTERNAL_API_TOKEN:-}"
+
+if [ "$PIPELINE_ORCHESTRATOR_ENABLED" = "true" ] && [ "$EGRESS_PROXY_ENABLED" != "true" ]; then
+  echo "ERROR: the durable pipeline requires EGRESS_PROXY_ENABLED=true." >&2
+  exit 1
+fi
+if [ "$EGRESS_PROXY_ENABLED" = "true" ] && [ -z "$INTERNAL_API_TOKEN" ]; then
+  echo "ERROR: egress proxy mode requires INTERNAL_API_TOKEN (used only for settings S2S auth)." >&2
+  exit 1
+fi
+# Keep the shared internal token out of the Terraform command line/process list.
+export TF_VAR_internal_api_token="$INTERNAL_API_TOKEN"
 
 if { [ -n "$EMAIL_SMTP_USER" ] && [ -z "$EMAIL_SMTP_PASSWORD" ]; } || \
    { [ -z "$EMAIL_SMTP_USER" ] && [ -n "$EMAIL_SMTP_PASSWORD" ]; }; then
@@ -104,6 +120,10 @@ TFVARS=(
   -var="email_smtp_require_tls=${EMAIL_SMTP_REQUIRE_TLS}"
   -var="email_from=${EMAIL_FROM}"
   -var="email_public_app_url=${EMAIL_PUBLIC_APP_URL}"
+  -var="pipeline_orchestrator_enabled=${PIPELINE_ORCHESTRATOR_ENABLED}"
+  -var="pipeline_deployment_enabled=${PIPELINE_DEPLOYMENT_ENABLED}"
+  -var="egress_proxy_enabled=${EGRESS_PROXY_ENABLED}"
+  -var="settings_operator_invoker=${SETTINGS_OPERATOR_INVOKER}"
 )
 
 # --- 1. Enable APIs ---------------------------------------------------------
@@ -195,10 +215,22 @@ else
     docker build -f "deploy/gcp/$2" -t "${IMAGE_BASE}/$1:${IMAGE_TAG}" .
     docker push "${IMAGE_BASE}/$1:${IMAGE_TAG}"
   }
+  build_push_context() { # service, dockerfile, context
+    docker build -f "$2" -t "${IMAGE_BASE}/$1:${IMAGE_TAG}" "$3"
+    docker push "${IMAGE_BASE}/$1:${IMAGE_TAG}"
+  }
   build_push gateway       Dockerfile.gateway
   build_push planner       Dockerfile.planner
   build_push coder-control Dockerfile.coder   # dual-role image; also runs the worker Job
+  build_push pipeline-orchestrator Dockerfile.orchestrator
+  build_push pipeline-tester       Dockerfile.tester
+  build_push pipeline-deployer     Dockerfile.deployer
+  if [ "$EGRESS_PROXY_ENABLED" = "true" ]; then build_push proxy Dockerfile.proxy; fi
   build_push email-service Dockerfile.email
+  build_push provisioner Dockerfile.provisioner
+  build_push_context org-service services/org/Dockerfile services/org
+  # Settings copies the shared-core harness catalog, so it builds at repo root.
+  build_push_context settings-service services/settings/Dockerfile .
 fi
 
 # --- 7. Publish the SPA to GCS ----------------------------------------------
