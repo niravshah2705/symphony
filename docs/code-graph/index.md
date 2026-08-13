@@ -10,13 +10,13 @@ Auto-generated documentation from the code knowledge graph community structure.
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-model | 1757 | [agent-model.md](agent-model.md) |
+| agent-model | 1758 | [agent-model.md](agent-model.md) |
 | core-org | 456 | [core-org.md](core-org.md) |
 | e2e-json | 62 | [e2e-json.md](e2e-json.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
 | gcp-image | 26 | [gcp-image.md](gcp-image.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
-| pipeline-stage | 615 | [pipeline-stage.md](pipeline-stage.md) |
+| pipeline-stage | 616 | [pipeline-stage.md](pipeline-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
 | routes-test:planner | 179 | [routes-test-planner.md](routes-test-planner.md) |
 | scripts-module | 34 | [scripts-module.md](scripts-module.md) |

@@ -172,6 +172,11 @@ test('pipeline topology enforces dedicated topics and brokered agent egress', ()
   assert.equal((cloudRun.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 2);
   assert.match(pipeline, /check "pipeline_agent_egress_is_brokered"/);
   assert.match(pipeline, /!var\.pipeline_orchestrator_enabled \|\| var\.egress_proxy_enabled/);
+  assert.match(cloudRun, /!local\.pipeline_on \|\| var\.min_instances <= 1/);
+  assert.equal(
+    (cloudRun.match(/max_instance_count = local\.pipeline_on \? 1 : var\.max_instances/g) || []).length,
+    2,
+  );
 
   for (const service of ['tester', 'deployer']) {
     const start = pipeline.indexOf(`resource "google_cloud_run_v2_service" "${service}"`);

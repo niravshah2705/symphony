@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared-core
 
-- **Size**: 615 nodes
-- **Cohesion**: 0.2425
+- **Size**: 616 nodes
+- **Cohesion**: 0.2424
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared-core
 | customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 590-777 |
 | publicCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 779-781 |
 
-*... and 565 more members.*
+*... and 566 more members.*
 
 ## Execution Flows
 

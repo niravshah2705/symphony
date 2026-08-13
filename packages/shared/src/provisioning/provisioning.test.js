@@ -183,11 +183,18 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
   assert.equal(plan.services.coder.env.PUBSUB_PIPELINE_CODE_RESULTS_TOPIC, n.pipelineCodeResultsTopic);
   assert.equal(plan.services.tester.env.PUBSUB_PIPELINE_TEST_RESULTS_TOPIC, n.pipelineTestResultsTopic);
   assert.equal(plan.services.deployer.env.PUBSUB_PIPELINE_DEPLOY_RESULTS_TOPIC, n.pipelineDeployResultsTopic);
+  for (const service of [
+    plan.services.planner,
+    plan.services.coder,
+    plan.services.tester,
+    plan.services.deployer,
+  ]) {
+    assert.equal(service.maxInstanceCount, 1);
+    assert.equal(service.requestTimeoutSeconds, 3600);
+  }
   for (const service of [plan.services.tester, plan.services.deployer]) {
     assert.equal(service.requireSecretFreePrimary, true);
     assert.equal(service.requireEgressProxy, true);
-    assert.equal(service.maxInstanceCount, 1);
-    assert.equal(service.requestTimeoutSeconds, 3600);
     assert.equal(service.env.EGRESS_PROXY_URL, 'http://127.0.0.1:4030');
     assert.equal(service.sidecarEnv.PROXY_ORG_ID, ORG_ID);
     assert.match(service.sidecarEnv.ORG_INTERNAL_API_TOKEN, /^[A-Za-z0-9_-]{43}$/);

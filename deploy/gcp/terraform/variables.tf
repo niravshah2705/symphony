@@ -260,22 +260,49 @@ variable "settings_operator_invoker" {
   }
 }
 
+variable "min_instances" {
+  type        = number
+  description = "Minimum Cloud Run instances per service. Keep at 0 for scale-to-zero / no idle cost."
+  default     = 0
+
+  validation {
+    condition     = var.min_instances >= 0 && floor(var.min_instances) == var.min_instances
+    error_message = "min_instances must be a non-negative integer."
+  }
+}
+
 variable "max_instances" {
   type        = number
-  description = "Per-service max Cloud Run instances (min is always 0 for scale-to-zero / no idle cost)."
-  default     = 3
+  description = "Maximum Cloud Run instances per service."
+  default     = 1
+
+  validation {
+    condition     = var.max_instances >= 1 && floor(var.max_instances) == var.max_instances
+    error_message = "max_instances must be a positive integer."
+  }
+}
+
+variable "container_concurrency" {
+  type        = number
+  description = "Maximum concurrent requests per Cloud Run service instance. Values above 1 require service containers with at least 1 vCPU."
+  default     = 10
+
+  validation {
+    condition     = var.container_concurrency >= 1 && var.container_concurrency <= 1000 && floor(var.container_concurrency) == var.container_concurrency
+    error_message = "container_concurrency must be an integer from 1 through 1000."
+  }
 }
 
 variable "cloud_run_service_cpu" {
   type        = string
-  description = "vCPU limit for Cloud Run service app containers. The fractional default is paired with request concurrency 1, request-based billing, and gen1; agent services use 1 vCPU when the optional gen2 skills mount is enabled."
-  default     = "0.5"
+  description = "vCPU limit for Cloud Run service app containers. The 1-vCPU default supports container_concurrency > 1; fractional overrides require container_concurrency = 1 and gen1."
+  default     = "1"
 }
 
 variable "cloud_run_proxy_cpu" {
   type        = string
-  description = "vCPU limit for egress-proxy sidecars on Cloud Run services. Cloud Run Jobs use coder_job_proxy_cpu because job containers require at least 1 vCPU."
-  default     = "0.5"
+  description = "vCPU limit for egress-proxy sidecars on Cloud Run services. Cloud Run Jobs use coder_job_proxy_cpu."
+  default     = "1"
 }
 
 # --- Pub/Sub topics -----------------------------------------------------------

@@ -7,7 +7,7 @@
 Directory-based community: deploy/gcp
 
 - **Size**: 26 nodes
-- **Cohesion**: 0.1046
+- **Cohesion**: 0.1030
 - **Dominant Language**: bash
 
 ## Members
@@ -34,12 +34,12 @@ Directory-based community: deploy/gcp
 | test:deploy workflow does not query disabled optional Cloud Run services@L41 | Test | ./deploy/gcp/pipeline-infra.test.js | 41-68 |
 | test:optional image resolver uses a SHA placeholder only while disabled@L70 | Test | ./deploy/gcp/pipeline-infra.test.js | 70-116 |
 | test:required image resolution failure makes the tag output step fail@L118 | Test | ./deploy/gcp/pipeline-infra.test.js | 118-140 |
-| test:pipeline topology enforces dedicated topics and brokered agent egress@L142 | Test | ./deploy/gcp/pipeline-infra.test.js | 142-184 |
-| test:orchestrator image remains free of the heavy shared agent SDK workspace@L186 | Test | ./deploy/gcp/pipeline-infra.test.js | 186-192 |
-| test:tester image installs the capability-free network sandbox for repository commands@L194 | Test | ./deploy/gcp/pipeline-infra.test.js | 194-203 |
-| test:direct settings operator access is IAM-gated and never public@L205 | Test | ./deploy/gcp/pipeline-infra.test.js | 205-210 |
-| test:tenant vault token derivation root is limited to settings and provisioner@L212 | Test | ./deploy/gcp/pipeline-infra.test.js | 212-222 |
-| test:orchestrator can consume run-bound deployment approvals from settings@L224 | Test | ./deploy/gcp/pipeline-infra.test.js | 224-233 |
+| test:pipeline topology enforces dedicated topics and brokered agent egress@L142 | Test | ./deploy/gcp/pipeline-infra.test.js | 142-189 |
+| test:orchestrator image remains free of the heavy shared agent SDK workspace@L191 | Test | ./deploy/gcp/pipeline-infra.test.js | 191-197 |
+| test:tester image installs the capability-free network sandbox for repository commands@L199 | Test | ./deploy/gcp/pipeline-infra.test.js | 199-208 |
+| test:direct settings operator access is IAM-gated and never public@L210 | Test | ./deploy/gcp/pipeline-infra.test.js | 210-215 |
+| test:tenant vault token derivation root is limited to settings and provisioner@L217 | Test | ./deploy/gcp/pipeline-infra.test.js | 217-227 |
+| test:orchestrator can consume run-bound deployment approvals from settings@L229 | Test | ./deploy/gcp/pipeline-infra.test.js | 229-238 |
 
 ## Execution Flows
 
@@ -49,11 +49,11 @@ Directory-based community: deploy/gcp
 
 ### Outgoing
 
-- `match` (58 edge(s))
+- `match` (60 edge(s))
 - `indexOf` (16 edge(s))
 - `doesNotMatch` (10 edge(s))
+- `equal` (10 edge(s))
 - `slice` (9 edge(s))
-- `equal` (9 edge(s))
 - `gcloud` (8 edge(s))
 - `echo` (6 edge(s))
 - `spawnSync` (5 edge(s))
@@ -67,13 +67,13 @@ Directory-based community: deploy/gcp
 
 ### Incoming
 
-- `match` (58 edge(s))
+- `match` (60 edge(s))
 - `./deploy/gcp/deploy.sh` (38 edge(s))
 - `./deploy/gcp/bootstrap.sh` (35 edge(s))
 - `indexOf` (14 edge(s))
 - `./deploy/gcp/pipeline-infra.test.js` (13 edge(s))
 - `doesNotMatch` (10 edge(s))
-- `equal` (9 edge(s))
+- `equal` (10 edge(s))
 - `slice` (8 edge(s))
 - `spawnSync` (5 edge(s))
 - `ok` (3 edge(s))

@@ -3,7 +3,12 @@
 const { provision, teardown } = require('./provisioner');
 const { buildPlan } = require('./plan');
 const { names, urls, assertSlug } = require('./naming');
-const { extractSourceService, extractSourceJob, cloneContainers } = require('./containers');
+const {
+  extractSourceService,
+  extractSourceJob,
+  mergeServiceScaling,
+  cloneContainers,
+} = require('./containers');
 
 /**
  * Real @google-cloud adapter for the provisioning executor.
@@ -16,9 +21,10 @@ const { extractSourceService, extractSourceJob, cloneContainers } = require('./c
  * teardowns converge.
  *
  * "Reuse original builds": createService/createJob copy the image AND the secret
- * env blocks, resource limits, execution environment, concurrency, and skills
- * volumes from the live SHARED source service/job, so a tenant runtime is the
- * same build with the same secrets — only its per-tenant plain env differs.
+ * env blocks, resource limits, execution environment, scaling, concurrency,
+ * and skills volumes from the live SHARED source service/job. Explicit
+ * per-service safety overrides (such as the pipeline's max-one ceiling) are
+ * applied after the source profile.
  */
 
 const ALREADY_EXISTS = 6; // gRPC ALREADY_EXISTS
@@ -119,11 +125,10 @@ function createGcpClients({ projectId, region }) {
         labels: spec.labels,
         template: {
           serviceAccount: spec.serviceAccount,
-          scaling: {
-            minInstanceCount: 0,
-            ...(spec.maxInstanceCount ? { maxInstanceCount: spec.maxInstanceCount } : {}),
-          },
-          ...(spec.requestTimeoutSeconds
+          // Preserve the source service's parameterized scaling profile while
+          // allowing pipeline stages to apply their stricter explicit ceiling.
+          scaling: mergeServiceScaling(src.scaling, spec.maxInstanceCount),
+          ...(spec.requestTimeoutSeconds != null
             ? { timeout: { seconds: spec.requestTimeoutSeconds } }
             : {}),
           executionEnvironment: src.executionEnvironment,

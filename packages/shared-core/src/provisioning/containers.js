@@ -44,6 +44,7 @@ function extractContainers(containers) {
 function extractSourceService(svc) {
   return {
     containers: extractContainers(svc.template.containers),
+    scaling: svc.template.scaling,
     volumes: svc.template.volumes,
     executionEnvironment: svc.template.executionEnvironment,
     maxInstanceRequestConcurrency: svc.template.maxInstanceRequestConcurrency,
@@ -57,6 +58,15 @@ function extractSourceJob(job) {
     containers: extractContainers(t.containers),
     volumes: t.volumes,
     executionEnvironment: t.executionEnvironment,
+  };
+}
+
+/** Preserve source scaling while applying an explicit per-service maximum. */
+function mergeServiceScaling(sourceScaling, maxInstanceCount) {
+  return {
+    minInstanceCount: 0,
+    ...(sourceScaling || {}),
+    ...(maxInstanceCount != null ? { maxInstanceCount } : {}),
   };
 }
 
@@ -102,6 +112,7 @@ module.exports = {
   extractContainers,
   extractSourceService,
   extractSourceJob,
+  mergeServiceScaling,
   toEnvList,
   cloneContainers,
 };
