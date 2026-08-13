@@ -17,7 +17,8 @@
 # The Cloud Build service account needs: Cloud Run admin, Artifact Registry
 # writer, Pub/Sub admin, Cloud Scheduler admin, Firestore/Datastore admin,
 # Secret Manager admin, Service Account admin + user, Storage admin, and Service
-# Usage admin (to enable APIs) — or run this pipeline as a dedicated deployer SA.
+# Usage admin (to enable APIs), plus Logging config writer (to create the scoped
+# log sink) — or run this pipeline as a dedicated deployer SA.
 
 substitutions:
   _REGION: "asia-south1"
@@ -40,6 +41,14 @@ substitutions:
   _PIPELINE_ORCHESTRATOR_ENABLED: "false"
   _PIPELINE_DEPLOYMENT_ENABLED: "false"
   _SETTINGS_OPERATOR_INVOKER: ""
+  _GRAFANA_MONITORING_ENABLED: "false"
+  _GRAFANA_METRICS_REMOTE_WRITE_URL: "https://prometheus-prod-43-prod-ap-south-1.grafana.net/api/prom/push"
+  _GRAFANA_METRICS_USERNAME: ""
+  _GRAFANA_LOKI_PUSH_URL: ""
+  _GRAFANA_LOKI_USERNAME: ""
+  # Optional numeric pin. Empty resolves the newest enabled version without
+  # reading the token value.
+  _GRAFANA_CLOUD_TOKEN_VERSION: ""
   # Empty derives the URL of the GCS object published by this pipeline.
   # Set an explicit HTTPS URL when a custom domain/CDN fronts the SPA.
   _EMAIL_PUBLIC_APP_URL: ""
@@ -169,6 +178,19 @@ steps:
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/provisioner:${_IMAGE_TAG}
       - .
 
+  # Central infrastructure collector. It is built even while disabled so the
+  # first enabled apply always references an image that exists at this tag.
+  - id: build-alloy
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -f
+      - deploy/gcp/Dockerfile.alloy
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/grafana-alloy:${_IMAGE_TAG}
+      - .
+
   # --- Terraform: bootstrap (APIs, registry, SPA bucket, secret containers) --
   - id: tf-bootstrap
     name: hashicorp/terraform:1.9
@@ -187,6 +209,7 @@ steps:
           -target=google_artifact_registry_repository.docker \
           -target=google_secret_manager_secret.email_smtp_user \
           -target=google_secret_manager_secret.email_smtp_password \
+          -target=google_secret_manager_secret.grafana_cloud_access_token \
           -target=google_storage_bucket.spa \
           -target=google_storage_bucket_iam_member.spa_public_read \
           -var="project_id=$PROJECT_ID" \
@@ -237,7 +260,7 @@ steps:
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     # Do not create the ephemeral plaintext tfvars until every Docker build/push
     # has finished; otherwise it could enter the root Docker build context.
-    waitFor: [push-gateway, push-planner, push-coder, push-orchestrator, push-tester, push-deployer, push-proxy, push-email, push-org, push-settings, push-provisioner, spa-publish, email-secret-state]
+    waitFor: [push-gateway, push-planner, push-coder, push-orchestrator, push-tester, push-deployer, push-proxy, push-email, push-org, push-settings, push-provisioner, push-alloy, spa-publish, email-secret-state]
     entrypoint: bash
     args:
       - -c
@@ -313,6 +336,67 @@ steps:
     waitFor: [build-provisioner, tf-bootstrap]
     args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/provisioner:${_IMAGE_TAG}"]
 
+  - id: push-alloy
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-alloy, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/grafana-alloy:${_IMAGE_TAG}"]
+
+  # Resolve only Secret Manager metadata. The value never enters Cloud Build,
+  # Terraform state, substitutions, or logs. Waiting for pipeline-secret-state
+  # keeps this generated file out of every Docker build context.
+  - id: grafana-monitoring-state
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    waitFor: [pipeline-secret-state]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        case "${_GRAFANA_MONITORING_ENABLED}" in
+          true|false) ;;
+          *) echo "_GRAFANA_MONITORING_ENABLED must be true or false" >&2; exit 1 ;;
+        esac
+
+        TOKEN_VERSION=""
+        if [ "${_GRAFANA_MONITORING_ENABLED}" = "true" ]; then
+          case "${_GRAFANA_METRICS_REMOTE_WRITE_URL}" in
+            https://*/api/prom/push) ;;
+            *) echo "_GRAFANA_METRICS_REMOTE_WRITE_URL must be an HTTPS /api/prom/push endpoint" >&2; exit 1 ;;
+          esac
+          case "${_GRAFANA_METRICS_USERNAME}" in
+            *[!0-9]*|'') echo "_GRAFANA_METRICS_USERNAME must be the numeric metrics instance ID" >&2; exit 1 ;;
+          esac
+          case "${_GRAFANA_LOKI_PUSH_URL}" in
+            https://*/loki/api/v1/push) ;;
+            *) echo "_GRAFANA_LOKI_PUSH_URL must be an HTTPS /loki/api/v1/push endpoint" >&2; exit 1 ;;
+          esac
+          [ -n "${_GRAFANA_LOKI_USERNAME}" ] || { echo "_GRAFANA_LOKI_USERNAME is required" >&2; exit 1; }
+
+          if [ -n "${_GRAFANA_CLOUD_TOKEN_VERSION}" ]; then
+            TOKEN_STATE="$$(gcloud secrets versions describe "${_GRAFANA_CLOUD_TOKEN_VERSION}" \
+              --secret=grafana-cloud-access-token --project "$PROJECT_ID" \
+              --format='value(state)' 2>/dev/null || true)"
+            [ "$$TOKEN_STATE" = "ENABLED" ] || {
+              echo "Requested Grafana token version does not exist or is not enabled" >&2; exit 1;
+            }
+            TOKEN_VERSION="${_GRAFANA_CLOUD_TOKEN_VERSION}"
+          else
+            TOKEN_NAME="$$(gcloud secrets versions list grafana-cloud-access-token \
+              --project "$PROJECT_ID" --filter='state=ENABLED' --sort-by='~createTime' \
+              --limit=1 --format='value(name)' 2>/dev/null || true)"
+            TOKEN_VERSION="$${TOKEN_NAME##*/}"
+          fi
+          case "$$TOKEN_VERSION" in
+            *[!0-9]*|'')
+              echo "Monitoring is enabled, but grafana-cloud-access-token has no enabled version" >&2
+              echo "Run once disabled, add the token, then enable monitoring" >&2
+              exit 1
+              ;;
+          esac
+        fi
+        printf '%s' "$$TOKEN_VERSION" > /workspace/grafana-token-version.txt
+        echo "Grafana monitoring token ready: $$([ -n "$$TOKEN_VERSION" ] && echo true || echo false) (value was not accessed)"
+
   # --- Obfuscate the SPA's client JS before it is published ------------------
   # Rewrites public/js/** in /workspace (shared across steps) so spa-publish
   # rsyncs the obfuscated site. config.js is regenerated in spa-publish and
@@ -373,18 +457,19 @@ steps:
   # --- Terraform: full apply (services, job, pubsub, scheduler, secrets, …) --
   - id: tf-apply
     name: hashicorp/terraform:1.9
-    waitFor: [push-gateway, push-planner, push-coder, push-orchestrator, push-tester, push-deployer, push-proxy, push-email, push-org, push-settings, push-provisioner, spa-publish, email-secret-state, pipeline-secret-state]
+    waitFor: [push-gateway, push-planner, push-coder, push-orchestrator, push-tester, push-deployer, push-proxy, push-email, push-org, push-settings, push-provisioner, push-alloy, spa-publish, email-secret-state, pipeline-secret-state, grafana-monitoring-state]
     entrypoint: sh
     args:
       - -c
       - |
         set -euo pipefail
-        trap 'rm -f /workspace/pipeline-secret.auto.tfvars.json' EXIT
+        trap 'rm -f /workspace/pipeline-secret.auto.tfvars.json /workspace/grafana-token-version.txt' EXIT
         cd "${_TF_DIR}"
         terraform init -input=false \
           -backend-config="bucket=${_TF_STATE_BUCKET}" \
           -backend-config="prefix=${_TF_STATE_PREFIX}"
         API_BASE_URL="$$(cat /workspace/gateway_url.txt)"
+        GRAFANA_CLOUD_TOKEN_VERSION="$$(cat /workspace/grafana-token-version.txt)"
         EMAIL_PUBLIC_APP_URL="${_EMAIL_PUBLIC_APP_URL}"
         if [ -z "$${EMAIL_PUBLIC_APP_URL}" ]; then
           EMAIL_PUBLIC_APP_URL="https://storage.googleapis.com/${_BUCKET}/index.html"
@@ -400,6 +485,7 @@ steps:
           -var="tester_image_tag=${_IMAGE_TAG}" \
           -var="deployer_image_tag=${_IMAGE_TAG}" \
           -var="proxy_image_tag=${_IMAGE_TAG}" \
+          -var="alloy_image_tag=${_IMAGE_TAG}" \
           -var="spa_bucket_name=${_BUCKET}" \
           -var="firestore_location=${_FIRESTORE_LOCATION}" \
           -var="spa_origin=${_SPA_ORIGIN}" \
@@ -414,7 +500,13 @@ steps:
           -var="email_smtp_secure=${_EMAIL_SMTP_SECURE}" \
           -var="email_smtp_require_tls=${_EMAIL_SMTP_REQUIRE_TLS}" \
           -var="email_from=${_EMAIL_FROM}" \
-          -var="email_public_app_url=$${EMAIL_PUBLIC_APP_URL}"
+          -var="email_public_app_url=$${EMAIL_PUBLIC_APP_URL}" \
+          -var="grafana_monitoring_enabled=${_GRAFANA_MONITORING_ENABLED}" \
+          -var="grafana_metrics_remote_write_url=${_GRAFANA_METRICS_REMOTE_WRITE_URL}" \
+          -var="grafana_metrics_username=${_GRAFANA_METRICS_USERNAME}" \
+          -var="grafana_loki_push_url=${_GRAFANA_LOKI_PUSH_URL}" \
+          -var="grafana_loki_username=${_GRAFANA_LOKI_USERNAME}" \
+          -var="grafana_cloud_token_version=$${GRAFANA_CLOUD_TOKEN_VERSION}"
 
 # Longer timeout: parallel service builds + two terraform applies.
 timeout: 3600s

@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+#
+# Central, project-scoped Grafana Alloy collector. Build from the monorepo root:
+#   docker build -f deploy/gcp/Dockerfile.alloy -t <tag> .
+#
+# The upstream multi-architecture image is pinned by both release and immutable
+# index digest. Verify/update with:
+#   docker buildx imagetools inspect grafana/alloy:v1.18.1
+ARG GRAFANA_ALLOY_IMAGE=grafana/alloy:v1.18.1@sha256:0f4434c92b3e6cdac38bb129b344e1790c246f7b6e2eaffcc16a5fa363240e33
+
+FROM ${GRAFANA_ALLOY_IMAGE}
+
+# Keep credentials out of the image: every runtime value, including the token,
+# is injected by Cloud Run and read with sys.env() from this baked config.
+COPY --chmod=0444 deploy/gcp/alloy/config.alloy /etc/alloy/config.alloy
+
+# GCP API polling and Pub/Sub consumption need no host privileges. Use the
+# packaged Alloy account instead of the upstream image's root default.
+USER alloy
+
+# Cloud Run supplies the `run`, listen-address, storage-path, and config-path
+# arguments while this image preserves the official Alloy ENTRYPOINT.
+EXPOSE 8080

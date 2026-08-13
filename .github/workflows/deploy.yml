@@ -6,7 +6,8 @@ name: Deploy to GCP
 #                                  `terraform apply` rolls ONLY that service.
 #   • shared packages changed → rebuild all service images.
 #   • root deps changed → rebuild all service images + republish the SPA.
-#   • deploy/gcp/terraform/** changed → `terraform apply` only (no image rebuild).
+#   • deploy/gcp/terraform/** changed → rebuild required proxy/Alloy images,
+#                                      then `terraform apply`.
 #   • SPA source, config, or release tooling changed → Firebase Hosting deploy.
 #   • docs / anything else → nothing runs.
 #
@@ -63,6 +64,7 @@ jobs:
             deployer:     ['services/deployer/**',     'deploy/gcp/Dockerfile.deployer']
             provisioner: ['services/provisioner/**', 'deploy/gcp/Dockerfile.provisioner']
             proxy:   ['services/proxy/**',   'deploy/gcp/Dockerfile.proxy']
+            alloy:   ['deploy/gcp/Dockerfile.alloy', 'deploy/gcp/alloy/**']
             # A release-tooling change must publish the newly transformed SPA;
             # otherwise an obfuscator/default change would wait for an unrelated
             # public/** edit before reaching production.
@@ -87,6 +89,7 @@ jobs:
           PIPELINE_ENABLED: ${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}
           PROVISIONER: ${{ steps.filter.outputs.provisioner }}
           PROXY: ${{ steps.filter.outputs.proxy }}
+          ALLOY: ${{ steps.filter.outputs.alloy }}
           SPA: ${{ steps.filter.outputs.spa }}
           INFRA: ${{ steps.filter.outputs.infra }}
           ORG: ${{ steps.filter.outputs.org }}
@@ -128,7 +131,7 @@ jobs:
           # Terraform runs when infra changed OR any image was rebuilt (rolling a
           # new image is a `terraform apply`). A SPA-only or docs-only change skips it.
           run_tf=false
-          if [ "$FORCE_ALL" = "true" ] || [ "$INFRA" = "true" ] || [ "$PROXY" = "true" ] || [ "$services" != "[]" ]; then run_tf=true; fi
+          if [ "$FORCE_ALL" = "true" ] || [ "$INFRA" = "true" ] || [ "$PROXY" = "true" ] || [ "$ALLOY" = "true" ] || [ "$services" != "[]" ]; then run_tf=true; fi
 
           # Egress proxy sidecar image: built whenever terraform will run so the
           # image the sidecar references ALWAYS exists at this SHA. Harmless when
@@ -136,6 +139,11 @@ jobs:
           # (Like the provisioner, it is built even while the feature can be off so
           # turning it on is a one-var flip.)
           if [ "$run_tf" = "true" ]; then push proxy proxy deploy/gcp/Dockerfile.proxy . ; fi
+
+          # Grafana Alloy is a standalone, feature-gated collector. Like the
+          # proxy image, build it on every terraform-running deploy so the first
+          # enablement can never reference a tag that was not pushed.
+          if [ "$run_tf" = "true" ]; then push alloy grafana-alloy deploy/gcp/Dockerfile.alloy . ; fi
 
           {
             echo "services=$services"
@@ -340,6 +348,9 @@ jobs:
             # live tag from), but it is built on every terraform-running deploy
             # (see the plan step), so it always resolves to the current SHA here.
             write_tag proxy resolve proxy proxy
+            # Alloy is built on every terraform-running deploy, including the
+            # first feature enablement, so it always uses this immutable SHA.
+            write_tag alloy resolve alloy grafana-alloy
             write_tag org resolve org org-service
             write_tag settings resolve settings settings-service
             write_tag email resolve email email-service
@@ -352,15 +363,74 @@ jobs:
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
             -backend-config="prefix=${TF_STATE_PREFIX}"
 
+      - name: Resolve Grafana Cloud token version
+        id: grafana
+        env:
+          GRAFANA_MONITORING_ENABLED: ${{ vars.GRAFANA_MONITORING_ENABLED || 'false' }}
+          REQUESTED_TOKEN_VERSION: ${{ vars.GRAFANA_CLOUD_TOKEN_VERSION }}
+        run: |
+          set -euo pipefail
+          case "$GRAFANA_MONITORING_ENABLED" in
+            true|false) ;;
+            *) echo "GRAFANA_MONITORING_ENABLED must be true or false" >&2; exit 1 ;;
+          esac
+
+          token_version=""
+          if [ "$GRAFANA_MONITORING_ENABLED" = "true" ]; then
+            if [ -n "$REQUESTED_TOKEN_VERSION" ]; then
+              token_state="$(gcloud secrets versions describe "$REQUESTED_TOKEN_VERSION" \
+                --secret=grafana-cloud-access-token \
+                --project "${{ vars.GCP_PROJECT_ID }}" --format='value(state)' 2>/dev/null || true)"
+              if [ "$token_state" != "ENABLED" ]; then
+                echo "Grafana token version $REQUESTED_TOKEN_VERSION does not exist or is not enabled" >&2
+                exit 1
+              fi
+              token_version="$REQUESTED_TOKEN_VERSION"
+            else
+              token_name="$(gcloud secrets versions list grafana-cloud-access-token \
+                --project "${{ vars.GCP_PROJECT_ID }}" --filter='state=ENABLED' \
+                --sort-by='~createTime' --limit=1 --format='value(name)' 2>/dev/null || true)"
+              token_version="${token_name##*/}"
+            fi
+            if [[ ! "$token_version" =~ ^[0-9]+$ ]]; then
+              echo "Monitoring is enabled, but grafana-cloud-access-token has no resolvable enabled version" >&2
+              echo "Deploy once with monitoring disabled, add the token version, then enable monitoring" >&2
+              exit 1
+            fi
+          fi
+          printf 'token_version=%s\n' "$token_version" >> "$GITHUB_OUTPUT"
+          echo "Grafana monitoring token ready: $([ -n "$token_version" ] && echo true || echo false) (value was not accessed)"
+
       - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}
         env:
           # Sensitive Terraform input stays out of the command line and logs.
           TF_VAR_internal_api_token: ${{ secrets.INTERNAL_API_TOKEN }}
+          GRAFANA_MONITORING_ENABLED: ${{ vars.GRAFANA_MONITORING_ENABLED || 'false' }}
+          GRAFANA_METRICS_REMOTE_WRITE_URL: ${{ vars.GRAFANA_METRICS_REMOTE_WRITE_URL || 'https://prometheus-prod-43-prod-ap-south-1.grafana.net/api/prom/push' }}
+          GRAFANA_METRICS_USERNAME: ${{ vars.GRAFANA_METRICS_USERNAME }}
+          GRAFANA_LOKI_PUSH_URL: ${{ vars.GRAFANA_LOKI_PUSH_URL }}
+          GRAFANA_LOKI_USERNAME: ${{ vars.GRAFANA_LOKI_USERNAME }}
+          GRAFANA_CLOUD_TOKEN_VERSION: ${{ steps.grafana.outputs.token_version }}
         run: |
           set -euo pipefail
           PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
           GATEWAY_URL="https://${{ vars.GATEWAY_SERVICE_NAME || 'gateway' }}-${PROJECT_NUMBER}.${REGION}.run.app"
+
+          if [ "$GRAFANA_MONITORING_ENABLED" = "true" ]; then
+            [[ "$GRAFANA_METRICS_REMOTE_WRITE_URL" == https://*/api/prom/push ]] || {
+              echo "GRAFANA_METRICS_REMOTE_WRITE_URL must be an HTTPS /api/prom/push endpoint" >&2; exit 1;
+            }
+            [[ "$GRAFANA_METRICS_USERNAME" =~ ^[0-9]+$ ]] || {
+              echo "GRAFANA_METRICS_USERNAME must be the numeric Grafana Cloud metrics instance ID" >&2; exit 1;
+            }
+            [[ "$GRAFANA_LOKI_PUSH_URL" == https://*/loki/api/v1/push ]] || {
+              echo "GRAFANA_LOKI_PUSH_URL must be an HTTPS /loki/api/v1/push endpoint" >&2; exit 1;
+            }
+            [ -n "$GRAFANA_LOKI_USERNAME" ] || {
+              echo "GRAFANA_LOKI_USERNAME is required when monitoring is enabled" >&2; exit 1;
+            }
+          fi
 
           # Every service tag above is either this run's immutable SHA or a
           # successfully resolved live tag. An unresolved tag aborts deployment.
@@ -390,6 +460,12 @@ jobs:
             -var="email_smtp_auth_enabled=${{ vars.EMAIL_SMTP_AUTH_ENABLED || 'false' }}"
             -var="email_from=${{ vars.EMAIL_FROM }}"
             -var="email_public_app_url=${{ vars.EMAIL_PUBLIC_APP_URL }}"
+            -var="grafana_monitoring_enabled=${GRAFANA_MONITORING_ENABLED}"
+            -var="grafana_metrics_remote_write_url=${GRAFANA_METRICS_REMOTE_WRITE_URL}"
+            -var="grafana_metrics_username=${GRAFANA_METRICS_USERNAME}"
+            -var="grafana_loki_push_url=${GRAFANA_LOKI_PUSH_URL}"
+            -var="grafana_loki_username=${GRAFANA_LOKI_USERNAME}"
+            -var="grafana_cloud_token_version=${GRAFANA_CLOUD_TOKEN_VERSION}"
           )
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
@@ -399,6 +475,7 @@ jobs:
           [ -n "${{ steps.tags.outputs.deployer }}" ] && apply_args+=(-var="deployer_image_tag=${{ steps.tags.outputs.deployer }}") || true
           [ -n "${{ steps.tags.outputs.provisioner }}" ] && apply_args+=(-var="provisioner_image_tag=${{ steps.tags.outputs.provisioner }}") || true
           [ -n "${{ steps.tags.outputs.proxy }}" ] && apply_args+=(-var="proxy_image_tag=${{ steps.tags.outputs.proxy }}") || true
+          [ -n "${{ steps.tags.outputs.alloy }}" ] && apply_args+=(-var="alloy_image_tag=${{ steps.tags.outputs.alloy }}") || true
           [ -n "${{ steps.tags.outputs.org }}" ]     && apply_args+=(-var="org_image_tag=${{ steps.tags.outputs.org }}") || true
           [ -n "${{ steps.tags.outputs.settings }}" ] && apply_args+=(-var="settings_image_tag=${{ steps.tags.outputs.settings }}") || true
           [ -n "${{ steps.tags.outputs.email }}" ] && apply_args+=(-var="email_image_tag=${{ steps.tags.outputs.email }}") || true

@@ -30,6 +30,10 @@
 #   EMAIL_SMTP_REQUIRE_TLS, EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_FROM,
 #   EMAIL_PUBLIC_APP_URL. Its default is the GCS SPA entry point published here;
 #   empty SMTP host/from values deploy the email service in not-ready state.
+#   Grafana Cloud monitoring: GRAFANA_MONITORING_ENABLED (false),
+#   GRAFANA_METRICS_REMOTE_WRITE_URL, GRAFANA_METRICS_USERNAME (numeric instance
+#   ID), GRAFANA_LOKI_PUSH_URL, GRAFANA_LOKI_USERNAME, GRAFANA_CLOUD_TOKEN
+#   (optional initial seed), and GRAFANA_CLOUD_TOKEN_VERSION (optional pin).
 set -euo pipefail
 
 # --- Inputs -----------------------------------------------------------------
@@ -59,6 +63,40 @@ PIPELINE_DEPLOYMENT_ENABLED="${PIPELINE_DEPLOYMENT_ENABLED:-false}"
 EGRESS_PROXY_ENABLED="${EGRESS_PROXY_ENABLED:-$PIPELINE_ORCHESTRATOR_ENABLED}"
 SETTINGS_OPERATOR_INVOKER="${SETTINGS_OPERATOR_INVOKER:-}"
 INTERNAL_API_TOKEN="${INTERNAL_API_TOKEN:-}"
+GRAFANA_MONITORING_ENABLED="${GRAFANA_MONITORING_ENABLED:-false}"
+GRAFANA_METRICS_REMOTE_WRITE_URL="${GRAFANA_METRICS_REMOTE_WRITE_URL:-https://prometheus-prod-43-prod-ap-south-1.grafana.net/api/prom/push}"
+GRAFANA_METRICS_USERNAME="${GRAFANA_METRICS_USERNAME:-}"
+GRAFANA_LOKI_PUSH_URL="${GRAFANA_LOKI_PUSH_URL:-}"
+GRAFANA_LOKI_USERNAME="${GRAFANA_LOKI_USERNAME:-}"
+GRAFANA_CLOUD_TOKEN_VERSION="${GRAFANA_CLOUD_TOKEN_VERSION:-}"
+# Do not leave the raw token exported to gcloud, Docker, Terraform, or service
+# builds. Keep a shell-local copy only until it is piped to Secret Manager.
+GRAFANA_CLOUD_TOKEN_VALUE="${GRAFANA_CLOUD_TOKEN:-}"
+unset GRAFANA_CLOUD_TOKEN
+export -n GRAFANA_CLOUD_TOKEN_VALUE 2>/dev/null || true
+
+case "$GRAFANA_MONITORING_ENABLED" in
+  true|false) ;;
+  *) echo "ERROR: GRAFANA_MONITORING_ENABLED must be true or false." >&2; exit 1 ;;
+esac
+if [ -n "$GRAFANA_CLOUD_TOKEN_VERSION" ] && [[ ! "$GRAFANA_CLOUD_TOKEN_VERSION" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: GRAFANA_CLOUD_TOKEN_VERSION must be an exact positive numeric version, never 'latest'." >&2
+  exit 1
+fi
+if [ "$GRAFANA_MONITORING_ENABLED" = "true" ]; then
+  [[ "$GRAFANA_METRICS_REMOTE_WRITE_URL" == https://*/api/prom/push ]] || {
+    echo "ERROR: GRAFANA_METRICS_REMOTE_WRITE_URL must be an HTTPS /api/prom/push endpoint." >&2; exit 1;
+  }
+  [[ "$GRAFANA_METRICS_USERNAME" =~ ^[0-9]+$ ]] || {
+    echo "ERROR: GRAFANA_METRICS_USERNAME must be the numeric Grafana Cloud metrics instance ID." >&2; exit 1;
+  }
+  [[ "$GRAFANA_LOKI_PUSH_URL" == https://*/loki/api/v1/push ]] || {
+    echo "ERROR: GRAFANA_LOKI_PUSH_URL must be an HTTPS /loki/api/v1/push endpoint." >&2; exit 1;
+  }
+  [ -n "$GRAFANA_LOKI_USERNAME" ] || {
+    echo "ERROR: GRAFANA_LOKI_USERNAME is required when monitoring is enabled." >&2; exit 1;
+  }
+fi
 
 if [ "$PIPELINE_ORCHESTRATOR_ENABLED" = "true" ] && [ "$EGRESS_PROXY_ENABLED" != "true" ]; then
   echo "ERROR: the durable pipeline requires EGRESS_PROXY_ENABLED=true." >&2
@@ -124,6 +162,12 @@ TFVARS=(
   -var="pipeline_deployment_enabled=${PIPELINE_DEPLOYMENT_ENABLED}"
   -var="egress_proxy_enabled=${EGRESS_PROXY_ENABLED}"
   -var="settings_operator_invoker=${SETTINGS_OPERATOR_INVOKER}"
+  -var="alloy_image_tag=${IMAGE_TAG}"
+  -var="grafana_monitoring_enabled=${GRAFANA_MONITORING_ENABLED}"
+  -var="grafana_metrics_remote_write_url=${GRAFANA_METRICS_REMOTE_WRITE_URL}"
+  -var="grafana_metrics_username=${GRAFANA_METRICS_USERNAME}"
+  -var="grafana_loki_push_url=${GRAFANA_LOKI_PUSH_URL}"
+  -var="grafana_loki_username=${GRAFANA_LOKI_USERNAME}"
 )
 
 # --- 1. Enable APIs ---------------------------------------------------------
@@ -132,7 +176,7 @@ gcloud services enable \
   run.googleapis.com artifactregistry.googleapis.com pubsub.googleapis.com \
   cloudscheduler.googleapis.com firestore.googleapis.com secretmanager.googleapis.com \
   cloudbuild.googleapis.com iam.googleapis.com iamcredentials.googleapis.com \
-  storage.googleapis.com
+  storage.googleapis.com logging.googleapis.com monitoring.googleapis.com
 
 # --- 2. Terraform state bucket (idempotent) ---------------------------------
 log "Ensuring Terraform state bucket gs://${TF_STATE_BUCKET}"
@@ -158,6 +202,7 @@ terraform -chdir="$TF_DIR" apply -input=false -auto-approve "${TFVARS[@]}" \
   -target=google_secret_manager_secret.org_jwt_secret \
   -target=google_secret_manager_secret.email_smtp_user \
   -target=google_secret_manager_secret.email_smtp_password \
+  -target=google_secret_manager_secret.grafana_cloud_access_token \
   -target=google_secret_manager_secret.extra \
   -target=google_storage_bucket.spa \
   -target=google_storage_bucket_iam_member.spa_public_read
@@ -180,6 +225,10 @@ seed_secret stream-token-secret "$STREAM_TOKEN_SECRET"
 [ -n "${LANGSMITH_API_KEY:-}" ] && seed_secret langsmith-api-key "$LANGSMITH_API_KEY" || true
 if [ -n "$EMAIL_SMTP_USER" ]; then seed_secret email-smtp-user "$EMAIL_SMTP_USER"; fi
 if [ -n "$EMAIL_SMTP_PASSWORD" ]; then seed_secret email-smtp-password "$EMAIL_SMTP_PASSWORD"; fi
+if [ -n "$GRAFANA_CLOUD_TOKEN_VALUE" ]; then
+  seed_secret grafana-cloud-access-token "$GRAFANA_CLOUD_TOKEN_VALUE"
+fi
+unset GRAFANA_CLOUD_TOKEN_VALUE
 
 enabled_version() {
   gcloud secrets versions list "$1" --project "$PROJECT_ID" \
@@ -199,12 +248,41 @@ fi
 [ "$EMAIL_SMTP_USER_READY" = true ] && EMAIL_SMTP_AUTH_ENABLED=true
 TFVARS+=( -var="email_smtp_auth_enabled=${EMAIL_SMTP_AUTH_ENABLED}" )
 
+# Pin the exact enabled version while passing only Secret Manager metadata to
+# Terraform. The secret value is never accessed after the optional local seed.
+if [ "$GRAFANA_MONITORING_ENABLED" = "true" ]; then
+  if [ -n "$GRAFANA_CLOUD_TOKEN_VERSION" ]; then
+    GRAFANA_TOKEN_STATE="$(gcloud secrets versions describe "$GRAFANA_CLOUD_TOKEN_VERSION" \
+      --secret=grafana-cloud-access-token --project "$PROJECT_ID" \
+      --format='value(state)' 2>/dev/null || true)"
+    [ "$GRAFANA_TOKEN_STATE" = "ENABLED" ] || {
+      echo "ERROR: requested Grafana token version does not exist or is not enabled." >&2; exit 1;
+    }
+  else
+    GRAFANA_TOKEN_NAME="$(gcloud secrets versions list grafana-cloud-access-token \
+      --project "$PROJECT_ID" --filter='state=ENABLED' --sort-by='~createTime' \
+      --limit=1 --format='value(name)' 2>/dev/null || true)"
+    GRAFANA_CLOUD_TOKEN_VERSION="${GRAFANA_TOKEN_NAME##*/}"
+  fi
+  [[ "$GRAFANA_CLOUD_TOKEN_VERSION" =~ ^[0-9]+$ ]] || {
+    echo "ERROR: monitoring is enabled, but grafana-cloud-access-token has no enabled version." >&2
+    echo "Deploy once disabled, add the token version, then enable monitoring." >&2
+    exit 1
+  }
+fi
+TFVARS+=( -var="grafana_cloud_token_version=${GRAFANA_CLOUD_TOKEN_VERSION}" )
+
 # linear-api-key is mounted as REQUIRED env — the revisions won't start without it.
 has_version linear-api-key || { echo "ERROR: secret 'linear-api-key' has no version. Re-run with LINEAR_API_KEY=... set."; exit 1; }
 
 # --- 6. Build + push images -------------------------------------------------
 if [ "${SKIP_BUILD:-}" = "1" ]; then
   log "SKIP_BUILD=1 — reusing images already pushed at tag ${IMAGE_TAG}"
+  if [ "$GRAFANA_MONITORING_ENABLED" = "true" ]; then
+    gcloud artifacts docker images describe "${IMAGE_BASE}/grafana-alloy:${IMAGE_TAG}" >/dev/null 2>&1 || {
+      echo "ERROR: SKIP_BUILD=1 but the grafana-alloy:${IMAGE_TAG} image does not exist." >&2; exit 1;
+    }
+  fi
 else
   log "Building + pushing images (tag ${IMAGE_TAG})"
   gcloud auth configure-docker "$AR_HOST" -q
@@ -228,6 +306,7 @@ else
   if [ "$EGRESS_PROXY_ENABLED" = "true" ]; then build_push proxy Dockerfile.proxy; fi
   build_push email-service Dockerfile.email
   build_push provisioner Dockerfile.provisioner
+  build_push grafana-alloy Dockerfile.alloy
   build_push_context org-service services/org/Dockerfile services/org
   # Settings copies the shared-core harness catalog, so it builds at repo root.
   build_push_context settings-service services/settings/Dockerfile .
@@ -253,6 +332,7 @@ cat <<EOF
 
   Gateway API : ${GATEWAY_URL}
   SPA         : https://storage.googleapis.com/${SPA_BUCKET}/index.html
+  Monitoring  : ${GRAFANA_MONITORING_ENABLED}
 
   Next, in the Firebase console:
     - enable the Google sign-in provider (Authentication → Sign-in method), and

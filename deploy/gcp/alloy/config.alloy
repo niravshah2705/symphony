@@ -1,0 +1,423 @@
+// AI Fleet's central GCP infrastructure collector.
+//
+// Cloud Run supplies Application Default Credentials through the collector's
+// dedicated service account. Grafana credentials and resource allowlists are
+// runtime environment variables so the image remains reusable and secret-free.
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+prometheus.remote_write "grafana_cloud" {
+  external_labels = {
+    app            = "ai-fleet",
+    environment    = sys.env("DEPLOYMENT_ENVIRONMENT"),
+    gcp_project_id = sys.env("GCP_PROJECT_ID"),
+  }
+
+  endpoint {
+    url            = sys.env("GRAFANA_METRICS_URL")
+    remote_timeout = "30s"
+
+    basic_auth {
+      username = sys.env("GRAFANA_METRICS_USERNAME")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+
+    queue_config {
+      capacity             = 2500
+      min_shards           = 1
+      max_shards           = 4
+      max_samples_per_send = 1000
+      batch_send_deadline  = "5s"
+      min_backoff          = "1s"
+      max_backoff          = "1m"
+      retry_on_http_429    = true
+    }
+  }
+}
+
+// Add stable operational labels and remove request/user/execution identifiers
+// before any native GCP metric reaches the remote-write WAL.
+prometheus.relabel "gcp_native" {
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  rule {
+    source_labels = ["job"]
+    regex         = "integrations/gcp/(.+)"
+    replacement   = "$1"
+    target_label  = "component"
+  }
+
+  rule {
+    replacement  = "shared"
+    target_label = "tenancy"
+  }
+
+  rule {
+    source_labels = ["service_name"]
+    regex         = "(?:gw|pl|cc|po|pt|pd)-t[a-z0-9]+"
+    replacement   = "dedicated"
+    target_label  = "tenancy"
+  }
+
+  rule {
+    source_labels = ["job_name"]
+    regex         = "cw-t[a-z0-9]+"
+    replacement   = "dedicated"
+    target_label  = "tenancy"
+  }
+
+  rule {
+    source_labels = ["topic_id", "subscription_id"]
+    separator     = ";"
+    regex         = ".*(?:^|[-;])t[a-z0-9]+(?:$|-).*"
+    replacement   = "dedicated"
+    target_label  = "tenancy"
+  }
+
+  rule {
+    action = "labeldrop"
+    regex  = "(?:revision|configuration|instance|execution|request|user|organization|org|credential|consumer)_(?:id|name)|task_(?:index|attempt)"
+  }
+}
+
+// Cloud Run service and job metrics share several metric descriptors, so use
+// two mutually-exclusive resource-label allowlists to retain both resource
+// types without admitting unrelated project workloads.
+prometheus.exporter.gcp "cloud_run_services" {
+  project_ids             = [sys.env("GCP_PROJECT_ID")]
+  metrics_prefixes        = ["run.googleapis.com/"]
+  extra_filters           = ["run.googleapis.com:resource.labels.location=\"" + sys.env("GCP_REGION") + "\" AND resource.labels.service_name=monitoring.regex.full_match(\"" + sys.env("GRAFANA_CLOUD_RUN_SERVICE_REGEX") + "\")"]
+  request_interval        = "5m"
+  ingest_delay            = true
+  drop_delegated_projects = true
+  gcp_client_timeout      = "30s"
+}
+
+prometheus.scrape "cloud_run_services" {
+  targets         = prometheus.exporter.gcp.cloud_run_services.targets
+  forward_to      = [prometheus.relabel.gcp_native.receiver]
+  job_name        = "integrations/gcp/cloud-run-services"
+  scrape_interval = "5m"
+  scrape_timeout  = "90s"
+}
+
+prometheus.exporter.gcp "cloud_run_jobs" {
+  project_ids             = [sys.env("GCP_PROJECT_ID")]
+  metrics_prefixes        = ["run.googleapis.com/"]
+  extra_filters           = ["run.googleapis.com:resource.labels.location=\"" + sys.env("GCP_REGION") + "\" AND resource.labels.job_name=monitoring.regex.full_match(\"" + sys.env("GRAFANA_CLOUD_RUN_JOB_REGEX") + "\")"]
+  request_interval        = "5m"
+  ingest_delay            = true
+  drop_delegated_projects = true
+  gcp_client_timeout      = "30s"
+}
+
+prometheus.scrape "cloud_run_jobs" {
+  targets         = prometheus.exporter.gcp.cloud_run_jobs.targets
+  forward_to      = [prometheus.relabel.gcp_native.receiver]
+  job_name        = "integrations/gcp/cloud-run-jobs"
+  scrape_interval = "5m"
+  scrape_timeout  = "90s"
+}
+
+prometheus.exporter.gcp "pubsub_topics" {
+  project_ids      = [sys.env("GCP_PROJECT_ID")]
+  metrics_prefixes = ["pubsub.googleapis.com/topic"]
+  extra_filters    = ["pubsub.googleapis.com/topic:resource.labels.topic_id=monitoring.regex.full_match(\"" + sys.env("GRAFANA_PUBSUB_RESOURCE_REGEX") + "\")"]
+
+  request_interval        = "5m"
+  ingest_delay            = true
+  drop_delegated_projects = true
+  gcp_client_timeout      = "30s"
+}
+
+prometheus.scrape "pubsub_topics" {
+  targets         = prometheus.exporter.gcp.pubsub_topics.targets
+  forward_to      = [prometheus.relabel.gcp_native.receiver]
+  job_name        = "integrations/gcp/pubsub-topics"
+  scrape_interval = "5m"
+  scrape_timeout  = "90s"
+}
+
+prometheus.exporter.gcp "pubsub_subscriptions" {
+  project_ids      = [sys.env("GCP_PROJECT_ID")]
+  metrics_prefixes = ["pubsub.googleapis.com/subscription"]
+  extra_filters    = ["pubsub.googleapis.com/subscription:resource.labels.subscription_id=monitoring.regex.full_match(\"" + sys.env("GRAFANA_PUBSUB_RESOURCE_REGEX") + "\")"]
+
+  request_interval        = "5m"
+  ingest_delay            = true
+  drop_delegated_projects = true
+  gcp_client_timeout      = "30s"
+}
+
+prometheus.scrape "pubsub_subscriptions" {
+  targets         = prometheus.exporter.gcp.pubsub_subscriptions.targets
+  forward_to      = [prometheus.relabel.gcp_native.receiver]
+  job_name        = "integrations/gcp/pubsub-subscriptions"
+  scrape_interval = "5m"
+  scrape_timeout  = "90s"
+}
+
+prometheus.exporter.gcp "firestore" {
+  project_ids = [sys.env("GCP_PROJECT_ID")]
+  metrics_prefixes = [
+    "firestore.googleapis.com/api",
+    "firestore.googleapis.com/composite_indexes_per_database",
+    "firestore.googleapis.com/document",
+    "firestore.googleapis.com/field_configurations_per_database",
+    "firestore.googleapis.com/mcp",
+    "firestore.googleapis.com/network",
+    "firestore.googleapis.com/query_stat",
+    "firestore.googleapis.com/quota",
+    "firestore.googleapis.com/rules",
+    "firestore.googleapis.com/storage",
+  ]
+  extra_filters = ["firestore.googleapis.com:resource.labels.database_id=\"(default)\""]
+
+  request_interval        = "5m"
+  ingest_delay            = true
+  drop_delegated_projects = true
+  gcp_client_timeout      = "30s"
+}
+
+prometheus.scrape "firestore" {
+  targets         = prometheus.exporter.gcp.firestore.targets
+  forward_to      = [prometheus.relabel.gcp_native.receiver]
+  job_name        = "integrations/gcp/firestore"
+  scrape_interval = "5m"
+  scrape_timeout  = "90s"
+}
+
+prometheus.exporter.gcp "gcs" {
+  project_ids = [sys.env("GCP_PROJECT_ID")]
+  metrics_prefixes = [
+    "storage.googleapis.com/api",
+    "storage.googleapis.com/authz",
+    "storage.googleapis.com/network",
+    "storage.googleapis.com/replication",
+    "storage.googleapis.com/storage",
+  ]
+  extra_filters = ["storage.googleapis.com:resource.labels.bucket_name=monitoring.regex.full_match(\"" + sys.env("GRAFANA_GCS_BUCKET_REGEX") + "\")"]
+
+  request_interval        = "5m"
+  ingest_delay            = true
+  drop_delegated_projects = true
+  gcp_client_timeout      = "30s"
+}
+
+prometheus.scrape "gcs" {
+  targets         = prometheus.exporter.gcp.gcs.targets
+  forward_to      = [prometheus.relabel.gcp_native.receiver]
+  job_name        = "integrations/gcp/gcs"
+  scrape_interval = "5m"
+  scrape_timeout  = "90s"
+}
+
+prometheus.exporter.gcp "artifact_registry" {
+  project_ids      = [sys.env("GCP_PROJECT_ID")]
+  metrics_prefixes = ["artifactregistry.googleapis.com/repository"]
+  extra_filters    = ["artifactregistry.googleapis.com/repository:resource.labels.repository_id=monitoring.regex.full_match(\"" + sys.env("GRAFANA_ARTIFACT_REPOSITORY_REGEX") + "\")"]
+
+  request_interval        = "5m"
+  ingest_delay            = true
+  drop_delegated_projects = true
+  gcp_client_timeout      = "30s"
+}
+
+prometheus.scrape "artifact_registry" {
+  targets         = prometheus.exporter.gcp.artifact_registry.targets
+  forward_to      = [prometheus.relabel.gcp_native.receiver]
+  job_name        = "integrations/gcp/artifact-registry"
+  scrape_interval = "5m"
+  scrape_timeout  = "90s"
+}
+
+prometheus.exporter.gcp "firebase_hosting" {
+  project_ids      = [sys.env("GCP_PROJECT_ID")]
+  metrics_prefixes = ["firebasehosting.googleapis.com/"]
+  extra_filters    = ["firebasehosting.googleapis.com:resource.labels.site_name=\"" + sys.env("GCP_PROJECT_ID") + "\""]
+
+  request_interval        = "10m"
+  ingest_delay            = true
+  drop_delegated_projects = true
+  gcp_client_timeout      = "30s"
+}
+
+prometheus.scrape "firebase_hosting" {
+  targets         = prometheus.exporter.gcp.firebase_hosting.targets
+  forward_to      = [prometheus.relabel.gcp_native.receiver]
+  job_name        = "integrations/gcp/firebase-hosting"
+  scrape_interval = "10m"
+  scrape_timeout  = "90s"
+}
+
+prometheus.exporter.gcp "identity_platform" {
+  project_ids             = [sys.env("GCP_PROJECT_ID")]
+  metrics_prefixes        = ["identitytoolkit.googleapis.com/"]
+  request_interval        = "5m"
+  ingest_delay            = true
+  drop_delegated_projects = true
+  gcp_client_timeout      = "30s"
+}
+
+prometheus.scrape "identity_platform" {
+  targets         = prometheus.exporter.gcp.identity_platform.targets
+  forward_to      = [prometheus.relabel.gcp_native.receiver]
+  job_name        = "integrations/gcp/identity-platform"
+  scrape_interval = "5m"
+  scrape_timeout  = "90s"
+}
+
+// Scheduler, Secret Manager, and optional Cloud KMS expose their useful
+// operational request signals through the consumed-API resource. Keep this
+// allowlist narrow so the project collector doesn't ingest unrelated API use.
+prometheus.exporter.gcp "service_runtime" {
+  project_ids      = [sys.env("GCP_PROJECT_ID")]
+  metrics_prefixes = ["serviceruntime.googleapis.com/api"]
+  extra_filters = [
+    "serviceruntime.googleapis.com/api:resource.labels.service=monitoring.regex.full_match(\"(?:run|pubsub|firestore|storage|artifactregistry|firebasehosting|identitytoolkit|cloudscheduler|secretmanager|cloudkms)[.]googleapis[.]com\")",
+  ]
+
+  request_interval        = "5m"
+  ingest_delay            = true
+  drop_delegated_projects = true
+  gcp_client_timeout      = "30s"
+}
+
+prometheus.scrape "service_runtime" {
+  targets         = prometheus.exporter.gcp.service_runtime.targets
+  forward_to      = [prometheus.relabel.gcp_native.receiver]
+  job_name        = "integrations/gcp/service-runtime"
+  scrape_interval = "5m"
+  scrape_timeout  = "90s"
+}
+
+// Alloy's own endpoint provides remote-write, scrape, and gcplog health. This
+// target is local to the single collector instance and never traverses Cloud Run.
+prometheus.scrape "alloy_self" {
+  targets = [{
+    "__address__" = "127.0.0.1:8080",
+    component     = "grafana-alloy",
+    tenancy       = "shared",
+  }]
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  job_name        = "integrations/grafana-alloy"
+  metrics_path    = "/metrics"
+  scrape_interval = "60s"
+  scrape_timeout  = "10s"
+}
+
+// gcplog produces these internal labels from each Cloud Logging LogEntry. Copy
+// only stable resource identity fields, then drop every unapproved label before
+// Loki stream construction to keep cardinality bounded.
+discovery.relabel "gcp_logs" {
+  targets = []
+
+  rule {
+    source_labels = ["__gcp_logname"]
+    target_label  = "logname"
+  }
+
+  rule {
+    source_labels = ["__gcp_resource_type"]
+    target_label  = "resource_type"
+  }
+
+  rule {
+    source_labels = ["__gcp_resource_labels_location"]
+    target_label  = "location"
+  }
+
+  rule {
+    source_labels = ["__gcp_resource_labels_service_name"]
+    target_label  = "service_name"
+  }
+
+  rule {
+    source_labels = ["__gcp_resource_labels_job_name"]
+    target_label  = "job_name"
+  }
+
+  rule {
+    source_labels = ["__gcp_labels_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__gcp_severity"]
+    target_label  = "severity"
+  }
+
+  rule {
+    replacement  = "cloud-run"
+    target_label = "component"
+  }
+
+  rule {
+    replacement  = "shared"
+    target_label = "tenancy"
+  }
+
+  rule {
+    source_labels = ["service_name"]
+    regex         = "(?:gw|pl|cc|po|pt|pd)-t[a-z0-9]+"
+    replacement   = "dedicated"
+    target_label  = "tenancy"
+  }
+
+  rule {
+    source_labels = ["job_name"]
+    regex         = "cw-t[a-z0-9]+"
+    replacement   = "dedicated"
+    target_label  = "tenancy"
+  }
+
+  rule {
+    action = "labelkeep"
+    regex  = "app|environment|gcp_project_id|job|logname|resource_type|location|service_name|job_name|container|severity|component|tenancy"
+  }
+}
+
+loki.source.gcplog "gcp_cloud_run" {
+  pull {
+    project_id             = sys.env("GCP_PROJECT_ID")
+    subscription           = sys.env("GRAFANA_LOG_SUBSCRIPTION")
+    use_incoming_timestamp = true
+    labels = {
+      app            = "ai-fleet",
+      environment    = sys.env("DEPLOYMENT_ENVIRONMENT"),
+      gcp_project_id = sys.env("GCP_PROJECT_ID"),
+      job            = "integrations/gcp",
+    }
+
+    limit {
+      max_outstanding_bytes    = "128MiB"
+      max_outstanding_messages = 500
+    }
+  }
+
+  relabel_rules = discovery.relabel.gcp_logs.rules
+  forward_to    = [loki.write.grafana_cloud.receiver]
+}
+
+loki.write "grafana_cloud" {
+  max_streams = 5000
+
+  endpoint {
+    url                  = sys.env("GRAFANA_LOKI_URL")
+    batch_size           = "1MiB"
+    batch_wait           = "1s"
+    remote_timeout       = "30s"
+    retry_on_http_429    = true
+    min_backoff_period   = "1s"
+    max_backoff_period   = "1m"
+    max_backoff_retries  = 20
+
+    basic_auth {
+      username = sys.env("GRAFANA_LOKI_USERNAME")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+}

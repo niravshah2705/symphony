@@ -16,6 +16,11 @@ locals {
     "cloudbuild.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    # Central Grafana Alloy collector: Cloud Monitoring polling plus a
+    # Cloud Logging project sink. These stay enabled even while the collector
+    # feature flag is off so the token-later bootstrap is a two-stage apply.
+    "logging.googleapis.com",
+    "monitoring.googleapis.com",
     "storage.googleapis.com",
     # Firebase — Hosting (SPA), the web app config, and Identity Platform (auth).
     "firebase.googleapis.com",

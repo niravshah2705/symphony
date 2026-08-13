@@ -18,7 +18,8 @@ are conditional on it:
 | `packages/shared-core/**` | rebuild every consumer, including the SDK-free gateway/orchestrator and agent stages |
 | `packages/shared/**` | rebuild planner, coder, tester, and deployer images |
 | root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
-| `deploy/gcp/terraform/**` | `terraform apply` **only** (no image rebuild) |
+| `deploy/gcp/terraform/**` | rebuild the required proxy/Alloy infrastructure images → `terraform apply` |
+| `deploy/gcp/Dockerfile.alloy`, `deploy/gcp/alloy/**` | rebuild **grafana-alloy** (plus required proxy image) → `terraform apply` |
 | `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy only (no images, no Terraform) |
 | docs / anything else | nothing runs |
 
@@ -31,6 +32,11 @@ everything except the service that changed (see the per-service
 Need a full rebuild + apply of everything (e.g. after a manual hotfix or to
 re-converge state)? Trigger the workflow manually with **`deploy_all: true`**
 (Actions → Deploy to GCP → Run workflow).
+
+Grafana monitoring is feature-gated off by default. Its first enablement must
+use `deploy_all: true`; this guarantees the standalone Alloy image exists at the
+same immutable SHA before Terraform creates the collector. See
+[Grafana Cloud monitoring](./GRAFANA_CLOUD_MONITORING.md).
 
 ## SPA obfuscation (release-time)
 
@@ -94,6 +100,12 @@ non-secret `EMAIL_SMTP_AUTH_ENABLED` switch in GitHub Actions. It also sets
 (or to an explicit override), so invitation links cannot silently point at a
 different hosting channel.
 
+The bootstrap also creates the empty `grafana-cloud-access-token` secret and
+defaults `GRAFANA_MONITORING_ENABLED=false`. It may accept
+`GRAFANA_CLOUD_TOKEN` for the initial direct Secret Manager seed, but never puts
+that value in GitHub or Terraform. Pass the remaining non-secret `GRAFANA_*`
+inputs only when using the optional central monitoring rollout.
+
 After it, only two console actions remain: **link a billing account** and
 **enable the Google sign-in provider** in the Firebase console (the one Firebase
 piece Terraform can't create). Then push to main (first run:
@@ -120,7 +132,8 @@ for role in \
   roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin \
   roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser \
   roles/resourcemanager.projectIamAdmin roles/serviceusage.serviceUsageAdmin \
-  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin; do
+  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin \
+  roles/logging.configWriter; do
   gcloud projects add-iam-policy-binding "$PROJECT" \
     --member="serviceAccount:${DEPLOYER}" --role="$role" --condition=None >/dev/null
 done
@@ -183,6 +196,13 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
 # Transactional email (normally set by bootstrap.sh):
 # gh variable set EMAIL_SMTP_AUTH_ENABLED --repo niravshah2705/symphony --body "true"
 # gh variable set EMAIL_PUBLIC_APP_URL --repo niravshah2705/symphony --body "https://adlc-9e72f.web.app"
+# Optional Grafana Cloud monitoring (the access-policy token is NOT a GitHub secret):
+# gh variable set GRAFANA_METRICS_REMOTE_WRITE_URL --repo niravshah2705/symphony --body "https://prometheus-prod-43-prod-ap-south-1.grafana.net/api/prom/push"
+# gh variable set GRAFANA_METRICS_USERNAME --repo niravshah2705/symphony --body "NUMERIC_METRICS_ID"
+# gh variable set GRAFANA_LOKI_PUSH_URL --repo niravshah2705/symphony --body "HTTPS_LOKI_PUSH_URL"
+# gh variable set GRAFANA_LOKI_USERNAME --repo niravshah2705/symphony --body "LOKI_USER_ID"
+# gh variable set GRAFANA_CLOUD_TOKEN_VERSION --repo niravshah2705/symphony --body "1"
+# gh variable set GRAFANA_MONITORING_ENABLED --repo niravshah2705/symphony --body "true"
 ```
 
 ## Prerequisites the pipeline assumes
@@ -202,6 +222,12 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
   `latest` mounts through `EMAIL_SMTP_AUTH_ENABLED`. A missing half fails closed.
   Rotation happens in Secret Manager, without exposing a value to GitHub or
   Terraform state.
+- Grafana monitoring uses the same metadata-only pattern. The workflow requires
+  the exact enabled version of `grafana-cloud-access-token`, a numeric metrics
+  instance ID, Loki URL/user ID, and a token scoped for `metrics:write` plus
+  `logs:write`. It only describes/lists secret versions and never accesses the
+  value. Follow the required disabled-first rollout in
+  [Grafana Cloud monitoring](./GRAFANA_CLOUD_MONITORING.md).
 - The `TF_STATE_BUCKET` exists (created by `deploy.sh` / the first manual apply).
 - Firebase console: Google provider enabled + gateway URL and SPA origin in
   **Authorized domains** (see docs/GCP_DEPLOY.md).
@@ -212,6 +238,9 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
 - `concurrency: gcp-deploy` serializes applies so two merges never race the state.
 - A rebuilt service's image tag is the commit SHA, so it rolls a fresh Cloud Run
   revision; unchanged services keep their live tag and are left untouched.
+- The proxy and Alloy images are built whenever Terraform runs. They have no
+  independently queryable live image in every feature state, so this guarantees
+  safe first enablement at the current immutable SHA.
 - No untrusted event input (PR/commit text, `head_ref`) is used in any `run:` step.
 - Path filters read only file paths (`dorny/paths-filter`), never event text.
 - Skills are published by a **separate** workflow (`publish-skills.yml`), also WIF

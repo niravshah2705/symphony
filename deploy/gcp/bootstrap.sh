@@ -27,7 +27,10 @@
 #   SPA_ORIGIN (https://<project>.web.app), FIREBASE_ALLOWED_DOMAIN,
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, STREAM_TOKEN_SECRET (auto-generated if unset),
 #   EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_SMTP_HOST, EMAIL_SMTP_PORT,
-#   EMAIL_SMTP_SECURE, EMAIL_SMTP_REQUIRE_TLS, EMAIL_FROM, EMAIL_PUBLIC_APP_URL.
+#   EMAIL_SMTP_SECURE, EMAIL_SMTP_REQUIRE_TLS, EMAIL_FROM, EMAIL_PUBLIC_APP_URL,
+#   GRAFANA_MONITORING_ENABLED (false), GRAFANA_METRICS_REMOTE_WRITE_URL,
+#   GRAFANA_METRICS_USERNAME, GRAFANA_LOKI_PUSH_URL, GRAFANA_LOKI_USERNAME,
+#   GRAFANA_CLOUD_TOKEN (optional initial seed), GRAFANA_CLOUD_TOKEN_VERSION.
 set -euo pipefail
 
 : "${PROJECT_ID:?set PROJECT_ID}"
@@ -42,6 +45,40 @@ SPA_ORIGIN="${SPA_ORIGIN:-https://${PROJECT_ID}.web.app}"
 EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://${PROJECT_ID}.web.app}"
 DEPLOYER="gh-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 TF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/terraform" && pwd)"
+GRAFANA_MONITORING_ENABLED="${GRAFANA_MONITORING_ENABLED:-false}"
+GRAFANA_METRICS_REMOTE_WRITE_URL="${GRAFANA_METRICS_REMOTE_WRITE_URL:-https://prometheus-prod-43-prod-ap-south-1.grafana.net/api/prom/push}"
+GRAFANA_METRICS_USERNAME="${GRAFANA_METRICS_USERNAME:-}"
+GRAFANA_LOKI_PUSH_URL="${GRAFANA_LOKI_PUSH_URL:-}"
+GRAFANA_LOKI_USERNAME="${GRAFANA_LOKI_USERNAME:-}"
+GRAFANA_CLOUD_TOKEN_VERSION="${GRAFANA_CLOUD_TOKEN_VERSION:-}"
+# Capture once, then remove the inherited environment variable so the raw token
+# is not exposed to later gcloud, gh, Terraform, or image-build processes.
+GRAFANA_CLOUD_TOKEN_VALUE="${GRAFANA_CLOUD_TOKEN:-}"
+unset GRAFANA_CLOUD_TOKEN
+export -n GRAFANA_CLOUD_TOKEN_VALUE 2>/dev/null || true
+
+case "$GRAFANA_MONITORING_ENABLED" in
+  true|false) ;;
+  *) echo "ERROR: GRAFANA_MONITORING_ENABLED must be true or false." >&2; exit 1 ;;
+esac
+if [ -n "$GRAFANA_CLOUD_TOKEN_VERSION" ] && [[ ! "$GRAFANA_CLOUD_TOKEN_VERSION" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: GRAFANA_CLOUD_TOKEN_VERSION must be an exact positive numeric version, never 'latest'." >&2
+  exit 1
+fi
+if [ "$GRAFANA_MONITORING_ENABLED" = "true" ]; then
+  [[ "$GRAFANA_METRICS_REMOTE_WRITE_URL" == https://*/api/prom/push ]] || {
+    echo "ERROR: GRAFANA_METRICS_REMOTE_WRITE_URL must be an HTTPS /api/prom/push endpoint." >&2; exit 1;
+  }
+  [[ "$GRAFANA_METRICS_USERNAME" =~ ^[0-9]+$ ]] || {
+    echo "ERROR: GRAFANA_METRICS_USERNAME must be the numeric metrics instance ID." >&2; exit 1;
+  }
+  [[ "$GRAFANA_LOKI_PUSH_URL" == https://*/loki/api/v1/push ]] || {
+    echo "ERROR: GRAFANA_LOKI_PUSH_URL must be an HTTPS /loki/api/v1/push endpoint." >&2; exit 1;
+  }
+  [ -n "$GRAFANA_LOKI_USERNAME" ] || {
+    echo "ERROR: GRAFANA_LOKI_USERNAME is required when monitoring is enabled." >&2; exit 1;
+  }
+fi
 
 if { [ -n "${EMAIL_SMTP_USER:-}" ] && [ -z "${EMAIL_SMTP_PASSWORD:-}" ]; } || \
    { [ -z "${EMAIL_SMTP_USER:-}" ] && [ -n "${EMAIL_SMTP_PASSWORD:-}" ]; }; then
@@ -62,7 +99,8 @@ gcloud services enable --project "$PROJECT_ID" \
   run.googleapis.com artifactregistry.googleapis.com pubsub.googleapis.com \
   cloudscheduler.googleapis.com firestore.googleapis.com \
   secretmanager.googleapis.com cloudbuild.googleapis.com storage.googleapis.com \
-  firebase.googleapis.com firebasehosting.googleapis.com identitytoolkit.googleapis.com
+  firebase.googleapis.com firebasehosting.googleapis.com identitytoolkit.googleapis.com \
+  logging.googleapis.com monitoring.googleapis.com
 
 # --- 2. Terraform state bucket ----------------------------------------------
 log "Terraform state bucket gs://${TF_STATE_BUCKET}"
@@ -81,11 +119,12 @@ for role in \
   roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin \
   roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser \
   roles/resourcemanager.projectIamAdmin roles/serviceusage.serviceUsageAdmin \
-  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin; do
+  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin \
+  roles/logging.configWriter; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:${DEPLOYER}" --role="$role" --condition=None >/dev/null
 done
-echo "  granted 15 roles"
+echo "  granted deployment roles"
 
 # --- 4. Workload Identity Federation (bind the repo to the deployer SA) ------
 log "Workload Identity Federation for ${REPO}"
@@ -132,8 +171,13 @@ ensure_secret github-token;     [ -n "${GITHUB_TOKEN:-}" ]      && seed github-t
 ensure_secret langsmith-api-key;[ -n "${LANGSMITH_API_KEY:-}" ] && seed langsmith-api-key "$LANGSMITH_API_KEY" || true
 ensure_secret email-smtp-user
 ensure_secret email-smtp-password
+ensure_secret grafana-cloud-access-token
 if [ -n "${EMAIL_SMTP_USER:-}" ]; then seed email-smtp-user "$EMAIL_SMTP_USER"; fi
 if [ -n "${EMAIL_SMTP_PASSWORD:-}" ]; then seed email-smtp-password "$EMAIL_SMTP_PASSWORD"; fi
+if [ -n "$GRAFANA_CLOUD_TOKEN_VALUE" ]; then
+  seed grafana-cloud-access-token "$GRAFANA_CLOUD_TOKEN_VALUE"
+fi
+unset GRAFANA_CLOUD_TOKEN_VALUE
 
 enabled_version() { gcloud secrets versions list "$1" --project "$PROJECT_ID" \
   --filter='state=ENABLED' --limit=1 --format='value(name)'; }
@@ -149,6 +193,26 @@ if [ "$EMAIL_SMTP_USER_READY" != "$EMAIL_SMTP_PASSWORD_READY" ]; then
   exit 1
 fi
 [ "$EMAIL_SMTP_USER_READY" = true ] && EMAIL_SMTP_AUTH_ENABLED=true
+
+# Select an exact enabled version using Secret Manager metadata only. The raw
+# token is never read back into this process.
+if [ -n "$GRAFANA_CLOUD_TOKEN_VERSION" ]; then
+  GRAFANA_TOKEN_STATE="$(gcloud secrets versions describe "$GRAFANA_CLOUD_TOKEN_VERSION" \
+    --secret=grafana-cloud-access-token --project "$PROJECT_ID" \
+    --format='value(state)' 2>/dev/null || true)"
+  [ "$GRAFANA_TOKEN_STATE" = "ENABLED" ] || {
+    echo "ERROR: requested Grafana token version does not exist or is not enabled." >&2; exit 1;
+  }
+else
+  GRAFANA_TOKEN_NAME="$(gcloud secrets versions list grafana-cloud-access-token \
+    --project "$PROJECT_ID" --filter='state=ENABLED' --sort-by='~createTime' \
+    --limit=1 --format='value(name)' 2>/dev/null || true)"
+  GRAFANA_CLOUD_TOKEN_VERSION="${GRAFANA_TOKEN_NAME##*/}"
+fi
+if [ "$GRAFANA_MONITORING_ENABLED" = "true" ] && [[ ! "$GRAFANA_CLOUD_TOKEN_VERSION" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: monitoring is enabled, but grafana-cloud-access-token has no enabled version." >&2
+  exit 1
+fi
 
 # --- 7. GitHub repo secrets + variables -------------------------------------
 if command -v gh >/dev/null 2>&1; then
@@ -168,6 +232,12 @@ if command -v gh >/dev/null 2>&1; then
   [ -n "${EMAIL_FROM:-}" ] && gh variable set EMAIL_FROM --repo "$REPO" --body "$EMAIL_FROM" || true
   gh variable set EMAIL_SMTP_AUTH_ENABLED --repo "$REPO" --body "$EMAIL_SMTP_AUTH_ENABLED"
   gh variable set EMAIL_PUBLIC_APP_URL --repo "$REPO" --body "$EMAIL_PUBLIC_APP_URL"
+  gh variable set GRAFANA_MONITORING_ENABLED --repo "$REPO" --body "$GRAFANA_MONITORING_ENABLED"
+  gh variable set GRAFANA_METRICS_REMOTE_WRITE_URL --repo "$REPO" --body "$GRAFANA_METRICS_REMOTE_WRITE_URL"
+  [ -n "$GRAFANA_METRICS_USERNAME" ] && gh variable set GRAFANA_METRICS_USERNAME --repo "$REPO" --body "$GRAFANA_METRICS_USERNAME" || true
+  [ -n "$GRAFANA_LOKI_PUSH_URL" ] && gh variable set GRAFANA_LOKI_PUSH_URL --repo "$REPO" --body "$GRAFANA_LOKI_PUSH_URL" || true
+  [ -n "$GRAFANA_LOKI_USERNAME" ] && gh variable set GRAFANA_LOKI_USERNAME --repo "$REPO" --body "$GRAFANA_LOKI_USERNAME" || true
+  [ -n "$GRAFANA_CLOUD_TOKEN_VERSION" ] && gh variable set GRAFANA_CLOUD_TOKEN_VERSION --repo "$REPO" --body "$GRAFANA_CLOUD_TOKEN_VERSION" || true
   [ -n "${FIREBASE_ALLOWED_DOMAIN:-}" ] && gh variable set FIREBASE_ALLOWED_DOMAIN --repo "$REPO" --body "$FIREBASE_ALLOWED_DOMAIN" || true
   echo "  set (FIREBASE_API_KEY is NOT needed — Terraform derives it from the web app)"
 else
@@ -177,6 +247,9 @@ else
   echo "  vars: GCP_PROJECT_ID=$PROJECT_ID GCP_REGION=$REGION SPA_BUCKET=$SPA_BUCKET"
   echo "        TF_STATE_BUCKET=$TF_STATE_BUCKET FIRESTORE_LOCATION=$FIRESTORE_LOCATION SPA_ORIGIN=$SPA_ORIGIN"
   echo "        EMAIL_SMTP_AUTH_ENABLED=$EMAIL_SMTP_AUTH_ENABLED EMAIL_PUBLIC_APP_URL=$EMAIL_PUBLIC_APP_URL"
+  echo "        GRAFANA_MONITORING_ENABLED=$GRAFANA_MONITORING_ENABLED"
+  echo "        GRAFANA_METRICS_REMOTE_WRITE_URL=$GRAFANA_METRICS_REMOTE_WRITE_URL"
+  echo "        (Grafana usernames, Loki URL, and numeric token version are non-secret variables)"
 fi
 
 # --- 8. Import seeded secrets into TF state (so first `git push` applies clean)
@@ -196,6 +269,7 @@ if command -v terraform >/dev/null 2>&1; then
   tfimport 'google_secret_manager_secret.extra["langsmith-api-key"]' "projects/${PROJECT_ID}/secrets/langsmith-api-key"
   tfimport 'google_secret_manager_secret.email_smtp_user' "projects/${PROJECT_ID}/secrets/email-smtp-user"
   tfimport 'google_secret_manager_secret.email_smtp_password' "projects/${PROJECT_ID}/secrets/email-smtp-password"
+  tfimport 'google_secret_manager_secret.grafana_cloud_access_token' "projects/${PROJECT_ID}/secrets/grafana-cloud-access-token"
 else
   log "terraform not found — skipping secret import"
   echo "  Run the first deploy with ./deploy/gcp/deploy.sh instead of git push"

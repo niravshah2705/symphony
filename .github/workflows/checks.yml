@@ -12,6 +12,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  infrastructure:
+    name: Terraform and Alloy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive deploy/gcp/terraform
+      - name: Initialize Terraform without remote state
+        run: terraform init -backend=false
+        working-directory: deploy/gcp/terraform
+      - name: Validate Terraform
+        run: terraform validate
+        working-directory: deploy/gcp/terraform
+      - name: Build the Alloy collector image
+        run: docker build -f deploy/gcp/Dockerfile.alloy -t ai-fleet-alloy:check .
+      - name: Validate the Alloy configuration
+        run: |
+          docker run --rm \
+            -e GCP_PROJECT_ID=example-project \
+            -e GCP_REGION=asia-south1 \
+            -e DEPLOYMENT_ENVIRONMENT=test \
+            -e GRAFANA_METRICS_URL=https://example.invalid/api/prom/push \
+            -e GRAFANA_METRICS_USERNAME=123456 \
+            -e GRAFANA_LOKI_URL=https://example.invalid/loki/api/v1/push \
+            -e GRAFANA_LOKI_USERNAME=123456 \
+            -e GRAFANA_CLOUD_TOKEN=validation-only \
+            -e GRAFANA_CLOUD_RUN_SERVICE_REGEX='.*' \
+            -e GRAFANA_CLOUD_RUN_JOB_REGEX='.*' \
+            -e GRAFANA_PUBSUB_RESOURCE_REGEX='.*' \
+            -e GRAFANA_GCS_BUCKET_REGEX='.*' \
+            -e GRAFANA_ARTIFACT_REPOSITORY_REGEX='.*' \
+            -e GRAFANA_LOG_SUBSCRIPTION=projects/example-project/subscriptions/example-logs \
+            ai-fleet-alloy:check validate /etc/alloy/config.alloy
+
   node-tests:
     name: Node unit tests
     runs-on: ubuntu-latest

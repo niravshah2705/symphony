@@ -102,6 +102,75 @@ variable "email_image_tag" {
   default     = ""
 }
 
+# --- Grafana Cloud monitoring -------------------------------------------------
+
+variable "grafana_monitoring_enabled" {
+  type        = bool
+  description = "Deploy one always-on, private Grafana Alloy collector and route the AI Fleet Cloud Run logs to it. Off is fail-closed: only the empty access-token secret container and required APIs exist."
+  default     = false
+}
+
+variable "grafana_metrics_remote_write_url" {
+  type        = string
+  description = "Grafana Cloud Prometheus remote-write endpoint. This is the write endpoint, not the query endpoint or Grafana data-source name."
+  default     = "https://prometheus-prod-43-prod-ap-south-1.grafana.net/api/prom/push"
+
+  validation {
+    condition     = can(regex("^https://[^/?#]+(/[^?#]*)?/api/prom/push$", trimspace(var.grafana_metrics_remote_write_url)))
+    error_message = "grafana_metrics_remote_write_url must be an HTTPS Grafana Prometheus endpoint ending in /api/prom/push."
+  }
+}
+
+variable "grafana_metrics_username" {
+  type        = string
+  description = "Numeric Grafana Cloud Prometheus instance ID used as the remote-write basic-auth username. The stack/data-source name is not a username."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.grafana_metrics_username) == "" || can(regex("^[0-9]+$", trimspace(var.grafana_metrics_username)))
+    error_message = "grafana_metrics_username must be empty while monitoring is disabled or a numeric Grafana Cloud metrics instance ID."
+  }
+}
+
+variable "grafana_loki_push_url" {
+  type        = string
+  description = "Grafana Cloud Loki push endpoint, supplied separately from the Prometheus endpoint."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.grafana_loki_push_url) == "" || can(regex("^https://[^/?#]+(/[^?#]*)?/loki/api/v1/push$", trimspace(var.grafana_loki_push_url)))
+    error_message = "grafana_loki_push_url must be empty while monitoring is disabled or an HTTPS endpoint ending in /loki/api/v1/push."
+  }
+}
+
+variable "grafana_loki_username" {
+  type        = string
+  description = "Grafana Cloud Loki basic-auth username/user ID."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.grafana_loki_username) == "" || can(regex("^[^[:space:]]+$", trimspace(var.grafana_loki_username)))
+    error_message = "grafana_loki_username must be empty while monitoring is disabled or a non-whitespace Grafana Cloud Loki user ID."
+  }
+}
+
+variable "grafana_cloud_token_version" {
+  type        = string
+  description = "Exact enabled Secret Manager version number containing a Grafana access-policy token with metrics:write and logs:write. Empty is allowed only while monitoring is disabled; 'latest' is deliberately rejected for auditable rotation."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.grafana_cloud_token_version) == "" || can(regex("^[1-9][0-9]*$", trimspace(var.grafana_cloud_token_version)))
+    error_message = "grafana_cloud_token_version must be empty or an exact positive numeric Secret Manager version (never 'latest')."
+  }
+}
+
+variable "alloy_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the pinned Grafana Alloy collector image. Empty falls back to image_tag."
+  default     = ""
+}
+
 # --- Cloud Run service / job names -------------------------------------------
 
 variable "gateway_service_name" {
@@ -182,8 +251,13 @@ variable "proxy_image_tag" {
 
 variable "managed_provider_secrets" {
   type        = map(string)
-  description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Hosted LLMs require the matching GEMINI_API_KEY, HUGGINGFACE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY entry. Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
+  description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Hosted LLMs require the matching GEMINI_API_KEY, HUGGINGFACE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY entry. Each id MUST have an enabled version before it is mounted (else the settings revision fails to start). The Grafana token is reserved for the isolated collector."
   default     = { LINEAR_API_KEY = "linear-api-key", GITHUB_TOKEN = "github-token" }
+
+  validation {
+    condition     = !contains(values(var.managed_provider_secrets), "grafana-cloud-access-token")
+    error_message = "grafana-cloud-access-token is reserved for Grafana Alloy; do not mount it on the settings service as a managed provider credential."
+  }
 }
 
 # --- Per-tenant provisioning (Phase 1, gated OFF by default) ------------------
@@ -511,8 +585,13 @@ variable "coder_repo_url" {
 
 variable "extra_secret_ids" {
   type        = list(string)
-  description = "Additional Secret Manager secret IDs to create (provider OAuth, LangSmith, GitHub token, managed LLM keys, etc.). Versions are added out-of-band. planner-sa + coder-sa are granted accessor on these (and the proxy sidecar runs under those SAs). The managed LLM keys back the proxy's 'managed' credential option."
+  description = "Additional Secret Manager secret IDs to create (provider OAuth, LangSmith, GitHub token, managed LLM keys, etc.). Versions are added out-of-band. planner-sa + coder-sa are granted accessor on these (and the proxy sidecar runs under those SAs). The managed LLM keys back the proxy's 'managed' credential option. grafana-cloud-access-token is reserved for the isolated monitoring collector and cannot be included."
   default     = ["github-token", "langsmith-api-key", "gemini-api-key", "huggingface-api-key", "anthropic-api-key", "openai-api-key"]
+
+  validation {
+    condition     = !contains(var.extra_secret_ids, "grafana-cloud-access-token")
+    error_message = "grafana-cloud-access-token is reserved for Grafana Alloy; do not expose it through extra_secret_ids to planner/coder runtimes."
+  }
 }
 
 # --- SPA (GCS bucket) ---------------------------------------------------------

@@ -13,6 +13,7 @@
 #   firestore.googleapis.com      secretmanager.googleapis.com
 #   cloudbuild.googleapis.com     iam.googleapis.com
 #   iamcredentials.googleapis.com storage.googleapis.com
+#   logging.googleapis.com        monitoring.googleapis.com
 #
 # SECURITY POSTURE (tribal-knowledge infra / ingress / oauth-oidc checklists):
 #   - Least-privilege, per-resource IAM. No wildcard roles, no allUsers on the
@@ -22,6 +23,8 @@
 #   - Every Pub/Sub push and every Cloud Scheduler call carries an OIDC token.
 #   - Secrets live in Secret Manager and are injected as secret env, never baked
 #     into images or hardcoded here.
+#   - Optional monitoring uses one private, always-on Alloy service. It is off by
+#     default; enabling it intentionally adds idle Cloud Run cost.
 #   - Container images are non-root and pinned by digest (see the Dockerfiles).
 # =============================================================================
 

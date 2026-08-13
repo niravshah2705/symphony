@@ -23,8 +23,13 @@ variables. Nothing GCP-specific is required for local development.
   by coder-control.
 - **Firestore** replaces `data/store.json` and relays SSE events. **Secret
   Manager** holds credentials (injected as env; override stored settings).
+- Optional **Grafana Alloy** → one private, always-on Cloud Run collector for
+  allowlisted native GCP metrics and existing Cloud Run logs. See
+  [Grafana Cloud monitoring](./GRAFANA_CLOUD_MONITORING.md).
 
-Idle cost ≈ $0: static SPA + everything scale-to-zero + Firestore free tier.
+Idle cost ≈ $0 while Grafana monitoring is disabled: static SPA + application
+services scale-to-zero + Firestore free tier. Enabling Alloy adds an always-on
+Cloud Run instance and telemetry ingestion/egress charges.
 
 ## Local profile (default — no GCP)
 
@@ -111,6 +116,10 @@ defaults `EMAIL_PUBLIC_APP_URL` to the exact GCS `index.html` URL it publishes;
 override it only when a custom domain/CDN serves the SPA. It prints the gateway
 URL + SPA URL and the Firebase authorized domains to register.
 
+Grafana monitoring is optional and defaults off. Its `GRAFANA_*` inputs,
+token-later two-stage rollout, and secret rotation procedure are documented in
+[Grafana Cloud monitoring](./GRAFANA_CLOUD_MONITORING.md).
+
 ### Deploy — CI (Cloud Build)
 
 `gcloud builds submit --config cloudbuild.yaml --substitutions=_BUCKET=...,_TF_STATE_BUCKET=...`
@@ -133,6 +142,11 @@ that was actually published and set `email_smtp_auth_enabled=true` only after
 both SMTP secrets have an enabled version. Terraform intentionally fails the
 email-service plan when the public URL is empty, instead of guessing a Firebase
 Hosting URL.
+
+Cloud Build also defaults Grafana monitoring off. It always builds the pinned
+Alloy image, but enabling requires the non-secret `_GRAFANA_*` substitutions and
+an already-enabled `grafana-cloud-access-token` Secret Manager version. Cloud
+Build lists version metadata only; it never reads the token value.
 
 ### After either path
 
@@ -243,3 +257,5 @@ permission domains (`packages/shared/src/authz.js`):
   confirm SSE steps stream in.
 - Confirm a direct unauthenticated call to the planner/coder URL is rejected,
   and that everything scales to zero when idle.
+- When monitoring is enabled, follow the metrics, Loki, isolation, and failure
+  checks in [Grafana Cloud monitoring](./GRAFANA_CLOUD_MONITORING.md#validation).

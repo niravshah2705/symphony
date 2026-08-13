@@ -105,3 +105,38 @@ output "artifact_registry_repo" {
   description = "Artifact Registry Docker repo path (images are pushed here as <repo>/<service>:<tag>)."
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}"
 }
+
+output "grafana_monitoring_enabled" {
+  description = "Whether the central Grafana Alloy collector and its Cloud Logging route are deployed."
+  value       = var.grafana_monitoring_enabled
+}
+
+output "grafana_cloud_access_token_secret" {
+  description = "Secret Manager container to seed out-of-band with a Grafana access-policy token. Terraform never stores a secret version."
+  value       = google_secret_manager_secret.grafana_cloud_access_token.secret_id
+}
+
+output "grafana_alloy_service_name" {
+  description = "Private always-on Alloy Cloud Run service name (null while monitoring is disabled)."
+  value       = one(google_cloud_run_v2_service.grafana_alloy[*].name)
+}
+
+output "grafana_alloy_uri" {
+  description = "IAM-gated Alloy Cloud Run URI (null while monitoring is disabled; no allUsers invoker is granted)."
+  value       = one(google_cloud_run_v2_service.grafana_alloy[*].uri)
+}
+
+output "grafana_log_sink_name" {
+  description = "Cloud Logging project sink that selects AI Fleet shared and tenant Cloud Run logs (null while disabled)."
+  value       = one(google_logging_project_sink.grafana_cloud_run[*].name)
+}
+
+output "grafana_log_topic_name" {
+  description = "Pub/Sub topic receiving the selected Cloud Run logs (null while monitoring is disabled)."
+  value       = one(google_pubsub_topic.grafana_cloud_logs[*].name)
+}
+
+output "grafana_log_subscription_name" {
+  description = "Seven-day pull subscription consumed by Alloy (null while monitoring is disabled)."
+  value       = one(google_pubsub_subscription.grafana_cloud_logs[*].name)
+}
