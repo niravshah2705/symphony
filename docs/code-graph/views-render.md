@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 671 nodes
-- **Cohesion**: 0.4757
+- **Size**: 673 nodes
+- **Cohesion**: 0.4779
 - **Dominant Language**: javascript
 
 ## Members
@@ -21,23 +21,23 @@ Directory-based community: public/js
 | agentPauseCopy | Function | ./public/js/agent-pause.js | 96-98 |
 | localized | Function | ./public/js/agent-pause.js | 100-105 |
 | agentPauseNotice | Function | ./public/js/agent-pause.js | 108-124 |
-| setAccessTokenProvider | Function | ./public/js/api.js | 11-13 |
-| contextId | Function | ./public/js/api.js | 15-18 |
-| setRequestContext | Function | ./public/js/api.js | 21-26 |
-| getRequestContext | Function | ./public/js/api.js | 28-30 |
-| requestContextQuerySuffix | Function | ./public/js/api.js | 34-40 |
-| refreshAccessToken | Function | ./public/js/api.js | 45-48 |
-| readJson | Function | ./public/js/api.js | 50-56 |
-| errorCode | Function | ./public/js/api.js | 60-63 |
-| getApiBase | Function | ./public/js/api.js | 71-74 |
-| setApiBase | Function | ./public/js/api.js | 85-88 |
-| notifyAuthenticationRequired | Function | ./public/js/api.js | 90-94 |
-| request | Function | ./public/js/api.js | 96-166 |
-| openStream | Function | ./public/js/api.js | 183-255 |
-| mintFailureCanRetry | Function | ./public/js/api.js | 189-193 |
-| scheduleReconnect | Function | ./public/js/api.js | 195-208 |
-| connect | Function | ./public/js/api.js | 210-237 |
-| close | Function | ./public/js/api.js | 249-253 |
+| setAccessTokenProvider | Function | ./public/js/api.js | 15-17 |
+| contextId | Function | ./public/js/api.js | 19-22 |
+| setRequestContext | Function | ./public/js/api.js | 25-30 |
+| getRequestContext | Function | ./public/js/api.js | 32-34 |
+| requestContextQuerySuffix | Function | ./public/js/api.js | 38-44 |
+| refreshAccessToken | Function | ./public/js/api.js | 49-52 |
+| readJson | Function | ./public/js/api.js | 54-60 |
+| errorCode | Function | ./public/js/api.js | 64-67 |
+| getApiBase | Function | ./public/js/api.js | 75-78 |
+| setApiBase | Function | ./public/js/api.js | 89-92 |
+| notifyAuthenticationRequired | Function | ./public/js/api.js | 94-98 |
+| request | Function | ./public/js/api.js | 100-175 |
+| openStream | Function | ./public/js/api.js | 192-264 |
+| mintFailureCanRetry | Function | ./public/js/api.js | 198-202 |
+| scheduleReconnect | Function | ./public/js/api.js | 204-217 |
+| connect | Function | ./public/js/api.js | 219-246 |
+| close | Function | ./public/js/api.js | 258-262 |
 | ensureStylesheet | Function | ./public/js/app.js | 41-63 |
 | route | Function | ./public/js/app.js | 65-84 |
 | load | Function | ./public/js/app.js | 70-82 |
@@ -65,7 +65,7 @@ Directory-based community: public/js
 | renderAuthControl | Function | ./public/js/app.js | 495-626 |
 | renderAuthenticationGate | Function | ./public/js/app.js | 628-687 |
 
-*... and 621 more members.*
+*... and 623 more members.*
 
 ## Execution Flows
 
@@ -85,7 +85,7 @@ Directory-based community: public/js
 
 ### Outgoing
 
-- `append` (195 edge(s))
+- `append` (197 edge(s))
 - `addEventListener` (192 edge(s))
 - `map` (144 edge(s))
 - `String` (108 edge(s))
@@ -93,20 +93,20 @@ Directory-based community: public/js
 - `filter` (77 edge(s))
 - `trim` (73 edge(s))
 - `isArray` (63 edge(s))
-- `setAttribute` (60 edge(s))
-- `has` (57 edge(s))
-- `catch` (53 edge(s))
-- `querySelector` (46 edge(s))
+- `setAttribute` (61 edge(s))
+- `has` (59 edge(s))
+- `catch` (54 edge(s))
+- `querySelector` (47 edge(s))
 - `t` (43 edge(s))
 - `slice` (43 edge(s))
-- `find` (40 edge(s))
+- `Boolean` (41 edge(s))
 
 ### Incoming
 
 - `./public/js/api.js` (159 edge(s))
 - `./public/js/workflow-designer-model.mjs` (145 edge(s))
 - `./public/js/views/settings.js` (128 edge(s))
-- `./public/js/views/agent.js` (97 edge(s))
+- `./public/js/views/agent.js` (98 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (89 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/views/workflows.js` (63 edge(s))
@@ -115,6 +115,6 @@ Directory-based community: public/js
 - `./public/js/i18n.js` (35 edge(s))
 - `./public/js/auth.js` (24 edge(s))
 - `./public/js/omnibox-router.mjs` (16 edge(s))
-- `./public/js/auth-retry.test.mjs` (15 edge(s))
 - `./public/js/views/organization.js` (13 edge(s))
 - `./public/js/workspace-context.mjs` (13 edge(s))
+- `./public/js/views/cost.js` (12 edge(s))

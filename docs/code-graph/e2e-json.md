@@ -6,8 +6,8 @@
 
 Directory-based community: e2e
 
-- **Size**: 69 nodes
-- **Cohesion**: 0.1000
+- **Size**: 88 nodes
+- **Cohesion**: 0.1109
 - **Dominant Language**: javascript
 
 ## Members
@@ -39,33 +39,33 @@ Directory-based community: e2e
 | test:remember phrasing surfaces a confirm-before-save memory draft@L389 | Test | ./e2e/agent-workspace.spec.js | 389-405 |
 | test:troubleshooting requests combine diagnostic checks with retained log signals@L407 | Test | ./e2e/agent-workspace.spec.js | 407-446 |
 | test:implementation drafts require project selection and explicit approval before task creation@L448 | Test | ./e2e/agent-workspace.spec.js | 448-495 |
+| json | Function | ./e2e/anonymous-agent.spec.js | 5-11 |
+| authConfig | Function | ./e2e/anonymous-agent.spec.js | 36-50 |
+| apiRecord | Function | ./e2e/anonymous-agent.spec.js | 52-65 |
+| callLabel | Function | ./e2e/anonymous-agent.spec.js | 67-69 |
+| isShellRequest | Function | ./e2e/anonymous-agent.spec.js | 71-75 |
+| isTenantPrivateRequest | Function | ./e2e/anonymous-agent.spec.js | 77-89 |
+| installFirebaseAssets | Function | ./e2e/anonymous-agent.spec.js | 91-102 |
+| settlePublishedWork | Function | ./e2e/anonymous-agent.spec.js | 105-109 |
+| installSignedOutHarness | Function | ./e2e/anonymous-agent.spec.js | 111-172 |
+| resetRequests | Function | ./e2e/anonymous-agent.spec.js | 170-170 |
+| openPublicAgent | Function | ./e2e/anonymous-agent.spec.js | 174-183 |
+| sendAgentRequest | Function | ./e2e/anonymous-agent.spec.js | 185-189 |
+| describe:anonymous Firebase Agent boundary@L191 | Test | ./e2e/anonymous-agent.spec.js | 191-247 |
+| test:public Agent hydrates without tenant state requests or 401 auth churn@L192 | Test | ./e2e/anonymous-agent.spec.js | 192-201 |
+| test:public knowledge search uses only the reviewed documentation endpoint@L203 | Test | ./e2e/anonymous-agent.spec.js | 203-217 |
+| test:public implementation intent stays read-only and explains that sign-in is required@L219 | Test | ./e2e/anonymous-agent.spec.js | 219-235 |
+| test:direct Agent jobs navigation is hidden and gated for a public visitor@L237 | Test | ./e2e/anonymous-agent.spec.js | 237-246 |
+| installExpiringSessionHarness | Function | ./e2e/anonymous-agent.spec.js | 279-340 |
+| test:parallel application-auth failures expire an authenticated session once and stop private loading@L342 | Test | ./e2e/anonymous-agent.spec.js | 342-367 |
 | json | Function | ./e2e/organization-flow.spec.js | 9-11 |
 | makeOrgState | Function | ./e2e/organization-flow.spec.js | 16-27 |
 | createStateOrg | Function | ./e2e/organization-flow.spec.js | 29-40 |
 | organizationIdFor | Function | ./e2e/organization-flow.spec.js | 42-47 |
 | installStubs | Function | ./e2e/organization-flow.spec.js | 49-189 |
 | page1 | Function | ./e2e/organization-flow.spec.js | 85-85 |
-| test:user creates orgs and projects, then manages pending invitations@L191 | Test | ./e2e/organization-flow.spec.js | 191-248 |
-| test:fragment invitation requires an explicit accept and refreshes selectable context@L250 | Test | ./e2e/organization-flow.spec.js | 250-275 |
-| json | Function | ./e2e/page-loading.spec.js | 5-11 |
-| test:settings renders task-model controls without a view error@L39 | Test | ./e2e/page-loading.spec.js | 39-59 |
-| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
-| test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
-| test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148 | Test | ./e2e/page-loading.spec.js | 148-182 |
-| test:fixed language groups mark, but never auto-apply, the IP recommendation@L184 | Test | ./e2e/page-loading.spec.js | 184-219 |
-| test:authenticated Firebase session adds a bearer token and ignores an unrelated provider 401@L221 | Test | ./e2e/page-loading.spec.js | 221-369 |
-| authorizedJson | Function | ./e2e/page-loading.spec.js | 232-237 |
-| streamContext | Function | ./e2e/page-loading.spec.js | 351-351 |
-| test:authenticated users without an organization route to onboarding before workspace requests@L371 | Test | ./e2e/page-loading.spec.js | 371-442 |
-| test:Settings Policy uses the active native project and selected-context roles@L444 | Test | ./e2e/page-loading.spec.js | 444-506 |
-| test:selected organization admins can open scoped policy without global settings write@L508 | Test | ./e2e/page-loading.spec.js | 508-549 |
-| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L551 | Test | ./e2e/page-loading.spec.js | 551-600 |
-| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L602 | Test | ./e2e/page-loading.spec.js | 602-625 |
-| json | Function | ./e2e/route-loading.spec.js | 5-11 |
-| test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
-| test:a non-Agent hash never exposes or preloads the Agent scaffold@L107 | Test | ./e2e/route-loading.spec.js | 107-137 |
 
-*... and 19 more members.*
+*... and 38 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (371 edge(s))
-- `locator` (208 edge(s))
-- `route` (139 edge(s))
-- `getByRole` (83 edge(s))
-- `toBeVisible` (70 edge(s))
-- `toHaveCount` (61 edge(s))
-- `click` (43 edge(s))
-- `request` (42 edge(s))
-- `push` (39 edge(s))
-- `toContainText` (38 edge(s))
-- `toHaveAttribute` (34 edge(s))
-- `fulfill` (31 edge(s))
-- `url` (30 edge(s))
-- `goto` (29 edge(s))
-- `toEqual` (29 edge(s))
+- `expect` (398 edge(s))
+- `locator` (220 edge(s))
+- `route` (143 edge(s))
+- `getByRole` (86 edge(s))
+- `toBeVisible` (75 edge(s))
+- `toHaveCount` (63 edge(s))
+- `request` (44 edge(s))
+- `click` (44 edge(s))
+- `push` (41 edge(s))
+- `toContainText` (39 edge(s))
+- `toHaveAttribute` (37 edge(s))
+- `toEqual` (35 edge(s))
+- `fulfill` (34 edge(s))
+- `goto` (32 edge(s))
+- `toBe` (32 edge(s))
 
 ### Incoming
 
-- `expect` (359 edge(s))
-- `locator` (201 edge(s))
+- `expect` (381 edge(s))
+- `locator` (211 edge(s))
 - `route` (88 edge(s))
 - `getByRole` (81 edge(s))
-- `toBeVisible` (68 edge(s))
-- `toHaveCount` (60 edge(s))
+- `toBeVisible` (72 edge(s))
+- `toHaveCount` (62 edge(s))
 - `click` (42 edge(s))
-- `toContainText` (37 edge(s))
-- `toHaveAttribute` (32 edge(s))
-- `toHaveText` (28 edge(s))
-- `goto` (27 edge(s))
-- `toEqual` (27 edge(s))
-- `toBe` (26 edge(s))
+- `toContainText` (38 edge(s))
+- `toHaveAttribute` (33 edge(s))
+- `toEqual` (33 edge(s))
+- `toBe` (31 edge(s))
+- `evaluate` (30 edge(s))
+- `goto` (29 edge(s))
+- `toHaveText` (29 edge(s))
 - `url` (25 edge(s))
-- `evaluate` (25 edge(s))

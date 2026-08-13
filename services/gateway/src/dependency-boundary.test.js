@@ -92,3 +92,55 @@ test('heavy public routes proxy to planner and tombstones mount before SPA fallb
       < gatewayIndex.indexOf('app.use(express.static'),
   );
 });
+
+test('only knowledge search bypasses agent authentication; tenant agent and coder data stay protected', () => {
+  const gatewayIndex = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+  const routeIndex = (method, route) => {
+    const escapedRoute = route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const matches = [...gatewayIndex.matchAll(
+      new RegExp(`app\\.${method}\\(\\s*['"]${escapedRoute}['"]\\s*,`, 'g'),
+    )];
+    assert.equal(matches.length, 1, `expected exactly one ${method.toUpperCase()} ${route} mount`);
+    return matches[0].index;
+  };
+
+  const knowledgeSearch = routeIndex('post', '/api/agent/knowledge-search');
+  const workspaceStreamToken = routeIndex('get', '/api/agent/workspace-stream-token');
+  const agentCatchAll = routeIndex('use', '/api/agent');
+  routeIndex('use', '/api/coder');
+
+  const knowledgeSearchMethods = [...gatewayIndex.matchAll(
+    /app\.(get|post|put|patch|delete|all|use)\(\s*['"]\/api\/agent\/knowledge-search['"]\s*,/g,
+  )].map((match) => match[1]);
+  assert.deepEqual(knowledgeSearchMethods, ['post']);
+
+  assert.match(
+    gatewayIndex,
+    /app\.post\(\s*['"]\/api\/agent\/knowledge-search['"]\s*,\s*requirePermission\(\s*['"]workspace['"]\s*,\s*\{\s*level:\s*['"]read['"]\s*\}\s*\)\s*,\s*plannerProxy\s*\);/,
+  );
+  assert.ok(knowledgeSearch < agentCatchAll, 'the exact public route must win before the protected catch-all');
+  assert.ok(workspaceStreamToken < agentCatchAll, 'the protected token mint must win before the agent catch-all');
+
+  assert.match(
+    gatewayIndex,
+    /app\.get\(\s*['"]\/api\/agent\/workspace-stream-token['"]\s*,\s*requireAuthenticated\(\)\s*,\s*requirePermission\(\s*['"]workspace['"]\s*,\s*\{\s*level:\s*['"]read['"]\s*\}\s*\)\s*,\s*requireOrganizationContext\(\)\s*,/,
+  );
+  assert.match(
+    gatewayIndex,
+    /app\.use\(\s*['"]\/api\/agent['"]\s*,\s*requireAuthenticated\(\)\s*,\s*requirePermission\(\s*['"]workspace['"]\s*\)\s*,\s*requireOrganizationContext\(\)\s*,/,
+  );
+  assert.match(
+    gatewayIndex,
+    /app\.use\(\s*['"]\/api\/coder['"]\s*,\s*requireAuthenticated\(\)\s*,\s*requirePermission\(\s*['"]workspace['"]\s*\)\s*,\s*requireOrganizationContext\(\)\s*,/,
+  );
+
+  const beforeAgentCatchAll = gatewayIndex.slice(0, agentCatchAll);
+  for (const route of ['/api/agent/memory', '/api/agent/status', '/api/agent/conversations']) {
+    const escapedRoute = route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.doesNotMatch(
+      beforeAgentCatchAll,
+      new RegExp(`app\\.(?:get|post|put|patch|delete|all|use)\\(\\s*['"]${escapedRoute}[^'"]*['"]`),
+      `${route} must fall through to the authenticated agent catch-all`,
+    );
+  }
+});

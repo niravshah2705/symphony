@@ -19,6 +19,20 @@ export function shouldRetryAuth({ status, code, path } = {}) {
 }
 
 /**
+ * Whether a failed request should transition the browser from authenticated to
+ * public mode. The response shape alone is not enough: public callers receive
+ * the same `authentication_required` code when they reach a private endpoint.
+ * Only a request made while an application token provider exists owns the
+ * global auth-loss event.
+ *
+ * @param {{ status?: number, code?: string, path?: string, hasAccessTokenProvider?: boolean }} [meta]
+ * @returns {boolean}
+ */
+export function shouldNotifyAuthenticationRequired({ hasAccessTokenProvider, ...meta } = {}) {
+  return Boolean(hasAccessTokenProvider) && shouldRetryAuth(meta);
+}
+
+/**
  * Coalesce a concurrent burst of calls onto a SINGLE invocation of `fn`.
  *
  * The 12-call parallel batch a view fires on mount each hit their 401 at nearly

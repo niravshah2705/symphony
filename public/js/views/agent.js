@@ -105,6 +105,24 @@ function scrollConversationToEnd() {
 export async function renderAgent(view) {
   stopRefresh();
   const generation = ++renderGeneration;
+  eulaStatus = null; // re-check acceptance on each mount (handles a signed-in identity change)
+  railState = { mode: 'setup', result: null };
+  latestAgentStatus = null;
+  latestJobs = [];
+  latestCoderStatus = null;
+  conversation = [];
+
+  // The document contains this scaffold on the default route, so the hero can
+  // paint before JavaScript, auth, or API data. Deep links use the same shape.
+  const scaffold = ensureAgentScaffold(view, generation);
+  const { pauseHost, stream, railBody } = scaffold;
+  const session = getAuthenticationState();
+  if (session.enabled && !session.authenticated) {
+    activeConversationId = null;
+    hydratePublicAgent(scaffold);
+    return;
+  }
+
   const controller = new AbortController();
   bootstrapController = controller;
   const timedRequest = () => {
@@ -123,17 +141,6 @@ export async function renderAgent(view) {
   };
   const seedRequest = timedRequest();
   const requestOptions = seedRequest.options;
-  eulaStatus = null; // re-check acceptance on each mount (handles a signed-in identity change)
-  railState = { mode: 'setup', result: null };
-  latestAgentStatus = null;
-  latestJobs = [];
-  latestCoderStatus = null;
-  conversation = [];
-
-  // The document contains this scaffold on the default route, so the hero can
-  // paint before JavaScript, auth, or API data. Deep links use the same shape.
-  const scaffold = ensureAgentScaffold(view, generation);
-  const { pauseHost, stream, railBody } = scaffold;
   let toolbar = scaffold.toolbar;
   let toolbarSignature = '';
   const requestedWorkspaceId = parseWorkspaceId();
@@ -263,6 +270,66 @@ export async function renderAgent(view) {
     seedRequest.dispose();
     if (bootstrapController === controller) bootstrapController = null;
   }
+}
+
+// Anonymous visitors intentionally receive the public ADLC/documentation
+// experience, but none of the tenant hydration used by an authenticated Agent
+// mount. Keeping this as an early, complete render path prevents future seed or
+// stream additions from silently becoming public network calls.
+function hydratePublicAgent(scaffold) {
+  const publicThreads = el('aside', {
+    class: 'conversation-rail',
+    'aria-label': 'Public Agent access',
+    dataset: { agentThreads: '' },
+  }, [
+    el('div', { class: 'conversation-rail-head' }, [
+      el('strong', {}, 'Public Agent'),
+      el('span', {}, 'Read only'),
+    ]),
+    el('p', { class: 'rail-copy' }, 'Search the reviewed ADLC documentation. Sign in for private history and workspace activity.'),
+    el('a', { class: 'btn', href: '#/settings' }, 'Sign in for workspace access'),
+  ]);
+  scaffold.threadRail.replaceWith(publicThreads);
+  scaffold.threadRail = publicThreads;
+
+  const publicToolbar = el('div', { class: 'reader-toolbar agent-toolbar', dataset: { agentToolbar: '' } }, [
+    el('div', { class: 'breadcrumbs' }, [
+      el('span', {}, 'Workspace'),
+      el('span', {}, '›'),
+      el('strong', {}, 'Public Agent'),
+    ]),
+    el('span', { class: 'privacy-chip' }, 'Reviewed docs only'),
+  ]);
+  scaffold.toolbar.replaceWith(publicToolbar);
+
+  const publicTabs = el('div', {
+    class: 'rail-tabs agent-rail-tabs',
+    id: 'agent-public-tab',
+    dataset: { agentRailTabs: '' },
+  }, 'Public access');
+  scaffold.root.querySelector('[data-agent-rail-tabs]')?.replaceWith(publicTabs);
+  scaffold.railBody.setAttribute('aria-labelledby', 'agent-public-tab');
+  clear(scaffold.railBody).append(
+    railIntro('Read-only Agent', 'Public access is isolated from private organizations, projects, conversations, and run activity.'),
+    el('section', { class: 'route-policy-card', dataset: { panelSection: 'public-access' } }, [
+      el('span', { class: 'route-policy-icon', 'aria-hidden': 'true' }, '✳'),
+      el('strong', {}, 'Reviewed ADLC documentation'),
+      el('p', {}, 'Ask a documentation question here. Sign in before accessing tenant data or starting work.'),
+    ]),
+    el('a', { class: 'rail-action-link', href: '#/settings' }, 'Sign in to continue'),
+  );
+
+  scaffold.stream.replaceChildren(
+    assistantMessage(
+      'Public knowledge is ready.',
+      'Ask about ADLC or search the reviewed documentation. Private memory, conversations, projects, jobs, and agent actions stay unavailable until you sign in.',
+      [{ label: 'Sign in for private workspace access', href: '#/settings' }],
+      'notice'
+    )
+  );
+  scaffold.root.removeAttribute('data-i18n-skip');
+  scaffold.root.dataset.agentScaffold = 'public';
+  setComposerReady(scaffold.root, true);
 }
 
 /** Return the pre-rendered Agent shell, or create the same shell for a deep link. */
@@ -728,18 +795,23 @@ function buildComposer(stream, railBody, generation = renderGeneration) {
       pending.replaceWith(renderConversationEntry(entry, railBody));
       scrollConversationToEnd();
       showRailResult(railBody, result);
-      // Persist the turn server-side (lazily creating the thread on first send).
-      persistenceQueue = persistenceQueue.then(async () => {
-        const persistedId = await persistTurn(
-          outgoing,
-          result,
-          generation,
-          targetConversationId || persistedConversationId
-        );
-        if (persistedId) persistedConversationId = persistedId;
-      });
+      // Public conversations stay browser-local. Persist only after the
+      // application has established an authenticated identity.
+      if (getAuthenticationState().authenticated) {
+        persistenceQueue = persistenceQueue.then(async () => {
+          const persistedId = await persistTurn(
+            outgoing,
+            result,
+            generation,
+            targetConversationId || persistedConversationId
+          );
+          if (persistedId) persistedConversationId = persistedId;
+        });
+      }
       // A build request runs a guided, human-in-the-loop flow inline in the chat.
-      if (result.route && result.route.intent === 'build') void startBuildFlow(result.route, stream, railBody);
+      if (result.route && result.route.intent === 'build' && !result.requiresAuthentication) {
+        void startBuildFlow(result.route, stream, railBody);
+      }
     } catch (error) {
       if (!isCurrentComposer()) return;
       pending.replaceWith(
@@ -805,6 +877,7 @@ function buildComposer(stream, railBody, generation = renderGeneration) {
 // read-only RAG intents (knowledge/troubleshooting/general/salutation) are never
 // gated, so a first-time user can still ask questions and search.
 const WORK_INTENTS = new Set(['business', 'build', 'implementation']);
+const AUTHENTICATED_AGENT_INTENTS = new Set(['business', 'build', 'implementation', 'troubleshooting']);
 
 /**
  * Whether the current user may run actions. A member of an organisation is
@@ -837,7 +910,7 @@ async function resolveOmniboxRequest(text) {
   let routed;
   // Anonymous visitors get BASIC RAG: the server router (POST /agent/message)
   // needs workspace:write, so for a public session we classify in the browser
-  // and use only the public read-only knowledge/memory search endpoints. This
+  // and use only the public reviewed-documentation search endpoint. This
   // also avoids a 401 that would otherwise churn the auth state mid-search.
   const session = getAuthenticationState();
   if (!session.authenticated) {
@@ -867,7 +940,35 @@ async function resolveOmniboxRequest(text) {
     return { ...base, eulaRequired: true, eula: { version: eulaStatus ? eulaStatus.version : null } };
   }
 
+  // Public mode is deliberately documentation-only. These intent previews are
+  // useful for explaining what Agent can do, but must not query tenant state or
+  // expose controls that can start work.
+  if (!session.authenticated && AUTHENTICATED_AGENT_INTENTS.has(route.intent)) {
+    return { ...base, requiresAuthentication: true, payload: {} };
+  }
+
   if (route.intent === 'knowledge') {
+    if (!session.authenticated) {
+      const documentsResponse = await api.searchAgentKnowledge({ query: route.input })
+        .catch((error) => ({ results: [], indexedFiles: 0, error: error.message }));
+      const sources = {
+        documents: documentsResponse.results || [],
+        indexedFiles: documentsResponse.indexedFiles || 0,
+        businesses: [],
+        projects: [],
+        jobs: [],
+      };
+      return {
+        ...base,
+        public: true,
+        payload: {
+          sources,
+          scope: 'documentation',
+          results: router.searchWorkspaceMemory(route.input, sources),
+          unavailable: documentsResponse.error ? [documentsResponse.error] : [],
+        },
+      };
+    }
     const [documentsResponse, memoryResponse, businessesResponse, projectsResponse, jobsResponse] = await Promise.all([
       api.searchAgentKnowledge({ query: route.input }).catch((error) => ({ results: [], indexedFiles: 0, error: error.message })),
       api.searchMemory({ query: route.input }).catch((error) => ({ results: [], scope: 'all', error: error.message })),
@@ -1021,7 +1122,15 @@ function renderConversationEntry(entry, railBody) {
 /** The dynamic assistant copy for a routed result (reused for stored transcripts). */
 function routedCopy(result) {
   const { route = {}, payload = {} } = result || {};
+  if (result.requiresAuthentication) {
+    return 'Sign in to use private workspace data or start Agent work. Public access remains limited to reviewed ADLC documentation.';
+  }
   if (route.intent === 'knowledge') {
+    if (result.public) {
+      return payload.results?.length
+        ? `I found ${payload.results.length} relevant match${payload.results.length === 1 ? '' : 'es'} in the reviewed documentation.`
+        : 'I searched the reviewed documentation but did not find a matching passage.';
+    }
     return payload.results?.length
       ? `I found ${payload.results.length} relevant workspace ${payload.results.length === 1 ? 'record' : 'records'} across memory, projects, and recent activity.`
       : 'I checked the connected workspace sources but did not find a matching record. I won’t invent a document or memory that is not connected.';
@@ -1051,9 +1160,15 @@ function chipTone(intent) {
 
 function renderRoutedConversation(result, railBody) {
   const { route } = result;
-  const links = route.intent === 'build' ? [] : [{ label: route.intent === 'implementation' ? 'Review task' : 'Open result', action: () => showRailResult(railBody, result) }];
-  if (route.intent === 'troubleshooting') links.push({ label: 'Full diagnostics', href: '#/troubleshooting' });
-  if (route.intent === 'knowledge') links.push({ label: 'Browse projects', href: '#/projects' });
+  const links = result.requiresAuthentication
+    ? [{ label: 'Sign in to continue', href: '#/settings' }]
+    : route.intent === 'build'
+      ? []
+      : [{ label: route.intent === 'implementation' ? 'Review task' : 'Open result', action: () => showRailResult(railBody, result) }];
+  if (route.intent === 'troubleshooting' && !result.requiresAuthentication) {
+    links.push({ label: 'Full diagnostics', href: '#/troubleshooting' });
+  }
+  if (route.intent === 'knowledge' && !result.public) links.push({ label: 'Browse projects', href: '#/projects' });
   const message = assistantMessage(route.title, routedCopy(result), links, `intent-message intent-${route.intent}`);
   message.dataset.agentIntent = route.intent;
   const body = message.querySelector('.message-copy');
@@ -1108,6 +1223,7 @@ function compactAssistant(userText, result) {
 }
 
 async function persistTurn(userText, result, generation, conversationId) {
+  if (!getAuthenticationState().authenticated) return null;
   let targetConversationId = conversationId;
   try {
     if (!targetConversationId && generation === renderGeneration && agentRouteActive()) {
@@ -1134,6 +1250,7 @@ async function persistTurn(userText, result, generation, conversationId) {
 }
 
 async function refreshThreadRail() {
+  if (!getAuthenticationState().authenticated) return;
   const host = document.querySelector('.conversation-thread-list');
   if (!host) return;
   const { conversations = [] } = await api.listConversations().catch(() => ({ conversations: [] }));
@@ -1216,7 +1333,7 @@ function projectNameFromGoal(goal) {
 
 /** Append a concise assistant note to the active thread's transcript. */
 function persistNote(intent, copy) {
-  if (!activeConversationId) return;
+  if (!getAuthenticationState().authenticated || !activeConversationId) return;
   api.appendConversationMessages(activeConversationId, [{ role: 'assistant', intent, title: 'Build', copy }])
     .then(() => refreshThreadRail())
     .catch(() => { /* a note that fails to persist should not break the flow */ });
@@ -1356,6 +1473,18 @@ function renderIntentRail(host, result) {
     answer: 'The workspace returned a result without routing details.',
   };
   host.dataset.agentIntent = route.intent;
+  if (result.requiresAuthentication) {
+    clear(host).append(
+      railIntro('Sign in to continue', 'This request needs private workspace context or can start work, so it is unavailable in public mode.'),
+      el('section', { class: 'route-policy-card', dataset: { panelSection: 'authentication' } }, [
+        el('span', { class: 'route-policy-icon', 'aria-hidden': 'true' }, '◇'),
+        el('strong', {}, 'Your private workspace stays protected'),
+        el('p', {}, 'Sign in to use organization data, project history, diagnostics, or Agent actions.'),
+      ]),
+      el('a', { class: 'rail-action-link', href: '#/settings' }, 'Sign in to continue'),
+    );
+    return;
+  }
   if (route.intent === 'business') return renderBusinessRail(host, result);
   if (route.intent === 'knowledge') return renderKnowledgeRail(host, result);
   if (route.intent === 'troubleshooting') return renderTroubleshootingRail(host, result);
@@ -1385,15 +1514,22 @@ function renderIntentRail(host, result) {
 function renderKnowledgeRail(host, result) {
   const payload = result.payload || {};
   const results = payload.results || [];
-  const sourceCounts = [
-    ['Documents', payload.sources?.indexedFiles || 0],
-    ['Business memory', payload.sources?.businesses?.length || 0],
-    ['Projects', payload.sources?.projects?.length || 0],
-    ['Activity', payload.sources?.jobs?.length || 0],
-  ];
+  const sourceCounts = result.public
+    ? [['Documents', payload.sources?.indexedFiles || 0]]
+    : [
+        ['Documents', payload.sources?.indexedFiles || 0],
+        ['Business memory', payload.sources?.businesses?.length || 0],
+        ['Projects', payload.sources?.projects?.length || 0],
+        ['Activity', payload.sources?.jobs?.length || 0],
+      ];
   clear(host).append(
-    railIntro('Workspace memory', `Searched typed memory${payload.scope && payload.scope !== 'all' ? ` (${payload.scope} scope)` : ' across all scopes'} plus connected records. Results show their real source type.`),
-    result.memoryDraft ? memoryDraftBlock(result.memoryDraft) : null,
+    railIntro(
+      result.public ? 'Reviewed documentation' : 'Workspace memory',
+      result.public
+        ? 'Searched the bounded public documentation index. No tenant memory or workspace records were queried.'
+        : `Searched typed memory${payload.scope && payload.scope !== 'all' ? ` (${payload.scope} scope)` : ' across all scopes'} plus connected records. Results show their real source type.`
+    ),
+    !result.public && result.memoryDraft ? memoryDraftBlock(result.memoryDraft) : null,
     el('section', { class: 'knowledge-source-grid', dataset: { panelSection: 'sources' }, 'aria-label': 'Searched sources' }, sourceCounts.map(([label, count]) =>
       el('div', {}, [el('strong', {}, String(count)), el('span', {}, label)])
     )),
@@ -1414,7 +1550,9 @@ function renderKnowledgeRail(host, result) {
           ])
         ))
       : emptyRail('No connected match', 'The search completed, but no stored memory, business, project, or activity record matched this request.'),
-    el('p', { class: 'rail-copy knowledge-honesty' }, 'Document results come from a bounded lexical index of connected README/docs files; typed memory (user, business, project, task, workspace) is searched live. Semantic vector retrieval is not connected yet.')
+    el('p', { class: 'rail-copy knowledge-honesty' }, result.public
+      ? 'Public results come only from a bounded lexical index of reviewed README/docs files. Sign in to search private workspace memory.'
+      : 'Document results come from a bounded lexical index of connected README/docs files; typed memory (user, business, project, task, workspace) is searched live. Semantic vector retrieval is not connected yet.')
   );
 }
 

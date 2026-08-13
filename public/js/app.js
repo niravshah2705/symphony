@@ -135,11 +135,11 @@ function currentRoute() {
 
 // Hide nav links (and their now-empty sections) the current permissions don't
 // allow. UX only — the gateway enforces the same rules on every /api route.
-function applyMenuPermissions(permissions) {
+function applyMenuPermissions(session) {
   const nav = document.getElementById('tabs');
   if (!nav) return;
   nav.querySelectorAll('a[data-route]').forEach((link) => {
-    link.hidden = !canAccessRoute(permissions, link.dataset.route);
+    link.hidden = !canAccessRoute(session, link.dataset.route);
   });
   nav.querySelectorAll('.nav-section').forEach((section) => {
     const links = section.querySelectorAll('a[data-route]');
@@ -730,7 +730,7 @@ function renderAccessDenied(name) {
 async function render({ focus = false } = {}) {
   const session = getAuthenticationState();
   const permissions = session.permissions || {};
-  applyMenuPermissions(permissions);
+  applyMenuPermissions(session);
   setAuthenticationLocked(false);
   const epoch = ++renderEpoch;
   let name = currentRoute();
@@ -750,7 +750,7 @@ async function render({ focus = false } = {}) {
     renderSignInRequired(name);
     return;
   }
-  if (!canAccessRoute(permissions, name)) {
+  if (!canAccessRoute(session, name)) {
     if (!session.authenticated) renderSignInRequired(name);
     else renderAccessDenied(name);
     return;
@@ -898,11 +898,10 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 window.addEventListener('ai-fleet:locale-changed', async () => {
   const session = getAuthenticationState();
-  const permissions = session.permissions || {};
   renderAuthControl();
-  applyMenuPermissions(permissions);
+  applyMenuPermissions(session);
   const name = currentRoute();
-  if (canAccessRoute(permissions, name)) {
+  if (canAccessRoute(session, name)) {
     // Keep the in-view state; only refresh the shell chrome + labels.
     const view = document.getElementById('view');
     if (view) syncShell(name, view);
@@ -918,7 +917,7 @@ window.addEventListener('ai-fleet:auth-required', () => {
   const session = getAuthenticationState();
   // A connected tool can legitimately return 401 in local mode; only an
   // enabled application-auth session reacts to an app-auth failure.
-  if (!session.enabled) return;
+  if (!session.enabled || !session.authenticated) return;
   // Every trigger of this event is an app-auth failure, so show the friendly,
   // localized "session expired" copy rather than the raw gateway string.
   expireAuthentication(t('sessionExpired'));

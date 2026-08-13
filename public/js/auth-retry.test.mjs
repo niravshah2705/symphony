@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shouldRetryAuth, createSingleFlight } from './auth-retry.mjs';
+import * as authRetry from './auth-retry.mjs';
+
+const {
+  shouldRetryAuth,
+  shouldNotifyAuthenticationRequired,
+  createSingleFlight,
+} = authRetry;
 
 // shouldRetryAuth — the single source of truth for both the retry gate and the
 // notify gate in api.js. Only an APP-auth 401 (or the identity probe) retries;
@@ -31,6 +37,55 @@ test('shouldRetryAuth: 2xx is NOT retryable', () => {
 
 test('shouldRetryAuth: tolerates a missing argument', () => {
   assert.equal(shouldRetryAuth(), false);
+});
+
+// shouldNotifyAuthenticationRequired — an application-auth failure only owns
+// the global sign-in notification when this browser session has an application
+// token provider. Anonymous identity probes and connected-tool failures must
+// remain ordinary request errors instead of locking the workspace.
+test('shouldNotifyAuthenticationRequired: app-auth 401 with a token provider notifies', () => {
+  assert.equal(shouldNotifyAuthenticationRequired({
+    status: 401,
+    code: 'authentication_required',
+    path: '/projects',
+    hasAccessTokenProvider: true,
+  }), true);
+});
+
+test('shouldNotifyAuthenticationRequired: app-auth 401 without a token provider does not notify', () => {
+  assert.equal(shouldNotifyAuthenticationRequired({
+    status: 401,
+    code: 'authentication_required',
+    path: '/projects',
+    hasAccessTokenProvider: false,
+  }), false);
+});
+
+test('shouldNotifyAuthenticationRequired: anonymous provider-less identity 401 does not notify', () => {
+  assert.equal(shouldNotifyAuthenticationRequired({
+    status: 401,
+    code: '',
+    path: '/auth/me',
+    hasAccessTokenProvider: false,
+  }), false);
+});
+
+test('shouldNotifyAuthenticationRequired: signed-in identity 401 notifies', () => {
+  assert.equal(shouldNotifyAuthenticationRequired({
+    status: 401,
+    code: '',
+    path: '/auth/me',
+    hasAccessTokenProvider: true,
+  }), true);
+});
+
+test('shouldNotifyAuthenticationRequired: unrelated provider 401 never notifies', () => {
+  assert.equal(shouldNotifyAuthenticationRequired({
+    status: 401,
+    code: 'linear_unauthorized',
+    path: '/projects',
+    hasAccessTokenProvider: true,
+  }), false);
 });
 
 // createSingleFlight — coalesces a concurrent burst onto ONE call to fn so a
