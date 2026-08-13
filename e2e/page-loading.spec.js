@@ -368,6 +368,79 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
   expect(authStartupRequests).toContain('/vendor/firebase/firebase-auth.js');
 });
 
+test('authenticated users without an organization route to onboarding before workspace requests', async ({ page }) => {
+  const apiRequests = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith('/api/')) {
+      apiRequests.push(`${request.method()} ${url.pathname}`);
+    }
+  });
+
+  await page.addInitScript(() => {
+    localStorage.setItem('e2e.signedin', '1');
+  });
+  // Keep the regression independent of local service data. Specific routes are
+  // registered after this catch-all so they win Playwright's reverse matching.
+  await page.route('**/api/**', (route) => json(route, {}));
+  await page.route('**/vendor/firebase/firebase-app.js', (route) => route.fulfill({
+    status: 200, contentType: 'text/javascript', body: 'export function initializeApp() { return {}; }',
+  }));
+  await page.route('**/vendor/firebase/firebase-auth.js', (route) => route.fulfill({
+    status: 200, contentType: 'text/javascript', body: FIREBASE_AUTH_STUB,
+  }));
+  await page.route('**/api/auth/config', (route) => json(route, {
+    mode: 'firebase', enabled: true, provider: 'firebase',
+    firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo-proj.firebaseapp.com', projectId: 'demo-proj' },
+  }));
+  await page.route('**/api/auth/me', (route) => json(route, {
+    authenticated: true, role: 'admin',
+    permissions: { workspace: 'write', settings: 'write', org: 'write' },
+    user: { sub: 'firebase|max', name: 'Max Operator', email: 'max@example.com' },
+  }));
+  await page.route('**/api/org/me/context', (route) => json(route, {
+    user: { id: 'firebase|max', email: 'max@example.com', full_name: 'Max Operator' },
+    organizations: [],
+    selected: null,
+  }));
+  await page.route('**/api/config', (route) => json(route, {
+    authenticated: true, status: 'shared', gatewayUrl: '', orgName: '',
+  }));
+  await page.route('**/api/locale/suggestions**', (route) => json(route, {
+    locale: 'en',
+    suggestions: [{ tag: 'en', label: 'English', nativeLabel: 'English', direction: 'ltr' }],
+  }));
+
+  const localeRequest = page.waitForRequest((request) => (
+    new URL(request.url()).pathname === '/api/locale/suggestions'
+  ));
+  const response = await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
+  expect(response && response.ok()).toBeTruthy();
+
+  await expect(page).toHaveURL(/#\/organization$/);
+  await expect(page.getByRole('heading', { name: 'Organization & projects' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create an organization' })).toBeVisible();
+  await localeRequest;
+
+  expect(apiRequests).toEqual(expect.arrayContaining([
+    'GET /api/auth/config',
+    'GET /api/auth/me',
+    'GET /api/org/me/context',
+    'GET /api/config',
+    'GET /api/locale/suggestions',
+  ]));
+  const onboardingRequests = new Set([
+    'GET /api/auth/config',
+    'GET /api/auth/me',
+    'GET /api/org/me/context',
+    'GET /api/config',
+    'GET /api/locale/suggestions',
+    'GET /api/org/me',
+    'GET /api/org/me/projects',
+  ]);
+  expect(apiRequests.filter((request) => !onboardingRequests.has(request))).toEqual([]);
+});
+
 test('Settings Policy uses the active native project and selected-context roles', async ({ page }) => {
   const policyRequests = [];
   let personalProjectRequests = 0;

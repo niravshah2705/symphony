@@ -186,23 +186,39 @@ async function openStream({ mintToken, buildUrl, onEvent }) {
   let failures = 0;
   let retryTimer = null;
 
+  const mintFailureCanRetry = (error) => {
+    if (error?.terminal || error?.code === 'authentication_required') return false;
+    const status = Number(error && error.status) || 0;
+    return status === 0 || status === 408 || status === 429 || status >= 500;
+  };
+
   const scheduleReconnect = () => {
     if (stopped || failures >= STREAM_MAX_CONSECUTIVE_FAILURES) return;
     const delay = Math.min(STREAM_RECONNECT_BASE_MS * 2 ** failures, STREAM_RECONNECT_MAX_MS);
     failures += 1;
-    retryTimer = setTimeout(() => { retryTimer = null; connect(); }, delay);
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      void connect().catch((error) => {
+        // A rejected request (auth, permission, or invalid context) will not
+        // heal through retries. Transient network/server failures retain the
+        // bounded backoff used for EventSource disconnects.
+        if (mintFailureCanRetry(error)) scheduleReconnect();
+      });
+    }, delay);
   };
 
   async function connect() {
     if (stopped) return;
-    let token = '';
-    try {
-      ({ token } = await mintToken());
-    } catch (_) {
-      /* auth disabled locally → the stream token is optional */
+    const minted = await mintToken();
+    const token = typeof minted?.token === 'string' ? minted.token.trim() : '';
+    if (!token) {
+      const error = new Error('Stream token is unavailable.');
+      error.code = 'stream_token_missing';
+      error.terminal = true;
+      throw error;
     }
     if (stopped) return;
-    source = new EventSource(buildUrl(token || ''));
+    source = new EventSource(buildUrl(token));
     source.onopen = () => { failures = 0; }; // a live connection resets the backoff
     source.onmessage = (event) => {
       try {
@@ -220,7 +236,15 @@ async function openStream({ mintToken, buildUrl, onEvent }) {
     };
   }
 
-  await connect();
+  try {
+    await connect();
+  } catch (error) {
+    // Preserve best-effort recovery for a temporary minting outage without
+    // ever constructing an unauthenticated EventSource. Caller/actionable 4xx
+    // responses still reject immediately.
+    if (!mintFailureCanRetry(error)) throw error;
+    scheduleReconnect();
+  }
   return {
     close() {
       stopped = true;

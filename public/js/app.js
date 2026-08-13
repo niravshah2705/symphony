@@ -99,6 +99,11 @@ const routes = Object.freeze({
   invite: route(() => import('./views/invite.js'), 'renderInvitation'),
 });
 
+// Authenticated users may legitimately exist before they create an organization
+// or accept an invitation. Keep only those two onboarding routes reachable in
+// that state; every workspace route is redirected to Organization first.
+const ORGANIZATION_OPTIONAL_ROUTES = new Set(['organization', 'invite']);
+
 const routeMeta = {
   agent: { titleKey: 'agentWorkspace', eyebrowKey: 'workspace' },
   workflows: { titleKey: 'workflows', eyebrowKey: 'workspace' },
@@ -145,12 +150,28 @@ function applyMenuPermissions(permissions) {
 
 // Connection/role toolbar refreshes call permission-gated APIs — only run them
 // for a session that actually holds the permission (avoids public 401 noise).
+function organizationContextRequired(session) {
+  return Boolean(
+    session.enabled
+    && session.authenticated
+    && !activeWorkspaceOrganization(getWorkspaceContext())
+  );
+}
+
 function maybeRefreshConnection(session) {
-  if (session.authenticated && permitted(session.permissions, 'settings', 'read')) return refreshConnection();
+  if (
+    session.authenticated
+    && !organizationContextRequired(session)
+    && permitted(session.permissions, 'settings', 'read')
+  ) return refreshConnection();
   return Promise.resolve();
 }
 function maybeRefreshRole(session) {
-  if (session.authenticated && permitted(session.permissions, 'settings', 'write')) return refreshRole();
+  if (
+    session.authenticated
+    && !organizationContextRequired(session)
+    && permitted(session.permissions, 'settings', 'write')
+  ) return refreshRole();
   const chip = document.getElementById('assumed-role');
   if (chip) { chip.hidden = true; chip.replaceChildren(); }
   return Promise.resolve();
@@ -712,7 +733,16 @@ async function render({ focus = false } = {}) {
   applyMenuPermissions(permissions);
   setAuthenticationLocked(false);
   const epoch = ++renderEpoch;
-  const name = currentRoute();
+  let name = currentRoute();
+
+  // An authenticated account can exist before its first organization. Land it
+  // directly on the real onboarding surface so no workspace renderer gets a
+  // chance to issue organization-scoped REST or SSE requests. Invitation links
+  // remain reachable because accepting one is the other way out of this state.
+  if (organizationContextRequired(session) && !ORGANIZATION_OPTIONAL_ROUTES.has(name)) {
+    name = 'organization';
+    window.history.replaceState(null, '', '#/organization');
+  }
 
   // Per-route authorization (mirrors the gateway). No permission → sign-in
   // prompt for public visitors, access-denied for signed-in users.
@@ -862,7 +892,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Signed-in users get global notifications (e.g. billing threshold alerts) over
   // one workspace SSE stream, on any route. Best-effort; anonymous visitors have
   // no org to bill so it is skipped for them.
-  if (session.authenticated) initNotifications();
+  if (session.authenticated && !organizationContextRequired(session)) initNotifications();
 
 });
 

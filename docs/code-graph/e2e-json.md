@@ -6,8 +6,8 @@
 
 Directory-based community: e2e
 
-- **Size**: 62 nodes
-- **Cohesion**: 0.0994
+- **Size**: 69 nodes
+- **Cohesion**: 0.1000
 - **Dominant Language**: javascript
 
 ## Members
@@ -56,16 +56,16 @@ Directory-based community: e2e
 | test:authenticated Firebase session adds a bearer token and ignores an unrelated provider 401@L221 | Test | ./e2e/page-loading.spec.js | 221-369 |
 | authorizedJson | Function | ./e2e/page-loading.spec.js | 232-237 |
 | streamContext | Function | ./e2e/page-loading.spec.js | 351-351 |
-| test:Settings Policy uses the active native project and selected-context roles@L371 | Test | ./e2e/page-loading.spec.js | 371-433 |
-| test:selected organization admins can open scoped policy without global settings write@L435 | Test | ./e2e/page-loading.spec.js | 435-476 |
-| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L478 | Test | ./e2e/page-loading.spec.js | 478-527 |
-| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L529 | Test | ./e2e/page-loading.spec.js | 529-552 |
+| test:authenticated users without an organization route to onboarding before workspace requests@L371 | Test | ./e2e/page-loading.spec.js | 371-442 |
+| test:Settings Policy uses the active native project and selected-context roles@L444 | Test | ./e2e/page-loading.spec.js | 444-506 |
+| test:selected organization admins can open scoped policy without global settings write@L508 | Test | ./e2e/page-loading.spec.js | 508-549 |
+| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L551 | Test | ./e2e/page-loading.spec.js | 551-600 |
+| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L602 | Test | ./e2e/page-loading.spec.js | 602-625 |
 | json | Function | ./e2e/route-loading.spec.js | 5-11 |
 | test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
 | test:a non-Agent hash never exposes or preloads the Agent scaffold@L107 | Test | ./e2e/route-loading.spec.js | 107-137 |
-| test:SEO and AI discovery resources bypass the SPA fallback@L139 | Test | ./e2e/route-loading.spec.js | 139-155 |
 
-*... and 12 more members.*
+*... and 19 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (356 edge(s))
+- `expect` (371 edge(s))
 - `locator` (208 edge(s))
-- `route` (127 edge(s))
-- `getByRole` (81 edge(s))
-- `toBeVisible` (68 edge(s))
+- `route` (139 edge(s))
+- `getByRole` (83 edge(s))
+- `toBeVisible` (70 edge(s))
 - `toHaveCount` (61 edge(s))
 - `click` (43 edge(s))
-- `request` (39 edge(s))
+- `request` (42 edge(s))
+- `push` (39 edge(s))
 - `toContainText` (38 edge(s))
-- `toHaveAttribute` (35 edge(s))
-- `push` (33 edge(s))
-- `fulfill` (28 edge(s))
-- `toHaveText` (28 edge(s))
-- `url` (26 edge(s))
-- `goto` (25 edge(s))
+- `toHaveAttribute` (34 edge(s))
+- `fulfill` (31 edge(s))
+- `url` (30 edge(s))
+- `goto` (29 edge(s))
+- `toEqual` (29 edge(s))
 
 ### Incoming
 
-- `expect` (344 edge(s))
+- `expect` (359 edge(s))
 - `locator` (201 edge(s))
-- `getByRole` (79 edge(s))
-- `route` (76 edge(s))
-- `toBeVisible` (66 edge(s))
+- `route` (88 edge(s))
+- `getByRole` (81 edge(s))
+- `toBeVisible` (68 edge(s))
 - `toHaveCount` (60 edge(s))
 - `click` (42 edge(s))
 - `toContainText` (37 edge(s))
-- `toHaveAttribute` (33 edge(s))
+- `toHaveAttribute` (32 edge(s))
 - `toHaveText` (28 edge(s))
-- `goto` (23 edge(s))
-- `toBe` (22 edge(s))
-- `url` (21 edge(s))
-- `toContain` (21 edge(s))
-- `evaluate` (20 edge(s))
+- `goto` (27 edge(s))
+- `toEqual` (27 edge(s))
+- `toBe` (26 edge(s))
+- `url` (25 edge(s))
+- `evaluate` (25 edge(s))

@@ -60,7 +60,12 @@ async function follow(client, conversationId, options = {}) {
     'GET',
     `/api/agent/stream-token?conversationId=${encodeURIComponent(conversationId)}`
   );
-  const token = minted && minted.token ? minted.token : '';
+  const token = typeof minted?.token === 'string' ? minted.token.trim() : '';
+  if (!token) {
+    const error = new Error('Stream token is unavailable.');
+    error.code = 'stream_token_missing';
+    throw error;
+  }
   const url = `${client.base}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token)}`;
 
   const controller = new AbortController();
