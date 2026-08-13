@@ -24,6 +24,8 @@ data/
 # Playwright browser-test artifacts
 playwright-report/
 test-results/
+# Browser storage states contain live session cookies and bearer material.
+.playwright-auth/
 
 # Terraform — provider binaries and state (the .terraform.lock.hcl IS committed).
 **/.terraform/

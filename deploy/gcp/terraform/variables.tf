@@ -248,7 +248,7 @@ variable "settings_ingress" {
 
 variable "settings_operator_invoker" {
   type        = string
-  description = "Optional IAM member allowed to invoke the settings service directly for operator-only CLI calls (for example user:admin@example.com or group:platform@example.com). Empty grants nobody."
+  description = "Legacy optional IAM member allowed to invoke the settings service directly for operator-only CLI calls (for example user:admin@example.com or group:platform@example.com). Kept for backward compatibility; new callers should prefer settings_operator_invokers. Empty grants nobody through this input."
   default     = ""
 
   validation {
@@ -257,6 +257,34 @@ variable "settings_operator_invoker" {
       can(regex("^(user|group|serviceAccount):[^[:space:]]+$", trimspace(var.settings_operator_invoker)))
     )
     error_message = "settings_operator_invoker must be empty or a user:, group:, or serviceAccount: IAM member."
+  }
+}
+
+variable "settings_operator_invokers" {
+  type        = set(string)
+  description = "Additional IAM members allowed to invoke the settings service directly for operator-only CLI calls. These are additive to settings_operator_invoker; duplicates are removed."
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for member in var.settings_operator_invokers :
+      can(regex("^(user|group|serviceAccount):[^[:space:]]+$", trimspace(member)))
+    ])
+    error_message = "settings_operator_invokers entries must be user:, group:, or serviceAccount: IAM members."
+  }
+}
+
+variable "e2e_approver_service_account" {
+  type        = string
+  description = "Optional bare service-account email used by the protected live E2E workflow to invoke the IAM-gated settings operator surface. Terraform adds the serviceAccount: prefix. Empty grants no E2E identity."
+  default     = ""
+
+  validation {
+    condition = (
+      trimspace(var.e2e_approver_service_account) == "" ||
+      can(regex("^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*\\.iam\\.gserviceaccount\\.com$", trimspace(var.e2e_approver_service_account)))
+    )
+    error_message = "e2e_approver_service_account must be empty or a bare *.iam.gserviceaccount.com email address."
   }
 }
 

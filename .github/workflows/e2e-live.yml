@@ -1,0 +1,282 @@
+name: Live QA E2E security journey
+
+# Deliberately manual-only. The qa-e2e environment must have required reviewers
+# configured in the repository settings before its secrets become available.
+on:
+  workflow_dispatch:
+    inputs:
+      allow_full_deploy:
+        description: "Authorize one disposable QA plan -> code -> test -> deploy run"
+        required: true
+        type: boolean
+        default: false
+      confirm_full_deploy:
+        description: "Type exactly: DEPLOY QA E2E"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+# A second live run must wait. It must never cancel a run that may already have
+# created a work item, repository commit, or deployment awaiting cleanup.
+concurrency:
+  group: e2e-live-qa
+  cancel-in-progress: false
+
+jobs:
+  live-security:
+    name: Chrome live security journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: qa-e2e
+    env:
+      CI: "true"
+      E2E_ALLOW_FULL_DEPLOY: ${{ inputs.allow_full_deploy && 'true' || 'false' }}
+      E2E_QA_BASE_URL: ${{ vars.E2E_QA_BASE_URL }}
+      E2E_QA_SETTINGS_URL: ${{ vars.E2E_QA_SETTINGS_URL }}
+      E2E_QA_REPOSITORY: ${{ vars.E2E_QA_REPOSITORY }}
+      E2E_QA_DEPLOY_ENV: ${{ vars.E2E_QA_DEPLOY_ENV }}
+      E2E_QA_DEPLOY_HEALTH_URL: ${{ vars.E2E_QA_DEPLOY_HEALTH_URL }}
+
+    steps:
+      - name: Enforce explicit non-production authorization
+        env:
+          CONFIRMATION: ${{ inputs.confirm_full_deploy }}
+          E2E_QA_FIXTURES_JSON: ${{ secrets.E2E_QA_FIXTURES_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$E2E_ALLOW_FULL_DEPLOY" != "true" ]]; then
+            echo "The full-deploy authorization checkbox was not selected." >&2
+            exit 1
+          fi
+          if [[ "$CONFIRMATION" != "DEPLOY QA E2E" ]]; then
+            echo "The confirmation phrase did not match exactly." >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Live QA E2E may run only from the main branch." >&2
+            exit 1
+          fi
+          case "$E2E_QA_DEPLOY_ENV" in
+            qa|test|testing|stage|staging|dev|development) ;;
+            *)
+              echo "E2E_QA_DEPLOY_ENV must name an approved non-production environment." >&2
+              exit 1
+              ;;
+          esac
+          required=(
+            E2E_QA_BASE_URL
+            E2E_QA_SETTINGS_URL
+            E2E_QA_REPOSITORY
+            E2E_QA_DEPLOY_HEALTH_URL
+            E2E_QA_FIXTURES_JSON
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Required qa-e2e configuration is missing: $name" >&2
+              exit 1
+            fi
+          done
+          jq -e 'type == "object"' <<<"$E2E_QA_FIXTURES_JSON" >/dev/null
+
+      - uses: actions/checkout@v4
+
+      - name: Authenticate as the dedicated E2E approver
+        id: google-auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_E2E_OPERATOR_SA }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      # The auth action emits an external-account ADC file. The CLI needs an
+      # ID-token-capable impersonated ADC client so it can mint a fresh Cloud Run
+      # audience token after a potentially long plan/code/test run.
+      - name: Prepare refreshable approver ADC in runner temp
+        env:
+          TARGET_SERVICE_ACCOUNT: ${{ secrets.GCP_E2E_OPERATOR_SA }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ ! "$TARGET_SERVICE_ACCOUNT" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*\.iam\.gserviceaccount\.com$ ]]; then
+            echo "GCP_E2E_OPERATOR_SA must be a bare service-account email." >&2
+            exit 1
+          fi
+          if [[ ! -f "$GOOGLE_GHA_CREDS_PATH" ]]; then
+            echo "The keyless source credential file was not created." >&2
+            exit 1
+          fi
+          auth_dir="$RUNNER_TEMP/ai-fleet-e2e-auth-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          install -d -m 700 "$auth_dir"
+          adc_path="$auth_dir/google-impersonated-adc.json"
+          impersonation_url="https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${TARGET_SERVICE_ACCOUNT}:generateAccessToken"
+          jq --arg impersonation_url "$impersonation_url" '
+            if .type != "external_account" then
+              error("expected an external-account source credential")
+            else
+              {
+                type: "impersonated_service_account",
+                service_account_impersonation_url: $impersonation_url,
+                delegates: [],
+                source_credentials: del(.service_account_impersonation_url)
+              }
+            end
+          ' "$GOOGLE_GHA_CREDS_PATH" >"$adc_path"
+          chmod 600 "$adc_path"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$adc_path" >>"$GITHUB_ENV"
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Chrome for Playwright
+        run: npx playwright install --with-deps chrome
+
+      - name: Decode short-lived browser states in runner temp
+        env:
+          TENANT_A_STATE_GZIP_B64: ${{ secrets.E2E_QA_TENANT_A_STATE_GZIP_B64 }}
+          TENANT_B_STATE_GZIP_B64: ${{ secrets.E2E_QA_TENANT_B_STATE_GZIP_B64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          auth_dir="$RUNNER_TEMP/ai-fleet-e2e-auth-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          install -d -m 700 "$auth_dir"
+          tenant_a_path="$auth_dir/tenant-a.json"
+          tenant_b_path="$auth_dir/tenant-b.json"
+          if [[ -z "$TENANT_A_STATE_GZIP_B64" || -z "$TENANT_B_STATE_GZIP_B64" ]]; then
+            echo "Both protected tenant browser-state secrets are required." >&2
+            exit 1
+          fi
+          printf '%s' "$TENANT_A_STATE_GZIP_B64" | base64 --decode | gzip -d >"$tenant_a_path"
+          printf '%s' "$TENANT_B_STATE_GZIP_B64" | base64 --decode | gzip -d >"$tenant_b_path"
+          chmod 600 "$tenant_a_path" "$tenant_b_path"
+          for state_path in "$tenant_a_path" "$tenant_b_path"; do
+            jq -e '
+              type == "object" and
+              (.cookies | type == "array") and
+              (.origins | type == "array")
+            ' "$state_path" >/dev/null
+          done
+          {
+            echo "E2E_QA_TENANT_A_STATE_PATH=$tenant_a_path"
+            echo "E2E_QA_TENANT_B_STATE_PATH=$tenant_b_path"
+          } >>"$GITHUB_ENV"
+
+      - name: Audit QA topology and fixtures (read-only)
+        env:
+          E2E_QA_FIXTURES_JSON: ${{ secrets.E2E_QA_FIXTURES_JSON }}
+          E2E_QA_REPO_READ_TOKEN: ${{ secrets.E2E_QA_REPO_READ_TOKEN }}
+        run: npm run e2e:qa:audit
+
+      - name: Run recorded live security suite
+        id: live-suite
+        env:
+          E2E_QA_FIXTURES_JSON: ${{ secrets.E2E_QA_FIXTURES_JSON }}
+        run: npm run test:e2e:live
+
+      - name: Stage sanitized evidence without traces
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          artifact_dir="$RUNNER_TEMP/ai-fleet-e2e-artifacts-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          install -d -m 700 \
+            "$artifact_dir/evidence" \
+            "$artifact_dir/report" \
+            "$artifact_dir/videos"
+
+          evidence_source="test-results/live-evidence"
+          report_source="playwright-report/live-evidence"
+          if [[ -d "$evidence_source" ]]; then
+            cp -R "$evidence_source/." "$artifact_dir/evidence/"
+          fi
+          if [[ -d "$report_source" ]]; then
+            cp -R "$report_source/." "$artifact_dir/report/"
+          fi
+
+          video_index=0
+          while IFS= read -r -d '' video_path; do
+            video_index=$((video_index + 1))
+            extension="${video_path##*.}"
+            cp "$video_path" "$artifact_dir/videos/video-${video_index}.${extension}"
+          done < <(find test-results/live-evidence -type f \
+            \( -iname '*.webm' -o -iname '*.mp4' \) -print0 2>/dev/null || true)
+
+          # Trace archives, HAR/network captures, and duplicate report videos can
+          # expose request headers. Only the intentionally curated outputs remain.
+          find "$artifact_dir" -type f \
+            \( -iname '*trace*' -o -iname '*.zip' -o -iname '*.har' -o -iname '*.network' \) \
+            -delete
+          find "$artifact_dir/evidence" "$artifact_dir/report" -type f \
+            \( -iname '*.webm' -o -iname '*.mp4' \) -delete
+          if ! find "$artifact_dir/evidence" -type f -print -quit | grep -q .; then
+            printf '%s\n' \
+              'Live QA E2E did not produce curated evidence. Inspect the job result; no raw trace or network capture was retained.' \
+              >"$artifact_dir/evidence/README.txt"
+          fi
+          if ! find "$artifact_dir/report" -type f -print -quit | grep -q .; then
+            printf '%s\n' \
+              'Live QA E2E did not produce an HTML report. Inspect the job result; no raw trace or network capture was retained.' \
+              >"$artifact_dir/report/README.txt"
+          fi
+          if [[ "$video_index" -eq 0 ]]; then
+            printf '%s\n' \
+              'Live QA E2E did not produce a video. Inspect the job result; no raw trace or network capture was retained.' \
+              >"$artifact_dir/videos/README.txt"
+          fi
+
+      - name: Upload sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-live-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ai-fleet-e2e-artifacts-${{ github.run_id }}-${{ github.run_attempt }}/evidence
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload sanitized HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-live-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ai-fleet-e2e-artifacts-${{ github.run_id }}-${{ github.run_attempt }}/report
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload recorded videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-live-videos-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ai-fleet-e2e-artifacts-${{ github.run_id }}-${{ github.run_attempt }}/videos
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Remove temporary auth and artifact copies
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_dir="$RUNNER_TEMP/ai-fleet-e2e-auth-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          artifact_dir="$RUNNER_TEMP/ai-fleet-e2e-artifacts-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          case "$auth_dir:$artifact_dir" in
+            "$RUNNER_TEMP"/*:"$RUNNER_TEMP"/*) ;;
+            *) echo "Refusing to clean paths outside RUNNER_TEMP." >&2; exit 1 ;;
+          esac
+          rm -rf -- "$auth_dir" "$artifact_dir"
+
+      - name: Preserve live-suite failure after evidence cleanup
+        if: always() && steps.live-suite.outcome == 'failure'
+        run: exit 1
