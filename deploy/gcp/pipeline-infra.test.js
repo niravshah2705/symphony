@@ -16,10 +16,87 @@ function variableBlock(source, name) {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
+function resourceBlock(source, type, name) {
+  const start = source.indexOf(`resource "${type}" "${name}"`);
+  assert.notEqual(start, -1, `missing Terraform resource ${type}.${name}`);
+  const next = source.indexOf('\nresource "', start + 1);
+  return source.slice(start, next === -1 ? source.length : next);
+}
+
 test('pipeline rollout and deployment are fail-closed Terraform defaults', () => {
   const variables = read('deploy/gcp/terraform/variables.tf');
   assert.match(variableBlock(variables, 'pipeline_orchestrator_enabled'), /default\s*=\s*false/);
   assert.match(variableBlock(variables, 'pipeline_deployment_enabled'), /default\s*=\s*false/);
+});
+
+test('all Cloud Run services use the gen2 execution environment', () => {
+  const servicesByFile = new Map([
+    ['cloud_run.tf', ['gateway', 'planner', 'coder_control']],
+    ['org_service.tf', ['org']],
+    ['settings_service.tf', ['settings']],
+    ['email_service.tf', ['email']],
+    ['pipeline.tf', ['orchestrator', 'tester', 'deployer']],
+    ['provisioner.tf', ['provisioner']],
+  ]);
+  const expectedInventory = [...servicesByFile]
+    .flatMap(([file, services]) => services.map((service) => [file, service]))
+    .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
+  assert.equal(expectedInventory.length, 10);
+
+  const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
+  const actualInventory = fs.readdirSync(terraformDir)
+    .filter((file) => file.endsWith('.tf'))
+    .flatMap((file) => {
+      const source = read('deploy/gcp/terraform', file);
+      return [...source.matchAll(/resource\s+"google_cloud_run_v2_service"\s+"([^"]+)"/g)]
+        .map((match) => [file, match[1]]);
+    })
+    .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
+  assert.deepEqual(actualInventory, expectedInventory, 'Cloud Run service inventory changed');
+
+  for (const [file, expectedServices] of servicesByFile) {
+    const source = read('deploy/gcp/terraform', file);
+    for (const service of expectedServices) {
+      assert.match(
+        resourceBlock(source, 'google_cloud_run_v2_service', service),
+        /^\s*execution_environment\s*=\s*"EXECUTION_ENVIRONMENT_GEN2"\s*$/m,
+        `${file}: google_cloud_run_v2_service.${service} must explicitly use gen2`,
+      );
+    }
+  }
+});
+
+test('fixed-memory gen2 Cloud Run CPU variables reject incompatible allocations', () => {
+  const variables = read('deploy/gcp/terraform/variables.tf');
+  const supportedCpuValues = String.raw`\[\s*"1"\s*,\s*"2"\s*\]`;
+
+  for (const name of ['cloud_run_service_cpu', 'cloud_run_proxy_cpu']) {
+    const block = variableBlock(variables, name);
+    assert.match(
+      block,
+      new RegExp(`condition\\s*=\\s*contains\\(\\s*${supportedCpuValues}\\s*,\\s*var\\.${name}\\s*\\)`),
+      `${name} must reject CPU values incompatible with fixed 512 MiB containers`,
+    );
+    assert.match(block, /error_message\s*=\s*"[^"]*1 or 2 vCPU[^"]*"/);
+  }
+});
+
+test('skills mounts preserve configured Cloud Run service and proxy CPUs', () => {
+  const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
+  const variables = read('deploy/gcp/terraform/variables.tf');
+  assert.doesNotMatch(
+    cloudRun,
+    /local\.agent_(?:service|proxy)_cpu|agent_(?:service|proxy)_cpu\s*=/,
+    'skills mounts must not replace configured CPU values with local clamps',
+  );
+
+  for (const service of ['planner', 'coder_control']) {
+    const resource = resourceBlock(cloudRun, 'google_cloud_run_v2_service', service);
+    assert.match(resource, /cpu\s*=\s*var\.cloud_run_service_cpu/);
+    assert.match(resource, /cpu\s*=\s*var\.cloud_run_proxy_cpu/);
+  }
+
+  assert.doesNotMatch(variableBlock(variables, 'skills_mount_enabled'), /\+ gen2 exec env/);
 });
 
 test('deploy workflow fails closed when an unchanged live image tag cannot be resolved', () => {

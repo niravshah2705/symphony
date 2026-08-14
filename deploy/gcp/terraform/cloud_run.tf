@@ -8,19 +8,14 @@
 
 locals {
   # Skills registry (skills.tf). Terraform CREATES the bucket when skills_enabled.
-  # The read-only gcsfuse MOUNT (+ gen2 exec env + SKILLS_ROOT env) is a SEPARATE
-  # toggle, skills_mount_enabled, default OFF: the fuse mount under gen2 currently
+  # The read-only gcsfuse MOUNT (+ SKILLS_ROOT env) is a SEPARATE toggle,
+  # skills_mount_enabled, default OFF: the fuse mount under gen2 currently
   # fails the coder-control startup probe (heavy dual-role image), so the mount is
   # opt-in until that's validated. Mount off → services use the vendored skills
   # baked into the image (packages/shared/src/config.js resolveSkillsSrc). The
   # mount requires the bucket, so it is ANDed with skills_enabled.
   skills_enabled       = var.skills_enabled
   skills_mount_enabled = var.skills_mount_enabled && var.skills_enabled
-  # Fractional CPU is supported only by the gen1 service environment. Keep the
-  # optional gcsfuse/gen2 path valid by raising agent app + sidecar containers
-  # back to Cloud Run's 1-vCPU gen2 minimum when that mount is enabled.
-  agent_service_cpu = local.skills_mount_enabled ? "1" : var.cloud_run_service_cpu
-  agent_proxy_cpu   = local.skills_mount_enabled ? "1" : var.cloud_run_proxy_cpu
   skills_env = local.skills_mount_enabled ? {
     SKILLS_ROOT    = "/skills"
     SKILLS_VERSION = var.skills_version
@@ -234,7 +229,7 @@ resource "google_cloud_run_v2_service" "gateway" {
 
   template {
     service_account                  = google_service_account.gateway.email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = var.container_concurrency
 
     scaling {
@@ -338,7 +333,7 @@ resource "google_cloud_run_v2_service" "planner" {
       error_message = "min_instances cannot exceed 1 while pipeline orchestration is enabled."
     }
     precondition {
-      condition     = !local.proxy_enabled || var.container_concurrency == 1 || try(tonumber(local.agent_proxy_cpu) >= 1, false)
+      condition     = !local.proxy_enabled || var.container_concurrency == 1 || try(tonumber(var.cloud_run_proxy_cpu) >= 1, false)
       error_message = "container_concurrency values above 1 require cloud_run_proxy_cpu to be at least 1 vCPU when the egress proxy is enabled."
     }
   }
@@ -347,9 +342,7 @@ resource "google_cloud_run_v2_service" "planner" {
     service_account = google_service_account.planner.email
     timeout         = local.pipeline_on ? "3600s" : null
 
-    # Fractional CPU requires gen1. The optional gcsfuse mount requires gen2,
-    # in which case local.agent_*_cpu also raises both containers to 1 vCPU.
-    execution_environment            = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = var.container_concurrency
 
     scaling {
@@ -412,7 +405,7 @@ resource "google_cloud_run_v2_service" "planner" {
 
       resources {
         limits = {
-          cpu    = local.agent_service_cpu
+          cpu    = var.cloud_run_service_cpu
           memory = "512Mi"
         }
         cpu_idle          = true
@@ -450,7 +443,7 @@ resource "google_cloud_run_v2_service" "planner" {
         }
         resources {
           limits = {
-            cpu    = local.agent_proxy_cpu
+            cpu    = var.cloud_run_proxy_cpu
             memory = "512Mi"
           }
           cpu_idle = true
@@ -481,9 +474,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
     service_account = google_service_account.coder.email
     timeout         = local.pipeline_on ? "3600s" : null
 
-    # Fractional CPU requires gen1. The optional gcsfuse mount requires gen2,
-    # in which case local.agent_*_cpu also raises both containers to 1 vCPU.
-    execution_environment            = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = var.container_concurrency
 
     scaling {
@@ -546,7 +537,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
 
       resources {
         limits = {
-          cpu    = local.agent_service_cpu
+          cpu    = var.cloud_run_service_cpu
           memory = "512Mi"
         }
         cpu_idle          = true
@@ -581,7 +572,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
         }
         resources {
           limits = {
-            cpu    = local.agent_proxy_cpu
+            cpu    = var.cloud_run_proxy_cpu
             memory = "512Mi"
           }
           cpu_idle = true

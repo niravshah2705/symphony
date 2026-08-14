@@ -295,14 +295,24 @@ variable "container_concurrency" {
 
 variable "cloud_run_service_cpu" {
   type        = string
-  description = "vCPU limit for Cloud Run service app containers. The 1-vCPU default supports container_concurrency > 1; fractional overrides require container_concurrency = 1 and gen1."
+  description = "vCPU limit for gen2 Cloud Run service app containers. Supported values are 1 or 2 because some services have fixed 512Mi memory limits; the 1-vCPU default supports container_concurrency > 1."
   default     = "1"
+
+  validation {
+    condition     = contains(["1", "2"], var.cloud_run_service_cpu)
+    error_message = "cloud_run_service_cpu must be 1 or 2 vCPU because these gen2 Cloud Run services include fixed 512Mi containers."
+  }
 }
 
 variable "cloud_run_proxy_cpu" {
   type        = string
-  description = "vCPU limit for egress-proxy sidecars on Cloud Run services. Cloud Run Jobs use coder_job_proxy_cpu."
+  description = "vCPU limit for fixed-512Mi egress-proxy sidecars on gen2 Cloud Run services. Supported values are 1 or 2; Cloud Run Jobs use coder_job_proxy_cpu."
   default     = "1"
+
+  validation {
+    condition     = contains(["1", "2"], var.cloud_run_proxy_cpu)
+    error_message = "cloud_run_proxy_cpu must be 1 or 2 vCPU because these gen2 Cloud Run sidecars use fixed 512Mi memory limits."
+  }
 }
 
 # --- Pub/Sub topics -----------------------------------------------------------
@@ -549,7 +559,7 @@ variable "skills_enabled" {
 
 variable "skills_mount_enabled" {
   type        = bool
-  description = "Mount the skills bucket read-only via gcsfuse (+ gen2 exec env + SKILLS_ROOT/SKILLS_VERSION env) on planner/coder. Default OFF: the fuse mount under the gen2 execution environment currently fails the coder-control startup probe (heavy dual-role image) and needs validation (and an initially-populated bucket + a resolveSkillsSrc empty-mount fallback) before enabling. Requires skills_enabled. Off → services use the vendored skills baked into the image."
+  description = "Mount the skills bucket read-only via gcsfuse (+ SKILLS_ROOT/SKILLS_VERSION env) on planner/coder. Default OFF: the fuse mount under the gen2 execution environment currently fails the coder-control startup probe (heavy dual-role image) and needs validation (and an initially-populated bucket + a resolveSkillsSrc empty-mount fallback) before enabling. Requires skills_enabled. Off → services use the vendored skills baked into the image."
   default     = false
 }
 
