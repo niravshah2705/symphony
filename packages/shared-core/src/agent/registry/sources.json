@@ -1,11 +1,13 @@
 {
+  "schemaVersion": "harness-registry/v2",
   "version": "v1",
-  "updatedAt": "2026-08-12",
-  "_note": "Source-of-truth for the weekly harness-registry sync. Marketplaces are cloned at the pinned `ref` (full sha). All marketplaces here are PUBLIC — no clone auth is needed.",
+  "updatedAt": "2026-08-13",
+  "_note": "ECC is resolved from trackRef to one immutable commit per run. Other selected plugins remain inert and use their pinned refs. All sources are public.",
   "marketplaces": {
     "ecc": {
-      "url": "https://github.com/affaan-m/everything-claude-code.git",
-      "ref": "b39d2244cf93d2e39eb7e3dfc375b737b75ca14d"
+      "url": "https://github.com/affaan-m/ECC.git",
+      "trackRef": "main",
+      "versionRange": "2.2.x"
     },
     "claude-plugins-official": {
       "repo": "anthropics/claude-plugins-official",
@@ -15,6 +17,15 @@
       "repo": "langchain-ai/langsmith-claude-code-plugins",
       "ref": "d1abe832350a3a524212a30bf0f8c4fbff3e1e99"
     }
+  },
+  "harnessStrategies": {
+    "deepagent": "dcode-plugin",
+    "codex-sdk": "codex-marketplace",
+    "claude-agent-sdk": "claude-marketplace",
+    "antigravity-sdk": "antigravity-profile",
+    "opencode": "opencode-profile",
+    "pi": "pi-package",
+    "oh-my-pi": "oh-my-pi-marketplace"
   },
   "skills": [
     { "name": "commit", "vendored": true },
@@ -26,7 +37,7 @@
     { "name": "web-research", "vendored": true }
   ],
   "plugins": [
-    { "name": "ecc", "marketplace": "ecc", "version": "2.0.0-rc.1" },
+    { "name": "ecc", "marketplace": "ecc", "version": "2.2.x" },
     { "name": "security-guidance", "marketplace": "claude-plugins-official", "version": "2.0.0" },
     { "name": "playwright", "marketplace": "claude-plugins-official", "version": "latest" },
     { "name": "langsmith-tracing", "marketplace": "langsmith-claude-code-plugins", "version": "0.1.3" }

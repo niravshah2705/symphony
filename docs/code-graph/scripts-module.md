@@ -6,8 +6,8 @@
 
 Directory-based community: scripts
 
-- **Size**: 34 nodes
-- **Cohesion**: 0.0878
+- **Size**: 38 nodes
+- **Cohesion**: 0.1043
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,6 +15,10 @@ Directory-based community: scripts
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | resolve | Function | ./scripts/build-graphs.sh | 36-36 |
+| parseOptions | Function | ./scripts/build-harness-artifact.js | 12-27 |
+| required | Function | ./scripts/build-harness-artifact.js | 29-33 |
+| rejectUnexpected | Function | ./scripts/build-harness-artifact.js | 35-38 |
+| main | Function | ./scripts/build-harness-artifact.js | 40-66 |
 | parseArgs | Function | ./scripts/build-harness-registry.js | 39-56 |
 | main | Function | ./scripts/build-harness-registry.js | 58-115 |
 | main | Function | ./scripts/models-label-group.js | 21-38 |
@@ -57,21 +61,21 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `join` (47 edge(s))
+- `join` (48 edge(s))
 - `match` (24 edge(s))
-- `write` (21 edge(s))
+- `write` (22 edge(s))
 - `equal` (21 edge(s))
 - `readFileSync` (13 edge(s))
 - `writeFileSync` (11 edge(s))
 - `log` (9 edge(s))
+- `map` (8 edge(s))
 - `mkdtempSync` (8 edge(s))
 - `tmpdir` (8 edge(s))
 - `doesNotMatch` (8 edge(s))
-- `map` (7 edge(s))
 - `run` (7 edge(s))
 - `deepEqual` (6 edge(s))
 - `resolveStrength` (5 edge(s))
-- `exit` (4 edge(s))
+- `filter` (4 edge(s))
 
 ### Incoming
 
@@ -82,6 +86,7 @@ No execution flows pass through this community.
 - `./scripts/obfuscate-spa.test.js` (12 edge(s))
 - `readFileSync` (10 edge(s))
 - `doesNotMatch` (8 edge(s))
+- `./scripts/build-harness-artifact.js` (7 edge(s))
 - `./scripts/start-all.js` (7 edge(s))
 - `run` (6 edge(s))
 - `deepEqual` (6 edge(s))
@@ -89,4 +94,3 @@ No execution flows pass through this community.
 - `tmpdir` (5 edge(s))
 - `resolveStrength` (5 edge(s))
 - `./scripts/seo-discovery.test.js` (5 edge(s))
-- `./scripts/build-graphs.sh` (3 edge(s))

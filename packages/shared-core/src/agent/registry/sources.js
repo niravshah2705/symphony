@@ -1,21 +1,31 @@
 'use strict';
 
 const fs = require('fs');
-const { assertSafePathSegment } = require('./schema');
+const {
+  HARNESS_REGISTRY_SCHEMA_VERSION,
+  ECC_SOURCE,
+  assertSafePathSegment,
+  validateEccSource,
+  validateHarnessStrategyMap,
+} = require('./schema');
 
 /**
  * Load + validate the repository source manifest (`sources.json`) — the single
- * source of truth for WHAT to publish and at WHICH version. The weekly GitHub
- * Action reads this, shallow-clones each marketplace at its pinned ref, and
- * converts the named skills/plugins/hooks.
+ * source of truth for WHAT to publish and at WHICH version. In v2, ECC alone is
+ * followed at `trackRef`, resolved once to an immutable commit, and installed by
+ * the explicit strategy for every catalog harness. Other selected plugins stay
+ * inert and retain immutable marketplace refs.
  *
  * Shape (validated here, fail-fast at the system boundary):
  *   {
  *     "version": "v1",                       // safe path segment → GCS prefix
  *     "updatedAt": "2026-08-12",
  *     "marketplaces": {
- *       "<name>": { "repo": "owner/name" | null, "url": "https://…" | null, "ref": "<sha|tag>" }
+ *       "ecc": { "url": "https://github.com/affaan-m/ECC.git",
+ *                "trackRef": "main", "versionRange": "2.2.x" },
+ *       "<inert-name>": { "repo": "owner/name" | null, "url": "https://…" | null, "ref": "<sha|tag>" }
  *     },
+ *     "harnessStrategies": { "<catalog-id>": "<strategy>" },
  *     "skills":  [ { "name": "web-research", "vendored": true } ],
  *     "plugins": [ { "name": "security", "marketplace": "<mp>", "version": "1.6.2" } ],
  *     "hooks":   [ { "name": "…", "marketplace": "<mp>", "event": "pre"|"post" } ]  // optional
@@ -44,8 +54,35 @@ function validateMarketplace(name, mp) {
   const hasUrl = typeof mp.url === 'string' && mp.url !== '';
   if (!hasRepo && !hasUrl) fail(`marketplace ${name} needs a "repo" (owner/name) or "url"`);
   if (hasRepo && !REPO_RE.test(mp.repo)) fail(`marketplace ${name} repo must be "owner/name" (got ${mp.repo})`);
+
+  const isTracked = mp.trackRef != null || mp.versionRange != null;
+  if (isTracked) {
+    if (name !== ECC_SOURCE.id) fail(`only marketplace ${ECC_SOURCE.id} may use a tracked ref`);
+    if (mp.ref != null) fail(`marketplace ${name} must not combine "ref" with "trackRef"`);
+    if (hasRepo) fail(`marketplace ${name} must use the canonical ECC "url", not "repo"`);
+    const source = validateEccSource({
+      ...ECC_SOURCE,
+      url: mp.url,
+      trackRef: mp.trackRef,
+      versionRange: mp.versionRange,
+    });
+    return {
+      repo: null,
+      url: source.url,
+      ref: null,
+      trackRef: source.trackRef,
+      versionRange: source.versionRange,
+    };
+  }
+
   if (typeof mp.ref !== 'string' || mp.ref === '') fail(`marketplace ${name} needs a pinned "ref"`);
-  return { repo: hasRepo ? mp.repo : null, url: hasUrl ? mp.url : null, ref: mp.ref };
+  return {
+    repo: hasRepo ? mp.repo : null,
+    url: hasUrl ? mp.url : null,
+    ref: mp.ref,
+    trackRef: null,
+    versionRange: null,
+  };
 }
 
 /**
@@ -68,6 +105,11 @@ function loadSources(filePath) {
   }
   if (!isPlainObject(doc)) fail('top level must be an object');
 
+  const schemaVersion = doc.schemaVersion == null ? null : String(doc.schemaVersion);
+  if (schemaVersion != null && schemaVersion !== HARNESS_REGISTRY_SCHEMA_VERSION) {
+    fail(`unsupported schemaVersion ${JSON.stringify(schemaVersion)}`);
+  }
+
   if (typeof doc.version !== 'string') fail('missing string "version"');
   assertSafePathSegment(doc.version, 'sources version');
 
@@ -77,6 +119,22 @@ function loadSources(filePath) {
     for (const [name, mp] of Object.entries(doc.marketplaces)) {
       marketplaces[name] = validateMarketplace(name, mp);
     }
+  }
+
+  let source = null;
+  let harnessStrategies = null;
+  if (schemaVersion === HARNESS_REGISTRY_SCHEMA_VERSION) {
+    const ecc = marketplaces[ECC_SOURCE.id];
+    if (!ecc || !ecc.trackRef) {
+      fail(`marketplaces.${ECC_SOURCE.id} must declare the canonical tracked ECC source`);
+    }
+    source = validateEccSource({
+      ...ECC_SOURCE,
+      url: ecc.url,
+      trackRef: ecc.trackRef,
+      versionRange: ecc.versionRange,
+    });
+    harnessStrategies = validateHarnessStrategyMap(doc.harnessStrategies);
   }
 
   const skills = [];
@@ -130,8 +188,11 @@ function loadSources(filePath) {
   }
 
   return {
+    schemaVersion,
     version: doc.version,
     updatedAt: doc.updatedAt != null ? String(doc.updatedAt) : null,
+    source,
+    harnessStrategies,
     marketplaces,
     skills,
     plugins,
