@@ -72,7 +72,10 @@ function stateFor(windowRef, measurementId) {
 function ensureGtag(windowRef) {
   if (!Array.isArray(windowRef.dataLayer)) windowRef.dataLayer = [];
   if (typeof windowRef.gtag !== 'function') {
-    windowRef.gtag = (...args) => windowRef.dataLayer.push(args);
+    function gtag() {
+      windowRef.dataLayer.push(arguments);
+    }
+    windowRef.gtag = gtag;
   }
   return windowRef.gtag;
 }
