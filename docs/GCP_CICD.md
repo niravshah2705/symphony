@@ -1,220 +1,195 @@
-# GitHub Actions CD (deploy on merge to main)
+# Manual local workflows and GitHub Actions wrappers
 
-`.github/workflows/deploy.yml` runs on every merge to `main`, but it is
-**path-filtered** — a merge only does the work its diff actually requires.
-Auth is **keyless** via Workload Identity Federation (WIF) — no service-account
-key is stored in GitHub.
+Operational logic is implemented in repository scripts and is intended to run
+from an operator machine. The five GitHub Actions workflows are thin,
+`workflow_dispatch`-only alternatives that call those same commands with WIF or
+`GITHUB_TOKEN` authentication. None runs from a pull request, push, merge, tag,
+path change, or schedule.
 
-## Path-filtered deploys
+| Operation | Canonical local command | Manual GitHub alternative |
+|---|---|---|
+| Checks | `npm run checks` or `npm run checks -- --suite <suite>` | `gh workflow run checks.yml -f suite=all` |
+| CLI release | `npm run cli:release -- --version <semver> [--dry-run]` | `gh workflow run cli-release.yml -f version=<semver>` |
+| GCP deploy | `npm run gcp:deploy` with `-- --since <ref>`, `--all`, or `--plan` as needed | `gh workflow run deploy.yml -f deploy_all=<bool> -f changed_since=<ref>` |
+| Skills publish | `npm run skills:publish` with `-- --dry-run` (optional `--version` must match the manifest) | `gh workflow run publish-skills.yml -f version=<manifest-version>` |
+| Harness registry | `npm run registry:publish` or `npm run registry:publish -- --dry-run` | `gh workflow run sync-harness-registry.yml` |
 
-A `changes` job (via `dorny/paths-filter`) computes a work plan; downstream jobs
-are conditional on it:
+Run the local commands from the repository root. Every mutating release/deploy/
+publish command requires a clean committed worktree. Deployment planning and
+the skills/registry dry runs skip cloud access and the clean-tree gate; the CLI
+release dry run still stages and validates committed `HEAD` and requires it to
+be clean.
 
-| Changed paths | What runs |
-|---|---|
-| `services/gateway/**` (or its Dockerfile) | rebuild **gateway** image → `terraform apply` rolls **only** gateway |
-| `services/planner/**` / `services/coder/**` | rebuild that image → apply rolls **only** that service (coder ⇒ coder-control + the worker Job) |
-| `services/orchestrator/**` / `services/tester/**` / `services/deployer/**` | rebuild and roll only the corresponding durable-pipeline service |
-| `packages/shared-core/**` | rebuild every consumer, including the SDK-free gateway/orchestrator and agent stages |
-| `packages/shared/**` | rebuild planner, coder, tester, and deployer images |
-| root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
-| `deploy/gcp/terraform/**` | `terraform apply` **only** (no image rebuild) |
-| `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy only (no images, no Terraform) |
-| docs / anything else | nothing runs |
+## Local operator setup
 
-How "roll only one service" works: each unchanged service keeps its
-**currently-deployed** image tag (resolved live from Cloud Run) while the
-rebuilt service gets the new commit SHA, so `terraform apply` is a no-op for
-everything except the service that changed (see the per-service
-`*_image_tag` vars in `terraform/{variables,locals}.tf`).
-
-Need a full rebuild + apply of everything (e.g. after a manual hotfix or to
-re-converge state)? Trigger the workflow manually with **`deploy_all: true`**
-(Actions → Deploy to GCP → Run workflow).
-
-## SPA obfuscation (release-time)
-
-The SPA ships to browsers as raw ES modules, so the `deploy-spa` job
-**obfuscates `public/js/**` before the Firebase Hosting deploy**
-(`node scripts/obfuscate-spa.js --in-place`, backed by `javascript-obfuscator`).
-Cloud Build's `spa-publish` path does the same via its `spa-obfuscate` step
-before the GCS rsync, so both served copies are obfuscated.
-
-- It runs **in the ephemeral CI checkout only** — the source in git stays
-  readable. Locally, `npm run spa:obfuscate` writes an obfuscated copy to
-  `dist/spa-obfuscated/` and never touches your working tree.
-- `renameGlobals` and `renameProperties` are kept **off** so exported bindings,
-  import specifiers, and DOM/data property names survive — otherwise the native
-  (bundler-free) module graph would break. `config.js` (regenerated per deploy)
-  and `vendor/` (pre-minified Firebase SDK) are left untouched.
-- Strength is a selectable preset — **light | balanced | maximum**:
-
-  | Preset | Adds | Size | Runtime cost |
-  |---|---|---|---|
-  | `light` *(default)* | rename locals only (strings stay clear-text) | ~0.9–1.1x | negligible |
-  | `balanced` | + string-array encoding | ~1.5x | small |
-  | `maximum` | + control-flow flattening, dead-code injection, self-defending | ~4–5x | noticeable |
-
-  Choose it with `--strength <preset>`, the `SPA_OBFUSCATION_STRENGTH` env var,
-  or the defaults baked into the pipelines: the GitHub Actions `deploy-spa` job
-  reads the **`SPA_OBFUSCATION_STRENGTH` repo variable** (Actions → Variables),
-  and Cloud Build reads the **`_SPA_OBFUSCATION_STRENGTH` substitution**. Both
-  default to `light`. Preset definitions live in the `PRESETS` constant in
-  `scripts/obfuscate-spa.js`.
-
-The generated `config.js` also starts a cross-origin `preconnect` to the
-gateway before the main module executes. Firebase Hosting, and the equivalent
-metadata applied by the alternate GCS publish, serve `/`, `/index.html`, and
-`config.js` without storage caching; native module and stylesheet assets remain
-revalidated with `Cache-Control: no-cache` until the SPA adopts fingerprinted
-filenames.
-
-> Obfuscation raises the effort to read the client bundle; it is **not** a
-> secret store. Anything that must stay private belongs server-side (the
-> gateway), never in `public/`.
-
-## Automated bootstrap (new project)
-
-**`deploy/gcp/bootstrap.sh` does §1–§3 + the secret prerequisites in one run** —
-enable APIs, create the state bucket, create the deployer SA + roles, set up WIF,
-create the Pub/Sub service agent, seed Secret Manager, and set the GitHub
-secrets/variables (then imports the secrets into TF state so the first `git push`
-applies cleanly):
+Install Node.js 22+, Docker, Terraform, the Google Cloud CLI (including
+`gsutil`), `jq`, and the GitHub CLI when cutting releases. Authenticate the
+operator account rather than putting credentials on a command line:
 
 ```bash
-PROJECT_ID=my-proj REPO=owner/repo LINEAR_API_KEY=lin_... \
+gcloud auth login
+gcloud auth application-default login
+gh auth login
+```
+
+Create the ignored deployment configuration from the committed template:
+
+```bash
+cp deploy/gcp/.env.example deploy/gcp/.env
+chmod 600 deploy/gcp/.env
+```
+
+At minimum, set `GCP_PROJECT_ID`, `GCP_REGION`, `SPA_BUCKET`,
+`TF_STATE_BUCKET`, and `INTERNAL_API_TOKEN`. The same file supplies optional
+Firebase/auth, skills, registry, pipeline, provisioning, and SMTP switches.
+Command-line options such as `--since`, `--all`, `--plan`, and `--dry-run`
+override the corresponding defaults. The skills publisher's `--version` is a
+provenance assertion and must equal the committed manifest version.
+
+## Bootstrap a new GCP project
+
+Run the idempotent bootstrap before the first deployment. It enables APIs,
+creates and versions the Terraform state bucket, creates the Pub/Sub service
+identity, creates/seeds Secret Manager resources, imports them into Terraform
+state, and applies the Artifact Registry prerequisite:
+
+```bash
+PROJECT_ID=my-proj \
+LINEAR_API_KEY=lin_... \
+INTERNAL_API_TOKEN='<strong-random-value>' \
+  ./deploy/gcp/bootstrap.sh
+
+npm run gcp:deploy -- --all
+```
+
+SMTP authentication is all-or-none: pass `EMAIL_SMTP_USER`,
+`EMAIL_SMTP_PASSWORD`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM` together during
+bootstrap. Credential values go to Secret Manager; `.env` carries only the
+configuration/mount switches.
+
+Two console actions remain: link billing, then enable the Google sign-in
+provider in Firebase Authentication. Add the Firebase Hosting domain and the
+gateway host to authorized domains if they are not already present.
+
+## Selective deployment behavior
+
+`npm run gcp:deploy` compares `HEAD^...HEAD` by default. `--since <ref>` compares
+the merge base of that ref with `HEAD`; `--all` bypasses path selection; and
+`--plan` prints the JSON plan before any cloud access. Documentation-only
+changes produce an empty plan.
+
+| Changed paths | Planned work |
+|---|---|
+| A service directory or its Dockerfile | Build that service at the full `HEAD` SHA and apply Terraform |
+| `packages/shared/**` or `packages/shared-core/**` | Rebuild every shared-package image consumer except the independent org service, then apply Terraform |
+| Root `package.json` or lockfile | Rebuild those same dependency consumers, deploy the SPA, and apply Terraform |
+| `services/org/**` | Rebuild org-service and apply Terraform |
+| `services/settings/**` | Rebuild settings-service and apply Terraform |
+| `deploy/gcp/terraform/**` | Apply Terraform; when the durable pipeline is enabled, also build its stage images |
+| `services/proxy/**` or its Dockerfile | Apply Terraform and build the proxy |
+| `public/**`, `firebase.json`, or SPA/deploy tooling | Stage and deploy the Firebase Hosting SPA |
+| `--all` | Build every image, deploy the SPA, and apply Terraform |
+
+Any plan that applies Terraform also includes the proxy build. Changed images
+use the exact full 40-character `HEAD` SHA. Unchanged services keep the
+immutable 40-character tag resolved from their live Cloud Run revision; the
+deployment fails closed if a required live tag cannot be resolved. Disabled
+optional services do not require a live revision.
+
+The default `HEAD^` comparison covers only the newest commit. When a manual
+deployment did not run for every commit, pass the last successfully deployed
+ref with `--since` (or select `deploy_all` in the wrapper); otherwise earlier
+accumulated path changes are outside the selective plan.
+
+A real deployment refuses a dirty worktree. It uses both a per-project local
+lock and a generation-fenced object in the Terraform state bucket, so local and
+hosted runs cannot overlap across machines. It builds and pushes only the
+planned images, deploys the SPA when selected, and then performs one full
+Terraform apply with the complete variable set. Inspect any stale deployment
+lock before removing it manually.
+
+## SPA release staging
+
+The deploy command copies `public/` to a temporary directory and runs
+`scripts/obfuscate-spa.js` there. It generates a deployment-only `config.js`
+with the deterministic Cloud Run gateway URL, rewrites a temporary
+`firebase.json` to point at that staging directory, and publishes with Firebase
+Hosting. The tracked `public/config.js` is never rewritten or restored.
+
+`SPA_OBFUSCATION_STRENGTH` accepts `light` (default), `balanced`, or `maximum`.
+Property/global renaming remains disabled so native ES-module exports and DOM
+contracts survive. Obfuscation only raises the effort to inspect browser code;
+it is not a secret boundary.
+
+## Enable the manual GitHub wrappers
+
+Local execution needs no GitHub deployment setup. To also enable hosted manual
+dispatch, authenticate `gh` and include `REPO=owner/repo` during bootstrap:
+
+```bash
+PROJECT_ID=my-proj \
+REPO=owner/repo \
+LINEAR_API_KEY=lin_... \
+INTERNAL_API_TOKEN='<strong-random-value>' \
   ./deploy/gcp/bootstrap.sh
 ```
 
-When SMTP authentication is required, pass `EMAIL_SMTP_USER`,
-`EMAIL_SMTP_PASSWORD`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM` together. The
-bootstrap writes the credential pair only to Secret Manager; it stores only the
-non-secret `EMAIL_SMTP_AUTH_ENABLED` switch in GitHub Actions. It also sets
-`EMAIL_PUBLIC_APP_URL` to the Firebase Hosting URL deployed by this workflow
-(or to an explicit override), so invitation links cannot silently point at a
-different hosting channel.
+This creates `gh-deployer`, grants its scoped project roles, creates a GitHub
+OIDC workload identity pool/provider bound to that exact repository, and writes
+the wrapper configuration:
 
-After it, only two console actions remain: **link a billing account** and
-**enable the Google sign-in provider** in the Firebase console (the one Firebase
-piece Terraform can't create). Then push to main (first run:
-`gh workflow run deploy.yml -f deploy_all=true`).
+- Secrets: `GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`, `INTERNAL_API_TOKEN`.
+- Required variables: `GCP_PROJECT_ID`, `GCP_REGION`, `SPA_BUCKET`,
+  `TF_STATE_BUCKET`, `TF_STATE_PREFIX`, `AR_REPO`, `FIRESTORE_LOCATION`, and
+  `SPA_ORIGIN`.
+- Optional variables: Firebase/auth, SMTP, pipeline/provisioning,
+  `SKILLS_BUCKET`, `SKILLS_VERSION`, and `REGISTRY_BUCKET` settings used by the
+  relevant wrapper.
 
-The manual equivalents are documented below for reference / customization.
+If `gh` is unavailable, bootstrap prints the values that must be entered
+manually. WIF is keyless: no service-account JSON key belongs in GitHub.
 
-One-time setup below (values pre-filled for project `adlc-9e72f`, number
-`819642330335`, repo `niravshah2705/symphony` — change if yours differ).
-
-## 1. Deployer service account + roles
-
-Terraform manages the whole stack, so the deployer SA needs broad admin on the
-managed services (still least-privilege vs. Owner — no billing/org access):
+Examples:
 
 ```bash
-PROJECT=adlc-9e72f
-gcloud iam service-accounts create gh-deployer --project "$PROJECT" \
-  --display-name "GitHub Actions deployer"
-DEPLOYER="gh-deployer@${PROJECT}.iam.gserviceaccount.com"
+# Selective deployment from a chosen baseline
+gh workflow run deploy.yml \
+  -f deploy_all=false \
+  -f changed_since=HEAD^
 
-for role in \
-  roles/run.admin roles/cloudscheduler.admin roles/pubsub.admin \
-  roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin \
-  roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser \
-  roles/resourcemanager.projectIamAdmin roles/serviceusage.serviceUsageAdmin \
-  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin; do
-  gcloud projects add-iam-policy-binding "$PROJECT" \
-    --member="serviceAccount:${DEPLOYER}" --role="$role" --condition=None >/dev/null
-done
+# Full first deployment or explicit convergence
+gh workflow run deploy.yml \
+  -f deploy_all=true \
+  -f changed_since=HEAD^
+
+# Other wrappers
+gh workflow run checks.yml -f suite=all
+gh workflow run cli-release.yml -f version=1.2.0
+gh workflow run publish-skills.yml -f version=v1  # must match skills-manifest.json
+gh workflow run sync-harness-registry.yml
 ```
 
-## 2. Workload Identity Federation (bind the SA to this repo)
+The wrapper inputs are operator-controlled, but deployments and releases still
+bind output to the checked-out full commit SHA. GitHub concurrency protects
+wrapper runs. Skills and registry publishers also acquire atomic objects under
+`gs://<bucket>/.locks/`, which serializes local operators with hosted wrappers.
+If a process is interrupted and leaves a stale lock, inspect it and confirm no
+publisher is active before removing that object manually.
 
-```bash
-PROJECT=adlc-9e72f; PROJNUM=819642330335; REPO=niravshah2705/symphony
-DEPLOYER="gh-deployer@${PROJECT}.iam.gserviceaccount.com"
+## Branch protection and verification
 
-gcloud iam workload-identity-pools create github \
-  --project "$PROJECT" --location global --display-name "GitHub"
+Because Checks is no longer triggered automatically, remove obsolete required
+`Checks` status contexts from branch protection. Contributors run
+`npm run checks` locally and record the result in the pull request. A maintainer
+can manually dispatch the wrapper when a GitHub-hosted confirmation is useful.
 
-gcloud iam workload-identity-pools providers create-oidc github-oidc \
-  --project "$PROJECT" --location global --workload-identity-pool github \
-  --display-name "GitHub OIDC" \
-  --issuer-uri "https://token.actions.githubusercontent.com" \
-  --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository" \
-  --attribute-condition "assertion.repository=='${REPO}'"
+After a deployment:
 
-# Only this repo may impersonate the deployer SA.
-gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER" --project "$PROJECT" \
-  --role roles/iam.workloadIdentityUser \
-  --member "principalSet://iam.googleapis.com/projects/${PROJNUM}/locations/global/workloadIdentityPools/github/attribute.repository/${REPO}"
-```
+- `curl https://<gateway>/healthz` returns `{"status":"ok"}`.
+- The Firebase Hosting SPA signs in and streams planner/coder progress.
+- Direct unauthenticated access to internal services is rejected.
+- Cloud Run images use immutable full-SHA tags and unchanged services retain
+  their previous tag.
 
-Provider resource name (for the `GCP_WIF_PROVIDER` secret):
-```
-projects/819642330335/locations/global/workloadIdentityPools/github/providers/github-oidc
-```
-
-## 3. GitHub repo secrets + variables
-
-```bash
-# Secrets (Settings → Secrets and variables → Actions → Secrets)
-gh secret set GCP_WIF_PROVIDER --repo niravshah2705/symphony \
-  --body "projects/819642330335/locations/global/workloadIdentityPools/github/providers/github-oidc"
-gh secret set GCP_DEPLOYER_SA --repo niravshah2705/symphony \
-  --body "gh-deployer@adlc-9e72f.iam.gserviceaccount.com"
-
-# Variables (non-secret; Firebase web API key is public by design)
-gh variable set GCP_PROJECT_ID   --repo niravshah2705/symphony --body "adlc-9e72f"
-gh variable set GCP_REGION       --repo niravshah2705/symphony --body "asia-south1"
-gh variable set SPA_BUCKET       --repo niravshah2705/symphony --body "adlc-9e72f-aifleet-spa"
-gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72f-tfstate"
-# Skills registry (see docs/GCP_DEPLOY.md "Skills registry"). NO repo variable is
-# required for the bucket name: Terraform CREATES the bucket (var.skills_enabled,
-# default true) with a derived name "<GCP_PROJECT_ID>-aifleet-skills", and
-# .github/workflows/publish-skills.yml derives that SAME name from GCP_PROJECT_ID.
-# SKILLS_BUCKET is only an OPTIONAL override if you pin a custom bucket name (it
-# must then match Terraform var.skills_bucket_name):
-# gh variable set SKILLS_BUCKET --repo niravshah2705/symphony --body "custom-bucket-name"
-# FIREBASE_API_KEY is NOT needed — Terraform reads it from the managed Firebase
-# web app (data.google_firebase_web_app_config) and injects it into the gateway.
-# Optional: gh variable set FIREBASE_ALLOWED_DOMAIN --repo niravshah2705/symphony --body "yourco.com"
-# Optional RBAC bootstrap: gh variable set AUTH_ADMIN_EMAILS --repo niravshah2705/symphony --body "you@corp.com"
-#   (admins at sign-in) and AUTH_DEFAULT_ROLE (default "viewer"). Other roles are
-#   assigned as Firebase custom claims via services/gateway/scripts/set-user-role.js.
-# Transactional email (normally set by bootstrap.sh):
-# gh variable set EMAIL_SMTP_AUTH_ENABLED --repo niravshah2705/symphony --body "true"
-# gh variable set EMAIL_PUBLIC_APP_URL --repo niravshah2705/symphony --body "https://adlc-9e72f.web.app"
-```
-
-## Prerequisites the pipeline assumes
-
-- **Secret Manager values already seeded** (the pipeline never creates/rotates
-  these two): `stream-token-secret` and `linear-api-key` must have a version, or
-  the Cloud Run revisions won't start. `deploy/gcp/deploy.sh` / `bootstrap.sh`
-  seed these; or add manually:
-  ```bash
-  printf 'REPLACE' | gcloud secrets versions add linear-api-key --project adlc-9e72f --data-file=-
-  ```
-  `org-jwt-secret` is **Terraform-managed** (`random_password` + version) — created
-  and seeded by the apply, no manual step. `google-one-tap-client-id` is likewise
-  Terraform-managed from the `google_one_tap_client_id` var (only when set).
-- SMTP credential **values are not Terraform inputs**. The bootstrap creates and
-  seeds `email-smtp-user` and `email-smtp-password`, then enables their all-or-none
-  `latest` mounts through `EMAIL_SMTP_AUTH_ENABLED`. A missing half fails closed.
-  Rotation happens in Secret Manager, without exposing a value to GitHub or
-  Terraform state.
-- The `TF_STATE_BUCKET` exists (created by `deploy.sh` / the first manual apply).
-- Firebase console: Google provider enabled + gateway URL and SPA origin in
-  **Authorized domains** (see docs/GCP_DEPLOY.md).
-
-## Notes
-
-- Keyless (WIF) — no static SA key in GitHub (cicd-pipeline checklist).
-- `concurrency: gcp-deploy` serializes applies so two merges never race the state.
-- A rebuilt service's image tag is the commit SHA, so it rolls a fresh Cloud Run
-  revision; unchanged services keep their live tag and are left untouched.
-- No untrusted event input (PR/commit text, `head_ref`) is used in any `run:` step.
-- Path filters read only file paths (`dorny/paths-filter`), never event text.
-- Skills are published by a **separate** workflow (`publish-skills.yml`), also WIF
-  keyless, triggered by changes under `packages/shared-core/src/agent/skills/**`. It only
-  writes GCS objects (never applies Terraform); roll a new version forward by bumping
-  `skills_version`. See docs/GCP_DEPLOY.md ("Skills registry").
+`cloudbuild.yaml` remains a separate, manually submitted GCP pipeline. It is not
+invoked by these workflows or by repository events.

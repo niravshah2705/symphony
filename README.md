@@ -13,7 +13,6 @@
   These badges are STATIC so they render on a private repo. When this repo becomes
   public (and is registered on trendshift.io), you can add the live/trending badges:
   [![Trendshift](https://trendshift.io/api/badge/repositories/XXXXX)](https://trendshift.io/repositories/XXXXX)
-  [![CI](https://github.com/niravshah2705/symphony/actions/workflows/checks.yml/badge.svg)](https://github.com/niravshah2705/symphony/actions/workflows/checks.yml)
   [![Stars](https://img.shields.io/github/stars/niravshah2705/symphony?style=flat-square)](https://github.com/niravshah2705/symphony/stargazers)
 -->
 
@@ -392,6 +391,35 @@ and `CODER_URL`. The shared `data/store.json` location can be overridden with
 Then open http://localhost:4000, go to **Settings**, and paste a Linear
 **personal API key** (create one at https://linear.app/settings/api). The key is
 validated against Linear before it is saved.
+
+### Checks, releases, and deployment
+
+The repository's operational logic lives in local scripts. Run these canonical
+commands from the repository root:
+
+```bash
+npm run checks                                      # every test suite
+npm run checks -- --suite node                     # node | e2e | org | settings
+npm run cli:release -- --version 1.2.0 --dry-run   # omit --dry-run to publish
+npm run gcp:deploy -- --plan                       # inspect HEAD^...HEAD
+npm run gcp:deploy                                 # selectively deploy that diff
+npm run gcp:deploy -- --since <ref>                # choose the comparison ref
+npm run gcp:deploy -- --all                        # rebuild/deploy everything
+npm run skills:publish -- --dry-run                # version comes from the manifest
+npm run registry:publish -- --dry-run
+```
+
+Copy `deploy/gcp/.env.example` to the gitignored `deploy/gcp/.env` before using
+the GCP commands. Local cloud publishing uses the operator's ambient `gcloud`
+credentials; CLI releases use the ambient `gh` login. See
+[GCP deployment](docs/GCP_DEPLOY.md) and [manual workflow wrappers](docs/GCP_CICD.md)
+for first-run bootstrap and production procedures.
+
+All five GitHub Actions workflows are **manual `workflow_dispatch` wrappers**
+around these same scripts. They do not run on pull requests, pushes, tags, path
+changes, or schedules. Operators can explicitly dispatch WIF-backed GCP work or
+GitHub-hosted checks/releases with `gh workflow run`; local execution remains
+the source of truth.
 
 ### Authentication
 

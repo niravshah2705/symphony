@@ -19,8 +19,8 @@ locals {
   # Skills registry (skills.tf). Terraform CREATES the bucket; the name defaults to
   # a stable derived value so the operator no longer pre-creates it. An empty
   # var.skills_bucket_name (the default) → derived "<project_id>-aifleet-skills";
-  # a non-empty value is an explicit override. The same name is used by the CI
-  # publish workflow (derived the same way) — no repo-var dependency for the name.
+  # a non-empty value is an explicit override. The same name is used by the
+  # manual publisher (derived the same way) — no extra bucket-name dependency.
   skills_bucket_name = var.skills_bucket_name != "" ? var.skills_bucket_name : "${var.project_id}-aifleet-skills"
 
   # Artifact Registry image references. Each service resolves its own tag,

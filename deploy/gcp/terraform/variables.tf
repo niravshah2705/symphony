@@ -583,12 +583,12 @@ variable "skills_version" {
 
 variable "skills_publisher_member" {
   type        = string
-  description = "Optional IAM member (e.g. serviceAccount:gh-deployer@PROJECT.iam.gserviceaccount.com) granted objectAdmin on the skills bucket so the CI publish workflow can push new bundles. Empty = no grant (manage the deployer SA's write access out-of-band)."
+  description = "Optional IAM member (e.g. serviceAccount:gh-deployer@PROJECT.iam.gserviceaccount.com) granted objectAdmin on the skills bucket so a local operator or manual wrapper can publish bundles. Empty = no grant (manage publisher access out-of-band)."
   default     = ""
 }
 
 # --- Harness registry bucket (see registry.tf) -------------------------------
-# The weekly sync-harness-registry workflow publishes a versioned dual-format
+# The manual registry publisher creates a versioned dual-format
 # (original + generic) bundle here. Terraform CREATES and OWNS the bucket; the
 # name defaults to "<project_id>-aifleet-registry". registry_bucket_name is an
 # optional override for a custom globally-unique name.
@@ -601,7 +601,7 @@ variable "registry_enabled" {
 
 variable "registry_bucket_name" {
   type        = string
-  description = "Fixed name of the harness-registry GCS bucket (NOT derived from project_id). Terraform CREATES this bucket — it is NOT assumed to pre-exist. GCS bucket names are GLOBALLY unique, so override this if the default is already taken. The sync-harness-registry CI workflow uses this same fixed name (REGISTRY_BUCKET repo-var override). Ignored when registry_enabled = false."
+  description = "Fixed name of the harness-registry GCS bucket (NOT derived from project_id). Terraform CREATES this bucket — it is NOT assumed to pre-exist. GCS bucket names are GLOBALLY unique, so override this if the default is already taken. The manual publisher uses this same fixed name (REGISTRY_BUCKET override). Ignored when registry_enabled = false."
   default     = "aifleet-registry"
 }
 
@@ -613,7 +613,7 @@ variable "registry_bucket_force_destroy" {
 
 variable "registry_publisher_member" {
   type        = string
-  description = "Optional IAM member (e.g. serviceAccount:gh-deployer@PROJECT.iam.gserviceaccount.com) granted objectAdmin on the registry bucket so the sync-harness-registry CI workflow can push new bundles. Empty = no grant (manage the deployer SA's write access out-of-band)."
+  description = "Optional IAM member (e.g. serviceAccount:gh-deployer@PROJECT.iam.gserviceaccount.com) granted objectAdmin on the registry bucket so a local operator or manual wrapper can publish bundles. Empty = no grant (manage publisher access out-of-band)."
   default     = ""
 }
 

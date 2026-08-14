@@ -137,8 +137,9 @@ an end-to-end lifecycle. Coverage gate: **80%+**.
   `org_role`/`is_super_admin`. Response DTOs never expose password hashes.
 - **Injection-safe**: parameterized SQLAlchemy only; Pydantic type validation.
 - **Rate limiting** on auth endpoints; pagination capped at 100 items.
-- **CI** (`.github/workflows/ci.yml`): `contents: read`, no `pull_request_target`,
-  no production secrets.
+- **Checks**: run `npm run checks -- --suite org` from the repository root. The
+  manual GitHub Checks wrapper has `contents: read`, no `pull_request_target`,
+  and no production secrets; it is never triggered by a pull request or push.
 
 ## Project layout
 

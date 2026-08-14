@@ -18,7 +18,7 @@ const { sanitizeMcpDescriptor } = require('./secret-filter');
  *
  * The reader is deliberately TOLERANT: a missing manifest or payload dir yields an
  * `incomplete: true` record rather than throwing, so one bad plugin never fails the
- * whole weekly sync (the CLI logs the gaps).
+ * whole registry sync (the CLI logs the gaps).
  */
 
 // --- small fs helpers -------------------------------------------------------

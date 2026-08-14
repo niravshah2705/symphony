@@ -5,7 +5,7 @@
  * Obfuscate the SPA's client-side JavaScript before it is published.
  *
  * The SPA in `public/` ships to browsers verbatim — Firebase Hosting
- * (.github/workflows/deploy.yml → `deploy-spa`) and the GCS bucket
+ * (the canonical local/manual deploy command) and the GCS bucket
  * (cloudbuild.yaml → `spa-publish`) both serve the raw `public/js/**` files.
  * This step rewrites those files with `javascript-obfuscator` so the released
  * bundle is not human-readable, without touching the source in git.

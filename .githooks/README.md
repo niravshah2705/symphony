@@ -40,5 +40,6 @@ don't pile up rebuilds. Logs to `.code-review-graph/post-commit.log`.
 - Bypass: `SKIP_GRAPH_REFRESH=1 git commit …`
 
 > Enforcement is **local only** — a git hook cannot be enforced server-side and
-> can be bypassed. To also block *merges*, add `npm run docs:code` as a job in
-> `.github/workflows/checks.yml` and mark it a required status check.
+> can be bypassed. Run `npm run checks` before review and include any code-map
+> regeneration in the commit. The repository's Checks workflow is a manually
+> dispatched wrapper, so it does not provide an automatic required status.

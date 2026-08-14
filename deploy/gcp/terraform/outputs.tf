@@ -87,7 +87,7 @@ output "spa_website_url" {
 }
 
 output "skills_bucket" {
-  description = "Terraform-created GCS bucket holding versioned agent-skill bundles (null when skills_enabled = false). Name defaults to '<project_id>-aifleet-skills'. Mounted read-only on planner + coder at /skills; the runtime pins var.skills_version. The CI publish workflow targets this same name."
+  description = "Terraform-created GCS bucket holding versioned agent-skill bundles (null when skills_enabled = false). Name defaults to '<project_id>-aifleet-skills'. Mounted read-only on planner + coder at /skills; the runtime pins var.skills_version. The manual publisher targets this same name."
   value       = one(google_storage_bucket.skills[*].name)
 }
 
@@ -97,7 +97,7 @@ output "skills_version_pinned" {
 }
 
 output "registry_bucket" {
-  description = "Terraform-created GCS bucket holding the versioned dual-format harness registry (null when registry_enabled = false). Fixed name from var.registry_bucket_name (default 'aifleet-registry'). The sync-harness-registry workflow publishes here (<version>/original + <version>/generic)."
+  description = "Terraform-created GCS bucket holding the versioned dual-format harness registry (null when registry_enabled = false). Fixed name from var.registry_bucket_name (default 'aifleet-registry'). The manual registry publisher writes <version>/original + <version>/generic here."
   value       = one(google_storage_bucket.registry[*].name)
 }
 

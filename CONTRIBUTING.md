@@ -19,7 +19,7 @@ agree to uphold it. Report unacceptable behavior to `nirav.s@uipath.com`.
 
 - **Node.js >= 22** (see `engines.node` in `package.json`)
 - **npm** — the repo is an npm-workspaces monorepo (`packages/*`, `services/*`)
-- Optional, per area: **Python 3** for the `org` and `settings` services, and a local
+- Optional, per area: **Python 3.12** for the `org` and `settings` services, and a local
   LLM runtime (Ollama / LM Studio / OMLX) or a hosted provider for agent work.
 
 ## Getting started
@@ -43,13 +43,16 @@ the code map — read the [Developer Onboarding guide](./docs/DEVELOPER_ONBOARDI
 ## Running the tests
 
 ```bash
-npm test           # Node unit suites (node --test)
-npm run test:e2e   # Playwright end-to-end (run `npx playwright install chrome` once)
+npm run checks                         # Node, Playwright, org, and settings
+npm run checks -- --suite node         # node | e2e | org | settings
 ```
 
-The Python services have their own `pytest` suites (see `services/org` and
-`services/settings`). CI runs all of these — see the **Checks** workflow at
-[`.github/workflows/checks.yml`](./.github/workflows/checks.yml).
+The checks script installs reproducible Node dependencies, installs Chrome for
+Playwright, and runs each Python service in a temporary Python 3.12 virtual
+environment. The [Checks workflow](./.github/workflows/checks.yml) is an optional
+manual wrapper around the same command; it does not run automatically for pull
+requests or pushes. Dispatch it with `gh workflow run checks.yml -f suite=all`
+when a GitHub-hosted run is useful.
 
 ## The code-map pre-commit hook (important)
 
@@ -82,10 +85,12 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`.
 
 1. Branch off `main`.
 2. Keep changes focused, and add or update tests for new behavior.
-3. Run `npm test` locally (plus `npm run test:e2e` when you touch the UI or flows).
+3. Run `npm run checks` locally, or the relevant `--suite` during development and
+   the full command before review.
 4. Review the full diff with `git diff main...HEAD`, then write a clear description
    with a short test plan.
-5. Make sure the **Checks** workflow is green before requesting review.
+5. Include the local check results in the pull-request test plan. If a maintainer
+   requests a hosted run, manually dispatch the **Checks** workflow and link it.
 
 ## Security
 

@@ -20,6 +20,7 @@ explains what the software does, and points you at the code you'll be working in
 | Requirement | Notes |
 | ----------- | ----- |
 | **Node.js ≥ 22** | Services and the `adlc` CLI target Node 22 (the deploy images are `node:22-alpine`). Check with `node -v`. |
+| **Python 3.12** | Required to run the org/settings portions of `npm run checks`; the script creates temporary virtual environments. |
 | **A Linear account + personal API key** | Create one at <https://linear.app/settings/api>. Required for every feature. |
 | **LLM routes** (for the agents only) | For full routing, configure one local preset (Ollama, LM Studio, or OMLX) and one hosted preset (OpenAI or Claude OAuth). Not needed just to browse projects/board. |
 | **git** | Required by the **code-writer** agent (it clones and pushes). |
@@ -49,7 +50,8 @@ npm run dev            # same, each service under node --watch
 # run one service at a time (they share data/store.json):
 npm run start:gateway  # or start:planner / start:coder
 
-npm test               # run the whole suite (node --test) — tests live in packages/shared
+npm run checks                         # Node, Playwright, org, and settings
+npm run checks -- --suite node         # or: e2e | org | settings
 ```
 
 Override ports with env vars — `PORT` (gateway), `PLANNER_PORT`, `CODER_SERVICE_PORT`:

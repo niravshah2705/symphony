@@ -5,8 +5,8 @@ const { assertSafePathSegment } = require('./schema');
 
 /**
  * Load + validate the repository source manifest (`sources.json`) — the single
- * source of truth for WHAT to publish and at WHICH version. The weekly GitHub
- * Action reads this, shallow-clones each marketplace at its pinned ref, and
+ * source of truth for WHAT to publish and at WHICH version. The manual registry
+ * publisher reads this, shallow-clones each marketplace at its pinned ref, and
  * converts the named skills/plugins/hooks.
  *
  * Shape (validated here, fail-fast at the system boundary):
@@ -22,7 +22,7 @@ const { assertSafePathSegment } = require('./schema');
  *   }
  *
  * `version` is validated to a single safe path segment because it becomes a GCS
- * object prefix — defends against a poisoned manifest value (see publish-skills.yml).
+ * object prefix — defends against a poisoned manifest value in manual publishers.
  */
 
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;

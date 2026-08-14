@@ -2,7 +2,8 @@
 # Versioned agent-skills registry (GCS bucket + gcsfuse mount).
 # -----------------------------------------------------------------------------
 # The deep-agent skills (packages/shared-core/src/agent/skills/<skill>/SKILL.md) are
-# published as VERSIONED bundles to this bucket by .github/workflows/publish-skills.yml
+# published as VERSIONED bundles by `npm run skills:publish` (locally or through
+# the manual GitHub wrapper)
 # (objects laid out as `<version>/<skill>/SKILL.md` plus a `skills-manifest.json`).
 # The planner + coder Cloud Run services mount it read-only via a gen2 GCS volume
 # at /skills and PIN a version with SKILLS_VERSION (see cloud_run.tf), so the
@@ -27,8 +28,8 @@ resource "google_storage_bucket" "skills" {
   # Uniform bucket-level access — no per-object ACLs (infra checklist).
   uniform_bucket_level_access = true
 
-  # This registry is internal (read by planner/coder SAs, written by the CI
-  # deployer). Enforce no-public-access at the bucket level so an accidental
+  # This registry is internal (read by planner/coder SAs, written by a publisher
+  # identity). Enforce no-public-access at the bucket level so an accidental
   # allUsers/allAuthenticatedUsers grant can never expose the skill bundles.
   public_access_prevention = "enforced"
 
@@ -61,12 +62,10 @@ resource "google_storage_bucket_iam_member" "coder_skills_read" {
   member = "serviceAccount:${google_service_account.coder.email}"
 }
 
-# --- Optional publisher (CI) --------------------------------------------------
-# The publish-skills workflow authenticates as the WIF deployer SA and needs
-# write access to push new versioned bundles. That SA is a repo-level secret
-# (GCP_DEPLOYER_SA), not a Terraform-managed resource, so grant it here ONLY when
-# its member string is provided. objectAdmin (not admin) — write objects, never
-# change bucket IAM/config.
+# --- Optional publisher -------------------------------------------------------
+# Local publishing uses ambient gcloud credentials; the manual wrapper uses the
+# WIF deployer SA. Grant a dedicated publisher here ONLY when its member string
+# is provided. objectAdmin (not admin) — write objects, never change bucket IAM.
 resource "google_storage_bucket_iam_member" "skills_publisher" {
   count  = var.skills_enabled && var.skills_publisher_member != "" ? 1 : 0
   bucket = google_storage_bucket.skills[0].name

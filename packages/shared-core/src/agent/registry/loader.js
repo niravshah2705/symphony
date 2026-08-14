@@ -7,7 +7,7 @@ const { REGISTRY_SCHEMA_VERSION, KINDS, assertSafePathSegment } = require('./sch
 /**
  * Runtime consumption of a published harness registry.
  *
- * The weekly Action publishes a versioned bundle to GCS; the planner/coder mount
+ * The manual publisher writes a versioned bundle to GCS; the planner/coder mount
  * it read-only via gcsfuse at REGISTRY_ROOT and PIN a version with REGISTRY_VERSION
  * (same pattern as the skills bucket, see config.js `resolveSkillsSrc`). This
  * module resolves that mount, loads the generic `registry.json`, and selects the

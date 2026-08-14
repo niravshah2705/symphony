@@ -1,29 +1,7 @@
 name: Sync Harness Registry
 
-# Weekly (Mondays) job that mirrors the harness skills/plugins/tools/hooks
-# ecosystem into a versioned, DUAL-format bundle on GCS:
-#   gs://<bucket>/<version>/original/...   harness-native payloads
-#   gs://<bucket>/<version>/generic/...    normalized tree + registry.json
-#
-# It reads the repo-pinned package list (packages/shared-core/src/agent/registry/
-# sources.json), shallow-clones each marketplace at its pinned ref, converts every
-# selected resource to the generic pattern, verifies NO secrets slipped through,
-# then publishes. Terraform CREATES the bucket (deploy/gcp/terraform/registry.tf)
-# with a FIXED name ("aifleet-registry", var.registry_bucket_name); this workflow
-# uses that same fixed name (override via the optional REGISTRY_BUCKET repo var).
-#
-# Auth is keyless via Workload Identity Federation (same provider/SA as deploy.yml
-# and publish-skills.yml). SECURITY: no untrusted github.event.* value is
-# interpolated into any `run:` body — everything flows via `env:`; the version is
-# validated to a single safe path segment before it becomes a GCS prefix.
 on:
-  schedule:
-    - cron: "0 6 * * 1" # Mondays 06:00 UTC
-  workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - "packages/shared-core/src/agent/registry/sources.json"
+  workflow_dispatch:
 
 # Never let two publishes race the same bucket prefix.
 concurrency:
@@ -32,132 +10,26 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write # required for Workload Identity Federation
-
-env:
-  SOURCES: packages/shared-core/src/agent/registry/sources.json
+  id-token: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      # Third-party actions are tag-pinned to match this repo's existing
-      # workflows (publish-skills.yml, checks.yml). SHA-pinning is a repo-wide
-      # hardening decision, not one to diverge on in a single workflow.
       - uses: actions/checkout@v4
-
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
       - id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOYER_SA }}
-
       - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Resolve + validate version
-        id: ver
-        run: |
-          set -euo pipefail
-          # sources.json is the SINGLE source of truth for the bundle version.
-          VERSION="$(jq -r '.version' "$SOURCES")"
-          case "$VERSION" in
-            "" | "." | ".." | */* | *[!A-Za-z0-9._-]*)
-              echo "Refusing invalid registry version: '$VERSION'" >&2
-              exit 1
-              ;;
-          esac
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Resolved registry version: $VERSION"
-
-      - name: Pre-flight — validate sources + print plan
-        run: node scripts/build-harness-registry.js --sources "$SOURCES" --dry-run
-
-      - name: Build dual (original + generic) bundle
-        # All marketplaces in sources.json are public (no clone auth needed).
-        # GIT_TERMINAL_PROMPT=0 makes any unreachable clone fail fast instead of
-        # hanging; the build fails loudly (no --allow-incomplete) if a pinned plugin
-        # cannot be resolved, so a broken ref surfaces immediately.
+      - name: Publish registry
         env:
           GIT_TERMINAL_PROMPT: "0"
-        run: |
-          set -euo pipefail
-          node scripts/build-harness-registry.js \
-            --sources "$SOURCES" \
-            --out "$RUNNER_TEMP/registry" \
-            --work "$RUNNER_TEMP/clones"
-
-      - name: Secret-leak guard (fail before publish)
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          set -euo pipefail
-          BUNDLE="$RUNNER_TEMP/registry"
-          # Structural (filename) check — precise, no false positives on skill docs
-          # that legitimately discuss "Authorization"/"Bearer"/"token".
-          LEAKED="$(find "$BUNDLE" -type f \( \
-            -name 'auth.json' -o -name '.env' -o -name '.env.*' -o \
-            -name '*.pem' -o -name '*.key' -o -name 'credentials.json' -o \
-            -name '.netrc' -o -name '.mcp.json' -o -name 'mcp.json' \) || true)"
-          if [ -n "$LEAKED" ]; then
-            echo "Secret-like files leaked into the bundle:" >&2
-            echo "$LEAKED" >&2
-            exit 1
-          fi
-          # MCP descriptors must carry only transport fields (no env/headers).
-          MCPDIR="$BUNDLE/$VERSION/generic/mcp" node -e '
-            const fs = require("fs"), path = require("path");
-            const dir = process.env.MCPDIR;
-            if (!fs.existsSync(dir)) process.exit(0);
-            for (const f of fs.readdirSync(dir)) {
-              const j = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
-              if ("env" in j || "headers" in j) {
-                console.error("MCP descriptor retained secrets:", f);
-                process.exit(1);
-              }
-            }
-            console.log("MCP descriptors clean.");
-          '
-          echo "Secret-leak guard passed."
-
-      - name: Publish versioned bundle to GCS
-        env:
-          # REGISTRY_BUCKET is an OPTIONAL repo VAR (trusted config) overriding the
-          # FIXED default bucket name (must match var.registry_bucket_name). Read via
-          # env only — never untrusted github.event.*.
-          REGISTRY_BUCKET_OVERRIDE: ${{ vars.REGISTRY_BUCKET }}
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          set -euo pipefail
-          BUCKET="${REGISTRY_BUCKET_OVERRIDE:-aifleet-registry}"
-          SRC="$RUNNER_TEMP/registry/${VERSION}"
-          test -d "$SRC" || { echo "Built bundle missing at $SRC" >&2; exit 1; }
-          DEST="gs://${BUCKET}/${VERSION}"
-          echo "Publishing $SRC -> $DEST"
-
-          # rsync mirrors ONLY this version's prefix; -d prunes objects removed
-          # from source WITHIN <version>/, so other version prefixes are untouched
-          # and pinned older versions keep working (multi-version coexistence).
-          gsutil -m rsync -r -d "$SRC" "$DEST"
-
-          # Refresh the top-level pointer to the newest published version.
-          gsutil cp "$RUNNER_TEMP/registry/registry-manifest.json" "gs://${BUCKET}/registry-manifest.json"
-
-          echo "Published harness registry to $DEST"
-
-      - name: Post — sanity list
-        env:
-          REGISTRY_BUCKET_OVERRIDE: ${{ vars.REGISTRY_BUCKET }}
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          set -euo pipefail
-          BUCKET="${REGISTRY_BUCKET_OVERRIDE:-aifleet-registry}"
-          # List to a file first — piping `gsutil ls` straight into `head` makes
-          # gsutil hit a BrokenPipe (exit 120) when head closes early, which under
-          # `set -o pipefail` would fail this step even though the publish succeeded.
-          gsutil ls -r "gs://${BUCKET}/${VERSION}" > "$RUNNER_TEMP/listing.txt"
-          echo "Published objects: $(wc -l < "$RUNNER_TEMP/listing.txt")"
-          head -50 "$RUNNER_TEMP/listing.txt"
+          REGISTRY_BUCKET: ${{ vars.REGISTRY_BUCKET }}
+        run: npm run registry:publish

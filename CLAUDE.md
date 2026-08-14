@@ -124,9 +124,18 @@ outbound call.
 npm start              # run all services (scripts/start-all.js)
 npm test               # node --test unit suites
 npm run test:e2e       # Playwright end-to-end
+npm run checks         # all local checks; add -- --suite node|e2e|org|settings
+npm run cli:release -- --version <semver> [--dry-run]
+npm run gcp:deploy     # selective HEAD^ deploy; add -- --since <ref>|--all|--plan
+npm run skills:publish # add -- --dry-run; --version must match the manifest
+npm run registry:publish # add -- --dry-run for validation only
 npm run docs:code      # regenerate the code-graph docs (docs/code-graph/)
 npm run hooks:install  # enable the repo git hooks (core.hooksPath=.githooks)
 ```
+
+These scripts are the source of truth for operations. The five workflows under
+`.github/workflows/` are `workflow_dispatch`-only wrappers and never run from a
+pull request, push, tag, path change, or schedule.
 
 Per-service guides live alongside the service (e.g.
 [`services/org/CLAUDE.md`](./services/org/CLAUDE.md)) — read the relevant one

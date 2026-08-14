@@ -21,6 +21,10 @@ data/
 # Environment / secrets.
 .env
 .env.*
+**/.env
+**/.env.*
+gha-creds-*.json
+**/gha-creds-*.json
 
 # Python virtualenv used by local tooling.
 .venv

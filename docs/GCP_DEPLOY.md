@@ -5,8 +5,9 @@ variables. Nothing GCP-specific is required for local development.
 
 ## Architecture
 
-- **SPA** → static files on a **GCS bucket** (free-tier hosting). The SPA calls
-  the gateway API cross-origin; `public/config.js` carries the gateway URL.
+- **SPA** → static files on **Firebase Hosting**. The deployment script stages an
+  obfuscated copy and generates `config.js` with the gateway URL; tracked source
+  files are never rewritten.
 - **gateway** → public **Cloud Run** service (API-only, scale-to-zero). Verifies
   the **Firebase ID token** on every request, performs EULA/billing/user-scoped
   pipeline preflight, and serves **SSE** fed by **Firestore** `onSnapshot`.
@@ -87,60 +88,108 @@ Mount managed keys on the settings service only—never on an agent app containe
 organization-scoped imported Codex token bundle and therefore a matching
 dedicated stack. To use a platform-managed OpenAI key, set `CODEX_BACKEND=api`.
 
-### Deploy — one-shot script (recommended)
+### First deployment — bootstrap once
 
-`deploy/gcp/deploy.sh` does the whole thing from an operator machine (idempotent):
-enables APIs, creates the Terraform state bucket, stages Secret Manager versions
-(auto-generates `stream-token-secret`), builds + pushes the shared images,
-publishes the SPA to GCS, and applies Terraform in the correct staged order.
+`deploy/gcp/bootstrap.sh` owns the one-time project layer: API enablement,
+Terraform state bucket, Pub/Sub service identity, seeded Secret Manager
+containers/versions, Terraform imports, and the Artifact Registry prerequisite.
+It is idempotent. Authenticate with `gcloud`, then run it before the canonical
+deployment command:
 
 ```bash
+gcloud auth login
+gcloud auth application-default login
+
 PROJECT_ID=my-proj \
-SPA_BUCKET=my-proj-aifleet-spa \        # globally-unique
-TF_STATE_BUCKET=my-proj-tfstate \
-LINEAR_API_KEY=lin_... \                # required (services won't start without it)
-./deploy/gcp/deploy.sh
+LINEAR_API_KEY=lin_... \
+INTERNAL_API_TOKEN='<strong-random-value>' \
+  ./deploy/gcp/bootstrap.sh
+
+cp deploy/gcp/.env.example deploy/gcp/.env
+chmod 600 deploy/gcp/.env
+# Fill GCP_PROJECT_ID, SPA_BUCKET, TF_STATE_BUCKET, INTERNAL_API_TOKEN, and
+# the optional settings in deploy/gcp/.env.
+
+npm run gcp:deploy -- --all
 ```
 
-Optional env: `REGION`, `AR_REPO`, `IMAGE_TAG`, `FIRESTORE_LOCATION`, `SPA_ORIGIN`,
-`FIREBASE_ALLOWED_DOMAIN` (empty = any verified user), `GITHUB_TOKEN`,
-`LANGSMITH_API_KEY`, `SKIP_BUILD=1` (reuse pushed images), plus
-`EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`,
-`EMAIL_SMTP_PASSWORD`, and `EMAIL_FROM` for transactional email. The script
-defaults `EMAIL_PUBLIC_APP_URL` to the exact GCS `index.html` URL it publishes;
-override it only when a custom domain/CDN serves the SPA. It prints the gateway
-URL + SPA URL and the Firebase authorized domains to register.
+Pass `REPO=owner/repo` to the bootstrap only when the manual GitHub wrappers are
+also wanted. That additionally creates the deployer service account and WIF
+binding and writes the wrapper's repository variables/secrets through the
+ambient `gh` login. No service-account key is created.
 
-### Deploy — CI (Cloud Build)
+### Subsequent deployments — canonical local command
 
-`gcloud builds submit --config cloudbuild.yaml --substitutions=_BUCKET=...,_TF_STATE_BUCKET=...`
-runs the same build → SPA-publish → staged `terraform apply` in Cloud Build.
-Seed the required agent Secret Manager versions first (the one-shot/bootstrap
-scripts do this for you). SMTP credentials use the acyclic flow below.
+The local script computes the same path-sensitive work plan formerly embedded
+in GitHub Actions:
 
-The Cloud Build bootstrap owns the empty `email-smtp-user` and
-`email-smtp-password` secret containers. It never reads SMTP values and never
-passes them through Terraform state. If both secrets already have an enabled
-version, the pipeline mounts both as `latest`; if neither does, it deploys with
-SMTP authentication disabled. A partial pair fails before the full apply. On a
-brand-new Cloud Build-only project, let the first build create the containers,
-add both versions with `gcloud secrets versions add`, then rerun the build. The
-`_EMAIL_PUBLIC_APP_URL` substitution defaults to the GCS `index.html` object
-published by that same build.
+```bash
+npm run gcp:deploy -- --plan          # print the HEAD^...HEAD plan; no cloud calls
+npm run gcp:deploy                    # deploy only that plan
+npm run gcp:deploy -- --since <ref>   # compare merge-base(<ref>, HEAD) with HEAD
+npm run gcp:deploy -- --all           # rebuild/deploy the complete stack
+```
 
-For a direct Terraform apply, set `email_public_app_url` explicitly to the SPA
-that was actually published and set `email_smtp_auth_enabled=true` only after
-both SMTP secrets have an enabled version. Terraform intentionally fails the
-email-service plan when the public URL is empty, instead of guessing a Firebase
-Hosting URL.
+The no-argument `HEAD^` default intentionally covers only the newest commit.
+If manual deployment has lagged by more than one commit, use
+`--since <last-successfully-deployed-ref>` so every accumulated path change is
+planned, or use `--all` for full convergence.
 
-### After either path
+Configuration is loaded from the gitignored `deploy/gcp/.env`; use
+`--env-file <path>` for another trusted assignment file. A real deployment
+requires a clean, committed worktree and ambient `gcloud`/`gsutil` credentials.
+The deploy revision must resolve to a full 40-character SHA. The command holds
+both a host-local lock and a generation-fenced object in `TF_STATE_BUCKET` for
+the complete mutating run, which prevents a local operator and the manual
+GitHub wrapper from publishing or applying concurrently. Inspect a stale lock
+before removing it manually.
+
+Changed service images are built and pushed with that immutable SHA. When
+Terraform runs, unchanged services retain the full immutable tag resolved from
+their live Cloud Run revision; failure to resolve such a tag stops the apply.
+The proxy image is included whenever Terraform is required. The script then
+runs one complete `terraform apply` with the resolved per-service tags and the
+configuration from `.env`.
+
+SPA work is staged under a temporary directory, obfuscated, given a generated
+gateway `config.js`, and published with Firebase Hosting. Neither
+`public/config.js` nor another tracked source file is changed. A SPA-only plan
+does not apply Terraform, while an infrastructure or image plan does.
+
+The optional `cloudbuild.yaml` remains available as a separately submitted,
+manual GCP pipeline:
+
+```bash
+gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=_BUCKET=...,_TF_STATE_BUCKET=...
+```
+
+It is not invoked by the local command or by a repository event.
+
+### Manual GitHub alternative
+
+`.github/workflows/deploy.yml` is a `workflow_dispatch`-only wrapper around
+`npm run gcp:deploy`. It provides WIF authentication and deployment concurrency,
+but contains no second deployment implementation:
+
+```bash
+gh workflow run deploy.yml \
+  -f deploy_all=false \
+  -f changed_since=HEAD^
+
+# First deploy, region move, or explicit full convergence:
+gh workflow run deploy.yml -f deploy_all=true -f changed_since=HEAD^
+```
+
+It never runs from a push, merge, path change, tag, or schedule.
+
+### After either deployment path
 
 In the **Firebase console**: enable the **Google** sign-in provider
 (Authentication → Sign-in method), and add the printed gateway URL and the SPA's
-GCS origin to Authentication → Settings → **Authorized domains**.
+Firebase Hosting domain to Authentication → Settings → **Authorized domains**.
 
-## Skills registry (versioned, GCS + gcsfuse)
+## Skills registry (versioned, GCS + optional gcsfuse)
 
 The deep-agent **skills** (`packages/shared-core/src/agent/skills/<skill>/SKILL.md`) can
 be served from a **GCS bucket** instead of only the copy baked into the image, so a
@@ -153,47 +202,86 @@ skill edit ships without rebuilding/redeploying a service — and so multiple sk
   bundle `version`, `updatedAt`, and a per-skill `{ name, version }` list (mirrors
   `llm-presets.json`). The bundle `version` (e.g. `v1`) is the release token used
   everywhere below.
-- **CI publish** — `.github/workflows/publish-skills.yml` runs on any push touching
-  `packages/shared-core/src/agent/skills/**` (or `workflow_dispatch` with a `version`
-  input). It authenticates via WIF and `gsutil rsync`es the skills dir to
-  `gs://<bucket>/<version>/` (plus the manifest object). It derives `<bucket>` from
-  the `GCP_PROJECT_ID` repo variable the same way Terraform does
-  (`<project_id>-aifleet-skills`) — no `SKILLS_BUCKET` repo var is needed. On a push
-  the version is read from the manifest; each version lives under its own prefix, so
-  publishing a new one **never touches** an older prefix.
+- **Manual publish** — `npm run skills:publish` reads the version from the
+  manifest. An optional `--version` is an assertion and must match that
+  committed value. The command resolves the bucket from
+  `SKILLS_BUCKET` or `GCP_PROJECT_ID`, and mirrors the directory to
+  `gs://<bucket>/<version>/`. It refreshes both the version-scoped and top-level
+  manifest pointers. Deletion is confined to the selected version prefix;
+  older versions are never touched.
 - **Mount** — `deploy/gcp/terraform/skills.tf` **CREATES and owns** the bucket (name
   derived as `<project_id>-aifleet-skills`; override with `var.skills_bucket_name`,
   toggle the whole feature with `var.skills_enabled`, default `true`). It has
   uniform bucket-level access, object versioning, and public-access-prevention
-  **enforced** (no public access). Terraform mounts it **read-only** on the
-  **planner** and **coder** (control service + worker Job) via a gen2 **gcsfuse** GCS
-  volume at `/skills`. The planner/coder service accounts get `objectViewer`, and
-  the CI deployer gets `objectAdmin` when `var.skills_publisher_member` is set.
-- **Version-pinned install** — those services run with `SKILLS_ROOT=/skills` and
+  **enforced** (no public access). The planner/coder service accounts get
+  `objectViewer`, and an operator or manual-wrapper identity can receive
+  `objectAdmin` through `var.skills_publisher_member`.
+- **Version-pinned install** — when the separate `skills_mount_enabled` toggle is
+  enabled, Terraform mounts the bucket read-only on planner/coder via gen2
+  gcsfuse and those services run with `SKILLS_ROOT=/skills` and
   `SKILLS_VERSION=<var.skills_version>`. `packages/shared/src/config.js`
   `resolveSkillsSrc()` resolves the install source to `/skills/<version>`, and
-  `installSkills()` copies from there. **Backward-compat:** when `SKILLS_ROOT` is
-  unset (local/dev, or a project without the bucket) it falls back to the vendored
-  `packages/shared-core/src/agent/skills` — existing behavior, unchanged.
+  `installSkills()` copies from there. The mount defaults off while its coder
+  startup behavior is being validated; with it off, or when `SKILLS_ROOT` is
+  unset in local development, the runtime uses the vendored skills.
 
 **Cut a new skills version**
 
 1. Edit the skills and bump the manifest `version` (e.g. `v1` → `v2`) + the touched
    per-skill `version`; update `updatedAt`.
-2. Merge to `main`. `publish-skills.yml` publishes the new bundle to
-   `gs://<bucket>/v2/` — `v1` stays intact, so every deployment still pinned
-   to `v1` keeps working.
-3. Roll the deployment forward by bumping **`skills_version`** (Terraform var /
-   `gh variable set SKILLS_VERSION`) and applying. Only then do planner/coder read
-   `v2`. To roll back, set it to `v1` again — the objects are still there.
+2. Preview, then publish from a clean committed worktree using ambient `gcloud`
+   credentials:
+
+   ```bash
+   npm run skills:publish -- --version v2 --dry-run
+   npm run skills:publish -- --version v2
+   ```
+
+   With no `--version`, the command uses the manifest version; when supplied,
+   `--version` must match it. `v1` remains intact when `v2` is published. An
+   atomic bucket lock prevents this local
+   command from racing the manual GitHub wrapper or another operator.
+3. If the gcsfuse mount is enabled, set `SKILLS_VERSION=v2` in
+   `deploy/gcp/.env` and apply with `npm run gcp:deploy -- --all`. Only then do
+   planner/coder read `v2`. Restore `v1` and apply again to roll back.
 
 Set-up (one-off): nothing to pre-create — **Terraform creates the bucket** (name
-`<project_id>-aifleet-skills`) and grants the CI deployer write access when you set
-`var.skills_publisher_member` to the deployer SA. After the first `terraform apply`,
-publish an initial version by running the **Publish Skills Bundle** workflow
-(`workflow_dispatch`, `version = v1`) or by pushing a change under
-`packages/shared-core/src/agent/skills/**`. No `SKILLS_BUCKET` repo variable is
-required — the workflow derives the name from `GCP_PROJECT_ID`.
+`<project_id>-aifleet-skills`). `deploy/gcp/.env` may leave `SKILLS_BUCKET`
+empty to derive that name. After the first Terraform apply, publish the initial
+version with the local command above. The optional GitHub wrapper is manual-only:
+
+```bash
+gh workflow run publish-skills.yml -f version=v1
+```
+
+It invokes the same local command and is never triggered by a push or path change.
+
+## Harness registry (versioned, GCS)
+
+The harness registry publisher reads the pinned full-SHA sources in
+`packages/shared-core/src/agent/registry/sources.json`, builds fresh `original`
+and normalized `generic` trees in a temporary directory, and scans both for
+secret-like files and forbidden MCP `env`/`headers` fields before publication.
+The manifest's `version` selects the GCS prefix.
+
+```bash
+npm run registry:publish -- --dry-run  # clone, build, and scan; do not upload
+npm run registry:publish               # publish from a clean committed worktree
+```
+
+The real publish uses ambient `gcloud` credentials, mirrors only the selected
+`gs://<bucket>/<version>/` prefix, and refreshes
+`registry-manifest.json`. Configure `REGISTRY_BUCKET` in `deploy/gcp/.env`; it
+must match Terraform's `registry_bucket_name` (default `aifleet-registry`). Other
+version prefixes remain untouched. A bucket-backed atomic lock serializes the
+prefix and manifest update across machines. Inspect a stale `.locks/` object
+before removing it manually. The WIF-backed manual wrapper is:
+
+```bash
+gh workflow run sync-harness-registry.yml
+```
+
+There is no weekly schedule or other automatic trigger.
 
 ## Roles & access control (RBAC)
 
@@ -239,7 +327,7 @@ permission domains (`packages/shared/src/authz.js`):
 ## Verify a deploy
 
 - `curl https://<gateway>/healthz` → `{"status":"ok"}`.
-- Open the GCS SPA URL, sign in via Google, submit a planner/coder request, and
+- Open the Firebase Hosting SPA URL, sign in via Google, submit a planner/coder request, and
   confirm SSE steps stream in.
 - Confirm a direct unauthenticated call to the planner/coder URL is rejected,
   and that everything scales to zero when idle.

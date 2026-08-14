@@ -11,7 +11,7 @@
  *   <out>/<version>/generic/    normalized tree + registry.json
  *   <out>/registry-manifest.json
  *
- * The weekly GitHub Action calls this, then publishes <out>/<version> to GCS.
+ * The manual registry publisher calls this, then publishes <out>/<version> to GCS.
  *
  *   node scripts/build-harness-registry.js --dry-run
  *   node scripts/build-harness-registry.js --out ./registry-bundle-out

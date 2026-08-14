@@ -1,7 +1,7 @@
 {
   "version": "v1",
   "updatedAt": "2026-08-12",
-  "_note": "Source-of-truth for the weekly harness-registry sync. Marketplaces are cloned at the pinned `ref` (full sha). All marketplaces here are PUBLIC — no clone auth is needed.",
+  "_note": "Source of truth for the manually run harness-registry sync. Marketplaces are cloned at the pinned `ref` (full sha). All marketplaces here are PUBLIC — no clone auth is needed.",
   "marketplaces": {
     "ecc": {
       "url": "https://github.com/affaan-m/everything-claude-code.git",

@@ -91,23 +91,34 @@ per-tenant ticks are identified by their `<name>-<slug>` instead.)
 Disabled by default (`provisioning_enabled=false` / `PROVISIONING_ENABLED=false`).
 To turn it on:
 
-1. **Build the provisioner image.** A `services/provisioner/**` or `packages/shared/**`
-   change builds it automatically; otherwise run the deploy workflow with
-   `deploy_all=true` (or a full `cloudbuild.yaml` run).
+1. **Bootstrap and configure local deployment.** Run `deploy/gcp/bootstrap.sh`
+   once, copy `deploy/gcp/.env.example` to the ignored `deploy/gcp/.env`, and
+   authenticate with `gcloud`. A selective `npm run gcp:deploy` includes the
+   provisioner when its service/shared code changed; use
+   `npm run gcp:deploy -- --all` for first enablement so every required image
+   exists.
 2. **Set an internal token.** Terraform var `internal_api_token` (a strong random
-   string). This creates the `internal-api-token` secret and grants both the
-   provisioner and the org service accessor. Terraform separately generates an
-   organization-token HMAC root that only settings and the provisioner can read;
-   each cloned proxy receives only its own derived organization bearer.
-3. **Flip the flag.** Terraform var `provisioning_enabled=true`, then apply
-   (a `deploy_all=true` run applies it). This creates `provisioner-sa` (+ its
-   least-privilege roles), the `tenant-provision-requests` topic + push
+   string), supplied as `INTERNAL_API_TOKEN` in `deploy/gcp/.env`. This creates
+   the `internal-api-token` secret and grants both the provisioner and the org
+   service accessor. Terraform separately generates an organization-token HMAC
+   root that only settings and the provisioner can read; each cloned proxy
+   receives only its own derived organization bearer.
+3. **Flip the flag and apply.** Set `PROVISIONING_ENABLED=true` in
+   `deploy/gcp/.env`, then run `npm run gcp:deploy -- --all`. This creates
+   `provisioner-sa` (+ its least-privilege roles), the
+   `tenant-provision-requests` topic + push
    subscription + DLQ, and the internal provisioner service; it also injects
    `PROVISIONING_ENABLED=true` + `INTERNAL_API_TOKEN` into the org service.
 4. **Verify in a scratch project first** — create an org, watch
    `deployments.status` go `provisioning → provisioned`, confirm `gw-<slug>`
    serves and `pl-/cc-<slug>` reject unauthenticated calls, then delete the org
    and confirm teardown.
+
+The WIF-backed GitHub alternative is also manual: set the
+`PROVISIONING_ENABLED=true` repository variable and the `INTERNAL_API_TOKEN`
+secret, then run
+`gh workflow run deploy.yml -f deploy_all=true -f changed_since=HEAD^`. No push
+or path change enables or deploys provisioning automatically.
 
 ## Caveats
 

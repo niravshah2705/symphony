@@ -14,12 +14,12 @@ Auto-generated documentation from the code knowledge graph community structure.
 | core-org | 456 | [core-org.md](core-org.md) |
 | e2e-json | 88 | [e2e-json.md](e2e-json.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
-| gcp-image | 30 | [gcp-image.md](gcp-image.md) |
+| gcp-tag | 55 | [gcp-tag.md](gcp-tag.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
 | pipeline-stage | 616 | [pipeline-stage.md](pipeline-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
 | routes-test:planner | 179 | [routes-test-planner.md](routes-test-planner.md) |
-| scripts-module | 34 | [scripts-module.md](scripts-module.md) |
+| scripts-cli | 102 | [scripts-cli.md](scripts-cli.md) |
 | src-auth | 296 | [src-auth.md](src-auth.md) |
 | src-back | 17 | [src-back.md](src-back.md) |
 | src-body | 17 | [src-body.md](src-body.md) |

@@ -1,25 +1,18 @@
 name: Deploy to GCP
 
-# Continuous deployment on every merge to main — but PATH-FILTERED so a merge
-# only does the work it needs:
-#   • a service's code changed  → rebuild ONLY that image, then a per-service
-#                                  `terraform apply` rolls ONLY that service.
-#   • shared packages changed → rebuild all service images.
-#   • root deps changed → rebuild all service images + republish the SPA.
-#   • deploy/gcp/terraform/** changed → `terraform apply` only (no image rebuild).
-#   • SPA source, config, or release tooling changed → Firebase Hosting deploy.
-#   • docs / anything else → nothing runs.
-#
-# Auth is keyless via Workload Identity Federation — see docs/GCP_CICD.md.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       deploy_all:
-        description: "Force rebuild + apply everything (ignore path filters)"
+        description: Force rebuild and deploy of every component
         type: boolean
+        required: true
         default: false
+      changed_since:
+        description: Last deployed ref (HEAD^ covers only the newest commit)
+        type: string
+        required: true
+        default: HEAD^
 
 # Never run two applies against the same Terraform state at once.
 concurrency:
@@ -28,383 +21,65 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write # required for Workload Identity Federation
-
-env:
-  REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
-  AR_REPO: ai-fleet
-  TF_DIR: deploy/gcp/terraform
-  TF_STATE_PREFIX: ai-fleet/gcp
+  id-token: write
 
 jobs:
-  # --------------------------------------------------------------------------
-  # 1. Decide what changed and build the work plan (a JSON list of services to
-  #    rebuild + whether the SPA / Terraform steps need to run at all).
-  # --------------------------------------------------------------------------
-  changes:
+  deploy:
     runs-on: ubuntu-latest
-    outputs:
-      services: ${{ steps.plan.outputs.services }} # JSON array of {id,image,dockerfile}
-      spa: ${{ steps.plan.outputs.spa }}
-      run_terraform: ${{ steps.plan.outputs.run_terraform }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: dorny/paths-filter@v3
-        id: filter
         with:
-          filters: |
-            shared:  ['packages/shared/**', 'packages/shared-core/**']
-            gateway: ['services/gateway/**', 'deploy/gcp/Dockerfile.gateway']
-            planner: ['services/planner/**', 'deploy/gcp/Dockerfile.planner']
-            coder:   ['services/coder/**',   'deploy/gcp/Dockerfile.coder']
-            orchestrator: ['services/orchestrator/**', 'deploy/gcp/Dockerfile.orchestrator']
-            tester:       ['services/tester/**',       'deploy/gcp/Dockerfile.tester']
-            deployer:     ['services/deployer/**',     'deploy/gcp/Dockerfile.deployer']
-            provisioner: ['services/provisioner/**', 'deploy/gcp/Dockerfile.provisioner']
-            proxy:   ['services/proxy/**',   'deploy/gcp/Dockerfile.proxy']
-            # A release-tooling change must publish the newly transformed SPA;
-            # otherwise an obfuscator/default change would wait for an unrelated
-            # public/** edit before reaching production.
-            spa:     ['public/**', 'firebase.json', 'scripts/obfuscate-spa.js', 'package.json', 'package-lock.json', '.github/workflows/deploy.yml']
-            infra:    ['deploy/gcp/terraform/**']
-            root:     ['package.json', 'package-lock.json']
-            org:      ['services/org/**']
-            settings: ['services/settings/**']
-            email:    ['services/email/**', 'deploy/gcp/Dockerfile.email']
-
-      - id: plan
-        env:
-          FORCE_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_all }}
-          SHARED: ${{ steps.filter.outputs.shared }}
-          ROOT: ${{ steps.filter.outputs.root }}
-          GATEWAY: ${{ steps.filter.outputs.gateway }}
-          PLANNER: ${{ steps.filter.outputs.planner }}
-          CODER: ${{ steps.filter.outputs.coder }}
-          ORCHESTRATOR: ${{ steps.filter.outputs.orchestrator }}
-          TESTER: ${{ steps.filter.outputs.tester }}
-          DEPLOYER: ${{ steps.filter.outputs.deployer }}
-          PIPELINE_ENABLED: ${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}
-          PROVISIONER: ${{ steps.filter.outputs.provisioner }}
-          PROXY: ${{ steps.filter.outputs.proxy }}
-          SPA: ${{ steps.filter.outputs.spa }}
-          INFRA: ${{ steps.filter.outputs.infra }}
-          ORG: ${{ steps.filter.outputs.org }}
-          SETTINGS: ${{ steps.filter.outputs.settings }}
-          EMAIL: ${{ steps.filter.outputs.email }}
-        run: |
-          set -euo pipefail
-          # A shared-code / root-deps change (or a forced run) rebuilds the Node
-          # services. The org service is an independent Python app.
-          all=false
-          if [ "$FORCE_ALL" = "true" ] || [ "$SHARED" = "true" ] || [ "$ROOT" = "true" ]; then all=true; fi
-
-          services='[]'
-          push() { services=$(printf '%s' "$services" | jq -c \
-            --arg id "$1" --arg image "$2" --arg df "$3" --arg ctx "$4" \
-            '. + [{id:$id, image:$image, dockerfile:$df, context:$ctx}]'); }
-
-          if [ "$all" = "true" ] || [ "$GATEWAY" = "true" ]; then push gateway gateway       deploy/gcp/Dockerfile.gateway . ; fi
-          if [ "$all" = "true" ] || [ "$PLANNER" = "true" ]; then push planner planner       deploy/gcp/Dockerfile.planner . ; fi
-          if [ "$all" = "true" ] || [ "$CODER"   = "true" ]; then push coder   coder-control deploy/gcp/Dockerfile.coder   . ; fi
-          if [ "$all" = "true" ] || [ "$ORCHESTRATOR" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push orchestrator pipeline-orchestrator deploy/gcp/Dockerfile.orchestrator . ; fi
-          if [ "$all" = "true" ] || [ "$TESTER" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push tester pipeline-tester deploy/gcp/Dockerfile.tester . ; fi
-          if [ "$all" = "true" ] || [ "$DEPLOYER" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push deployer pipeline-deployer deploy/gcp/Dockerfile.deployer . ; fi
-          if [ "$all" = "true" ] || [ "$EMAIL"   = "true" ]; then push email   email-service deploy/gcp/Dockerfile.email   . ; fi
-          # The provisioner is a Node service (rebuilds on shared/root/force too).
-          # Its image is built even while provisioning is disabled so enabling is a
-          # one-var flip; terraform only creates the service when provisioning_enabled.
-          if [ "$all" = "true" ] || [ "$PROVISIONER" = "true" ]; then push provisioner provisioner deploy/gcp/Dockerfile.provisioner . ; fi
-          # The org service builds from its own directory (its Dockerfile expects
-          # services/org as the build context).
-          if [ "$FORCE_ALL" = "true" ] || [ "$ORG" = "true" ]; then push org org-service services/org/Dockerfile services/org ; fi
-          # Settings consumes the canonical shared-core harness catalog, so a
-          # shared/root dependency change must rebuild it from the repo root too.
-          if [ "$all" = "true" ] || [ "$SETTINGS" = "true" ]; then push settings settings-service services/settings/Dockerfile . ; fi
-
-          spa=false
-          if [ "$FORCE_ALL" = "true" ] || [ "$SPA" = "true" ]; then spa=true; fi
-
-          # Terraform runs when infra changed OR any image was rebuilt (rolling a
-          # new image is a `terraform apply`). A SPA-only or docs-only change skips it.
-          run_tf=false
-          if [ "$FORCE_ALL" = "true" ] || [ "$INFRA" = "true" ] || [ "$PROXY" = "true" ] || [ "$services" != "[]" ]; then run_tf=true; fi
-
-          # Egress proxy sidecar image: built whenever terraform will run so the
-          # image the sidecar references ALWAYS exists at this SHA. Harmless when
-          # egress_proxy_enabled is off — terraform simply doesn't reference it.
-          # (Like the provisioner, it is built even while the feature can be off so
-          # turning it on is a one-var flip.)
-          if [ "$run_tf" = "true" ]; then push proxy proxy deploy/gcp/Dockerfile.proxy . ; fi
-
-          {
-            echo "services=$services"
-            echo "spa=$spa"
-            echo "run_terraform=$run_tf"
-          } >> "$GITHUB_OUTPUT"
-
-          echo "Plan → services=$services  spa=$spa  run_terraform=$run_tf"
-
-  # --------------------------------------------------------------------------
-  # 2a. Build + push ONLY the changed service images (one matrix leg each).
-  #     Push-only; the terraform job below actually rolls them.
-  # --------------------------------------------------------------------------
-  build:
-    needs: changes
-    if: needs.changes.outputs.services != '[]'
-    runs-on: ubuntu-latest
-    name: build ${{ matrix.svc.id }}
-    strategy:
-      fail-fast: true
-      matrix:
-        svc: ${{ fromJSON(needs.changes.outputs.services) }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
-
-      - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Ensure Artifact Registry repo exists
-        run: |
-          gcloud artifacts repositories describe "$AR_REPO" \
-            --project "${{ vars.GCP_PROJECT_ID }}" --location "$REGION" >/dev/null 2>&1 \
-          || gcloud artifacts repositories create "$AR_REPO" \
-            --project "${{ vars.GCP_PROJECT_ID }}" --location "$REGION" --repository-format=docker
-
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" -q
-
-      - name: Build & push ${{ matrix.svc.id }}
-        run: |
-          set -euo pipefail
-          IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${AR_REPO}/${{ matrix.svc.image }}:${GITHUB_SHA}"
-          docker build -f "${{ matrix.svc.dockerfile }}" -t "$IMAGE" "${{ matrix.svc.context }}"
-          docker push "$IMAGE"
-          echo "Pushed $IMAGE"
-
-  # --------------------------------------------------------------------------
-  # 2b. Deploy the SPA to Firebase Hosting when source or release tooling changed.
-  # --------------------------------------------------------------------------
-  deploy-spa:
-    needs: changes
-    if: needs.changes.outputs.spa == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: "22"
           cache: npm
-
       - id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOYER_SA }}
-
       - uses: google-github-actions/setup-gcloud@v2
-
-      # Obfuscate the SPA's client JS before it ships. Rewrites public/js/** in
-      # this ephemeral checkout only (source in git stays readable); config.js is
-      # regenerated below and vendor/ is left untouched. Strength preset is set by
-      # the SPA_OBFUSCATION_STRENGTH repo variable (light|balanced|maximum),
-      # defaulting to light. See scripts/obfuscate-spa.js.
-      - name: Obfuscate SPA client JS
-        env:
-          SPA_OBFUSCATION_STRENGTH: ${{ vars.SPA_OBFUSCATION_STRENGTH || 'light' }}
-        run: |
-          set -euo pipefail
-          npm ci --no-audit --no-fund --ignore-scripts
-          node scripts/obfuscate-spa.js --in-place
-
-      - name: Deploy SPA to Firebase Hosting
-        run: |
-          set -euo pipefail
-          PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
-          GATEWAY_URL="https://${{ vars.GATEWAY_SERVICE_NAME || 'gateway' }}-${PROJECT_NUMBER}.${REGION}.run.app"
-          # api.js imports this runtime module before reading the base URL. Start
-          # the gateway connection here so DNS/TLS can overlap module evaluation.
-          printf '%s\n' \
-            "window.__API_BASE__='$GATEWAY_URL';" \
-            "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
-            > public/config.js
-          npx --yes firebase-tools@13 deploy --only hosting \
-            --project "${{ vars.GCP_PROJECT_ID }}" --non-interactive
-
-  # --------------------------------------------------------------------------
-  # 3. Terraform apply. Rolls the rebuilt service(s) to the new SHA and applies
-  #    any infra change. UNCHANGED services keep their currently-deployed tag,
-  #    so apply is a no-op for them. Runs after (any) builds finish.
-  # --------------------------------------------------------------------------
-  terraform:
-    needs: [changes, build]
-    if: |
-      always() &&
-      needs.changes.outputs.run_terraform == 'true' &&
-      needs.build.result != 'failure' && needs.build.result != 'cancelled'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
-
-      - uses: google-github-actions/setup-gcloud@v2
-
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"
           terraform_wrapper: false
-
-      - name: Resolve per-service image tags
-        id: tags
+      - name: Deploy
         env:
-          SERVICES: ${{ needs.changes.outputs.services }}
-          PIPELINE_ENABLED: ${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}
+          DEPLOY_ALL: ${{ inputs.deploy_all }}
+          CHANGED_SINCE: ${{ inputs.changed_since }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
+          REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
+          AR_REPO: ${{ vars.AR_REPO || 'ai-fleet' }}
+          DOCKER_PLATFORM: ${{ vars.DOCKER_PLATFORM || 'linux/amd64' }}
+          TF_DIR: deploy/gcp/terraform
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_STATE_PREFIX: ${{ vars.TF_STATE_PREFIX || 'ai-fleet/gcp' }}
+          SPA_BUCKET: ${{ vars.SPA_BUCKET }}
+          FIRESTORE_LOCATION: ${{ vars.FIRESTORE_LOCATION || 'nam5' }}
+          SPA_ORIGIN: ${{ vars.SPA_ORIGIN }}
+          GATEWAY_SERVICE_NAME: ${{ vars.GATEWAY_SERVICE_NAME || 'gateway' }}
+          FIREBASE_ALLOWED_DOMAIN: ${{ vars.FIREBASE_ALLOWED_DOMAIN }}
+          AUTH_ADMIN_EMAILS: ${{ vars.AUTH_ADMIN_EMAILS }}
+          AUTH_DEFAULT_ROLE: ${{ vars.AUTH_DEFAULT_ROLE || 'viewer' }}
+          GOOGLE_ONE_TAP_CLIENT_ID: ${{ vars.GOOGLE_ONE_TAP_CLIENT_ID }}
+          SKILLS_BUCKET: ${{ vars.SKILLS_BUCKET }}
+          SKILLS_VERSION: ${{ vars.SKILLS_VERSION || 'v1' }}
+          REGISTRY_BUCKET: ${{ vars.REGISTRY_BUCKET || 'aifleet-registry' }}
+          SPA_OBFUSCATION_STRENGTH: ${{ vars.SPA_OBFUSCATION_STRENGTH || 'light' }}
+          EGRESS_PROXY_ENABLED: "true"
           PROVISIONING_ENABLED: ${{ vars.PROVISIONING_ENABLED || 'false' }}
-        run: |
-          set -euo pipefail
-          PROJECT="${{ vars.GCP_PROJECT_ID }}"
-
-          # A service that was rebuilt this run deploys at the new SHA; one that
-          # was NOT rebuilt keeps whatever tag is live now (→ apply no-op for it).
-          built() { printf '%s' "$SERVICES" | jq -e --arg id "$1" 'any(.[]; .id == $id)' >/dev/null; }
-          release_tag() { # <tag> <source-description>
-            if [[ ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "Refusing non-immutable image tag from $2" >&2
-              return 1
-            fi
-            printf '%s\n' "$1"
-          }
-          live_tag() {
-            local image tag
-            image="$(gcloud run services describe "$1" --project "$PROJECT" --region "$REGION" \
-              --format='value(spec.template.spec.containers[0].image)')"
-            tag="${image##*:}"
-            if [ -z "$image" ] || [ -z "$tag" ] || [ "$tag" = "$image" ]; then
-              echo "Unable to resolve immutable live image tag for $1" >&2
-              return 1
-            fi
-            release_tag "$tag" "live Cloud Run service $1"
-          }
-          resolve() { # <plan-id> <cloud-run-service-name>
-            if built "$1"; then release_tag "$GITHUB_SHA" "current GitHub revision"; else live_tag "$2"; fi
-          }
-          resolve_optional() { # <plan-id> <cloud-run-service-name> <enabled>
-            if built "$1"; then
-              release_tag "$GITHUB_SHA" "current GitHub revision"
-              return
-            fi
-            case "$3" in
-              true) live_tag "$2" ;;
-              false)
-                # Terraform does not dereference this placeholder while the
-                # optional resource has count=0. Keep it syntactically and
-                # semantically equivalent to every other release tag anyway.
-                release_tag "$GITHUB_SHA" "disabled optional service $2"
-                ;;
-              *)
-                echo "Invalid enablement flag for optional service $2: $3" >&2
-                return 1
-                ;;
-            esac
-          }
-          write_tag() { # <output-name> <resolver> [resolver-args...]
-            local output_name="$1" tag
-            shift
-            if ! tag="$("$@")"; then
-              echo "Unable to resolve image tag output $output_name" >&2
-              return 1
-            fi
-            printf '%s=%s\n' "$output_name" "$tag"
-          }
-
-          {
-            write_tag gateway resolve gateway gateway
-            write_tag planner resolve planner planner
-            write_tag coder resolve coder coder-control
-            write_tag orchestrator resolve_optional orchestrator pipeline-orchestrator "$PIPELINE_ENABLED"
-            write_tag tester resolve_optional tester pipeline-tester "$PIPELINE_ENABLED"
-            write_tag deployer resolve_optional deployer pipeline-deployer "$PIPELINE_ENABLED"
-            write_tag provisioner resolve_optional provisioner provisioner "$PROVISIONING_ENABLED"
-            # The proxy is a SIDECAR (no standalone Cloud Run service to query a
-            # live tag from), but it is built on every terraform-running deploy
-            # (see the plan step), so it always resolves to the current SHA here.
-            write_tag proxy resolve proxy proxy
-            write_tag org resolve org org-service
-            write_tag settings resolve settings settings-service
-            write_tag email resolve email email-service
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Terraform init
-        working-directory: ${{ env.TF_DIR }}
-        run: |
-          terraform init -input=false \
-            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
-            -backend-config="prefix=${TF_STATE_PREFIX}"
-
-      - name: Terraform apply
-        working-directory: ${{ env.TF_DIR }}
-        env:
-          # Sensitive Terraform input stays out of the command line and logs.
-          TF_VAR_internal_api_token: ${{ secrets.INTERNAL_API_TOKEN }}
-        run: |
-          set -euo pipefail
-          PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
-          GATEWAY_URL="https://${{ vars.GATEWAY_SERVICE_NAME || 'gateway' }}-${PROJECT_NUMBER}.${REGION}.run.app"
-
-          # Every service tag above is either this run's immutable SHA or a
-          # successfully resolved live tag. An unresolved tag aborts deployment.
-          apply_args=(
-            -var="project_id=${{ vars.GCP_PROJECT_ID }}"
-            -var="region=${REGION}"
-            -var="artifact_repo=${AR_REPO}"
-            -var="spa_bucket_name=${{ vars.SPA_BUCKET }}"
-            -var="firestore_location=${{ vars.FIRESTORE_LOCATION || 'nam5' }}"
-            -var="spa_origin=${{ vars.SPA_ORIGIN || 'https://storage.googleapis.com' }}"
-            -var="api_base_url=${GATEWAY_URL}"
-            -var="firebase_allowed_domain=${{ vars.FIREBASE_ALLOWED_DOMAIN }}"
-            -var="auth_admin_emails=${{ vars.AUTH_ADMIN_EMAILS }}"
-            -var="auth_default_role=${{ vars.AUTH_DEFAULT_ROLE || 'viewer' }}"
-            -var="google_one_tap_client_id=${{ vars.GOOGLE_ONE_TAP_CLIENT_ID }}"
-            -var="skills_bucket_name=${{ vars.SKILLS_BUCKET }}"
-            -var="skills_version=${{ vars.SKILLS_VERSION || 'v1' }}"
-            -var="egress_proxy_enabled=true"
-            -var="provisioning_enabled=${{ vars.PROVISIONING_ENABLED || 'false' }}"
-            -var="pipeline_orchestrator_enabled=${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}"
-            -var="pipeline_deployment_enabled=${{ vars.PIPELINE_DEPLOYMENT_ENABLED || 'false' }}"
-            -var="settings_operator_invoker=${{ vars.SETTINGS_OPERATOR_INVOKER }}"
-            -var="email_smtp_host=${{ vars.EMAIL_SMTP_HOST }}"
-            -var="email_smtp_port=${{ vars.EMAIL_SMTP_PORT || '587' }}"
-            -var="email_smtp_secure=${{ vars.EMAIL_SMTP_SECURE || 'false' }}"
-            -var="email_smtp_require_tls=${{ vars.EMAIL_SMTP_REQUIRE_TLS || 'true' }}"
-            -var="email_smtp_auth_enabled=${{ vars.EMAIL_SMTP_AUTH_ENABLED || 'false' }}"
-            -var="email_from=${{ vars.EMAIL_FROM }}"
-            -var="email_public_app_url=${{ vars.EMAIL_PUBLIC_APP_URL }}"
-          )
-          [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
-          [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
-          [ -n "${{ steps.tags.outputs.coder }}" ]   && apply_args+=(-var="coder_image_tag=${{ steps.tags.outputs.coder }}") || true
-          [ -n "${{ steps.tags.outputs.orchestrator }}" ] && apply_args+=(-var="orchestrator_image_tag=${{ steps.tags.outputs.orchestrator }}") || true
-          [ -n "${{ steps.tags.outputs.tester }}" ] && apply_args+=(-var="tester_image_tag=${{ steps.tags.outputs.tester }}") || true
-          [ -n "${{ steps.tags.outputs.deployer }}" ] && apply_args+=(-var="deployer_image_tag=${{ steps.tags.outputs.deployer }}") || true
-          [ -n "${{ steps.tags.outputs.provisioner }}" ] && apply_args+=(-var="provisioner_image_tag=${{ steps.tags.outputs.provisioner }}") || true
-          [ -n "${{ steps.tags.outputs.proxy }}" ] && apply_args+=(-var="proxy_image_tag=${{ steps.tags.outputs.proxy }}") || true
-          [ -n "${{ steps.tags.outputs.org }}" ]     && apply_args+=(-var="org_image_tag=${{ steps.tags.outputs.org }}") || true
-          [ -n "${{ steps.tags.outputs.settings }}" ] && apply_args+=(-var="settings_image_tag=${{ steps.tags.outputs.settings }}") || true
-          [ -n "${{ steps.tags.outputs.email }}" ] && apply_args+=(-var="email_image_tag=${{ steps.tags.outputs.email }}") || true
-
-          terraform apply -input=false -auto-approve "${apply_args[@]}"
-
-      - name: Outputs
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform output
+          PIPELINE_ORCHESTRATOR_ENABLED: ${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}
+          PIPELINE_DEPLOYMENT_ENABLED: ${{ vars.PIPELINE_DEPLOYMENT_ENABLED || 'false' }}
+          SETTINGS_OPERATOR_INVOKER: ${{ vars.SETTINGS_OPERATOR_INVOKER }}
+          EMAIL_SMTP_HOST: ${{ vars.EMAIL_SMTP_HOST }}
+          EMAIL_SMTP_PORT: ${{ vars.EMAIL_SMTP_PORT || '587' }}
+          EMAIL_SMTP_SECURE: ${{ vars.EMAIL_SMTP_SECURE || 'false' }}
+          EMAIL_SMTP_REQUIRE_TLS: ${{ vars.EMAIL_SMTP_REQUIRE_TLS || 'true' }}
+          EMAIL_SMTP_AUTH_ENABLED: ${{ vars.EMAIL_SMTP_AUTH_ENABLED || 'false' }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          EMAIL_PUBLIC_APP_URL: ${{ vars.EMAIL_PUBLIC_APP_URL }}
+          INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+        run: npm run gcp:deploy

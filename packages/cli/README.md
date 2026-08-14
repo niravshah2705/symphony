@@ -79,34 +79,40 @@ The default gateway port comes from the shared `CONFIG.SERVICES.gatewayPort`
 
 ## Releasing
 
-Releases are cut by GitHub Actions (`.github/workflows/cli-release.yml`), which
-runs the unit tests, then packages and publishes a GitHub Release with three
-assets:
+The canonical release command runs locally from the repository root. It archives
+the exact committed `HEAD` into temporary staging, installs locked dependencies,
+runs the CLI unit tests, stamps the version only in staging, and builds three
+assets under `dist/adlc-v<version>/`:
 
 - `adlc.js` — a **self-contained bundle** (esbuild); runs on any Node ≥22 with
   no `npm install` (`chmod +x adlc.js && ./adlc.js status`)
 - `ai-fleet-cli-<version>.tgz` — the npm tarball (`bin/` + `src/`)
-- `SHA256SUMS` — checksums for both
+- `SHA256SUMS` — portable SHA-256 checksums for both
 
-**Cut a release** either way:
+The version must be valid SemVer, and both modes require a completely clean
+worktree. A real publish additionally requires an authenticated GitHub CLI
+(`gh auth login`); the release and its `adlc-v<version>` tag target the full
+40-character `HEAD` SHA in the repository identified by this checkout's
+`origin`. If the remote tag already exists, it must resolve to that same SHA.
 
-```bash
-# 1) push a version tag
-git tag adlc-v1.0.0 && git push origin adlc-v1.0.0
-
-# 2) or run it manually
-gh workflow run "Release adlc CLI" -f version=1.0.0
-```
-
-The version must be semver (`MAJOR.MINOR.PATCH`); the tag form is `adlc-v<version>`.
-
-**Test the pipeline locally** before tagging:
+Build and verify everything without contacting GitHub:
 
 ```bash
-npm ci
-node --test "packages/cli/src/**/*.test.js"          # unit tests (Node 22+ glob)
-npm pack -w @ai-fleet/cli --dry-run                  # inspect tarball contents
-npx --yes esbuild@0.24.2 packages/cli/bin/adlc.js \
-  --bundle --platform=node --target=node22 --format=cjs --outfile=dist/adlc.js
-node dist/adlc.js --help                             # bundle smoke test
+npm run cli:release -- --version 1.0.0 --dry-run
 ```
+
+Publish after reviewing those artifacts:
+
+```bash
+npm run cli:release -- --version 1.0.0
+```
+
+The script creates the GitHub Release; pushing a tag does not trigger a release.
+If GitHub-hosted execution is preferred, manually dispatch the thin wrapper:
+
+```bash
+gh workflow run cli-release.yml -f version=1.0.0
+```
+
+`cli-release.yml` is `workflow_dispatch`-only and invokes the same
+`npm run cli:release` command. It never runs from a push or tag.

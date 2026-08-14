@@ -3,27 +3,27 @@
 # One-time project bootstrap for a NEW ai-fleet customer / GCP project.
 # Idempotent — safe to re-run.
 # =============================================================================
-# Sets up everything the CD pipeline (.github/workflows/deploy.yml) and Terraform
-# need but cannot manage themselves (the bootstrap layer): enabled APIs, the
-# Terraform state bucket, the keyless deployer SA + roles, Workload Identity
-# Federation, the Pub/Sub service agent, seeded Secret Manager values, and the
-# GitHub repo secrets/variables. It also imports the seeded secrets into TF state
-# so the very first `git push` deploys cleanly (no chicken-and-egg on secret
-# versions).
+# Sets up everything the local/manual deployment and Terraform need but cannot
+# manage themselves (the bootstrap layer): enabled APIs, Terraform state, the
+# Pub/Sub service agent, and seeded Secret Manager values. When REPO=owner/repo
+# is provided it also configures the deployer SA, Workload Identity Federation,
+# and variables/secrets used by the manual GitHub wrapper.
 #
 # After this, only TWO things remain manual (both console-only):
 #   1. Link a BILLING account to the project.
 #   2. Firebase console -> Authentication -> enable the Google sign-in provider
 #      (creates the Google OAuth client; there is no API/Terraform to create it).
-# Then: push to main (first run: Actions -> Deploy to GCP -> Run workflow with
-# deploy_all=true so all images build), and CD does the rest.
+# Then run a full deployment locally, or dispatch the manual wrapper with
+# deploy_all=true, so every required image exists before Terraform applies.
 #
 # Usage:
-#   PROJECT_ID=my-proj REPO=owner/repo LINEAR_API_KEY=lin_... \
+#   PROJECT_ID=my-proj LINEAR_API_KEY=lin_... \
 #     ./deploy/gcp/bootstrap.sh
 #
-# Optional env: REGION (asia-south1), SPA_BUCKET (<project>-aifleet-spa),
-#   TF_STATE_BUCKET (<project>-tfstate), FIRESTORE_LOCATION (nam5),
+# Optional env: REPO (owner/repo, enables the GitHub manual wrapper),
+#   REGION (asia-south1), SPA_BUCKET (<project>-aifleet-spa),
+#   TF_STATE_BUCKET (<project>-tfstate), TF_STATE_PREFIX (ai-fleet/gcp),
+#   AR_REPO (ai-fleet), INTERNAL_API_TOKEN, FIRESTORE_LOCATION (nam5),
 #   SPA_ORIGIN (https://<project>.web.app), FIREBASE_ALLOWED_DOMAIN,
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, STREAM_TOKEN_SECRET (auto-generated if unset),
 #   EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_SMTP_HOST, EMAIL_SMTP_PORT,
@@ -31,12 +31,13 @@
 set -euo pipefail
 
 : "${PROJECT_ID:?set PROJECT_ID}"
-: "${REPO:?set REPO (the GitHub owner/repo the CD workflow lives in)}"
+REPO="${REPO:-}"
 
 REGION="${REGION:-asia-south1}"
 SPA_BUCKET="${SPA_BUCKET:-${PROJECT_ID}-aifleet-spa}"
 TF_STATE_BUCKET="${TF_STATE_BUCKET:-${PROJECT_ID}-tfstate}"
 TF_STATE_PREFIX="${TF_STATE_PREFIX:-ai-fleet/gcp}"
+AR_REPO="${AR_REPO:-ai-fleet}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://${PROJECT_ID}.web.app}"
 EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://${PROJECT_ID}.web.app}"
@@ -50,6 +51,14 @@ if { [ -n "${EMAIL_SMTP_USER:-}" ] && [ -z "${EMAIL_SMTP_PASSWORD:-}" ]; } || \
 fi
 
 log() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
+
+command -v gcloud >/dev/null 2>&1 || { echo "ERROR: gcloud is required" >&2; exit 1; }
+gcloud auth print-access-token >/dev/null 2>&1 \
+  || { echo "ERROR: run gcloud auth login before bootstrap" >&2; exit 1; }
+if command -v terraform >/dev/null 2>&1; then
+  gcloud auth application-default print-access-token >/dev/null 2>&1 \
+    || { echo "ERROR: Terraform requires: gcloud auth application-default login" >&2; exit 1; }
+fi
 
 PROJNUM="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 [ -n "$PROJNUM" ] || { echo "Cannot read project $PROJECT_ID — does it exist and are you authenticated?"; exit 1; }
@@ -71,40 +80,44 @@ gcloud storage buckets describe "gs://${TF_STATE_BUCKET}" >/dev/null 2>&1 \
        --location "$REGION" --uniform-bucket-level-access
 gcloud storage buckets update "gs://${TF_STATE_BUCKET}" --versioning >/dev/null 2>&1 || true
 
-# --- 3. Deployer service account + roles ------------------------------------
-log "Deployer SA ${DEPLOYER}"
-gcloud iam service-accounts describe "$DEPLOYER" --project "$PROJECT_ID" >/dev/null 2>&1 \
-  || gcloud iam service-accounts create gh-deployer --project "$PROJECT_ID" \
-       --display-name "GitHub Actions deployer"
-for role in \
-  roles/run.admin roles/cloudscheduler.admin roles/pubsub.admin \
-  roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin \
-  roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser \
-  roles/resourcemanager.projectIamAdmin roles/serviceusage.serviceUsageAdmin \
-  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin; do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:${DEPLOYER}" --role="$role" --condition=None >/dev/null
-done
-echo "  granted 15 roles"
+# --- 3-4. Optional GitHub deployer + Workload Identity Federation -----------
+WIF_PROVIDER=""
+if [ -n "$REPO" ]; then
+  log "Deployer SA ${DEPLOYER}"
+  gcloud iam service-accounts describe "$DEPLOYER" --project "$PROJECT_ID" >/dev/null 2>&1 \
+    || gcloud iam service-accounts create gh-deployer --project "$PROJECT_ID" \
+         --display-name "Manual GitHub Actions deployer"
+  for role in \
+    roles/run.admin roles/cloudscheduler.admin roles/pubsub.admin \
+    roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin \
+    roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser \
+    roles/resourcemanager.projectIamAdmin roles/serviceusage.serviceUsageAdmin \
+    roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin; do
+    gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+      --member="serviceAccount:${DEPLOYER}" --role="$role" --condition=None >/dev/null
+  done
+  echo "  granted 15 roles"
 
-# --- 4. Workload Identity Federation (bind the repo to the deployer SA) ------
-log "Workload Identity Federation for ${REPO}"
-gcloud iam workload-identity-pools describe github \
-  --project "$PROJECT_ID" --location global >/dev/null 2>&1 \
-  || gcloud iam workload-identity-pools create github \
-       --project "$PROJECT_ID" --location global --display-name "GitHub"
-gcloud iam workload-identity-pools providers describe github-oidc \
-  --project "$PROJECT_ID" --location global --workload-identity-pool github >/dev/null 2>&1 \
-  || gcloud iam workload-identity-pools providers create-oidc github-oidc \
-       --project "$PROJECT_ID" --location global --workload-identity-pool github \
-       --display-name "GitHub OIDC" \
-       --issuer-uri "https://token.actions.githubusercontent.com" \
-       --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository" \
-       --attribute-condition "assertion.repository=='${REPO}'"
-gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER" --project "$PROJECT_ID" \
-  --role roles/iam.workloadIdentityUser \
-  --member "principalSet://iam.googleapis.com/projects/${PROJNUM}/locations/global/workloadIdentityPools/github/attribute.repository/${REPO}" >/dev/null
-WIF_PROVIDER="projects/${PROJNUM}/locations/global/workloadIdentityPools/github/providers/github-oidc"
+  log "Workload Identity Federation for ${REPO}"
+  gcloud iam workload-identity-pools describe github \
+    --project "$PROJECT_ID" --location global >/dev/null 2>&1 \
+    || gcloud iam workload-identity-pools create github \
+         --project "$PROJECT_ID" --location global --display-name "GitHub"
+  gcloud iam workload-identity-pools providers describe github-oidc \
+    --project "$PROJECT_ID" --location global --workload-identity-pool github >/dev/null 2>&1 \
+    || gcloud iam workload-identity-pools providers create-oidc github-oidc \
+         --project "$PROJECT_ID" --location global --workload-identity-pool github \
+         --display-name "GitHub OIDC" \
+         --issuer-uri "https://token.actions.githubusercontent.com" \
+         --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository" \
+         --attribute-condition "assertion.repository=='${REPO}'"
+  gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER" --project "$PROJECT_ID" \
+    --role roles/iam.workloadIdentityUser \
+    --member "principalSet://iam.googleapis.com/projects/${PROJNUM}/locations/global/workloadIdentityPools/github/attribute.repository/${REPO}" >/dev/null
+  WIF_PROVIDER="projects/${PROJNUM}/locations/global/workloadIdentityPools/github/providers/github-oidc"
+else
+  log "Skipping GitHub WIF setup (set REPO=owner/repo to enable manual wrappers)"
+fi
 
 # --- 5. Pub/Sub service agent (mints OIDC push tokens; must exist for IAM) ---
 log "Pub/Sub service agent"
@@ -150,17 +163,39 @@ if [ "$EMAIL_SMTP_USER_READY" != "$EMAIL_SMTP_PASSWORD_READY" ]; then
 fi
 [ "$EMAIL_SMTP_USER_READY" = true ] && EMAIL_SMTP_AUTH_ENABLED=true
 
-# --- 7. GitHub repo secrets + variables -------------------------------------
-if command -v gh >/dev/null 2>&1; then
+# --- 7. GitHub repo secrets + variables (optional manual wrappers) ----------
+if [ -n "$REPO" ] && command -v gh >/dev/null 2>&1; then
   log "GitHub repo secrets + variables (${REPO})"
   gh secret   set GCP_WIF_PROVIDER    --repo "$REPO" --body "$WIF_PROVIDER"
   gh secret   set GCP_DEPLOYER_SA     --repo "$REPO" --body "$DEPLOYER"
+  if [ -n "${INTERNAL_API_TOKEN:-}" ]; then
+    # gh reads a secret from stdin when --body is omitted. Keep this
+    # control-plane credential out of argv and process listings.
+    printf '%s' "$INTERNAL_API_TOKEN" \
+      | gh secret set INTERNAL_API_TOKEN --repo "$REPO"
+  else
+    echo "  WARNING: set INTERNAL_API_TOKEN locally and as a GitHub secret before deploying"
+  fi
   gh variable set GCP_PROJECT_ID      --repo "$REPO" --body "$PROJECT_ID"
   gh variable set GCP_REGION          --repo "$REPO" --body "$REGION"
   gh variable set SPA_BUCKET          --repo "$REPO" --body "$SPA_BUCKET"
   gh variable set TF_STATE_BUCKET     --repo "$REPO" --body "$TF_STATE_BUCKET"
+  gh variable set TF_STATE_PREFIX     --repo "$REPO" --body "$TF_STATE_PREFIX"
+  gh variable set AR_REPO             --repo "$REPO" --body "$AR_REPO"
   gh variable set FIRESTORE_LOCATION  --repo "$REPO" --body "$FIRESTORE_LOCATION"
   gh variable set SPA_ORIGIN          --repo "$REPO" --body "$SPA_ORIGIN"
+  gh variable set GATEWAY_SERVICE_NAME --repo "$REPO" --body "${GATEWAY_SERVICE_NAME:-gateway}"
+  gh variable set AUTH_DEFAULT_ROLE   --repo "$REPO" --body "${AUTH_DEFAULT_ROLE:-viewer}"
+  gh variable set SKILLS_VERSION      --repo "$REPO" --body "${SKILLS_VERSION:-v1}"
+  gh variable set REGISTRY_BUCKET     --repo "$REPO" --body "${REGISTRY_BUCKET:-aifleet-registry}"
+  gh variable set SPA_OBFUSCATION_STRENGTH --repo "$REPO" --body "${SPA_OBFUSCATION_STRENGTH:-light}"
+  gh variable set PROVISIONING_ENABLED --repo "$REPO" --body "${PROVISIONING_ENABLED:-false}"
+  gh variable set PIPELINE_ORCHESTRATOR_ENABLED --repo "$REPO" --body "${PIPELINE_ORCHESTRATOR_ENABLED:-false}"
+  gh variable set PIPELINE_DEPLOYMENT_ENABLED --repo "$REPO" --body "${PIPELINE_DEPLOYMENT_ENABLED:-false}"
+  [ -n "${SKILLS_BUCKET:-}" ] && gh variable set SKILLS_BUCKET --repo "$REPO" --body "$SKILLS_BUCKET" || true
+  [ -n "${AUTH_ADMIN_EMAILS:-}" ] && gh variable set AUTH_ADMIN_EMAILS --repo "$REPO" --body "$AUTH_ADMIN_EMAILS" || true
+  [ -n "${GOOGLE_ONE_TAP_CLIENT_ID:-}" ] && gh variable set GOOGLE_ONE_TAP_CLIENT_ID --repo "$REPO" --body "$GOOGLE_ONE_TAP_CLIENT_ID" || true
+  [ -n "${SETTINGS_OPERATOR_INVOKER:-}" ] && gh variable set SETTINGS_OPERATOR_INVOKER --repo "$REPO" --body "$SETTINGS_OPERATOR_INVOKER" || true
   [ -n "${EMAIL_SMTP_HOST:-}" ] && gh variable set EMAIL_SMTP_HOST --repo "$REPO" --body "$EMAIL_SMTP_HOST" || true
   gh variable set EMAIL_SMTP_PORT --repo "$REPO" --body "${EMAIL_SMTP_PORT:-587}"
   gh variable set EMAIL_SMTP_SECURE --repo "$REPO" --body "${EMAIL_SMTP_SECURE:-false}"
@@ -170,16 +205,19 @@ if command -v gh >/dev/null 2>&1; then
   gh variable set EMAIL_PUBLIC_APP_URL --repo "$REPO" --body "$EMAIL_PUBLIC_APP_URL"
   [ -n "${FIREBASE_ALLOWED_DOMAIN:-}" ] && gh variable set FIREBASE_ALLOWED_DOMAIN --repo "$REPO" --body "$FIREBASE_ALLOWED_DOMAIN" || true
   echo "  set (FIREBASE_API_KEY is NOT needed — Terraform derives it from the web app)"
-else
+elif [ -n "$REPO" ]; then
   log "gh CLI not found — set these repo secrets/variables manually"
   echo "  secret GCP_WIF_PROVIDER = $WIF_PROVIDER"
   echo "  secret GCP_DEPLOYER_SA  = $DEPLOYER"
   echo "  vars: GCP_PROJECT_ID=$PROJECT_ID GCP_REGION=$REGION SPA_BUCKET=$SPA_BUCKET"
   echo "        TF_STATE_BUCKET=$TF_STATE_BUCKET FIRESTORE_LOCATION=$FIRESTORE_LOCATION SPA_ORIGIN=$SPA_ORIGIN"
+  echo "        TF_STATE_PREFIX=$TF_STATE_PREFIX AR_REPO=$AR_REPO"
   echo "        EMAIL_SMTP_AUTH_ENABLED=$EMAIL_SMTP_AUTH_ENABLED EMAIL_PUBLIC_APP_URL=$EMAIL_PUBLIC_APP_URL"
+else
+  log "Skipping GitHub variables (local-only bootstrap)"
 fi
 
-# --- 8. Import seeded secrets into TF state (so first `git push` applies clean)
+# --- 8. Import seeded secrets into TF state (so the first deploy applies clean)
 if command -v terraform >/dev/null 2>&1; then
   log "Importing secret containers into Terraform state"
   terraform -chdir="$TF_DIR" init -input=false -reconfigure \
@@ -196,10 +234,22 @@ if command -v terraform >/dev/null 2>&1; then
   tfimport 'google_secret_manager_secret.extra["langsmith-api-key"]' "projects/${PROJECT_ID}/secrets/langsmith-api-key"
   tfimport 'google_secret_manager_secret.email_smtp_user' "projects/${PROJECT_ID}/secrets/email-smtp-user"
   tfimport 'google_secret_manager_secret.email_smtp_password' "projects/${PROJECT_ID}/secrets/email-smtp-password"
+
+  # Record the Artifact Registry repository in Terraform state before any local
+  # or manual-wrapper image build. This avoids creating it imperatively and then
+  # colliding with Terraform on the first full apply.
+  log "Applying first-deploy Artifact Registry prerequisites"
+  terraform -chdir="$TF_DIR" apply -input=false -auto-approve \
+    -target=google_project_service.services \
+    -target=google_artifact_registry_repository.docker \
+    -var="project_id=${PROJECT_ID}" \
+    -var="region=${REGION}" \
+    -var="artifact_repo=${AR_REPO}" \
+    -var="spa_bucket_name=${SPA_BUCKET}" \
+    -var="email_public_app_url=${EMAIL_PUBLIC_APP_URL}"
 else
   log "terraform not found — skipping secret import"
-  echo "  Run the first deploy with ./deploy/gcp/deploy.sh instead of git push"
-  echo "  (it stages secret creation), then use git push for subsequent deploys."
+  echo "  Install Terraform and rerun bootstrap before the first deployment."
 fi
 
 # --- Done -------------------------------------------------------------------
@@ -216,7 +266,13 @@ TWO manual steps remain (console only):
      (Terraform manages the web app, Hosting and authorized domains; only the
       Google OAuth client must be created via this console toggle.)
 
-Then deploy: push to main. For the FIRST run, trigger it with all images built:
-  gh workflow run deploy.yml -f deploy_all=true --repo ${REPO}
+Configure deploy/gcp/.env from deploy/gcp/.env.example, then run the first
+deployment with every image built:
+  npm run gcp:deploy -- --all
 ────────────────────────────────────────────────────────────────────────────
 EOF
+
+if [ -n "$REPO" ]; then
+  echo "Or dispatch the manual GitHub wrapper:"
+  echo "  gh workflow run deploy.yml -f deploy_all=true --repo ${REPO}"
+fi
