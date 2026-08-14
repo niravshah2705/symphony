@@ -32,6 +32,7 @@ substitutions:
   _FIREBASE_ALLOWED_DOMAIN: "" # empty = any verified user
   _SPA_ORIGIN: "https://storage.googleapis.com"
   _SPA_OBFUSCATION_STRENGTH: "light" # light | balanced | maximum
+  _GOOGLE_ANALYTICS_MEASUREMENT_ID: "" # optional public GA4 id (G-...); empty = disabled
   _EMAIL_SMTP_HOST: ""
   _EMAIL_SMTP_PORT: "587"
   _EMAIL_SMTP_SECURE: "false"
@@ -338,6 +339,8 @@ steps:
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     waitFor: [tf-bootstrap, spa-obfuscate]
     entrypoint: bash
+    env:
+      - "GOOGLE_ANALYTICS_MEASUREMENT_ID=${_GOOGLE_ANALYTICS_MEASUREMENT_ID}"
     args:
       - -c
       - |
@@ -345,10 +348,15 @@ steps:
         PROJECT_NUMBER="$$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
         GATEWAY_URL="https://${_GATEWAY_SERVICE}-$${PROJECT_NUMBER}.${_REGION}.run.app"
         echo "Gateway URL: $${GATEWAY_URL}"
+        if [[ -n "$${GOOGLE_ANALYTICS_MEASUREMENT_ID}" && ! "$${GOOGLE_ANALYTICS_MEASUREMENT_ID}" =~ ^G-[A-Z0-9]+$$ ]]; then
+          echo "GOOGLE_ANALYTICS_MEASUREMENT_ID must be empty or a GA4 id such as G-XXXXXXXXXX." >&2
+          exit 1
+        fi
         # Match the Firebase deploy path: api.js imports this runtime module,
-        # which exposes the API base and warms its origin before client calls.
+        # which exposes public SPA config and warms the API origin before calls.
         printf '%s\n' \
           "window.__API_BASE__='$${GATEWAY_URL}';" \
+          "window.__GA_MEASUREMENT_ID__='$${GOOGLE_ANALYTICS_MEASUREMENT_ID}';" \
           "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
           > public/config.js
         # Persist for the Terraform step so API_BASE_URL matches config.js exactly.

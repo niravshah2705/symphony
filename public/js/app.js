@@ -24,6 +24,7 @@ import {
 } from './auth.js';
 import { initThemeToggle } from './theme.js';
 import { initNotifications } from './notifications.js';
+import { trackGoogleAnalyticsPageView } from './google-analytics.mjs';
 import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 import {
   activeWorkspaceOrganization,
@@ -202,6 +203,8 @@ function syncShell(name, view) {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
+
+  trackGoogleAnalyticsPageView(name);
 }
 
 function syncSidebar(open, { restoreFocus = false } = {}) {

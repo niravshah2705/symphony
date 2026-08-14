@@ -104,7 +104,8 @@ LINEAR_API_KEY=lin_... \                # required (services won't start without
 
 Optional env: `REGION`, `AR_REPO`, `IMAGE_TAG`, `FIRESTORE_LOCATION`, `SPA_ORIGIN`,
 `FIREBASE_ALLOWED_DOMAIN` (empty = any verified user), `GITHUB_TOKEN`,
-`LANGSMITH_API_KEY`, `SKIP_BUILD=1` (reuse pushed images), plus
+`LANGSMITH_API_KEY`, `GOOGLE_ANALYTICS_MEASUREMENT_ID` (a public GA4 `G-...`
+web-stream id; empty = disabled), `SKIP_BUILD=1` (reuse pushed images), plus
 `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`,
 `EMAIL_SMTP_PASSWORD`, and `EMAIL_FROM` for transactional email. The script
 defaults `EMAIL_PUBLIC_APP_URL` to the exact GCS `index.html` URL it publishes;
@@ -113,10 +114,14 @@ URL + SPA URL and the Firebase authorized domains to register.
 
 ### Deploy — CI (Cloud Build)
 
-`gcloud builds submit --config cloudbuild.yaml --substitutions=_BUCKET=...,_TF_STATE_BUCKET=...`
+`gcloud builds submit --config cloudbuild.yaml --substitutions=_BUCKET=...,_TF_STATE_BUCKET=...,_GOOGLE_ANALYTICS_MEASUREMENT_ID=G-XXXXXXXXXX`
 runs the same build → SPA-publish → staged `terraform apply` in Cloud Build.
 Seed the required agent Secret Manager versions first (the one-shot/bootstrap
 scripts do this for you). SMTP credentials use the acyclic flow below.
+
+The Analytics substitution is optional and public. The SPA publish step validates
+it and writes it to the no-store `config.js`; omit it to disable collection. See
+[Google Analytics](GOOGLE_ANALYTICS.md) for data-stream and verification setup.
 
 The Cloud Build bootstrap owns the empty `email-smtp-user` and
 `email-smtp-password` secret containers. It never reads SMTP values and never
