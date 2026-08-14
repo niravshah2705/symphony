@@ -79,7 +79,7 @@ Directory-based community: services/gateway
 - **requirePermission** (criticality: 0.61, depth: 1)
 - **requireAuthenticated** (criticality: 0.61, depth: 1)
 - **createLocalizationRouter** (criticality: 0.49, depth: 2)
-- *... and 2 more flows.*
+- *... and 3 more flows.*
 
 ## Dependencies
 

@@ -165,7 +165,7 @@ resource "google_cloud_run_v2_service" "orchestrator" {
 
   template {
     service_account                  = google_service_account.orchestrator[0].email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = 1
     scaling {
       min_instance_count = 0
@@ -219,7 +219,7 @@ resource "google_cloud_run_v2_service" "tester" {
 
   template {
     service_account                  = google_service_account.tester[0].email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = 1
     timeout                          = "3600s"
     scaling {
@@ -293,7 +293,7 @@ resource "google_cloud_run_v2_service" "deployer" {
 
   template {
     service_account                  = google_service_account.deployer[0].email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = 1
     timeout                          = "3600s"
     scaling {
