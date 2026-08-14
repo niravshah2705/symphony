@@ -83,7 +83,7 @@ resource "google_cloud_run_v2_service" "email" {
 
   template {
     service_account                  = google_service_account.email.email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = var.container_concurrency
 
     scaling {

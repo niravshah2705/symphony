@@ -14,7 +14,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | core-org | 456 | [core-org.md](core-org.md) |
 | e2e-json | 90 | [e2e-json.md](e2e-json.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
-| gcp-image | 35 | [gcp-image.md](gcp-image.md) |
+| gcp-cloud | 39 | [gcp-cloud.md](gcp-cloud.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
 | pipeline-stage | 616 | [pipeline-stage.md](pipeline-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
