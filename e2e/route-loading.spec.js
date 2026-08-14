@@ -165,12 +165,16 @@ test('Google Analytics receives one sanitized virtual page view per SPA route', 
     window.dataLayer?.filter(([command]) => command === 'event').length || 0
   ))).toBe(2);
 
-  const commands = await page.evaluate(() => window.dataLayer);
+  const { commands, entryTypes } = await page.evaluate(() => ({
+    commands: window.dataLayer.map((entry) => Array.from(entry)),
+    entryTypes: window.dataLayer.map((entry) => Object.prototype.toString.call(entry)),
+  }));
   const configs = commands.filter(([command]) => command === 'config');
   const pageViews = commands
     .filter(([command, event]) => command === 'event' && event === 'page_view')
     .map(([, , parameters]) => parameters);
 
+  expect(entryTypes).toEqual(commands.map(() => '[object Arguments]'));
   expect(configs).toEqual([
     ['config', 'G-TEST123', {
       send_page_view: false,

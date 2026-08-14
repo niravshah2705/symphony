@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 689 nodes
-- **Cohesion**: 0.4736
+- **Size**: 690 nodes
+- **Cohesion**: 0.4738
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: public/js
 | renderAuthControl | Function | ./public/js/app.js | 498-629 |
 | renderAuthenticationGate | Function | ./public/js/app.js | 631-690 |
 
-*... and 639 more members.*
+*... and 640 more members.*
 
 ## Execution Flows
 
@@ -87,7 +87,7 @@ Directory-based community: public/js
 
 - `append` (198 edge(s))
 - `addEventListener` (192 edge(s))
-- `map` (145 edge(s))
+- `map` (146 edge(s))
 - `String` (109 edge(s))
 - `push` (82 edge(s))
 - `filter` (78 edge(s))
@@ -113,8 +113,8 @@ Directory-based community: public/js
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (35 edge(s))
-- `./public/js/google-analytics.test.mjs` (28 edge(s))
+- `./public/js/google-analytics.test.mjs` (30 edge(s))
 - `./public/js/auth.js` (24 edge(s))
 - `./public/js/omnibox-router.mjs` (16 edge(s))
-- `./public/js/google-analytics.mjs` (13 edge(s))
+- `./public/js/google-analytics.mjs` (14 edge(s))
 - `./public/js/views/organization.js` (13 edge(s))

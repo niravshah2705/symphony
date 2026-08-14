@@ -29,4 +29,4 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-test:build | 62 | [src-test-build.md](src-test-build.md) |
 | src-test:coder | 102 | [src-test-coder.md](src-test-coder.md) |
 | src-token | 110 | [src-token.md](src-token.md) |
-| views-render | 689 | [views-render.md](views-render.md) |
+| views-render | 690 | [views-render.md](views-render.md) |

@@ -7,7 +7,7 @@
 Directory-based community: e2e
 
 - **Size**: 90 nodes
-- **Cohesion**: 0.1098
+- **Cohesion**: 0.1094
 - **Dominant Language**: javascript
 
 ## Members
@@ -75,7 +75,7 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (403 edge(s))
+- `expect` (404 edge(s))
 - `locator` (221 edge(s))
 - `route` (147 edge(s))
 - `getByRole` (86 edge(s))
@@ -86,14 +86,14 @@ No execution flows pass through this community.
 - `push` (41 edge(s))
 - `toContainText` (39 edge(s))
 - `toHaveAttribute` (38 edge(s))
-- `toEqual` (37 edge(s))
+- `toEqual` (38 edge(s))
 - `fulfill` (36 edge(s))
 - `evaluate` (35 edge(s))
 - `toBe` (35 edge(s))
 
 ### Incoming
 
-- `expect` (386 edge(s))
+- `expect` (387 edge(s))
 - `locator` (212 edge(s))
 - `route` (92 edge(s))
 - `getByRole` (81 edge(s))
@@ -101,7 +101,7 @@ No execution flows pass through this community.
 - `toHaveCount` (62 edge(s))
 - `click` (42 edge(s))
 - `toContainText` (38 edge(s))
-- `toEqual` (35 edge(s))
+- `toEqual` (36 edge(s))
 - `toHaveAttribute` (34 edge(s))
 - `evaluate` (34 edge(s))
 - `toBe` (34 edge(s))

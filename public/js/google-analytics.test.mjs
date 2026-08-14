@@ -35,7 +35,9 @@ function fakeBrowser({
 }
 
 function callsOf(windowRef, command) {
-  return windowRef.dataLayer.filter(([name]) => name === command);
+  return windowRef.dataLayer
+    .filter((args) => args[0] === command)
+    .map((args) => Array.from(args));
 }
 
 test('accepts only normalized GA4 measurement IDs', () => {
@@ -56,6 +58,18 @@ test('blank or invalid configuration is a network-free no-op', () => {
     assert.equal(scripts.length, 0);
     assert.equal(windowRef.dataLayer, undefined);
     assert.equal(windowRef.gtag, undefined);
+  }
+});
+
+test('queues gtag calls as Arguments objects', () => {
+  const { documentRef, windowRef } = fakeBrowser();
+  const analytics = createGoogleAnalytics({ windowRef, documentRef });
+
+  assert.equal(analytics.trackPageView('agent'), true);
+  assert.ok(windowRef.dataLayer.length > 0);
+  for (const entry of windowRef.dataLayer) {
+    assert.equal(Object.prototype.toString.call(entry), '[object Arguments]');
+    assert.equal(Array.isArray(entry), false);
   }
 });
 
