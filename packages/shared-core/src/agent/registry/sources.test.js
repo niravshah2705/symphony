@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { loadSources } = require('./sources');
+const { HARNESS_STRATEGIES } = require('./schema');
 
 function writeTmp(obj) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sources-test-'));
@@ -23,6 +24,22 @@ const VALID = {
   skills: [{ name: 'web-research', vendored: true }],
   plugins: [{ name: 'security', marketplace: 'uipath-claude-marketplace', version: '1.6.2' }],
   hooks: [{ name: 'pre-commit-scan', marketplace: 'uipath-claude-marketplace', event: 'pre' }],
+};
+
+const VALID_V2 = {
+  schemaVersion: 'harness-registry/v2',
+  version: 'v1',
+  marketplaces: {
+    ecc: {
+      url: 'https://github.com/affaan-m/ECC.git',
+      trackRef: 'main',
+      versionRange: '2.2.x',
+    },
+  },
+  harnessStrategies: HARNESS_STRATEGIES,
+  skills: [],
+  plugins: [{ name: 'ecc', marketplace: 'ecc', version: '2.2.x' }],
+  hooks: [],
 };
 
 test('loads and normalizes a valid manifest', () => {
@@ -60,4 +77,47 @@ test('rejects an invalid hook event', () => {
 
 test('rejects non-JSON', () => {
   assert.throws(() => loadSources(writeTmp('{not json')), /not valid JSON/);
+});
+
+test('loads v2 canonical ECC tracking metadata and complete harness strategies', () => {
+  const parsed = loadSources(writeTmp(VALID_V2));
+  assert.equal(parsed.schemaVersion, 'harness-registry/v2');
+  assert.deepEqual(parsed.source, {
+    id: 'ecc',
+    repository: 'affaan-m/ECC',
+    url: 'https://github.com/affaan-m/ECC.git',
+    trackRef: 'main',
+    versionRange: '2.2.x',
+  });
+  assert.deepEqual(parsed.harnessStrategies, HARNESS_STRATEGIES);
+  assert.equal(parsed.marketplaces.ecc.ref, null);
+});
+
+test('v2 rejects incomplete strategy coverage and non-canonical ECC sources', () => {
+  const missing = { ...HARNESS_STRATEGIES };
+  delete missing.deepseek;
+  assert.throws(
+    () => loadSources(writeTmp({ ...VALID_V2, harnessStrategies: missing })),
+    /missing: deepseek/
+  );
+
+  const oldRepo = {
+    ...VALID_V2,
+    marketplaces: {
+      ecc: {
+        url: 'https://github.com/affaan-m/everything-claude-code.git',
+        trackRef: 'main',
+        versionRange: '2.2.x',
+      },
+    },
+  };
+  assert.throws(() => loadSources(writeTmp(oldRepo)), /source.url/);
+});
+
+test('repository sources.json uses the v2 ECC contract', () => {
+  const parsed = loadSources(path.join(__dirname, 'sources.json'));
+  assert.equal(parsed.schemaVersion, 'harness-registry/v2');
+  assert.equal(parsed.source.repository, 'affaan-m/ECC');
+  assert.equal(parsed.source.versionRange, '2.2.x');
+  assert.deepEqual(parsed.harnessStrategies, HARNESS_STRATEGIES);
 });

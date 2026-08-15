@@ -97,7 +97,7 @@ output "skills_version_pinned" {
 }
 
 output "registry_bucket" {
-  description = "Terraform-created GCS bucket holding the versioned dual-format harness registry (null when registry_enabled = false). Fixed name from var.registry_bucket_name (default 'aifleet-registry'). The sync-harness-registry workflow publishes here (<version>/original + <version>/generic)."
+  description = "Terraform-created GCS bucket holding versioned harness-native rootfs artifacts, v2 descriptors, and inert resources (null when registry_enabled = false). Fixed name from var.registry_bucket_name (default 'aifleet-registry')."
   value       = one(google_storage_bucket.registry[*].name)
 }
 

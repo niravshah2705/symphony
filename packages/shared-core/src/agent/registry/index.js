@@ -7,6 +7,19 @@ const { fetchMarketplace } = require('./source-fetcher');
 const { readVendoredSkill, readPlugin } = require('./native-reader');
 const { normalize } = require('./normalizer');
 const { writeBundle } = require('./bundle-writer');
+const {
+  HARNESS_REGISTRY_SCHEMA_VERSION,
+  HARNESS_ARTIFACT_MOUNT_ROOT,
+  ECC_SOURCE,
+  HARNESS_IDS,
+  HARNESS_STRATEGIES,
+  validateHarnessStrategyMap,
+  validateEccSource,
+  validateArtifactDescriptor,
+  validateHarnessRegistryIndex,
+  expectedArtifactPath,
+  expectedDescriptorPath,
+} = require('./schema');
 
 /**
  * Public entry point for the harness-registry converter.
@@ -114,10 +127,13 @@ function buildRegistry(opts) {
 function planSummary(sourcesPath) {
   const sources = loadSources(sourcesPath);
   return {
+    schemaVersion: sources.schemaVersion,
     version: sources.version,
     marketplaces: Object.entries(sources.marketplaces).map(([name, mp]) => ({
-      name, ref: mp.ref, repo: mp.repo, url: mp.url,
+      name, ref: mp.ref || mp.trackRef, tracked: Boolean(mp.trackRef), repo: mp.repo, url: mp.url,
     })),
+    source: sources.source,
+    harnessStrategies: sources.harnessStrategies,
     skills: sources.skills.map((s) => s.name),
     plugins: sources.plugins.map((p) => `${p.name}@${p.marketplace} (${p.version})`),
     hooks: sources.hooks.map((h) => `${h.name}${h.event ? ` (${h.event})` : ''}`),
@@ -129,4 +145,16 @@ module.exports = {
   planSummary,
   readRawRecords,
   DEFAULT_VENDORED_SKILLS_ROOT,
+  loadSources,
+  HARNESS_REGISTRY_SCHEMA_VERSION,
+  HARNESS_ARTIFACT_MOUNT_ROOT,
+  ECC_SOURCE,
+  HARNESS_IDS,
+  HARNESS_STRATEGIES,
+  validateHarnessStrategyMap,
+  validateEccSource,
+  validateArtifactDescriptor,
+  validateHarnessRegistryIndex,
+  expectedArtifactPath,
+  expectedDescriptorPath,
 };
