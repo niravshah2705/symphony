@@ -17,6 +17,19 @@ unless the SPA receives a valid `G-...` measurement ID at deploy time.
    enabling both mechanisms can double-count navigation. This follows Google's
    guidance for [manual SPA page
    views](https://developers.google.com/analytics/devguides/collection/ga4/views).
+4. In **Admin → Data display → Custom definitions**, create one custom
+   dimension with these values:
+   - **Dimension name:** `Authentication status`
+   - **Scope:** Event
+   - **Event parameter:** `authentication_status`
+
+Do not create a custom dimension for `user_id`. GA4 handles it through the
+built-in **Signed in with user ID** dimension; registering raw IDs as a custom
+dimension creates unnecessary high-cardinality data. Custom dimensions apply
+only to data collected after they are created and can take 24–48 hours to
+become available in reports. See Google's guidance for
+[event-scoped custom dimensions](https://support.google.com/analytics/answer/14239696)
+and [User-ID](https://developers.google.com/analytics/devguides/collection/ga4/user-id).
 
 The client disables the tag's automatic initial page view. For GA's page URL and
 title context, it supplies only the site origin plus a canonical top-level route
@@ -25,6 +38,16 @@ events. Browser pathnames, query strings, hash parameters, dynamic identifiers,
 and UI-derived titles are discarded, so an invitation token, conversation ID,
 organization ID, or project ID is never included in `page_location`. Google
 signals and ad-personalization signals are disabled by the client configuration.
+
+Every manual page view also includes `authentication_status`, with an
+allowlisted value of `anonymous` or `authenticated`. For an authenticated
+Firebase deployment, the client configures GA4 `user_id` from the
+gateway-verified `session.user.sub`. That subject is the only accepted identity
+source: display names, email addresses, organizations, projects, access tokens,
+and URL values are never used. Values with common PII/URL shapes or more than
+256 characters are rejected. The ID is configured at tag scope, never copied
+into an event parameter, and is cleared with JavaScript `null` if an in-page
+session expires. A visitor who has never signed in has no `user_id` setting.
 
 ## Configure a deployment
 
@@ -55,6 +78,14 @@ Assistant](https://tagassistant.google.com/) or GA4 DebugView/Realtime:
 - `page_location` contains only the normalized route, with no hash query string
   or internal identifier.
 
+For an anonymous visit, the page view should contain
+`authentication_status=anonymous` and no `user_id`. For an authenticated visit,
+it should contain `authentication_status=authenticated`, while `user_id` appears
+only on the GA configuration command. In reports, compare the custom
+**Authentication status** dimension or GA4's built-in **Signed in with user ID**
+dimension. Historical events are not reprocessed after either feature is added.
+
 The integration controls what AI Fleet sends, but it does not add a consent
 banner or privacy policy. The operator remains responsible for any consent,
-disclosure, retention, and regional controls required for the deployment.
+disclosure (including the stable authenticated identifier), retention, and
+regional controls required for the deployment.

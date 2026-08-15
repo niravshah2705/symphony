@@ -195,11 +195,13 @@ test('Google Analytics receives one sanitized virtual page view per SPA route', 
     {
       page_location: expect.stringMatching(/\/#\/invite$/),
       page_title: 'Invite',
+      authentication_status: 'authenticated',
       send_to: 'G-TEST123',
     },
     {
       page_location: expect.stringMatching(/\/#\/settings$/),
       page_title: 'Settings',
+      authentication_status: 'authenticated',
       send_to: 'G-TEST123',
     },
   ]);

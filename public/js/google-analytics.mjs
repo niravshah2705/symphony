@@ -1,4 +1,6 @@
 const GA4_MEASUREMENT_ID = /^G-[A-Z0-9]+$/;
+const GA4_USER_ID_MAX_LENGTH = 256;
+const GA4_USER_ID_FORBIDDEN = /[\s@/?#]/u;
 const GTAG_SCRIPT_ID = 'ai-fleet-google-analytics';
 const GTAG_SCRIPT_URL = 'https://www.googletagmanager.com/gtag/js';
 const TRACKED_ROUTES = new Set([
@@ -26,6 +28,24 @@ export function normalizeGa4MeasurementId(value) {
   if (typeof value !== 'string') return '';
   const measurementId = value.trim();
   return GA4_MEASUREMENT_ID.test(measurementId) ? measurementId : '';
+}
+
+// GA4 permits an operator-defined, non-PII user_id of at most 256 characters.
+// AI Fleet supplies only the gateway-verified Firebase subject. Reject common
+// PII/URL shapes defensively so a future caller cannot accidentally substitute
+// an email address, page URL, token-bearing query, or display label.
+export function normalizeGa4UserId(value) {
+  if (typeof value !== 'string') return '';
+  const userId = value.trim();
+  const lowerUserId = userId.toLowerCase();
+  if (
+    !userId
+    || userId.length > GA4_USER_ID_MAX_LENGTH
+    || GA4_USER_ID_FORBIDDEN.test(userId)
+    || lowerUserId === 'null'
+    || lowerUserId === 'undefined'
+  ) return '';
+  return userId;
 }
 
 export function normalizeTopLevelRoute(value) {
@@ -64,7 +84,13 @@ function stateFor(windowRef, measurementId) {
     statesByWindow.set(windowRef, states);
   }
   if (!states.has(measurementId)) {
-    states.set(measurementId, { initialized: false, lastPageLocation: '' });
+    states.set(measurementId, {
+      initialized: false,
+      lastPageLocation: '',
+      // undefined means this page has never associated a GA user_id. Once a
+      // user signs out, null is retained so later config calls keep it cleared.
+      userId: undefined,
+    });
   }
   return states.get(measurementId);
 }
@@ -130,8 +156,8 @@ export function createGoogleAnalytics({
 
   const state = stateFor(windowRef, normalizedMeasurementId);
 
-  function routeConfig(pageLocation, pageTitle) {
-    return {
+  function routeConfig(pageLocation, pageTitle, userId) {
+    const config = {
       send_page_view: false,
       allow_google_signals: false,
       allow_ad_personalization_signals: false,
@@ -141,40 +167,71 @@ export function createGoogleAnalytics({
       page_location: pageLocation,
       page_title: pageTitle,
     };
+    if (userId) config.user_id = userId;
+    else if (state.userId !== undefined) config.user_id = null;
+    return config;
   }
 
-  function initialize(pageLocation, pageTitle) {
+  function initialize(pageLocation, pageTitle, userId) {
     if (state.initialized) return true;
     try {
       const gtag = ensureGtag(windowRef);
       gtag('js', now());
-      gtag('config', normalizedMeasurementId, routeConfig(pageLocation, pageTitle));
+      gtag('config', normalizedMeasurementId, routeConfig(pageLocation, pageTitle, userId));
       loadGtagScript(documentRef, normalizedMeasurementId);
       state.initialized = true;
+      state.userId = userId || undefined;
       return true;
     } catch {
       return false;
     }
   }
 
-  function trackPageView(route = windowRef.location?.hash) {
+  function trackPageView(route = windowRef.location?.hash, identity = {}) {
     const pageLocation = sanitizedPageLocation(windowRef.location, route);
     const pageTitle = sanitizedPageTitle(route);
-    if (!pageLocation || pageLocation === state.lastPageLocation) return false;
+    if (!pageLocation) return false;
+
+    const authenticated = identity?.authenticated === true;
+    const authenticationStatus = authenticated ? 'authenticated' : 'anonymous';
+    const userId = authenticated ? normalizeGa4UserId(identity?.userId) : '';
     const alreadyInitialized = state.initialized;
-    if (!initialize(pageLocation, pageTitle)) return false;
+    if (!initialize(pageLocation, pageTitle, userId)) return false;
 
     try {
+      let identityChanged = false;
+      if (alreadyInitialized) {
+        const nextUserId = userId || null;
+        const mustClearUserId = !userId && state.userId !== undefined && state.userId !== null;
+        if ((userId && state.userId !== userId) || mustClearUserId) {
+          // Google recommends the global set command when login state changes
+          // after initialization; JavaScript null is the only supported logout
+          // value. Never use an empty/dummy identifier.
+          windowRef.gtag('set', { user_id: nextUserId });
+          state.userId = nextUserId;
+          identityChanged = true;
+        }
+      }
+
+      // Identity can change during an in-place auth-expiry rerender. Its GA
+      // global context is synchronized above. Refresh this measurement target
+      // too because config-scoped values override global set values in gtag.
+      // The route itself is still the same view and must not be counted twice.
+      const duplicatePageView = pageLocation === state.lastPageLocation;
+
       // Refresh GA's defaults before the explicit view so later automatic events
       // remain associated with the same canonical virtual route.
-      if (alreadyInitialized) {
-        windowRef.gtag('config', normalizedMeasurementId, routeConfig(pageLocation, pageTitle));
+      if (alreadyInitialized && (!duplicatePageView || identityChanged)) {
+        windowRef.gtag('config', normalizedMeasurementId, routeConfig(pageLocation, pageTitle, userId));
       }
+      if (duplicatePageView) return false;
+
       windowRef.gtag('event', 'page_view', {
         page_location: pageLocation,
         // Derive the title from the same route allowlist as page_location. A
         // future UI title may contain tenant or record context; never forward it.
         page_title: pageTitle,
+        authentication_status: authenticationStatus,
         send_to: normalizedMeasurementId,
       });
       state.lastPageLocation = pageLocation;
@@ -193,7 +250,7 @@ export function createGoogleAnalytics({
 
 let browserAnalytics;
 
-export function trackGoogleAnalyticsPageView(route) {
+export function trackGoogleAnalyticsPageView(route, identity) {
   browserAnalytics ||= createGoogleAnalytics();
-  return browserAnalytics.trackPageView(route);
+  return browserAnalytics.trackPageView(route, identity);
 }
