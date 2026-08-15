@@ -6,8 +6,8 @@
 
 Directory-based community: scripts/harness-registry
 
-- **Size**: 139 nodes
-- **Cohesion**: 0.1806
+- **Size**: 149 nodes
+- **Cohesion**: 0.1719
 - **Dominant Language**: javascript
 
 ## Members
@@ -36,36 +36,36 @@ Directory-based community: scripts/harness-registry
 | test:archive creation rejects paths and symlinks that escape the root@L66 | Test | ./scripts/harness-registry/archive.test.js | 66-79 |
 | test:archive extraction refuses a non-empty destination@L81 | Test | ./scripts/harness-registry/archive.test.js | 81-92 |
 | test:archive parser rejects a crafted traversal path before extraction@L94 | Test | ./scripts/harness-registry/archive.test.js | 94-116 |
-| sortJson | Function | ./scripts/harness-registry/artifact-builder.js | 118-124 |
-| writeJson | Function | ./scripts/harness-registry/artifact-builder.js | 126-129 |
-| readJson | Function | ./scripts/harness-registry/artifact-builder.js | 131-137 |
-| assertPlainObject | Function | ./scripts/harness-registry/artifact-builder.js | 139-143 |
-| assertExactString | Function | ./scripts/harness-registry/artifact-builder.js | 145-147 |
-| assertLowerSha | Function | ./scripts/harness-registry/artifact-builder.js | 149-155 |
-| assertPositiveInteger | Function | ./scripts/harness-registry/artifact-builder.js | 157-160 |
-| ensureEmptyDirectory | Function | ./scripts/harness-registry/artifact-builder.js | 162-168 |
-| safeRemoveGeneratedDirectory | Function | ./scripts/harness-registry/artifact-builder.js | 170-177 |
-| log | Function | ./scripts/harness-registry/artifact-builder.js | 179-181 |
-| displayCommand | Function | ./scripts/harness-registry/artifact-builder.js | 183-185 |
-| run | Function | ./scripts/harness-registry/artifact-builder.js | 187-206 |
-| parseJsonOutput | Function | ./scripts/harness-registry/artifact-builder.js | 208-224 |
-| pathPrefixes | Function | ./scripts/harness-registry/artifact-builder.js | 226-232 |
-| walkTree | Function | ./scripts/harness-registry/artifact-builder.js | 234-243 |
-| visit | Function | ./scripts/harness-registry/artifact-builder.js | 236-241 |
-| isDisallowedName | Function | ./scripts/harness-registry/artifact-builder.js | 245-248 |
-| isHarnessStateFile | Function | ./scripts/harness-registry/artifact-builder.js | 250-283 |
-| scanTreeForLeaks | Function | ./scripts/harness-registry/artifact-builder.js | 285-322 |
-| prunePrivateState | Function | ./scripts/harness-registry/artifact-builder.js | 324-334 |
-| replaceTextPrefixes | Function | ./scripts/harness-registry/artifact-builder.js | 336-351 |
-| pinMutableMcpDependencies | Function | ./scripts/harness-registry/artifact-builder.js | 353-366 |
-| validateResolvedSource | Function | ./scripts/harness-registry/artifact-builder.js | 368-391 |
-| readResolvedSource | Function | ./scripts/harness-registry/artifact-builder.js | 393-395 |
-| resolvedDescriptorSource | Function | ./scripts/harness-registry/artifact-builder.js | 397-407 |
-| sourceArchiveExcluded | Function | ./scripts/harness-registry/artifact-builder.js | 409-413 |
-| buildInertBundles | Function | ./scripts/harness-registry/artifact-builder.js | 415-484 |
-| resolveSource | Function | ./scripts/harness-registry/artifact-builder.js | 486-528 |
+| sortJson | Function | ./scripts/harness-registry/artifact-builder.js | 131-137 |
+| writeJson | Function | ./scripts/harness-registry/artifact-builder.js | 139-142 |
+| readJson | Function | ./scripts/harness-registry/artifact-builder.js | 144-150 |
+| assertPlainObject | Function | ./scripts/harness-registry/artifact-builder.js | 152-156 |
+| assertExactString | Function | ./scripts/harness-registry/artifact-builder.js | 158-160 |
+| assertLowerSha | Function | ./scripts/harness-registry/artifact-builder.js | 162-168 |
+| assertPositiveInteger | Function | ./scripts/harness-registry/artifact-builder.js | 170-173 |
+| ensureEmptyDirectory | Function | ./scripts/harness-registry/artifact-builder.js | 175-181 |
+| safeRemoveGeneratedDirectory | Function | ./scripts/harness-registry/artifact-builder.js | 183-190 |
+| log | Function | ./scripts/harness-registry/artifact-builder.js | 192-194 |
+| displayCommand | Function | ./scripts/harness-registry/artifact-builder.js | 196-198 |
+| run | Function | ./scripts/harness-registry/artifact-builder.js | 200-219 |
+| parseJsonOutput | Function | ./scripts/harness-registry/artifact-builder.js | 221-237 |
+| pathPrefixes | Function | ./scripts/harness-registry/artifact-builder.js | 239-245 |
+| walkTree | Function | ./scripts/harness-registry/artifact-builder.js | 247-256 |
+| visit | Function | ./scripts/harness-registry/artifact-builder.js | 249-254 |
+| isDisallowedName | Function | ./scripts/harness-registry/artifact-builder.js | 258-261 |
+| isHarnessStateFile | Function | ./scripts/harness-registry/artifact-builder.js | 263-297 |
+| scanTreeForLeaks | Function | ./scripts/harness-registry/artifact-builder.js | 299-336 |
+| prunePrivateState | Function | ./scripts/harness-registry/artifact-builder.js | 338-348 |
+| replaceTextPrefixes | Function | ./scripts/harness-registry/artifact-builder.js | 350-365 |
+| pinMutableMcpDependencies | Function | ./scripts/harness-registry/artifact-builder.js | 367-380 |
+| validateResolvedSource | Function | ./scripts/harness-registry/artifact-builder.js | 382-405 |
+| readResolvedSource | Function | ./scripts/harness-registry/artifact-builder.js | 407-409 |
+| resolvedDescriptorSource | Function | ./scripts/harness-registry/artifact-builder.js | 411-421 |
+| sourceArchiveExcluded | Function | ./scripts/harness-registry/artifact-builder.js | 423-427 |
+| buildInertBundles | Function | ./scripts/harness-registry/artifact-builder.js | 429-498 |
+| resolveSource | Function | ./scripts/harness-registry/artifact-builder.js | 500-542 |
 
-*... and 89 more members.*
+*... and 99 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `join` (254 edge(s))
-- `equal` (46 edge(s))
-- `existsSync` (37 edge(s))
-- `mkdirSync` (31 edge(s))
-- `readFileSync` (28 edge(s))
+- `join` (290 edge(s))
+- `equal` (50 edge(s))
+- `existsSync` (43 edge(s))
+- `mkdirSync` (37 edge(s))
+- `readFileSync` (29 edge(s))
+- `push` (27 edge(s))
 - `startsWith` (26 edge(s))
-- `push` (24 edge(s))
+- `rmSync` (25 edge(s))
+- `throws` (25 edge(s))
+- `map` (24 edge(s))
+- `stringify` (23 edge(s))
 - `resolve` (23 edge(s))
 - `includes` (22 edge(s))
-- `map` (22 edge(s))
-- `rmSync` (22 edge(s))
-- `throws` (22 edge(s))
-- `stringify` (21 edge(s))
+- `sort` (21 edge(s))
 - `split` (19 edge(s))
-- `writeFileSync` (18 edge(s))
 
 ### Incoming
 
-- `join` (94 edge(s))
-- `./scripts/harness-registry/artifact-builder.js` (78 edge(s))
-- `equal` (46 edge(s))
+- `join` (123 edge(s))
+- `./scripts/harness-registry/artifact-builder.js` (87 edge(s))
+- `equal` (50 edge(s))
 - `./scripts/harness-registry/dcode-adapter.js` (41 edge(s))
+- `throws` (25 edge(s))
 - `./scripts/harness-registry/archive.js` (24 edge(s))
-- `throws` (22 edge(s))
-- `rmSync` (18 edge(s))
-- `after` (15 edge(s))
+- `rmSync` (21 edge(s))
+- `after` (18 edge(s))
+- `./scripts/harness-registry/artifact-builder.test.js` (16 edge(s))
+- `mkdtempSync` (15 edge(s))
+- `tmpdir` (15 edge(s))
+- `deepEqual` (15 edge(s))
 - `./scripts/harness-registry/dcode-adapter.test.js` (15 edge(s))
-- `mkdtempSync` (12 edge(s))
-- `tmpdir` (12 edge(s))
+- `existsSync` (14 edge(s))
 - `readFileSync` (12 edge(s))
-- `./scripts/harness-registry/artifact-builder.test.js` (11 edge(s))
-- `deepEqual` (10 edge(s))
-- `existsSync` (9 edge(s))

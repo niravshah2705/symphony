@@ -15,7 +15,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | e2e-json | 91 | [e2e-json.md](e2e-json.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
 | gcp-cloud | 44 | [gcp-cloud.md](gcp-cloud.md) |
-| harness-registry-install | 139 | [harness-registry-install.md](harness-registry-install.md) |
+| harness-registry-install | 149 | [harness-registry-install.md](harness-registry-install.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
 | registry-stage | 649 | [registry-stage.md](registry-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |

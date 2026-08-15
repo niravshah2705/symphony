@@ -20,7 +20,7 @@ function jobBlock(source, name) {
   return next === -1 ? rest : rest.slice(0, next);
 }
 
-test('harness registry workflow has isolated resolve, seven-leg build, assemble, and publish jobs', () => {
+test('harness registry workflow has isolated resolve, eight-leg build, assemble, and publish jobs', () => {
   const source = workflowText();
   const resolve = jobBlock(source, 'resolve');
   const build = jobBlock(source, 'build');
@@ -48,7 +48,11 @@ test('harness registry workflow has isolated resolve, seven-leg build, assemble,
     'opencode',
     'pi',
     'oh-my-pi',
+    'deepseek',
   ]);
+  assert.equal(harnesses.length, 8);
+  assert.match(build, /- harness: deepseek\n\s+python: false\n\s+bun: false/);
+  assert.match(assemble, /\(\.harnesses \| length == 8\)/);
 });
 
 test('only the publish job can mint cloud credentials', () => {
@@ -72,16 +76,37 @@ test('only the publish job can mint cloud credentials', () => {
   assert.ok(validate !== -1 && validate < auth, 'payload must be validated before cloud auth');
   const validateBlock = publish.slice(validate, auth);
   assert.match(validateBlock, /for HARNESS_ID in/);
+  const allowlistMatch = validateBlock.match(/for HARNESS_ID in \\\n([\s\S]*?)\n\s+do/);
+  assert.ok(allowlistMatch, 'publish harness allowlist must be present');
+  const allowlistedHarnesses = allowlistMatch[1].replaceAll('\\', '').trim().split(/\s+/);
+  assert.deepEqual(allowlistedHarnesses, [
+    'deepagent',
+    'codex-sdk',
+    'claude-agent-sdk',
+    'antigravity-sdk',
+    'opencode',
+    'pi',
+    'oh-my-pi',
+    'deepseek',
+  ]);
+  assert.equal(allowlistedHarnesses.length, 8);
+  assert.match(validateBlock, /\(\.harnesses \| length == 8\)/);
   assert.match(validateBlock, /sha256sum "\$ARCHIVE"/);
   assert.match(validateBlock, /test "\$INDEX_SHA" = "\$DESCRIPTOR_SHA"/);
   assert.match(validateBlock, /test "\$INDEX_SHA" = "\$ACTUAL_SHA"/);
   assert.match(validateBlock, /test "\$DESCRIPTOR_SIZE" = "\$ACTUAL_SIZE"/);
+  assert.match(validateBlock, /-name '\.credentials\.yaml'/);
 });
 
 test('matrix provisions only the harness-specific runtimes and publishes registry index last', () => {
   const source = workflowText();
   const build = jobBlock(source, 'build');
   const publish = jobBlock(source, 'publish');
+
+  const nodeVersions = [...source.matchAll(/^\s+node-version: "([^"]+)"$/gm)]
+    .map((match) => match[1]);
+  assert.equal(nodeVersions.length, 3);
+  assert.deepEqual(nodeVersions, ['22.19.0', '22.19.0', '22.19.0']);
 
   assert.match(build, /Set up Python for DCode[\s\S]*if: \$\{\{ matrix\.python \}\}[\s\S]*python-version: "3\.13"/);
   assert.match(build, /Set up Bun for Oh My Pi[\s\S]*if: \$\{\{ matrix\.bun \}\}[\s\S]*bun-version: "1\.3\.14"/);

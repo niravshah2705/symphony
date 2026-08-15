@@ -154,6 +154,7 @@ test('makeEntry builds an immutable-friendly entry with derived id', () => {
 
 test('v2 strategy map covers every harness catalog id with an explicit strategy', () => {
   assert.deepEqual(validateHarnessStrategyMap(HARNESS_STRATEGIES), HARNESS_STRATEGIES);
+  assert.equal(HARNESS_STRATEGIES.deepseek, 'dsh-skills');
   const missing = { ...HARNESS_STRATEGIES };
   delete missing.deepagent;
   assert.throws(() => validateHarnessStrategyMap(missing), /missing: deepagent/);
@@ -197,9 +198,17 @@ test('v2 artifact descriptors capture ready-to-copy DCode plugin state', () => {
   const unsafePath = artifactDescriptor();
   unsafePath.artifact = { ...unsafePath.artifact, path: '../rootfs.tar.gz' };
   assert.throws(() => validateArtifactDescriptor(unsafePath), /artifact\.path/);
+
+  const deepseek = artifactDescriptor('deepseek');
+  deepseek.installer = { name: '@deepseek-ai/dsh', version: '0.1.0-rc.6' };
+  deepseek.compatibility = 'native-skills';
+  deepseek.capabilities = { native: ['skills'], companion: [] };
+  const deepseekDescriptor = validateArtifactDescriptor(deepseek);
+  assert.equal(deepseekDescriptor.strategy, 'dsh-skills');
+  assert.deepEqual(deepseekDescriptor.capabilities.native, ['skills']);
 });
 
-test('v2 registry index requires exactly one artifact for all seven catalog harnesses', () => {
+test('v2 registry index requires exactly one artifact for every catalog harness', () => {
   const reversed = harnessIndex();
   reversed.harnesses = [...reversed.harnesses].reverse();
   const validated = validateHarnessRegistryIndex(reversed);

@@ -7,7 +7,7 @@
 Directory-based community: deploy/gcp
 
 - **Size**: 44 nodes
-- **Cohesion**: 0.1435
+- **Cohesion**: 0.1373
 - **Dominant Language**: javascript
 
 ## Members
@@ -38,9 +38,9 @@ Directory-based community: deploy/gcp
 | build_push_context | Function | ./deploy/gcp/deploy.sh | 225-228 |
 | workflowText | Function | ./deploy/gcp/harness-registry-workflow.test.js | 10-12 |
 | jobBlock | Function | ./deploy/gcp/harness-registry-workflow.test.js | 14-21 |
-| test:harness registry workflow has isolated resolve, seven-leg build, assemble, and publish jobs@L23 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 23-52 |
-| test:only the publish job can mint cloud credentials@L54 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 54-79 |
-| test:matrix provisions only the harness-specific runtimes and publishes registry index last@L81 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 81-109 |
+| test:harness registry workflow has isolated resolve, eight-leg build, assemble, and publish jobs@L23 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 23-56 |
+| test:only the publish job can mint cloud credentials@L58 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 58-99 |
+| test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 101-134 |
 | read | Function | ./deploy/gcp/pipeline-infra.test.js | 10-10 |
 | variableBlock | Function | ./deploy/gcp/pipeline-infra.test.js | 12-17 |
 | resourceBlock | Function | ./deploy/gcp/pipeline-infra.test.js | 19-24 |
@@ -67,36 +67,36 @@ Directory-based community: deploy/gcp
 
 ### Outgoing
 
-- `match` (94 edge(s))
+- `match` (99 edge(s))
 - `indexOf` (42 edge(s))
 - `doesNotMatch` (20 edge(s))
+- `equal` (19 edge(s))
+- `ok` (16 edge(s))
 - `slice` (16 edge(s))
-- `equal` (16 edge(s))
-- `ok` (15 edge(s))
+- `deepEqual` (8 edge(s))
 - `gcloud` (8 edge(s))
-- `deepEqual` (6 edge(s))
 - `echo` (6 edge(s))
+- `map` (5 edge(s))
 - `notEqual` (5 edge(s))
 - `spawnSync` (5 edge(s))
-- `map` (4 edge(s))
+- `matchAll` (4 edge(s))
 - `printf` (4 edge(s))
 - `docker` (4 edge(s))
-- `readFileSync` (3 edge(s))
 
 ### Incoming
 
-- `match` (94 edge(s))
+- `match` (99 edge(s))
 - `./deploy/gcp/deploy.sh` (36 edge(s))
 - `./deploy/gcp/bootstrap.sh` (35 edge(s))
 - `indexOf` (33 edge(s))
 - `doesNotMatch` (20 edge(s))
+- `equal` (19 edge(s))
 - `./deploy/gcp/pipeline-infra.test.js` (17 edge(s))
-- `equal` (16 edge(s))
-- `ok` (14 edge(s))
+- `ok` (15 edge(s))
 - `./deploy/gcp/analytics-config.test.js` (12 edge(s))
 - `slice` (11 edge(s))
-- `deepEqual` (6 edge(s))
+- `deepEqual` (8 edge(s))
 - `./deploy/gcp/harness-registry-workflow.test.js` (5 edge(s))
 - `spawnSync` (5 edge(s))
-- `map` (3 edge(s))
-- `repeat` (3 edge(s))
+- `map` (4 edge(s))
+- `trim` (4 edge(s))

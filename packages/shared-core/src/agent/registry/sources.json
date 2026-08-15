@@ -1,7 +1,7 @@
 {
   "schemaVersion": "harness-registry/v2",
   "version": "v1",
-  "updatedAt": "2026-08-13",
+  "updatedAt": "2026-08-15",
   "_note": "ECC is resolved from trackRef to one immutable commit per run. Other selected plugins remain inert and use their pinned refs. All sources are public.",
   "marketplaces": {
     "ecc": {
@@ -25,7 +25,8 @@
     "antigravity-sdk": "antigravity-profile",
     "opencode": "opencode-profile",
     "pi": "pi-package",
-    "oh-my-pi": "oh-my-pi-marketplace"
+    "oh-my-pi": "oh-my-pi-marketplace",
+    "deepseek": "dsh-skills"
   },
   "skills": [
     { "name": "commit", "vendored": true },

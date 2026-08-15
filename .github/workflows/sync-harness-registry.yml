@@ -51,7 +51,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.19.0"
           cache: npm
 
       - name: Install trusted build dependencies
@@ -139,6 +139,9 @@ jobs:
           - harness: oh-my-pi
             python: false
             bun: true
+          - harness: deepseek
+            python: false
+            bun: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -146,7 +149,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.19.0"
           cache: npm
 
       - name: Set up Python for DCode
@@ -244,7 +247,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.19.0"
           cache: npm
 
       - name: Install trusted build dependencies
@@ -268,7 +271,7 @@ jobs:
           REGISTRY_DIR: ${{ runner.temp }}/registry
         run: |
           set -euo pipefail
-          test "$(find "$INPUTS_DIR/harnesses" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "7"
+          test "$(find "$INPUTS_DIR/harnesses" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "8"
           test -f "$INPUTS_DIR/resolve/source.json"
           test -d "$INPUTS_DIR/resolve/inert"
           node scripts/build-harness-artifact.js assemble \
@@ -282,7 +285,7 @@ jobs:
           jq -e \
             --arg schema "harness-registry/v2" \
             --arg version "$REGISTRY_VERSION" \
-            '.schemaVersion == $schema and .version == $version and (.harnesses | length == 7)' \
+            '.schemaVersion == $schema and .version == $version and (.harnesses | length == 8)' \
             "$INDEX" >/dev/null
 
       - name: Upload verified registry
@@ -319,17 +322,17 @@ jobs:
           test -f "$INDEX"
           test -d "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses"
           test -d "$REGISTRY_DIR/$REGISTRY_VERSION/inert"
-          test "$(find "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses" -name artifact.json -type f | wc -l | tr -d ' ')" = "7"
-          test "$(find "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses" -name rootfs.tar.gz -type f | wc -l | tr -d ' ')" = "7"
+          test "$(find "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses" -name artifact.json -type f | wc -l | tr -d ' ')" = "8"
+          test "$(find "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses" -name rootfs.tar.gz -type f | wc -l | tr -d ' ')" = "8"
           jq -e \
             --arg schema "harness-registry/v2" \
             --arg version "$REGISTRY_VERSION" \
-            '.schemaVersion == $schema and .version == $version and (.harnesses | length == 7)' \
+            '.schemaVersion == $schema and .version == $version and (.harnesses | length == 8)' \
             "$INDEX" >/dev/null
 
           for HARNESS_ID in \
             deepagent codex-sdk claude-agent-sdk antigravity-sdk \
-            opencode pi oh-my-pi
+            opencode pi oh-my-pi deepseek
           do
             HARNESS_DIR="$REGISTRY_DIR/$REGISTRY_VERSION/harnesses/$HARNESS_ID"
             DESCRIPTOR="$HARNESS_DIR/artifact.json"
@@ -355,7 +358,8 @@ jobs:
           LEAKED="$(find "$REGISTRY_DIR" -type f \( \
             -name 'auth.json' -o -name '.env' -o -name '.env.*' -o \
             -name '*.pem' -o -name '*.key' -o -name 'credentials.json' -o \
-            -name '.netrc' -o -name 'mcp-tokens' -o -name '.credentials.json' \
+            -name '.netrc' -o -name 'mcp-tokens' -o -name '.credentials.json' -o \
+            -name '.credentials.yaml' \
           \) -print -quit)"
           if [ -n "$LEAKED" ]; then
             echo "Secret-like file in registry payload: $LEAKED" >&2

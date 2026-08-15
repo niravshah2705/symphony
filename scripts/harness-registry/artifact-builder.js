@@ -10,6 +10,8 @@ const registry = require('../../packages/shared-core/src/agent/registry');
 const { fetchMarketplace } = require('../../packages/shared-core/src/agent/registry/source-fetcher');
 const { readPlugin } = require('../../packages/shared-core/src/agent/registry/native-reader');
 const { copyTreeFiltered } = require('../../packages/shared-core/src/agent/registry/secret-filter');
+const { parseFrontmatter, skillFields } = require('../../packages/shared-core/src/agent/registry/frontmatter');
+const { assertContained, lstatOrNull } = require('../../packages/shared-core/src/agent/registry/fs-guards');
 const {
   createDeterministicTarGz,
   extractTarGz,
@@ -30,6 +32,7 @@ const TOOL_VERSIONS = Object.freeze({
   dcode: '0.1.55',
   codex: '0.146.1',
   claude: '2.1.198',
+  deepseek: '0.1.0-rc.6',
   pi: '0.84.1',
   omp: '17.2.15',
   'ecc-installer': '2.2.x',
@@ -38,11 +41,13 @@ const TOOL_VERSIONS = Object.freeze({
 const NPM_CLI_PACKAGES = Object.freeze({
   codex: '@openai/codex',
   claude: '@anthropic-ai/claude-code',
+  deepseek: '@deepseek-ai/dsh',
   pi: '@earendil-works/pi-coding-agent',
 });
 
 const DISALLOWED_EXACT_NAMES = new Set([
   '.credentials.json',
+  '.credentials.yaml',
   '.netrc',
   '.npmrc',
   '.pypirc',
@@ -112,6 +117,14 @@ const STRATEGY_METADATA = Object.freeze({
     compatibility: 'native-marketplace',
     capabilities: { native: ['skills', 'commands', 'hooks', 'mcp'], companion: [] },
     limitations: ['ECC has no dedicated Oh My Pi adapter; this artifact uses its Claude-marketplace-compatible plugin surface.'],
+  },
+  deepseek: {
+    installer: { name: NPM_CLI_PACKAGES.deepseek, version: TOOL_VERSIONS.deepseek },
+    compatibility: 'native-skills',
+    capabilities: { native: ['skills'], companion: [] },
+    limitations: [
+      'DeepSeek Harness is a developer preview; this artifact stages ECC SKILL.md bundles only and does not activate ECC commands, agents, hooks, MCP servers, credentials, or profiles.',
+    ],
   },
 });
 
@@ -276,6 +289,7 @@ function isHarnessStateFile(root, file) {
     'home/.pi/agent/git/',
     'home/.omp/plugins/cache/',
     'home/.omp/marketplaces/',
+    'home/.dsh/skills/',
     'home/.opencode/',
     'project/.agent/',
   ];
@@ -783,6 +797,140 @@ function runEccProfile({ sourceRoot, homeRoot, projectRoot, env, target, profile
   return installDocument.result;
 }
 
+function validateDshSkillTree(skillsRoot, { requireDirectoryMatch = false } = {}) {
+  let rootStat;
+  try {
+    rootStat = fs.lstatSync(skillsRoot);
+  } catch (_) {
+    throw new Error(`DeepSeek skill root is missing: ${skillsRoot}`);
+  }
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw new Error(`DeepSeek skill root must be a real directory: ${skillsRoot}`);
+  }
+
+  const skills = [];
+  const seenNames = new Set();
+  for (const entry of fs.readdirSync(skillsRoot, { withFileTypes: true }).sort((left, right) => (
+    left.name.localeCompare(right.name)
+  ))) {
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+    const manifestPath = path.join(skillsRoot, entry.name, 'SKILL.md');
+    let manifestStat;
+    try {
+      manifestStat = fs.lstatSync(manifestPath);
+    } catch (_) {
+      continue;
+    }
+    if (!manifestStat.isFile() || manifestStat.isSymbolicLink()) {
+      throw new Error(`DeepSeek skill manifest must be a regular file: ${manifestPath}`);
+    }
+    const fields = skillFields(parseFrontmatter(fs.readFileSync(manifestPath, 'utf8')).data);
+    if (!fields.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(fields.name) || !fields.description.trim()) {
+      throw new Error(`DeepSeek skill ${entry.name} needs a kebab-case name and description frontmatter`);
+    }
+    if (requireDirectoryMatch && fields.name !== entry.name) {
+      throw new Error(`DeepSeek staged skill directory ${entry.name} does not match manifest name ${fields.name}`);
+    }
+    if (seenNames.has(fields.name)) {
+      throw new Error(`DeepSeek skill name is duplicated: ${fields.name}`);
+    }
+    seenNames.add(fields.name);
+    skills.push({ directory: entry.name, name: fields.name });
+  }
+  if (skills.length === 0) throw new Error('ECC source provides no DeepSeek-compatible SKILL.md bundles');
+  return skills;
+}
+
+function requireRealDirectory(directory, label) {
+  const stat = lstatOrNull(directory);
+  if (!stat || !stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error(`${label} must be a real directory: ${directory}`);
+  }
+  return fs.realpathSync(directory);
+}
+
+function prepareEmptyChildDirectory(realParent, name, label) {
+  const directory = path.join(realParent, name);
+  assertContained(realParent, directory);
+  const stat = lstatOrNull(directory);
+  if (stat) {
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error(`${label} must be a real directory: ${directory}`);
+    }
+    if (fs.readdirSync(directory).length !== 0) {
+      throw new Error(`${label} must be empty: ${directory}`);
+    }
+  } else {
+    fs.mkdirSync(directory);
+  }
+  const realDirectory = fs.realpathSync(directory);
+  assertContained(realParent, realDirectory);
+  return realDirectory;
+}
+
+function stageDshSkills({ sourceRoot, homeRoot }) {
+  const sourceSkillsRoot = path.join(sourceRoot, 'skills');
+  const sourceSkills = validateDshSkillTree(sourceSkillsRoot);
+  const skillNames = sourceSkills.map((skill) => skill.name).sort((left, right) => left.localeCompare(right));
+  const realHomeRoot = requireRealDirectory(homeRoot, 'DeepSeek artifact home root');
+  const realDshHome = prepareEmptyChildDirectory(realHomeRoot, '.dsh', 'DeepSeek home');
+  const destinationSkillsRoot = prepareEmptyChildDirectory(realDshHome, 'skills', 'DeepSeek skill destination');
+
+  for (const skill of sourceSkills) {
+    const sourceSkillRoot = path.join(sourceSkillsRoot, skill.directory);
+    const destinationSkillRoot = prepareEmptyChildDirectory(
+      destinationSkillsRoot,
+      skill.name,
+      `DeepSeek skill destination ${skill.name}`
+    );
+    // A validated skill can legitimately contain a boundary-delimited word such
+    // as "token" in its identity. Apply the secret filter to every child while
+    // avoiding its conservative root-name rejection for the skill directory.
+    for (const entry of fs.readdirSync(sourceSkillRoot).sort()) {
+      const warnings = copyTreeFiltered(
+        path.join(sourceSkillRoot, entry),
+        path.join(destinationSkillRoot, entry),
+        { realRoot: realDshHome }
+      );
+      for (const warning of warnings) log(warning);
+    }
+  }
+  const stagedNames = validateDshSkillTree(destinationSkillsRoot, { requireDirectoryMatch: true })
+    .map((skill) => skill.name)
+    .sort((left, right) => left.localeCompare(right));
+  if (JSON.stringify(stagedNames) !== JSON.stringify(skillNames)) {
+    throw new Error('DeepSeek staged skill set does not match the validated ECC source skills');
+  }
+  return { dshHome: realDshHome, skillsRoot: destinationSkillsRoot, skillNames: stagedNames };
+}
+
+function installDeepseek(context, dependencies = {}) {
+  const installCli = dependencies.installCli || installNpmCli;
+  const runCommand = dependencies.runCommand || run;
+  const realHomeRoot = requireRealDirectory(context.homeRoot, 'DeepSeek artifact home root');
+  const dshHome = prepareEmptyChildDirectory(realHomeRoot, '.dsh', 'DeepSeek home');
+  const dshEnvironment = { ...context.env, DSH_HOME: dshHome };
+  const dsh = installCli({
+    name: NPM_CLI_PACKAGES.deepseek,
+    version: TOOL_VERSIONS.deepseek,
+    binary: 'dsh',
+    toolsRoot: context.toolsRoot,
+    env: dshEnvironment,
+  });
+  const installedVersion = String(runCommand(dsh, ['--version'], { env: dshEnvironment })).trim();
+  if (installedVersion !== TOOL_VERSIONS.deepseek) {
+    throw new Error(`DeepSeek Harness version mismatch: expected ${TOOL_VERSIONS.deepseek}, got ${JSON.stringify(installedVersion)}`);
+  }
+
+  const staged = stageDshSkills({ ...context, homeRoot: realHomeRoot });
+  for (const relative of ['.credentials.yaml', 'settings.yaml', 'profiles', 'sessions', 'node_modules']) {
+    if (fs.existsSync(path.join(dshHome, relative))) {
+      throw new Error(`DeepSeek artifact must not retain ${relative}`);
+    }
+  }
+  return { stagedSkills: staged.skillNames };
+}
+
 function installDeepagent(context) {
   const { sourceRoot, homeRoot, mountPath, toolsRoot, env } = context;
   const marketplaceRoot = path.join(homeRoot, '.deepagents', 'marketplaces', 'ecc-source');
@@ -975,6 +1123,7 @@ const HARNESS_INSTALLERS = Object.freeze({
   opencode: installOpencode,
   pi: installPi,
   'oh-my-pi': installOhMyPi,
+  deepseek: installDeepseek,
 });
 
 function directoryHasFile(root) {
@@ -1295,11 +1444,14 @@ module.exports = {
   assembleRegistry,
   buildHarnessArtifact,
   buildInertBundles,
+  installDeepseek,
   readResolvedSource,
   resolveSource,
   scanTreeForLeaks,
+  stageDshSkills,
   validateInertManifest,
   validateCodexConfig,
+  validateDshSkillTree,
   validateResolvedSource,
   verifyRegistry,
   verifyRootfsArchive,

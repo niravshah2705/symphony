@@ -7,7 +7,7 @@
 Directory-based community: packages/shared-core
 
 - **Size**: 649 nodes
-- **Cohesion**: 0.2456
+- **Cohesion**: 0.2455
 - **Dominant Language**: javascript
 
 ## Members
@@ -85,7 +85,7 @@ Directory-based community: packages/shared-core
 
 ### Outgoing
 
-- `equal` (204 edge(s))
+- `equal` (206 edge(s))
 - `join` (138 edge(s))
 - `String` (96 edge(s))
 - `map` (78 edge(s))
@@ -94,7 +94,7 @@ Directory-based community: packages/shared-core
 - `push` (59 edge(s))
 - `throws` (58 edge(s))
 - `filter` (57 edge(s))
-- `deepEqual` (52 edge(s))
+- `deepEqual` (53 edge(s))
 - `isArray` (50 edge(s))
 - `slice` (42 edge(s))
 - `stringify` (41 edge(s))
@@ -103,11 +103,11 @@ Directory-based community: packages/shared-core
 
 ### Incoming
 
-- `equal` (204 edge(s))
+- `equal` (206 edge(s))
 - `./packages/shared-core/src/store.js` (173 edge(s))
 - `join` (69 edge(s))
 - `throws` (58 edge(s))
-- `deepEqual` (52 edge(s))
+- `deepEqual` (53 edge(s))
 - `./packages/shared-core/src/pipeline/contracts.js` (42 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (40 edge(s))
 - `ok` (35 edge(s))

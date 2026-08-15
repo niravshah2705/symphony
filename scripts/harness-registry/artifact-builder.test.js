@@ -14,9 +14,14 @@ const {
   HARNESS_STRATEGIES,
 } = require('../../packages/shared-core/src/agent/registry/schema');
 const {
+  HARNESS_INSTALLERS,
+  STRATEGY_METADATA,
+  TOOL_VERSIONS,
   assembleRegistry,
+  installDeepseek,
   readResolvedSource,
   scanTreeForLeaks,
+  stageDshSkills,
   validateCodexConfig,
   validateResolvedSource,
   verifyRegistry,
@@ -166,7 +171,126 @@ test('Codex state retains the canonical immutable marketplace and enabled plugin
   assert.throws(() => validateCodexConfig(config, source), /enable ecc@ecc/i);
 });
 
-test('assembles and verifies exactly the seven catalog harness artifacts', (t) => {
+test('DeepSeek stages ECC skills through the pinned first-party dsh contract', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-deepseek-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const sourceRoot = path.join(root, 'source');
+  const homeRoot = path.join(root, 'home');
+  const toolsRoot = path.join(root, 'tools');
+  fs.mkdirSync(homeRoot);
+  writeFile(path.join(sourceRoot, 'skills', 'token-review-code-source', 'SKILL.md'), [
+    '---',
+    'name: token-review-code',
+    'description: Review a change safely.',
+    '---',
+    '# Review code',
+    '',
+  ].join('\n'));
+  writeFile(path.join(sourceRoot, 'skills', 'token-review-code-source', 'references', 'checklist.md'), '# Checklist\n');
+  writeFile(path.join(sourceRoot, 'skills', 'token-review-code-source', '.credentials.yaml'), 'api_key: never-copy\n');
+
+  const calls = [];
+  const result = installDeepseek({
+    sourceRoot,
+    homeRoot,
+    toolsRoot,
+    env: { CI: 'true' },
+  }, {
+    installCli(options) {
+      calls.push({ type: 'install', options });
+      return '/tools/dsh';
+    },
+    runCommand(executable, args, options) {
+      calls.push({ type: 'run', executable, args, options });
+      return `${TOOL_VERSIONS.deepseek}\n`;
+    },
+  });
+
+  assert.deepEqual(result.stagedSkills, ['token-review-code']);
+  assert.deepEqual(Object.keys(HARNESS_INSTALLERS), HARNESS_IDS);
+  assert.deepEqual(Object.keys(STRATEGY_METADATA), HARNESS_IDS);
+  assert.deepEqual(calls[0].options, {
+    name: '@deepseek-ai/dsh',
+    version: '0.1.0-rc.6',
+    binary: 'dsh',
+    toolsRoot,
+    env: { CI: 'true', DSH_HOME: fs.realpathSync(path.join(homeRoot, '.dsh')) },
+  });
+  assert.deepEqual(calls[1].args, ['--version']);
+  assert.equal(calls[1].options.env.DSH_HOME, fs.realpathSync(path.join(homeRoot, '.dsh')));
+  assert.ok(fs.existsSync(path.join(homeRoot, '.dsh', 'skills', 'token-review-code', 'SKILL.md')));
+  assert.ok(fs.existsSync(path.join(homeRoot, '.dsh', 'skills', 'token-review-code', 'references', 'checklist.md')));
+  assert.equal(fs.existsSync(path.join(homeRoot, '.dsh', 'skills', 'token-review-code', '.credentials.yaml')), false);
+  for (const privatePath of ['.credentials.yaml', 'settings.yaml', 'profiles', 'sessions', 'node_modules']) {
+    assert.equal(fs.existsSync(path.join(homeRoot, '.dsh', privatePath)), false);
+  }
+});
+
+test('DeepSeek skill staging rejects malformed and duplicate Agent Skills metadata', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-deepseek-invalid-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFile(path.join(root, 'source', 'skills', 'review-code', 'SKILL.md'), [
+    '---',
+    'name: Wrong Name',
+    'description: Review a change safely.',
+    '---',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(path.join(root, 'home'));
+  assert.throws(
+    () => stageDshSkills({ sourceRoot: path.join(root, 'source'), homeRoot: path.join(root, 'home') }),
+    /kebab-case name and description frontmatter/i
+  );
+
+  writeFile(path.join(root, 'duplicate-source', 'skills', 'first', 'SKILL.md'), [
+    '---',
+    'name: same-name',
+    'description: First skill.',
+    '---',
+    '',
+  ].join('\n'));
+  writeFile(path.join(root, 'duplicate-source', 'skills', 'second', 'SKILL.md'), [
+    '---',
+    'name: same-name',
+    'description: Second skill.',
+    '---',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(path.join(root, 'duplicate-home'));
+  assert.throws(
+    () => stageDshSkills({
+      sourceRoot: path.join(root, 'duplicate-source'),
+      homeRoot: path.join(root, 'duplicate-home'),
+    }),
+    /skill name is duplicated: same-name/i
+  );
+});
+
+test('DeepSeek staging rejects a destination symlink before writing outside the artifact', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-deepseek-symlink-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const sourceRoot = path.join(root, 'source');
+  const homeRoot = path.join(root, 'home');
+  const outside = path.join(root, 'outside');
+  writeFile(path.join(sourceRoot, 'skills', 'safe-skill', 'SKILL.md'), [
+    '---',
+    'name: safe-skill',
+    'description: A safe test skill.',
+    '---',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(homeRoot);
+  fs.mkdirSync(outside);
+  fs.symlinkSync(outside, path.join(homeRoot, '.dsh'), 'dir');
+
+  assert.throws(
+    () => stageDshSkills({ sourceRoot, homeRoot }),
+    /DeepSeek home must be a real directory/i
+  );
+  assert.equal(fs.existsSync(path.join(outside, 'skills', 'safe-skill', 'SKILL.md')), false);
+});
+
+test('assembles and verifies exactly the eight catalog harness artifacts', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-assemble-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const { inputsDir } = createInputs(root);
@@ -178,7 +302,7 @@ test('assembles and verifies exactly the seven catalog harness artifacts', (t) =
   const index = JSON.parse(fs.readFileSync(path.join(outDir, 'v1', 'registry.json'), 'utf8'));
   assert.equal(index.schemaVersion, HARNESS_REGISTRY_SCHEMA_VERSION);
   assert.deepEqual(index.harnesses.map((entry) => entry.id), HARNESS_IDS);
-  assert.equal(index.harnesses.length, 7);
+  assert.equal(index.harnesses.length, HARNESS_IDS.length);
   for (const harnessId of HARNESS_IDS) {
     assert.ok(fs.existsSync(path.join(outDir, 'v1', 'harnesses', harnessId, 'artifact.json')));
     assert.ok(fs.existsSync(path.join(outDir, 'v1', 'harnesses', harnessId, 'rootfs.tar.gz')));
@@ -203,7 +327,7 @@ test('assembly fails closed when any catalog harness is missing', (t) => {
 
   assert.throws(
     () => assembleRegistry({ inputsDir, outDir: path.join(root, 'registry') }),
-    new RegExp(`missing|${omitted}|expected 7.*found 6`, 'i')
+    new RegExp(`missing|${omitted}|expected ${HARNESS_IDS.length}.*found ${HARNESS_IDS.length - 1}`, 'i')
   );
 });
 

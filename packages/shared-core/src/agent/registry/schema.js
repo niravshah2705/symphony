@@ -49,6 +49,7 @@ const HARNESS_STRATEGIES = Object.freeze({
   opencode: 'opencode-profile',
   pi: 'pi-package',
   'oh-my-pi': 'oh-my-pi-marketplace',
+  deepseek: 'dsh-skills',
 });
 
 const FULL_GIT_SHA_RE = /^[0-9a-f]{40}$/;

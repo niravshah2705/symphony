@@ -1,6 +1,6 @@
 # Harness Registry v2 Implementation Diagram
 
-The registry pipeline resolves moving external inputs once, builds seven
+The registry pipeline resolves moving external inputs once, builds eight
 harness-native filesystem trees without cloud credentials, verifies their
 shared source identity, and grants cloud identity only to the final publisher.
 
@@ -19,7 +19,7 @@ flowchart TB
     Resolve["1 · Resolve<br/>contents: read · no OIDC<br/>resolve ECC main to one commit<br/>fetch, normalize, and build inert bundles"]
     Resolved[("Resolved-source artifact<br/>source.json · source.tar.gz · inert/")]
 
-    subgraph Matrix["2 · Build matrix × 7 · no OIDC"]
+    subgraph Matrix["2 · Build matrix × 8 · no OIDC"]
       DeepAgent["DeepAgent<br/>DCode plugin"]
       Codex["Codex SDK<br/>Codex marketplace"]
       Claude["Claude Agent SDK<br/>Claude marketplace"]
@@ -27,10 +27,11 @@ flowchart TB
       OpenCode["OpenCode<br/>OpenCode profile"]
       Pi["Pi<br/>Pi package"]
       OhMyPi["Oh My Pi<br/>Bun marketplace"]
+      DeepSeek["DeepSeek Harness<br/>native DSH skills"]
     end
 
-    Built[("Seven harness artifacts<br/>artifact.json + rootfs.tar.gz per harness")]
-    Assemble["3 · Assemble and verify<br/>contents: read · no OIDC<br/>require exactly seven legs<br/>validate schema, source identity, digests,<br/>sizes, file counts, archives, and content"]
+    Built[("Eight harness artifacts<br/>artifact.json + rootfs.tar.gz per harness")]
+    Assemble["3 · Assemble and verify<br/>contents: read · no OIDC<br/>require exactly eight legs<br/>validate schema, source identity, digests,<br/>sizes, file counts, archives, and content"]
     Verified[("Verified registry tree<br/>v1/harnesses/ · v1/inert/ · v1/registry.json")]
     Publish["4 · Publish<br/>id-token: write<br/>validate before cloud authentication<br/>stage, compare checksums/object count,<br/>publish payload first and registry index last"]
   end
@@ -60,6 +61,7 @@ flowchart TB
   Resolved --> OpenCode
   Resolved --> Pi
   Resolved --> OhMyPi
+  Resolved --> DeepSeek
 
   DeepAgent --> Built
   Codex --> Built
@@ -68,6 +70,7 @@ flowchart TB
   OpenCode --> Built
   Pi --> Built
   OhMyPi --> Built
+  DeepSeek --> Built
 
   Resolved --> Assemble
   Built --> Assemble
@@ -90,7 +93,7 @@ flowchart TB
   classDef warning fill:#fff3e0,stroke:#ef6c00,color:#e65100
 
   class Trigger,Sources,ECC,Pinned,Vendored external
-  class Resolve,DeepAgent,Codex,Claude,Antigravity,OpenCode,Pi,OhMyPi,Assemble noOidc
+  class Resolve,DeepAgent,Codex,Claude,Antigravity,OpenCode,Pi,OhMyPi,DeepSeek,Assemble noOidc
   class Resolved,Built,Verified artifact
   class Publish privileged
   class Bucket,IAM,Loader cloud
@@ -104,6 +107,9 @@ flowchart TB
   every matrix leg must report that same source identity.
 - Jobs that fetch or execute third-party installers have no `id-token`
   permission and therefore cannot mint Google Cloud credentials.
+- The DeepSeek leg pins the official `dsh` CLI, validates its version, and
+  stages only native `SKILL.md` bundles; credentials and mutable profile state
+  are never included in the artifact.
 - The publish job receives only assembled bytes, validates them before
   authenticating, verifies the staged copy, and writes `registry.json` last.
 - Terraform keeps the bucket private and separates publisher write access from

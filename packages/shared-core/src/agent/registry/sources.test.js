@@ -95,10 +95,10 @@ test('loads v2 canonical ECC tracking metadata and complete harness strategies',
 
 test('v2 rejects incomplete strategy coverage and non-canonical ECC sources', () => {
   const missing = { ...HARNESS_STRATEGIES };
-  delete missing.opencode;
+  delete missing.deepseek;
   assert.throws(
     () => loadSources(writeTmp({ ...VALID_V2, harnessStrategies: missing })),
-    /missing: opencode/
+    /missing: deepseek/
   );
 
   const oldRepo = {
