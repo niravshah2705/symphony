@@ -6,8 +6,8 @@
 
 Directory-based community: deploy/gcp
 
-- **Size**: 44 nodes
-- **Cohesion**: 0.1373
+- **Size**: 51 nodes
+- **Cohesion**: 0.1613
 - **Dominant Language**: javascript
 
 ## Members
@@ -27,15 +27,15 @@ Directory-based community: deploy/gcp
 | ensure_secret | Function | ./deploy/gcp/bootstrap.sh | 126-127 |
 | has_version | Function | ./deploy/gcp/bootstrap.sh | 128-129 |
 | seed | Function | ./deploy/gcp/bootstrap.sh | 130-131 |
-| enabled_version | Function | ./deploy/gcp/bootstrap.sh | 145-146 |
-| tfimport | Function | ./deploy/gcp/bootstrap.sh | 203-208 |
-| log | Function | ./deploy/gcp/deploy.sh | 94-94 |
-| cleanup | Function | ./deploy/gcp/deploy.sh | 97-97 |
-| has_version | Function | ./deploy/gcp/deploy.sh | 174-175 |
-| seed_secret | Function | ./deploy/gcp/deploy.sh | 176-179 |
-| enabled_version | Function | ./deploy/gcp/deploy.sh | 191-194 |
-| build_push | Function | ./deploy/gcp/deploy.sh | 221-224 |
-| build_push_context | Function | ./deploy/gcp/deploy.sh | 225-228 |
+| enabled_version | Function | ./deploy/gcp/bootstrap.sh | 143-144 |
+| tfimport | Function | ./deploy/gcp/bootstrap.sh | 201-206 |
+| log | Function | ./deploy/gcp/deploy.sh | 85-85 |
+| cleanup | Function | ./deploy/gcp/deploy.sh | 88-88 |
+| has_version | Function | ./deploy/gcp/deploy.sh | 183-184 |
+| seed_secret | Function | ./deploy/gcp/deploy.sh | 185-188 |
+| enabled_version | Function | ./deploy/gcp/deploy.sh | 199-202 |
+| build_push | Function | ./deploy/gcp/deploy.sh | 226-229 |
+| build_push_context | Function | ./deploy/gcp/deploy.sh | 230-233 |
 | workflowText | Function | ./deploy/gcp/harness-registry-workflow.test.js | 10-12 |
 | jobBlock | Function | ./deploy/gcp/harness-registry-workflow.test.js | 14-21 |
 | test:harness registry workflow has isolated resolve, eight-leg build, assemble, and publish jobs@L23 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 23-56 |
@@ -45,19 +45,27 @@ Directory-based community: deploy/gcp
 | variableBlock | Function | ./deploy/gcp/pipeline-infra.test.js | 12-17 |
 | resourceBlock | Function | ./deploy/gcp/pipeline-infra.test.js | 19-24 |
 | test:pipeline rollout and deployment are fail-closed Terraform defaults@L26 | Test | ./deploy/gcp/pipeline-infra.test.js | 26-30 |
-| test:all Cloud Run services use the gen2 execution environment@L32 | Test | ./deploy/gcp/pipeline-infra.test.js | 32-67 |
-| test:fixed-memory gen2 Cloud Run CPU variables reject incompatible allocations@L69 | Test | ./deploy/gcp/pipeline-infra.test.js | 69-82 |
-| test:skills mounts preserve configured Cloud Run service and proxy CPUs@L84 | Test | ./deploy/gcp/pipeline-infra.test.js | 84-100 |
-| test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L102 | Test | ./deploy/gcp/pipeline-infra.test.js | 102-116 |
-| test:deploy workflow does not query disabled optional Cloud Run services@L118 | Test | ./deploy/gcp/pipeline-infra.test.js | 118-145 |
-| test:optional image resolver uses a SHA placeholder only while disabled@L147 | Test | ./deploy/gcp/pipeline-infra.test.js | 147-193 |
-| test:required image resolution failure makes the tag output step fail@L195 | Test | ./deploy/gcp/pipeline-infra.test.js | 195-217 |
-| test:pipeline topology enforces dedicated topics and brokered agent egress@L219 | Test | ./deploy/gcp/pipeline-infra.test.js | 219-266 |
-| test:orchestrator image remains free of the heavy shared agent SDK workspace@L268 | Test | ./deploy/gcp/pipeline-infra.test.js | 268-274 |
-| test:tester image installs the capability-free network sandbox for repository commands@L276 | Test | ./deploy/gcp/pipeline-infra.test.js | 276-285 |
-| test:direct settings operator access is IAM-gated and never public@L287 | Test | ./deploy/gcp/pipeline-infra.test.js | 287-292 |
-| test:tenant vault token derivation root is limited to settings and provisioner@L294 | Test | ./deploy/gcp/pipeline-infra.test.js | 294-304 |
-| test:orchestrator can consume run-bound deployment approvals from settings@L306 | Test | ./deploy/gcp/pipeline-infra.test.js | 306-315 |
+| test:all Cloud Run services use the gen2 execution environment@L32 | Test | ./deploy/gcp/pipeline-infra.test.js | 32-68 |
+| test:fixed-memory gen2 Cloud Run CPU variables reject incompatible allocations@L70 | Test | ./deploy/gcp/pipeline-infra.test.js | 70-83 |
+| test:skills mounts preserve configured Cloud Run service and proxy CPUs@L85 | Test | ./deploy/gcp/pipeline-infra.test.js | 85-101 |
+| test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L103 | Test | ./deploy/gcp/pipeline-infra.test.js | 103-117 |
+| test:deploy workflow does not query disabled optional Cloud Run services@L119 | Test | ./deploy/gcp/pipeline-infra.test.js | 119-146 |
+| test:optional image resolver uses a SHA placeholder only while disabled@L148 | Test | ./deploy/gcp/pipeline-infra.test.js | 148-194 |
+| test:required image resolution failure makes the tag output step fail@L196 | Test | ./deploy/gcp/pipeline-infra.test.js | 196-218 |
+| test:pipeline topology enforces dedicated topics and brokered agent egress@L220 | Test | ./deploy/gcp/pipeline-infra.test.js | 220-270 |
+| test:stream-token broker owns the signing secret behind private IAM@L272 | Test | ./deploy/gcp/pipeline-infra.test.js | 272-358 |
+| test@L328 | Test | ./deploy/gcp/pipeline-infra.test.js | 328-328 |
+| name | Function | ./deploy/gcp/pipeline-infra.test.js | 329-329 |
+| test@L343 | Test | ./deploy/gcp/pipeline-infra.test.js | 343-343 |
+| test:proxy artifact retention preserves a multi-revision broker rollback window@L360 | Test | ./deploy/gcp/pipeline-infra.test.js | 360-365 |
+| test:OpenSWE upstream is trusted proxy-only deployment configuration@L367 | Test | ./deploy/gcp/pipeline-infra.test.js | 367-383 |
+| test:orchestrator image remains free of the heavy shared agent SDK workspace@L385 | Test | ./deploy/gcp/pipeline-infra.test.js | 385-391 |
+| test:coder image installs the seccomp launcher for model-controlled commands@L393 | Test | ./deploy/gcp/pipeline-infra.test.js | 393-403 |
+| test:tester image installs the capability-free network sandbox for repository commands@L405 | Test | ./deploy/gcp/pipeline-infra.test.js | 405-414 |
+| test:direct settings operator access is IAM-gated and never public@L416 | Test | ./deploy/gcp/pipeline-infra.test.js | 416-421 |
+| test:tenant vault token derivation root is limited to settings and provisioner@L423 | Test | ./deploy/gcp/pipeline-infra.test.js | 423-433 |
+
+*... and 1 more members.*
 
 ## Execution Flows
 
@@ -67,36 +75,36 @@ Directory-based community: deploy/gcp
 
 ### Outgoing
 
-- `match` (99 edge(s))
-- `indexOf` (42 edge(s))
-- `doesNotMatch` (20 edge(s))
-- `equal` (19 edge(s))
-- `ok` (16 edge(s))
-- `slice` (16 edge(s))
-- `deepEqual` (8 edge(s))
+- `match` (138 edge(s))
+- `indexOf` (46 edge(s))
+- `doesNotMatch` (32 edge(s))
+- `slice` (20 edge(s))
+- `equal` (20 edge(s))
+- `ok` (18 edge(s))
+- `deepEqual` (9 edge(s))
 - `gcloud` (8 edge(s))
+- `map` (6 edge(s))
+- `matchAll` (6 edge(s))
 - `echo` (6 edge(s))
-- `map` (5 edge(s))
 - `notEqual` (5 edge(s))
 - `spawnSync` (5 edge(s))
-- `matchAll` (4 edge(s))
 - `printf` (4 edge(s))
 - `docker` (4 edge(s))
 
 ### Incoming
 
-- `match` (99 edge(s))
-- `./deploy/gcp/deploy.sh` (36 edge(s))
-- `./deploy/gcp/bootstrap.sh` (35 edge(s))
-- `indexOf` (33 edge(s))
-- `doesNotMatch` (20 edge(s))
-- `equal` (19 edge(s))
-- `./deploy/gcp/pipeline-infra.test.js` (17 edge(s))
-- `ok` (15 edge(s))
+- `match` (138 edge(s))
+- `indexOf` (37 edge(s))
+- `./deploy/gcp/deploy.sh` (34 edge(s))
+- `doesNotMatch` (32 edge(s))
+- `./deploy/gcp/bootstrap.sh` (32 edge(s))
+- `./deploy/gcp/pipeline-infra.test.js` (22 edge(s))
+- `equal` (20 edge(s))
+- `ok` (17 edge(s))
+- `slice` (15 edge(s))
 - `./deploy/gcp/analytics-config.test.js` (12 edge(s))
-- `slice` (11 edge(s))
-- `deepEqual` (8 edge(s))
+- `deepEqual` (9 edge(s))
 - `./deploy/gcp/harness-registry-workflow.test.js` (5 edge(s))
+- `map` (5 edge(s))
+- `matchAll` (5 edge(s))
 - `spawnSync` (5 edge(s))
-- `map` (4 edge(s))
-- `trim` (4 edge(s))

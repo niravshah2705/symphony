@@ -16,6 +16,49 @@ const { applyPolicyToWorkflow, filterSkillPaths } = require('../settings-policy'
 const registry = require('./registry');
 const { AgentRuntimeError, deepAgentUsage, deepAgentCost } = require('./contract');
 
+const NETWORK_SANDBOX_COMMAND = '/usr/local/bin/ai-fleet-network-sandbox';
+
+/** Production and proxy-backed coding shells must not have direct IP egress. */
+function requiresNetworkIsolation(runtimeEnv = process.env, requested = false) {
+  const env = runtimeEnv || {};
+  return requested === true
+    || String(env.NODE_ENV || '').trim().toLowerCase() === 'production'
+    || Boolean(String(env.EGRESS_PROXY_URL || '').trim());
+}
+
+/** Quote one opaque argv value for the outer POSIX shell used by deepagents. */
+function quoteShellArg(value) {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
+/**
+ * Keep deepagents' filesystem backend identity/private fields intact while
+ * forcing every model-controlled shell string below the seccomp launcher.
+ * The model command is one opaque `sh -lc` argv value; it cannot alter the
+ * launcher invocation through quotes, substitutions, newlines, or redirects.
+ */
+function installNetworkIsolation(backend, sandboxCommand = NETWORK_SANDBOX_COMMAND) {
+  if (!backend || typeof backend.execute !== 'function' || backend.__networkIsolationInstalled) return backend;
+  const launcher = String(sandboxCommand || '').trim();
+  if (!launcher.startsWith('/')) {
+    throw new Error('The DeepAgent network sandbox launcher must be an absolute path.');
+  }
+  const original = backend.execute.bind(backend);
+  backend.execute = (command) => {
+    if (!command || typeof command !== 'string') return original(command);
+    const wrapped = [
+      'exec',
+      quoteShellArg(launcher),
+      quoteShellArg('/bin/sh'),
+      quoteShellArg('-lc'),
+      quoteShellArg(command),
+    ].join(' ');
+    return original(wrapped);
+  };
+  Object.defineProperty(backend, '__networkIsolationInstalled', { value: true, enumerable: false });
+  return backend;
+}
+
 /** Build the DeepAgent backend for a workflow kind, rooted at `rootDir`. */
 function buildBackend(kind, rootDir, opts = {}, deps = {}) {
   const deepagents = deps.deepagents || require('deepagents');
@@ -25,7 +68,11 @@ function buildBackend(kind, rootDir, opts = {}, deps = {}) {
     // explicitly supplied env so repository/API credentials cannot reach agent
     // commands through a future caller by mistake.
     const env = buildSafeAgentEnv(opts.env || process.env, rootDir);
-    return new LocalShellBackend({ rootDir, env, inheritEnv: false, timeout: opts.timeout || 600 });
+    const backend = new LocalShellBackend({ rootDir, env, inheritEnv: false, timeout: opts.timeout || 600 });
+    if (requiresNetworkIsolation(deps.runtimeEnv || process.env, opts.isolateNetwork)) {
+      return installNetworkIsolation(backend, opts.networkSandboxCommand);
+    }
+    return backend;
   }
   return new FilesystemBackend({ rootDir });
 }
@@ -52,7 +99,7 @@ function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, ext
     be = buildBackend(
       workflow.backend,
       rootDir,
-      { timeout: workflow.shellTimeoutSec, env },
+      { timeout: workflow.shellTimeoutSec, env, isolateNetwork: ctx.isolateNetwork },
       { deepagents },
     );
   }
@@ -107,4 +154,12 @@ async function executeDeepAgent(options, prompt) {
 
 registry.register(registry.builtinDefinition('deepagent', () => executeDeepAgent));
 
-module.exports = { buildBackend, buildAgent, executeDeepAgent };
+module.exports = {
+  buildBackend,
+  buildAgent,
+  executeDeepAgent,
+  installNetworkIsolation,
+  quoteShellArg,
+  requiresNetworkIsolation,
+  NETWORK_SANDBOX_COMMAND,
+};

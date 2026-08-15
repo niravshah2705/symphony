@@ -45,6 +45,7 @@ function labelValue(value) {
  * @param {string} cfg.region
  * @param {string} cfg.sharedOrgUrl        SHARED org service URL
  * @param {string} cfg.sharedSettingsUrl   SHARED settings service URL
+ * @param {string} cfg.streamTokenServiceUrl SHARED stream-token broker URL
  * @param {string} cfg.spaOrigin           SPA origin(s) for the tenant gateway CORS
  * @param {string} cfg.firebaseProjectId
  * @param {string} cfg.firebaseApiKey
@@ -57,12 +58,28 @@ function buildPlan(slug, cfg) {
   const u = urls(slug, cfg);
   const sa = cfg.serviceAccounts || {};
   const pipelineEnabled = cfg.pipelineOrchestratorEnabled === true;
-  if (pipelineEnabled && cfg.egressProxyEnabled !== true) {
-    throw new Error('durable pipeline provisioning requires the egress proxy');
-  }
   const orgInternalToken = deriveOrgInternalToken(cfg.orgS2sSigningKey, cfg.orgId);
-  if (cfg.egressProxyEnabled === true && cfg.orgId && !orgInternalToken) {
+  const streamTokenServiceUrl = String(cfg.streamTokenServiceUrl || '').trim();
+  if (cfg.orgId && !orgInternalToken) {
     throw new Error('per-tenant egress proxy requires the org S2S signing key');
+  }
+  if (!streamTokenServiceUrl) {
+    throw new Error('per-tenant gateway requires the shared stream-token service URL');
+  }
+  let parsedStreamTokenServiceUrl;
+  try {
+    parsedStreamTokenServiceUrl = new URL(streamTokenServiceUrl);
+  } catch (_) {
+    parsedStreamTokenServiceUrl = null;
+  }
+  if (!parsedStreamTokenServiceUrl
+      || parsedStreamTokenServiceUrl.protocol !== 'https:'
+      || parsedStreamTokenServiceUrl.username
+      || parsedStreamTokenServiceUrl.password
+      || parsedStreamTokenServiceUrl.search
+      || parsedStreamTokenServiceUrl.hash
+      || (parsedStreamTokenServiceUrl.pathname && parsedStreamTokenServiceUrl.pathname !== '/')) {
+    throw new Error('per-tenant gateway requires an HTTPS shared stream-token service URL');
   }
   // run.app calls from the tenant gateway require network-reachable ingress;
   // Cloud Run IAM (never allUsers) is the authorization boundary. Operators
@@ -95,10 +112,6 @@ function buildPlan(slug, cfg) {
     FIREBASE_PROJECT_ID: cfg.firebaseProjectId || cfg.projectId,
     FIREBASE_API_KEY: cfg.firebaseApiKey || '',
     AI_FLEET_DATA_DIR: '/tmp',
-    ...(cfg.egressProxyEnabled ? {
-      EGRESS_PROXY_URL: 'http://127.0.0.1:4030',
-      EGRESS_PROXY_INCLUDE_SDK: String(cfg.egressProxyIncludeSdk === true),
-    } : {}),
     // The isolation switch — this tenant's own Firestore store + SSE namespace.
     STORE_NAMESPACE: slug,
     PUBSUB_PLANNER_TOPIC: n.plannerTopic,
@@ -115,12 +128,21 @@ function buildPlan(slug, cfg) {
     ...(cfg.orgId ? { FLEET_ORG_ID: cfg.orgId } : {}),
   };
 
+  // Credential-bearing workloads always use their co-located egress proxy.
+  // Gateway and orchestrator deliberately do not inherit this URL: gateway
+  // calls the shared stream-token broker and orchestrator has no provider egress.
+  const agentEnv = {
+    ...commonEnv,
+    EGRESS_PROXY_URL: 'http://127.0.0.1:4030',
+  };
+
   // Per-tenant patch overlaid onto the cloned egress-proxy SIDECAR container
   // (planner/coder/worker). It needs this tenant's store namespace (to read the
   // tenant's OAuth token sets) and org id + derived bearer (to resolve only that
   // tenant's encrypted vault). The derivation root remains in settings and the
   // provisioner; it is never cloned into an agent or proxy container.
   const sidecarEnv = {
+    PROXY_CAPABILITIES: 'egress',
     GCP_PROJECT_ID: cfg.projectId,
     STORE_BACKEND: 'firestore',
     MESSAGING_MODE: 'pubsub',
@@ -138,8 +160,14 @@ function buildPlan(slug, cfg) {
     allowUnauthenticated: true, // public origin, app-auth (Firebase) guarded
     port: 8080,
     serviceAccount: sa.gateway,
+    // A gateway cloned from the legacy multi-container service must converge to
+    // one app container. Stream signing now belongs to the shared IAM-gated
+    // broker, never a per-tenant sidecar.
+    primaryContainerOnly: true,
+    forbidProviderSecretsOnPrimary: true,
     env: {
       ...commonEnv,
+      STREAM_TOKEN_SERVICE_URL: parsedStreamTokenServiceUrl.origin,
       AUTH_MODE: 'firebase',
       TRUST_PROXY_HOPS: '1',
       SPA_ORIGIN: cfg.spaOrigin || '',
@@ -166,8 +194,10 @@ function buildPlan(slug, cfg) {
     ...(pipelineEnabled ? { maxInstanceCount: 1, requestTimeoutSeconds: 3600 } : {}),
     invokers: [sa.gateway, sa.pubsubPush].filter(Boolean),
     sidecarEnv,
+    requireSecretFreePrimary: true,
+    requireEgressProxy: true,
     env: {
-      ...commonEnv,
+      ...agentEnv,
       PLANNER_PORT: '8080',
       // Transactional email stays shared; tenant planners publish billing
       // alerts to the allow-listed queue rather than cloning an SMTP service.
@@ -190,8 +220,10 @@ function buildPlan(slug, cfg) {
     ...(pipelineEnabled ? { maxInstanceCount: 1, requestTimeoutSeconds: 3600 } : {}),
     invokers: [sa.gateway, sa.pubsubPush].filter(Boolean),
     sidecarEnv,
+    requireSecretFreePrimary: true,
+    requireEgressProxy: true,
     env: {
-      ...commonEnv,
+      ...agentEnv,
       CODER_SERVICE_PORT: '8080',
       CODER_ROLE: 'control',
       CODER_JOB_NAME: n.worker, // launches this tenant's worker job
@@ -207,8 +239,10 @@ function buildPlan(slug, cfg) {
     labels: withComponent('coder-worker'),
     serviceAccount: sa.coder,
     sidecarEnv,
+    requireSecretFreePrimary: true,
+    requireEgressProxy: true,
     env: {
-      ...commonEnv,
+      ...agentEnv,
       CODER_ROLE: 'worker',
       HOME: '/tmp',
       CODER_WORKSPACE_ROOT: '/tmp/coder-workspaces',
@@ -255,7 +289,7 @@ function buildPlan(slug, cfg) {
     requireSecretFreePrimary: true,
     requireEgressProxy: true,
     env: {
-      ...commonEnv,
+      ...agentEnv,
       TESTER_SERVICE_PORT: '8080',
       SETTINGS_URL: cfg.sharedSettingsUrl,
       ORG_URL: cfg.sharedOrgUrl,
@@ -282,7 +316,7 @@ function buildPlan(slug, cfg) {
     requireSecretFreePrimary: true,
     requireEgressProxy: true,
     env: {
-      ...commonEnv,
+      ...agentEnv,
       DEPLOYER_SERVICE_PORT: '8080',
       SETTINGS_URL: cfg.sharedSettingsUrl,
       ORG_URL: cfg.sharedOrgUrl,

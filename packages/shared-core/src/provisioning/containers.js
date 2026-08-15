@@ -7,9 +7,11 @@
  * only `containers[0]` was copied — so an egress-proxy SIDECAR added to the
  * shared planner/coder would NOT propagate to tenant stacks, silently leaving
  * per-tenant agents with no proxy (and, once secrets move to the sidecar, no
- * credentials). These helpers copy EVERY container, overlaying per-tenant plain
- * env on the primary (ingress) container and a small patch on each sidecar,
- * while preserving each container's own image + secret env + resources + mounts.
+ * credentials). These helpers normally copy EVERY container, overlaying
+ * per-tenant plain env on the primary (ingress) container and a small patch on
+ * each sidecar, while preserving each container's own image + secret env +
+ * resources + mounts. An explicit `primaryContainerOnly` migration can converge
+ * a legacy service by dropping obsolete sidecars.
  *
  * Extracted as pure functions so the multi-container behavior is unit-tested
  * without any GCP client.
@@ -30,12 +32,16 @@ function extractContainers(containers) {
   return (containers || []).map((c) => {
     const { secretEnv, plainEnv } = splitEnv(c.env);
     return {
+      name: c.name,
       image: c.image,
       ports: c.ports,
       secretEnv,
       plainEnv,
       resources: c.resources,
       volumeMounts: c.volumeMounts,
+      dependsOn: c.dependsOn,
+      startupProbe: c.startupProbe,
+      livenessProbe: c.livenessProbe,
     };
   });
 }
@@ -79,30 +85,45 @@ function toEnvList(obj) {
  *
  * - Primary (index 0, the ingress container): tenant image + tenant plain env +
  *   its source secret env; ports added when `withPorts`.
- * - Sidecars (index > 0): keep their source image + secret env; overlay the
- *   tenant `sidecarEnv` patch onto their source plain env; never given ports.
+ * - Sidecars (index > 0): unless `primaryContainerOnly`, keep their source image
+ *   + secret env; overlay the tenant `sidecarEnv` patch onto their source plain
+ *   env; never given ports.
  *
  * @param {Array} srcContainers extracted source containers (extractSource*)
- * @param {object} spec { image, port, env, sidecarEnv }
+ * @param {object} spec { image, port, env, sidecarEnv, primaryContainerOnly }
  * @param {object} [opts] { withPorts }
  */
 function cloneContainers(srcContainers, spec, { withPorts = false } = {}) {
-  return (srcContainers || []).map((c, index) => {
+  const source = spec.primaryContainerOnly
+    ? (srcContainers || []).slice(0, 1)
+    : (srcContainers || []);
+  return source.map((c, index) => {
     if (index === 0) {
       const container = {
+        name: c.name,
         image: spec.image || c.image,
         env: [...toEnvList(spec.env), ...(c.secretEnv || [])],
         resources: c.resources,
         volumeMounts: c.volumeMounts,
+        // A stale primary may still depend on a sidecar that is intentionally
+        // omitted (the gateway stream-token migration). Clear that edge while
+        // preserving dependencies for normal multi-container agent clones.
+        ...(spec.primaryContainerOnly ? {} : { dependsOn: c.dependsOn }),
+        startupProbe: c.startupProbe,
+        livenessProbe: c.livenessProbe,
       };
       if (withPorts) container.ports = [{ containerPort: spec.port || 8080 }];
       return container;
     }
     return {
+      name: c.name,
       image: c.image,
       env: [...toEnvList({ ...c.plainEnv, ...(spec.sidecarEnv || {}) }), ...(c.secretEnv || [])],
       resources: c.resources,
       volumeMounts: c.volumeMounts,
+      dependsOn: c.dependsOn,
+      startupProbe: c.startupProbe,
+      livenessProbe: c.livenessProbe,
     };
   });
 }

@@ -37,13 +37,19 @@ from app.schemas.policy import (
 )
 from app.schemas.secrets import InternalOrgSecretsResponse
 from app.schemas.codex_tokens import CodexTokenRotateRequest, CodexTokenRotateResponse
+from app.schemas.connectors import ConnectorConfigResponse
 from app.schemas.deployment_approval import (
     DeploymentApprovalConsumeRequest,
     DeploymentApprovalResponse,
     validate_run_id,
 )
 from app.errors import ValidationAppError
-from app.services import deployment_approval_service, policy_service, secrets_service
+from app.services import (
+    connectors_service,
+    deployment_approval_service,
+    policy_service,
+    secrets_service,
+)
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -104,12 +110,28 @@ def require_org_internal_token(
 @router.get("/s2s/orgs/{org_id}/secrets", response_model=InternalOrgSecretsResponse)
 async def resolve_org_secrets(
     org_id: uuid.UUID,
+    project_id: uuid.UUID | None = Query(default=None),
     _: None = Depends(require_org_internal_token),
     session: Uow = Depends(get_session),
 ):
     """Return an org's UNMASKED resolved provider secrets for the egress proxy
     (organization-bound token-gated S2S; no user principal)."""
-    return await secrets_service.resolve_secrets_for_org(session, org_id)
+    return await secrets_service.resolve_secrets_for_org(
+        session, org_id, project_id
+    )
+
+
+@router.get(
+    "/s2s/orgs/{org_id}/egress-config",
+    response_model=ConnectorConfigResponse,
+)
+async def resolve_org_egress_config(
+    org_id: uuid.UUID,
+    _: None = Depends(require_org_internal_token),
+    session: Uow = Depends(get_session),
+):
+    """Return non-secret connector routing metadata for the tenant sidecar."""
+    return await connectors_service.get_internal_egress_config(session, org_id)
 
 
 @router.get("/s2s/managed-secrets", response_model=InternalOrgSecretsResponse)

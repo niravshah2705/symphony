@@ -1,6 +1,9 @@
 'use strict';
 
 const log = require('../logger');
+const { CONFIG } = require('../config');
+const { projectEgressHeaders } = require('../egress');
+const { currentWorkspaceContext } = require('../store/workspace-context');
 
 /**
  * Keyless web search via DuckDuckGo's HTML endpoint. Best-effort: returns [] on
@@ -28,12 +31,24 @@ function stripHtml(s) {
  * Run a web search and return up to `limit` snippet strings.
  * @returns {Promise<string[]>}
  */
-async function webSearch(query, limit = 5) {
+function searchRequest(query, { config = CONFIG, context = currentWorkspaceContext() } = {}) {
+  const origin = String(config.DUCKDUCKGO_HTML_ORIGIN || 'https://html.duckduckgo.com').replace(/\/+$/, '');
+  return {
+    url: `${origin}/html/?q=${encodeURIComponent(query)}`,
+    headers: {
+      'User-Agent': UA,
+      ...(config.EGRESS_PROXY_URL ? projectEgressHeaders(context) : {}),
+    },
+  };
+}
+
+async function webSearch(query, limit = 5, dependencies = {}) {
   const q = String(query || '').trim();
   if (!q) return [];
   try {
-    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
-    const resp = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) });
+    const fetchImpl = dependencies.fetchImpl || globalThis.fetch;
+    const { url, headers } = searchRequest(q, dependencies);
+    const resp = await fetchImpl(url, { headers, signal: AbortSignal.timeout(8000) });
     if (!resp.ok) {
       log.warn(`web search failed (${resp.status}) for "${q.slice(0, 60)}"`);
       return [];
@@ -69,4 +84,4 @@ function formatResults(snippets) {
   return snippets.map((s, i) => `${i + 1}. ${s}`).join('\n');
 }
 
-module.exports = { webSearch, webSearchMany, formatResults };
+module.exports = { webSearch, webSearchMany, formatResults, searchRequest };

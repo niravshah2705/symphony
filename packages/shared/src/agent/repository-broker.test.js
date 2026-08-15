@@ -320,7 +320,6 @@ test('safe shell environment allowlists operational values and drops all ambient
         GH_TOKEN: 'github-secret',
         GITLAB_TOKEN: 'gitlab-secret',
         TECHSYMPHONY_BROKER_GIT_TOKEN: 'broker-secret',
-        LINEAR_API_KEY: 'linear-secret',
         AWS_SECRET_ACCESS_KEY: 'cloud-secret',
         OTHER: 'not-allowlisted',
       },
@@ -336,7 +335,6 @@ test('safe shell environment allowlists operational values and drops all ambient
       'GH_TOKEN',
       'GITLAB_TOKEN',
       'TECHSYMPHONY_BROKER_GIT_TOKEN',
-      'LINEAR_API_KEY',
       'AWS_SECRET_ACCESS_KEY',
       'OTHER',
     ]) {

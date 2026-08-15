@@ -22,14 +22,18 @@ flowchart LR
   Gateway -->|proxy /api/agent| Planner["Planner service :4010<br/>services/planner<br/>scheduler + /api/agent"]
   Gateway -->|proxy /api/coder| CoderSvc["Coder service :4020<br/>services/coder<br/>board monitor + /api/coder"]
 
-  Gateway --> Store["Shared store<br/>data/store.json<br/>settings, keys, jobs"]
+  Gateway --> Store["Shared store<br/>data/store.json<br/>non-secret settings, jobs"]
   Planner --> Store
   CoderSvc --> Store
+  Gateway --> StreamProxy["Stream-token proxy sidecar<br/>loopback mint / verify<br/>only holder of signing secret"]
+  Planner --> EgressProxy["Egress proxy sidecar<br/>fixed allow-listed routes<br/>credential injection"]
+  CoderSvc --> EgressProxy
+  SettingsSvc["Settings service<br/>KMS-encrypted org/project vault<br/>managed + customer resolver"] --> EgressProxy
   Shared["@ai-fleet/shared<br/>config · store · linear · logger/util<br/>+ DeepAgent runtime (one copy)"] -.->|imported by| Gateway
   Shared -.->|imported by| Planner
   Shared -.->|imported by| CoderSvc
   Catalog["LLM preset catalog<br/>agent/llm-presets.json<br/>limits, sampling, reasoning adapters"] --> Shared
-  Gateway <-->|GraphQL with server-held Linear key| Linear["Linear<br/>ticket management<br/>projects, milestones, issues, labels"]
+  EgressProxy -->|GraphQL with selected scope credential| Linear["Linear<br/>ticket management<br/>projects, milestones, issues, labels"]
 
   subgraph AgentRuntime["DeepAgent runtime (in @ai-fleet/shared)"]
     Framework["Workflow framework<br/>agent/framework.js"]
@@ -63,18 +67,19 @@ flowchart LR
     Claude["Claude Opus 4.8<br/>Anthropic OAuth"]
   end
 
-  LlmRouter -->|local preset| Ollama
-  LlmRouter -->|local preset| LmStudio
-  LlmRouter -->|local preset| Omlx
-  LlmRouter -->|hosted preset| OpenAI
-  LlmRouter -->|hosted preset| Claude
+  LlmRouter -->|sentinel / fixed route| EgressProxy
+  EgressProxy -->|trusted local target| Ollama
+  EgressProxy -->|trusted local target| LmStudio
+  EgressProxy -->|trusted local target| Omlx
+  EgressProxy -->|injected hosted credential| OpenAI
+  EgressProxy -->|injected hosted credential| Claude
 
-  BuiltInTools -->|linear_graphql| Linear
-  McpTools -.->|Linear MCP| Linear
+  BuiltInTools -->|linear_graphql sentinel| EgressProxy
+  McpTools -.->|MCP sentinel| EgressProxy
 
   CoderAgent --> Workspace["Isolated git workspace<br/>per project / ticket branch"]
-  Workspace -->|clone, commit, push| GitHub["GitHub<br/>repository, branches, pull requests"]
-  McpTools -.->|GitHub MCP / token| GitHub
+  Workspace -->|credential-helper sentinel| EgressProxy
+  EgressProxy -->|clone, push, API| GitHub["GitHub<br/>repository, branches, pull requests"]
 
   AgentRuntime -->|traces and run metadata| Observability["LangSmith tracing<br/>trace links in Agent tab"]
   Shared --> Logs["data/app.log<br/>shared logger, one file"]
@@ -93,9 +98,9 @@ sequenceDiagram
   participant GitHub as GitHub
   participant Obs as LangSmith
 
-  User->>UI: Configure Linear, local + hosted presets, tracing, labels
-  UI->>API: Save settings and start planner/coder
-  API->>Linear: Discover projects and active tickets
+  User->>UI: Select scope; configure vault, connectors, presets, tracing
+  UI->>API: Save masked scope settings and start planner/coder
+  API->>Linear: Via egress proxy, discover projects and active tickets
   API->>Agent: Run planning or coding workflow
   Agent->>Agent: Load workflow skills and tools
   Agent->>LLM: Reason through the selected route preset

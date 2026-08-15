@@ -1,8 +1,9 @@
 'use strict';
 
 const { Readable } = require('stream');
-const { matchRoute } = require('@ai-fleet/shared-core/egress');
+const { LLM_GATEWAY_ORG_HEADER, matchRoute } = require('@ai-fleet/shared-core/egress');
 const credentials = require('./credentials');
+const { validateProjectId } = require('./secrets-client');
 
 /**
  * Authenticating reverse proxy: match an inbound request to an egress route,
@@ -20,10 +21,16 @@ const DROP_REQUEST_HEADERS = new Set([
   'trailer', 'transfer-encoding', 'upgrade', 'host', 'content-length',
   'accept-encoding',
   // Inbound auth is never forwarded — the proxy injects its own credential.
-  // x-api-key only ever carries the agent's sentinel; routes that authenticate
-  // with it (LangSmith tracing, Anthropic API-key selection) re-inject it.
-  'authorization', 'x-internal-token', 'x-forwarded-authorization', 'cookie',
-  'x-api-key',
+  'authorization', 'private-token', 'x-api-key', 'x-goog-api-key',
+  'x-internal-token', 'x-org-internal-token', 'x-forwarded-authorization',
+  'chatgpt-account-id', 'cookie',
+  // Request context is consumed locally and must never reach a provider.
+  'x-ai-fleet-project-id',
+  // The per-org LangSmith policy identity is stamped only by the proxy.
+  LLM_GATEWAY_ORG_HEADER.toLowerCase(),
+  // Do not let a caller forge proxy-chain or client identity metadata.
+  'forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-port',
+  'x-forwarded-proto', 'x-real-ip',
   // OAuth-only; credentials.buildInjection re-adds it for a Claude OAuth
   // selection and omits it for an Anthropic API-key selection.
   'anthropic-beta',
@@ -37,9 +44,9 @@ const DROP_RESPONSE_HEADERS = new Set([
 ]);
 
 /** Build the absolute upstream URL for a matched route + path remainder. */
-function buildUpstreamUrl(route, rest) {
+function buildUpstreamUrl(route, rest, resolvedUpstream = route.upstream) {
   const tail = !rest || rest === '/' ? '' : rest;
-  return `${route.upstream}${tail}`;
+  return `${resolvedUpstream}${tail}`;
 }
 
 /** Forwarded request headers: copy safe inbound headers, retarget Host, inject. */
@@ -52,8 +59,14 @@ function buildForwardHeaders(incoming, upstreamUrl, inject) {
     }
   })();
   const out = {};
+  const connectionTokens = new Set(
+    String(incoming && incoming.connection || '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+  );
   for (const [key, value] of Object.entries(incoming || {})) {
-    if (DROP_REQUEST_HEADERS.has(key.toLowerCase())) continue;
+    if (DROP_REQUEST_HEADERS.has(key.toLowerCase()) || connectionTokens.has(key.toLowerCase())) continue;
     out[key.toLowerCase()] = value;
   }
   if (host) out.host = host;
@@ -77,6 +90,15 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function requestProjectId(headers) {
+  const raw = headers && headers['x-ai-fleet-project-id'];
+  if (raw === undefined || raw === null || raw === '') return '';
+  if (Array.isArray(raw) && raw.length !== 1) {
+    throw new Error('X-AI-Fleet-Project-ID must be a single UUID');
+  }
+  return validateProjectId(Array.isArray(raw) ? raw[0] : raw);
+}
+
 /**
  * Create the request handler. Dependencies are injectable for tests.
  * @param {object} [opts]
@@ -88,6 +110,7 @@ function createProxyHandler(opts = {}) {
   const fetchImpl = opts.fetchImpl || (typeof fetch === 'function' ? fetch : null);
   const oauthManager = opts.oauthManager || require('./oauth-manager');
   const log = opts.logger || require('@ai-fleet/shared-core/logger');
+  const routeResolver = opts.routeResolver || credentials;
 
   return async function handle(req, res) {
     const matched = matchRoute(req.url);
@@ -98,9 +121,25 @@ function createProxyHandler(opts = {}) {
     }
     const { route, rest } = matched;
 
-    let inject;
+    let projectId;
     try {
-      inject = await credentials.buildInjection(route, { fetchImpl, oauthManager });
+      projectId = requestProjectId(req.headers);
+    } catch (_) {
+      sendJson(res, 400, { error: 'invalid project egress context' });
+      return;
+    }
+
+    let inject;
+    let resolvedUpstream;
+    try {
+      const resolved = await routeResolver.resolveRoute(route, {
+        fetchImpl,
+        oauthManager,
+        env: opts.env || process.env,
+        projectId,
+      });
+      inject = resolved.headers;
+      resolvedUpstream = resolved.upstream;
     } catch (err) {
       // Fail closed: a missing/unresolvable credential must not go out unauthenticated.
       log.error(`egress credential unavailable for ${route.prefix}: ${err.message}`);
@@ -108,7 +147,7 @@ function createProxyHandler(opts = {}) {
       return;
     }
 
-    const upstreamUrl = buildUpstreamUrl(route, rest);
+    const upstreamUrl = buildUpstreamUrl(route, rest, resolvedUpstream);
     const headers = buildForwardHeaders(req.headers, upstreamUrl, inject);
     const hasBody = req.method !== 'GET' && req.method !== 'HEAD';
 
@@ -120,6 +159,18 @@ function createProxyHandler(opts = {}) {
         duplex: hasBody ? 'half' : undefined,
         redirect: 'manual',
       });
+      // Never expose an upstream redirect to the caller. Returning Location
+      // would let an SDK follow it outside this proxy and bypass credential
+      // isolation. The proxy also must not follow it itself.
+      if (upstream.status >= 300 && upstream.status < 400) {
+        log.error(`egress upstream redirect rejected for ${route.prefix}`);
+        if (upstream.body && typeof upstream.body.cancel === 'function') {
+          await upstream.body.cancel().catch(() => {});
+        }
+        res.writeHead(502);
+        res.end();
+        return;
+      }
       res.writeHead(upstream.status, filterResponseHeaders(upstream.headers));
       if (upstream.body) {
         Readable.fromWeb(upstream.body).pipe(res);
@@ -141,4 +192,5 @@ module.exports = {
   createProxyHandler,
   DROP_REQUEST_HEADERS,
   DROP_RESPONSE_HEADERS,
+  requestProjectId,
 };

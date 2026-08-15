@@ -14,6 +14,7 @@ const {
   languageSuggestions,
   normalizeIp,
   isPublicIp,
+  ipwhoRequest,
   locateIp,
   locateCurrentIp,
   clearCurrentLocationCache,
@@ -131,6 +132,30 @@ test('localhost geolocation uses public egress lookup without returning an addre
   assert.deepEqual(location, { countryCode: 'IN', region: 'Gujarat' });
   assert.equal(Object.hasOwn(location, 'ip'), false);
   clearCurrentLocationCache();
+});
+
+test('proxy geolocation uses the fixed IPWho route and validated project context', async () => {
+  const id = '7e2ce8ba-57d3-4d80-bdba-ec18a8d2d348';
+  const config = {
+    EGRESS_PROXY_URL: 'http://127.0.0.1:4030',
+    IPWHO_ORIGIN: 'http://127.0.0.1:4030/ipwho',
+  };
+  const request = ipwhoRequest('8.8.8.8', { config, context: { projectId: id } });
+  assert.equal(request.url, 'http://127.0.0.1:4030/ipwho/8.8.8.8?fields=success,country_code,region');
+  assert.equal(request.headers['X-AI-Fleet-Project-ID'], id);
+
+  let seen;
+  const location = await locateIp('8.8.8.8', {
+    config,
+    context: { projectId: id },
+    fetchImpl: async (url, options) => {
+      seen = { url, options };
+      return { ok: true, json: async () => ({ country_code: 'US', region: 'Virginia' }) };
+    },
+  });
+  assert.equal(seen.url, request.url);
+  assert.equal(seen.options.headers['X-AI-Fleet-Project-ID'], id);
+  assert.deepEqual(location, { countryCode: 'US', region: 'Virginia' });
 });
 
 test('translation request bounds string count, item size, and total size', () => {

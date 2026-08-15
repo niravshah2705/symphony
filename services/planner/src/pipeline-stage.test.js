@@ -71,6 +71,7 @@ function scopedStore(overrides = {}) {
       ? { projectId: id, orgId: 'org-1', nativeProjectId: 'native-project-1' }
       : null,
     getAgentConfig: () => ({ createIssues: true }),
+    getApiKey: () => 'linear-key',
     ...overrides,
   };
 }
@@ -238,4 +239,15 @@ test('planner stage routes authenticate, execute a duplicate once, and republish
   assert.equal(published.length, 2);
   assert.equal(published[0].status, 'succeeded');
   assert.equal(published[0].stage, 'plan');
+});
+
+test('planner pipeline router constructs its configured default authentication middleware', () => {
+  const router = createPlannerPipelineRouter({
+    initStore: async () => {},
+    execute: async () => ({ status: 'succeeded', output: {} }),
+    publish: async () => {},
+  });
+
+  assert.equal(routeStack(router, '/internal/pipeline/stage').length, 2);
+  assert.equal(routeStack(router, '/pubsub/pipeline-stage').length, 2);
 });

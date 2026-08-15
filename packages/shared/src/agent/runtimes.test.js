@@ -218,7 +218,6 @@ test('Codex SDK API backend uses a constrained thread and reports token usage', 
     'GH_TOKEN',
     'GITHUB_TOKEN',
     'GITLAB_TOKEN',
-    'LINEAR_API_KEY',
     'LANGSMITH_API_KEY',
   ]);
   assert.doesNotMatch(seen.prompt, /Trusted coding rules/);
@@ -403,6 +402,29 @@ test('Claude Agent SDK adapter streams a result with cost and isolated settings'
   assert.equal(seen.run.metadata.cost_usd, 0.0125);
   assert.equal(seen.run.metadata.usage_total_tokens, 42);
   assert.equal(seen.run.metadata.usage_metadata.total_cost, 0.0125);
+});
+
+test('Claude Agent SDK proxy env carries only a validated project context header', () => {
+  const { applyClaudeProxyEnv } = require('./harnesses/claude');
+  const config = {
+    EGRESS_PROXY_INCLUDE_SDK: true,
+    CLAUDE: { baseUrl: 'http://127.0.0.1:4030/anthropic' },
+  };
+  const id = '7e2ce8ba-57d3-4d80-bdba-ec18a8d2d348';
+  const env = applyClaudeProxyEnv(
+    { ANTHROPIC_CUSTOM_HEADERS: 'Authorization: caller-secret' },
+    { projectId: id },
+    config,
+  );
+  assert.equal(env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:4030/anthropic');
+  assert.equal(env.ANTHROPIC_CUSTOM_HEADERS, `X-AI-Fleet-Project-ID: ${id}`);
+
+  const invalid = applyClaudeProxyEnv(
+    { ANTHROPIC_CUSTOM_HEADERS: 'Authorization: caller-secret' },
+    { projectId: 'not-a-uuid' },
+    config,
+  );
+  assert.equal(invalid.ANTHROPIC_CUSTOM_HEADERS, undefined);
 });
 
 test('runtime/provider mismatches fall back to traced DeepAgent execution', async (t) => {

@@ -17,7 +17,7 @@ function dependencies(labels) {
   const writes = [];
   return {
     writes,
-    store: { getSettings: () => ({ linearApiKey: 'linear-key' }) },
+    store: { getApiKey: () => 'linear-key' },
     linear: {
       getProjects: async () => [{ id: 'linear-project-1', labels: { nodes: labels } }],
       getOrCreateProjectLabel: async (apiKey, name) => ({ id: `id-${name}`, name }),

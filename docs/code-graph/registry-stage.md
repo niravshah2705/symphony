@@ -6,40 +6,40 @@
 
 Directory-based community: packages/shared-core
 
-- **Size**: 650 nodes
-- **Cohesion**: 0.2455
+- **Size**: 654 nodes
+- **Cohesion**: 0.2450
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| prunePending | Function | ./packages/shared-core/src/agent/claude-oauth.js | 33-37 |
-| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/claude-oauth.js | 40-50 |
-| createLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 56-67 |
-| consumeLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 70-78 |
-| pendingCount | Function | ./packages/shared-core/src/agent/claude-oauth.js | 81-84 |
-| parseCodeInput | Function | ./packages/shared-core/src/agent/claude-oauth.js | 90-104 |
-| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/claude-oauth.js | 107-119 |
-| postToken | Function | ./packages/shared-core/src/agent/claude-oauth.js | 121-142 |
-| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 145-155 |
-| refreshTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 158-170 |
-| isExpired | Function | ./packages/shared-core/src/agent/claude-oauth.js | 173-176 |
-| boundedTimeout | Function | ./packages/shared-core/src/agent/diagnostics.js | 11-15 |
-| configuredToken | Function | ./packages/shared-core/src/agent/diagnostics.js | 17-19 |
-| validHttpUrl | Function | ./packages/shared-core/src/agent/diagnostics.js | 21-28 |
-| endpoint | Function | ./packages/shared-core/src/agent/diagnostics.js | 30-39 |
-| probe | Function | ./packages/shared-core/src/agent/diagnostics.js | 41-65 |
-| packageAvailable | Function | ./packages/shared-core/src/agent/diagnostics.js | 67-85 |
-| check | Function | ./packages/shared-core/src/agent/diagnostics.js | 87-91 |
-| readBoundedLog | Function | ./packages/shared-core/src/agent/diagnostics.js | 93-108 |
-| summarizeLogTail | Function | ./packages/shared-core/src/agent/diagnostics.js | 110-131 |
-| integrationChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 133-177 |
-| sdkChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 179-230 |
-| serviceChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 232-248 |
-| localModelCheck | Function | ./packages/shared-core/src/agent/diagnostics.js | 250-283 |
-| reportStatus | Function | ./packages/shared-core/src/agent/diagnostics.js | 285-289 |
-| runDiagnostics | Function | ./packages/shared-core/src/agent/diagnostics.js | 292-315 |
+| prunePending | Function | ./packages/shared-core/src/agent/claude-oauth.js | 34-38 |
+| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/claude-oauth.js | 41-51 |
+| createLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 57-68 |
+| consumeLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 71-79 |
+| pendingCount | Function | ./packages/shared-core/src/agent/claude-oauth.js | 82-85 |
+| parseCodeInput | Function | ./packages/shared-core/src/agent/claude-oauth.js | 91-105 |
+| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/claude-oauth.js | 108-120 |
+| postToken | Function | ./packages/shared-core/src/agent/claude-oauth.js | 122-147 |
+| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 150-160 |
+| refreshTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 163-175 |
+| isExpired | Function | ./packages/shared-core/src/agent/claude-oauth.js | 178-181 |
+| boundedTimeout | Function | ./packages/shared-core/src/agent/diagnostics.js | 12-16 |
+| configuredToken | Function | ./packages/shared-core/src/agent/diagnostics.js | 18-20 |
+| validHttpUrl | Function | ./packages/shared-core/src/agent/diagnostics.js | 22-29 |
+| endpoint | Function | ./packages/shared-core/src/agent/diagnostics.js | 31-40 |
+| probe | Function | ./packages/shared-core/src/agent/diagnostics.js | 42-66 |
+| packageAvailable | Function | ./packages/shared-core/src/agent/diagnostics.js | 68-86 |
+| check | Function | ./packages/shared-core/src/agent/diagnostics.js | 88-92 |
+| readBoundedLog | Function | ./packages/shared-core/src/agent/diagnostics.js | 94-109 |
+| summarizeLogTail | Function | ./packages/shared-core/src/agent/diagnostics.js | 111-132 |
+| integrationChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 134-178 |
+| sdkChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 180-231 |
+| serviceChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 233-249 |
+| localModelCheck | Function | ./packages/shared-core/src/agent/diagnostics.js | 251-286 |
+| reportStatus | Function | ./packages/shared-core/src/agent/diagnostics.js | 288-292 |
+| runDiagnostics | Function | ./packages/shared-core/src/agent/diagnostics.js | 295-318 |
 | isLocalInference | Function | ./packages/shared-core/src/agent/model-presets.js | 24-24 |
 | isPurposeRole | Function | ./packages/shared-core/src/agent/model-presets.js | 45-45 |
 | assert | Function | ./packages/shared-core/src/agent/model-presets.js | 64-66 |
@@ -65,7 +65,7 @@ Directory-based community: packages/shared-core
 | customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 590-777 |
 | publicCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 779-781 |
 
-*... and 600 more members.*
+*... and 604 more members.*
 
 ## Execution Flows
 
@@ -79,7 +79,7 @@ Directory-based community: packages/shared-core
 - **consumeLogin** (criticality: 0.61, depth: 1)
 - **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
 - **refreshTokens** (criticality: 0.61, depth: 1)
-- *... and 9 more flows.*
+- *... and 4 more flows.*
 
 ## Dependencies
 
@@ -87,19 +87,19 @@ Directory-based community: packages/shared-core
 
 - `equal` (206 edge(s))
 - `join` (138 edge(s))
-- `String` (96 edge(s))
+- `String` (99 edge(s))
 - `map` (78 edge(s))
 - `includes` (71 edge(s))
-- `trim` (61 edge(s))
+- `trim` (64 edge(s))
 - `push` (59 edge(s))
 - `throws` (58 edge(s))
 - `filter` (57 edge(s))
 - `deepEqual` (53 edge(s))
 - `isArray` (50 edge(s))
-- `slice` (42 edge(s))
+- `slice` (43 edge(s))
+- `test` (42 edge(s))
 - `stringify` (41 edge(s))
 - `has` (41 edge(s))
-- `test` (40 edge(s))
 
 ### Incoming
 
@@ -108,12 +108,12 @@ Directory-based community: packages/shared-core
 - `join` (69 edge(s))
 - `throws` (58 edge(s))
 - `deepEqual` (53 edge(s))
+- `./packages/shared-core/src/config.js` (43 edge(s))
 - `./packages/shared-core/src/pipeline/contracts.js` (42 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (40 edge(s))
 - `ok` (35 edge(s))
 - `./packages/shared-core/src/agent/registry/schema.js` (32 edge(s))
-- `./packages/shared-core/src/config.js` (30 edge(s))
-- `./packages/shared-core/src/provisioning/index.js` (28 edge(s))
+- `./packages/shared-core/src/provisioning/index.js` (31 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (27 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
 - `./packages/shared-core/src/agent/diagnostics.js` (23 edge(s))

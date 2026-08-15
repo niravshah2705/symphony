@@ -1,9 +1,8 @@
 'use strict';
 
 const express = require('express');
-const { getApiKey, setApiKey, getSettings, patchSettings, addSettingsHistory } = require('@ai-fleet/shared/store');
-const { getViewer } = require('@ai-fleet/shared/linear');
-const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
+const { getSettings, patchSettings, addSettingsHistory } = require('@ai-fleet/shared/store');
+const { asyncHandler } = require('@ai-fleet/shared/util');
 const { CONFIG } = require('@ai-fleet/shared/config');
 const { repoParts } = require('@ai-fleet/shared/agent/repo-url');
 const {
@@ -32,6 +31,11 @@ const {
 } = require('@ai-fleet/shared/agent/settings-patch');
 
 const router = express.Router();
+const LEGACY_PLAINTEXT_SECRET_FIELDS = Object.freeze([
+  'linearApiKey', 'githubToken', 'gitlabToken', 'jiraApiToken',
+  'asanaAccessToken', 'omlxApiKey', 'huggingfaceApiKey',
+  'antigravityApiKey', 'geminiApiKey', 'langsmithApiKey', 'slackWebhookUrl',
+]);
 
 // Settings keys backing each LLM role. Provider-class slots ('byom'/'global')
 // stay deployment-pinned; task roles (thinking/execution/testing/deployment)
@@ -132,25 +136,23 @@ function publicSettings() {
   const planningProvider = ['linear', 'jira', 'asana'].includes(s.planningProvider) ? s.planningProvider : 'linear';
   const repositoryProvider = s.repositoryProvider === 'gitlab' ? 'gitlab' : 'github';
   return {
-    hasKey: Boolean(s.linearApiKey),
-    maskedKey: maskKey(s.linearApiKey),
+    // Credential presence is overlaid from the encrypted scope vault by the
+    // browser. Keep these legacy response properties, but never inspect the
+    // plaintext planner store for secrets.
+    hasKey: false,
+    maskedKey: '',
     planningProvider,
-    planningConfigured:
-      planningProvider === 'linear'
-        ? Boolean(s.linearApiKey)
-        : planningProvider === 'jira'
-          ? Boolean(s.jiraBaseUrl && s.jiraEmail && s.jiraApiToken)
-          : Boolean(s.asanaWorkspaceId && s.asanaAccessToken),
-    jiraBaseUrl: s.jiraBaseUrl || '',
-    jiraEmail: s.jiraEmail || '',
-    hasJiraToken: Boolean(s.jiraApiToken),
-    maskedJiraToken: maskKey(s.jiraApiToken),
-    asanaWorkspaceId: s.asanaWorkspaceId || '',
-    hasAsanaToken: Boolean(s.asanaAccessToken),
-    maskedAsanaToken: maskKey(s.asanaAccessToken),
+    planningConfigured: false,
+    jiraBaseUrl: '',
+    jiraEmail: '',
+    hasJiraToken: false,
+    maskedJiraToken: '',
+    asanaWorkspaceId: '',
+    hasAsanaToken: false,
+    maskedAsanaToken: '',
     repositoryProvider,
     repositoryUrl: s.repositoryUrl || '',
-    repositoryConfigured: Boolean(s.repositoryUrl && (repositoryProvider === 'gitlab' ? s.gitlabToken : s.githubToken)),
+    repositoryConfigured: false,
     // Deep-agent provider slots. `llmProvider` = GLOBAL (hosted) slot (planner +
     // coder's hosted/unlabeled route); `byomProvider` = BYoM slot (coder's
     // "byom"/XS route). BYoM providers are Ollama, LM Studio, oMLX, or Hugging
@@ -211,8 +213,8 @@ function publicSettings() {
     omlxReasoningAdapter: s.omlxReasoningAdapter || 'none',
     omlxJsonMode: s.omlxJsonMode || 'text',
     omlxContextMode: s.omlxContextMode || 'summarize',
-    hasOmlxApiKey: Boolean(s.omlxApiKey),
-    maskedOmlxApiKey: maskKey(s.omlxApiKey),
+    hasOmlxApiKey: false,
+    maskedOmlxApiKey: '',
     // Hosted model values are not secrets; OAuth tokens remain masked in their
     // dedicated status endpoints.
     codexModel: s.codexModel,
@@ -237,8 +239,8 @@ function publicSettings() {
     huggingfaceTemperature: s.huggingfaceTemperature ?? null,
     huggingfaceReasoningEffort: s.huggingfaceReasoningEffort || 'none',
     huggingfaceReasoningAdapter: s.huggingfaceReasoningAdapter || 'none',
-    hasHuggingfaceApiKey: Boolean(s.huggingfaceApiKey),
-    maskedHuggingfaceApiKey: maskKey(s.huggingfaceApiKey),
+    hasHuggingfaceApiKey: false,
+    maskedHuggingfaceApiKey: '',
     // Antigravity (Google/Gemini) — model/params/agent-id are not secrets; the
     // Gemini API key is and is exposed only as has/masked fields.
     antigravityModel: s.antigravityModel,
@@ -248,14 +250,14 @@ function publicSettings() {
     antigravityTemperature: s.antigravityTemperature ?? null,
     antigravityReasoningEffort: s.antigravityReasoningEffort || 'none',
     antigravityReasoningAdapter: s.antigravityReasoningAdapter || 'none',
-    hasAntigravityApiKey: Boolean(s.antigravityApiKey),
-    maskedAntigravityApiKey: maskKey(s.antigravityApiKey),
-    hasGithubToken: Boolean(s.githubToken),
-    maskedGithubToken: maskKey(s.githubToken),
-    hasGitlabToken: Boolean(s.gitlabToken),
-    maskedGitlabToken: maskKey(s.gitlabToken),
-    hasLangsmithKey: Boolean(s.langsmithApiKey),
-    maskedLangsmithKey: maskKey(s.langsmithApiKey),
+    hasAntigravityApiKey: false,
+    maskedAntigravityApiKey: '',
+    hasGithubToken: false,
+    maskedGithubToken: '',
+    hasGitlabToken: false,
+    maskedGitlabToken: '',
+    hasLangsmithKey: false,
+    maskedLangsmithKey: '',
     langsmithProject: s.langsmithProject,
     langsmithEndpoint: s.langsmithEndpoint,
     langsmithTracing: Boolean(s.langsmithTracing),
@@ -288,19 +290,6 @@ function normalizeHost(value, fallback) {
 function normalizeOmlxHost(value, fallback) {
   const normalized = normalizeHost(value, fallback);
   return String(normalized || '').replace(/\/v1\/?$/i, '');
-}
-
-/** Optional connector URL. Empty is meaningful (not configured). */
-function normalizeOptionalUrl(value, fallback = '') {
-  const raw = String(value ?? '').trim();
-  if (!raw) return '';
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return fallback;
-    return url.origin + (url.pathname === '/' ? '' : url.pathname.replace(/\/$/, ''));
-  } catch (_) {
-    return fallback;
-  }
 }
 
 /** Tokenless repository reference: owner/name or a GitHub/GitLab HTTPS/SSH URL. */
@@ -406,6 +395,12 @@ router.put('/llm-preset', (req, res) => {
   }
 
   const overrides = b.overrides && typeof b.overrides === 'object' && !Array.isArray(b.overrides) ? b.overrides : {};
+  if (Object.prototype.hasOwnProperty.call(overrides, 'apiKey')
+      || Object.prototype.hasOwnProperty.call(overrides, 'clearApiKey')) {
+    return res.status(400).json({
+      error: 'Provider credentials are no longer accepted by planner settings. Store them in the organization or project vault.',
+    });
+  }
   if (!isCustom && Object.prototype.hasOwnProperty.call(overrides, 'model') && !modelMatchesPreset(preset, overrides.model)) {
     return res.status(400).json({
       error: `Model id is incompatible with the ${preset.label} preset. Select the matching model preset first.`,
@@ -422,27 +417,16 @@ router.put('/llm-preset', (req, res) => {
     if (overrides.host !== undefined) {
       patch.omlxHost = normalizeOmlxHost(overrides.host, current.omlxHost || CONFIG.OMLX.defaultHost);
     }
-    if (overrides.clearApiKey === true) patch.omlxApiKey = '';
-    else if (overrides.apiKey !== undefined && String(overrides.apiKey).trim()) {
-      patch.omlxApiKey = String(overrides.apiKey).trim().slice(0, 4096);
-    }
   }
   if (preset.provider === 'huggingface') {
     if (overrides.host !== undefined) {
       patch.huggingfaceHost = normalizeOmlxHost(overrides.host, current.huggingfaceHost || CONFIG.HUGGINGFACE.defaultHost);
     }
-    if (overrides.clearApiKey === true) patch.huggingfaceApiKey = '';
-    else if (overrides.apiKey !== undefined && String(overrides.apiKey).trim()) {
-      patch.huggingfaceApiKey = String(overrides.apiKey).trim().slice(0, 4096);
-    }
   }
   if (preset.provider === 'antigravity') {
-    // Optional preview agent-id override (non-secret) and the Gemini API key.
+    // Optional preview agent-id override (non-secret). Gemini credentials live
+    // in the encrypted scope vault.
     if (overrides.agentId !== undefined) patch.antigravityAgentId = String(overrides.agentId).trim().slice(0, 200);
-    if (overrides.clearApiKey === true) patch.antigravityApiKey = '';
-    else if (overrides.apiKey !== undefined && String(overrides.apiKey).trim()) {
-      patch.antigravityApiKey = String(overrides.apiKey).trim().slice(0, 4096);
-    }
   }
   patch[keys.provider] = preset.provider;
   patch[keys.preset] = preset.id;
@@ -515,19 +499,11 @@ router.put('/complexity', (req, res) => {
   res.json(publicSettings());
 });
 
-// PUT /api/settings — validate the Linear key against Linear, then persist.
-router.put(
-  '/',
-  asyncHandler(async (req, res) => {
-    const linearApiKey = (req.body && req.body.linearApiKey ? String(req.body.linearApiKey) : '').trim();
-    if (!linearApiKey) {
-      return res.status(400).json({ error: 'A Linear API key is required.' });
-    }
-    const { viewer, organization } = await getViewer(linearApiKey);
-    setApiKey(linearApiKey);
-    res.json({ ...publicSettings(), viewer, organization });
-  })
-);
+// Legacy plaintext credential route. Fail explicitly so an old client cannot
+// believe it saved a key the egress proxy will never consume.
+router.put('/', (_req, res) => res.status(400).json({
+  error: 'linearApiKey is no longer accepted here. Store it in the organization or project vault.',
+}));
 
 // PUT /api/settings/llm — save the local Ollama configuration for the deep agent.
 // Provider selection is separate (PUT /api/settings/provider), so saving Ollama
@@ -700,24 +676,27 @@ router.put('/provider', (req, res) => {
   res.json(publicSettings());
 });
 
-// PUT /api/settings/github — save the GitHub token for the code-writer's git ops.
-// Stored server-side only; never returned raw or logged. Empty string clears it.
-router.put('/github', (req, res) => {
-  const b = req.body || {};
-  if (b.githubToken !== undefined) {
-    patchSettings({ githubToken: String(b.githubToken).trim() });
-  }
-  res.json(publicSettings());
-});
+router.put('/github', (_req, res) => res.status(400).json({
+  error: 'githubToken is no longer accepted here. Store it in the organization or project vault.',
+}));
 
-// PUT /api/settings/integrations — configure the work-management and source
-// repository connectors in one atomic, server-owned settings update. Blank
-// credential fields are ignored so editing a URL never erases a saved secret;
-// explicit `clear*Token` flags are used for removal.
+// PUT /api/settings/integrations — non-secret provider/repository choices only.
+// Connector routing metadata and credentials belong to settings-service scope.
 router.put('/integrations', (req, res) => {
   const b = req.body || {};
   const current = getSettings();
   const patch = {};
+
+  const legacyFields = [
+    'githubToken', 'gitlabToken', 'jiraApiToken', 'asanaAccessToken',
+    'clearGithubToken', 'clearGitlabToken', 'clearJiraToken', 'clearAsanaToken',
+    'jiraBaseUrl', 'jiraEmail', 'asanaWorkspaceId',
+  ].filter((key) => Object.prototype.hasOwnProperty.call(b, key));
+  if (legacyFields.length) {
+    return res.status(400).json({
+      error: `Legacy integration field(s) are no longer accepted here: ${legacyFields.join(', ')}. Use organization connectors and the scope vault.`,
+    });
+  }
 
   if (b.planningProvider !== undefined) {
     const planningProvider = String(b.planningProvider).toLowerCase();
@@ -752,26 +731,6 @@ router.put('/integrations', (req, res) => {
     });
   }
 
-  if (b.jiraBaseUrl !== undefined) {
-    const jiraBaseUrl = normalizeOptionalUrl(b.jiraBaseUrl, '');
-    if (String(b.jiraBaseUrl || '').trim() && !jiraBaseUrl) {
-      return res.status(400).json({ error: 'Jira site must be a valid http(s) URL.' });
-    }
-    patch.jiraBaseUrl = jiraBaseUrl;
-  }
-  if (b.jiraEmail !== undefined) patch.jiraEmail = String(b.jiraEmail || '').trim().slice(0, 320);
-  if (b.asanaWorkspaceId !== undefined) patch.asanaWorkspaceId = String(b.asanaWorkspaceId || '').trim().slice(0, 160);
-
-  for (const [bodyKey, settingKey, clearKey] of [
-    ['githubToken', 'githubToken', 'clearGithubToken'],
-    ['gitlabToken', 'gitlabToken', 'clearGitlabToken'],
-    ['jiraApiToken', 'jiraApiToken', 'clearJiraToken'],
-    ['asanaAccessToken', 'asanaAccessToken', 'clearAsanaToken'],
-  ]) {
-    if (b[clearKey] === true) patch[settingKey] = '';
-    else if (b[bodyKey] !== undefined && String(b[bodyKey]).trim()) patch[settingKey] = String(b[bodyKey]).trim();
-  }
-
   patchSettings(patch);
   res.json(publicSettings());
 });
@@ -802,8 +761,12 @@ router.put('/runtime', (req, res) => {
 // PUT /api/settings/langsmith — save LangSmith tracing configuration.
 router.put('/langsmith', (req, res) => {
   const b = req.body || {};
+  if (Object.prototype.hasOwnProperty.call(b, 'langsmithApiKey')) {
+    return res.status(400).json({
+      error: 'langsmithApiKey is no longer accepted here. Store it in the organization or project vault.',
+    });
+  }
   const patch = {};
-  if (b.langsmithApiKey !== undefined) patch.langsmithApiKey = String(b.langsmithApiKey).trim();
   if (b.langsmithProject !== undefined && String(b.langsmithProject).trim()) {
     patch.langsmithProject = String(b.langsmithProject).trim();
   }
@@ -827,6 +790,14 @@ router.get('/json', (req, res) => {
 router.put('/json', (req, res) => {
   const body = req.body || {};
   const input = body.settings && typeof body.settings === 'object' ? body.settings : body;
+  const legacySecrets = LEGACY_PLAINTEXT_SECRET_FIELDS.filter((key) =>
+    Object.prototype.hasOwnProperty.call(input || {}, key)
+  );
+  if (legacySecrets.length) {
+    return res.status(400).json({
+      error: `Plaintext secret field(s) are not accepted in settings JSON: ${legacySecrets.join(', ')}. Use the scope vault.`,
+    });
+  }
   const { patch, applied, rejected, ignored } = sanitizeSettingsPatch(input);
   if (!applied.length) {
     const detail = rejected.length
@@ -838,29 +809,12 @@ router.put('/json', (req, res) => {
   res.json({ settings: publicSettings(), applied, rejected, ignored });
 });
 
-// GET /api/settings/validate — test the currently stored Linear key.
-// A rejected key is a validation RESULT, not an authentication failure of THIS
-// API, so return 200 { ok:false, error } instead of propagating Linear's 401.
-// That lets the client guide the user to Settings without the browser logging a
-// console error for every probe. Missing key stays a 400 (nothing to test).
-router.get(
-  '/validate',
-  asyncHandler(async (req, res) => {
-    const key = getApiKey();
-    if (!key) return res.status(400).json({ error: 'No API key configured.' });
-    try {
-      const { viewer, organization } = await getViewer(key);
-      res.json({ ok: true, viewer, organization });
-    } catch (err) {
-      res.json({ ok: false, error: err.message || 'The Linear key was rejected. Verify it in Settings.' });
-    }
-  })
-);
+router.get('/validate', (_req, res) => res.status(400).json({
+  error: 'Linear readiness is reported by the organization connector surface.',
+}));
 
-// DELETE /api/settings — clear the Linear key.
-router.delete('/', (req, res) => {
-  setApiKey('');
-  res.json(publicSettings());
-});
+router.delete('/', (_req, res) => res.status(400).json({
+  error: 'Linear credentials must be cleared from the organization or project vault.',
+}));
 
 module.exports = router;

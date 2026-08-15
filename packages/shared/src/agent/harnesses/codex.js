@@ -178,7 +178,6 @@ async function executeCodex(options, prompt) {
           'GH_TOKEN',
           'GITHUB_TOKEN',
           'GITLAB_TOKEN',
-          'LINEAR_API_KEY',
           'LANGSMITH_API_KEY',
         ],
       },

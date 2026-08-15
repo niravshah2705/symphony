@@ -54,3 +54,33 @@ test('follow fails closed when token minting returns no usable token', async () 
   );
   assert.equal(streamRequests, 0);
 });
+
+test('follow builds the SSE URL from the mint response authoritative context', async () => {
+  let streamUrl;
+  const client = {
+    base: 'https://gateway.example',
+    headers: () => ({ Accept: 'text/event-stream' }),
+    request: async () => ({
+      token: '123.signature',
+      organizationId: 'authoritative-org',
+      projectId: 'authoritative-project',
+    }),
+  };
+
+  await follow(client, 'conversation-1', {
+    fetchImpl: async (url) => {
+      streamUrl = new URL(url);
+      return {
+        ok: true,
+        status: 200,
+        body: new ReadableStream({ start(controller) { controller.close(); } }),
+      };
+    },
+  });
+
+  assert.equal(streamUrl.pathname, '/api/agent/stream');
+  assert.equal(streamUrl.searchParams.get('conversationId'), 'conversation-1');
+  assert.equal(streamUrl.searchParams.get('t'), '123.signature');
+  assert.equal(streamUrl.searchParams.get('organizationId'), 'authoritative-org');
+  assert.equal(streamUrl.searchParams.get('projectId'), 'authoritative-project');
+});

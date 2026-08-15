@@ -41,15 +41,18 @@ standard route, byte-for-byte.
 1. **LangSmith (Plus/Enterprise):** create (or pick) the managed workspace; add
    the Anthropic + OpenAI provider secrets under workspace Provider Secrets;
    mint a workspace API key.
-2. **Secrets:** mount the workspace key as `LANGSMITH_GATEWAY_API_KEY` on the
-   settings service (vault key `langsmithGatewayApiKey`, managed-only — never
-   browser-writable) and optionally on the proxy sidecar as the last-resort
-   fallback. Non-proxied processes (gateway service, local dev) read it from the
-   store env overlay. It is deliberately distinct from `langsmithApiKey`
-   (tracing) so a customer tracing key can never become the billing credential.
+2. **Secrets:** add the workspace key to the settings service's
+   `managed_provider_secrets` map as `LANGSMITH_GATEWAY_API_KEY => <secret-id>`
+   (vault key `langsmithGatewayApiKey`, managed-only — never browser-writable).
+   The proxy resolves it through the same settings S2S path as every other
+   managed credential. Never mount it on a proxy, gateway, planner, coder, or
+   worker container. A trusted non-proxied local process may use the store env
+   overlay. It is deliberately distinct from `langsmithApiKey` (tracing) so a
+   customer tracing key can never become the billing credential.
 3. **Env:** set `LLM_GATEWAY_ENABLED=true` on the gateway service AND the
-   planner/coder/worker containers. BYOC/self-hosted LangSmith: also set
-   `LANGSMITH_GATEWAY_URL=https://<data-plane-host>/gateway` (sidecar + agents).
+   planner/coder/worker containers. BYOC/self-hosted LangSmith: set
+   `LANGSMITH_GATEWAY_URL=https://<data-plane-host>/gateway` only on deployed
+   proxy sidecars (or on the trusted process in non-proxied local mode).
 4. **Policies (LangSmith UI):** set the customer-identifier header to
    `X-Fleet-Org-Id`; define per-org spend/rate policies keyed on its values;
    consider a default-deny/zero-budget policy for unknown org ids. The proxy
@@ -76,8 +79,12 @@ standard route, byte-for-byte.
 ## Smoke test (no agent needed)
 
 ```bash
-# sidecar with the key + a tenant org
-PROXY_PORT=4030 PROXY_ORG_ID=test-org LANGSMITH_GATEWAY_API_KEY=lsv2_... node services/proxy/src/index.js
+# Precondition: the local settings service holds LANGSMITH_GATEWAY_API_KEY and
+# validates this org-bound internal token. The proxy receives no provider key.
+PROXY_PORT=4030 PROXY_ORG_ID=test-org \
+  SETTINGS_SERVICE_URL=http://127.0.0.1:8002 \
+  ORG_INTERNAL_API_TOKEN=<org-bound-token> \
+  node services/proxy/src/index.js
 
 curl http://127.0.0.1:4030/llmgw/v1/chat/completions \
   -H 'content-type: application/json' \

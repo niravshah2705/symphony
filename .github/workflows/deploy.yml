@@ -130,11 +130,8 @@ jobs:
           run_tf=false
           if [ "$FORCE_ALL" = "true" ] || [ "$INFRA" = "true" ] || [ "$PROXY" = "true" ] || [ "$services" != "[]" ]; then run_tf=true; fi
 
-          # Egress proxy sidecar image: built whenever terraform will run so the
-          # image the sidecar references ALWAYS exists at this SHA. Harmless when
-          # egress_proxy_enabled is off — terraform simply doesn't reference it.
-          # (Like the provisioner, it is built even while the feature can be off so
-          # turning it on is a one-var flip.)
+          # Shared proxy artifact: built whenever terraform will run so both the
+          # mandatory egress sidecars and stream-token broker have this SHA.
           if [ "$run_tf" = "true" ]; then push proxy proxy deploy/gcp/Dockerfile.proxy . ; fi
 
           {
@@ -345,9 +342,9 @@ jobs:
             write_tag tester resolve_optional tester pipeline-tester "$PIPELINE_ENABLED"
             write_tag deployer resolve_optional deployer pipeline-deployer "$PIPELINE_ENABLED"
             write_tag provisioner resolve_optional provisioner provisioner "$PROVISIONING_ENABLED"
-            # The proxy is a SIDECAR (no standalone Cloud Run service to query a
-            # live tag from), but it is built on every terraform-running deploy
-            # (see the plan step), so it always resolves to the current SHA here.
+            # One proxy artifact backs both sidecars and the standalone broker.
+            # It is built on every terraform-running deploy (see the plan step),
+            # so it always resolves to the current SHA here.
             write_tag proxy resolve proxy proxy
             write_tag org resolve org org-service
             write_tag settings resolve settings settings-service
@@ -361,11 +358,27 @@ jobs:
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
             -backend-config="prefix=${TF_STATE_PREFIX}"
 
+      - name: Prepare internal S2S token
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          token=""
+          version="$(gcloud secrets versions list internal-api-token \
+            --project "$PROJECT_ID" --filter='state=ENABLED' --limit=1 \
+            --format='value(name)' 2>/dev/null || true)"
+          if [ -n "$version" ]; then
+            token="$(gcloud secrets versions access "$version" \
+              --secret=internal-api-token --project "$PROJECT_ID")"
+          else
+            token="$(openssl rand -base64 48 | tr -d '\n')"
+          fi
+          [ -n "$token" ] || { echo "Unable to prepare internal S2S token" >&2; exit 1; }
+          echo "::add-mask::$token"
+          printf 'TF_VAR_internal_api_token=%s\n' "$token" >> "$GITHUB_ENV"
+
       - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}
-        env:
-          # Sensitive Terraform input stays out of the command line and logs.
-          TF_VAR_internal_api_token: ${{ secrets.INTERNAL_API_TOKEN }}
         run: |
           set -euo pipefail
           PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
@@ -387,11 +400,14 @@ jobs:
             -var="google_one_tap_client_id=${{ vars.GOOGLE_ONE_TAP_CLIENT_ID }}"
             -var="skills_bucket_name=${{ vars.SKILLS_BUCKET }}"
             -var="skills_version=${{ vars.SKILLS_VERSION || 'v1' }}"
-            -var="egress_proxy_enabled=true"
             -var="provisioning_enabled=${{ vars.PROVISIONING_ENABLED || 'false' }}"
             -var="pipeline_orchestrator_enabled=${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}"
             -var="pipeline_deployment_enabled=${{ vars.PIPELINE_DEPLOYMENT_ENABLED || 'false' }}"
             -var="settings_operator_invoker=${{ vars.SETTINGS_OPERATOR_INVOKER }}"
+            -var="omlx_proxy_upstream=${{ vars.OMLX_PROXY_UPSTREAM }}"
+            -var="ollama_proxy_upstream=${{ vars.OLLAMA_PROXY_UPSTREAM }}"
+            -var="lmstudio_proxy_upstream=${{ vars.LMSTUDIO_PROXY_UPSTREAM }}"
+            -var="openswe_proxy_upstream=${{ vars.OPENSWE_PROXY_UPSTREAM }}"
             -var="email_smtp_host=${{ vars.EMAIL_SMTP_HOST }}"
             -var="email_smtp_port=${{ vars.EMAIL_SMTP_PORT || '587' }}"
             -var="email_smtp_secure=${{ vars.EMAIL_SMTP_SECURE || 'false' }}"

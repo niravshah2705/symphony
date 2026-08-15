@@ -364,6 +364,8 @@ test('authenticated Firebase session adds a bearer token and reports only gatewa
   });
   await page.route('**/api/agent/workspace-stream-token**', (route) => authorizedJson(route, {
     token: 'context-bound-stream-token',
+    organizationId: 'org-primary',
+    projectId: 'fleet-project',
   }));
 
   const response = await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });

@@ -66,7 +66,7 @@ test('sanitizeMcpDescriptor keeps transport fields and strips secrets', () => {
     args: ['-y', '@playwright/mcp@latest'],
     url: null,
     headers: { Authorization: 'Bearer sk-secret' },
-    env: { LINEAR_API_KEY: 'lin_secret' },
+    env: { EXAMPLE_PROVIDER_TOKEN: 'provider-secret' },
   });
   assert.deepEqual(clean, { command: 'npx', args: ['-y', '@playwright/mcp@latest'], url: null });
   assert.equal('headers' in clean, false);

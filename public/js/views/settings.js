@@ -59,6 +59,13 @@ export async function renderSettings(view) {
   if (!settings.claudeModel) settings.claudeModel = claudeRes.model || claudeRes.defaultModel || 'claude-opus-4-8';
 
   const identity = deriveIdentity(meRes, workspace);
+  const scopeState = {
+    scope: identity.isOrgAdmin && identity.hasOrg
+      ? 'org'
+      : identity.isProjectAdmin && identity.defaultProjectId ? 'project' : 'user',
+    projectId: identity.defaultProjectId,
+    identity,
+  };
   const ctx = {
     settings,
     presets,
@@ -69,10 +76,12 @@ export async function renderSettings(view) {
     view,
     me: meRes,
     identity,
+    scopeState,
     harnessCatalog: Array.isArray(universeRes.harnesses) ? universeRes.harnesses : [],
     effectivePrefs: (effectiveRes && effectiveRes.prefs) || {},
     advanced: { configRes, modelsRes, labelsRes, membersRes, roleRes, jsonRes },
   };
+  await hydrateVaultState(ctx, scopeState);
   const llm = llmSection(ctx);
   // A model/param change inside a role card re-renders the LLM section via
   // ctx.rebuild; extend it so the complexity dial re-derives its position too.
@@ -82,23 +91,13 @@ export async function renderSettings(view) {
     if (ctx.refreshComplexity) ctx.refreshComplexity();
   };
 
-  // Scope state — which level (org/project/user) the page is editing. It governs
-  // the per-scope policy / effective / inheritance surfaces. Operational settings
-  // (complexity/provider/roles/runtime/tracker) are still a single global store,
-  // so they are labeled "Global" in the effective panel until per-scope lands.
-  const scopeState = {
-    scope: identity.isOrgAdmin && identity.hasOrg
-      ? 'org'
-      : identity.isProjectAdmin && identity.defaultProjectId ? 'project' : 'user',
-    projectId: identity.defaultProjectId,
-    identity,
-  };
-
   const render = () => {
     clear(view).append(
       el('div', { class: 'sx-root' }, [
         sxHeader(),
-        scopeLadder(scopeState, identity, render),
+        scopeLadder(scopeState, identity, () => {
+          void hydrateVaultState(ctx, scopeState).then(render);
+        }),
         editingBanner(scopeState, ctx),
       ]),
       el('div', { class: 'settings-layout' }, [
@@ -192,6 +191,79 @@ function canEditPolicyScope(identity, scope) {
   if (scope === 'org') return Boolean(identity?.isOrgAdmin);
   if (scope === 'project') return Boolean(identity?.isOrgAdmin || identity?.isProjectAdmin);
   return scope === 'user';
+}
+
+function scopedVaultClient(scopeState) {
+  const p = api.settingsPolicy;
+  if (scopeState.scope === 'org' && scopeState.identity?.isOrgAdmin) {
+    return {
+      get: () => p.getOrgSecrets(),
+      set: (values, selection) => p.setOrgSecrets(values, selection),
+      select: (selection) => p.setOrgSecretSelection(selection),
+    };
+  }
+  if (scopeState.scope === 'project' && scopeState.projectId
+      && (scopeState.identity?.isOrgAdmin || scopeState.identity?.isProjectAdmin)) {
+    return {
+      get: () => p.getProjectSecrets(scopeState.projectId),
+      set: (values, selection) => p.setProjectSecrets(scopeState.projectId, values, selection),
+      select: (selection) => p.setProjectSecretSelection(scopeState.projectId, selection),
+    };
+  }
+  return null;
+}
+
+function overlayVaultState(settings, secrets = {}, connectors = {}, readiness = {}) {
+  const isSet = (key) => Boolean(secrets[key] && secrets[key].set);
+  settings.vaultSecrets = secrets;
+  settings.hasKey = isSet('linearApiKey');
+  settings.hasGithubToken = isSet('githubToken');
+  settings.hasGitlabToken = isSet('gitlabToken');
+  settings.hasJiraToken = isSet('jiraApiToken');
+  settings.hasAsanaToken = isSet('asanaAccessToken');
+  settings.hasOmlxApiKey = isSet('omlxApiKey');
+  settings.hasHuggingfaceApiKey = isSet('huggingfaceApiKey');
+  settings.hasAntigravityApiKey = isSet('geminiApiKey');
+  settings.hasLangsmithKey = isSet('langsmithApiKey');
+  settings.jiraBaseUrl = connectors.jira_origin || '';
+  settings.jiraEmail = connectors.jira_email || '';
+  settings.asanaWorkspaceId = connectors.asana_workspace_id || '';
+  const stateByConnector = readiness.connectors || {};
+  const tracker = stateByConnector[settings.planningProvider || 'linear'];
+  settings.planningConfigured = tracker
+    ? tracker.configured === true
+    : settings.planningProvider === 'jira'
+      ? Boolean(settings.jiraBaseUrl && settings.jiraEmail && settings.hasJiraToken)
+      : settings.planningProvider === 'asana'
+        ? Boolean(settings.asanaWorkspaceId && settings.hasAsanaToken)
+        : settings.hasKey;
+  settings.repositoryConfigured = Boolean(
+    settings.repositoryUrl
+    && (settings.repositoryProvider === 'gitlab'
+      ? settings.hasGitlabToken : settings.hasGithubToken)
+  );
+}
+
+async function hydrateVaultState(ctx, scopeState) {
+  const vault = scopedVaultClient(scopeState);
+  let secrets = {};
+  let connectors = {};
+  let readiness = {};
+  if (vault) {
+    try { secrets = ((await vault.get()) || {}).secrets || {}; } catch (_) { secrets = {}; }
+  }
+  if (scopeState.identity?.isOrgAdmin) {
+    [connectors, readiness] = await Promise.all([
+      api.settingsPolicy.getOrgConnectors().catch(() => ({})),
+      api.settingsPolicy.getConnectorReadiness(
+        scopeState.scope === 'project' ? scopeState.projectId : null
+      ).catch(() => ({})),
+    ]);
+  }
+  ctx.vault = vault;
+  ctx.connectors = connectors;
+  ctx.readiness = readiness;
+  overlayVaultState(ctx.settings, secrets, connectors, readiness);
 }
 
 const SCOPE_META = {
@@ -899,8 +971,8 @@ function connectionsSection(ctx, scopeState) {
     trackerCard,
     servicesCard,
     // Detailed credential editors reuse the existing collapsible sections.
-    integrationsSection(settings),
-    keysSection(settings),
+    integrationsSection(ctx, scopeState),
+    keysSection(ctx, scopeState),
   ]);
 }
 
@@ -1140,10 +1212,18 @@ const RECOMMENDED_SOFTWARE_DEV = {
 // read). Each has a managed-vs-customer selection. Keys must be in the settings
 // service SECRET_KEYS allowlist (services/settings/app/models/secrets.py).
 const VAULT_SECRETS = [
+  { key: 'linearApiKey', label: 'Linear API key', hint: 'Customer-only. Used by planning and project synchronization.' },
+  { key: 'githubToken', label: 'GitHub token', hint: 'Used by repository egress for GitHub.' },
+  { key: 'gitlabToken', label: 'GitLab token', hint: 'Customer-only. Used by repository egress for GitLab.' },
+  { key: 'jiraApiToken', label: 'Jira API token', hint: 'Customer-only. Jira execution is not yet routable.' },
+  { key: 'asanaAccessToken', label: 'Asana access token', hint: 'Customer-only. Asana execution is not yet routable.' },
+  { key: 'omlxApiKey', label: 'oMLX API key', hint: 'Customer-only. Optional authentication for the configured oMLX server.' },
+  { key: 'slackWebhookUrl', label: 'Slack webhook URL', hint: 'Customer-only. Used by brokered Slack notifications.' },
   { key: 'anthropicApiKey', label: 'Anthropic API key', hint: 'Used by the Claude provider (managed alternative to Sign in with Claude).' },
   { key: 'openaiApiKey', label: 'OpenAI API key', hint: 'Used by the OpenAI provider (managed alternative to Sign in with ChatGPT).' },
   { key: 'geminiApiKey', label: 'Gemini API key', hint: 'Used by the Gemini / Antigravity provider.' },
   { key: 'huggingfaceApiKey', label: 'Hugging Face token', hint: 'Used by the Hugging Face (BYoM) provider.' },
+  { key: 'langsmithApiKey', label: 'LangSmith API key', hint: 'Used for brokered tracing and evaluation.' },
 ];
 
 function describeVaultStatus(isSet, source) {
@@ -1215,7 +1295,7 @@ async function policyScopeCard(container, { title, hint, load, save, universe, e
   });
   clear(container).append(...head, form);
   // Provider secrets live in the per-org vault, so they attach to the org scope only.
-  if (vault) container.append(vaultSecretsEditor());
+  if (vault) container.append(vaultSecretsEditor(vault));
 }
 
 /**
@@ -1223,22 +1303,27 @@ async function policyScopeCard(container, { title, hint, load, save, universe, e
  * customer selection and a write-only customer key. This is the source proxied
  * agents read; pasting a customer key auto-selects "customer" so it takes effect.
  */
-function vaultSecretsEditor() {
+function vaultSecretsEditor(scopeState) {
   const wrap = el('div', { class: 'policy-domain field vault-secrets' });
+  const vault = scopedVaultClient(scopeState);
   const render = (secrets) => {
     clear(wrap).append(
       el('div', { class: 'subhead' }, 'Provider keys (per-org vault)'),
       el('p', { class: 'muted' }, 'KMS-encrypted and write-only — never shown again. “Managed” uses the platform key; “Customer” uses the key you paste here. Agents read from this vault.'),
     );
     for (const item of VAULT_SECRETS) {
-      const entry = (secrets && secrets[item.key]) || { set: false, source: 'managed' };
-      let source = entry.source === 'customer' ? 'customer' : 'managed';
+      const entry = (secrets && secrets[item.key]) || { set: false, source: 'managed', allowed_sources: ['managed', 'customer'] };
+      const allowedSources = Array.isArray(entry.allowed_sources) && entry.allowed_sources.length
+        ? entry.allowed_sources : ['managed', 'customer'];
+      let source = allowedSources.includes(entry.source) ? entry.source : allowedSources[0];
       const status = el('span', { class: 'muted' }, describeVaultStatus(entry.set, source));
       const input = pwd(entry.set ? 'Configured — paste a new key to replace' : 'Paste your key');
       const saveBtn = el('button', { type: 'button', class: 'btn' }, 'Save customer key');
       const clearBtn = el('button', { type: 'button', class: 'btn' }, 'Clear');
       const managedBtn = el('button', { type: 'button', class: `btn btn-small${source === 'managed' ? ' primary' : ''}` }, 'Managed');
       const customerBtn = el('button', { type: 'button', class: `btn btn-small${source === 'customer' ? ' primary' : ''}` }, 'Customer');
+      managedBtn.hidden = !allowedSources.includes('managed');
+      customerBtn.hidden = !allowedSources.includes('customer');
       const reflect = () => {
         managedBtn.classList.toggle('primary', source === 'managed');
         customerBtn.classList.toggle('primary', source === 'customer');
@@ -1246,7 +1331,7 @@ function vaultSecretsEditor() {
       };
       const setSource = async (mode) => {
         managedBtn.disabled = customerBtn.disabled = true;
-        try { await api.settingsPolicy.setOrgSecretSelection({ [item.key]: mode }); source = mode; reflect(); toast(`Using ${mode} key.`, 'ok'); }
+        try { await vault.select({ [item.key]: mode }); source = mode; reflect(); toast(`Using ${mode} key.`, 'ok'); }
         catch (err) { toast(err.message || 'Could not update selection.', 'err'); }
         finally { managedBtn.disabled = customerBtn.disabled = false; }
       };
@@ -1257,10 +1342,9 @@ function vaultSecretsEditor() {
         if (!value) return toast('Paste a key value to save.', 'err');
         saveBtn.disabled = true;
         try {
-          await api.settingsPolicy.setOrgSecrets({ [item.key]: value });
+          await vault.set({ [item.key]: value }, { [item.key]: 'customer' });
           entry.set = true; input.value = '';
-          // A stored customer key only takes effect once the org selects "customer".
-          if (source !== 'customer') { await api.settingsPolicy.setOrgSecretSelection({ [item.key]: 'customer' }); source = 'customer'; }
+          source = 'customer';
           reflect();
           toast('Customer key saved.', 'ok');
         } catch (err) { toast(err.message || 'Could not save key.', 'err'); }
@@ -1268,7 +1352,7 @@ function vaultSecretsEditor() {
       });
       clearBtn.addEventListener('click', async () => {
         clearBtn.disabled = true;
-        try { await api.settingsPolicy.setOrgSecrets({ [item.key]: '' }); entry.set = false; input.value = ''; reflect(); toast('Customer key cleared.', 'ok'); }
+        try { await vault.set({ [item.key]: '' }); entry.set = false; input.value = ''; reflect(); toast('Customer key cleared.', 'ok'); }
         catch (err) { toast(err.message || 'Could not clear key.', 'err'); }
         finally { clearBtn.disabled = false; }
       });
@@ -1283,7 +1367,11 @@ function vaultSecretsEditor() {
   };
   wrap.append(loading('Loading provider keys…'));
   void (async () => {
-    try { const res = await api.settingsPolicy.getOrgSecrets(); render((res && res.secrets) || {}); }
+    try {
+      if (!vault) throw new Error('Choose an organization or project scope you can administer.');
+      const res = await vault.get();
+      render((res && res.secrets) || {});
+    }
     catch (err) {
       clear(wrap).append(
         el('div', { class: 'subhead' }, 'Provider keys (per-org vault)'),
@@ -1318,6 +1406,7 @@ function policyGroup(ctx) {
   const wrap = el('div', { class: 'policy-merged' });
   const userC = el('div', { class: 'policy-scope' });
   const orgC = el('div', { class: 'policy-scope' });
+  const vaultC = el('div', { class: 'policy-scope' });
   const effC = el('div', { class: 'policy-scope' });
   wrap.append(loading('Loading policy…'));
   void (async () => {
@@ -1327,8 +1416,11 @@ function policyGroup(ctx) {
     const isOrgAdmin = Boolean(ctx.identity?.isOrgAdmin);
     clear(wrap).append(
       el('p', { class: 'muted settings-section-intro' }, 'Include/exclude what agents may use per scope. Lower scopes only narrow — an exclude higher up always wins. Empty include = allow all.'),
-      userC, orgC, effC,
+      userC, orgC, vaultC, effC,
     );
+    if (scopedVaultClient(ctx.scopeState)) {
+      vaultC.append(vaultSecretsEditor(ctx.scopeState));
+    }
     await Promise.all([
       policyScopeCard(userC, {
         title: 'My settings (user scope)', hint: 'Your personal narrowing — applied last.',
@@ -1339,7 +1431,6 @@ function policyGroup(ctx) {
         title: 'Organization scope', hint: 'Applies to everyone in the org. An exclude here blocks project and user.',
         universe, enabled: isOrgAdmin, disabledReason: 'Organization admins only.',
         load: () => api.settingsPolicy.getOrgPolicy(), save: (b) => api.settingsPolicy.setOrgPolicy(b),
-        vault: true,
       }),
       policyEffectiveCard(effC),
     ]);
@@ -1495,11 +1586,13 @@ const pwd = (placeholder) => el('input', { type: 'password', autocomplete: 'off'
 
 /* ------------------------- Keys & connection ---------------------------- */
 
-function keysSection(settings) {
+function keysSection(ctx, scopeState) {
+  const settings = ctx.settings;
+  const vault = scopedVaultClient(scopeState);
   const status = el('div', { class: 'muted', style: 'font-size:13px;margin-top:6px' });
 
-  const linearInput = pwd(settings.hasKey ? `Saved: ${settings.maskedKey}` : 'lin_api_…');
-  const langsmithInput = pwd(settings.hasLangsmithKey ? `Saved: ${settings.maskedLangsmithKey}` : 'lsv2_…');
+  const linearInput = pwd(settings.hasKey ? 'Configured — paste to replace' : 'lin_api_…');
+  const langsmithInput = pwd(settings.hasLangsmithKey ? 'Configured — paste to replace' : 'lsv2_…');
   const hostInput = el('input', { value: settings.langsmithEndpoint || '', placeholder: 'https://api.smith.langchain.com' });
   const projectInput = el('input', { value: settings.langsmithProject || '', placeholder: 'linear-manager' });
   const tracingInput = el('input', { type: 'checkbox', style: 'width:auto', ...(settings.langsmithTracing ? { checked: 'checked' } : {}) });
@@ -1509,20 +1602,33 @@ function keysSection(settings) {
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving…';
     try {
+      const values = {};
+      const selection = {};
       if (linearInput.value.trim()) {
-        const r = await api.saveKey(linearInput.value.trim());
+        values.linearApiKey = linearInput.value.trim();
+        selection.linearApiKey = 'customer';
+      }
+      if (langsmithInput.value.trim()) {
+        values.langsmithApiKey = langsmithInput.value.trim();
+        selection.langsmithApiKey = 'customer';
+      }
+      if (Object.keys(values).length) {
+        if (!vault) throw new Error('Choose an organization or project scope you can administer.');
+        const saved = await vault.set(values, selection);
+        const entries = (saved && saved.secrets) || {};
+        settings.hasKey = Boolean(entries.linearApiKey && entries.linearApiKey.set);
+        settings.hasLangsmithKey = Boolean(entries.langsmithApiKey && entries.langsmithApiKey.set);
         linearInput.value = '';
-        linearInput.placeholder = `Saved: ${r.maskedKey}`;
+        langsmithInput.value = '';
+        linearInput.placeholder = settings.hasKey ? 'Configured — paste to replace' : 'lin_api_…';
+        langsmithInput.placeholder = settings.hasLangsmithKey ? 'Configured — paste to replace' : 'lsv2_…';
       }
       const lsPayload = {
         langsmithProject: projectInput.value.trim() || 'linear-manager',
         langsmithEndpoint: hostInput.value.trim() || 'https://api.smith.langchain.com',
         langsmithTracing: tracingInput.checked,
       };
-      if (langsmithInput.value.trim()) lsPayload.langsmithApiKey = langsmithInput.value.trim();
-      const lr = await api.saveLangsmith(lsPayload);
-      langsmithInput.value = '';
-      langsmithInput.placeholder = lr.hasLangsmithKey ? `Saved: ${lr.maskedLangsmithKey}` : 'lsv2_…';
+      await api.saveLangsmith(lsPayload);
 
       status.textContent = 'Keys saved.';
       status.style.color = 'var(--green)';
@@ -1541,7 +1647,9 @@ function keysSection(settings) {
   const removeLinear = el('button', {
     class: 'danger',
     onclick: async () => {
-      await api.clearKey();
+      if (!vault) return;
+      await vault.set({ linearApiKey: '' });
+      settings.hasKey = false;
       linearInput.placeholder = 'lin_api_…';
       status.textContent = 'Linear key removed.';
       status.style.color = 'var(--muted)';
@@ -1550,28 +1658,13 @@ function keysSection(settings) {
     },
   }, 'Remove Linear key');
 
-  // Reflect current connection state. validate() now returns 200 { ok:false }
-  // for a rejected key (instead of a 401), so handle that in the success path.
   if (settings.hasKey) {
-    api
-      .validate()
-      .then((r) => {
-        if (r && r.ok === false) {
-          status.textContent = `Linear key not working: ${r.error || 'the key was rejected.'}`;
-          status.style.color = 'var(--red)';
-          return;
-        }
-        const who = r.viewer ? r.viewer.name : 'your account';
-        const org = r.organization ? ` @ ${r.organization.name}` : '';
-        status.textContent = `Connected as ${who}${org}.`;
-        status.style.color = 'var(--green)';
-      })
-      .catch((err) => {
-        status.textContent = `Linear key not working: ${err.message}`;
-        status.style.color = 'var(--red)';
-      });
+    status.textContent = 'Linear credential configured in the encrypted scope vault.';
+    status.style.color = 'var(--green)';
   } else {
-    status.textContent = 'No Linear key configured yet.';
+    status.textContent = vault
+      ? 'No Linear key configured at this scope.'
+      : 'Choose an organization or project scope you can administer to edit credentials.';
   }
 
   return section('API Keys & Connection', 'Linear · LangSmith', true, [
@@ -1587,15 +1680,17 @@ function keysSection(settings) {
     field('LangSmith API Key', langsmithInput),
     field('Host / Endpoint', hostInput),
     field('Project', projectInput),
-    el('div', { class: 'row' }, [saveBtn, settings.hasKey ? removeLinear : null]),
+    el('div', { class: 'row' }, [saveBtn, settings.hasKey && vault ? removeLinear : null]),
     status,
-    el('p', { class: 'muted', style: 'font-size:12px' }, 'All keys are stored server-side and never returned to the browser.'),
+    el('p', { class: 'muted', style: 'font-size:12px' }, 'Credentials are KMS-encrypted in the selected organization/project vault and never returned to the browser.'),
   ]);
 }
 
 /* ------------------------ Tool integrations ---------------------------- */
 
-function integrationsSection(settings) {
+function integrationsSection(ctx, scopeState) {
+  const settings = ctx.settings;
+  const vault = scopedVaultClient(scopeState);
   const planningProvider = el('select', {}, [
     el('option', { value: 'linear', selected: settings.planningProvider === 'linear' }, 'Linear'),
     el('option', { value: 'jira', selected: settings.planningProvider === 'jira' }, 'Jira'),
@@ -1610,13 +1705,13 @@ function integrationsSection(settings) {
     value: settings.repositoryUrl || '',
     placeholder: settings.repositoryProvider === 'gitlab' ? 'group/project' : 'owner/repository',
   });
-  const githubToken = pwd(settings.hasGithubToken ? `Saved: ${settings.maskedGithubToken}` : 'github_pat_… / ghp_…');
-  const gitlabToken = pwd(settings.hasGitlabToken ? `Saved: ${settings.maskedGitlabToken}` : 'glpat-…');
+  const githubToken = pwd(settings.hasGithubToken ? 'Configured — paste to replace' : 'github_pat_… / ghp_…');
+  const gitlabToken = pwd(settings.hasGitlabToken ? 'Configured — paste to replace' : 'glpat-…');
   const jiraBaseUrl = el('input', { value: settings.jiraBaseUrl || '', placeholder: 'https://company.atlassian.net' });
   const jiraEmail = el('input', { value: settings.jiraEmail || '', type: 'email', placeholder: 'you@company.com' });
-  const jiraToken = pwd(settings.hasJiraToken ? `Saved: ${settings.maskedJiraToken}` : 'Jira API token');
+  const jiraToken = pwd(settings.hasJiraToken ? 'Configured — paste to replace' : 'Jira API token');
   const asanaWorkspaceId = el('input', { value: settings.asanaWorkspaceId || '', placeholder: 'Workspace GID' });
-  const asanaToken = pwd(settings.hasAsanaToken ? `Saved: ${settings.maskedAsanaToken}` : 'Asana personal access token');
+  const asanaToken = pwd(settings.hasAsanaToken ? 'Configured — paste to replace' : 'Asana personal access token');
   const status = el('div', { class: 'muted', style: 'font-size:12px;min-height:18px' });
 
   const removalControl = (saved, label, tokenInput) => {
@@ -1682,37 +1777,70 @@ function integrationsSection(settings) {
     save.disabled = true;
     save.textContent = 'Saving…';
     status.textContent = '';
+    const wantsCredentialChange = [githubToken, gitlabToken, jiraToken, asanaToken]
+      .some((input) => input.value.trim())
+      || [clearGithub, clearGitlab, clearJira, clearAsana]
+        .some((control) => control.checkbox.checked);
     const payload = {
       planningProvider: planningProvider.value,
       repositoryProvider: repositoryProvider.value,
       repositoryUrl: repositoryUrl.value.trim(),
-      jiraBaseUrl: jiraBaseUrl.value.trim(),
-      jiraEmail: jiraEmail.value.trim(),
-      asanaWorkspaceId: asanaWorkspaceId.value.trim(),
-      clearGithubToken: clearGithub.checkbox.checked,
-      clearGitlabToken: clearGitlab.checkbox.checked,
-      clearJiraToken: clearJira.checkbox.checked,
-      clearAsanaToken: clearAsana.checkbox.checked,
     };
-    if (githubToken.value.trim()) payload.githubToken = githubToken.value.trim();
-    if (gitlabToken.value.trim()) payload.gitlabToken = gitlabToken.value.trim();
-    if (jiraToken.value.trim()) payload.jiraApiToken = jiraToken.value.trim();
-    if (asanaToken.value.trim()) payload.asanaAccessToken = asanaToken.value.trim();
     try {
-      const next = await api.saveIntegrations(payload);
+      if (wantsCredentialChange && !vault) {
+        throw new Error('Choose an organization or project scope you can administer.');
+      }
+      await api.saveIntegrations(payload);
+      if (scopeState.identity?.isOrgAdmin) {
+        ctx.connectors = await api.settingsPolicy.setOrgConnectors({
+          jira_origin: jiraBaseUrl.value.trim(),
+          jira_email: jiraEmail.value.trim(),
+          asana_workspace_id: asanaWorkspaceId.value.trim(),
+        });
+      }
+      const values = {};
+      const selection = {};
+      for (const [key, input, clearControl, customerOnly] of [
+        ['githubToken', githubToken, clearGithub, false],
+        ['gitlabToken', gitlabToken, clearGitlab, true],
+        ['jiraApiToken', jiraToken, clearJira, true],
+        ['asanaAccessToken', asanaToken, clearAsana, true],
+      ]) {
+        if (clearControl.checkbox.checked) {
+          values[key] = '';
+          if (!customerOnly) selection[key] = 'managed';
+        } else if (input.value.trim()) {
+          values[key] = input.value.trim();
+          selection[key] = 'customer';
+        }
+      }
+      let entries = settings.vaultSecrets || {};
+      if (Object.keys(values).length) {
+        if (!vault) throw new Error('Choose an organization or project scope you can administer.');
+        const saved = await vault.set(values, selection);
+        entries = (saved && saved.secrets) || entries;
+        settings.vaultSecrets = entries;
+      }
       githubToken.value = '';
       gitlabToken.value = '';
       jiraToken.value = '';
       asanaToken.value = '';
-      githubToken.placeholder = next.hasGithubToken ? `Saved: ${next.maskedGithubToken}` : 'github_pat_… / ghp_…';
-      gitlabToken.placeholder = next.hasGitlabToken ? `Saved: ${next.maskedGitlabToken}` : 'glpat-…';
-      jiraToken.placeholder = next.hasJiraToken ? `Saved: ${next.maskedJiraToken}` : 'Jira API token';
-      asanaToken.placeholder = next.hasAsanaToken ? `Saved: ${next.maskedAsanaToken}` : 'Asana personal access token';
+      const nextState = {
+        hasGithubToken: Boolean(entries.githubToken && entries.githubToken.set),
+        hasGitlabToken: Boolean(entries.gitlabToken && entries.gitlabToken.set),
+        hasJiraToken: Boolean(entries.jiraApiToken && entries.jiraApiToken.set),
+        hasAsanaToken: Boolean(entries.asanaAccessToken && entries.asanaAccessToken.set),
+      };
+      Object.assign(settings, nextState);
+      githubToken.placeholder = nextState.hasGithubToken ? 'Configured — paste to replace' : 'github_pat_… / ghp_…';
+      gitlabToken.placeholder = nextState.hasGitlabToken ? 'Configured — paste to replace' : 'glpat-…';
+      jiraToken.placeholder = nextState.hasJiraToken ? 'Configured — paste to replace' : 'Jira API token';
+      asanaToken.placeholder = nextState.hasAsanaToken ? 'Configured — paste to replace' : 'Asana personal access token';
       for (const [control, saved] of [
-        [clearGithub, next.hasGithubToken],
-        [clearGitlab, next.hasGitlabToken],
-        [clearJira, next.hasJiraToken],
-        [clearAsana, next.hasAsanaToken],
+        [clearGithub, nextState.hasGithubToken],
+        [clearGitlab, nextState.hasGitlabToken],
+        [clearJira, nextState.hasJiraToken],
+        [clearAsana, nextState.hasAsanaToken],
       ]) {
         control.checkbox.checked = false;
         control.tokenInput.disabled = false;
@@ -1735,7 +1863,7 @@ function integrationsSection(settings) {
   const repoName = settings.repositoryProvider === 'gitlab' ? 'GitLab' : 'GitHub';
   const planName = ({ linear: 'Linear', jira: 'Jira', asana: 'Asana' })[settings.planningProvider] || 'Linear';
   return section('Tool integrations', `${planName} · ${repoName}`, true, [
-    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Save planning-connector and repository credentials on this server. Live project views and scheduled planning remain Linear-backed; Jira and Asana are ready as stored connector choices for routing extensions.'),
+    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Credentials are encrypted in the selected scope vault. Jira and Asana configuration can be staged, but their work-item adapters are not yet routable.'),
     el('div', { class: 'subhead' }, 'Project planning'),
     field('Planning tool', planningProvider),
     linearFields,
@@ -2591,7 +2719,7 @@ function localConnectionEditor(ctx, role, preset, params, rebuild) {
   refreshEndpoint();
 
   const keyInput = isOmlx
-    ? pwd(ctx.settings.hasOmlxApiKey ? `Saved: ${ctx.settings.maskedOmlxApiKey}` : 'Optional API key')
+    ? pwd(ctx.settings.hasOmlxApiKey ? 'Configured — paste to replace' : 'Optional API key')
     : null;
   const clearKey = isOmlx && ctx.settings.hasOmlxApiKey
     ? el('input', { type: 'checkbox', style: 'width:auto' })
@@ -2625,10 +2753,17 @@ function localConnectionEditor(ctx, role, preset, params, rebuild) {
       jsonMode: params.jsonMode,
       contextMode: params.contextMode,
       host: hostInput.value.trim(),
-      ...(isOmlx && keyInput.value.trim() ? { apiKey: keyInput.value.trim() } : {}),
-      ...(isOmlx && clearKey && clearKey.checked ? { clearApiKey: true } : {}),
     };
     try {
+      if (isOmlx && (keyInput.value.trim() || (clearKey && clearKey.checked))) {
+        const vault = scopedVaultClient(ctx.scopeState);
+        if (!vault) throw new Error('Choose an organization or project scope you can administer.');
+        const saved = await vault.set(
+          { omlxApiKey: clearKey && clearKey.checked ? '' : keyInput.value.trim() },
+          clearKey && clearKey.checked ? undefined : { omlxApiKey: 'customer' }
+        );
+        ctx.settings.hasOmlxApiKey = Boolean(saved.secrets?.omlxApiKey?.set);
+      }
       const next = await api.applyLlmPreset({
         role: role === 'byom' ? 'byom' : 'global',
         presetId: preset.id,
@@ -2895,7 +3030,7 @@ function huggingfaceConnection(ctx, role, preset, params, rebuild) {
     type: 'text', value: params.model || '',
     placeholder: 'meta-llama/Llama-3.3-70B-Instruct', spellcheck: 'false',
   });
-  const keyInput = pwd(s.hasHuggingfaceApiKey ? `Saved: ${s.maskedHuggingfaceApiKey}` : 'hf_… access token');
+  const keyInput = pwd(s.hasHuggingfaceApiKey ? 'Configured — paste to replace' : 'hf_… access token');
   const clearKey = s.hasHuggingfaceApiKey ? el('input', { type: 'checkbox', style: 'width:auto' }) : null;
   if (clearKey) {
     clearKey.addEventListener('change', () => {
@@ -2929,10 +3064,18 @@ function huggingfaceConnection(ctx, role, preset, params, rebuild) {
       temperature: params.temperature,
       reasoningEffort: params.reasoningEffort,
       host: hostInput.value.trim(),
-      ...(keyInput.value.trim() ? { apiKey: keyInput.value.trim() } : {}),
-      ...(clearKey && clearKey.checked ? { clearApiKey: true } : {}),
     };
     try {
+      if (keyInput.value.trim() || (clearKey && clearKey.checked)) {
+        const vault = scopedVaultClient(ctx.scopeState);
+        if (!vault) throw new Error('Choose an organization or project scope you can administer.');
+        const clearing = Boolean(clearKey && clearKey.checked);
+        const saved = await vault.set(
+          { huggingfaceApiKey: clearing ? '' : keyInput.value.trim() },
+          { huggingfaceApiKey: clearing ? 'managed' : 'customer' }
+        );
+        s.hasHuggingfaceApiKey = Boolean(saved.secrets?.huggingfaceApiKey?.set);
+      }
       const next = await api.applyLlmPreset({
         role,
         presetId: matched ? matched.id : 'custom',

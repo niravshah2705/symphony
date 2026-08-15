@@ -8,6 +8,8 @@
  */
 
 const { CONFIG } = require('../../config');
+const { PROJECT_CONTEXT_HEADER, projectEgressHeaders } = require('../../egress');
+const { currentWorkspaceContext } = require('../../store/workspace-context');
 const { buildSafeAgentEnv } = require('../repository-broker');
 const { wireModelId } = require('../llm');
 const registry = require('./registry');
@@ -26,6 +28,21 @@ const {
 const ID = 'claude-agent-sdk';
 const LABEL = 'Claude Agent SDK';
 const PACKAGE = '@anthropic-ai/claude-agent-sdk';
+
+/** Apply the SDK's documented proxy base URL and custom-header environment. */
+function applyClaudeProxyEnv(env, context = currentWorkspaceContext(), config = CONFIG) {
+  if (!config.EGRESS_PROXY_INCLUDE_SDK) return env;
+  env.ANTHROPIC_BASE_URL = config.CLAUDE.baseUrl;
+  const projectId = projectEgressHeaders(context)[PROJECT_CONTEXT_HEADER];
+  if (projectId) {
+    env.ANTHROPIC_CUSTOM_HEADERS = `${PROJECT_CONTEXT_HEADER}: ${projectId}`;
+  } else {
+    // Do not preserve an untrusted caller-supplied custom-header bundle in
+    // proxy mode. The sidecar is the only credential/header authority.
+    delete env.ANTHROPIC_CUSTOM_HEADERS;
+  }
+  return env;
+}
 
 /** Restrict Claude tools to the prepared workspace and keep SDK auth out of Bash. */
 function claudePermissionGuard(cwd, carriesCredential) {
@@ -76,10 +93,11 @@ async function executeClaude(options, prompt) {
     else env.CLAUDE_CODE_OAUTH_TOKEN = credential;
   }
   env.CLAUDE_AGENT_SDK_CLIENT_APP = 'tech-symphony/1.0';
-  // Route the SDK's Anthropic calls at the descriptor's base: the egress
-  // proxy's /anthropic prefix (include-SDK mode), or the LangSmith gateway
-  // (flagged run — its base already points at /llmgw when also proxied).
-  if (CONFIG.EGRESS_PROXY_INCLUDE_SDK || viaLlmGateway) {
+  // Proxy mode also replaces any caller-supplied custom-header bundle with the
+  // validated project context. A gateway descriptor then selects /llmgw (or the
+  // direct LangSmith base); an ordinary descriptor keeps the /anthropic base.
+  applyClaudeProxyEnv(env);
+  if (viaLlmGateway) {
     env.ANTHROPIC_BASE_URL = options.llm.baseUrl || CONFIG.CLAUDE.baseUrl;
   }
   const sdkTools = options.backendKind === 'filesystem'
@@ -145,4 +163,4 @@ async function executeClaude(options, prompt) {
 
 registry.register(registry.builtinDefinition(ID, () => executeClaude));
 
-module.exports = { executeClaude, claudePermissionGuard };
+module.exports = { executeClaude, claudePermissionGuard, applyClaudeProxyEnv };

@@ -91,12 +91,13 @@ sidecar** (`services/proxy`) runs co-located with each agent runtime (Cloud Run
 multi-container, shared loopback) and injects the real credential on every
 outbound call.
 
-- **Switch:** `EGRESS_PROXY_URL` (set on planner/coder/worker only — NOT the
+- **Boundary:** `EGRESS_PROXY_URL` (set on every deployed planner/coder/worker — NOT the
   gateway). When set, `packages/shared/src/config.js` points every provider base
   URL at `${EGRESS_PROXY_URL}<prefix>` (see `packages/shared/src/egress.js` for
   the canonical prefix→upstream map) and the agent sends a **sentinel** token;
-  the sidecar strips it and injects the real credential. Unset ⇒ today's direct
-  behavior (fully backward compatible).
+  the sidecar strips it and injects the real credential. Unset is supported only
+  for the trusted local direct-development profile; cloud provisioning fails
+  closed without the sidecar.
 - **One resolution path (managed + customer):** the settings service is the single
   secret source. Customer keys are stored **per organization, encrypted** (GCP KMS
   envelope, `services/settings/app/crypto/` + vault doc
@@ -111,12 +112,15 @@ outbound call.
   settings service holds managed keys, the vault holds customer keys. The runtime
   provisioner clones ALL containers, so a sidecar on the shared service propagates
   to per-tenant stacks (`packages/shared/src/provisioning/containers.js`).
-- **SDK runtimes + LangSmith:** the deep-agent runtime is proxied unconditionally.
-  Set `EGRESS_PROXY_INCLUDE_SDK=true` (with `EGRESS_PROXY_URL`) to also route the
-  NATIVE SDK runtimes (codex-sdk / claude-agent-sdk / antigravity) and LangSmith
-  tracing through the proxy via per-SDK base-URL overrides (`runtimes.js`,
-  `plan.js`). Off = deep-agent-only + direct tracing (the safety valve for SDKs
-  that can't take a base-URL override).
+- **SDK runtimes + LangSmith:** once `EGRESS_PROXY_URL` is present, deep-agent,
+  native SDK runtimes (codex-sdk / claude-agent-sdk / antigravity), and LangSmith
+  tracing are all proxied. There is no deployed direct-egress opt-out.
+- **Gateway stream tokens:** deployed gateways receive only the HTTPS
+  `STREAM_TOKEN_SERVICE_URL`. A standalone, IAM-gated Cloud Run broker runs
+  under its own service account, is the only workload allowed to read
+  `STREAM_TOKEN_SECRET`, and exposes only mint/verify RPCs. Local development
+  uses the same broker entrypoint over loopback; `STREAM_TOKEN_PROXY_URL`
+  remains a temporary rollback compatibility input only.
 - **LangSmith LLM Gateway (per-request feature flag):** a browser request carrying
   `X-AI-Fleet-Llm-Gateway: langsmith` routes THAT run's LLM calls through the
   LangSmith LLM Gateway (`/llmgw` route → `gateway.smith.langchain.com`, Bearer

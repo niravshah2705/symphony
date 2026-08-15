@@ -1,8 +1,6 @@
 'use strict';
 
 const express = require('express');
-const { CONFIG } = require('@ai-fleet/shared/config');
-const { SENTINEL_TOKEN } = require('@ai-fleet/shared/egress');
 const log = require('@ai-fleet/shared/logger');
 const store = require('@ai-fleet/shared/store');
 const linear = require('@ai-fleet/shared/linear');
@@ -47,11 +45,6 @@ function linearProjectId(command) {
       || request.linearProjectId
       || request.projectId,
   );
-}
-
-function linearAccessKey(settings) {
-  const configured = String((settings && settings.linearApiKey) || '');
-  return configured || (CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : '');
 }
 
 function planningKeys(agent) {
@@ -163,7 +156,7 @@ async function executePlanningStage(command, dependencies = {}) {
     { role: 'thinking', workflowStage: 'planning' },
     { ...dependencies, store: storeImpl, step },
   );
-  const apiKey = linearAccessKey(agent.settings);
+  const apiKey = String(storeImpl.getApiKey() || '');
   if (!apiKey) {
     throw new StageExecutionError('Linear access is unavailable to the planner.', 'linear_not_configured');
   }
@@ -295,7 +288,7 @@ function createPlannerPipelineRouter(options = {}) {
     firestoreFactory: options.firestoreFactory,
   });
   const internalAuth = options.internalAuth || pipelineStageAuth({ mode: 'direct' });
-  const pushMiddleware = options.pushAuth || pipelineStageAuth({ mode: CONFIG.MESSAGING_MODE });
+  const pushMiddleware = options.pushAuth || pipelineStageAuth();
   const router = express.Router();
   router.post('/internal/pipeline/stage', internalAuth, handler);
   router.post('/pubsub/pipeline-stage', pushMiddleware, handler);

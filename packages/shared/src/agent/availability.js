@@ -1,7 +1,8 @@
 'use strict';
 
 const { CONFIG } = require('../config');
-const { SENTINEL_TOKEN } = require('../egress');
+const { SENTINEL_TOKEN, projectEgressHeaders } = require('../egress');
+const { currentWorkspaceContext } = require('../store/workspace-context');
 const { discoverModels } = require('./model-discovery');
 const { repoParts } = require('./workspace');
 const { MODEL_ROLES } = require('./model-presets');
@@ -137,7 +138,10 @@ async function probeModelAvailability(llm, dependencies = {}) {
       if (typeof fetchImpl !== 'function' || !llm.host) throw new Error('Local model host is not configured.');
       const path = llm.provider === 'ollama' ? '/api/tags' : '/v1/models';
       const headers = { Accept: 'application/json' };
-      if (llm.provider === 'omlx' && llm.apiKey) headers.Authorization = `Bearer ${llm.apiKey}`;
+      if (CONFIG.EGRESS_PROXY_URL) Object.assign(headers, projectEgressHeaders(currentWorkspaceContext()));
+      if (llm.provider === 'omlx' && (llm.apiKey || CONFIG.EGRESS_PROXY_URL)) {
+        headers.Authorization = `Bearer ${CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : llm.apiKey}`;
+      }
       const response = await fetchImpl(`${String(llm.host).replace(/\/$/, '')}${path}`, {
         headers,
         signal: AbortSignal.timeout(timeoutMs),
@@ -180,7 +184,11 @@ async function probeModelAvailability(llm, dependencies = {}) {
       // large and may omit routable models, so we do NOT require the configured
       // model to appear — only that the authenticated call succeeds.
       const response = await fetchImpl(`${String(llm.baseUrl).replace(/\/$/, '')}/models`, {
-        headers: { Accept: 'application/json', Authorization: `Bearer ${llm.apiKey}` },
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${llm.apiKey}`,
+          ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
+        },
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) throw Object.assign(new Error('Hugging Face rejected the readiness check.'), { status: response.status });
@@ -196,7 +204,11 @@ async function probeModelAvailability(llm, dependencies = {}) {
       // endpoint. Gemini's model listing does not always surface every routable
       // model, so we only require the authenticated call to succeed.
       const response = await fetchImpl(`${String(llm.baseUrl).replace(/\/$/, '')}/models`, {
-        headers: { Accept: 'application/json', Authorization: `Bearer ${llm.apiKey}` },
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${llm.apiKey}`,
+          ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
+        },
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) throw Object.assign(new Error('Antigravity (Gemini) rejected the readiness check.'), { status: response.status });
@@ -216,19 +228,21 @@ async function probeRepositoryAvailability(selection, dependencies = {}) {
   const provider = selection && selection.provider === 'gitlab' ? 'gitlab' : 'github';
   const context = { provider };
   const parts = repoParts(selection && selection.repoRef, provider);
-  // Egress-proxy mode (github only): the agent has no PAT — probe through the
-  // sidecar with the sentinel, which injects the real token.
-  const proxied = provider === 'github' && Boolean(CONFIG.EGRESS_PROXY_URL);
-  const token = selection && selection.token ? selection.token : proxied ? SENTINEL_TOKEN : '';
+  // Egress-proxy mode is mandatory for both supported forges. Ignore a legacy
+  // raw token and probe with the sentinel; the sidecar injects the selected PAT.
+  const proxied = Boolean(CONFIG.EGRESS_PROXY_URL);
+  const token = proxied ? SENTINEL_TOKEN : selection && selection.token ? selection.token : '';
   if (!parts || !token || typeof fetchImpl !== 'function') {
     throw new AgentAvailabilityError('git', publicAvailabilityMessage('git', context), 400, 'git_not_configured');
   }
 
   const github = provider === 'github';
-  const apiOrigin = proxied ? CONFIG.GITHUB_API_ORIGIN : 'https://api.github.com';
+  const apiOrigin = proxied
+    ? github ? CONFIG.GITHUB_API_ORIGIN : CONFIG.GITLAB_API_ORIGIN
+    : github ? 'https://api.github.com' : 'https://gitlab.com/api/v4';
   const url = github
     ? `${apiOrigin}/repos/${encodeURIComponent(parts.owner)}/${encodeURIComponent(parts.name)}`
-    : `https://gitlab.com/api/v4/projects/${encodeURIComponent(parts.fullName)}`;
+    : `${apiOrigin}/projects/${encodeURIComponent(parts.fullName)}`;
   const headers = github
     ? {
         Accept: 'application/vnd.github+json',
@@ -237,6 +251,7 @@ async function probeRepositoryAvailability(selection, dependencies = {}) {
         'User-Agent': 'tech-symphony-readiness',
       }
     : { Accept: 'application/json', 'PRIVATE-TOKEN': token, 'User-Agent': 'tech-symphony-readiness' };
+  if (proxied) Object.assign(headers, projectEgressHeaders(currentWorkspaceContext()));
   try {
     const response = await fetchImpl(url, {
       headers,

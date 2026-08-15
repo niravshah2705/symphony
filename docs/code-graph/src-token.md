@@ -6,8 +6,8 @@
 
 Directory-based community: packages/cli
 
-- **Size**: 110 nodes
-- **Cohesion**: 0.0750
+- **Size**: 112 nodes
+- **Cohesion**: 0.0729
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/cli
 | resolveInputToken | Function | ./packages/cli/src/commands/auth.js | 50-65 |
 | login | Function | ./packages/cli/src/commands/auth.js | 67-102 |
 
-*... and 60 more members.*
+*... and 62 more members.*
 
 ## Execution Flows
 
@@ -80,11 +80,11 @@ Directory-based community: packages/cli
 
 ### Outgoing
 
-- `equal` (56 edge(s))
+- `equal` (61 edge(s))
 - `kv` (36 edge(s))
 - `request` (34 edge(s))
 - `String` (26 edge(s))
-- `trim` (19 edge(s))
+- `trim` (21 edge(s))
 - `ok` (17 edge(s))
 - `heading` (16 edge(s))
 - `line` (14 edge(s))
@@ -98,7 +98,7 @@ Directory-based community: packages/cli
 
 ### Incoming
 
-- `equal` (56 edge(s))
+- `equal` (61 edge(s))
 - `./packages/cli/src/client.test.js` (22 edge(s))
 - `./packages/cli/src/output.js` (16 edge(s))
 - `deepEqual` (14 edge(s))
@@ -106,10 +106,10 @@ Directory-based community: packages/cli
 - `./packages/cli/src/credentials.js` (14 edge(s))
 - `./packages/cli/src/stream.js` (10 edge(s))
 - `parseArgs` (9 edge(s))
+- `./packages/cli/src/stream.test.js` (9 edge(s))
 - `./packages/cli/src/args.test.js` (8 edge(s))
 - `./packages/cli/src/client.js` (8 edge(s))
 - `createClient` (8 edge(s))
 - `request` (8 edge(s))
 - `./packages/cli/src/commands/admin.test.js` (8 edge(s))
 - `./packages/cli/src/commands/auth.js` (8 edge(s))
-- `./packages/cli/src/stream.test.js` (7 edge(s))

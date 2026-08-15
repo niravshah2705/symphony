@@ -2,6 +2,9 @@
 
 const crypto = require('crypto');
 const net = require('net');
+const { CONFIG } = require('../config');
+const { projectEgressHeaders } = require('../egress');
+const { currentWorkspaceContext } = require('../store/workspace-context');
 const {
   fencedJson,
   resolveLocalLlm,
@@ -255,20 +258,31 @@ function isPublicIp(value) {
   return false;
 }
 
+function ipwhoRequest(ip, { config = CONFIG, context = currentWorkspaceContext() } = {}) {
+  const origin = String(config.IPWHO_ORIGIN || 'https://ipwho.is').replace(/\/+$/, '');
+  const suffix = ip ? `/${encodeURIComponent(ip)}` : '/';
+  return {
+    url: `${origin}${suffix}?fields=success,country_code,region`,
+    headers: {
+      accept: 'application/json',
+      ...(config.EGRESS_PROXY_URL ? projectEgressHeaders(context) : {}),
+    },
+  };
+}
+
 /**
  * Resolve only country and region. Failures are intentionally swallowed and no
  * logger receives the address or a provider error that might contain it.
  */
-async function locateIp(ip, { fetchImpl = globalThis.fetch, timeoutMs = LIMITS.geoTimeoutMs } = {}) {
+async function locateIp(ip, options = {}) {
+  const { fetchImpl = globalThis.fetch, timeoutMs = LIMITS.geoTimeoutMs } = options;
   const normalized = normalizeIp(ip);
   if (!normalized || !isPublicIp(normalized) || typeof fetchImpl !== 'function') return null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(100, Math.min(5_000, Number(timeoutMs) || LIMITS.geoTimeoutMs)));
   try {
-    const response = await fetchImpl(
-      `https://ipwho.is/${encodeURIComponent(normalized)}?fields=success,country_code,region`,
-      { signal: controller.signal, headers: { accept: 'application/json' } }
-    );
+    const request = ipwhoRequest(normalized, options);
+    const response = await fetchImpl(request.url, { signal: controller.signal, headers: request.headers });
     if (!response || !response.ok) return null;
     const body = await response.json();
     if (body && body.success === false) return null;
@@ -290,6 +304,8 @@ async function locateCurrentIp({
   fetchImpl = globalThis.fetch,
   timeoutMs = LIMITS.geoTimeoutMs,
   now = Date.now(),
+  config = CONFIG,
+  context = currentWorkspaceContext(),
 } = {}) {
   if (currentLocationCache.expiresAt > now) return currentLocationCache.value;
   if (currentLocationCache.pending) return currentLocationCache.pending;
@@ -298,10 +314,8 @@ async function locateCurrentIp({
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.max(100, Math.min(5_000, Number(timeoutMs) || LIMITS.geoTimeoutMs)));
     try {
-      const response = await fetchImpl(
-        'https://ipwho.is/?fields=success,country_code,region',
-        { signal: controller.signal, headers: { accept: 'application/json' } }
-      );
+      const request = ipwhoRequest('', { config, context });
+      const response = await fetchImpl(request.url, { signal: controller.signal, headers: request.headers });
       if (!response || !response.ok) return null;
       const body = await response.json();
       if (body && body.success === false) return null;
@@ -596,6 +610,7 @@ module.exports = {
   languageSuggestions,
   normalizeIp,
   isPublicIp,
+  ipwhoRequest,
   locateIp,
   locateCurrentIp,
   clearCurrentLocationCache,

@@ -56,6 +56,13 @@ OPENSWE_REPO=your-org/your-repo  # or rely on CODER_REPO_URL
 OPENSWE_USER_EMAIL=you@org.com   # optional: attributes PRs to you
 ```
 
+`OPENSWE_URL` is used only by the trusted direct-development profile. When
+`EGRESS_PROXY_URL` is present, the coder always calls the fixed `/openswe`
+sidecar route; configure the real origin only on the proxy as
+`OPENSWE_PROXY_UPSTREAM`. Cloud deployments pass this as the Terraform variable
+`openswe_proxy_upstream`, so the agent app container never needs the upstream
+origin.
+
 The board monitor (`POST /api/coder/monitor {"action":"start"}`) then dispatches
 each AI-labeled, dependency-unblocked ticket to Open SWE, waits for the run, and
 logs the PR URL. With `CODER_BACKEND=local` (default) none of the above is needed.
@@ -65,8 +72,8 @@ logs the PR URL. With `CODER_BACKEND=local` (default) none of the above is neede
 Independently of the backend, the agents can attach hosted MCP tools:
 
 ```bash
-LINEAR_MCP_ENABLED=true                 # Linear MCP (auth = your stored Linear key)
-GITHUB_MCP_TOKEN=github_pat_...          # GitHub MCP (branch/PR tools)
+LINEAR_MCP_ENABLED=true                 # Linear MCP; proxy injects the selected vault key
+GITHUB_MCP_ENABLED=true                 # GitHub MCP; proxy injects the selected vault token
 npm i @langchain/mcp-adapters            # required for MCP tool loading
 ```
 

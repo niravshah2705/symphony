@@ -15,7 +15,6 @@
 #   PROJECT_ID=my-proj \
 #   SPA_BUCKET=my-proj-aifleet-spa \        # globally-unique
 #   TF_STATE_BUCKET=my-proj-tfstate \       # created if missing
-#   LINEAR_API_KEY=lin_... \                # required secret (else services won't start)
 #   ./deploy/gcp/deploy.sh
 #
 # The Firebase Web API key is read from the managed web app by Terraform — no
@@ -58,25 +57,17 @@ EMAIL_FROM="${EMAIL_FROM:-}"
 EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://storage.googleapis.com/${SPA_BUCKET}/index.html}"
 PIPELINE_ORCHESTRATOR_ENABLED="${PIPELINE_ORCHESTRATOR_ENABLED:-false}"
 PIPELINE_DEPLOYMENT_ENABLED="${PIPELINE_DEPLOYMENT_ENABLED:-false}"
-EGRESS_PROXY_ENABLED="${EGRESS_PROXY_ENABLED:-$PIPELINE_ORCHESTRATOR_ENABLED}"
 SETTINGS_OPERATOR_INVOKER="${SETTINGS_OPERATOR_INVOKER:-}"
+OMLX_PROXY_UPSTREAM="${OMLX_PROXY_UPSTREAM:-}"
+OLLAMA_PROXY_UPSTREAM="${OLLAMA_PROXY_UPSTREAM:-}"
+LMSTUDIO_PROXY_UPSTREAM="${LMSTUDIO_PROXY_UPSTREAM:-}"
+OPENSWE_PROXY_UPSTREAM="${OPENSWE_PROXY_UPSTREAM:-}"
 INTERNAL_API_TOKEN="${INTERNAL_API_TOKEN:-}"
 
 if [[ -n "$GOOGLE_ANALYTICS_MEASUREMENT_ID" && ! "$GOOGLE_ANALYTICS_MEASUREMENT_ID" =~ ^G-[A-Z0-9]+$ ]]; then
   echo "ERROR: GOOGLE_ANALYTICS_MEASUREMENT_ID must be empty or a GA4 id such as G-XXXXXXXXXX." >&2
   exit 1
 fi
-
-if [ "$PIPELINE_ORCHESTRATOR_ENABLED" = "true" ] && [ "$EGRESS_PROXY_ENABLED" != "true" ]; then
-  echo "ERROR: the durable pipeline requires EGRESS_PROXY_ENABLED=true." >&2
-  exit 1
-fi
-if [ "$EGRESS_PROXY_ENABLED" = "true" ] && [ -z "$INTERNAL_API_TOKEN" ]; then
-  echo "ERROR: egress proxy mode requires INTERNAL_API_TOKEN (used only for settings S2S auth)." >&2
-  exit 1
-fi
-# Keep the shared internal token out of the Terraform command line/process list.
-export TF_VAR_internal_api_token="$INTERNAL_API_TOKEN"
 
 if { [ -n "$EMAIL_SMTP_USER" ] && [ -z "$EMAIL_SMTP_PASSWORD" ]; } || \
    { [ -z "$EMAIL_SMTP_USER" ] && [ -n "$EMAIL_SMTP_PASSWORD" ]; }; then
@@ -129,8 +120,11 @@ TFVARS=(
   -var="email_public_app_url=${EMAIL_PUBLIC_APP_URL}"
   -var="pipeline_orchestrator_enabled=${PIPELINE_ORCHESTRATOR_ENABLED}"
   -var="pipeline_deployment_enabled=${PIPELINE_DEPLOYMENT_ENABLED}"
-  -var="egress_proxy_enabled=${EGRESS_PROXY_ENABLED}"
   -var="settings_operator_invoker=${SETTINGS_OPERATOR_INVOKER}"
+  -var="omlx_proxy_upstream=${OMLX_PROXY_UPSTREAM}"
+  -var="ollama_proxy_upstream=${OLLAMA_PROXY_UPSTREAM}"
+  -var="lmstudio_proxy_upstream=${LMSTUDIO_PROXY_UPSTREAM}"
+  -var="openswe_proxy_upstream=${OPENSWE_PROXY_UPSTREAM}"
 )
 
 # --- 1. Enable APIs ---------------------------------------------------------
@@ -140,6 +134,22 @@ gcloud services enable \
   cloudscheduler.googleapis.com firestore.googleapis.com secretmanager.googleapis.com \
   cloudbuild.googleapis.com iam.googleapis.com iamcredentials.googleapis.com \
   storage.googleapis.com
+
+# Reuse the deployed token on subsequent runs; generate it once on the first
+# deploy. Keep it out of Terraform command arguments and shell output.
+if [ -z "$INTERNAL_API_TOKEN" ]; then
+  INTERNAL_API_TOKEN_VERSION="$(gcloud secrets versions list internal-api-token \
+    --project "$PROJECT_ID" --filter='state=ENABLED' --limit=1 \
+    --format='value(name)' 2>/dev/null || true)"
+  if [ -n "$INTERNAL_API_TOKEN_VERSION" ]; then
+    INTERNAL_API_TOKEN="$(gcloud secrets versions access "$INTERNAL_API_TOKEN_VERSION" \
+      --secret=internal-api-token --project "$PROJECT_ID")"
+  else
+    INTERNAL_API_TOKEN="$(openssl rand -base64 48 2>/dev/null | tr -d '\n' || head -c 48 /dev/urandom | base64 | tr -d '\n')"
+  fi
+fi
+[ -n "$INTERNAL_API_TOKEN" ] || { echo "Unable to prepare mandatory internal S2S token" >&2; exit 1; }
+export TF_VAR_internal_api_token="$INTERNAL_API_TOKEN"
 
 # --- 2. Terraform state bucket (idempotent) ---------------------------------
 log "Ensuring Terraform state bucket gs://${TF_STATE_BUCKET}"
@@ -161,7 +171,6 @@ terraform -chdir="$TF_DIR" apply -input=false -auto-approve "${TFVARS[@]}" \
   -target=google_project_service.services \
   -target=google_artifact_registry_repository.docker \
   -target=google_secret_manager_secret.stream_token_secret \
-  -target=google_secret_manager_secret.linear_api_key \
   -target=google_secret_manager_secret.org_jwt_secret \
   -target=google_secret_manager_secret.email_smtp_user \
   -target=google_secret_manager_secret.email_smtp_password \
@@ -182,7 +191,6 @@ seed_secret() { # id, value
 STREAM_TOKEN_SECRET="${STREAM_TOKEN_SECRET:-$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || head -c 32 /dev/urandom | base64 | tr -d '\n')}"
 seed_secret stream-token-secret "$STREAM_TOKEN_SECRET"
 # org-jwt-secret is Terraform-managed (random_password + secret version); no seed here.
-[ -n "${LINEAR_API_KEY:-}" ]    && seed_secret linear-api-key   "$LINEAR_API_KEY"    || echo "  linear-api-key: LINEAR_API_KEY not provided"
 [ -n "${GITHUB_TOKEN:-}" ]      && seed_secret github-token     "$GITHUB_TOKEN"      || true
 [ -n "${LANGSMITH_API_KEY:-}" ] && seed_secret langsmith-api-key "$LANGSMITH_API_KEY" || true
 if [ -n "$EMAIL_SMTP_USER" ]; then seed_secret email-smtp-user "$EMAIL_SMTP_USER"; fi
@@ -205,9 +213,6 @@ if [ "$EMAIL_SMTP_USER_READY" != "$EMAIL_SMTP_PASSWORD_READY" ]; then
 fi
 [ "$EMAIL_SMTP_USER_READY" = true ] && EMAIL_SMTP_AUTH_ENABLED=true
 TFVARS+=( -var="email_smtp_auth_enabled=${EMAIL_SMTP_AUTH_ENABLED}" )
-
-# linear-api-key is mounted as REQUIRED env — the revisions won't start without it.
-has_version linear-api-key || { echo "ERROR: secret 'linear-api-key' has no version. Re-run with LINEAR_API_KEY=... set."; exit 1; }
 
 # --- 6. Build + push images -------------------------------------------------
 if [ "${SKIP_BUILD:-}" = "1" ]; then
@@ -232,7 +237,7 @@ else
   build_push pipeline-orchestrator Dockerfile.orchestrator
   build_push pipeline-tester       Dockerfile.tester
   build_push pipeline-deployer     Dockerfile.deployer
-  if [ "$EGRESS_PROXY_ENABLED" = "true" ]; then build_push proxy Dockerfile.proxy; fi
+  build_push proxy Dockerfile.proxy
   build_push email-service Dockerfile.email
   build_push provisioner Dockerfile.provisioner
   build_push_context org-service services/org/Dockerfile services/org

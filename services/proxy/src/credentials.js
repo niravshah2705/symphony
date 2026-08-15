@@ -1,36 +1,18 @@
 'use strict';
 
 const { LLM_GATEWAY_ORG_HEADER } = require('@ai-fleet/shared-core/egress');
-const { fetchOrgSecrets, fetchManagedSecrets } = require('./secrets-client');
+const {
+  fetchOrgSecrets,
+  fetchManagedSecrets,
+  fetchOrgEgressConfig,
+} = require('./secrets-client');
 
 /**
- * Resolve the credential to inject for a given egress route.
- *
- * Two credential families:
- *   - Static keys (Linear/GitHub/Gemini/HF/LangSmith/Anthropic/OpenAI) — resolved through the
- *     settings service via ONE path (managed and customer alike). PROXY_ORG_ID
- *     set => the per-org resolve (managed + customer merged); unset (shared stack)
- *     => the no-org managed resolve. The settings service supplies the value for
- *     BOTH sources, so a customer key ("customer" selection) and a platform key
- *     ("managed") are resolved the same way. Customer selected but missing =>
- *     FAIL CLOSED. A mounted platform env is used only as a last-resort fallback
- *     when the settings resolve is unavailable (resilience), never as the primary.
- *   - OAuth (Claude/Codex) — resolved by the oauth-manager (store/vault token
- *     sets + refresh). Anthropic and the metered OpenAI route prefer a selected
- *     static key when present; otherwise they use the matching OAuth path.
+ * Resolve the credential and trusted target for an egress route. Provider
+ * credentials have one source only: the settings S2S resolver. The proxy never
+ * falls back to its process environment, because that could silently select a
+ * different organization's/platform's key during a resolver outage.
  */
-
-// Platform-managed keys mounted on the sidecar (mirror store.js SECRET_ENV names).
-const MANAGED_ENV = Object.freeze({
-  linearApiKey: 'LINEAR_API_KEY',
-  githubToken: 'GITHUB_TOKEN',
-  geminiApiKey: 'GEMINI_API_KEY',
-  anthropicApiKey: 'ANTHROPIC_API_KEY',
-  openaiApiKey: 'OPENAI_API_KEY',
-  huggingfaceApiKey: 'HUGGINGFACE_API_KEY',
-  langsmithApiKey: 'LANGSMITH_API_KEY',
-  langsmithGatewayApiKey: 'LANGSMITH_GATEWAY_API_KEY',
-});
 
 function configuredProxyOrgId(env = process.env) {
   const proxyOrgId = String(env.PROXY_ORG_ID || '').trim();
@@ -41,7 +23,7 @@ function configuredProxyOrgId(env = process.env) {
   return proxyOrgId || fleetOrgId;
 }
 
-const ORG_ID = configuredProxyOrgId();
+const DEFAULT_ORG_ID = configuredProxyOrgId();
 const CACHE_TTL_MS = Number(process.env.PROXY_SECRETS_TTL_MS) || 60000;
 
 class FailClosed extends Error {
@@ -52,148 +34,308 @@ class FailClosed extends Error {
   }
 }
 
-let cache = { at: 0, data: null };
+let secretsCache = { scope: '', at: 0, data: null };
+let egressConfigCache = { scope: '', at: 0, data: null };
 
-/**
- * Fetch (and briefly cache) the resolved secrets from the settings S2S. Uses the
- * per-org resolve when PROXY_ORG_ID is set (per-tenant stack), else the no-org
- * managed resolve (shared stack). Per-org calls require the provisioner-derived
- * ORG_INTERNAL_API_TOKEN. Returns null on transport failure so the
- * caller can apply the platform-env fallback.
- */
-async function resolveSecrets({ fetchImpl, now = Date.now() } = {}) {
-  if (cache.data && now - cache.at < CACHE_TTL_MS) return cache.data;
-  const data = ORG_ID
-    ? await fetchOrgSecrets(ORG_ID, { fetchImpl })
-    : await fetchManagedSecrets({ fetchImpl });
-  cache = { at: now, data };
+function proxyOrgId(opts = {}) {
+  if (opts.orgId !== undefined) return String(opts.orgId || '').trim();
+  if (opts.env) return configuredProxyOrgId(opts.env);
+  return DEFAULT_ORG_ID;
+}
+
+async function resolveSecrets(opts = {}) {
+  const now = Number.isFinite(opts.now) ? opts.now : Date.now();
+  const orgId = proxyOrgId(opts);
+  const projectId = String(opts.projectId || '').trim().toLowerCase();
+  const scope = `${orgId || '__managed__'}:${projectId}`;
+  if (secretsCache.data && secretsCache.scope === scope && now - secretsCache.at < CACHE_TTL_MS) {
+    return secretsCache.data;
+  }
+  let data;
+  try {
+    data = orgId
+      ? await fetchOrgSecrets(orgId, opts)
+      : await fetchManagedSecrets(opts);
+  } catch (error) {
+    throw error instanceof FailClosed
+      ? error
+      : new FailClosed('settings secret resolution failed');
+  }
+  if (!data || typeof data !== 'object' || !data.secrets || typeof data.secrets !== 'object') {
+    throw new FailClosed('settings secret resolution returned no usable payload');
+  }
+  secretsCache = { scope, at: now, data };
+  return data;
+}
+
+async function resolveEgressConfig(opts = {}) {
+  const now = Number.isFinite(opts.now) ? opts.now : Date.now();
+  const orgId = proxyOrgId(opts);
+  if (!orgId) throw new FailClosed('organization egress configuration is unavailable on a shared proxy');
+  if (
+    egressConfigCache.data
+    && egressConfigCache.scope === orgId
+    && now - egressConfigCache.at < CACHE_TTL_MS
+  ) {
+    return egressConfigCache.data;
+  }
+  let data;
+  try {
+    data = await fetchOrgEgressConfig(orgId, opts);
+  } catch (_) {
+    throw new FailClosed('organization egress configuration could not be resolved');
+  }
+  if (!data || typeof data !== 'object') {
+    throw new FailClosed('organization egress configuration is missing');
+  }
+  egressConfigCache = { scope: orgId, at: now, data };
   return data;
 }
 
 function clearCache() {
-  cache = { at: 0, data: null };
+  secretsCache = { scope: '', at: 0, data: null };
+  egressConfigCache = { scope: '', at: 0, data: null };
 }
 
-function managedValue(secretKey, env = process.env) {
-  const name = MANAGED_ENV[secretKey];
-  return name ? String(env[name] || '') : '';
-}
-
-/**
- * Resolve a static key's plaintext from the settings-resolve payload. Both
- * managed and customer entries carry a value, so ONE code path serves them.
- * FAIL CLOSED when "customer" is selected but has no value. When the settings
- * resolve is unavailable (no payload), fall back to the platform env (resilience).
- */
-function resolveStaticKey(secretKey, resolved, env = process.env) {
-  const entry = resolved && resolved.secrets && resolved.secrets[secretKey];
-  if (entry) {
-    if (entry.source === 'customer' && !entry.value) {
-      throw new FailClosed(`customer key "${secretKey}" is selected but not set`);
-    }
-    if (entry.value) return entry.value;
-    // managed with no value at the settings side → try the local env fallback.
-    return managedValue(secretKey, env);
+function safeCredential(value, label) {
+  const text = String(value == null ? '' : value).trim();
+  if (/[\x00\r\n]/.test(text) || text.length > 16384) {
+    throw new FailClosed(`${label} is invalid`);
   }
-  // No settings payload at all (resolve failed) → last-resort platform env.
-  return managedValue(secretKey, env);
+  return text;
 }
 
-/**
- * Build the header patch to inject for a route. Never mutates the request; the
- * caller applies these over the forwarded headers (after stripping inbound auth).
- */
+/** Resolve a vault/settings key. Missing required values always fail closed. */
+function resolveStaticKey(secretKey, resolved, options = {}) {
+  if (!resolved || !resolved.secrets || typeof resolved.secrets !== 'object') {
+    throw new FailClosed('settings secret payload is unavailable');
+  }
+  const entry = resolved.secrets[secretKey];
+  const value = entry && safeCredential(entry.value, `credential "${secretKey}"`);
+  if (value) return value;
+  if (options.allowMissing && (options.allowCustomerMissing || !entry || entry.source !== 'customer')) {
+    return '';
+  }
+  throw new FailClosed(`required credential "${secretKey}" is not configured`);
+}
+
+function normalizeTrustedUpstream(value, label) {
+  let url;
+  try {
+    url = new URL(String(value || '').trim());
+  } catch (_) {
+    throw new FailClosed(`${label} is not a valid URL`);
+  }
+  if (
+    !['http:', 'https:'].includes(url.protocol)
+    || url.username
+    || url.password
+    || url.search
+    || url.hash
+  ) {
+    throw new FailClosed(`${label} is not an allowed URL`);
+  }
+  return url.toString().replace(/\/$/, '');
+}
+
+function normalizeOmlxUpstream(value) {
+  return normalizeTrustedUpstream(value, 'OMLX_PROXY_UPSTREAM');
+}
+
+function normalizeJiraConfig(config) {
+  const rawOrigin = config && (config.jira_origin || config.jiraOrigin);
+  const email = safeCredential(config && (config.jira_email || config.jiraEmail), 'Jira account email');
+  let url;
+  try {
+    url = new URL(String(rawOrigin || '').trim());
+  } catch (_) {
+    throw new FailClosed('Jira origin is not configured');
+  }
+  const labels = url.hostname.split('.');
+  const tenant = labels.length === 3 ? labels[0] : '';
+  if (
+    url.protocol !== 'https:'
+    || labels[1] !== 'atlassian'
+    || labels[2] !== 'net'
+    || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(tenant)
+    || url.port
+    || url.username
+    || url.password
+    || (url.pathname && url.pathname !== '/')
+    || url.search
+    || url.hash
+    || !email
+    || email.includes(':')
+  ) {
+    throw new FailClosed('Jira organization egress configuration is invalid');
+  }
+  return { origin: `https://${tenant}.atlassian.net`, email };
+}
+
+function normalizeSlackWebhook(value) {
+  let url;
+  try {
+    url = new URL(safeCredential(value, 'Slack webhook URL'));
+  } catch (error) {
+    if (error instanceof FailClosed) throw error;
+    throw new FailClosed('Slack webhook URL is not configured');
+  }
+  if (
+    url.protocol !== 'https:'
+    || url.hostname !== 'hooks.slack.com'
+    || url.port
+    || url.username
+    || url.password
+    || url.search
+    || url.hash
+    || !/^\/services\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(url.pathname)
+  ) {
+    throw new FailClosed('Slack webhook URL is invalid');
+  }
+  return url.toString();
+}
+
+async function resolveUpstream(route, opts = {}) {
+  if (route.upstream) return route.upstream;
+  if (route.target === 'omlx') {
+    const env = opts.env || process.env;
+    return normalizeOmlxUpstream(env.OMLX_PROXY_UPSTREAM);
+  }
+  if (route.target === 'ollama' || route.target === 'lmstudio' || route.target === 'openswe') {
+    const env = opts.env || process.env;
+    const name = {
+      ollama: 'OLLAMA_PROXY_UPSTREAM',
+      lmstudio: 'LMSTUDIO_PROXY_UPSTREAM',
+      openswe: 'OPENSWE_PROXY_UPSTREAM',
+    }[route.target];
+    return normalizeTrustedUpstream(env[name], name);
+  }
+  if (route.target === 'jira') {
+    const config = opts.egressConfig !== undefined
+      ? opts.egressConfig
+      : await resolveEgressConfig(opts);
+    return `${normalizeJiraConfig(config).origin}/rest/api/3`;
+  }
+  if (route.target === 'slack-webhook') {
+    const resolved = opts.resolved !== undefined ? opts.resolved : await resolveSecrets(opts);
+    return normalizeSlackWebhook(resolveStaticKey(route.secretKey, resolved));
+  }
+  throw new FailClosed('egress route has no trusted upstream');
+}
+
 async function buildInjection(route, opts = {}) {
-  const { fetchImpl, oauthManager, env = process.env } = opts;
+  const oauthManager = opts.oauthManager;
+  const resolvedSecrets = async () => (
+    opts.resolved !== undefined ? opts.resolved : resolveSecrets(opts)
+  );
   const headers = {};
 
   switch (route.auth) {
     case 'claude': {
-      const resolved =
-        opts.resolved !== undefined ? opts.resolved : await resolveSecrets({ fetchImpl });
-      const apiKey = resolveStaticKey('anthropicApiKey', resolved, env);
-      if (apiKey) {
-        headers['x-api-key'] = apiKey;
-        return headers;
+      const resolved = await resolvedSecrets();
+      const apiKey = resolveStaticKey('anthropicApiKey', resolved, { allowMissing: true });
+      if (apiKey) return { 'x-api-key': apiKey };
+      if (!oauthManager || typeof oauthManager.getClaudeAuth !== 'function') {
+        throw new FailClosed('Claude OAuth resolver is unavailable');
       }
-      const { accessToken, betaHeader } = await oauthManager.getClaudeAuth();
+      const auth = await oauthManager.getClaudeAuth();
+      const accessToken = safeCredential(auth && auth.accessToken, 'Claude access token');
+      if (!accessToken) throw new FailClosed('Claude access token is unavailable');
       headers.authorization = `Bearer ${accessToken}`;
+      const betaHeader = safeCredential(auth && auth.betaHeader, 'Anthropic beta header');
       if (betaHeader) headers['anthropic-beta'] = betaHeader;
       return headers;
     }
     case 'codex-chatgpt': {
-      const { accessToken, accountId } = await oauthManager.getCodexAuth();
+      if (!oauthManager || typeof oauthManager.getCodexAuth !== 'function') {
+        throw new FailClosed('Codex OAuth resolver is unavailable');
+      }
+      const auth = await oauthManager.getCodexAuth();
+      const accessToken = safeCredential(auth && auth.accessToken, 'Codex access token');
+      if (!accessToken) throw new FailClosed('Codex access token is unavailable');
       headers.authorization = `Bearer ${accessToken}`;
+      const accountId = safeCredential(auth && auth.accountId, 'ChatGPT account id');
       if (accountId) headers['chatgpt-account-id'] = accountId;
       return headers;
     }
     case 'codex-api': {
-      const resolved =
-        opts.resolved !== undefined ? opts.resolved : await resolveSecrets({ fetchImpl });
-      const bundle = resolved && resolved.secrets && resolved.secrets.codexTokenBundle;
-      // An explicitly available org token bundle wins because settings
-      // preflight chooses it before the API key. Otherwise the metered OpenAI
-      // route uses its selected static key, falling back to legacy OAuth only
-      // when neither resolver entry nor managed env provides one.
+      const resolved = await resolvedSecrets();
+      const bundle = resolved.secrets && resolved.secrets.codexTokenBundle;
       if (!(bundle && bundle.value)) {
-        const apiKey = resolveStaticKey('openaiApiKey', resolved, env);
-        if (apiKey) {
-          headers.authorization = `Bearer ${apiKey}`;
-          return headers;
-        }
+        const apiKey = resolveStaticKey('openaiApiKey', resolved, { allowMissing: true });
+        if (apiKey) return { authorization: `Bearer ${apiKey}` };
       }
-      const { accessToken } = await oauthManager.getCodexAuth();
-      headers.authorization = `Bearer ${accessToken}`;
-      return headers;
+      if (!oauthManager || typeof oauthManager.getCodexAuth !== 'function') {
+        throw new FailClosed('Codex OAuth resolver is unavailable');
+      }
+      const auth = await oauthManager.getCodexAuth();
+      const accessToken = safeCredential(auth && auth.accessToken, 'Codex access token');
+      if (!accessToken) throw new FailClosed('Codex access token is unavailable');
+      return { authorization: `Bearer ${accessToken}` };
     }
     case 'git': {
-      const resolved =
-        opts.resolved !== undefined ? opts.resolved : await resolveSecrets({ fetchImpl });
-      const pat = resolveStaticKey(route.secretKey, resolved, env);
-      if (pat) {
-        const basic = Buffer.from(`x-access-token:${pat}`).toString('base64');
-        headers.authorization = `Basic ${basic}`;
-      }
-      return headers;
+      const key = resolveStaticKey(route.secretKey, await resolvedSecrets());
+      const username = safeCredential(route.username, 'git credential username');
+      return { authorization: `Basic ${Buffer.from(`${username}:${key}`).toString('base64')}` };
     }
     case 'llm-gateway': {
-      const resolved =
-        opts.resolved !== undefined ? opts.resolved : await resolveSecrets({ fetchImpl });
-      const key = resolveStaticKey(route.secretKey, resolved, env);
-      if (!key) {
-        // Stricter than the generic apiKey case: the LangSmith gateway bills the
-        // managed workspace, so a missing key must fail closed, never forward.
-        throw new FailClosed(`LLM gateway key "${route.secretKey}" is unavailable`);
-      }
+      const key = resolveStaticKey(route.secretKey, await resolvedSecrets());
+      const orgId = safeCredential(
+        configuredProxyOrgId(opts.env || process.env),
+        'proxy organization id',
+      );
       headers.authorization = `Bearer ${key}`;
-      // Per-org spend/rate policies key on this header in the LangSmith policy
-      // UI; the shared (no-org) stack sends none — that traffic is the platform's.
-      const orgId = configuredProxyOrgId(env);
       if (orgId) headers[LLM_GATEWAY_ORG_HEADER] = orgId;
       return headers;
     }
-    case 'apiKey':
-    default: {
-      const resolved =
-        opts.resolved !== undefined ? opts.resolved : await resolveSecrets({ fetchImpl });
-      const key = resolveStaticKey(route.secretKey, resolved, env);
-      if (!key) return headers; // forward unauthenticated → upstream rejects
+    case 'jira': {
+      const token = resolveStaticKey(route.secretKey, await resolvedSecrets());
+      const config = opts.egressConfig !== undefined
+        ? opts.egressConfig
+        : await resolveEgressConfig(opts);
+      const { email } = normalizeJiraConfig(config);
+      return { authorization: `Basic ${Buffer.from(`${email}:${token}`).toString('base64')}` };
+    }
+    case 'apiKey': {
+      const key = resolveStaticKey(route.secretKey, await resolvedSecrets(), {
+        allowMissing: route.optionalCredential === true,
+        allowCustomerMissing: route.optionalCredential === true,
+      });
+      if (!key) return headers; // oMLX is the only explicitly anonymous route.
       if (route.scheme === 'raw') headers.authorization = key;
       else if (route.scheme === 'x-api-key') headers['x-api-key'] = key;
       else if (route.scheme === 'x-goog-api-key') headers['x-goog-api-key'] = key;
+      else if (route.scheme === 'private-token') headers['private-token'] = key;
       else headers.authorization = `Bearer ${key}`;
       return headers;
     }
+    case 'url-secret':
+      return headers;
+    case 'none':
+      return headers;
+    default:
+      throw new FailClosed('egress route has no supported authentication policy');
   }
 }
 
+async function resolveRoute(route, opts = {}) {
+  const upstream = await resolveUpstream(route, opts);
+  const headers = await buildInjection(route, opts);
+  return { upstream, headers };
+}
+
 module.exports = {
-  MANAGED_ENV,
   configuredProxyOrgId,
   FailClosed,
   resolveSecrets,
+  resolveEgressConfig,
   clearCache,
-  managedValue,
   resolveStaticKey,
+  normalizeTrustedUpstream,
+  normalizeOmlxUpstream,
+  normalizeJiraConfig,
+  normalizeSlackWebhook,
+  resolveUpstream,
   buildInjection,
+  resolveRoute,
 };
