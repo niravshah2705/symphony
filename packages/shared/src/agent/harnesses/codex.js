@@ -13,6 +13,7 @@ const os = require('os');
 const path = require('path');
 const { CONFIG } = require('../../config');
 const { buildSafeAgentEnv } = require('../repository-broker');
+const { wireModelId } = require('../llm');
 const registry = require('./registry');
 const {
   AgentRuntimeError,
@@ -199,7 +200,11 @@ async function executeCodex(options, prompt) {
     }
     const client = new sdk.Codex(clientOptions);
     const thread = client.startThread({
-      model: options.llm.model || undefined,
+      // LangSmith-gateway descriptors need the provider-prefixed wire id
+      // (openai/<model>); every other descriptor keeps the bare model name.
+      // The SDK's built-in `openai` provider speaks the /responses wire API
+      // against baseUrl — exactly the gateway's OpenAI Responses surface.
+      model: wireModelId(options.llm) || undefined,
       workingDirectory: cwd,
       skipGitRepoCheck: true,
       sandboxMode: options.backendKind === 'filesystem' ? 'read-only' : 'workspace-write',

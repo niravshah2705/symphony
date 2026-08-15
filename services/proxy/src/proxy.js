@@ -20,7 +20,10 @@ const DROP_REQUEST_HEADERS = new Set([
   'trailer', 'transfer-encoding', 'upgrade', 'host', 'content-length',
   'accept-encoding',
   // Inbound auth is never forwarded — the proxy injects its own credential.
+  // x-api-key only ever carries the agent's sentinel; routes that authenticate
+  // with it (LangSmith tracing, Anthropic API-key selection) re-inject it.
   'authorization', 'x-internal-token', 'x-forwarded-authorization', 'cookie',
+  'x-api-key',
   // OAuth-only; credentials.buildInjection re-adds it for a Claude OAuth
   // selection and omits it for an Anthropic API-key selection.
   'anthropic-beta',

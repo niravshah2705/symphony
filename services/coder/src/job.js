@@ -27,6 +27,8 @@ async function main({
   const nativeProjectId = env.AI_FLEET_PROJECT_CONTEXT
     ? String(env.AI_FLEET_PROJECT_CONTEXT)
     : null;
+  // Per-request LLM gateway flag threaded from the enqueue request; allowlisted.
+  const llmGateway = env.LLM_GATEWAY_FLAG === 'langsmith' ? 'langsmith' : null;
   if (!issueId) {
     logImpl.error('coder-worker: ISSUE_ID env is required');
     exit(2);
@@ -39,7 +41,7 @@ async function main({
       // before any synchronous store accessor runs.
       await initStoreImpl();
       logImpl.info(`coder-worker starting for issue ${issueId}`);
-      await runTicketImpl({ issueId, conversationId, blocking: true, orgId, nativeProjectId });
+      await runTicketImpl({ issueId, conversationId, blocking: true, orgId, nativeProjectId, llmGateway });
       logImpl.info(`coder-worker finished issue ${issueId}`);
       exit(0);
       return 0;

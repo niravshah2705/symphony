@@ -401,7 +401,12 @@ async function resolveStageAgent(command, { role, workflowStage }, dependencies 
   const policySnapshot = command && command.preflight && command.preflight.policy;
   const effectivePolicy = effectivePolicySnapshot(command);
   const prefs = plainObject(policySnapshot.prefs) ? policySnapshot.prefs : {};
-  const resolvedLlm = await resolveModel(settings, role);
+  // Per-request LLM gateway flag, admitted with the run and carried in the
+  // command's request bag. It changes ROUTING only — never provider or model —
+  // so the live-vs-snapshot cross-checks below stay valid for flagged runs.
+  const admittedRequest = (command && command.input && command.input.request) || {};
+  const llmGateway = admittedRequest.llmGateway === 'langsmith' ? 'langsmith' : '';
+  const resolvedLlm = await resolveModel(llmGateway ? { ...settings, llmGateway } : settings, role);
   const configuration = stageConfiguration(command);
   if (
     typeof configuration.harness !== 'string'

@@ -9,6 +9,7 @@
 
 const { CONFIG } = require('../../config');
 const { buildSafeAgentEnv } = require('../repository-broker');
+const { wireModelId } = require('../llm');
 const registry = require('./registry');
 const {
   AgentRuntimeError,
@@ -66,12 +67,21 @@ async function executeClaude(options, prompt) {
   const cwd = assertWorkingDirectory(options.rootDir);
   const env = buildSafeAgentEnv(options.env || process.env, cwd);
   const credential = String(options.llm.accessToken || '');
-  if (credential) env.CLAUDE_CODE_OAUTH_TOKEN = credential;
+  const viaLlmGateway = options.llm.gateway === 'langsmith';
+  if (credential) {
+    // A LangSmith-gateway run authenticates with a plain Bearer credential
+    // (ANTHROPIC_AUTH_TOKEN — the workspace key, or the sentinel in proxy
+    // mode); the subscription path keeps the Claude Code OAuth env.
+    if (viaLlmGateway) env.ANTHROPIC_AUTH_TOKEN = credential;
+    else env.CLAUDE_CODE_OAUTH_TOKEN = credential;
+  }
   env.CLAUDE_AGENT_SDK_CLIENT_APP = 'tech-symphony/1.0';
-  // Route the SDK's Anthropic calls through the egress proxy when enabled: the
-  // OAuth token is already the sentinel (resolveLlm proxy mode); the proxy
-  // injects the real bearer. baseUrl is the proxy's /anthropic prefix.
-  if (CONFIG.EGRESS_PROXY_INCLUDE_SDK) env.ANTHROPIC_BASE_URL = CONFIG.CLAUDE.baseUrl;
+  // Route the SDK's Anthropic calls at the descriptor's base: the egress
+  // proxy's /anthropic prefix (include-SDK mode), or the LangSmith gateway
+  // (flagged run — its base already points at /llmgw when also proxied).
+  if (CONFIG.EGRESS_PROXY_INCLUDE_SDK || viaLlmGateway) {
+    env.ANTHROPIC_BASE_URL = options.llm.baseUrl || CONFIG.CLAUDE.baseUrl;
+  }
   const sdkTools = options.backendKind === 'filesystem'
     ? ['Read', 'Glob', 'Grep', ...(plannerWebSearchAllowed(options) ? ['WebSearch'] : [])]
     : credential
@@ -87,7 +97,7 @@ async function executeClaude(options, prompt) {
     options: {
       cwd,
       env,
-      model: options.llm.model || undefined,
+      model: wireModelId(options.llm) || undefined,
       maxTurns: Number(options.maxTurns) || 24,
       systemPrompt: cleanSystemPrompt(options.systemPrompt, options.ctx) || undefined,
       settingSources: [],

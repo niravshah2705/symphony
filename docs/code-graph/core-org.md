@@ -6,7 +6,7 @@
 
 Directory-based community: services/settings
 
-- **Size**: 456 nodes
+- **Size**: 457 nodes
 - **Cohesion**: 0.3813
 - **Dominant Language**: python
 
@@ -65,7 +65,7 @@ Directory-based community: services/settings
 | get_project_context | Function | ./services/settings/app/authz/guards.py | 41-93 |
 | require_project_admin | Function | ./services/settings/app/authz/guards.py | 96-102 |
 
-*... and 406 more members.*
+*... and 407 more members.*
 
 ## Execution Flows
 
@@ -85,11 +85,11 @@ Directory-based community: services/settings
 
 ### Outgoing
 
-- `get` (181 edge(s))
+- `get` (182 edge(s))
 - `str` (90 edge(s))
-- `uuid4` (64 edge(s))
-- `json` (56 edge(s))
-- `put` (53 edge(s))
+- `uuid4` (65 edge(s))
+- `json` (57 edge(s))
+- `put` (55 edge(s))
 - `Depends` (47 edge(s))
 - `ValueError` (40 edge(s))
 - `set` (28 edge(s))
@@ -103,16 +103,16 @@ Directory-based community: services/settings
 
 ### Incoming
 
-- `uuid4` (60 edge(s))
-- `json` (55 edge(s))
-- `put` (53 edge(s))
-- `get` (50 edge(s))
+- `uuid4` (61 edge(s))
+- `json` (56 edge(s))
+- `put` (55 edge(s))
+- `get` (51 edge(s))
 - `./services/settings/app/errors.py` (18 edge(s))
 - `./services/settings/tests/unit/test_resolver.py` (18 edge(s))
 - `./services/settings/app/services/policy_service.py` (17 edge(s))
 - `./services/settings/app/schemas/policy.py` (15 edge(s))
 - `./services/settings/app/services/secrets_service.py` (15 edge(s))
-- `./services/settings/tests/integration/test_secrets_vault.py` (14 edge(s))
+- `./services/settings/tests/integration/test_secrets_vault.py` (15 edge(s))
 - `post` (13 edge(s))
 - `./services/settings/tests/integration/test_settings.py` (13 edge(s))
 - `./services/settings/tests/integration/test_authz.py` (12 edge(s))

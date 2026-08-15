@@ -26,7 +26,11 @@ interception is needed.
   exported and unit-tested (`proxy.test.js`, `server.test.js`).
 - `src/credentials.js` — resolve the credential per route: managed platform key
   (sidecar env) vs customer key (per-org vault). **Fail closed** when a customer
-  key is selected but missing.
+  key is selected but missing. The `llm-gateway` auth family (route `/llmgw` →
+  LangSmith LLM Gateway) is STRICTER: a missing `langsmithGatewayApiKey` always
+  fails closed (never forward unauthenticated to a billing gateway), and the
+  injection stamps `x-fleet-org-id: <PROXY_ORG_ID>` so per-org spend/rate
+  policies in LangSmith can key on the tenant (omitted on the shared stack).
 - `src/secrets-client.js` — S2S call to the settings vault resolver
   (`/internal/s2s/orgs/{orgId}/secrets`, `X-Internal-Token` + Cloud Run OIDC).
 - `src/oauth-manager.js` — Claude/Codex OAuth: reads the per-namespace store

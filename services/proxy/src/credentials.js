@@ -1,5 +1,6 @@
 'use strict';
 
+const { LLM_GATEWAY_ORG_HEADER } = require('@ai-fleet/shared-core/egress');
 const { fetchOrgSecrets, fetchManagedSecrets } = require('./secrets-client');
 
 /**
@@ -28,6 +29,7 @@ const MANAGED_ENV = Object.freeze({
   openaiApiKey: 'OPENAI_API_KEY',
   huggingfaceApiKey: 'HUGGINGFACE_API_KEY',
   langsmithApiKey: 'LANGSMITH_API_KEY',
+  langsmithGatewayApiKey: 'LANGSMITH_GATEWAY_API_KEY',
 });
 
 function configuredProxyOrgId(env = process.env) {
@@ -152,6 +154,22 @@ async function buildInjection(route, opts = {}) {
         const basic = Buffer.from(`x-access-token:${pat}`).toString('base64');
         headers.authorization = `Basic ${basic}`;
       }
+      return headers;
+    }
+    case 'llm-gateway': {
+      const resolved =
+        opts.resolved !== undefined ? opts.resolved : await resolveSecrets({ fetchImpl });
+      const key = resolveStaticKey(route.secretKey, resolved, env);
+      if (!key) {
+        // Stricter than the generic apiKey case: the LangSmith gateway bills the
+        // managed workspace, so a missing key must fail closed, never forward.
+        throw new FailClosed(`LLM gateway key "${route.secretKey}" is unavailable`);
+      }
+      headers.authorization = `Bearer ${key}`;
+      // Per-org spend/rate policies key on this header in the LangSmith policy
+      // UI; the shared (no-org) stack sends none — that traffic is the platform's.
+      const orgId = configuredProxyOrgId(env);
+      if (orgId) headers[LLM_GATEWAY_ORG_HEADER] = orgId;
       return headers;
     }
     case 'apiKey':
