@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { CONFIG } = require('../config');
+const { SENTINEL_TOKEN } = require('../egress');
 
 const DEFAULT_TIMEOUT_MS = 1800;
 const MAX_TIMEOUT_MS = 5000;
@@ -253,7 +254,9 @@ async function localModelCheck(settings, dependencies) {
     : 'ollama';
   const base = provider === 'lmstudio'
     ? settings.lmstudioHost
-    : provider === 'omlx' ? settings.omlxHost : settings.ollamaHost;
+    : provider === 'omlx'
+      ? CONFIG.EGRESS_PROXY_URL ? CONFIG.OMLX.defaultHost : settings.omlxHost
+      : settings.ollamaHost;
   const model = provider === 'lmstudio'
     ? settings.lmstudioModel
     : provider === 'omlx' ? settings.omlxModel : settings.ollamaModel;
@@ -268,8 +271,8 @@ async function localModelCheck(settings, dependencies) {
       { provider, configured: false }
     );
   }
-  const headers = provider === 'omlx' && settings.omlxApiKey
-    ? { authorization: `Bearer ${settings.omlxApiKey}` }
+  const headers = provider === 'omlx' && (CONFIG.EGRESS_PROXY_URL || settings.omlxApiKey)
+    ? { authorization: `Bearer ${CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : settings.omlxApiKey}` }
     : {};
   const result = await probe(url, dependencies, { headers });
   return check(

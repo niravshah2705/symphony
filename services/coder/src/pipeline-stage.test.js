@@ -110,6 +110,7 @@ function scopedStore(overrides = {}) {
       }
       : null,
     getRepositoryConfig: () => ({ provider: 'github', url: 'https://github.com/acme/fleet.git' }),
+    getApiKey: () => 'linear-key',
     ...overrides,
   };
 }
@@ -261,6 +262,7 @@ test('coder fails closed before execution when the repository snapshot drifts', 
       }
       : null,
     getRepositoryConfig: () => ({ provider: 'github', url: 'https://github.com/acme/other.git' }),
+    getApiKey: () => 'linear-key',
   };
   assert.throws(
     () => assertRepositorySnapshot(value, mismatchedStore),
@@ -314,6 +316,17 @@ test('coder publishes a terminal failure and deduplicates command execution acro
   assert.equal(published.length, 2);
   assert.ok(published.every((result) => result.status === 'failed'));
   assert.ok(published.every((result) => result.error.code === 'model_execution_failed'));
+});
+
+test('coder pipeline router constructs its configured default authentication middleware', () => {
+  const router = createCoderPipelineRouter({
+    initStore: async () => {},
+    execute: async () => ({ status: 'succeeded', output: {} }),
+    publish: async () => {},
+  });
+
+  assert.equal(routeStack(router, '/internal/pipeline/stage').length, 2);
+  assert.equal(routeStack(router, '/pubsub/pipeline-stage').length, 2);
 });
 
 test('coder rejects label-only recovery for a terminal aidone work item as ambiguous', async () => {

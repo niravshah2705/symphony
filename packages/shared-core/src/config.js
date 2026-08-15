@@ -2,7 +2,7 @@
 
 const path = require('path');
 const { ROLES } = require('./authz');
-const { egressUrl, normalizeProxyBase } = require('./egress');
+const { egressUrl, llmGatewayUpstream, normalizeProxyBase } = require('./egress');
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -12,23 +12,40 @@ const PORT = Number(process.env.PORT) || 4000;
  * third-party base URL below defaults to `${EGRESS_PROXY_URL}<prefix>` instead
  * of the real upstream, so the SDK/fetch calls go to the sidecar — which injects
  * the real credential. The agent container therefore holds NO raw provider key.
- * An explicit per-provider env override (e.g. CLAUDE_ANTHROPIC_BASE_URL) still
- * wins over the proxy default. Empty (gateway / local) = today's direct behavior.
+ * Once the switch is set, provider-specific env overrides cannot bypass the
+ * sidecar. Empty (gateway / local) retains direct behavior and trusted operator
+ * overrides.
  */
 const EGRESS_PROXY_URL = normalizeProxyBase(process.env.EGRESS_PROXY_URL);
 const proxied = (prefix, explicit, fallback) =>
   egressUrl({ proxyBase: EGRESS_PROXY_URL, prefix, explicit, fallback });
 
 /**
- * Opt-in: also route the NATIVE SDK runtimes (codex-sdk / claude-agent-sdk /
- * antigravity) AND LangSmith tracing through the proxy. Off by default because
- * the native SDKs need per-SDK base-URL overrides that not every version honors;
- * the LangChain deep-agent path is proxied unconditionally by the base URLs
- * above. Only meaningful when EGRESS_PROXY_URL is set.
+ * Native SDK runtimes and LangSmith must follow the same isolation boundary as
+ * the deep-agent runtime. Keep the legacy exported flag for callers, but derive
+ * it solely from proxy mode so an opt-out cannot silently restore direct egress.
  */
-const EGRESS_PROXY_INCLUDE_SDK =
-  Boolean(EGRESS_PROXY_URL) &&
-  String(process.env.EGRESS_PROXY_INCLUDE_SDK || '').trim().toLowerCase() === 'true';
+const EGRESS_PROXY_INCLUDE_SDK = Boolean(EGRESS_PROXY_URL);
+
+/**
+ * LangSmith LLM Gateway — a PER-REQUEST feature flag, not a deployment mode.
+ * `enabled` (LLM_GATEWAY_ENABLED) is only the server-side availability gate: a
+ * request carrying the browser header X-AI-Fleet-Llm-Gateway: langsmith is
+ * honored only when it is true. Base-URL selection happens per run in
+ * resolveLlm — never here — so unflagged traffic keeps today's provider base
+ * URLs byte-for-byte. In egress-proxy mode the bases point at the sidecar's
+ * /llmgw prefix (sentinel token, sidecar injects the workspace key); otherwise
+ * they hit the gateway directly with the store-overlay key.
+ */
+const LLM_GATEWAY_UPSTREAM = llmGatewayUpstream(process.env);
+const LLM_GATEWAY = Object.freeze({
+  enabled: String(process.env.LLM_GATEWAY_ENABLED || '').trim().toLowerCase() === 'true',
+  url: LLM_GATEWAY_UPSTREAM,
+  // Anthropic surface (SDK appends /v1/messages) and OpenAI surface (SDK
+  // appends /chat/completions | /responses).
+  claudeBaseUrl: proxied('/llmgw', null, LLM_GATEWAY_UPSTREAM),
+  openaiBaseUrl: proxied('/llmgw/v1', null, `${LLM_GATEWAY_UPSTREAM}/v1`),
+});
 
 // Application login modes: 'disabled' (local single-user workflow — open) and
 // 'firebase' (Google SSO via Firebase Authentication).
@@ -155,7 +172,7 @@ const AUTH = buildFirebaseAuthConfig();
  */
 const OAUTH = Object.freeze({
   authorizeUrl: process.env.CODEX_OAUTH_AUTHORIZE_URL || 'https://auth.openai.com/oauth/authorize',
-  tokenUrl: process.env.CODEX_OAUTH_TOKEN_URL || 'https://auth.openai.com/oauth/token',
+  tokenUrl: proxied('/codex-oauth-token', process.env.CODEX_OAUTH_TOKEN_URL, 'https://auth.openai.com/oauth/token'),
   clientId: process.env.CODEX_OAUTH_CLIENT_ID || 'app_EMoamEEZ73f0CkXaXp7hrann',
   scope: process.env.CODEX_OAUTH_SCOPE || 'openid profile email offline_access',
   // OpenAI-compatible chat endpoint the access token is used against.
@@ -218,7 +235,7 @@ const OAUTH = Object.freeze({
  */
 const CLAUDE = Object.freeze({
   authorizeUrl: process.env.CLAUDE_OAUTH_AUTHORIZE_URL || 'https://claude.ai/oauth/authorize',
-  tokenUrl: process.env.CLAUDE_OAUTH_TOKEN_URL || 'https://console.anthropic.com/v1/oauth/token',
+  tokenUrl: proxied('/claude-oauth-token', process.env.CLAUDE_OAUTH_TOKEN_URL, 'https://console.anthropic.com/v1/oauth/token'),
   clientId: process.env.CLAUDE_OAUTH_CLIENT_ID || '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
   scope: process.env.CLAUDE_OAUTH_SCOPE || 'org:create_api_key user:profile user:inference',
   redirectUri: process.env.CLAUDE_OAUTH_REDIRECT_URI || 'https://console.anthropic.com/oauth/code/callback',
@@ -250,7 +267,7 @@ const CLAUDE = Object.freeze({
  * mount LM Studio exposes; access tokens/models are used against `${host}${apiPath}`.
  */
 const LMSTUDIO = Object.freeze({
-  defaultHost: process.env.LMSTUDIO_HOST || 'http://localhost:1234',
+  defaultHost: proxied('/lmstudio', process.env.LMSTUDIO_HOST, 'http://localhost:1234'),
   apiPath: process.env.LMSTUDIO_API_PATH || '/v1',
   // Per-request timeout for LM Studio calls. The OpenAI SDK default is 600000ms
   // (10 min); a large local reasoning model (e.g. a 35B) can spend longer than
@@ -276,6 +293,11 @@ const LMSTUDIO = Object.freeze({
   summaryMaxTokens: Number(process.env.LMSTUDIO_SUMMARY_MAX_TOKENS) || 1024,
 });
 
+/** Ollama local inference; proxy mode pins its target in the sidecar env. */
+const OLLAMA = Object.freeze({
+  defaultHost: proxied('/ollama', process.env.OLLAMA_HOST, 'http://localhost:11434'),
+});
+
 /**
  * oMLX (local, OpenAI-compatible) provider configuration.
  *
@@ -285,7 +307,7 @@ const LMSTUDIO = Object.freeze({
  * Chat Completions.
  */
 const OMLX = Object.freeze({
-  defaultHost: process.env.OMLX_HOST || 'http://127.0.0.1:8000',
+  defaultHost: proxied('/omlx', process.env.OMLX_HOST, 'http://127.0.0.1:8000'),
   apiPath: process.env.OMLX_API_PATH || '/v1',
   requestTimeoutMs: Number(process.env.OMLX_REQUEST_TIMEOUT_MS) || 30 * 60 * 1000,
   maxRetries: Number.isFinite(Number(process.env.OMLX_MAX_RETRIES)) ? Number(process.env.OMLX_MAX_RETRIES) : 1,
@@ -385,8 +407,9 @@ const CODER = Object.freeze({
   localSize: process.env.CODER_LOCAL_SIZE || 'XS',
   // Open SWE integration (used only when backend === 'openswe').
   openswe: Object.freeze({
-    // Base URL of the locally-running Open SWE LangGraph server (`langgraph dev`).
-    url: process.env.OPENSWE_URL || 'http://localhost:2024',
+    // In trusted direct development this is the OpenSWE LangGraph server. In
+    // proxy mode the explicit origin cannot bypass the sidecar allowlist.
+    url: proxied('/openswe', process.env.OPENSWE_URL, 'http://localhost:2024'),
     // The graph/assistant id to run (Open SWE's coding graph).
     assistant: process.env.OPENSWE_ASSISTANT || 'agent',
     // GitHub repo the coding agent operates on, "owner/name" (defaults to the coder repo).
@@ -413,9 +436,11 @@ const MCP = Object.freeze({
     url: proxied('/linear-mcp', process.env.LINEAR_MCP_URL, 'https://mcp.linear.app/mcp'),
   }),
   github: Object.freeze({
-    enabled: Boolean(process.env.GITHUB_MCP_TOKEN),
+    enabled: EGRESS_PROXY_URL
+      ? String(process.env.GITHUB_MCP_ENABLED || '').trim().toLowerCase() === 'true'
+      : Boolean(process.env.GITHUB_MCP_TOKEN),
     url: proxied('/github-mcp', process.env.GITHUB_MCP_URL, 'https://api.githubcopilot.com/mcp/'),
-    token: process.env.GITHUB_MCP_TOKEN || '',
+    token: EGRESS_PROXY_URL ? '' : process.env.GITHUB_MCP_TOKEN || '',
   }),
   // Playwright MCP (local, stdio): interactive browser automation tools
   // (navigate/click/snapshot). Launched as a child process via npx, so no
@@ -649,6 +674,7 @@ const BILLING = Object.freeze({
   ),
   orgId: String(process.env.FLEET_ORG_ID || process.env.PROXY_ORG_ID || '').trim(),
   usageRetentionDays: toPositiveNumber(process.env.BILLING_USAGE_RETENTION_DAYS, 90),
+  slackWebhookUrl: proxied('/slack-webhook', process.env.BILLING_SLACK_WEBHOOK_URL, ''),
 });
 
 /** Server configuration and shared constants. */
@@ -659,9 +685,17 @@ const CONFIG = Object.freeze({
   EGRESS_PROXY_URL,
   // Also route the native SDK runtimes + LangSmith tracing through the proxy.
   EGRESS_PROXY_INCLUDE_SDK,
+  // Per-request LangSmith LLM Gateway feature flag (availability gate + bases).
+  LLM_GATEWAY,
   LINEAR_API_URL: proxied('/linear', process.env.LINEAR_API_URL, 'https://api.linear.app/graphql'),
   GITHUB_API_ORIGIN: proxied('/github-api', process.env.GITHUB_API_ORIGIN, 'https://api.github.com'),
   GIT_HTTPS_ORIGIN: proxied('/git/github', process.env.GIT_HTTPS_ORIGIN, 'https://github.com'),
+  GITLAB_API_ORIGIN: proxied('/gitlab-api', process.env.GITLAB_API_ORIGIN, 'https://gitlab.com/api/v4'),
+  GITLAB_GIT_ORIGIN: proxied('/git/gitlab', process.env.GITLAB_GIT_ORIGIN, 'https://gitlab.com'),
+  ASANA_API_ORIGIN: proxied('/asana-api', process.env.ASANA_API_ORIGIN, 'https://app.asana.com/api/1.0'),
+  JIRA_API_ORIGIN: proxied('/jira-api', process.env.JIRA_API_ORIGIN, ''),
+  DUCKDUCKGO_HTML_ORIGIN: proxied('/duckduckgo-html', process.env.DUCKDUCKGO_HTML_ORIGIN, 'https://html.duckduckgo.com'),
+  IPWHO_ORIGIN: proxied('/ipwho', process.env.IPWHO_ORIGIN, 'https://ipwho.is'),
   DATA_DIR,
   STORE_FILE: path.join(DATA_DIR, 'store.json'),
   LOG_FILE: path.join(DATA_DIR, 'app.log'),
@@ -715,6 +749,7 @@ const CONFIG = Object.freeze({
   LLM_STREAM_RETRIES: Number.isFinite(Number(process.env.LLM_STREAM_RETRIES)) ? Number(process.env.LLM_STREAM_RETRIES) : 1,
   OAUTH,
   CLAUDE,
+  OLLAMA,
   LMSTUDIO,
   OMLX,
   HUGGINGFACE,

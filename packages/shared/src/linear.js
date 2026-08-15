@@ -1,7 +1,8 @@
 'use strict';
 
 const { CONFIG } = require('./config');
-const { SENTINEL_TOKEN } = require('./egress');
+const { SENTINEL_TOKEN, projectEgressHeaders } = require('./egress');
+const { currentWorkspaceContext } = require('./store/workspace-context');
 
 /**
  * Thin wrapper around the Linear GraphQL API.
@@ -22,7 +23,10 @@ class LinearError extends Error {
 }
 
 async function linearRequest(apiKey, query, variables = {}) {
-  const key = apiKey || (CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : '');
+  // Proxy mode is a credential boundary, not a fallback. Ignore any legacy key
+  // a caller happened to pass so a raw Linear credential cannot leave the
+  // agent container or override the sidecar's per-org selection.
+  const key = CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : apiKey;
   if (!key) {
     throw new LinearError('Linear API key is not configured. Add it in Settings.', 400);
   }
@@ -34,6 +38,7 @@ async function linearRequest(apiKey, query, variables = {}) {
       headers: {
         'Content-Type': 'application/json',
         Authorization: key,
+        ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
       },
       body: JSON.stringify({ query, variables }),
     });

@@ -19,12 +19,13 @@
 # deploy_all=true so all images build), and CD does the rest.
 #
 # Usage:
-#   PROJECT_ID=my-proj REPO=owner/repo LINEAR_API_KEY=lin_... \
+#   PROJECT_ID=my-proj REPO=owner/repo \
 #     ./deploy/gcp/bootstrap.sh
 #
 # Optional env: REGION (asia-south1), SPA_BUCKET (<project>-aifleet-spa),
 #   TF_STATE_BUCKET (<project>-tfstate), FIRESTORE_LOCATION (nam5),
 #   SPA_ORIGIN (https://<project>.web.app), FIREBASE_ALLOWED_DOMAIN,
+#   GOOGLE_ANALYTICS_MEASUREMENT_ID (public GA4 G-... id; empty disables analytics),
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, STREAM_TOKEN_SECRET (auto-generated if unset),
 #   EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_SMTP_HOST, EMAIL_SMTP_PORT,
 #   EMAIL_SMTP_SECURE, EMAIL_SMTP_REQUIRE_TLS, EMAIL_FROM, EMAIL_PUBLIC_APP_URL.
@@ -40,8 +41,14 @@ TF_STATE_PREFIX="${TF_STATE_PREFIX:-ai-fleet/gcp}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://${PROJECT_ID}.web.app}"
 EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://${PROJECT_ID}.web.app}"
+GOOGLE_ANALYTICS_MEASUREMENT_ID="${GOOGLE_ANALYTICS_MEASUREMENT_ID:-}"
 DEPLOYER="gh-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 TF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/terraform" && pwd)"
+
+if [[ -n "$GOOGLE_ANALYTICS_MEASUREMENT_ID" && ! "$GOOGLE_ANALYTICS_MEASUREMENT_ID" =~ ^G-[A-Z0-9]+$ ]]; then
+  echo "ERROR: GOOGLE_ANALYTICS_MEASUREMENT_ID must be empty or a GA4 id such as G-XXXXXXXXXX." >&2
+  exit 1
+fi
 
 if { [ -n "${EMAIL_SMTP_USER:-}" ] && [ -z "${EMAIL_SMTP_PASSWORD:-}" ]; } || \
    { [ -z "${EMAIL_SMTP_USER:-}" ] && [ -n "${EMAIL_SMTP_PASSWORD:-}" ]; }; then
@@ -126,8 +133,6 @@ seed() { ensure_secret "$1"; if has_version "$1"; then echo "  $1: has a version
 STREAM_TOKEN_SECRET="${STREAM_TOKEN_SECRET:-$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || head -c 32 /dev/urandom | base64 | tr -d '\n')}"
 seed stream-token-secret "$STREAM_TOKEN_SECRET"
 # org-jwt-secret is Terraform-managed (random_password + version) — no seed here.
-if [ -n "${LINEAR_API_KEY:-}" ]; then seed linear-api-key "$LINEAR_API_KEY"
-else ensure_secret linear-api-key; echo "  linear-api-key: created EMPTY — add a version before deploy (services won't start without it)"; fi
 ensure_secret github-token;     [ -n "${GITHUB_TOKEN:-}" ]      && seed github-token     "$GITHUB_TOKEN"      || true
 ensure_secret langsmith-api-key;[ -n "${LANGSMITH_API_KEY:-}" ] && seed langsmith-api-key "$LANGSMITH_API_KEY" || true
 ensure_secret email-smtp-user
@@ -161,6 +166,14 @@ if command -v gh >/dev/null 2>&1; then
   gh variable set TF_STATE_BUCKET     --repo "$REPO" --body "$TF_STATE_BUCKET"
   gh variable set FIRESTORE_LOCATION  --repo "$REPO" --body "$FIRESTORE_LOCATION"
   gh variable set SPA_ORIGIN          --repo "$REPO" --body "$SPA_ORIGIN"
+  if [ -n "$GOOGLE_ANALYTICS_MEASUREMENT_ID" ]; then
+    gh variable set GOOGLE_ANALYTICS_MEASUREMENT_ID --repo "$REPO" --body "$GOOGLE_ANALYTICS_MEASUREMENT_ID"
+  else
+    REPO_VARIABLE_NAMES="$(gh variable list --repo "$REPO" --json name --jq '.[].name')"
+    if printf '%s\n' "$REPO_VARIABLE_NAMES" | grep -Fxq GOOGLE_ANALYTICS_MEASUREMENT_ID; then
+      gh variable delete GOOGLE_ANALYTICS_MEASUREMENT_ID --repo "$REPO"
+    fi
+  fi
   [ -n "${EMAIL_SMTP_HOST:-}" ] && gh variable set EMAIL_SMTP_HOST --repo "$REPO" --body "$EMAIL_SMTP_HOST" || true
   gh variable set EMAIL_SMTP_PORT --repo "$REPO" --body "${EMAIL_SMTP_PORT:-587}"
   gh variable set EMAIL_SMTP_SECURE --repo "$REPO" --body "${EMAIL_SMTP_SECURE:-false}"
@@ -176,6 +189,7 @@ else
   echo "  secret GCP_DEPLOYER_SA  = $DEPLOYER"
   echo "  vars: GCP_PROJECT_ID=$PROJECT_ID GCP_REGION=$REGION SPA_BUCKET=$SPA_BUCKET"
   echo "        TF_STATE_BUCKET=$TF_STATE_BUCKET FIRESTORE_LOCATION=$FIRESTORE_LOCATION SPA_ORIGIN=$SPA_ORIGIN"
+  [ -n "$GOOGLE_ANALYTICS_MEASUREMENT_ID" ] && echo "        GOOGLE_ANALYTICS_MEASUREMENT_ID=$GOOGLE_ANALYTICS_MEASUREMENT_ID"
   echo "        EMAIL_SMTP_AUTH_ENABLED=$EMAIL_SMTP_AUTH_ENABLED EMAIL_PUBLIC_APP_URL=$EMAIL_PUBLIC_APP_URL"
 fi
 
@@ -191,7 +205,6 @@ if command -v terraform >/dev/null 2>&1; then
       -var="email_public_app_url=${EMAIL_PUBLIC_APP_URL}" \
       "$1" "$2" >/dev/null && echo "  $1: imported"; fi; }
   tfimport 'google_secret_manager_secret.stream_token_secret' "projects/${PROJECT_ID}/secrets/stream-token-secret"
-  tfimport 'google_secret_manager_secret.linear_api_key'      "projects/${PROJECT_ID}/secrets/linear-api-key"
   tfimport 'google_secret_manager_secret.extra["github-token"]'     "projects/${PROJECT_ID}/secrets/github-token"
   tfimport 'google_secret_manager_secret.extra["langsmith-api-key"]' "projects/${PROJECT_ID}/secrets/langsmith-api-key"
   tfimport 'google_secret_manager_secret.email_smtp_user' "projects/${PROJECT_ID}/secrets/email-smtp-user"

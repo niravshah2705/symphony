@@ -69,7 +69,7 @@ Directory-based community: e2e-live/support
 
 ## Execution Flows
 
-- **resolveBootstrapApiBase** (criticality: 0.47, depth: 2)
+No execution flows pass through this community.
 
 ## Dependencies
 

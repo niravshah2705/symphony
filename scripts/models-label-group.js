@@ -7,21 +7,23 @@
  * single-select dropdown on issues. Idempotent — re-running is a no-op once the
  * labels are already grouped.
  *
- * Uses the Linear API key from the store (Settings), or LINEAR_API_KEY from the
- * environment. Run from the repo root:
+ * This maintenance call is deliberately routed through the local egress proxy;
+ * the process never receives the Linear credential. Run from the repo root:
  *
- *   node scripts/models-label-group.js
- *   LINEAR_API_KEY=lin_api_xxx node scripts/models-label-group.js
+ *   EGRESS_PROXY_URL=http://127.0.0.1:4030 node scripts/models-label-group.js
+ *
+ * Set FLEET_ORG_ID and AI_FLEET_PROJECT_ID to select a project-vault override;
+ * omit the project id to use the organization-level fallback.
  */
 
 const { CONFIG } = require('@ai-fleet/shared/config');
-const { getApiKey } = require('@ai-fleet/shared/store');
+const { SENTINEL_TOKEN } = require('@ai-fleet/shared/egress');
 const { getOrCreateGroupedIssueLabel } = require('@ai-fleet/shared/linear');
+const { runWithWorkspaceContext } = require('@ai-fleet/shared/store/workspace-context');
 
-async function main() {
-  const apiKey = process.env.LINEAR_API_KEY || getApiKey();
-  if (!apiKey) {
-    console.error('No Linear API key. Set it in Settings or pass LINEAR_API_KEY=…');
+async function groupLabels() {
+  if (!String(process.env.EGRESS_PROXY_URL || '').trim()) {
+    console.error('EGRESS_PROXY_URL is required; this script never accepts a raw provider credential.');
     process.exitCode = 1;
     return;
   }
@@ -31,13 +33,16 @@ async function main() {
 
   console.log(`Grouping model labels [${children.join(', ')}] under "${groupName}"…`);
   for (const name of children) {
-    const label = await getOrCreateGroupedIssueLabel(apiKey, groupName, name);
+    const label = await getOrCreateGroupedIssueLabel(SENTINEL_TOKEN, groupName, name);
     console.log(`  ✓ "${name}" → group "${groupName}" (label ${label.id})`);
   }
   console.log(`Done. "${groupName}" now renders as a single-select dropdown on issues in Linear.`);
 }
 
-main().catch((err) => {
+const organizationId = String(process.env.FLEET_ORG_ID || process.env.PROXY_ORG_ID || '').trim();
+const projectId = String(process.env.AI_FLEET_PROJECT_ID || '').trim();
+
+Promise.resolve(runWithWorkspaceContext({ organizationId, projectId }, groupLabels)).catch((err) => {
   console.error(`Failed: ${err && err.message ? err.message : err}`);
   process.exitCode = 1;
 });

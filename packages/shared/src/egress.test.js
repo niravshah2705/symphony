@@ -6,19 +6,22 @@ const {
   SENTINEL_TOKEN,
   EGRESS_ROUTES,
   EGRESS_SECRET_KEYS,
+  LLM_GATEWAY_ORG_HEADER,
   egressUrl,
+  llmGatewayUpstream,
   matchRoute,
   normalizeProxyBase,
+  projectEgressHeaders,
 } = require('./egress');
 
-test('egressUrl: explicit override wins over proxy and fallback', () => {
+test('egressUrl: proxy mode cannot be bypassed by an explicit provider override', () => {
   const url = egressUrl({
     proxyBase: 'http://127.0.0.1:4030',
     prefix: '/anthropic',
     explicit: 'https://custom.example',
     fallback: 'https://api.anthropic.com',
   });
-  assert.equal(url, 'https://custom.example');
+  assert.equal(url, 'http://127.0.0.1:4030/anthropic');
 });
 
 test('egressUrl: proxy base wins over fallback when no explicit', () => {
@@ -39,6 +42,12 @@ test('normalizeProxyBase strips trailing slashes', () => {
   assert.equal(normalizeProxyBase('http://x:4030//'), 'http://x:4030');
 });
 
+test('projectEgressHeaders emits only canonical UUID context', () => {
+  const id = '7e2ce8ba-57d3-4d80-bdba-ec18a8d2d348';
+  assert.deepEqual(projectEgressHeaders({ projectId: id }), { 'X-AI-Fleet-Project-ID': id });
+  assert.deepEqual(projectEgressHeaders({ projectId: 'legacy-project-id' }), {});
+});
+
 test('matchRoute: longest-prefix disambiguates /linear vs /linear-mcp', () => {
   assert.equal(matchRoute('/linear').route, EGRESS_ROUTES.linear);
   assert.equal(matchRoute('/linear-mcp').route, EGRESS_ROUTES.linearMcp);
@@ -47,6 +56,32 @@ test('matchRoute: longest-prefix disambiguates /linear vs /linear-mcp', () => {
 test('matchRoute: /github-api and /git/github are distinct', () => {
   assert.equal(matchRoute('/github-api/repos/x/y').route, EGRESS_ROUTES.githubApi);
   assert.equal(matchRoute('/git/github/o/r.git/info/refs').route, EGRESS_ROUTES.git);
+});
+
+test('matchRoute: GitLab, Jira, Asana, and OMLX use fixed route prefixes', () => {
+  assert.equal(matchRoute('/gitlab-api/projects/1').route, EGRESS_ROUTES.gitlabApi);
+  assert.equal(matchRoute('/git/gitlab/acme/app.git').route, EGRESS_ROUTES.gitlabGit);
+  assert.equal(matchRoute('/jira-api/issue/AI-1').route, EGRESS_ROUTES.jiraApi);
+  assert.equal(matchRoute('/asana-api/tasks').route, EGRESS_ROUTES.asanaApi);
+  assert.equal(matchRoute('/omlx/v1/models').route, EGRESS_ROUTES.omlx);
+});
+
+test('matchRoute: anonymous and trusted operator activity has fixed proxy routes', () => {
+  assert.equal(matchRoute('/duckduckgo-html/html/?q=fleet').route, EGRESS_ROUTES.duckDuckGoHtml);
+  assert.equal(matchRoute('/ipwho/8.8.8.8?fields=country_code').route, EGRESS_ROUTES.ipwho);
+  assert.equal(matchRoute('/ollama/api/tags').route, EGRESS_ROUTES.ollama);
+  assert.equal(matchRoute('/lmstudio/v1/models').route, EGRESS_ROUTES.lmstudio);
+  assert.equal(matchRoute('/openswe/threads').route, EGRESS_ROUTES.openSwe);
+  assert.equal(matchRoute('/codex-oauth-token').route, EGRESS_ROUTES.codexOauthToken);
+  assert.equal(matchRoute('/claude-oauth-token').route, EGRESS_ROUTES.claudeOauthToken);
+  assert.equal(matchRoute('/codex-oauth-token/other'), null);
+  assert.equal(matchRoute('/claude-oauth-token?target=other'), null);
+});
+
+test('matchRoute: Slack webhook is exact and cannot select a path or query', () => {
+  assert.equal(matchRoute('/slack-webhook').route, EGRESS_ROUTES.slackWebhook);
+  assert.equal(matchRoute('/slack-webhook/other'), null);
+  assert.equal(matchRoute('/slack-webhook?target=other'), null);
 });
 
 test('matchRoute: returns path remainder after the prefix', () => {
@@ -69,4 +104,29 @@ test('EGRESS_SECRET_KEYS is the deduped set of static-key routes', () => {
 test('SENTINEL_TOKEN is a non-empty constant', () => {
   assert.equal(typeof SENTINEL_TOKEN, 'string');
   assert.ok(SENTINEL_TOKEN.length > 0);
+});
+
+test('llmGateway route: one /llmgw prefix covers all three gateway surfaces', () => {
+  assert.equal(matchRoute('/llmgw/v1/chat/completions').route, EGRESS_ROUTES.llmGateway);
+  assert.equal(matchRoute('/llmgw/v1/chat/completions').rest, '/v1/chat/completions');
+  assert.equal(matchRoute('/llmgw/v1/messages').rest, '/v1/messages');
+  assert.equal(matchRoute('/llmgw/v1/responses').rest, '/v1/responses');
+});
+
+test('llmGatewayUpstream: hosted default, env override with trailing slash stripped', () => {
+  assert.equal(llmGatewayUpstream({}), 'https://gateway.smith.langchain.com');
+  assert.equal(
+    llmGatewayUpstream({ LANGSMITH_GATEWAY_URL: 'https://dataplane.example/gateway/' }),
+    'https://dataplane.example/gateway'
+  );
+});
+
+test('llmGateway route uses the dedicated gateway secret, not the tracing key', () => {
+  assert.equal(EGRESS_ROUTES.llmGateway.auth, 'llm-gateway');
+  assert.equal(EGRESS_ROUTES.llmGateway.secretKey, 'langsmithGatewayApiKey');
+  assert.ok(EGRESS_SECRET_KEYS.includes('langsmithGatewayApiKey'));
+});
+
+test('LLM_GATEWAY_ORG_HEADER names the per-org policy header', () => {
+  assert.equal(LLM_GATEWAY_ORG_HEADER, 'x-fleet-org-id');
 });

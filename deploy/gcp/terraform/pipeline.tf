@@ -45,13 +45,8 @@ locals {
 
 check "pipeline_agent_egress_is_brokered" {
   assert {
-    condition     = !var.pipeline_orchestrator_enabled || var.egress_proxy_enabled
-    error_message = "pipeline_orchestrator_enabled requires egress_proxy_enabled: tester/deployer may never receive raw provider or repository credentials."
-  }
-
-  assert {
-    condition     = !var.pipeline_orchestrator_enabled || trimspace(nonsensitive(var.internal_api_token)) != ""
-    error_message = "pipeline_orchestrator_enabled requires a non-empty internal_api_token for proxy-to-settings authentication."
+    condition     = trimspace(nonsensitive(var.internal_api_token)) != ""
+    error_message = "mandatory egress proxying requires a non-empty internal_api_token for proxy-to-settings authentication."
   }
 }
 
@@ -125,19 +120,8 @@ resource "google_project_iam_member" "deployer_datastore" {
 }
 
 # Agent sidecars resolve managed/customer credentials through settings. The
-# orchestrator receives only the internal S2S token needed to atomically consume
-# a run-bound deployment approval; tester/deployer app containers stay secret-free.
-resource "google_secret_manager_secret_iam_member" "pipeline_proxy_internal_token" {
-  for_each = local.pipeline_on ? {
-    orchestrator = google_service_account.orchestrator[0].email
-    tester       = google_service_account.tester[0].email
-    deployer     = google_service_account.deployer[0].email
-  } : {}
-  project   = var.project_id
-  secret_id = one(google_secret_manager_secret.internal_api_token[*].secret_id)
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${each.value}"
-}
+# resolver token is scoped to the exact container that needs it; pipeline
+# identities receive no Secret Manager accessor role.
 
 resource "google_cloud_run_v2_service_iam_member" "pipeline_proxy_invokes_settings" {
   for_each = local.pipeline_on ? {
@@ -165,7 +149,7 @@ resource "google_cloud_run_v2_service" "orchestrator" {
 
   template {
     service_account                  = google_service_account.orchestrator[0].email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = 1
     scaling {
       min_instance_count = 0
@@ -184,13 +168,8 @@ resource "google_cloud_run_v2_service" "orchestrator" {
         }
       }
       env {
-        name = "INTERNAL_API_TOKEN"
-        value_source {
-          secret_key_ref {
-            secret  = one(google_secret_manager_secret.internal_api_token[*].secret_id)
-            version = "latest"
-          }
-        }
+        name  = "INTERNAL_API_TOKEN"
+        value = var.internal_api_token
       }
       resources {
         limits            = { cpu = var.cloud_run_service_cpu, memory = "512Mi" }
@@ -203,7 +182,6 @@ resource "google_cloud_run_v2_service" "orchestrator" {
   depends_on = [
     google_firestore_database.default,
     google_project_iam_member.orchestrator_datastore,
-    google_secret_manager_secret_iam_member.pipeline_proxy_internal_token,
     google_cloud_run_v2_service_iam_member.pipeline_proxy_invokes_settings,
   ]
 }
@@ -219,7 +197,7 @@ resource "google_cloud_run_v2_service" "tester" {
 
   template {
     service_account                  = google_service_account.tester[0].email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = 1
     timeout                          = "3600s"
     scaling {
@@ -231,8 +209,9 @@ resource "google_cloud_run_v2_service" "tester" {
     }
 
     containers {
-      name  = "app"
-      image = local.tester_image
+      name       = "app"
+      image      = local.tester_image
+      depends_on = ["egress-proxy"]
       ports { container_port = 8080 }
       dynamic "env" {
         for_each = local.tester_env
@@ -259,13 +238,18 @@ resource "google_cloud_run_v2_service" "tester" {
         }
       }
       env {
-        name = "INTERNAL_API_TOKEN"
-        value_source {
-          secret_key_ref {
-            secret  = one(google_secret_manager_secret.internal_api_token[*].secret_id)
-            version = "latest"
-          }
+        name  = "INTERNAL_API_TOKEN"
+        value = var.internal_api_token
+      }
+      startup_probe {
+        http_get {
+          path = "/healthz"
+          port = 4030
         }
+        initial_delay_seconds = 0
+        timeout_seconds       = 3
+        period_seconds        = 3
+        failure_threshold     = 20
       }
       resources {
         limits   = { cpu = var.cloud_run_proxy_cpu, memory = "512Mi" }
@@ -277,7 +261,6 @@ resource "google_cloud_run_v2_service" "tester" {
   depends_on = [
     google_firestore_database.default,
     google_project_iam_member.tester_datastore,
-    google_secret_manager_secret_iam_member.pipeline_proxy_internal_token,
     google_cloud_run_v2_service_iam_member.pipeline_proxy_invokes_settings,
   ]
 }
@@ -293,7 +276,7 @@ resource "google_cloud_run_v2_service" "deployer" {
 
   template {
     service_account                  = google_service_account.deployer[0].email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = 1
     timeout                          = "3600s"
     scaling {
@@ -302,8 +285,9 @@ resource "google_cloud_run_v2_service" "deployer" {
     }
 
     containers {
-      name  = "app"
-      image = local.deployer_image
+      name       = "app"
+      image      = local.deployer_image
+      depends_on = ["egress-proxy"]
       ports { container_port = 8080 }
       dynamic "env" {
         for_each = local.deployer_env
@@ -330,13 +314,18 @@ resource "google_cloud_run_v2_service" "deployer" {
         }
       }
       env {
-        name = "INTERNAL_API_TOKEN"
-        value_source {
-          secret_key_ref {
-            secret  = one(google_secret_manager_secret.internal_api_token[*].secret_id)
-            version = "latest"
-          }
+        name  = "INTERNAL_API_TOKEN"
+        value = var.internal_api_token
+      }
+      startup_probe {
+        http_get {
+          path = "/healthz"
+          port = 4030
         }
+        initial_delay_seconds = 0
+        timeout_seconds       = 3
+        period_seconds        = 3
+        failure_threshold     = 20
       }
       resources {
         limits   = { cpu = var.cloud_run_proxy_cpu, memory = "512Mi" }
@@ -348,7 +337,6 @@ resource "google_cloud_run_v2_service" "deployer" {
   depends_on = [
     google_firestore_database.default,
     google_project_iam_member.deployer_datastore,
-    google_secret_manager_secret_iam_member.pipeline_proxy_internal_token,
     google_cloud_run_v2_service_iam_member.pipeline_proxy_invokes_settings,
   ]
 }

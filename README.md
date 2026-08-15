@@ -46,7 +46,7 @@ and every LLM write is schema-validated before it touches Linear.
 
 ```bash
 npm install        # installs all workspaces
-npm start          # boots gateway (:4000) + planner (:4010) + coder (:4020)
+npm start          # boots the local services plus isolated egress/token helpers
 ```
 
 Then open <http://localhost:4000>, go to **Settings**, and paste a Linear **personal API
@@ -101,10 +101,10 @@ AI Fleet in action — from creating a business to shipping merged PRs:
 
 Collapsible sections:
 
-1. **API Keys & Connection** — the Linear and LangSmith keys together, plus the LangSmith **host/endpoint**, project, and tracing toggle. One **Save keys** button; the Linear key is validated on save and connection status is shown.
-2. **Tool integrations** — choose a planning connector (**Linear / Jira / Asana**) and repository host (**GitHub / GitLab**), then save the matching connection details. Tokens are masked and stored only on the server. The code agent receives a provider-neutral, repository/branch-scoped broker tool; the token is never copied into its shell environment or checkout configuration.
+1. **Scope vault & connections** — organization administrators store provider credentials in the encrypted organization vault, with optional per-project overrides. Linear is customer-owned and has no process-wide or platform-managed fallback. The UI exposes only masked presence/source metadata and connector readiness.
+2. **Tool integrations** — choose a planning connector (**Linear / Jira / Asana**) and repository host (**GitHub / GitLab**), then save non-secret connector metadata separately from credentials. Agent containers send sentinel credentials to their loopback egress proxy; only the proxy resolves and injects the selected organization/project vault value.
 3. **Task Models** — choose **Provider**, **Model**, and **Reasoning** for each task role ("models as tasks"): **Thinking** (planner), **Execution** (coder), **Testing** (tester), and **Deployment** (deployer). Each role picks any provider — local (Ollama / LM Studio / OMLX) or hosted (OpenAI / Anthropic). Selecting a model atomically applies its recommended context, output, sampling, and provider-native reasoning defaults. Expand **Customize parameters** to change supported numeric values later.
-   - **Ollama / LM Studio / OMLX (local)** — the page renders immediately, discovers available models asynchronously, and offers a refresh action. Ollama and LM Studio require no key. OMLX authentication is optional: leave the key empty for an unsecured local server or save its API key server-side. LM Studio's configured context must match the context used when loading the model, and its output budget is capped at half that context so prompt and output fit together.
+   - **Ollama / LM Studio / OMLX (local)** — the page renders immediately, discovers available models asynchronously, and offers a refresh action. In proxied deployments their network origins are trusted operator configuration on the proxy, never browser-selected targets. Ollama and LM Studio require no key; an optional OMLX key belongs in the scope vault. LM Studio's configured context must match the context used when loading the model, and its output budget is capped at half that context so prompt and output fit together.
    - **OpenAI / Codex** — browser OAuth is intentionally disabled. An organization administrator imports a Codex token bundle out of band with `adlc admin codex import --org-id <uuid> --settings-url <url>` (stdin by default, or `--token-file`); the IAM-gated settings service encrypts it in the org vault. The browser exposes status/model selection only and never receives the bundle.
    - **Anthropic / Claude OAuth** — **Sign in with Claude**, approve in the opened tab, then paste the returned `code#state`. Available models are queried from Anthropic with bundled fallbacks, and only each model's advertised adaptive-thinking effort values are shown.
 
@@ -116,7 +116,7 @@ accepts either that origin or `http://127.0.0.1:8000/v1` and stores the normaliz
 origin. Model discovery calls the server's OpenAI-compatible `GET /v1/models`
 endpoint. If the server was started with API-key protection, enter the key in the
 OMLX connection card; it remains masked and server-side.
-4. **Agent runtime & workflow** — select a default and optional per-stage harness for planning, coding, testing, and deployment, then choose bounded sequential/fan-out/evaluator/supervisor guidance. Only catalog entries marked available are selectable; OpenCode, Pi, and Oh My Pi remain experimental metadata until real reviewed adapters exist. DeepAgent remains the full brokered Linear + GitHub/GitLab lifecycle. SDK runtimes operate only with a compatible hosted provider and never receive application-owned tracker or repository credentials.
+4. **Agent runtime & workflow** — select a default and optional per-stage harness for planning, coding, testing, and deployment, then choose bounded sequential/fan-out/evaluator/supervisor guidance. Only catalog entries marked available are selectable; OpenCode, Pi, Oh My Pi, and DeepSeek remain experimental metadata until reviewed runtime executors exist. DeepAgent remains the full brokered Linear + GitHub/GitLab lifecycle. SDK runtimes operate only with a compatible hosted provider and never receive application-owned tracker or repository credentials.
 5. **Assume Role** — pick a workspace member (validated server-side). The assumed role owns enriched projects and is shown in the **top toolbar**.
 6. **Deep Agent** — **enrich labels** (multi-select dropdown of your Linear project labels), **scheduler cadence** (5 / 10 / 15 minutes), parallelism, and per-run/milestone/issue caps, plus toggles.
 
@@ -377,14 +377,15 @@ public/
 ```bash
 npm install        # installs all workspaces
 
-npm start          # boots gateway (:4000) + planner (:4010) + coder (:4020)
+npm start          # boots the local services plus isolated egress/token helpers
 # or: npm run dev  # same, each service under node --watch
 
 # run a single service (e.g. only the gateway):
 npm run start:gateway   # or start:planner / start:coder
 ```
 
-Ports are env-overridable: `PORT` (gateway), `PLANNER_PORT`, `CODER_SERVICE_PORT`.
+Ports are env-overridable: `PORT` (gateway), `PLANNER_PORT`, `CODER_SERVICE_PORT`,
+and `LOCAL_STREAM_TOKEN_PORT` (standalone local stream-token broker).
 To run services on different hosts, point the gateway at them with `PLANNER_URL`
 and `CODER_URL`. The shared `data/store.json` location can be overridden with
 `AI_FLEET_DATA_DIR`.
@@ -472,7 +473,7 @@ npm run test:e2e:debug         # headed Playwright inspector
 
 ## Using it
 
-1. **Settings** → save your Linear API key. The header shows connection status.
+1. **Settings** → select an organization/project and save the Linear credential in its encrypted scope vault. The header shows connector readiness without returning the key.
 2. **Projects** → click a project to open its milestone planning timeline.
 3. **Board** → pick a project; drag issue cards between state columns to update them in Linear.
 4. **Business** → OTA is already there. Link it to an existing Linear project, or
@@ -525,9 +526,10 @@ rather than stuck in "running".
 | GET | `/api/auth/me` | Current mesh-verified application identity |
 | GET | `/api/eula` | Caller's EULA acceptance status (public; anonymous → not accepted) |
 | POST | `/api/eula` | Record the caller's EULA decision `{ decision: accepted \| rejected }` (authenticated) |
-| GET | `/api/settings` | Whether a key is set (masked) |
-| PUT | `/api/settings` | Validate + save API key |
-| DELETE | `/api/settings` | Remove key |
+| GET | `/api/settings` | Public, non-secret runtime settings and masked readiness |
+| GET/PUT | `/api/settings-policy/settings/org/secrets` | Read masked organization-vault state or atomically update values/selections (org admin) |
+| GET/PUT | `/api/settings-policy/settings/project/:projectId/secrets` | Read or update project overrides with organization fallback (project admin) |
+| GET/PUT | `/api/settings-policy/settings/org/connectors` | Read or update non-secret Jira/Asana connector metadata |
 | GET | `/api/settings/llm-presets` | Shared local + hosted LLM preset JSON catalog |
 | PUT | `/api/settings/llm-preset` | Atomically apply a role preset plus safe optional overrides |
 | PUT | `/api/settings/llm-selection` | Select a provider/model or change only its validated reasoning effort |
@@ -541,7 +543,7 @@ rather than stuck in "running".
 | GET/POST/PUT/DELETE | `/api/businesses[...]` | Manage businesses ↔ project mapping |
 | PUT | `/api/settings/llm` | Save Ollama config (host, model, num_ctx, num_predict) |
 | PUT | `/api/settings/lmstudio` | Save legacy/custom LM Studio config |
-| PUT | `/api/settings/langsmith` | Save LangSmith config (key masked) |
+| PUT | `/api/settings/langsmith` | Save non-secret LangSmith tracing configuration; its key is managed through the scope vault |
 | GET/POST | `/api/settings/codex[...]` | Codex provider status and model selection. Browser login/callback/pending/sign-out endpoints return `410`; org admins provision/delete bundles through the IAM-gated settings operator API via `adlc admin codex`. |
 | GET/POST/DELETE | `/api/settings/claude[...]` | Claude provider status / model / sign-out (`/login`, `/exchange`, `/test` for OAuth) |
 | PUT | `/api/settings/runtime` | Select the agent SDK and workflow guidance pattern |
@@ -572,7 +574,7 @@ rather than stuck in "running".
 
 ## Notes
 
-- `data/` (contains your saved keys, assumed role, config, and jobs) is git-ignored.
+- `data/` (contains local operational state, assumed role, config, and jobs) is git-ignored. Deployed provider credentials live in the encrypted settings-service vault, not an agent store or environment.
 - Board columns are derived from the workflow states present on the project's
   issues, ordered: triage → backlog → unstarted → started → completed → canceled.
 - Linear project milestones only carry a target date, so each milestone's **start
@@ -581,7 +583,7 @@ rather than stuck in "running".
 - The scheduler starts with the server and runs on the configured cadence
   (5/10/15 min), plus a one-off **resume pass a few seconds after restart**. Each
   tick it **auto-discovers** projects still carrying an enrich label and processes
-  them — only once a role is assumed, the Linear key is set, and an LLM provider
+  them — only once a role is assumed, the selected scope reports a ready Linear credential, and an LLM provider
   (Ollama / LM Studio / OMLX / Codex / Claude) is fully configured. Completed projects become
   `aidone` / `aifail` (the label is replaced), so they drop out of discovery and
   are not re-processed.

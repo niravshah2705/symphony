@@ -8,7 +8,8 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { pathToFileURL } = require('url');
 const { CONFIG } = require('../config');
-const { SENTINEL_TOKEN } = require('../egress');
+const { SENTINEL_TOKEN, PROJECT_CONTEXT_HEADER, projectEgressHeaders } = require('../egress');
+const { currentWorkspaceContext } = require('../store/workspace-context');
 const { copySecretFreeJson, isSecretFieldName } = require('@ai-fleet/shared-core/pipeline/contracts');
 
 const execFileP = promisify(execFile);
@@ -21,7 +22,7 @@ const PROVIDERS = Object.freeze({
   }),
   gitlab: Object.freeze({
     host: 'gitlab.com',
-    apiOrigin: 'https://gitlab.com',
+    apiOrigin: 'https://gitlab.com/api/v4',
     username: 'oauth2',
   }),
 });
@@ -313,15 +314,15 @@ function validateRepository(repository, selectedProvider) {
   ) {
     throw new RepositoryBrokerError('Repository namespace is invalid.', 'invalid_repository');
   }
-  // In egress-proxy mode the REST + git traffic is routed at the sidecar (which
-  // injects the PAT) instead of straight to GitHub, so the agent holds no token.
-  // The INPUT repo URL is still validated as a real github.com URL above; only
-  // the effective apiOrigin/remote are retargeted (github only — the proxy has
-  // no GitLab route).
-  const proxied = provider === 'github' && Boolean(CONFIG.EGRESS_PROXY_URL);
-  const apiOrigin = proxied ? CONFIG.GITHUB_API_ORIGIN : expected.apiOrigin;
+  // In egress-proxy mode REST + git traffic for either supported forge is
+  // routed through fixed sidecar prefixes. The input URL is still validated
+  // against the provider's official host before the effective targets change.
+  const proxied = Boolean(CONFIG.EGRESS_PROXY_URL);
+  const apiOrigin = proxied
+    ? provider === 'github' ? CONFIG.GITHUB_API_ORIGIN : CONFIG.GITLAB_API_ORIGIN
+    : expected.apiOrigin;
   const https = proxied
-    ? `${CONFIG.GIT_HTTPS_ORIGIN}/${fullName}.git`
+    ? `${provider === 'github' ? CONFIG.GIT_HTTPS_ORIGIN : CONFIG.GITLAB_GIT_ORIGIN}/${fullName}.git`
     : `https://${expected.host}/${fullName}.git`;
   return Object.freeze({
     provider,
@@ -523,7 +524,7 @@ function repoApiPath(repository) {
   if (repository.provider === 'github') {
     return `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}`;
   }
-  return `/api/v4/projects/${encodeURIComponent(repository.fullName)}`;
+  return `/projects/${encodeURIComponent(repository.fullName)}`;
 }
 
 /**
@@ -544,22 +545,26 @@ async function forgeApiRequest({
   withMeta = false,
   redactSecrets = [],
 }) {
-  if (!token) throw new RepositoryBrokerError('No repository token is configured.', 'missing_token');
+  const effectiveToken = CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : token;
+  if (!effectiveToken) throw new RepositoryBrokerError('No repository token is configured.', 'missing_token');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LIMITS.apiTimeoutMs);
   const github = provider === 'github';
   const headers = github
     ? {
         Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${effectiveToken}`,
         'X-GitHub-Api-Version': '2022-11-28',
         'User-Agent': 'tech-symphony-repository-broker',
       }
     : {
         Accept: 'application/json',
-        'PRIVATE-TOKEN': token,
+        'PRIVATE-TOKEN': effectiveToken,
         'User-Agent': 'tech-symphony-repository-broker',
       };
+  if (CONFIG.EGRESS_PROXY_URL) {
+    Object.assign(headers, projectEgressHeaders(currentWorkspaceContext()));
+  }
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const url = `${repository.apiOrigin}${endpoint}`;
   const safe = (value) => redact(value, redactSecrets);
@@ -713,12 +718,9 @@ class RepositoryBroker {
     }
     this.label = oneLine(label, 100);
     this.step = typeof step === 'function' ? step : () => {};
-    // Egress-proxy mode: the agent holds no PAT. Use the sentinel so the broker's
-    // `!token` gates pass; the sidecar injects the real credential on egress. The
-    // git credential helper is bound to `repository.host` (github.com) while the
-    // remote is the proxy origin, so the sentinel is never even offered — git
-    // sends no auth and the proxy adds it.
-    this.#token = String(token || '') || (CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : '');
+    // Egress-proxy mode is sentinel-only even if a legacy caller still supplies
+    // a raw PAT. The sidecar resolves the selected per-org credential.
+    this.#token = CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : String(token || '');
     this.#fetchImpl = fetchImpl;
     this.#execFileImpl = execFileImpl;
     this.#sleep = sleep;
@@ -1158,7 +1160,10 @@ class RepositoryBroker {
     delete env.SSH_ASKPASS;
     if (auth && this.#token) {
       env[BROKER_TOKEN_ENV] = this.#token;
-      env[BROKER_HOST_ENV] = this.repository.host;
+      // In proxy mode git asks for credentials for the loopback sidecar host,
+      // not the validated public forge host. Bind the sentinel helper to the
+      // effective remote only; the proxy strips Basic and injects the real PAT.
+      env[BROKER_HOST_ENV] = new URL(this.repository.https).hostname;
       env[BROKER_USER_ENV] = PROVIDERS[this.repository.provider].username;
     }
     return env;
@@ -1178,6 +1183,10 @@ class RepositoryBroker {
       '-c', 'http.proxy=',
       '-c', 'http.sslVerify=true',
     ];
+    const projectId = projectEgressHeaders(currentWorkspaceContext())[PROJECT_CONTEXT_HEADER];
+    if (CONFIG.EGRESS_PROXY_URL && projectId) {
+      config.push('-c', `http.extraHeader=${PROJECT_CONTEXT_HEADER}: ${projectId}`);
+    }
     if (auth) config.push('-c', `credential.helper=${BROKER_CREDENTIAL_HELPER}`);
     try {
       const result = await this.#execFileImpl('git', [...config, ...args], {

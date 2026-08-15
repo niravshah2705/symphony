@@ -16,10 +16,88 @@ function variableBlock(source, name) {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
+function resourceBlock(source, type, name) {
+  const start = source.indexOf(`resource "${type}" "${name}"`);
+  assert.notEqual(start, -1, `missing Terraform resource ${type}.${name}`);
+  const next = source.indexOf('\nresource "', start + 1);
+  return source.slice(start, next === -1 ? source.length : next);
+}
+
 test('pipeline rollout and deployment are fail-closed Terraform defaults', () => {
   const variables = read('deploy/gcp/terraform/variables.tf');
   assert.match(variableBlock(variables, 'pipeline_orchestrator_enabled'), /default\s*=\s*false/);
   assert.match(variableBlock(variables, 'pipeline_deployment_enabled'), /default\s*=\s*false/);
+});
+
+test('all Cloud Run services use the gen2 execution environment', () => {
+  const servicesByFile = new Map([
+    ['cloud_run.tf', ['gateway', 'planner', 'coder_control']],
+    ['org_service.tf', ['org']],
+    ['settings_service.tf', ['settings']],
+    ['email_service.tf', ['email']],
+    ['pipeline.tf', ['orchestrator', 'tester', 'deployer']],
+    ['provisioner.tf', ['provisioner']],
+    ['stream_token_service.tf', ['stream_token_broker']],
+  ]);
+  const expectedInventory = [...servicesByFile]
+    .flatMap(([file, services]) => services.map((service) => [file, service]))
+    .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
+  assert.equal(expectedInventory.length, 11);
+
+  const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
+  const actualInventory = fs.readdirSync(terraformDir)
+    .filter((file) => file.endsWith('.tf'))
+    .flatMap((file) => {
+      const source = read('deploy/gcp/terraform', file);
+      return [...source.matchAll(/resource\s+"google_cloud_run_v2_service"\s+"([^"]+)"/g)]
+        .map((match) => [file, match[1]]);
+    })
+    .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
+  assert.deepEqual(actualInventory, expectedInventory, 'Cloud Run service inventory changed');
+
+  for (const [file, expectedServices] of servicesByFile) {
+    const source = read('deploy/gcp/terraform', file);
+    for (const service of expectedServices) {
+      assert.match(
+        resourceBlock(source, 'google_cloud_run_v2_service', service),
+        /^\s*execution_environment\s*=\s*"EXECUTION_ENVIRONMENT_GEN2"\s*$/m,
+        `${file}: google_cloud_run_v2_service.${service} must explicitly use gen2`,
+      );
+    }
+  }
+});
+
+test('fixed-memory gen2 Cloud Run CPU variables reject incompatible allocations', () => {
+  const variables = read('deploy/gcp/terraform/variables.tf');
+  const supportedCpuValues = String.raw`\[\s*"1"\s*,\s*"2"\s*\]`;
+
+  for (const name of ['cloud_run_service_cpu', 'cloud_run_proxy_cpu']) {
+    const block = variableBlock(variables, name);
+    assert.match(
+      block,
+      new RegExp(`condition\\s*=\\s*contains\\(\\s*${supportedCpuValues}\\s*,\\s*var\\.${name}\\s*\\)`),
+      `${name} must reject CPU values incompatible with fixed 512 MiB containers`,
+    );
+    assert.match(block, /error_message\s*=\s*"[^"]*1 or 2 vCPU[^"]*"/);
+  }
+});
+
+test('skills mounts preserve configured Cloud Run service and proxy CPUs', () => {
+  const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
+  const variables = read('deploy/gcp/terraform/variables.tf');
+  assert.doesNotMatch(
+    cloudRun,
+    /local\.agent_(?:service|proxy)_cpu|agent_(?:service|proxy)_cpu\s*=/,
+    'skills mounts must not replace configured CPU values with local clamps',
+  );
+
+  for (const service of ['planner', 'coder_control']) {
+    const resource = resourceBlock(cloudRun, 'google_cloud_run_v2_service', service);
+    assert.match(resource, /cpu\s*=\s*var\.cloud_run_service_cpu/);
+    assert.match(resource, /cpu\s*=\s*var\.cloud_run_proxy_cpu/);
+  }
+
+  assert.doesNotMatch(variableBlock(variables, 'skills_mount_enabled'), /\+ gen2 exec env/);
 });
 
 test('deploy workflow fails closed when an unchanged live image tag cannot be resolved', () => {
@@ -171,7 +249,8 @@ test('pipeline topology enforces dedicated topics and brokered agent egress', ()
   assert.equal((pipeline.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 2);
   assert.equal((cloudRun.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 2);
   assert.match(pipeline, /check "pipeline_agent_egress_is_brokered"/);
-  assert.match(pipeline, /!var\.pipeline_orchestrator_enabled \|\| var\.egress_proxy_enabled/);
+  assert.match(pipeline, /trimspace\(nonsensitive\(var\.internal_api_token\)\) != ""/);
+  assert.doesNotMatch(variables, /variable "egress_proxy_enabled"/);
   assert.match(cloudRun, /!local\.pipeline_on \|\| var\.min_instances <= 1/);
   assert.equal(
     (cloudRun.match(/max_instance_count = local\.pipeline_on \? 1 : var\.max_instances/g) || []).length,
@@ -185,7 +264,122 @@ test('pipeline topology enforces dedicated topics and brokered agent egress', ()
     const appEnd = resource.indexOf('name  = "egress-proxy"');
     assert.ok(appEnd > 0, `${service} must include the egress-proxy sidecar`);
     assert.doesNotMatch(resource.slice(0, appEnd), /secret_key_ref/);
+    assert.match(resource, /local\.proxy_plain_env/);
+    assert.match(resource, /depends_on\s*=\s*\["egress-proxy"\]/);
   }
+});
+
+test('stream-token broker owns the signing secret behind private IAM', () => {
+  const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
+  const brokerSource = read('deploy/gcp/terraform/stream_token_service.tf');
+  const pipeline = read('deploy/gcp/terraform/pipeline.tf');
+  const provisioner = read('deploy/gcp/terraform/provisioner.tf');
+  const iam = read('deploy/gcp/terraform/iam.tf');
+  const variables = read('deploy/gcp/terraform/variables.tf');
+  const outputs = read('deploy/gcp/terraform/outputs.tf');
+
+  const gateway = resourceBlock(cloudRun, 'google_cloud_run_v2_service', 'gateway');
+  const broker = resourceBlock(brokerSource, 'google_cloud_run_v2_service', 'stream_token_broker');
+  const brokerSecret = resourceBlock(iam, 'google_secret_manager_secret_iam_member', 'stream_token_broker');
+  const legacyGatewaySecret = resourceBlock(iam, 'google_secret_manager_secret_iam_member', 'gateway_stream_token_legacy');
+  const brokerInvoker = resourceBlock(iam, 'google_cloud_run_v2_service_iam_member', 'gateway_invokes_stream_token_broker');
+
+  assert.match(cloudRun, /STREAM_TOKEN_SERVICE_URL\s*=\s*google_cloud_run_v2_service\.stream_token_broker\.uri/);
+  assert.match(provisioner, /STREAM_TOKEN_SERVICE_URL\s*=\s*google_cloud_run_v2_service\.stream_token_broker\.uri/);
+  assert.doesNotMatch(gateway, /STREAM_TOKEN_SECRET|stream-token-proxy|127\.0\.0\.1:4030/);
+  assert.match(gateway, /google_cloud_run_v2_service\.stream_token_broker/);
+  assert.match(gateway, /google_cloud_run_v2_service_iam_member\.gateway_invokes_stream_token_broker/);
+
+  assert.match(broker, /service_account\s*=\s*google_service_account\.stream_token_broker\.email/);
+  assert.match(broker, /ingress\s*=\s*var\.internal_ingress/);
+  assert.match(broker, /image\s*=\s*local\.proxy_image/);
+  assert.match(broker, /command\s*=\s*\["node"\]/);
+  assert.match(broker, /args\s*=\s*\["services\/proxy\/src\/stream-token-server\.js"\]/);
+  assert.match(broker, /name\s*=\s*"STREAM_TOKEN_BIND_HOST"\s+value\s*=\s*"0\.0\.0\.0"/);
+  assert.match(broker, /name\s*=\s*"STREAM_TOKEN_SECRET"/);
+  assert.doesNotMatch(broker, /PROXY_CAPABILITIES|egress-proxy/);
+  assert.doesNotMatch(gateway, /STREAM_TOKEN_BIND_HOST/);
+  const brokerMinInstances = variableBlock(variables, 'stream_token_min_instances');
+  assert.match(brokerMinInstances, /default\s*=\s*1/);
+  assert.match(
+    brokerMinInstances,
+    /condition\s*=\s*var\.stream_token_min_instances\s*>=\s*0\s*&&\s*floor\(var\.stream_token_min_instances\)\s*==\s*var\.stream_token_min_instances/,
+  );
+  assert.match(broker, /min_instance_count\s*=\s*var\.stream_token_min_instances/);
+  assert.match(broker, /condition\s*=\s*var\.stream_token_min_instances\s*<=\s*var\.max_instances/);
+
+  assert.match(brokerSecret, /role\s*=\s*"roles\/secretmanager\.secretAccessor"/);
+  assert.match(brokerSecret, /member\s*=\s*"serviceAccount:\$\{google_service_account\.stream_token_broker\.email\}"/);
+  assert.match(
+    variableBlock(variables, 'stream_token_legacy_gateway_secret_access'),
+    /default\s*=\s*true/,
+    'the first migration apply must preserve legacy tenant sidecars',
+  );
+  assert.match(
+    legacyGatewaySecret,
+    /count\s*=\s*var\.stream_token_legacy_gateway_secret_access\s*\?\s*1\s*:\s*0/,
+    'setting the migration gate false must remove the gateway secret binding',
+  );
+  assert.match(legacyGatewaySecret, /member\s*=\s*"serviceAccount:\$\{google_service_account\.gateway\.email\}"/);
+  assert.match(iam, /to\s*=\s*google_secret_manager_secret_iam_member\.gateway_stream_token_legacy\[0\]/);
+  const streamSecretAccessors = [...iam.matchAll(
+    /resource "google_secret_manager_secret_iam_member" "([^"]+)" \{([\s\S]*?)(?=\nresource "|\n# ---|$)/g,
+  )]
+    .filter(([, , body]) => /secret_id\s*=\s*google_secret_manager_secret\.stream_token_secret\.secret_id/.test(body))
+    .map(([, name]) => name)
+    .sort();
+  assert.deepEqual(
+    streamSecretAccessors,
+    ['gateway_stream_token_legacy', 'stream_token_broker'],
+    'the completed false-gate state must leave only the broker accessor',
+  );
+  assert.match(outputs, /output "stream_token_legacy_gateway_secret_access_enabled"/);
+  assert.match(outputs, /value\s*=\s*var\.stream_token_legacy_gateway_secret_access/);
+  assert.match(brokerInvoker, /role\s*=\s*"roles\/run\.invoker"/);
+  assert.match(brokerInvoker, /member\s*=\s*"serviceAccount:\$\{google_service_account\.gateway\.email\}"/);
+  assert.doesNotMatch(brokerInvoker, /allUsers/);
+  const brokerIamBindings = [...iam.matchAll(
+    /resource "google_cloud_run_v2_service_iam_member" "([^"]+)" \{([\s\S]*?)(?=\nresource "|\n# ---|$)/g,
+  )].filter(([, , body]) => /google_cloud_run_v2_service\.stream_token_broker\.name/.test(body));
+  assert.equal(brokerIamBindings.length, 1, 'the broker must have one explicit invoker binding');
+  assert.doesNotMatch(brokerIamBindings[0][2], /allUsers/, 'the broker must never be publicly invokable');
+
+  for (const service of ['planner', 'coder_control']) {
+    const resource = resourceBlock(cloudRun, 'google_cloud_run_v2_service', service);
+    const proxy = resource.indexOf('name  = "egress-proxy"');
+    assert.ok(proxy > 0);
+    assert.doesNotMatch(resource.slice(0, proxy), /secret_key_ref|INTERNAL_API_TOKEN/);
+    assert.match(resource.slice(proxy), /name\s*=\s*"INTERNAL_API_TOKEN"\s+value\s*=\s*var\.internal_api_token/);
+  }
+
+  assert.doesNotMatch(`${cloudRun}\n${pipeline}`, /egress_proxy_enabled/);
+  assert.doesNotMatch(iam, /(?:gateway|planner|coder)[^\n]*linear|linear[^\n]*(?:gateway|planner|coder)/i);
+  assert.doesNotMatch(`${cloudRun}\n${pipeline}`, /proxy_internal_token/);
+});
+
+test('proxy artifact retention preserves a multi-revision broker rollback window', () => {
+  const variables = read('deploy/gcp/terraform/variables.tf');
+  const artifactRegistry = read('deploy/gcp/terraform/artifact_registry.tf');
+  assert.match(variableBlock(variables, 'artifact_retention_count'), /default\s*=\s*[3-9][0-9]*/);
+  assert.match(artifactRegistry, /keep_count\s*=\s*var\.artifact_retention_count/);
+});
+
+test('OpenSWE upstream is trusted proxy-only deployment configuration', () => {
+  const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
+  const variables = read('deploy/gcp/terraform/variables.tf');
+  const block = variableBlock(variables, 'openswe_proxy_upstream');
+  assert.match(block, /default\s*=\s*""/);
+  assert.match(block, /without credentials, query, or fragment/);
+
+  const egressEnvStart = cloudRun.indexOf('egress_env =');
+  const proxyEnvStart = cloudRun.indexOf('proxy_plain_env =', egressEnvStart);
+  const plannerEnvStart = cloudRun.indexOf('planner_env =', proxyEnvStart);
+  assert.ok(egressEnvStart >= 0 && proxyEnvStart > egressEnvStart && plannerEnvStart > proxyEnvStart);
+  assert.doesNotMatch(cloudRun.slice(egressEnvStart, proxyEnvStart), /OPENSWE_(?:URL|PROXY_UPSTREAM)/);
+  assert.match(
+    cloudRun.slice(proxyEnvStart, plannerEnvStart),
+    /OPENSWE_PROXY_UPSTREAM\s*=\s*trimspace\(var\.openswe_proxy_upstream\)/,
+  );
 });
 
 test('orchestrator image remains free of the heavy shared agent SDK workspace', () => {
@@ -194,6 +388,18 @@ test('orchestrator image remains free of the heavy shared agent SDK workspace', 
   assert.doesNotMatch(dockerfile, /COPY packages\/shared\//);
   assert.doesNotMatch(dockerfile, /COPY packages\/ \./);
   assert.match(dockerfile, /--workspace=@ai-fleet\/orchestrator/);
+});
+
+test('coder image installs the seccomp launcher for model-controlled commands', () => {
+  const dockerfile = read('deploy/gcp/Dockerfile.coder');
+  const harness = read('packages/shared/src/agent/harnesses/deepagent.js');
+  assert.match(dockerfile, /network-sandbox\.c/);
+  assert.match(dockerfile, /-lseccomp/);
+  assert.match(dockerfile, /apk add --no-cache git openssh-client ca-certificates bash libseccomp/);
+  assert.match(dockerfile, /\/usr\/local\/bin\/ai-fleet-network-sandbox/);
+  assert.match(harness, /NODE_ENV[\s\S]*production/);
+  assert.match(harness, /EGRESS_PROXY_URL/);
+  assert.match(harness, /exec[\s\S]*quoteShellArg\(launcher\)[\s\S]*quoteShellArg\(command\)/);
 });
 
 test('tester image installs the capability-free network sandbox for repository commands', () => {
@@ -232,7 +438,7 @@ test('orchestrator can consume run-bound deployment approvals from settings', ()
   const end = pipeline.indexOf('\nresource "google_cloud_run_v2_service"', start + 1);
   const resource = pipeline.slice(start, end);
   assert.match(pipeline, /SETTINGS_URL\s*=\s*local\.settings_url/);
-  assert.match(pipeline, /orchestrator\s*=\s*google_service_account\.orchestrator\[0\]\.email/);
   assert.match(resource, /name\s*=\s*"INTERNAL_API_TOKEN"/);
   assert.match(pipeline, /pipeline_proxy_invokes_settings/);
+  assert.doesNotMatch(pipeline, /pipeline_proxy_internal_token/);
 });

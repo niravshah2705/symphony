@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 #
-# Egress proxy sidecar image. Runs co-located with planner / coder / coder-worker
-# (Cloud Run multi-container, shared loopback) and injects per-org credentials so
-# the agent containers hold no raw provider keys.
+# Security proxy image. Its default entrypoint runs co-located with planner /
+# coder / coder-worker and injects per-org credentials. Cloud Run also reuses
+# the same immutable image with a broker-only entrypoint for stream-token
+# signing; that service has its own identity and exposes no egress relay.
 #
 # Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared-core:
 #   docker build -f deploy/gcp/Dockerfile.proxy -t <tag> .
@@ -46,9 +47,8 @@ COPY --from=builder --chown=node:node /app /app
 # Non-root (infra-misconfig checklist).
 USER node
 
-# The proxy reads process.env.PROXY_PORT. As a Cloud Run sidecar it binds a
-# non-ingress port on the shared loopback (default 4030); the ingress container
-# keeps 8080.
-EXPOSE 4030
+# The egress entrypoint reads PROXY_PORT and uses 4030 on shared loopback. The
+# broker-only entrypoint reads PORT and uses Cloud Run's ingress port 8080.
+EXPOSE 4030 8080
 
 CMD ["node", "services/proxy/src/index.js"]

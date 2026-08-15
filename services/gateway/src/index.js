@@ -22,7 +22,7 @@ const events = require('@ai-fleet/shared-core/messaging/events');
 const { createCompatibilityHandlers } = require('./publish');
 const sse = require('./sse');
 const { mintStreamToken, mintWorkspaceToken } = require('./stream-token');
-const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared-core/messaging/events');
+const { createStreamTokenHandlers } = require('./stream-token-handlers');
 const { configureTrustProxy } = require('./trust-proxy');
 const { enforcePinnedOrganization, requestContext, requireOrganizationContext } = require('./request-context');
 const { createContextValidationMiddleware } = require('./context-validator');
@@ -31,6 +31,13 @@ const { createStoreContextMiddleware } = require('./store-context');
 const { PipelineAdmissionError, createPipelineAdmission } = require('./pipeline-admission');
 const pipelineAdmission = createPipelineAdmission();
 const publish = createCompatibilityHandlers({ admission: pipelineAdmission });
+const streamTokenHandlers = createStreamTokenHandlers({
+  mintStreamToken,
+  mintWorkspaceToken,
+  requestContext,
+  getConversation,
+  matchesEventContext: events.matchesEventContext,
+});
 
 /**
  * Gateway service — the single browser-facing origin. It serves the SPA, owns
@@ -141,33 +148,11 @@ app.get('/api/config', createConfigResolver());
 // all fleet:access operators share one store/conversations (see README), so there
 // is no per-user ownership boundary to enforce here. We still require the
 // conversation to EXIST so tokens can't be minted for arbitrary/guessed ids.
-app.get('/api/agent/stream-token', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), (req, res) => {
-  const conversationId = String(req.query.conversationId || '').trim();
-  if (!conversationId) return res.status(400).json({ error: 'conversationId is required.' });
-  const context = requestContext(req);
-  const conversation = getConversation(conversationId);
-  if (!conversation || !events.matchesEventContext(conversation, context)) {
-    return res.status(404).json({ error: 'Unknown conversation.' });
-  }
-  return res.set('Cache-Control', 'no-store').json({
-    token: mintStreamToken(conversationId, context),
-    conversationId,
-    organizationId: context.organizationId || null,
-    projectId: context.projectId || null,
-  });
-});
+app.get('/api/agent/stream-token', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), streamTokenHandlers.mintConversation);
 
 // Mint a token for the selected workspace stream. Bound to the reserved channel
 // id and the authoritative organization/project context.
-app.get('/api/agent/workspace-stream-token', requireAuthenticated(), requirePermission('workspace', { level: 'read' }), requireOrganizationContext(), (req, res) => {
-  const context = requestContext(req);
-  res.set('Cache-Control', 'no-store').json({
-    token: mintWorkspaceToken(context),
-    conversationId: WORKSPACE_CHANNEL,
-    organizationId: context.organizationId || null,
-    projectId: context.projectId || null,
-  });
-});
+app.get('/api/agent/workspace-stream-token', requireAuthenticated(), requirePermission('workspace', { level: 'read' }), requireOrganizationContext(), streamTokenHandlers.mintWorkspace);
 
 // EULA gate applied to POST /api/issues only (task creation is "actual work";
 // board-drag PATCH and reads pass through). Kept here so all EULA gating lives

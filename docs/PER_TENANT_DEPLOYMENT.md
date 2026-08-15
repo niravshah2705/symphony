@@ -114,13 +114,42 @@ To turn it on:
 - **Runtime-created, imperative.** Per-tenant resources live **outside** Terraform
   state (only the provisioner service itself is in TF). Do not `terraform destroy`
   expecting tenant stacks to be cleaned up — org deletion tears them down.
-- **Create-only reconciliation.** Shared template changes (including container CPU
-  limits) are inherited by newly provisioned tenants. Existing dedicated stacks
-  are left unchanged until they are deliberately torn down and reprovisioned.
-- **Shared SAs + shared secrets.** Per-tenant services reuse the 4 shared service
-  accounts and shared Secret Manager secrets (Linear key, stream-token secret).
-  This adds no IAM-level tenant isolation and is safe only under the shared-Firestore
-  trust boundary + `STORE_NAMESPACE`. Per-tenant SAs/secrets is the hardening path.
+- **Existing gateways require an explicit reconciliation sweep.** The executor
+  updates an existing Cloud Run service when it receives another `provision`
+  request, but the org trigger intentionally suppresses requests for an org
+  whose status is already `provisioned`. During the stream-token broker rollout,
+  republish one message per existing tenant (substitute its organization
+  deployment-registry values):
+
+  ```bash
+  gcloud pubsub topics publish tenant-provision-requests \
+    --project="<project-id>" \
+    --message='{"org_id":"<organization-uuid>","slug":"<deployment-slug>","action":"provision"}'
+  ```
+
+  Inspect each reconciled revision (the JSON shape is intentionally easy to
+  gate in a rollout script):
+
+  ```bash
+  gcloud run services describe "gw-<deployment-slug>" \
+    --project="<project-id>" --region="<region>" --format=json |
+    jq '{container_count: (.spec.template.spec.containers | length), stream_env: [.spec.template.spec.containers[0].env[]? | select(.name | startswith("STREAM_TOKEN_"))]}'
+  ```
+
+  Before removing the gateway service account's legacy access to
+  `stream-token-secret`, every result must report `container_count: 1`, and
+  `stream_env` must contain only `STREAM_TOKEN_SERVICE_URL` set to the shared
+  HTTPS broker URL (no `STREAM_TOKEN_SECRET` or `STREAM_TOKEN_PROXY_URL`). There
+  is no automatic all-tenant sweep. Only after the sweep passes, set Terraform
+  `stream_token_legacy_gateway_secret_access=false` to remove the temporary
+  gateway service-account grant.
+- **Shared SAs, scoped proxy credentials.** Per-tenant services reuse the shared
+  runtime service accounts, but agent identities have no provider-secret
+  accessor role. Each cloned egress proxy receives an organization-bound bearer
+  and resolves the organization/project vault. Tenant gateways call the shared,
+  IAM-gated stream-token broker and never receive the stream signing secret.
+  Per-tenant service accounts remain the hardening path for IAM-level compute
+  isolation.
 - **Privileged provisioner SA** (`run.admin`/`pubsub.admin`/`cloudscheduler.admin`,
   per-SA `serviceAccountUser`) lives **only** on the internal provisioner — never
   the public gateway — and its actions should be audit-logged.

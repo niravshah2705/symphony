@@ -43,6 +43,7 @@ async def test_org_admin_imports_and_proxy_rotates_codex_bundle(client):
     assert masked.json()["secrets"]["codexTokenBundle"] == {
         "set": True,
         "source": "customer",
+        "allowed_sources": ["managed", "customer"],
     }
 
     resolved_url = f"/api/v1/internal/s2s/orgs/{org}/secrets"

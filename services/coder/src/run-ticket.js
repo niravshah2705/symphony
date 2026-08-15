@@ -1,6 +1,6 @@
 'use strict';
 
-const { getSettings } = require('@ai-fleet/shared/store');
+const { getApiKey, getSettings } = require('@ai-fleet/shared/store');
 const linear = require('@ai-fleet/shared/linear');
 const log = require('@ai-fleet/shared/logger');
 const { resolveLlm } = require('@ai-fleet/shared/agent/llm');
@@ -52,9 +52,9 @@ function toIssue(node) {
   };
 }
 
-function buildKeys(s) {
+function buildKeys(s, linearApiKey = getApiKey()) {
   return {
-    linearApiKey: s.linearApiKey,
+    linearApiKey,
     langsmithApiKey: s.langsmithApiKey,
     langsmithTracing: s.langsmithTracing,
     langsmithProject: s.langsmithProject,
@@ -71,9 +71,9 @@ function httpError(message, status, extra = {}) {
   return error;
 }
 
-async function loadIssue(settings, issueId) {
-  if (!settings.linearApiKey) throw httpError('Add a Linear API key in Settings.', 400);
-  const data = await linear.linearRequest(settings.linearApiKey, ISSUE_QUERY, { id: issueId });
+async function loadIssue(_settings, issueId, apiKey = getApiKey()) {
+  if (!apiKey) throw httpError('Add a Linear API key in Settings.', 400);
+  const data = await linear.linearRequest(apiKey, ISSUE_QUERY, { id: issueId });
   if (!data || !data.issue) throw httpError(`Issue ${issueId} not found.`, 404);
   return toIssue(data.issue);
 }
@@ -110,8 +110,10 @@ async function runTicketInProcess({
   blocking = false,
   orgId = null,
   nativeProjectId = null,
+  llmGateway = null,
 }, dependencies = {}) {
   const getSettingsImpl = dependencies.getSettings || getSettings;
+  const getApiKeyImpl = dependencies.getApiKey || getApiKey;
   const loadIssueImpl = dependencies.loadIssue || loadIssue;
   const billingStatusImpl = dependencies.billingStatus || billingStatus;
   const resolvePolicyImpl = dependencies.resolvePolicy || fetchOrgEffectivePolicy;
@@ -125,8 +127,12 @@ async function runTicketInProcess({
   // model work so a conflicting tenant context fails closed.
   const effectiveOrgId = resolvePolicyOrganization(orgId);
   const context = eventContext(effectiveOrgId, nativeProjectId);
-  const settings = getSettingsImpl();
-  const loadedIssue = await loadIssueImpl(settings, issueId);
+  // The per-request LLM gateway flag rides the settings object because
+  // resolveLlm reads ONLY settings; unflagged runs keep the store shape as-is.
+  const storeSettings = getSettingsImpl();
+  const settings = llmGateway ? { ...storeSettings, llmGateway } : storeSettings;
+  const apiKey = getApiKeyImpl();
+  const loadedIssue = await loadIssueImpl(settings, issueId, apiKey);
   const issue = {
     ...loadedIssue,
     ...(effectiveOrgId ? { orgId: effectiveOrgId } : {}),
@@ -162,7 +168,7 @@ async function runTicketInProcess({
   if (effectiveOrgId && !hasEffectivePolicy(effectivePolicy)) {
     throw new PolicyUnavailableError();
   }
-  const keys = applyOperationalPrefs(buildKeys(settings), (resolvedPolicy && resolvedPolicy.prefs) || {}, onStep);
+  const keys = applyOperationalPrefs(buildKeys(settings, apiKey), (resolvedPolicy && resolvedPolicy.prefs) || {}, onStep);
 
   let readiness;
   try {
@@ -193,13 +199,14 @@ async function runTicketInProcess({
   const run = () => runCoderImpl({
     issue,
     llm,
-    apiKey: settings.linearApiKey,
+    apiKey,
     keys,
     onStep,
     settings: {
       effectivePolicy,
       orgId: effectiveOrgId || null,
       nativeProjectId: nativeProjectId || null,
+      llmGateway: llmGateway || null,
     },
   });
   const onError = (err) => {
@@ -243,22 +250,24 @@ async function runTicketInProcess({
  * one-shot Cloud Run Job (long-running, scale-to-zero) and returns immediately;
  * locally it runs in-process (detached).
  */
-async function runTicket({ issueId, conversationId = null, orgId = null, nativeProjectId = null }, dependencies = {}) {
+async function runTicket({ issueId, conversationId = null, orgId = null, nativeProjectId = null, llmGateway = null }, dependencies = {}) {
   const jobsImpl = dependencies.jobs || jobs;
   const getSettingsImpl = dependencies.getSettings || getSettings;
+  const getApiKeyImpl = dependencies.getApiKey || getApiKey;
   const loadIssueImpl = dependencies.loadIssue || loadIssue;
   const publish = dependencies.publishEvent || publishEvent;
   const effectiveOrgId = resolvePolicyOrganization(orgId);
   const context = eventContext(effectiveOrgId, nativeProjectId);
   if (jobsImpl.isCloudJobEnabled()) {
     const settings = getSettingsImpl();
-    const issue = await loadIssueImpl(settings, issueId);
+    const issue = await loadIssueImpl(settings, issueId, getApiKeyImpl());
     const { execution } = await jobsImpl.runCoderJob({
       issueId: issue.id,
       env: {
         ...(conversationId ? { CONVERSATION_ID: conversationId } : {}),
         ...(effectiveOrgId ? { FLEET_ORG_ID: effectiveOrgId } : {}),
         ...(nativeProjectId ? { AI_FLEET_PROJECT_CONTEXT: nativeProjectId } : {}),
+        ...(llmGateway ? { LLM_GATEWAY_FLAG: llmGateway } : {}),
       },
     });
     if (conversationId) {
@@ -267,7 +276,7 @@ async function runTicket({ issueId, conversationId = null, orgId = null, nativeP
     return { accepted: true, issue: { id: issue.id, identifier: issue.identifier, state: issue.state }, execution };
   }
   return runTicketInProcess(
-    { issueId, conversationId, blocking: false, orgId: effectiveOrgId, nativeProjectId },
+    { issueId, conversationId, blocking: false, orgId: effectiveOrgId, nativeProjectId, llmGateway },
     dependencies,
   );
 }

@@ -79,7 +79,7 @@ Directory-based community: services/org
 - **lifespan** (criticality: 0.73, depth: 4)
 - **resend_invitation** (criticality: 0.72, depth: 3)
 - **create_invitation** (criticality: 0.71, depth: 2)
-- *... and 48 more flows.*
+- *... and 41 more flows.*
 
 ## Dependencies
 

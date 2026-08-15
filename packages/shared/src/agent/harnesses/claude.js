@@ -8,7 +8,10 @@
  */
 
 const { CONFIG } = require('../../config');
+const { PROJECT_CONTEXT_HEADER, projectEgressHeaders } = require('../../egress');
+const { currentWorkspaceContext } = require('../../store/workspace-context');
 const { buildSafeAgentEnv } = require('../repository-broker');
+const { wireModelId } = require('../llm');
 const registry = require('./registry');
 const {
   AgentRuntimeError,
@@ -25,6 +28,21 @@ const {
 const ID = 'claude-agent-sdk';
 const LABEL = 'Claude Agent SDK';
 const PACKAGE = '@anthropic-ai/claude-agent-sdk';
+
+/** Apply the SDK's documented proxy base URL and custom-header environment. */
+function applyClaudeProxyEnv(env, context = currentWorkspaceContext(), config = CONFIG) {
+  if (!config.EGRESS_PROXY_INCLUDE_SDK) return env;
+  env.ANTHROPIC_BASE_URL = config.CLAUDE.baseUrl;
+  const projectId = projectEgressHeaders(context)[PROJECT_CONTEXT_HEADER];
+  if (projectId) {
+    env.ANTHROPIC_CUSTOM_HEADERS = `${PROJECT_CONTEXT_HEADER}: ${projectId}`;
+  } else {
+    // Do not preserve an untrusted caller-supplied custom-header bundle in
+    // proxy mode. The sidecar is the only credential/header authority.
+    delete env.ANTHROPIC_CUSTOM_HEADERS;
+  }
+  return env;
+}
 
 /** Restrict Claude tools to the prepared workspace and keep SDK auth out of Bash. */
 function claudePermissionGuard(cwd, carriesCredential) {
@@ -66,12 +84,22 @@ async function executeClaude(options, prompt) {
   const cwd = assertWorkingDirectory(options.rootDir);
   const env = buildSafeAgentEnv(options.env || process.env, cwd);
   const credential = String(options.llm.accessToken || '');
-  if (credential) env.CLAUDE_CODE_OAUTH_TOKEN = credential;
+  const viaLlmGateway = options.llm.gateway === 'langsmith';
+  if (credential) {
+    // A LangSmith-gateway run authenticates with a plain Bearer credential
+    // (ANTHROPIC_AUTH_TOKEN — the workspace key, or the sentinel in proxy
+    // mode); the subscription path keeps the Claude Code OAuth env.
+    if (viaLlmGateway) env.ANTHROPIC_AUTH_TOKEN = credential;
+    else env.CLAUDE_CODE_OAUTH_TOKEN = credential;
+  }
   env.CLAUDE_AGENT_SDK_CLIENT_APP = 'tech-symphony/1.0';
-  // Route the SDK's Anthropic calls through the egress proxy when enabled: the
-  // OAuth token is already the sentinel (resolveLlm proxy mode); the proxy
-  // injects the real bearer. baseUrl is the proxy's /anthropic prefix.
-  if (CONFIG.EGRESS_PROXY_INCLUDE_SDK) env.ANTHROPIC_BASE_URL = CONFIG.CLAUDE.baseUrl;
+  // Proxy mode also replaces any caller-supplied custom-header bundle with the
+  // validated project context. A gateway descriptor then selects /llmgw (or the
+  // direct LangSmith base); an ordinary descriptor keeps the /anthropic base.
+  applyClaudeProxyEnv(env);
+  if (viaLlmGateway) {
+    env.ANTHROPIC_BASE_URL = options.llm.baseUrl || CONFIG.CLAUDE.baseUrl;
+  }
   const sdkTools = options.backendKind === 'filesystem'
     ? ['Read', 'Glob', 'Grep', ...(plannerWebSearchAllowed(options) ? ['WebSearch'] : [])]
     : credential
@@ -87,7 +115,7 @@ async function executeClaude(options, prompt) {
     options: {
       cwd,
       env,
-      model: options.llm.model || undefined,
+      model: wireModelId(options.llm) || undefined,
       maxTurns: Number(options.maxTurns) || 24,
       systemPrompt: cleanSystemPrompt(options.systemPrompt, options.ctx) || undefined,
       settingSources: [],
@@ -135,4 +163,4 @@ async function executeClaude(options, prompt) {
 
 registry.register(registry.builtinDefinition(ID, () => executeClaude));
 
-module.exports = { executeClaude, claudePermissionGuard };
+module.exports = { executeClaude, claudePermissionGuard, applyClaudeProxyEnv };

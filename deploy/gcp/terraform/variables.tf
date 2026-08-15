@@ -29,8 +29,8 @@ variable "artifact_repo" {
 
 variable "artifact_retention_count" {
   type        = number
-  description = "Number of most recent versions to retain for each image package in the Artifact Registry repository. Older tagged and untagged versions are deleted by the cleanup policy."
-  default     = 2
+  description = "Number of most recent versions to retain for each image package in the Artifact Registry repository. The proxy package backs both agent sidecars and the stream-token broker, so the default preserves a multi-revision rollback window across their coordinated rollout. Older tagged and untagged versions are deleted by the cleanup policy."
+  default     = 5
 
   validation {
     condition     = var.artifact_retention_count >= 1 && floor(var.artifact_retention_count) == var.artifact_retention_count
@@ -155,13 +155,7 @@ variable "coder_job_name" {
   default     = "coder-worker"
 }
 
-# --- Egress proxy sidecar -----------------------------------------------------
-
-variable "egress_proxy_enabled" {
-  type        = bool
-  description = "Add the egress-proxy sidecar to planner/coder/coder-worker and route their third-party egress through it (via EGRESS_PROXY_URL). The durable tester/deployer require it. OFF keeps the legacy direct behavior only while the durable pipeline is disabled. Requires the proxy image to be built + pushed."
-  default     = false
-}
+# --- Mandatory egress proxy + stream-token broker ----------------------------
 
 variable "secret_vault_kms_enabled" {
   type        = bool
@@ -174,16 +168,83 @@ variable "proxy_service_name" {
   default = "proxy"
 }
 
+variable "stream_token_service_name" {
+  type        = string
+  description = "Private Cloud Run service that owns the stream-token signing secret and exposes only the IAM-gated mint/verify RPCs."
+  default     = "stream-token-broker"
+}
+
+variable "stream_token_min_instances" {
+  type        = number
+  description = "Minimum warm stream-token broker instances. The default of 1 avoids Cloud Run cold starts exceeding the gateway's strict broker RPC deadline; setting 0 reduces idle cost but can cause transient stream-token failures."
+  default     = 1
+
+  validation {
+    condition     = var.stream_token_min_instances >= 0 && floor(var.stream_token_min_instances) == var.stream_token_min_instances
+    error_message = "stream_token_min_instances must be a non-negative integer."
+  }
+}
+
+variable "stream_token_legacy_gateway_secret_access" {
+  type        = bool
+  description = "TEMPORARY migration gate. Keep true while any existing tenant gateway revision still runs the legacy stream-token sidecar; set false only after every tenant has been reconciled to the shared broker. The completed state grants the signing secret only to stream-token-broker-sa."
+  default     = true
+}
+
 variable "proxy_image_tag" {
   type        = string
-  description = "Per-service image tag override for the egress proxy (Node)."
+  description = "Image tag override for the proxy package used by agent egress sidecars and the standalone stream-token broker. Keeping one immutable tag makes both capability-specific entrypoints come from the same reviewed artifact."
   default     = ""
+}
+
+variable "omlx_proxy_upstream" {
+  type        = string
+  description = "Trusted operator-configured oMLX origin used only by egress proxy containers (for example http://omlx.internal:8000). Browser/request settings can never select this target. Empty disables oMLX in proxied cloud runtimes."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.omlx_proxy_upstream) == "" || can(regex("^https?://[^/?#@[:space:]]+(?::[0-9]{1,5})?/?$", trimspace(var.omlx_proxy_upstream)))
+    error_message = "omlx_proxy_upstream must be empty or a path-free HTTP(S) origin without credentials, query, or fragment."
+  }
+}
+
+variable "ollama_proxy_upstream" {
+  type        = string
+  description = "Trusted operator-configured Ollama origin used only by egress proxy containers. Empty disables Ollama in proxied cloud runtimes."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.ollama_proxy_upstream) == "" || can(regex("^https?://[^/?#@[:space:]]+(?::[0-9]{1,5})?/?$", trimspace(var.ollama_proxy_upstream)))
+    error_message = "ollama_proxy_upstream must be empty or a path-free HTTP(S) origin without credentials, query, or fragment."
+  }
+}
+
+variable "lmstudio_proxy_upstream" {
+  type        = string
+  description = "Trusted operator-configured LM Studio origin used only by egress proxy containers. Empty disables LM Studio in proxied cloud runtimes."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.lmstudio_proxy_upstream) == "" || can(regex("^https?://[^/?#@[:space:]]+(?::[0-9]{1,5})?/?$", trimspace(var.lmstudio_proxy_upstream)))
+    error_message = "lmstudio_proxy_upstream must be empty or a path-free HTTP(S) origin without credentials, query, or fragment."
+  }
+}
+
+variable "openswe_proxy_upstream" {
+  type        = string
+  description = "Trusted operator-configured OpenSWE LangGraph origin used only by egress proxy containers. Empty disables OpenSWE in proxied cloud runtimes."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.openswe_proxy_upstream) == "" || can(regex("^https?://[^/?#@[:space:]]+(?::[0-9]{1,5})?/?$", trimspace(var.openswe_proxy_upstream)))
+    error_message = "openswe_proxy_upstream must be empty or a path-free HTTP(S) origin without credentials, query, or fragment."
+  }
 }
 
 variable "managed_provider_secrets" {
   type        = map(string)
   description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Hosted LLMs require the matching GEMINI_API_KEY, HUGGINGFACE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY entry. Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
-  default     = { LINEAR_API_KEY = "linear-api-key", GITHUB_TOKEN = "github-token" }
+  default     = { GITHUB_TOKEN = "github-token" }
 }
 
 # --- Per-tenant provisioning (Phase 1, gated OFF by default) ------------------
@@ -323,14 +384,24 @@ variable "container_concurrency" {
 
 variable "cloud_run_service_cpu" {
   type        = string
-  description = "vCPU limit for Cloud Run service app containers. The 1-vCPU default supports container_concurrency > 1; fractional overrides require container_concurrency = 1 and gen1."
+  description = "vCPU limit for gen2 Cloud Run service app containers. Supported values are 1 or 2 because some services have fixed 512Mi memory limits; the 1-vCPU default supports container_concurrency > 1."
   default     = "1"
+
+  validation {
+    condition     = contains(["1", "2"], var.cloud_run_service_cpu)
+    error_message = "cloud_run_service_cpu must be 1 or 2 vCPU because these gen2 Cloud Run services include fixed 512Mi containers."
+  }
 }
 
 variable "cloud_run_proxy_cpu" {
   type        = string
-  description = "vCPU limit for egress-proxy sidecars on Cloud Run services. Cloud Run Jobs use coder_job_proxy_cpu."
+  description = "vCPU limit for egress-proxy sidecars and the standalone stream-token broker on gen2 Cloud Run. Supported values are 1 or 2; Cloud Run Jobs use coder_job_proxy_cpu."
   default     = "1"
+
+  validation {
+    condition     = contains(["1", "2"], var.cloud_run_proxy_cpu)
+    error_message = "cloud_run_proxy_cpu must be 1 or 2 vCPU because these gen2 Cloud Run sidecars use fixed 512Mi memory limits."
+  }
 }
 
 # --- Pub/Sub topics -----------------------------------------------------------
@@ -539,7 +610,7 @@ variable "coder_repo_url" {
 
 variable "extra_secret_ids" {
   type        = list(string)
-  description = "Additional Secret Manager secret IDs to create (provider OAuth, LangSmith, GitHub token, managed LLM keys, etc.). Versions are added out-of-band. planner-sa + coder-sa are granted accessor on these (and the proxy sidecar runs under those SAs). The managed LLM keys back the proxy's 'managed' credential option."
+  description = "Additional Secret Manager secret IDs to create (provider OAuth, LangSmith, GitHub token, managed LLM keys, etc.). Versions are added out-of-band and mounted only on the settings service through managed_provider_secrets; agent identities receive no accessor role."
   default     = ["github-token", "langsmith-api-key", "gemini-api-key", "huggingface-api-key", "anthropic-api-key", "openai-api-key"]
 }
 
@@ -577,7 +648,7 @@ variable "skills_enabled" {
 
 variable "skills_mount_enabled" {
   type        = bool
-  description = "Mount the skills bucket read-only via gcsfuse (+ gen2 exec env + SKILLS_ROOT/SKILLS_VERSION env) on planner/coder. Default OFF: the fuse mount under the gen2 execution environment currently fails the coder-control startup probe (heavy dual-role image) and needs validation (and an initially-populated bucket + a resolveSkillsSrc empty-mount fallback) before enabling. Requires skills_enabled. Off → services use the vendored skills baked into the image."
+  description = "Mount the skills bucket read-only via gcsfuse (+ SKILLS_ROOT/SKILLS_VERSION env) on planner/coder. Default OFF: the fuse mount under the gen2 execution environment currently fails the coder-control startup probe (heavy dual-role image) and needs validation (and an initially-populated bucket + a resolveSkillsSrc empty-mount fallback) before enabling. Requires skills_enabled. Off → services use the vendored skills baked into the image."
   default     = false
 }
 
@@ -606,10 +677,10 @@ variable "skills_publisher_member" {
 }
 
 # --- Harness registry bucket (see registry.tf) -------------------------------
-# The weekly sync-harness-registry workflow publishes a versioned dual-format
-# (original + generic) bundle here. Terraform CREATES and OWNS the bucket; the
-# name defaults to "<project_id>-aifleet-registry". registry_bucket_name is an
-# optional override for a custom globally-unique name.
+# The weekly sync-harness-registry workflow publishes versioned, harness-native
+# rootfs artifacts plus their v2 descriptors and inert non-ECC resources here.
+# Terraform CREATES and OWNS the bucket; registry_bucket_name is an optional
+# override for a custom globally-unique name.
 
 variable "registry_enabled" {
   type        = bool

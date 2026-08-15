@@ -54,8 +54,7 @@ async function projectStageResult(command, result, dependencies = {}) {
   if (!projectId) return { projected: false, skipped: 'missing-linear-project' };
   const storeImpl = dependencies.store || store;
   const linearImpl = dependencies.linear || linear;
-  const settings = dependencies.settings || storeImpl.getSettings();
-  const apiKey = String(settings.linearApiKey || '');
+  const apiKey = String(storeImpl.getApiKey() || '');
   if (!apiKey) return { projected: false, skipped: 'missing-linear-key' };
 
   const projects = await linearImpl.getProjects(apiKey);

@@ -8,19 +8,14 @@
 
 locals {
   # Skills registry (skills.tf). Terraform CREATES the bucket when skills_enabled.
-  # The read-only gcsfuse MOUNT (+ gen2 exec env + SKILLS_ROOT env) is a SEPARATE
-  # toggle, skills_mount_enabled, default OFF: the fuse mount under gen2 currently
+  # The read-only gcsfuse MOUNT (+ SKILLS_ROOT env) is a SEPARATE toggle,
+  # skills_mount_enabled, default OFF: the fuse mount under gen2 currently
   # fails the coder-control startup probe (heavy dual-role image), so the mount is
   # opt-in until that's validated. Mount off → services use the vendored skills
   # baked into the image (packages/shared/src/config.js resolveSkillsSrc). The
   # mount requires the bucket, so it is ANDed with skills_enabled.
   skills_enabled       = var.skills_enabled
   skills_mount_enabled = var.skills_mount_enabled && var.skills_enabled
-  # Fractional CPU is supported only by the gen1 service environment. Keep the
-  # optional gcsfuse/gen2 path valid by raising agent app + sidecar containers
-  # back to Cloud Run's 1-vCPU gen2 minimum when that mount is enabled.
-  agent_service_cpu = local.skills_mount_enabled ? "1" : var.cloud_run_service_cpu
-  agent_proxy_cpu   = local.skills_mount_enabled ? "1" : var.cloud_run_proxy_cpu
   skills_env = local.skills_mount_enabled ? {
     SKILLS_ROOT    = "/skills"
     SKILLS_VERSION = var.skills_version
@@ -29,17 +24,21 @@ locals {
   # Plain (non-secret) env per service. Secrets are mounted as separate env
   # blocks below via secret_key_ref.
   gateway_env = merge(local.common_env, {
-    AUTH_MODE           = "firebase" # gateway verifies the Firebase ID token
-    TRUST_PROXY_HOPS    = "1"        # direct Cloud Run ingress; req.ip is advisory locale only
-    SPA_ORIGIN          = var.spa_origin
-    API_BASE_URL        = local.gateway_url
-    PLANNER_URL         = local.planner_url # proxied read endpoints
-    CODER_URL           = local.coder_url
-    ORCHESTRATOR_URL    = local.orchestrator_url
-    ORG_URL             = local.org_url      # org service (proxied at /api/org/*)
-    SETTINGS_URL        = local.settings_url # settings service (proxied at /api/settings-policy/*)
-    FIREBASE_PROJECT_ID = var.project_id
-    FIREBASE_API_KEY    = data.google_firebase_web_app_config.default.api_key
+    AUTH_MODE        = "firebase" # gateway verifies the Firebase ID token
+    TRUST_PROXY_HOPS = "1"        # direct Cloud Run ingress; req.ip is advisory locale only
+    SPA_ORIGIN       = var.spa_origin
+    API_BASE_URL     = local.gateway_url
+    PLANNER_URL      = local.planner_url # proxied read endpoints
+    CODER_URL        = local.coder_url
+    ORCHESTRATOR_URL = local.orchestrator_url
+    ORG_URL          = local.org_url      # org service (proxied at /api/org/*)
+    SETTINGS_URL     = local.settings_url # settings service (proxied at /api/settings-policy/*)
+    # Use the provider-returned origin rather than reconstructing the run.app
+    # hostname: Cloud Run ID-token audiences must match the deployed service
+    # URL exactly, including projects that still use a legacy hash-style URL.
+    STREAM_TOKEN_SERVICE_URL = google_cloud_run_v2_service.stream_token_broker.uri
+    FIREBASE_PROJECT_ID      = var.project_id
+    FIREBASE_API_KEY         = data.google_firebase_web_app_config.default.api_key
     # RBAC (packages/shared/src/authz.js): least-privilege default role for a
     # signed-in user with no role claim yet. Roles are otherwise Firebase custom
     # claims (services/gateway/scripts/set-user-role.js).
@@ -61,23 +60,37 @@ locals {
     # the gateway container below, only when a value is configured.
   )
 
-  # Egress-proxy sidecar: when enabled, the agent containers route every
+  # Egress-proxy sidecar: agent containers route every
   # third-party call to the co-located proxy over loopback (which injects the
   # real credential), so they hold NO raw provider key. `egress_env` is merged
   # into the agent containers; the sidecar container + its secret env is added to
-  # each service below. proxy_enabled ANDs a var so a deployment without the
-  # proxy image built keeps the direct (pre-sidecar) behavior.
-  proxy_enabled = var.egress_proxy_enabled
-  egress_env    = local.proxy_enabled ? { EGRESS_PROXY_URL = "http://127.0.0.1:4030" } : {}
+  # each service below. There is intentionally no direct-mode fallback.
+  egress_env = { EGRESS_PROXY_URL = "http://127.0.0.1:4030" }
 
   # Plain env for the proxy sidecar. It imports @ai-fleet/shared/config (which
   # requires AUTH_MODE + the Firebase web config at load) and reads the
   # per-namespace store for OAuth token sets, so it needs the common cloud env
   # plus its own port and the shared settings URL for the per-org secret S2S.
-  proxy_plain_env = merge(local.common_env, {
-    PROXY_PORT   = "4030"
-    SETTINGS_URL = local.settings_url
-  })
+  proxy_plain_env = merge(
+    local.common_env,
+    {
+      PROXY_PORT         = "4030"
+      PROXY_CAPABILITIES = "egress"
+      SETTINGS_URL       = local.settings_url
+    },
+    trimspace(var.omlx_proxy_upstream) != "" ? {
+      OMLX_PROXY_UPSTREAM = trimspace(var.omlx_proxy_upstream)
+    } : {},
+    trimspace(var.ollama_proxy_upstream) != "" ? {
+      OLLAMA_PROXY_UPSTREAM = trimspace(var.ollama_proxy_upstream)
+    } : {},
+    trimspace(var.lmstudio_proxy_upstream) != "" ? {
+      LMSTUDIO_PROXY_UPSTREAM = trimspace(var.lmstudio_proxy_upstream)
+    } : {},
+    trimspace(var.openswe_proxy_upstream) != "" ? {
+      OPENSWE_PROXY_UPSTREAM = trimspace(var.openswe_proxy_upstream)
+    } : {},
+  )
 
   planner_env = merge(
     local.common_env,
@@ -177,28 +190,15 @@ resource "google_secret_manager_secret_iam_member" "gateway_one_tap" {
 
 # --- Egress-proxy sidecar IAM -------------------------------------------------
 # The sidecar runs under the planner/coder service accounts (Cloud Run v2 shares
-# the service SA across all its containers). When the proxy is enabled it needs:
-#   - accessor on the shared internal token (to call the settings per-org S2S), and
-#   - run.invoker on the shared settings service (the IAM-gated S2S target).
-# Accessors on the managed provider secrets (linear + extra_secret_ids) are
-# already granted to planner-sa/coder-sa in iam.tf.
+# the service SA across all its containers). Those identities get only
+# run.invoker on settings. The internal resolver token is placed directly on the
+# sidecar container below; granting Secret Manager access to the shared identity
+# would let model-generated app code retrieve it through the metadata server.
 locals {
-  proxy_sa_members = var.egress_proxy_enabled ? {
+  proxy_sa_members = {
     planner = google_service_account.planner.email
     coder   = google_service_account.coder.email
-  } : {}
-}
-
-# Gated on egress_proxy_enabled via proxy_sa_members (a non-sensitive map); the
-# token secret id is pulled with one() so this never indexes a count=0 resource.
-# (var.internal_api_token is sensitive and cannot appear in for_each.) If the
-# proxy is enabled the internal token MUST be configured — see the variable.
-resource "google_secret_manager_secret_iam_member" "proxy_internal_token" {
-  for_each  = local.proxy_sa_members
-  project   = var.project_id
-  secret_id = one(google_secret_manager_secret.internal_api_token[*].secret_id)
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${each.value}"
+  }
 }
 
 resource "google_cloud_run_v2_service_iam_member" "proxy_invokes_settings" {
@@ -234,7 +234,7 @@ resource "google_cloud_run_v2_service" "gateway" {
 
   template {
     service_account                  = google_service_account.gateway.email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = var.container_concurrency
 
     scaling {
@@ -243,6 +243,7 @@ resource "google_cloud_run_v2_service" "gateway" {
     }
 
     containers {
+      name  = "app"
       image = local.gateway_image
 
       ports {
@@ -257,25 +258,6 @@ resource "google_cloud_run_v2_service" "gateway" {
         }
       }
 
-      # Secret env (Secret Manager). Versions must exist before deploy.
-      env {
-        name = "STREAM_TOKEN_SECRET"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.stream_token_secret.secret_id
-            version = "latest"
-          }
-        }
-      }
-      env {
-        name = "LINEAR_API_KEY"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.linear_api_key.secret_id
-            version = "latest"
-          }
-        }
-      }
       # Public Google One Tap client id, delivered from Secret Manager only when
       # configured. Absent → the SPA uses the Firebase Google popup.
       dynamic "env" {
@@ -300,16 +282,17 @@ resource "google_cloud_run_v2_service" "gateway" {
         startup_cpu_boost = true
       }
     }
+
   }
 
   depends_on = [
     google_project_service.services,
     google_firestore_database.default,
     google_project_iam_member.gateway_datastore,
-    google_secret_manager_secret_iam_member.gateway_stream_token,
-    google_secret_manager_secret_iam_member.gateway_linear,
     google_secret_manager_secret_version.google_one_tap_client_id,
     google_secret_manager_secret_iam_member.gateway_one_tap,
+    google_cloud_run_v2_service.stream_token_broker,
+    google_cloud_run_v2_service_iam_member.gateway_invokes_stream_token_broker,
   ]
 }
 
@@ -338,7 +321,7 @@ resource "google_cloud_run_v2_service" "planner" {
       error_message = "min_instances cannot exceed 1 while pipeline orchestration is enabled."
     }
     precondition {
-      condition     = !local.proxy_enabled || var.container_concurrency == 1 || try(tonumber(local.agent_proxy_cpu) >= 1, false)
+      condition     = var.container_concurrency == 1 || try(tonumber(var.cloud_run_proxy_cpu) >= 1, false)
       error_message = "container_concurrency values above 1 require cloud_run_proxy_cpu to be at least 1 vCPU when the egress proxy is enabled."
     }
   }
@@ -347,9 +330,7 @@ resource "google_cloud_run_v2_service" "planner" {
     service_account = google_service_account.planner.email
     timeout         = local.pipeline_on ? "3600s" : null
 
-    # Fractional CPU requires gen1. The optional gcsfuse mount requires gen2,
-    # in which case local.agent_*_cpu also raises both containers to 1 vCPU.
-    execution_environment            = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = var.container_concurrency
 
     scaling {
@@ -371,8 +352,9 @@ resource "google_cloud_run_v2_service" "planner" {
     }
 
     containers {
-      name  = "app"
-      image = local.planner_image
+      name       = "app"
+      image      = local.planner_image
+      depends_on = ["egress-proxy"]
 
       ports {
         container_port = 8080
@@ -385,21 +367,6 @@ resource "google_cloud_run_v2_service" "planner" {
           value = env.value
         }
       }
-      # Direct mode keeps the Linear key on the agent; proxy mode relocates it to
-      # the sidecar so this container holds no provider secret.
-      dynamic "env" {
-        for_each = local.proxy_enabled ? [] : [1]
-        content {
-          name = "LINEAR_API_KEY"
-          value_source {
-            secret_key_ref {
-              secret  = google_secret_manager_secret.linear_api_key.secret_id
-              version = "latest"
-            }
-          }
-        }
-      }
-
       # Mount the skills bundle at SKILLS_ROOT (/skills). resolveSkillsSrc pins
       # /skills/<SKILLS_VERSION>.
       dynamic "volume_mounts" {
@@ -412,7 +379,7 @@ resource "google_cloud_run_v2_service" "planner" {
 
       resources {
         limits = {
-          cpu    = local.agent_service_cpu
+          cpu    = var.cloud_run_service_cpu
           memory = "512Mi"
         }
         cpu_idle          = true
@@ -420,41 +387,39 @@ resource "google_cloud_run_v2_service" "planner" {
       }
     }
 
-    dynamic "containers" {
-      for_each = local.proxy_enabled ? [1] : []
-      content {
-        name  = "egress-proxy"
-        image = local.proxy_image
+    containers {
+      name  = "egress-proxy"
+      image = local.proxy_image
 
-        dynamic "env" {
-          for_each = local.proxy_plain_env
-          content {
-            name  = env.key
-            value = env.value
-          }
+      dynamic "env" {
+        for_each = local.proxy_plain_env
+        content {
+          name  = env.key
+          value = env.value
         }
-        # Managed keys are resolved by the settings service (single source) and
-        # returned over the S2S below — the sidecar mounts no provider secret.
-        # Shared token for the per-org secret S2S to the settings service.
-        dynamic "env" {
-          for_each = toset(google_secret_manager_secret.internal_api_token[*].secret_id)
-          content {
-            name = "INTERNAL_API_TOKEN"
-            value_source {
-              secret_key_ref {
-                secret  = env.value
-                version = "latest"
-              }
-            }
-          }
+      }
+      # Managed keys are resolved by the settings service (single source) and
+      # returned over the S2S below — the sidecar mounts no provider secret.
+      env {
+        name  = "INTERNAL_API_TOKEN"
+        value = var.internal_api_token
+      }
+      startup_probe {
+        http_get {
+          path = "/healthz"
+          port = 4030
         }
-        resources {
-          limits = {
-            cpu    = local.agent_proxy_cpu
-            memory = "512Mi"
-          }
-          cpu_idle = true
+        initial_delay_seconds = 0
+        timeout_seconds       = 3
+        period_seconds        = 3
+        failure_threshold     = 20
+      }
+      resources {
+        limits = {
+          cpu    = var.cloud_run_proxy_cpu
+          memory = "512Mi"
         }
+        cpu_idle = true
       }
     }
   }
@@ -463,7 +428,6 @@ resource "google_cloud_run_v2_service" "planner" {
     google_project_service.services,
     google_firestore_database.default,
     google_project_iam_member.planner_datastore,
-    google_secret_manager_secret_iam_member.planner_linear,
     google_storage_bucket.skills,
   ]
 }
@@ -481,9 +445,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
     service_account = google_service_account.coder.email
     timeout         = local.pipeline_on ? "3600s" : null
 
-    # Fractional CPU requires gen1. The optional gcsfuse mount requires gen2,
-    # in which case local.agent_*_cpu also raises both containers to 1 vCPU.
-    execution_environment            = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = var.container_concurrency
 
     scaling {
@@ -505,8 +467,9 @@ resource "google_cloud_run_v2_service" "coder_control" {
     }
 
     containers {
-      name  = "app"
-      image = local.coder_image
+      name       = "app"
+      image      = local.coder_image
+      depends_on = ["egress-proxy"]
 
       ports {
         container_port = 8080
@@ -519,21 +482,6 @@ resource "google_cloud_run_v2_service" "coder_control" {
           value = env.value
         }
       }
-      # Direct mode keeps the Linear key on the agent; proxy mode relocates it to
-      # the sidecar so this container holds no provider secret.
-      dynamic "env" {
-        for_each = local.proxy_enabled ? [] : [1]
-        content {
-          name = "LINEAR_API_KEY"
-          value_source {
-            secret_key_ref {
-              secret  = google_secret_manager_secret.linear_api_key.secret_id
-              version = "latest"
-            }
-          }
-        }
-      }
-
       # Mount the skills bundle at SKILLS_ROOT (/skills). resolveSkillsSrc pins
       # /skills/<SKILLS_VERSION>.
       dynamic "volume_mounts" {
@@ -546,7 +494,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
 
       resources {
         limits = {
-          cpu    = local.agent_service_cpu
+          cpu    = var.cloud_run_service_cpu
           memory = "512Mi"
         }
         cpu_idle          = true
@@ -554,38 +502,37 @@ resource "google_cloud_run_v2_service" "coder_control" {
       }
     }
 
-    dynamic "containers" {
-      for_each = local.proxy_enabled ? [1] : []
-      content {
-        name  = "egress-proxy"
-        image = local.proxy_image
+    containers {
+      name  = "egress-proxy"
+      image = local.proxy_image
 
-        dynamic "env" {
-          for_each = local.proxy_plain_env
-          content {
-            name  = env.key
-            value = env.value
-          }
+      dynamic "env" {
+        for_each = local.proxy_plain_env
+        content {
+          name  = env.key
+          value = env.value
         }
-        dynamic "env" {
-          for_each = toset(google_secret_manager_secret.internal_api_token[*].secret_id)
-          content {
-            name = "INTERNAL_API_TOKEN"
-            value_source {
-              secret_key_ref {
-                secret  = env.value
-                version = "latest"
-              }
-            }
-          }
+      }
+      env {
+        name  = "INTERNAL_API_TOKEN"
+        value = var.internal_api_token
+      }
+      startup_probe {
+        http_get {
+          path = "/healthz"
+          port = 4030
         }
-        resources {
-          limits = {
-            cpu    = local.agent_proxy_cpu
-            memory = "512Mi"
-          }
-          cpu_idle = true
+        initial_delay_seconds = 0
+        timeout_seconds       = 3
+        period_seconds        = 3
+        failure_threshold     = 20
+      }
+      resources {
+        limits = {
+          cpu    = var.cloud_run_proxy_cpu
+          memory = "512Mi"
         }
+        cpu_idle = true
       }
     }
   }
@@ -594,7 +541,6 @@ resource "google_cloud_run_v2_service" "coder_control" {
     google_project_service.services,
     google_firestore_database.default,
     google_project_iam_member.coder_datastore,
-    google_secret_manager_secret_iam_member.coder_linear,
     google_storage_bucket.skills,
   ]
 }
@@ -636,29 +582,15 @@ resource "google_cloud_run_v2_job" "coder_worker" {
       }
 
       containers {
-        name  = "app"
-        image = local.coder_image
+        name       = "app"
+        image      = local.coder_image
+        depends_on = ["egress-proxy"]
 
         dynamic "env" {
           for_each = local.coder_worker_env
           content {
             name  = env.key
             value = env.value
-          }
-        }
-
-        # Direct mode keeps the Linear key on the agent; proxy mode relocates it
-        # to the sidecar so this container holds no provider secret.
-        dynamic "env" {
-          for_each = local.proxy_enabled ? [] : [1]
-          content {
-            name = "LINEAR_API_KEY"
-            value_source {
-              secret_key_ref {
-                secret  = google_secret_manager_secret.linear_api_key.secret_id
-                version = "latest"
-              }
-            }
           }
         }
 
@@ -680,36 +612,35 @@ resource "google_cloud_run_v2_job" "coder_worker" {
         }
       }
 
-      dynamic "containers" {
-        for_each = local.proxy_enabled ? [1] : []
-        content {
-          name  = "egress-proxy"
-          image = local.proxy_image
+      containers {
+        name  = "egress-proxy"
+        image = local.proxy_image
 
-          dynamic "env" {
-            for_each = local.proxy_plain_env
-            content {
-              name  = env.key
-              value = env.value
-            }
+        dynamic "env" {
+          for_each = local.proxy_plain_env
+          content {
+            name  = env.key
+            value = env.value
           }
-          dynamic "env" {
-            for_each = toset(google_secret_manager_secret.internal_api_token[*].secret_id)
-            content {
-              name = "INTERNAL_API_TOKEN"
-              value_source {
-                secret_key_ref {
-                  secret  = env.value
-                  version = "latest"
-                }
-              }
-            }
+        }
+        env {
+          name  = "INTERNAL_API_TOKEN"
+          value = var.internal_api_token
+        }
+        startup_probe {
+          http_get {
+            path = "/healthz"
+            port = 4030
           }
-          resources {
-            limits = {
-              cpu    = var.coder_job_proxy_cpu
-              memory = var.coder_job_memory
-            }
+          initial_delay_seconds = 0
+          timeout_seconds       = 3
+          period_seconds        = 3
+          failure_threshold     = 20
+        }
+        resources {
+          limits = {
+            cpu    = var.coder_job_proxy_cpu
+            memory = var.coder_job_memory
           }
         }
       }
@@ -720,7 +651,6 @@ resource "google_cloud_run_v2_job" "coder_worker" {
     google_project_service.services,
     google_firestore_database.default,
     google_project_iam_member.coder_datastore,
-    google_secret_manager_secret_iam_member.coder_linear,
     google_storage_bucket.skills,
   ]
 }

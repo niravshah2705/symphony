@@ -26,6 +26,8 @@ const {
 const { getProjectsWithLabels, getAllProjectLabels } = require('@ai-fleet/shared/linear');
 const { asyncHandler } = require('@ai-fleet/shared/util');
 const { CONFIG } = require('@ai-fleet/shared/config');
+const { SENTINEL_TOKEN, projectEgressHeaders } = require('@ai-fleet/shared/egress');
+const { currentWorkspaceContext } = require('@ai-fleet/shared/store/workspace-context');
 const scheduler = require('@ai-fleet/shared/agent/scheduler');
 const { llmReady, providerForRole } = require('@ai-fleet/shared/agent/llm');
 const localIntelligence = require('@ai-fleet/shared/agent/local-intelligence');
@@ -190,9 +192,12 @@ router.get('/models', (req, res) => {
 router.get(
   '/ollama-models',
   asyncHandler(async (req, res) => {
-    const host = getSettings().ollamaHost;
+    const host = String(
+      CONFIG.EGRESS_PROXY_URL ? CONFIG.OLLAMA.defaultHost : getSettings().ollamaHost || CONFIG.OLLAMA.defaultHost
+    ).replace(/\/$/, '');
+    const headers = CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {};
     try {
-      const resp = await fetch(`${host}/api/tags`, { signal: AbortSignal.timeout(4000) });
+      const resp = await fetch(`${host}/api/tags`, { headers, signal: AbortSignal.timeout(4000) });
       if (!resp.ok) return res.json({ models: [], reachable: false });
       const data = await resp.json();
       const models = (data.models || []).map((m) => m.name).filter(Boolean).sort();
@@ -209,9 +214,12 @@ router.get(
 router.get(
   '/lmstudio-models',
   asyncHandler(async (req, res) => {
-    const host = getSettings().lmstudioHost;
+    const host = String(
+      CONFIG.EGRESS_PROXY_URL ? CONFIG.LMSTUDIO.defaultHost : getSettings().lmstudioHost || CONFIG.LMSTUDIO.defaultHost
+    ).replace(/\/$/, '');
+    const headers = CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {};
     try {
-      const resp = await fetch(`${host}/v1/models`, { signal: AbortSignal.timeout(4000) });
+      const resp = await fetch(`${host}/v1/models`, { headers, signal: AbortSignal.timeout(4000) });
       if (!resp.ok) return res.json({ models: [], reachable: false });
       const data = await resp.json();
       const models = (data.data || []).map((m) => m.id).filter(Boolean).sort();
@@ -229,11 +237,14 @@ router.get(
   '/omlx-models',
   asyncHandler(async (req, res) => {
     const settings = getSettings();
-    const host = String(settings.omlxHost || CONFIG.OMLX.defaultHost)
+    const host = String(CONFIG.EGRESS_PROXY_URL ? CONFIG.OMLX.defaultHost : settings.omlxHost || CONFIG.OMLX.defaultHost)
       .replace(/\/v1\/?$/i, '')
       .replace(/\/$/, '');
     const headers = { Accept: 'application/json' };
-    if (settings.omlxApiKey) headers.Authorization = `Bearer ${settings.omlxApiKey}`;
+    if (CONFIG.EGRESS_PROXY_URL) Object.assign(headers, projectEgressHeaders(currentWorkspaceContext()));
+    if (CONFIG.EGRESS_PROXY_URL || settings.omlxApiKey) {
+      headers.Authorization = `Bearer ${CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : settings.omlxApiKey}`;
+    }
     try {
       const resp = await fetch(`${host}${CONFIG.OMLX.apiPath}/models`, {
         headers,

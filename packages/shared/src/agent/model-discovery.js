@@ -1,6 +1,7 @@
 'use strict';
 
 const { CONFIG } = require('../config');
+const { SENTINEL_TOKEN, projectEgressHeaders } = require('../egress');
 const store = require('../store');
 const codexOauth = require('./oauth');
 const claudeOauth = require('./claude-oauth');
@@ -416,12 +417,16 @@ async function storedClaudeCredentials() {
 }
 
 function configuredConnected(provider) {
+  if (CONFIG.EGRESS_PROXY_URL) return true;
   return provider === 'codex'
     ? hasCredentials(store.getCodexTokens())
     : hasCredentials(store.getClaudeTokens());
 }
 
 async function credentialsFor(provider, options) {
+  if (CONFIG.EGRESS_PROXY_URL) {
+    return { accessToken: SENTINEL_TOKEN, accountId: SENTINEL_TOKEN };
+  }
   if (Object.prototype.hasOwnProperty.call(options, 'credentials')) return options.credentials;
   return provider === 'codex' ? storedCodexCredentials() : storedClaudeCredentials();
 }
@@ -429,25 +434,32 @@ async function credentialsFor(provider, options) {
 async function fetchCodexModels(credentials, backend, options) {
   const fetchImpl = options.fetchImpl || fetch;
   const baseUrl = String(backend === 'api' ? CONFIG.OAUTH.baseUrl : CONFIG.OAUTH.chatgptBaseUrl).replace(/\/$/, '');
+  const accessToken = CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : credentials.accessToken;
   if (backend === 'api') {
     const response = await fetchImpl(`${baseUrl}/models`, {
-      headers: { Authorization: `Bearer ${credentials.accessToken}`, Accept: 'application/json' },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+        ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
+      },
       signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`OpenAI models request failed (HTTP ${response.status}).`);
     const body = await response.json();
     return mergeMeteredCodexModels(body.data);
   }
-  if (!credentials.accountId) throw new Error('Codex model discovery requires a ChatGPT account id.');
+  const accountId = CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : credentials.accountId;
+  if (!accountId) throw new Error('Codex model discovery requires a ChatGPT account id.');
   const clientVersion = options.clientVersion || CONFIG.OAUTH.clientVersion;
   const url = new URL(`${baseUrl}/models`);
   url.searchParams.set('client_version', clientVersion);
   const response = await fetchImpl(url.toString(), {
     headers: {
-      Authorization: `Bearer ${credentials.accessToken}`,
-      'chatgpt-account-id': credentials.accountId,
+      Authorization: `Bearer ${accessToken}`,
+      'chatgpt-account-id': accountId,
       Accept: 'application/json',
       originator: 'codex_cli_rs',
+      ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
     },
     signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
   });
@@ -469,11 +481,14 @@ async function fetchClaudeModels(credentials, options) {
   });
   const client = createClient({
     apiKey: null,
-    authToken: credentials.accessToken,
+    authToken: CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : credentials.accessToken,
     baseURL: String(CONFIG.CLAUDE.baseUrl).replace(/\/$/, ''),
     timeout: DISCOVERY_TIMEOUT_MS,
     maxRetries: 0,
-    defaultHeaders: { 'anthropic-beta': CONFIG.CLAUDE.betaHeader },
+    defaultHeaders: {
+      'anthropic-beta': CONFIG.CLAUDE.betaHeader,
+      ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
+    },
   });
   const page = await client.models.list({ limit: 100 });
   const models = (Array.isArray(page.data) ? page.data : [])

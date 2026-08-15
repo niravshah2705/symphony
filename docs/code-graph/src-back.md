@@ -6,8 +6,8 @@
 
 Directory-based community: services/provisioner
 
-- **Size**: 17 nodes
-- **Cohesion**: 0.1575
+- **Size**: 18 nodes
+- **Cohesion**: 0.1419
 - **Dominant Language**: javascript
 
 ## Members
@@ -24,23 +24,24 @@ Directory-based community: services/provisioner
 | test:malformed message: no provision, no write-back@L46 | Test | ./services/provisioner/src/handler.test.js | 46-53 |
 | test:provision failure: records status=failed via write-back@L55 | Test | ./services/provisioner/src/handler.test.js | 55-62 |
 | test:write-back failure on the failure path is swallowed (no throw)@L64 | Test | ./services/provisioner/src/handler.test.js | 64-71 |
-| buildCfg | Function | ./services/provisioner/src/index.js | 28-69 |
+| buildCfg | Function | ./services/provisioner/src/index.js | 28-68 |
 | enabled | Function | ./services/provisioner/src/index.js | 29-32 |
-| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 72-82 |
-| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 86-98 |
-| writeBack | Function | ./services/provisioner/src/index.js | 100-113 |
-| createApp | Function | ./services/provisioner/src/index.js | 115-136 |
-| start | Function | ./services/provisioner/src/index.js | 138-146 |
+| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 71-81 |
+| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 85-97 |
+| writeBack | Function | ./services/provisioner/src/index.js | 99-112 |
+| createApp | Function | ./services/provisioner/src/index.js | 114-135 |
+| start | Function | ./services/provisioner/src/index.js | 137-145 |
+| test:buildCfg passes the shared stream-token broker URL into tenant plans@L8 | Test | ./services/provisioner/src/index.test.js | 8-20 |
 
 ## Execution Flows
 
-- **writeBack** (criticality: 0.48, depth: 1)
+No execution flows pass through this community.
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (15 edge(s))
+- `equal` (16 edge(s))
 - `handleMessage` (7 edge(s))
 - `error` (4 edge(s))
 - `writeBack` (3 edge(s))
@@ -58,10 +59,12 @@ Directory-based community: services/provisioner
 
 ### Incoming
 
-- `equal` (15 edge(s))
+- `equal` (16 edge(s))
 - `./services/provisioner/src/index.js` (11 edge(s))
 - `./services/provisioner/src/handler.test.js` (8 edge(s))
 - `handleMessage` (6 edge(s))
 - `./services/provisioner/src/handler.js` (3 edge(s))
 - `match` (2 edge(s))
 - `deepEqual` (2 edge(s))
+- `./services/provisioner/src/index.test.js` (1 edge(s))
+- `buildCfg` (1 edge(s))

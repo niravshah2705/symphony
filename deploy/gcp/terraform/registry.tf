@@ -1,21 +1,22 @@
 # -----------------------------------------------------------------------------
-# Harness-agnostic resource registry (GCS bucket).
+# Harness-native artifact registry (GCS bucket).
 # -----------------------------------------------------------------------------
 # The weekly "sync harness registry" GitHub Action (.github/workflows/
 # sync-harness-registry.yml) reads packages/shared-core/src/agent/registry/
-# sources.json, clones each marketplace at its pinned ref, and publishes a
-# VERSIONED, DUAL-format bundle to this bucket:
-#   gs://<bucket>/<version>/original/...   harness-native payloads
-#   gs://<bucket>/<version>/generic/...    normalized tree + registry.json
-#   gs://<bucket>/registry-manifest.json   newest-version pointer
+# sources.json, resolves ECC to one immutable commit, builds every supported
+# harness with its native installer, and publishes a VERSIONED v2 bundle:
+#   gs://<bucket>/<version>/harnesses/<id>/rootfs.tar.gz  ready-to-copy root
+#   gs://<bucket>/<version>/harnesses/<id>/artifact.json  verified descriptor
+#   gs://<bucket>/<version>/inert/...                       non-ECC resources
+#   gs://<bucket>/<version>/registry.json                  index (published last)
 #
 # This mirrors the skills registry (skills.tf): Terraform CREATES and OWNS the
 # bucket. Unlike the skills bucket, the name is a FIXED value from
 # var.registry_bucket_name (default "aifleet-registry", NOT derived from
 # project_id) — GCS names are globally unique, so override it if taken. The
 # whole feature is gated by var.registry_enabled. The planner/coder SAs get
-# read-only access so a future runtime loader can consume generic/skills the same
-# way it consumes the skills bucket; publishing is done by the CI deployer SA.
+# read-only access so runtime provisioning can select the descriptor for its
+# harness; publishing is done by the CI deployer SA.
 
 resource "google_storage_bucket" "registry" {
   count    = var.registry_enabled ? 1 : 0

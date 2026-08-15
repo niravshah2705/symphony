@@ -15,10 +15,11 @@ are conditional on it:
 | `services/gateway/**` (or its Dockerfile) | rebuild **gateway** image → `terraform apply` rolls **only** gateway |
 | `services/planner/**` / `services/coder/**` | rebuild that image → apply rolls **only** that service (coder ⇒ coder-control + the worker Job) |
 | `services/orchestrator/**` / `services/tester/**` / `services/deployer/**` | rebuild and roll only the corresponding durable-pipeline service |
+| `services/proxy/**` (or its Dockerfile) | rebuild the shared proxy artifact → apply rolls the stream-token broker and egress sidecars |
 | `packages/shared-core/**` | rebuild every consumer, including the SDK-free gateway/orchestrator and agent stages |
 | `packages/shared/**` | rebuild planner, coder, tester, and deployer images |
 | root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
-| `deploy/gcp/terraform/**` | `terraform apply` **only** (no image rebuild) |
+| `deploy/gcp/terraform/**` | rebuild the shared proxy artifact and run `terraform apply` (required for first broker creation) |
 | `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy only (no images, no Terraform) |
 | docs / anything else | nothing runs |
 
@@ -82,9 +83,12 @@ secrets/variables (then imports the secrets into TF state so the first `git push
 applies cleanly):
 
 ```bash
-PROJECT_ID=my-proj REPO=owner/repo LINEAR_API_KEY=lin_... \
+PROJECT_ID=my-proj REPO=owner/repo \
   ./deploy/gcp/bootstrap.sh
 ```
+
+Linear credentials are added after deployment through the encrypted
+organization/project vault; bootstrap never accepts or creates a global key.
 
 When SMTP authentication is required, pass `EMAIL_SMTP_USER`,
 `EMAIL_SMTP_PASSWORD`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM` together. The
@@ -180,20 +184,28 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
 # Optional RBAC bootstrap: gh variable set AUTH_ADMIN_EMAILS --repo niravshah2705/symphony --body "you@corp.com"
 #   (admins at sign-in) and AUTH_DEFAULT_ROLE (default "viewer"). Other roles are
 #   assigned as Firebase custom claims via services/gateway/scripts/set-user-role.js.
+# Optional Google Analytics 4 (public web-stream id; empty/unset = disabled):
+# gh variable set GOOGLE_ANALYTICS_MEASUREMENT_ID --repo niravshah2705/symphony --body "G-XXXXXXXXXX"
 # Transactional email (normally set by bootstrap.sh):
 # gh variable set EMAIL_SMTP_AUTH_ENABLED --repo niravshah2705/symphony --body "true"
 # gh variable set EMAIL_PUBLIC_APP_URL --repo niravshah2705/symphony --body "https://adlc-9e72f.web.app"
 ```
 
+`deploy-spa` validates that optional Analytics variable, writes it to the
+no-store `config.js`, and leaves collection disabled when the variable is absent.
+A repo-variable-only change does not satisfy the path filter, so manually run the
+workflow with `deploy_all=true` after adding, rotating, or removing the
+measurement ID.
+See [Google Analytics](GOOGLE_ANALYTICS.md) for the GA4 stream settings and
+verification steps.
+
 ## Prerequisites the pipeline assumes
 
-- **Secret Manager values already seeded** (the pipeline never creates/rotates
-  these two): `stream-token-secret` and `linear-api-key` must have a version, or
-  the Cloud Run revisions won't start. `deploy/gcp/deploy.sh` / `bootstrap.sh`
-  seed these; or add manually:
-  ```bash
-  printf 'REPLACE' | gcloud secrets versions add linear-api-key --project adlc-9e72f --data-file=-
-  ```
+- **`stream-token-secret` already seeded.** The pipeline never rotates it and
+  the private stream-token broker will fail startup without an enabled version.
+  `deploy/gcp/deploy.sh` / `bootstrap.sh` seed it. Linear has no global Secret
+  Manager value: administrators store it through the encrypted
+  organization/project vault after deployment.
   `org-jwt-secret` is **Terraform-managed** (`random_password` + version) — created
   and seeded by the apply, no manual step. `google-one-tap-client-id` is likewise
   Terraform-managed from the `google_one_tap_client_id` var (only when set).
@@ -203,6 +215,8 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
   Rotation happens in Secret Manager, without exposing a value to GitHub or
   Terraform state.
 - The `TF_STATE_BUCKET` exists (created by `deploy.sh` / the first manual apply).
+- The internal proxy-to-settings bearer is prepared automatically: CI reuses
+  the enabled `internal-api-token` version or generates it on the first apply.
 - Firebase console: Google provider enabled + gateway URL and SPA origin in
   **Authorized domains** (see docs/GCP_DEPLOY.md).
 
@@ -212,6 +226,16 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
 - `concurrency: gcp-deploy` serializes applies so two merges never race the state.
 - A rebuilt service's image tag is the commit SHA, so it rolls a fresh Cloud Run
   revision; unchanged services keep their live tag and are left untouched.
+- The proxy package is one reviewed artifact used by agent sidecars and the
+  broker-only entrypoint. It is rebuilt on every Terraform-running deployment.
+  Artifact Registry retains the five most recent versions per package so a
+  known-good broker revision remains available during the migration rollback
+  window.
+- The first broker release intentionally leaves
+  `stream_token_legacy_gateway_secret_access=true` for unreconciled tenant
+  sidecars. Follow the two-phase gate in
+  [GCP deployment](GCP_DEPLOY.md#stream-token-broker-migration-two-phases); IAM
+  isolation is complete only when the operator-visible output is `false`.
 - No untrusted event input (PR/commit text, `head_ref`) is used in any `run:` step.
 - Path filters read only file paths (`dorny/paths-filter`), never event text.
 - Skills are published by a **separate** workflow (`publish-skills.yml`), also WIF

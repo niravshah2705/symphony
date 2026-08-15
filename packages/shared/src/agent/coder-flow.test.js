@@ -18,6 +18,7 @@ const { AgentRuntimeError } = require('./runtimes');
 const { PolicyDeniedError } = require('./settings-policy');
 const { pickStateByType } = require('../linear');
 const workspaceEvents = require('./workspace-events');
+const { SENTINEL_TOKEN } = require('../egress');
 
 /* ------------------------------ parseVerdict ---------------------------- */
 
@@ -290,6 +291,35 @@ test('selected autonomous policy resolution rejects missing effective policy whi
   assert.equal(local.effectivePolicy, null);
 });
 
+test('proxy-vault autonomous polling needs no stored Linear key and uses the sentinel for every Linear read', async (t) => {
+  const context = {};
+  orchestrator._test.clearPause('test setup', context);
+  t.after(() => orchestrator._test.clearPause('test cleanup', context));
+  const linearKeys = [];
+
+  const result = await orchestrator.pollOnce(context, {
+    getSettings: () => ({
+      linearApiKey: '',
+      agentRuntime: 'deepagent',
+      workflowPattern: 'sequential',
+    }),
+    getApiKey: () => SENTINEL_TOKEN,
+    billingStatus: () => ({ blocked: false }),
+    resolvePolicy: async () => null,
+    fetchPlannedProjects: async (apiKey) => {
+      linearKeys.push(apiKey);
+      return [];
+    },
+    fetchPlannedTasks: async (apiKey) => {
+      linearKeys.push(apiKey);
+      return new Map();
+    },
+  });
+
+  assert.deepEqual(result, { dispatched: true });
+  assert.deepEqual(linearKeys, [SENTINEL_TOKEN, SENTINEL_TOKEN]);
+});
+
 test('autonomous planned coder threads selected policy and loads only permitted MCP plugins', async (t) => {
   const context = { orgId: 'org-autonomous-mcp', nativeProjectId: 'native-autonomous-mcp' };
   const effectivePolicy = {
@@ -405,6 +435,54 @@ test('autonomous planned coder threads selected policy and loads only permitted 
   });
   assert.deepEqual(loadedPlugins, ['linear']);
   assert.equal(jobs[0].status, 'done');
+});
+
+test('proxied coding isolates DeepAgent shell and developer-tool contexts', async (t) => {
+  const mcp = require('./mcp');
+  const originalLoadMcpTools = mcp.loadMcpTools;
+  const originalInstallSkills = framework.installSkills;
+  const originalBuildAgent = framework.buildAgent;
+  let mcpContext;
+  let agentContext;
+  mcp.loadMcpTools = async (_names, ctx) => {
+    mcpContext = ctx;
+    return [];
+  };
+  framework.installSkills = () => [];
+  framework.buildAgent = (options) => {
+    agentContext = options.ctx;
+    return {
+      agent: { invoke: async () => ({ messages: [{ role: 'assistant', content: 'done' }] }) },
+      tools: [],
+      skillPaths: [],
+    };
+  };
+  t.after(() => {
+    mcp.loadMcpTools = originalLoadMcpTools;
+    framework.installSkills = originalInstallSkills;
+    framework.buildAgent = originalBuildAgent;
+  });
+
+  const result = await executeCodingRuntime({
+    llm: { provider: 'ollama', model: 'fixture', host: 'http://127.0.0.1:4030/ollama' },
+    keys: { agentRuntime: 'deepagent', workflowPattern: 'sequential' },
+    apiKey: 'sentinel',
+    step: () => {},
+    workDir: process.cwd(),
+    env: {},
+    repositoryProvider: 'github',
+    repositoryBroker: null,
+    prompt: 'test',
+    invokeConfig: {},
+    settings: {},
+    attribution: {},
+    runtimeEnv: { NODE_ENV: 'development', EGRESS_PROXY_URL: 'http://127.0.0.1:4030' },
+  });
+
+  assert.equal(mcpContext.isolateNetwork, true);
+  assert.equal(agentContext.isolateNetwork, true);
+  assert.equal(agentContext.cwd, process.cwd());
+  assert.equal(result.finalText, 'done');
 });
 
 test('runtime outage helper pauses direct runs on the execution role regardless of legacy size label', async (t) => {

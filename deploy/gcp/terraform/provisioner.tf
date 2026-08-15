@@ -179,7 +179,7 @@ resource "google_cloud_run_v2_service" "provisioner" {
 
   template {
     service_account                  = google_service_account.provisioner[0].email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN1"
+    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = var.container_concurrency
     scaling {
       min_instance_count = var.min_instances
@@ -193,18 +193,19 @@ resource "google_cloud_run_v2_service" "provisioner" {
         for_each = merge(
           local.common_env,
           {
-            PROVISIONING_ENABLED    = "true"
-            MESSAGING_MODE          = "pubsub"
-            GCP_PROJECT_ID          = var.project_id
-            GCP_REGION              = var.region
-            ORG_URL                 = local.org_url
-            SETTINGS_URL            = local.settings_url
-            SPA_ORIGIN              = var.spa_origin
-            FIREBASE_PROJECT_ID     = var.project_id
-            PUBSUB_PUSH_AUDIENCE    = local.provisioner_url
-            PUBSUB_PUSH_SA          = google_service_account.pubsub_push.email
-            PUBSUB_DEADLETTER_TOPIC = var.dead_letter_topic
-            EMAIL_TOPIC             = google_pubsub_topic.email.name
+            PROVISIONING_ENABLED     = "true"
+            MESSAGING_MODE           = "pubsub"
+            GCP_PROJECT_ID           = var.project_id
+            GCP_REGION               = var.region
+            ORG_URL                  = local.org_url
+            SETTINGS_URL             = local.settings_url
+            STREAM_TOKEN_SERVICE_URL = google_cloud_run_v2_service.stream_token_broker.uri
+            SPA_ORIGIN               = var.spa_origin
+            FIREBASE_PROJECT_ID      = var.project_id
+            PUBSUB_PUSH_AUDIENCE     = local.provisioner_url
+            PUBSUB_PUSH_SA           = google_service_account.pubsub_push.email
+            PUBSUB_DEADLETTER_TOPIC  = var.dead_letter_topic
+            EMAIL_TOPIC              = google_pubsub_topic.email.name
             # Names of the SHARED services to clone images/secrets/config from.
             GATEWAY_SERVICE_NAME      = var.gateway_service_name
             PLANNER_SERVICE_NAME      = var.planner_service_name
@@ -213,7 +214,6 @@ resource "google_cloud_run_v2_service" "provisioner" {
             ORCHESTRATOR_SERVICE_NAME = var.orchestrator_service_name
             TESTER_SERVICE_NAME       = var.tester_service_name
             DEPLOYER_SERVICE_NAME     = var.deployer_service_name
-            EGRESS_PROXY_ENABLED      = tostring(var.egress_proxy_enabled)
             INTERNAL_INGRESS          = var.internal_ingress
             # Runtime SAs the per-tenant services run as.
             GATEWAY_SA = google_service_account.gateway.email

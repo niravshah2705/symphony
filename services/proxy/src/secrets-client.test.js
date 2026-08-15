@@ -3,7 +3,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { fetchOrgSecrets, rotateOrgCodexTokens } = require('./secrets-client');
+const {
+  fetchOrgSecrets,
+  fetchOrgEgressConfig,
+  rotateOrgCodexTokens,
+} = require('./secrets-client');
 
 test('organization secret resolution uses the organization-bound bearer', async () => {
   let request = null;
@@ -16,6 +20,41 @@ test('organization secret resolution uses the organization-bound bearer', async 
   });
   assert.equal(request.init.headers['x-org-internal-token'], 'org-bound-token');
   assert.equal(request.init.headers['x-internal-token'], undefined);
+});
+
+test('project-scoped secret resolution appends only a validated UUID', async () => {
+  let request = null;
+  const projectId = '7e2ce8ba-57d3-4d80-bdba-ec18a8d2d348';
+  await fetchOrgSecrets('org-1', {
+    projectId,
+    orgInternalToken: 'org-bound-token',
+    fetchImpl: async (url, init) => {
+      request = { url, init };
+      return { ok: true, status: 200, json: async () => ({ org_id: 'org-1', project_id: projectId, secrets: {} }) };
+    },
+  });
+  assert.match(request.url, new RegExp(`secrets\\?project_id=${projectId}$`));
+  await assert.rejects(
+    () => fetchOrgSecrets('org-1', {
+      projectId: '../../other',
+      orgInternalToken: 'org-bound-token',
+      fetchImpl: async () => { throw new Error('must not fetch'); },
+    }),
+    /must be a UUID/,
+  );
+});
+
+test('organization egress config uses the organization-bound S2S endpoint', async () => {
+  let request = null;
+  await fetchOrgEgressConfig('org-1', {
+    orgInternalToken: 'org-bound-token',
+    fetchImpl: async (url, init) => {
+      request = { url, init };
+      return { ok: true, status: 200, json: async () => ({ jira_origin: null, jira_email: null }) };
+    },
+  });
+  assert.match(request.url, /\/orgs\/org-1\/egress-config$/);
+  assert.equal(request.init.headers['x-org-internal-token'], 'org-bound-token');
 });
 
 test('organization secret resolution fails closed without an organization bearer', async () => {

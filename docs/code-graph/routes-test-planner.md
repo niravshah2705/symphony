@@ -6,27 +6,26 @@
 
 Directory-based community: services/planner
 
-- **Size**: 179 nodes
-- **Cohesion**: 0.1707
+- **Size**: 187 nodes
+- **Cohesion**: 0.1783
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| plainObject | Function | ./services/planner/src/pipeline-stage.js | 32-34 |
-| cleanId | Function | ./services/planner/src/pipeline-stage.js | 36-39 |
-| linearProjectId | Function | ./services/planner/src/pipeline-stage.js | 41-50 |
-| linearAccessKey | Function | ./services/planner/src/pipeline-stage.js | 52-55 |
-| planningKeys | Function | ./services/planner/src/pipeline-stage.js | 57-68 |
-| safeText | Function | ./services/planner/src/pipeline-stage.js | 70-72 |
-| publicSummary | Function | ./services/planner/src/pipeline-stage.js | 74-85 |
-| publicHttpsUrl | Function | ./services/planner/src/pipeline-stage.js | 87-97 |
-| publicWorkItems | Function | ./services/planner/src/pipeline-stage.js | 99-125 |
-| stageFailure | Function | ./services/planner/src/pipeline-stage.js | 127-133 |
-| executePlanningStage | Function | ./services/planner/src/pipeline-stage.js | 138-271 |
-| inCommandWorkspace | Function | ./services/planner/src/pipeline-stage.js | 273-281 |
-| createPlannerPipelineRouter | Function | ./services/planner/src/pipeline-stage.js | 283-303 |
+| plainObject | Function | ./services/planner/src/pipeline-stage.js | 30-32 |
+| cleanId | Function | ./services/planner/src/pipeline-stage.js | 34-37 |
+| linearProjectId | Function | ./services/planner/src/pipeline-stage.js | 39-48 |
+| planningKeys | Function | ./services/planner/src/pipeline-stage.js | 50-61 |
+| safeText | Function | ./services/planner/src/pipeline-stage.js | 63-65 |
+| publicSummary | Function | ./services/planner/src/pipeline-stage.js | 67-78 |
+| publicHttpsUrl | Function | ./services/planner/src/pipeline-stage.js | 80-90 |
+| publicWorkItems | Function | ./services/planner/src/pipeline-stage.js | 92-118 |
+| stageFailure | Function | ./services/planner/src/pipeline-stage.js | 120-126 |
+| executePlanningStage | Function | ./services/planner/src/pipeline-stage.js | 131-264 |
+| inCommandWorkspace | Function | ./services/planner/src/pipeline-stage.js | 266-274 |
+| createPlannerPipelineRouter | Function | ./services/planner/src/pipeline-stage.js | 276-296 |
 | command | Function | ./services/planner/src/pipeline-stage.test.js | 19-51 |
 | NOW | Function | ./services/planner/src/pipeline-stage.test.js | 50-50 |
 | routeStack | Function | ./services/planner/src/pipeline-stage.test.js | 53-56 |
@@ -34,16 +33,17 @@ Directory-based community: services/planner
 | status | Function | ./services/planner/src/pipeline-stage.test.js | 62-62 |
 | json | Function | ./services/planner/src/pipeline-stage.test.js | 63-63 |
 | end | Function | ./services/planner/src/pipeline-stage.test.js | 64-64 |
-| scopedStore | Function | ./services/planner/src/pipeline-stage.test.js | 68-76 |
-| test:planner resolves the admitted agent exactly and returns deterministic coding work items@L78 | Test | ./services/planner/src/pipeline-stage.test.js | 78-137 |
-| getProjectIssues | Function | ./services/planner/src/pipeline-stage.test.js | 162-168 |
-| getMilestonesWithIssueCounts | Function | ./services/planner/src/pipeline-stage.test.js | 169-171 |
-| test:planner refuses commands that cannot identify their external Linear project@L139 | Test | ./services/planner/src/pipeline-stage.test.js | 139-146 |
-| test:planner never falls back to unrelated open project issues@L148 | Test | ./services/planner/src/pipeline-stage.test.js | 148-183 |
-| test:planner rejects a Linear project linked to another native project before model or Linear work@L185 | Test | ./services/planner/src/pipeline-stage.test.js | 185-200 |
-| test:planner stage routes authenticate, execute a duplicate once, and republish its terminal result@L202 | Test | ./services/planner/src/pipeline-stage.test.js | 202-241 |
-| warn | Function | ./services/planner/src/pipeline-stage.test.js | 214-214 |
-| error | Function | ./services/planner/src/pipeline-stage.test.js | 214-214 |
+| scopedStore | Function | ./services/planner/src/pipeline-stage.test.js | 68-77 |
+| test:planner resolves the admitted agent exactly and returns deterministic coding work items@L79 | Test | ./services/planner/src/pipeline-stage.test.js | 79-138 |
+| getProjectIssues | Function | ./services/planner/src/pipeline-stage.test.js | 163-169 |
+| getMilestonesWithIssueCounts | Function | ./services/planner/src/pipeline-stage.test.js | 170-172 |
+| test:planner refuses commands that cannot identify their external Linear project@L140 | Test | ./services/planner/src/pipeline-stage.test.js | 140-147 |
+| test:planner never falls back to unrelated open project issues@L149 | Test | ./services/planner/src/pipeline-stage.test.js | 149-184 |
+| test:planner rejects a Linear project linked to another native project before model or Linear work@L186 | Test | ./services/planner/src/pipeline-stage.test.js | 186-201 |
+| test:planner stage routes authenticate, execute a duplicate once, and republish its terminal result@L203 | Test | ./services/planner/src/pipeline-stage.test.js | 203-242 |
+| warn | Function | ./services/planner/src/pipeline-stage.test.js | 215-215 |
+| error | Function | ./services/planner/src/pipeline-stage.test.js | 215-215 |
+| test:planner pipeline router constructs its configured default authentication middleware@L244 | Test | ./services/planner/src/pipeline-stage.test.js | 244-253 |
 | stream | Function | ./services/planner/src/pubsub.js | 30-38 |
 | messageWorkspaceContext | Function | ./services/planner/src/pubsub.js | 40-42 |
 | messageWorkspaceContextInput | Function | ./services/planner/src/pubsub.js | 44-50 |
@@ -53,19 +53,19 @@ Directory-based community: services/planner
 | isRejectedWorkspaceMessage | Function | ./services/planner/src/pubsub.js | 97-99 |
 | plannerHandler | Function | ./services/planner/src/pubsub.test.js | 11-15 |
 | invoke | Function | ./services/planner/src/pubsub.test.js | 17-28 |
-| test:planner Pub/Sub scopes every conversation event to the native workspace context@L30 | Test | ./services/planner/src/pubsub.test.js | 30-77 |
-| test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L79 | Test | ./services/planner/src/pubsub.test.js | 79-102 |
-| test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L104 | Test | ./services/planner/src/pubsub.test.js | 104-154 |
-| byOrg | Function | ./services/planner/src/pubsub.test.js | 145-145 |
-| context | Function | ./services/planner/src/pubsub.test.js | 146-146 |
-| test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L156 | Test | ./services/planner/src/pubsub.test.js | 156-184 |
-| test:planner autonomous ticks fail closed only on an unpinned shared cloud runtime@L186 | Test | ./services/planner/src/pubsub.test.js | 186-220 |
-| error | Function | ./services/planner/src/pubsub.test.js | 229-229 |
-| warn | Function | ./services/planner/src/pubsub.test.js | 229-229 |
-| test:planner orchestrator rollout keeps billing sweeps but suppresses autonomous planning@L222 | Test | ./services/planner/src/pubsub.test.js | 222-238 |
-| redactUserText | Function | ./services/planner/src/routes/agent.js | 55-55 |
+| test:planner Pub/Sub scopes every conversation event to the native workspace context@L30 | Test | ./services/planner/src/pubsub.test.js | 30-78 |
+| test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L80 | Test | ./services/planner/src/pubsub.test.js | 80-103 |
+| test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L105 | Test | ./services/planner/src/pubsub.test.js | 105-155 |
+| byOrg | Function | ./services/planner/src/pubsub.test.js | 146-146 |
+| context | Function | ./services/planner/src/pubsub.test.js | 147-147 |
+| test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L157 | Test | ./services/planner/src/pubsub.test.js | 157-185 |
+| test:planner autonomous ticks fail closed only on an unpinned shared cloud runtime@L187 | Test | ./services/planner/src/pubsub.test.js | 187-221 |
+| error | Function | ./services/planner/src/pubsub.test.js | 230-230 |
+| warn | Function | ./services/planner/src/pubsub.test.js | 230-230 |
+| test:planner orchestrator rollout keeps billing sweeps but suppresses autonomous planning@L223 | Test | ./services/planner/src/pubsub.test.js | 223-239 |
+| redactUserText | Function | ./services/planner/src/routes/agent.js | 57-57 |
 
-*... and 129 more members.*
+*... and 137 more members.*
 
 ## Execution Flows
 
@@ -74,41 +74,40 @@ Directory-based community: services/planner
 - **conversationForRequest** (criticality: 0.50, depth: 2)
 - **jobsForRequest** (criticality: 0.49, depth: 2)
 - **createLocalizationRouter** (criticality: 0.49, depth: 2)
-- **createStoreContextMiddleware** (criticality: 0.45, depth: 2)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (162 edge(s))
-- `deepEqual` (38 edge(s))
-- `ok` (33 edge(s))
-- `require` (29 edge(s))
-- `resolve` (28 edge(s))
+- `equal` (167 edge(s))
+- `deepEqual` (40 edge(s))
+- `ok` (34 edge(s))
+- `resolve` (30 edge(s))
+- `require` (30 edge(s))
 - `map` (22 edge(s))
-- `Boolean` (21 edge(s))
 - `includes` (19 edge(s))
+- `after` (18 edge(s))
 - `filter` (17 edge(s))
-- `String` (17 edge(s))
-- `after` (17 edge(s))
-- `push` (15 edge(s))
-- `trim` (13 edge(s))
+- `String` (16 edge(s))
+- `push` (16 edge(s))
+- `find` (13 edge(s))
+- `trim` (12 edge(s))
 - `isArray` (12 edge(s))
-- `find` (12 edge(s))
+- `some` (11 edge(s))
 
 ### Incoming
 
-- `equal` (162 edge(s))
-- `./services/planner/src/routes/settings.js` (62 edge(s))
+- `equal` (167 edge(s))
 - `./services/planner/src/routes/agent.js` (57 edge(s))
-- `deepEqual` (38 edge(s))
+- `./services/planner/src/routes/settings.js` (57 edge(s))
+- `deepEqual` (40 edge(s))
 - `./services/planner/src/pubsub.js` (28 edge(s))
 - `require` (27 edge(s))
 - `ok` (27 edge(s))
 - `./services/planner/src/routes/agent.test.js` (27 edge(s))
 - `./services/planner/src/routes/businesses.js` (24 edge(s))
-- `./services/planner/src/pipeline-stage.test.js` (20 edge(s))
-- `./services/planner/src/pipeline-stage.js` (19 edge(s))
+- `./services/planner/src/pipeline-stage.test.js` (21 edge(s))
+- `./services/planner/src/pipeline-stage.js` (18 edge(s))
 - `resolve` (16 edge(s))
 - `after` (16 edge(s))
 - `./services/planner/src/pubsub.test.js` (14 edge(s))

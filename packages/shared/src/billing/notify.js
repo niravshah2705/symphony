@@ -3,6 +3,8 @@
 const { randomUUID } = require('node:crypto');
 const log = require('../logger');
 const { CONFIG } = require('../config');
+const { projectEgressHeaders } = require('../egress');
+const { currentWorkspaceContext } = require('../store/workspace-context');
 const { paiseToInr } = require('./pricing');
 
 /**
@@ -33,12 +35,19 @@ function sendBrowser(payload) {
   }
 }
 
-async function sendSlack(payload, webhookUrl = process.env.BILLING_SLACK_WEBHOOK_URL) {
-  if (!webhookUrl) return false;
+async function sendSlack(payload, webhookUrl = CONFIG.BILLING.slackWebhookUrl) {
+  // A Slack webhook URL is itself a secret. In agent/proxy mode never honor a
+  // persisted or caller-supplied URL; use the sidecar's fixed route, which
+  // resolves the exact vault target and does not accept a path or origin.
+  const target = CONFIG.EGRESS_PROXY_URL ? CONFIG.BILLING.slackWebhookUrl : webhookUrl;
+  if (!target) return false;
   try {
-    const res = await fetch(webhookUrl, {
+    const res = await fetch(target, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
+      },
       body: JSON.stringify({ text: `*${payload.title}* — ${payload.message}` }),
     });
     return Boolean(res && res.ok);

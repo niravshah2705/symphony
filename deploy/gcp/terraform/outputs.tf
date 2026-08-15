@@ -12,6 +12,16 @@ output "gateway_url_deterministic" {
   value       = local.gateway_url
 }
 
+output "stream_token_broker_uri" {
+  description = "Private stream-token broker URL. Only gateway-sa may invoke its mint/verify RPCs through Cloud Run IAM."
+  value       = google_cloud_run_v2_service.stream_token_broker.uri
+}
+
+output "stream_token_legacy_gateway_secret_access_enabled" {
+  description = "Migration warning: true means gateway-sa temporarily retains direct access to stream-token-secret for unreconciled tenant sidecars. The completed isolation state is false."
+  value       = var.stream_token_legacy_gateway_secret_access
+}
+
 output "planner_uri" {
   description = "Planner URL — IAM-gated (no allUsers invoker); only gateway-sa and pubsub-push-sa can call it via OIDC."
   value       = google_cloud_run_v2_service.planner.uri
@@ -97,7 +107,7 @@ output "skills_version_pinned" {
 }
 
 output "registry_bucket" {
-  description = "Terraform-created GCS bucket holding the versioned dual-format harness registry (null when registry_enabled = false). Fixed name from var.registry_bucket_name (default 'aifleet-registry'). The sync-harness-registry workflow publishes here (<version>/original + <version>/generic)."
+  description = "Terraform-created GCS bucket holding versioned harness-native rootfs artifacts, v2 descriptors, and inert resources (null when registry_enabled = false). Fixed name from var.registry_bucket_name (default 'aifleet-registry')."
   value       = one(google_storage_bucket.registry[*].name)
 }
 

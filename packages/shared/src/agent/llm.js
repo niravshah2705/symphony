@@ -4,12 +4,17 @@ const crypto = require('crypto');
 const { CONFIG } = require('../config');
 const logger = require('../logger');
 const oauth = require('./oauth');
-const { SENTINEL_TOKEN } = require('../egress');
+const { SENTINEL_TOKEN, projectEgressHeaders } = require('../egress');
+const { currentWorkspaceContext } = require('../store/workspace-context');
 const { ensureFreshCodexTokens, ensureFreshClaudeTokens } = require('./oauth-tokens');
 const { runWithRetry, streamWithRetry } = require('./llm-retry');
 
 // Hard cap on the configurable stream-retry count (mirrors settings-patch.js).
 const MAX_STREAM_RETRIES = 5;
+
+function proxyProjectHeaders() {
+  return CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {};
+}
 
 /** Coerce an operator-supplied retry count to a bounded, non-negative integer. */
 function clampStreamRetries(value) {
@@ -199,7 +204,10 @@ async function fetchLmstudioLoadedContext(host, model) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 2000);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: proxyProjectHeaders(),
+    });
     if (!res.ok) return null;
     const body = await res.json();
     const models = (body && (body.data || body.models)) || [];
@@ -272,6 +280,7 @@ function createCodexChatgptModel(llm, json) {
         'OpenAI-Beta': 'responses=experimental',
         originator: 'codex_cli_rs',
         session_id: crypto.randomUUID(),
+        ...proxyProjectHeaders(),
       },
     },
     // Bound the growing deep-agent history to fit the Codex context window (only
@@ -367,13 +376,26 @@ function getClaudeChatModelClass() {
  *     already say "return ONLY JSON" and plan.js parseJsonLoose tolerates fences,
  *     so `json` is prompt-driven here (no request param).
  */
+/**
+ * Extra Anthropic client headers per descriptor: the OAuth beta header on the
+ * direct/subscription path; NONE for a LangSmith-gateway descriptor (Bearer
+ * workspace key auth — the oauth beta header would be rejected).
+ */
+function claudeClientHeaders(llm) {
+  if (llm && llm.gateway === 'langsmith') return {};
+  return { 'anthropic-beta': CONFIG.CLAUDE.betaHeader };
+}
+
 function createClaudeModel(llm /* , json */) {
   const ClaudeChatModel = getClaudeChatModelClass();
   const { Anthropic } = require('@anthropic-ai/sdk');
   const baseURL = String(llm.baseUrl || CONFIG.CLAUDE.baseUrl).replace(/\/$/, '');
-  const betaHeader = CONFIG.CLAUDE.betaHeader;
+  // The oauth beta header is a subscription-auth artifact: the LangSmith
+  // gateway authenticates with a Bearer workspace key, so a gateway descriptor
+  // must not send it (claudeClientHeaders is exported for tests).
+  const extraHeaders = claudeClientHeaders(llm);
   const opts = {
-    model: llm.model,
+    model: wireModelId(llm),
     maxTokens: llm.numTokens,
     streamRetries: clampStreamRetries(llm.streamRetries),
     // Stream responses (settings-configurable, `claudeStreaming`, default on). A
@@ -393,7 +415,11 @@ function createClaudeModel(llm /* , json */) {
         apiKey: null,
         authToken: llm.accessToken,
         baseURL,
-        defaultHeaders: { ...(options.defaultHeaders || {}), 'anthropic-beta': betaHeader },
+        defaultHeaders: {
+          ...(options.defaultHeaders || {}),
+          ...extraHeaders,
+          ...proxyProjectHeaders(),
+        },
       }),
   };
   // Opus 4.8 supports adaptive thinking only; fixed budget_tokens and sampling
@@ -437,6 +463,7 @@ function getManagedChatOpenAIClass() {
         model: fields && fields.model,
         apiKey: fields && fields.apiKey,
         baseURL: fields && fields.configuration && fields.configuration.baseURL,
+        defaultHeaders: fields && fields.configuration && fields.configuration.defaultHeaders,
         timeout: fields && fields.timeout,
         maxRetries: fields && fields.maxRetries,
       };
@@ -453,7 +480,10 @@ function getManagedChatOpenAIClass() {
         maxTokens: this.summaryMaxTokens,
         timeout: this._summaryCfg.timeout,
         maxRetries: this._summaryCfg.maxRetries,
-        configuration: { baseURL: this._summaryCfg.baseURL },
+        configuration: {
+          baseURL: this._summaryCfg.baseURL,
+          defaultHeaders: this._summaryCfg.defaultHeaders,
+        },
       });
     }
     _summarizer() {
@@ -552,10 +582,10 @@ function createChatModel(llm, { json = false } = {}) {
     // developer rewrite is needed here).
     const ManagedChatOpenAI = getManagedChatOpenAIClass();
     const opts = {
-      model: llm.model,
+      model: wireModelId(llm),
       apiKey: llm.accessToken,
       maxTokens: llm.numTokens,
-      configuration: { baseURL: llm.baseUrl },
+      configuration: { baseURL: llm.baseUrl, defaultHeaders: proxyProjectHeaders() },
       promptBudget: codexPromptBudget(llm),
       charsPerToken: CONFIG.OAUTH.charsPerToken,
       contextMode: llm.contextMode,
@@ -586,7 +616,7 @@ function createChatModel(llm, { json = false } = {}) {
       apiKey: llm.apiKey,
       maxTokens: llm.numTokens,
       streaming: true,
-      configuration: { baseURL: llm.baseUrl },
+      configuration: { baseURL: llm.baseUrl, defaultHeaders: proxyProjectHeaders() },
       streamRetries: clampStreamRetries(llm.streamRetries),
       retryProvider: 'huggingface',
     };
@@ -611,7 +641,7 @@ function createChatModel(llm, { json = false } = {}) {
       apiKey: llm.apiKey,
       maxTokens: llm.numTokens,
       streaming: true,
-      configuration: { baseURL: llm.baseUrl },
+      configuration: { baseURL: llm.baseUrl, defaultHeaders: proxyProjectHeaders() },
       streamRetries: clampStreamRetries(llm.streamRetries),
       retryProvider: 'antigravity',
     };
@@ -648,7 +678,7 @@ function createChatModel(llm, { json = false } = {}) {
       // timeout fails once instead of being retried into a much longer wait.
       timeout: CONFIG.LMSTUDIO.requestTimeoutMs,
       maxRetries: CONFIG.LMSTUDIO.maxRetries,
-      configuration: { baseURL: llm.baseUrl },
+      configuration: { baseURL: llm.baseUrl, defaultHeaders: proxyProjectHeaders() },
       // Bound the growing deep-agent history to fit the loaded context window, so a
       // long run can't overflow it (the max_tokens cap only bounds OUTPUT, not the
       // re-sent input). `contextMode` picks the strategy (trim | summarize | none);
@@ -687,7 +717,7 @@ function createChatModel(llm, { json = false } = {}) {
       streaming: true,
       timeout: CONFIG.OMLX.requestTimeoutMs,
       maxRetries: CONFIG.OMLX.maxRetries,
-      configuration: { baseURL: llm.baseUrl },
+      configuration: { baseURL: llm.baseUrl, defaultHeaders: proxyProjectHeaders() },
       promptBudget: omlxPromptBudget(llm),
       charsPerToken: CONFIG.OMLX.charsPerToken,
       contextMode: llm.contextMode,
@@ -722,6 +752,7 @@ function createChatModel(llm, { json = false } = {}) {
   const OllamaChatModel = getOllamaChatModelClass();
   const opts = {
     baseUrl: llm.host,
+    headers: proxyProjectHeaders(),
     model: llm.model,
     numCtx: llm.contextWindow,
     numPredict: llm.numTokens,
@@ -781,6 +812,43 @@ function providerForRole(settings, role) {
 }
 
 /**
+ * Per-request LangSmith LLM gateway opt-in: on only when the deployment has the
+ * gateway configured AND this run's settings carry the threaded browser flag.
+ */
+function useLlmGateway(settings) {
+  return CONFIG.LLM_GATEWAY.enabled && settings.llmGateway === 'langsmith';
+}
+
+/**
+ * Credential a gateway-routed descriptor sends: the sentinel in egress-proxy
+ * mode (the sidecar injects the real workspace key), otherwise the managed
+ * workspace key from the store env overlay. Never falls back to provider
+ * OAuth — a subscription token is meaningless at the gateway.
+ */
+function llmGatewayCredential(settings) {
+  if (CONFIG.EGRESS_PROXY_URL) return SENTINEL_TOKEN;
+  const key = String(settings.langsmithGatewayApiKey || '').trim();
+  if (!key) {
+    const err = new Error('The LLM gateway is enabled for this request but no workspace key is configured.');
+    err.status = 401;
+    throw err;
+  }
+  return key;
+}
+
+/**
+ * Wire-format model id. The LangSmith gateway routes by `provider/model`, so a
+ * gateway descriptor prefixes the provider ON THE WIRE only — `llm.model` stays
+ * bare for policy enforcement (enforceLlmModel) and admission snapshots.
+ * Derived at use time (not stored at resolve time) so a policy model swap can
+ * never leave a stale prefixed name behind.
+ */
+function wireModelId(llm) {
+  if (!llm || llm.gateway !== 'langsmith') return llm && llm.model;
+  return `${llm.provider === 'claude' ? 'anthropic' : 'openai'}/${llm.model}`;
+}
+
+/**
  * Resolve a provider descriptor from settings for the given role ('global' by
  * default, or 'byom'). For 'codex'/'claude' this refreshes the access token if
  * needed (async, may hit the token endpoint). The per-provider config (model,
@@ -791,6 +859,24 @@ async function resolveLlm(settings, role = 'global') {
   // Transient/in-stream retry count is a single knob applied to every provider.
   const streamRetries = clampStreamRetries(settings.llmStreamRetries);
   if (provider === 'claude') {
+    // Flagged run: route through the LangSmith gateway's Anthropic surface. The
+    // flag changes ROUTING only — model selection is identical to the direct
+    // path, so policy enforcement and admission snapshots are unaffected.
+    if (useLlmGateway(settings)) {
+      return {
+        provider: 'claude',
+        gateway: 'langsmith',
+        model: settings.claudeModel || CONFIG.CLAUDE.defaultModel,
+        baseUrl: CONFIG.LLM_GATEWAY.claudeBaseUrl,
+        accessToken: llmGatewayCredential(settings),
+        numTokens: settings.claudeMaxTokens || 65536,
+        temperature: settings.claudeTemperature ?? null,
+        reasoningEffort: settings.claudeReasoningEffort ?? null,
+        reasoningAdapter: settings.claudeReasoningAdapter || 'none',
+        streaming: settings.claudeStreaming !== false,
+        streamRetries,
+      };
+    }
     // In egress-proxy mode the agent holds no token: the sidecar injects the
     // real OAuth bearer. Otherwise refresh the token set from the store as usual.
     const accessToken = CONFIG.EGRESS_PROXY_URL
@@ -810,6 +896,33 @@ async function resolveLlm(settings, role = 'global') {
     };
   }
   if (provider === 'codex') {
+    // Flagged run: route through the LangSmith gateway. The gateway has no
+    // chatgpt.com backend surface, so the descriptor is always the `api` shape
+    // (codex-sdk /responses, deep-agent /chat/completions) — but the MODEL is
+    // whatever the unflagged path would pick: the flag never changes model
+    // selection, only routing. No OAuth: the credential is the workspace key
+    // (or the sentinel in proxy mode). Note a ChatGPT-subscription-only model
+    // must be metered-API-available to work through the gateway.
+    if (useLlmGateway(settings)) {
+      const model = settings.codexModel
+        || (CONFIG.OAUTH.backend === 'chatgpt' ? CONFIG.OAUTH.chatgptModel : CONFIG.OAUTH.defaultModel);
+      return {
+        provider: 'codex',
+        backend: 'api',
+        gateway: 'langsmith',
+        model,
+        baseUrl: CONFIG.LLM_GATEWAY.openaiBaseUrl,
+        accessToken: llmGatewayCredential(settings),
+        authTokens: null,
+        numTokens: settings.codexMaxTokens || 65536,
+        contextWindow: Number(settings.codexContextWindow) || 0,
+        contextMode: settings.codexContextMode || 'trim',
+        temperature: settings.codexTemperature ?? null,
+        reasoningEffort: settings.codexReasoningEffort ?? null,
+        reasoningAdapter: settings.codexReasoningAdapter || 'none',
+        streamRetries,
+      };
+    }
     // Egress-proxy mode: no token in the agent (sidecar injects the bearer +
     // chatgpt-account-id), so use the sentinel and skip the account-id check.
     const proxied = Boolean(CONFIG.EGRESS_PROXY_URL);
@@ -860,7 +973,9 @@ async function resolveLlm(settings, role = 'global') {
     };
   }
   if (provider === 'lmstudio') {
-    const host = String(settings.lmstudioHost || CONFIG.LMSTUDIO.defaultHost).replace(/\/$/, '');
+    const host = String(
+      CONFIG.EGRESS_PROXY_URL ? CONFIG.LMSTUDIO.defaultHost : settings.lmstudioHost || CONFIG.LMSTUDIO.defaultHost
+    ).replace(/\/$/, '');
     // Key the prompt budget to the window the model is ACTUALLY loaded with (LM
     // Studio may load it smaller than configured), not just the operator setting.
     const declaredCtx = Number(settings.lmstudioContextWindow) || 0;
@@ -888,14 +1003,14 @@ async function resolveLlm(settings, role = 'global') {
     };
   }
   if (provider === 'omlx') {
-    const host = String(settings.omlxHost || CONFIG.OMLX.defaultHost)
+    const host = String(CONFIG.EGRESS_PROXY_URL ? CONFIG.OMLX.defaultHost : settings.omlxHost || CONFIG.OMLX.defaultHost)
       .replace(/\/v1\/?$/i, '')
       .replace(/\/$/, '');
     return {
       provider: 'omlx',
       host,
       baseUrl: `${host}${CONFIG.OMLX.apiPath}`,
-      apiKey: settings.omlxApiKey || '',
+      apiKey: CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : settings.omlxApiKey || '',
       model: settings.omlxModel,
       contextWindow: settings.omlxContextWindow,
       numTokens: settings.omlxNumTokens,
@@ -911,14 +1026,14 @@ async function resolveLlm(settings, role = 'global') {
     };
   }
   if (provider === 'huggingface') {
-    const host = String(settings.huggingfaceHost || CONFIG.HUGGINGFACE.defaultHost)
+    const host = String(CONFIG.EGRESS_PROXY_URL ? CONFIG.HUGGINGFACE.defaultHost : settings.huggingfaceHost || CONFIG.HUGGINGFACE.defaultHost)
       .replace(/\/v1\/?$/i, '')
       .replace(/\/$/, '');
     return {
       provider: 'huggingface',
       host,
       baseUrl: `${host}${CONFIG.HUGGINGFACE.apiPath}`,
-      apiKey: settings.huggingfaceApiKey || '',
+      apiKey: CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : settings.huggingfaceApiKey || '',
       model: settings.huggingfaceModel,
       contextWindow: settings.huggingfaceContextWindow,
       numTokens: settings.huggingfaceMaxTokens || 8192,
@@ -932,7 +1047,7 @@ async function resolveLlm(settings, role = 'global') {
     // Gemini API key (mandatory). It is the credential for BOTH the native harness
     // (@google/genai) and the OpenAI-compatible deep-agent path, so it is exposed as
     // `apiKey` (deep-agent) and `accessToken` (harness auth guard) on the descriptor.
-    const apiKey = settings.antigravityApiKey || '';
+    const apiKey = CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : settings.antigravityApiKey || '';
     return {
       provider: 'antigravity',
       apiKey,
@@ -953,7 +1068,9 @@ async function resolveLlm(settings, role = 'global') {
   if (provider !== 'ollama') throw new TypeError(`Unsupported LLM provider: ${provider || 'unknown'}`);
   return {
     provider: 'ollama',
-    host: settings.ollamaHost,
+    host: String(
+      CONFIG.EGRESS_PROXY_URL ? CONFIG.OLLAMA.defaultHost : settings.ollamaHost || CONFIG.OLLAMA.defaultHost
+    ).replace(/\/$/, ''),
     model: settings.ollamaModel,
     contextWindow: settings.ollamaContextWindow,
     numTokens: settings.ollamaNumTokens,
@@ -1031,9 +1148,11 @@ function notReadyReason(settings, role = 'global') {
 
 module.exports = {
   createChatModel,
+  claudeClientHeaders,
   ensureFreshCodexTokens,
   ensureFreshClaudeTokens,
   resolveLlm,
+  wireModelId,
   providerForRole,
   llmReady,
   notReadyReason,

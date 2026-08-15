@@ -6,6 +6,7 @@ import {
   shouldRetryAuth,
   createSingleFlight,
 } from './auth-retry.mjs';
+import { mintedStreamContextQuerySuffix } from './stream-context.mjs';
 
 // Thin fetch wrapper around the backend API.
 
@@ -31,6 +32,24 @@ export function setRequestContext(value) {
 
 export function getRequestContext() {
   return requestContext;
+}
+
+/**
+ * Per-request LLM gateway opt-in (feature flag). Stored in localStorage —
+ * `localStorage.setItem('aiFleetLlmGateway', 'langsmith')` — and read per
+ * request so toggling applies immediately. The gateway honors the resulting
+ * X-AI-Fleet-Llm-Gateway header only on deployments with the LLM gateway
+ * configured; everywhere else requests follow the standard route.
+ */
+const LLM_GATEWAY_STORAGE_KEY = 'aiFleetLlmGateway';
+
+function llmGatewayFlag() {
+  try {
+    const value = (window.localStorage.getItem(LLM_GATEWAY_STORAGE_KEY) || '').trim().toLowerCase();
+    return value === 'langsmith' ? 'langsmith' : '';
+  } catch (_) {
+    return ''; /* storage unavailable (private mode) — flag off */
+  }
 }
 
 /** EventSource cannot send custom headers, so its short-lived token-bound context
@@ -103,12 +122,15 @@ async function request(path, options = {}) {
   // caller-supplied values so every request carries the final validated choice.
   headers.delete('X-AI-Fleet-Organization-Id');
   headers.delete('X-AI-Fleet-Project-Id');
+  headers.delete('X-AI-Fleet-Llm-Gateway');
   if (requestContext.organizationId) {
     headers.set('X-AI-Fleet-Organization-Id', requestContext.organizationId);
   }
   if (requestContext.projectId) {
     headers.set('X-AI-Fleet-Project-Id', requestContext.projectId);
   }
+  const llmGateway = llmGatewayFlag();
+  if (llmGateway) headers.set('X-AI-Fleet-Llm-Gateway', llmGateway);
   // `application/json` is not a CORS-safelisted request header. Adding it to a
   // bodyless anonymous GET forces an otherwise unnecessary OPTIONS preflight.
   // Mutations that actually carry our JSON payload still advertise it.
@@ -186,8 +208,9 @@ const STREAM_MAX_CONSECUTIVE_FAILURES = 6;
 
 /**
  * Open an SSE stream that owns its reconnection, and return a `{ close() }`
- * controller. `mintToken()` resolves to `{ token }`; `buildUrl(token)` returns the
- * SSE URL; `onEvent(parsed)` receives each JSON message.
+ * controller. `mintToken()` resolves to `{ token, organizationId, projectId }`;
+ * `buildUrl(token, minted)` returns the SSE URL; `onEvent(parsed)` receives each
+ * JSON message.
  */
 async function openStream({ mintToken, buildUrl, onEvent }) {
   let source = null;
@@ -227,7 +250,7 @@ async function openStream({ mintToken, buildUrl, onEvent }) {
       throw error;
     }
     if (stopped) return;
-    source = new EventSource(buildUrl(token));
+    source = new EventSource(buildUrl(token, minted));
     source.onopen = () => { failures = 0; }; // a live connection resets the backoff
     source.onmessage = (event) => {
       try {
@@ -279,10 +302,6 @@ export const api = {
 
   // Settings
   getSettings: (options = {}) => request('/settings', options),
-  saveKey: (linearApiKey) =>
-    request('/settings', { method: 'PUT', body: JSON.stringify({ linearApiKey }) }),
-  validate: (options = {}) => request('/settings/validate', options),
-  clearKey: () => request('/settings', { method: 'DELETE' }),
 
   // Projects
   getProjects: () => request('/projects'),
@@ -317,8 +336,6 @@ export const api = {
   saveLmstudio: (payload) => request('/settings/lmstudio', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLangsmith: (payload) =>
     request('/settings/langsmith', { method: 'PUT', body: JSON.stringify(payload) }),
-  saveGithubToken: (githubToken) =>
-    request('/settings/github', { method: 'PUT', body: JSON.stringify({ githubToken }) }),
   saveIntegrations: (payload) =>
     request('/settings/integrations', { method: 'PUT', body: JSON.stringify(payload) }),
   saveAgentRuntime: (payload) =>
@@ -386,10 +403,12 @@ export const api = {
   // Open an SSE stream of a conversation's intermittent agent responses. Returns
   // a { close() } controller; onEvent receives each parsed event. Reconnection
   // (with a freshly-minted token) is handled internally — see openStream. The
-  // multi-org request context is repeated in the URL via requestContextQuerySuffix().
+  // Token-bound context returned by minting is repeated in the URL. Do not
+  // re-read mutable requestContext here: the user may switch projects between
+  // mint and EventSource construction.
   openAgentStream: (conversationId, onEvent) => openStream({
     mintToken: () => api.getStreamToken(conversationId),
-    buildUrl: (token) => `${getApiBase()}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token)}${requestContextQuerySuffix()}`,
+    buildUrl: (token, minted) => `${getApiBase()}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token)}${mintedStreamContextQuerySuffix(minted)}`,
     onEvent,
   }),
   // Short-lived token authorizing the authenticated workspace EventSource.
@@ -397,10 +416,10 @@ export const api = {
   // Open the workspace SSE stream — typed status/jobs/coder/gate snapshots that
   // replace the old 5s polling loops. Returns a { close() } controller; onEvent
   // receives each parsed event. Reconnection is handled internally (openStream).
-  // The multi-org request context is repeated in the URL via requestContextQuerySuffix().
+  // The authoritative token-bound context is repeated in the URL.
   openWorkspaceStream: (onEvent) => openStream({
     mintToken: () => api.getWorkspaceStreamToken(),
-    buildUrl: (token) => `${getApiBase()}/api/agent/workspace-stream?t=${encodeURIComponent(token)}${requestContextQuerySuffix()}`,
+    buildUrl: (token, minted) => `${getApiBase()}/api/agent/workspace-stream?t=${encodeURIComponent(token)}${mintedStreamContextQuerySuffix(minted)}`,
     onEvent,
   }),
   routeAgentMessage: (payload) =>
@@ -538,17 +557,6 @@ export const api = {
     setMyPolicy: (payload) =>
       request('/settings-policy/me/settings', { method: 'PUT', body: JSON.stringify(payload) }),
 
-    // Config VALUES (provider API keys, e.g. geminiApiKey). Write-only: the PUT
-    // takes plaintext and reads back only `values.<key>.set` (never the secret).
-    // Sent alone (no `domains`), so the scope's include/exclude policy is
-    // preserved. An empty string clears a stored key.
-    setOrgConfig: (values) =>
-      request('/settings-policy/settings/org', { method: 'PUT', body: JSON.stringify({ values }) }),
-    setProjectConfig: (projectId, values) =>
-      request(`/settings-policy/settings/project/${projectId}`, { method: 'PUT', body: JSON.stringify({ values }) }),
-    setMyConfig: (values) =>
-      request('/settings-policy/me/settings', { method: 'PUT', body: JSON.stringify({ values }) }),
-
     // Per-scope OPERATIONAL prefs (readable, non-secret; merge semantics). These
     // are the scope-ladder overrides for complexity/provider/runtime/tracker/
     // tracing; the effective response resolves them user > project > org.
@@ -568,13 +576,35 @@ export const api = {
 
     // Per-org KMS-encrypted secret VAULT (org admin). This is the credential
     // source proxied agents read (via the settings service S2S resolver), with a
-    // per-key managed-vs-customer selection. Write-only: GET masks each key to
-    // `{set, source}`; PUT takes plaintext (empty string clears); selection sets
-    // managed|customer. Reached via the same /api/settings-policy proxy.
+    // per-key source capability. Write-only: GET returns only
+    // `{set, source, allowed_sources}`. A combined values+selection PUT is atomic;
+    // the dedicated selection routes remain for older clients.
     getOrgSecrets: () => request('/settings-policy/settings/org/secrets'),
-    setOrgSecrets: (values) =>
-      request('/settings-policy/settings/org/secrets', { method: 'PUT', body: JSON.stringify({ values }) }),
+    setOrgSecrets: (values, selection = undefined) =>
+      request('/settings-policy/settings/org/secrets', {
+        method: 'PUT',
+        body: JSON.stringify({ values, ...(selection ? { selection } : {}) }),
+      }),
     setOrgSecretSelection: (selection) =>
       request('/settings-policy/settings/org/secrets/selection', { method: 'PUT', body: JSON.stringify({ selection }) }),
+    getProjectSecrets: (projectId) =>
+      request(`/settings-policy/settings/project/${projectId}/secrets`),
+    setProjectSecrets: (projectId, values, selection = undefined) =>
+      request(`/settings-policy/settings/project/${projectId}/secrets`, {
+        method: 'PUT',
+        body: JSON.stringify({ values, ...(selection ? { selection } : {}) }),
+      }),
+    setProjectSecretSelection: (projectId, selection) =>
+      request(`/settings-policy/settings/project/${projectId}/secrets/selection`, {
+        method: 'PUT', body: JSON.stringify({ selection }),
+      }),
+
+    // Non-secret org connector routing metadata. Jira origins are validated by
+    // settings service as HTTPS Atlassian Cloud origins.
+    getOrgConnectors: () => request('/settings-policy/settings/org/connectors'),
+    setOrgConnectors: (payload) =>
+      request('/settings-policy/settings/org/connectors', { method: 'PUT', body: JSON.stringify(payload) }),
+    getConnectorReadiness: (projectId) =>
+      request(`/settings-policy/settings/org/connectors/readiness${projectId ? `?project_id=${projectId}` : ''}`),
   },
 };

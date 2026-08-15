@@ -1,11 +1,11 @@
-# CLAUDE.md — AI agent guide for the egress proxy sidecar
+# CLAUDE.md — AI agent guide for proxy-owned security capabilities
 
 Read this before changing `services/proxy`. It encodes the invariants that keep
 credential isolation correct.
 
 ## What this is
 
-An **authenticating reverse proxy** that runs as a Cloud Run sidecar next to each
+The primary entrypoint is an **authenticating reverse proxy** that runs as a Cloud Run sidecar next to each
 agent runtime (planner / coder-control / coder-worker). The agent routes every
 third-party call to `http://127.0.0.1:4030/<prefix>` over the shared loopback;
 this process holds (or resolves per-org) the real credential and injects it, then
@@ -17,18 +17,33 @@ MITM/`HTTP_PROXY`: the agent's SDK/fetch base URLs already point here (via
 `CONFIG.*` when `EGRESS_PROXY_URL` is set), so no CA distribution or TLS
 interception is needed.
 
+`src/stream-token-server.js` is a separate broker-only entrypoint deployed as
+its own Cloud Run service and service account. It exposes only health plus the
+stream-token mint/verify RPCs; it must never mount the general egress relay.
+Cloud Run IAM authenticates remote callers, while local development binds the
+broker to loopback by default.
+
 ## Files
 
 - `src/index.js` — HTTP server (`PROXY_PORT`, default 4030) + `/healthz`.
+- `src/stream-token-server.js` — standalone stream-token broker (`PORT`, default
+  8080) with no provider-egress surface. Cloud Run explicitly sets
+  `STREAM_TOKEN_BIND_HOST=0.0.0.0`; the safe local default is loopback.
 - `src/proxy.js` — the reverse-proxy core: `matchRoute` (longest-prefix), build
   the upstream URL, strip inbound auth + retarget Host, inject the credential,
   and **stream** both ways (SSE-safe — never buffer). Pure header/URL helpers are
   exported and unit-tested (`proxy.test.js`, `server.test.js`).
-- `src/credentials.js` — resolve the credential per route: managed platform key
-  (sidecar env) vs customer key (per-org vault). **Fail closed** when a customer
-  key is selected but missing.
+- `src/credentials.js` — resolve every credential through the settings service:
+  managed platform key vs customer key (per-org/project vault). Provider-key
+  environment fallback is forbidden in the proxy. **Fail closed** when a
+  selected key is missing. The `llm-gateway` auth family (route `/llmgw` →
+  LangSmith LLM Gateway) is STRICTER: a missing `langsmithGatewayApiKey` always
+  fails closed (never forward unauthenticated to a billing gateway), and the
+  injection stamps `x-fleet-org-id: <PROXY_ORG_ID>` so per-org spend/rate
+  policies in LangSmith can key on the tenant (omitted on the shared stack).
 - `src/secrets-client.js` — S2S call to the settings vault resolver
-  (`/internal/s2s/orgs/{orgId}/secrets`, `X-Internal-Token` + Cloud Run OIDC).
+  (`/internal/s2s/orgs/{orgId}/secrets`, org-bound internal token + Cloud Run
+  OIDC; shared managed resolution uses the shared internal token).
 - `src/oauth-manager.js` — Claude/Codex OAuth: reads the per-namespace store
   token sets and refreshes on near-expiry (reuses
   `packages/shared/src/agent/oauth-tokens.js`, single in-flight refresh).
@@ -48,13 +63,15 @@ The prefix→upstream→credential contract is shared with the agent-side config
 4. **Never log secrets.** Log route prefixes + generic errors only; never request
    bodies, headers, or the S2S response.
 5. **Stream, don't buffer.** LLM SSE + git packfiles are long-lived; pipe bodies.
+6. **Keep broker authority narrow.** Only the standalone broker service account
+   may read `STREAM_TOKEN_SECRET`; gateways receive only `roles/run.invoker`.
+   Never add provider routes or provider credentials to the broker entrypoint.
 
 ## Per-org scope
 
 This sidecar serves ONE org (`PROXY_ORG_ID`, injected by the provisioner for a
-per-tenant stack; unset on the shared stack ⇒ managed-only, using the operator's
-sign-in + mounted platform keys). `STORE_NAMESPACE` selects the tenant's store
-for the OAuth token sets.
+per-tenant stack; unset on the shared stack ⇒ managed-only through the settings
+service). `STORE_NAMESPACE` selects the tenant's store for the OAuth token sets.
 
 ## Tests
 

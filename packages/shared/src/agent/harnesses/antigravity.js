@@ -9,7 +9,8 @@
  */
 
 const { CONFIG } = require('../../config');
-const { SENTINEL_TOKEN } = require('../../egress');
+const { SENTINEL_TOKEN, projectEgressHeaders } = require('../../egress');
+const { currentWorkspaceContext } = require('../../store/workspace-context');
 const registry = require('./registry');
 const {
   AgentRuntimeError,
@@ -84,11 +85,9 @@ async function executeAntigravity(options, prompt) {
   // In include-SDK proxy mode the agent has no Gemini key — the proxy injects it
   // (x-goog-api-key) — so the sentinel satisfies the "configured" guard.
   const proxySdk = Boolean(CONFIG.EGRESS_PROXY_INCLUDE_SDK);
-  const apiKey = String(
-    resolvedConfigKey ||
-      (options.llm && (options.llm.apiKey || options.llm.accessToken)) ||
-      (proxySdk ? SENTINEL_TOKEN : '')
-  );
+  const apiKey = String(proxySdk
+    ? SENTINEL_TOKEN
+    : resolvedConfigKey || (options.llm && (options.llm.apiKey || options.llm.accessToken)) || '');
   if (!apiKey) {
     throw new AgentRuntimeError(
       'Antigravity SDK authentication is unavailable. Add a Gemini API key in Settings and try again.',
@@ -105,7 +104,13 @@ async function executeAntigravity(options, prompt) {
   try {
     // Route native genai through the proxy's /gemini-native prefix when enabled.
     const genaiOptions = proxySdk
-      ? { apiKey, httpOptions: { baseUrl: CONFIG.ANTIGRAVITY.nativeBaseUrl } }
+      ? {
+          apiKey,
+          httpOptions: {
+            baseUrl: CONFIG.ANTIGRAVITY.nativeBaseUrl,
+            headers: projectEgressHeaders(currentWorkspaceContext()),
+          },
+        }
       : { apiKey };
     const ai = new GoogleGenAI(genaiOptions);
     // Config-driven target: the Antigravity preview agent id when provided, else a

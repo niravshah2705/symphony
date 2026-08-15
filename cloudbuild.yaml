@@ -32,6 +32,7 @@ substitutions:
   _FIREBASE_ALLOWED_DOMAIN: "" # empty = any verified user
   _SPA_ORIGIN: "https://storage.googleapis.com"
   _SPA_OBFUSCATION_STRENGTH: "light" # light | balanced | maximum
+  _GOOGLE_ANALYTICS_MEASUREMENT_ID: "" # optional public GA4 id (G-...); empty = disabled
   _EMAIL_SMTP_HOST: ""
   _EMAIL_SMTP_PORT: "587"
   _EMAIL_SMTP_SECURE: "false"
@@ -40,6 +41,10 @@ substitutions:
   _PIPELINE_ORCHESTRATOR_ENABLED: "false"
   _PIPELINE_DEPLOYMENT_ENABLED: "false"
   _SETTINGS_OPERATOR_INVOKER: ""
+  _OMLX_PROXY_UPSTREAM: ""
+  _OLLAMA_PROXY_UPSTREAM: ""
+  _LMSTUDIO_PROXY_UPSTREAM: ""
+  _OPENSWE_PROXY_UPSTREAM: ""
   # Empty derives the URL of the GCS object published by this pipeline.
   # Set an explicit HTTPS URL when a custom domain/CDN fronts the SPA.
   _EMAIL_PUBLIC_APP_URL: ""
@@ -230,7 +235,7 @@ steps:
         echo "SMTP auth secret pair ready: $$USER_READY (values were not accessed)"
 
   # Keep the shared internal S2S token stable without putting it in a Cloud
-  # Build substitution or log. On first pipeline enable, generate it in the
+  # Build substitution or log. On first deploy, generate it in the
   # ephemeral workspace and let Terraform create the secret/version. On later
   # runs, reuse the enabled version so Terraform never rotates or destroys it.
   - id: pipeline-secret-state
@@ -251,7 +256,7 @@ steps:
         if [ -n "$$VERSION" ]; then
           TOKEN="$$(gcloud secrets versions access "$$VERSION" \
             --secret=internal-api-token --project "$PROJECT_ID")"
-        elif [ "${_PIPELINE_ORCHESTRATOR_ENABLED}" = "true" ]; then
+        else
           TOKEN="$$(dd if=/dev/urandom bs=48 count=1 2>/dev/null | base64 | tr -d '\n')"
         fi
         printf '{"internal_api_token":"%s"}\n' "$$TOKEN" > /workspace/pipeline-secret.auto.tfvars.json
@@ -338,6 +343,8 @@ steps:
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     waitFor: [tf-bootstrap, spa-obfuscate]
     entrypoint: bash
+    env:
+      - "GOOGLE_ANALYTICS_MEASUREMENT_ID=${_GOOGLE_ANALYTICS_MEASUREMENT_ID}"
     args:
       - -c
       - |
@@ -345,10 +352,15 @@ steps:
         PROJECT_NUMBER="$$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
         GATEWAY_URL="https://${_GATEWAY_SERVICE}-$${PROJECT_NUMBER}.${_REGION}.run.app"
         echo "Gateway URL: $${GATEWAY_URL}"
+        if [[ -n "$${GOOGLE_ANALYTICS_MEASUREMENT_ID}" && ! "$${GOOGLE_ANALYTICS_MEASUREMENT_ID}" =~ ^G-[A-Z0-9]+$$ ]]; then
+          echo "GOOGLE_ANALYTICS_MEASUREMENT_ID must be empty or a GA4 id such as G-XXXXXXXXXX." >&2
+          exit 1
+        fi
         # Match the Firebase deploy path: api.js imports this runtime module,
-        # which exposes the API base and warms its origin before client calls.
+        # which exposes public SPA config and warms the API origin before calls.
         printf '%s\n' \
           "window.__API_BASE__='$${GATEWAY_URL}';" \
+          "window.__GA_MEASUREMENT_ID__='$${GOOGLE_ANALYTICS_MEASUREMENT_ID}';" \
           "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
           > public/config.js
         # Persist for the Terraform step so API_BASE_URL matches config.js exactly.
@@ -405,10 +417,13 @@ steps:
           -var="spa_origin=${_SPA_ORIGIN}" \
           -var="api_base_url=$${API_BASE_URL}" \
           -var="firebase_allowed_domain=${_FIREBASE_ALLOWED_DOMAIN}" \
-          -var="egress_proxy_enabled=${_PIPELINE_ORCHESTRATOR_ENABLED}" \
           -var="pipeline_orchestrator_enabled=${_PIPELINE_ORCHESTRATOR_ENABLED}" \
           -var="pipeline_deployment_enabled=${_PIPELINE_DEPLOYMENT_ENABLED}" \
           -var="settings_operator_invoker=${_SETTINGS_OPERATOR_INVOKER}" \
+          -var="omlx_proxy_upstream=${_OMLX_PROXY_UPSTREAM}" \
+          -var="ollama_proxy_upstream=${_OLLAMA_PROXY_UPSTREAM}" \
+          -var="lmstudio_proxy_upstream=${_LMSTUDIO_PROXY_UPSTREAM}" \
+          -var="openswe_proxy_upstream=${_OPENSWE_PROXY_UPSTREAM}" \
           -var="email_smtp_host=${_EMAIL_SMTP_HOST}" \
           -var="email_smtp_port=${_EMAIL_SMTP_PORT}" \
           -var="email_smtp_secure=${_EMAIL_SMTP_SECURE}" \

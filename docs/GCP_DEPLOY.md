@@ -10,6 +10,11 @@ variables. Nothing GCP-specific is required for local development.
 - **gateway** → public **Cloud Run** service (API-only, scale-to-zero). Verifies
   the **Firebase ID token** on every request, performs EULA/billing/user-scoped
   pipeline preflight, and serves **SSE** fed by **Firestore** `onSnapshot`.
+- **stream-token-broker** → private **Cloud Run** service that exposes only
+  stream-token mint/verify RPCs. It has its own service account and is the only
+  service that retains `stream-token-secret` after migration; the gateway
+  service account receives only `roles/run.invoker` on this service. One broker
+  instance stays warm by default so token RPCs do not depend on a cold start.
 - **orchestrator** → internal Cloud Run control plane. It imports only
   `@ai-fleet/shared-core` + LangGraph, persists PipelineRun/StageRun state and a
   Firestore checkpointer, and publishes dedicated per-stage commands.
@@ -21,10 +26,12 @@ variables. Nothing GCP-specific is required for local development.
   repository-allowlisted CI/CD after server policy/approval gates.
 - **coder-worker** → a Cloud Run **Job** (one ticket per run, up to 24h) launched
   by coder-control.
-- **Firestore** replaces `data/store.json` and relays SSE events. **Secret
-  Manager** holds credentials (injected as env; override stored settings).
+- **Firestore** replaces `data/store.json` and relays SSE events. The settings
+  service encrypts customer credentials per organization/project; egress
+  sidecars resolve and inject them without exposing raw values to agent apps.
 
-Idle cost ≈ $0: static SPA + everything scale-to-zero + Firestore free tier.
+Most compute scales to zero. The stream-token broker intentionally keeps one
+warm instance, so the deployed stack has a small steady-state Cloud Run cost.
 
 ## Local profile (default — no GCP)
 
@@ -39,10 +46,20 @@ in-process and worker events reach the gateway's SSE via the local collector
 Set the env vars documented in `.env.example` (GCP section) on each service:
 `STORE_BACKEND=firestore`, `MESSAGING_MODE=pubsub`, `EVENTS_BACKEND=firestore`,
 `AUTH_MODE=firebase`, project/region, dedicated pipeline topic names, push audience + SA, and the
-gateway's `SPA_ORIGIN` / `API_BASE_URL` / `STREAM_TOKEN_SECRET`. The public
+gateway's `SPA_ORIGIN` / `API_BASE_URL`. Terraform sets the gateway's
+`STREAM_TOKEN_SERVICE_URL` to the private broker URL. The signing secret is
+mounted on the broker container, which runs as `stream-token-broker-sa`; it is
+not mounted on the shared gateway revision. While the temporary migration gate
+is true, unreconciled tenant sidecars can still mount that same secret. The public
 Firebase web config (`FIREBASE_API_KEY` / `FIREBASE_AUTH_DOMAIN`) is injected by
 Terraform from the managed web app — no manual key needed; `FIREBASE_PROJECT_ID`
 defaults to the project id, and `FIREBASE_ALLOWED_DOMAIN` is optional.
+
+`stream_token_min_instances` defaults to `1` because the gateway enforces a
+strict two-second broker RPC deadline; waiting for a Cloud Run cold start would
+otherwise turn routine mint/verify calls into 503 responses. Setting it to `0`
+opts back into scale-to-zero and lower idle cost, but explicitly accepts that
+availability risk.
 
 ### Durable pipeline prerequisites
 
@@ -80,8 +97,9 @@ secret id to `managed_provider_secrets`, and create an enabled secret version
 before applying Terraform. The required names are `GEMINI_API_KEY` for
 Gemini/Antigravity, `HUGGINGFACE_API_KEY` for Hugging Face,
 `ANTHROPIC_API_KEY` for Claude key mode, and `OPENAI_API_KEY` for OpenAI/Codex
-API-key mode. The default map contains only Linear and GitHub credentials, so a
-hosted model is intentionally not ready until its LLM secret is configured.
+API-key mode. The default managed map contains only GitHub; Linear is always a
+customer-owned organization/project vault credential. A hosted model is
+intentionally not ready until its LLM secret is configured.
 Mount managed keys on the settings service only—never on an agent app container.
 `CODEX_BACKEND=chatgpt` does not accept `OPENAI_API_KEY`; it requires an
 organization-scoped imported Codex token bundle and therefore a matching
@@ -98,13 +116,17 @@ publishes the SPA to GCS, and applies Terraform in the correct staged order.
 PROJECT_ID=my-proj \
 SPA_BUCKET=my-proj-aifleet-spa \        # globally-unique
 TF_STATE_BUCKET=my-proj-tfstate \
-LINEAR_API_KEY=lin_... \                # required (services won't start without it)
 ./deploy/gcp/deploy.sh
 ```
 
+After deployment, an organization or project administrator stores its Linear
+credential in Settings. It is encrypted by the settings service and resolved
+only by the egress sidecar; it is never mounted on gateway or agent containers.
+
 Optional env: `REGION`, `AR_REPO`, `IMAGE_TAG`, `FIRESTORE_LOCATION`, `SPA_ORIGIN`,
 `FIREBASE_ALLOWED_DOMAIN` (empty = any verified user), `GITHUB_TOKEN`,
-`LANGSMITH_API_KEY`, `SKIP_BUILD=1` (reuse pushed images), plus
+`LANGSMITH_API_KEY`, `GOOGLE_ANALYTICS_MEASUREMENT_ID` (a public GA4 `G-...`
+web-stream id; empty = disabled), `SKIP_BUILD=1` (reuse pushed images), plus
 `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`,
 `EMAIL_SMTP_PASSWORD`, and `EMAIL_FROM` for transactional email. The script
 defaults `EMAIL_PUBLIC_APP_URL` to the exact GCS `index.html` URL it publishes;
@@ -113,10 +135,14 @@ URL + SPA URL and the Firebase authorized domains to register.
 
 ### Deploy — CI (Cloud Build)
 
-`gcloud builds submit --config cloudbuild.yaml --substitutions=_BUCKET=...,_TF_STATE_BUCKET=...`
+`gcloud builds submit --config cloudbuild.yaml --substitutions=_BUCKET=...,_TF_STATE_BUCKET=...,_GOOGLE_ANALYTICS_MEASUREMENT_ID=G-XXXXXXXXXX`
 runs the same build → SPA-publish → staged `terraform apply` in Cloud Build.
 Seed the required agent Secret Manager versions first (the one-shot/bootstrap
 scripts do this for you). SMTP credentials use the acyclic flow below.
+
+The Analytics substitution is optional and public. The SPA publish step validates
+it and writes it to the no-store `config.js`; omit it to disable collection. See
+[Google Analytics](GOOGLE_ANALYTICS.md) for data-stream and verification setup.
 
 The Cloud Build bootstrap owns the empty `email-smtp-user` and
 `email-smtp-password` secret containers. It never reads SMTP values and never
@@ -133,6 +159,41 @@ that was actually published and set `email_smtp_auth_enabled=true` only after
 both SMTP secrets have an enabled version. Terraform intentionally fails the
 email-service plan when the public URL is empty, instead of guessing a Firebase
 Hosting URL.
+
+### Stream-token broker migration (two phases)
+
+Existing tenant gateways are Cloud Run services outside the shared Terraform
+state. A previously provisioned tenant revision can therefore keep its legacy
+stream-token sidecar after the shared gateway has moved to the broker. Removing
+`gateway-sa` access to `stream-token-secret` before those revisions are
+reconciled would break them on restart.
+
+1. Apply this release with
+   `stream_token_legacy_gateway_secret_access=true` (the temporary default).
+   Terraform creates the private broker and its service account, grants the
+   broker access to the existing secret, grants `gateway-sa` broker invoke
+   rights, and moves the shared gateway to `STREAM_TOKEN_SERVICE_URL`. The
+   conditional legacy secret grant remains during this phase solely for
+   unreconciled tenant revisions. The output
+   `stream_token_legacy_gateway_secret_access_enabled = true` is an explicit
+   warning that IAM isolation is not complete yet.
+2. Verify shared gateway mint/verify and SSE behavior, then reconcile every
+   existing tenant gateway as described in
+   [Per-tenant deployment](PER_TENANT_DEPLOYMENT.md). Inventory every active
+   tenant revision and confirm it has one gateway app container, the broker URL,
+   and no `stream-token-proxy` container or `STREAM_TOKEN_SECRET` reference.
+3. Persist `stream_token_legacy_gateway_secret_access=false` and apply again.
+   For the standard repository pipeline, use a follow-up PR that flips the
+   variable default; for a tfvars-managed deployment, commit it to that durable
+   deployment input. Do not rely on a one-off CLI override that the next apply
+   would undo. Confirm the output is `false` and the only accessor on
+   `stream-token-secret` is `stream-token-broker-sa`.
+
+Do not rotate `stream-token-secret` during the topology cutover: old and new
+revisions must cross-verify in-flight tokens. Keep the broker and at least one
+known-good proxy image throughout the rollback window. Before phase 2, rollback
+can restore the old tenant templates directly. After phase 2, restore the
+legacy IAM gate and apply it **before** rolling any gateway back to a sidecar.
 
 ### After either path
 

@@ -4,32 +4,33 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 23
+**Total communities**: 24
 
 ## Communities
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-model | 1758 | [agent-model.md](agent-model.md) |
-| core-org | 456 | [core-org.md](core-org.md) |
-| e2e-json | 88 | [e2e-json.md](e2e-json.md) |
+| agent-model | 1832 | [agent-model.md](agent-model.md) |
+| core-org | 506 | [core-org.md](core-org.md) |
+| e2e-json | 91 | [e2e-json.md](e2e-json.md) |
 | e2e-live-tenant | 25 | [e2e-live-tenant.md](e2e-live-tenant.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
-| gcp-image | 26 | [gcp-image.md](gcp-image.md) |
+| gcp-cloud | 51 | [gcp-cloud.md](gcp-cloud.md) |
+| harness-registry-install | 149 | [harness-registry-install.md](harness-registry-install.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
-| pipeline-stage | 616 | [pipeline-stage.md](pipeline-stage.md) |
+| registry-stage | 654 | [registry-stage.md](registry-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
-| routes-test:planner | 179 | [routes-test-planner.md](routes-test-planner.md) |
+| routes-test:planner | 187 | [routes-test-planner.md](routes-test-planner.md) |
 | scripts-audit | 24 | [scripts-audit.md](scripts-audit.md) |
-| scripts-module | 34 | [scripts-module.md](scripts-module.md) |
-| src-auth | 296 | [src-auth.md](src-auth.md) |
-| src-back | 17 | [src-back.md](src-back.md) |
+| scripts-module | 42 | [scripts-module.md](scripts-module.md) |
+| src-back | 18 | [src-back.md](src-back.md) |
 | src-body | 17 | [src-body.md](src-body.md) |
 | src-body | 17 | [src-body-2.md](src-body-2.md) |
+| src-context | 335 | [src-context.md](src-context.md) |
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
 | src-stage | 179 | [src-stage.md](src-stage.md) |
-| src-test:build | 62 | [src-test-build.md](src-test-build.md) |
-| src-test:coder | 102 | [src-test-coder.md](src-test-coder.md) |
-| src-token | 110 | [src-token.md](src-token.md) |
+| src-test:build | 157 | [src-test-build.md](src-test-build.md) |
+| src-test:coder | 107 | [src-test-coder.md](src-test-coder.md) |
+| src-token | 112 | [src-token.md](src-token.md) |
 | support-parse | 59 | [support-parse.md](support-parse.md) |
-| views-render | 673 | [views-render.md](views-render.md) |
+| views-render | 699 | [views-render.md](views-render.md) |

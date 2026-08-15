@@ -21,12 +21,16 @@
  *   'bearer'   → Authorization: Bearer <key>
  *   'raw'      → Authorization: <key>            (Linear personal API keys)
  *   'x-api-key'→ x-api-key: <key>                (LangSmith)
+ *   'private-token' → PRIVATE-TOKEN: <key>        (GitLab REST)
  * `auth`:
  *   'apiKey'         → static key from the vault/managed source (uses secretKey)
  *   'claude'         → Claude OAuth bearer (+ anthropic-beta), refreshed by proxy
  *   'codex-chatgpt'  → Codex OAuth bearer (+ chatgpt-account-id), refreshed by proxy
  *   'codex-api'      → Codex OAuth bearer against the metered API
  *   'git'            → git smart-HTTP basic (x-access-token:<PAT>)
+ *   'llm-gateway'    → LangSmith LLM Gateway bearer + per-org policy header;
+ *                      FAILS CLOSED on a missing key (billing gateway — never
+ *                      forward unauthenticated)
  */
 
 // Sentinel the agent sends in place of a real credential so SDKs that require a
@@ -34,6 +38,22 @@
 // The proxy STRIPS all inbound auth and injects the real credential, so this
 // value is never sent upstream and carries no privilege.
 const SENTINEL_TOKEN = 'egress-proxy-sentinel';
+const PROJECT_CONTEXT_HEADER = 'X-AI-Fleet-Project-ID';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Header the proxy stamps on LangSmith LLM Gateway calls so per-org spend/rate
+// policies can key on the tenant (configured as the customer-identifier header
+// in the LangSmith policy UI).
+const LLM_GATEWAY_ORG_HEADER = 'x-fleet-org-id';
+
+/**
+ * LangSmith LLM Gateway upstream base. The one env-read exception in this module
+ * (config.js requires this file, so the override cannot live there): the hosted
+ * gateway by default, or the BYOC/self-hosted data plane via LANGSMITH_GATEWAY_URL.
+ */
+function llmGatewayUpstream(env = process.env) {
+  return normalizeProxyBase(env.LANGSMITH_GATEWAY_URL) || 'https://gateway.smith.langchain.com';
+}
 
 // Order matters only for readability; matching is longest-prefix (see matchRoute).
 const EGRESS_ROUTES = Object.freeze({
@@ -47,8 +67,36 @@ const EGRESS_ROUTES = Object.freeze({
   linear: Object.freeze({ prefix: '/linear', upstream: 'https://api.linear.app/graphql', auth: 'apiKey', scheme: 'raw', secretKey: 'linearApiKey' }),
   githubApi: Object.freeze({ prefix: '/github-api', upstream: 'https://api.github.com', auth: 'apiKey', scheme: 'bearer', secretKey: 'githubToken' }),
   githubMcp: Object.freeze({ prefix: '/github-mcp', upstream: 'https://api.githubcopilot.com/mcp/', auth: 'apiKey', scheme: 'bearer', secretKey: 'githubToken' }),
-  git: Object.freeze({ prefix: '/git/github', upstream: 'https://github.com', auth: 'git', secretKey: 'githubToken' }),
+  git: Object.freeze({ prefix: '/git/github', upstream: 'https://github.com', auth: 'git', username: 'x-access-token', secretKey: 'githubToken' }),
+  gitlabApi: Object.freeze({ prefix: '/gitlab-api', upstream: 'https://gitlab.com/api/v4', auth: 'apiKey', scheme: 'private-token', secretKey: 'gitlabToken' }),
+  gitlabGit: Object.freeze({ prefix: '/git/gitlab', upstream: 'https://gitlab.com', auth: 'git', username: 'oauth2', secretKey: 'gitlabToken' }),
+  asanaApi: Object.freeze({ prefix: '/asana-api', upstream: 'https://app.asana.com/api/1.0', auth: 'apiKey', scheme: 'bearer', secretKey: 'asanaAccessToken' }),
+  // Jira's tenant origin and account email are non-secret organization config,
+  // resolved S2S by the proxy. The token still comes from the encrypted vault.
+  jiraApi: Object.freeze({ prefix: '/jira-api', target: 'jira', auth: 'jira', secretKey: 'jiraApiToken' }),
+  // oMLX may live on a private deployment network. Its upstream is accepted
+  // only from the proxy's trusted OMLX_PROXY_UPSTREAM environment variable.
+  omlx: Object.freeze({ prefix: '/omlx', target: 'omlx', auth: 'apiKey', scheme: 'bearer', secretKey: 'omlxApiKey', optionalCredential: true }),
+  // A Slack webhook URL is itself a credential. The caller gets one fixed path
+  // and cannot append a path/query that would select another target.
+  slackWebhook: Object.freeze({ prefix: '/slack-webhook', target: 'slack-webhook', auth: 'url-secret', secretKey: 'slackWebhookUrl', exact: true }),
   langsmith: Object.freeze({ prefix: '/langsmith', upstream: 'https://api.smith.langchain.com', auth: 'apiKey', scheme: 'x-api-key', secretKey: 'langsmithApiKey' }),
+  // One feature-flagged prefix serves the OpenAI, Anthropic, and Responses API
+  // surfaces. Its workspace key is deliberately separate from the tracing key.
+  llmGateway: Object.freeze({ prefix: '/llmgw', upstream: llmGatewayUpstream(), auth: 'llm-gateway', secretKey: 'langsmithGatewayApiKey' }),
+  // Anonymous providers still use fixed routes so agent activity cannot bypass
+  // the sidecar's target allowlist, header stripping, or redirect rejection.
+  duckDuckGoHtml: Object.freeze({ prefix: '/duckduckgo-html', upstream: 'https://html.duckduckgo.com', auth: 'none' }),
+  ipwho: Object.freeze({ prefix: '/ipwho', upstream: 'https://ipwho.is', auth: 'none' }),
+  codexOauthToken: Object.freeze({ prefix: '/codex-oauth-token', upstream: 'https://auth.openai.com/oauth/token', auth: 'none', exact: true }),
+  claudeOauthToken: Object.freeze({ prefix: '/claude-oauth-token', upstream: 'https://console.anthropic.com/v1/oauth/token', auth: 'none', exact: true }),
+  // Local inference origins are trusted deployment configuration on the proxy,
+  // never browser/settings-selected targets while proxy mode is active.
+  ollama: Object.freeze({ prefix: '/ollama', target: 'ollama', auth: 'none' }),
+  lmstudio: Object.freeze({ prefix: '/lmstudio', target: 'lmstudio', auth: 'none' }),
+  // OpenSWE is a separate LangGraph server. Its real origin is trusted
+  // sidecar-only deployment config; the coder sees only this fixed route.
+  openSwe: Object.freeze({ prefix: '/openswe', target: 'openswe', auth: 'none' }),
 });
 
 /** All vault secret keys any static-key route can request (dedup, stable order). */
@@ -61,14 +109,24 @@ function normalizeProxyBase(url) {
   return String(url || '').trim().replace(/\/+$/, '');
 }
 
+/** Project-vault selection header. Non-UUID legacy ids are deliberately omitted. */
+function projectEgressHeaders(context) {
+  const raw = typeof context === 'string'
+    ? context
+    : context && (context.projectId || context.nativeProjectId);
+  const projectId = String(raw || '').trim().toLowerCase();
+  return UUID_RE.test(projectId) ? { [PROJECT_CONTEXT_HEADER]: projectId } : {};
+}
+
 /**
- * Client-side base URL for a route: `${proxyBase}<prefix>` when a proxy base is
- * set, else the caller's `fallback` (the true upstream / operator override).
+ * Client-side base URL for a route. Once proxy mode is enabled it is mandatory:
+ * provider-specific overrides cannot bypass the sidecar. Outside proxy mode an
+ * explicit trusted operator override still wins over the normal fallback.
  */
 function egressUrl({ proxyBase, prefix, explicit, fallback }) {
-  if (explicit) return explicit; // operator override always wins
   const base = normalizeProxyBase(proxyBase);
   if (base) return `${base}${prefix}`;
+  if (explicit) return explicit;
   return fallback;
 }
 
@@ -83,7 +141,10 @@ function matchRoute(pathname, routes = EGRESS_ROUTES) {
   let best = null;
   for (const route of Object.values(routes)) {
     const p = route.prefix;
-    if (path === p || path.startsWith(`${p}/`) || path.startsWith(`${p}?`)) {
+    const matches = route.exact
+      ? path === p
+      : path === p || path.startsWith(`${p}/`) || path.startsWith(`${p}?`);
+    if (matches) {
       if (!best || route.prefix.length > best.route.prefix.length) {
         best = { route, rest: path.slice(p.length) || '/' };
       }
@@ -94,9 +155,13 @@ function matchRoute(pathname, routes = EGRESS_ROUTES) {
 
 module.exports = {
   SENTINEL_TOKEN,
+  PROJECT_CONTEXT_HEADER,
   EGRESS_ROUTES,
   EGRESS_SECRET_KEYS,
+  LLM_GATEWAY_ORG_HEADER,
   normalizeProxyBase,
+  projectEgressHeaders,
   egressUrl,
+  llmGatewayUpstream,
   matchRoute,
 };

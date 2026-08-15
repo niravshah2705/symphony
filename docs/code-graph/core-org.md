@@ -6,33 +6,40 @@
 
 Directory-based community: services/settings
 
-- **Size**: 456 nodes
-- **Cohesion**: 0.3813
+- **Size**: 506 nodes
+- **Cohesion**: 0.3749
 - **Dominant Language**: python
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| get_org_connectors | Function | ./services/settings/app/api/v1/routes_connectors.py | 22-26 |
+| put_org_connectors | Function | ./services/settings/app/api/v1/routes_connectors.py | 30-35 |
+| get_org_connectors_readiness | Function | ./services/settings/app/api/v1/routes_connectors.py | 39-46 |
 | health | Function | ./services/settings/app/api/v1/routes_health.py | 13-15 |
 | readiness | Function | ./services/settings/app/api/v1/routes_health.py | 19-22 |
-| get_effective_config | Function | ./services/settings/app/api/v1/routes_internal.py | 52-64 |
-| require_internal_token | Function | ./services/settings/app/api/v1/routes_internal.py | 67-71 |
-| derive_org_internal_token | Function | ./services/settings/app/api/v1/routes_internal.py | 77-86 |
-| require_org_internal_token | Function | ./services/settings/app/api/v1/routes_internal.py | 89-101 |
-| resolve_org_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 105-112 |
-| resolve_managed_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 116-121 |
-| resolve_org_effective_policy | Function | ./services/settings/app/api/v1/routes_internal.py | 128-139 |
-| rotate_org_codex_tokens | Function | ./services/settings/app/api/v1/routes_internal.py | 146-153 |
-| consume_deployment_approval | Function | ./services/settings/app/api/v1/routes_internal.py | 160-174 |
+| get_effective_config | Function | ./services/settings/app/api/v1/routes_internal.py | 58-70 |
+| require_internal_token | Function | ./services/settings/app/api/v1/routes_internal.py | 73-77 |
+| derive_org_internal_token | Function | ./services/settings/app/api/v1/routes_internal.py | 83-92 |
+| require_org_internal_token | Function | ./services/settings/app/api/v1/routes_internal.py | 95-107 |
+| resolve_org_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 111-121 |
+| resolve_org_egress_config | Function | ./services/settings/app/api/v1/routes_internal.py | 128-134 |
+| resolve_managed_secrets | Function | ./services/settings/app/api/v1/routes_internal.py | 138-143 |
+| resolve_org_effective_policy | Function | ./services/settings/app/api/v1/routes_internal.py | 150-161 |
+| rotate_org_codex_tokens | Function | ./services/settings/app/api/v1/routes_internal.py | 168-175 |
+| consume_deployment_approval | Function | ./services/settings/app/api/v1/routes_internal.py | 182-196 |
 | get_my_settings | Function | ./services/settings/app/api/v1/routes_me.py | 25-29 |
 | put_my_settings | Function | ./services/settings/app/api/v1/routes_me.py | 33-38 |
 | import_codex_tokens | Function | ./services/settings/app/api/v1/routes_operator.py | 22-27 |
 | delete_codex_tokens | Function | ./services/settings/app/api/v1/routes_operator.py | 31-35 |
 | approve_deployment | Function | ./services/settings/app/api/v1/routes_operator.py | 42-59 |
-| get_org_secrets | Function | ./services/settings/app/api/v1/routes_secrets.py | 22-26 |
-| put_org_secrets | Function | ./services/settings/app/api/v1/routes_secrets.py | 30-35 |
-| put_org_secrets_selection | Function | ./services/settings/app/api/v1/routes_secrets.py | 39-44 |
+| get_org_secrets | Function | ./services/settings/app/api/v1/routes_secrets.py | 25-29 |
+| put_org_secrets | Function | ./services/settings/app/api/v1/routes_secrets.py | 33-38 |
+| put_org_secrets_selection | Function | ./services/settings/app/api/v1/routes_secrets.py | 42-47 |
+| get_project_secrets | Function | ./services/settings/app/api/v1/routes_secrets.py | 51-55 |
+| put_project_secrets | Function | ./services/settings/app/api/v1/routes_secrets.py | 59-64 |
+| put_project_secrets_selection | Function | ./services/settings/app/api/v1/routes_secrets.py | 68-73 |
 | get_org_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 34-38 |
 | put_org_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 42-47 |
 | get_project_settings | Function | ./services/settings/app/api/v1/routes_settings.py | 53-57 |
@@ -57,64 +64,57 @@ Directory-based community: services/settings
 | _items | Function | ./services/settings/app/auth/org_context.py | 56-57 |
 | parse_context_payload | Function | ./services/settings/app/auth/org_context.py | 60-138 |
 | _audience | Function | ./services/settings/app/auth/org_context.py | 141-143 |
-| _cloud_run_token | Function | ./services/settings/app/auth/org_context.py | 146-153 |
-| fetch | Function | ./services/settings/app/auth/org_context.py | 147-151 |
-| resolve_org_context | Function | ./services/settings/app/auth/org_context.py | 156-207 |
-| ProjectContext | Class | ./services/settings/app/authz/guards.py | 24-32 |
-| require_org_admin | Function | ./services/settings/app/authz/guards.py | 35-38 |
-| get_project_context | Function | ./services/settings/app/authz/guards.py | 41-93 |
-| require_project_admin | Function | ./services/settings/app/authz/guards.py | 96-102 |
 
-*... and 406 more members.*
+*... and 456 more members.*
 
 ## Execution Flows
 
-- **set_selection** (criticality: 0.91, depth: 5)
-- **resolve_secrets_for_org** (criticality: 0.90, depth: 4)
-- **set_org_secrets** (criticality: 0.90, depth: 4)
-- **rotate_codex_tokens** (criticality: 0.89, depth: 4)
+- **get_org_secrets** (criticality: 0.93, depth: 3)
+- **get_project_secrets** (criticality: 0.93, depth: 3)
+- **set_org_secrets** (criticality: 0.92, depth: 5)
+- **set_project_secrets** (criticality: 0.92, depth: 5)
+- **resolve_secrets_for_org** (criticality: 0.91, depth: 4)
 - **import_codex_tokens** (criticality: 0.89, depth: 4)
-- **delete_codex_tokens** (criticality: 0.87, depth: 1)
+- **rotate_codex_tokens** (criticality: 0.89, depth: 4)
 - **__call__** (criticality: 0.85, depth: 4)
-- **get_org_secrets** (criticality: 0.81, depth: 3)
-- **credential_readiness_for_org** (criticality: 0.76, depth: 1)
-- **preflight_for_caller** (criticality: 0.70, depth: 4)
-- *... and 37 more flows.*
+- **set_selection** (criticality: 0.82, depth: 4)
+- **set_project_selection** (criticality: 0.82, depth: 4)
+- *... and 42 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (181 edge(s))
-- `str` (90 edge(s))
-- `uuid4` (64 edge(s))
-- `json` (56 edge(s))
-- `put` (53 edge(s))
-- `Depends` (47 edge(s))
-- `ValueError` (40 edge(s))
-- `set` (28 edge(s))
-- `BaseModel` (26 edge(s))
-- `strip` (23 edge(s))
-- `items` (20 edge(s))
+- `get` (205 edge(s))
+- `str` (102 edge(s))
+- `uuid4` (82 edge(s))
+- `json` (76 edge(s))
+- `put` (72 edge(s))
+- `Depends` (61 edge(s))
+- `ValueError` (47 edge(s))
+- `set` (33 edge(s))
+- `BaseModel` (30 edge(s))
+- `strip` (26 edge(s))
+- `items` (21 edge(s))
 - `append` (20 edge(s))
-- `len` (15 edge(s))
-- `list` (14 edge(s))
-- `post` (13 edge(s))
+- `len` (16 edge(s))
+- `list` (15 edge(s))
+- `lower` (14 edge(s))
 
 ### Incoming
 
-- `uuid4` (60 edge(s))
-- `json` (55 edge(s))
-- `put` (53 edge(s))
-- `get` (50 edge(s))
+- `uuid4` (78 edge(s))
+- `json` (75 edge(s))
+- `put` (72 edge(s))
+- `get` (64 edge(s))
+- `./services/settings/app/services/secrets_service.py` (26 edge(s))
+- `./services/settings/tests/integration/test_secrets_vault.py` (20 edge(s))
 - `./services/settings/app/errors.py` (18 edge(s))
 - `./services/settings/tests/unit/test_resolver.py` (18 edge(s))
 - `./services/settings/app/services/policy_service.py` (17 edge(s))
 - `./services/settings/app/schemas/policy.py` (15 edge(s))
-- `./services/settings/app/services/secrets_service.py` (15 edge(s))
-- `./services/settings/tests/integration/test_secrets_vault.py` (14 edge(s))
 - `post` (13 edge(s))
 - `./services/settings/tests/integration/test_settings.py` (13 edge(s))
 - `./services/settings/tests/integration/test_authz.py` (12 edge(s))
+- `str` (12 edge(s))
 - `./services/settings/app/domain/resolver.py` (11 edge(s))
-- `./services/settings/app/auth/org_context.py` (10 edge(s))

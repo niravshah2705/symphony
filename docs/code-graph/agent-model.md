@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1758 nodes
-- **Cohesion**: 0.1249
+- **Size**: 1832 nodes
+- **Cohesion**: 0.1241
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,56 +65,56 @@ Directory-based community: packages/shared
 | issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
 | applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-222 |
 
-*... and 1708 more members.*
+*... and 1782 more members.*
 
 ## Execution Flows
 
-- **executeClaude** (criticality: 0.61, depth: 1)
 - **internalServiceAuth** (criticality: 0.61, depth: 1)
+- **executeClaude** (criticality: 0.53, depth: 1)
 - **requestIp** (criticality: 0.48, depth: 1)
 - **pipelineStageAuth** (criticality: 0.48, depth: 1)
 - **applySettingsPatch** (criticality: 0.48, depth: 1)
 - **prepareWorkspace** (criticality: 0.48, depth: 1)
-- **createIssue** (criticality: 0.48, depth: 1)
-- **normalizeDeploymentManifest** (criticality: 0.46, depth: 1)
-- **createRuntimeDispatcher** (criticality: 0.45, depth: 2)
-- **preparePlannedWorkspace** (criticality: 0.45, depth: 2)
-- *... and 3 more flows.*
+- **getViewer** (criticality: 0.48, depth: 1)
+- **getTeams** (criticality: 0.48, depth: 1)
+- **updateIssueState** (criticality: 0.48, depth: 1)
+- **updateIssue** (criticality: 0.48, depth: 1)
+- *... and 11 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (1550 edge(s))
-- `deepEqual` (315 edge(s))
-- `String` (251 edge(s))
-- `join` (239 edge(s))
-- `includes` (187 edge(s))
-- `push` (183 edge(s))
-- `ok` (151 edge(s))
-- `trim` (136 edge(s))
-- `map` (135 edge(s))
+- `equal` (1708 edge(s))
+- `deepEqual` (332 edge(s))
+- `String` (261 edge(s))
+- `join` (247 edge(s))
+- `push` (188 edge(s))
+- `includes` (188 edge(s))
+- `ok` (154 edge(s))
+- `trim` (143 edge(s))
+- `map` (136 edge(s))
 - `strictEqual` (132 edge(s))
-- `match` (117 edge(s))
+- `match` (119 edge(s))
 - `slice` (108 edge(s))
 - `isArray` (105 edge(s))
 - `filter` (100 edge(s))
-- `throws` (96 edge(s))
+- `throws` (97 edge(s))
 
 ### Incoming
 
-- `equal` (1540 edge(s))
-- `deepEqual` (313 edge(s))
-- `ok` (151 edge(s))
+- `equal` (1698 edge(s))
+- `deepEqual` (330 edge(s))
+- `ok` (154 edge(s))
 - `strictEqual` (132 edge(s))
-- `match` (99 edge(s))
-- `throws` (96 edge(s))
+- `match` (101 edge(s))
+- `join` (98 edge(s))
+- `throws` (97 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (96 edge(s))
-- `join` (92 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (80 edge(s))
 - `./packages/shared/src/linear.js` (74 edge(s))
-- `includes` (70 edge(s))
+- `includes` (71 edge(s))
 - `rejects` (64 edge(s))
 - `./packages/shared/src/agent/harnesses/contract.js` (60 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (60 edge(s))
-- `./packages/shared/src/agent/coder-flow.test.js` (55 edge(s))
+- `./packages/shared/src/agent/coder-flow.test.js` (58 edge(s))

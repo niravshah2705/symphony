@@ -15,7 +15,6 @@
 #   PROJECT_ID=my-proj \
 #   SPA_BUCKET=my-proj-aifleet-spa \        # globally-unique
 #   TF_STATE_BUCKET=my-proj-tfstate \       # created if missing
-#   LINEAR_API_KEY=lin_... \                # required secret (else services won't start)
 #   ./deploy/gcp/deploy.sh
 #
 # The Firebase Web API key is read from the managed web app by Terraform — no
@@ -24,7 +23,8 @@
 # Optional env: REGION (asia-south1), AR_REPO (ai-fleet), TF_STATE_PREFIX
 #   (ai-fleet/gcp), IMAGE_TAG (git short SHA), FIRESTORE_LOCATION (nam5),
 #   SPA_ORIGIN (https://storage.googleapis.com), FIREBASE_ALLOWED_DOMAIN (empty =
-#   any verified user), STREAM_TOKEN_SECRET (auto-generated if unset),
+#   any verified user), GOOGLE_ANALYTICS_MEASUREMENT_ID (public GA4 G-... id;
+#   empty disables analytics), STREAM_TOKEN_SECRET (auto-generated if unset),
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, SKIP_BUILD=1 (reuse existing images).
 #   Email delivery: EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, EMAIL_SMTP_SECURE,
 #   EMAIL_SMTP_REQUIRE_TLS, EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_FROM,
@@ -44,6 +44,7 @@ FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://storage.googleapis.com}"
 FIREBASE_ALLOWED_DOMAIN="${FIREBASE_ALLOWED_DOMAIN:-}"
 GOOGLE_ONE_TAP_CLIENT_ID="${GOOGLE_ONE_TAP_CLIENT_ID:-}"  # public OAuth Web client id for Google One Tap (optional)
+GOOGLE_ANALYTICS_MEASUREMENT_ID="${GOOGLE_ANALYTICS_MEASUREMENT_ID:-}"
 AUTH_ADMIN_EMAILS="${AUTH_ADMIN_EMAILS:-}"
 AUTH_DEFAULT_ROLE="${AUTH_DEFAULT_ROLE:-viewer}"
 EMAIL_SMTP_HOST="${EMAIL_SMTP_HOST:-}"
@@ -56,20 +57,17 @@ EMAIL_FROM="${EMAIL_FROM:-}"
 EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://storage.googleapis.com/${SPA_BUCKET}/index.html}"
 PIPELINE_ORCHESTRATOR_ENABLED="${PIPELINE_ORCHESTRATOR_ENABLED:-false}"
 PIPELINE_DEPLOYMENT_ENABLED="${PIPELINE_DEPLOYMENT_ENABLED:-false}"
-EGRESS_PROXY_ENABLED="${EGRESS_PROXY_ENABLED:-$PIPELINE_ORCHESTRATOR_ENABLED}"
 SETTINGS_OPERATOR_INVOKER="${SETTINGS_OPERATOR_INVOKER:-}"
+OMLX_PROXY_UPSTREAM="${OMLX_PROXY_UPSTREAM:-}"
+OLLAMA_PROXY_UPSTREAM="${OLLAMA_PROXY_UPSTREAM:-}"
+LMSTUDIO_PROXY_UPSTREAM="${LMSTUDIO_PROXY_UPSTREAM:-}"
+OPENSWE_PROXY_UPSTREAM="${OPENSWE_PROXY_UPSTREAM:-}"
 INTERNAL_API_TOKEN="${INTERNAL_API_TOKEN:-}"
 
-if [ "$PIPELINE_ORCHESTRATOR_ENABLED" = "true" ] && [ "$EGRESS_PROXY_ENABLED" != "true" ]; then
-  echo "ERROR: the durable pipeline requires EGRESS_PROXY_ENABLED=true." >&2
+if [[ -n "$GOOGLE_ANALYTICS_MEASUREMENT_ID" && ! "$GOOGLE_ANALYTICS_MEASUREMENT_ID" =~ ^G-[A-Z0-9]+$ ]]; then
+  echo "ERROR: GOOGLE_ANALYTICS_MEASUREMENT_ID must be empty or a GA4 id such as G-XXXXXXXXXX." >&2
   exit 1
 fi
-if [ "$EGRESS_PROXY_ENABLED" = "true" ] && [ -z "$INTERNAL_API_TOKEN" ]; then
-  echo "ERROR: egress proxy mode requires INTERNAL_API_TOKEN (used only for settings S2S auth)." >&2
-  exit 1
-fi
-# Keep the shared internal token out of the Terraform command line/process list.
-export TF_VAR_internal_api_token="$INTERNAL_API_TOKEN"
 
 if { [ -n "$EMAIL_SMTP_USER" ] && [ -z "$EMAIL_SMTP_PASSWORD" ]; } || \
    { [ -z "$EMAIL_SMTP_USER" ] && [ -n "$EMAIL_SMTP_PASSWORD" ]; }; then
@@ -122,8 +120,11 @@ TFVARS=(
   -var="email_public_app_url=${EMAIL_PUBLIC_APP_URL}"
   -var="pipeline_orchestrator_enabled=${PIPELINE_ORCHESTRATOR_ENABLED}"
   -var="pipeline_deployment_enabled=${PIPELINE_DEPLOYMENT_ENABLED}"
-  -var="egress_proxy_enabled=${EGRESS_PROXY_ENABLED}"
   -var="settings_operator_invoker=${SETTINGS_OPERATOR_INVOKER}"
+  -var="omlx_proxy_upstream=${OMLX_PROXY_UPSTREAM}"
+  -var="ollama_proxy_upstream=${OLLAMA_PROXY_UPSTREAM}"
+  -var="lmstudio_proxy_upstream=${LMSTUDIO_PROXY_UPSTREAM}"
+  -var="openswe_proxy_upstream=${OPENSWE_PROXY_UPSTREAM}"
 )
 
 # --- 1. Enable APIs ---------------------------------------------------------
@@ -133,6 +134,22 @@ gcloud services enable \
   cloudscheduler.googleapis.com firestore.googleapis.com secretmanager.googleapis.com \
   cloudbuild.googleapis.com iam.googleapis.com iamcredentials.googleapis.com \
   storage.googleapis.com
+
+# Reuse the deployed token on subsequent runs; generate it once on the first
+# deploy. Keep it out of Terraform command arguments and shell output.
+if [ -z "$INTERNAL_API_TOKEN" ]; then
+  INTERNAL_API_TOKEN_VERSION="$(gcloud secrets versions list internal-api-token \
+    --project "$PROJECT_ID" --filter='state=ENABLED' --limit=1 \
+    --format='value(name)' 2>/dev/null || true)"
+  if [ -n "$INTERNAL_API_TOKEN_VERSION" ]; then
+    INTERNAL_API_TOKEN="$(gcloud secrets versions access "$INTERNAL_API_TOKEN_VERSION" \
+      --secret=internal-api-token --project "$PROJECT_ID")"
+  else
+    INTERNAL_API_TOKEN="$(openssl rand -base64 48 2>/dev/null | tr -d '\n' || head -c 48 /dev/urandom | base64 | tr -d '\n')"
+  fi
+fi
+[ -n "$INTERNAL_API_TOKEN" ] || { echo "Unable to prepare mandatory internal S2S token" >&2; exit 1; }
+export TF_VAR_internal_api_token="$INTERNAL_API_TOKEN"
 
 # --- 2. Terraform state bucket (idempotent) ---------------------------------
 log "Ensuring Terraform state bucket gs://${TF_STATE_BUCKET}"
@@ -154,7 +171,6 @@ terraform -chdir="$TF_DIR" apply -input=false -auto-approve "${TFVARS[@]}" \
   -target=google_project_service.services \
   -target=google_artifact_registry_repository.docker \
   -target=google_secret_manager_secret.stream_token_secret \
-  -target=google_secret_manager_secret.linear_api_key \
   -target=google_secret_manager_secret.org_jwt_secret \
   -target=google_secret_manager_secret.email_smtp_user \
   -target=google_secret_manager_secret.email_smtp_password \
@@ -175,7 +191,6 @@ seed_secret() { # id, value
 STREAM_TOKEN_SECRET="${STREAM_TOKEN_SECRET:-$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || head -c 32 /dev/urandom | base64 | tr -d '\n')}"
 seed_secret stream-token-secret "$STREAM_TOKEN_SECRET"
 # org-jwt-secret is Terraform-managed (random_password + secret version); no seed here.
-[ -n "${LINEAR_API_KEY:-}" ]    && seed_secret linear-api-key   "$LINEAR_API_KEY"    || echo "  linear-api-key: LINEAR_API_KEY not provided"
 [ -n "${GITHUB_TOKEN:-}" ]      && seed_secret github-token     "$GITHUB_TOKEN"      || true
 [ -n "${LANGSMITH_API_KEY:-}" ] && seed_secret langsmith-api-key "$LANGSMITH_API_KEY" || true
 if [ -n "$EMAIL_SMTP_USER" ]; then seed_secret email-smtp-user "$EMAIL_SMTP_USER"; fi
@@ -198,9 +213,6 @@ if [ "$EMAIL_SMTP_USER_READY" != "$EMAIL_SMTP_PASSWORD_READY" ]; then
 fi
 [ "$EMAIL_SMTP_USER_READY" = true ] && EMAIL_SMTP_AUTH_ENABLED=true
 TFVARS+=( -var="email_smtp_auth_enabled=${EMAIL_SMTP_AUTH_ENABLED}" )
-
-# linear-api-key is mounted as REQUIRED env — the revisions won't start without it.
-has_version linear-api-key || { echo "ERROR: secret 'linear-api-key' has no version. Re-run with LINEAR_API_KEY=... set."; exit 1; }
 
 # --- 6. Build + push images -------------------------------------------------
 if [ "${SKIP_BUILD:-}" = "1" ]; then
@@ -225,7 +237,7 @@ else
   build_push pipeline-orchestrator Dockerfile.orchestrator
   build_push pipeline-tester       Dockerfile.tester
   build_push pipeline-deployer     Dockerfile.deployer
-  if [ "$EGRESS_PROXY_ENABLED" = "true" ]; then build_push proxy Dockerfile.proxy; fi
+  build_push proxy Dockerfile.proxy
   build_push email-service Dockerfile.email
   build_push provisioner Dockerfile.provisioner
   build_push_context org-service services/org/Dockerfile services/org
@@ -237,8 +249,13 @@ fi
 log "Publishing SPA to gs://${SPA_BUCKET}"
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 GATEWAY_URL="https://gateway-${PROJECT_NUMBER}.${REGION}.run.app"
-printf "window.__API_BASE__='%s';\n" "$GATEWAY_URL" > "$REPO_ROOT/public/config.js"
+printf '%s\n' \
+  "window.__API_BASE__='$GATEWAY_URL';" \
+  "window.__GA_MEASUREMENT_ID__='$GOOGLE_ANALYTICS_MEASUREMENT_ID';" \
+  "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
+  > "$REPO_ROOT/public/config.js"
 gsutil -m rsync -r -d "$REPO_ROOT/public" "gs://${SPA_BUCKET}"
+gsutil setmeta -h "Cache-Control:no-store" "gs://${SPA_BUCKET}/config.js"
 gsutil -m setmeta -h "Content-Type:text/javascript" "gs://${SPA_BUCKET}/**/*.mjs" >/dev/null 2>&1 || true
 
 # --- 8. Full apply ----------------------------------------------------------
