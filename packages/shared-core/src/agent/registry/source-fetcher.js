@@ -6,15 +6,17 @@ const { execFileSync } = require('child_process');
 const { assertSafePathSegment } = require('./schema');
 
 /**
- * Fetch a marketplace repository at a PINNED ref into a working directory.
+ * Fetch a marketplace repository at a pinned ref, or resolve an explicitly
+ * tracked ref, into a working directory.
  *
- * Supply-chain posture (see tribal-knowledge: supply-chain): we clone at the exact
- * `ref` recorded in sources.json (a tag or full sha), never a moving branch, and
- * we NEVER run install/postinstall scripts against the clone — the payload is read
- * as inert files. `git` is injected so the pure command-plan is unit-testable and
- * a local marketplace (source_type: local) can be copied instead of cloned.
+ * Supply-chain posture (see tribal-knowledge: supply-chain): normal marketplaces
+ * clone the immutable `ref` recorded in sources.json. The one canonical ECC
+ * source may use `trackRef`; its returned full `sha` is the immutable identity
+ * used by every downstream artifact. This helper never runs package scripts.
+ * `git` is injected so the command plan is unit-testable and a local marketplace
+ * (source_type: local) can be copied instead of cloned.
  *
- * @param {{ repo:(string|null), url:(string|null), ref:string }} mp
+ * @param {{ repo:(string|null), url:(string|null), ref?:string, trackRef?:string }} mp
  * @param {{ workRoot:string, git?:Function, name?:string }} opts
  * @returns {{ path:string, ref:string, sha:string, url:string }}
  */
@@ -27,25 +29,28 @@ function fetchMarketplace(mp, opts) {
   fs.mkdirSync(dest, { recursive: true });
 
   const url = resolveMarketplaceUrl(mp);
+  const requestedRef = (mp && (mp.ref || mp.trackRef)) || null;
+  if (!requestedRef) throw new Error('marketplace has neither ref nor trackRef');
 
   // Local marketplace: copy the tree instead of cloning (secret-filter is applied
   // later by the bundle-writer, so a plain copy here is fine).
   if (url.startsWith('file://')) {
     const srcDir = url.slice('file://'.length);
     fs.cpSync(srcDir, dest, { recursive: true });
-    return { path: dest, ref: mp.ref, sha: mp.ref, url };
+    return { path: dest, ref: requestedRef, sha: requestedRef, url };
   }
 
-  // Fetch ONLY the pinned ref, shallow, no tags — minimal surface, deterministic.
+  // Fetch only the requested ref, shallow, with no tags. A tracked ref becomes
+  // deterministic once `rev-parse HEAD` is recorded and handed downstream.
   git(['init', '-q', dest]);
   git(['-C', dest, 'remote', 'add', 'origin', url]);
-  git(['-C', dest, 'fetch', '--depth', '1', '-q', 'origin', mp.ref]);
+  git(['-C', dest, 'fetch', '--depth', '1', '-q', 'origin', requestedRef]);
   git(['-C', dest, '-c', 'advice.detachedHead=false', 'checkout', '-q', 'FETCH_HEAD']);
-  let sha = mp.ref;
+  let sha = requestedRef;
   try {
-    sha = String(git(['-C', dest, 'rev-parse', 'HEAD'])).trim() || mp.ref;
+    sha = String(git(['-C', dest, 'rev-parse', 'HEAD'])).trim() || requestedRef;
   } catch (_) { /* keep the requested ref if rev-parse is unavailable (test stub) */ }
-  return { path: dest, ref: mp.ref, sha, url };
+  return { path: dest, ref: requestedRef, sha, url };
 }
 
 /** Derive the clone URL from a `repo` (owner/name) or explicit `url`. */

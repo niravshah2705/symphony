@@ -77,6 +77,17 @@
       "capabilities": ["planning", "coding", "testing"],
       "stages": ["planning", "coding", "testing"],
       "brokeredStages": []
+    },
+    {
+      "id": "deepseek",
+      "label": "DeepSeek Harness",
+      "harnessName": "deepseek",
+      "packageName": "@deepseek-ai/dsh",
+      "requiresProvider": null,
+      "availability": "experimental",
+      "capabilities": ["planning", "coding", "testing", "subagents"],
+      "stages": ["planning", "coding", "testing"],
+      "brokeredStages": []
     }
   ]
 }

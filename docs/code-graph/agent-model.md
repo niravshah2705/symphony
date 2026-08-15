@@ -79,7 +79,7 @@ Directory-based community: packages/shared
 - **normalizeDeploymentManifest** (criticality: 0.46, depth: 1)
 - **createRuntimeDispatcher** (criticality: 0.45, depth: 2)
 - **preparePlannedWorkspace** (criticality: 0.45, depth: 2)
-- *... and 4 more flows.*
+- *... and 3 more flows.*
 
 ## Dependencies
 
