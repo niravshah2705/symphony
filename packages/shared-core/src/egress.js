@@ -28,6 +28,9 @@
  *   'codex-chatgpt'  → Codex OAuth bearer (+ chatgpt-account-id), refreshed by proxy
  *   'codex-api'      → Codex OAuth bearer against the metered API
  *   'git'            → git smart-HTTP basic (x-access-token:<PAT>)
+ *   'llm-gateway'    → LangSmith LLM Gateway bearer + per-org policy header;
+ *                      FAILS CLOSED on a missing key (billing gateway — never
+ *                      forward unauthenticated)
  */
 
 // Sentinel the agent sends in place of a real credential so SDKs that require a
@@ -37,6 +40,20 @@
 const SENTINEL_TOKEN = 'egress-proxy-sentinel';
 const PROJECT_CONTEXT_HEADER = 'X-AI-Fleet-Project-ID';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Header the proxy stamps on LangSmith LLM Gateway calls so per-org spend/rate
+// policies can key on the tenant (configured as the customer-identifier header
+// in the LangSmith policy UI).
+const LLM_GATEWAY_ORG_HEADER = 'x-fleet-org-id';
+
+/**
+ * LangSmith LLM Gateway upstream base. The one env-read exception in this module
+ * (config.js requires this file, so the override cannot live there): the hosted
+ * gateway by default, or the BYOC/self-hosted data plane via LANGSMITH_GATEWAY_URL.
+ */
+function llmGatewayUpstream(env = process.env) {
+  return normalizeProxyBase(env.LANGSMITH_GATEWAY_URL) || 'https://gateway.smith.langchain.com';
+}
 
 // Order matters only for readability; matching is longest-prefix (see matchRoute).
 const EGRESS_ROUTES = Object.freeze({
@@ -64,6 +81,9 @@ const EGRESS_ROUTES = Object.freeze({
   // and cannot append a path/query that would select another target.
   slackWebhook: Object.freeze({ prefix: '/slack-webhook', target: 'slack-webhook', auth: 'url-secret', secretKey: 'slackWebhookUrl', exact: true }),
   langsmith: Object.freeze({ prefix: '/langsmith', upstream: 'https://api.smith.langchain.com', auth: 'apiKey', scheme: 'x-api-key', secretKey: 'langsmithApiKey' }),
+  // One feature-flagged prefix serves the OpenAI, Anthropic, and Responses API
+  // surfaces. Its workspace key is deliberately separate from the tracing key.
+  llmGateway: Object.freeze({ prefix: '/llmgw', upstream: llmGatewayUpstream(), auth: 'llm-gateway', secretKey: 'langsmithGatewayApiKey' }),
   // Anonymous providers still use fixed routes so agent activity cannot bypass
   // the sidecar's target allowlist, header stripping, or redirect rejection.
   duckDuckGoHtml: Object.freeze({ prefix: '/duckduckgo-html', upstream: 'https://html.duckduckgo.com', auth: 'none' }),
@@ -138,8 +158,10 @@ module.exports = {
   PROJECT_CONTEXT_HEADER,
   EGRESS_ROUTES,
   EGRESS_SECRET_KEYS,
+  LLM_GATEWAY_ORG_HEADER,
   normalizeProxyBase,
   projectEgressHeaders,
   egressUrl,
+  llmGatewayUpstream,
   matchRoute,
 };

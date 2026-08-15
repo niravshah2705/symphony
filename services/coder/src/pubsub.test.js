@@ -58,18 +58,46 @@ test('coder Pub/Sub binds concurrent decoded contexts for the full async dispatc
     {
       input: {
         issueId: 'issue-a', conversationId: 'conversation-a',
-        orgId: 'org-a', nativeProjectId: 'project-a',
+        orgId: 'org-a', nativeProjectId: 'project-a', llmGateway: null,
       },
       context: { organizationId: 'org-a', projectId: 'project-a' },
     },
     {
       input: {
         issueId: 'issue-b', conversationId: 'conversation-b',
-        orgId: 'org-b', nativeProjectId: 'project-b',
+        orgId: 'org-b', nativeProjectId: 'project-b', llmGateway: null,
       },
       context: { organizationId: 'org-b', projectId: 'project-b' },
     },
   ]);
+});
+
+test('coder Pub/Sub threads the allowlisted llm-gateway flag into runTicket', async (t) => {
+  const modulePath = require.resolve('./pubsub');
+  const original = runTicketModule.runTicket;
+  const received = [];
+  let finish;
+  const finished = new Promise((resolve) => { finish = resolve; });
+  runTicketModule.runTicket = async (input) => {
+    received.push(input);
+    if (received.length === 2) finish();
+    return { accepted: true };
+  };
+  delete require.cache[modulePath];
+  t.after(() => {
+    runTicketModule.runTicket = original;
+    delete require.cache[modulePath];
+  });
+
+  const router = require('./pubsub');
+  const handler = coderHandler(router);
+  await invoke(handler, { issueId: 'issue-a', llmGateway: 'langsmith' });
+  await invoke(handler, { issueId: 'issue-b', llmGateway: 'not-a-gateway' });
+  await finished;
+
+  assert.equal(received.find((i) => i.issueId === 'issue-a').llmGateway, 'langsmith');
+  // Unknown selector values are re-allowlisted away at the trust boundary.
+  assert.equal(received.find((i) => i.issueId === 'issue-b').llmGateway, null);
 });
 
 test('coder Pub/Sub missing context retains the legacy empty workspace', async (t) => {

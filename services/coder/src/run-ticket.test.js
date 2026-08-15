@@ -103,6 +103,7 @@ test('in-process coder resolves selected scope before model preflight and enforc
     effectivePolicy,
     orgId: 'org-1',
     nativeProjectId: 'native-project-1',
+    llmGateway: null,
   });
   assert.ok(events.length >= 2);
   for (const emitted of events) {
@@ -153,6 +154,55 @@ test('proxy-vault coder needs no stored Linear key and passes only the sentinel 
   assert.deepEqual(linearKeys, [SENTINEL_TOKEN]);
   assert.equal(coderArgs.apiKey, SENTINEL_TOKEN);
   assert.equal(coderArgs.keys.linearApiKey, SENTINEL_TOKEN);
+});
+
+test('llm-gateway flag rides the settings object into resolveLlm and the run bag', async () => {
+  const seenSettings = [];
+  let coderArgs;
+  await runTicketInProcess(
+    { issueId: 'issue-1', blocking: true, llmGateway: 'langsmith' },
+    baseDependencies({
+      resolveLlm: async (settings) => {
+        seenSettings.push(settings);
+        return { provider: 'codex', model: 'custom-model' };
+      },
+      preflightAndPause: async (_issue, resolveRole) => ({
+        llm: await resolveRole('execution'),
+        role: 'execution',
+        selection: { provider: 'github' },
+      }),
+      runCoder: async (args) => { coderArgs = args; return { finalText: 'complete' }; },
+    }),
+  );
+  assert.equal(seenSettings[0].llmGateway, 'langsmith');
+  // The store settings still come through — the flag is merged, not replacing.
+  assert.equal(seenSettings[0].linearApiKey, 'linear-key');
+  assert.equal(coderArgs.settings.llmGateway, 'langsmith');
+});
+
+test('cloud job launch threads the llm-gateway flag as LLM_GATEWAY_FLAG env', async () => {
+  let jobEnv;
+  await runTicket(
+    {
+      issueId: 'issue-1',
+      conversationId: 'conversation-1',
+      orgId: 'org-1',
+      nativeProjectId: 'native-project-1',
+      llmGateway: 'langsmith',
+    },
+    baseDependencies({
+      jobs: {
+        isCloudJobEnabled: () => true,
+        runCoderJob: async ({ env }) => { jobEnv = env; return { execution: 'exec-1' }; },
+      },
+    }),
+  );
+  assert.deepEqual(jobEnv, {
+    CONVERSATION_ID: 'conversation-1',
+    FLEET_ORG_ID: 'org-1',
+    AI_FLEET_PROJECT_CONTEXT: 'native-project-1',
+    LLM_GATEWAY_FLAG: 'langsmith',
+  });
 });
 
 test('legacy empty-context coder remains allow-all when policy resolution is unavailable', async () => {

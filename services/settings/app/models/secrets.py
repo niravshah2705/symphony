@@ -51,14 +51,19 @@ SECRET_KEYS: tuple[str, ...] = (
     # JSON-encoded OpenAI/Codex OAuth token bundle. Provisioned only through the
     # direct org-admin operator surface; never accepted by the browser gateway.
     "codexTokenBundle",
+    # LangSmith LLM Gateway WORKSPACE key (distinct from langsmithApiKey, the
+    # tracing key). Managed-only: it bills the platform's LangSmith workspace,
+    # so it is resolved like any managed key but never writable by a browser.
+    "langsmithGatewayApiKey",
 )
 
 # Browser-facing org-admin secret CRUD is intentionally narrower than the
 # storage/resolver allowlist. OAuth bundles must pass the typed, direct
 # operator-only import flow; accepting their opaque JSON through generic secret
-# CRUD would bypass token validation and that separate IAM boundary.
+# CRUD would bypass token validation and that separate IAM boundary. The LLM
+# gateway workspace key is platform-billing material and stays operator-only.
 BROWSER_WRITABLE_SECRET_KEYS: tuple[str, ...] = tuple(
-    key for key in SECRET_KEYS if key != "codexTokenBundle"
+    key for key in SECRET_KEYS if key not in ("codexTokenBundle", "langsmithGatewayApiKey")
 )
 
 # Who owns each provider's key. "managed" => platform key (settings-mounted);

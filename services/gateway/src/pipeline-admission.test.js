@@ -344,7 +344,7 @@ test('admission forwards user auth and authoritative scope, then dispatches only
   assert.equal(settingsCall.baseUrl, 'http://settings.internal');
   assert.equal(settingsCall.path, SETTINGS_PREFLIGHT_PATH);
   assert.equal(settingsCall.options.userAuth, 'Bearer user-token');
-  assert.deepEqual(settingsCall.options.context, context);
+  assert.deepEqual(settingsCall.options.context, { ...context, llmGateway: '' });
   assert.deepEqual(settingsCall.options.body, {
     project_id: context.projectId,
     stages: ['plan', 'code'],
@@ -356,7 +356,7 @@ test('admission forwards user auth and authoritative scope, then dispatches only
   const dispatch = calls[1];
   assert.equal(dispatch.baseUrl, 'http://orchestrator.internal');
   assert.equal(dispatch.path, ORCHESTRATOR_RUNS_PATH);
-  assert.deepEqual(dispatch.options.context, context);
+  assert.deepEqual(dispatch.options.context, { ...context, llmGateway: '' });
   const start = dispatch.options.body;
   assert.equal(start.organizationId, context.organizationId);
   assert.equal(start.projectId, context.projectId);
@@ -730,6 +730,7 @@ test('rollout-off compatibility routes retain legacy planner/coder publishing', 
         conversationId: 'legacy-conversation-1',
         orgId: 'org-1',
         nativeProjectId: 'project-1',
+        llmGateway: null,
       },
     },
     {
@@ -739,6 +740,7 @@ test('rollout-off compatibility routes retain legacy planner/coder publishing', 
         conversationId: 'legacy-conversation-2',
         orgId: 'org-1',
         nativeProjectId: 'project-1',
+        llmGateway: null,
       },
     },
   ]);

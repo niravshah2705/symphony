@@ -614,6 +614,9 @@ const SECRET_ENV = Object.freeze({
   githubToken: 'GITHUB_TOKEN',
   gitlabToken: 'GITLAB_TOKEN',
   langsmithApiKey: 'LANGSMITH_API_KEY',
+  // LangSmith LLM Gateway workspace key (managed-only, distinct from the tracing
+  // key above) — the non-proxied gateway service + local dev read it here.
+  langsmithGatewayApiKey: 'LANGSMITH_GATEWAY_API_KEY',
   jiraApiToken: 'JIRA_API_TOKEN',
   asanaAccessToken: 'ASANA_ACCESS_TOKEN',
   omlxApiKey: 'OMLX_API_KEY',

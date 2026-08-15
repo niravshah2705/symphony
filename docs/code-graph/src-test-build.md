@@ -6,31 +6,31 @@
 
 Directory-based community: services/proxy
 
-- **Size**: 152 nodes
-- **Cohesion**: 0.1084
+- **Size**: 157 nodes
+- **Cohesion**: 0.1087
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| configuredProxyOrgId | Function | ./services/proxy/src/credentials.js | 16-23 |
-| FailClosed | Class | ./services/proxy/src/credentials.js | 28-34 |
-| constructor | Function | ./services/proxy/src/credentials.js | 29-33 |
-| proxyOrgId | Function | ./services/proxy/src/credentials.js | 39-43 |
-| resolveSecrets | Function | ./services/proxy/src/credentials.js | 45-68 |
-| resolveEgressConfig | Function | ./services/proxy/src/credentials.js | 70-92 |
-| clearCache | Function | ./services/proxy/src/credentials.js | 94-97 |
-| safeCredential | Function | ./services/proxy/src/credentials.js | 99-105 |
-| resolveStaticKey | Function | ./services/proxy/src/credentials.js | 108-119 |
-| normalizeTrustedUpstream | Function | ./services/proxy/src/credentials.js | 121-138 |
-| normalizeOmlxUpstream | Function | ./services/proxy/src/credentials.js | 140-142 |
-| normalizeJiraConfig | Function | ./services/proxy/src/credentials.js | 144-172 |
-| normalizeSlackWebhook | Function | ./services/proxy/src/credentials.js | 174-195 |
-| resolveUpstream | Function | ./services/proxy/src/credentials.js | 197-223 |
-| buildInjection | Function | ./services/proxy/src/credentials.js | 225-308 |
-| resolvedSecrets | Function | ./services/proxy/src/credentials.js | 227-229 |
-| resolveRoute | Function | ./services/proxy/src/credentials.js | 310-314 |
+| configuredProxyOrgId | Function | ./services/proxy/src/credentials.js | 17-24 |
+| FailClosed | Class | ./services/proxy/src/credentials.js | 29-35 |
+| constructor | Function | ./services/proxy/src/credentials.js | 30-34 |
+| proxyOrgId | Function | ./services/proxy/src/credentials.js | 40-44 |
+| resolveSecrets | Function | ./services/proxy/src/credentials.js | 46-69 |
+| resolveEgressConfig | Function | ./services/proxy/src/credentials.js | 71-93 |
+| clearCache | Function | ./services/proxy/src/credentials.js | 95-98 |
+| safeCredential | Function | ./services/proxy/src/credentials.js | 100-106 |
+| resolveStaticKey | Function | ./services/proxy/src/credentials.js | 109-120 |
+| normalizeTrustedUpstream | Function | ./services/proxy/src/credentials.js | 122-139 |
+| normalizeOmlxUpstream | Function | ./services/proxy/src/credentials.js | 141-143 |
+| normalizeJiraConfig | Function | ./services/proxy/src/credentials.js | 145-173 |
+| normalizeSlackWebhook | Function | ./services/proxy/src/credentials.js | 175-196 |
+| resolveUpstream | Function | ./services/proxy/src/credentials.js | 198-224 |
+| buildInjection | Function | ./services/proxy/src/credentials.js | 226-319 |
+| resolvedSecrets | Function | ./services/proxy/src/credentials.js | 228-230 |
+| resolveRoute | Function | ./services/proxy/src/credentials.js | 321-325 |
 | parseCapabilities | Function | ./services/proxy/src/index.js | 17-22 |
 | pathname | Function | ./services/proxy/src/index.js | 24-30 |
 | sendJson | Function | ./services/proxy/src/index.js | 32-35 |
@@ -53,23 +53,23 @@ Directory-based community: services/proxy
 | test:org Codex resolver fails closed for an explicitly missing customer bundle@L94 | Test | ./services/proxy/src/oauth-manager.test.js | 94-114 |
 | test:org Codex resolver fails closed for a malformed customer bundle@L116 | Test | ./services/proxy/src/oauth-manager.test.js | 116-136 |
 | test:parseBundle rejects invalid vault values@L138 | Test | ./services/proxy/src/oauth-manager.test.js | 138-141 |
-| buildUpstreamUrl | Function | ./services/proxy/src/proxy.js | 45-48 |
-| buildForwardHeaders | Function | ./services/proxy/src/proxy.js | 51-73 |
-| filterResponseHeaders | Function | ./services/proxy/src/proxy.js | 76-84 |
-| sendJson | Function | ./services/proxy/src/proxy.js | 86-89 |
-| requestProjectId | Function | ./services/proxy/src/proxy.js | 91-98 |
-| createProxyHandler | Function | ./services/proxy/src/proxy.js | 107-184 |
+| buildUpstreamUrl | Function | ./services/proxy/src/proxy.js | 47-50 |
+| buildForwardHeaders | Function | ./services/proxy/src/proxy.js | 53-75 |
+| filterResponseHeaders | Function | ./services/proxy/src/proxy.js | 78-86 |
+| sendJson | Function | ./services/proxy/src/proxy.js | 88-91 |
+| requestProjectId | Function | ./services/proxy/src/proxy.js | 93-100 |
+| createProxyHandler | Function | ./services/proxy/src/proxy.js | 109-186 |
 | test:buildUpstreamUrl appends the path remainder@L15 | Test | ./services/proxy/src/proxy.test.js | 15-23 |
 | test:buildForwardHeaders strips inbound auth and retargets Host@L25 | Test | ./services/proxy/src/proxy.test.js | 25-60 |
 | test:buildForwardHeaders cannot smuggle an OAuth beta header into API-key auth@L62 | Test | ./services/proxy/src/proxy.test.js | 62-70 |
 | test:filterResponseHeaders drops body-frame + hop-by-hop but keeps content-type@L72 | Test | ./services/proxy/src/proxy.test.js | 72-87 |
 | test:resolveStaticKey: managed value from the settings payload (one path)@L91 | Test | ./services/proxy/src/proxy.test.js | 91-97 |
 
-*... and 102 more members.*
+*... and 107 more members.*
 
 ## Execution Flows
 
-- **resolveRoute** (criticality: 0.64, depth: 4)
+- **resolveRoute** (criticality: 0.63, depth: 3)
 - **fetchOrgSecrets** (criticality: 0.63, depth: 3)
 - **fetchOrgEgressConfig** (criticality: 0.63, depth: 3)
 - **fetchManagedSecrets** (criticality: 0.63, depth: 3)
@@ -84,16 +84,16 @@ Directory-based community: services/proxy
 
 ### Outgoing
 
-- `equal` (117 edge(s))
+- `equal` (120 edge(s))
+- `deepEqual` (30 edge(s))
 - `String` (28 edge(s))
-- `deepEqual` (28 edge(s))
 - `trim` (22 edge(s))
-- `buildInjection` (15 edge(s))
+- `buildInjection` (19 edge(s))
 - `stringify` (14 edge(s))
+- `rejects` (14 edge(s))
 - `verify` (14 edge(s))
 - `end` (12 edge(s))
 - `fetch` (12 edge(s))
-- `rejects` (12 edge(s))
 - `createStreamTokenService` (10 edge(s))
 - `toLowerCase` (9 edge(s))
 - `resolve` (9 edge(s))
@@ -102,18 +102,18 @@ Directory-based community: services/proxy
 
 ### Incoming
 
-- `equal` (117 edge(s))
-- `./services/proxy/src/proxy.test.js` (38 edge(s))
+- `equal` (120 edge(s))
+- `./services/proxy/src/proxy.test.js` (43 edge(s))
 - `./services/proxy/src/credentials.js` (30 edge(s))
-- `deepEqual` (28 edge(s))
+- `deepEqual` (30 edge(s))
+- `buildInjection` (19 edge(s))
 - `./services/proxy/src/stream-token-rpc.test.js` (16 edge(s))
-- `buildInjection` (15 edge(s))
 - `./services/proxy/src/oauth-manager.test.js` (14 edge(s))
+- `rejects` (14 edge(s))
 - `./services/proxy/src/server.test.js` (14 edge(s))
 - `./services/proxy/src/stream-token.test.js` (14 edge(s))
 - `./services/proxy/src/secrets-client.js` (13 edge(s))
 - `verify` (13 edge(s))
-- `rejects` (12 edge(s))
 - `fetch` (11 edge(s))
 - `./services/proxy/src/proxy.js` (11 edge(s))
 - `./services/proxy/src/stream-token-rpc.js` (11 edge(s))

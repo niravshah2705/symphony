@@ -6,15 +6,15 @@
 
 Directory-based community: services/coder
 
-- **Size**: 104 nodes
-- **Cohesion**: 0.1733
+- **Size**: 107 nodes
+- **Cohesion**: 0.1751
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| main | Function | ./services/coder/src/job.js | 17-52 |
+| main | Function | ./services/coder/src/job.js | 17-54 |
 | pause | Function | ./services/coder/src/job.test.js | 8-8 |
 | test:coder workers bind their job context across init and execution concurrently@L10 | Test | ./services/coder/src/job.test.js | 10-55 |
 | run | Function | ./services/coder/src/job.test.js | 14-31 |
@@ -65,7 +65,7 @@ Directory-based community: services/coder
 | messageWorkspaceContextInput | Function | ./services/coder/src/pubsub.js | 34-39 |
 | runMessageInWorkspace | Function | ./services/coder/src/pubsub.js | 41-46 |
 
-*... and 54 more members.*
+*... and 57 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (62 edge(s))
-- `deepEqual` (32 edge(s))
+- `equal` (67 edge(s))
+- `deepEqual` (33 edge(s))
 - `String` (28 edge(s))
-- `push` (19 edge(s))
+- `push` (21 edge(s))
 - `map` (12 edge(s))
-- `resolve` (11 edge(s))
+- `resolve` (12 edge(s))
 - `currentWorkspaceContext` (9 edge(s))
 - `rejects` (8 edge(s))
+- `runTicketInProcess` (8 edge(s))
 - `sort` (7 edge(s))
 - `slice` (7 edge(s))
+- `find` (7 edge(s))
 - `ok` (7 edge(s))
-- `runTicketInProcess` (7 edge(s))
+- `require` (7 edge(s))
 - `executeCodingStage` (6 edge(s))
-- `require` (6 edge(s))
-- `publish` (6 edge(s))
 
 ### Incoming
 
-- `equal` (62 edge(s))
-- `deepEqual` (32 edge(s))
+- `equal` (67 edge(s))
+- `deepEqual` (33 edge(s))
 - `./services/coder/src/pipeline-stage.test.js` (24 edge(s))
 - `./services/coder/src/pipeline-stage.js` (23 edge(s))
 - `./services/coder/src/pubsub.js` (18 edge(s))
 - `./services/coder/src/run-ticket.js` (18 edge(s))
+- `push` (14 edge(s))
+- `./services/coder/src/run-ticket.test.js` (13 edge(s))
 - `./services/coder/src/job.test.js` (12 edge(s))
-- `push` (12 edge(s))
-- `./services/coder/src/run-ticket.test.js` (11 edge(s))
-- `./services/coder/src/pubsub.test.js` (10 edge(s))
+- `./services/coder/src/pubsub.test.js` (11 edge(s))
 - `rejects` (8 edge(s))
+- `runTicketInProcess` (8 edge(s))
+- `require` (7 edge(s))
 - `./services/coder/src/routes/coder.test.js` (7 edge(s))
-- `runTicketInProcess` (7 edge(s))
 - `./services/coder/src/store-context.js` (7 edge(s))
-- `executeCodingStage` (6 edge(s))

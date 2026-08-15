@@ -33,11 +33,17 @@ broker to loopback by default.
   the upstream URL, strip inbound auth + retarget Host, inject the credential,
   and **stream** both ways (SSE-safe — never buffer). Pure header/URL helpers are
   exported and unit-tested (`proxy.test.js`, `server.test.js`).
-- `src/credentials.js` — resolve the credential per route: managed platform key
-  (sidecar env) vs customer key (per-org vault). **Fail closed** when a customer
-  key is selected but missing.
+- `src/credentials.js` — resolve every credential through the settings service:
+  managed platform key vs customer key (per-org/project vault). Provider-key
+  environment fallback is forbidden in the proxy. **Fail closed** when a
+  selected key is missing. The `llm-gateway` auth family (route `/llmgw` →
+  LangSmith LLM Gateway) is STRICTER: a missing `langsmithGatewayApiKey` always
+  fails closed (never forward unauthenticated to a billing gateway), and the
+  injection stamps `x-fleet-org-id: <PROXY_ORG_ID>` so per-org spend/rate
+  policies in LangSmith can key on the tenant (omitted on the shared stack).
 - `src/secrets-client.js` — S2S call to the settings vault resolver
-  (`/internal/s2s/orgs/{orgId}/secrets`, `X-Internal-Token` + Cloud Run OIDC).
+  (`/internal/s2s/orgs/{orgId}/secrets`, org-bound internal token + Cloud Run
+  OIDC; shared managed resolution uses the shared internal token).
 - `src/oauth-manager.js` — Claude/Codex OAuth: reads the per-namespace store
   token sets and refreshes on near-expiry (reuses
   `packages/shared/src/agent/oauth-tokens.js`, single in-flight refresh).
@@ -64,9 +70,8 @@ The prefix→upstream→credential contract is shared with the agent-side config
 ## Per-org scope
 
 This sidecar serves ONE org (`PROXY_ORG_ID`, injected by the provisioner for a
-per-tenant stack; unset on the shared stack ⇒ managed-only, using the operator's
-sign-in + mounted platform keys). `STORE_NAMESPACE` selects the tenant's store
-for the OAuth token sets.
+per-tenant stack; unset on the shared stack ⇒ managed-only through the settings
+service). `STORE_NAMESPACE` selects the tenant's store for the OAuth token sets.
 
 ## Tests
 

@@ -110,6 +110,7 @@ async function runTicketInProcess({
   blocking = false,
   orgId = null,
   nativeProjectId = null,
+  llmGateway = null,
 }, dependencies = {}) {
   const getSettingsImpl = dependencies.getSettings || getSettings;
   const getApiKeyImpl = dependencies.getApiKey || getApiKey;
@@ -126,7 +127,10 @@ async function runTicketInProcess({
   // model work so a conflicting tenant context fails closed.
   const effectiveOrgId = resolvePolicyOrganization(orgId);
   const context = eventContext(effectiveOrgId, nativeProjectId);
-  const settings = getSettingsImpl();
+  // The per-request LLM gateway flag rides the settings object because
+  // resolveLlm reads ONLY settings; unflagged runs keep the store shape as-is.
+  const storeSettings = getSettingsImpl();
+  const settings = llmGateway ? { ...storeSettings, llmGateway } : storeSettings;
   const apiKey = getApiKeyImpl();
   const loadedIssue = await loadIssueImpl(settings, issueId, apiKey);
   const issue = {
@@ -202,6 +206,7 @@ async function runTicketInProcess({
       effectivePolicy,
       orgId: effectiveOrgId || null,
       nativeProjectId: nativeProjectId || null,
+      llmGateway: llmGateway || null,
     },
   });
   const onError = (err) => {
@@ -245,7 +250,7 @@ async function runTicketInProcess({
  * one-shot Cloud Run Job (long-running, scale-to-zero) and returns immediately;
  * locally it runs in-process (detached).
  */
-async function runTicket({ issueId, conversationId = null, orgId = null, nativeProjectId = null }, dependencies = {}) {
+async function runTicket({ issueId, conversationId = null, orgId = null, nativeProjectId = null, llmGateway = null }, dependencies = {}) {
   const jobsImpl = dependencies.jobs || jobs;
   const getSettingsImpl = dependencies.getSettings || getSettings;
   const getApiKeyImpl = dependencies.getApiKey || getApiKey;
@@ -262,6 +267,7 @@ async function runTicket({ issueId, conversationId = null, orgId = null, nativeP
         ...(conversationId ? { CONVERSATION_ID: conversationId } : {}),
         ...(effectiveOrgId ? { FLEET_ORG_ID: effectiveOrgId } : {}),
         ...(nativeProjectId ? { AI_FLEET_PROJECT_CONTEXT: nativeProjectId } : {}),
+        ...(llmGateway ? { LLM_GATEWAY_FLAG: llmGateway } : {}),
       },
     });
     if (conversationId) {
@@ -270,7 +276,7 @@ async function runTicket({ issueId, conversationId = null, orgId = null, nativeP
     return { accepted: true, issue: { id: issue.id, identifier: issue.identifier, state: issue.state }, execution };
   }
   return runTicketInProcess(
-    { issueId, conversationId, blocking: false, orgId: effectiveOrgId, nativeProjectId },
+    { issueId, conversationId, blocking: false, orgId: effectiveOrgId, nativeProjectId, llmGateway },
     dependencies,
   );
 }

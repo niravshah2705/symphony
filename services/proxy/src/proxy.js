@@ -1,7 +1,7 @@
 'use strict';
 
 const { Readable } = require('stream');
-const { matchRoute } = require('@ai-fleet/shared-core/egress');
+const { LLM_GATEWAY_ORG_HEADER, matchRoute } = require('@ai-fleet/shared-core/egress');
 const credentials = require('./credentials');
 const { validateProjectId } = require('./secrets-client');
 
@@ -26,6 +26,8 @@ const DROP_REQUEST_HEADERS = new Set([
   'chatgpt-account-id', 'cookie',
   // Request context is consumed locally and must never reach a provider.
   'x-ai-fleet-project-id',
+  // The per-org LangSmith policy identity is stamped only by the proxy.
+  LLM_GATEWAY_ORG_HEADER.toLowerCase(),
   // Do not let a caller forge proxy-chain or client identity metadata.
   'forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-port',
   'x-forwarded-proto', 'x-real-ip',

@@ -6,8 +6,8 @@
 
 Directory-based community: services/gateway
 
-- **Size**: 330 nodes
-- **Cohesion**: 0.1889
+- **Size**: 335 nodes
+- **Cohesion**: 0.1896
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: services/gateway
 | test:buildFirebaseAuthConfig: reads AUTH_MICROSOFT_ENABLED and Microsoft tenant (either alias)@L281 | Test | ./services/gateway/src/auth.test.js | 281-289 |
 | test:buildFirebaseAuthConfig: rejects a non-boolean provider flag@L291 | Test | ./services/gateway/src/auth.test.js | 291-296 |
 
-*... and 280 more members.*
+*... and 285 more members.*
 
 ## Execution Flows
 
@@ -85,17 +85,17 @@ Directory-based community: services/gateway
 
 ### Outgoing
 
-- `equal` (261 edge(s))
-- `deepEqual` (72 edge(s))
+- `equal` (264 edge(s))
+- `deepEqual` (74 edge(s))
 - `String` (55 edge(s))
-- `trim` (53 edge(s))
+- `trim` (54 edge(s))
 - `json` (38 edge(s))
 - `status` (34 edge(s))
 - `map` (26 edge(s))
 - `next` (24 edge(s))
 - `push` (24 edge(s))
+- `toLowerCase` (22 edge(s))
 - `includes` (21 edge(s))
-- `toLowerCase` (21 edge(s))
 - `throws` (20 edge(s))
 - `isArray` (18 edge(s))
 - `join` (17 edge(s))
@@ -103,8 +103,8 @@ Directory-based community: services/gateway
 
 ### Incoming
 
-- `equal` (260 edge(s))
-- `deepEqual` (72 edge(s))
+- `equal` (263 edge(s))
+- `deepEqual` (74 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (44 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (42 edge(s))
 - `./services/gateway/src/auth.test.js` (36 edge(s))
@@ -115,6 +115,6 @@ Directory-based community: services/gateway
 - `./services/gateway/src/eula.test.js` (18 edge(s))
 - `ok` (17 edge(s))
 - `rejects` (16 edge(s))
+- `./services/gateway/src/request-context.js` (16 edge(s))
 - `./services/gateway/src/config-resolver.test.js` (15 edge(s))
 - `match` (15 edge(s))
-- `join` (15 edge(s))

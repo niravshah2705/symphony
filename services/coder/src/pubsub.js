@@ -110,6 +110,8 @@ router.post('/coder', pushAuth(), async (req, res) => {
         conversationId,
         orgId: orgId || null,
         nativeProjectId: nativeProjectId || null,
+        // Re-allowlist at the trust boundary; only the known selector survives.
+        llmGateway: message.llmGateway === 'langsmith' ? 'langsmith' : null,
       })).catch((err) => {
         const detail = err && err.message ? err.message : String(err);
         log.error(`coder pubsub dispatch failed: ${detail}`);

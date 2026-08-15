@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared-core
 
-- **Size**: 653 nodes
-- **Cohesion**: 0.2451
+- **Size**: 654 nodes
+- **Cohesion**: 0.2450
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared-core
 | customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 590-777 |
 | publicCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 779-781 |
 
-*... and 603 more members.*
+*... and 604 more members.*
 
 ## Execution Flows
 
@@ -108,8 +108,8 @@ Directory-based community: packages/shared-core
 - `join` (69 edge(s))
 - `throws` (58 edge(s))
 - `deepEqual` (53 edge(s))
+- `./packages/shared-core/src/config.js` (43 edge(s))
 - `./packages/shared-core/src/pipeline/contracts.js` (42 edge(s))
-- `./packages/shared-core/src/config.js` (41 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (40 edge(s))
 - `ok` (35 edge(s))
 - `./packages/shared-core/src/agent/registry/schema.js` (32 edge(s))

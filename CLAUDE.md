@@ -121,6 +121,23 @@ outbound call.
   `STREAM_TOKEN_SECRET`, and exposes only mint/verify RPCs. Local development
   uses the same broker entrypoint over loopback; `STREAM_TOKEN_PROXY_URL`
   remains a temporary rollback compatibility input only.
+- **LangSmith LLM Gateway (per-request feature flag):** a browser request carrying
+  `X-AI-Fleet-Llm-Gateway: langsmith` routes THAT run's LLM calls through the
+  LangSmith LLM Gateway (`/llmgw` route → `gateway.smith.langchain.com`, Bearer
+  workspace key `langsmithGatewayApiKey`, per-org spend/rate caps keyed on the
+  proxy-stamped `x-fleet-org-id` header). Server gate: `LLM_GATEWAY_ENABLED=true`
+  (else the header is dropped at ingestion). The flag threads on the org/project
+  context channel: `request-context.js` → Pub/Sub message field / `PipelineStart.
+  request.llmGateway` → coder job env `LLM_GATEWAY_FLAG` → merged into the
+  `settings` passed to `resolveLlm`, which emits a `gateway: 'langsmith'`
+  descriptor (`wireModelId()` prefixes `provider/model` ON THE WIRE only —
+  `llm.model` stays bare for policy + snapshots; the flag changes ROUTING only,
+  never model selection). Unflagged traffic is byte-identical to before. Scope:
+  deepagent / claude-agent-sdk / codex-sdk (`api` shape — no ChatGPT backend
+  surface at the gateway); antigravity + local providers stay direct. See
+  `docs/LLM_GATEWAY.md` for LangSmith-side setup. Keep the FOUR maps aligned
+  when adding provider keys: settings `MANAGED_ENV`, proxy `MANAGED_ENV`,
+  store `SECRET_ENV`, vault `SECRET_KEYS`.
 
 ## Commands
 

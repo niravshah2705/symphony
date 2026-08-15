@@ -246,6 +246,31 @@ async def test_browser_secret_crud_rejects_operator_only_codex_bundle(client):
     assert select.status_code == 422
 
 
+async def test_llm_gateway_key_is_managed_only(client, monkeypatch):
+    # The LangSmith LLM Gateway workspace key resolves like any managed key over
+    # S2S but is platform-billing material — never writable through browser CRUD.
+    monkeypatch.setenv("LANGSMITH_GATEWAY_API_KEY", "lsv2_gateway_platform")
+    org = uuid.uuid4()
+    _u, token = await make_user(email="admin@a.com", org_id=org, org_role=OrgRole.ORG_ADMIN)
+
+    url, headers = _s2s(org)
+    entry = (await client.get(url, headers=headers)).json()["secrets"]["langsmithGatewayApiKey"]
+    assert entry == {"source": "managed", "value": "lsv2_gateway_platform", "error": None}
+
+    write = await client.put(
+        "/api/v1/settings/org/secrets",
+        headers=auth(token),
+        json={"values": {"langsmithGatewayApiKey": "lsv2_attacker"}},
+    )
+    select = await client.put(
+        "/api/v1/settings/org/secrets/selection",
+        headers=auth(token),
+        json={"selection": {"langsmithGatewayApiKey": "customer"}},
+    )
+    assert write.status_code == 422
+    assert select.status_code == 422
+
+
 async def test_non_admin_cannot_access_org_secrets(client):
     org = uuid.uuid4()
     _member, token = await make_user(email="m@a.com", org_id=org, org_role=OrgRole.MEMBER)

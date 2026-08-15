@@ -1,5 +1,6 @@
 'use strict';
 
+const { LLM_GATEWAY_ORG_HEADER } = require('@ai-fleet/shared-core/egress');
 const {
   fetchOrgSecrets,
   fetchManagedSecrets,
@@ -276,6 +277,16 @@ async function buildInjection(route, opts = {}) {
       const key = resolveStaticKey(route.secretKey, await resolvedSecrets());
       const username = safeCredential(route.username, 'git credential username');
       return { authorization: `Basic ${Buffer.from(`${username}:${key}`).toString('base64')}` };
+    }
+    case 'llm-gateway': {
+      const key = resolveStaticKey(route.secretKey, await resolvedSecrets());
+      const orgId = safeCredential(
+        configuredProxyOrgId(opts.env || process.env),
+        'proxy organization id',
+      );
+      headers.authorization = `Bearer ${key}`;
+      if (orgId) headers[LLM_GATEWAY_ORG_HEADER] = orgId;
+      return headers;
     }
     case 'jira': {
       const token = resolveStaticKey(route.secretKey, await resolvedSecrets());

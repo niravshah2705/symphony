@@ -817,6 +817,9 @@ function createPipelineAdmission({
           // tokenless repository identity captured for every later stage.
           repository,
           conversationId,
+          // Per-request LLM gateway feature flag (already availability-gated
+          // and allowlisted at ingestion by requestContext).
+          llmGateway: context.llmGateway || null,
           policy: decision,
           stageConfiguration: stageConfigurationFromDecision(decision, stages, selections, baseRequest),
         },

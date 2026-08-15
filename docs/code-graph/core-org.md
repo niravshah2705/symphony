@@ -6,7 +6,7 @@
 
 Directory-based community: services/settings
 
-- **Size**: 505 nodes
+- **Size**: 506 nodes
 - **Cohesion**: 0.3749
 - **Dominant Language**: python
 
@@ -65,7 +65,7 @@ Directory-based community: services/settings
 | parse_context_payload | Function | ./services/settings/app/auth/org_context.py | 60-138 |
 | _audience | Function | ./services/settings/app/auth/org_context.py | 141-143 |
 
-*... and 455 more members.*
+*... and 456 more members.*
 
 ## Execution Flows
 
@@ -85,11 +85,11 @@ Directory-based community: services/settings
 
 ### Outgoing
 
-- `get` (204 edge(s))
+- `get` (205 edge(s))
 - `str` (102 edge(s))
-- `uuid4` (81 edge(s))
-- `json` (75 edge(s))
-- `put` (70 edge(s))
+- `uuid4` (82 edge(s))
+- `json` (76 edge(s))
+- `put` (72 edge(s))
 - `Depends` (61 edge(s))
 - `ValueError` (47 edge(s))
 - `set` (33 edge(s))
@@ -103,12 +103,12 @@ Directory-based community: services/settings
 
 ### Incoming
 
-- `uuid4` (77 edge(s))
-- `json` (74 edge(s))
-- `put` (70 edge(s))
-- `get` (63 edge(s))
+- `uuid4` (78 edge(s))
+- `json` (75 edge(s))
+- `put` (72 edge(s))
+- `get` (64 edge(s))
 - `./services/settings/app/services/secrets_service.py` (26 edge(s))
-- `./services/settings/tests/integration/test_secrets_vault.py` (19 edge(s))
+- `./services/settings/tests/integration/test_secrets_vault.py` (20 edge(s))
 - `./services/settings/app/errors.py` (18 edge(s))
 - `./services/settings/tests/unit/test_resolver.py` (18 edge(s))
 - `./services/settings/app/services/policy_service.py` (17 edge(s))

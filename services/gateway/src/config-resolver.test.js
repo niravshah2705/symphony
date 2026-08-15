@@ -100,7 +100,7 @@ test('forwards the already-validated selected context on the correct S2S path', 
   assert.equal(seen.length, 1);
   assert.equal(seen[0].path, '/api/v1/me/deployment');
   assert.equal(seen[0].opts.userAuth, 'Bearer THE-USER-TOKEN');
-  assert.deepEqual(seen[0].opts.context, { organizationId: 'org-1', projectId: 'project-1' });
+  assert.deepEqual(seen[0].opts.context, { organizationId: 'org-1', projectId: 'project-1', llmGateway: '' });
   assert.equal(seen[0].opts.body, undefined);
 });
 
