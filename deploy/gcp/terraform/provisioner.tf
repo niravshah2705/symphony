@@ -213,7 +213,6 @@ resource "google_cloud_run_v2_service" "provisioner" {
             ORCHESTRATOR_SERVICE_NAME = var.orchestrator_service_name
             TESTER_SERVICE_NAME       = var.tester_service_name
             DEPLOYER_SERVICE_NAME     = var.deployer_service_name
-            EGRESS_PROXY_ENABLED      = tostring(var.egress_proxy_enabled)
             INTERNAL_INGRESS          = var.internal_ingress
             # Runtime SAs the per-tenant services run as.
             GATEWAY_SA = google_service_account.gateway.email

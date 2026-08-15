@@ -61,8 +61,9 @@ PORT=5000 npm start    # gateway → http://localhost:5000
 If the agent services run on other hosts, tell the gateway where with `PLANNER_URL`
 and `CODER_URL`. Move the shared store with `AI_FLEET_DATA_DIR`.
 
-Then open **<http://localhost:4000>** in a browser. On first launch you'll be
-prompted to add a Linear API key before any view will load.
+Then open **<http://localhost:4000>** in a browser. Select an organization and
+project, then provision its Linear credential through the encrypted scope vault.
+Agent processes never receive that credential directly.
 
 ### What happens on boot
 `npm start` runs `scripts/start-all.js`, which spawns the three service
@@ -156,14 +157,15 @@ role in **Settings → Task Models** to change which model runs that task.
 > the **`Models` issue-label group** (`CONFIG.CODER.modelLabelGroup`) for
 > reporting, but they no longer influence model selection — the coder always uses
 > the `execution` model. `node scripts/models-label-group.js` still manages that
-> label group.
+> label group through the local egress proxy and never accepts a raw provider key.
 
 - **Skills** (`skills/<name>/SKILL.md`) = instructions loaded on demand:
   `software-planning`, `web-research` (planner); `linear`, `commit`, `push`,
   `pull`, `land` (coder).
 - **Tools** (`tools.js`) = `web_search`, `linear_graphql`. Optionally, **MCP tool
   groups** (`mcp.js`) — Linear MCP + GitHub MCP — attach when enabled
-  (`LINEAR_MCP_ENABLED`, `GITHUB_MCP_TOKEN`); off by default.
+  (`LINEAR_MCP_ENABLED`, `GITHUB_MCP_ENABLED`). In proxy mode their credentials
+  are injected from the scope vault; both are off by default.
 
 The rollout-gated durable pipeline is **plan → code → test → deploy**. It uses
 versioned secret-free commands/results, Firestore PipelineRun/StageRun state, and
@@ -290,7 +292,8 @@ The full table lives in the root `README.md` (§ *API*). Most-used endpoints:
 
 | Method | Path | Purpose |
 | ------ | ---- | ------- |
-| PUT | `/api/settings` | Validate + save Linear key |
+| GET/PUT | `/api/settings-policy/settings/org/secrets` | Organization credential vault (masked reads; org-admin writes) |
+| GET/PUT | `/api/settings-policy/settings/project/:projectId/secrets` | Project credential overrides with organization fallback |
 | GET | `/api/settings/llm-presets` | Read the shared local + hosted preset catalog |
 | PUT | `/api/settings/llm-preset` | Apply a route preset with safe optional overrides |
 | GET | `/api/projects` | List Linear projects |
@@ -309,10 +312,10 @@ The full table lives in the root `README.md` (§ *API*). Most-used endpoints:
 
 ## 9. Common gotchas
 
-- **"No API key" and views won't load** → add the Linear key in **Settings** first.
+- **Linear is not ready** → select the intended organization/project and add its credential in the **Scope vault**.
 - **Agent tab returns 403** → assume a role in **Settings** (server-enforced).
 - **Enrichment never runs** → the scheduler only processes projects once a role is
-  assumed, the Linear key is set, and an LLM provider is fully configured.
+  assumed, the selected scope reports a ready Linear credential, and an LLM provider is fully configured.
 - **Ollama model is missing/incompatible** → install the model named by the
   preset (`gpt-oss:20b` is the practical default) or use the compatible-model
   action shown in Settings. Local inference speed depends heavily on hardware.

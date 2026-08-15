@@ -40,11 +40,13 @@ async function s2sRequest(path, {
   body,
   orgScoped = false,
   orgInternalToken,
+  internalToken,
   env,
 } = {}) {
   const doFetch = fetchImpl || (typeof fetch === 'function' ? fetch : null);
   const base = CONFIG.SERVICES.settingsUrl;
-  if (!base || !doFetch) return null;
+  if (!base) throw new Error('settings service URL is not configured');
+  if (!doFetch) throw new Error('settings service transport is unavailable');
 
   const origin = (() => {
     try {
@@ -61,9 +63,17 @@ async function s2sRequest(path, {
   if (orgScoped && !scopedToken) {
     throw new Error('organization-scoped settings request requires ORG_INTERNAL_API_TOKEN');
   }
+  const sharedToken = String(
+    internalToken !== undefined
+      ? internalToken
+      : (env && env.INTERNAL_API_TOKEN) || INTERNAL_API_TOKEN
+  ).trim();
+  if (!orgScoped && !sharedToken) {
+    throw new Error('managed settings request requires INTERNAL_API_TOKEN');
+  }
   const headers = orgScoped
     ? { 'x-org-internal-token': scopedToken }
-    : { 'x-internal-token': INTERNAL_API_TOKEN };
+    : { 'x-internal-token': sharedToken };
   const auth = await s2sAuthHeader(origin);
   if (auth) headers.authorization = auth;
 
@@ -87,7 +97,28 @@ async function s2sGet(path, opts = {}) {
 /** Per-org resolve (managed + customer). */
 async function fetchOrgSecrets(orgId, opts = {}) {
   if (!orgId) return null;
-  return s2sGet(`/api/v1/internal/s2s/orgs/${encodeURIComponent(orgId)}/secrets`, {
+  const projectId = opts.projectId === undefined || opts.projectId === ''
+    ? ''
+    : validateProjectId(opts.projectId);
+  const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
+  return s2sGet(`/api/v1/internal/s2s/orgs/${encodeURIComponent(orgId)}/secrets${query}`, {
+    ...opts,
+    orgScoped: true,
+  });
+}
+
+function validateProjectId(value) {
+  const id = String(value || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+    throw new Error('X-AI-Fleet-Project-ID must be a UUID');
+  }
+  return id;
+}
+
+/** Non-secret organization connector target configuration. */
+async function fetchOrgEgressConfig(orgId, opts = {}) {
+  if (!orgId) return null;
+  return s2sGet(`/api/v1/internal/s2s/orgs/${encodeURIComponent(orgId)}/egress-config`, {
     ...opts,
     orgScoped: true,
   });
@@ -108,4 +139,10 @@ async function rotateOrgCodexTokens(orgId, expectedObtainedAt, tokens, opts = {}
   });
 }
 
-module.exports = { fetchOrgSecrets, fetchManagedSecrets, rotateOrgCodexTokens };
+module.exports = {
+  fetchOrgSecrets,
+  fetchManagedSecrets,
+  fetchOrgEgressConfig,
+  rotateOrgCodexTokens,
+  validateProjectId,
+};

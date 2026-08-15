@@ -53,7 +53,7 @@ function configureTracing(keys) {
   process.env.LANGSMITH_TRACING = flag;
   process.env.LANGCHAIN_TRACING_V2 = flag;
   if (on) {
-    const key = keys.langsmithApiKey || (proxyLangsmith ? SENTINEL_TOKEN : '');
+    const key = proxyLangsmith ? SENTINEL_TOKEN : keys.langsmithApiKey || '';
     const endpoint = proxyLangsmith
       ? `${CONFIG.EGRESS_PROXY_URL}/langsmith`
       : keys.langsmithEndpoint || 'https://api.smith.langchain.com';
@@ -495,7 +495,11 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep, s
 
 async function resolveTraceUrl(runId, keys) {
   const { Client } = require('langsmith');
-  const client = new Client({ apiKey: keys.langsmithApiKey, apiUrl: keys.langsmithEndpoint });
+  const proxied = Boolean(CONFIG.EGRESS_PROXY_URL);
+  const client = new Client({
+    apiKey: proxied ? SENTINEL_TOKEN : keys.langsmithApiKey,
+    apiUrl: proxied ? `${CONFIG.EGRESS_PROXY_URL}/langsmith` : keys.langsmithEndpoint,
+  });
   try {
     return await client.getRunUrl({ runId });
   } catch (_) {

@@ -1,6 +1,8 @@
 'use strict';
 
 const { CONFIG } = require('../config');
+const { SENTINEL_TOKEN, projectEgressHeaders } = require('../egress');
+const { currentWorkspaceContext } = require('../store/workspace-context');
 const log = require('../logger');
 
 /**
@@ -23,13 +25,22 @@ function repositoryAllowsMcp(name, ctx = {}) {
   return true;
 }
 
+/** Interactive browser MCP is direct egress and is local/direct-mode only. */
+function runtimeAllowsMcp(name, ctx = {}, runtimeEnv = process.env, config = CONFIG) {
+  if (name !== 'playwright') return true;
+  if (ctx.isolateNetwork === true) return false;
+  if (String((config && config.EGRESS_PROXY_URL) || '').trim()) return false;
+  return String((runtimeEnv && runtimeEnv.NODE_ENV) || '').trim().toLowerCase() !== 'production';
+}
+
 /** Whether a named MCP server is enabled and has the credentials it needs. */
 function isConfigured(name, ctx) {
   if (!repositoryAllowsMcp(name, ctx)) return false;
+  if (!runtimeAllowsMcp(name, ctx)) return false;
   const conf = CONFIG.MCP[name];
   if (!conf || !conf.enabled) return false;
-  if (name === 'linear') return Boolean(ctx.apiKey); // Bearer = stored Linear key
-  if (name === 'github') return Boolean(conf.token);
+  if (name === 'linear') return Boolean(CONFIG.EGRESS_PROXY_URL || ctx.apiKey);
+  if (name === 'github') return Boolean(CONFIG.EGRESS_PROXY_URL || conf.token);
   if (name === 'playwright') return Boolean(conf.command); // local stdio server, no credentials
   return false;
 }
@@ -38,10 +49,24 @@ function isConfigured(name, ctx) {
 function serverConfig(name, ctx) {
   const conf = CONFIG.MCP[name];
   if (name === 'linear') {
-    return { url: conf.url, headers: { Authorization: `Bearer ${ctx.apiKey}` } };
+    const token = CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : ctx.apiKey;
+    return {
+      url: conf.url,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
+      },
+    };
   }
   if (name === 'github') {
-    return { url: conf.url, headers: { Authorization: `Bearer ${conf.token}` } };
+    const token = CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : conf.token;
+    return {
+      url: conf.url,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
+      },
+    };
   }
   if (name === 'playwright') {
     // Local stdio server launched as a child process (no network credentials).
@@ -88,4 +113,4 @@ async function loadMcpTools(names, ctx = {}) {
   }
 }
 
-module.exports = { loadMcpTools, isConfigured, repositoryAllowsMcp };
+module.exports = { loadMcpTools, isConfigured, repositoryAllowsMcp, runtimeAllowsMcp };

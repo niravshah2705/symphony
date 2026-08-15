@@ -72,53 +72,13 @@ resource "google_pubsub_topic_iam_member" "gateway_publish_coder" {
 
 # --- Secret Manager accessor — scoped per secret ------------------------------
 
-# gateway: signs SSE stream tokens + (optionally) overrides the stored Linear key.
+# The stream-token proxy sidecar shares gateway-sa at the Cloud Run service
+# boundary, so the accessor remains scoped to this single secret.
 resource "google_secret_manager_secret_iam_member" "gateway_stream_token" {
   project   = var.project_id
   secret_id = google_secret_manager_secret.stream_token_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.gateway.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "gateway_linear" {
-  project   = var.project_id
-  secret_id = google_secret_manager_secret.linear_api_key.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.gateway.email}"
-}
-
-# planner + coder: Linear key.
-resource "google_secret_manager_secret_iam_member" "planner_linear" {
-  project   = var.project_id
-  secret_id = google_secret_manager_secret.linear_api_key.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.planner.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "coder_linear" {
-  project   = var.project_id
-  secret_id = google_secret_manager_secret.linear_api_key.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.coder.email}"
-}
-
-# planner + coder: the provider/LangSmith/GitHub secrets.
-resource "google_secret_manager_secret_iam_member" "planner_extra" {
-  for_each = google_secret_manager_secret.extra
-
-  project   = var.project_id
-  secret_id = each.value.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.planner.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "coder_extra" {
-  for_each = google_secret_manager_secret.extra
-
-  project   = var.project_id
-  secret_id = each.value.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.coder.email}"
 }
 
 # --- Cloud Run invoke rights --------------------------------------------------

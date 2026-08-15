@@ -4,10 +4,8 @@
 # Secret VALUES are added out-of-band (never in Terraform state / source):
 #   printf %s "<value>" | gcloud secrets versions add <secret-id> --data-file=-
 #
-# PREREQUISITE: the two secrets mounted as required env — `stream-token-secret`
-# and `linear-api-key` — MUST have an enabled version BEFORE `terraform apply`
-# creates the Cloud Run revisions, otherwise the revisions fail to start. Add a
-# version for any secret in var.extra_secret_ids before you mount it too.
+# PREREQUISITE: `stream-token-secret` MUST have an enabled version before
+# Terraform creates the gateway's proxy-sidecar revision.
 
 resource "google_secret_manager_secret" "stream_token_secret" {
   project   = var.project_id
@@ -21,21 +19,8 @@ resource "google_secret_manager_secret" "stream_token_secret" {
   depends_on = [google_project_service.services]
 }
 
-resource "google_secret_manager_secret" "linear_api_key" {
-  project   = var.project_id
-  secret_id = "linear-api-key"
-  labels    = merge(local.common_labels, { component = "shared" })
-
-  replication {
-    auto {}
-  }
-
-  depends_on = [google_project_service.services]
-}
-
-# Extra secrets (provider OAuth, LangSmith, GitHub token, …). Created empty;
-# planner-sa + coder-sa are granted accessor in iam.tf so they can be mounted
-# once a version exists.
+# Extra managed-provider secrets are created empty and consumed only through
+# the settings-service resolver; application containers never receive them.
 resource "google_secret_manager_secret" "extra" {
   for_each = toset(var.extra_secret_ids)
 

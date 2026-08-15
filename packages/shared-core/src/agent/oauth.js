@@ -1,8 +1,9 @@
 'use strict';
 
 const { CONFIG } = require('../config');
+const { projectEgressHeaders } = require('../egress');
 const pkce = require('./pkce');
-const { normalizeWorkspaceContext } = require('../store/workspace-context');
+const { normalizeWorkspaceContext, currentWorkspaceContext } = require('../store/workspace-context');
 
 /**
  * OAuth 2.0 Authorization Code + PKCE (S256) helper for the Codex (OpenAI)
@@ -104,7 +105,11 @@ function normalizeTokenResponse(json, previous = null) {
 async function postToken(params) {
   const resp = await fetch(OAUTH.tokenUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+      ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
+    },
     body: new URLSearchParams(params).toString(),
     signal: AbortSignal.timeout(15000),
   });

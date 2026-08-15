@@ -37,6 +37,23 @@ Values are **write-only secrets**:
   plaintext is never returned to a browser (not even a suffix).
 - The plaintext is returned **only** by the internal S2S endpoint below.
 
+## Encrypted scope vaults and connector routing
+
+Runtime credentials are stored in KMS-envelope-encrypted vault documents at
+organization or project scope. Project entries override the organization entry
+for the same key; an absent/cleared project entry inherits the organization
+entry. Browser responses expose only `{set, source, allowed_sources}`.
+
+Linear, GitLab, Jira, Asana, oMLX, and Slack webhook credentials are
+**customer-only**: they never resolve from a platform environment value and a
+missing customer value fails closed. Other provider keys retain their advertised
+managed/customer choices.
+
+Jira/Asana routing metadata is non-secret and separate from the vault. Jira is
+restricted to a canonical `https://<single-tenant>.atlassian.net` origin. The
+readiness response is secret-free; Jira and Asana currently report
+`supported=false` until their work-item adapters are implemented.
+
 ## Commands
 
 ```bash
@@ -53,10 +70,16 @@ pytest -q                                    # emulator-free (in-memory Firestor
 |--------|------|-----|
 | GET/PUT | `/settings/org` | org admin |
 | GET/PUT | `/settings/project/{project_id}` | project admin (org-scoped, cross-org → 404) |
+| GET/PUT | `/settings/org/secrets` | org admin (encrypted, write-only values) |
+| GET/PUT | `/settings/project/{project_id}/secrets` | project admin (encrypted overrides) |
+| GET/PUT | `/settings/org/connectors` | org admin (non-secret routing metadata) |
+| GET | `/settings/org/connectors/readiness?project_id=...` | org admin (secret-free status) |
 | GET/PUT | `/me/settings` | any authenticated user |
 | GET | `/settings/effective?project_id=...` | any authenticated user (cascade applied; config values **masked**) |
 | GET | `/settings/universe` | any authenticated user |
 | GET | `/internal/effective-config?project_id=...` | **S2S only** — UNMASKED config values |
+| GET | `/internal/s2s/orgs/{org_id}/secrets?project_id=...` | org-bound S2S token — resolved vault credentials |
+| GET | `/internal/s2s/orgs/{org_id}/egress-config` | org-bound S2S token — non-secret connector metadata |
 
 Behind the gateway the first group is reached at `/api/settings-policy/*` (the
 gateway rewrites to `/api/v1/*` and forwards the caller's Firebase bearer). The

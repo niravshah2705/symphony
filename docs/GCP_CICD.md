@@ -82,9 +82,12 @@ secrets/variables (then imports the secrets into TF state so the first `git push
 applies cleanly):
 
 ```bash
-PROJECT_ID=my-proj REPO=owner/repo LINEAR_API_KEY=lin_... \
+PROJECT_ID=my-proj REPO=owner/repo \
   ./deploy/gcp/bootstrap.sh
 ```
+
+Linear credentials are added after deployment through the encrypted
+organization/project vault; bootstrap never accepts or creates a global key.
 
 When SMTP authentication is required, pass `EMAIL_SMTP_USER`,
 `EMAIL_SMTP_PASSWORD`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM` together. The
@@ -197,13 +200,11 @@ verification steps.
 
 ## Prerequisites the pipeline assumes
 
-- **Secret Manager values already seeded** (the pipeline never creates/rotates
-  these two): `stream-token-secret` and `linear-api-key` must have a version, or
-  the Cloud Run revisions won't start. `deploy/gcp/deploy.sh` / `bootstrap.sh`
-  seed these; or add manually:
-  ```bash
-  printf 'REPLACE' | gcloud secrets versions add linear-api-key --project adlc-9e72f --data-file=-
-  ```
+- **`stream-token-secret` already seeded.** The pipeline never rotates it and
+  the stream-token proxy will fail startup without an enabled version.
+  `deploy/gcp/deploy.sh` / `bootstrap.sh` seed it. Linear has no global Secret
+  Manager value: administrators store it through the encrypted
+  organization/project vault after deployment.
   `org-jwt-secret` is **Terraform-managed** (`random_password` + version) — created
   and seeded by the apply, no manual step. `google-one-tap-client-id` is likewise
   Terraform-managed from the `google_one_tap_client_id` var (only when set).
@@ -213,6 +214,8 @@ verification steps.
   Rotation happens in Secret Manager, without exposing a value to GitHub or
   Terraform state.
 - The `TF_STATE_BUCKET` exists (created by `deploy.sh` / the first manual apply).
+- The internal proxy-to-settings bearer is prepared automatically: CI reuses
+  the enabled `internal-api-token` version or generates it on the first apply.
 - Firebase console: Google provider enabled + gateway URL and SPA origin in
   **Authorized domains** (see docs/GCP_DEPLOY.md).
 

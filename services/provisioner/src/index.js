@@ -44,8 +44,6 @@ function buildCfg(projectNumber) {
     internalIngress: process.env.INTERNAL_INGRESS || 'INGRESS_TRAFFIC_ALL',
     pipelineOrchestratorEnabled: enabled('PIPELINE_ORCHESTRATOR_ENABLED', false),
     pipelineDeploymentEnabled: enabled('PIPELINE_DEPLOYMENT_ENABLED', false),
-    egressProxyEnabled: enabled('EGRESS_PROXY_ENABLED', Boolean(process.env.EGRESS_PROXY_URL)),
-    egressProxyIncludeSdk: enabled('EGRESS_PROXY_INCLUDE_SDK', false),
     orgS2sSigningKey: process.env.ORG_S2S_SIGNING_KEY || '',
     serviceAccounts: {
       gateway: process.env.GATEWAY_SA || '',

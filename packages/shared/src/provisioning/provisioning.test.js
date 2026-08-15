@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { names, urls, assertSlug } = require('./naming');
 const { buildPlan } = require('./plan');
 const { provision, teardown } = require('./provisioner');
+const { createGcpClients } = require('./index');
 
 const SLUG = 't3f9a1b2c4d5';
 const ORG_ID = '3f9a1b2c-4d5e-6f70-8a90-b1c2d3e4f5a6';
@@ -44,6 +45,23 @@ function fakeClients(overrides = {}) {
     deleteSchedulerJob: async (n) => { calls.deletes.push(['sched', n]); },
   };
   return { ...base, ...overrides };
+}
+
+function alreadyExists() {
+  return Object.assign(new Error('already exists'), { code: 6 });
+}
+
+function completedOperation(onPromise = () => {}) {
+  return {
+    async promise() {
+      onPromise();
+      return [];
+    },
+  };
+}
+
+function envEntries(container) {
+  return Object.fromEntries((container.env || []).map((entry) => [entry.name, entry]));
 }
 
 // --- naming ------------------------------------------------------------------
@@ -91,6 +109,14 @@ test('plan encodes tenant isolation: STORE_NAMESPACE, per-tenant topics, shared 
   assert.equal(plan.services.gateway.env.API_BASE_URL, u.gateway);
   assert.equal(plan.services.gateway.env.FLEET_ORG_ID, ORG_ID);
   assert.equal(plan.services.gateway.env.TRUST_PROXY_HOPS, '1');
+  assert.equal(plan.services.gateway.env.STREAM_TOKEN_PROXY_URL, 'http://127.0.0.1:4030');
+  assert.equal(plan.services.gateway.env.EGRESS_PROXY_URL, undefined);
+  for (const service of [plan.services.planner, plan.services.coder, plan.worker]) {
+    assert.equal(service.env.EGRESS_PROXY_URL, 'http://127.0.0.1:4030');
+    assert.equal(service.requireSecretFreePrimary, true);
+    assert.equal(service.requireEgressProxy, true);
+    assert.equal(service.sidecarEnv.PROXY_CAPABILITIES, 'egress');
+  }
 });
 
 test('plan: only gateway is unauthenticated; agents are network-reachable but IAM-gated', () => {
@@ -131,7 +157,6 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
     ...CFG,
     pipelineOrchestratorEnabled: true,
     pipelineDeploymentEnabled: false,
-    egressProxyEnabled: true,
     serviceAccounts: {
       ...CFG.serviceAccounts,
       orchestrator: 'po@sa',
@@ -175,6 +200,7 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
   }
   assert.equal(plan.services.gateway.env.ORCHESTRATOR_URL, u.orchestrator);
   assert.equal(plan.services.orchestrator.env.PIPELINE_STORE_BACKEND, 'firestore');
+  assert.equal(plan.services.orchestrator.env.EGRESS_PROXY_URL, undefined);
   assert.equal(plan.services.orchestrator.env.SETTINGS_URL, CFG.sharedSettingsUrl);
   for (const service of [plan.services.planner, plan.services.coder, plan.services.tester, plan.services.deployer]) {
     assert.equal(service.env.PIPELINE_STAGE_STORE_BACKEND, 'firestore');
@@ -220,19 +246,11 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
   }
 });
 
-test('durable pipeline tenant provisioning fails closed without the egress proxy', () => {
-  assert.throws(
-    () => buildPlan(SLUG, { ...CFG, pipelineOrchestratorEnabled: true }),
-    /requires the egress proxy/,
-  );
-});
-
-test('per-tenant egress proxy fails closed without an organization signing key', () => {
+test('mandatory per-tenant egress proxy fails closed without an organization signing key', () => {
   assert.throws(
     () => buildPlan(SLUG, {
       ...CFG,
       orgS2sSigningKey: '',
-      egressProxyEnabled: true,
     }),
     /org S2S signing key/,
   );
@@ -246,6 +264,160 @@ test('organization label is omitted when orgId is absent; slug still labeled', (
 });
 
 // --- provision ---------------------------------------------------------------
+
+test('GCP adapter reconciles an existing tenant service with the gateway proxy boundary', async () => {
+  const plan = buildPlan(SLUG, CFG);
+  const parent = `projects/${CFG.projectId}/locations/${CFG.region}`;
+  const sourceName = `${parent}/services/${CFG.sourceServiceNames.gateway}`;
+  const tenantName = `${parent}/services/${plan.services.gateway.name}`;
+  const updates = [];
+  let updateCompleted = 0;
+
+  const source = {
+    template: {
+      scaling: { minInstanceCount: 0, maxInstanceCount: 3 },
+      executionEnvironment: 'EXECUTION_ENVIRONMENT_GEN2',
+      maxInstanceRequestConcurrency: 80,
+      containers: [
+        {
+          name: 'gateway',
+          image: 'registry/gateway@sha256:source',
+          env: [{ name: 'SOURCE_ONLY', value: 'must-not-leak' }],
+        },
+        {
+          name: 'proxy',
+          image: 'registry/proxy@sha256:source',
+          env: [
+            { name: 'PROXY_CAPABILITIES', value: 'egress' },
+            {
+              name: 'STREAM_TOKEN_SECRET',
+              valueSource: { secretKeyRef: { secret: 'stream-token-secret', version: 'latest' } },
+            },
+          ],
+        },
+      ],
+    },
+  };
+  const services = {
+    async getService({ name }) {
+      if (name === sourceName) return [source];
+      if (name === tenantName) return [{ name: tenantName, etag: 'service-etag-current' }];
+      throw new Error(`unexpected service read: ${name}`);
+    },
+    async createService() {
+      return [{ promise: async () => { throw alreadyExists(); } }];
+    },
+    async updateService(request) {
+      updates.push(request);
+      return [completedOperation(() => { updateCompleted += 1; })];
+    },
+    async setIamPolicy() {},
+  };
+  const jobs = {};
+  const clients = createGcpClients(
+    { projectId: CFG.projectId, region: CFG.region },
+    { run: { services, jobs } },
+  );
+
+  await clients.createService({
+    ...plan.services.gateway,
+    image: 'registry/gateway@sha256:source',
+  });
+
+  assert.equal(updates.length, 1);
+  assert.equal(updateCompleted, 1);
+  assert.deepEqual(updates[0].updateMask, { paths: ['ingress', 'labels', 'template'] });
+  assert.equal(updates[0].service.name, tenantName);
+  assert.equal(updates[0].service.etag, 'service-etag-current');
+
+  const [primary, proxy] = updates[0].service.template.containers;
+  const primaryEnv = envEntries(primary);
+  const proxyEnv = envEntries(proxy);
+  assert.equal(primaryEnv.STREAM_TOKEN_PROXY_URL.value, 'http://127.0.0.1:4030');
+  assert.equal(primaryEnv.STREAM_TOKEN_SECRET, undefined);
+  assert.equal(primaryEnv.EGRESS_PROXY_URL, undefined);
+  assert.equal(proxyEnv.PROXY_CAPABILITIES.value, 'stream-token');
+  assert.deepEqual(proxyEnv.STREAM_TOKEN_SECRET.valueSource, {
+    secretKeyRef: { secret: 'stream-token-secret', version: 'latest' },
+  });
+});
+
+test('GCP adapter reconciles an existing tenant worker job with sidecar-only egress credentials', async () => {
+  const plan = buildPlan(SLUG, CFG);
+  const parent = `projects/${CFG.projectId}/locations/${CFG.region}`;
+  const sourceName = `${parent}/jobs/${CFG.sourceServiceNames.worker}`;
+  const tenantName = `${parent}/jobs/${plan.worker.name}`;
+  const updates = [];
+  let updateCompleted = 0;
+
+  const source = {
+    template: {
+      template: {
+        executionEnvironment: 'EXECUTION_ENVIRONMENT_GEN2',
+        containers: [
+          {
+            name: 'worker',
+            image: 'registry/worker@sha256:source',
+            env: [{ name: 'SOURCE_ONLY', value: 'must-not-leak' }],
+          },
+          {
+            name: 'proxy',
+            image: 'registry/proxy@sha256:source',
+            env: [
+              { name: 'PROXY_CAPABILITIES', value: 'old-value' },
+              {
+                name: 'PROVIDER_CREDENTIAL',
+                valueSource: { secretKeyRef: { secret: 'provider-vault', version: 'latest' } },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+  const services = {};
+  const jobs = {
+    async getJob({ name }) {
+      if (name === sourceName) return [source];
+      if (name === tenantName) return [{ name: tenantName, etag: 'job-etag-current' }];
+      throw new Error(`unexpected job read: ${name}`);
+    },
+    async createJob() {
+      throw alreadyExists();
+    },
+    async updateJob(request) {
+      updates.push(request);
+      return [completedOperation(() => { updateCompleted += 1; })];
+    },
+  };
+  const clients = createGcpClients(
+    { projectId: CFG.projectId, region: CFG.region },
+    { run: { services, jobs } },
+  );
+
+  await clients.createJob({
+    ...plan.worker,
+    image: 'registry/worker@sha256:source',
+  });
+
+  assert.equal(updates.length, 1);
+  assert.equal(updateCompleted, 1);
+  assert.equal(updates[0].job.name, tenantName);
+  assert.equal(updates[0].job.etag, 'job-etag-current');
+
+  const [primary, proxy] = updates[0].job.template.template.containers;
+  const primaryEnv = envEntries(primary);
+  const proxyEnv = envEntries(proxy);
+  assert.equal(primaryEnv.EGRESS_PROXY_URL.value, 'http://127.0.0.1:4030');
+  assert.equal(primaryEnv.PROVIDER_CREDENTIAL, undefined);
+  assert.equal(primaryEnv.ORG_INTERNAL_API_TOKEN, undefined);
+  assert.equal(proxyEnv.PROXY_CAPABILITIES.value, 'egress');
+  assert.equal(proxyEnv.PROXY_ORG_ID.value, ORG_ID);
+  assert.match(proxyEnv.ORG_INTERNAL_API_TOKEN.value, /^[A-Za-z0-9_-]{43}$/);
+  assert.deepEqual(proxyEnv.PROVIDER_CREDENTIAL.valueSource, {
+    secretKeyRef: { secret: 'provider-vault', version: 'latest' },
+  });
+});
 
 test('provision reuses live images and creates the full stack, returning the deployments map', async () => {
   const clients = fakeClients();
@@ -291,7 +463,6 @@ test('pipeline provision clones all three shared pipeline services and writes ba
   const cfg = {
     ...CFG,
     pipelineOrchestratorEnabled: true,
-    egressProxyEnabled: true,
     serviceAccounts: {
       ...CFG.serviceAccounts,
       orchestrator: 'po@sa', tester: 'pt@sa', deployer: 'pd@sa',

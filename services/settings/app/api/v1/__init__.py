@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    routes_connectors,
     routes_health,
     routes_internal,
     routes_me,
@@ -17,6 +18,8 @@ api_router.include_router(routes_health.router)
 api_router.include_router(routes_me.router)
 api_router.include_router(routes_settings.router)
 api_router.include_router(routes_secrets.router)
+api_router.include_router(routes_secrets.project_router)
+api_router.include_router(routes_connectors.router)
 api_router.include_router(routes_operator.router)
 api_router.include_router(routes_internal.router)
 

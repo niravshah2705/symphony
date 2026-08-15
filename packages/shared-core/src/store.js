@@ -3,6 +3,7 @@
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const { CONFIG, namespaceCollection } = require('./config');
+const { SENTINEL_TOKEN } = require('./egress');
 const fileBackend = require('./store/file-backend');
 const firestoreBackend = require('./store/firestore-backend');
 const workspaceContext = require('./store/workspace-context');
@@ -610,7 +611,6 @@ function migrateAgentConfig(config) {
  * this map mirrors). Keep the two maps aligned when adding a provider key.
  */
 const SECRET_ENV = Object.freeze({
-  linearApiKey: 'LINEAR_API_KEY',
   githubToken: 'GITHUB_TOKEN',
   gitlabToken: 'GITLAB_TOKEN',
   langsmithApiKey: 'LANGSMITH_API_KEY',
@@ -625,6 +625,10 @@ const SECRET_ENV = Object.freeze({
 });
 
 function secretOverlay() {
+  // Agent services must not recover a raw provider credential merely because a
+  // legacy deployment accidentally mounted one. In proxy mode all runtime
+  // clients use the sentinel and the sidecar resolves the effective secret.
+  if (CONFIG.EGRESS_PROXY_URL) return {};
   const patch = {};
   for (const [key, envName] of Object.entries(SECRET_ENV)) {
     const value = process.env[envName];
@@ -634,7 +638,7 @@ function secretOverlay() {
 }
 
 function getApiKey() {
-  return getSettings().linearApiKey || '';
+  return CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : getSettings().linearApiKey || '';
 }
 
 function setApiKey(linearApiKey) {
@@ -661,7 +665,7 @@ function getBusinessByProjectId(projectId) {
 
 /** Server-side GitHub token (never returned raw to the browser). */
 function getGithubToken() {
-  return getSettings().githubToken || '';
+  return getRepositoryToken('github');
 }
 
 function setGithubToken(githubToken) {
@@ -675,12 +679,15 @@ function getRepositoryConfig() {
   return {
     provider,
     url: String(settings.repositoryUrl || ''),
-    token: provider === 'gitlab' ? String(settings.gitlabToken || '') : String(settings.githubToken || ''),
+    token: CONFIG.EGRESS_PROXY_URL
+      ? SENTINEL_TOKEN
+      : provider === 'gitlab' ? String(settings.gitlabToken || '') : String(settings.githubToken || ''),
   };
 }
 
 function getRepositoryToken(provider) {
   if (provider === undefined) return getRepositoryConfig().token;
+  if (CONFIG.EGRESS_PROXY_URL && (provider === 'github' || provider === 'gitlab')) return SENTINEL_TOKEN;
   const settings = getSettings();
   if (provider === 'github') return String(settings.githubToken || '');
   if (provider === 'gitlab') return String(settings.gitlabToken || '');
@@ -696,19 +703,20 @@ function getPlanningConfig() {
   if (provider === 'jira') {
     return {
       provider,
-      baseUrl: String(settings.jiraBaseUrl || ''),
+      baseUrl: CONFIG.EGRESS_PROXY_URL ? CONFIG.JIRA_API_ORIGIN : String(settings.jiraBaseUrl || ''),
       email: String(settings.jiraEmail || ''),
-      token: String(settings.jiraApiToken || ''),
+      token: CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : String(settings.jiraApiToken || ''),
     };
   }
   if (provider === 'asana') {
     return {
       provider,
       workspaceId: String(settings.asanaWorkspaceId || ''),
-      token: String(settings.asanaAccessToken || ''),
+      baseUrl: CONFIG.ASANA_API_ORIGIN,
+      token: CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : String(settings.asanaAccessToken || ''),
     };
   }
-  return { provider, token: String(settings.linearApiKey || '') };
+  return { provider, token: CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : String(settings.linearApiKey || '') };
 }
 
 /* --------------------------- Codex OAuth tokens ------------------------- */

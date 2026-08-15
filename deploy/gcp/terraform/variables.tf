@@ -155,13 +155,7 @@ variable "coder_job_name" {
   default     = "coder-worker"
 }
 
-# --- Egress proxy sidecar -----------------------------------------------------
-
-variable "egress_proxy_enabled" {
-  type        = bool
-  description = "Add the egress-proxy sidecar to planner/coder/coder-worker and route their third-party egress through it (via EGRESS_PROXY_URL). The durable tester/deployer require it. OFF keeps the legacy direct behavior only while the durable pipeline is disabled. Requires the proxy image to be built + pushed."
-  default     = false
-}
+# --- Mandatory egress proxy sidecar ------------------------------------------
 
 variable "secret_vault_kms_enabled" {
   type        = bool
@@ -180,10 +174,54 @@ variable "proxy_image_tag" {
   default     = ""
 }
 
+variable "omlx_proxy_upstream" {
+  type        = string
+  description = "Trusted operator-configured oMLX origin used only by egress proxy containers (for example http://omlx.internal:8000). Browser/request settings can never select this target. Empty disables oMLX in proxied cloud runtimes."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.omlx_proxy_upstream) == "" || can(regex("^https?://[^/?#@[:space:]]+(?::[0-9]{1,5})?/?$", trimspace(var.omlx_proxy_upstream)))
+    error_message = "omlx_proxy_upstream must be empty or a path-free HTTP(S) origin without credentials, query, or fragment."
+  }
+}
+
+variable "ollama_proxy_upstream" {
+  type        = string
+  description = "Trusted operator-configured Ollama origin used only by egress proxy containers. Empty disables Ollama in proxied cloud runtimes."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.ollama_proxy_upstream) == "" || can(regex("^https?://[^/?#@[:space:]]+(?::[0-9]{1,5})?/?$", trimspace(var.ollama_proxy_upstream)))
+    error_message = "ollama_proxy_upstream must be empty or a path-free HTTP(S) origin without credentials, query, or fragment."
+  }
+}
+
+variable "lmstudio_proxy_upstream" {
+  type        = string
+  description = "Trusted operator-configured LM Studio origin used only by egress proxy containers. Empty disables LM Studio in proxied cloud runtimes."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.lmstudio_proxy_upstream) == "" || can(regex("^https?://[^/?#@[:space:]]+(?::[0-9]{1,5})?/?$", trimspace(var.lmstudio_proxy_upstream)))
+    error_message = "lmstudio_proxy_upstream must be empty or a path-free HTTP(S) origin without credentials, query, or fragment."
+  }
+}
+
+variable "openswe_proxy_upstream" {
+  type        = string
+  description = "Trusted operator-configured OpenSWE LangGraph origin used only by egress proxy containers. Empty disables OpenSWE in proxied cloud runtimes."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.openswe_proxy_upstream) == "" || can(regex("^https?://[^/?#@[:space:]]+(?::[0-9]{1,5})?/?$", trimspace(var.openswe_proxy_upstream)))
+    error_message = "openswe_proxy_upstream must be empty or a path-free HTTP(S) origin without credentials, query, or fragment."
+  }
+}
+
 variable "managed_provider_secrets" {
   type        = map(string)
   description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Hosted LLMs require the matching GEMINI_API_KEY, HUGGINGFACE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY entry. Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
-  default     = { LINEAR_API_KEY = "linear-api-key", GITHUB_TOKEN = "github-token" }
+  default     = { GITHUB_TOKEN = "github-token" }
 }
 
 # --- Per-tenant provisioning (Phase 1, gated OFF by default) ------------------
@@ -521,7 +559,7 @@ variable "coder_repo_url" {
 
 variable "extra_secret_ids" {
   type        = list(string)
-  description = "Additional Secret Manager secret IDs to create (provider OAuth, LangSmith, GitHub token, managed LLM keys, etc.). Versions are added out-of-band. planner-sa + coder-sa are granted accessor on these (and the proxy sidecar runs under those SAs). The managed LLM keys back the proxy's 'managed' credential option."
+  description = "Additional Secret Manager secret IDs to create (provider OAuth, LangSmith, GitHub token, managed LLM keys, etc.). Versions are added out-of-band and mounted only on the settings service through managed_provider_secrets; agent identities receive no accessor role."
   default     = ["github-token", "langsmith-api-key", "gemini-api-key", "huggingface-api-key", "anthropic-api-key", "openai-api-key"]
 }
 

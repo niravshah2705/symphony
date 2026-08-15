@@ -66,7 +66,12 @@ async function follow(client, conversationId, options = {}) {
     error.code = 'stream_token_missing';
     throw error;
   }
-  const url = `${client.base}/api/agent/stream?conversationId=${encodeURIComponent(conversationId)}&t=${encodeURIComponent(token)}`;
+  const streamQuery = new URLSearchParams({ conversationId, t: token });
+  const organizationId = typeof minted.organizationId === 'string' ? minted.organizationId.trim() : '';
+  const projectId = typeof minted.projectId === 'string' ? minted.projectId.trim() : '';
+  if (organizationId) streamQuery.set('organizationId', organizationId);
+  if (projectId) streamQuery.set('projectId', projectId);
+  const url = `${client.base}/api/agent/stream?${streamQuery}`;
 
   const controller = new AbortController();
   const headers = client.headers({ Accept: 'text/event-stream' });

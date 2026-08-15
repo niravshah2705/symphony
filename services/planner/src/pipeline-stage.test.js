@@ -71,6 +71,7 @@ function scopedStore(overrides = {}) {
       ? { projectId: id, orgId: 'org-1', nativeProjectId: 'native-project-1' }
       : null,
     getAgentConfig: () => ({ createIssues: true }),
+    getApiKey: () => 'linear-key',
     ...overrides,
   };
 }

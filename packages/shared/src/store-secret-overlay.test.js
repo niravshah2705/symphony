@@ -13,18 +13,9 @@ const store = require('./store');
 
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
-test('environment secrets override stored settings (Secret Manager precedence)', () => {
+test('Linear credentials are store-backed and are not read from process environment', () => {
   store.setApiKey('stored-linear');
   assert.equal(store.getApiKey(), 'stored-linear');
-
-  process.env.LINEAR_API_KEY = 'env-linear';
-  try {
-    assert.equal(store.getApiKey(), 'env-linear');
-    assert.equal(store.getSettings().linearApiKey, 'env-linear');
-  } finally {
-    delete process.env.LINEAR_API_KEY;
-  }
-  // Falls back to the stored value once the env secret is gone.
   assert.equal(store.getApiKey(), 'stored-linear');
 });
 

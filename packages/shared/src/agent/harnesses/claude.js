@@ -8,6 +8,8 @@
  */
 
 const { CONFIG } = require('../../config');
+const { PROJECT_CONTEXT_HEADER, projectEgressHeaders } = require('../../egress');
+const { currentWorkspaceContext } = require('../../store/workspace-context');
 const { buildSafeAgentEnv } = require('../repository-broker');
 const registry = require('./registry');
 const {
@@ -25,6 +27,21 @@ const {
 const ID = 'claude-agent-sdk';
 const LABEL = 'Claude Agent SDK';
 const PACKAGE = '@anthropic-ai/claude-agent-sdk';
+
+/** Apply the SDK's documented proxy base URL and custom-header environment. */
+function applyClaudeProxyEnv(env, context = currentWorkspaceContext(), config = CONFIG) {
+  if (!config.EGRESS_PROXY_INCLUDE_SDK) return env;
+  env.ANTHROPIC_BASE_URL = config.CLAUDE.baseUrl;
+  const projectId = projectEgressHeaders(context)[PROJECT_CONTEXT_HEADER];
+  if (projectId) {
+    env.ANTHROPIC_CUSTOM_HEADERS = `${PROJECT_CONTEXT_HEADER}: ${projectId}`;
+  } else {
+    // Do not preserve an untrusted caller-supplied custom-header bundle in
+    // proxy mode. The sidecar is the only credential/header authority.
+    delete env.ANTHROPIC_CUSTOM_HEADERS;
+  }
+  return env;
+}
 
 /** Restrict Claude tools to the prepared workspace and keep SDK auth out of Bash. */
 function claudePermissionGuard(cwd, carriesCredential) {
@@ -71,7 +88,7 @@ async function executeClaude(options, prompt) {
   // Route the SDK's Anthropic calls through the egress proxy when enabled: the
   // OAuth token is already the sentinel (resolveLlm proxy mode); the proxy
   // injects the real bearer. baseUrl is the proxy's /anthropic prefix.
-  if (CONFIG.EGRESS_PROXY_INCLUDE_SDK) env.ANTHROPIC_BASE_URL = CONFIG.CLAUDE.baseUrl;
+  applyClaudeProxyEnv(env);
   const sdkTools = options.backendKind === 'filesystem'
     ? ['Read', 'Glob', 'Grep', ...(plannerWebSearchAllowed(options) ? ['WebSearch'] : [])]
     : credential
@@ -135,4 +152,4 @@ async function executeClaude(options, prompt) {
 
 registry.register(registry.builtinDefinition(ID, () => executeClaude));
 
-module.exports = { executeClaude, claudePermissionGuard };
+module.exports = { executeClaude, claudePermissionGuard, applyClaudeProxyEnv };

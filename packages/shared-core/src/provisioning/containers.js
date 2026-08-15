@@ -30,12 +30,16 @@ function extractContainers(containers) {
   return (containers || []).map((c) => {
     const { secretEnv, plainEnv } = splitEnv(c.env);
     return {
+      name: c.name,
       image: c.image,
       ports: c.ports,
       secretEnv,
       plainEnv,
       resources: c.resources,
       volumeMounts: c.volumeMounts,
+      dependsOn: c.dependsOn,
+      startupProbe: c.startupProbe,
+      livenessProbe: c.livenessProbe,
     };
   });
 }
@@ -90,19 +94,27 @@ function cloneContainers(srcContainers, spec, { withPorts = false } = {}) {
   return (srcContainers || []).map((c, index) => {
     if (index === 0) {
       const container = {
+        name: c.name,
         image: spec.image || c.image,
         env: [...toEnvList(spec.env), ...(c.secretEnv || [])],
         resources: c.resources,
         volumeMounts: c.volumeMounts,
+        dependsOn: c.dependsOn,
+        startupProbe: c.startupProbe,
+        livenessProbe: c.livenessProbe,
       };
       if (withPorts) container.ports = [{ containerPort: spec.port || 8080 }];
       return container;
     }
     return {
+      name: c.name,
       image: c.image,
       env: [...toEnvList({ ...c.plainEnv, ...(spec.sidecarEnv || {}) }), ...(c.secretEnv || [])],
       resources: c.resources,
       volumeMounts: c.volumeMounts,
+      dependsOn: c.dependsOn,
+      startupProbe: c.startupProbe,
+      livenessProbe: c.livenessProbe,
     };
   });
 }

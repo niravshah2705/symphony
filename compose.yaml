@@ -13,8 +13,8 @@
 # Verify the isolation holds:
 #   docker compose exec planner env | grep -iE 'TOKEN|KEY|SECRET'   # -> nothing
 #
-# Secrets live ONLY in the proxy service's environment (loaded from .env, which
-# is gitignored). See deploy/gcp/terraform/cloud_run.tf for the cloud wiring.
+# Provider credentials live in the organization vault exposed by SETTINGS_URL.
+# The stream secret is supplied only to the dedicated stream proxy.
 
 services:
   # -------- egress proxy sidecar (holds the credentials) --------------------
@@ -24,19 +24,39 @@ services:
       dockerfile: deploy/gcp/Dockerfile.proxy
     environment:
       PROXY_PORT: "4030"
-      # Managed platform keys (mirror store.js SECRET_ENV). Loaded from .env.
-      LINEAR_API_KEY: "${LINEAR_API_KEY:-}"
-      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
-      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
-      HUGGINGFACE_API_KEY: "${HUGGINGFACE_API_KEY:-}"
-      LANGSMITH_API_KEY: "${LANGSMITH_API_KEY:-}"
-      # Per-org vault (optional locally). When PROXY_ORG_ID + SETTINGS_URL are
-      # set, customer-selected keys are resolved from the settings service S2S.
-      PROXY_ORG_ID: "${PROXY_ORG_ID:-}"
-      SETTINGS_URL: "${SETTINGS_URL:-}"
-      INTERNAL_API_TOKEN: "${INTERNAL_API_TOKEN:-}"
+      PROXY_CAPABILITIES: "egress"
+      AUTH_MODE: "disabled"
+      PROXY_ORG_ID: "${PROXY_ORG_ID:?set an organization id}"
+      SETTINGS_URL: "${SETTINGS_URL:?set the settings service URL}"
+      ORG_INTERNAL_API_TOKEN: "${ORG_INTERNAL_API_TOKEN:?set the org-scoped settings token}"
+      OMLX_PROXY_UPSTREAM: "${OMLX_PROXY_UPSTREAM:-}"
+      OLLAMA_PROXY_UPSTREAM: "${OLLAMA_PROXY_UPSTREAM:-}"
+      LMSTUDIO_PROXY_UPSTREAM: "${LMSTUDIO_PROXY_UPSTREAM:-}"
+      OPENSWE_PROXY_UPSTREAM: "${OPENSWE_PROXY_UPSTREAM:-}"
     healthcheck:
       # node:alpine has no curl; use a tiny inline Node probe.
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://127.0.0.1:4030/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # -------- gateway stream-token proxy (only holder of the HMAC secret) ----
+  stream-proxy:
+    build:
+      context: .
+      dockerfile: deploy/gcp/Dockerfile.proxy
+    environment:
+      PROXY_PORT: "4030"
+      PROXY_CAPABILITIES: "stream-token"
+      AUTH_MODE: "disabled"
+      STREAM_TOKEN_SECRET: "${STREAM_TOKEN_SECRET:?set the local stream-token secret}"
+    ports:
+      - "4000:4000"
+    healthcheck:
       test:
         - CMD
         - node
@@ -75,3 +95,23 @@ services:
     depends_on:
       proxy:
         condition: service_healthy
+
+  # -------- public gateway + private stream-token sidecar ------------------
+  gateway:
+    build:
+      context: .
+      dockerfile: deploy/gcp/Dockerfile.gateway
+    network_mode: "service:stream-proxy"
+    environment:
+      PORT: "4000"
+      AUTH_MODE: "disabled"
+      PLANNER_URL: "http://proxy:8080"
+      CODER_URL: "http://proxy:8081"
+      STREAM_TOKEN_PROXY_URL: "http://127.0.0.1:4030"
+    depends_on:
+      stream-proxy:
+        condition: service_healthy
+      planner:
+        condition: service_started
+      coder:
+        condition: service_started

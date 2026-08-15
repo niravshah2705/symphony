@@ -1,72 +1,135 @@
 'use strict';
 
-const crypto = require('node:crypto');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
 const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared-core/messaging/events');
 
 /**
- * Short-lived, HMAC-signed stream tokens.
- *
- * EventSource cannot send an Authorization header, so after the SPA authenticates
- * it fetches a stream token (bound to one conversationId, ~5 min TTL) and passes
- * it in the SSE URL. The token is signed server-side, so it cannot be forged and
- * expires quickly.
- *
- * Secret resolution FAILS CLOSED: when app auth is enabled (any real deployment)
- * STREAM_TOKEN_SECRET must be provided (from Secret Manager) or the module throws
- * at load, so a misconfigured revision refuses to start rather than signing with
- * a predictable value. When auth is disabled (local dev) a fresh per-process
- * random secret is used — never a shared hardcoded literal.
+ * Gateway client for the proxy sidecar's loopback-only stream-token capability.
+ * The gateway deliberately contains no signing secret or HMAC implementation.
  */
 
-const TTL_MS = 5 * 60 * 1000;
+const STREAM_TOKEN_TIMEOUT_MS = 2_000;
 
-const ENV_SECRET = process.env.STREAM_TOKEN_SECRET || '';
-if (CONFIG.AUTH && CONFIG.AUTH.enabled && !ENV_SECRET) {
-  throw new Error('STREAM_TOKEN_SECRET is required when authentication is enabled');
-}
-const SECRET = ENV_SECRET || crypto.randomBytes(32).toString('base64url');
-
-function secret() {
-  return SECRET;
+class StreamTokenUnavailableError extends Error {
+  constructor(message = 'Stream token service is unavailable.', options = {}) {
+    super(message, options);
+    this.name = 'StreamTokenUnavailableError';
+    this.code = 'stream_token_unavailable';
+  }
 }
 
-function contextKey(context = {}) {
-  const organizationId = String(context.organizationId || '').trim();
-  const projectId = String(context.projectId || '').trim();
-  return `${organizationId}.${projectId}`;
+function isLoopbackHostname(hostname) {
+  const value = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+  return value === 'localhost' || value === '::1' || /^127(?:\.\d{1,3}){3}$/.test(value);
 }
 
-function sign(conversationId, exp, context = {}) {
-  return crypto.createHmac('sha256', secret())
-    .update(`${conversationId}.${exp}.${contextKey(context)}`)
-    .digest('base64url');
+function normalizeProxyBase(value) {
+  const raw = String(value || '').trim();
+  if (!raw) throw new Error('STREAM_TOKEN_PROXY_URL is required');
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch (_) {
+    throw new Error('STREAM_TOKEN_PROXY_URL must be a valid loopback HTTP URL');
+  }
+  if (parsed.protocol !== 'http:' || !isLoopbackHostname(parsed.hostname)
+      || parsed.username || parsed.password || parsed.search || parsed.hash
+      || (parsed.pathname && parsed.pathname !== '/')) {
+    throw new Error('STREAM_TOKEN_PROXY_URL must be a loopback HTTP origin');
+  }
+  return parsed.origin;
 }
 
-function mintStreamToken(conversationId, context = {}) {
-  const exp = Date.now() + TTL_MS;
-  return `${exp}.${sign(conversationId, exp, context)}`;
+function normalizeContext(context = {}) {
+  return {
+    organizationId: String(context.organizationId || '').trim(),
+    projectId: String(context.projectId || '').trim(),
+  };
 }
 
-/**
- * Mint a token for the reserved GLOBAL workspace channel. Bound to the fixed
- * channel id (not a conversation), so the read-only home can stream workspace
- * status/jobs/coder/gate events without owning a conversation.
- */
-function mintWorkspaceToken(context = {}) {
-  return mintStreamToken(WORKSPACE_CHANNEL, context);
+function unavailable(cause) {
+  if (cause instanceof StreamTokenUnavailableError) return cause;
+  return new StreamTokenUnavailableError(undefined, { cause });
 }
 
-function verifyStreamToken(token, conversationId, context = {}) {
-  if (!token || !conversationId) return false;
-  const [expStr, sig] = String(token).split('.');
-  const exp = Number(expStr);
-  if (!Number.isFinite(exp) || exp < Date.now() || !sig) return false;
-  const expected = sign(conversationId, exp, context);
-  const provided = Buffer.from(sig);
-  const wanted = Buffer.from(expected);
-  if (provided.length !== wanted.length) return false;
-  return crypto.timingSafeEqual(provided, wanted);
+function validMintResponse(data) {
+  if (!data || typeof data !== 'object' || typeof data.token !== 'string'
+      || !Number.isSafeInteger(data.expiresAt) || data.expiresAt <= Date.now()) return false;
+  const token = data.token.trim();
+  const match = /^(\d+)\.([A-Za-z0-9_-]+)$/.exec(token);
+  return Boolean(match) && match[1] === String(data.expiresAt);
 }
 
-module.exports = { mintStreamToken, mintWorkspaceToken, verifyStreamToken, TTL_MS };
+function createStreamTokenClient(options = {}) {
+  const baseUrl = normalizeProxyBase(options.baseUrl);
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const timeoutMs = options.timeoutMs === undefined ? STREAM_TOKEN_TIMEOUT_MS : options.timeoutMs;
+  if (typeof fetchImpl !== 'function') throw new Error('A fetch implementation is required');
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('timeoutMs must be positive');
+
+  async function post(path, body) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(`${baseUrl}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (!response || !response.ok) throw unavailable();
+
+      let data;
+      try {
+        const text = await response.text();
+        data = text ? JSON.parse(text) : null;
+      } catch (cause) {
+        throw unavailable(cause);
+      }
+      return data;
+    } catch (cause) {
+      throw unavailable(cause);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function mintStreamToken(channelId, context = {}) {
+    const data = await post('/internal/stream-token/mint', {
+      channelId: String(channelId || '').trim(),
+      context: normalizeContext(context),
+    });
+    if (!validMintResponse(data)) throw unavailable();
+    return data.token.trim();
+  }
+
+  async function mintWorkspaceToken(context = {}) {
+    return mintStreamToken(WORKSPACE_CHANNEL, context);
+  }
+
+  async function verifyStreamToken(token, channelId, context = {}) {
+    const data = await post('/internal/stream-token/verify', {
+      token: String(token || '').trim(),
+      channelId: String(channelId || '').trim(),
+      context: normalizeContext(context),
+    });
+    if (!data || typeof data !== 'object' || typeof data.valid !== 'boolean') {
+      throw unavailable();
+    }
+    return data.valid;
+  }
+
+  return { mintStreamToken, mintWorkspaceToken, verifyStreamToken };
+}
+
+const defaultClient = createStreamTokenClient({
+  baseUrl: process.env.STREAM_TOKEN_PROXY_URL,
+});
+
+module.exports = {
+  ...defaultClient,
+  createStreamTokenClient,
+  StreamTokenUnavailableError,
+  STREAM_TOKEN_TIMEOUT_MS,
+  normalizeProxyBase,
+};

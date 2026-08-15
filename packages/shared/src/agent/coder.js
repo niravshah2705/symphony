@@ -11,6 +11,7 @@ const { withAnnotations, withResources } = require('./trace-annotations');
 const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = require('./runtimes');
 const { applyPolicyToWorkflow } = require('./settings-policy');
 const { resolveHarnessForStage } = require('./policy-runtime');
+const { requiresNetworkIsolation } = require('./harnesses/deepagent');
 const codingWorkflow = require('./workflows/coding.workflow');
 
 /**
@@ -161,6 +162,7 @@ async function executeCodingRuntime({
   rubricMiddleware,
   settings,
   attribution,
+  runtimeEnv = process.env,
 }) {
   const effectivePolicy = (settings && settings.effectivePolicy) || null;
   const effectiveWorkflow = applyPolicyToWorkflow(codingWorkflow, effectivePolicy, {
@@ -177,6 +179,8 @@ async function executeCodingRuntime({
     effectivePolicy,
   });
   const skillPaths = framework.installSkills(workDir, codingWorkflow.skills);
+  const isolateNetwork = requiresNetworkIsolation(runtimeEnv);
+  const agentCtx = { apiKey, step, cwd: workDir, effectivePolicy, isolateNetwork };
   let deepAgentInvoke;
   let resolvedTools = null;
   let resolvedSkills = null;
@@ -196,6 +200,7 @@ async function executeCodingRuntime({
       step,
       repositoryProvider,
       repositoryBroker: Boolean(repositoryBroker),
+      isolateNetwork,
     });
     if (repositoryBroker) extraTools.push(repositoryBroker.createTool());
     const { agent, tools, skillPaths: builtSkills } = framework.buildAgent({
@@ -205,7 +210,7 @@ async function executeCodingRuntime({
       skillPaths,
       // `cwd` scopes the developer tools (docker/build/env/…) to this isolated
       // workspace; they refuse to operate outside it.
-      ctx: { apiKey, step, cwd: workDir, effectivePolicy },
+      ctx: agentCtx,
       extraTools,
       env,
     });
@@ -238,7 +243,7 @@ async function executeCodingRuntime({
     backendKind: codingWorkflow.backend,
     systemPrompt: codingWorkflow.systemPrompt,
     maxTurns: CONFIG.CODER.maxTurns,
-    ctx: { apiKey, step, effectivePolicy },
+    ctx: agentCtx,
     env,
     invokeConfig: invokeConfigWithResources,
     tags: codingWorkflow.tags,

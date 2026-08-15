@@ -356,7 +356,7 @@ async def preflight_for_caller(
     known_models = set(universe.get("models", []))
     metadata = {item["id"]: item for item in universe_mod.harness_metadata()}
     readiness = await secrets_service.credential_readiness_for_org(
-        session, principal.org_id
+        session, principal.org_id, resolved_project_id
     )
 
     decisions: list[StageDecision] = []

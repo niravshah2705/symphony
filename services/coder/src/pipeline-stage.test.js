@@ -110,6 +110,7 @@ function scopedStore(overrides = {}) {
       }
       : null,
     getRepositoryConfig: () => ({ provider: 'github', url: 'https://github.com/acme/fleet.git' }),
+    getApiKey: () => 'linear-key',
     ...overrides,
   };
 }
@@ -261,6 +262,7 @@ test('coder fails closed before execution when the repository snapshot drifts', 
       }
       : null,
     getRepositoryConfig: () => ({ provider: 'github', url: 'https://github.com/acme/other.git' }),
+    getApiKey: () => 'linear-key',
   };
   assert.throws(
     () => assertRepositorySnapshot(value, mismatchedStore),

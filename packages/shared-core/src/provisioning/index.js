@@ -17,8 +17,9 @@ const {
  * v2 Cloud Run, Pub/Sub, and Cloud Scheduler SDKs. All SDKs are required LAZILY
  * so importing this module (e.g. for provision/teardown re-exports or tests of
  * the pure core) never needs the GCP libraries installed. Every create/delete is
- * idempotent (ALREADY_EXISTS / NOT_FOUND tolerated) so retried provisions and
- * teardowns converge.
+ * idempotent: ALREADY_EXISTS services/jobs are reconciled in place, while
+ * ALREADY_EXISTS auxiliary resources and NOT_FOUND deletes are tolerated, so
+ * retried provisions and teardowns converge on the current secure template.
  *
  * "Reuse original builds": createService/createJob copy the image AND the secret
  * env blocks, resource limits, execution environment, scaling, concurrency,
@@ -29,6 +30,7 @@ const {
 
 const ALREADY_EXISTS = 6; // gRPC ALREADY_EXISTS
 const NOT_FOUND = 5; // gRPC NOT_FOUND
+const PROVIDER_SECRET_ENV_RE = /(?:^|_)(?:API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)(?:$|_)/i;
 
 function tolerate(codes, err) {
   if (err && codes.includes(err.code)) return;
@@ -39,6 +41,54 @@ function iamMember(value) {
   const member = String(value || '').trim();
   if (!member) return '';
   return member.includes(':') ? member : `serviceAccount:${member}`;
+}
+
+function assertContainerBoundary(spec, src, kind) {
+  const primary = src.containers && src.containers[0];
+  const secretEnv = (primary && primary.secretEnv) || [];
+  if (spec.requireSecretFreePrimary && secretEnv.length) {
+    throw new Error(`${spec.name} source app container contains secret env; ${kind} agents require sidecar-only credentials`);
+  }
+  if (spec.forbidProviderSecretsOnPrimary) {
+    const forbidden = secretEnv.find((entry) => PROVIDER_SECRET_ENV_RE.test(String(entry.name || '')));
+    if (forbidden) {
+      throw new Error(`${spec.name} source app container contains forbidden provider credential env ${forbidden.name}`);
+    }
+  }
+  if ((spec.requireEgressProxy || spec.requireProxySidecar) && (!src.containers || src.containers.length < 2)) {
+    throw new Error(`${spec.name} source ${kind} has no required proxy sidecar`);
+  }
+}
+
+async function awaitOperation(start) {
+  const [operation] = await start;
+  await operation.promise();
+}
+
+/**
+ * Reconcile a Cloud Run resource after create reports ALREADY_EXISTS.
+ *
+ * Updates require the server-owned fully-qualified name. Carrying the etag
+ * forward also makes reconciliation fail on a concurrent modification instead
+ * of silently overwriting it with a stale template.
+ */
+async function updateExistingRunResource({ client, kind, name, desired, updateMask }) {
+  const resourceKey = kind === 'service' ? 'service' : 'job';
+  const getMethod = kind === 'service' ? 'getService' : 'getJob';
+  const updateMethod = kind === 'service' ? 'updateService' : 'updateJob';
+  const [existing] = await client[getMethod]({ name });
+  if (!existing || !String(existing.name || '').trim()) {
+    throw new Error(`Cloud Run ${kind} ${name} has no server identity`);
+  }
+
+  const resource = {
+    ...desired,
+    name: existing.name,
+    ...(existing.etag ? { etag: existing.etag } : {}),
+  };
+  const request = { [resourceKey]: resource };
+  if (updateMask) request.updateMask = updateMask;
+  await awaitOperation(client[updateMethod](request));
 }
 
 let runClients = null;
@@ -67,10 +117,10 @@ function getScheduler() {
 }
 
 /** Build the executor's `clients` adapter bound to a project/region. */
-function createGcpClients({ projectId, region }) {
+function createGcpClients({ projectId, region }, dependencies = {}) {
   const parent = `projects/${projectId}/locations/${region}`;
-  const services = () => getRun().services;
-  const jobs = () => getRun().jobs;
+  const services = () => (dependencies.run || getRun()).services;
+  const jobs = () => (dependencies.run || getRun()).jobs;
 
   const serviceSrcCache = new Map();
   const jobSrcCache = new Map();
@@ -114,12 +164,7 @@ function createGcpClients({ projectId, region }) {
     },
     async createService(spec) {
       const src = spec.sourceName ? await sourceService(spec.sourceName) : { containers: [] };
-      if (spec.requireSecretFreePrimary && src.containers[0] && src.containers[0].secretEnv.length) {
-        throw new Error(`${spec.name} source app container contains secret env; pipeline agents require sidecar-only credentials`);
-      }
-      if (spec.requireEgressProxy && src.containers.length < 2) {
-        throw new Error(`${spec.name} source service has no egress-proxy sidecar`);
-      }
+      assertContainerBoundary(spec, src, 'service');
       const service = {
         ingress: spec.ingress,
         labels: spec.labels,
@@ -140,15 +185,22 @@ function createGcpClients({ projectId, region }) {
         },
       };
       try {
-        const [op] = await services().createService({ parent, serviceId: spec.name, service });
-        await op.promise();
+        await awaitOperation(services().createService({ parent, serviceId: spec.name, service }));
       } catch (err) {
-        tolerate([ALREADY_EXISTS], err);
+        if (!err || err.code !== ALREADY_EXISTS) throw err;
+        await updateExistingRunResource({
+          client: services(),
+          kind: 'service',
+          name: `${parent}/services/${spec.name}`,
+          desired: service,
+          updateMask: { paths: ['ingress', 'labels', 'template'] },
+        });
       }
       await setInvoker(spec);
     },
     async createJob(spec) {
       const src = spec.sourceName ? await sourceJob(spec.sourceName) : { containers: [] };
+      assertContainerBoundary(spec, src, 'job');
       const job = {
         labels: spec.labels,
         template: {
@@ -163,10 +215,15 @@ function createGcpClients({ projectId, region }) {
         },
       };
       try {
-        const [op] = await jobs().createJob({ parent, jobId: spec.name, job });
-        await op.promise();
+        await awaitOperation(jobs().createJob({ parent, jobId: spec.name, job }));
       } catch (err) {
-        tolerate([ALREADY_EXISTS], err);
+        if (!err || err.code !== ALREADY_EXISTS) throw err;
+        await updateExistingRunResource({
+          client: jobs(),
+          kind: 'job',
+          name: `${parent}/jobs/${spec.name}`,
+          desired: job,
+        });
       }
     },
     async createTopic(topic) {

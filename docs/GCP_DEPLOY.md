@@ -21,8 +21,9 @@ variables. Nothing GCP-specific is required for local development.
   repository-allowlisted CI/CD after server policy/approval gates.
 - **coder-worker** → a Cloud Run **Job** (one ticket per run, up to 24h) launched
   by coder-control.
-- **Firestore** replaces `data/store.json` and relays SSE events. **Secret
-  Manager** holds credentials (injected as env; override stored settings).
+- **Firestore** replaces `data/store.json` and relays SSE events. The settings
+  service encrypts customer credentials per organization/project; egress
+  sidecars resolve and inject them without exposing raw values to agent apps.
 
 Idle cost ≈ $0: static SPA + everything scale-to-zero + Firestore free tier.
 
@@ -39,7 +40,8 @@ in-process and worker events reach the gateway's SSE via the local collector
 Set the env vars documented in `.env.example` (GCP section) on each service:
 `STORE_BACKEND=firestore`, `MESSAGING_MODE=pubsub`, `EVENTS_BACKEND=firestore`,
 `AUTH_MODE=firebase`, project/region, dedicated pipeline topic names, push audience + SA, and the
-gateway's `SPA_ORIGIN` / `API_BASE_URL` / `STREAM_TOKEN_SECRET`. The public
+gateway's `SPA_ORIGIN` / `API_BASE_URL` / `STREAM_TOKEN_PROXY_URL`. The stream
+signing secret is mounted only on the gateway's stream-token proxy container. The public
 Firebase web config (`FIREBASE_API_KEY` / `FIREBASE_AUTH_DOMAIN`) is injected by
 Terraform from the managed web app — no manual key needed; `FIREBASE_PROJECT_ID`
 defaults to the project id, and `FIREBASE_ALLOWED_DOMAIN` is optional.
@@ -80,8 +82,9 @@ secret id to `managed_provider_secrets`, and create an enabled secret version
 before applying Terraform. The required names are `GEMINI_API_KEY` for
 Gemini/Antigravity, `HUGGINGFACE_API_KEY` for Hugging Face,
 `ANTHROPIC_API_KEY` for Claude key mode, and `OPENAI_API_KEY` for OpenAI/Codex
-API-key mode. The default map contains only Linear and GitHub credentials, so a
-hosted model is intentionally not ready until its LLM secret is configured.
+API-key mode. The default managed map contains only GitHub; Linear is always a
+customer-owned organization/project vault credential. A hosted model is
+intentionally not ready until its LLM secret is configured.
 Mount managed keys on the settings service only—never on an agent app container.
 `CODEX_BACKEND=chatgpt` does not accept `OPENAI_API_KEY`; it requires an
 organization-scoped imported Codex token bundle and therefore a matching
@@ -98,9 +101,12 @@ publishes the SPA to GCS, and applies Terraform in the correct staged order.
 PROJECT_ID=my-proj \
 SPA_BUCKET=my-proj-aifleet-spa \        # globally-unique
 TF_STATE_BUCKET=my-proj-tfstate \
-LINEAR_API_KEY=lin_... \                # required (services won't start without it)
 ./deploy/gcp/deploy.sh
 ```
+
+After deployment, an organization or project administrator stores its Linear
+credential in Settings. It is encrypted by the settings service and resolved
+only by the egress sidecar; it is never mounted on gateway or agent containers.
 
 Optional env: `REGION`, `AR_REPO`, `IMAGE_TAG`, `FIRESTORE_LOCATION`, `SPA_ORIGIN`,
 `FIREBASE_ALLOWED_DOMAIN` (empty = any verified user), `GITHUB_TOKEN`,

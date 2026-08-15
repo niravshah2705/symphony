@@ -306,9 +306,9 @@ async function fetchPlannedTasks(apiKey) {
   return byProject;
 }
 
-function buildKeys(settings) {
+function buildKeys(settings, linearApiKey = store.getApiKey()) {
   return {
-    linearApiKey: settings.linearApiKey,
+    linearApiKey,
     langsmithApiKey: settings.langsmithApiKey,
     langsmithTracing: settings.langsmithTracing,
     langsmithProject: settings.langsmithProject,
@@ -328,7 +328,12 @@ function hasEffectivePolicy(value) {
 }
 
 /** Resolve and validate the selected workspace policy before inspecting work. */
-async function resolveAutonomousPolicy(settings, context = {}, dependencies = {}) {
+async function resolveAutonomousPolicy(
+  settings,
+  context = {},
+  dependencies = {},
+  linearApiKey = (dependencies.getApiKey || store.getApiKey)(),
+) {
   const selected = resolveRuntimeContext({}, context);
   const resolvePolicyImpl = dependencies.resolvePolicy || fetchOrgEffectivePolicy;
   const resolveLlmImpl = dependencies.resolveLlm || resolveLlm;
@@ -350,7 +355,7 @@ async function resolveAutonomousPolicy(settings, context = {}, dependencies = {}
   }
   const prefs = (resolved && resolved.prefs) || {};
   const keys = applyOperationalPrefs(
-    buildKeys(settings),
+    buildKeys(settings, linearApiKey),
     prefs,
     dependencies.onPolicyStep || (() => {}),
   );
@@ -917,8 +922,9 @@ async function pollOnce(context = {}, dependencies = {}) {
     return { skipped: 'missing-workspace-context' };
   }
   const runtime = monitorState(selected);
-  const settings = store.getSettings();
-  if (!settings.linearApiKey) {
+  const settings = (dependencies.getSettings || store.getSettings)();
+  const linearApiKey = (dependencies.getApiKey || store.getApiKey)();
+  if (!linearApiKey) {
     log.warn('Coder poll skipped: add a Linear API key in Settings.');
     return { skipped: 'missing-linear-key' };
   }
@@ -941,7 +947,7 @@ async function pollOnce(context = {}, dependencies = {}) {
   }
   let governed;
   try {
-    governed = await resolveAutonomousPolicy(settings, selected, dependencies);
+    governed = await resolveAutonomousPolicy(settings, selected, dependencies, linearApiKey);
   } catch (err) {
     if (isPolicyUnavailableError(err)) {
       log.warn('Coder poll skipped: workspace policy is temporarily unavailable.');
@@ -957,8 +963,8 @@ async function pollOnce(context = {}, dependencies = {}) {
   let projects;
   let tasksByProject;
   try {
-    projects = await (dependencies.fetchPlannedProjects || fetchPlannedProjects)(settings.linearApiKey);
-    tasksByProject = await (dependencies.fetchPlannedTasks || fetchPlannedTasks)(settings.linearApiKey);
+    projects = await (dependencies.fetchPlannedProjects || fetchPlannedProjects)(linearApiKey);
+    tasksByProject = await (dependencies.fetchPlannedTasks || fetchPlannedTasks)(linearApiKey);
   } catch (err) {
     log.warn(`Coder poll: fetch failed: ${err && err.message ? err.message : err}`);
     return { skipped: 'planning-provider-unavailable' };
@@ -966,7 +972,7 @@ async function pollOnce(context = {}, dependencies = {}) {
 
   const repository = store.getRepositoryConfig();
   const ctx = {
-    apiKey: settings.linearApiKey,
+    apiKey: linearApiKey,
     keys: governed.keys,
     settings: governed.settings,
     orgId: selected.orgId,
@@ -986,7 +992,7 @@ async function pollOnce(context = {}, dependencies = {}) {
     // but only when nothing for it is still in flight.
     if (!tasks.length) {
       if (!projectBusy(project.id, selected)) {
-        applyAidone(settings.linearApiKey, { project, onStep: (m) => log.info(`[coder ${project.name}] ${m}`) })
+        applyAidone(linearApiKey, { project, onStep: (m) => log.info(`[coder ${project.name}] ${m}`) })
           .then(() => log.info(`Project "${project.name}" fully coded → aidone.`))
           .catch((err) => log.warn(`aidone for "${project.name}" failed: ${err && err.message ? err.message : err}`));
       }

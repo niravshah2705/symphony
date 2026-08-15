@@ -6,8 +6,8 @@
 
 Directory-based community: scripts
 
-- **Size**: 34 nodes
-- **Cohesion**: 0.0878
+- **Size**: 37 nodes
+- **Cohesion**: 0.0897
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,7 +17,7 @@ Directory-based community: scripts
 | resolve | Function | ./scripts/build-graphs.sh | 36-36 |
 | parseArgs | Function | ./scripts/build-harness-registry.js | 39-56 |
 | main | Function | ./scripts/build-harness-registry.js | 58-115 |
-| main | Function | ./scripts/models-label-group.js | 21-38 |
+| groupLabels | Function | ./scripts/models-label-group.js | 24-40 |
 | resolveStrength | Function | ./scripts/obfuscate-spa.js | 135-141 |
 | collectJsFiles | Function | ./scripts/obfuscate-spa.js | 148-157 |
 | obfuscateCode | Function | ./scripts/obfuscate-spa.js | 167-174 |
@@ -44,10 +44,13 @@ Directory-based community: scripts
 | test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L35 | Test | ./scripts/seo-discovery.test.js | 35-50 |
 | test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-68 |
 | test:compact ADLC launcher has four named, local-icon assistant links@L70 | Test | ./scripts/seo-discovery.test.js | 70-81 |
-| envFor | Function | ./scripts/start-all.js | 55-63 |
-| prefixStream | Function | ./scripts/start-all.js | 65-76 |
-| startService | Function | ./scripts/start-all.js | 78-93 |
-| shutdown | Function | ./scripts/start-all.js | 95-102 |
+| envFor | Function | ./scripts/start-all.js | 64-109 |
+| prefixStream | Function | ./scripts/start-all.js | 111-122 |
+| startService | Function | ./scripts/start-all.js | 124-140 |
+| waitForHealth | Function | ./scripts/start-all.js | 142-159 |
+| probe | Function | ./scripts/start-all.js | 145-156 |
+| shutdown | Function | ./scripts/start-all.js | 161-168 |
+| main | Function | ./scripts/start-all.js | 173-180 |
 
 ## Execution Flows
 
@@ -57,21 +60,21 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `join` (47 edge(s))
+- `join` (48 edge(s))
 - `match` (24 edge(s))
-- `write` (21 edge(s))
+- `write` (22 edge(s))
 - `equal` (21 edge(s))
 - `readFileSync` (13 edge(s))
 - `writeFileSync` (11 edge(s))
 - `log` (9 edge(s))
 - `mkdtempSync` (8 edge(s))
 - `tmpdir` (8 edge(s))
+- `map` (8 edge(s))
 - `doesNotMatch` (8 edge(s))
-- `map` (7 edge(s))
+- `String` (7 edge(s))
 - `run` (7 edge(s))
 - `deepEqual` (6 edge(s))
 - `resolveStrength` (5 edge(s))
-- `exit` (4 edge(s))
 
 ### Incoming
 
@@ -80,9 +83,9 @@ No execution flows pass through this community.
 - `join` (18 edge(s))
 - `./scripts/obfuscate-spa.js` (15 edge(s))
 - `./scripts/obfuscate-spa.test.js` (12 edge(s))
+- `./scripts/start-all.js` (11 edge(s))
 - `readFileSync` (10 edge(s))
 - `doesNotMatch` (8 edge(s))
-- `./scripts/start-all.js` (7 edge(s))
 - `run` (6 edge(s))
 - `deepEqual` (6 edge(s))
 - `mkdtempSync` (5 edge(s))

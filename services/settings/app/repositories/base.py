@@ -25,6 +25,11 @@ def org_secrets_col(org_id: uuid.UUID) -> str:
     return f"{ORGS}/{org_id}/secrets"
 
 
+def project_secrets_col(org_id: uuid.UUID, project_id: uuid.UUID) -> str:
+    """Per-project encrypted secret override collection."""
+    return f"{ORGS}/{org_id}/projects/{project_id}/secrets"
+
+
 def org_deployment_approvals_col(org_id: uuid.UUID) -> str:
     """Short-lived, run-bound deployment approvals for the orchestrator."""
     return f"{ORGS}/{org_id}/deployment_approvals"

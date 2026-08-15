@@ -19,16 +19,19 @@ const SOURCE_SVC = {
     maxInstanceRequestConcurrency: 10,
     containers: [
       {
+        name: 'app',
         image: 'registry/planner:sha',
         ports: [{ containerPort: 8080 }],
         env: [
           { name: 'PLANNER_PORT', value: '8080' },
-          { name: 'LINEAR_API_KEY', valueSource: { secretKeyRef: { secret: 'linear-api-key', version: 'latest' } } },
+          { name: 'EXAMPLE_PROVIDER_TOKEN', valueSource: { secretKeyRef: { secret: 'example-provider-token', version: 'latest' } } },
         ],
         resources: { limits: { cpu: '1', memory: '512Mi' } },
         volumeMounts: [{ name: 'skills', mountPath: '/skills' }],
+        dependsOn: ['proxy'],
       },
       {
+        name: 'proxy',
         image: 'registry/proxy:sha',
         // sidecar: no ports
         env: [
@@ -38,6 +41,8 @@ const SOURCE_SVC = {
           { name: 'INTERNAL_API_TOKEN', valueSource: { secretKeyRef: { secret: 'internal-api-token', version: 'latest' } } },
         ],
         resources: { limits: { cpu: '1', memory: '256Mi' } },
+        startupProbe: { httpGet: { path: '/healthz', port: 4030 } },
+        livenessProbe: { httpGet: { path: '/healthz', port: 4030 } },
       },
     ],
   },
@@ -91,12 +96,15 @@ test('cloneContainers propagates the sidecar to the tenant stack', () => {
   assert.deepEqual(primary.resources, { limits: { cpu: '1', memory: '512Mi' } });
   const primaryEnv = Object.fromEntries(primary.env.filter((e) => !e.valueSource).map((e) => [e.name, e.value]));
   assert.equal(primaryEnv.STORE_NAMESPACE, 'tabc123');
-  assert.ok(primary.env.some((e) => e.name === 'LINEAR_API_KEY' && e.valueSource));
+  assert.ok(primary.env.some((e) => e.name === 'EXAMPLE_PROVIDER_TOKEN' && e.valueSource));
+  assert.equal(primary.name, 'app');
+  assert.deepEqual(primary.dependsOn, ['proxy']);
 
   // Sidecar: NO ports, source secret env preserved, tenant patch overlaid on
   // its source plain env (SETTINGS_URL kept, PROXY_ORG_ID added).
   const sidecar = containers[1];
   assert.equal(sidecar.ports, undefined);
+  assert.equal(sidecar.name, 'proxy');
   assert.equal(sidecar.image, 'registry/proxy:sha');
   assert.deepEqual(sidecar.resources, { limits: { cpu: '1', memory: '256Mi' } });
   const sidecarEnv = Object.fromEntries(sidecar.env.filter((e) => !e.valueSource).map((e) => [e.name, e.value]));
@@ -105,6 +113,8 @@ test('cloneContainers propagates the sidecar to the tenant stack', () => {
   assert.equal(sidecarEnv.STORE_NAMESPACE, 'tabc123');
   assert.ok(sidecar.env.some((e) => e.name === 'GITHUB_TOKEN' && e.valueSource));
   assert.ok(sidecar.env.some((e) => e.name === 'INTERNAL_API_TOKEN' && e.valueSource));
+  assert.deepEqual(sidecar.startupProbe, { httpGet: { path: '/healthz', port: 4030 } });
+  assert.deepEqual(sidecar.livenessProbe, { httpGet: { path: '/healthz', port: 4030 } });
 });
 
 test('cloneContainers for a JOB gives the primary no ports', () => {

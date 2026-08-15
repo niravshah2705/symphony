@@ -4,12 +4,17 @@ const crypto = require('crypto');
 const { CONFIG } = require('../config');
 const logger = require('../logger');
 const oauth = require('./oauth');
-const { SENTINEL_TOKEN } = require('../egress');
+const { SENTINEL_TOKEN, projectEgressHeaders } = require('../egress');
+const { currentWorkspaceContext } = require('../store/workspace-context');
 const { ensureFreshCodexTokens, ensureFreshClaudeTokens } = require('./oauth-tokens');
 const { runWithRetry, streamWithRetry } = require('./llm-retry');
 
 // Hard cap on the configurable stream-retry count (mirrors settings-patch.js).
 const MAX_STREAM_RETRIES = 5;
+
+function proxyProjectHeaders() {
+  return CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {};
+}
 
 /** Coerce an operator-supplied retry count to a bounded, non-negative integer. */
 function clampStreamRetries(value) {
@@ -199,7 +204,10 @@ async function fetchLmstudioLoadedContext(host, model) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 2000);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: proxyProjectHeaders(),
+    });
     if (!res.ok) return null;
     const body = await res.json();
     const models = (body && (body.data || body.models)) || [];
@@ -272,6 +280,7 @@ function createCodexChatgptModel(llm, json) {
         'OpenAI-Beta': 'responses=experimental',
         originator: 'codex_cli_rs',
         session_id: crypto.randomUUID(),
+        ...proxyProjectHeaders(),
       },
     },
     // Bound the growing deep-agent history to fit the Codex context window (only
@@ -393,7 +402,11 @@ function createClaudeModel(llm /* , json */) {
         apiKey: null,
         authToken: llm.accessToken,
         baseURL,
-        defaultHeaders: { ...(options.defaultHeaders || {}), 'anthropic-beta': betaHeader },
+        defaultHeaders: {
+          ...(options.defaultHeaders || {}),
+          'anthropic-beta': betaHeader,
+          ...proxyProjectHeaders(),
+        },
       }),
   };
   // Opus 4.8 supports adaptive thinking only; fixed budget_tokens and sampling
@@ -437,6 +450,7 @@ function getManagedChatOpenAIClass() {
         model: fields && fields.model,
         apiKey: fields && fields.apiKey,
         baseURL: fields && fields.configuration && fields.configuration.baseURL,
+        defaultHeaders: fields && fields.configuration && fields.configuration.defaultHeaders,
         timeout: fields && fields.timeout,
         maxRetries: fields && fields.maxRetries,
       };
@@ -453,7 +467,10 @@ function getManagedChatOpenAIClass() {
         maxTokens: this.summaryMaxTokens,
         timeout: this._summaryCfg.timeout,
         maxRetries: this._summaryCfg.maxRetries,
-        configuration: { baseURL: this._summaryCfg.baseURL },
+        configuration: {
+          baseURL: this._summaryCfg.baseURL,
+          defaultHeaders: this._summaryCfg.defaultHeaders,
+        },
       });
     }
     _summarizer() {
@@ -555,7 +572,7 @@ function createChatModel(llm, { json = false } = {}) {
       model: llm.model,
       apiKey: llm.accessToken,
       maxTokens: llm.numTokens,
-      configuration: { baseURL: llm.baseUrl },
+      configuration: { baseURL: llm.baseUrl, defaultHeaders: proxyProjectHeaders() },
       promptBudget: codexPromptBudget(llm),
       charsPerToken: CONFIG.OAUTH.charsPerToken,
       contextMode: llm.contextMode,
@@ -586,7 +603,7 @@ function createChatModel(llm, { json = false } = {}) {
       apiKey: llm.apiKey,
       maxTokens: llm.numTokens,
       streaming: true,
-      configuration: { baseURL: llm.baseUrl },
+      configuration: { baseURL: llm.baseUrl, defaultHeaders: proxyProjectHeaders() },
       streamRetries: clampStreamRetries(llm.streamRetries),
       retryProvider: 'huggingface',
     };
@@ -611,7 +628,7 @@ function createChatModel(llm, { json = false } = {}) {
       apiKey: llm.apiKey,
       maxTokens: llm.numTokens,
       streaming: true,
-      configuration: { baseURL: llm.baseUrl },
+      configuration: { baseURL: llm.baseUrl, defaultHeaders: proxyProjectHeaders() },
       streamRetries: clampStreamRetries(llm.streamRetries),
       retryProvider: 'antigravity',
     };
@@ -648,7 +665,7 @@ function createChatModel(llm, { json = false } = {}) {
       // timeout fails once instead of being retried into a much longer wait.
       timeout: CONFIG.LMSTUDIO.requestTimeoutMs,
       maxRetries: CONFIG.LMSTUDIO.maxRetries,
-      configuration: { baseURL: llm.baseUrl },
+      configuration: { baseURL: llm.baseUrl, defaultHeaders: proxyProjectHeaders() },
       // Bound the growing deep-agent history to fit the loaded context window, so a
       // long run can't overflow it (the max_tokens cap only bounds OUTPUT, not the
       // re-sent input). `contextMode` picks the strategy (trim | summarize | none);
@@ -687,7 +704,7 @@ function createChatModel(llm, { json = false } = {}) {
       streaming: true,
       timeout: CONFIG.OMLX.requestTimeoutMs,
       maxRetries: CONFIG.OMLX.maxRetries,
-      configuration: { baseURL: llm.baseUrl },
+      configuration: { baseURL: llm.baseUrl, defaultHeaders: proxyProjectHeaders() },
       promptBudget: omlxPromptBudget(llm),
       charsPerToken: CONFIG.OMLX.charsPerToken,
       contextMode: llm.contextMode,
@@ -722,6 +739,7 @@ function createChatModel(llm, { json = false } = {}) {
   const OllamaChatModel = getOllamaChatModelClass();
   const opts = {
     baseUrl: llm.host,
+    headers: proxyProjectHeaders(),
     model: llm.model,
     numCtx: llm.contextWindow,
     numPredict: llm.numTokens,
@@ -860,7 +878,9 @@ async function resolveLlm(settings, role = 'global') {
     };
   }
   if (provider === 'lmstudio') {
-    const host = String(settings.lmstudioHost || CONFIG.LMSTUDIO.defaultHost).replace(/\/$/, '');
+    const host = String(
+      CONFIG.EGRESS_PROXY_URL ? CONFIG.LMSTUDIO.defaultHost : settings.lmstudioHost || CONFIG.LMSTUDIO.defaultHost
+    ).replace(/\/$/, '');
     // Key the prompt budget to the window the model is ACTUALLY loaded with (LM
     // Studio may load it smaller than configured), not just the operator setting.
     const declaredCtx = Number(settings.lmstudioContextWindow) || 0;
@@ -888,14 +908,14 @@ async function resolveLlm(settings, role = 'global') {
     };
   }
   if (provider === 'omlx') {
-    const host = String(settings.omlxHost || CONFIG.OMLX.defaultHost)
+    const host = String(CONFIG.EGRESS_PROXY_URL ? CONFIG.OMLX.defaultHost : settings.omlxHost || CONFIG.OMLX.defaultHost)
       .replace(/\/v1\/?$/i, '')
       .replace(/\/$/, '');
     return {
       provider: 'omlx',
       host,
       baseUrl: `${host}${CONFIG.OMLX.apiPath}`,
-      apiKey: settings.omlxApiKey || '',
+      apiKey: CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : settings.omlxApiKey || '',
       model: settings.omlxModel,
       contextWindow: settings.omlxContextWindow,
       numTokens: settings.omlxNumTokens,
@@ -911,14 +931,14 @@ async function resolveLlm(settings, role = 'global') {
     };
   }
   if (provider === 'huggingface') {
-    const host = String(settings.huggingfaceHost || CONFIG.HUGGINGFACE.defaultHost)
+    const host = String(CONFIG.EGRESS_PROXY_URL ? CONFIG.HUGGINGFACE.defaultHost : settings.huggingfaceHost || CONFIG.HUGGINGFACE.defaultHost)
       .replace(/\/v1\/?$/i, '')
       .replace(/\/$/, '');
     return {
       provider: 'huggingface',
       host,
       baseUrl: `${host}${CONFIG.HUGGINGFACE.apiPath}`,
-      apiKey: settings.huggingfaceApiKey || '',
+      apiKey: CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : settings.huggingfaceApiKey || '',
       model: settings.huggingfaceModel,
       contextWindow: settings.huggingfaceContextWindow,
       numTokens: settings.huggingfaceMaxTokens || 8192,
@@ -932,7 +952,7 @@ async function resolveLlm(settings, role = 'global') {
     // Gemini API key (mandatory). It is the credential for BOTH the native harness
     // (@google/genai) and the OpenAI-compatible deep-agent path, so it is exposed as
     // `apiKey` (deep-agent) and `accessToken` (harness auth guard) on the descriptor.
-    const apiKey = settings.antigravityApiKey || '';
+    const apiKey = CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : settings.antigravityApiKey || '';
     return {
       provider: 'antigravity',
       apiKey,
@@ -953,7 +973,9 @@ async function resolveLlm(settings, role = 'global') {
   if (provider !== 'ollama') throw new TypeError(`Unsupported LLM provider: ${provider || 'unknown'}`);
   return {
     provider: 'ollama',
-    host: settings.ollamaHost,
+    host: String(
+      CONFIG.EGRESS_PROXY_URL ? CONFIG.OLLAMA.defaultHost : settings.ollamaHost || CONFIG.OLLAMA.defaultHost
+    ).replace(/\/$/, ''),
     model: settings.ollamaModel,
     contextWindow: settings.ollamaContextWindow,
     numTokens: settings.ollamaNumTokens,

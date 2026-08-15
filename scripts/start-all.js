@@ -19,6 +19,7 @@
 
 const path = require('path');
 const crypto = require('crypto');
+const http = require('http');
 const { spawn } = require('child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -28,6 +29,14 @@ const watch = process.argv.includes('--watch');
 // preserving zero-config `npm start` without making internal routes public.
 const localInternalToken = String(process.env.INTERNAL_API_TOKEN || '').trim()
   || crypto.randomBytes(32).toString('base64url');
+const localStreamSecret = crypto.randomBytes(32).toString('base64url');
+const egressProxyPort = Number(process.env.LOCAL_EGRESS_PROXY_PORT) || 4030;
+const streamProxyPort = Number(process.env.LOCAL_STREAM_PROXY_PORT) || 4031;
+
+const PROXIES = [
+  { name: 'egress-proxy', entry: 'services/proxy/src/index.js', healthPort: egressProxyPort },
+  { name: 'stream-proxy', entry: 'services/proxy/src/index.js', healthPort: streamProxyPort },
+];
 
 // Start the agent services first so the gateway's proxy targets are likely up
 // by the time the first browser request arrives (connections are lazy anyway).
@@ -53,7 +62,44 @@ let shuttingDown = false;
  * processes; the gateway reads its own in-process bus (no self-sink).
  */
 function envFor(name) {
-  const env = { ...process.env, INTERNAL_API_TOKEN: localInternalToken };
+  // Never copy ambient provider/stream credentials or the direct OpenSWE target
+  // into application children. The settings service owns provider credentials;
+  // only the appropriate proxy gets its scoped control or trusted target config.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => (
+    key === 'FIREBASE_API_KEY'
+    || (
+      key !== 'OPENSWE_URL'
+      && !/(?:API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)$/i.test(key)
+    )
+  )));
+  env.INTERNAL_API_TOKEN = localInternalToken;
+  if (name === 'egress-proxy') {
+    env.PROXY_PORT = String(egressProxyPort);
+    env.PROXY_CAPABILITIES = 'egress';
+    env.PROXY_ORG_ID = String(process.env.PROXY_ORG_ID || process.env.FLEET_ORG_ID || '').trim();
+    env.ORG_INTERNAL_API_TOKEN = String(process.env.ORG_INTERNAL_API_TOKEN || '').trim();
+    env.SETTINGS_URL = process.env.SETTINGS_URL || 'http://127.0.0.1:8100';
+    env.OLLAMA_PROXY_UPSTREAM = process.env.OLLAMA_PROXY_UPSTREAM
+      || process.env.OLLAMA_HOST
+      || 'http://127.0.0.1:11434';
+    env.LMSTUDIO_PROXY_UPSTREAM = process.env.LMSTUDIO_PROXY_UPSTREAM
+      || process.env.LMSTUDIO_HOST
+      || 'http://127.0.0.1:1234';
+    env.OMLX_PROXY_UPSTREAM = process.env.OMLX_PROXY_UPSTREAM
+      || process.env.OMLX_HOST
+      || 'http://127.0.0.1:8000';
+    env.OPENSWE_PROXY_UPSTREAM = process.env.OPENSWE_PROXY_UPSTREAM
+      || process.env.OPENSWE_URL
+      || 'http://127.0.0.1:2024';
+  } else if (name === 'stream-proxy') {
+    env.PROXY_PORT = String(streamProxyPort);
+    env.PROXY_CAPABILITIES = 'stream-token';
+    env.STREAM_TOKEN_SECRET = localStreamSecret;
+  } else if (name === 'gateway') {
+    env.STREAM_TOKEN_PROXY_URL = `http://127.0.0.1:${streamProxyPort}`;
+  } else if (['planner', 'coder', 'tester', 'deployer'].includes(name)) {
+    env.EGRESS_PROXY_URL = `http://127.0.0.1:${egressProxyPort}`;
+  }
   if (String(env.EVENTS_BACKEND || 'memory').toLowerCase() === 'firestore') return env;
   const gatewayPort = Number(env.PORT) || 4000;
   const sink = `http://localhost:${gatewayPort}/internal/events`;
@@ -90,6 +136,26 @@ function startService({ name, entry }) {
     shutdown(code || 1);
   });
   children.push({ name, child });
+  return child;
+}
+
+function waitForHealth(port, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const probe = () => {
+      const req = http.get(`http://127.0.0.1:${port}/healthz`, (res) => {
+        res.resume();
+        if (res.statusCode === 200) return resolve();
+        if (Date.now() >= deadline) return reject(new Error(`proxy health check on ${port} returned ${res.statusCode}`));
+        setTimeout(probe, 100);
+      });
+      req.on('error', () => {
+        if (Date.now() >= deadline) return reject(new Error(`proxy health check on ${port} timed out`));
+        setTimeout(probe, 100);
+      });
+    };
+    probe();
+  });
 }
 
 function shutdown(exitCode) {
@@ -104,5 +170,16 @@ function shutdown(exitCode) {
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
-for (const service of SERVICES) startService(service);
-process.stdout.write(`[start-all] started ${SERVICES.map((s) => s.name).join(', ')}${watch ? ' (watch mode)' : ''}\n`);
+async function main() {
+  for (const proxy of PROXIES) {
+    startService(proxy);
+    await waitForHealth(proxy.healthPort);
+  }
+  for (const service of SERVICES) startService(service);
+  process.stdout.write(`[start-all] started ${[...PROXIES, ...SERVICES].map((s) => s.name).join(', ')}${watch ? ' (watch mode)' : ''}\n`);
+}
+
+main().catch((err) => {
+  process.stderr.write(`[start-all] startup failed: ${err.message}\n`);
+  shutdown(1);
+});

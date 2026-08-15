@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { runTicket, runTicketInProcess } = require('./run-ticket');
 const orchestrator = require('@ai-fleet/shared/agent/coder-orchestrator');
 const { PolicyDeniedError } = require('@ai-fleet/shared/agent/settings-policy');
+const { SENTINEL_TOKEN } = require('@ai-fleet/shared/egress');
 
 const loadedIssue = Object.freeze({
   id: 'issue-1',
@@ -19,6 +20,7 @@ const loadedIssue = Object.freeze({
 
 function baseDependencies(overrides = {}) {
   return {
+    getApiKey: () => 'linear-key',
     getSettings: () => ({
       linearApiKey: 'linear-key',
       agentRuntime: 'deepagent',
@@ -95,6 +97,8 @@ test('in-process coder resolves selected scope before model preflight and enforc
   assert.equal(coderArgs.keys.agentRuntime, 'claude-agent-sdk');
   assert.equal(coderArgs.keys.workflowPattern, 'supervisor');
   assert.equal(coderArgs.keys.langsmithTracing, false);
+  assert.equal(coderArgs.apiKey, 'linear-key');
+  assert.equal(coderArgs.keys.linearApiKey, 'linear-key');
   assert.deepEqual(coderArgs.settings, {
     effectivePolicy,
     orgId: 'org-1',
@@ -105,6 +109,50 @@ test('in-process coder resolves selected scope before model preflight and enforc
     assert.equal(emitted.conversationId, 'conversation-1');
     assert.deepEqual(emitted.context, { organizationId: 'org-1', projectId: 'native-project-1' });
   }
+});
+
+test('proxy-vault coder needs no stored Linear key and passes only the sentinel to Linear callers', async () => {
+  const linearKeys = [];
+  let coderArgs;
+
+  await runTicketInProcess(
+    {
+      issueId: 'issue-1',
+      blocking: true,
+      orgId: 'org-proxy-vault',
+      nativeProjectId: 'project-proxy-vault',
+    },
+    baseDependencies({
+      getSettings: () => ({
+        linearApiKey: '',
+        agentRuntime: 'deepagent',
+        workflowPattern: 'sequential',
+      }),
+      getApiKey: () => SENTINEL_TOKEN,
+      loadIssue: async (_settings, _issueId, apiKey) => {
+        linearKeys.push(apiKey);
+        return { ...loadedIssue };
+      },
+      resolvePolicy: async () => ({
+        effectivePolicy: { harness: { effective: ['deepagent'] } },
+        prefs: {},
+      }),
+      resolveLlm: async () => ({ provider: 'codex', model: 'gpt-5.6-terra' }),
+      preflightAndPause: async (_issue, resolveRole) => ({
+        llm: await resolveRole('execution'),
+        role: 'execution',
+        selection: { provider: 'github' },
+      }),
+      runCoder: async (args) => {
+        coderArgs = args;
+        return { finalText: 'complete' };
+      },
+    }),
+  );
+
+  assert.deepEqual(linearKeys, [SENTINEL_TOKEN]);
+  assert.equal(coderArgs.apiKey, SENTINEL_TOKEN);
+  assert.equal(coderArgs.keys.linearApiKey, SENTINEL_TOKEN);
 });
 
 test('legacy empty-context coder remains allow-all when policy resolution is unavailable', async () => {

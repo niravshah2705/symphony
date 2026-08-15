@@ -1,8 +1,6 @@
 'use strict';
 
 const express = require('express');
-const { CONFIG } = require('@ai-fleet/shared/config');
-const { SENTINEL_TOKEN } = require('@ai-fleet/shared/egress');
 const log = require('@ai-fleet/shared/logger');
 const store = require('@ai-fleet/shared/store');
 const linear = require('@ai-fleet/shared/linear');
@@ -109,15 +107,10 @@ function assertRepositorySnapshot(command, storeImpl = store, issue = null) {
   return { snapshot: admitted, live: configured, token };
 }
 
-function linearAccessKey(settings) {
-  const configured = String((settings && settings.linearApiKey) || '');
-  return configured || (CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : '');
-}
-
-function codingKeys(agent) {
+function codingKeys(agent, linearApiKey) {
   const settings = agent.settings || {};
   return {
-    linearApiKey: settings.linearApiKey,
+    linearApiKey,
     langsmithApiKey: settings.langsmithApiKey,
     langsmithTracing: settings.langsmithTracing,
     langsmithProject: settings.langsmithProject,
@@ -263,7 +256,7 @@ async function executeCodingStage(command, dependencies = {}) {
     { role: 'execution', workflowStage: 'coding' },
     { ...dependencies, store: storeImpl },
   );
-  const apiKey = linearAccessKey(agent.settings);
+  const apiKey = String(storeImpl.getApiKey() || '');
   if (!apiKey) {
     throw new StageExecutionError('Linear access is unavailable to the coder.', 'linear_not_configured');
   }
@@ -272,7 +265,7 @@ async function executeCodingStage(command, dependencies = {}) {
   const finishIssueImpl = dependencies.finishIssue || finishIssue;
   const loadIssue = dependencies.loadIssue || ((id) => loadPipelineIssue(apiKey, id, linearImpl));
   const step = typeof dependencies.step === 'function' ? dependencies.step : () => {};
-  const keys = codingKeys(agent);
+  const keys = codingKeys(agent, apiKey);
   const outcomes = [];
   const loadedIssues = [];
   const repositories = new Map();

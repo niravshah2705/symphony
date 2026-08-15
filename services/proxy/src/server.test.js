@@ -59,7 +59,12 @@ test('routes a request to the upstream, injecting the credential, and streams th
   const oauthManager = {
     getClaudeAuth: async () => ({ accessToken: 'acc-token', betaHeader: 'oauth-2025-04-20' }),
   };
-  const handler = createProxyHandler({ fetchImpl, oauthManager, logger: { error() {}, info() {}, warn() {} } });
+  const handler = createProxyHandler({
+    fetchImpl,
+    oauthManager,
+    env: { INTERNAL_API_TOKEN: 'managed-token' },
+    logger: { error() {}, info() {}, warn() {} },
+  });
   const { server, port } = await startServer(handler);
 
   try {

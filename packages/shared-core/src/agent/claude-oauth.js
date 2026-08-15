@@ -1,8 +1,9 @@
 'use strict';
 
 const { CONFIG } = require('../config');
+const { projectEgressHeaders } = require('../egress');
 const pkce = require('./pkce');
-const { normalizeWorkspaceContext } = require('../store/workspace-context');
+const { normalizeWorkspaceContext, currentWorkspaceContext } = require('../store/workspace-context');
 
 /**
  * Claude (Anthropic) OAuth 2.0 Authorization Code + PKCE (S256) helper —
@@ -121,7 +122,11 @@ function normalizeTokenResponse(json, previous = null) {
 async function postToken(payload) {
   const resp = await fetch(CLAUDE.tokenUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
+    },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(15000),
   });

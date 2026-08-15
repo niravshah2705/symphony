@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 692 nodes
-- **Cohesion**: 0.4728
+- **Size**: 698 nodes
+- **Cohesion**: 0.4712
 - **Dominant Language**: javascript
 
 ## Members
@@ -21,23 +21,23 @@ Directory-based community: public/js
 | agentPauseCopy | Function | ./public/js/agent-pause.js | 96-98 |
 | localized | Function | ./public/js/agent-pause.js | 100-105 |
 | agentPauseNotice | Function | ./public/js/agent-pause.js | 108-124 |
-| setAccessTokenProvider | Function | ./public/js/api.js | 15-17 |
-| contextId | Function | ./public/js/api.js | 19-22 |
-| setRequestContext | Function | ./public/js/api.js | 25-30 |
-| getRequestContext | Function | ./public/js/api.js | 32-34 |
-| requestContextQuerySuffix | Function | ./public/js/api.js | 38-44 |
-| refreshAccessToken | Function | ./public/js/api.js | 49-52 |
-| readJson | Function | ./public/js/api.js | 54-60 |
-| errorCode | Function | ./public/js/api.js | 64-67 |
-| getApiBase | Function | ./public/js/api.js | 75-78 |
-| setApiBase | Function | ./public/js/api.js | 89-92 |
-| notifyAuthenticationRequired | Function | ./public/js/api.js | 94-98 |
-| request | Function | ./public/js/api.js | 100-175 |
-| openStream | Function | ./public/js/api.js | 192-264 |
-| mintFailureCanRetry | Function | ./public/js/api.js | 198-202 |
-| scheduleReconnect | Function | ./public/js/api.js | 204-217 |
-| connect | Function | ./public/js/api.js | 219-246 |
-| close | Function | ./public/js/api.js | 258-262 |
+| setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
+| contextId | Function | ./public/js/api.js | 20-23 |
+| setRequestContext | Function | ./public/js/api.js | 26-31 |
+| getRequestContext | Function | ./public/js/api.js | 33-35 |
+| requestContextQuerySuffix | Function | ./public/js/api.js | 39-45 |
+| refreshAccessToken | Function | ./public/js/api.js | 50-53 |
+| readJson | Function | ./public/js/api.js | 55-61 |
+| errorCode | Function | ./public/js/api.js | 65-68 |
+| getApiBase | Function | ./public/js/api.js | 76-79 |
+| setApiBase | Function | ./public/js/api.js | 90-93 |
+| notifyAuthenticationRequired | Function | ./public/js/api.js | 95-99 |
+| request | Function | ./public/js/api.js | 101-176 |
+| openStream | Function | ./public/js/api.js | 194-266 |
+| mintFailureCanRetry | Function | ./public/js/api.js | 200-204 |
+| scheduleReconnect | Function | ./public/js/api.js | 206-219 |
+| connect | Function | ./public/js/api.js | 221-248 |
+| close | Function | ./public/js/api.js | 260-264 |
 | ensureStylesheet | Function | ./public/js/app.js | 42-64 |
 | route | Function | ./public/js/app.js | 66-85 |
 | load | Function | ./public/js/app.js | 71-83 |
@@ -65,7 +65,7 @@ Directory-based community: public/js
 | renderAuthControl | Function | ./public/js/app.js | 508-639 |
 | renderAuthenticationGate | Function | ./public/js/app.js | 641-700 |
 
-*... and 642 more members.*
+*... and 648 more members.*
 
 ## Execution Flows
 
@@ -79,33 +79,33 @@ Directory-based community: public/js
 - **render** (criticality: 0.78, depth: 6)
 - **onUp** (criticality: 0.76, depth: 6)
 - **hostedConnection** (criticality: 0.75, depth: 8)
-- *... and 20 more flows.*
+- *... and 16 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `append` (198 edge(s))
+- `append` (199 edge(s))
 - `addEventListener` (192 edge(s))
 - `map` (146 edge(s))
 - `String` (109 edge(s))
 - `push` (82 edge(s))
+- `trim` (79 edge(s))
 - `filter` (78 edge(s))
-- `trim` (76 edge(s))
-- `isArray` (64 edge(s))
+- `isArray` (65 edge(s))
 - `has` (62 edge(s))
 - `setAttribute` (61 edge(s))
-- `catch` (54 edge(s))
+- `Boolean` (56 edge(s))
+- `catch` (55 edge(s))
 - `querySelector` (48 edge(s))
 - `slice` (44 edge(s))
-- `Boolean` (43 edge(s))
 - `t` (43 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (159 edge(s))
+- `./public/js/api.js` (158 edge(s))
 - `./public/js/workflow-designer-model.mjs` (145 edge(s))
-- `./public/js/views/settings.js` (128 edge(s))
+- `./public/js/views/settings.js` (132 edge(s))
 - `./public/js/views/agent.js` (98 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (89 edge(s))
 - `./public/js/app.js` (86 edge(s))

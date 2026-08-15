@@ -19,7 +19,7 @@
 # deploy_all=true so all images build), and CD does the rest.
 #
 # Usage:
-#   PROJECT_ID=my-proj REPO=owner/repo LINEAR_API_KEY=lin_... \
+#   PROJECT_ID=my-proj REPO=owner/repo \
 #     ./deploy/gcp/bootstrap.sh
 #
 # Optional env: REGION (asia-south1), SPA_BUCKET (<project>-aifleet-spa),
@@ -133,8 +133,6 @@ seed() { ensure_secret "$1"; if has_version "$1"; then echo "  $1: has a version
 STREAM_TOKEN_SECRET="${STREAM_TOKEN_SECRET:-$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || head -c 32 /dev/urandom | base64 | tr -d '\n')}"
 seed stream-token-secret "$STREAM_TOKEN_SECRET"
 # org-jwt-secret is Terraform-managed (random_password + version) — no seed here.
-if [ -n "${LINEAR_API_KEY:-}" ]; then seed linear-api-key "$LINEAR_API_KEY"
-else ensure_secret linear-api-key; echo "  linear-api-key: created EMPTY — add a version before deploy (services won't start without it)"; fi
 ensure_secret github-token;     [ -n "${GITHUB_TOKEN:-}" ]      && seed github-token     "$GITHUB_TOKEN"      || true
 ensure_secret langsmith-api-key;[ -n "${LANGSMITH_API_KEY:-}" ] && seed langsmith-api-key "$LANGSMITH_API_KEY" || true
 ensure_secret email-smtp-user
@@ -207,7 +205,6 @@ if command -v terraform >/dev/null 2>&1; then
       -var="email_public_app_url=${EMAIL_PUBLIC_APP_URL}" \
       "$1" "$2" >/dev/null && echo "  $1: imported"; fi; }
   tfimport 'google_secret_manager_secret.stream_token_secret' "projects/${PROJECT_ID}/secrets/stream-token-secret"
-  tfimport 'google_secret_manager_secret.linear_api_key'      "projects/${PROJECT_ID}/secrets/linear-api-key"
   tfimport 'google_secret_manager_secret.extra["github-token"]'     "projects/${PROJECT_ID}/secrets/github-token"
   tfimport 'google_secret_manager_secret.extra["langsmith-api-key"]' "projects/${PROJECT_ID}/secrets/langsmith-api-key"
   tfimport 'google_secret_manager_secret.email_smtp_user' "projects/${PROJECT_ID}/secrets/email-smtp-user"

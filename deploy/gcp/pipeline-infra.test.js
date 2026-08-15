@@ -248,7 +248,8 @@ test('pipeline topology enforces dedicated topics and brokered agent egress', ()
   assert.equal((pipeline.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 2);
   assert.equal((cloudRun.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 2);
   assert.match(pipeline, /check "pipeline_agent_egress_is_brokered"/);
-  assert.match(pipeline, /!var\.pipeline_orchestrator_enabled \|\| var\.egress_proxy_enabled/);
+  assert.match(pipeline, /trimspace\(nonsensitive\(var\.internal_api_token\)\) != ""/);
+  assert.doesNotMatch(variables, /variable "egress_proxy_enabled"/);
   assert.match(cloudRun, /!local\.pipeline_on \|\| var\.min_instances <= 1/);
   assert.equal(
     (cloudRun.match(/max_instance_count = local\.pipeline_on \? 1 : var\.max_instances/g) || []).length,
@@ -262,7 +263,52 @@ test('pipeline topology enforces dedicated topics and brokered agent egress', ()
     const appEnd = resource.indexOf('name  = "egress-proxy"');
     assert.ok(appEnd > 0, `${service} must include the egress-proxy sidecar`);
     assert.doesNotMatch(resource.slice(0, appEnd), /secret_key_ref/);
+    assert.match(resource, /local\.proxy_plain_env/);
+    assert.match(resource, /depends_on\s*=\s*\["egress-proxy"\]/);
   }
+});
+
+test('gateway and agent app containers cannot receive raw provider or stream secrets', () => {
+  const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
+  const pipeline = read('deploy/gcp/terraform/pipeline.tf');
+  const iam = read('deploy/gcp/terraform/iam.tf');
+
+  const gateway = resourceBlock(cloudRun, 'google_cloud_run_v2_service', 'gateway');
+  const streamSidecar = gateway.indexOf('name  = "stream-token-proxy"');
+  assert.ok(streamSidecar > 0);
+  assert.doesNotMatch(gateway.slice(0, streamSidecar), /STREAM_TOKEN_SECRET/);
+  assert.match(gateway.slice(streamSidecar), /name\s*=\s*"STREAM_TOKEN_SECRET"/);
+  assert.match(gateway, /depends_on\s*=\s*\["stream-token-proxy"\]/);
+
+  for (const service of ['planner', 'coder_control']) {
+    const resource = resourceBlock(cloudRun, 'google_cloud_run_v2_service', service);
+    const proxy = resource.indexOf('name  = "egress-proxy"');
+    assert.ok(proxy > 0);
+    assert.doesNotMatch(resource.slice(0, proxy), /secret_key_ref|INTERNAL_API_TOKEN/);
+    assert.match(resource.slice(proxy), /name\s*=\s*"INTERNAL_API_TOKEN"\s+value\s*=\s*var\.internal_api_token/);
+  }
+
+  assert.doesNotMatch(`${cloudRun}\n${pipeline}`, /egress_proxy_enabled/);
+  assert.doesNotMatch(iam, /(?:gateway|planner|coder)[^\n]*linear|linear[^\n]*(?:gateway|planner|coder)/i);
+  assert.doesNotMatch(`${cloudRun}\n${pipeline}`, /proxy_internal_token/);
+});
+
+test('OpenSWE upstream is trusted proxy-only deployment configuration', () => {
+  const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
+  const variables = read('deploy/gcp/terraform/variables.tf');
+  const block = variableBlock(variables, 'openswe_proxy_upstream');
+  assert.match(block, /default\s*=\s*""/);
+  assert.match(block, /without credentials, query, or fragment/);
+
+  const egressEnvStart = cloudRun.indexOf('egress_env =');
+  const proxyEnvStart = cloudRun.indexOf('proxy_plain_env =', egressEnvStart);
+  const streamProxyEnvStart = cloudRun.indexOf('stream_proxy_plain_env =', proxyEnvStart);
+  assert.ok(egressEnvStart >= 0 && proxyEnvStart > egressEnvStart && streamProxyEnvStart > proxyEnvStart);
+  assert.doesNotMatch(cloudRun.slice(egressEnvStart, proxyEnvStart), /OPENSWE_(?:URL|PROXY_UPSTREAM)/);
+  assert.match(
+    cloudRun.slice(proxyEnvStart, streamProxyEnvStart),
+    /OPENSWE_PROXY_UPSTREAM\s*=\s*trimspace\(var\.openswe_proxy_upstream\)/,
+  );
 });
 
 test('orchestrator image remains free of the heavy shared agent SDK workspace', () => {
@@ -271,6 +317,18 @@ test('orchestrator image remains free of the heavy shared agent SDK workspace', 
   assert.doesNotMatch(dockerfile, /COPY packages\/shared\//);
   assert.doesNotMatch(dockerfile, /COPY packages\/ \./);
   assert.match(dockerfile, /--workspace=@ai-fleet\/orchestrator/);
+});
+
+test('coder image installs the seccomp launcher for model-controlled commands', () => {
+  const dockerfile = read('deploy/gcp/Dockerfile.coder');
+  const harness = read('packages/shared/src/agent/harnesses/deepagent.js');
+  assert.match(dockerfile, /network-sandbox\.c/);
+  assert.match(dockerfile, /-lseccomp/);
+  assert.match(dockerfile, /apk add --no-cache git openssh-client ca-certificates bash libseccomp/);
+  assert.match(dockerfile, /\/usr\/local\/bin\/ai-fleet-network-sandbox/);
+  assert.match(harness, /NODE_ENV[\s\S]*production/);
+  assert.match(harness, /EGRESS_PROXY_URL/);
+  assert.match(harness, /exec[\s\S]*quoteShellArg\(launcher\)[\s\S]*quoteShellArg\(command\)/);
 });
 
 test('tester image installs the capability-free network sandbox for repository commands', () => {
@@ -309,7 +367,7 @@ test('orchestrator can consume run-bound deployment approvals from settings', ()
   const end = pipeline.indexOf('\nresource "google_cloud_run_v2_service"', start + 1);
   const resource = pipeline.slice(start, end);
   assert.match(pipeline, /SETTINGS_URL\s*=\s*local\.settings_url/);
-  assert.match(pipeline, /orchestrator\s*=\s*google_service_account\.orchestrator\[0\]\.email/);
   assert.match(resource, /name\s*=\s*"INTERNAL_API_TOKEN"/);
   assert.match(pipeline, /pipeline_proxy_invokes_settings/);
+  assert.doesNotMatch(pipeline, /pipeline_proxy_internal_token/);
 });

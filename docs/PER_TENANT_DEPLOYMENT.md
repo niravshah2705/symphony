@@ -117,10 +117,12 @@ To turn it on:
 - **Create-only reconciliation.** Shared template changes (including container CPU
   limits) are inherited by newly provisioned tenants. Existing dedicated stacks
   are left unchanged until they are deliberately torn down and reprovisioned.
-- **Shared SAs + shared secrets.** Per-tenant services reuse the 4 shared service
-  accounts and shared Secret Manager secrets (Linear key, stream-token secret).
-  This adds no IAM-level tenant isolation and is safe only under the shared-Firestore
-  trust boundary + `STORE_NAMESPACE`. Per-tenant SAs/secrets is the hardening path.
+- **Shared SAs, scoped proxy credentials.** Per-tenant services reuse the shared
+  runtime service accounts, but agent identities have no provider-secret
+  accessor role. Each cloned egress proxy receives an organization-bound bearer
+  and resolves the organization/project vault; the gateway stream proxy alone
+  receives the stream signing secret. Per-tenant service accounts remain the
+  hardening path for IAM-level compute isolation.
 - **Privileged provisioner SA** (`run.admin`/`pubsub.admin`/`cloudscheduler.admin`,
   per-SA `serviceAccountUser`) lives **only** on the internal provisioner — never
   the public gateway — and its actions should be audit-logged.

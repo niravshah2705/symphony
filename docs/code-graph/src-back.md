@@ -7,7 +7,7 @@
 Directory-based community: services/provisioner
 
 - **Size**: 17 nodes
-- **Cohesion**: 0.1575
+- **Cohesion**: 0.1469
 - **Dominant Language**: javascript
 
 ## Members
@@ -24,17 +24,17 @@ Directory-based community: services/provisioner
 | test:malformed message: no provision, no write-back@L46 | Test | ./services/provisioner/src/handler.test.js | 46-53 |
 | test:provision failure: records status=failed via write-back@L55 | Test | ./services/provisioner/src/handler.test.js | 55-62 |
 | test:write-back failure on the failure path is swallowed (no throw)@L64 | Test | ./services/provisioner/src/handler.test.js | 64-71 |
-| buildCfg | Function | ./services/provisioner/src/index.js | 28-69 |
+| buildCfg | Function | ./services/provisioner/src/index.js | 28-67 |
 | enabled | Function | ./services/provisioner/src/index.js | 29-32 |
-| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 72-82 |
-| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 86-98 |
-| writeBack | Function | ./services/provisioner/src/index.js | 100-113 |
-| createApp | Function | ./services/provisioner/src/index.js | 115-136 |
-| start | Function | ./services/provisioner/src/index.js | 138-146 |
+| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 70-80 |
+| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 84-96 |
+| writeBack | Function | ./services/provisioner/src/index.js | 98-111 |
+| createApp | Function | ./services/provisioner/src/index.js | 113-134 |
+| start | Function | ./services/provisioner/src/index.js | 136-144 |
 
 ## Execution Flows
 
-- **writeBack** (criticality: 0.48, depth: 1)
+No execution flows pass through this community.
 
 ## Dependencies
 
