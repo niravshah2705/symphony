@@ -179,8 +179,9 @@ function createGcpClients({ projectId, region }, dependencies = {}) {
           executionEnvironment: src.executionEnvironment,
           maxInstanceRequestConcurrency: src.maxInstanceRequestConcurrency,
           volumes: src.volumes,
-          // Clone EVERY source container (primary + any sidecar), overlaying the
-          // per-tenant env on the primary and `sidecarEnv` on the sidecars.
+          // Clone every source container by default, overlaying per-tenant env
+          // on the primary and `sidecarEnv` on sidecars. An explicit
+          // primaryContainerOnly spec converges a legacy service to one app.
           containers: cloneContainers(src.containers, spec, { withPorts: true }),
         },
       };

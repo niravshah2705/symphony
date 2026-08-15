@@ -6,8 +6,8 @@
 
 Directory-based community: services/gateway
 
-- **Size**: 322 nodes
-- **Cohesion**: 0.1897
+- **Size**: 330 nodes
+- **Cohesion**: 0.1889
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,30 +65,30 @@ Directory-based community: services/gateway
 | test:buildFirebaseAuthConfig: reads AUTH_MICROSOFT_ENABLED and Microsoft tenant (either alias)@L281 | Test | ./services/gateway/src/auth.test.js | 281-289 |
 | test:buildFirebaseAuthConfig: rejects a non-boolean provider flag@L291 | Test | ./services/gateway/src/auth.test.js | 291-296 |
 
-*... and 272 more members.*
+*... and 280 more members.*
 
 ## Execution Flows
 
+- **mintWorkspaceToken** (criticality: 0.63, depth: 3)
 - **createAuthenticationMiddleware** (criticality: 0.62, depth: 2)
 - **forwardRequestContext** (criticality: 0.62, depth: 2)
 - **enforcePinnedOrganization** (criticality: 0.62, depth: 2)
 - **requireOrganizationContext** (criticality: 0.62, depth: 2)
-- **createStreamTokenClient** (criticality: 0.62, depth: 2)
-- **mintWorkspaceToken** (criticality: 0.62, depth: 2)
+- **verifyStreamToken** (criticality: 0.62, depth: 2)
 - **defaultVerify** (criticality: 0.61, depth: 1)
 - **requirePermission** (criticality: 0.61, depth: 1)
 - **requireAuthenticated** (criticality: 0.61, depth: 1)
 - **mintConversation** (criticality: 0.61, depth: 1)
-- *... and 4 more flows.*
+- *... and 3 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (247 edge(s))
+- `equal` (261 edge(s))
 - `deepEqual` (72 edge(s))
-- `String` (52 edge(s))
-- `trim` (50 edge(s))
+- `String` (55 edge(s))
+- `trim` (53 edge(s))
 - `json` (38 edge(s))
 - `status` (34 edge(s))
 - `map` (26 edge(s))
@@ -103,7 +103,7 @@ Directory-based community: services/gateway
 
 ### Incoming
 
-- `equal` (246 edge(s))
+- `equal` (260 edge(s))
 - `deepEqual` (72 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (44 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (42 edge(s))
@@ -111,10 +111,10 @@ Directory-based community: services/gateway
 - `./services/gateway/src/routes/billing.js` (25 edge(s))
 - `./services/gateway/src/auth.js` (20 edge(s))
 - `throws` (20 edge(s))
+- `./services/gateway/src/stream-token.js` (20 edge(s))
 - `./services/gateway/src/eula.test.js` (18 edge(s))
 - `ok` (17 edge(s))
+- `rejects` (16 edge(s))
 - `./services/gateway/src/config-resolver.test.js` (15 edge(s))
 - `match` (15 edge(s))
 - `join` (15 edge(s))
-- `./services/gateway/src/sse.test.js` (15 edge(s))
-- `./services/gateway/src/stream-token.js` (15 edge(s))

@@ -5,12 +5,12 @@
 #   printf %s "<value>" | gcloud secrets versions add <secret-id> --data-file=-
 #
 # PREREQUISITE: `stream-token-secret` MUST have an enabled version before
-# Terraform creates the gateway's proxy-sidecar revision.
+# Terraform creates the standalone stream-token broker revision.
 
 resource "google_secret_manager_secret" "stream_token_secret" {
   project   = var.project_id
   secret_id = "stream-token-secret"
-  labels    = merge(local.common_labels, { component = "gateway" })
+  labels    = merge(local.common_labels, { component = "stream-token-broker" })
 
   replication {
     auto {}

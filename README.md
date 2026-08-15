@@ -46,7 +46,7 @@ and every LLM write is schema-validated before it touches Linear.
 
 ```bash
 npm install        # installs all workspaces
-npm start          # boots gateway (:4000) + planner (:4010) + coder (:4020)
+npm start          # boots the local services plus isolated egress/token helpers
 ```
 
 Then open <http://localhost:4000>, go to **Settings**, and paste a Linear **personal API
@@ -377,14 +377,15 @@ public/
 ```bash
 npm install        # installs all workspaces
 
-npm start          # boots gateway (:4000) + planner (:4010) + coder (:4020)
+npm start          # boots the local services plus isolated egress/token helpers
 # or: npm run dev  # same, each service under node --watch
 
 # run a single service (e.g. only the gateway):
 npm run start:gateway   # or start:planner / start:coder
 ```
 
-Ports are env-overridable: `PORT` (gateway), `PLANNER_PORT`, `CODER_SERVICE_PORT`.
+Ports are env-overridable: `PORT` (gateway), `PLANNER_PORT`, `CODER_SERVICE_PORT`,
+and `LOCAL_STREAM_TOKEN_PORT` (standalone local stream-token broker).
 To run services on different hosts, point the gateway at them with `PLANNER_URL`
 and `CODER_URL`. The shared `data/store.json` location can be overridden with
 `AI_FLEET_DATA_DIR`.

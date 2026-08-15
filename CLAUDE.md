@@ -115,9 +115,12 @@ outbound call.
 - **SDK runtimes + LangSmith:** once `EGRESS_PROXY_URL` is present, deep-agent,
   native SDK runtimes (codex-sdk / claude-agent-sdk / antigravity), and LangSmith
   tracing are all proxied. There is no deployed direct-egress opt-out.
-- **Gateway stream tokens:** the gateway receives only
-  `STREAM_TOKEN_PROXY_URL`. A separate proxy capability owns
-  `STREAM_TOKEN_SECRET` and exposes loopback-only mint/verify RPCs.
+- **Gateway stream tokens:** deployed gateways receive only the HTTPS
+  `STREAM_TOKEN_SERVICE_URL`. A standalone, IAM-gated Cloud Run broker runs
+  under its own service account, is the only workload allowed to read
+  `STREAM_TOKEN_SECRET`, and exposes only mint/verify RPCs. Local development
+  uses the same broker entrypoint over loopback; `STREAM_TOKEN_PROXY_URL`
+  remains a temporary rollback compatibility input only.
 
 ## Commands
 

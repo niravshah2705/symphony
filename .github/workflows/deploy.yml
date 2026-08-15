@@ -130,8 +130,8 @@ jobs:
           run_tf=false
           if [ "$FORCE_ALL" = "true" ] || [ "$INFRA" = "true" ] || [ "$PROXY" = "true" ] || [ "$services" != "[]" ]; then run_tf=true; fi
 
-          # Egress proxy sidecar image: built whenever terraform will run so the
-          # image the mandatory sidecars reference ALWAYS exists at this SHA.
+          # Shared proxy artifact: built whenever terraform will run so both the
+          # mandatory egress sidecars and stream-token broker have this SHA.
           if [ "$run_tf" = "true" ]; then push proxy proxy deploy/gcp/Dockerfile.proxy . ; fi
 
           {
@@ -342,9 +342,9 @@ jobs:
             write_tag tester resolve_optional tester pipeline-tester "$PIPELINE_ENABLED"
             write_tag deployer resolve_optional deployer pipeline-deployer "$PIPELINE_ENABLED"
             write_tag provisioner resolve_optional provisioner provisioner "$PROVISIONING_ENABLED"
-            # The proxy is a SIDECAR (no standalone Cloud Run service to query a
-            # live tag from), but it is built on every terraform-running deploy
-            # (see the plan step), so it always resolves to the current SHA here.
+            # One proxy artifact backs both sidecars and the standalone broker.
+            # It is built on every terraform-running deploy (see the plan step),
+            # so it always resolves to the current SHA here.
             write_tag proxy resolve proxy proxy
             write_tag org resolve org org-service
             write_tag settings resolve settings settings-service

@@ -36,6 +36,7 @@ function buildCfg(projectNumber) {
     region: CONFIG.GCP.region,
     sharedOrgUrl: CONFIG.SERVICES.orgUrl,
     sharedSettingsUrl: CONFIG.SERVICES.settingsUrl,
+    streamTokenServiceUrl: process.env.STREAM_TOKEN_SERVICE_URL || '',
     spaOrigin: (CONFIG.GCP.spaOrigins && CONFIG.GCP.spaOrigins[0]) || '',
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID || CONFIG.GCP.projectId,
     firebaseApiKey: process.env.FIREBASE_API_KEY || '',

@@ -1,11 +1,11 @@
-# CLAUDE.md — AI agent guide for the egress proxy sidecar
+# CLAUDE.md — AI agent guide for proxy-owned security capabilities
 
 Read this before changing `services/proxy`. It encodes the invariants that keep
 credential isolation correct.
 
 ## What this is
 
-An **authenticating reverse proxy** that runs as a Cloud Run sidecar next to each
+The primary entrypoint is an **authenticating reverse proxy** that runs as a Cloud Run sidecar next to each
 agent runtime (planner / coder-control / coder-worker). The agent routes every
 third-party call to `http://127.0.0.1:4030/<prefix>` over the shared loopback;
 this process holds (or resolves per-org) the real credential and injects it, then
@@ -17,9 +17,18 @@ MITM/`HTTP_PROXY`: the agent's SDK/fetch base URLs already point here (via
 `CONFIG.*` when `EGRESS_PROXY_URL` is set), so no CA distribution or TLS
 interception is needed.
 
+`src/stream-token-server.js` is a separate broker-only entrypoint deployed as
+its own Cloud Run service and service account. It exposes only health plus the
+stream-token mint/verify RPCs; it must never mount the general egress relay.
+Cloud Run IAM authenticates remote callers, while local development binds the
+broker to loopback by default.
+
 ## Files
 
 - `src/index.js` — HTTP server (`PROXY_PORT`, default 4030) + `/healthz`.
+- `src/stream-token-server.js` — standalone stream-token broker (`PORT`, default
+  8080) with no provider-egress surface. Cloud Run explicitly sets
+  `STREAM_TOKEN_BIND_HOST=0.0.0.0`; the safe local default is loopback.
 - `src/proxy.js` — the reverse-proxy core: `matchRoute` (longest-prefix), build
   the upstream URL, strip inbound auth + retarget Host, inject the credential,
   and **stream** both ways (SSE-safe — never buffer). Pure header/URL helpers are
@@ -48,6 +57,9 @@ The prefix→upstream→credential contract is shared with the agent-side config
 4. **Never log secrets.** Log route prefixes + generic errors only; never request
    bodies, headers, or the S2S response.
 5. **Stream, don't buffer.** LLM SSE + git packfiles are long-lived; pipe bodies.
+6. **Keep broker authority narrow.** Only the standalone broker service account
+   may read `STREAM_TOKEN_SECRET`; gateways receive only `roles/run.invoker`.
+   Never add provider routes or provider credentials to the broker entrypoint.
 
 ## Per-org scope
 

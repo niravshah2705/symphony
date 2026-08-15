@@ -15,10 +15,11 @@ are conditional on it:
 | `services/gateway/**` (or its Dockerfile) | rebuild **gateway** image → `terraform apply` rolls **only** gateway |
 | `services/planner/**` / `services/coder/**` | rebuild that image → apply rolls **only** that service (coder ⇒ coder-control + the worker Job) |
 | `services/orchestrator/**` / `services/tester/**` / `services/deployer/**` | rebuild and roll only the corresponding durable-pipeline service |
+| `services/proxy/**` (or its Dockerfile) | rebuild the shared proxy artifact → apply rolls the stream-token broker and egress sidecars |
 | `packages/shared-core/**` | rebuild every consumer, including the SDK-free gateway/orchestrator and agent stages |
 | `packages/shared/**` | rebuild planner, coder, tester, and deployer images |
 | root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
-| `deploy/gcp/terraform/**` | `terraform apply` **only** (no image rebuild) |
+| `deploy/gcp/terraform/**` | rebuild the shared proxy artifact and run `terraform apply` (required for first broker creation) |
 | `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy only (no images, no Terraform) |
 | docs / anything else | nothing runs |
 
@@ -201,7 +202,7 @@ verification steps.
 ## Prerequisites the pipeline assumes
 
 - **`stream-token-secret` already seeded.** The pipeline never rotates it and
-  the stream-token proxy will fail startup without an enabled version.
+  the private stream-token broker will fail startup without an enabled version.
   `deploy/gcp/deploy.sh` / `bootstrap.sh` seed it. Linear has no global Secret
   Manager value: administrators store it through the encrypted
   organization/project vault after deployment.
@@ -225,6 +226,16 @@ verification steps.
 - `concurrency: gcp-deploy` serializes applies so two merges never race the state.
 - A rebuilt service's image tag is the commit SHA, so it rolls a fresh Cloud Run
   revision; unchanged services keep their live tag and are left untouched.
+- The proxy package is one reviewed artifact used by agent sidecars and the
+  broker-only entrypoint. It is rebuilt on every Terraform-running deployment.
+  Artifact Registry retains the five most recent versions per package so a
+  known-good broker revision remains available during the migration rollback
+  window.
+- The first broker release intentionally leaves
+  `stream_token_legacy_gateway_secret_access=true` for unreconciled tenant
+  sidecars. Follow the two-phase gate in
+  [GCP deployment](GCP_DEPLOY.md#stream-token-broker-migration-two-phases); IAM
+  isolation is complete only when the operator-visible output is `false`.
 - No untrusted event input (PR/commit text, `head_ref`) is used in any `run:` step.
 - Path filters read only file paths (`dorny/paths-filter`), never event text.
 - Skills are published by a **separate** workflow (`publish-skills.yml`), also WIF

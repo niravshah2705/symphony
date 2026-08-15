@@ -29,8 +29,8 @@ variable "artifact_repo" {
 
 variable "artifact_retention_count" {
   type        = number
-  description = "Number of most recent versions to retain for each image package in the Artifact Registry repository. Older tagged and untagged versions are deleted by the cleanup policy."
-  default     = 2
+  description = "Number of most recent versions to retain for each image package in the Artifact Registry repository. The proxy package backs both agent sidecars and the stream-token broker, so the default preserves a multi-revision rollback window across their coordinated rollout. Older tagged and untagged versions are deleted by the cleanup policy."
+  default     = 5
 
   validation {
     condition     = var.artifact_retention_count >= 1 && floor(var.artifact_retention_count) == var.artifact_retention_count
@@ -155,7 +155,7 @@ variable "coder_job_name" {
   default     = "coder-worker"
 }
 
-# --- Mandatory egress proxy sidecar ------------------------------------------
+# --- Mandatory egress proxy + stream-token broker ----------------------------
 
 variable "secret_vault_kms_enabled" {
   type        = bool
@@ -168,9 +168,32 @@ variable "proxy_service_name" {
   default = "proxy"
 }
 
+variable "stream_token_service_name" {
+  type        = string
+  description = "Private Cloud Run service that owns the stream-token signing secret and exposes only the IAM-gated mint/verify RPCs."
+  default     = "stream-token-broker"
+}
+
+variable "stream_token_min_instances" {
+  type        = number
+  description = "Minimum warm stream-token broker instances. The default of 1 avoids Cloud Run cold starts exceeding the gateway's strict broker RPC deadline; setting 0 reduces idle cost but can cause transient stream-token failures."
+  default     = 1
+
+  validation {
+    condition     = var.stream_token_min_instances >= 0 && floor(var.stream_token_min_instances) == var.stream_token_min_instances
+    error_message = "stream_token_min_instances must be a non-negative integer."
+  }
+}
+
+variable "stream_token_legacy_gateway_secret_access" {
+  type        = bool
+  description = "TEMPORARY migration gate. Keep true while any existing tenant gateway revision still runs the legacy stream-token sidecar; set false only after every tenant has been reconciled to the shared broker. The completed state grants the signing secret only to stream-token-broker-sa."
+  default     = true
+}
+
 variable "proxy_image_tag" {
   type        = string
-  description = "Per-service image tag override for the egress proxy (Node)."
+  description = "Image tag override for the proxy package used by agent egress sidecars and the standalone stream-token broker. Keeping one immutable tag makes both capability-specific entrypoints come from the same reviewed artifact."
   default     = ""
 }
 
@@ -344,7 +367,7 @@ variable "cloud_run_service_cpu" {
 
 variable "cloud_run_proxy_cpu" {
   type        = string
-  description = "vCPU limit for fixed-512Mi egress-proxy sidecars on gen2 Cloud Run services. Supported values are 1 or 2; Cloud Run Jobs use coder_job_proxy_cpu."
+  description = "vCPU limit for egress-proxy sidecars and the standalone stream-token broker on gen2 Cloud Run. Supported values are 1 or 2; Cloud Run Jobs use coder_job_proxy_cpu."
   default     = "1"
 
   validation {

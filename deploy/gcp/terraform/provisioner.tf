@@ -193,18 +193,19 @@ resource "google_cloud_run_v2_service" "provisioner" {
         for_each = merge(
           local.common_env,
           {
-            PROVISIONING_ENABLED    = "true"
-            MESSAGING_MODE          = "pubsub"
-            GCP_PROJECT_ID          = var.project_id
-            GCP_REGION              = var.region
-            ORG_URL                 = local.org_url
-            SETTINGS_URL            = local.settings_url
-            SPA_ORIGIN              = var.spa_origin
-            FIREBASE_PROJECT_ID     = var.project_id
-            PUBSUB_PUSH_AUDIENCE    = local.provisioner_url
-            PUBSUB_PUSH_SA          = google_service_account.pubsub_push.email
-            PUBSUB_DEADLETTER_TOPIC = var.dead_letter_topic
-            EMAIL_TOPIC             = google_pubsub_topic.email.name
+            PROVISIONING_ENABLED     = "true"
+            MESSAGING_MODE           = "pubsub"
+            GCP_PROJECT_ID           = var.project_id
+            GCP_REGION               = var.region
+            ORG_URL                  = local.org_url
+            SETTINGS_URL             = local.settings_url
+            STREAM_TOKEN_SERVICE_URL = google_cloud_run_v2_service.stream_token_broker.uri
+            SPA_ORIGIN               = var.spa_origin
+            FIREBASE_PROJECT_ID      = var.project_id
+            PUBSUB_PUSH_AUDIENCE     = local.provisioner_url
+            PUBSUB_PUSH_SA           = google_service_account.pubsub_push.email
+            PUBSUB_DEADLETTER_TOPIC  = var.dead_letter_topic
+            EMAIL_TOPIC              = google_pubsub_topic.email.name
             # Names of the SHARED services to clone images/secrets/config from.
             GATEWAY_SERVICE_NAME      = var.gateway_service_name
             PLANNER_SERVICE_NAME      = var.planner_service_name

@@ -24,18 +24,21 @@ locals {
   # Plain (non-secret) env per service. Secrets are mounted as separate env
   # blocks below via secret_key_ref.
   gateway_env = merge(local.common_env, {
-    AUTH_MODE              = "firebase" # gateway verifies the Firebase ID token
-    TRUST_PROXY_HOPS       = "1"        # direct Cloud Run ingress; req.ip is advisory locale only
-    SPA_ORIGIN             = var.spa_origin
-    API_BASE_URL           = local.gateway_url
-    PLANNER_URL            = local.planner_url # proxied read endpoints
-    CODER_URL              = local.coder_url
-    ORCHESTRATOR_URL       = local.orchestrator_url
-    ORG_URL                = local.org_url      # org service (proxied at /api/org/*)
-    SETTINGS_URL           = local.settings_url # settings service (proxied at /api/settings-policy/*)
-    STREAM_TOKEN_PROXY_URL = "http://127.0.0.1:4030"
-    FIREBASE_PROJECT_ID    = var.project_id
-    FIREBASE_API_KEY       = data.google_firebase_web_app_config.default.api_key
+    AUTH_MODE        = "firebase" # gateway verifies the Firebase ID token
+    TRUST_PROXY_HOPS = "1"        # direct Cloud Run ingress; req.ip is advisory locale only
+    SPA_ORIGIN       = var.spa_origin
+    API_BASE_URL     = local.gateway_url
+    PLANNER_URL      = local.planner_url # proxied read endpoints
+    CODER_URL        = local.coder_url
+    ORCHESTRATOR_URL = local.orchestrator_url
+    ORG_URL          = local.org_url      # org service (proxied at /api/org/*)
+    SETTINGS_URL     = local.settings_url # settings service (proxied at /api/settings-policy/*)
+    # Use the provider-returned origin rather than reconstructing the run.app
+    # hostname: Cloud Run ID-token audiences must match the deployed service
+    # URL exactly, including projects that still use a legacy hash-style URL.
+    STREAM_TOKEN_SERVICE_URL = google_cloud_run_v2_service.stream_token_broker.uri
+    FIREBASE_PROJECT_ID      = var.project_id
+    FIREBASE_API_KEY         = data.google_firebase_web_app_config.default.api_key
     # RBAC (packages/shared/src/authz.js): least-privilege default role for a
     # signed-in user with no role claim yet. Roles are otherwise Firebase custom
     # claims (services/gateway/scripts/set-user-role.js).
@@ -88,11 +91,6 @@ locals {
       OPENSWE_PROXY_UPSTREAM = trimspace(var.openswe_proxy_upstream)
     } : {},
   )
-
-  stream_proxy_plain_env = merge(local.common_env, {
-    PROXY_PORT         = "4030"
-    PROXY_CAPABILITIES = "stream-token"
-  })
 
   planner_env = merge(
     local.common_env,
@@ -245,9 +243,8 @@ resource "google_cloud_run_v2_service" "gateway" {
     }
 
     containers {
-      name       = "app"
-      image      = local.gateway_image
-      depends_on = ["stream-token-proxy"]
+      name  = "app"
+      image = local.gateway_image
 
       ports {
         container_port = 8080
@@ -286,53 +283,16 @@ resource "google_cloud_run_v2_service" "gateway" {
       }
     }
 
-    containers {
-      name  = "stream-token-proxy"
-      image = local.proxy_image
-
-      dynamic "env" {
-        for_each = local.stream_proxy_plain_env
-        content {
-          name  = env.key
-          value = env.value
-        }
-      }
-      env {
-        name = "STREAM_TOKEN_SECRET"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.stream_token_secret.secret_id
-            version = "latest"
-          }
-        }
-      }
-      startup_probe {
-        http_get {
-          path = "/healthz"
-          port = 4030
-        }
-        initial_delay_seconds = 0
-        timeout_seconds       = 3
-        period_seconds        = 3
-        failure_threshold     = 20
-      }
-      resources {
-        limits = {
-          cpu    = var.cloud_run_proxy_cpu
-          memory = "256Mi"
-        }
-        cpu_idle = true
-      }
-    }
   }
 
   depends_on = [
     google_project_service.services,
     google_firestore_database.default,
     google_project_iam_member.gateway_datastore,
-    google_secret_manager_secret_iam_member.gateway_stream_token,
     google_secret_manager_secret_version.google_one_tap_client_id,
     google_secret_manager_secret_iam_member.gateway_one_tap,
+    google_cloud_run_v2_service.stream_token_broker,
+    google_cloud_run_v2_service_iam_member.gateway_invokes_stream_token_broker,
   ]
 }
 

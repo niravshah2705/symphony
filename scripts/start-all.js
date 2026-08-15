@@ -13,8 +13,9 @@
  *   node scripts/start-all.js
  *   node scripts/start-all.js --watch
  *
- * Env (PORT, PLANNER_PORT, CODER_SERVICE_PORT, CODER_*, etc.) is inherited by
- * every child, so a single repo-root .env configures the whole fleet.
+ * Non-secret env (PORT, PLANNER_PORT, CODER_SERVICE_PORT, CODER_*, etc.) is
+ * inherited by each child. Credentials are copied only into the process that
+ * owns the corresponding capability.
  */
 
 const path = require('path');
@@ -29,13 +30,23 @@ const watch = process.argv.includes('--watch');
 // preserving zero-config `npm start` without making internal routes public.
 const localInternalToken = String(process.env.INTERNAL_API_TOKEN || '').trim()
   || crypto.randomBytes(32).toString('base64url');
-const localStreamSecret = crypto.randomBytes(32).toString('base64url');
+// The stream-token secret is copied only into the dedicated broker process.
+// Accepting an operator-provided value keeps Compose/manual local workflows
+// stable; zero-config `npm start` still gets an ephemeral secret.
+const localStreamSecret = String(process.env.STREAM_TOKEN_SECRET || '').trim()
+  || crypto.randomBytes(32).toString('base64url');
 const egressProxyPort = Number(process.env.LOCAL_EGRESS_PROXY_PORT) || 4030;
-const streamProxyPort = Number(process.env.LOCAL_STREAM_PROXY_PORT) || 4031;
+const streamTokenPort = Number(
+  process.env.LOCAL_STREAM_TOKEN_PORT || process.env.LOCAL_STREAM_PROXY_PORT,
+) || 4031;
 
-const PROXIES = [
+const LOCAL_DEPENDENCIES = [
   { name: 'egress-proxy', entry: 'services/proxy/src/index.js', healthPort: egressProxyPort },
-  { name: 'stream-proxy', entry: 'services/proxy/src/index.js', healthPort: streamProxyPort },
+  {
+    name: 'stream-token-broker',
+    entry: 'services/proxy/src/stream-token-server.js',
+    healthPort: streamTokenPort,
+  },
 ];
 
 // Start the agent services first so the gateway's proxy targets are likely up
@@ -91,12 +102,12 @@ function envFor(name) {
     env.OPENSWE_PROXY_UPSTREAM = process.env.OPENSWE_PROXY_UPSTREAM
       || process.env.OPENSWE_URL
       || 'http://127.0.0.1:2024';
-  } else if (name === 'stream-proxy') {
-    env.PROXY_PORT = String(streamProxyPort);
-    env.PROXY_CAPABILITIES = 'stream-token';
+  } else if (name === 'stream-token-broker') {
+    delete env.INTERNAL_API_TOKEN;
+    env.PORT = String(streamTokenPort);
     env.STREAM_TOKEN_SECRET = localStreamSecret;
   } else if (name === 'gateway') {
-    env.STREAM_TOKEN_PROXY_URL = `http://127.0.0.1:${streamProxyPort}`;
+    env.STREAM_TOKEN_SERVICE_URL = `http://127.0.0.1:${streamTokenPort}`;
   } else if (['planner', 'coder', 'tester', 'deployer'].includes(name)) {
     env.EGRESS_PROXY_URL = `http://127.0.0.1:${egressProxyPort}`;
   }
@@ -146,11 +157,11 @@ function waitForHealth(port, timeoutMs = 10000) {
       const req = http.get(`http://127.0.0.1:${port}/healthz`, (res) => {
         res.resume();
         if (res.statusCode === 200) return resolve();
-        if (Date.now() >= deadline) return reject(new Error(`proxy health check on ${port} returned ${res.statusCode}`));
+        if (Date.now() >= deadline) return reject(new Error(`dependency health check on ${port} returned ${res.statusCode}`));
         setTimeout(probe, 100);
       });
       req.on('error', () => {
-        if (Date.now() >= deadline) return reject(new Error(`proxy health check on ${port} timed out`));
+        if (Date.now() >= deadline) return reject(new Error(`dependency health check on ${port} timed out`));
         setTimeout(probe, 100);
       });
     };
@@ -167,19 +178,22 @@ function shutdown(exitCode) {
   setTimeout(() => process.exit(exitCode), 500);
 }
 
-process.on('SIGINT', () => shutdown(0));
-process.on('SIGTERM', () => shutdown(0));
-
 async function main() {
-  for (const proxy of PROXIES) {
-    startService(proxy);
-    await waitForHealth(proxy.healthPort);
+  for (const dependency of LOCAL_DEPENDENCIES) {
+    startService(dependency);
+    await waitForHealth(dependency.healthPort);
   }
   for (const service of SERVICES) startService(service);
-  process.stdout.write(`[start-all] started ${[...PROXIES, ...SERVICES].map((s) => s.name).join(', ')}${watch ? ' (watch mode)' : ''}\n`);
+  process.stdout.write(`[start-all] started ${[...LOCAL_DEPENDENCIES, ...SERVICES].map((s) => s.name).join(', ')}${watch ? ' (watch mode)' : ''}\n`);
 }
 
-main().catch((err) => {
-  process.stderr.write(`[start-all] startup failed: ${err.message}\n`);
-  shutdown(1);
-});
+if (require.main === module) {
+  process.on('SIGINT', () => shutdown(0));
+  process.on('SIGTERM', () => shutdown(0));
+  main().catch((err) => {
+    process.stderr.write(`[start-all] startup failed: ${err.message}\n`);
+    shutdown(1);
+  });
+}
+
+module.exports = { envFor, LOCAL_DEPENDENCIES, SERVICES };

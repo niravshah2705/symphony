@@ -13,6 +13,12 @@ resource "google_service_account" "gateway" {
   display_name = "AI Fleet gateway (public API)"
 }
 
+resource "google_service_account" "stream_token_broker" {
+  project      = var.project_id
+  account_id   = "stream-token-broker-sa"
+  display_name = "AI Fleet stream-token broker (private signer)"
+}
+
 resource "google_service_account" "planner" {
   project      = var.project_id
   account_id   = "planner-sa"
@@ -72,13 +78,30 @@ resource "google_pubsub_topic_iam_member" "gateway_publish_coder" {
 
 # --- Secret Manager accessor — scoped per secret ------------------------------
 
-# The stream-token proxy sidecar shares gateway-sa at the Cloud Run service
-# boundary, so the accessor remains scoped to this single secret.
-resource "google_secret_manager_secret_iam_member" "gateway_stream_token" {
+# Preserve the existing gateway binding in state during phase 1. Existing
+# tenant services are outside this Terraform state and can still run the old
+# stream-token sidecar until they are explicitly reconciled. Phase 2 sets the
+# migration gate false, which removes this exact binding without touching the
+# broker's independent grant below.
+moved {
+  from = google_secret_manager_secret_iam_member.gateway_stream_token
+  to   = google_secret_manager_secret_iam_member.gateway_stream_token_legacy[0]
+}
+
+resource "google_secret_manager_secret_iam_member" "gateway_stream_token_legacy" {
+  count = var.stream_token_legacy_gateway_secret_access ? 1 : 0
+
   project   = var.project_id
   secret_id = google_secret_manager_secret.stream_token_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.gateway.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "stream_token_broker" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.stream_token_secret.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.stream_token_broker.email}"
 }
 
 # --- Cloud Run invoke rights --------------------------------------------------
@@ -99,6 +122,18 @@ resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_coder" {
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_service.coder_control.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.gateway.email}"
+}
+
+# The public gateway can exercise only the broker's narrow mint/verify API. In
+# the completed migration state it cannot retrieve the HMAC key because
+# gateway-sa has no Secret Manager grant. The temporary legacy binding above is
+# retained only while unreconciled tenant revisions still need their sidecars.
+resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_stream_token_broker" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.stream_token_broker.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.gateway.email}"
 }

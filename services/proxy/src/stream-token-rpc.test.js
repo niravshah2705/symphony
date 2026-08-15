@@ -8,6 +8,7 @@ const {
   createStreamTokenRpcHandler,
   isLoopbackAddress,
   MAX_BODY_BYTES,
+  ACCESS_MODE_CLOUD_RUN_IAM,
 } = require('./stream-token-rpc');
 
 function startServer(handler) {
@@ -99,4 +100,63 @@ test('loopback address check rejects non-loopback peers', () => {
   for (const address of ['', '10.0.0.2', '192.168.1.2', '::ffff:10.0.0.2']) {
     assert.equal(isLoopbackAddress(address), false, address);
   }
+});
+
+function directRequest(remoteAddress) {
+  const payload = Buffer.from(JSON.stringify({
+    token: '123.signature',
+    channelId: 'conversation-1',
+    context: {},
+  }));
+  return {
+    method: 'POST',
+    url: '/internal/stream-token/verify',
+    headers: { 'content-length': String(payload.length) },
+    socket: { remoteAddress },
+    async *[Symbol.asyncIterator]() { yield payload; },
+  };
+}
+
+function directResponse() {
+  return {
+    status: 0,
+    headers: {},
+    body: '',
+    writeHead(status, headers) { this.status = status; this.headers = headers; },
+    end(body = '') { this.body = body; },
+  };
+}
+
+test('remote sockets require the explicit Cloud Run IAM access mode', async () => {
+  let verifyCalls = 0;
+  const service = {
+    mint: () => assert.fail('must not mint'),
+    verify: () => { verifyCalls += 1; return true; },
+  };
+
+  const loopbackHandler = createStreamTokenRpcHandler({ service });
+  const denied = directResponse();
+  await loopbackHandler(directRequest('10.0.0.2'), denied);
+  assert.equal(denied.status, 403);
+  assert.equal(verifyCalls, 0);
+
+  const brokerHandler = createStreamTokenRpcHandler({
+    service,
+    accessMode: ACCESS_MODE_CLOUD_RUN_IAM,
+  });
+  const accepted = directResponse();
+  await brokerHandler(directRequest('10.0.0.2'), accepted);
+  assert.equal(accepted.status, 200);
+  assert.deepEqual(JSON.parse(accepted.body), { valid: true });
+  assert.equal(verifyCalls, 1);
+});
+
+test('unknown RPC access modes fail at construction', () => {
+  assert.throws(
+    () => createStreamTokenRpcHandler({
+      service: { mint() {}, verify() {} },
+      accessMode: 'public',
+    }),
+    /Unsupported stream-token RPC access mode/,
+  );
 });

@@ -6,8 +6,8 @@
 
 Directory-based community: scripts
 
-- **Size**: 37 nodes
-- **Cohesion**: 0.0897
+- **Size**: 38 nodes
+- **Cohesion**: 0.0847
 - **Dominant Language**: javascript
 
 ## Members
@@ -44,13 +44,14 @@ Directory-based community: scripts
 | test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L35 | Test | ./scripts/seo-discovery.test.js | 35-50 |
 | test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-68 |
 | test:compact ADLC launcher has four named, local-icon assistant links@L70 | Test | ./scripts/seo-discovery.test.js | 70-81 |
-| envFor | Function | ./scripts/start-all.js | 64-109 |
-| prefixStream | Function | ./scripts/start-all.js | 111-122 |
-| startService | Function | ./scripts/start-all.js | 124-140 |
-| waitForHealth | Function | ./scripts/start-all.js | 142-159 |
-| probe | Function | ./scripts/start-all.js | 145-156 |
-| shutdown | Function | ./scripts/start-all.js | 161-168 |
-| main | Function | ./scripts/start-all.js | 173-180 |
+| envFor | Function | ./scripts/start-all.js | 75-120 |
+| prefixStream | Function | ./scripts/start-all.js | 122-133 |
+| startService | Function | ./scripts/start-all.js | 135-151 |
+| waitForHealth | Function | ./scripts/start-all.js | 153-170 |
+| probe | Function | ./scripts/start-all.js | 156-167 |
+| shutdown | Function | ./scripts/start-all.js | 172-179 |
+| main | Function | ./scripts/start-all.js | 181-188 |
+| test:local stream-token broker is standalone and exclusively receives its secret@L6 | Test | ./scripts/start-all.test.js | 6-32 |
 
 ## Execution Flows
 
@@ -61,9 +62,9 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `join` (48 edge(s))
+- `equal` (29 edge(s))
 - `match` (24 edge(s))
 - `write` (22 edge(s))
-- `equal` (21 edge(s))
 - `readFileSync` (13 edge(s))
 - `writeFileSync` (11 edge(s))
 - `log` (9 edge(s))
@@ -74,16 +75,16 @@ No execution flows pass through this community.
 - `String` (7 edge(s))
 - `run` (7 edge(s))
 - `deepEqual` (6 edge(s))
-- `resolveStrength` (5 edge(s))
+- `resolve` (5 edge(s))
 
 ### Incoming
 
+- `equal` (29 edge(s))
 - `match` (24 edge(s))
-- `equal` (21 edge(s))
 - `join` (18 edge(s))
 - `./scripts/obfuscate-spa.js` (15 edge(s))
 - `./scripts/obfuscate-spa.test.js` (12 edge(s))
-- `./scripts/start-all.js` (11 edge(s))
+- `./scripts/start-all.js` (12 edge(s))
 - `readFileSync` (10 edge(s))
 - `doesNotMatch` (8 edge(s))
 - `run` (6 edge(s))

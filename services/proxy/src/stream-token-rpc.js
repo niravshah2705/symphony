@@ -1,6 +1,8 @@
 'use strict';
 
 const MAX_BODY_BYTES = 8 * 1024;
+const ACCESS_MODE_LOOPBACK = 'loopback';
+const ACCESS_MODE_CLOUD_RUN_IAM = 'cloud-run-iam';
 
 class RpcRequestError extends Error {
   constructor(status, message) {
@@ -80,10 +82,23 @@ function requestPath(req) {
   }
 }
 
-/** Create the capability handler. It is safe to mount only under /internal/stream-token/. */
-function createStreamTokenRpcHandler({ service, logger } = {}) {
+/**
+ * Create the stream-token RPC handler.
+ *
+ * Loopback is the secure default for the co-located sidecar. The dedicated
+ * Cloud Run broker must opt in to remote sockets explicitly; in that mode the
+ * Cloud Run service's IAM policy is the caller-authentication boundary.
+ */
+function createStreamTokenRpcHandler({
+  service,
+  logger,
+  accessMode = ACCESS_MODE_LOOPBACK,
+} = {}) {
   if (!service || typeof service.mint !== 'function' || typeof service.verify !== 'function') {
     throw new Error('A stream-token service is required');
+  }
+  if (accessMode !== ACCESS_MODE_LOOPBACK && accessMode !== ACCESS_MODE_CLOUD_RUN_IAM) {
+    throw new Error(`Unsupported stream-token RPC access mode: ${accessMode}`);
   }
   const log = logger || require('@ai-fleet/shared-core/logger');
 
@@ -93,7 +108,8 @@ function createStreamTokenRpcHandler({ service, logger } = {}) {
       sendJson(res, 404, { error: 'not found' });
       return;
     }
-    if (!isLoopbackAddress(req.socket && req.socket.remoteAddress)) {
+    if (accessMode === ACCESS_MODE_LOOPBACK
+        && !isLoopbackAddress(req.socket && req.socket.remoteAddress)) {
       sendJson(res, 403, { error: 'loopback access required' });
       return;
     }
@@ -130,4 +146,6 @@ module.exports = {
   isLoopbackAddress,
   readJsonBody,
   MAX_BODY_BYTES,
+  ACCESS_MODE_LOOPBACK,
+  ACCESS_MODE_CLOUD_RUN_IAM,
 };

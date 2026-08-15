@@ -1,13 +1,19 @@
 'use strict';
 
 const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared-core/messaging/events');
+const { idTokenHeader } = require('./service-client');
 
 /**
- * Gateway client for the proxy sidecar's loopback-only stream-token capability.
- * The gateway deliberately contains no signing secret or HMAC implementation.
+ * Gateway client for the isolated stream-token capability. Production calls an
+ * IAM-gated Cloud Run broker over HTTPS; local/rollback deployments may retain
+ * the loopback-only sidecar. The gateway deliberately contains no signing
+ * secret or HMAC implementation.
  */
 
 const STREAM_TOKEN_TIMEOUT_MS = 2_000;
+const STREAM_TOKEN_TTL_MS = 5 * 60 * 1000;
+const STREAM_TOKEN_CLOCK_SKEW_MS = 60 * 1000;
+const STREAM_TOKEN_MAX_FUTURE_MS = STREAM_TOKEN_TTL_MS + STREAM_TOKEN_CLOCK_SKEW_MS;
 
 class StreamTokenUnavailableError extends Error {
   constructor(message = 'Stream token service is unavailable.', options = {}) {
@@ -22,22 +28,31 @@ function isLoopbackHostname(hostname) {
   return value === 'localhost' || value === '::1' || /^127(?:\.\d{1,3}){3}$/.test(value);
 }
 
-function normalizeProxyBase(value) {
+function normalizeServiceBase(value) {
   const raw = String(value || '').trim();
-  if (!raw) throw new Error('STREAM_TOKEN_PROXY_URL is required');
+  if (!raw) throw new Error('STREAM_TOKEN_SERVICE_URL or STREAM_TOKEN_PROXY_URL is required');
 
   let parsed;
   try {
     parsed = new URL(raw);
   } catch (_) {
-    throw new Error('STREAM_TOKEN_PROXY_URL must be a valid loopback HTTP URL');
+    throw new Error('Stream-token service URL must be a valid HTTPS or loopback HTTP URL');
   }
-  if (parsed.protocol !== 'http:' || !isLoopbackHostname(parsed.hostname)
+  const loopbackHttp = parsed.protocol === 'http:' && isLoopbackHostname(parsed.hostname);
+  if ((parsed.protocol !== 'https:' && !loopbackHttp)
       || parsed.username || parsed.password || parsed.search || parsed.hash
       || (parsed.pathname && parsed.pathname !== '/')) {
-    throw new Error('STREAM_TOKEN_PROXY_URL must be a loopback HTTP origin');
+    throw new Error('Stream-token service URL must be an HTTPS or loopback HTTP origin');
   }
   return parsed.origin;
+}
+
+// Backward-compatible export name for callers/tests from the sidecar-only phase.
+const normalizeProxyBase = normalizeServiceBase;
+
+function configuredServiceUrl(env = process.env) {
+  return String(env.STREAM_TOKEN_SERVICE_URL || '').trim()
+    || String(env.STREAM_TOKEN_PROXY_URL || '').trim();
 }
 
 function normalizeContext(context = {}) {
@@ -52,28 +67,48 @@ function unavailable(cause) {
   return new StreamTokenUnavailableError(undefined, { cause });
 }
 
-function validMintResponse(data) {
+function validMintResponse(data, currentTime = Date.now()) {
   if (!data || typeof data !== 'object' || typeof data.token !== 'string'
-      || !Number.isSafeInteger(data.expiresAt) || data.expiresAt <= Date.now()) return false;
+      || !Number.isSafeInteger(data.expiresAt) || data.expiresAt <= currentTime
+      || data.expiresAt > currentTime + STREAM_TOKEN_MAX_FUTURE_MS) return false;
   const token = data.token.trim();
   const match = /^(\d+)\.([A-Za-z0-9_-]+)$/.exec(token);
   return Boolean(match) && match[1] === String(data.expiresAt);
 }
 
 function createStreamTokenClient(options = {}) {
-  const baseUrl = normalizeProxyBase(options.baseUrl);
+  const baseUrl = normalizeServiceBase(options.baseUrl);
+  const parsedBase = new URL(baseUrl);
+  const remote = !isLoopbackHostname(parsedBase.hostname);
   const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const identityHeader = options.identityHeader || idTokenHeader;
+  const now = options.now || Date.now;
   const timeoutMs = options.timeoutMs === undefined ? STREAM_TOKEN_TIMEOUT_MS : options.timeoutMs;
   if (typeof fetchImpl !== 'function') throw new Error('A fetch implementation is required');
+  if (typeof identityHeader !== 'function') throw new Error('An identity-header provider is required');
+  if (typeof now !== 'function') throw new Error('A clock implementation is required');
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('timeoutMs must be positive');
 
   async function post(path, body) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
+    let timer;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(unavailable(new Error('stream-token service request timed out')));
+      }, timeoutMs);
+    });
+
+    const operation = async () => {
+      const headers = { 'content-type': 'application/json' };
+      if (remote) {
+        const authorization = String(await identityHeader(baseUrl) || '').trim();
+        if (!authorization) throw unavailable(new Error('stream-token service identity is unavailable'));
+        headers.authorization = authorization;
+      }
       const response = await fetchImpl(`${baseUrl}${path}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -87,6 +122,10 @@ function createStreamTokenClient(options = {}) {
         throw unavailable(cause);
       }
       return data;
+    };
+
+    try {
+      return await Promise.race([operation(), deadline]);
     } catch (cause) {
       throw unavailable(cause);
     } finally {
@@ -99,7 +138,7 @@ function createStreamTokenClient(options = {}) {
       channelId: String(channelId || '').trim(),
       context: normalizeContext(context),
     });
-    if (!validMintResponse(data)) throw unavailable();
+    if (!validMintResponse(data, now())) throw unavailable();
     return data.token.trim();
   }
 
@@ -123,7 +162,7 @@ function createStreamTokenClient(options = {}) {
 }
 
 const defaultClient = createStreamTokenClient({
-  baseUrl: process.env.STREAM_TOKEN_PROXY_URL,
+  baseUrl: configuredServiceUrl(),
 });
 
 module.exports = {
@@ -131,5 +170,11 @@ module.exports = {
   createStreamTokenClient,
   StreamTokenUnavailableError,
   STREAM_TOKEN_TIMEOUT_MS,
+  STREAM_TOKEN_TTL_MS,
+  STREAM_TOKEN_CLOCK_SKEW_MS,
+  STREAM_TOKEN_MAX_FUTURE_MS,
   normalizeProxyBase,
+  normalizeServiceBase,
+  configuredServiceUrl,
+  validMintResponse,
 };

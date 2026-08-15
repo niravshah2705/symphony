@@ -45,6 +45,7 @@ function labelValue(value) {
  * @param {string} cfg.region
  * @param {string} cfg.sharedOrgUrl        SHARED org service URL
  * @param {string} cfg.sharedSettingsUrl   SHARED settings service URL
+ * @param {string} cfg.streamTokenServiceUrl SHARED stream-token broker URL
  * @param {string} cfg.spaOrigin           SPA origin(s) for the tenant gateway CORS
  * @param {string} cfg.firebaseProjectId
  * @param {string} cfg.firebaseApiKey
@@ -58,8 +59,27 @@ function buildPlan(slug, cfg) {
   const sa = cfg.serviceAccounts || {};
   const pipelineEnabled = cfg.pipelineOrchestratorEnabled === true;
   const orgInternalToken = deriveOrgInternalToken(cfg.orgS2sSigningKey, cfg.orgId);
+  const streamTokenServiceUrl = String(cfg.streamTokenServiceUrl || '').trim();
   if (cfg.orgId && !orgInternalToken) {
     throw new Error('per-tenant egress proxy requires the org S2S signing key');
+  }
+  if (!streamTokenServiceUrl) {
+    throw new Error('per-tenant gateway requires the shared stream-token service URL');
+  }
+  let parsedStreamTokenServiceUrl;
+  try {
+    parsedStreamTokenServiceUrl = new URL(streamTokenServiceUrl);
+  } catch (_) {
+    parsedStreamTokenServiceUrl = null;
+  }
+  if (!parsedStreamTokenServiceUrl
+      || parsedStreamTokenServiceUrl.protocol !== 'https:'
+      || parsedStreamTokenServiceUrl.username
+      || parsedStreamTokenServiceUrl.password
+      || parsedStreamTokenServiceUrl.search
+      || parsedStreamTokenServiceUrl.hash
+      || (parsedStreamTokenServiceUrl.pathname && parsedStreamTokenServiceUrl.pathname !== '/')) {
+    throw new Error('per-tenant gateway requires an HTTPS shared stream-token service URL');
   }
   // run.app calls from the tenant gateway require network-reachable ingress;
   // Cloud Run IAM (never allUsers) is the authorization boundary. Operators
@@ -109,8 +129,8 @@ function buildPlan(slug, cfg) {
   };
 
   // Credential-bearing workloads always use their co-located egress proxy.
-  // Gateway and orchestrator deliberately do not inherit this URL: gateway has
-  // a separate stream-token broker and orchestrator has no provider egress.
+  // Gateway and orchestrator deliberately do not inherit this URL: gateway
+  // calls the shared stream-token broker and orchestrator has no provider egress.
   const agentEnv = {
     ...commonEnv,
     EGRESS_PROXY_URL: 'http://127.0.0.1:4030',
@@ -140,12 +160,14 @@ function buildPlan(slug, cfg) {
     allowUnauthenticated: true, // public origin, app-auth (Firebase) guarded
     port: 8080,
     serviceAccount: sa.gateway,
-    sidecarEnv: { PROXY_CAPABILITIES: 'stream-token' },
-    requireProxySidecar: true,
+    // A gateway cloned from the legacy multi-container service must converge to
+    // one app container. Stream signing now belongs to the shared IAM-gated
+    // broker, never a per-tenant sidecar.
+    primaryContainerOnly: true,
     forbidProviderSecretsOnPrimary: true,
     env: {
       ...commonEnv,
-      STREAM_TOKEN_PROXY_URL: 'http://127.0.0.1:4030',
+      STREAM_TOKEN_SERVICE_URL: parsedStreamTokenServiceUrl.origin,
       AUTH_MODE: 'firebase',
       TRUST_PROXY_HOPS: '1',
       SPA_ORIGIN: cfg.spaOrigin || '',

@@ -66,8 +66,14 @@ project, then provision its Linear credential through the encrypted scope vault.
 Agent processes never receive that credential directly.
 
 ### What happens on boot
-`npm start` runs `scripts/start-all.js`, which spawns the three service
-processes with prefixed output:
+
+`npm start` runs `scripts/start-all.js`, which spawns the application services
+and their local infrastructure processes with prefixed output:
+
+- **stream-token broker** (`services/proxy/src/stream-token-server.js`) owns the
+  local signing secret (ephemeral by default under `npm start`). The gateway
+  receives only its loopback `STREAM_TOKEN_SERVICE_URL`; planner/coder and the
+  gateway never receive the secret.
 - **gateway** (`services/gateway/src/index.js`) wires the user-facing routes,
   serves the SPA, and **reverse-proxies** `/api/agent/*` → planner and
   `/api/coder/*` → coder. It is the only browser-facing origin.
@@ -78,8 +84,9 @@ processes with prefixed output:
   board monitor** so `aiplanned` projects are picked up automatically (each poll
   self-guards on missing keys).
 
-All three import the same `@ai-fleet/shared` library, so there is exactly one
-copy of every module (config, store, Linear client, deep-agent runtime).
+The application services import the same `@ai-fleet/shared` library, so there
+is exactly one copy of every module (config, store, Linear client, deep-agent
+runtime).
 
 ---
 

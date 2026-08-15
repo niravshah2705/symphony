@@ -6,8 +6,8 @@
 
 Directory-based community: services/proxy
 
-- **Size**: 129 nodes
-- **Cohesion**: 0.1034
+- **Size**: 152 nodes
+- **Cohesion**: 0.1084
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: services/proxy
 | test:filterResponseHeaders drops body-frame + hop-by-hop but keeps content-type@L72 | Test | ./services/proxy/src/proxy.test.js | 72-87 |
 | test:resolveStaticKey: managed value from the settings payload (one path)@L91 | Test | ./services/proxy/src/proxy.test.js | 91-97 |
 
-*... and 79 more members.*
+*... and 102 more members.*
 
 ## Execution Flows
 
@@ -78,41 +78,42 @@ Directory-based community: services/proxy
 - **mint** (criticality: 0.62, depth: 2)
 - **verify** (criticality: 0.62, depth: 2)
 - **createStreamTokenRpcHandler** (criticality: 0.61, depth: 1)
+- **createStreamTokenServer** (criticality: 0.61, depth: 1)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (93 edge(s))
-- `String` (22 edge(s))
-- `deepEqual` (22 edge(s))
-- `trim` (19 edge(s))
+- `equal` (117 edge(s))
+- `String` (28 edge(s))
+- `deepEqual` (28 edge(s))
+- `trim` (22 edge(s))
 - `buildInjection` (15 edge(s))
+- `stringify` (14 edge(s))
+- `verify` (14 edge(s))
+- `end` (12 edge(s))
+- `fetch` (12 edge(s))
 - `rejects` (12 edge(s))
-- `end` (10 edge(s))
-- `stringify` (10 edge(s))
+- `createStreamTokenService` (10 edge(s))
 - `toLowerCase` (9 edge(s))
+- `resolve` (9 edge(s))
 - `close` (9 edge(s))
-- `resolveRoute` (9 edge(s))
-- `toString` (8 edge(s))
-- `verify` (8 edge(s))
-- `from` (7 edge(s))
-- `writeHead` (7 edge(s))
+- `json` (9 edge(s))
 
 ### Incoming
 
-- `equal` (93 edge(s))
+- `equal` (117 edge(s))
 - `./services/proxy/src/proxy.test.js` (38 edge(s))
 - `./services/proxy/src/credentials.js` (30 edge(s))
-- `deepEqual` (22 edge(s))
+- `deepEqual` (28 edge(s))
+- `./services/proxy/src/stream-token-rpc.test.js` (16 edge(s))
 - `buildInjection` (15 edge(s))
 - `./services/proxy/src/oauth-manager.test.js` (14 edge(s))
 - `./services/proxy/src/server.test.js` (14 edge(s))
+- `./services/proxy/src/stream-token.test.js` (14 edge(s))
 - `./services/proxy/src/secrets-client.js` (13 edge(s))
+- `verify` (13 edge(s))
 - `rejects` (12 edge(s))
+- `fetch` (11 edge(s))
 - `./services/proxy/src/proxy.js` (11 edge(s))
 - `./services/proxy/src/stream-token-rpc.js` (11 edge(s))
-- `close` (8 edge(s))
-- `./services/proxy/src/oauth-manager.js` (8 edge(s))
-- `resolveRoute` (8 edge(s))
-- `./services/proxy/src/stream-token-rpc.test.js` (8 edge(s))

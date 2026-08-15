@@ -17,6 +17,7 @@ const CFG = {
   region: 'us-central1',
   sharedOrgUrl: 'https://org-shared.run.app',
   sharedSettingsUrl: 'https://settings-shared.run.app',
+  streamTokenServiceUrl: 'https://stream-token-broker-shared.run.app',
   spaOrigin: 'https://spa.web.app',
   firebaseProjectId: 'proj',
   firebaseApiKey: 'fb-key',
@@ -109,8 +110,11 @@ test('plan encodes tenant isolation: STORE_NAMESPACE, per-tenant topics, shared 
   assert.equal(plan.services.gateway.env.API_BASE_URL, u.gateway);
   assert.equal(plan.services.gateway.env.FLEET_ORG_ID, ORG_ID);
   assert.equal(plan.services.gateway.env.TRUST_PROXY_HOPS, '1');
-  assert.equal(plan.services.gateway.env.STREAM_TOKEN_PROXY_URL, 'http://127.0.0.1:4030');
+  assert.equal(plan.services.gateway.env.STREAM_TOKEN_SERVICE_URL, CFG.streamTokenServiceUrl);
+  assert.equal(plan.services.gateway.env.STREAM_TOKEN_PROXY_URL, undefined);
   assert.equal(plan.services.gateway.env.EGRESS_PROXY_URL, undefined);
+  assert.equal(plan.services.gateway.primaryContainerOnly, true);
+  assert.equal(plan.services.gateway.sidecarEnv, undefined);
   for (const service of [plan.services.planner, plan.services.coder, plan.worker]) {
     assert.equal(service.env.EGRESS_PROXY_URL, 'http://127.0.0.1:4030');
     assert.equal(service.requireSecretFreePrimary, true);
@@ -256,6 +260,23 @@ test('mandatory per-tenant egress proxy fails closed without an organization sig
   );
 });
 
+test('per-tenant gateway fails closed without the shared stream-token broker URL', () => {
+  assert.throws(
+    () => buildPlan(SLUG, {
+      ...CFG,
+      streamTokenServiceUrl: '',
+    }),
+    /shared stream-token service URL/,
+  );
+  assert.throws(
+    () => buildPlan(SLUG, {
+      ...CFG,
+      streamTokenServiceUrl: 'http://stream-token-broker.internal',
+    }),
+    /HTTPS shared stream-token service URL/,
+  );
+});
+
 test('organization label is omitted when orgId is absent; slug still labeled', () => {
   const plan = buildPlan(SLUG, { ...CFG, orgId: undefined });
   assert.equal(plan.services.gateway.labels.organization, undefined);
@@ -265,7 +286,7 @@ test('organization label is omitted when orgId is absent; slug still labeled', (
 
 // --- provision ---------------------------------------------------------------
 
-test('GCP adapter reconciles an existing tenant service with the gateway proxy boundary', async () => {
+test('GCP adapter reconciles a legacy gateway sidecar down to one brokered container', async () => {
   const plan = buildPlan(SLUG, CFG);
   const parent = `projects/${CFG.projectId}/locations/${CFG.region}`;
   const sourceName = `${parent}/services/${CFG.sourceServiceNames.gateway}`;
@@ -283,6 +304,7 @@ test('GCP adapter reconciles an existing tenant service with the gateway proxy b
           name: 'gateway',
           image: 'registry/gateway@sha256:source',
           env: [{ name: 'SOURCE_ONLY', value: 'must-not-leak' }],
+          dependsOn: ['proxy'],
         },
         {
           name: 'proxy',
@@ -330,16 +352,14 @@ test('GCP adapter reconciles an existing tenant service with the gateway proxy b
   assert.equal(updates[0].service.name, tenantName);
   assert.equal(updates[0].service.etag, 'service-etag-current');
 
-  const [primary, proxy] = updates[0].service.template.containers;
+  assert.equal(updates[0].service.template.containers.length, 1);
+  const [primary] = updates[0].service.template.containers;
   const primaryEnv = envEntries(primary);
-  const proxyEnv = envEntries(proxy);
-  assert.equal(primaryEnv.STREAM_TOKEN_PROXY_URL.value, 'http://127.0.0.1:4030');
+  assert.equal(primaryEnv.STREAM_TOKEN_SERVICE_URL.value, CFG.streamTokenServiceUrl);
+  assert.equal(primaryEnv.STREAM_TOKEN_PROXY_URL, undefined);
   assert.equal(primaryEnv.STREAM_TOKEN_SECRET, undefined);
   assert.equal(primaryEnv.EGRESS_PROXY_URL, undefined);
-  assert.equal(proxyEnv.PROXY_CAPABILITIES.value, 'stream-token');
-  assert.deepEqual(proxyEnv.STREAM_TOKEN_SECRET.valueSource, {
-    secretKeyRef: { secret: 'stream-token-secret', version: 'latest' },
-  });
+  assert.equal(primary.dependsOn, undefined);
 });
 
 test('GCP adapter reconciles an existing tenant worker job with sidecar-only egress credentials', async () => {

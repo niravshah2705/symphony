@@ -37,11 +37,12 @@ test('all Cloud Run services use the gen2 execution environment', () => {
     ['email_service.tf', ['email']],
     ['pipeline.tf', ['orchestrator', 'tester', 'deployer']],
     ['provisioner.tf', ['provisioner']],
+    ['stream_token_service.tf', ['stream_token_broker']],
   ]);
   const expectedInventory = [...servicesByFile]
     .flatMap(([file, services]) => services.map((service) => [file, service]))
     .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
-  assert.equal(expectedInventory.length, 10);
+  assert.equal(expectedInventory.length, 11);
 
   const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
   const actualInventory = fs.readdirSync(terraformDir)
@@ -268,17 +269,80 @@ test('pipeline topology enforces dedicated topics and brokered agent egress', ()
   }
 });
 
-test('gateway and agent app containers cannot receive raw provider or stream secrets', () => {
+test('stream-token broker owns the signing secret behind private IAM', () => {
   const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
+  const brokerSource = read('deploy/gcp/terraform/stream_token_service.tf');
   const pipeline = read('deploy/gcp/terraform/pipeline.tf');
+  const provisioner = read('deploy/gcp/terraform/provisioner.tf');
   const iam = read('deploy/gcp/terraform/iam.tf');
+  const variables = read('deploy/gcp/terraform/variables.tf');
+  const outputs = read('deploy/gcp/terraform/outputs.tf');
 
   const gateway = resourceBlock(cloudRun, 'google_cloud_run_v2_service', 'gateway');
-  const streamSidecar = gateway.indexOf('name  = "stream-token-proxy"');
-  assert.ok(streamSidecar > 0);
-  assert.doesNotMatch(gateway.slice(0, streamSidecar), /STREAM_TOKEN_SECRET/);
-  assert.match(gateway.slice(streamSidecar), /name\s*=\s*"STREAM_TOKEN_SECRET"/);
-  assert.match(gateway, /depends_on\s*=\s*\["stream-token-proxy"\]/);
+  const broker = resourceBlock(brokerSource, 'google_cloud_run_v2_service', 'stream_token_broker');
+  const brokerSecret = resourceBlock(iam, 'google_secret_manager_secret_iam_member', 'stream_token_broker');
+  const legacyGatewaySecret = resourceBlock(iam, 'google_secret_manager_secret_iam_member', 'gateway_stream_token_legacy');
+  const brokerInvoker = resourceBlock(iam, 'google_cloud_run_v2_service_iam_member', 'gateway_invokes_stream_token_broker');
+
+  assert.match(cloudRun, /STREAM_TOKEN_SERVICE_URL\s*=\s*google_cloud_run_v2_service\.stream_token_broker\.uri/);
+  assert.match(provisioner, /STREAM_TOKEN_SERVICE_URL\s*=\s*google_cloud_run_v2_service\.stream_token_broker\.uri/);
+  assert.doesNotMatch(gateway, /STREAM_TOKEN_SECRET|stream-token-proxy|127\.0\.0\.1:4030/);
+  assert.match(gateway, /google_cloud_run_v2_service\.stream_token_broker/);
+  assert.match(gateway, /google_cloud_run_v2_service_iam_member\.gateway_invokes_stream_token_broker/);
+
+  assert.match(broker, /service_account\s*=\s*google_service_account\.stream_token_broker\.email/);
+  assert.match(broker, /ingress\s*=\s*var\.internal_ingress/);
+  assert.match(broker, /image\s*=\s*local\.proxy_image/);
+  assert.match(broker, /command\s*=\s*\["node"\]/);
+  assert.match(broker, /args\s*=\s*\["services\/proxy\/src\/stream-token-server\.js"\]/);
+  assert.match(broker, /name\s*=\s*"STREAM_TOKEN_BIND_HOST"\s+value\s*=\s*"0\.0\.0\.0"/);
+  assert.match(broker, /name\s*=\s*"STREAM_TOKEN_SECRET"/);
+  assert.doesNotMatch(broker, /PROXY_CAPABILITIES|egress-proxy/);
+  assert.doesNotMatch(gateway, /STREAM_TOKEN_BIND_HOST/);
+  const brokerMinInstances = variableBlock(variables, 'stream_token_min_instances');
+  assert.match(brokerMinInstances, /default\s*=\s*1/);
+  assert.match(
+    brokerMinInstances,
+    /condition\s*=\s*var\.stream_token_min_instances\s*>=\s*0\s*&&\s*floor\(var\.stream_token_min_instances\)\s*==\s*var\.stream_token_min_instances/,
+  );
+  assert.match(broker, /min_instance_count\s*=\s*var\.stream_token_min_instances/);
+  assert.match(broker, /condition\s*=\s*var\.stream_token_min_instances\s*<=\s*var\.max_instances/);
+
+  assert.match(brokerSecret, /role\s*=\s*"roles\/secretmanager\.secretAccessor"/);
+  assert.match(brokerSecret, /member\s*=\s*"serviceAccount:\$\{google_service_account\.stream_token_broker\.email\}"/);
+  assert.match(
+    variableBlock(variables, 'stream_token_legacy_gateway_secret_access'),
+    /default\s*=\s*true/,
+    'the first migration apply must preserve legacy tenant sidecars',
+  );
+  assert.match(
+    legacyGatewaySecret,
+    /count\s*=\s*var\.stream_token_legacy_gateway_secret_access\s*\?\s*1\s*:\s*0/,
+    'setting the migration gate false must remove the gateway secret binding',
+  );
+  assert.match(legacyGatewaySecret, /member\s*=\s*"serviceAccount:\$\{google_service_account\.gateway\.email\}"/);
+  assert.match(iam, /to\s*=\s*google_secret_manager_secret_iam_member\.gateway_stream_token_legacy\[0\]/);
+  const streamSecretAccessors = [...iam.matchAll(
+    /resource "google_secret_manager_secret_iam_member" "([^"]+)" \{([\s\S]*?)(?=\nresource "|\n# ---|$)/g,
+  )]
+    .filter(([, , body]) => /secret_id\s*=\s*google_secret_manager_secret\.stream_token_secret\.secret_id/.test(body))
+    .map(([, name]) => name)
+    .sort();
+  assert.deepEqual(
+    streamSecretAccessors,
+    ['gateway_stream_token_legacy', 'stream_token_broker'],
+    'the completed false-gate state must leave only the broker accessor',
+  );
+  assert.match(outputs, /output "stream_token_legacy_gateway_secret_access_enabled"/);
+  assert.match(outputs, /value\s*=\s*var\.stream_token_legacy_gateway_secret_access/);
+  assert.match(brokerInvoker, /role\s*=\s*"roles\/run\.invoker"/);
+  assert.match(brokerInvoker, /member\s*=\s*"serviceAccount:\$\{google_service_account\.gateway\.email\}"/);
+  assert.doesNotMatch(brokerInvoker, /allUsers/);
+  const brokerIamBindings = [...iam.matchAll(
+    /resource "google_cloud_run_v2_service_iam_member" "([^"]+)" \{([\s\S]*?)(?=\nresource "|\n# ---|$)/g,
+  )].filter(([, , body]) => /google_cloud_run_v2_service\.stream_token_broker\.name/.test(body));
+  assert.equal(brokerIamBindings.length, 1, 'the broker must have one explicit invoker binding');
+  assert.doesNotMatch(brokerIamBindings[0][2], /allUsers/, 'the broker must never be publicly invokable');
 
   for (const service of ['planner', 'coder_control']) {
     const resource = resourceBlock(cloudRun, 'google_cloud_run_v2_service', service);
@@ -293,6 +357,13 @@ test('gateway and agent app containers cannot receive raw provider or stream sec
   assert.doesNotMatch(`${cloudRun}\n${pipeline}`, /proxy_internal_token/);
 });
 
+test('proxy artifact retention preserves a multi-revision broker rollback window', () => {
+  const variables = read('deploy/gcp/terraform/variables.tf');
+  const artifactRegistry = read('deploy/gcp/terraform/artifact_registry.tf');
+  assert.match(variableBlock(variables, 'artifact_retention_count'), /default\s*=\s*[3-9][0-9]*/);
+  assert.match(artifactRegistry, /keep_count\s*=\s*var\.artifact_retention_count/);
+});
+
 test('OpenSWE upstream is trusted proxy-only deployment configuration', () => {
   const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
   const variables = read('deploy/gcp/terraform/variables.tf');
@@ -302,11 +373,11 @@ test('OpenSWE upstream is trusted proxy-only deployment configuration', () => {
 
   const egressEnvStart = cloudRun.indexOf('egress_env =');
   const proxyEnvStart = cloudRun.indexOf('proxy_plain_env =', egressEnvStart);
-  const streamProxyEnvStart = cloudRun.indexOf('stream_proxy_plain_env =', proxyEnvStart);
-  assert.ok(egressEnvStart >= 0 && proxyEnvStart > egressEnvStart && streamProxyEnvStart > proxyEnvStart);
+  const plannerEnvStart = cloudRun.indexOf('planner_env =', proxyEnvStart);
+  assert.ok(egressEnvStart >= 0 && proxyEnvStart > egressEnvStart && plannerEnvStart > proxyEnvStart);
   assert.doesNotMatch(cloudRun.slice(egressEnvStart, proxyEnvStart), /OPENSWE_(?:URL|PROXY_UPSTREAM)/);
   assert.match(
-    cloudRun.slice(proxyEnvStart, streamProxyEnvStart),
+    cloudRun.slice(proxyEnvStart, plannerEnvStart),
     /OPENSWE_PROXY_UPSTREAM\s*=\s*trimspace\(var\.openswe_proxy_upstream\)/,
   );
 });

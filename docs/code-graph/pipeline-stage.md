@@ -7,7 +7,7 @@
 Directory-based community: packages/shared-core
 
 - **Size**: 620 nodes
-- **Cohesion**: 0.2420
+- **Cohesion**: 0.2419
 - **Dominant Language**: javascript
 
 ## Members
@@ -87,16 +87,16 @@ Directory-based community: packages/shared-core
 
 - `equal` (189 edge(s))
 - `join` (125 edge(s))
-- `String` (95 edge(s))
+- `String` (96 edge(s))
 - `map` (69 edge(s))
 - `includes` (64 edge(s))
-- `trim` (59 edge(s))
+- `trim` (60 edge(s))
 - `push` (58 edge(s))
 - `filter` (54 edge(s))
 - `isArray` (46 edge(s))
 - `throws` (44 edge(s))
 - `deepEqual` (44 edge(s))
-- `slice` (41 edge(s))
+- `slice` (42 edge(s))
 - `has` (40 edge(s))
 - `test` (38 edge(s))
 - `ok` (34 edge(s))

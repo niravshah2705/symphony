@@ -1,4 +1,5 @@
-# Local emulation of the Cloud Run multi-container (sidecar) model.
+# Local emulation of the agent Cloud Run multi-container (sidecar) model plus
+# the standalone stream-token broker used by the gateway.
 #
 # Google Cloud Run multi-container instances share the loopback network
 # namespace between containers. Docker Compose reproduces that exactly with
@@ -14,7 +15,7 @@
 #   docker compose exec planner env | grep -iE 'TOKEN|KEY|SECRET'   # -> nothing
 #
 # Provider credentials live in the organization vault exposed by SETTINGS_URL.
-# The stream secret is supplied only to the dedicated stream proxy.
+# The stream secret is supplied only to the dedicated broker process.
 
 services:
   # -------- egress proxy sidecar (holds the credentials) --------------------
@@ -44,16 +45,17 @@ services:
       timeout: 3s
       retries: 5
 
-  # -------- gateway stream-token proxy (only holder of the HMAC secret) ----
-  stream-proxy:
+  # -------- standalone stream-token broker (only HMAC-secret holder) -------
+  stream-token-broker:
     build:
       context: .
       dockerfile: deploy/gcp/Dockerfile.proxy
+    command: ["node", "services/proxy/src/stream-token-server.js"]
     environment:
-      PROXY_PORT: "4030"
-      PROXY_CAPABILITIES: "stream-token"
-      AUTH_MODE: "disabled"
+      PORT: "4031"
       STREAM_TOKEN_SECRET: "${STREAM_TOKEN_SECRET:?set the local stream-token secret}"
+    # The gateway joins this service's local network namespace so its client
+    # can keep the production rule that plaintext HTTP is loopback-only.
     ports:
       - "4000:4000"
     healthcheck:
@@ -61,7 +63,7 @@ services:
         - CMD
         - node
         - -e
-        - "require('http').get('http://127.0.0.1:4030/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+        - "require('http').get('http://127.0.0.1:4031/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
       interval: 5s
       timeout: 3s
       retries: 5
@@ -96,20 +98,20 @@ services:
       proxy:
         condition: service_healthy
 
-  # -------- public gateway + private stream-token sidecar ------------------
+  # -------- public gateway + standalone stream-token broker ----------------
   gateway:
     build:
       context: .
       dockerfile: deploy/gcp/Dockerfile.gateway
-    network_mode: "service:stream-proxy"
+    network_mode: "service:stream-token-broker"
     environment:
       PORT: "4000"
       AUTH_MODE: "disabled"
       PLANNER_URL: "http://proxy:8080"
       CODER_URL: "http://proxy:8081"
-      STREAM_TOKEN_PROXY_URL: "http://127.0.0.1:4030"
+      STREAM_TOKEN_SERVICE_URL: "http://127.0.0.1:4031"
     depends_on:
-      stream-proxy:
+      stream-token-broker:
         condition: service_healthy
       planner:
         condition: service_started

@@ -1,7 +1,7 @@
 {
   "name": "@ai-fleet/proxy",
   "version": "1.0.0",
-  "description": "AI Fleet egress proxy sidecar — an authenticating reverse proxy that injects per-org credentials into outbound calls so the agent containers (planner/coder/coder-worker) hold no raw provider keys.",
+  "description": "AI Fleet security proxy — credential-injecting agent sidecars plus an isolated stream-token broker entrypoint.",
   "private": true,
   "main": "src/index.js",
   "scripts": {

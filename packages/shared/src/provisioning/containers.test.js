@@ -142,3 +142,25 @@ test('single-container source (no sidecar) still clones cleanly', () => {
   assert.equal(containers.length, 1);
   assert.deepEqual(containers[0].ports, [{ containerPort: 8080 }]);
 });
+
+test('primaryContainerOnly drops a legacy sidecar and its stale dependency', () => {
+  const src = extractSourceService(SOURCE_SVC);
+  const containers = cloneContainers(
+    src.containers,
+    {
+      image: 'registry/gateway:sha',
+      port: 8080,
+      env: { STREAM_TOKEN_SERVICE_URL: 'https://stream-token-broker.run.app' },
+      primaryContainerOnly: true,
+    },
+    { withPorts: true },
+  );
+
+  assert.equal(containers.length, 1);
+  assert.equal(containers[0].name, 'app');
+  assert.equal(containers[0].dependsOn, undefined);
+  assert.ok(containers[0].env.some((entry) => (
+    entry.name === 'STREAM_TOKEN_SERVICE_URL'
+      && entry.value === 'https://stream-token-broker.run.app'
+  )));
+});
