@@ -17,11 +17,31 @@ resource "google_service_account" "settings" {
 check "settings_operator_ingress" {
   assert {
     condition = (
-      trimspace(var.settings_operator_invoker) == "" ||
+      length(local.settings_direct_invokers) == 0 ||
       var.settings_ingress == "INGRESS_TRAFFIC_ALL"
     )
-    error_message = "A direct settings_operator_invoker requires settings_ingress=INGRESS_TRAFFIC_ALL; Cloud Run IAM remains the authorization boundary."
+    error_message = "Direct settings invokers require settings_ingress=INGRESS_TRAFFIC_ALL; Cloud Run IAM remains the authorization boundary."
   }
+}
+
+locals {
+  settings_additional_invokers = setsubtract(
+    setunion(
+      toset([for member in var.settings_operator_invokers : trimspace(member)]),
+      trimspace(var.e2e_approver_service_account) == ""
+      ? toset([])
+      : toset(["serviceAccount:${trimspace(var.e2e_approver_service_account)}"]),
+    ),
+    trimspace(var.settings_operator_invoker) == ""
+    ? toset([])
+    : toset([trimspace(var.settings_operator_invoker)]),
+  )
+  settings_direct_invokers = setunion(
+    local.settings_additional_invokers,
+    trimspace(var.settings_operator_invoker) == ""
+    ? toset([])
+    : toset([trimspace(var.settings_operator_invoker)]),
+  )
 }
 
 resource "google_project_iam_member" "settings_datastore" {
@@ -276,6 +296,19 @@ resource "google_cloud_run_v2_service_iam_member" "operator_invokes_settings" {
   name     = google_cloud_run_v2_service.settings.name
   role     = "roles/run.invoker"
   member   = trimspace(var.settings_operator_invoker)
+}
+
+# Additional direct operator identities, including the optional live-E2E
+# approver service account. Keep the legacy single-member resource above at its
+# existing address so adopting this additive interface never forces IAM state
+# migration or revokes an already-configured operator.
+resource "google_cloud_run_v2_service_iam_member" "additional_operators_invoke_settings" {
+  for_each = local.settings_additional_invokers
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.settings.name
+  role     = "roles/run.invoker"
+  member   = each.value
 }
 
 # Settings resolves every Firebase caller's selected membership/project through

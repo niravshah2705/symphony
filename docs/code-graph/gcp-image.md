@@ -6,36 +6,27 @@
 
 Directory-based community: deploy/gcp
 
-- **Size**: 35 nodes
-- **Cohesion**: 0.1182
-- **Dominant Language**: javascript
+- **Size**: 26 nodes
+- **Cohesion**: 0.1030
+- **Dominant Language**: bash
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| read | Function | ./deploy/gcp/analytics-config.test.js | 9-9 |
-| normalizeShell | Function | ./deploy/gcp/analytics-config.test.js | 18-22 |
-| runtimeConfigLines | Function | ./deploy/gcp/analytics-config.test.js | 24-33 |
-| test:deploy entry points share the blank/valid/invalid GA4 id contract@L35 | Test | ./deploy/gcp/analytics-config.test.js | 35-45 |
-| accepted | Function | ./deploy/gcp/analytics-config.test.js | 36-36 |
-| test@L36 | Test | ./deploy/gcp/analytics-config.test.js | 36-36 |
-| test:manual, Firebase, and Cloud Build deploys generate identical runtime config@L47 | Test | ./deploy/gcp/analytics-config.test.js | 47-57 |
-| test:blank or unset bootstrap input removes a stale repo variable and gh failures remain fatal@L59 | Test | ./deploy/gcp/analytics-config.test.js | 59-77 |
-| test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-92 |
-| log | Function | ./deploy/gcp/bootstrap.sh | 59-59 |
-| ensure_secret | Function | ./deploy/gcp/bootstrap.sh | 126-127 |
-| has_version | Function | ./deploy/gcp/bootstrap.sh | 128-129 |
-| seed | Function | ./deploy/gcp/bootstrap.sh | 130-131 |
-| enabled_version | Function | ./deploy/gcp/bootstrap.sh | 145-146 |
-| tfimport | Function | ./deploy/gcp/bootstrap.sh | 203-208 |
-| log | Function | ./deploy/gcp/deploy.sh | 94-94 |
-| cleanup | Function | ./deploy/gcp/deploy.sh | 97-97 |
-| has_version | Function | ./deploy/gcp/deploy.sh | 174-175 |
-| seed_secret | Function | ./deploy/gcp/deploy.sh | 176-179 |
-| enabled_version | Function | ./deploy/gcp/deploy.sh | 191-194 |
-| build_push | Function | ./deploy/gcp/deploy.sh | 221-224 |
-| build_push_context | Function | ./deploy/gcp/deploy.sh | 225-228 |
+| log | Function | ./deploy/gcp/bootstrap.sh | 52-52 |
+| ensure_secret | Function | ./deploy/gcp/bootstrap.sh | 119-120 |
+| has_version | Function | ./deploy/gcp/bootstrap.sh | 121-122 |
+| seed | Function | ./deploy/gcp/bootstrap.sh | 123-124 |
+| enabled_version | Function | ./deploy/gcp/bootstrap.sh | 138-139 |
+| tfimport | Function | ./deploy/gcp/bootstrap.sh | 187-192 |
+| log | Function | ./deploy/gcp/deploy.sh | 87-87 |
+| cleanup | Function | ./deploy/gcp/deploy.sh | 90-90 |
+| has_version | Function | ./deploy/gcp/deploy.sh | 167-168 |
+| seed_secret | Function | ./deploy/gcp/deploy.sh | 169-172 |
+| enabled_version | Function | ./deploy/gcp/deploy.sh | 184-187 |
+| build_push | Function | ./deploy/gcp/deploy.sh | 214-217 |
+| build_push_context | Function | ./deploy/gcp/deploy.sh | 218-221 |
 | read | Function | ./deploy/gcp/pipeline-infra.test.js | 10-10 |
 | variableBlock | Function | ./deploy/gcp/pipeline-infra.test.js | 12-17 |
 | test:pipeline rollout and deployment are fail-closed Terraform defaults@L19 | Test | ./deploy/gcp/pipeline-infra.test.js | 19-23 |
@@ -58,36 +49,34 @@ Directory-based community: deploy/gcp
 
 ### Outgoing
 
-- `match` (63 edge(s))
-- `indexOf` (29 edge(s))
-- `equal` (13 edge(s))
-- `slice` (12 edge(s))
-- `doesNotMatch` (12 edge(s))
-- `ok` (8 edge(s))
+- `match` (60 edge(s))
+- `indexOf` (16 edge(s))
+- `doesNotMatch` (10 edge(s))
+- `equal` (10 edge(s))
+- `slice` (9 edge(s))
 - `gcloud` (8 edge(s))
 - `echo` (6 edge(s))
 - `spawnSync` (5 edge(s))
-- `deepEqual` (4 edge(s))
 - `printf` (4 edge(s))
 - `docker` (4 edge(s))
 - `grep` (3 edge(s))
+- `ok` (3 edge(s))
 - `repeat` (3 edge(s))
 - `trim` (3 edge(s))
+- `notEqual` (3 edge(s))
 
 ### Incoming
 
-- `match` (63 edge(s))
-- `./deploy/gcp/deploy.sh` (36 edge(s))
+- `match` (60 edge(s))
+- `./deploy/gcp/deploy.sh` (38 edge(s))
 - `./deploy/gcp/bootstrap.sh` (35 edge(s))
-- `indexOf` (23 edge(s))
-- `equal` (13 edge(s))
+- `indexOf` (14 edge(s))
 - `./deploy/gcp/pipeline-infra.test.js` (13 edge(s))
-- `./deploy/gcp/analytics-config.test.js` (12 edge(s))
-- `doesNotMatch` (12 edge(s))
-- `slice` (10 edge(s))
-- `ok` (7 edge(s))
+- `doesNotMatch` (10 edge(s))
+- `equal` (10 edge(s))
+- `slice` (8 edge(s))
 - `spawnSync` (5 edge(s))
-- `deepEqual` (4 edge(s))
+- `ok` (3 edge(s))
 - `repeat` (3 edge(s))
 - `trim` (3 edge(s))
 - `notEqual` (2 edge(s))
