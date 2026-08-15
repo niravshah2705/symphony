@@ -70,6 +70,46 @@ test('gateway image copies only its service and shared-core workspaces', () => {
   assert.doesNotMatch(dockerfile, /^COPY services\/ \.\/services\/$/m);
 });
 
+test('environment debug endpoint is singular, authenticated, gateway-local, and precedes context validation', () => {
+  const gatewayIndex = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+  const route = '/api/debug/environment';
+  const escapedRoute = route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matches = [...gatewayIndex.matchAll(
+    new RegExp(`app\\.(get|post|put|patch|delete|all|use)\\(\\s*['"]${escapedRoute}['"]\\s*,`, 'g'),
+  )];
+
+  assert.equal(matches.length, 1, `expected exactly one route mount for ${route}`);
+  assert.equal(matches[0][1], 'get');
+
+  const authenticationMount = gatewayIndex.indexOf("app.use('/api', createAuthenticationMiddleware());");
+  const endpointMount = matches[0].index;
+  const pinnedOrganization = gatewayIndex.indexOf(
+    "app.use('/api', enforcePinnedOrganization(CONFIG.BILLING.orgId));",
+  );
+  const contextValidation = gatewayIndex.indexOf(
+    "app.use('/api', createContextValidationMiddleware());",
+  );
+  const storeContext = gatewayIndex.indexOf(
+    "app.use('/api', createStoreContextMiddleware());",
+  );
+  assert.ok(authenticationMount >= 0, 'authentication middleware mount must exist');
+  assert.ok(pinnedOrganization >= 0, 'pinned-organization middleware mount must exist');
+  assert.ok(contextValidation >= 0, 'context-validation middleware mount must exist');
+  assert.ok(storeContext >= 0, 'store-context middleware mount must exist');
+  assert.ok(authenticationMount < endpointMount, 'authentication must run before the debug endpoint');
+  assert.ok(endpointMount < pinnedOrganization, 'the debug endpoint must bypass organization pinning');
+  assert.ok(endpointMount < contextValidation, 'the debug endpoint must bypass context validation');
+  assert.ok(endpointMount < storeContext, 'the debug endpoint must bypass store initialization');
+
+  const routeStatementEnd = gatewayIndex.indexOf('\n', endpointMount);
+  const routeStatement = gatewayIndex.slice(endpointMount, routeStatementEnd);
+  assert.match(
+    routeStatement,
+    /app\.get\(\s*['"]\/api\/debug\/environment['"]\s*,\s*environmentDumpNoCache\s*,\s*requireAuthenticated\(\)\s*,\s*createEnvironmentDumpHandler\(\)\s*\);/,
+  );
+  assert.doesNotMatch(routeStatement, /publicAuthConfig|(?:create|planner|locale)Proxy/);
+});
+
 test('heavy public routes proxy to planner and tombstones mount before SPA fallback', () => {
   const gatewayIndex = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
   const plannerIndex = fs.readFileSync(path.join(REPO_ROOT, 'services/planner/src/index.js'), 'utf8');
