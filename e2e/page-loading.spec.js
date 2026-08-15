@@ -218,9 +218,19 @@ test('fixed language groups mark, but never auto-apply, the IP recommendation', 
   expect(suggestionRequests).toBe(1);
 });
 
-test('authenticated Firebase session adds a bearer token and ignores an unrelated provider 401', async ({ page }) => {
+test('authenticated Firebase session adds a bearer token and reports only gateway identity to GA', async ({ page }) => {
   const authenticatedRequests = [];
   const authStartupRequests = [];
+  const gatewaySubject = 'gateway-verified-subject-ada';
+  const firebaseSdkUid = 'firebase-sdk-local-uid-ada';
+  const displayName = 'Ada Operator';
+  const email = 'ada@example.com';
+  let releaseAuthConfig;
+  let markAuthConfigRequested;
+  const authConfigGate = new Promise((resolve) => { releaseAuthConfig = resolve; });
+  const authConfigRequested = new Promise((resolve) => { markAuthConfigRequested = resolve; });
+  let authenticationExpired = false;
+  let tagRequests = 0;
   let settingsContextHeaders = null;
   let streamContext = null;
   page.on('request', (request) => {
@@ -232,13 +242,23 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
   const authorizedJson = (route, body, status = 200) => {
     const authorization = route.request().headers().authorization;
     authenticatedRequests.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
-    expect(authorization).toBe('Bearer browser-access-token');
+    if (authenticationExpired) expect(authorization).toBeUndefined();
+    else expect(authorization).toBe('Bearer browser-access-token');
     return json(route, body, status);
   };
 
   await page.addInitScript(() => {
     localStorage.setItem('ai-fleet.locale', 'en');
     localStorage.setItem('lm.lastWorkspaceRoute', 'agent');
+  });
+  await page.route('**/config.js', (route) => route.fulfill({
+    status: 200,
+    contentType: 'text/javascript',
+    body: "window.__API_BASE__=''; window.__GA_MEASUREMENT_ID__='G-AUTH123';",
+  }));
+  await page.route('https://www.googletagmanager.com/gtag/js**', (route) => {
+    tagRequests += 1;
+    return route.fulfill({ status: 200, contentType: 'text/javascript', body: '' });
   });
   // Stub the vendored Firebase Web SDK with an already signed-in Google user.
   await page.route('**/vendor/firebase/firebase-app.js', (route) => route.fulfill({
@@ -250,7 +270,13 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
     status: 200,
     contentType: 'text/javascript',
     body: `
-      const user = { uid: 'firebase|ada', displayName: 'Ada Operator', email: 'ada@example.com', photoURL: '', getIdToken: async () => 'browser-access-token' };
+      const user = {
+        uid: ${JSON.stringify(firebaseSdkUid)},
+        displayName: ${JSON.stringify(displayName)},
+        email: ${JSON.stringify(email)},
+        photoURL: '',
+        getIdToken: async () => 'browser-access-token'
+      };
       export const browserLocalPersistence = {};
       export const browserPopupRedirectResolver = {};
       export function initializeAuth(_app, options) {
@@ -265,16 +291,20 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
       export async function signOut() {}
     `,
   }));
-  await page.route('**/api/auth/config', (route) => json(route, {
-    mode: 'firebase',
-    enabled: true,
-    provider: 'firebase',
-    firebase: {
-      apiKey: 'AIzaTESTKEY',
-      authDomain: 'demo-proj.firebaseapp.com',
-      projectId: 'demo-proj',
-    },
-  }));
+  await page.route('**/api/auth/config', async (route) => {
+    markAuthConfigRequested();
+    await authConfigGate;
+    return json(route, {
+      mode: 'firebase',
+      enabled: true,
+      provider: 'firebase',
+      firebase: {
+        apiKey: 'AIzaTESTKEY',
+        authDomain: 'demo-proj.firebaseapp.com',
+        projectId: 'demo-proj',
+      },
+    });
+  });
   await page.route('**/api/auth/me', (route) => authorizedJson(route, {
     mode: 'firebase',
     authenticated: true,
@@ -283,10 +313,10 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
     // on them (empty set → the agent workspace route is blocked). Mirror that so
     // the authenticated workspace actually renders.
     permissions: { workspace: 'write', planning: 'write', insights: 'write', settings: 'write', org: 'write' },
-    user: { sub: 'firebase|ada', name: 'Ada Operator', email: 'ada@example.com' },
+    user: { sub: gatewaySubject, name: displayName, email },
   }));
   await page.route('**/api/org/me/context', (route) => authorizedJson(route, {
-    user: { id: 'firebase|ada', email: 'ada@example.com', full_name: 'Ada Operator' },
+    user: { id: gatewaySubject, email, full_name: displayName },
     organizations: [{
       id: 'org-primary', name: 'Primary Org', role: 'ORG_ADMIN',
       projects: [{ id: 'fleet-project', name: 'Fleet Project', role: 'PROJECT_ADMIN' }],
@@ -338,6 +368,9 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
 
   const response = await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
   expect(response && response.ok()).toBeTruthy();
+  await authConfigRequested;
+  expect(await page.evaluate(() => window.dataLayer || [])).toEqual([]);
+  releaseAuthConfig();
   await expect(page.locator('.agent-workspace')).toBeVisible();
   await expect(page.locator('.auth-user')).toContainText('Ada Operator');
   await page.locator('.account-context-trigger').click();
@@ -355,7 +388,7 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('ai-fleet.context')))).toEqual({
     version: 1,
     users: {
-      'firebase|ada': {
+      [gatewaySubject]: {
         organizationId: 'org-primary',
         projectIdsByOrganization: { 'org-primary': 'fleet-project' },
       },
@@ -366,6 +399,77 @@ test('authenticated Firebase session adds a bearer token and ignores an unrelate
   expect(authStartupRequests[0]).toBe('/api/auth/config');
   expect(authStartupRequests).toContain('/vendor/firebase/firebase-app.js');
   expect(authStartupRequests).toContain('/vendor/firebase/firebase-auth.js');
+
+  await expect.poll(() => page.evaluate(() => (
+    window.dataLayer?.filter(([command, event]) => (
+      command === 'event' && event === 'page_view'
+    )).length || 0
+  ))).toBe(1);
+  const gaCommands = await page.evaluate(() => (
+    window.dataLayer.map((entry) => Array.from(entry))
+  ));
+  const gaConfigs = gaCommands.filter(([command]) => command === 'config');
+  const gaPageViews = gaCommands
+    .filter(([command, event]) => command === 'event' && event === 'page_view')
+    .map(([, , parameters]) => parameters);
+
+  expect(gaConfigs).toEqual([[
+    'config',
+    'G-AUTH123',
+    {
+      send_page_view: false,
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false,
+      page_location: expect.stringMatching(/\/#\/agent$/),
+      page_title: 'Agent',
+      user_id: gatewaySubject,
+    },
+  ]]);
+  expect(gaPageViews).toEqual([{
+    page_location: expect.stringMatching(/\/#\/agent$/),
+    page_title: 'Agent',
+    authentication_status: 'authenticated',
+    send_to: 'G-AUTH123',
+  }]);
+  expect(gaPageViews[0]).not.toHaveProperty('user_id');
+  const serializedGaCommands = JSON.stringify(gaCommands);
+  expect(serializedGaCommands).not.toContain(firebaseSdkUid);
+  expect(serializedGaCommands).not.toContain(displayName);
+  expect(serializedGaCommands).not.toContain(email);
+  expect(tagRequests).toBe(1);
+
+  // Expiring auth rerenders the same virtual Agent route. It must clear the
+  // configured identity without inflating page_view counts or putting user_id
+  // on the event itself.
+  authenticationExpired = true;
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('ai-fleet:auth-required'));
+  });
+  await expect.poll(() => page.evaluate(() => (
+    window.dataLayer?.filter(([command]) => command === 'set').length || 0
+  ))).toBe(1);
+  const commandsAfterExpiry = await page.evaluate(() => (
+    window.dataLayer.map((entry) => Array.from(entry))
+  ));
+  expect(commandsAfterExpiry.filter(([command]) => command === 'set')).toEqual([
+    ['set', { user_id: null }],
+  ]);
+  expect(commandsAfterExpiry.filter(([command]) => command === 'config')).toHaveLength(2);
+  expect(commandsAfterExpiry.filter(([command]) => command === 'config').at(-1)).toEqual([
+    'config',
+    'G-AUTH123',
+    {
+      send_page_view: false,
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false,
+      page_location: expect.stringMatching(/\/#\/agent$/),
+      page_title: 'Agent',
+      user_id: null,
+    },
+  ]);
+  expect(commandsAfterExpiry.filter(([command, event]) => (
+    command === 'event' && event === 'page_view'
+  ))).toHaveLength(1);
 });
 
 test('authenticated users without an organization route to onboarding before workspace requests', async ({ page }) => {

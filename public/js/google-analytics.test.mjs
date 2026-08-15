@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   createGoogleAnalytics,
   normalizeGa4MeasurementId,
+  normalizeGa4UserId,
   normalizeTopLevelRoute,
   sanitizedPageLocation,
   sanitizedPageTitle,
@@ -48,6 +49,25 @@ test('accepts only normalized GA4 measurement IDs', () => {
   }
 });
 
+test('accepts only bounded opaque GA4 user IDs', () => {
+  assert.equal(normalizeGa4UserId('firebase|ada'), 'firebase|ada');
+  assert.equal(normalizeGa4UserId(' subject-123 '), 'subject-123');
+  assert.equal(normalizeGa4UserId('x'.repeat(256)), 'x'.repeat(256));
+  for (const value of [
+    '',
+    'null',
+    'undefined',
+    'private-user@example.com',
+    'https://identity.example/users/123',
+    'subject with spaces',
+    'x'.repeat(257),
+    null,
+    undefined,
+  ]) {
+    assert.equal(normalizeGa4UserId(value), '');
+  }
+});
+
 test('blank or invalid configuration is a network-free no-op', () => {
   for (const measurementId of ['', 'not-a-ga4-id']) {
     const { documentRef, scripts, windowRef } = fakeBrowser({ measurementId });
@@ -78,8 +98,9 @@ test('loads gtag once and configures privacy-safe manual page views', () => {
   const instant = new Date('2026-08-14T00:00:00.000Z');
   const analytics = createGoogleAnalytics({ windowRef, documentRef, now: () => instant });
 
-  assert.equal(analytics.trackPageView('agent'), true);
-  assert.equal(analytics.trackPageView('settings'), true);
+  const identity = { authenticated: true, userId: 'firebase|ada' };
+  assert.equal(analytics.trackPageView('agent', identity), true);
+  assert.equal(analytics.trackPageView('settings', identity), true);
   assert.equal(scripts.length, 1);
   assert.deepEqual(scripts[0], {
     tagName: 'script',
@@ -93,6 +114,7 @@ test('loads gtag once and configures privacy-safe manual page views', () => {
       send_page_view: false,
       allow_google_signals: false,
       allow_ad_personalization_signals: false,
+      user_id: 'firebase|ada',
       page_location: 'https://fleet.example/#/agent',
       page_title: 'Agent',
     }],
@@ -100,6 +122,7 @@ test('loads gtag once and configures privacy-safe manual page views', () => {
       send_page_view: false,
       allow_google_signals: false,
       allow_ad_personalization_signals: false,
+      user_id: 'firebase|ada',
       page_location: 'https://fleet.example/#/settings',
       page_title: 'Settings',
     }],
@@ -108,11 +131,13 @@ test('loads gtag once and configures privacy-safe manual page views', () => {
     ['event', 'page_view', {
       page_location: 'https://fleet.example/#/agent',
       page_title: 'Agent',
+      authentication_status: 'authenticated',
       send_to: 'G-ABC123',
     }],
     ['event', 'page_view', {
       page_location: 'https://fleet.example/#/settings',
       page_title: 'Settings',
+      authentication_status: 'authenticated',
       send_to: 'G-ABC123',
     }],
   ]);
@@ -126,11 +151,15 @@ test('strips invite tokens, IDs, hash parameters, and UI titles from page-view d
   });
   const analytics = createGoogleAnalytics({ windowRef, documentRef });
 
-  assert.equal(analytics.trackPageView(), true);
+  assert.equal(analytics.trackPageView(undefined, {
+    authenticated: true,
+    userId: 'private-user@example.com',
+  }), true);
   const [[, , event]] = callsOf(windowRef, 'event');
   assert.deepEqual(event, {
     page_location: 'https://fleet.example/#/invite',
     page_title: 'Invite',
+    authentication_status: 'authenticated',
     send_to: 'G-ABC123',
   });
   assert.equal(JSON.stringify(windowRef.dataLayer).includes(secret), false);
@@ -145,16 +174,76 @@ test('strips invite tokens, IDs, hash parameters, and UI titles from page-view d
   });
 });
 
+test('sets user_id after login and clears invalid identity or logout without leaking it into events', () => {
+  const { documentRef, windowRef } = fakeBrowser();
+  const analytics = createGoogleAnalytics({ windowRef, documentRef });
+
+  assert.equal(analytics.trackPageView('agent', {
+    authenticated: false,
+    userId: 'firebase|must-ignore',
+  }), true);
+  assert.equal(analytics.trackPageView('settings', {
+    authenticated: true,
+    userId: 'firebase|ada',
+  }), true);
+  assert.equal(analytics.trackPageView('settings', {
+    authenticated: true,
+    userId: 'firebase|ada',
+  }), false, 'same route and identity is a shell rerender');
+  assert.equal(analytics.trackPageView('settings', {
+    authenticated: true,
+    userId: 'private-user@example.com',
+  }), false, 'an invalid replacement identity is cleared without duplicating the route');
+  assert.equal(analytics.trackPageView('settings', { authenticated: false }), false,
+    'logout clears identity without duplicating the current route');
+  assert.equal(analytics.trackPageView('agent', { authenticated: false }), true);
+
+  assert.deepEqual(callsOf(windowRef, 'set'), [
+    ['set', { user_id: 'firebase|ada' }],
+    ['set', { user_id: null }],
+  ]);
+  assert.deepEqual(
+    callsOf(windowRef, 'config').map(([, , config]) => config.user_id),
+    [undefined, 'firebase|ada', null, null]
+  );
+  const pageViews = callsOf(windowRef, 'event').map(([, , event]) => event);
+  assert.deepEqual(
+    pageViews.map((event) => event.authentication_status),
+    ['anonymous', 'authenticated', 'anonymous']
+  );
+  assert.equal(pageViews.some((event) => Object.hasOwn(event, 'user_id')), false);
+  assert.equal(JSON.stringify(windowRef.dataLayer).includes('firebase|must-ignore'), false);
+  assert.equal(JSON.stringify(windowRef.dataLayer).includes('private-user@example.com'), false);
+});
+
+test('same-route auth expiry clears target config without sending another page view', () => {
+  const { documentRef, windowRef } = fakeBrowser();
+  const analytics = createGoogleAnalytics({ windowRef, documentRef });
+
+  assert.equal(analytics.trackPageView('agent', {
+    authenticated: true,
+    userId: 'firebase|ada',
+  }), true);
+  assert.equal(analytics.trackPageView('agent', { authenticated: false }), false);
+
+  assert.deepEqual(callsOf(windowRef, 'set'), [['set', { user_id: null }]]);
+  assert.deepEqual(
+    callsOf(windowRef, 'config').map(([, , config]) => config.user_id),
+    ['firebase|ada', null]
+  );
+  assert.equal(callsOf(windowRef, 'event').length, 1);
+});
+
 test('deduplicates shell rerenders but tracks a route when it is revisited', () => {
   const { documentRef, windowRef } = fakeBrowser({ hash: '#/invite?token=first' });
   const analytics = createGoogleAnalytics({ windowRef, documentRef });
 
-  assert.equal(analytics.trackPageView(), true);
+  assert.equal(analytics.trackPageView(undefined, { authenticated: false }), true);
   documentRef.title = 'Localized invitation title';
   windowRef.location.hash = '#/invite?token=second';
-  assert.equal(analytics.trackPageView(), false, 'same top-level route is a shell rerender');
-  assert.equal(analytics.trackPageView('settings'), true);
-  assert.equal(analytics.trackPageView('invite'), true);
+  assert.equal(analytics.trackPageView(undefined, { authenticated: false }), false, 'same top-level route is a shell rerender');
+  assert.equal(analytics.trackPageView('settings', { authenticated: false }), true);
+  assert.equal(analytics.trackPageView('invite', { authenticated: false }), true);
 
   assert.deepEqual(
     callsOf(windowRef, 'event').map(([, , event]) => event.page_location),
