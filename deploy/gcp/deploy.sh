@@ -263,7 +263,11 @@ log "Full apply (Cloud Run services + job, Pub/Sub, Scheduler, Firestore, IAM)"
 terraform -chdir="$TF_DIR" apply -input=false -auto-approve "${TFVARS[@]}" \
   -var="api_base_url=${GATEWAY_URL}"
 
-# --- 9. Report --------------------------------------------------------------
+# --- 9. Bound Cloud Run revision history -----------------------------------
+log "Pruning old Cloud Run revisions (retain newest 3 per service)"
+bash "$SCRIPT_DIR/prune-cloud-run-revisions.sh" "$PROJECT_ID" "$REGION"
+
+# --- 10. Report -------------------------------------------------------------
 log "Done"
 terraform -chdir="$TF_DIR" output || true
 cat <<EOF

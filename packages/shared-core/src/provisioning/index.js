@@ -20,6 +20,8 @@ const {
  * idempotent: ALREADY_EXISTS services/jobs are reconciled in place, while
  * ALREADY_EXISTS auxiliary resources and NOT_FOUND deletes are tolerated, so
  * retried provisions and teardowns converge on the current secure template.
+ * After each service reconcile, revisions are bounded to the three newest so
+ * tenant stacks follow the same rollback window as shared deployments.
  *
  * "Reuse original builds": createService/createJob copy the image AND the secret
  * env blocks, resource limits, execution environment, scaling, concurrency,
@@ -30,6 +32,7 @@ const {
 
 const ALREADY_EXISTS = 6; // gRPC ALREADY_EXISTS
 const NOT_FOUND = 5; // gRPC NOT_FOUND
+const CLOUD_RUN_REVISIONS_TO_KEEP = 3;
 const PROVIDER_SECRET_ENV_RE = /(?:^|_)(?:API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)(?:$|_)/i;
 
 function tolerate(codes, err) {
@@ -65,6 +68,29 @@ async function awaitOperation(start) {
   await operation.promise();
 }
 
+function revisionCreatedAt(revision) {
+  const value = revision && revision.createTime;
+  if (!value) return Number.NaN;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return parsed;
+  }
+
+  if (value.seconds === undefined || value.seconds === null) return Number.NaN;
+  const seconds = value.seconds && typeof value.seconds.toNumber === 'function'
+    ? value.seconds.toNumber()
+    : Number(value.seconds);
+  const nanos = value.nanos === undefined || value.nanos === null ? 0 : Number(value.nanos);
+  return Number.isFinite(seconds) && Number.isFinite(nanos)
+    ? (seconds * 1000) + (nanos / 1e6)
+    : Number.NaN;
+}
+
+function revisionId(name) {
+  return String(name || '').split('/').filter(Boolean).pop() || '';
+}
+
 /**
  * Reconcile a Cloud Run resource after create reports ALREADY_EXISTS.
  *
@@ -94,8 +120,12 @@ async function updateExistingRunResource({ client, kind, name, desired, updateMa
 let runClients = null;
 function getRun() {
   if (!runClients) {
-    const { ServicesClient, JobsClient } = require('@google-cloud/run').v2;
-    runClients = { services: new ServicesClient(), jobs: new JobsClient() };
+    const { ServicesClient, JobsClient, RevisionsClient } = require('@google-cloud/run').v2;
+    runClients = {
+      services: new ServicesClient(),
+      jobs: new JobsClient(),
+      revisions: new RevisionsClient(),
+    };
   }
   return runClients;
 }
@@ -121,6 +151,7 @@ function createGcpClients({ projectId, region }, dependencies = {}) {
   const parent = `projects/${projectId}/locations/${region}`;
   const services = () => (dependencies.run || getRun()).services;
   const jobs = () => (dependencies.run || getRun()).jobs;
+  const revisions = () => (dependencies.run || getRun()).revisions;
 
   const serviceSrcCache = new Map();
   const jobSrcCache = new Map();
@@ -153,6 +184,79 @@ function createGcpClients({ projectId, region }, dependencies = {}) {
       resource: `${parent}/services/${spec.name}`,
       policy: { bindings: [{ role: 'roles/run.invoker', members }] },
     });
+  }
+
+  async function listServiceRevisions(serviceName) {
+    const service = `${parent}/services/${serviceName}`;
+    const [items] = await revisions().listRevisions({ parent: service });
+    const sortable = [...items].map((revision) => {
+      if (!revisionId(revision && revision.name)) {
+        throw new Error(`Cloud Run service ${serviceName} returned a revision without a server identity`);
+      }
+      const createdAt = revisionCreatedAt(revision);
+      if (!Number.isFinite(createdAt)) {
+        throw new Error(
+          `Cloud Run revision ${revision.name} has no valid creation timestamp; refusing unsafe cleanup`,
+        );
+      }
+      return { revision, createdAt };
+    });
+    sortable.sort((left, right) => right.createdAt - left.createdAt);
+    return sortable.map(({ revision }) => revision);
+  }
+
+  async function pruneServiceRevisions(serviceName) {
+    const servicePath = `${parent}/services/${serviceName}`;
+    const [service] = await services().getService({ name: servicePath });
+    if (!service || !String(service.name || '').trim()) {
+      throw new Error(`Cloud Run service ${serviceName} has no server identity after reconciliation`);
+    }
+
+    const current = await listServiceRevisions(serviceName);
+    const stale = current.slice(CLOUD_RUN_REVISIONS_TO_KEEP).reverse();
+    const protectedRevisionIds = new Set([
+      revisionId(service.latestCreatedRevision),
+      revisionId(service.latestReadyRevision),
+      ...(service.trafficStatuses || [])
+        .filter((target) => Number(target.percent || 0) > 0 || String(target.tag || '').trim())
+        .map((target) => revisionId(target.revision)),
+    ].filter(Boolean));
+    const protectedStale = stale.filter((revision) => protectedRevisionIds.has(revisionId(revision.name)));
+    if (protectedStale.length) {
+      throw new Error(
+        `Unable to retain only ${CLOUD_RUN_REVISIONS_TO_KEEP} revisions for Cloud Run service ${serviceName}; `
+        + `older revision ${protectedStale[0].name} is latest, receives traffic, or has a traffic tag`,
+      );
+    }
+
+    for (const revision of stale) {
+      if (!String(revision.etag || '').trim()) {
+        throw new Error(
+          `Cloud Run revision ${revision.name} has no etag; refusing deletion without a concurrency precondition`,
+        );
+      }
+      try {
+        await awaitOperation(revisions().deleteRevision({
+          name: revision.name,
+          etag: revision.etag,
+        }));
+      } catch (err) {
+        const detail = err && err.message ? `: ${err.message}` : '';
+        throw new Error(
+          `Unable to retain only ${CLOUD_RUN_REVISIONS_TO_KEEP} revisions for Cloud Run service ${serviceName}; `
+          + `failed to delete ${revision.name}${detail}`,
+          { cause: err },
+        );
+      }
+    }
+
+    const remaining = await listServiceRevisions(serviceName);
+    if (remaining.length > CLOUD_RUN_REVISIONS_TO_KEEP) {
+      throw new Error(
+        `Cloud Run service ${serviceName} still has ${remaining.length} revisions after pruning; `
+        + `expected at most ${CLOUD_RUN_REVISIONS_TO_KEEP}`,
+      );
+    }
   }
 
   return {
@@ -198,6 +302,7 @@ function createGcpClients({ projectId, region }, dependencies = {}) {
         });
       }
       await setInvoker(spec);
+      await pruneServiceRevisions(spec.name);
     },
     async createJob(spec) {
       const src = spec.sourceName ? await sourceJob(spec.sourceName) : { containers: [] };

@@ -292,7 +292,14 @@ test('GCP adapter reconciles a legacy gateway sidecar down to one brokered conta
   const sourceName = `${parent}/services/${CFG.sourceServiceNames.gateway}`;
   const tenantName = `${parent}/services/${plan.services.gateway.name}`;
   const updates = [];
+  const revisionDeletes = [];
+  const revisionListParents = [];
   let updateCompleted = 0;
+  let revisionState = [2, 5, 1, 4, 3].map((number) => ({
+    name: `${tenantName}/revisions/gw-rev-${number}`,
+    createTime: { seconds: number, nanos: 0 },
+    etag: `revision-etag-${number}`,
+  }));
 
   const source = {
     template: {
@@ -336,9 +343,21 @@ test('GCP adapter reconciles a legacy gateway sidecar down to one brokered conta
     async setIamPolicy() {},
   };
   const jobs = {};
+  const revisions = {
+    async listRevisions({ parent: revisionParent }) {
+      revisionListParents.push(revisionParent);
+      return [revisionState];
+    },
+    async deleteRevision(request) {
+      revisionDeletes.push(request);
+      return [completedOperation(() => {
+        revisionState = revisionState.filter((revision) => revision.name !== request.name);
+      })];
+    },
+  };
   const clients = createGcpClients(
     { projectId: CFG.projectId, region: CFG.region },
-    { run: { services, jobs } },
+    { run: { services, jobs, revisions } },
   );
 
   await clients.createService({
@@ -360,6 +379,148 @@ test('GCP adapter reconciles a legacy gateway sidecar down to one brokered conta
   assert.equal(primaryEnv.STREAM_TOKEN_SECRET, undefined);
   assert.equal(primaryEnv.EGRESS_PROXY_URL, undefined);
   assert.equal(primary.dependsOn, undefined);
+  assert.deepEqual(revisionDeletes, [
+    { name: `${tenantName}/revisions/gw-rev-1`, etag: 'revision-etag-1' },
+    { name: `${tenantName}/revisions/gw-rev-2`, etag: 'revision-etag-2' },
+  ]);
+  assert.deepEqual(
+    revisionState.map((revision) => revision.name).sort(),
+    [3, 4, 5].map((number) => `${tenantName}/revisions/gw-rev-${number}`).sort(),
+  );
+  assert.deepEqual(revisionListParents, [tenantName, tenantName]);
+});
+
+test('GCP adapter fails closed when an older tenant revision is active or tagged', async (t) => {
+  const scenarios = [
+    { label: 'receives traffic', trafficStatus: { revision: 'rev-1', percent: 10 } },
+    { label: 'has a traffic tag', trafficStatus: { revision: 'rev-1', percent: 0, tag: 'canary' } },
+  ];
+
+  for (const scenario of scenarios) {
+    await t.test(scenario.label, async () => {
+      const serviceName = `gw-retention-${scenario.trafficStatus.tag ? 'tagged' : 'active'}`;
+      const parent = `projects/${CFG.projectId}/locations/${CFG.region}`;
+      const serviceParent = `${parent}/services/${serviceName}`;
+      const services = {
+        async getService({ name }) {
+          assert.equal(name, serviceParent);
+          return [{
+            name,
+            latestCreatedRevision: 'rev-4',
+            latestReadyRevision: 'rev-4',
+            trafficStatuses: [scenario.trafficStatus],
+          }];
+        },
+        async createService() {
+          return [completedOperation()];
+        },
+        async setIamPolicy() {},
+      };
+      const revisions = {
+        async listRevisions({ parent: revisionParent }) {
+          assert.equal(revisionParent, serviceParent);
+          return [[4, 3, 2, 1].map((number) => ({
+            name: `${revisionParent}/revisions/rev-${number}`,
+            createTime: new Date(number * 1000),
+          }))];
+        },
+        async deleteRevision() {
+          throw new Error('protected revision should not be sent for deletion');
+        },
+      };
+      const clients = createGcpClients(
+        { projectId: CFG.projectId, region: CFG.region },
+        { run: { services, jobs: {}, revisions } },
+      );
+
+      await assert.rejects(
+        clients.createService({ name: serviceName, env: {} }),
+        /Unable to retain only 3 revisions.*rev-1.*receives traffic/,
+      );
+    });
+  }
+});
+
+test('GCP adapter refuses deletion when revision metadata is unsafe', async (t) => {
+  async function assertUnsafeRevision(revision, expected) {
+    const serviceName = 'gw-retention-metadata';
+    const parent = `projects/${CFG.projectId}/locations/${CFG.region}`;
+    const serviceParent = `${parent}/services/${serviceName}`;
+    const safeRevisions = [4, 3, 2].map((number) => ({
+      name: `${serviceParent}/revisions/rev-${number}`,
+      createTime: new Date(number * 1000),
+      etag: `etag-${number}`,
+    }));
+    const clients = createGcpClients(
+      { projectId: CFG.projectId, region: CFG.region },
+      {
+        run: {
+          services: {
+            async getService({ name }) { return [{ name }]; },
+            async createService() { return [completedOperation()]; },
+            async setIamPolicy() {},
+          },
+          jobs: {},
+          revisions: {
+            async listRevisions() { return [[...safeRevisions, revision]]; },
+            async deleteRevision() { throw new Error('unsafe revision must not be deleted'); },
+          },
+        },
+      },
+    );
+
+    await assert.rejects(clients.createService({ name: serviceName, env: {} }), expected);
+  }
+
+  await t.test('invalid creation timestamp', () => assertUnsafeRevision({
+    name: 'projects/test/locations/test/services/test/revisions/rev-1',
+    createTime: 'not-a-timestamp',
+    etag: 'etag-1',
+  }, /has no valid creation timestamp; refusing unsafe cleanup/));
+  await t.test('missing etag', () => assertUnsafeRevision({
+    name: 'projects/test/locations/test/services/test/revisions/rev-1',
+    createTime: new Date(1000),
+  }, /has no etag; refusing deletion without a concurrency precondition/));
+});
+
+test('GCP adapter verifies the tenant revision count after pruning', async () => {
+  const serviceName = 'gw-retention-race';
+  const parent = `projects/${CFG.projectId}/locations/${CFG.region}`;
+  const serviceParent = `${parent}/services/${serviceName}`;
+  const listed = [4, 3, 2, 1].map((number) => ({
+    name: `${serviceParent}/revisions/rev-${number}`,
+    createTime: { seconds: { toNumber: () => number }, nanos: 0 },
+    etag: `etag-${number}`,
+  }));
+  let listCalls = 0;
+  const clients = createGcpClients(
+    { projectId: CFG.projectId, region: CFG.region },
+    {
+      run: {
+        services: {
+          async getService({ name }) { return [{ name }]; },
+          async createService() { return [completedOperation()]; },
+          async setIamPolicy() {},
+        },
+        jobs: {},
+        revisions: {
+          async listRevisions() {
+            listCalls += 1;
+            return [listed];
+          },
+          async deleteRevision() {
+            return [completedOperation()];
+          },
+        },
+      },
+    },
+  );
+
+  await assert.rejects(
+    clients.createService({ name: serviceName, env: {} }),
+    /still has 4 revisions after pruning; expected at most 3/,
+  );
+  assert.equal(listCalls, 2);
 });
 
 test('GCP adapter reconciles an existing tenant worker job with sidecar-only egress credentials', async () => {

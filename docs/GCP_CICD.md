@@ -19,7 +19,7 @@ are conditional on it:
 | `packages/shared-core/**` | rebuild every consumer, including the SDK-free gateway/orchestrator and agent stages |
 | `packages/shared/**` | rebuild planner, coder, tester, and deployer images |
 | root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
-| `deploy/gcp/terraform/**` | rebuild the shared proxy artifact and run `terraform apply` (required for first broker creation) |
+| `deploy/gcp/terraform/**` or `deploy/gcp/prune-cloud-run-revisions.sh` | rebuild the shared proxy artifact and run `terraform apply` (required for first broker creation and pruner changes) |
 | `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy only (no images, no Terraform) |
 | docs / anything else | nothing runs |
 
@@ -32,6 +32,14 @@ everything except the service that changed (see the per-service
 Need a full rebuild + apply of everything (e.g. after a manual hotfix or to
 re-converge state)? Trigger the workflow manually with **`deploy_all: true`**
 (Actions → Deploy to GCP → Run workflow).
+
+After a successful apply, the workflow runs the shared revision-retention sweep
+for **every Cloud Run service** in `GCP_PROJECT_ID` / `GCP_REGION`. It keeps the
+newest three revisions and deletes older candidates oldest-first, synchronously.
+It never changes traffic; a protected-revision refusal or failed post-check fails
+the deploy with the affected service and revision instead of hiding the cleanup
+failure. Tenant provisioning also applies the same three-revision bound when it
+reconciles each tenant service; the sweep is the project-wide backstop.
 
 ## SPA obfuscation (release-time)
 
@@ -226,6 +234,8 @@ verification steps.
 - `concurrency: gcp-deploy` serializes applies so two merges never race the state.
 - A rebuilt service's image tag is the commit SHA, so it rolls a fresh Cloud Run
   revision; unchanged services keep their live tag and are left untouched.
+- Successful Terraform deploys retain only the newest three revisions per Cloud
+  Run service. Cleanup is fail-closed and never moves traffic.
 - The proxy package is one reviewed artifact used by agent sidecars and the
   broker-only entrypoint. It is rebuilt on every Terraform-running deployment.
   Artifact Registry retains the five most recent versions per package so a

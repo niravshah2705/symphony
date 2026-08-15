@@ -10,15 +10,15 @@ Auto-generated documentation from the code knowledge graph community structure.
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-model | 1832 | [agent-model.md](agent-model.md) |
+| agent-model | 1842 | [agent-model.md](agent-model.md) |
 | core-org | 506 | [core-org.md](core-org.md) |
 | e2e-json | 91 | [e2e-json.md](e2e-json.md) |
 | e2e-live-tenant | 25 | [e2e-live-tenant.md](e2e-live-tenant.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
-| gcp-cloud | 52 | [gcp-cloud.md](gcp-cloud.md) |
+| gcp-cloud | 70 | [gcp-cloud.md](gcp-cloud.md) |
 | harness-registry-install | 160 | [harness-registry-install.md](harness-registry-install.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
-| registry-stage | 654 | [registry-stage.md](registry-stage.md) |
+| registry-stage | 660 | [registry-stage.md](registry-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
 | routes-test:planner | 187 | [routes-test-planner.md](routes-test-planner.md) |
 | scripts-audit | 24 | [scripts-audit.md](scripts-audit.md) |

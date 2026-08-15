@@ -431,6 +431,17 @@ steps:
           -var="email_from=${_EMAIL_FROM}" \
           -var="email_public_app_url=$${EMAIL_PUBLIC_APP_URL}"
 
+  # --- Bound revision history after (and only after) a successful apply -----
+  - id: prune-cloud-run-revisions
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    waitFor: [tf-apply]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        bash deploy/gcp/prune-cloud-run-revisions.sh "$PROJECT_ID" "${_REGION}"
+
 # Longer timeout: parallel service builds + two terraform applies.
 timeout: 3600s
 

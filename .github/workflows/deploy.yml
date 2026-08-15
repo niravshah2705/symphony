@@ -67,7 +67,7 @@ jobs:
             # otherwise an obfuscator/default change would wait for an unrelated
             # public/** edit before reaching production.
             spa:     ['public/**', 'firebase.json', 'scripts/obfuscate-spa.js', 'package.json', 'package-lock.json', '.github/workflows/deploy.yml']
-            infra:    ['deploy/gcp/terraform/**']
+            infra:    ['deploy/gcp/terraform/**', 'deploy/gcp/prune-cloud-run-revisions.sh']
             root:     ['package.json', 'package-lock.json']
             org:      ['services/org/**']
             settings: ['services/settings/**']
@@ -429,6 +429,9 @@ jobs:
           [ -n "${{ steps.tags.outputs.email }}" ] && apply_args+=(-var="email_image_tag=${{ steps.tags.outputs.email }}") || true
 
           terraform apply -input=false -auto-approve "${apply_args[@]}"
+
+      - name: Prune old Cloud Run revisions
+        run: bash deploy/gcp/prune-cloud-run-revisions.sh "${{ vars.GCP_PROJECT_ID }}" "$REGION"
 
       - name: Outputs
         working-directory: ${{ env.TF_DIR }}

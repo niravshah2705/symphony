@@ -140,6 +140,18 @@ runs the same build → SPA-publish → staged `terraform apply` in Cloud Build.
 Seed the required agent Secret Manager versions first (the one-shot/bootstrap
 scripts do this for you). SMTP credentials use the acyclic flow below.
 
+### Cloud Run revision retention
+
+GitHub Actions, `deploy/gcp/deploy.sh`, and Cloud Build run
+`deploy/gcp/prune-cloud-run-revisions.sh` only after a successful full Terraform
+apply. The shared sweep covers every Cloud Run service in the supplied project
+and region, keeps the newest three revisions, deletes older candidates
+oldest-first and synchronously, then verifies the bound. It never changes
+traffic: if Cloud Run protects an older active/tagged revision, deletion fails
+and the deployment reports the cleanup failure with service/revision context.
+Tenant provisioning also bounds each tenant service immediately after reconcile;
+the shared sweep is the project-wide backstop.
+
 The Analytics substitution is optional and public. The SPA publish step validates
 it and writes it to the no-store `config.js`; omit it to disable collection. See
 [Google Analytics](GOOGLE_ANALYTICS.md) for data-stream and verification setup.

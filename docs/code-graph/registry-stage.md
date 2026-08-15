@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared-core
 
-- **Size**: 654 nodes
-- **Cohesion**: 0.2450
+- **Size**: 660 nodes
+- **Cohesion**: 0.2453
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared-core
 | customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 590-777 |
 | publicCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 779-781 |
 
-*... and 604 more members.*
+*... and 610 more members.*
 
 ## Execution Flows
 
@@ -87,19 +87,19 @@ Directory-based community: packages/shared-core
 
 - `equal` (206 edge(s))
 - `join` (138 edge(s))
-- `String` (99 edge(s))
-- `map` (78 edge(s))
+- `String` (103 edge(s))
+- `map` (81 edge(s))
 - `includes` (71 edge(s))
-- `trim` (64 edge(s))
+- `trim` (67 edge(s))
+- `filter` (61 edge(s))
 - `push` (59 edge(s))
 - `throws` (58 edge(s))
-- `filter` (57 edge(s))
 - `deepEqual` (53 edge(s))
 - `isArray` (50 edge(s))
-- `slice` (43 edge(s))
+- `slice` (44 edge(s))
 - `test` (42 edge(s))
+- `has` (42 edge(s))
 - `stringify` (41 edge(s))
-- `has` (41 edge(s))
 
 ### Incoming
 
@@ -111,9 +111,9 @@ Directory-based community: packages/shared-core
 - `./packages/shared-core/src/config.js` (43 edge(s))
 - `./packages/shared-core/src/pipeline/contracts.js` (42 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (40 edge(s))
+- `./packages/shared-core/src/provisioning/index.js` (37 edge(s))
 - `ok` (35 edge(s))
 - `./packages/shared-core/src/agent/registry/schema.js` (32 edge(s))
-- `./packages/shared-core/src/provisioning/index.js` (31 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (27 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
 - `./packages/shared-core/src/agent/diagnostics.js` (23 edge(s))

@@ -6,8 +6,8 @@
 
 Directory-based community: deploy/gcp
 
-- **Size**: 52 nodes
-- **Cohesion**: 0.1610
+- **Size**: 70 nodes
+- **Cohesion**: 0.1594
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: deploy/gcp
 | test:tester image installs the capability-free network sandbox for repository commands@L450 | Test | ./deploy/gcp/pipeline-infra.test.js | 450-459 |
 | test:direct settings operator access is IAM-gated and never public@L461 | Test | ./deploy/gcp/pipeline-infra.test.js | 461-466 |
 
-*... and 2 more members.*
+*... and 20 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Directory-based community: deploy/gcp
 
 ### Outgoing
 
-- `match` (142 edge(s))
-- `indexOf` (49 edge(s))
-- `doesNotMatch` (33 edge(s))
+- `match` (164 edge(s))
+- `indexOf` (53 edge(s))
+- `doesNotMatch` (35 edge(s))
+- `equal` (30 edge(s))
+- `ok` (27 edge(s))
 - `slice` (22 edge(s))
-- `equal` (21 edge(s))
-- `ok` (20 edge(s))
-- `deepEqual` (10 edge(s))
-- `gcloud` (8 edge(s))
-- `map` (7 edge(s))
+- `echo` (19 edge(s))
+- `gcloud` (13 edge(s))
+- `return` (12 edge(s))
+- `deepEqual` (11 edge(s))
+- `notEqual` (11 edge(s))
+- `filter` (9 edge(s))
+- `map` (8 edge(s))
 - `matchAll` (7 edge(s))
-- `echo` (6 edge(s))
-- `notEqual` (5 edge(s))
-- `spawnSync` (5 edge(s))
-- `printf` (4 edge(s))
-- `docker` (4 edge(s))
+- `join` (6 edge(s))
 
 ### Incoming
 
-- `match` (142 edge(s))
-- `indexOf` (40 edge(s))
+- `match` (164 edge(s))
+- `indexOf` (44 edge(s))
+- `doesNotMatch` (35 edge(s))
 - `./deploy/gcp/deploy.sh` (34 edge(s))
-- `doesNotMatch` (33 edge(s))
 - `./deploy/gcp/bootstrap.sh` (32 edge(s))
+- `equal` (30 edge(s))
+- `ok` (26 edge(s))
 - `./deploy/gcp/pipeline-infra.test.js` (23 edge(s))
-- `equal` (21 edge(s))
-- `ok` (19 edge(s))
 - `slice` (17 edge(s))
 - `./deploy/gcp/analytics-config.test.js` (12 edge(s))
-- `deepEqual` (10 edge(s))
-- `map` (6 edge(s))
-- `matchAll` (6 edge(s))
-- `./deploy/gcp/harness-registry-workflow.test.js` (5 edge(s))
-- `spawnSync` (5 edge(s))
+- `deepEqual` (11 edge(s))
+- `filter` (8 edge(s))
+- `notEqual` (8 edge(s))
+- `./deploy/gcp/revision-retention.test.js` (8 edge(s))
+- `map` (7 edge(s))
