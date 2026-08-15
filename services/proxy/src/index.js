@@ -12,7 +12,20 @@ const { createStreamTokenRpcHandler } = require('./stream-token-rpc');
  */
 
 const PORT = Number(process.env.PROXY_PORT) || 4030;
-const PROXY_BIND_HOST = '127.0.0.1';
+const DEFAULT_PROXY_BIND_HOST = '127.0.0.1';
+const CLOUD_RUN_BIND_HOST = '0.0.0.0';
+
+function resolveBindHost(value = process.env.PROXY_BIND_HOST) {
+  const host = String(value || '').trim() || DEFAULT_PROXY_BIND_HOST;
+  if (host !== DEFAULT_PROXY_BIND_HOST && host !== CLOUD_RUN_BIND_HOST) {
+    throw new Error('PROXY_BIND_HOST must be 127.0.0.1 or 0.0.0.0');
+  }
+  return host;
+}
+
+// Resolve before the server is constructed or listen is attempted so a typo
+// cannot silently expose the credential-bearing relay on an arbitrary address.
+const PROXY_BIND_HOST = resolveBindHost();
 
 function parseCapabilities(value = process.env.PROXY_CAPABILITIES) {
   return new Set(String(value || '')
@@ -81,15 +94,18 @@ function createServer(options = {}) {
 const server = createServer();
 
 if (require.main === module) {
-  // Both capability surfaces are sidecar-only. Binding the wildcard interface
-  // would make the egress relay reachable from the container network even
-  // though its intended client is co-located over shared loopback.
+  // Local development stays loopback-only. Cloud Run explicitly opts into the
+  // wildcard bind required by its sidecar startup probe; the application still
+  // reaches this container only through the instance's shared loopback.
   server.listen(PORT, PROXY_BIND_HOST, () => {
-    log.info(`AI Fleet egress proxy sidecar listening on http://127.0.0.1:${PORT}`);
+    log.info(`AI Fleet egress proxy sidecar listening on http://${PROXY_BIND_HOST}:${PORT}`);
   });
 }
 
 module.exports = server;
 module.exports.createServer = createServer;
 module.exports.parseCapabilities = parseCapabilities;
+module.exports.resolveBindHost = resolveBindHost;
 module.exports.PROXY_BIND_HOST = PROXY_BIND_HOST;
+module.exports.DEFAULT_PROXY_BIND_HOST = DEFAULT_PROXY_BIND_HOST;
+module.exports.CLOUD_RUN_BIND_HOST = CLOUD_RUN_BIND_HOST;

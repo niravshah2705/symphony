@@ -5,7 +5,14 @@ const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 
 const proxyServer = require('./index');
-const { createServer, parseCapabilities, PROXY_BIND_HOST } = proxyServer;
+const {
+  createServer,
+  parseCapabilities,
+  resolveBindHost,
+  PROXY_BIND_HOST,
+  DEFAULT_PROXY_BIND_HOST,
+  CLOUD_RUN_BIND_HOST,
+} = proxyServer;
 
 function listen(server) {
   return new Promise((resolve) => {
@@ -56,8 +63,40 @@ test('capability parsing is explicit and comma-separated', () => {
   assert.deepEqual([...parseCapabilities('')], []);
 });
 
-test('the deployed proxy binds only shared loopback', () => {
-  assert.equal(PROXY_BIND_HOST, '127.0.0.1');
+test('proxy binding defaults to loopback and permits the explicit Cloud Run wildcard', () => {
+  assert.equal(DEFAULT_PROXY_BIND_HOST, '127.0.0.1');
+  assert.equal(CLOUD_RUN_BIND_HOST, '0.0.0.0');
+  assert.equal(PROXY_BIND_HOST, DEFAULT_PROXY_BIND_HOST);
+  assert.equal(resolveBindHost(''), DEFAULT_PROXY_BIND_HOST);
+  assert.equal(resolveBindHost(' 127.0.0.1 '), DEFAULT_PROXY_BIND_HOST);
+  assert.equal(resolveBindHost(' 0.0.0.0 '), CLOUD_RUN_BIND_HOST);
+  for (const value of ['localhost', '::', '10.0.0.2', '*']) {
+    assert.throws(() => resolveBindHost(value), /PROXY_BIND_HOST must be/);
+  }
+});
+
+test('proxy startup accepts the explicit Cloud Run wildcard bind', () => {
+  const result = spawnSync(
+    process.execPath,
+    ['-e', "process.stdout.write(require('./index').PROXY_BIND_HOST)"],
+    {
+      cwd: __dirname,
+      encoding: 'utf8',
+      env: { ...process.env, PROXY_BIND_HOST: CLOUD_RUN_BIND_HOST },
+    },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, CLOUD_RUN_BIND_HOST);
+});
+
+test('proxy startup fails closed before listen for an untrusted bind host', () => {
+  const result = spawnSync(process.execPath, ['-e', "require('./index')"], {
+    cwd: __dirname,
+    encoding: 'utf8',
+    env: { ...process.env, PROXY_BIND_HOST: '10.0.0.2' },
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /PROXY_BIND_HOST must be 127\.0\.0\.1 or 0\.0\.0\.0/);
 });
 
 test('proxy startup fails closed when stream-token capability has no secret', () => {

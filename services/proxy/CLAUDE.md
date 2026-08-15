@@ -26,6 +26,9 @@ broker to loopback by default.
 ## Files
 
 - `src/index.js` — HTTP server (`PROXY_PORT`, default 4030) + `/healthz`.
+  It defaults to loopback; Cloud Run explicitly sets
+  `PROXY_BIND_HOST=0.0.0.0` so the platform startup probe can reach the sidecar.
+  Port 4030 is not the service ingress port, and other bind hosts fail closed.
 - `src/stream-token-server.js` — standalone stream-token broker (`PORT`, default
   8080) with no provider-egress surface. Cloud Run explicitly sets
   `STREAM_TOKEN_BIND_HOST=0.0.0.0`; the safe local default is loopback.

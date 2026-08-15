@@ -14,8 +14,8 @@ Auto-generated documentation from the code knowledge graph community structure.
 | core-org | 506 | [core-org.md](core-org.md) |
 | e2e-json | 91 | [e2e-json.md](e2e-json.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
-| gcp-cloud | 51 | [gcp-cloud.md](gcp-cloud.md) |
-| harness-registry-install | 149 | [harness-registry-install.md](harness-registry-install.md) |
+| gcp-cloud | 52 | [gcp-cloud.md](gcp-cloud.md) |
+| harness-registry-install | 160 | [harness-registry-install.md](harness-registry-install.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
 | registry-stage | 654 | [registry-stage.md](registry-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
@@ -27,7 +27,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-context | 335 | [src-context.md](src-context.md) |
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
 | src-stage | 179 | [src-stage.md](src-stage.md) |
-| src-test:build | 157 | [src-test-build.md](src-test-build.md) |
+| src-test:build | 160 | [src-test-build.md](src-test-build.md) |
 | src-test:coder | 107 | [src-test-coder.md](src-test-coder.md) |
 | src-token | 112 | [src-token.md](src-token.md) |
 | views-render | 699 | [views-render.md](views-render.md) |

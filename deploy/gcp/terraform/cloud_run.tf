@@ -75,6 +75,7 @@ locals {
     local.common_env,
     {
       PROXY_PORT         = "4030"
+      PROXY_BIND_HOST    = "0.0.0.0"
       PROXY_CAPABILITIES = "egress"
       SETTINGS_URL       = local.settings_url
     },
