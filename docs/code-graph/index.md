@@ -12,7 +12,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 |-----------|------|------|
 | agent-model | 1832 | [agent-model.md](agent-model.md) |
 | core-org | 506 | [core-org.md](core-org.md) |
-| e2e-json | 91 | [e2e-json.md](e2e-json.md) |
+| e2e-json | 111 | [e2e-json.md](e2e-json.md) |
 | e2e-live-tenant | 25 | [e2e-live-tenant.md](e2e-live-tenant.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
 | gcp-cloud | 52 | [gcp-cloud.md](gcp-cloud.md) |
@@ -22,7 +22,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
 | routes-test:planner | 187 | [routes-test-planner.md](routes-test-planner.md) |
 | scripts-audit | 24 | [scripts-audit.md](scripts-audit.md) |
-| scripts-module | 42 | [scripts-module.md](scripts-module.md) |
+| scripts-module | 45 | [scripts-module.md](scripts-module.md) |
 | src-back | 18 | [src-back.md](src-back.md) |
 | src-body | 17 | [src-body.md](src-body.md) |
 | src-body | 17 | [src-body-2.md](src-body-2.md) |
@@ -33,4 +33,4 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-test:coder | 107 | [src-test-coder.md](src-test-coder.md) |
 | src-token | 112 | [src-token.md](src-token.md) |
 | support-parse | 59 | [support-parse.md](support-parse.md) |
-| views-render | 699 | [views-render.md](views-render.md) |
+| views-render | 735 | [views-render.md](views-render.md) |

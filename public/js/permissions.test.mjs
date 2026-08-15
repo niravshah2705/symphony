@@ -38,6 +38,15 @@ test('a signed-in viewer with workspace read can access Agent and Agent Jobs', (
   assert.equal(canAccessRoute(viewerSession, 'agent-jobs'), true);
 });
 
+test('legal routes remain public and organization-independent', () => {
+  const noSession = { authenticated: false, permissions: {} };
+  for (const route of ['privacy', 'terms']) {
+    assert.equal(canAccessRoute(noSession, route), true);
+    assert.equal(canAccessRoute(publicSession, route), true);
+    assert.equal(canAccessRoute(viewerSession, route), true);
+  }
+});
+
 test('session-aware route checks preserve unrelated permission requirements', () => {
   assert.equal(canAccessRoute(viewerSession, 'business'), true, 'planning read remains sufficient');
   assert.equal(canAccessRoute(viewerSession, 'calls'), false, 'workspace read remains insufficient for write');

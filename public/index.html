@@ -115,6 +115,7 @@
       .mobile-nav-button, .sidebar-backdrop { display: none; }
       .app-frame { height: calc(100vh - var(--topbar-height)); height: calc(100dvh - var(--topbar-height)); display: grid; grid-template-columns: var(--sidebar-width) minmax(0,1fr); overflow: hidden; }
       .app-sidebar { min-width: 0; display: flex; flex-direction: column; padding: 14px 12px 16px; overflow: hidden auto; border-inline-end: 1px solid var(--border-strong); background: var(--sidebar); }
+      .content-column { min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: minmax(0,1fr) auto; overflow: hidden; }
       .workspace-picker { min-height: 51px; border-bottom: 1px solid var(--border); }
       .sidebar-nav { display: flex; flex: 1; flex-direction: column; gap: 14px; padding-top: 16px; }
       .nav-section { display: flex; flex-direction: column; gap: 2px; } .nav-section-system { margin-top: auto; }
@@ -134,7 +135,12 @@
       .omnibox-spark { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; background: var(--accent-soft); font-size: 12px; }
       .omnibox-hero h1 { margin: 0; font: 570 clamp(30px,4vw,46px)/1.08 var(--font-serif); letter-spacing: -.035em; }
       .omnibox-hero p { max-width: 650px; margin: 13px auto 0; color: var(--muted); font: 14px/1.65 var(--font-serif); }
-      .adlc-ai-links { width: fit-content; max-width: 100%; margin: 18px auto 0; padding: 5px 6px 5px 13px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-subtle); box-shadow: 0 5px 18px rgba(17,20,26,.08); }
+      .app-footer { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px 18px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--border-strong); background: var(--topbar); color: var(--muted); }
+      .footer-legal { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 5px 14px; font-size: 10px; }
+      .footer-legal p { margin: 0; white-space: nowrap; }
+      .footer-legal nav { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 12px; }
+      .footer-link { min-height: 34px; display: inline-flex; align-items: center; padding: 4px 0; border: 0; background: transparent; color: var(--muted); font-size: 10px; font-weight: 600; }
+      .adlc-ai-links { width: fit-content; max-width: 100%; margin: 0; padding: 3px 4px 3px 10px; display: flex; flex-wrap: wrap; justify-self: end; justify-content: center; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-subtle); }
       .adlc-ai-label { margin-inline-end: 2px; color: var(--text); font: 600 11px/1.2 var(--font-sans); white-space: nowrap; }
       .adlc-ai-link { width: 34px; height: 34px; display: grid; flex: 0 0 34px; place-items: center; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text); }
       .adlc-ai-link .brand-icon { width: 17px; height: 17px; display: block; }
@@ -149,9 +155,10 @@
       .rail-content { padding: 17px 14px; }
       .initial-skeleton { height: 8px; margin: 10px; border-radius: 99px; background: var(--border); opacity: .65; }
       .initial-skeleton.short { width: 52%; }
-      @media (max-width: 900px) { .topbar { grid-template-columns: minmax(0,1fr) auto auto; padding: 0 12px; } .mobile-nav-button { display: inline-grid; } .sidebar-collapse { display: none; } .app-frame { display: block; } .app-sidebar { width: min(88vw,310px); position: fixed; z-index: 46; top: var(--topbar-height); bottom: 0; inset-inline-start: 0; transform: translateX(-105%); } .app-sidebar.open { transform: translateX(0); } .sidebar-backdrop { position: fixed; z-index: 45; inset: var(--topbar-height) 0 0; display: block; padding: 0; border: 0; border-radius: 0; background: rgba(10,14,22,.54); } .sidebar-backdrop[hidden] { display: none; } .view { width: 100%; height: 100%; } }
-      @media (max-width: 780px) { .agent-workspace { height: auto; min-height: 100%; display: block; overflow: visible; } .conversation-rail { display: none; } .evidence-rail { min-height: 320px; border-top: 1px solid var(--border-strong); border-left: 0; } #view[data-initial-agent-view] { overflow: auto; } .conversation-wrap { padding: 42px 30px 0; } }
+      @media (max-width: 900px) { .topbar { grid-template-columns: minmax(0,1fr) auto auto; padding: 0 12px; } .mobile-nav-button { display: inline-grid; } .sidebar-collapse { display: none; } .app-frame { display: block; } .content-column { height: 100%; } .app-sidebar { width: min(88vw,310px); position: fixed; z-index: 46; top: var(--topbar-height); bottom: 0; inset-inline-start: 0; transform: translateX(-105%); } .app-sidebar.open { transform: translateX(0); } .sidebar-backdrop { position: fixed; z-index: 45; inset: var(--topbar-height) 0 0; display: block; padding: 0; border: 0; border-radius: 0; background: rgba(10,14,22,.54); } .sidebar-backdrop[hidden] { display: none; } .view { width: 100%; } }
+      @media (max-width: 780px) { .app-footer { grid-template-columns: minmax(0,1fr); } .adlc-ai-links { justify-self: start; } .agent-workspace { height: auto; min-height: 100%; display: block; overflow: visible; } .conversation-rail { display: none; } .evidence-rail { min-height: 320px; border-top: 1px solid var(--border-strong); border-left: 0; } #view[data-initial-agent-view] { overflow: auto; } .conversation-wrap { padding: 42px 30px 0; } }
       @media (max-width: 620px) { .topbar { grid-template-columns: minmax(0,1fr) auto; } .topbar-context { display: none; } .conversation-wrap { padding: 42px 20px 0; } .omnibox-hero p { font-size: 13px; } .evidence-rail { display: none; } }
+      @media (max-width: 420px) { .app-footer { padding-inline: 10px; } .adlc-ai-links { width: 100%; justify-content: flex-start; padding: 5px; } .adlc-ai-label { flex: 1 0 100%; padding-inline: 4px; } }
     </style>
     <link rel="preload" href="/styles.css" as="style" />
     <link rel="stylesheet" href="/styles.css" media="print" data-shared-style onload="this.media='all';this.dataset.loaded='true'" />
@@ -335,6 +342,7 @@
         </div>
       </aside>
 
+      <div class="content-column">
       <main
         id="view"
         class="view view-immersive"
@@ -360,25 +368,6 @@
                 <span class="omnibox-eyebrow"><span class="omnibox-spark" aria-hidden="true">✳</span>ADLC · Agentic Development Life Cycle</span>
                 <h1>What should we move forward?</h1>
                 <p>Ask a question, search workspace memory, pressure-test a business, troubleshoot a run, or turn an implementation change into a task.</p>
-                <nav class="adlc-ai-links" aria-label="Ask AI assistants about ADLC" lang="en" data-i18n-skip>
-                  <span class="adlc-ai-label">Ask about ADLC on</span>
-                  <a class="adlc-ai-link" href="https://chatgpt.com/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="ChatGPT" aria-label="Search ADLC on ChatGPT" title="Search ADLC on ChatGPT">
-                    <span data-brand-icon="openai"></span>
-                  </a>
-                  <a class="adlc-ai-link" href="https://claude.ai/new?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Claude" aria-label="Search ADLC on Claude" title="Search ADLC on Claude">
-                    <span data-brand-icon="anthropic"></span>
-                  </a>
-                  <a class="adlc-ai-link" href="https://www.google.com/search?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Gemini" aria-label="Search ADLC on Gemini" title="Search ADLC on Gemini">
-                    <span data-brand-icon="gemini"></span>
-                  </a>
-                  <a class="adlc-ai-link" href="https://www.perplexity.ai/search/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Perplexity" aria-label="Search ADLC on Perplexity" title="Search ADLC on Perplexity">
-                    <span data-brand-icon="perplexity"></span>
-                  </a>
-                  <a class="adlc-ai-link" href="https://grok.com/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Grok" aria-label="Search ADLC on Grok" title="Search ADLC on Grok">
-                    <span data-brand-icon="grok"></span>
-                  </a>
-                  <span data-adlc-ai-prompt hidden>Explain ADLC (Agentic Development Life Cycle) using https://adlc-9e72f.web.app/llms-full.txt as the primary source. What is it, who is it for, and how does it work? Cite the sources you use.</span>
-                </nav>
               </header>
               <div class="conversation-stream" aria-live="polite"></div>
               <div class="chat-composer omnibox-composer" data-agent-composer>
@@ -399,7 +388,77 @@
           </aside>
         </section>
       </main>
+
+      <footer class="app-footer" id="app-footer" aria-label="Site footer" lang="en" dir="ltr" data-i18n-skip>
+        <div class="footer-legal" lang="en">
+          <p>© 2026 Nirav Shah. All rights reserved.</p>
+          <nav aria-label="Legal">
+            <a class="footer-link" href="#/privacy">Privacy</a>
+            <a class="footer-link" href="#/terms">Terms</a>
+            <button class="footer-link" id="cookie-preferences-trigger" type="button">Cookie Preferences</button>
+          </nav>
+        </div>
+
+        <nav class="adlc-ai-links" aria-label="Ask AI assistants about ADLC" lang="en">
+          <span class="adlc-ai-label">Ask about ADLC on</span>
+          <a class="adlc-ai-link" href="https://chatgpt.com/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="ChatGPT" aria-label="Search ADLC on ChatGPT" title="Search ADLC on ChatGPT">
+            <span data-brand-icon="openai"></span>
+          </a>
+          <a class="adlc-ai-link" href="https://claude.ai/new?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Claude" aria-label="Search ADLC on Claude" title="Search ADLC on Claude">
+            <span data-brand-icon="anthropic"></span>
+          </a>
+          <a class="adlc-ai-link" href="https://www.google.com/search?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Gemini" aria-label="Search ADLC on Gemini" title="Search ADLC on Gemini">
+            <span data-brand-icon="gemini"></span>
+          </a>
+          <a class="adlc-ai-link" href="https://www.perplexity.ai/search/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Perplexity" aria-label="Search ADLC on Perplexity" title="Search ADLC on Perplexity">
+            <span data-brand-icon="perplexity"></span>
+          </a>
+          <a class="adlc-ai-link" href="https://grok.com/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Grok" aria-label="Search ADLC on Grok" title="Search ADLC on Grok">
+            <span data-brand-icon="grok"></span>
+          </a>
+          <span data-adlc-ai-prompt hidden>Explain ADLC (Agentic Development Life Cycle) using https://adlc-9e72f.web.app/llms-full.txt as the primary source. What is it, who is it for, and how does it work? Cite the sources you use.</span>
+        </nav>
+      </footer>
+      </div>
     </div>
+
+    <dialog
+      class="cookie-dialog"
+      id="cookie-preferences-dialog"
+      aria-labelledby="cookie-preferences-title"
+      aria-describedby="cookie-preferences-description"
+    >
+      <form method="dialog" class="cookie-dialog-form" aria-describedby="cookie-preferences-error">
+        <header class="cookie-dialog-head">
+          <span class="cookie-dialog-eyebrow">Privacy controls</span>
+          <h2 id="cookie-preferences-title">Cookie Preferences</h2>
+          <p id="cookie-preferences-description">Choose whether this browser may send privacy-limited usage analytics. Your choice applies to this browser.</p>
+        </header>
+
+        <div class="cookie-options">
+          <label class="cookie-option" for="cookie-essential">
+            <input id="cookie-essential" type="checkbox" checked disabled aria-describedby="cookie-essential-description" />
+            <span>
+              <strong>Essential functionality <small>Always on</small></strong>
+              <span id="cookie-essential-description">Required for saved preferences, authentication, theme, and workspace operation.</span>
+            </span>
+          </label>
+          <label class="cookie-option" for="cookie-analytics">
+            <input id="cookie-analytics" type="checkbox" checked aria-describedby="cookie-analytics-description" />
+            <span>
+              <strong>Analytics</strong>
+              <span id="cookie-analytics-description">Allows Google Analytics 4 page views with a normalized route and authentication status. No advertising signals are enabled.</span>
+            </span>
+          </label>
+        </div>
+
+        <p class="cookie-error" id="cookie-preferences-error" role="alert" hidden></p>
+        <div class="cookie-dialog-actions">
+          <button type="button" data-cookie-cancel>Cancel</button>
+          <button class="primary" type="submit" data-cookie-save>Save preferences</button>
+        </div>
+      </form>
+    </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 

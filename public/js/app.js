@@ -23,6 +23,7 @@ import {
   signOut,
 } from './auth.js';
 import { initThemeToggle } from './theme.js';
+import { initCookiePreferences } from './cookie-preferences.js';
 import { initNotifications } from './notifications.js';
 import { trackGoogleAnalyticsPageView } from './google-analytics.mjs';
 import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
@@ -38,6 +39,7 @@ const { initializeI18n, localize, renderLanguageControl, t } = i18n;
 const stylesheetLoads = new Map();
 const SHARED_STYLESHEET = '/styles.css';
 const ADLC_BRAND_TITLE = 'ADLC — Agentic Development Life Cycle';
+let footerResizeObserver = null;
 
 function ensureStylesheet(href) {
   if (stylesheetLoads.has(href)) return stylesheetLoads.get(href);
@@ -98,12 +100,15 @@ const routes = Object.freeze({
   settings: route(() => import('./views/settings.js'), 'renderSettings', ['/styles/settings.css']),
   organization: route(() => import('./views/organization.js'), 'renderOrganization'),
   invite: route(() => import('./views/invite.js'), 'renderInvitation'),
+  privacy: route(() => import('./views/legal.js'), 'renderPrivacy'),
+  terms: route(() => import('./views/legal.js'), 'renderTerms'),
 });
 
 // Authenticated users may legitimately exist before they create an organization
-// or accept an invitation. Keep only those two onboarding routes reachable in
-// that state; every workspace route is redirected to Organization first.
-const ORGANIZATION_OPTIONAL_ROUTES = new Set(['organization', 'invite']);
+// or accept an invitation. Keep both onboarding routes and the public legal
+// documents reachable in that state; workspace routes redirect to Organization.
+const ORGANIZATION_OPTIONAL_ROUTES = new Set(['organization', 'invite', 'privacy', 'terms']);
+const AUTHENTICATION_INDEPENDENT_ROUTES = new Set(['privacy', 'terms']);
 
 const routeMeta = {
   agent: { titleKey: 'agentWorkspace', eyebrowKey: 'workspace' },
@@ -119,6 +124,8 @@ const routeMeta = {
   settings: { titleKey: 'settings', eyebrowKey: 'system' },
   organization: { titleKey: 'organization', eyebrowKey: 'workspace' },
   invite: { titleKey: 'invitation', eyebrowKey: 'workspace' },
+  privacy: { title: 'Privacy Notice', eyebrow: 'Legal' },
+  terms: { title: 'Terms of Use', eyebrow: 'Legal' },
 };
 
 // These existing surfaces depend on the configured project-management connection.
@@ -178,10 +185,10 @@ function maybeRefreshRole(session) {
   return Promise.resolve();
 }
 
-function syncShell(name, view) {
+function syncShell(name, view, { analyticsIdentity = null } = {}) {
   const meta = routeMeta[name];
-  const title = t(meta.titleKey);
-  const eyebrow = t(meta.eyebrowKey);
+  const title = meta.title || t(meta.titleKey);
+  const eyebrow = meta.eyebrow || t(meta.eyebrowKey);
   const immersive = isImmersiveRoute(name);
   setActiveRoute(name);
 
@@ -189,8 +196,20 @@ function syncShell(name, view) {
   document.title = name === 'agent' ? `${ADLC_BRAND_TITLE} | AI Fleet` : `${title} | ${ADLC_BRAND_TITLE}`;
   const routeEyebrow = document.getElementById('route-eyebrow');
   const routeTitle = document.getElementById('route-title');
-  routeEyebrow.dataset.i18n = meta.eyebrowKey;
-  routeTitle.dataset.i18n = meta.titleKey;
+  if (meta.eyebrowKey) {
+    routeEyebrow.dataset.i18n = meta.eyebrowKey;
+    delete routeEyebrow.dataset.i18nSkip;
+  } else {
+    delete routeEyebrow.dataset.i18n;
+    routeEyebrow.dataset.i18nSkip = 'true';
+  }
+  if (meta.titleKey) {
+    routeTitle.dataset.i18n = meta.titleKey;
+    delete routeTitle.dataset.i18nSkip;
+  } else {
+    delete routeTitle.dataset.i18n;
+    routeTitle.dataset.i18nSkip = 'true';
+  }
   routeEyebrow.textContent = eyebrow;
   routeTitle.textContent = title;
 
@@ -207,14 +226,16 @@ function syncShell(name, view) {
   const session = getAuthenticationState();
   // A user can change the hash while Firebase session restoration is pending.
   // Wait for the authoritative gateway-backed state so signed-in visitors are
-  // never mislabeled as anonymous.
-  if (session.mode === 'loading') return;
-  trackGoogleAnalyticsPageView(name, {
+  // never mislabeled as anonymous. A public legal route can explicitly supply
+  // an anonymous identity after authentication configuration has failed.
+  if (session.mode === 'loading' && !analyticsIdentity) return;
+  const identity = analyticsIdentity || {
     authenticated: session.authenticated,
     // `sub` is the gateway-verified Firebase subject. It is stable and opaque;
     // never fall back to the user's display name, email, organization, or token.
     userId: session.user?.sub,
-  });
+  };
+  trackGoogleAnalyticsPageView(name, identity);
 }
 
 function syncSidebar(open, { restoreFocus = false } = {}) {
@@ -237,11 +258,13 @@ function syncSidebar(open, { restoreFocus = false } = {}) {
 
   const backgroundInert = compact && state.sidebarOpen;
   const view = document.getElementById('view');
+  const footer = document.getElementById('app-footer');
   const brand = document.querySelector('.brand');
   const context = document.querySelector('.topbar-context');
   const actions = document.querySelector('.topbar-actions');
   const skipLink = document.querySelector('.skip-link');
   if (view) view.inert = backgroundInert;
+  if (footer) footer.inert = backgroundInert;
   if (brand) brand.inert = backgroundInert;
   if (context) context.inert = backgroundInert;
   if (actions) actions.inert = backgroundInert;
@@ -305,7 +328,25 @@ function initShellInteractions() {
   const collapse = document.getElementById('sidebar-collapse');
   const navigation = document.getElementById('tabs');
   const skipLink = document.querySelector('.skip-link');
+  const footer = document.getElementById('app-footer');
   const compactLayout = window.matchMedia('(max-width: 900px)');
+
+  // Keep fixed status toasts above the responsive footer. Its height changes
+  // when the legal and assistant groups stack, so a static offset would cover
+  // controls on narrow screens.
+  const syncFooterHeight = () => {
+    if (!footer) return;
+    const height = Math.ceil(footer.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--app-footer-height', `${height}px`);
+  };
+  syncFooterHeight();
+  if (footer && typeof ResizeObserver === 'function') {
+    footerResizeObserver?.disconnect();
+    footerResizeObserver = new ResizeObserver(syncFooterHeight);
+    footerResizeObserver.observe(footer);
+  } else {
+    window.addEventListener('resize', syncFooterHeight);
+  }
 
   toggle?.addEventListener('click', () => syncSidebar(!state.sidebarOpen, { restoreFocus: state.sidebarOpen }));
   collapse?.addEventListener('click', () => syncSidebarCollapsed(!state.sidebarCollapsed));
@@ -851,17 +892,21 @@ window.addEventListener('hashchange', () => render({ focus: true }));
 window.addEventListener('DOMContentLoaded', async () => {
   hydrateIcons();
   initThemeToggle(document.getElementById('theme-toggle'));
+  initCookiePreferences();
   initShellInteractions();
   syncSidebarCollapsed();
 
   // Start the public Agent route while authentication restores. The server-
   // rendered scaffold remains the LCP candidate and is hydrated in place once
-  // the session is known; non-Agent routes retain the explicit auth status.
+  // the session is known. Legal routes render independently; other non-Agent
+  // routes retain the explicit authentication status.
   const initialRoute = currentRoute();
+  const initialAuthenticationIndependent = AUTHENTICATION_INDEPENDENT_ROUTES.has(initialRoute);
   const hasInitialAgentView = initialRoute === 'agent'
     && document.getElementById('view')?.hasAttribute('data-initial-agent-view');
   if (initialRoute === 'agent') routes.agent.load().catch(() => {});
-  if (!hasInitialAgentView) renderAuthenticationGate({ loading: true });
+  if (initialAuthenticationIndependent) render().catch(() => {});
+  else if (!hasInitialAgentView) renderAuthenticationGate({ loading: true });
 
   // Apply the saved/default locale immediately. Network-backed locale discovery
   // is optional and starts only after the first useful route has completed.
@@ -871,9 +916,27 @@ window.addEventListener('DOMContentLoaded', async () => {
     session = await initializeAuthentication();
   } catch (error) {
     // Hard configuration failure (Firebase web config unreachable) — show the
-    // retry gate; there is no usable surface without it.
+    // retry gate for application routes. Public legal documents remain usable.
     await initialI18n;
     renderAuthControl();
+    let failedRoute = currentRoute();
+    if (AUTHENTICATION_INDEPENDENT_ROUTES.has(failedRoute)) {
+      // Hash navigation can happen while configuration is pending. Mount the
+      // current legal route if necessary, then retain that exact view and mark
+      // its analytics identity anonymous now that restoration has failed.
+      if (document.body.dataset.route !== failedRoute) await render();
+      failedRoute = currentRoute();
+      const view = document.getElementById('view');
+      if (
+        AUTHENTICATION_INDEPENDENT_ROUTES.has(failedRoute)
+        && document.body.dataset.route === failedRoute
+        && view
+      ) {
+        syncShell(failedRoute, view, { analyticsIdentity: { authenticated: false } });
+        syncSidebar(false);
+        return;
+      }
+    }
     renderAuthenticationGate({ error: error.message });
     return;
   }
@@ -887,7 +950,23 @@ window.addEventListener('DOMContentLoaded', async () => {
     maybeRefreshConnection(session),
     maybeRefreshRole(session),
   ]);
-  await render();
+  const activeRoute = currentRoute();
+  const activeView = document.getElementById('view');
+  if (
+    AUTHENTICATION_INDEPENDENT_ROUTES.has(activeRoute)
+    && document.body.dataset.route === activeRoute
+    && activeView
+  ) {
+    // Legal content may already be painted (and scrolled/focused) while auth
+    // restores. Preserve its DOM and fetch; only reconcile shell permissions
+    // and emit the now-authoritative analytics identity.
+    applyMenuPermissions(session);
+    setAuthenticationLocked(false);
+    syncShell(activeRoute, activeView);
+    syncSidebar(false);
+  } else {
+    await render();
+  }
 
   // Suggestions can refine the already-usable language control in the
   // background when the i18n module provides the refresh hook.

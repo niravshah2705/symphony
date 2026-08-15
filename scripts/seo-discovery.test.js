@@ -67,7 +67,7 @@ test('sitemap and language-model documents expose one canonical public source', 
   assert.match(full, /human-governed/i);
 });
 
-test('compact ADLC launcher has four named, local-icon assistant links', () => {
+test('persistent ADLC launcher has five named, local-icon assistant links', () => {
   const html = readPublic('index.html');
   const assistants = [...html.matchAll(/data-ai-assistant="([^"]+)"/g)].map((match) => match[1]);
   const icons = [...html.matchAll(/data-brand-icon="([^"]+)"/g)].map((match) => match[1]);

@@ -2,13 +2,26 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  ANALYTICS_CONSENT_KEY,
   createGoogleAnalytics,
+  getAnalyticsConsent,
   normalizeGa4MeasurementId,
   normalizeGa4UserId,
+  normalizeAnalyticsConsent,
   normalizeTopLevelRoute,
   sanitizedPageLocation,
   sanitizedPageTitle,
+  setAnalyticsConsent,
 } from './google-analytics.mjs';
+
+function memoryStorage(entries = {}) {
+  const values = new Map(Object.entries(entries));
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+    value: (key) => values.get(key),
+  };
+}
 
 function fakeBrowser({
   measurementId = 'G-ABC123',
@@ -27,6 +40,7 @@ function fakeBrowser({
     __GA_MEASUREMENT_ID__: measurementId,
     location: {
       origin: 'https://fleet.example',
+      hostname: 'fleet.example',
       pathname: '/private-customer/private-record',
       search: '?email=private-user@example.com',
       hash,
@@ -47,6 +61,25 @@ test('accepts only normalized GA4 measurement IDs', () => {
   for (const value of ['', 'G-', 'g-ABC123', 'UA-123-1', 'G-ABC_123', null, undefined]) {
     assert.equal(normalizeGa4MeasurementId(value), '');
   }
+});
+
+test('normalizes the two persisted analytics choices and defaults invalid data to enabled', () => {
+  assert.equal(normalizeAnalyticsConsent('enabled'), 'enabled');
+  assert.equal(normalizeAnalyticsConsent('disabled'), 'disabled');
+  for (const value of ['', ' disabled ', 'DISABLED', null, undefined, false]) {
+    assert.equal(normalizeAnalyticsConsent(value), '');
+  }
+
+  assert.equal(getAnalyticsConsent({ storageRef: memoryStorage() }), 'enabled');
+  assert.equal(getAnalyticsConsent({
+    storageRef: memoryStorage({ [ANALYTICS_CONSENT_KEY]: 'corrupt' }),
+  }), 'enabled');
+  assert.equal(getAnalyticsConsent({
+    storageRef: { getItem: () => { throw new Error('blocked'); } },
+  }), 'enabled');
+  assert.equal(getAnalyticsConsent({
+    storageRef: memoryStorage({ [ANALYTICS_CONSENT_KEY]: 'disabled' }),
+  }), 'disabled');
 });
 
 test('accepts only bounded opaque GA4 user IDs', () => {
@@ -79,6 +112,19 @@ test('blank or invalid configuration is a network-free no-op', () => {
     assert.equal(windowRef.dataLayer, undefined);
     assert.equal(windowRef.gtag, undefined);
   }
+});
+
+test('a persisted opt-out suppresses all GA initialization side effects', () => {
+  const { documentRef, scripts, windowRef } = fakeBrowser();
+  const storageRef = memoryStorage({ [ANALYTICS_CONSENT_KEY]: 'disabled' });
+  windowRef.localStorage = storageRef;
+  const analytics = createGoogleAnalytics({ windowRef, documentRef });
+
+  assert.equal(analytics.enabled, false);
+  assert.equal(analytics.trackPageView('agent'), false);
+  assert.equal(scripts.length, 0);
+  assert.equal(windowRef.dataLayer, undefined);
+  assert.equal(windowRef.gtag, undefined);
 });
 
 test('queues gtag calls as Arguments objects', () => {
@@ -234,6 +280,65 @@ test('same-route auth expiry clears target config without sending another page v
   assert.equal(callsOf(windowRef, 'event').length, 1);
 });
 
+test('persisted revocation updates a loaded tag, clears GA cookies, and suppresses future views', () => {
+  const { documentRef, windowRef } = fakeBrowser();
+  const storageRef = memoryStorage();
+  windowRef.localStorage = storageRef;
+  const cookieWrites = [];
+  Object.defineProperty(documentRef, 'cookie', {
+    configurable: true,
+    get: () => '_ga=GA1.1.1.1; _ga_FLEET=GS1.1.1; session=keep-me; _gat=not-ga4',
+    set: (value) => cookieWrites.push(value),
+  });
+  const analytics = createGoogleAnalytics({ windowRef, documentRef });
+  assert.equal(analytics.trackPageView('agent'), true);
+
+  assert.equal(setAnalyticsConsent('disabled', {
+    windowRef,
+    documentRef,
+    storageRef,
+  }), 'disabled');
+  assert.equal(storageRef.value(ANALYTICS_CONSENT_KEY), 'disabled');
+  assert.deepEqual(callsOf(windowRef, 'consent'), [[
+    'consent',
+    'update',
+    {
+      analytics_storage: 'denied',
+      ad_storage: 'denied',
+      ad_user_data: 'denied',
+      ad_personalization: 'denied',
+    },
+  ]]);
+  assert.ok(cookieWrites.length >= 2);
+  assert.ok(cookieWrites.every((value) => /^_ga(?:=|_FLEET=)/u.test(value)));
+  assert.ok(cookieWrites.every((value) => value.includes('Max-Age=0') && value.includes('Path=/')));
+  assert.equal(cookieWrites.some((value) => value.includes('session') || value.includes('_gat')), false);
+
+  assert.equal(analytics.trackPageView('settings'), false);
+  assert.equal(callsOf(windowRef, 'event').length, 1);
+});
+
+test('a failed preference write does not revoke loaded consent or clear cookies', () => {
+  const { documentRef, windowRef } = fakeBrowser();
+  const cookieWrites = [];
+  Object.defineProperty(documentRef, 'cookie', {
+    configurable: true,
+    get: () => '_ga=GA1.1.1.1',
+    set: (value) => cookieWrites.push(value),
+  });
+  const analytics = createGoogleAnalytics({ windowRef, documentRef });
+  assert.equal(analytics.trackPageView('agent'), true);
+
+  assert.throws(() => setAnalyticsConsent('disabled', {
+    windowRef,
+    documentRef,
+    storageRef: { setItem: () => { throw new Error('quota'); } },
+  }), /quota/);
+  assert.equal(callsOf(windowRef, 'consent').length, 0);
+  assert.deepEqual(cookieWrites, []);
+  assert.equal(analytics.trackPageView('settings'), true);
+});
+
 test('deduplicates shell rerenders but tracks a route when it is revisited', () => {
   const { documentRef, windowRef } = fakeBrowser({ hash: '#/invite?token=first' });
   const analytics = createGoogleAnalytics({ windowRef, documentRef });
@@ -273,6 +378,7 @@ test('the analytics allowlist covers every application route and nothing else', 
   const routes = [
     'agent', 'workflows', 'agent-jobs', 'calls', 'business', 'projects', 'board',
     'analytics', 'cost', 'troubleshooting', 'settings', 'organization', 'invite',
+    'privacy', 'terms',
   ];
   for (const route of routes) assert.equal(normalizeTopLevelRoute(route), route);
   for (const route of ['unknown', 'user-123', 'project-private', '']) {

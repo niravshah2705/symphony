@@ -1,8 +1,10 @@
 # Google Analytics 4
 
-AI Fleet supports an optional Google Analytics 4 web data stream. Analytics is
-disabled by default: the Google tag is not downloaded and no events are queued
-unless the SPA receives a valid `G-...` measurement ID at deploy time.
+AI Fleet supports an optional Google Analytics 4 web data stream. A deployment
+does not load the Google tag or queue events unless the SPA receives a valid
+`G-...` measurement ID at deploy time. On a configured deployment, analytics is
+enabled by default for each browser and can be disabled at any time through the
+persistent **Cookie Preferences** control in the application footer.
 
 ## Create and configure the stream
 
@@ -67,6 +69,30 @@ variable. The committed `public/config.js` keeps the value empty, so local
 development and automated tests never contact Google Analytics. Removing the
 deployment variable and republishing the SPA disables collection again.
 
+## Visitor analytics preference
+
+The footer's **Cookie Preferences** dialog uses an opt-out model: essential
+functionality is always on, while Analytics starts enabled. The choice is saved
+locally as one of these exact values:
+
+```text
+localStorage["ai-fleet.analytics-consent"] = "enabled" | "disabled"
+```
+
+Missing, unreadable, or invalid preference data preserves the default-enabled
+behavior on a deployment that has a valid measurement ID. Choosing Disabled
+persists the preference before taking effect, sends Google's consent update when
+the tag is already present, expires JavaScript-accessible `_ga` and `_ga_*`
+cookies, and reloads the same hash route. On the next startup the client does not
+create `dataLayer` or `gtag` and does not request Google's script. Future virtual
+page views remain suppressed. Choosing Enabled again reloads the same route and
+resumes configured tracking. The in-page revocation follows Google's
+[consent update guidance](https://developers.google.com/tag-platform/security/guides/consent).
+
+This browser preference is separate from deployment configuration. Removing the
+measurement ID disables GA4 for every visitor regardless of their saved choice.
+The public Privacy Notice at `#/privacy` describes the control and the data sent.
+
 ## Verify
 
 Republish the SPA, open the deployed site, and navigate between two sidebar
@@ -85,7 +111,8 @@ only on the GA configuration command. In reports, compare the custom
 **Authentication status** dimension or GA4's built-in **Signed in with user ID**
 dimension. Historical events are not reprocessed after either feature is added.
 
-The integration controls what AI Fleet sends, but it does not add a consent
-banner or privacy policy. The operator remains responsible for any consent,
-disclosure (including the stable authenticated identifier), retention, and
-regional controls required for the deployment.
+AI Fleet intentionally does not show a first-visit banner because the selected
+model is opt-out by default. The footer control and Privacy Notice do not replace
+deployment-specific legal review. The operator remains responsible for any
+additional consent, disclosure (including the stable authenticated identifier),
+retention, and regional controls required for the deployment.

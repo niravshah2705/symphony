@@ -4,7 +4,6 @@ import { t } from '../i18n.js';
 import { agentPauseCopy, agentPauseInfo, agentPauseNotice, hasAgentPauseContract } from '../agent-pause.js';
 import { state, setCurrentProject } from '../state.js';
 import { getAuthenticationState } from '../auth.js';
-import { brandIcon } from '../icons.js';
 
 let workspaceStream = null; // EventSource: global status/jobs/coder/gate feed (replaces polling)
 let gateTimer = null; // display-only countdown tick for an awaiting approval gate (no fetch)
@@ -26,34 +25,6 @@ const pauseSignatures = new WeakMap();
 const CONVERSATION_ID = /^conv_[A-Za-z0-9_-]{1,64}$/;
 const GATE_COUNTDOWN_TICK_MS = 1000; // refreshes only the countdown label; no network
 const AGENT_BOOT_TIMEOUT_MS = 8000;
-const ADLC_AI_PROMPT = 'Explain ADLC (Agentic Development Life Cycle) using https://adlc-9e72f.web.app/llms-full.txt as the primary source. What is it, who is it for, and how does it work? Cite the sources you use.';
-// Each provider icon deep-links a search for this string via the provider's ?q=
-// query param (ChatGPT auto-submits, Perplexity/Grok auto-run, Claude prefills).
-// Gemini has no native param, so its icon routes to a Google web search instead.
-const ADLC_SEARCH_QUERY = 'ADLC - Agentic Development Life Cycle, with AI Fleet services';
-const ADLC_AI_ASSISTANTS = Object.freeze([
-  { name: 'ChatGPT', icon: 'openai', search: 'https://chatgpt.com/?q=' },
-  { name: 'Claude', icon: 'anthropic', search: 'https://claude.ai/new?q=' },
-  { name: 'Gemini', icon: 'gemini', search: 'https://www.google.com/search?q=' },
-  { name: 'Perplexity', icon: 'perplexity', search: 'https://www.perplexity.ai/search/?q=' },
-  { name: 'Grok', icon: 'grok', search: 'https://grok.com/?q=' },
-]);
-
-function buildAdlcAiLinks() {
-  return el('nav', { class: 'adlc-ai-links', 'aria-label': 'Ask AI assistants about ADLC', lang: 'en', dataset: { i18nSkip: '' } }, [
-    el('span', { class: 'adlc-ai-label' }, 'Ask about ADLC on'),
-    ...ADLC_AI_ASSISTANTS.map((assistant) => el('a', {
-      class: 'adlc-ai-link',
-      href: `${assistant.search}${encodeURIComponent(ADLC_SEARCH_QUERY)}`,
-      target: '_blank',
-      rel: 'noopener noreferrer',
-      title: `Search ADLC on ${assistant.name}`,
-      'aria-label': `Search ADLC on ${assistant.name}`,
-      dataset: { aiAssistant: assistant.name },
-    }, brandIcon(assistant.icon, { size: 17 }))),
-    el('span', { hidden: true, dataset: { adlcAiPrompt: '' } }, ADLC_AI_PROMPT),
-  ]);
-}
 
 function loadOmniboxRouter() {
   if (!omniboxRouterPromise) omniboxRouterPromise = import('../omnibox-router.mjs');
@@ -362,7 +333,6 @@ function ensureAgentScaffold(view, generation) {
             ]),
             el('h1', {}, 'What should we move forward?'),
             el('p', {}, 'Ask a question, search workspace memory, pressure-test a business, troubleshoot a run, or turn an implementation change into a task.'),
-            buildAdlcAiLinks(),
           ]),
           el('div', { class: 'conversation-stream', 'aria-live': 'polite' }, [
             el('p', { class: 'agent-loading-copy' }, 'Loading recent workspace activity…'),
