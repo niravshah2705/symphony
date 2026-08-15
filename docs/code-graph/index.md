@@ -20,7 +20,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
 | routes-test:planner | 179 | [routes-test-planner.md](routes-test-planner.md) |
 | scripts-module | 34 | [scripts-module.md](scripts-module.md) |
-| src-auth | 312 | [src-auth.md](src-auth.md) |
+| src-auth | 296 | [src-auth.md](src-auth.md) |
 | src-back | 17 | [src-back.md](src-back.md) |
 | src-body | 17 | [src-body.md](src-body.md) |
 | src-body | 17 | [src-body-2.md](src-body-2.md) |

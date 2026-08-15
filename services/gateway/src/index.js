@@ -27,7 +27,6 @@ const { configureTrustProxy } = require('./trust-proxy');
 const { enforcePinnedOrganization, requestContext, requireOrganizationContext } = require('./request-context');
 const { createContextValidationMiddleware } = require('./context-validator');
 const { createStoreContextMiddleware } = require('./store-context');
-const { createEnvironmentDumpHandler, environmentDumpNoCache } = require('./environment-dump');
 
 const { PipelineAdmissionError, createPipelineAdmission } = require('./pipeline-admission');
 const pipelineAdmission = createPipelineAdmission();
@@ -102,15 +101,10 @@ app.get('/api/agent/stream', sse.handleStream);
 app.get('/api/agent/workspace-stream', sse.handleWorkspaceStream);
 
 // Attaches req.auth (identity + role + permissions) to every /api request. It
-// does NOT deny — authorization is enforced by the per-route guards
+// does NOT deny — authorization is enforced per-router by requirePermission
 // below, so unauthenticated visitors get exactly the public surface (read-only
-// Agent workspace) and 401/403 on anything else. Local dev is generally open;
-// the temporary environment dump below keeps its exact-user gate.
+// Agent workspace) and 401/403 on anything else. Local dev is fully open.
 app.use('/api', createAuthenticationMiddleware());
-
-// Temporary authenticated diagnostics for inspecting the gateway's Cloud Run
-// environment. The handler applies the exact-user authorization boundary.
-app.get('/api/debug/environment', environmentDumpNoCache, requireAuthenticated(), createEnvironmentDumpHandler());
 
 // A provisioned tenant gateway is pinned to one organization/store namespace.
 // Never let a client carry another organization selection into that stack.
