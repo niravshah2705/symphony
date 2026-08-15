@@ -180,10 +180,20 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
 # Optional RBAC bootstrap: gh variable set AUTH_ADMIN_EMAILS --repo niravshah2705/symphony --body "you@corp.com"
 #   (admins at sign-in) and AUTH_DEFAULT_ROLE (default "viewer"). Other roles are
 #   assigned as Firebase custom claims via services/gateway/scripts/set-user-role.js.
+# Optional Google Analytics 4 (public web-stream id; empty/unset = disabled):
+# gh variable set GOOGLE_ANALYTICS_MEASUREMENT_ID --repo niravshah2705/symphony --body "G-XXXXXXXXXX"
 # Transactional email (normally set by bootstrap.sh):
 # gh variable set EMAIL_SMTP_AUTH_ENABLED --repo niravshah2705/symphony --body "true"
 # gh variable set EMAIL_PUBLIC_APP_URL --repo niravshah2705/symphony --body "https://adlc-9e72f.web.app"
 ```
+
+`deploy-spa` validates that optional Analytics variable, writes it to the
+no-store `config.js`, and leaves collection disabled when the variable is absent.
+A repo-variable-only change does not satisfy the path filter, so manually run the
+workflow with `deploy_all=true` after adding, rotating, or removing the
+measurement ID.
+See [Google Analytics](GOOGLE_ANALYTICS.md) for the GA4 stream settings and
+verification steps.
 
 ## Prerequisites the pipeline assumes
 

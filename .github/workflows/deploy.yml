@@ -224,14 +224,23 @@ jobs:
           node scripts/obfuscate-spa.js --in-place
 
       - name: Deploy SPA to Firebase Hosting
+        env:
+          # Public GA4 web-stream id. Empty keeps analytics disabled.
+          GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ vars.GOOGLE_ANALYTICS_MEASUREMENT_ID }}
         run: |
           set -euo pipefail
           PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
           GATEWAY_URL="https://${{ vars.GATEWAY_SERVICE_NAME || 'gateway' }}-${PROJECT_NUMBER}.${REGION}.run.app"
+          if [[ -n "$GOOGLE_ANALYTICS_MEASUREMENT_ID" && ! "$GOOGLE_ANALYTICS_MEASUREMENT_ID" =~ ^G-[A-Z0-9]+$ ]]; then
+            echo "GOOGLE_ANALYTICS_MEASUREMENT_ID must be empty or a GA4 id such as G-XXXXXXXXXX." >&2
+            exit 1
+          fi
           # api.js imports this runtime module before reading the base URL. Start
           # the gateway connection here so DNS/TLS can overlap module evaluation.
+          # The GA id is public and read by google-analytics.mjs; blank is off.
           printf '%s\n' \
             "window.__API_BASE__='$GATEWAY_URL';" \
+            "window.__GA_MEASUREMENT_ID__='$GOOGLE_ANALYTICS_MEASUREMENT_ID';" \
             "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
             > public/config.js
           npx --yes firebase-tools@13 deploy --only hosting \

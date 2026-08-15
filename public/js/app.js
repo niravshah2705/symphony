@@ -24,6 +24,7 @@ import {
 } from './auth.js';
 import { initThemeToggle } from './theme.js';
 import { initNotifications } from './notifications.js';
+import { trackGoogleAnalyticsPageView } from './google-analytics.mjs';
 import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 import {
   activeWorkspaceOrganization,
@@ -201,6 +202,18 @@ function syncShell(name, view) {
     link.classList.toggle('active', active);
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
+  });
+
+  const session = getAuthenticationState();
+  // A user can change the hash while Firebase session restoration is pending.
+  // Wait for the authoritative gateway-backed state so signed-in visitors are
+  // never mislabeled as anonymous.
+  if (session.mode === 'loading') return;
+  trackGoogleAnalyticsPageView(name, {
+    authenticated: session.authenticated,
+    // `sub` is the gateway-verified Firebase subject. It is stable and opaque;
+    // never fall back to the user's display name, email, organization, or token.
+    userId: session.user?.sub,
   });
 }
 

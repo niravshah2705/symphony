@@ -136,6 +136,79 @@ test('a non-Agent hash never exposes or preloads the Agent scaffold', async ({ p
   await expect(page.locator('.adlc-ai-links .brand-icon')).toHaveCount(5);
 });
 
+test('Google Analytics receives one sanitized virtual page view per SPA route', async ({ page }) => {
+  const secret = 'invite-token-must-never-leave-the-browser';
+  let tagRequests = 0;
+
+  await page.route('**/config.js', (route) => route.fulfill({
+    status: 200,
+    contentType: 'text/javascript',
+    body: "window.__API_BASE__=''; window.__GA_MEASUREMENT_ID__='G-TEST123';",
+  }));
+  await page.route('https://www.googletagmanager.com/gtag/js**', (route) => {
+    tagRequests += 1;
+    return route.fulfill({ status: 200, contentType: 'text/javascript', body: '' });
+  });
+  await page.route('**/api/**', (route) => json(route, {}));
+  await page.route('**/api/auth/config', (route) => json(route, { mode: 'disabled', enabled: false }));
+
+  await page.goto(`/#/invite?token=${secret}`, { waitUntil: 'domcontentloaded' });
+  await expect.poll(() => page.evaluate(() => (
+    window.dataLayer?.filter(([command]) => command === 'event').length || 0
+  ))).toBe(1);
+
+  await page.evaluate((privateValue) => {
+    window.location.hash = `#/settings/${privateValue}?token=${privateValue}`;
+  }, secret);
+  await expect(page.locator('body')).toHaveAttribute('data-route', 'settings');
+  await expect.poll(() => page.evaluate(() => (
+    window.dataLayer?.filter(([command]) => command === 'event').length || 0
+  ))).toBe(2);
+
+  const { commands, entryTypes } = await page.evaluate(() => ({
+    commands: window.dataLayer.map((entry) => Array.from(entry)),
+    entryTypes: window.dataLayer.map((entry) => Object.prototype.toString.call(entry)),
+  }));
+  const configs = commands.filter(([command]) => command === 'config');
+  const pageViews = commands
+    .filter(([command, event]) => command === 'event' && event === 'page_view')
+    .map(([, , parameters]) => parameters);
+
+  expect(entryTypes).toEqual(commands.map(() => '[object Arguments]'));
+  expect(configs).toEqual([
+    ['config', 'G-TEST123', {
+      send_page_view: false,
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false,
+      page_location: expect.stringMatching(/\/#\/invite$/),
+      page_title: 'Invite',
+    }],
+    ['config', 'G-TEST123', {
+      send_page_view: false,
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false,
+      page_location: expect.stringMatching(/\/#\/settings$/),
+      page_title: 'Settings',
+    }],
+  ]);
+  expect(pageViews).toEqual([
+    {
+      page_location: expect.stringMatching(/\/#\/invite$/),
+      page_title: 'Invite',
+      authentication_status: 'authenticated',
+      send_to: 'G-TEST123',
+    },
+    {
+      page_location: expect.stringMatching(/\/#\/settings$/),
+      page_title: 'Settings',
+      authentication_status: 'authenticated',
+      send_to: 'G-TEST123',
+    },
+  ]);
+  expect(JSON.stringify(commands)).not.toContain(secret);
+  expect(tagRequests).toBe(1);
+});
+
 test('SEO and AI discovery resources bypass the SPA fallback', async ({ request }) => {
   const resources = [
     ['/robots.txt', 'text/plain', 'User-agent: OAI-SearchBot'],

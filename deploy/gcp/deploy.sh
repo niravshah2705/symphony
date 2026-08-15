@@ -24,7 +24,8 @@
 # Optional env: REGION (asia-south1), AR_REPO (ai-fleet), TF_STATE_PREFIX
 #   (ai-fleet/gcp), IMAGE_TAG (git short SHA), FIRESTORE_LOCATION (nam5),
 #   SPA_ORIGIN (https://storage.googleapis.com), FIREBASE_ALLOWED_DOMAIN (empty =
-#   any verified user), STREAM_TOKEN_SECRET (auto-generated if unset),
+#   any verified user), GOOGLE_ANALYTICS_MEASUREMENT_ID (public GA4 G-... id;
+#   empty disables analytics), STREAM_TOKEN_SECRET (auto-generated if unset),
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, SKIP_BUILD=1 (reuse existing images).
 #   Email delivery: EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, EMAIL_SMTP_SECURE,
 #   EMAIL_SMTP_REQUIRE_TLS, EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_FROM,
@@ -44,6 +45,7 @@ FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://storage.googleapis.com}"
 FIREBASE_ALLOWED_DOMAIN="${FIREBASE_ALLOWED_DOMAIN:-}"
 GOOGLE_ONE_TAP_CLIENT_ID="${GOOGLE_ONE_TAP_CLIENT_ID:-}"  # public OAuth Web client id for Google One Tap (optional)
+GOOGLE_ANALYTICS_MEASUREMENT_ID="${GOOGLE_ANALYTICS_MEASUREMENT_ID:-}"
 AUTH_ADMIN_EMAILS="${AUTH_ADMIN_EMAILS:-}"
 AUTH_DEFAULT_ROLE="${AUTH_DEFAULT_ROLE:-viewer}"
 EMAIL_SMTP_HOST="${EMAIL_SMTP_HOST:-}"
@@ -59,6 +61,11 @@ PIPELINE_DEPLOYMENT_ENABLED="${PIPELINE_DEPLOYMENT_ENABLED:-false}"
 EGRESS_PROXY_ENABLED="${EGRESS_PROXY_ENABLED:-$PIPELINE_ORCHESTRATOR_ENABLED}"
 SETTINGS_OPERATOR_INVOKER="${SETTINGS_OPERATOR_INVOKER:-}"
 INTERNAL_API_TOKEN="${INTERNAL_API_TOKEN:-}"
+
+if [[ -n "$GOOGLE_ANALYTICS_MEASUREMENT_ID" && ! "$GOOGLE_ANALYTICS_MEASUREMENT_ID" =~ ^G-[A-Z0-9]+$ ]]; then
+  echo "ERROR: GOOGLE_ANALYTICS_MEASUREMENT_ID must be empty or a GA4 id such as G-XXXXXXXXXX." >&2
+  exit 1
+fi
 
 if [ "$PIPELINE_ORCHESTRATOR_ENABLED" = "true" ] && [ "$EGRESS_PROXY_ENABLED" != "true" ]; then
   echo "ERROR: the durable pipeline requires EGRESS_PROXY_ENABLED=true." >&2
@@ -237,8 +244,13 @@ fi
 log "Publishing SPA to gs://${SPA_BUCKET}"
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 GATEWAY_URL="https://gateway-${PROJECT_NUMBER}.${REGION}.run.app"
-printf "window.__API_BASE__='%s';\n" "$GATEWAY_URL" > "$REPO_ROOT/public/config.js"
+printf '%s\n' \
+  "window.__API_BASE__='$GATEWAY_URL';" \
+  "window.__GA_MEASUREMENT_ID__='$GOOGLE_ANALYTICS_MEASUREMENT_ID';" \
+  "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
+  > "$REPO_ROOT/public/config.js"
 gsutil -m rsync -r -d "$REPO_ROOT/public" "gs://${SPA_BUCKET}"
+gsutil setmeta -h "Cache-Control:no-store" "gs://${SPA_BUCKET}/config.js"
 gsutil -m setmeta -h "Content-Type:text/javascript" "gs://${SPA_BUCKET}/**/*.mjs" >/dev/null 2>&1 || true
 
 # --- 8. Full apply ----------------------------------------------------------
