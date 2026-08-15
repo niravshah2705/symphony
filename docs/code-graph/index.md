@@ -29,7 +29,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-context | 335 | [src-context.md](src-context.md) |
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
 | src-stage | 179 | [src-stage.md](src-stage.md) |
-| src-test:build | 160 | [src-test-build.md](src-test-build.md) |
+| src-test:build | 172 | [src-test-build.md](src-test-build.md) |
 | src-test:coder | 107 | [src-test-coder.md](src-test-coder.md) |
 | src-token | 112 | [src-token.md](src-token.md) |
 | support-parse | 59 | [support-parse.md](support-parse.md) |
