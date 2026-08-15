@@ -6,8 +6,8 @@
 
 Directory-based community: scripts
 
-- **Size**: 42 nodes
-- **Cohesion**: 0.0995
+- **Size**: 45 nodes
+- **Cohesion**: 0.1034
 - **Dominant Language**: javascript
 
 ## Members
@@ -21,6 +21,9 @@ Directory-based community: scripts
 | main | Function | ./scripts/build-harness-artifact.js | 40-66 |
 | parseArgs | Function | ./scripts/build-harness-registry.js | 39-56 |
 | main | Function | ./scripts/build-harness-registry.js | 58-115 |
+| read | Function | ./scripts/legal-documents.test.js | 9-9 |
+| test:deployed Terms is an exact byte-for-byte copy of EULA.md@L11 | Test | ./scripts/legal-documents.test.js | 11-15 |
+| test:Privacy remains an English legal-review draft with every required disclosure@L17 | Test | ./scripts/legal-documents.test.js | 17-44 |
 | groupLabels | Function | ./scripts/models-label-group.js | 24-40 |
 | resolveStrength | Function | ./scripts/obfuscate-spa.js | 135-141 |
 | collectJsFiles | Function | ./scripts/obfuscate-spa.js | 148-157 |
@@ -47,7 +50,7 @@ Directory-based community: scripts
 | test:SPA publishes complete ADLC search metadata and valid JSON-LD@L11 | Test | ./scripts/seo-discovery.test.js | 11-33 |
 | test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L35 | Test | ./scripts/seo-discovery.test.js | 35-50 |
 | test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-68 |
-| test:compact ADLC launcher has four named, local-icon assistant links@L70 | Test | ./scripts/seo-discovery.test.js | 70-81 |
+| test:persistent ADLC launcher has five named, local-icon assistant links@L70 | Test | ./scripts/seo-discovery.test.js | 70-81 |
 | envFor | Function | ./scripts/start-all.js | 75-120 |
 | prefixStream | Function | ./scripts/start-all.js | 122-133 |
 | startService | Function | ./scripts/start-all.js | 135-151 |
@@ -65,11 +68,11 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `join` (49 edge(s))
-- `equal` (29 edge(s))
-- `match` (24 edge(s))
+- `join` (50 edge(s))
+- `match` (33 edge(s))
+- `equal` (30 edge(s))
 - `write` (23 edge(s))
-- `readFileSync` (13 edge(s))
+- `readFileSync` (14 edge(s))
 - `writeFileSync` (11 edge(s))
 - `map` (9 edge(s))
 - `log` (9 edge(s))
@@ -83,8 +86,8 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (29 edge(s))
-- `match` (24 edge(s))
+- `match` (33 edge(s))
+- `equal` (30 edge(s))
 - `join` (18 edge(s))
 - `./scripts/obfuscate-spa.js` (15 edge(s))
 - `./scripts/obfuscate-spa.test.js` (12 edge(s))

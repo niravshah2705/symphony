@@ -79,7 +79,7 @@ Directory-based community: packages/shared
 - **getTeams** (criticality: 0.48, depth: 1)
 - **updateIssueState** (criticality: 0.48, depth: 1)
 - **updateIssue** (criticality: 0.48, depth: 1)
-- *... and 11 more flows.*
+- *... and 10 more flows.*
 
 ## Dependencies
 

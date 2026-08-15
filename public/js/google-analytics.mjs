@@ -3,6 +3,9 @@ const GA4_USER_ID_MAX_LENGTH = 256;
 const GA4_USER_ID_FORBIDDEN = /[\s@/?#]/u;
 const GTAG_SCRIPT_ID = 'ai-fleet-google-analytics';
 const GTAG_SCRIPT_URL = 'https://www.googletagmanager.com/gtag/js';
+export const ANALYTICS_CONSENT_KEY = 'ai-fleet.analytics-consent';
+const ANALYTICS_ENABLED = 'enabled';
+const ANALYTICS_DISABLED = 'disabled';
 const TRACKED_ROUTES = new Set([
   'agent',
   'workflows',
@@ -17,6 +20,8 @@ const TRACKED_ROUTES = new Set([
   'settings',
   'organization',
   'invite',
+  'privacy',
+  'terms',
 ]);
 
 // Shared state keeps initialization and page-view deduplication stable even if
@@ -28,6 +33,114 @@ export function normalizeGa4MeasurementId(value) {
   if (typeof value !== 'string') return '';
   const measurementId = value.trim();
   return GA4_MEASUREMENT_ID.test(measurementId) ? measurementId : '';
+}
+
+export function normalizeAnalyticsConsent(value) {
+  return value === ANALYTICS_ENABLED || value === ANALYTICS_DISABLED ? value : '';
+}
+
+function resolveStorage(windowRef, storageRef) {
+  if (storageRef !== undefined) return storageRef;
+  try {
+    return windowRef?.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+// Analytics is intentionally opt-out on deployments that configure GA4. A
+// missing, malformed, or unreadable preference therefore retains the existing
+// enabled behavior.
+export function getAnalyticsConsent({ windowRef = globalThis.window, storageRef } = {}) {
+  const storage = resolveStorage(windowRef, storageRef);
+  try {
+    return normalizeAnalyticsConsent(storage?.getItem?.(ANALYTICS_CONSENT_KEY)) || ANALYTICS_ENABLED;
+  } catch {
+    return ANALYTICS_ENABLED;
+  }
+}
+
+function gaCookieNames(documentRef) {
+  let cookieHeader = '';
+  try {
+    cookieHeader = documentRef?.cookie || '';
+  } catch {
+    return [];
+  }
+  return [...new Set(cookieHeader
+    .split(';')
+    .map((part) => part.trim().split('=', 1)[0])
+    .filter((name) => /^_ga(?:$|_[A-Za-z0-9_-]+$)/u.test(name)))];
+}
+
+function cookieDomains(locationRef) {
+  const hostname = String(locationRef?.hostname || '').trim().toLowerCase();
+  if (!hostname || hostname === 'localhost' || /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(hostname)) return [];
+  const parts = hostname.split('.').filter(Boolean);
+  const domains = [];
+  // Try the current hostname and each registrable-looking parent. Browsers
+  // ignore invalid public-suffix attempts, while this clears GA cookies set by
+  // either a host-only or parent-domain configuration.
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    domains.push(parts.slice(index).join('.'));
+  }
+  return domains;
+}
+
+export function expireGoogleAnalyticsCookies({
+  documentRef = globalThis.document,
+  locationRef = globalThis.location,
+} = {}) {
+  const names = gaCookieNames(documentRef);
+  const expiration = 'Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; Path=/; SameSite=Lax';
+  for (const name of names) {
+    const attempts = [
+      `${name}=; ${expiration}`,
+      ...cookieDomains(locationRef).map((domain) => `${name}=; ${expiration}; Domain=${domain}`),
+    ];
+    for (const cookie of attempts) {
+      try {
+        documentRef.cookie = cookie;
+      } catch {
+        // Continue through the remaining visible cookies/domains. Sandboxed
+        // documents may reject writes even though the preference still saves.
+      }
+    }
+  }
+  return names;
+}
+
+export function setAnalyticsConsent(value, {
+  windowRef = globalThis.window,
+  documentRef = globalThis.document,
+  locationRef = windowRef?.location,
+  storageRef,
+} = {}) {
+  const normalized = normalizeAnalyticsConsent(value);
+  if (!normalized) throw new TypeError('Analytics consent must be enabled or disabled.');
+
+  const storage = resolveStorage(windowRef, storageRef);
+  if (!storage || typeof storage.setItem !== 'function') {
+    throw new Error('Browser storage is unavailable.');
+  }
+  // Persist first. If this throws, the dialog remains open and no transient
+  // consent state is presented as a durable choice.
+  storage.setItem(ANALYTICS_CONSENT_KEY, normalized);
+
+  // Do not call ensureGtag here: revoking consent must never create GA globals
+  // or download the tag in a browser that started with analytics disabled.
+  if (typeof windowRef?.gtag === 'function') {
+    windowRef.gtag('consent', 'update', {
+      analytics_storage: normalized === ANALYTICS_ENABLED ? 'granted' : 'denied',
+      ad_storage: 'denied',
+      ad_user_data: 'denied',
+      ad_personalization: 'denied',
+    });
+  }
+  if (normalized === ANALYTICS_DISABLED) {
+    expireGoogleAnalyticsCookies({ documentRef, locationRef });
+  }
+  return normalized;
 }
 
 // GA4 permits an operator-defined, non-PII user_id of at most 256 characters.
@@ -139,11 +252,14 @@ export function createGoogleAnalytics({
   windowRef = globalThis.window,
   documentRef = globalThis.document,
   measurementId = windowRef?.__GA_MEASUREMENT_ID__,
+  storageRef,
   now = () => new Date(),
 } = {}) {
   const normalizedMeasurementId = normalizeGa4MeasurementId(measurementId);
+  const analyticsAllowed = getAnalyticsConsent({ windowRef, storageRef }) !== ANALYTICS_DISABLED;
   const enabled = Boolean(
     normalizedMeasurementId
+    && analyticsAllowed
     && windowRef
     && typeof windowRef === 'object'
     && documentRef?.head
@@ -188,6 +304,10 @@ export function createGoogleAnalytics({
   }
 
   function trackPageView(route = windowRef.location?.hash, identity = {}) {
+    // Consent can change while this tracker remains alive. Suppress every
+    // future event immediately; the preferences UI then reloads the same hash
+    // so the next startup remains entirely free of GA globals and requests.
+    if (getAnalyticsConsent({ windowRef, storageRef }) === ANALYTICS_DISABLED) return false;
     const pageLocation = sanitizedPageLocation(windowRef.location, route);
     const pageTitle = sanitizedPageTitle(route);
     if (!pageLocation) return false;
