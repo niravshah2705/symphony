@@ -97,7 +97,7 @@ const STRATEGY_METADATA = Object.freeze({
     compatibility: 'best-fit-adapter',
     capabilities: { native: ['rules', 'workflows', 'skills', 'agents'], companion: [] },
     limitations: [
-      'ECC targets the Antigravity .agent compatibility layout, while this repository runtime uses @google/genai rather than an Antigravity IDE plugin API.',
+      'ECC targets the Antigravity .agents compatibility layout, while this repository runtime uses @google/genai rather than an Antigravity IDE plugin API.',
     ],
   },
   opencode: {
@@ -292,6 +292,7 @@ function isHarnessStateFile(root, file) {
     'home/.dsh/skills/',
     'home/.opencode/',
     'project/.agent/',
+    'project/.agents/',
   ];
   return !vendoredPayloadRoots.some((prefix) => relative.startsWith(prefix));
 }
@@ -333,6 +334,38 @@ function scanTreeForLeaks(root, options = {}) {
     }
   });
   return { fileCount };
+}
+
+/**
+ * Runtime installers may create absolute links between two paths inside the
+ * staged rootfs. Those links are safe at build time but break after the rootfs
+ * is copied to its immutable mount. Rewrite only links whose existing real
+ * targets remain inside the rootfs; fail closed for missing or escaping targets.
+ */
+function relativizeContainedAbsoluteSymlinks(root) {
+  const realRoot = fs.realpathSync(root);
+  const rewritten = [];
+  walkTree(realRoot, (file, stat) => {
+    if (!stat.isSymbolicLink()) return;
+    const link = fs.readlinkSync(file);
+    if (!path.isAbsolute(link)) return;
+
+    let realTarget;
+    try {
+      realTarget = fs.realpathSync(link);
+    } catch (error) {
+      throw new Error(`Absolute symlink target is missing: ${file} -> ${link}: ${error.message}`);
+    }
+    assertContained(realRoot, realTarget);
+    const relativeTarget = path.relative(path.dirname(file), realTarget) || '.';
+    if (path.isAbsolute(relativeTarget)) {
+      throw new Error(`Could not relativize contained symlink: ${file} -> ${link}`);
+    }
+    fs.unlinkSync(file);
+    fs.symlinkSync(relativeTarget, file);
+    rewritten.push(file);
+  });
+  return rewritten;
 }
 
 function prunePrivateState(root) {
@@ -578,10 +611,19 @@ function createHarnessEnvironment({ homeRoot, workRoot, extra = {} }) {
   return environment;
 }
 
-function installNpmCli({ name, version, binary, toolsRoot, env, packages = [] }) {
+function installNpmCli({
+  name,
+  version,
+  binary,
+  toolsRoot,
+  env,
+  packages = [],
+  explicitPostinstall = null,
+}, dependencies = {}) {
+  const runCommand = dependencies.runCommand || run;
   const toolRoot = path.join(toolsRoot, binary);
   fs.mkdirSync(toolRoot, { recursive: true });
-  run('npm', [
+  runCommand('npm', [
     'install',
     '--prefix', toolRoot,
     '--ignore-scripts',
@@ -591,6 +633,28 @@ function installNpmCli({ name, version, binary, toolsRoot, env, packages = [] })
     `${name}@${version}`,
     ...packages,
   ], { env });
+  if (explicitPostinstall !== null) {
+    const normalizedPostinstall = typeof explicitPostinstall === 'string'
+      ? path.normalize(explicitPostinstall)
+      : '';
+    if (
+      typeof explicitPostinstall !== 'string'
+      || explicitPostinstall === ''
+      || path.isAbsolute(explicitPostinstall)
+      || normalizedPostinstall === '..'
+      || normalizedPostinstall.startsWith(`..${path.sep}`)
+    ) {
+      throw new Error(`Invalid explicit postinstall path for ${name}: ${explicitPostinstall}`);
+    }
+    const packageRoot = path.join(toolRoot, 'node_modules', ...name.split('/'));
+    const postinstall = path.join(packageRoot, explicitPostinstall);
+    if (!fs.existsSync(postinstall) || !fs.lstatSync(postinstall).isFile()) {
+      throw new Error(`Installed ${name}@${version} is missing ${explicitPostinstall}`);
+    }
+    // Keep arbitrary dependency lifecycle scripts disabled. Run only the
+    // reviewed postinstall belonging to this exact, pinned CLI package.
+    runCommand(process.execPath, [postinstall], { cwd: packageRoot, env });
+  }
   const executable = path.join(toolRoot, 'node_modules', '.bin', binary);
   if (!fs.existsSync(executable)) {
     throw new Error(`Installed ${name}@${version} did not provide ${binary}`);
@@ -652,6 +716,17 @@ function copySourceTree(sourceRoot, destination) {
   });
 }
 
+function stageClaudeMarketplace({ sourceRoot, homeRoot, source }) {
+  const marketplaceRoot = path.join(homeRoot, '.claude', 'plugins', 'marketplaces', 'ecc-source');
+  copySourceTree(sourceRoot, marketplaceRoot);
+  writeJson(path.join(marketplaceRoot, '.ai-fleet-source.json'), {
+    repository: source.repository,
+    commit: source.commit,
+    version: source.version,
+  });
+  return marketplaceRoot;
+}
+
 function assertOutputContains(output, needle, label) {
   if (!String(output).toLowerCase().includes(String(needle).toLowerCase())) {
     throw new Error(`${label} did not contain ${JSON.stringify(needle)}`);
@@ -665,6 +740,83 @@ function findFiles(root, basename) {
     if (stat.isFile() && path.basename(file) === basename) files.push(file);
   });
   return files.sort();
+}
+
+function selectPiEccPackage(piHome) {
+  const candidates = [];
+  for (const file of findFiles(piHome, 'package.json')) {
+    let manifest;
+    try {
+      manifest = readJson(file);
+    } catch (_) {
+      continue;
+    }
+    if (manifest.name !== 'ecc-universal') continue;
+    candidates.push({ file, manifest });
+    if (Array.isArray(manifest.pi?.extensions) && Array.isArray(manifest.pi?.skills)) {
+      return { file, manifest };
+    }
+  }
+  if (candidates.length === 0) throw new Error('Pi did not retain the installed ECC git package');
+  throw new Error('ECC Pi package does not declare extensions and skills');
+}
+
+function compactDcodeCacheVendors({ homeRoot, marketplacePluginRoot }) {
+  const realHomeRoot = fs.realpathSync(homeRoot);
+  const realMarketplacePluginRoot = fs.realpathSync(marketplacePluginRoot);
+  assertContained(realHomeRoot, realMarketplacePluginRoot);
+  const marketplaceVendor = path.join(realMarketplacePluginRoot, 'vendor');
+  const dependencyEntrypoint = path.join(
+    marketplaceVendor,
+    'node_modules',
+    'chrome-devtools-mcp',
+    'build',
+    'src',
+    'bin',
+    'chrome-devtools-mcp.js'
+  );
+  if (!fs.existsSync(dependencyEntrypoint)) {
+    throw new Error('DCode marketplace is missing the pinned chrome-devtools MCP dependency');
+  }
+
+  const cacheRoot = path.join(realHomeRoot, '.deepagents', 'plugins', 'cache');
+  const pluginRoots = findFiles(cacheRoot, 'plugin.json')
+    .filter((file) => {
+      const relative = path.relative(cacheRoot, file).split(path.sep);
+      return relative.length === 5
+        && relative[3] === '.claude-plugin'
+        && relative[4] === 'plugin.json';
+    })
+    .filter((file) => {
+      try { return readJson(file).name === 'ecc'; } catch (_) { return false; }
+    })
+    .map((file) => path.dirname(path.dirname(file)));
+  if (pluginRoots.length === 0) throw new Error('DCode did not create an ECC plugin cache');
+
+  for (const pluginRoot of pluginRoots) {
+    const realPluginRoot = fs.realpathSync(pluginRoot);
+    assertContained(cacheRoot, realPluginRoot);
+    const cacheVendor = path.join(realPluginRoot, 'vendor');
+    const cacheVendorStat = lstatOrNull(cacheVendor);
+    if (!cacheVendorStat || cacheVendorStat.isSymbolicLink() || !cacheVendorStat.isDirectory()) {
+      throw new Error(`DCode cache vendor is not a real directory: ${cacheVendor}`);
+    }
+    assertContained(cacheRoot, fs.realpathSync(cacheVendor));
+    fs.rmSync(cacheVendor, { recursive: true });
+    const relativeTarget = path.relative(path.dirname(cacheVendor), marketplaceVendor);
+    if (!relativeTarget || path.isAbsolute(relativeTarget)) {
+      throw new Error(`Could not compact DCode cache vendor: ${cacheVendor}`);
+    }
+    fs.symlinkSync(relativeTarget, cacheVendor);
+    if (!fs.existsSync(path.join(cacheVendor, path.relative(marketplaceVendor, dependencyEntrypoint)))) {
+      throw new Error(`DCode compacted cache cannot resolve its MCP dependency: ${cacheVendor}`);
+    }
+  }
+  return pluginRoots;
+}
+
+function antigravityStatePath(projectRoot) {
+  return path.join(projectRoot, '.agents', 'ecc-install-state.json');
 }
 
 function treeTextIncludes(root, needle) {
@@ -959,12 +1111,7 @@ function installDeepagent(context) {
     canonicalMount: mountPath,
     canonicalMarketplaceRoot,
   });
-  const cacheRoots = findFiles(path.join(homeRoot, '.deepagents'), 'plugin.json')
-    .filter((file) => file.includes(`${path.sep}cache${path.sep}`));
-  if (cacheRoots.length === 0) throw new Error('DCode did not create an ECC plugin cache');
-  if (!fs.existsSync(path.join(adapted.pluginRoot, 'vendor', 'node_modules', 'chrome-devtools-mcp'))) {
-    throw new Error('DCode marketplace is missing the pinned chrome-devtools MCP dependency');
-  }
+  compactDcodeCacheVendors({ homeRoot, marketplacePluginRoot: adapted.pluginRoot });
   return {
     capabilities: adapted.artifactManifest.capabilities,
     limitations: adapted.artifactManifest.limitations,
@@ -1009,26 +1156,31 @@ function installCodex(context) {
   }
 }
 
-function installClaude(context) {
+function installClaude(context, dependencies = {}) {
   const { sourceRoot, homeRoot, toolsRoot, env, source } = context;
-  const claude = installNpmCli({
+  const installCli = dependencies.installCli || installNpmCli;
+  const runCommand = dependencies.runCommand || run;
+  const stageMarketplace = dependencies.stageMarketplace || stageClaudeMarketplace;
+  const claude = installCli({
     name: NPM_CLI_PACKAGES.claude,
     version: TOOL_VERSIONS.claude,
     binary: 'claude',
     toolsRoot,
     env,
+    explicitPostinstall: 'install.cjs',
   });
-  run(claude, [
-    'plugin', 'marketplace', 'add', `${source.repository}@${source.commit}`,
+  const marketplaceRoot = stageMarketplace({ sourceRoot, homeRoot, source });
+  runCommand(claude, [
+    'plugin', 'marketplace', 'add', marketplaceRoot,
     '--scope', 'user',
   ], { env });
-  run(claude, ['plugin', 'install', 'ecc@ecc', '--scope', 'user'], { env });
-  const listed = run(claude, ['plugin', 'list', '--json'], { env });
+  runCommand(claude, ['plugin', 'install', 'ecc@ecc', '--scope', 'user'], { env });
+  const listed = runCommand(claude, ['plugin', 'list', '--json'], { env });
   assertOutputContains(listed, 'ecc@ecc', 'claude plugin list');
   if (!treeTextIncludes(path.join(homeRoot, '.claude', 'plugins'), source.commit)) {
     throw new Error('Claude plugin state does not record the immutable ECC commit');
   }
-  run(claude, ['plugin', 'validate', sourceRoot], { env });
+  runCommand(claude, ['plugin', 'validate', sourceRoot], { env });
   pinMutableMcpDependencies(path.join(homeRoot, '.claude', 'plugins'));
 }
 
@@ -1038,7 +1190,7 @@ function installAntigravity(context) {
     env: context.env,
   });
   runEccProfile({ ...context, target: 'antigravity', profile: 'minimal' });
-  const statePath = path.join(context.projectRoot, '.agent', 'ecc-install-state.json');
+  const statePath = antigravityStatePath(context.projectRoot);
   if (!fs.existsSync(statePath)) throw new Error('Antigravity adapter did not write install state');
 }
 
@@ -1079,13 +1231,10 @@ function installPi(context) {
   if (!JSON.stringify(settings).includes(context.source.commit)) {
     throw new Error('Pi settings do not retain the immutable ECC commit');
   }
-  const packageFiles = findFiles(path.join(context.homeRoot, '.pi'), 'package.json');
-  const eccPackage = packageFiles.find((file) => {
-    try { return readJson(file).name === 'ecc-universal'; } catch (_) { return false; }
-  });
-  if (!eccPackage) throw new Error('Pi did not retain the installed ECC git package');
+  const { file: eccPackage, manifest: piManifest } = selectPiEccPackage(
+    path.join(context.homeRoot, '.pi')
+  );
   const eccRoot = path.dirname(eccPackage);
-  const piManifest = readJson(eccPackage, 'Pi ECC package');
   if (!Array.isArray(piManifest.pi?.extensions) || !Array.isArray(piManifest.pi?.skills)) {
     throw new Error('ECC Pi package does not declare extensions and skills');
   }
@@ -1177,6 +1326,9 @@ function buildHarnessArtifact({ harnessId, sourcePath, archivePath, outDir, work
   normalizeVolatileState(rootfsRoot);
   prunePrivateState(rootfsRoot);
   pinMutableMcpDependencies(rootfsRoot);
+  // Normalize links only after pruning so a removed private target cannot leave
+  // a dangling link in an otherwise verified artifact.
+  relativizeContainedAbsoluteSymlinks(rootfsRoot);
   scanTreeForLeaks(rootfsRoot, { forbiddenPrefixes: [work, sourceRoot, homeRoot, projectRoot] });
 
   const copyRoots = ['home', 'project'].filter((name) => directoryHasFile(path.join(rootfsRoot, name)));
@@ -1441,13 +1593,20 @@ module.exports = {
   SOURCE_SCHEMA_VERSION,
   STRATEGY_METADATA,
   TOOL_VERSIONS,
+  antigravityStatePath,
   assembleRegistry,
   buildHarnessArtifact,
   buildInertBundles,
+  compactDcodeCacheVendors,
+  installClaude,
+  installNpmCli,
   installDeepseek,
   readResolvedSource,
+  relativizeContainedAbsoluteSymlinks,
   resolveSource,
   scanTreeForLeaks,
+  selectPiEccPackage,
+  stageClaudeMarketplace,
   stageDshSkills,
   validateInertManifest,
   validateCodexConfig,

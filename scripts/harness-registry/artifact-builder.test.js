@@ -17,16 +17,22 @@ const {
   HARNESS_INSTALLERS,
   STRATEGY_METADATA,
   TOOL_VERSIONS,
+  antigravityStatePath,
   assembleRegistry,
+  compactDcodeCacheVendors,
+  installClaude,
+  installNpmCli,
   installDeepseek,
   readResolvedSource,
+  relativizeContainedAbsoluteSymlinks,
   scanTreeForLeaks,
+  selectPiEccPackage,
   stageDshSkills,
   validateCodexConfig,
   validateResolvedSource,
   verifyRegistry,
 } = require('./artifact-builder');
-const { createDeterministicTarGz } = require('./archive');
+const { createDeterministicTarGz, extractTarGz } = require('./archive');
 
 const SOURCE_SCHEMA_VERSION = 'harness-registry/source-v1';
 const COMMIT = 'a'.repeat(40);
@@ -169,6 +175,205 @@ test('Codex state retains the canonical immutable marketplace and enabled plugin
   );
   writeFile(config, fs.readFileSync(config, 'utf8').replace('enabled = true', 'enabled = false'));
   assert.throws(() => validateCodexConfig(config, source), /enable ecc@ecc/i);
+});
+
+test('pinned npm CLI postinstall runs explicitly while dependency scripts stay disabled', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-npm-postinstall-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const toolsRoot = path.join(root, 'tools');
+  const calls = [];
+
+  const executable = installNpmCli({
+    name: '@anthropic-ai/claude-code',
+    version: TOOL_VERSIONS.claude,
+    binary: 'claude',
+    toolsRoot,
+    env: { CI: 'true' },
+    explicitPostinstall: 'install.cjs',
+  }, {
+    runCommand(command, args, options) {
+      calls.push({ command, args, options });
+      if (command !== 'npm') return '';
+      const prefix = args[args.indexOf('--prefix') + 1];
+      writeFile(path.join(prefix, 'node_modules', '@anthropic-ai', 'claude-code', 'install.cjs'), '// pinned installer\n');
+      writeFile(path.join(prefix, 'node_modules', '.bin', 'claude'), '#!/bin/sh\n');
+      return '';
+    },
+  });
+
+  assert.equal(executable, path.join(toolsRoot, 'claude', 'node_modules', '.bin', 'claude'));
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].command, 'npm');
+  assert.ok(calls[0].args.includes('--ignore-scripts'));
+  assert.equal(calls[1].command, process.execPath);
+  assert.deepEqual(calls[1].args, [
+    path.join(toolsRoot, 'claude', 'node_modules', '@anthropic-ai', 'claude-code', 'install.cjs'),
+  ]);
+  assert.equal(
+    calls[1].options.cwd,
+    path.join(toolsRoot, 'claude', 'node_modules', '@anthropic-ai', 'claude-code')
+  );
+});
+
+test('Claude installs the pinned local marketplace instead of treating a commit as a branch', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-claude-marketplace-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const sourceRoot = path.join(root, 'source');
+  const homeRoot = path.join(root, 'home');
+  writeJson(path.join(sourceRoot, '.claude-plugin', 'marketplace.json'), { name: 'ecc' });
+  writeFile(path.join(sourceRoot, 'node_modules', 'excluded', 'index.js'), 'excluded\n');
+  fs.mkdirSync(homeRoot);
+  const source = { ...ECC_SOURCE, commit: COMMIT, version: '2.2.0' };
+  const calls = [];
+  let installOptions;
+
+  installClaude({
+    sourceRoot,
+    homeRoot,
+    toolsRoot: path.join(root, 'tools'),
+    env: { CI: 'true' },
+    source,
+  }, {
+    installCli(options) {
+      installOptions = options;
+      return '/tools/claude';
+    },
+    runCommand(command, args, options) {
+      calls.push({ command, args, options });
+      return args.includes('list') ? '{"plugins":["ecc@ecc"]}\n' : '';
+    },
+  });
+
+  assert.equal(installOptions.explicitPostinstall, 'install.cjs');
+  const marketplaceRoot = path.join(homeRoot, '.claude', 'plugins', 'marketplaces', 'ecc-source');
+  assert.deepEqual(calls[0].args, ['plugin', 'marketplace', 'add', marketplaceRoot, '--scope', 'user']);
+  assert.equal(calls[0].args.some((value) => String(value).includes(`@${COMMIT}`)), false);
+  assert.equal(fs.existsSync(path.join(marketplaceRoot, 'node_modules')), false);
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(path.join(marketplaceRoot, '.ai-fleet-source.json'), 'utf8')),
+    { commit: COMMIT, repository: ECC_SOURCE.repository, version: '2.2.0' }
+  );
+});
+
+test('Antigravity uses the current plural compatibility-state directory', () => {
+  assert.equal(
+    antigravityStatePath('/artifact/project'),
+    path.join('/artifact/project', '.agents', 'ecc-install-state.json')
+  );
+  assert.doesNotMatch(STRATEGY_METADATA['antigravity-sdk'].limitations.join(' '), /\.agent compatibility/);
+});
+
+test('Pi selects the compatible root manifest instead of a nested same-name manifest', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-pi-manifest-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const piHome = path.join(root, '.pi');
+  const nested = path.join(piHome, 'agent', 'git', 'ecc', '.opencode', 'package.json');
+  const compatible = path.join(piHome, 'agent', 'git', 'ecc', 'package.json');
+  writeJson(nested, { name: 'ecc-universal', version: '2.2.0' });
+  writeJson(compatible, {
+    name: 'ecc-universal',
+    version: '2.2.0',
+    pi: { extensions: ['./.pi/extensions/index.ts'], skills: ['./skills'], prompts: ['./commands'] },
+  });
+
+  const selected = selectPiEccPackage(piHome);
+  assert.equal(selected.file, compatible);
+  assert.deepEqual(selected.manifest.pi.extensions, ['./.pi/extensions/index.ts']);
+});
+
+test('contained absolute symlinks become relocatable and escaping links fail closed', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-contained-link-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const rootfs = path.join(root, 'rootfs');
+  const target = path.join(rootfs, 'home', '.omp', 'plugins', 'cache', 'ecc');
+  const link = path.join(rootfs, 'home', '.omp', 'plugins', 'node_modules', 'ecc-universal');
+  writeFile(path.join(target, 'plugin.json'), '{"name":"ecc"}\n');
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(target, link);
+
+  assert.deepEqual(relativizeContainedAbsoluteSymlinks(rootfs), [
+    path.join(fs.realpathSync(rootfs), path.relative(rootfs, link)),
+  ]);
+  assert.equal(path.isAbsolute(fs.readlinkSync(link)), false);
+  assert.equal(fs.realpathSync(link), fs.realpathSync(target));
+
+  const archive = path.join(root, 'rootfs.tar.gz');
+  createDeterministicTarGz(rootfs, archive);
+  const extracted = path.join(root, 'extracted');
+  extractTarGz(archive, extracted);
+  const extractedLink = path.join(extracted, 'home', '.omp', 'plugins', 'node_modules', 'ecc-universal');
+  assert.equal(path.isAbsolute(fs.readlinkSync(extractedLink)), false);
+  assert.equal(fs.readFileSync(path.join(extractedLink, 'plugin.json'), 'utf8'), '{"name":"ecc"}\n');
+
+  const outside = path.join(root, 'outside');
+  writeFile(path.join(outside, 'secret'), 'nope\n');
+  const escaping = path.join(rootfs, 'home', 'escaping');
+  fs.symlinkSync(outside, escaping);
+  assert.throws(
+    () => relativizeContainedAbsoluteSymlinks(rootfs),
+    /outside destination root/i
+  );
+});
+
+test('DCode cache reuses the retained marketplace vendor without exceeding ustar paths', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-dcode-cache-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const rootfs = path.join(root, 'rootfs');
+  const homeRoot = path.join(rootfs, 'home');
+  const marketplacePluginRoot = path.join(
+    homeRoot, '.deepagents', 'marketplaces', 'ecc-source', 'plugins', 'ecc'
+  );
+  const dependencyRelative = path.join(
+    'vendor', 'node_modules', 'chrome-devtools-mcp', 'build', 'src', 'bin', 'chrome-devtools-mcp.js'
+  );
+  writeFile(path.join(marketplacePluginRoot, dependencyRelative), '#!/usr/bin/env node\n');
+
+  const cachePluginRoot = path.join(
+    homeRoot,
+    '.deepagents',
+    'plugins',
+    'cache',
+    `ecc-${'a'.repeat(32)}`,
+    `ecc-${'b'.repeat(32)}`,
+    `2-2-0-${'c'.repeat(32)}`
+  );
+  writeJson(path.join(cachePluginRoot, '.claude-plugin', 'plugin.json'), { name: 'ecc' });
+  const nestedPluginRoot = path.join(
+    homeRoot, '.deepagents', 'plugins', 'cache', 'future', 'nested', 'layout', 'plugin'
+  );
+  writeJson(path.join(nestedPluginRoot, '.claude-plugin', 'plugin.json'), { name: 'ecc' });
+  writeFile(path.join(nestedPluginRoot, 'vendor', 'keep'), 'future layout\n');
+  const tooLongRelative = path.join(
+    'vendor',
+    'node_modules',
+    'chrome-devtools-mcp',
+    'build',
+    'src',
+    'third_party',
+    'issue-descriptions',
+    'arInvalidRegisterOsSourceHeader.md'
+  );
+  writeFile(path.join(marketplacePluginRoot, tooLongRelative), '# retained payload\n');
+  writeFile(path.join(cachePluginRoot, tooLongRelative), '# duplicated payload\n');
+  assert.ok(Buffer.byteLength(path.relative(rootfs, path.join(cachePluginRoot, tooLongRelative))) > 255);
+
+  assert.deepEqual(
+    compactDcodeCacheVendors({ homeRoot, marketplacePluginRoot }),
+    [path.join(fs.realpathSync(homeRoot), path.relative(homeRoot, cachePluginRoot))]
+  );
+  const cacheVendor = path.join(cachePluginRoot, 'vendor');
+  assert.equal(fs.lstatSync(cacheVendor).isSymbolicLink(), true);
+  assert.equal(path.isAbsolute(fs.readlinkSync(cacheVendor)), false);
+  assert.equal(fs.lstatSync(path.join(nestedPluginRoot, 'vendor')).isDirectory(), true);
+  assert.equal(
+    fs.readFileSync(path.join(cachePluginRoot, dependencyRelative), 'utf8'),
+    '#!/usr/bin/env node\n'
+  );
+  assert.equal(
+    fs.readFileSync(path.join(cachePluginRoot, tooLongRelative), 'utf8'),
+    '# retained payload\n'
+  );
+  assert.doesNotThrow(() => createDeterministicTarGz(rootfs, path.join(root, 'rootfs.tar.gz')));
 });
 
 test('DeepSeek stages ECC skills through the pinned first-party dsh contract', (t) => {

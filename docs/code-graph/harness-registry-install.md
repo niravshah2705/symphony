@@ -6,8 +6,8 @@
 
 Directory-based community: scripts/harness-registry
 
-- **Size**: 149 nodes
-- **Cohesion**: 0.1719
+- **Size**: 160 nodes
+- **Cohesion**: 0.1558
 - **Dominant Language**: javascript
 
 ## Members
@@ -53,19 +53,19 @@ Directory-based community: scripts/harness-registry
 | walkTree | Function | ./scripts/harness-registry/artifact-builder.js | 247-256 |
 | visit | Function | ./scripts/harness-registry/artifact-builder.js | 249-254 |
 | isDisallowedName | Function | ./scripts/harness-registry/artifact-builder.js | 258-261 |
-| isHarnessStateFile | Function | ./scripts/harness-registry/artifact-builder.js | 263-297 |
-| scanTreeForLeaks | Function | ./scripts/harness-registry/artifact-builder.js | 299-336 |
-| prunePrivateState | Function | ./scripts/harness-registry/artifact-builder.js | 338-348 |
-| replaceTextPrefixes | Function | ./scripts/harness-registry/artifact-builder.js | 350-365 |
-| pinMutableMcpDependencies | Function | ./scripts/harness-registry/artifact-builder.js | 367-380 |
-| validateResolvedSource | Function | ./scripts/harness-registry/artifact-builder.js | 382-405 |
-| readResolvedSource | Function | ./scripts/harness-registry/artifact-builder.js | 407-409 |
-| resolvedDescriptorSource | Function | ./scripts/harness-registry/artifact-builder.js | 411-421 |
-| sourceArchiveExcluded | Function | ./scripts/harness-registry/artifact-builder.js | 423-427 |
-| buildInertBundles | Function | ./scripts/harness-registry/artifact-builder.js | 429-498 |
-| resolveSource | Function | ./scripts/harness-registry/artifact-builder.js | 500-542 |
+| isHarnessStateFile | Function | ./scripts/harness-registry/artifact-builder.js | 263-298 |
+| scanTreeForLeaks | Function | ./scripts/harness-registry/artifact-builder.js | 300-337 |
+| relativizeContainedAbsoluteSymlinks | Function | ./scripts/harness-registry/artifact-builder.js | 345-369 |
+| prunePrivateState | Function | ./scripts/harness-registry/artifact-builder.js | 371-381 |
+| replaceTextPrefixes | Function | ./scripts/harness-registry/artifact-builder.js | 383-398 |
+| pinMutableMcpDependencies | Function | ./scripts/harness-registry/artifact-builder.js | 400-413 |
+| validateResolvedSource | Function | ./scripts/harness-registry/artifact-builder.js | 415-438 |
+| readResolvedSource | Function | ./scripts/harness-registry/artifact-builder.js | 440-442 |
+| resolvedDescriptorSource | Function | ./scripts/harness-registry/artifact-builder.js | 444-454 |
+| sourceArchiveExcluded | Function | ./scripts/harness-registry/artifact-builder.js | 456-460 |
+| buildInertBundles | Function | ./scripts/harness-registry/artifact-builder.js | 462-531 |
 
-*... and 99 more members.*
+*... and 110 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `join` (290 edge(s))
-- `equal` (50 edge(s))
-- `existsSync` (43 edge(s))
-- `mkdirSync` (37 edge(s))
-- `readFileSync` (29 edge(s))
-- `push` (27 edge(s))
-- `startsWith` (26 edge(s))
-- `rmSync` (25 edge(s))
-- `throws` (25 edge(s))
-- `map` (24 edge(s))
+- `join` (353 edge(s))
+- `equal` (69 edge(s))
+- `existsSync` (46 edge(s))
+- `mkdirSync` (39 edge(s))
+- `readFileSync` (33 edge(s))
+- `push` (31 edge(s))
+- `rmSync` (31 edge(s))
+- `startsWith` (27 edge(s))
+- `throws` (26 edge(s))
+- `map` (25 edge(s))
+- `includes` (24 edge(s))
 - `stringify` (23 edge(s))
 - `resolve` (23 edge(s))
-- `includes` (22 edge(s))
-- `sort` (21 edge(s))
-- `split` (19 edge(s))
+- `tmpdir` (23 edge(s))
+- `after` (23 edge(s))
 
 ### Incoming
 
-- `join` (123 edge(s))
-- `./scripts/harness-registry/artifact-builder.js` (87 edge(s))
-- `equal` (50 edge(s))
+- `join` (177 edge(s))
+- `./scripts/harness-registry/artifact-builder.js` (99 edge(s))
+- `equal` (69 edge(s))
 - `./scripts/harness-registry/dcode-adapter.js` (41 edge(s))
-- `throws` (25 edge(s))
+- `rmSync` (26 edge(s))
+- `throws` (26 edge(s))
+- `./scripts/harness-registry/artifact-builder.test.js` (25 edge(s))
 - `./scripts/harness-registry/archive.js` (24 edge(s))
-- `rmSync` (21 edge(s))
-- `after` (18 edge(s))
-- `./scripts/harness-registry/artifact-builder.test.js` (16 edge(s))
-- `mkdtempSync` (15 edge(s))
-- `tmpdir` (15 edge(s))
-- `deepEqual` (15 edge(s))
+- `after` (23 edge(s))
+- `deepEqual` (21 edge(s))
+- `mkdtempSync` (20 edge(s))
+- `tmpdir` (20 edge(s))
+- `readFileSync` (16 edge(s))
+- `existsSync` (15 edge(s))
 - `./scripts/harness-registry/dcode-adapter.test.js` (15 edge(s))
-- `existsSync` (14 edge(s))
-- `readFileSync` (12 edge(s))

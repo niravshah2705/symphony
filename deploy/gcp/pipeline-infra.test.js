@@ -100,6 +100,41 @@ test('skills mounts preserve configured Cloud Run service and proxy CPUs', () =>
   assert.doesNotMatch(variableBlock(variables, 'skills_mount_enabled'), /\+ gen2 exec env/);
 });
 
+test('every Cloud Run egress sidecar explicitly opts into the wildcard bind', () => {
+  const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
+  const pipeline = read('deploy/gcp/terraform/pipeline.tf');
+  const proxyEnvStart = cloudRun.indexOf('proxy_plain_env =');
+  const plannerEnvStart = cloudRun.indexOf('planner_env =', proxyEnvStart);
+  assert.ok(proxyEnvStart >= 0 && plannerEnvStart > proxyEnvStart);
+  assert.match(
+    cloudRun.slice(proxyEnvStart, plannerEnvStart),
+    /PROXY_BIND_HOST\s*=\s*"0\.0\.0\.0"/,
+  );
+
+  const sidecars = [
+    [cloudRun, 'google_cloud_run_v2_service', 'planner'],
+    [cloudRun, 'google_cloud_run_v2_service', 'coder_control'],
+    [cloudRun, 'google_cloud_run_v2_job', 'coder_worker'],
+    [pipeline, 'google_cloud_run_v2_service', 'tester'],
+    [pipeline, 'google_cloud_run_v2_service', 'deployer'],
+  ];
+  assert.equal(
+    ((`${cloudRun}\n${pipeline}`).match(/name\s*=\s*"egress-proxy"/g) || []).length,
+    sidecars.length,
+    'Cloud Run egress sidecar inventory changed',
+  );
+  for (const [source, type, name] of sidecars) {
+    const resource = resourceBlock(source, type, name);
+    const sidecar = resource.indexOf('name  = "egress-proxy"');
+    assert.ok(sidecar > 0, `${type}.${name} must include the egress sidecar`);
+    assert.match(
+      resource.slice(sidecar),
+      /for_each\s*=\s*local\.proxy_plain_env/,
+      `${type}.${name} must inherit the Cloud Run proxy bind override`,
+    );
+  }
+});
+
 test('deploy workflow fails closed when an unchanged live image tag cannot be resolved', () => {
   const workflow = read('.github/workflows/deploy.yml');
   const releaseStart = workflow.indexOf('release_tag()');
@@ -297,6 +332,8 @@ test('stream-token broker owns the signing secret behind private IAM', () => {
   assert.match(broker, /args\s*=\s*\["services\/proxy\/src\/stream-token-server\.js"\]/);
   assert.match(broker, /name\s*=\s*"STREAM_TOKEN_BIND_HOST"\s+value\s*=\s*"0\.0\.0\.0"/);
   assert.match(broker, /name\s*=\s*"STREAM_TOKEN_SECRET"/);
+  assert.match(broker, /memory\s*=\s*"512Mi"/);
+  assert.doesNotMatch(broker, /memory\s*=\s*"256Mi"/);
   assert.doesNotMatch(broker, /PROXY_CAPABILITIES|egress-proxy/);
   assert.doesNotMatch(gateway, /STREAM_TOKEN_BIND_HOST/);
   const brokerMinInstances = variableBlock(variables, 'stream_token_min_instances');

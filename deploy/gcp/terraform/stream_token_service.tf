@@ -77,7 +77,7 @@ resource "google_cloud_run_v2_service" "stream_token_broker" {
       resources {
         limits = {
           cpu    = var.cloud_run_proxy_cpu
-          memory = "256Mi"
+          memory = "512Mi"
         }
         cpu_idle          = true
         startup_cpu_boost = true

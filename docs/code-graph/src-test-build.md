@@ -6,8 +6,8 @@
 
 Directory-based community: services/proxy
 
-- **Size**: 157 nodes
-- **Cohesion**: 0.1087
+- **Size**: 160 nodes
+- **Cohesion**: 0.1056
 - **Dominant Language**: javascript
 
 ## Members
@@ -31,16 +31,19 @@ Directory-based community: services/proxy
 | buildInjection | Function | ./services/proxy/src/credentials.js | 226-319 |
 | resolvedSecrets | Function | ./services/proxy/src/credentials.js | 228-230 |
 | resolveRoute | Function | ./services/proxy/src/credentials.js | 321-325 |
-| parseCapabilities | Function | ./services/proxy/src/index.js | 17-22 |
-| pathname | Function | ./services/proxy/src/index.js | 24-30 |
-| sendJson | Function | ./services/proxy/src/index.js | 32-35 |
-| createServer | Function | ./services/proxy/src/index.js | 37-79 |
-| listen | Function | ./services/proxy/src/index.test.js | 10-14 |
-| test:agent proxy without stream-token capability returns 404 for the internal RPCs@L16 | Test | ./services/proxy/src/index.test.js | 16-32 |
-| test:stream-token capability mounts the loopback RPC handler@L34 | Test | ./services/proxy/src/index.test.js | 34-52 |
-| test:capability parsing is explicit and comma-separated@L54 | Test | ./services/proxy/src/index.test.js | 54-57 |
-| test:the deployed proxy binds only shared loopback@L59 | Test | ./services/proxy/src/index.test.js | 59-61 |
-| test:proxy startup fails closed when stream-token capability has no secret@L63 | Test | ./services/proxy/src/index.test.js | 63-75 |
+| resolveBindHost | Function | ./services/proxy/src/index.js | 18-24 |
+| parseCapabilities | Function | ./services/proxy/src/index.js | 30-35 |
+| pathname | Function | ./services/proxy/src/index.js | 37-43 |
+| sendJson | Function | ./services/proxy/src/index.js | 45-48 |
+| createServer | Function | ./services/proxy/src/index.js | 50-92 |
+| listen | Function | ./services/proxy/src/index.test.js | 17-21 |
+| test:agent proxy without stream-token capability returns 404 for the internal RPCs@L23 | Test | ./services/proxy/src/index.test.js | 23-39 |
+| test:stream-token capability mounts the loopback RPC handler@L41 | Test | ./services/proxy/src/index.test.js | 41-59 |
+| test:capability parsing is explicit and comma-separated@L61 | Test | ./services/proxy/src/index.test.js | 61-64 |
+| test:proxy binding defaults to loopback and permits the explicit Cloud Run wildcard@L66 | Test | ./services/proxy/src/index.test.js | 66-76 |
+| test:proxy startup accepts the explicit Cloud Run wildcard bind@L78 | Test | ./services/proxy/src/index.test.js | 78-90 |
+| test:proxy startup fails closed before listen for an untrusted bind host@L92 | Test | ./services/proxy/src/index.test.js | 92-100 |
+| test:proxy startup fails closed when stream-token capability has no secret@L102 | Test | ./services/proxy/src/index.test.js | 102-114 |
 | getClaudeAuth | Function | ./services/proxy/src/oauth-manager.js | 20-23 |
 | getCodexAuth | Function | ./services/proxy/src/oauth-manager.js | 25-31 |
 | parseBundle | Function | ./services/proxy/src/oauth-manager.js | 35-44 |
@@ -61,11 +64,8 @@ Directory-based community: services/proxy
 | createProxyHandler | Function | ./services/proxy/src/proxy.js | 109-186 |
 | test:buildUpstreamUrl appends the path remainder@L15 | Test | ./services/proxy/src/proxy.test.js | 15-23 |
 | test:buildForwardHeaders strips inbound auth and retargets Host@L25 | Test | ./services/proxy/src/proxy.test.js | 25-60 |
-| test:buildForwardHeaders cannot smuggle an OAuth beta header into API-key auth@L62 | Test | ./services/proxy/src/proxy.test.js | 62-70 |
-| test:filterResponseHeaders drops body-frame + hop-by-hop but keeps content-type@L72 | Test | ./services/proxy/src/proxy.test.js | 72-87 |
-| test:resolveStaticKey: managed value from the settings payload (one path)@L91 | Test | ./services/proxy/src/proxy.test.js | 91-97 |
 
-*... and 107 more members.*
+*... and 110 more members.*
 
 ## Execution Flows
 
@@ -84,10 +84,10 @@ Directory-based community: services/proxy
 
 ### Outgoing
 
-- `equal` (120 edge(s))
+- `equal` (127 edge(s))
 - `deepEqual` (30 edge(s))
-- `String` (28 edge(s))
-- `trim` (22 edge(s))
+- `String` (29 edge(s))
+- `trim` (23 edge(s))
 - `buildInjection` (19 edge(s))
 - `stringify` (14 edge(s))
 - `rejects` (14 edge(s))
@@ -98,11 +98,11 @@ Directory-based community: services/proxy
 - `toLowerCase` (9 edge(s))
 - `resolve` (9 edge(s))
 - `close` (9 edge(s))
-- `json` (9 edge(s))
+- `match` (9 edge(s))
 
 ### Incoming
 
-- `equal` (120 edge(s))
+- `equal` (127 edge(s))
 - `./services/proxy/src/proxy.test.js` (43 edge(s))
 - `./services/proxy/src/credentials.js` (30 edge(s))
 - `deepEqual` (30 edge(s))
