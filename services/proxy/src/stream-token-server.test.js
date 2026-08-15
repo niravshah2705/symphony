@@ -2,7 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { spawnSync } = require('node:child_process');
+const net = require('node:net');
+const { spawn, spawnSync } = require('node:child_process');
+const { once } = require('node:events');
 
 const {
   createStreamTokenServer,
@@ -22,6 +24,64 @@ async function close(server) {
   await new Promise((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
   });
+}
+
+async function availablePort() {
+  const server = net.createServer();
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const port = server.address().port;
+  await close(server);
+  return port;
+}
+
+function captureOutput(child) {
+  const output = { stdout: '', stderr: '' };
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (chunk) => { output.stdout += chunk; });
+  child.stderr.on('data', (chunk) => { output.stderr += chunk; });
+  return output;
+}
+
+function waitForOutput(child, output, pattern, timeoutMs = 5_000) {
+  if (pattern.test(output.stdout)) return Promise.resolve();
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.reject(new Error(
+      `broker exited before listening (code=${child.exitCode}, signal=${child.signalCode})\n${output.stderr}`
+    ));
+  }
+  return new Promise((resolve, reject) => {
+    const finish = (callback) => {
+      clearTimeout(timer);
+      child.stdout.off('data', onData);
+      child.off('exit', onExit);
+      child.off('error', onError);
+      callback();
+    };
+    const onData = () => {
+      if (pattern.test(output.stdout)) finish(resolve);
+    };
+    const onExit = (code, signal) => finish(() => reject(new Error(
+      `broker exited before listening (code=${code}, signal=${signal})\n${output.stderr}`
+    )));
+    const onError = (error) => finish(() => reject(error));
+    const timer = setTimeout(() => finish(() => reject(new Error(
+      `broker did not listen within ${timeoutMs}ms\n${output.stderr}`
+    ))), timeoutMs);
+    child.stdout.on('data', onData);
+    child.once('exit', onExit);
+    child.once('error', onError);
+  });
+}
+
+async function stopChild(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const exited = once(child, 'exit');
+  child.kill();
+  await exited;
 }
 
 test('broker-only server exposes health, mint, and verify but no egress relay', async () => {
@@ -113,6 +173,43 @@ test('wildcard binding requires the explicit trusted Cloud Run value', () => {
   for (const value of ['localhost', '::1', '10.0.0.2', '*']) {
     assert.throws(() => resolveBindHost(value), /STREAM_TOKEN_BIND_HOST must be/);
   }
+});
+
+test('production broker entrypoint listens without gateway authentication config', {
+  timeout: 10_000,
+}, async (t) => {
+  const port = await availablePort();
+  const env = {
+    ...process.env,
+    NODE_ENV: 'production',
+    STREAM_TOKEN_SECRET: 'startup-test-secret',
+    STREAM_TOKEN_BIND_HOST: CLOUD_RUN_BIND_HOST,
+    PORT: String(port),
+  };
+  delete env.AUTH_MODE;
+  for (const key of Object.keys(env)) {
+    if (key.startsWith('FIREBASE_')) delete env[key];
+  }
+
+  const child = spawn(process.execPath, ['stream-token-server.js'], {
+    cwd: __dirname,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const output = captureOutput(child);
+  t.after(() => stopChild(child));
+
+  await waitForOutput(
+    child,
+    output,
+    new RegExp(`stream-token broker listening on http://0\\.0\\.0\\.0:${port}`)
+  );
+  const response = await fetch(`http://127.0.0.1:${port}/healthz`);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { status: 'ok' });
+  assert.equal(child.exitCode, null, output.stderr);
+  assert.equal(Object.hasOwn(env, 'AUTH_MODE'), false);
+  assert.deepEqual(Object.keys(env).filter((key) => key.startsWith('FIREBASE_')), []);
 });
 
 test('broker startup fails closed for an untrusted bind host', () => {

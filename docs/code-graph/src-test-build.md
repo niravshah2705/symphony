@@ -6,8 +6,8 @@
 
 Directory-based community: services/proxy
 
-- **Size**: 160 nodes
-- **Cohesion**: 0.1056
+- **Size**: 172 nodes
+- **Cohesion**: 0.1103
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: services/proxy
 | test:buildUpstreamUrl appends the path remainder@L15 | Test | ./services/proxy/src/proxy.test.js | 15-23 |
 | test:buildForwardHeaders strips inbound auth and retargets Host@L25 | Test | ./services/proxy/src/proxy.test.js | 25-60 |
 
-*... and 110 more members.*
+*... and 122 more members.*
 
 ## Execution Flows
 
@@ -84,29 +84,30 @@ Directory-based community: services/proxy
 
 ### Outgoing
 
-- `equal` (127 edge(s))
-- `deepEqual` (30 edge(s))
-- `String` (29 edge(s))
+- `equal` (130 edge(s))
+- `deepEqual` (32 edge(s))
+- `String` (30 edge(s))
 - `trim` (23 edge(s))
 - `buildInjection` (19 edge(s))
 - `stringify` (14 edge(s))
 - `rejects` (14 edge(s))
 - `verify` (14 edge(s))
+- `fetch` (13 edge(s))
 - `end` (12 edge(s))
-- `fetch` (12 edge(s))
 - `createStreamTokenService` (10 edge(s))
+- `resolve` (10 edge(s))
+- `json` (10 edge(s))
 - `toLowerCase` (9 edge(s))
-- `resolve` (9 edge(s))
 - `close` (9 edge(s))
-- `match` (9 edge(s))
 
 ### Incoming
 
-- `equal` (127 edge(s))
+- `equal` (130 edge(s))
 - `./services/proxy/src/proxy.test.js` (43 edge(s))
+- `deepEqual` (32 edge(s))
 - `./services/proxy/src/credentials.js` (30 edge(s))
-- `deepEqual` (30 edge(s))
 - `buildInjection` (19 edge(s))
+- `./services/proxy/src/stream-token-server.test.js` (18 edge(s))
 - `./services/proxy/src/stream-token-rpc.test.js` (16 edge(s))
 - `./services/proxy/src/oauth-manager.test.js` (14 edge(s))
 - `rejects` (14 edge(s))
@@ -114,6 +115,5 @@ Directory-based community: services/proxy
 - `./services/proxy/src/stream-token.test.js` (14 edge(s))
 - `./services/proxy/src/secrets-client.js` (13 edge(s))
 - `verify` (13 edge(s))
-- `fetch` (11 edge(s))
+- `fetch` (12 edge(s))
 - `./services/proxy/src/proxy.js` (11 edge(s))
-- `./services/proxy/src/stream-token-rpc.js` (11 edge(s))

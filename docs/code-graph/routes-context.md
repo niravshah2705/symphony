@@ -6,8 +6,8 @@
 
 Directory-based community: services/planner
 
-- **Size**: 69 nodes
-- **Cohesion**: 0.2266
+- **Size**: 68 nodes
+- **Cohesion**: 0.2316
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,9 +18,9 @@ Directory-based community: services/planner
 | messageWorkspaceContext | Function | ./services/planner/src/pubsub.js | 40-42 |
 | messageWorkspaceContextInput | Function | ./services/planner/src/pubsub.js | 44-50 |
 | runMessageInWorkspace | Function | ./services/planner/src/pubsub.js | 52-57 |
-| shouldRunAutonomousTick | Function | ./services/planner/src/pubsub.js | 59-67 |
-| dispatchPlannerTick | Function | ./services/planner/src/pubsub.js | 69-95 |
-| isRejectedWorkspaceMessage | Function | ./services/planner/src/pubsub.js | 97-99 |
+| shouldRunAutonomousTick | Function | ./services/planner/src/pubsub.js | 59-66 |
+| dispatchPlannerTick | Function | ./services/planner/src/pubsub.js | 68-87 |
+| isRejectedWorkspaceMessage | Function | ./services/planner/src/pubsub.js | 89-91 |
 | plannerHandler | Function | ./services/planner/src/pubsub.test.js | 11-15 |
 | invoke | Function | ./services/planner/src/pubsub.test.js | 17-28 |
 | test:planner Pub/Sub scopes every conversation event to the native workspace context@L30 | Test | ./services/planner/src/pubsub.test.js | 30-77 |
@@ -29,10 +29,9 @@ Directory-based community: services/planner
 | byOrg | Function | ./services/planner/src/pubsub.test.js | 145-145 |
 | context | Function | ./services/planner/src/pubsub.test.js | 146-146 |
 | test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L156 | Test | ./services/planner/src/pubsub.test.js | 156-184 |
-| test:planner autonomous ticks fail closed only on an unpinned shared cloud runtime@L186 | Test | ./services/planner/src/pubsub.test.js | 186-220 |
-| error | Function | ./services/planner/src/pubsub.test.js | 229-229 |
-| warn | Function | ./services/planner/src/pubsub.test.js | 229-229 |
-| test:planner orchestrator rollout keeps billing sweeps but suppresses autonomous planning@L222 | Test | ./services/planner/src/pubsub.test.js | 222-238 |
+| test:planner autonomous ticks fail closed only on an unpinned shared cloud runtime@L186 | Test | ./services/planner/src/pubsub.test.js | 186-217 |
+| error | Function | ./services/planner/src/pubsub.test.js | 208-208 |
+| warn | Function | ./services/planner/src/pubsub.test.js | 208-208 |
 | redactUserText | Function | ./services/planner/src/routes/agent.js | 55-55 |
 | requestWorkspaceContext | Function | ./services/planner/src/routes/agent.js | 59-68 |
 | getHeader | Function | ./services/planner/src/routes/agent.js | 60-63 |
@@ -64,8 +63,9 @@ Directory-based community: services/planner
 | get | Function | ./services/planner/src/routes/agent.test.js | 435-440 |
 | test:message yields a confirmable memory draft and canPrepare, never auto-writing@L230 | Test | ./services/planner/src/routes/agent.test.js | 230-240 |
 | test:business/prepare re-blocks unsafe input without a model call@L242 | Test | ./services/planner/src/routes/agent.test.js | 242-247 |
+| test:business/prepare resolves the linked business and forwards pipeline output@L249 | Test | ./services/planner/src/routes/agent.test.js | 249-264 |
 
-*... and 19 more members.*
+*... and 18 more members.*
 
 ## Execution Flows
 
@@ -79,11 +79,11 @@ Directory-based community: services/planner
 
 ### Outgoing
 
-- `equal` (71 edge(s))
+- `equal` (68 edge(s))
 - `ok` (26 edge(s))
-- `require` (23 edge(s))
 - `resolve` (22 edge(s))
-- `deepEqual` (21 edge(s))
+- `require` (22 edge(s))
+- `deepEqual` (20 edge(s))
 - `after` (14 edge(s))
 - `includes` (12 edge(s))
 - `filter` (10 edge(s))
@@ -93,20 +93,20 @@ Directory-based community: services/planner
 - `currentWorkspaceContext` (8 edge(s))
 - `find` (6 edge(s))
 - `catch` (5 edge(s))
-- `setImmediate` (5 edge(s))
+- `String` (5 edge(s))
 
 ### Incoming
 
-- `equal` (71 edge(s))
+- `equal` (68 edge(s))
 - `./services/planner/src/routes/agent.js` (57 edge(s))
 - `./services/planner/src/pubsub.js` (28 edge(s))
 - `./services/planner/src/routes/agent.test.js` (27 edge(s))
-- `require` (23 edge(s))
+- `require` (22 edge(s))
 - `ok` (22 edge(s))
-- `deepEqual` (21 edge(s))
-- `./services/planner/src/pubsub.test.js` (14 edge(s))
+- `deepEqual` (20 edge(s))
 - `resolve` (14 edge(s))
 - `after` (14 edge(s))
+- `./services/planner/src/pubsub.test.js` (11 edge(s))
 - `includes` (11 edge(s))
 - `push` (9 edge(s))
 - `some` (9 edge(s))
