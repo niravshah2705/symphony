@@ -116,7 +116,7 @@ accepts either that origin or `http://127.0.0.1:8000/v1` and stores the normaliz
 origin. Model discovery calls the server's OpenAI-compatible `GET /v1/models`
 endpoint. If the server was started with API-key protection, enter the key in the
 OMLX connection card; it remains masked and server-side.
-4. **Agent runtime & workflow** — select a default and optional per-stage harness for planning, coding, testing, and deployment, then choose bounded sequential/fan-out/evaluator/supervisor guidance. Only catalog entries marked available are selectable; OpenCode, Pi, and Oh My Pi remain experimental metadata until real reviewed adapters exist. DeepAgent remains the full brokered Linear + GitHub/GitLab lifecycle. SDK runtimes operate only with a compatible hosted provider and never receive application-owned tracker or repository credentials.
+4. **Agent runtime & workflow** — select a default and optional per-stage harness for planning, coding, testing, and deployment, then choose bounded sequential/fan-out/evaluator/supervisor guidance. Only catalog entries marked available are selectable; OpenCode, Pi, Oh My Pi, and DeepSeek remain experimental metadata until reviewed runtime executors exist. DeepAgent remains the full brokered Linear + GitHub/GitLab lifecycle. SDK runtimes operate only with a compatible hosted provider and never receive application-owned tracker or repository credentials.
 5. **Assume Role** — pick a workspace member (validated server-side). The assumed role owns enriched projects and is shown in the **top toolbar**.
 6. **Deep Agent** — **enrich labels** (multi-select dropdown of your Linear project labels), **scheduler cadence** (5 / 10 / 15 minutes), parallelism, and per-run/milestone/issue caps, plus toggles.
 

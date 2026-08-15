@@ -649,10 +649,10 @@ variable "skills_publisher_member" {
 }
 
 # --- Harness registry bucket (see registry.tf) -------------------------------
-# The weekly sync-harness-registry workflow publishes a versioned dual-format
-# (original + generic) bundle here. Terraform CREATES and OWNS the bucket; the
-# name defaults to "<project_id>-aifleet-registry". registry_bucket_name is an
-# optional override for a custom globally-unique name.
+# The weekly sync-harness-registry workflow publishes versioned, harness-native
+# rootfs artifacts plus their v2 descriptors and inert non-ECC resources here.
+# Terraform CREATES and OWNS the bucket; registry_bucket_name is an optional
+# override for a custom globally-unique name.
 
 variable "registry_enabled" {
   type        = bool

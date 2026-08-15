@@ -40,6 +40,24 @@ test('fetchMarketplace clones the pinned ref via the injected git', () => {
   assert.ok(calls.some((c) => c.includes('checkout') && c.includes('FETCH_HEAD')));
 });
 
+test('fetchMarketplace resolves a tracked ECC ref and returns its immutable sha', () => {
+  const work = tmp();
+  const calls = [];
+  const git = (args) => {
+    calls.push(args);
+    if (args.includes('rev-parse')) return `${'a'.repeat(40)}\n`;
+    return '';
+  };
+  const out = fetchMarketplace(
+    { url: 'https://github.com/affaan-m/ECC.git', trackRef: 'main' },
+    { workRoot: work, git, name: 'ecc' }
+  );
+  assert.equal(out.ref, 'main');
+  assert.equal(out.sha, 'a'.repeat(40));
+  const fetch = calls.find((args) => args.includes('fetch'));
+  assert.ok(fetch.includes('main'));
+});
+
 test('fetchMarketplace copies a local file:// marketplace instead of cloning', () => {
   const src = tmp();
   fs.writeFileSync(path.join(src, 'marker.txt'), 'hello');

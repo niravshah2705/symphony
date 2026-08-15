@@ -1,21 +1,10 @@
 name: Sync Harness Registry
 
-# Weekly (Mondays) job that mirrors the harness skills/plugins/tools/hooks
-# ecosystem into a versioned, DUAL-format bundle on GCS:
-#   gs://<bucket>/<version>/original/...   harness-native payloads
-#   gs://<bucket>/<version>/generic/...    normalized tree + registry.json
-#
-# It reads the repo-pinned package list (packages/shared-core/src/agent/registry/
-# sources.json), shallow-clones each marketplace at its pinned ref, converts every
-# selected resource to the generic pattern, verifies NO secrets slipped through,
-# then publishes. Terraform CREATES the bucket (deploy/gcp/terraform/registry.tf)
-# with a FIXED name ("aifleet-registry", var.registry_bucket_name); this workflow
-# uses that same fixed name (override via the optional REGISTRY_BUCKET repo var).
-#
-# Auth is keyless via Workload Identity Federation (same provider/SA as deploy.yml
-# and publish-skills.yml). SECURITY: no untrusted github.event.* value is
-# interpolated into any `run:` body — everything flows via `env:`; the version is
-# validated to a single safe path segment before it becomes a GCS prefix.
+# Build ECC once at an immutable commit, adapt it independently for every
+# supported harness, and publish ready-to-copy trees under the v1 registry
+# prefix. Installer code from ECC runs only in the unprivileged matrix jobs;
+# the publish job receives already-verified files and is the only job allowed
+# to request a Google identity token.
 on:
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC
@@ -23,34 +12,362 @@ on:
   push:
     branches: [main]
     paths:
-      - "packages/shared-core/src/agent/registry/sources.json"
+      - ".github/workflows/sync-harness-registry.yml"
+      - "packages/shared-core/src/agent/harness-catalog.json"
+      - "packages/shared-core/src/agent/registry/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/build-harness-artifact.js"
+      - "scripts/harness-registry/**"
 
-# Never let two publishes race the same bucket prefix.
+# A registry index is the discoverability boundary. Serializing runs ensures an
+# older run cannot publish its index after a newer run has completed.
 concurrency:
   group: harness-registry-publish
   cancel-in-progress: false
 
-permissions:
-  contents: read
-  id-token: write # required for Workload Identity Federation
+# Jobs opt into only the permissions they need. In particular, id-token is not
+# available while third-party installer code is running.
+permissions: {}
 
 env:
   SOURCES: packages/shared-core/src/agent/registry/sources.json
+  REGISTRY_VERSION: v1
 
 jobs:
-  publish:
+  resolve:
+    name: Resolve immutable ECC source
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      version: ${{ steps.source.outputs.version }}
     steps:
-      # Third-party actions are tag-pinned to match this repo's existing
-      # workflows (publish-skills.yml, checks.yml). SHA-pinning is a repo-wide
-      # hardening decision, not one to diverge on in a single workflow.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.19.0"
+          cache: npm
+
+      - name: Install trusted build dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Resolve ECC ref and create source archive
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+          GIT_CONFIG_NOSYSTEM: "1"
+          GIT_LFS_SKIP_SMUDGE: "1"
+          RESOLVE_DIR: ${{ runner.temp }}/resolved-source
+        run: |
+          set -euo pipefail
+          mkdir -p "$RESOLVE_DIR"
+          timeout --signal=TERM 8m node scripts/build-harness-artifact.js resolve \
+            --sources "$SOURCES" \
+            --out "$RESOLVE_DIR"
+
+      - name: Validate resolved provenance
+        id: source
+        env:
+          RESOLVE_DIR: ${{ runner.temp }}/resolved-source
+        run: |
+          set -euo pipefail
+          SOURCE_JSON="$RESOLVE_DIR/source.json"
+          SOURCE_ARCHIVE="$RESOLVE_DIR/source.tar.gz"
+          test -f "$SOURCE_JSON"
+          test -f "$SOURCE_ARCHIVE"
+          test -d "$RESOLVE_DIR/inert"
+
+          COMMIT="$(jq -er '.commit' "$SOURCE_JSON")"
+          VERSION="$(jq -er '.version' "$SOURCE_JSON")"
+          EXPECTED_SHA="$(jq -er '.archiveSha256' "$SOURCE_JSON")"
+          ACTUAL_SHA="$(sha256sum "$SOURCE_ARCHIVE" | cut -d ' ' -f 1)"
+
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$VERSION" =~ ^2\.2\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{64}$ ]]
+          test "$EXPECTED_SHA" = "$ACTUAL_SHA"
+          test "$(stat -c %s "$SOURCE_ARCHIVE")" -le 268435456
+
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved ECC $VERSION at $COMMIT"
+
+      - name: Upload immutable source
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecc-resolved-source
+          path: ${{ runner.temp }}/resolved-source
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+
+  build:
+    name: Build ${{ matrix.harness }}
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - harness: deepagent
+            python: true
+            bun: false
+          - harness: codex-sdk
+            python: false
+            bun: false
+          - harness: claude-agent-sdk
+            python: false
+            bun: false
+          - harness: antigravity-sdk
+            python: false
+            bun: false
+          - harness: opencode
+            python: false
+            bun: false
+          - harness: pi
+            python: false
+            bun: false
+          - harness: oh-my-pi
+            python: false
+            bun: true
+          - harness: deepseek
+            python: false
+            bun: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+          cache: npm
+
+      - name: Set up Python for DCode
+        if: ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up Bun for Oh My Pi
+        if: ${{ matrix.bun }}
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install trusted build dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download resolved ECC source
+        uses: actions/download-artifact@v4
+        with:
+          name: ecc-resolved-source
+          path: ${{ runner.temp }}/resolved-source
+
+      - name: Build isolated ready-to-copy tree
+        env:
+          HARNESS_ID: ${{ matrix.harness }}
+          SOURCE_COMMIT: ${{ needs.resolve.outputs.commit }}
+          SOURCE_VERSION: ${{ needs.resolve.outputs.version }}
+          RESOLVE_DIR: ${{ runner.temp }}/resolved-source
+          LEG_DIR: ${{ runner.temp }}/harness-artifact
+          WORK_DIR: ${{ runner.temp }}/harness-work
+          HOME: ${{ runner.temp }}/harness-home
+          XDG_CONFIG_HOME: ${{ runner.temp }}/xdg/config
+          XDG_CACHE_HOME: ${{ runner.temp }}/xdg/cache
+          XDG_DATA_HOME: ${{ runner.temp }}/xdg/data
+          NPM_CONFIG_CACHE: ${{ runner.temp }}/npm/cache
+          NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm/prefix
+          PIP_CACHE_DIR: ${{ runner.temp }}/pip/cache
+          UV_CACHE_DIR: ${{ runner.temp }}/uv/cache
+          BUN_INSTALL: ${{ runner.temp }}/bun
+          GIT_TERMINAL_PROMPT: "0"
+          GIT_CONFIG_NOSYSTEM: "1"
+          GIT_LFS_SKIP_SMUDGE: "1"
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          UV_NO_PROGRESS: "1"
+          NPM_CONFIG_UPDATE_NOTIFIER: "false"
+          NO_UPDATE_NOTIFIER: "1"
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+          CI: "true"
+          NO_COLOR: "1"
+          FORCE_COLOR: "0"
+        run: |
+          set -euo pipefail
+          export PATH="$NPM_CONFIG_PREFIX/bin:$BUN_INSTALL/bin:$HOME/.local/bin:$PATH"
+          mkdir -p \
+            "$LEG_DIR" "$WORK_DIR" "$HOME" \
+            "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" \
+            "$NPM_CONFIG_CACHE" "$NPM_CONFIG_PREFIX" "$PIP_CACHE_DIR" \
+            "$UV_CACHE_DIR" "$BUN_INSTALL"
+
+          timeout --signal=TERM 35m node scripts/build-harness-artifact.js build \
+            --harness "$HARNESS_ID" \
+            --source "$RESOLVE_DIR/source.json" \
+            --archive "$RESOLVE_DIR/source.tar.gz" \
+            --out "$LEG_DIR" \
+            --work "$WORK_DIR"
+
+          test -f "$LEG_DIR/artifact.json"
+          test -f "$LEG_DIR/rootfs.tar.gz"
+          test "$(find "$LEG_DIR" -type f | wc -l | tr -d ' ')" = "2"
+          jq -e . "$LEG_DIR/artifact.json" >/dev/null
+          test "$(stat -c %s "$LEG_DIR/artifact.json")" -le 1048576
+          test "$(stat -c %s "$LEG_DIR/rootfs.tar.gz")" -le 1073741824
+
+      - name: Upload harness artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-${{ matrix.harness }}
+          path: ${{ runner.temp }}/harness-artifact
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+
+  assemble:
+    name: Assemble and verify registry
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+          cache: npm
+
+      - name: Install trusted build dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download all harness artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: harness-*
+          path: ${{ runner.temp }}/harness-inputs/harnesses
+
+      - name: Download resolved source metadata and inert bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: ecc-resolved-source
+          path: ${{ runner.temp }}/harness-inputs/resolve
+
+      - name: Assemble and verify v2 index
+        env:
+          INPUTS_DIR: ${{ runner.temp }}/harness-inputs
+          REGISTRY_DIR: ${{ runner.temp }}/registry
+        run: |
+          set -euo pipefail
+          test "$(find "$INPUTS_DIR/harnesses" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "8"
+          test -f "$INPUTS_DIR/resolve/source.json"
+          test -d "$INPUTS_DIR/resolve/inert"
+          node scripts/build-harness-artifact.js assemble \
+            --inputs "$INPUTS_DIR" \
+            --out "$REGISTRY_DIR"
+          node scripts/build-harness-artifact.js verify \
+            --registry "$REGISTRY_DIR"
+
+          INDEX="$REGISTRY_DIR/$REGISTRY_VERSION/registry.json"
+          test -f "$INDEX"
+          jq -e \
+            --arg schema "harness-registry/v2" \
+            --arg version "$REGISTRY_VERSION" \
+            '.schemaVersion == $schema and .version == $version and (.harnesses | length == 8)' \
+            "$INDEX" >/dev/null
+
+      - name: Upload verified registry
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-registry-v1
+          path: ${{ runner.temp }}/registry/v1
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+
+  publish:
+    name: Publish verified registry
+    needs: assemble
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+    steps:
+      # No repository checkout and no registry code execution occurs in this job.
+      # Validate the artifact before acquiring cloud credentials.
+      - name: Download verified registry
+        uses: actions/download-artifact@v4
+        with:
+          name: harness-registry-v1
+          path: ${{ runner.temp }}/registry/v1
+
+      - name: Validate publish payload
+        env:
+          REGISTRY_DIR: ${{ runner.temp }}/registry
+        run: |
+          set -euo pipefail
+          INDEX="$REGISTRY_DIR/$REGISTRY_VERSION/registry.json"
+          test -f "$INDEX"
+          test -d "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses"
+          test -d "$REGISTRY_DIR/$REGISTRY_VERSION/inert"
+          test "$(find "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses" -name artifact.json -type f | wc -l | tr -d ' ')" = "8"
+          test "$(find "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses" -name rootfs.tar.gz -type f | wc -l | tr -d ' ')" = "8"
+          jq -e \
+            --arg schema "harness-registry/v2" \
+            --arg version "$REGISTRY_VERSION" \
+            '.schemaVersion == $schema and .version == $version and (.harnesses | length == 8)' \
+            "$INDEX" >/dev/null
+
+          for HARNESS_ID in \
+            deepagent codex-sdk claude-agent-sdk antigravity-sdk \
+            opencode pi oh-my-pi deepseek
+          do
+            HARNESS_DIR="$REGISTRY_DIR/$REGISTRY_VERSION/harnesses/$HARNESS_ID"
+            DESCRIPTOR="$HARNESS_DIR/artifact.json"
+            ARCHIVE="$HARNESS_DIR/rootfs.tar.gz"
+            test -f "$DESCRIPTOR"
+            test -f "$ARCHIVE"
+
+            INDEX_SHA="$(jq -er --arg id "$HARNESS_ID" \
+              '.harnesses | map(select(.id == $id)) | if length == 1 then .[0].sha256 else error("missing or duplicate harness") end' \
+              "$INDEX")"
+            DESCRIPTOR_SHA="$(jq -er --arg id "$HARNESS_ID" \
+              'select(.harnessId == $id) | .artifact.sha256' "$DESCRIPTOR")"
+            DESCRIPTOR_SIZE="$(jq -er '.artifact.sizeBytes' "$DESCRIPTOR")"
+            ACTUAL_SHA="$(sha256sum "$ARCHIVE" | cut -d ' ' -f 1)"
+            ACTUAL_SIZE="$(stat -c %s "$ARCHIVE")"
+
+            [[ "$INDEX_SHA" =~ ^[0-9a-f]{64}$ ]]
+            test "$INDEX_SHA" = "$DESCRIPTOR_SHA"
+            test "$INDEX_SHA" = "$ACTUAL_SHA"
+            test "$DESCRIPTOR_SIZE" = "$ACTUAL_SIZE"
+          done
+
+          LEAKED="$(find "$REGISTRY_DIR" -type f \( \
+            -name 'auth.json' -o -name '.env' -o -name '.env.*' -o \
+            -name '*.pem' -o -name '*.key' -o -name 'credentials.json' -o \
+            -name '.netrc' -o -name 'mcp-tokens' -o -name '.credentials.json' -o \
+            -name '.credentials.yaml' \
+          \) -print -quit)"
+          if [ -n "$LEAKED" ]; then
+            echo "Secret-like file in registry payload: $LEAKED" >&2
+            exit 1
+          fi
 
       - id: auth
+        name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
@@ -58,106 +375,64 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Resolve + validate version
-        id: ver
-        run: |
-          set -euo pipefail
-          # sources.json is the SINGLE source of truth for the bundle version.
-          VERSION="$(jq -r '.version' "$SOURCES")"
-          case "$VERSION" in
-            "" | "." | ".." | */* | *[!A-Za-z0-9._-]*)
-              echo "Refusing invalid registry version: '$VERSION'" >&2
-              exit 1
-              ;;
-          esac
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Resolved registry version: $VERSION"
-
-      - name: Pre-flight — validate sources + print plan
-        run: node scripts/build-harness-registry.js --sources "$SOURCES" --dry-run
-
-      - name: Build dual (original + generic) bundle
-        # All marketplaces in sources.json are public (no clone auth needed).
-        # GIT_TERMINAL_PROMPT=0 makes any unreachable clone fail fast instead of
-        # hanging; the build fails loudly (no --allow-incomplete) if a pinned plugin
-        # cannot be resolved, so a broken ref surfaces immediately.
+      - name: Stage, verify, and publish index last
         env:
-          GIT_TERMINAL_PROMPT: "0"
+          REGISTRY_BUCKET_OVERRIDE: ${{ vars.REGISTRY_BUCKET }}
+          REGISTRY_DIR: ${{ runner.temp }}/registry
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -euo pipefail
-          node scripts/build-harness-registry.js \
-            --sources "$SOURCES" \
-            --out "$RUNNER_TEMP/registry" \
-            --work "$RUNNER_TEMP/clones"
-
-      - name: Secret-leak guard (fail before publish)
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          set -euo pipefail
-          BUNDLE="$RUNNER_TEMP/registry"
-          # Structural (filename) check — precise, no false positives on skill docs
-          # that legitimately discuss "Authorization"/"Bearer"/"token".
-          LEAKED="$(find "$BUNDLE" -type f \( \
-            -name 'auth.json' -o -name '.env' -o -name '.env.*' -o \
-            -name '*.pem' -o -name '*.key' -o -name 'credentials.json' -o \
-            -name '.netrc' -o -name '.mcp.json' -o -name 'mcp.json' \) || true)"
-          if [ -n "$LEAKED" ]; then
-            echo "Secret-like files leaked into the bundle:" >&2
-            echo "$LEAKED" >&2
+          BUCKET="${REGISTRY_BUCKET_OVERRIDE:-aifleet-registry}"
+          if [[ ! "$BUCKET" =~ ^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$ ]] || [[ "$BUCKET" == *..* ]]; then
+            echo "Refusing invalid registry bucket name: $BUCKET" >&2
             exit 1
           fi
-          # MCP descriptors must carry only transport fields (no env/headers).
-          MCPDIR="$BUNDLE/$VERSION/generic/mcp" node -e '
-            const fs = require("fs"), path = require("path");
-            const dir = process.env.MCPDIR;
-            if (!fs.existsSync(dir)) process.exit(0);
-            for (const f of fs.readdirSync(dir)) {
-              const j = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
-              if ("env" in j || "headers" in j) {
-                console.error("MCP descriptor retained secrets:", f);
-                process.exit(1);
-              }
-            }
-            console.log("MCP descriptors clean.");
-          '
-          echo "Secret-leak guard passed."
 
-      - name: Publish versioned bundle to GCS
-        env:
-          # REGISTRY_BUCKET is an OPTIONAL repo VAR (trusted config) overriding the
-          # FIXED default bucket name (must match var.registry_bucket_name). Read via
-          # env only — never untrusted github.event.*.
-          REGISTRY_BUCKET_OVERRIDE: ${{ vars.REGISTRY_BUCKET }}
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          set -euo pipefail
-          BUCKET="${REGISTRY_BUCKET_OVERRIDE:-aifleet-registry}"
-          SRC="$RUNNER_TEMP/registry/${VERSION}"
-          test -d "$SRC" || { echo "Built bundle missing at $SRC" >&2; exit 1; }
-          DEST="gs://${BUCKET}/${VERSION}"
-          echo "Publishing $SRC -> $DEST"
+          LOCAL_V1="$REGISTRY_DIR/$REGISTRY_VERSION"
+          STAGING="gs://${BUCKET}/.staging/harness-registry/${RUN_ID}-${RUN_ATTEMPT}/${REGISTRY_VERSION}"
+          DEST="gs://${BUCKET}/${REGISTRY_VERSION}"
+          INDEX_SHA="$(sha256sum "$LOCAL_V1/registry.json" | cut -d ' ' -f 1)"
 
-          # rsync mirrors ONLY this version's prefix; -d prunes objects removed
-          # from source WITHIN <version>/, so other version prefixes are untouched
-          # and pinned older versions keep working (multi-version coexistence).
-          gsutil -m rsync -r -d "$SRC" "$DEST"
+          # Upload and checksum-compare the complete payload in an undiscoverable
+          # staging prefix. A second checksum-mode rsync verifies object contents.
+          gsutil -m rsync -r -d "$LOCAL_V1" "$STAGING"
+          gsutil -m rsync -r -c "$LOCAL_V1" "$STAGING"
+          STAGED_INDEX_SHA="$(gsutil cat "$STAGING/registry.json" | sha256sum | cut -d ' ' -f 1)"
+          test "$INDEX_SHA" = "$STAGED_INDEX_SHA"
 
-          # Refresh the top-level pointer to the newest published version.
-          gsutil cp "$RUNNER_TEMP/registry/registry-manifest.json" "gs://${BUCKET}/registry-manifest.json"
+          LOCAL_COUNT="$(find "$LOCAL_V1" -type f | wc -l | tr -d ' ')"
+          gsutil ls -r "$STAGING" > "$RUNNER_TEMP/staged-listing.txt"
+          REMOTE_COUNT="$(awk '/^gs:\/\// && $0 !~ /:$/ { count += 1 } END { print count + 0 }' "$RUNNER_TEMP/staged-listing.txt")"
+          test "$LOCAL_COUNT" = "$REMOTE_COUNT"
 
-          echo "Published harness registry to $DEST"
+          # Mirror payload trees first. registry.json is the discoverability
+          # boundary. Remove the prior index before changing its same-path
+          # payload, so an interrupted publish cannot expose a mixed generation;
+          # the replacement index is copied only after both trees succeed.
+          if gsutil -q stat "$DEST/registry.json"; then
+            gsutil rm "$DEST/registry.json"
+          fi
+          gsutil -m rsync -r -d "$STAGING/harnesses" "$DEST/harnesses"
+          gsutil -m rsync -r -d "$STAGING/inert" "$DEST/inert"
+          gsutil cp "$STAGING/registry.json" "$DEST/registry.json"
 
-      - name: Post — sanity list
-        env:
-          REGISTRY_BUCKET_OVERRIDE: ${{ vars.REGISTRY_BUCKET }}
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          set -euo pipefail
-          BUCKET="${REGISTRY_BUCKET_OVERRIDE:-aifleet-registry}"
-          # List to a file first — piping `gsutil ls` straight into `head` makes
-          # gsutil hit a BrokenPipe (exit 120) when head closes early, which under
-          # `set -o pipefail` would fail this step even though the publish succeeded.
-          gsutil ls -r "gs://${BUCKET}/${VERSION}" > "$RUNNER_TEMP/listing.txt"
-          echo "Published objects: $(wc -l < "$RUNNER_TEMP/listing.txt")"
-          head -50 "$RUNNER_TEMP/listing.txt"
+          PUBLISHED_INDEX_SHA="$(gsutil cat "$DEST/registry.json" | sha256sum | cut -d ' ' -f 1)"
+          test "$INDEX_SHA" = "$PUBLISHED_INDEX_SHA"
+
+          # v2 replaces the former dual-format v1 contract. Remove only its
+          # three known legacy locations, and only after the new index is live.
+          if gsutil ls "$DEST/original/**" >/dev/null 2>&1; then
+            gsutil -m rm -r "$DEST/original"
+          fi
+          if gsutil ls "$DEST/generic/**" >/dev/null 2>&1; then
+            gsutil -m rm -r "$DEST/generic"
+          fi
+          LEGACY_POINTER="gs://${BUCKET}/registry-manifest.json"
+          if gsutil -q stat "$LEGACY_POINTER"; then
+            gsutil rm "$LEGACY_POINTER"
+          fi
+
+          gsutil ls -r "$DEST" > "$RUNNER_TEMP/published-listing.txt"
+          echo "Published $LOCAL_COUNT verified objects to $DEST"
+          head -50 "$RUNNER_TEMP/published-listing.txt"

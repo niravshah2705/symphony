@@ -4,7 +4,7 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 20
+**Total communities**: 21
 
 ## Communities
 
@@ -14,12 +14,13 @@ Auto-generated documentation from the code knowledge graph community structure.
 | core-org | 505 | [core-org.md](core-org.md) |
 | e2e-json | 91 | [e2e-json.md](e2e-json.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
-| gcp-cloud | 46 | [gcp-cloud.md](gcp-cloud.md) |
+| gcp-cloud | 51 | [gcp-cloud.md](gcp-cloud.md) |
+| harness-registry-install | 149 | [harness-registry-install.md](harness-registry-install.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
-| pipeline-stage | 620 | [pipeline-stage.md](pipeline-stage.md) |
+| registry-stage | 653 | [registry-stage.md](registry-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
 | routes-test:planner | 187 | [routes-test-planner.md](routes-test-planner.md) |
-| scripts-module | 38 | [scripts-module.md](scripts-module.md) |
+| scripts-module | 42 | [scripts-module.md](scripts-module.md) |
 | src-back | 18 | [src-back.md](src-back.md) |
 | src-body | 17 | [src-body.md](src-body.md) |
 | src-body | 17 | [src-body-2.md](src-body-2.md) |

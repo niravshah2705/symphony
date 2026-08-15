@@ -6,8 +6,8 @@
 
 Directory-based community: deploy/gcp
 
-- **Size**: 46 nodes
-- **Cohesion**: 0.1651
+- **Size**: 51 nodes
+- **Cohesion**: 0.1613
 - **Dominant Language**: javascript
 
 ## Members
@@ -36,6 +36,11 @@ Directory-based community: deploy/gcp
 | enabled_version | Function | ./deploy/gcp/deploy.sh | 199-202 |
 | build_push | Function | ./deploy/gcp/deploy.sh | 226-229 |
 | build_push_context | Function | ./deploy/gcp/deploy.sh | 230-233 |
+| workflowText | Function | ./deploy/gcp/harness-registry-workflow.test.js | 10-12 |
+| jobBlock | Function | ./deploy/gcp/harness-registry-workflow.test.js | 14-21 |
+| test:harness registry workflow has isolated resolve, eight-leg build, assemble, and publish jobs@L23 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 23-56 |
+| test:only the publish job can mint cloud credentials@L58 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 58-99 |
+| test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 101-134 |
 | read | Function | ./deploy/gcp/pipeline-infra.test.js | 10-10 |
 | variableBlock | Function | ./deploy/gcp/pipeline-infra.test.js | 12-17 |
 | resourceBlock | Function | ./deploy/gcp/pipeline-infra.test.js | 19-24 |
@@ -59,7 +64,8 @@ Directory-based community: deploy/gcp
 | test:tester image installs the capability-free network sandbox for repository commands@L405 | Test | ./deploy/gcp/pipeline-infra.test.js | 405-414 |
 | test:direct settings operator access is IAM-gated and never public@L416 | Test | ./deploy/gcp/pipeline-infra.test.js | 416-421 |
 | test:tenant vault token derivation root is limited to settings and provisioner@L423 | Test | ./deploy/gcp/pipeline-infra.test.js | 423-433 |
-| test:orchestrator can consume run-bound deployment approvals from settings@L435 | Test | ./deploy/gcp/pipeline-infra.test.js | 435-444 |
+
+*... and 1 more members.*
 
 ## Execution Flows
 
@@ -69,36 +75,36 @@ Directory-based community: deploy/gcp
 
 ### Outgoing
 
-- `match` (107 edge(s))
-- `indexOf` (35 edge(s))
-- `doesNotMatch` (26 edge(s))
-- `slice` (17 edge(s))
-- `equal` (15 edge(s))
-- `ok` (10 edge(s))
+- `match` (138 edge(s))
+- `indexOf` (46 edge(s))
+- `doesNotMatch` (32 edge(s))
+- `slice` (20 edge(s))
+- `equal` (20 edge(s))
+- `ok` (18 edge(s))
+- `deepEqual` (9 edge(s))
 - `gcloud` (8 edge(s))
-- `deepEqual` (6 edge(s))
+- `map` (6 edge(s))
+- `matchAll` (6 edge(s))
 - `echo` (6 edge(s))
+- `notEqual` (5 edge(s))
 - `spawnSync` (5 edge(s))
-- `map` (4 edge(s))
-- `matchAll` (4 edge(s))
 - `printf` (4 edge(s))
 - `docker` (4 edge(s))
-- `notEqual` (4 edge(s))
 
 ### Incoming
 
-- `match` (107 edge(s))
+- `match` (138 edge(s))
+- `indexOf` (37 edge(s))
 - `./deploy/gcp/deploy.sh` (34 edge(s))
+- `doesNotMatch` (32 edge(s))
 - `./deploy/gcp/bootstrap.sh` (32 edge(s))
-- `indexOf` (27 edge(s))
-- `doesNotMatch` (26 edge(s))
 - `./deploy/gcp/pipeline-infra.test.js` (22 edge(s))
-- `equal` (15 edge(s))
-- `slice` (14 edge(s))
+- `equal` (20 edge(s))
+- `ok` (17 edge(s))
+- `slice` (15 edge(s))
 - `./deploy/gcp/analytics-config.test.js` (12 edge(s))
-- `ok` (9 edge(s))
-- `deepEqual` (6 edge(s))
+- `deepEqual` (9 edge(s))
+- `./deploy/gcp/harness-registry-workflow.test.js` (5 edge(s))
+- `map` (5 edge(s))
+- `matchAll` (5 edge(s))
 - `spawnSync` (5 edge(s))
-- `sort` (3 edge(s))
-- `map` (3 edge(s))
-- `filter` (3 edge(s))
