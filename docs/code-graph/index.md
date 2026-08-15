@@ -18,7 +18,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
 | pipeline-stage | 620 | [pipeline-stage.md](pipeline-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
-| routes-test:planner | 186 | [routes-test-planner.md](routes-test-planner.md) |
+| routes-test:planner | 187 | [routes-test-planner.md](routes-test-planner.md) |
 | scripts-module | 38 | [scripts-module.md](scripts-module.md) |
 | src-back | 18 | [src-back.md](src-back.md) |
 | src-body | 17 | [src-body.md](src-body.md) |
@@ -27,6 +27,6 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
 | src-stage | 179 | [src-stage.md](src-stage.md) |
 | src-test:build | 152 | [src-test-build.md](src-test-build.md) |
-| src-test:coder | 103 | [src-test-coder.md](src-test-coder.md) |
+| src-test:coder | 104 | [src-test-coder.md](src-test-coder.md) |
 | src-token | 112 | [src-token.md](src-token.md) |
 | views-render | 698 | [views-render.md](views-render.md) |

@@ -66,7 +66,6 @@ export async function renderSettings(view) {
     projectId: identity.defaultProjectId,
     identity,
   };
-  ctx.scopeState = scopeState;
   const ctx = {
     settings,
     presets,

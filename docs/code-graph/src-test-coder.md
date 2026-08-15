@@ -6,8 +6,8 @@
 
 Directory-based community: services/coder
 
-- **Size**: 103 nodes
-- **Cohesion**: 0.1711
+- **Size**: 104 nodes
+- **Cohesion**: 0.1733
 - **Dominant Language**: javascript
 
 ## Members
@@ -57,15 +57,15 @@ Directory-based community: services/coder
 | test:coder publishes a terminal failure and deduplicates command execution across both routes@L282 | Test | ./services/coder/src/pipeline-stage.test.js | 282-319 |
 | warn | Function | ./services/coder/src/pipeline-stage.test.js | 296-296 |
 | error | Function | ./services/coder/src/pipeline-stage.test.js | 296-296 |
-| test:coder rejects label-only recovery for a terminal aidone work item as ambiguous@L321 | Test | ./services/coder/src/pipeline-stage.test.js | 321-340 |
-| test:coder rejects a completed model verdict without a broker merge receipt@L342 | Test | ./services/coder/src/pipeline-stage.test.js | 342-357 |
-| test:coder rejects an issue linked to another native project before any mutation@L359 | Test | ./services/coder/src/pipeline-stage.test.js | 359-380 |
+| test:coder pipeline router constructs its configured default authentication middleware@L321 | Test | ./services/coder/src/pipeline-stage.test.js | 321-330 |
+| test:coder rejects label-only recovery for a terminal aidone work item as ambiguous@L332 | Test | ./services/coder/src/pipeline-stage.test.js | 332-351 |
+| test:coder rejects a completed model verdict without a broker merge receipt@L353 | Test | ./services/coder/src/pipeline-stage.test.js | 353-368 |
+| test:coder rejects an issue linked to another native project before any mutation@L370 | Test | ./services/coder/src/pipeline-stage.test.js | 370-391 |
 | messageWorkspaceContext | Function | ./services/coder/src/pubsub.js | 30-32 |
 | messageWorkspaceContextInput | Function | ./services/coder/src/pubsub.js | 34-39 |
 | runMessageInWorkspace | Function | ./services/coder/src/pubsub.js | 41-46 |
-| shouldRunAutonomousTick | Function | ./services/coder/src/pubsub.js | 48-56 |
 
-*... and 53 more members.*
+*... and 54 more members.*
 
 ## Execution Flows
 
@@ -75,7 +75,7 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (60 edge(s))
+- `equal` (62 edge(s))
 - `deepEqual` (32 edge(s))
 - `String` (28 edge(s))
 - `push` (19 edge(s))
@@ -93,10 +93,10 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (60 edge(s))
+- `equal` (62 edge(s))
 - `deepEqual` (32 edge(s))
+- `./services/coder/src/pipeline-stage.test.js` (24 edge(s))
 - `./services/coder/src/pipeline-stage.js` (23 edge(s))
-- `./services/coder/src/pipeline-stage.test.js` (23 edge(s))
 - `./services/coder/src/pubsub.js` (18 edge(s))
 - `./services/coder/src/run-ticket.js` (18 edge(s))
 - `./services/coder/src/job.test.js` (12 edge(s))

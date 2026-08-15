@@ -414,7 +414,7 @@ function createCoderPipelineRouter(options = {}) {
     firestoreFactory: options.firestoreFactory,
   });
   const internalAuth = options.internalAuth || pipelineStageAuth({ mode: 'direct' });
-  const pushMiddleware = options.pushAuth || pipelineStageAuth({ mode: CONFIG.MESSAGING_MODE });
+  const pushMiddleware = options.pushAuth || pipelineStageAuth();
   const router = express.Router();
   router.post('/internal/pipeline/stage', internalAuth, handler);
   router.post('/pubsub/pipeline-stage', pushMiddleware, handler);

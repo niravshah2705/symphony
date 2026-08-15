@@ -6,8 +6,8 @@
 
 Directory-based community: services/planner
 
-- **Size**: 186 nodes
-- **Cohesion**: 0.1772
+- **Size**: 187 nodes
+- **Cohesion**: 0.1783
 - **Dominant Language**: javascript
 
 ## Members
@@ -43,6 +43,7 @@ Directory-based community: services/planner
 | test:planner stage routes authenticate, execute a duplicate once, and republish its terminal result@L203 | Test | ./services/planner/src/pipeline-stage.test.js | 203-242 |
 | warn | Function | ./services/planner/src/pipeline-stage.test.js | 215-215 |
 | error | Function | ./services/planner/src/pipeline-stage.test.js | 215-215 |
+| test:planner pipeline router constructs its configured default authentication middleware@L244 | Test | ./services/planner/src/pipeline-stage.test.js | 244-253 |
 | stream | Function | ./services/planner/src/pubsub.js | 30-38 |
 | messageWorkspaceContext | Function | ./services/planner/src/pubsub.js | 40-42 |
 | messageWorkspaceContextInput | Function | ./services/planner/src/pubsub.js | 44-50 |
@@ -63,9 +64,8 @@ Directory-based community: services/planner
 | warn | Function | ./services/planner/src/pubsub.test.js | 229-229 |
 | test:planner orchestrator rollout keeps billing sweeps but suppresses autonomous planning@L222 | Test | ./services/planner/src/pubsub.test.js | 222-238 |
 | redactUserText | Function | ./services/planner/src/routes/agent.js | 57-57 |
-| requestWorkspaceContext | Function | ./services/planner/src/routes/agent.js | 61-70 |
 
-*... and 136 more members.*
+*... and 137 more members.*
 
 ## Execution Flows
 
@@ -79,7 +79,7 @@ Directory-based community: services/planner
 
 ### Outgoing
 
-- `equal` (165 edge(s))
+- `equal` (167 edge(s))
 - `deepEqual` (40 edge(s))
 - `ok` (34 edge(s))
 - `resolve` (30 edge(s))
@@ -97,7 +97,7 @@ Directory-based community: services/planner
 
 ### Incoming
 
-- `equal` (165 edge(s))
+- `equal` (167 edge(s))
 - `./services/planner/src/routes/agent.js` (57 edge(s))
 - `./services/planner/src/routes/settings.js` (57 edge(s))
 - `deepEqual` (40 edge(s))
@@ -106,7 +106,7 @@ Directory-based community: services/planner
 - `ok` (27 edge(s))
 - `./services/planner/src/routes/agent.test.js` (27 edge(s))
 - `./services/planner/src/routes/businesses.js` (24 edge(s))
-- `./services/planner/src/pipeline-stage.test.js` (20 edge(s))
+- `./services/planner/src/pipeline-stage.test.js` (21 edge(s))
 - `./services/planner/src/pipeline-stage.js` (18 edge(s))
 - `resolve` (16 edge(s))
 - `after` (16 edge(s))

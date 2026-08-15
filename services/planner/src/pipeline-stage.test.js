@@ -240,3 +240,14 @@ test('planner stage routes authenticate, execute a duplicate once, and republish
   assert.equal(published[0].status, 'succeeded');
   assert.equal(published[0].stage, 'plan');
 });
+
+test('planner pipeline router constructs its configured default authentication middleware', () => {
+  const router = createPlannerPipelineRouter({
+    initStore: async () => {},
+    execute: async () => ({ status: 'succeeded', output: {} }),
+    publish: async () => {},
+  });
+
+  assert.equal(routeStack(router, '/internal/pipeline/stage').length, 2);
+  assert.equal(routeStack(router, '/pubsub/pipeline-stage').length, 2);
+});

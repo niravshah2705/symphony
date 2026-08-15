@@ -318,6 +318,17 @@ test('coder publishes a terminal failure and deduplicates command execution acro
   assert.ok(published.every((result) => result.error.code === 'model_execution_failed'));
 });
 
+test('coder pipeline router constructs its configured default authentication middleware', () => {
+  const router = createCoderPipelineRouter({
+    initStore: async () => {},
+    execute: async () => ({ status: 'succeeded', output: {} }),
+    publish: async () => {},
+  });
+
+  assert.equal(routeStack(router, '/internal/pipeline/stage').length, 2);
+  assert.equal(routeStack(router, '/pubsub/pipeline-stage').length, 2);
+});
+
 test('coder rejects label-only recovery for a terminal aidone work item as ambiguous', async () => {
   let runCalls = 0;
   await assert.rejects(
