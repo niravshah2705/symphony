@@ -194,7 +194,7 @@ function emitWorkspaceState(job = null, context) {
 }
 
 /** Queue a project for enrichment, skipping duplicates already in flight. */
-function enqueue({ projectId, projectName, assumedRole, orgId = null, nativeProjectId = null }) {
+function enqueue({ projectId, projectName, assumedRole, orgId = null, nativeProjectId = null, llmGateway = null }) {
   const activeContext = schedulerContext();
   const requestedContext = normalizeWorkspaceContext({
     organizationId: orgId || activeContext.organizationId,
@@ -237,6 +237,9 @@ function enqueue({ projectId, projectName, assumedRole, orgId = null, nativeProj
     projectName: projectName || projectId,
     ...(selectedOrgId ? { orgId: selectedOrgId } : {}),
     ...(selectedProjectId ? { nativeProjectId: selectedProjectId } : {}),
+    // Per-request LLM gateway feature flag, persisted so the async tick that
+    // eventually runs this job re-resolves the model through the gateway.
+    ...(llmGateway === 'langsmith' ? { llmGateway: 'langsmith' } : {}),
     status: 'pending',
     assumedRole: assumedRole ? { id: assumedRole.id, name: assumedRole.name } : null,
     createdAt: new Date().toISOString(),
@@ -322,6 +325,7 @@ async function runJob(job, { apiKey, keys, llm, config }, dependencies = {}) {
       effectivePolicy,
       orgId: policyOrgId,
       nativeProjectId: policyProjectId,
+      llmGateway: job.llmGateway || null,
     };
     // Enforce the models policy on the resolved model. A denied model may move
     // only to an allowed same-provider preset; otherwise enforcement fails
@@ -583,7 +587,15 @@ async function processPending(context, options = {}) {
       return runJobInWorkspace(
         job,
         selected,
-        () => runJob(job, { apiKey, keys, llm, config }),
+        async () => {
+          // A job flagged at enqueue time routes its model through the LLM
+          // gateway: re-resolve with the flag merged into settings (resolveLlm
+          // reads only settings). Unflagged jobs reuse the tick's probed llm.
+          const jobLlm = job.llmGateway === 'langsmith'
+            ? await resolveLlm({ ...settings, llmGateway: 'langsmith' }, 'thinking')
+            : llm;
+          return runJob(job, { apiKey, keys, llm: jobLlm, config });
+        },
       );
     });
     // A project-scoped tick must never prune another native project's history.

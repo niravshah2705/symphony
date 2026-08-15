@@ -80,7 +80,7 @@ test('middleware forwards selection to org service and attaches validated contex
   assert.equal(nexted, true);
   assert.deepEqual(req.fleetContext, { organizationId: 'org-2', projectId: 'project-2' });
   assert.equal(call[1], '/api/v1/me/context');
-  assert.deepEqual(call[2].context, { organizationId: 'org-2', projectId: 'project-2' });
+  assert.deepEqual(call[2].context, { organizationId: 'org-2', projectId: 'project-2', llmGateway: '' });
 });
 
 test('middleware fails closed when authoritative context is unavailable', async () => {

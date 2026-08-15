@@ -44,11 +44,11 @@ test('coder workers bind their job context across init and execution concurrentl
   assert.deepEqual(executed.map(({ input }) => input), [
     {
       issueId: 'issue-a', conversationId: 'conversation-a', blocking: true,
-      orgId: 'org-a', nativeProjectId: 'project-a',
+      orgId: 'org-a', nativeProjectId: 'project-a', llmGateway: null,
     },
     {
       issueId: 'issue-b', conversationId: 'conversation-b', blocking: true,
-      orgId: 'org-b', nativeProjectId: 'project-b',
+      orgId: 'org-b', nativeProjectId: 'project-b', llmGateway: null,
     },
   ]);
   assert.deepEqual(exits, [{ suffix: 'a', code: 0 }, { suffix: 'b', code: 0 }]);

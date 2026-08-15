@@ -129,6 +129,8 @@ router.post('/planner', pushAuth(), async (req, res) => {
           assumedRole: message.assumedRole || null,
           orgId: orgId || null,
           nativeProjectId: nativeProjectId || null,
+          // Re-allowlist at the trust boundary; only the known selector survives.
+          llmGateway: message.llmGateway === 'langsmith' ? 'langsmith' : null,
         });
         stream(
           conversationId,

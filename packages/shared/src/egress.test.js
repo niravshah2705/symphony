@@ -6,7 +6,9 @@ const {
   SENTINEL_TOKEN,
   EGRESS_ROUTES,
   EGRESS_SECRET_KEYS,
+  LLM_GATEWAY_ORG_HEADER,
   egressUrl,
+  llmGatewayUpstream,
   matchRoute,
   normalizeProxyBase,
 } = require('./egress');
@@ -69,4 +71,29 @@ test('EGRESS_SECRET_KEYS is the deduped set of static-key routes', () => {
 test('SENTINEL_TOKEN is a non-empty constant', () => {
   assert.equal(typeof SENTINEL_TOKEN, 'string');
   assert.ok(SENTINEL_TOKEN.length > 0);
+});
+
+test('llmGateway route: one /llmgw prefix covers all three gateway surfaces', () => {
+  assert.equal(matchRoute('/llmgw/v1/chat/completions').route, EGRESS_ROUTES.llmGateway);
+  assert.equal(matchRoute('/llmgw/v1/chat/completions').rest, '/v1/chat/completions');
+  assert.equal(matchRoute('/llmgw/v1/messages').rest, '/v1/messages');
+  assert.equal(matchRoute('/llmgw/v1/responses').rest, '/v1/responses');
+});
+
+test('llmGatewayUpstream: hosted default, env override with trailing slash stripped', () => {
+  assert.equal(llmGatewayUpstream({}), 'https://gateway.smith.langchain.com');
+  assert.equal(
+    llmGatewayUpstream({ LANGSMITH_GATEWAY_URL: 'https://dataplane.example/gateway/' }),
+    'https://dataplane.example/gateway'
+  );
+});
+
+test('llmGateway route uses the dedicated gateway secret, not the tracing key', () => {
+  assert.equal(EGRESS_ROUTES.llmGateway.auth, 'llm-gateway');
+  assert.equal(EGRESS_ROUTES.llmGateway.secretKey, 'langsmithGatewayApiKey');
+  assert.ok(EGRESS_SECRET_KEYS.includes('langsmithGatewayApiKey'));
+});
+
+test('LLM_GATEWAY_ORG_HEADER names the per-org policy header', () => {
+  assert.equal(LLM_GATEWAY_ORG_HEADER, 'x-fleet-org-id');
 });

@@ -33,6 +33,24 @@ export function getRequestContext() {
   return requestContext;
 }
 
+/**
+ * Per-request LLM gateway opt-in (feature flag). Stored in localStorage —
+ * `localStorage.setItem('aiFleetLlmGateway', 'langsmith')` — and read per
+ * request so toggling applies immediately. The gateway honors the resulting
+ * X-AI-Fleet-Llm-Gateway header only on deployments with the LLM gateway
+ * configured; everywhere else requests follow the standard route.
+ */
+const LLM_GATEWAY_STORAGE_KEY = 'aiFleetLlmGateway';
+
+function llmGatewayFlag() {
+  try {
+    const value = (window.localStorage.getItem(LLM_GATEWAY_STORAGE_KEY) || '').trim().toLowerCase();
+    return value === 'langsmith' ? 'langsmith' : '';
+  } catch (_) {
+    return ''; /* storage unavailable (private mode) — flag off */
+  }
+}
+
 /** EventSource cannot send custom headers, so its short-lived token-bound context
  * is repeated in the URL. Normal fetch requests use the headers below. */
 export function requestContextQuerySuffix() {
@@ -103,12 +121,15 @@ async function request(path, options = {}) {
   // caller-supplied values so every request carries the final validated choice.
   headers.delete('X-AI-Fleet-Organization-Id');
   headers.delete('X-AI-Fleet-Project-Id');
+  headers.delete('X-AI-Fleet-Llm-Gateway');
   if (requestContext.organizationId) {
     headers.set('X-AI-Fleet-Organization-Id', requestContext.organizationId);
   }
   if (requestContext.projectId) {
     headers.set('X-AI-Fleet-Project-Id', requestContext.projectId);
   }
+  const llmGateway = llmGatewayFlag();
+  if (llmGateway) headers.set('X-AI-Fleet-Llm-Gateway', llmGateway);
   // `application/json` is not a CORS-safelisted request header. Adding it to a
   // bodyless anonymous GET forces an otherwise unnecessary OPTIONS preflight.
   // Mutations that actually carry our JSON payload still advertise it.

@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 692 nodes
-- **Cohesion**: 0.4728
+- **Size**: 693 nodes
+- **Cohesion**: 0.4725
 - **Dominant Language**: javascript
 
 ## Members
@@ -25,19 +25,20 @@ Directory-based community: public/js
 | contextId | Function | ./public/js/api.js | 19-22 |
 | setRequestContext | Function | ./public/js/api.js | 25-30 |
 | getRequestContext | Function | ./public/js/api.js | 32-34 |
-| requestContextQuerySuffix | Function | ./public/js/api.js | 38-44 |
-| refreshAccessToken | Function | ./public/js/api.js | 49-52 |
-| readJson | Function | ./public/js/api.js | 54-60 |
-| errorCode | Function | ./public/js/api.js | 64-67 |
-| getApiBase | Function | ./public/js/api.js | 75-78 |
-| setApiBase | Function | ./public/js/api.js | 89-92 |
-| notifyAuthenticationRequired | Function | ./public/js/api.js | 94-98 |
-| request | Function | ./public/js/api.js | 100-175 |
-| openStream | Function | ./public/js/api.js | 192-264 |
-| mintFailureCanRetry | Function | ./public/js/api.js | 198-202 |
-| scheduleReconnect | Function | ./public/js/api.js | 204-217 |
-| connect | Function | ./public/js/api.js | 219-246 |
-| close | Function | ./public/js/api.js | 258-262 |
+| llmGatewayFlag | Function | ./public/js/api.js | 45-52 |
+| requestContextQuerySuffix | Function | ./public/js/api.js | 56-62 |
+| refreshAccessToken | Function | ./public/js/api.js | 67-70 |
+| readJson | Function | ./public/js/api.js | 72-78 |
+| errorCode | Function | ./public/js/api.js | 82-85 |
+| getApiBase | Function | ./public/js/api.js | 93-96 |
+| setApiBase | Function | ./public/js/api.js | 107-110 |
+| notifyAuthenticationRequired | Function | ./public/js/api.js | 112-116 |
+| request | Function | ./public/js/api.js | 118-196 |
+| openStream | Function | ./public/js/api.js | 213-285 |
+| mintFailureCanRetry | Function | ./public/js/api.js | 219-223 |
+| scheduleReconnect | Function | ./public/js/api.js | 225-238 |
+| connect | Function | ./public/js/api.js | 240-267 |
+| close | Function | ./public/js/api.js | 279-283 |
 | ensureStylesheet | Function | ./public/js/app.js | 42-64 |
 | route | Function | ./public/js/app.js | 66-85 |
 | load | Function | ./public/js/app.js | 71-83 |
@@ -63,9 +64,8 @@ Directory-based community: public/js
 | authProviderButtons | Function | ./public/js/app.js | 478-496 |
 | beginSignOut | Function | ./public/js/app.js | 498-506 |
 | renderAuthControl | Function | ./public/js/app.js | 508-639 |
-| renderAuthenticationGate | Function | ./public/js/app.js | 641-700 |
 
-*... and 642 more members.*
+*... and 643 more members.*
 
 ## Execution Flows
 
@@ -91,7 +91,7 @@ Directory-based community: public/js
 - `String` (109 edge(s))
 - `push` (82 edge(s))
 - `filter` (78 edge(s))
-- `trim` (76 edge(s))
+- `trim` (77 edge(s))
 - `isArray` (64 edge(s))
 - `has` (62 edge(s))
 - `setAttribute` (61 edge(s))
@@ -103,7 +103,7 @@ Directory-based community: public/js
 
 ### Incoming
 
-- `./public/js/api.js` (159 edge(s))
+- `./public/js/api.js` (160 edge(s))
 - `./public/js/workflow-designer-model.mjs` (145 edge(s))
 - `./public/js/views/settings.js` (128 edge(s))
 - `./public/js/views/agent.js` (98 edge(s))

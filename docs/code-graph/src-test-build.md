@@ -6,22 +6,22 @@
 
 Directory-based community: services/proxy
 
-- **Size**: 62 nodes
-- **Cohesion**: 0.0687
+- **Size**: 67 nodes
+- **Cohesion**: 0.0704
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| configuredProxyOrgId | Function | ./services/proxy/src/credentials.js | 33-40 |
-| FailClosed | Class | ./services/proxy/src/credentials.js | 45-51 |
-| constructor | Function | ./services/proxy/src/credentials.js | 46-50 |
-| resolveSecrets | Function | ./services/proxy/src/credentials.js | 62-69 |
-| clearCache | Function | ./services/proxy/src/credentials.js | 71-73 |
-| managedValue | Function | ./services/proxy/src/credentials.js | 75-78 |
-| resolveStaticKey | Function | ./services/proxy/src/credentials.js | 86-98 |
-| buildInjection | Function | ./services/proxy/src/credentials.js | 104-170 |
+| configuredProxyOrgId | Function | ./services/proxy/src/credentials.js | 35-42 |
+| FailClosed | Class | ./services/proxy/src/credentials.js | 47-53 |
+| constructor | Function | ./services/proxy/src/credentials.js | 48-52 |
+| resolveSecrets | Function | ./services/proxy/src/credentials.js | 64-71 |
+| clearCache | Function | ./services/proxy/src/credentials.js | 73-75 |
+| managedValue | Function | ./services/proxy/src/credentials.js | 77-80 |
+| resolveStaticKey | Function | ./services/proxy/src/credentials.js | 88-100 |
+| buildInjection | Function | ./services/proxy/src/credentials.js | 106-188 |
 | getClaudeAuth | Function | ./services/proxy/src/oauth-manager.js | 20-23 |
 | getCodexAuth | Function | ./services/proxy/src/oauth-manager.js | 25-31 |
 | parseBundle | Function | ./services/proxy/src/oauth-manager.js | 35-44 |
@@ -34,11 +34,11 @@ Directory-based community: services/proxy
 | test:org Codex resolver fails closed for an explicitly missing customer bundle@L94 | Test | ./services/proxy/src/oauth-manager.test.js | 94-114 |
 | test:org Codex resolver fails closed for a malformed customer bundle@L116 | Test | ./services/proxy/src/oauth-manager.test.js | 116-136 |
 | test:parseBundle rejects invalid vault values@L138 | Test | ./services/proxy/src/oauth-manager.test.js | 138-141 |
-| buildUpstreamUrl | Function | ./services/proxy/src/proxy.js | 37-40 |
-| buildForwardHeaders | Function | ./services/proxy/src/proxy.js | 43-59 |
-| filterResponseHeaders | Function | ./services/proxy/src/proxy.js | 62-70 |
-| sendJson | Function | ./services/proxy/src/proxy.js | 72-75 |
-| createProxyHandler | Function | ./services/proxy/src/proxy.js | 84-132 |
+| buildUpstreamUrl | Function | ./services/proxy/src/proxy.js | 40-43 |
+| buildForwardHeaders | Function | ./services/proxy/src/proxy.js | 46-62 |
+| filterResponseHeaders | Function | ./services/proxy/src/proxy.js | 65-73 |
+| sendJson | Function | ./services/proxy/src/proxy.js | 75-78 |
+| createProxyHandler | Function | ./services/proxy/src/proxy.js | 87-135 |
 | test:buildUpstreamUrl appends the path remainder@L9 | Test | ./services/proxy/src/proxy.test.js | 9-17 |
 | test:buildForwardHeaders strips inbound auth and retargets Host@L19 | Test | ./services/proxy/src/proxy.test.js | 19-44 |
 | test:buildForwardHeaders cannot smuggle an OAuth beta header into API-key auth@L46 | Test | ./services/proxy/src/proxy.test.js | 46-54 |
@@ -57,15 +57,15 @@ Directory-based community: services/proxy
 | test:buildInjection: metered OpenAI route uses its selected static key@L167 | Test | ./services/proxy/src/proxy.test.js | 167-174 |
 | test:buildInjection: metered OpenAI route honors the preflight-preferred org token bundle@L176 | Test | ./services/proxy/src/proxy.test.js | 176-188 |
 | test:buildInjection: codex chatgpt route injects Bearer + chatgpt-account-id@L190 | Test | ./services/proxy/src/proxy.test.js | 190-198 |
+| test:buildForwardHeaders strips an inbound x-api-key sentinel@L202 | Test | ./services/proxy/src/proxy.test.js | 202-211 |
+| test:buildInjection: llm-gateway injects Bearer + the per-org policy header@L213 | Test | ./services/proxy/src/proxy.test.js | 213-219 |
+| test:buildInjection: llm-gateway omits the org header on the shared stack@L221 | Test | ./services/proxy/src/proxy.test.js | 221-227 |
+| test:buildInjection: llm-gateway FAILS CLOSED without a key@L229 | Test | ./services/proxy/src/proxy.test.js | 229-236 |
+| test:buildInjection: llm-gateway falls back to the mounted platform env key@L238 | Test | ./services/proxy/src/proxy.test.js | 238-244 |
 | s2sAuthHeader | Function | ./services/proxy/src/secrets-client.js | 22-35 |
 | s2sRequest | Function | ./services/proxy/src/secrets-client.js | 37-81 |
-| s2sGet | Function | ./services/proxy/src/secrets-client.js | 83-85 |
-| fetchOrgSecrets | Function | ./services/proxy/src/secrets-client.js | 88-94 |
-| fetchManagedSecrets | Function | ./services/proxy/src/secrets-client.js | 97-99 |
-| rotateOrgCodexTokens | Function | ./services/proxy/src/secrets-client.js | 101-109 |
-| test:organization secret resolution uses the organization-bound bearer@L8 | Test | ./services/proxy/src/secrets-client.test.js | 8-19 |
 
-*... and 12 more members.*
+*... and 17 more members.*
 
 ## Execution Flows
 
@@ -79,13 +79,13 @@ Directory-based community: services/proxy
 
 ### Outgoing
 
-- `equal` (54 edge(s))
-- `buildInjection` (12 edge(s))
+- `equal` (57 edge(s))
+- `buildInjection` (16 edge(s))
+- `deepEqual` (10 edge(s))
 - `String` (7 edge(s))
-- `deepEqual` (7 edge(s))
+- `rejects` (6 edge(s))
 - `stringify` (5 edge(s))
 - `ensureFreshOrgCodexTokens` (5 edge(s))
-- `rejects` (5 edge(s))
 - `end` (5 edge(s))
 - `trim` (4 edge(s))
 - `fetchOrgSecrets` (4 edge(s))
@@ -97,18 +97,18 @@ Directory-based community: services/proxy
 
 ### Incoming
 
-- `equal` (54 edge(s))
-- `./services/proxy/src/proxy.test.js` (18 edge(s))
+- `equal` (57 edge(s))
+- `./services/proxy/src/proxy.test.js` (23 edge(s))
 - `./services/proxy/src/credentials.js` (15 edge(s))
+- `buildInjection` (15 edge(s))
 - `./services/proxy/src/oauth-manager.test.js` (14 edge(s))
 - `./services/proxy/src/server.test.js` (14 edge(s))
-- `buildInjection` (11 edge(s))
+- `deepEqual` (10 edge(s))
 - `./services/proxy/src/proxy.js` (9 edge(s))
 - `./services/proxy/src/secrets-client.js` (9 edge(s))
 - `./services/proxy/src/oauth-manager.js` (8 edge(s))
-- `deepEqual` (7 edge(s))
+- `rejects` (6 edge(s))
 - `ensureFreshOrgCodexTokens` (5 edge(s))
-- `rejects` (5 edge(s))
 - `match` (3 edge(s))
+- `buildForwardHeaders` (3 edge(s))
 - `buildUpstreamUrl` (3 edge(s))
-- `configuredProxyOrgId` (3 edge(s))

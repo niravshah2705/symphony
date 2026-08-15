@@ -10,24 +10,24 @@ Auto-generated documentation from the code knowledge graph community structure.
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-model | 1758 | [agent-model.md](agent-model.md) |
-| core-org | 456 | [core-org.md](core-org.md) |
+| agent-model | 1787 | [agent-model.md](agent-model.md) |
+| core-org | 457 | [core-org.md](core-org.md) |
 | e2e-json | 91 | [e2e-json.md](e2e-json.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
 | gcp-cloud | 44 | [gcp-cloud.md](gcp-cloud.md) |
 | harness-registry-install | 149 | [harness-registry-install.md](harness-registry-install.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
-| registry-stage | 649 | [registry-stage.md](registry-stage.md) |
+| registry-stage | 650 | [registry-stage.md](registry-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
 | routes-test:planner | 179 | [routes-test-planner.md](routes-test-planner.md) |
 | scripts-module | 38 | [scripts-module.md](scripts-module.md) |
-| src-auth | 296 | [src-auth.md](src-auth.md) |
+| src-auth | 301 | [src-auth.md](src-auth.md) |
 | src-back | 17 | [src-back.md](src-back.md) |
 | src-body | 17 | [src-body.md](src-body.md) |
 | src-body | 17 | [src-body-2.md](src-body-2.md) |
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
 | src-stage | 179 | [src-stage.md](src-stage.md) |
-| src-test:build | 62 | [src-test-build.md](src-test-build.md) |
-| src-test:coder | 102 | [src-test-coder.md](src-test-coder.md) |
+| src-test:build | 67 | [src-test-build.md](src-test-build.md) |
+| src-test:coder | 105 | [src-test-coder.md](src-test-coder.md) |
 | src-token | 110 | [src-token.md](src-token.md) |
-| views-render | 692 | [views-render.md](views-render.md) |
+| views-render | 693 | [views-render.md](views-render.md) |

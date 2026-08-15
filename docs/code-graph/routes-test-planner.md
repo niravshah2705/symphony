@@ -53,16 +53,16 @@ Directory-based community: services/planner
 | isRejectedWorkspaceMessage | Function | ./services/planner/src/pubsub.js | 97-99 |
 | plannerHandler | Function | ./services/planner/src/pubsub.test.js | 11-15 |
 | invoke | Function | ./services/planner/src/pubsub.test.js | 17-28 |
-| test:planner Pub/Sub scopes every conversation event to the native workspace context@L30 | Test | ./services/planner/src/pubsub.test.js | 30-77 |
-| test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L79 | Test | ./services/planner/src/pubsub.test.js | 79-102 |
-| test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L104 | Test | ./services/planner/src/pubsub.test.js | 104-154 |
-| byOrg | Function | ./services/planner/src/pubsub.test.js | 145-145 |
-| context | Function | ./services/planner/src/pubsub.test.js | 146-146 |
-| test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L156 | Test | ./services/planner/src/pubsub.test.js | 156-184 |
-| test:planner autonomous ticks fail closed only on an unpinned shared cloud runtime@L186 | Test | ./services/planner/src/pubsub.test.js | 186-220 |
-| error | Function | ./services/planner/src/pubsub.test.js | 229-229 |
-| warn | Function | ./services/planner/src/pubsub.test.js | 229-229 |
-| test:planner orchestrator rollout keeps billing sweeps but suppresses autonomous planning@L222 | Test | ./services/planner/src/pubsub.test.js | 222-238 |
+| test:planner Pub/Sub scopes every conversation event to the native workspace context@L30 | Test | ./services/planner/src/pubsub.test.js | 30-78 |
+| test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L80 | Test | ./services/planner/src/pubsub.test.js | 80-103 |
+| test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L105 | Test | ./services/planner/src/pubsub.test.js | 105-155 |
+| byOrg | Function | ./services/planner/src/pubsub.test.js | 146-146 |
+| context | Function | ./services/planner/src/pubsub.test.js | 147-147 |
+| test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L157 | Test | ./services/planner/src/pubsub.test.js | 157-185 |
+| test:planner autonomous ticks fail closed only on an unpinned shared cloud runtime@L187 | Test | ./services/planner/src/pubsub.test.js | 187-221 |
+| error | Function | ./services/planner/src/pubsub.test.js | 230-230 |
+| warn | Function | ./services/planner/src/pubsub.test.js | 230-230 |
+| test:planner orchestrator rollout keeps billing sweeps but suppresses autonomous planning@L223 | Test | ./services/planner/src/pubsub.test.js | 223-239 |
 | redactUserText | Function | ./services/planner/src/routes/agent.js | 55-55 |
 
 *... and 129 more members.*

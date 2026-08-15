@@ -27,6 +27,9 @@
  *   'codex-chatgpt'  → Codex OAuth bearer (+ chatgpt-account-id), refreshed by proxy
  *   'codex-api'      → Codex OAuth bearer against the metered API
  *   'git'            → git smart-HTTP basic (x-access-token:<PAT>)
+ *   'llm-gateway'    → LangSmith LLM Gateway bearer + per-org policy header;
+ *                      FAILS CLOSED on a missing key (billing gateway — never
+ *                      forward unauthenticated)
  */
 
 // Sentinel the agent sends in place of a real credential so SDKs that require a
@@ -34,6 +37,20 @@
 // The proxy STRIPS all inbound auth and injects the real credential, so this
 // value is never sent upstream and carries no privilege.
 const SENTINEL_TOKEN = 'egress-proxy-sentinel';
+
+// Header the proxy stamps on LangSmith LLM Gateway calls so per-org spend/rate
+// policies can key on the tenant (configured as the customer-identifier header
+// in the LangSmith policy UI).
+const LLM_GATEWAY_ORG_HEADER = 'x-fleet-org-id';
+
+/**
+ * LangSmith LLM Gateway upstream base. The one env-read exception in this module
+ * (config.js requires this file, so the override cannot live there): the hosted
+ * gateway by default, or the BYOC/self-hosted data plane via LANGSMITH_GATEWAY_URL.
+ */
+function llmGatewayUpstream(env = process.env) {
+  return normalizeProxyBase(env.LANGSMITH_GATEWAY_URL) || 'https://gateway.smith.langchain.com';
+}
 
 // Order matters only for readability; matching is longest-prefix (see matchRoute).
 const EGRESS_ROUTES = Object.freeze({
@@ -49,6 +66,11 @@ const EGRESS_ROUTES = Object.freeze({
   githubMcp: Object.freeze({ prefix: '/github-mcp', upstream: 'https://api.githubcopilot.com/mcp/', auth: 'apiKey', scheme: 'bearer', secretKey: 'githubToken' }),
   git: Object.freeze({ prefix: '/git/github', upstream: 'https://github.com', auth: 'git', secretKey: 'githubToken' }),
   langsmith: Object.freeze({ prefix: '/langsmith', upstream: 'https://api.smith.langchain.com', auth: 'apiKey', scheme: 'x-api-key', secretKey: 'langsmithApiKey' }),
+  // LangSmith LLM Gateway (feature-flagged per request, browser header
+  // X-AI-Fleet-Llm-Gateway). One prefix serves all three surfaces —
+  // /v1/chat/completions, /v1/messages, /v1/responses. The secret is the
+  // gateway WORKSPACE key, deliberately distinct from the tracing key above.
+  llmGateway: Object.freeze({ prefix: '/llmgw', upstream: llmGatewayUpstream(), auth: 'llm-gateway', secretKey: 'langsmithGatewayApiKey' }),
 });
 
 /** All vault secret keys any static-key route can request (dedup, stable order). */
@@ -96,7 +118,9 @@ module.exports = {
   SENTINEL_TOKEN,
   EGRESS_ROUTES,
   EGRESS_SECRET_KEYS,
+  LLM_GATEWAY_ORG_HEADER,
   normalizeProxyBase,
   egressUrl,
+  llmGatewayUpstream,
   matchRoute,
 };

@@ -59,6 +59,7 @@ function createCompatibilityHandlers({
         conversationId: conversation.id,
         orgId: context.organizationId || null,
         nativeProjectId: context.projectId || null,
+        llmGateway: context.llmGateway || null,
       });
       return res.status(202).json({ accepted: true, conversationId: conversation.id });
     }
@@ -100,6 +101,7 @@ function createCompatibilityHandlers({
         conversationId: conversation.id,
         orgId: context.organizationId || null,
         nativeProjectId: context.projectId || null,
+        llmGateway: context.llmGateway || null,
       });
       return res.status(202).json({ accepted: true, conversationId: conversation.id });
     }

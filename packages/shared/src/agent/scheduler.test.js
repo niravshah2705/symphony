@@ -703,6 +703,24 @@ test('enqueue defaults to the ALS selection and emits only that workspace', asyn
 
   assert.equal(job.orgId, 'org-enqueue');
   assert.equal(job.nativeProjectId, 'native-enqueue');
+  // No per-request llm-gateway flag => the job record carries no dead field.
+  assert.equal('llmGateway' in job, false);
   assert.equal(emitted.length, 2);
   assert.deepEqual(emitted.map(([, selected]) => selected), [context, context]);
+
+  const flagged = await runWithWorkspaceContext(context, () => scheduler.enqueue({
+    projectId: 'linear-enqueue-flagged',
+    projectName: 'Enqueue flagged',
+    assumedRole: { id: 'role-1', name: 'Planner' },
+    llmGateway: 'langsmith',
+  }));
+  assert.equal(flagged.llmGateway, 'langsmith');
+
+  const unknownSelector = await runWithWorkspaceContext(context, () => scheduler.enqueue({
+    projectId: 'linear-enqueue-unknown',
+    projectName: 'Enqueue unknown',
+    assumedRole: { id: 'role-1', name: 'Planner' },
+    llmGateway: 'other-router',
+  }));
+  assert.equal('llmGateway' in unknownSelector, false);
 });

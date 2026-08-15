@@ -2,7 +2,7 @@
 
 const path = require('path');
 const { ROLES } = require('./authz');
-const { egressUrl, normalizeProxyBase } = require('./egress');
+const { egressUrl, llmGatewayUpstream, normalizeProxyBase } = require('./egress');
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -29,6 +29,26 @@ const proxied = (prefix, explicit, fallback) =>
 const EGRESS_PROXY_INCLUDE_SDK =
   Boolean(EGRESS_PROXY_URL) &&
   String(process.env.EGRESS_PROXY_INCLUDE_SDK || '').trim().toLowerCase() === 'true';
+
+/**
+ * LangSmith LLM Gateway — a PER-REQUEST feature flag, not a deployment mode.
+ * `enabled` (LLM_GATEWAY_ENABLED) is only the server-side availability gate: a
+ * request carrying the browser header X-AI-Fleet-Llm-Gateway: langsmith is
+ * honored only when it is true. Base-URL selection happens per run in
+ * resolveLlm — never here — so unflagged traffic keeps today's provider base
+ * URLs byte-for-byte. In egress-proxy mode the bases point at the sidecar's
+ * /llmgw prefix (sentinel token, sidecar injects the workspace key); otherwise
+ * they hit the gateway directly with the store-overlay key.
+ */
+const LLM_GATEWAY_UPSTREAM = llmGatewayUpstream(process.env);
+const LLM_GATEWAY = Object.freeze({
+  enabled: String(process.env.LLM_GATEWAY_ENABLED || '').trim().toLowerCase() === 'true',
+  url: LLM_GATEWAY_UPSTREAM,
+  // Anthropic surface (SDK appends /v1/messages) and OpenAI surface (SDK
+  // appends /chat/completions | /responses).
+  claudeBaseUrl: proxied('/llmgw', null, LLM_GATEWAY_UPSTREAM),
+  openaiBaseUrl: proxied('/llmgw/v1', null, `${LLM_GATEWAY_UPSTREAM}/v1`),
+});
 
 // Application login modes: 'disabled' (local single-user workflow — open) and
 // 'firebase' (Google SSO via Firebase Authentication).
@@ -659,6 +679,8 @@ const CONFIG = Object.freeze({
   EGRESS_PROXY_URL,
   // Also route the native SDK runtimes + LangSmith tracing through the proxy.
   EGRESS_PROXY_INCLUDE_SDK,
+  // Per-request LangSmith LLM Gateway feature flag (availability gate + bases).
+  LLM_GATEWAY,
   LINEAR_API_URL: proxied('/linear', process.env.LINEAR_API_URL, 'https://api.linear.app/graphql'),
   GITHUB_API_ORIGIN: proxied('/github-api', process.env.GITHUB_API_ORIGIN, 'https://api.github.com'),
   GIT_HTTPS_ORIGIN: proxied('/git/github', process.env.GIT_HTTPS_ORIGIN, 'https://github.com'),

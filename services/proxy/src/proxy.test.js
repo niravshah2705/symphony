@@ -196,3 +196,49 @@ test('buildInjection: codex chatgpt route injects Bearer + chatgpt-account-id', 
   assert.equal(headers.authorization, 'Bearer acc');
   assert.equal(headers['chatgpt-account-id'], 'acct-123');
 });
+
+// --- LangSmith LLM gateway route ---------------------------------------------
+
+test('buildForwardHeaders strips an inbound x-api-key sentinel', () => {
+  const out = buildForwardHeaders(
+    { 'x-api-key': 'egress-proxy-sentinel', 'content-type': 'application/json' },
+    'https://gateway.smith.langchain.com/v1/messages',
+    { authorization: 'Bearer lsv2_gw' }
+  );
+  assert.equal(out['x-api-key'], undefined);
+  assert.equal(out.authorization, 'Bearer lsv2_gw');
+  assert.equal(out['content-type'], 'application/json');
+});
+
+test('buildInjection: llm-gateway injects Bearer + the per-org policy header', async () => {
+  const headers = await credentials.buildInjection(EGRESS_ROUTES.llmGateway, {
+    resolved: { secrets: { langsmithGatewayApiKey: { source: 'managed', value: 'lsv2_gw' } } },
+    env: { PROXY_ORG_ID: 'org-42' },
+  });
+  assert.deepEqual(headers, { authorization: 'Bearer lsv2_gw', 'x-fleet-org-id': 'org-42' });
+});
+
+test('buildInjection: llm-gateway omits the org header on the shared stack', async () => {
+  const headers = await credentials.buildInjection(EGRESS_ROUTES.llmGateway, {
+    resolved: { secrets: { langsmithGatewayApiKey: { source: 'managed', value: 'lsv2_gw' } } },
+    env: {},
+  });
+  assert.deepEqual(headers, { authorization: 'Bearer lsv2_gw' });
+});
+
+test('buildInjection: llm-gateway FAILS CLOSED without a key', async () => {
+  // Unlike generic apiKey routes (forward unauthenticated, upstream rejects),
+  // a missing workspace key must never reach the billing gateway.
+  await assert.rejects(
+    () => credentials.buildInjection(EGRESS_ROUTES.llmGateway, { resolved: { secrets: {} }, env: {} }),
+    (err) => err.name === 'FailClosed' && err.status === 502
+  );
+});
+
+test('buildInjection: llm-gateway falls back to the mounted platform env key', async () => {
+  const headers = await credentials.buildInjection(EGRESS_ROUTES.llmGateway, {
+    resolved: null,
+    env: { LANGSMITH_GATEWAY_API_KEY: 'lsv2_env' },
+  });
+  assert.deepEqual(headers, { authorization: 'Bearer lsv2_env' });
+});

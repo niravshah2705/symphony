@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { CONFIG } = require('../config');
 const { SENTINEL_TOKEN } = require('../egress');
+const log = require('../logger');
 const { PlanSchema, ViabilitySchema, ResumeSchema, normalizePlan } = require('./schema');
 const { webSearch, webSearchMany, formatResults } = require('./search');
 const { createChatModel } = require('./llm');
@@ -63,6 +64,11 @@ function configureTracing(keys) {
     process.env.LANGCHAIN_PROJECT = keys.langsmithProject || 'linear-manager';
     process.env.LANGSMITH_ENDPOINT = endpoint;
     process.env.LANGCHAIN_ENDPOINT = endpoint;
+    if (CONFIG.LLM_GATEWAY.enabled) {
+      // The LangSmith gateway auto-traces every routed call; a flagged run with
+      // agent-side tracing to the SAME workspace records duplicate LLM spans.
+      log.warn('LLM gateway is enabled alongside LangSmith tracing — gateway-routed runs will double-trace unless they use separate projects/workspaces.');
+    }
   }
   return on;
 }
