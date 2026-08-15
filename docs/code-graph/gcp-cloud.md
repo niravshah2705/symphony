@@ -7,7 +7,7 @@
 Directory-based community: deploy/gcp
 
 - **Size**: 52 nodes
-- **Cohesion**: 0.1620
+- **Cohesion**: 0.1610
 - **Dominant Language**: javascript
 
 ## Members
@@ -54,16 +54,16 @@ Directory-based community: deploy/gcp
 | test:optional image resolver uses a SHA placeholder only while disabled@L183 | Test | ./deploy/gcp/pipeline-infra.test.js | 183-229 |
 | test:required image resolution failure makes the tag output step fail@L231 | Test | ./deploy/gcp/pipeline-infra.test.js | 231-253 |
 | test:pipeline topology enforces dedicated topics and brokered agent egress@L255 | Test | ./deploy/gcp/pipeline-infra.test.js | 255-305 |
-| test:stream-token broker owns the signing secret behind private IAM@L307 | Test | ./deploy/gcp/pipeline-infra.test.js | 307-395 |
-| test@L365 | Test | ./deploy/gcp/pipeline-infra.test.js | 365-365 |
-| name | Function | ./deploy/gcp/pipeline-infra.test.js | 366-366 |
-| test@L380 | Test | ./deploy/gcp/pipeline-infra.test.js | 380-380 |
-| test:proxy artifact retention preserves a multi-revision broker rollback window@L397 | Test | ./deploy/gcp/pipeline-infra.test.js | 397-402 |
-| test:OpenSWE upstream is trusted proxy-only deployment configuration@L404 | Test | ./deploy/gcp/pipeline-infra.test.js | 404-420 |
-| test:orchestrator image remains free of the heavy shared agent SDK workspace@L422 | Test | ./deploy/gcp/pipeline-infra.test.js | 422-428 |
-| test:coder image installs the seccomp launcher for model-controlled commands@L430 | Test | ./deploy/gcp/pipeline-infra.test.js | 430-440 |
-| test:tester image installs the capability-free network sandbox for repository commands@L442 | Test | ./deploy/gcp/pipeline-infra.test.js | 442-451 |
-| test:direct settings operator access is IAM-gated and never public@L453 | Test | ./deploy/gcp/pipeline-infra.test.js | 453-458 |
+| test:stream-token broker owns the signing secret behind private IAM@L307 | Test | ./deploy/gcp/pipeline-infra.test.js | 307-403 |
+| test@L373 | Test | ./deploy/gcp/pipeline-infra.test.js | 373-373 |
+| name | Function | ./deploy/gcp/pipeline-infra.test.js | 374-374 |
+| test@L388 | Test | ./deploy/gcp/pipeline-infra.test.js | 388-388 |
+| test:proxy artifact retention preserves a multi-revision broker rollback window@L405 | Test | ./deploy/gcp/pipeline-infra.test.js | 405-410 |
+| test:OpenSWE upstream is trusted proxy-only deployment configuration@L412 | Test | ./deploy/gcp/pipeline-infra.test.js | 412-428 |
+| test:orchestrator image remains free of the heavy shared agent SDK workspace@L430 | Test | ./deploy/gcp/pipeline-infra.test.js | 430-436 |
+| test:coder image installs the seccomp launcher for model-controlled commands@L438 | Test | ./deploy/gcp/pipeline-infra.test.js | 438-448 |
+| test:tester image installs the capability-free network sandbox for repository commands@L450 | Test | ./deploy/gcp/pipeline-infra.test.js | 450-459 |
+| test:direct settings operator access is IAM-gated and never public@L461 | Test | ./deploy/gcp/pipeline-infra.test.js | 461-466 |
 
 *... and 2 more members.*
 
@@ -81,10 +81,10 @@ Directory-based community: deploy/gcp
 - `slice` (22 edge(s))
 - `equal` (21 edge(s))
 - `ok` (20 edge(s))
-- `deepEqual` (9 edge(s))
+- `deepEqual` (10 edge(s))
 - `gcloud` (8 edge(s))
-- `map` (6 edge(s))
-- `matchAll` (6 edge(s))
+- `map` (7 edge(s))
+- `matchAll` (7 edge(s))
 - `echo` (6 edge(s))
 - `notEqual` (5 edge(s))
 - `spawnSync` (5 edge(s))
@@ -103,8 +103,8 @@ Directory-based community: deploy/gcp
 - `ok` (19 edge(s))
 - `slice` (17 edge(s))
 - `./deploy/gcp/analytics-config.test.js` (12 edge(s))
-- `deepEqual` (9 edge(s))
+- `deepEqual` (10 edge(s))
+- `map` (6 edge(s))
+- `matchAll` (6 edge(s))
 - `./deploy/gcp/harness-registry-workflow.test.js` (5 edge(s))
-- `map` (5 edge(s))
-- `matchAll` (5 edge(s))
 - `spawnSync` (5 edge(s))

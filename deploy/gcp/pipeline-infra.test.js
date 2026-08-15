@@ -331,6 +331,14 @@ test('stream-token broker owns the signing secret behind private IAM', () => {
   assert.match(broker, /command\s*=\s*\["node"\]/);
   assert.match(broker, /args\s*=\s*\["services\/proxy\/src\/stream-token-server\.js"\]/);
   assert.match(broker, /name\s*=\s*"STREAM_TOKEN_BIND_HOST"\s+value\s*=\s*"0\.0\.0\.0"/);
+  const brokerPublicAuthEnv = [...broker.matchAll(
+    /env\s*\{\s*name\s*=\s*"(AUTH_MODE|FIREBASE_[A-Z0-9_]+)"\s*value\s*=\s*("[^"]*"|[^\s}]+)\s*\}/g,
+  )].map(([, name, value]) => [name, value]);
+  assert.deepEqual(brokerPublicAuthEnv, [
+    ['AUTH_MODE', '"firebase"'],
+    ['FIREBASE_PROJECT_ID', 'var.project_id'],
+    ['FIREBASE_API_KEY', 'data.google_firebase_web_app_config.default.api_key'],
+  ]);
   assert.match(broker, /name\s*=\s*"STREAM_TOKEN_SECRET"/);
   assert.match(broker, /memory\s*=\s*"512Mi"/);
   assert.doesNotMatch(broker, /memory\s*=\s*"256Mi"/);

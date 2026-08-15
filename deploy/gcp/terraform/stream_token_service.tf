@@ -54,6 +54,21 @@ resource "google_cloud_run_v2_service" "stream_token_broker" {
       }
 
       env {
+        name  = "AUTH_MODE"
+        value = "firebase"
+      }
+
+      env {
+        name  = "FIREBASE_PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
+        name  = "FIREBASE_API_KEY"
+        value = data.google_firebase_web_app_config.default.api_key
+      }
+
+      env {
         name = "STREAM_TOKEN_SECRET"
         value_source {
           secret_key_ref {
