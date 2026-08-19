@@ -6,14 +6,18 @@
 
 Directory-based community: e2e
 
-- **Size**: 111 nodes
-- **Cohesion**: 0.1028
+- **Size**: 115 nodes
+- **Cohesion**: 0.1026
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| json | Function | ./e2e/adlc.spec.js | 5-11 |
+| test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-26 |
+| test:ADLC manifest is served as a static resource@L28 | Test | ./e2e/adlc.spec.js | 28-35 |
+| test:existing Agent workspace route still renders directly@L37 | Test | ./e2e/adlc.spec.js | 37-45 |
 | json | Function | ./e2e/agent-jobs.spec.js | 5-11 |
 | mockShell | Function | ./e2e/agent-jobs.spec.js | 13-62 |
 | mixedJobs | Function | ./e2e/agent-jobs.spec.js | 64-97 |
@@ -60,12 +64,8 @@ Directory-based community: e2e
 | test:parallel application-auth failures expire an authenticated session once and stop private loading@L342 | Test | ./e2e/anonymous-agent.spec.js | 342-367 |
 | json | Function | ./e2e/organization-flow.spec.js | 9-11 |
 | makeOrgState | Function | ./e2e/organization-flow.spec.js | 16-27 |
-| createStateOrg | Function | ./e2e/organization-flow.spec.js | 29-40 |
-| organizationIdFor | Function | ./e2e/organization-flow.spec.js | 42-47 |
-| installStubs | Function | ./e2e/organization-flow.spec.js | 49-189 |
-| page1 | Function | ./e2e/organization-flow.spec.js | 85-85 |
 
-*... and 61 more members.*
+*... and 65 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (512 edge(s))
-- `locator` (256 edge(s))
-- `route` (161 edge(s))
+- `expect` (525 edge(s))
+- `locator` (263 edge(s))
+- `route` (165 edge(s))
 - `getByRole` (104 edge(s))
-- `toBeVisible` (99 edge(s))
-- `toHaveCount` (68 edge(s))
+- `toBeVisible` (101 edge(s))
+- `toHaveCount` (69 edge(s))
 - `evaluate` (67 edge(s))
-- `toBe` (54 edge(s))
-- `click` (50 edge(s))
-- `toHaveAttribute` (50 edge(s))
+- `toBe` (56 edge(s))
+- `toHaveAttribute` (51 edge(s))
+- `click` (51 edge(s))
 - `toEqual` (48 edge(s))
 - `request` (47 edge(s))
-- `fulfill` (43 edge(s))
-- `goto` (43 edge(s))
-- `toContainText` (42 edge(s))
+- `goto` (45 edge(s))
+- `fulfill` (44 edge(s))
+- `toContainText` (43 edge(s))
 
 ### Incoming
 
-- `expect` (489 edge(s))
-- `locator` (244 edge(s))
-- `route` (103 edge(s))
+- `expect` (502 edge(s))
+- `locator` (251 edge(s))
+- `route` (107 edge(s))
 - `getByRole` (99 edge(s))
-- `toBeVisible` (94 edge(s))
-- `toHaveCount` (65 edge(s))
+- `toBeVisible` (96 edge(s))
+- `toHaveCount` (66 edge(s))
 - `evaluate` (63 edge(s))
-- `toBe` (51 edge(s))
-- `click` (48 edge(s))
-- `toHaveAttribute` (46 edge(s))
+- `toBe` (53 edge(s))
+- `click` (49 edge(s))
+- `toHaveAttribute` (47 edge(s))
 - `toEqual` (46 edge(s))
-- `toContainText` (41 edge(s))
-- `goto` (40 edge(s))
-- `toHaveText` (35 edge(s))
+- `goto` (42 edge(s))
+- `toContainText` (42 edge(s))
+- `toHaveText` (36 edge(s))
 - `url` (28 edge(s))
