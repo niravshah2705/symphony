@@ -1,0 +1,19 @@
+{
+  "name": "ADLC by AI Fleet",
+  "short_name": "ADLC",
+  "description": "Agentic Development Life Cycle workspace for human-governed AI software delivery.",
+  "start_url": "/adlc/",
+  "scope": "/adlc/",
+  "display": "standalone",
+  "background_color": "#f7f5ef",
+  "theme_color": "#16201d",
+  "categories": ["developer", "productivity"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='38' fill='%2316201d'/%3E%3Cpath d='M45 134h102v16H45zM45 42h102v16H45zM45 73h64v16H45zM45 104h82v16H45z' fill='%23f7f5ef'/%3E%3Ccircle cx='139' cy='82' r='10' fill='%23e77d3c'/%3E%3Ccircle cx='151' cy='113' r='10' fill='%234f8f77'/%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -224,6 +224,8 @@ jobs:
         env:
           # Public GA4 web-stream id. Empty keeps analytics disabled.
           GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ vars.GOOGLE_ANALYTICS_MEASUREMENT_ID }}
+          ADLC_TRY_NOW_URL: ${{ vars.ADLC_TRY_NOW_URL || '/#/agent' }}
+          ADLC_CANONICAL_ORIGIN: ${{ vars.ADLC_CANONICAL_ORIGIN }}
         run: |
           set -euo pipefail
           PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
@@ -240,6 +242,7 @@ jobs:
             "window.__GA_MEASUREMENT_ID__='$GOOGLE_ANALYTICS_MEASUREMENT_ID';" \
             "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
             > public/config.js
+          node -e "const fs=require('fs'); const cfg={tryNowUrl:process.env.ADLC_TRY_NOW_URL || '/#/agent', canonicalOrigin:process.env.ADLC_CANONICAL_ORIGIN || ''}; fs.writeFileSync('public/adlc/config.js', 'window.__ADLC_CONFIG__ = ' + JSON.stringify(cfg, null, 2) + ';\\n');"
           npx --yes firebase-tools@13 deploy --only hosting \
             --project "${{ vars.GCP_PROJECT_ID }}" --non-interactive
 
