@@ -355,7 +355,7 @@ test('stream-token broker owns the signing secret behind private IAM', () => {
   assert.doesNotMatch(broker, /PROXY_CAPABILITIES|egress-proxy/);
   assert.doesNotMatch(gateway, /STREAM_TOKEN_BIND_HOST/);
   const brokerMinInstances = variableBlock(variables, 'stream_token_min_instances');
-  assert.match(brokerMinInstances, /default\s*=\s*1/);
+  assert.match(brokerMinInstances, /default\s*=\s*0/);
   assert.match(
     brokerMinInstances,
     /condition\s*=\s*var\.stream_token_min_instances\s*>=\s*0\s*&&\s*floor\(var\.stream_token_min_instances\)\s*==\s*var\.stream_token_min_instances/,

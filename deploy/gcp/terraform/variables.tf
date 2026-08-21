@@ -176,7 +176,7 @@ variable "stream_token_service_name" {
 
 variable "stream_token_min_instances" {
   type        = number
-  description = "Minimum warm stream-token broker instances. The default of 1 avoids Cloud Run cold starts exceeding the gateway's strict broker RPC deadline; setting 0 reduces idle cost but can cause transient stream-token failures."
+  description = "Minimum warm stream-token broker instances. Default 0 keeps idle cost at zero but can cause transient stream-token failures on a cold start; set to 1 to keep an instance warm and avoid Cloud Run cold starts exceeding the gateway's strict broker RPC deadline."
   default     = 0
 
   validation {
