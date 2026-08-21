@@ -205,6 +205,15 @@ async function request(path, options = {}) {
 const STREAM_RECONNECT_BASE_MS = 1_000;
 const STREAM_RECONNECT_MAX_MS = 30_000;
 const STREAM_MAX_CONSECUTIVE_FAILURES = 6;
+// A connection that dies before staying open this long is "flapping" rather
+// than healthy, and keeps counting toward the consecutive-failure budget
+// instead of resetting it — otherwise a platform regression that force-closes
+// streams on a short, regular cadence (e.g. an unconfigured Cloud Run request
+// timeout) looks like a "fresh success" every time and the breaker never
+// engages. 60s clears the 15s SSE heartbeat (services/gateway/src/sse.js
+// HEARTBEAT_MS) several times over while staying well below any reasonable
+// connection ceiling.
+const STREAM_HEALTHY_MS = 60_000;
 
 /**
  * Open an SSE stream that owns its reconnection, and return a `{ close() }`
@@ -217,6 +226,7 @@ async function openStream({ mintToken, buildUrl, onEvent }) {
   let stopped = false;
   let failures = 0;
   let retryTimer = null;
+  let openedAt = null;
 
   const mintFailureCanRetry = (error) => {
     if (error?.terminal || error?.code === 'authentication_required') return false;
@@ -250,8 +260,9 @@ async function openStream({ mintToken, buildUrl, onEvent }) {
       throw error;
     }
     if (stopped) return;
+    openedAt = null;
     source = new EventSource(buildUrl(token, minted));
-    source.onopen = () => { failures = 0; }; // a live connection resets the backoff
+    source.onopen = () => { openedAt = Date.now(); };
     source.onmessage = (event) => {
       try {
         onEvent(JSON.parse(event.data));
@@ -261,8 +272,13 @@ async function openStream({ mintToken, buildUrl, onEvent }) {
     };
     source.onerror = () => {
       // The native reconnect would reuse the (soon-)expired token, so take over:
-      // close and re-mint after a backoff rather than let the stream die.
+      // close and re-mint after a backoff rather than let the stream die. Only
+      // reset the backoff if this connection was actually healthy for a while
+      // (see STREAM_HEALTHY_MS) — a connection that opens and dies faster than
+      // that is flapping and must keep counting toward the failure budget even
+      // though `onopen` fired.
       if (stopped) return;
+      if (openedAt !== null && Date.now() - openedAt >= STREAM_HEALTHY_MS) failures = 0;
       try { source.close(); } catch (_) { /* ignore */ }
       scheduleReconnect();
     };

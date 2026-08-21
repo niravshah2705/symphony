@@ -234,7 +234,15 @@ resource "google_cloud_run_v2_service" "gateway" {
   }
 
   template {
-    service_account                  = google_service_account.gateway.email
+    # The gateway serves long-lived SSE connections (/api/agent/stream,
+    # /api/agent/workspace-stream — see services/gateway/src/sse.js) that must
+    # outlive Cloud Run's 300s default request timeout. Unconditional (unlike
+    # planner/coder_control's pipeline_on-gated timeout), since the gateway's
+    # streaming need is unrelated to the pipeline-orchestrator feature flag.
+    # 3600s is Cloud Run v2's maximum allowed request timeout for services.
+    service_account = google_service_account.gateway.email
+    timeout         = "3600s"
+
     execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     max_instance_request_concurrency = var.container_concurrency
 

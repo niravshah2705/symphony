@@ -67,6 +67,16 @@ test('all Cloud Run services use the gen2 execution environment', () => {
   }
 });
 
+test('gateway sets an explicit long-lived request timeout for SSE streams', () => {
+  const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
+  const gateway = resourceBlock(cloudRun, 'google_cloud_run_v2_service', 'gateway');
+  assert.match(
+    gateway,
+    /^\s*timeout\s*=\s*"3600s"\s*$/m,
+    'gateway must set timeout = "3600s" so /api/agent/(workspace-)stream SSE connections outlive Cloud Run\'s 300s default',
+  );
+});
+
 test('fixed-memory gen2 Cloud Run CPU variables reject incompatible allocations', () => {
   const variables = read('deploy/gcp/terraform/variables.tf');
   const supportedCpuValues = String.raw`\[\s*"1"\s*,\s*"2"\s*\]`;
