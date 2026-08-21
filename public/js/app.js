@@ -983,8 +983,10 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Signed-in users get global notifications (e.g. billing threshold alerts) over
   // one workspace SSE stream, on any route. Best-effort; anonymous visitors have
-  // no org to bill so it is skipped for them.
-  if (session.authenticated && !organizationContextRequired(session)) initNotifications();
+  // no org to bill so it is skipped for them. Off unless the session opted in
+  // (see request-context.js NOTIFICATIONS_HEADER) — an always-open stream keeps
+  // the gateway's Cloud Run instance billed continuously even with no active work.
+  if (session.authenticated && !organizationContextRequired(session) && session.notificationsEnabled) initNotifications();
 
 });
 

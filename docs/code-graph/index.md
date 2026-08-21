@@ -12,10 +12,10 @@ Auto-generated documentation from the code knowledge graph community structure.
 |-----------|------|------|
 | agent-model | 1832 | [agent-model.md](agent-model.md) |
 | core-org | 506 | [core-org.md](core-org.md) |
-| e2e-json | 115 | [e2e-json.md](e2e-json.md) |
+| e2e-json | 119 | [e2e-json.md](e2e-json.md) |
 | e2e-live-tenant | 25 | [e2e-live-tenant.md](e2e-live-tenant.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
-| gcp-cloud | 52 | [gcp-cloud.md](gcp-cloud.md) |
+| gcp-cloud | 53 | [gcp-cloud.md](gcp-cloud.md) |
 | harness-registry-install | 160 | [harness-registry-install.md](harness-registry-install.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
 | registry-stage | 654 | [registry-stage.md](registry-stage.md) |
@@ -26,7 +26,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-back | 18 | [src-back.md](src-back.md) |
 | src-body | 17 | [src-body.md](src-body.md) |
 | src-body | 17 | [src-body-2.md](src-body-2.md) |
-| src-context | 335 | [src-context.md](src-context.md) |
+| src-context | 337 | [src-context.md](src-context.md) |
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
 | src-stage | 179 | [src-stage.md](src-stage.md) |
 | src-test:build | 172 | [src-test-build.md](src-test-build.md) |

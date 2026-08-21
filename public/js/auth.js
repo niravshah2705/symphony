@@ -31,6 +31,10 @@ let authState = Object.freeze({
   // 'provisioned' (using the per-tenant gateway). orgName is the workspace label.
   deploymentStatus: 'shared',
   orgName: null,
+  // Global notifications workspace stream (see notifications.js). Off unless
+  // the server echoes it back on — opt-in only, see request-context.js
+  // NOTIFICATIONS_HEADER.
+  notificationsEnabled: false,
 });
 
 function setState(next) {
@@ -192,7 +196,7 @@ export async function initializeAuthentication() {
     auth = null;
     setAccessTokenProvider(null);
     clearWorkspaceContext();
-    return setState({ mode: 'disabled', enabled: false, authenticated: true, role: 'admin', permissions: ADMIN_PERMISSIONS, user: null, error: '' });
+    return setState({ mode: 'disabled', enabled: false, authenticated: true, role: 'admin', permissions: ADMIN_PERMISSIONS, user: null, error: '', notificationsEnabled: false });
   }
 
   const publicPermissions = configuration.publicPermissions || FALLBACK_PUBLIC_PERMISSIONS;
@@ -211,7 +215,7 @@ export async function initializeAuthentication() {
     // No signed-in user → public visitor (read-only Agent workspace).
     setAccessTokenProvider(null);
     clearWorkspaceContext();
-    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: '' });
+    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: '', notificationsEnabled: false });
   }
 
   let identity;
@@ -222,7 +226,7 @@ export async function initializeAuthentication() {
     setAccessTokenProvider(null);
     clearWorkspaceContext();
     try { await authSdk.signOut(auth); } catch (_) { /* ignore */ }
-    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: error?.message || 'This account is not allowed.' });
+    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: error?.message || 'This account is not allowed.', notificationsEnabled: false });
   }
 
   // Validate the device-local org/project choice before any workspace calls.
@@ -244,6 +248,7 @@ export async function initializeAuthentication() {
     error: '',
     deploymentStatus: deployment.deploymentStatus,
     orgName: deployment.orgName,
+    notificationsEnabled: Boolean(identity.notificationsEnabled),
   });
 }
 
