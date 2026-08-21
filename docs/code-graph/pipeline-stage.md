@@ -4,117 +4,107 @@
 
 ## Overview
 
-Directory-based community: packages/shared-core
+Community of 134 nodes
 
-- **Size**: 616 nodes
-- **Cohesion**: 0.2424
+- **Size**: 134 nodes
+- **Cohesion**: 0.5014
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| prunePending | Function | ./packages/shared-core/src/agent/claude-oauth.js | 33-37 |
-| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/claude-oauth.js | 40-50 |
-| createLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 56-67 |
-| consumeLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 70-78 |
-| pendingCount | Function | ./packages/shared-core/src/agent/claude-oauth.js | 81-84 |
-| parseCodeInput | Function | ./packages/shared-core/src/agent/claude-oauth.js | 90-104 |
-| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/claude-oauth.js | 107-119 |
-| postToken | Function | ./packages/shared-core/src/agent/claude-oauth.js | 121-142 |
-| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 145-155 |
-| refreshTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 158-170 |
-| isExpired | Function | ./packages/shared-core/src/agent/claude-oauth.js | 173-176 |
-| boundedTimeout | Function | ./packages/shared-core/src/agent/diagnostics.js | 11-15 |
-| configuredToken | Function | ./packages/shared-core/src/agent/diagnostics.js | 17-19 |
-| validHttpUrl | Function | ./packages/shared-core/src/agent/diagnostics.js | 21-28 |
-| endpoint | Function | ./packages/shared-core/src/agent/diagnostics.js | 30-39 |
-| probe | Function | ./packages/shared-core/src/agent/diagnostics.js | 41-65 |
-| packageAvailable | Function | ./packages/shared-core/src/agent/diagnostics.js | 67-85 |
-| check | Function | ./packages/shared-core/src/agent/diagnostics.js | 87-91 |
-| readBoundedLog | Function | ./packages/shared-core/src/agent/diagnostics.js | 93-108 |
-| summarizeLogTail | Function | ./packages/shared-core/src/agent/diagnostics.js | 110-131 |
-| integrationChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 133-177 |
-| sdkChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 179-230 |
-| serviceChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 232-248 |
-| localModelCheck | Function | ./packages/shared-core/src/agent/diagnostics.js | 250-283 |
-| reportStatus | Function | ./packages/shared-core/src/agent/diagnostics.js | 285-289 |
-| runDiagnostics | Function | ./packages/shared-core/src/agent/diagnostics.js | 292-315 |
-| isLocalInference | Function | ./packages/shared-core/src/agent/model-presets.js | 24-24 |
-| isPurposeRole | Function | ./packages/shared-core/src/agent/model-presets.js | 45-45 |
-| assert | Function | ./packages/shared-core/src/agent/model-presets.js | 64-66 |
-| validateCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 68-196 |
-| getPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 209-211 |
-| presetsForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 213-218 |
-| presetForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 220-225 |
-| presetForModel | Function | ./packages/shared-core/src/agent/model-presets.js | 227-229 |
-| clampInt | Function | ./packages/shared-core/src/agent/model-presets.js | 231-235 |
-| clampNumber | Function | ./packages/shared-core/src/agent/model-presets.js | 237-241 |
-| clampTemperature | Function | ./packages/shared-core/src/agent/model-presets.js | 243-248 |
-| cleanModel | Function | ./packages/shared-core/src/agent/model-presets.js | 250-255 |
-| normalizedModel | Function | ./packages/shared-core/src/agent/model-presets.js | 257-259 |
-| modelMatchesPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 262-274 |
-| normalizeParameters | Function | ./packages/shared-core/src/agent/model-presets.js | 276-336 |
-| settingsPatchForPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 339-424 |
-| settingsPatchForTier | Function | ./packages/shared-core/src/agent/model-presets.js | 433-447 |
-| sanitizeModelId | Function | ./packages/shared-core/src/agent/model-presets.js | 450-452 |
-| effortValuesFromProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 454-460 |
-| runtimePresetForProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 467-533 |
-| neutralLocalPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 540-573 |
-| settingsPatchForReasoning | Function | ./packages/shared-core/src/agent/model-presets.js | 576-587 |
-| customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 590-777 |
-| publicCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 779-781 |
+| assertCommand | Function | ./packages/shared-core/src/pipeline/bus.js | 16-24 |
+| toPipelinePushEnvelope | Function | ./packages/shared-core/src/pipeline/bus.js | 27-29 |
+| decodePipelinePushMessage | Function | ./packages/shared-core/src/pipeline/bus.js | 31-42 |
+| DirectStageCommandBus | Class | ./packages/shared-core/src/pipeline/bus.js | 45-61 |
+| constructor | Function | ./packages/shared-core/src/pipeline/bus.js | 46-48 |
+| dispatch | Function | ./packages/shared-core/src/pipeline/bus.js | 50-60 |
+| HttpStageCommandBus | Class | ./packages/shared-core/src/pipeline/bus.js | 67-99 |
+| constructor | Function | ./packages/shared-core/src/pipeline/bus.js | 68-74 |
+| dispatch | Function | ./packages/shared-core/src/pipeline/bus.js | 76-98 |
+| PubSubStageCommandBus | Class | ./packages/shared-core/src/pipeline/bus.js | 102-129 |
+| constructor | Function | ./packages/shared-core/src/pipeline/bus.js | 103-108 |
+| dispatch | Function | ./packages/shared-core/src/pipeline/bus.js | 110-128 |
+| command | Function | ./packages/shared-core/src/pipeline/bus.test.js | 24-44 |
+| test:DirectStageCommandBus dispatches the contract to an injected local handler@L46 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 46-57 |
+| test:HTTP direct delivery and Pub/Sub use the same push-compatible message body@L59 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 59-90 |
+| test:push envelope decoding returns null for malformed or non-JSON messages@L92 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 92-96 |
+| test:StageCommand transport budget accounts for base64 expansion and rejects one byte over the raw ceiling@L98 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 98-142 |
+| make | Function | ./packages/shared-core/src/pipeline/bus.test.js | 105-114 |
+| test:transport adapters fail closed when a stage route is not configured@L144 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 144-153 |
+| fail | Function | ./packages/shared-core/src/pipeline/contracts.js | 55-57 |
+| isPlainObject | Function | ./packages/shared-core/src/pipeline/contracts.js | 59-63 |
+| assertIdentifier | Function | ./packages/shared-core/src/pipeline/contracts.js | 65-70 |
+| assertIsoTimestamp | Function | ./packages/shared-core/src/pipeline/contracts.js | 72-77 |
+| assertVersionAndKind | Function | ./packages/shared-core/src/pipeline/contracts.js | 79-84 |
+| normalizeRequestedStages | Function | ./packages/shared-core/src/pipeline/contracts.js | 86-113 |
+| copySecretFreeJson | Function | ./packages/shared-core/src/pipeline/contracts.js | 121-150 |
+| isSecretFieldName | Function | ./packages/shared-core/src/pipeline/contracts.js | 152-159 |
+| deepFreeze | Function | ./packages/shared-core/src/pipeline/contracts.js | 161-165 |
+| normalizeObject | Function | ./packages/shared-core/src/pipeline/contracts.js | 167-171 |
+| normalizeOptionalIdentifier | Function | ./packages/shared-core/src/pipeline/contracts.js | 173-175 |
+| normalizePipelineStart | Function | ./packages/shared-core/src/pipeline/contracts.js | 177-193 |
+| createPipelineStart | Function | ./packages/shared-core/src/pipeline/contracts.js | 195-206 |
+| normalizeStageConfiguration | Function | ./packages/shared-core/src/pipeline/contracts.js | 208-214 |
+| canonicalJson | Function | ./packages/shared-core/src/pipeline/contracts.js | 216-224 |
+| calculatePreflightDecisionDigest | Function | ./packages/shared-core/src/pipeline/contracts.js | 226-228 |
+| normalizePreflightSnapshot | Function | ./packages/shared-core/src/pipeline/contracts.js | 230-254 |
+| createPreflightSnapshot | Function | ./packages/shared-core/src/pipeline/contracts.js | 256-269 |
+| assertAttempt | Function | ./packages/shared-core/src/pipeline/contracts.js | 271-276 |
+| stageIdempotencyKey | Function | ./packages/shared-core/src/pipeline/contracts.js | 278-283 |
+| normalizeStageCommandV1 | Function | ./packages/shared-core/src/pipeline/contracts.js | 285-324 |
+| createStageCommandV1 | Function | ./packages/shared-core/src/pipeline/contracts.js | 326-339 |
+| normalizeResultError | Function | ./packages/shared-core/src/pipeline/contracts.js | 341-360 |
+| normalizeArtifact | Function | ./packages/shared-core/src/pipeline/contracts.js | 362-379 |
+| normalizeStageResultV1 | Function | ./packages/shared-core/src/pipeline/contracts.js | 381-428 |
+| createStageResultV1 | Function | ./packages/shared-core/src/pipeline/contracts.js | 430-443 |
+| validationFor | Function | ./packages/shared-core/src/pipeline/contracts.js | 445-452 |
+| validatePipelineStart | Function | ./packages/shared-core/src/pipeline/contracts.js | 454-454 |
+| validatePreflightSnapshot | Function | ./packages/shared-core/src/pipeline/contracts.js | 455-455 |
+| validateStageCommandV1 | Function | ./packages/shared-core/src/pipeline/contracts.js | 456-456 |
+| validateStageResultV1 | Function | ./packages/shared-core/src/pipeline/contracts.js | 457-457 |
 
-*... and 566 more members.*
+*... and 84 more members.*
 
 ## Execution Flows
 
-- **createLogin** (criticality: 0.61, depth: 1)
-- **consumeLogin** (criticality: 0.61, depth: 1)
-- **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
-- **refreshTokens** (criticality: 0.61, depth: 1)
-- **ensureFreshCodexTokens** (criticality: 0.61, depth: 1)
-- **ensureFreshClaudeTokens** (criticality: 0.61, depth: 1)
-- **createLogin** (criticality: 0.61, depth: 1)
-- **consumeLogin** (criticality: 0.61, depth: 1)
-- **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
-- **refreshTokens** (criticality: 0.61, depth: 1)
-- *... and 8 more flows.*
+No execution flows pass through this community.
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (189 edge(s))
-- `join` (125 edge(s))
-- `String` (93 edge(s))
-- `map` (69 edge(s))
-- `includes` (64 edge(s))
-- `push` (58 edge(s))
-- `trim` (57 edge(s))
-- `filter` (54 edge(s))
-- `isArray` (46 edge(s))
-- `throws` (44 edge(s))
-- `deepEqual` (44 edge(s))
-- `slice` (41 edge(s))
-- `has` (40 edge(s))
-- `test` (36 edge(s))
-- `ok` (34 edge(s))
+- `equal` (74 edge(s))
+- `throws` (23 edge(s))
+- `deepEqual` (19 edge(s))
+- `stringify` (15 edge(s))
+- `has` (15 edge(s))
+- `includes` (14 edge(s))
+- `getRun` (14 edge(s))
+- `./packages/shared-core/src/pipeline/repository.js::PipelineRunRepository.clock` (12 edge(s))
+- `test` (11 edge(s))
+- `setRun` (11 edge(s))
+- `repeat` (10 edge(s))
+- `map` (10 edge(s))
+- `transaction` (10 edge(s))
+- `parse` (9 edge(s))
+- `get` (8 edge(s))
 
 ### Incoming
 
-- `equal` (189 edge(s))
-- `./packages/shared-core/src/store.js` (173 edge(s))
-- `join` (66 edge(s))
-- `throws` (44 edge(s))
-- `deepEqual` (44 edge(s))
-- `./packages/shared-core/src/pipeline/contracts.js` (42 edge(s))
-- `./packages/shared-core/src/agent/model-presets.js` (40 edge(s))
-- `ok` (34 edge(s))
-- `./packages/shared-core/src/config.js` (28 edge(s))
-- `./packages/shared-core/src/provisioning/index.js` (28 edge(s))
-- `./packages/shared-core/src/store/workspace-context.js` (27 edge(s))
-- `./packages/shared-core/src/messaging/events.js` (25 edge(s))
-- `./packages/shared-core/src/agent/diagnostics.js` (23 edge(s))
-- `claimStage` (21 edge(s))
-- `./packages/shared-core/src/agent/claude-oauth.js` (20 edge(s))
+- `equal` (74 edge(s))
+- `./packages/shared-core/src/pipeline/contracts.js` (40 edge(s))
+- `throws` (23 edge(s))
+- `deepEqual` (19 edge(s))
+- `./packages/shared-core/src/pipeline/repository.test.js` (18 edge(s))
+- `./packages/shared-core/src/pipeline/repository.js` (12 edge(s))
+- `./packages/shared-core/src/pipeline/bus.js` (11 edge(s))
+- `./packages/shared-core/src/pipeline/contracts.test.js` (10 edge(s))
+- `./packages/shared-core/src/pipeline/storage.js` (9 edge(s))
+- `repeat` (8 edge(s))
+- `rejects` (8 edge(s))
+- `./packages/shared-core/src/pipeline/bus.test.js` (7 edge(s))
+- `dispatch` (5 edge(s))
+- `isFrozen` (3 edge(s))
+- `getRun` (3 edge(s))

@@ -8,6 +8,7 @@ const {
   forwardRequestContext,
   enforcePinnedOrganization,
   requireOrganizationContext,
+  notificationsRequested,
 } = require('./request-context');
 
 function req(headers = {}) {
@@ -66,6 +67,14 @@ test('llm-gateway flag: survives the validated fleetContext branch and forwards'
     'x-ai-fleet-project-id': 'p-1',
     'x-ai-fleet-llm-gateway': 'langsmith',
   });
+});
+
+test('notifications flag: off by default, on for any non-blank header value', () => {
+  assert.equal(notificationsRequested(req()), false);
+  assert.equal(notificationsRequested(req({ 'x-ai-fleet-notifications': '' })), false);
+  assert.equal(notificationsRequested(req({ 'x-ai-fleet-notifications': '   ' })), false);
+  assert.equal(notificationsRequested(req({ 'x-ai-fleet-notifications': 'enabled' })), true);
+  assert.equal(notificationsRequested(req({ 'x-ai-fleet-notifications': '1' })), true);
 });
 
 test('dedicated gateway rejects a different selected organization', () => {

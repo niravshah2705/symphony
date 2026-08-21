@@ -24,7 +24,7 @@ const sse = require('./sse');
 const { mintStreamToken, mintWorkspaceToken } = require('./stream-token');
 const { createStreamTokenHandlers } = require('./stream-token-handlers');
 const { configureTrustProxy } = require('./trust-proxy');
-const { enforcePinnedOrganization, requestContext, requireOrganizationContext } = require('./request-context');
+const { enforcePinnedOrganization, requestContext, requireOrganizationContext, notificationsRequested } = require('./request-context');
 const { createContextValidationMiddleware } = require('./context-validator');
 const { createStoreContextMiddleware } = require('./store-context');
 
@@ -133,6 +133,8 @@ app.get('/api/auth/me', (req, res) => {
     user: req.auth.user,
     role: req.auth.role,
     permissions: req.auth.permissions,
+    // Off by default — see request-context.js NOTIFICATIONS_HEADER.
+    notificationsEnabled: notificationsRequested(req),
   });
 });
 

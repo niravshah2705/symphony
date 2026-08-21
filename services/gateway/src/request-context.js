@@ -8,6 +8,12 @@ const PROJECT_HEADER = 'x-ai-fleet-project-id';
 // directly from the header on both the validated and raw context branches.
 const LLM_GATEWAY_HEADER = 'x-ai-fleet-llm-gateway';
 const LLM_GATEWAY_MODES = new Set(['langsmith']);
+// Per-request opt-in (browser header, e.g. via the ModHeader extension) for the
+// global notifications workspace stream — see public/js/notifications.js. Off
+// by default: an open SSE stream keeps the gateway's Cloud Run instance
+// continuously billed (cpu_idle only saves cost in gaps BETWEEN requests, and a
+// long-lived stream never creates one), so nobody gets it unless they ask.
+const NOTIFICATIONS_HEADER = 'x-ai-fleet-notifications';
 const MAX_CONTEXT_ID_CHARS = 160;
 
 function cleanContextId(value) {
@@ -28,6 +34,11 @@ function header(req, name) {
 function cleanLlmGateway(value) {
   const mode = typeof value === 'string' ? value.trim().toLowerCase() : '';
   return LLM_GATEWAY_MODES.has(mode) ? mode : '';
+}
+
+/** True when the request opted into the notifications stream via any non-blank header value. */
+function notificationsRequested(req) {
+  return header(req, NOTIFICATIONS_HEADER).trim() !== '';
 }
 
 /**
@@ -104,9 +115,11 @@ module.exports = {
   ORGANIZATION_HEADER,
   PROJECT_HEADER,
   LLM_GATEWAY_HEADER,
+  NOTIFICATIONS_HEADER,
   MAX_CONTEXT_ID_CHARS,
   cleanContextId,
   cleanLlmGateway,
+  notificationsRequested,
   requestContext,
   contextHeaders,
   forwardRequestContext,

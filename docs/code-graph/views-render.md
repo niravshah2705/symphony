@@ -7,7 +7,7 @@
 Directory-based community: public/js
 
 - **Size**: 735 nodes
-- **Cohesion**: 0.4602
+- **Cohesion**: 0.4600
 - **Dominant Language**: javascript
 
 ## Members
@@ -34,11 +34,11 @@ Directory-based community: public/js
 | setApiBase | Function | ./public/js/api.js | 108-111 |
 | notifyAuthenticationRequired | Function | ./public/js/api.js | 113-117 |
 | request | Function | ./public/js/api.js | 119-197 |
-| openStream | Function | ./public/js/api.js | 215-287 |
-| mintFailureCanRetry | Function | ./public/js/api.js | 221-225 |
-| scheduleReconnect | Function | ./public/js/api.js | 227-240 |
-| connect | Function | ./public/js/api.js | 242-269 |
-| close | Function | ./public/js/api.js | 281-285 |
+| openStream | Function | ./public/js/api.js | 224-303 |
+| mintFailureCanRetry | Function | ./public/js/api.js | 231-235 |
+| scheduleReconnect | Function | ./public/js/api.js | 237-250 |
+| connect | Function | ./public/js/api.js | 252-285 |
+| close | Function | ./public/js/api.js | 297-301 |
 | ensureStylesheet | Function | ./public/js/app.js | 44-66 |
 | route | Function | ./public/js/app.js | 68-87 |
 | load | Function | ./public/js/app.js | 73-85 |
@@ -95,7 +95,7 @@ Directory-based community: public/js
 - `setAttribute` (66 edge(s))
 - `isArray` (65 edge(s))
 - `has` (64 edge(s))
-- `Boolean` (57 edge(s))
+- `Boolean` (58 edge(s))
 - `catch` (55 edge(s))
 - `querySelector` (53 edge(s))
 - `slice` (51 edge(s))

@@ -6,8 +6,8 @@
 
 Directory-based community: e2e
 
-- **Size**: 115 nodes
-- **Cohesion**: 0.1026
+- **Size**: 119 nodes
+- **Cohesion**: 0.1038
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: e2e
 | json | Function | ./e2e/organization-flow.spec.js | 9-11 |
 | makeOrgState | Function | ./e2e/organization-flow.spec.js | 16-27 |
 
-*... and 65 more members.*
+*... and 69 more members.*
 
 ## Execution Flows
 
@@ -75,35 +75,35 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (525 edge(s))
+- `expect` (530 edge(s))
 - `locator` (263 edge(s))
-- `route` (165 edge(s))
+- `route` (167 edge(s))
 - `getByRole` (104 edge(s))
 - `toBeVisible` (101 edge(s))
+- `evaluate` (76 edge(s))
 - `toHaveCount` (69 edge(s))
-- `evaluate` (67 edge(s))
-- `toBe` (56 edge(s))
+- `toBe` (59 edge(s))
 - `toHaveAttribute` (51 edge(s))
 - `click` (51 edge(s))
-- `toEqual` (48 edge(s))
+- `toEqual` (50 edge(s))
 - `request` (47 edge(s))
-- `goto` (45 edge(s))
+- `goto` (46 edge(s))
+- `push` (45 edge(s))
 - `fulfill` (44 edge(s))
-- `toContainText` (43 edge(s))
 
 ### Incoming
 
-- `expect` (502 edge(s))
+- `expect` (507 edge(s))
 - `locator` (251 edge(s))
 - `route` (107 edge(s))
 - `getByRole` (99 edge(s))
 - `toBeVisible` (96 edge(s))
+- `evaluate` (69 edge(s))
 - `toHaveCount` (66 edge(s))
-- `evaluate` (63 edge(s))
-- `toBe` (53 edge(s))
+- `toBe` (56 edge(s))
 - `click` (49 edge(s))
+- `toEqual` (48 edge(s))
 - `toHaveAttribute` (47 edge(s))
-- `toEqual` (46 edge(s))
 - `goto` (42 edge(s))
 - `toContainText` (42 edge(s))
 - `toHaveText` (36 edge(s))

@@ -20,7 +20,7 @@ function createCorsMiddleware(allowed = CONFIG.GCP.spaOrigins) {
       res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
       res.set(
         'Access-Control-Allow-Headers',
-        'Authorization,Content-Type,X-AI-Fleet-Organization-Id,X-AI-Fleet-Project-Id,X-AI-Fleet-Llm-Gateway'
+        'Authorization,Content-Type,X-AI-Fleet-Organization-Id,X-AI-Fleet-Project-Id,X-AI-Fleet-Llm-Gateway,X-AI-Fleet-Notifications'
       );
       res.set('Access-Control-Max-Age', '600');
     }
