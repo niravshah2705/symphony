@@ -6,8 +6,8 @@
 
 Directory-based community: e2e
 
-- **Size**: 119 nodes
-- **Cohesion**: 0.1038
+- **Size**: 135 nodes
+- **Cohesion**: 0.1092
 - **Dominant Language**: javascript
 
 ## Members
@@ -30,42 +30,42 @@ Directory-based community: e2e
 | test:Agent workspace clears a model pause from a workspace SSE agent-status event@L360 | Test | ./e2e/agent-jobs.spec.js | 360-443 |
 | json | Function | ./e2e/agent-workspace.spec.js | 7-13 |
 | defaultPreparedBusiness | Function | ./e2e/agent-workspace.spec.js | 15-48 |
-| mockAgentWorkspace | Function | ./e2e/agent-workspace.spec.js | 50-219 |
+| mockAgentWorkspace | Function | ./e2e/agent-workspace.spec.js | 50-277 |
 | test@L124 | Test | ./e2e/agent-workspace.spec.js | 124-124 |
 | summarize | Function | ./e2e/agent-workspace.spec.js | 172-172 |
-| openAgent | Function | ./e2e/agent-workspace.spec.js | 221-226 |
-| routeRequest | Function | ./e2e/agent-workspace.spec.js | 228-232 |
-| test:greetings and unsafe scam requests stay on non-mutating routes@L234 | Test | ./e2e/agent-workspace.spec.js | 234-254 |
-| test:business requests evaluate first, then prepare on demand, rendering the staged decision rail and metric tones@L264 | Test | ./e2e/agent-workspace.spec.js | 264-305 |
-| test:knowledge requests report typed memory, documents, and workspace matches@L307 | Test | ./e2e/agent-workspace.spec.js | 307-328 |
-| test:build requests run a guided project -> planner flow with human-in-the-loop steps@L330 | Test | ./e2e/agent-workspace.spec.js | 330-353 |
-| test:conversation history: sending lazily creates a thread that survives reload, plus new chat and delete@L355 | Test | ./e2e/agent-workspace.spec.js | 355-387 |
-| test:remember phrasing surfaces a confirm-before-save memory draft@L389 | Test | ./e2e/agent-workspace.spec.js | 389-405 |
-| test:troubleshooting requests combine diagnostic checks with retained log signals@L407 | Test | ./e2e/agent-workspace.spec.js | 407-446 |
-| test:implementation drafts require project selection and explicit approval before task creation@L448 | Test | ./e2e/agent-workspace.spec.js | 448-495 |
+| openAgent | Function | ./e2e/agent-workspace.spec.js | 279-284 |
+| routeRequest | Function | ./e2e/agent-workspace.spec.js | 286-290 |
+| test:greetings and unsafe scam requests stay on non-mutating routes@L292 | Test | ./e2e/agent-workspace.spec.js | 292-312 |
+| test:business requests evaluate first, then prepare on demand, rendering the staged decision rail and metric tones@L322 | Test | ./e2e/agent-workspace.spec.js | 322-363 |
+| test:knowledge requests report typed memory, documents, and workspace matches@L365 | Test | ./e2e/agent-workspace.spec.js | 365-386 |
+| test:build requests run a guided project -> planner flow with human-in-the-loop steps@L388 | Test | ./e2e/agent-workspace.spec.js | 388-411 |
+| test:conversation history: sending lazily creates a thread that survives reload, plus new chat and delete@L413 | Test | ./e2e/agent-workspace.spec.js | 413-445 |
+| test:a send that outlives a navigate still lands in the thread rail once persistence completes@L447 | Test | ./e2e/agent-workspace.spec.js | 447-482 |
+| createRequested | Function | ./e2e/agent-workspace.spec.js | 469-469 |
+| test:remember phrasing surfaces a confirm-before-save memory draft@L484 | Test | ./e2e/agent-workspace.spec.js | 484-500 |
+| test:troubleshooting requests combine diagnostic checks with retained log signals@L502 | Test | ./e2e/agent-workspace.spec.js | 502-541 |
+| test:implementation drafts require project selection and explicit approval before task creation@L543 | Test | ./e2e/agent-workspace.spec.js | 543-590 |
+| installFakeSpeechRecognition | Function | ./e2e/agent-workspace.spec.js | 594-617 |
+| FakeSpeechRecognition | Class | ./e2e/agent-workspace.spec.js | 596-613 |
+| start | Function | ./e2e/agent-workspace.spec.js | 597-609 |
+| stop | Function | ./e2e/agent-workspace.spec.js | 610-612 |
+| test:mic dictation button has a distinct accessible name from Send@L619 | Test | ./e2e/agent-workspace.spec.js | 619-626 |
+| test:dictation button degrades gracefully when the browser has no SpeechRecognition@L628 | Test | ./e2e/agent-workspace.spec.js | 628-643 |
+| test:a successful dictation appends the transcript to the composer@L645 | Test | ./e2e/agent-workspace.spec.js | 645-658 |
+| test:a denied microphone permission surfaces a toast and leaves the composer usable@L660 | Test | ./e2e/agent-workspace.spec.js | 660-672 |
+| test:attaching a file before any conversation exists shows a helpful toast and never calls the service@L674 | Test | ./e2e/agent-workspace.spec.js | 674-685 |
+| test:attaching a file after sending a message uploads it and shows a ready chip@L687 | Test | ./e2e/agent-workspace.spec.js | 687-701 |
+| test:removing an attachment deletes it server-side and the chip disappears@L703 | Test | ./e2e/agent-workspace.spec.js | 703-717 |
+| test:dropping a file directly onto the composer uploads it@L719 | Test | ./e2e/agent-workspace.spec.js | 719-736 |
+| test:a rejected file oversize check surfaces a toast and never calls the service@L738 | Test | ./e2e/agent-workspace.spec.js | 738-750 |
+| test:the "Ask about files" affordance stays hidden until an attachment is ready, then answers with citations@L752 | Test | ./e2e/agent-workspace.spec.js | 752-773 |
 | json | Function | ./e2e/anonymous-agent.spec.js | 5-11 |
 | authConfig | Function | ./e2e/anonymous-agent.spec.js | 36-50 |
 | apiRecord | Function | ./e2e/anonymous-agent.spec.js | 52-65 |
 | callLabel | Function | ./e2e/anonymous-agent.spec.js | 67-69 |
 | isShellRequest | Function | ./e2e/anonymous-agent.spec.js | 71-75 |
-| isTenantPrivateRequest | Function | ./e2e/anonymous-agent.spec.js | 77-89 |
-| installFirebaseAssets | Function | ./e2e/anonymous-agent.spec.js | 91-102 |
-| settlePublishedWork | Function | ./e2e/anonymous-agent.spec.js | 105-109 |
-| installSignedOutHarness | Function | ./e2e/anonymous-agent.spec.js | 111-172 |
-| resetRequests | Function | ./e2e/anonymous-agent.spec.js | 170-170 |
-| openPublicAgent | Function | ./e2e/anonymous-agent.spec.js | 174-183 |
-| sendAgentRequest | Function | ./e2e/anonymous-agent.spec.js | 185-189 |
-| describe:anonymous Firebase Agent boundary@L191 | Test | ./e2e/anonymous-agent.spec.js | 191-247 |
-| test:public Agent hydrates without tenant state requests or 401 auth churn@L192 | Test | ./e2e/anonymous-agent.spec.js | 192-201 |
-| test:public knowledge search uses only the reviewed documentation endpoint@L203 | Test | ./e2e/anonymous-agent.spec.js | 203-217 |
-| test:public implementation intent stays read-only and explains that sign-in is required@L219 | Test | ./e2e/anonymous-agent.spec.js | 219-235 |
-| test:direct Agent jobs navigation is hidden and gated for a public visitor@L237 | Test | ./e2e/anonymous-agent.spec.js | 237-246 |
-| installExpiringSessionHarness | Function | ./e2e/anonymous-agent.spec.js | 279-340 |
-| test:parallel application-auth failures expire an authenticated session once and stop private loading@L342 | Test | ./e2e/anonymous-agent.spec.js | 342-367 |
-| json | Function | ./e2e/organization-flow.spec.js | 9-11 |
-| makeOrgState | Function | ./e2e/organization-flow.spec.js | 16-27 |
 
-*... and 69 more members.*
+*... and 85 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (530 edge(s))
-- `locator` (263 edge(s))
-- `route` (167 edge(s))
-- `getByRole` (104 edge(s))
-- `toBeVisible` (101 edge(s))
-- `evaluate` (76 edge(s))
-- `toHaveCount` (69 edge(s))
-- `toBe` (59 edge(s))
-- `toHaveAttribute` (51 edge(s))
-- `click` (51 edge(s))
-- `toEqual` (50 edge(s))
-- `request` (47 edge(s))
+- `expect` (574 edge(s))
+- `locator` (293 edge(s))
+- `route` (171 edge(s))
+- `getByRole` (114 edge(s))
+- `toBeVisible` (104 edge(s))
+- `toHaveCount` (79 edge(s))
+- `evaluate` (77 edge(s))
+- `toBe` (62 edge(s))
+- `click` (56 edge(s))
+- `toHaveAttribute` (52 edge(s))
+- `request` (52 edge(s))
+- `toEqual` (51 edge(s))
+- `toContainText` (50 edge(s))
 - `goto` (46 edge(s))
-- `push` (45 edge(s))
-- `fulfill` (44 edge(s))
+- `push` (46 edge(s))
 
 ### Incoming
 
-- `expect` (507 edge(s))
-- `locator` (251 edge(s))
-- `route` (107 edge(s))
-- `getByRole` (99 edge(s))
-- `toBeVisible` (96 edge(s))
-- `evaluate` (69 edge(s))
-- `toHaveCount` (66 edge(s))
-- `toBe` (56 edge(s))
-- `click` (49 edge(s))
-- `toEqual` (48 edge(s))
-- `toHaveAttribute` (47 edge(s))
+- `expect` (551 edge(s))
+- `locator` (281 edge(s))
+- `getByRole` (109 edge(s))
+- `route` (108 edge(s))
+- `toBeVisible` (99 edge(s))
+- `toHaveCount` (76 edge(s))
+- `evaluate` (70 edge(s))
+- `toBe` (59 edge(s))
+- `click` (54 edge(s))
+- `toContainText` (49 edge(s))
+- `toEqual` (49 edge(s))
+- `toHaveAttribute` (48 edge(s))
 - `goto` (42 edge(s))
-- `toContainText` (42 edge(s))
-- `toHaveText` (36 edge(s))
-- `url` (28 edge(s))
+- `toHaveText` (39 edge(s))
+- `url` (29 edge(s))

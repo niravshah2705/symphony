@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared-core
 
-- **Size**: 654 nodes
-- **Cohesion**: 0.2450
+- **Size**: 784 nodes
+- **Cohesion**: 0.2197
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared-core
 | customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 590-777 |
 | publicCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 779-781 |
 
-*... and 604 more members.*
+*... and 734 more members.*
 
 ## Execution Flows
 
@@ -79,42 +79,42 @@ Directory-based community: packages/shared-core
 - **consumeLogin** (criticality: 0.61, depth: 1)
 - **exchangeCodeForTokens** (criticality: 0.61, depth: 1)
 - **refreshTokens** (criticality: 0.61, depth: 1)
-- *... and 4 more flows.*
+- *... and 5 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (206 edge(s))
-- `join` (138 edge(s))
-- `String` (99 edge(s))
-- `map` (78 edge(s))
-- `includes` (71 edge(s))
-- `trim` (64 edge(s))
-- `push` (59 edge(s))
-- `throws` (58 edge(s))
+- `equal` (295 edge(s))
+- `join` (141 edge(s))
+- `String` (107 edge(s))
+- `map` (87 edge(s))
+- `includes` (72 edge(s))
+- `push` (69 edge(s))
+- `trim` (66 edge(s))
+- `throws` (66 edge(s))
+- `deepEqual` (60 edge(s))
 - `filter` (57 edge(s))
-- `deepEqual` (53 edge(s))
-- `isArray` (50 edge(s))
-- `slice` (43 edge(s))
-- `test` (42 edge(s))
-- `stringify` (41 edge(s))
-- `has` (41 edge(s))
+- `slice` (51 edge(s))
+- `isArray` (51 edge(s))
+- `ok` (45 edge(s))
+- `test` (43 edge(s))
+- `stringify` (42 edge(s))
 
 ### Incoming
 
-- `equal` (206 edge(s))
+- `equal` (295 edge(s))
 - `./packages/shared-core/src/store.js` (173 edge(s))
-- `join` (69 edge(s))
-- `throws` (58 edge(s))
-- `deepEqual` (53 edge(s))
+- `join` (71 edge(s))
+- `throws` (66 edge(s))
+- `deepEqual` (60 edge(s))
+- `ok` (45 edge(s))
 - `./packages/shared-core/src/config.js` (43 edge(s))
 - `./packages/shared-core/src/pipeline/contracts.js` (42 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (40 edge(s))
-- `ok` (35 edge(s))
 - `./packages/shared-core/src/agent/registry/schema.js` (32 edge(s))
+- `./packages/shared-core/src/attachments/__fixtures__/fakes.js` (31 edge(s))
 - `./packages/shared-core/src/provisioning/index.js` (31 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (27 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
 - `./packages/shared-core/src/agent/diagnostics.js` (23 edge(s))
-- `claimStage` (21 edge(s))

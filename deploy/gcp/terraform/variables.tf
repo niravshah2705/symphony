@@ -664,6 +664,22 @@ variable "skills_bucket_force_destroy" {
   default     = false
 }
 
+# --- Chat attachments (GCS bucket, gcs_attachments.tf) -----------------------
+# Unlike skills, there is no vendored fallback for this feature — it's always
+# created, no enabled toggle.
+
+variable "attachments_bucket_name" {
+  type        = string
+  description = "OPTIONAL override for the attachments bucket name. Empty ('') derives a stable default of '<project_id>-aifleet-attachments' (see locals.tf). Terraform CREATES this bucket. Set only to pin a custom globally-unique name."
+  default     = ""
+}
+
+variable "attachments_bucket_force_destroy" {
+  type        = bool
+  description = "Allow `terraform destroy` to delete the attachments bucket even if it still holds objects. Default false: this bucket holds real tenant file content, unlike the skills/SPA buckets."
+  default     = false
+}
+
 variable "skills_version" {
   type        = string
   description = "Skills bundle version the runtime PINS (SKILLS_VERSION). The planner/coder read /skills/<skills_version>/<skill>/SKILL.md, so bumping the published bundle to a new version does NOT affect a deployment until this is bumped — older pinned versions keep working. Must match a published `<version>/` prefix in the bucket."

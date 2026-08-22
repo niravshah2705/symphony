@@ -410,6 +410,33 @@
 .composer-actions { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
 .composer-count, .composer-hint { color: var(--muted); font-size: 8px; }
 .scenario-submit { padding: 6px 10px; font-size: 9px; }
+.composer-mic { width: 30px; height: 30px; margin-right: 2px; }
+.composer-mic.is-listening { border-color: color-mix(in srgb, var(--red) 45%, var(--border)); background: var(--red-soft); color: var(--red); }
+.composer-mic.is-listening .icon { animation: recording-pulse 1.6s ease-in-out infinite; }
+.composer-attach { width: 30px; height: 30px; margin-right: 2px; }
+.composer-surface.is-dragover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+.composer-ask-attachments { padding: 6px 10px; font-size: 9px; background: var(--surface-subtle); color: var(--text); }
+
+.attachment-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.attachment-chip-row:empty { display: none; }
+.attachment-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px 3px 8px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface-subtle);
+  color: var(--muted); font-size: 8px; max-width: 220px;
+}
+.attachment-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; color: var(--text); }
+.attachment-chip-status { color: var(--muted); }
+.attachment-chip.is-ready { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); }
+.attachment-chip.is-ready .attachment-chip-status { color: var(--green); }
+.attachment-chip.is-pending .attachment-chip-status, .attachment-chip.is-processing .attachment-chip-status { color: var(--amber); }
+.attachment-chip.is-failed, .attachment-chip.is-unsupported { border-color: color-mix(in srgb, var(--red) 35%, var(--border)); }
+.attachment-chip.is-failed .attachment-chip-status { color: var(--red); }
+.attachment-chip.is-removing { opacity: .5; pointer-events: none; }
+.attachment-chip-remove {
+  display: inline-grid; place-items: center; width: 14px; height: 14px; padding: 0;
+  border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 10px; line-height: 1;
+}
+.attachment-chip-remove:hover { background: var(--red-soft); color: var(--red); }
 
 .trace-composer { margin-top: 32px; }
 .trace-composer > input { margin-bottom: 8px; }

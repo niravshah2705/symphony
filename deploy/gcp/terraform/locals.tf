@@ -23,6 +23,10 @@ locals {
   # publish workflow (derived the same way) — no repo-var dependency for the name.
   skills_bucket_name = var.skills_bucket_name != "" ? var.skills_bucket_name : "${var.project_id}-aifleet-skills"
 
+  # Chat attachments bucket (gcs_attachments.tf) — same derived-default-with-
+  # override convention as the skills bucket above.
+  attachments_bucket_name = var.attachments_bucket_name != "" ? var.attachments_bucket_name : "${var.project_id}-aifleet-attachments"
+
   # Artifact Registry image references. Each service resolves its own tag,
   # falling back to var.image_tag when no per-service override is set — this is
   # what lets the CD pipeline roll ONE service (its tag = new SHA) while every

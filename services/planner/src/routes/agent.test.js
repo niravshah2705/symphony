@@ -315,6 +315,88 @@ test('conversation routes reject malformed ids and unknown threads', async () =>
   assert.equal(notFound.status, 404);
 });
 
+test('deleting a conversation cascades to its attachments (best-effort) before removing it', async (t) => {
+  const modulePath = require.resolve('./agent');
+  const attachmentsService = require('@ai-fleet/shared/attachments/service');
+  const original = {
+    getConversation: store.getConversation,
+    removeConversation: store.removeConversation,
+    removeAllAttachmentsForConversation: attachmentsService.removeAllAttachmentsForConversation,
+  };
+  const conversation = { id: 'conv_org1', orgId: 'org-1', nativeProjectId: 'proj-1', title: 'T', messages: [] };
+  let cascadeCalledWith = null;
+  let removedConversationId = null;
+  store.getConversation = (id) => (id === conversation.id ? conversation : null);
+  store.removeConversation = (id) => { removedConversationId = id; return true; };
+  attachmentsService.removeAllAttachmentsForConversation = async (ids) => { cascadeCalledWith = ids; };
+  delete require.cache[modulePath];
+  t.after(() => {
+    Object.assign(store, { getConversation: original.getConversation, removeConversation: original.removeConversation });
+    attachmentsService.removeAllAttachmentsForConversation = original.removeAllAttachmentsForConversation;
+    delete require.cache[modulePath];
+  });
+
+  const router = require('./agent');
+  const headers = { get: (name) => ({ 'x-ai-fleet-organization-id': 'org-1', 'x-ai-fleet-project-id': 'proj-1' }[name]) };
+  const result = await call(handlerFor(router, 'delete', '/conversations/:id'), { ...headers, params: { id: conversation.id } });
+  assert.equal(result.body.ok, true);
+  assert.equal(removedConversationId, conversation.id);
+  assert.deepEqual(cascadeCalledWith, { orgId: 'org-1', projectId: 'proj-1', conversationId: conversation.id });
+});
+
+test('a cascade failure never blocks the conversation delete itself', async (t) => {
+  const modulePath = require.resolve('./agent');
+  const attachmentsService = require('@ai-fleet/shared/attachments/service');
+  const original = {
+    getConversation: store.getConversation,
+    removeConversation: store.removeConversation,
+    removeAllAttachmentsForConversation: attachmentsService.removeAllAttachmentsForConversation,
+  };
+  const conversation = { id: 'conv_org2', orgId: 'org-1', nativeProjectId: 'proj-1', title: 'T', messages: [] };
+  let removedConversationId = null;
+  store.getConversation = (id) => (id === conversation.id ? conversation : null);
+  store.removeConversation = (id) => { removedConversationId = id; return true; };
+  attachmentsService.removeAllAttachmentsForConversation = async () => { throw new Error('GCS is unreachable'); };
+  delete require.cache[modulePath];
+  t.after(() => {
+    Object.assign(store, { getConversation: original.getConversation, removeConversation: original.removeConversation });
+    attachmentsService.removeAllAttachmentsForConversation = original.removeAllAttachmentsForConversation;
+    delete require.cache[modulePath];
+  });
+
+  const router = require('./agent');
+  const headers = { get: (name) => ({ 'x-ai-fleet-organization-id': 'org-1', 'x-ai-fleet-project-id': 'proj-1' }[name]) };
+  const result = await call(handlerFor(router, 'delete', '/conversations/:id'), { ...headers, params: { id: conversation.id } });
+  assert.equal(result.body.ok, true);
+  assert.equal(removedConversationId, conversation.id);
+});
+
+test('a conversation with no org/project context skips the cascade entirely (nothing could have been attached without it)', async (t) => {
+  const modulePath = require.resolve('./agent');
+  const attachmentsService = require('@ai-fleet/shared/attachments/service');
+  const original = {
+    getConversation: store.getConversation,
+    removeConversation: store.removeConversation,
+    removeAllAttachmentsForConversation: attachmentsService.removeAllAttachmentsForConversation,
+  };
+  const conversation = { id: 'conv_noorg', title: 'T', messages: [] }; // no orgId/nativeProjectId
+  let cascadeCalled = false;
+  store.getConversation = (id) => (id === conversation.id ? conversation : null);
+  store.removeConversation = () => true;
+  attachmentsService.removeAllAttachmentsForConversation = async () => { cascadeCalled = true; };
+  delete require.cache[modulePath];
+  t.after(() => {
+    Object.assign(store, { getConversation: original.getConversation, removeConversation: original.removeConversation });
+    attachmentsService.removeAllAttachmentsForConversation = original.removeAllAttachmentsForConversation;
+    delete require.cache[modulePath];
+  });
+
+  const router = require('./agent');
+  const result = await call(handlerFor(router, 'delete', '/conversations/:id'), { params: { id: conversation.id } });
+  assert.equal(result.body.ok, true);
+  assert.equal(cascadeCalled, false);
+});
+
 test('enqueue is role-gated, validates projectId, and queues exactly one project', async (t) => {
   const modulePath = require.resolve('./agent');
   const scheduler = require('@ai-fleet/shared/agent/scheduler');

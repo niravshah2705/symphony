@@ -41,6 +41,7 @@ const conversations = require('@ai-fleet/shared/agent/conversations');
 const workspaceEvents = require('@ai-fleet/shared/agent/workspace-events');
 const { normalizeEventContext, matchesEventContext } = require('@ai-fleet/shared/messaging/events');
 const { redactSecrets } = require('@ai-fleet/shared/agent/tools/exec');
+const attachmentsService = require('@ai-fleet/shared/attachments/service');
 
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const CONV_ID_PATTERN = /^conv_[A-Za-z0-9_-]{1,64}$/;
@@ -110,6 +111,17 @@ function conversationForRequest(req, id) {
   return conversation && matchesEventContext(conversation, requestWorkspaceContext(req))
     ? conversation
     : null;
+}
+
+// Deps for the DELETE-cascade call into attachmentsService below. The full
+// attachments router (agent-attachments.js) builds its own copy of this —
+// duplicated rather than imported to avoid a circular require (that router
+// is required FROM this file).
+function attachmentDeps(context) {
+  return {
+    embeddingApiKey: CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : getSettings().antigravityApiKey || '',
+    workspaceContext: context,
+  };
 }
 
 /**
@@ -610,14 +622,34 @@ router.patch('/conversations/:id', (req, res) => {
   res.json({ conversation });
 });
 
-// DELETE /api/agent/conversations/:id — remove a thread.
-router.delete('/conversations/:id', (req, res) => {
-  const id = String(req.params.id || '');
-  if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
-  if (!conversationForRequest(req, id)) return res.status(404).json({ error: 'Conversation not found.' });
-  if (!removeConversation(id)) return res.status(404).json({ error: 'Conversation not found.' });
-  res.json({ ok: true });
-});
+// DELETE /api/agent/conversations/:id — remove a thread, cascading to its
+// attachments first (best-effort — a cleanup failure must never block the
+// conversation delete itself, and never orphan an unbounded background job).
+router.delete(
+  '/conversations/:id',
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id || '');
+    if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+    const existing = conversationForRequest(req, id);
+    if (!existing) return res.status(404).json({ error: 'Conversation not found.' });
+    if (existing.orgId && existing.nativeProjectId) {
+      const context = { organizationId: existing.orgId, projectId: existing.nativeProjectId };
+      await attachmentsService
+        .removeAllAttachmentsForConversation(
+          { orgId: existing.orgId, projectId: existing.nativeProjectId, conversationId: id },
+          attachmentDeps(context)
+        )
+        .catch(() => {});
+    }
+    if (!removeConversation(id)) return res.status(404).json({ error: 'Conversation not found.' });
+    res.json({ ok: true });
+  })
+);
+
+// Chat attachments (upload/extract/embed/index, retrieval, and the /ask
+// endpoint) — a fully self-contained, newly-added surface split into its own
+// router file rather than growing this already-large one further.
+router.use(require('./agent-attachments'));
 
 // POST /api/agent/enrich-input — turn short user notes into a clearer brief via
 // the configured LOCAL role only (Ollama / LM Studio / oMLX; never a hosted fallback).

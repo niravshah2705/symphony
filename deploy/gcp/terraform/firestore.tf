@@ -45,3 +45,43 @@ resource "google_firestore_index" "org_users_by_created_at" {
 
   depends_on = [google_firestore_database.default]
 }
+
+# Vector search composite index for chat-attachment RAG retrieval
+# (packages/shared-core/src/attachments/store.js: searchAttachmentChunks).
+# COLLECTION_GROUP scope because chunks live nested under
+# organizations/{orgId}/projects/{projectId}/conversations/{conversationId}/
+# attachments/{attachmentId}/chunks/{chunkId} — retrieval queries across ALL
+# of a conversation's attachments via db.collectionGroup('chunks'). The
+# conversationId equality pre-filter MUST be in the same composite index as
+# the vector field for Firestore to accept
+# .where('conversationId','==',id).findNearest(...); the equality field is
+# listed BEFORE the vector field, per Firestore's documented field order for
+# pre-filtered vector indexes.
+#
+# Verified: `terraform validate` against the pinned provider (google 6.50.0,
+# versions.tf) accepts this `vector_config`/`flat {}` block. Not yet verified:
+# an actual `apply` against real GCP — if the API itself rejects the request
+# for any reason, create the index once manually via `gcloud firestore
+# indexes composite create` instead (see the docs/GCP_REGION_MIGRATION.md-style
+# runbook convention for a similar
+# manual step).
+resource "google_firestore_index" "attachment_chunks_by_conversation_and_embedding" {
+  project     = var.project_id
+  database    = google_firestore_database.default.name
+  collection  = "chunks"
+  query_scope = "COLLECTION_GROUP"
+
+  fields {
+    field_path = "conversationId"
+    order      = "ASCENDING"
+  }
+  fields {
+    field_path = "embedding"
+    vector_config {
+      dimension = 768 # matches EMBEDDING_DIMENSION in packages/shared-core/src/attachments/embed.js
+      flat {}
+    }
+  }
+
+  depends_on = [google_firestore_database.default]
+}
