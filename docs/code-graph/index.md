@@ -10,17 +10,17 @@ Auto-generated documentation from the code knowledge graph community structure.
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-model | 1832 | [agent-model.md](agent-model.md) |
+| agent-model | 1840 | [agent-model.md](agent-model.md) |
 | core-org | 506 | [core-org.md](core-org.md) |
-| e2e-json | 119 | [e2e-json.md](e2e-json.md) |
+| e2e-json | 135 | [e2e-json.md](e2e-json.md) |
 | e2e-live-tenant | 25 | [e2e-live-tenant.md](e2e-live-tenant.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
 | gcp-cloud | 53 | [gcp-cloud.md](gcp-cloud.md) |
 | harness-registry-install | 160 | [harness-registry-install.md](harness-registry-install.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
-| registry-stage | 654 | [registry-stage.md](registry-stage.md) |
+| registry-stage | 784 | [registry-stage.md](registry-stage.md) |
 | repositories-org | 579 | [repositories-org.md](repositories-org.md) |
-| routes-test:planner | 187 | [routes-test-planner.md](routes-test-planner.md) |
+| routes-test:planner | 219 | [routes-test-planner.md](routes-test-planner.md) |
 | scripts-audit | 24 | [scripts-audit.md](scripts-audit.md) |
 | scripts-module | 45 | [scripts-module.md](scripts-module.md) |
 | src-back | 18 | [src-back.md](src-back.md) |
@@ -33,4 +33,4 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-test:coder | 107 | [src-test-coder.md](src-test-coder.md) |
 | src-token | 112 | [src-token.md](src-token.md) |
 | support-parse | 59 | [support-parse.md](support-parse.md) |
-| views-render | 735 | [views-render.md](views-render.md) |
+| views-render | 745 | [views-render.md](views-render.md) |

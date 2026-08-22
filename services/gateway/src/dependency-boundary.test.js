@@ -135,12 +135,42 @@ test('only knowledge search bypasses agent authentication; tenant agent and code
   );
 
   const beforeAgentCatchAll = gatewayIndex.slice(0, agentCatchAll);
-  for (const route of ['/api/agent/memory', '/api/agent/status', '/api/agent/conversations']) {
+  for (const route of ['/api/agent/memory', '/api/agent/status']) {
     const escapedRoute = route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     assert.doesNotMatch(
       beforeAgentCatchAll,
       new RegExp(`app\\.(?:get|post|put|patch|delete|all|use)\\(\\s*['"]${escapedRoute}[^'"]*['"]`),
       `${route} must fall through to the authenticated agent catch-all`,
+    );
+  }
+
+  // Conversation CRUD itself must never be split out early with a weaker gate.
+  // Attachment sub-routes ARE deliberately registered early, same as
+  // business/prepare above — verified below to carry an EQUAL-OR-STRONGER gate
+  // (the plain workspace+org check plus requireEulaAccepted), not just
+  // "absent from this list."
+  for (const route of ['/api/agent/conversations', '/api/agent/conversations/:id', '/api/agent/conversations/:id/messages']) {
+    const escapedRoute = route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.doesNotMatch(
+      beforeAgentCatchAll,
+      new RegExp(`app\\.(?:get|post|put|patch|delete|all|use)\\(\\s*['"]${escapedRoute}['"]`),
+      `${route} must fall through to the authenticated agent catch-all`,
+    );
+  }
+
+  for (const route of [
+    '/api/agent/conversations/:id/attachments',
+    '/api/agent/conversations/:id/attachments/:attachmentId/complete',
+    '/api/agent/conversations/:id/attachments/ask',
+  ]) {
+    const escapedRoute = route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.match(
+      beforeAgentCatchAll,
+      new RegExp(
+        `app\\.post\\(\\s*['"]${escapedRoute}['"]\\s*,\\s*requirePermission\\(\\s*['"]workspace['"]\\s*\\)\\s*,\\s*`
+        + `requireOrganizationContext\\(\\)\\s*,\\s*requireEulaAccepted\\(\\)\\s*,\\s*plannerProxy\\s*\\);`
+      ),
+      `${route} must carry the same workspace+org gate as the catch-all, plus requireEulaAccepted (real work: GCS writes / embeddings / a hosted LLM call)`,
     );
   }
 });
