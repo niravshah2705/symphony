@@ -25,6 +25,7 @@
 #   SPA_ORIGIN (https://storage.googleapis.com), FIREBASE_ALLOWED_DOMAIN (empty =
 #   any verified user), GOOGLE_ANALYTICS_MEASUREMENT_ID (public GA4 G-... id;
 #   empty disables analytics), STREAM_TOKEN_SECRET (auto-generated if unset),
+#   IDENTITY_HASH_PEPPER (auto-generated if unset),
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, SKIP_BUILD=1 (reuse existing images).
 #   Email delivery: EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, EMAIL_SMTP_SECURE,
 #   EMAIL_SMTP_REQUIRE_TLS, EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_FROM,
@@ -174,6 +175,7 @@ terraform -chdir="$TF_DIR" apply -input=false -auto-approve "${TFVARS[@]}" \
   -target=google_secret_manager_secret.org_jwt_secret \
   -target=google_secret_manager_secret.email_smtp_user \
   -target=google_secret_manager_secret.email_smtp_password \
+  -target=google_secret_manager_secret.identity_hash_pepper \
   -target=google_secret_manager_secret.extra \
   -target=google_storage_bucket.spa \
   -target=google_storage_bucket_iam_member.spa_public_read
@@ -190,6 +192,8 @@ seed_secret() { # id, value
 # stream-token-secret: never printed; generated once if absent (do NOT rotate on redeploy).
 STREAM_TOKEN_SECRET="${STREAM_TOKEN_SECRET:-$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || head -c 32 /dev/urandom | base64 | tr -d '\n')}"
 seed_secret stream-token-secret "$STREAM_TOKEN_SECRET"
+IDENTITY_HASH_PEPPER="${IDENTITY_HASH_PEPPER:-$(openssl rand -base64 48 2>/dev/null | tr -d '\n' || head -c 48 /dev/urandom | base64 | tr -d '\n')}"
+seed_secret identity-hash-pepper "$IDENTITY_HASH_PEPPER"
 # org-jwt-secret is Terraform-managed (random_password + secret version); no seed here.
 [ -n "${GITHUB_TOKEN:-}" ]      && seed_secret github-token     "$GITHUB_TOKEN"      || true
 [ -n "${LANGSMITH_API_KEY:-}" ] && seed_secret langsmith-api-key "$LANGSMITH_API_KEY" || true
@@ -239,6 +243,7 @@ else
   build_push pipeline-deployer     Dockerfile.deployer
   build_push proxy Dockerfile.proxy
   build_push email-service Dockerfile.email
+  build_push identity-verification Dockerfile.identity-verification
   build_push provisioner Dockerfile.provisioner
   build_push_context org-service services/org/Dockerfile services/org
   # Settings copies the shared-core harness catalog, so it builds at repo root.

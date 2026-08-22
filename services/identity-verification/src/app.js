@@ -2,9 +2,8 @@
 
 const crypto = require('node:crypto');
 const express = require('express');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
 const log = require('@ai-fleet/shared-core/logger');
-const { createFileRepository } = require('./repository');
+const { createRepositoryFromEnv } = require('./repository');
 const { createDigiLockerProvider } = require('./provider');
 const {
   normalizeChecks,
@@ -34,8 +33,15 @@ function safeSession(session) {
 
 function createIdentityService(options = {}) {
   const now = options.now || Date.now;
-  const pepper = options.hashPepper || process.env.IDENTITY_HASH_PEPPER || 'local-development-identity-pepper';
-  const repository = options.repository || createFileRepository(process.env.IDENTITY_STORE_FILE || `${CONFIG.DATA_DIR}/identity-verification.json`);
+  const production = process.env.NODE_ENV === 'production';
+  const pepper = options.hashPepper || process.env.IDENTITY_HASH_PEPPER || (production ? '' : 'local-development-identity-pepper');
+  if (!pepper) {
+    throw Object.assign(new Error('IDENTITY_HASH_PEPPER is required in production.'), {
+      status: 500,
+      code: 'identity_hash_pepper_required',
+    });
+  }
+  const repository = options.repository || createRepositoryFromEnv(process.env);
   const provider = options.provider || createDigiLockerProvider({
     mock: String(process.env.IDENTITY_PROVIDER || 'mock').toLowerCase() === 'mock',
     env: process.env,
