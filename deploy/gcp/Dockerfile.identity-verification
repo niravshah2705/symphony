@@ -1,0 +1,44 @@
+# syntax=docker/dockerfile:1
+#
+# Identity verification service image (INTERNAL Cloud Run service).
+# Build from the monorepo root so npm workspaces resolve @ai-fleet/shared-core:
+#   docker build -f deploy/gcp/Dockerfile.identity-verification -t <tag> .
+#
+# Base image is pinned by DIGEST (not just a mutable tag) per the
+# infrastructure-misconfig checklist. This is the multi-arch index digest for
+# node:22-alpine.
+ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+
+FROM ${NODE_IMAGE} AS builder
+WORKDIR /app
+ENV NODE_ENV=production
+
+# The identity service uses only lightweight shared primitives. Keep the
+# agent-oriented @ai-fleet/shared workspace out of the image so it never pulls
+# in agent SDKs or LLM dependencies.
+COPY package.json package-lock.json ./
+COPY packages/shared-core/package.json ./packages/shared-core/package.json
+COPY services/identity-verification/package.json ./services/identity-verification/package.json
+
+RUN npm ci --omit=dev \
+      --workspace=@ai-fleet/shared-core \
+      --workspace=@ai-fleet/identity-verification \
+      --include-workspace-root=false \
+    && npm cache clean --force
+
+COPY packages/shared-core/ ./packages/shared-core/
+COPY services/identity-verification/ ./services/identity-verification/
+
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    AI_FLEET_DATA_DIR=/tmp
+
+COPY --from=builder --chown=node:node /app /app
+
+USER node
+
+EXPOSE 8080
+
+CMD ["node", "services/identity-verification/src/index.js"]

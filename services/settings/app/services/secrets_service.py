@@ -61,6 +61,8 @@ MANAGED_ENV = {
     "openaiApiKey": "OPENAI_API_KEY",
     "huggingfaceApiKey": "HUGGINGFACE_API_KEY",
     "langsmithApiKey": "LANGSMITH_API_KEY",
+    "digilockerClientId": "DIGILOCKER_CLIENT_ID",
+    "digilockerClientSecret": "DIGILOCKER_CLIENT_SECRET",
     # LangSmith LLM Gateway workspace key (managed-only; see models/secrets.py).
     "langsmithGatewayApiKey": "LANGSMITH_GATEWAY_API_KEY",
     # OAuth bundles have no environment fallback. Platform operators may still

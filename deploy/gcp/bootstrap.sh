@@ -27,6 +27,7 @@
 #   SPA_ORIGIN (https://<project>.web.app), FIREBASE_ALLOWED_DOMAIN,
 #   GOOGLE_ANALYTICS_MEASUREMENT_ID (public GA4 G-... id; empty disables analytics),
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, STREAM_TOKEN_SECRET (auto-generated if unset),
+#   IDENTITY_HASH_PEPPER (auto-generated if unset),
 #   EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_SMTP_HOST, EMAIL_SMTP_PORT,
 #   EMAIL_SMTP_SECURE, EMAIL_SMTP_REQUIRE_TLS, EMAIL_FROM, EMAIL_PUBLIC_APP_URL.
 set -euo pipefail
@@ -132,6 +133,8 @@ seed() { ensure_secret "$1"; if has_version "$1"; then echo "  $1: has a version
 
 STREAM_TOKEN_SECRET="${STREAM_TOKEN_SECRET:-$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || head -c 32 /dev/urandom | base64 | tr -d '\n')}"
 seed stream-token-secret "$STREAM_TOKEN_SECRET"
+IDENTITY_HASH_PEPPER="${IDENTITY_HASH_PEPPER:-$(openssl rand -base64 48 2>/dev/null | tr -d '\n' || head -c 48 /dev/urandom | base64 | tr -d '\n')}"
+seed identity-hash-pepper "$IDENTITY_HASH_PEPPER"
 # org-jwt-secret is Terraform-managed (random_password + version) — no seed here.
 ensure_secret github-token;     [ -n "${GITHUB_TOKEN:-}" ]      && seed github-token     "$GITHUB_TOKEN"      || true
 ensure_secret langsmith-api-key;[ -n "${LANGSMITH_API_KEY:-}" ] && seed langsmith-api-key "$LANGSMITH_API_KEY" || true
@@ -205,6 +208,7 @@ if command -v terraform >/dev/null 2>&1; then
       -var="email_public_app_url=${EMAIL_PUBLIC_APP_URL}" \
       "$1" "$2" >/dev/null && echo "  $1: imported"; fi; }
   tfimport 'google_secret_manager_secret.stream_token_secret' "projects/${PROJECT_ID}/secrets/stream-token-secret"
+  tfimport 'google_secret_manager_secret.identity_hash_pepper' "projects/${PROJECT_ID}/secrets/identity-hash-pepper"
   tfimport 'google_secret_manager_secret.extra["github-token"]'     "projects/${PROJECT_ID}/secrets/github-token"
   tfimport 'google_secret_manager_secret.extra["langsmith-api-key"]' "projects/${PROJECT_ID}/secrets/langsmith-api-key"
   tfimport 'google_secret_manager_secret.email_smtp_user' "projects/${PROJECT_ID}/secrets/email-smtp-user"

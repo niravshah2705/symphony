@@ -4,7 +4,7 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 24
+**Total communities**: 25
 
 ## Communities
 
@@ -28,9 +28,10 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-body | 17 | [src-body-2.md](src-body-2.md) |
 | src-context | 337 | [src-context.md](src-context.md) |
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
+| src-session | 43 | [src-session.md](src-session.md) |
 | src-stage | 179 | [src-stage.md](src-stage.md) |
 | src-test:build | 172 | [src-test-build.md](src-test-build.md) |
 | src-test:coder | 107 | [src-test-coder.md](src-test-coder.md) |
 | src-token | 112 | [src-token.md](src-token.md) |
 | support-parse | 59 | [support-parse.md](support-parse.md) |
-| views-render | 735 | [views-render.md](views-render.md) |
+| views-render | 740 | [views-render.md](views-render.md) |
