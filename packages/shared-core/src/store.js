@@ -625,6 +625,8 @@ const SECRET_ENV = Object.freeze({
   // Managed LLM API keys (alternative to OAuth), matching the vault's managed set.
   anthropicApiKey: 'ANTHROPIC_API_KEY',
   openaiApiKey: 'OPENAI_API_KEY',
+  digilockerClientId: 'DIGILOCKER_CLIENT_ID',
+  digilockerClientSecret: 'DIGILOCKER_CLIENT_SECRET',
 });
 
 function secretOverlay() {

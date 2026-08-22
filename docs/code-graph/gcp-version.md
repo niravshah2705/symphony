@@ -4,32 +4,47 @@
 
 ## Overview
 
-Community of 2 nodes
+Directory-based community: deploy/gcp
 
-- **Size**: 2 nodes
-- **Cohesion**: 0.0714
+- **Size**: 12 nodes
+- **Cohesion**: 0.0316
 - **Dominant Language**: bash
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| has_version | Function | ./deploy/gcp/deploy.sh | 183-184 |
-| seed_secret | Function | ./deploy/gcp/deploy.sh | 185-188 |
+| log | Function | ./deploy/gcp/bootstrap.sh | 52-52 |
+| ensure_secret | Function | ./deploy/gcp/bootstrap.sh | 119-120 |
+| has_version | Function | ./deploy/gcp/bootstrap.sh | 121-122 |
+| seed | Function | ./deploy/gcp/bootstrap.sh | 123-124 |
+| enabled_version | Function | ./deploy/gcp/bootstrap.sh | 138-139 |
+| tfimport | Function | ./deploy/gcp/bootstrap.sh | 187-192 |
+| log | Function | ./deploy/gcp/deploy.sh | 71-71 |
+| cleanup | Function | ./deploy/gcp/deploy.sh | 74-74 |
+| has_version | Function | ./deploy/gcp/deploy.sh | 147-148 |
+| seed_secret | Function | ./deploy/gcp/deploy.sh | 149-152 |
+| enabled_version | Function | ./deploy/gcp/deploy.sh | 164-167 |
+| build_push | Function | ./deploy/gcp/deploy.sh | 194-197 |
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **seed_secret** (criticality: 0.48, depth: 1)
 
 ## Dependencies
 
 ### Outgoing
 
-- `gcloud` (2 edge(s))
-- `echo` (2 edge(s))
-- `grep` (1 edge(s))
-- `printf` (1 edge(s))
+- `gcloud` (8 edge(s))
+- `echo` (6 edge(s))
+- `printf` (4 edge(s))
+- `grep` (3 edge(s))
+- `terraform` (2 edge(s))
+- `docker` (2 edge(s))
+- `git` (1 edge(s))
+- `true` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/deploy.sh` (7 edge(s))
+- `./deploy/gcp/bootstrap.sh` (35 edge(s))
+- `./deploy/gcp/deploy.sh` (30 edge(s))

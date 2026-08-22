@@ -507,6 +507,17 @@ export const api = {
     updateConfig: (payload) => request('/billing/config', { method: 'PUT', body: JSON.stringify(payload) }),
   },
 
+  identity: {
+    createSession: (checks) =>
+      request('/identity/sessions', { method: 'POST', body: JSON.stringify({ checks }) }),
+    getSession: (sessionId) => request(`/identity/sessions/${encodeURIComponent(sessionId)}`),
+    getResult: (sessionId) => request(`/identity/sessions/${encodeURIComponent(sessionId)}/result`),
+    completeMock: (sessionId) =>
+      request(`/identity/sessions/${encodeURIComponent(sessionId)}/mock-complete`, { method: 'POST' }),
+    revoke: (sessionId) =>
+      request(`/identity/sessions/${encodeURIComponent(sessionId)}/revoke`, { method: 'POST' }),
+  },
+
   // Organization service (services/org via /api/org/*). The `me` surface is
   // available to any signed-in user (personal projects + create-org); the org
   // tenant surface needs an org role and the org service enforces per-org RBAC.

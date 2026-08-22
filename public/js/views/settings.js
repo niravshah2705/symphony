@@ -1224,6 +1224,8 @@ const VAULT_SECRETS = [
   { key: 'geminiApiKey', label: 'Gemini API key', hint: 'Used by the Gemini / Antigravity provider.' },
   { key: 'huggingfaceApiKey', label: 'Hugging Face token', hint: 'Used by the Hugging Face (BYoM) provider.' },
   { key: 'langsmithApiKey', label: 'LangSmith API key', hint: 'Used for brokered tracing and evaluation.' },
+  { key: 'digilockerClientId', label: 'DigiLocker client ID', hint: 'Customer-only. Used by identity verification after DigiLocker/API Setu onboarding.' },
+  { key: 'digilockerClientSecret', label: 'DigiLocker client secret', hint: 'Customer-only. Used only server-side by the identity verification service.' },
 ];
 
 function describeVaultStatus(isSet, source) {

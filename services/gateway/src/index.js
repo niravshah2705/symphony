@@ -229,6 +229,23 @@ app.post('/api/agent/business/prepare', requirePermission('workspace'), requireO
 app.use('/api/agent', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), plannerProxy);
 app.use('/api/coder', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), createProxy(CONFIG.SERVICES.coderUrl));
 
+// Identity verification service (DigiLocker / PAN / age proof / APAAR / NAD).
+// Browser calls stay same-origin and are scoped by authenticated user plus the
+// selected organization. The service owns provider OAuth state and identity
+// uniqueness claims; gateway only enforces coarse access/context.
+if (CONFIG.SERVICES.identityUrl) {
+  const identityProxy = createProxy(CONFIG.SERVICES.identityUrl, {
+    rewrite: { from: '/api/identity', to: '' },
+    injectHeaders: (req) => ({
+      'x-ai-fleet-user-id': req.auth && req.auth.user ? String(req.auth.user.sub || req.auth.user.email || '') : '',
+    }),
+  });
+  app.use('/api/identity', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), identityProxy);
+} else {
+  app.use('/api/identity', requireAuthenticated(), (req, res) =>
+    res.status(501).json({ error: 'Identity verification service is not configured (IDENTITY_URL unset).' }));
+}
+
 // Organization service (FastAPI + Firestore, services/org). It runs its own
 // Firebase-OIDC auth + org-scoped RBAC, so the gateway forwards the caller's
 // Firebase bearer (forwardUserAuth) and rewrites /api/org/* -> /api/v1/*.
