@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| summarizeConversation | Function | ./packages/shared/src/agent/conversations.js | 86-95 |
-| test:summarizeConversation omits messages and counts them@L54 | Test | ./packages/shared/src/agent/conversations.test.js | 54-58 |
+| summarizeConversation | Function | ./packages/shared/src/agent/conversations.js | 139-148 |
+| test:summarizeConversation omits messages and counts them@L106 | Test | ./packages/shared/src/agent/conversations.test.js | 106-110 |
 
 ## Execution Flows
 

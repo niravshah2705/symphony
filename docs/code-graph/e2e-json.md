@@ -4,68 +4,28 @@
 
 ## Overview
 
-Directory-based community: e2e
+Community of 12 nodes
 
-- **Size**: 138 nodes
-- **Cohesion**: 0.1094
+- **Size**: 12 nodes
+- **Cohesion**: 0.0947
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| json | Function | ./e2e/adlc.spec.js | 5-11 |
-| test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-26 |
-| test:ADLC manifest is served as a static resource@L28 | Test | ./e2e/adlc.spec.js | 28-35 |
-| test:existing Agent workspace route still renders directly@L37 | Test | ./e2e/adlc.spec.js | 37-45 |
-| json | Function | ./e2e/agent-jobs.spec.js | 5-11 |
-| mockShell | Function | ./e2e/agent-jobs.spec.js | 13-62 |
-| mixedJobs | Function | ./e2e/agent-jobs.spec.js | 64-97 |
-| test:Agent jobs restores complete grouped planner and coding history@L99 | Test | ./e2e/agent-jobs.spec.js | 99-166 |
-| test:Agent jobs exposes load failures and retries successfully@L168 | Test | ./e2e/agent-jobs.spec.js | 168-181 |
-| test:Agent jobs rejects a malformed successful response and retries@L183 | Test | ./e2e/agent-jobs.spec.js | 183-198 |
-| test:Agent jobs preserves row focus and defers refresh while delete is armed@L200 | Test | ./e2e/agent-jobs.spec.js | 200-251 |
-| test:Agent jobs route, menu, and pause notice use the selected Gujarati locale@L253 | Test | ./e2e/agent-jobs.spec.js | 253-287 |
-| test:Agent surfaces deduplicate Git pauses and explain recovery in plain language@L289 | Test | ./e2e/agent-jobs.spec.js | 289-353 |
-| test:Agent workspace clears a model pause from a workspace SSE agent-status event@L360 | Test | ./e2e/agent-jobs.spec.js | 360-443 |
-| json | Function | ./e2e/agent-workspace.spec.js | 7-13 |
-| defaultPreparedBusiness | Function | ./e2e/agent-workspace.spec.js | 15-48 |
-| mockAgentWorkspace | Function | ./e2e/agent-workspace.spec.js | 50-277 |
-| test@L124 | Test | ./e2e/agent-workspace.spec.js | 124-124 |
-| summarize | Function | ./e2e/agent-workspace.spec.js | 172-172 |
-| openAgent | Function | ./e2e/agent-workspace.spec.js | 279-284 |
-| routeRequest | Function | ./e2e/agent-workspace.spec.js | 286-290 |
-| test:greetings and unsafe scam requests stay on non-mutating routes@L292 | Test | ./e2e/agent-workspace.spec.js | 292-312 |
-| test:business requests evaluate first, then prepare on demand, rendering the staged decision rail and metric tones@L322 | Test | ./e2e/agent-workspace.spec.js | 322-363 |
-| test:knowledge requests report typed memory, documents, and workspace matches@L365 | Test | ./e2e/agent-workspace.spec.js | 365-386 |
-| test:build requests run a guided project -> planner flow with human-in-the-loop steps@L388 | Test | ./e2e/agent-workspace.spec.js | 388-411 |
-| test:conversation history: sending lazily creates a thread that survives reload, plus new chat and delete@L413 | Test | ./e2e/agent-workspace.spec.js | 413-445 |
-| test:a send that outlives a navigate still lands in the thread rail once persistence completes@L447 | Test | ./e2e/agent-workspace.spec.js | 447-482 |
-| createRequested | Function | ./e2e/agent-workspace.spec.js | 469-469 |
-| test:a persistence failure surfaces a visible error and a working retry@L484 | Test | ./e2e/agent-workspace.spec.js | 484-512 |
-| test:clicking "+ New chat" while already on the unsent new thread resets compose state@L514 | Test | ./e2e/agent-workspace.spec.js | 514-536 |
-| test:rapid re-entry into "+ New chat" never leaves the composer stuck disabled@L538 | Test | ./e2e/agent-workspace.spec.js | 538-568 |
-| test:remember phrasing surfaces a confirm-before-save memory draft@L570 | Test | ./e2e/agent-workspace.spec.js | 570-586 |
-| test:troubleshooting requests combine diagnostic checks with retained log signals@L588 | Test | ./e2e/agent-workspace.spec.js | 588-627 |
-| test:implementation drafts require project selection and explicit approval before task creation@L629 | Test | ./e2e/agent-workspace.spec.js | 629-676 |
-| installFakeSpeechRecognition | Function | ./e2e/agent-workspace.spec.js | 680-703 |
-| FakeSpeechRecognition | Class | ./e2e/agent-workspace.spec.js | 682-699 |
-| start | Function | ./e2e/agent-workspace.spec.js | 683-695 |
-| stop | Function | ./e2e/agent-workspace.spec.js | 696-698 |
-| test:mic dictation button has a distinct accessible name from Send@L705 | Test | ./e2e/agent-workspace.spec.js | 705-712 |
-| test:dictation button degrades gracefully when the browser has no SpeechRecognition@L714 | Test | ./e2e/agent-workspace.spec.js | 714-729 |
-| test:a successful dictation appends the transcript to the composer@L731 | Test | ./e2e/agent-workspace.spec.js | 731-744 |
-| test:a denied microphone permission surfaces a toast and leaves the composer usable@L746 | Test | ./e2e/agent-workspace.spec.js | 746-758 |
-| test:attaching a file before any conversation exists shows a helpful toast and never calls the service@L760 | Test | ./e2e/agent-workspace.spec.js | 760-771 |
-| test:attaching a file after sending a message uploads it and shows a ready chip@L773 | Test | ./e2e/agent-workspace.spec.js | 773-787 |
-| test:removing an attachment deletes it server-side and the chip disappears@L789 | Test | ./e2e/agent-workspace.spec.js | 789-803 |
-| test:dropping a file directly onto the composer uploads it@L805 | Test | ./e2e/agent-workspace.spec.js | 805-822 |
-| test:a rejected file oversize check surfaces a toast and never calls the service@L824 | Test | ./e2e/agent-workspace.spec.js | 824-836 |
-| test:the "Ask about files" affordance stays hidden until an attachment is ready, then answers with citations@L838 | Test | ./e2e/agent-workspace.spec.js | 838-859 |
-| json | Function | ./e2e/anonymous-agent.spec.js | 5-11 |
-| authConfig | Function | ./e2e/anonymous-agent.spec.js | 36-50 |
-
-*... and 88 more members.*
+| json | Function | ./e2e/page-loading.spec.js | 5-11 |
+| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
+| test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
+| test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148 | Test | ./e2e/page-loading.spec.js | 148-182 |
+| test:fixed language groups mark, but never auto-apply, the IP recommendation@L184 | Test | ./e2e/page-loading.spec.js | 184-219 |
+| test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221 | Test | ./e2e/page-loading.spec.js | 221-475 |
+| authorizedJson | Function | ./e2e/page-loading.spec.js | 242-248 |
+| test:authenticated users without an organization route to onboarding before workspace requests@L477 | Test | ./e2e/page-loading.spec.js | 477-548 |
+| test:Settings Policy uses the active native project and selected-context roles@L550 | Test | ./e2e/page-loading.spec.js | 550-612 |
+| test:selected organization admins can open scoped policy without global settings write@L614 | Test | ./e2e/page-loading.spec.js | 614-655 |
+| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L657 | Test | ./e2e/page-loading.spec.js | 657-706 |
+| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L708 | Test | ./e2e/page-loading.spec.js | 708-731 |
 
 ## Execution Flows
 
@@ -75,36 +35,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (589 edge(s))
-- `locator` (305 edge(s))
-- `route` (173 edge(s))
-- `getByRole` (121 edge(s))
-- `toBeVisible` (106 edge(s))
-- `toHaveCount` (83 edge(s))
-- `evaluate` (78 edge(s))
-- `toBe` (62 edge(s))
-- `click` (61 edge(s))
-- `request` (56 edge(s))
-- `toHaveAttribute` (52 edge(s))
-- `toContainText` (51 edge(s))
-- `toEqual` (51 edge(s))
-- `goto` (46 edge(s))
-- `push` (46 edge(s))
+- `expect` (88 edge(s))
+- `route` (64 edge(s))
+- `locator` (35 edge(s))
+- `fulfill` (16 edge(s))
+- `toEqual` (16 edge(s))
+- `toBe` (14 edge(s))
+- `push` (13 edge(s))
+- `setItem` (12 edge(s))
+- `toBeVisible` (12 edge(s))
+- `url` (11 edge(s))
+- `goto` (10 edge(s))
+- `filter` (10 edge(s))
+- `toHaveText` (9 edge(s))
+- `toContain` (9 edge(s))
+- `on` (9 edge(s))
 
 ### Incoming
 
-- `expect` (566 edge(s))
-- `locator` (293 edge(s))
-- `getByRole` (116 edge(s))
-- `route` (110 edge(s))
-- `toBeVisible` (101 edge(s))
-- `toHaveCount` (80 edge(s))
-- `evaluate` (71 edge(s))
-- `click` (59 edge(s))
-- `toBe` (59 edge(s))
-- `toContainText` (50 edge(s))
-- `toEqual` (49 edge(s))
-- `toHaveAttribute` (48 edge(s))
-- `goto` (42 edge(s))
-- `toHaveText` (39 edge(s))
-- `url` (31 edge(s))
+- `expect` (86 edge(s))
+- `route` (64 edge(s))
+- `locator` (35 edge(s))
+- `toEqual` (16 edge(s))
+- `fulfill` (15 edge(s))
+- `toBe` (13 edge(s))
+- `./e2e/page-loading.spec.js` (12 edge(s))
+- `setItem` (12 edge(s))
+- `push` (12 edge(s))
+- `toBeVisible` (12 edge(s))
+- `goto` (10 edge(s))
+- `url` (10 edge(s))
+- `filter` (10 edge(s))
+- `toHaveText` (9 edge(s))
+- `toContain` (9 edge(s))

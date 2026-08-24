@@ -7,7 +7,7 @@
 Community of 19 nodes
 
 - **Size**: 19 nodes
-- **Cohesion**: 0.4451
+- **Cohesion**: 0.4378
 - **Dominant Language**: javascript
 
 ## Members
@@ -57,6 +57,6 @@ No execution flows pass through this community.
 - `equal` (28 edge(s))
 - `./services/gateway/src/eula.test.js` (15 edge(s))
 - `./services/gateway/src/eula.js` (8 edge(s))
-- `./services/gateway/src/index.js` (4 edge(s))
+- `./services/gateway/src/index.js` (7 edge(s))
 - `gate` (4 edge(s))
 - `./services/gateway/src/routes/eula.js` (2 edge(s))

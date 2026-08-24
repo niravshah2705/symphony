@@ -1,0 +1,642 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "AI Fleet Gateway API",
+    "description": "Agent-free AI Fleet API gateway — browser auth, billing, EULA, SSE, publishing, and authorized reverse proxies.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "AI Fleet Team"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000",
+      "description": "Local development server"
+    },
+    {
+      "url": "https://api.aifleet.com",
+      "description": "Production server"
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Health check",
+        "description": "Returns the health status of the gateway",
+        "tags": ["Health"],
+        "responses": {
+          "200": {
+            "description": "Gateway is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/config": {
+      "get": {
+        "summary": "Get public authentication configuration",
+        "description": "Returns Firebase web config for the SPA to initialize authentication",
+        "tags": ["Authentication"],
+        "responses": {
+          "200": {
+            "description": "Firebase web configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "apiKey": { "type": "string" },
+                    "authDomain": { "type": "string" },
+                    "projectId": { "type": "string" },
+                    "storageBucket": { "type": "string" },
+                    "messagingSenderId": { "type": "string" },
+                    "appId": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "Get authenticated user identity and permissions",
+        "description": "Returns the current user's identity, role, and permissions",
+        "tags": ["Authentication"],
+        "security": [
+          { "Bearer": [] }
+        ],
+        "responses": {
+          "200": {
+            "description": "User authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authenticated": { "type": "boolean" },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "sub": { "type": "string" },
+                        "email": { "type": "string" },
+                        "name": { "type": "string" }
+                      }
+                    },
+                    "role": { "type": "string" },
+                    "permissions": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "notificationsEnabled": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      }
+    },
+    "/api/config": {
+      "get": {
+        "summary": "Get deployment configuration",
+        "description": "Returns configuration for the current deployment (shared or per-tenant)",
+        "tags": ["Configuration"],
+        "security": [
+          { "Bearer": [] }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deployment configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authenticated": { "type": "boolean" },
+                    "gatewayUrl": { "type": "string" },
+                    "tenantId": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/stream": {
+      "get": {
+        "summary": "Server-Sent Events stream for conversation updates",
+        "description": "Stream for conversation status, job updates, and coder events",
+        "tags": ["Streaming"],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "description": "Signed stream token",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event stream established",
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token"
+          }
+        }
+      }
+    },
+    "/api/agent/workspace-stream": {
+      "get": {
+        "summary": "Server-Sent Events stream for workspace updates",
+        "description": "Stream for workspace-level status and events",
+        "tags": ["Streaming"],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "description": "Signed workspace stream token",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workspace event stream established",
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token"
+          }
+        }
+      }
+    },
+    "/api/agent/stream-token": {
+      "get": {
+        "summary": "Mint a conversation stream token",
+        "description": "Create a signed token to establish an SSE connection for a specific conversation",
+        "tags": ["Streaming"],
+        "security": [
+          { "Bearer": [] }
+        ],
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stream token minted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": { "type": "string" },
+                    "expiresIn": { "type": "number" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "404": {
+            "description": "Conversation not found"
+          }
+        }
+      }
+    },
+    "/api/agent/workspace-stream-token": {
+      "get": {
+        "summary": "Mint a workspace stream token",
+        "description": "Create a signed token to establish an SSE connection for workspace updates",
+        "tags": ["Streaming"],
+        "security": [
+          { "Bearer": [] }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workspace stream token minted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": { "type": "string" },
+                    "expiresIn": { "type": "number" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      }
+    },
+    "/api/eula": {
+      "get": {
+        "summary": "Get EULA acceptance status",
+        "description": "Check if the current user has accepted the EULA",
+        "tags": ["EULA"],
+        "responses": {
+          "200": {
+            "description": "EULA status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": { "type": "boolean" },
+                    "acceptedAt": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Record EULA acceptance",
+        "description": "Mark the EULA as accepted for the authenticated user",
+        "tags": ["EULA"],
+        "security": [
+          { "Bearer": [] }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accepted": { "type": "boolean" }
+                },
+                "required": ["accepted"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "EULA acceptance recorded"
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      }
+    },
+    "/api/billing": {
+      "get": {
+        "summary": "Get billing information",
+        "description": "Retrieve organization billing data and costs",
+        "tags": ["Billing"],
+        "security": [
+          { "Bearer": [] }
+        ],
+        "responses": {
+          "200": {
+            "description": "Billing information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orgId": { "type": "string" },
+                    "totalCost": { "type": "number" },
+                    "currency": { "type": "string" },
+                    "period": {
+                      "type": "object",
+                      "properties": {
+                        "start": { "type": "string", "format": "date" },
+                        "end": { "type": "string", "format": "date" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      }
+    },
+    "/api/pipeline/start": {
+      "post": {
+        "summary": "Start a new pipeline",
+        "description": "Initialize a new planner or coder pipeline run",
+        "tags": ["Pipeline"],
+        "security": [
+          { "Bearer": [] }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["planner", "coder"]
+                  },
+                  "model": { "type": "string" },
+                  "context": { "type": "object" }
+                },
+                "required": ["type"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pipeline started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runId": { "type": "string" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "EULA not accepted"
+          }
+        }
+      }
+    },
+    "/api/agent/knowledge-search": {
+      "post": {
+        "summary": "Search knowledge base",
+        "description": "RAG search over reviewed repository documentation (public access)",
+        "tags": ["Knowledge"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": { "type": "string" },
+                  "limit": { "type": "integer", "default": 10 }
+                },
+                "required": ["query"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "title": { "type": "string" },
+                          "content": { "type": "string" },
+                          "score": { "type": "number" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/business/prepare": {
+      "post": {
+        "summary": "Prepare a business context",
+        "description": "Run the 6-stage pipeline to prepare a business context",
+        "tags": ["Agent"],
+        "security": [
+          { "Bearer": [] }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "businessId": { "type": "string" },
+                  "repositoryUrl": { "type": "string" }
+                },
+                "required": ["businessId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Business context prepared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "businessId": { "type": "string" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "EULA not accepted"
+          }
+        }
+      }
+    },
+    "/api/agent/conversations": {
+      "get": {
+        "summary": "List conversations",
+        "description": "Get all conversations for the authenticated user",
+        "tags": ["Conversations"],
+        "security": [
+          { "Bearer": [] }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of conversations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "title": { "type": "string" },
+                      "createdAt": { "type": "string", "format": "date-time" },
+                      "updatedAt": { "type": "string", "format": "date-time" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      }
+    },
+    "/api/org/me": {
+      "get": {
+        "summary": "Get personal organization context",
+        "description": "Retrieve current user's personal workspace and projects",
+        "tags": ["Organization"],
+        "security": [
+          { "Bearer": [] }
+        ],
+        "responses": {
+          "200": {
+            "description": "Personal organization data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orgId": { "type": "string" },
+                    "orgName": { "type": "string" },
+                    "role": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Firebase ID token"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "code": { "type": "string" },
+          "details": { "type": "object" }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "sub": { "type": "string" },
+          "email": { "type": "string" },
+          "name": { "type": "string" },
+          "picture": { "type": "string" }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Service health endpoints"
+    },
+    {
+      "name": "Authentication",
+      "description": "User authentication and authorization"
+    },
+    {
+      "name": "Configuration",
+      "description": "Deployment and tenant configuration"
+    },
+    {
+      "name": "Streaming",
+      "description": "Server-Sent Events (SSE) streams"
+    },
+    {
+      "name": "EULA",
+      "description": "End-User License Agreement management"
+    },
+    {
+      "name": "Billing",
+      "description": "Organization billing and cost tracking"
+    },
+    {
+      "name": "Pipeline",
+      "description": "Pipeline execution and management"
+    },
+    {
+      "name": "Knowledge",
+      "description": "Knowledge base and RAG search"
+    },
+    {
+      "name": "Agent",
+      "description": "Agent-related operations"
+    },
+    {
+      "name": "Conversations",
+      "description": "Conversation management"
+    },
+    {
+      "name": "Organization",
+      "description": "Organization and workspace management"
+    }
+  ]
+}

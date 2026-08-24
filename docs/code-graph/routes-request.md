@@ -14,14 +14,14 @@ Community of 8 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| requestWorkspaceContext | Function | ./services/planner/src/routes/agent.js | 61-70 |
-| getHeader | Function | ./services/planner/src/routes/agent.js | 62-65 |
-| jobsForContext | Function | ./services/planner/src/routes/agent.js | 72-78 |
-| jobsForRequest | Function | ./services/planner/src/routes/agent.js | 80-82 |
-| recordsForRequest | Function | ./services/planner/src/routes/agent.js | 84-89 |
-| recordForRequest | Function | ./services/planner/src/routes/agent.js | 91-93 |
-| stampRequestContext | Function | ./services/planner/src/routes/agent.js | 95-102 |
-| conversationForRequest | Function | ./services/planner/src/routes/agent.js | 108-113 |
+| requestWorkspaceContext | Function | ./services/planner/src/routes/agent.js | 62-71 |
+| getHeader | Function | ./services/planner/src/routes/agent.js | 63-66 |
+| jobsForContext | Function | ./services/planner/src/routes/agent.js | 73-79 |
+| jobsForRequest | Function | ./services/planner/src/routes/agent.js | 81-83 |
+| recordsForRequest | Function | ./services/planner/src/routes/agent.js | 85-90 |
+| recordForRequest | Function | ./services/planner/src/routes/agent.js | 92-94 |
+| stampRequestContext | Function | ./services/planner/src/routes/agent.js | 96-103 |
+| conversationForRequest | Function | ./services/planner/src/routes/agent.js | 109-114 |
 
 ## Execution Flows
 

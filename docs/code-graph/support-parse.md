@@ -4,68 +4,68 @@
 
 ## Overview
 
-Directory-based community: e2e-live/support
+Community of 107 nodes
 
-- **Size**: 59 nodes
-- **Cohesion**: 0.1410
+- **Size**: 107 nodes
+- **Cohesion**: 0.2800
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| liveConfig | Function | ./e2e-live/full-pipeline.spec.js | 23-26 |
+| requiredPipelineFixture | Function | ./e2e-live/full-pipeline.spec.js | 35-45 |
+| issueFromResponse | Function | ./e2e-live/full-pipeline.spec.js | 47-53 |
+| finalEvidence | Function | ./e2e-live/full-pipeline.spec.js | 55-86 |
+| test:03 — Tenant A completes the approved plan → code → test → deploy pipeline@L88 | Test | ./e2e-live/full-pipeline.spec.js | 88-290 |
+| load | Function | ./e2e-live/full-pipeline.spec.js | 169-173 |
+| contextHeaders | Function | ./e2e-live/scripts/audit.js | 20-27 |
+| readBoundedJson | Function | ./e2e-live/scripts/audit.js | 29-39 |
+| requestJson | Function | ./e2e-live/scripts/audit.js | 41-64 |
+| assert | Function | ./e2e-live/scripts/audit.js | 66-68 |
+| noElevatedClaims | Function | ./e2e-live/scripts/audit.js | 70-80 |
+| validateIdentity | Function | ./e2e-live/scripts/audit.js | 82-104 |
+| browserSession | Function | ./e2e-live/scripts/audit.js | 106-132 |
+| normalizeRepository | Function | ./e2e-live/scripts/audit.js | 134-136 |
+| hasCanary | Function | ./e2e-live/scripts/audit.js | 138-140 |
+| ownContextHeaders | Function | ./e2e-live/scripts/audit.js | 142-144 |
+| auditTenantReadiness | Function | ./e2e-live/scripts/audit.js | 146-188 |
+| githubHeaders | Function | ./e2e-live/scripts/audit.js | 190-199 |
+| githubRequest | Function | ./e2e-live/scripts/audit.js | 201-215 |
+| githubContent | Function | ./e2e-live/scripts/audit.js | 217-225 |
+| auditRepository | Function | ./e2e-live/scripts/audit.js | 227-252 |
+| auditRecord | Function | ./e2e-live/scripts/audit.js | 254-256 |
+| writeAudit | Function | ./e2e-live/scripts/audit.js | 258-265 |
+| runAudit | Function | ./e2e-live/scripts/audit.js | 267-372 |
+| usage | Function | ./e2e-live/scripts/capture-auth.js | 12-18 |
+| parseCaptureArgs | Function | ./e2e-live/scripts/capture-auth.js | 20-43 |
+| atomicWriteStorageState | Function | ./e2e-live/scripts/capture-auth.js | 45-63 |
+| verifySignedIn | Function | ./e2e-live/scripts/capture-auth.js | 65-82 |
+| captureTenant | Function | ./e2e-live/scripts/capture-auth.js | 84-100 |
+| main | Function | ./e2e-live/scripts/capture-auth.js | 102-136 |
+| liveConfig | Function | ./e2e-live/security-evidence.spec.js | 34-37 |
+| requestRecord | Function | ./e2e-live/security-evidence.spec.js | 41-44 |
+| requestLabel | Function | ./e2e-live/security-evidence.spec.js | 46-48 |
+| isTenantPrivateRequest | Function | ./e2e-live/security-evidence.spec.js | 50-74 |
+| privateRequestLabels | Function | ./e2e-live/security-evidence.spec.js | 76-78 |
+| openAgent | Function | ./e2e-live/security-evidence.spec.js | 80-92 |
+| settlePublishedWork | Function | ./e2e-live/security-evidence.spec.js | 94-98 |
+| sendAgentRequest | Function | ./e2e-live/security-evidence.spec.js | 100-104 |
+| accountContextSnapshot | Function | ./e2e-live/security-evidence.spec.js | 106-126 |
+| containsText | Function | ./e2e-live/security-evidence.spec.js | 128-130 |
+| payloadContainsAny | Function | ./e2e-live/security-evidence.spec.js | 132-136 |
+| expectNoFixtureDisclosure | Function | ./e2e-live/security-evidence.spec.js | 138-149 |
+| runStatus | Function | ./e2e-live/security-evidence.spec.js | 151-153 |
+| traverseMainNavigation | Function | ./e2e-live/security-evidence.spec.js | 155-205 |
+| persistRecordedResult | Function | ./e2e-live/security-evidence.spec.js | 207-228 |
+| describe:recorded anonymous security journey@L230 | Test | ./e2e-live/security-evidence.spec.js | 230-369 |
+| test:01 — public questions and RAG work, while every pipeline start is denied@L233 | Test | ./e2e-live/security-evidence.spec.js | 233-368 |
+| describe:recorded authenticated tenant-isolation journey@L371 | Test | ./e2e-live/security-evidence.spec.js | 371-674 |
+| test:02 — Tenant A cannot discover or control Tenant B through UI or API@L374 | Test | ./e2e-live/security-evidence.spec.js | 374-673 |
 | requiredString | Function | ./e2e-live/support/config.js | 17-23 |
-| optionalString | Function | ./e2e-live/support/config.js | 25-27 |
-| hasProductionMarker | Function | ./e2e-live/support/config.js | 29-31 |
-| hasNonProductionMarker | Function | ./e2e-live/support/config.js | 33-37 |
-| parseHttpsUrl | Function | ./e2e-live/support/config.js | 39-62 |
-| parseRepository | Function | ./e2e-live/support/config.js | 64-69 |
-| parseUuid | Function | ./e2e-live/support/config.js | 71-76 |
-| parseOpaqueId | Function | ./e2e-live/support/config.js | 78-87 |
-| parseCanary | Function | ./e2e-live/support/config.js | 89-95 |
-| plainObject | Function | ./e2e-live/support/config.js | 97-102 |
-| parseTenant | Function | ./e2e-live/support/config.js | 104-132 |
-| parsePipelineTask | Function | ./e2e-live/support/config.js | 134-148 |
-| parseFixtures | Function | ./e2e-live/support/config.js | 150-181 |
-| parseStorageState | Function | ./e2e-live/support/config.js | 183-209 |
-| loadLiveConfig | Function | ./e2e-live/support/config.js | 211-277 |
-| parseBootstrapApiAssignment | Function | ./e2e-live/support/config.js | 279-290 |
-| resolveBootstrapApiBase | Function | ./e2e-live/support/config.js | 292-302 |
-| fixture | Function | ./e2e-live/support/config.test.js | 23-47 |
-| storageState | Function | ./e2e-live/support/config.test.js | 49-57 |
-| environment | Function | ./e2e-live/support/config.test.js | 59-71 |
-| test:loadLiveConfig returns the canonical typed shape for read-only checks@L73 | Test | ./e2e-live/support/config.test.js | 73-84 |
-| test:the deploy gate requires exact opt-in and explicitly disposable fixtures@L86 | Test | ./e2e-live/support/config.test.js | 86-99 |
-| test:fixture parsing rejects non-UUID tenant IDs and shared canaries@L101 | Test | ./e2e-live/support/config.test.js | 101-113 |
-| test:production-looking deployment inputs fail before browser or network work@L115 | Test | ./e2e-live/support/config.test.js | 115-127 |
-| test:bootstrap config parser accepts only one literal assignment without eval@L129 | Test | ./e2e-live/support/config.test.js | 129-151 |
-| test:capture arguments support sequential defaults or one explicit tenant@L20 | Test | ./e2e-live/support/live-scripts.test.js | 20-27 |
-| test:capture and audit writers create private, parseable JSON artifacts@L29 | Test | ./e2e-live/support/live-scripts.test.js | 29-44 |
-| test:identity validation rejects admin/super identities and accepts least-privilege operator@L46 | Test | ./e2e-live/support/live-scripts.test.js | 46-62 |
-| test:repository normalization compares configured URL and OWNER/REPO safely@L64 | Test | ./e2e-live/support/live-scripts.test.js | 64-67 |
-| boundedSafeText | Function | ./e2e-live/support/pipeline-evidence.js | 11-17 |
-| contextHeaders | Function | ./e2e-live/support/pipeline-evidence.js | 19-27 |
-| jsonRequest | Function | ./e2e-live/support/pipeline-evidence.js | 29-64 |
-| freshBrowserBearer | Function | ./e2e-live/support/pipeline-evidence.js | 66-82 |
-| setEvidenceHud | Function | ./e2e-live/support/pipeline-evidence.js | 84-105 |
-| latestStageRuns | Function | ./e2e-live/support/pipeline-evidence.js | 107-115 |
-| stageSummary | Function | ./e2e-live/support/pipeline-evidence.js | 117-120 |
-| waitForRun | Function | ./e2e-live/support/pipeline-evidence.js | 122-144 |
-| approveDeployment | Function | ./e2e-live/support/pipeline-evidence.js | 146-183 |
-| mergeEvidence | Function | ./e2e-live/support/pipeline-evidence.js | 185-198 |
-| saveStableVideo | Function | ./e2e-live/support/pipeline-evidence.js | 200-209 |
-| test:boundedSafeText redacts bearer-shaped credentials and control characters@L17 | Test | ./e2e-live/support/pipeline-evidence.test.js | 17-21 |
-| test:latestStageRuns and stageSummary select the newest attempt in canonical order@L23 | Test | ./e2e-live/support/pipeline-evidence.test.js | 23-38 |
-| test:jsonRequest owns auth and tenant context headers without leaking them in errors@L40 | Test | ./e2e-live/support/pipeline-evidence.test.js | 40-63 |
-| test:jsonRequest rejects off-origin and non-API targets before fetch@L65 | Test | ./e2e-live/support/pipeline-evidence.test.js | 65-82 |
-| test:mergeEvidence preserves existing scenarios and creates a private manifest@L84 | Test | ./e2e-live/support/pipeline-evidence.test.js | 84-94 |
-| boundedEvidenceText | Function | ./e2e-live/support/security-evidence.js | 12-20 |
-| stringField | Function | ./e2e-live/support/security-evidence.js | 22-28 |
-| tenantFixture | Function | ./e2e-live/support/security-evidence.js | 30-54 |
-| requireSecurityFixtures | Function | ./e2e-live/support/security-evidence.js | 56-74 |
-| apiErrorCode | Function | ./e2e-live/support/security-evidence.js | 76-79 |
 
-*... and 9 more members.*
+*... and 57 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
+- `expect` (73 edge(s))
+- `toBe` (29 edge(s))
+- `locator` (28 edge(s))
 - `equal` (26 edge(s))
-- `join` (19 edge(s))
+- `encodeURIComponent` (24 edge(s))
+- `String` (24 edge(s))
+- `join` (22 edge(s))
+- `trim` (19 edge(s))
+- `startsWith` (19 edge(s))
+- `stringify` (18 edge(s))
 - `throws` (16 edge(s))
-- `stringify` (12 edge(s))
-- `trim` (11 edge(s))
-- `parse` (9 edge(s))
-- `freeze` (8 edge(s))
-- `String` (8 edge(s))
-- `test` (7 edge(s))
-- `isArray` (7 edge(s))
-- `loadLiveConfig` (7 edge(s))
-- `replace` (7 edge(s))
-- `toLowerCase` (6 edge(s))
-- `has` (6 edge(s))
-- `resolve` (6 edge(s))
+- `toBeVisible` (15 edge(s))
+- `freeze` (14 edge(s))
+- `toLowerCase` (14 edge(s))
+- `map` (14 edge(s))
 
 ### Incoming
 
+- `expect` (56 edge(s))
+- `./e2e-live/scripts/audit.js` (27 edge(s))
+- `toBe` (26 edge(s))
 - `equal` (26 edge(s))
 - `./e2e-live/support/config.js` (24 edge(s))
-- `./e2e-live/support/security-evidence.js` (24 edge(s))
+- `./e2e-live/support/security-evidence.js` (22 edge(s))
 - `./e2e-live/support/pipeline-evidence.js` (21 edge(s))
+- `./e2e-live/security-evidence.spec.js` (17 edge(s))
+- `encodeURIComponent` (16 edge(s))
 - `throws` (16 edge(s))
-- `./e2e-live/support/config.test.js` (8 edge(s))
-- `join` (8 edge(s))
-- `loadLiveConfig` (7 edge(s))
-- `stringify` (6 edge(s))
-- `parseFixtures` (5 edge(s))
-- `mkdtempSync` (5 edge(s))
-- `tmpdir` (5 edge(s))
-- `after` (5 edge(s))
-- `rmSync` (5 edge(s))
-- `./e2e-live/support/pipeline-evidence.test.js` (5 edge(s))
+- `locator` (11 edge(s))
+- `./e2e-live/scripts/capture-auth.js` (11 edge(s))
+- `toEqual` (10 edge(s))
+- `toISOString` (8 edge(s))
+- `map` (8 edge(s))

@@ -27,6 +27,7 @@ const { configureTrustProxy } = require('./trust-proxy');
 const { enforcePinnedOrganization, requestContext, requireOrganizationContext, notificationsRequested } = require('./request-context');
 const { createContextValidationMiddleware } = require('./context-validator');
 const { createStoreContextMiddleware } = require('./store-context');
+const { createApiDocsGate, serveSwaggerJson, createSwaggerMiddleware, createSwaggerUISetup } = require('./swagger');
 
 const { PipelineAdmissionError, createPipelineAdmission } = require('./pipeline-admission');
 const pipelineAdmission = createPipelineAdmission();
@@ -80,6 +81,12 @@ app.get('/healthz', (req, res) => res.json({ status: 'ok' }));
 app.get('/api/auth/config', (req, res) => {
   res.set('Cache-Control', 'no-store').json(publicAuthConfig());
 });
+
+// Swagger/OpenAPI documentation — gated by x-ai-fleet-api-docs header in production.
+// Local dev (non-cloud): always available. Cloud deployments: require header (any value).
+// Serve the OpenAPI spec and the interactive Swagger UI.
+app.get('/swagger.json', serveSwaggerJson());
+app.use('/api/docs', createApiDocsGate(), createSwaggerMiddleware(), createSwaggerUISetup());
 
 // Removed Codex browser credential routes (OAuth and sign-out) must never fall
 // through to auth, a proxy, or the local SPA. Stable no-store 410s tell old

@@ -4,7 +4,7 @@
 
 ## Overview
 
-Directory-based community: integrations/openswe
+Community of 6 nodes
 
 - **Size**: 6 nodes
 - **Cohesion**: 0.2778

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 386 nodes
+Community of 424 nodes
 
-- **Size**: 386 nodes
-- **Cohesion**: 0.2897
+- **Size**: 424 nodes
+- **Cohesion**: 0.2900
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 386 nodes
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
 
-*... and 336 more members.*
+*... and 374 more members.*
 
 ## Execution Flows
 
@@ -77,42 +77,41 @@ Community of 386 nodes
 - **runPlannedCoder** (criticality: 0.65, depth: 5)
 - **executeClaude** (criticality: 0.61, depth: 2)
 - **executeCodex** (criticality: 0.60, depth: 2)
-- **runAudit** (criticality: 0.56, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (213 edge(s))
-- `join` (137 edge(s))
-- `String` (82 edge(s))
+- `equal` (251 edge(s))
+- `join` (140 edge(s))
+- `String` (86 edge(s))
 - `includes` (76 edge(s))
+- `deepEqual` (52 edge(s))
 - `strictEqual` (50 edge(s))
-- `isArray` (44 edge(s))
-- `deepEqual` (44 edge(s))
-- `trim` (43 edge(s))
+- `isArray` (48 edge(s))
+- `trim` (45 edge(s))
+- `map` (42 edge(s))
+- `slice` (39 edge(s))
 - `endsWith` (39 edge(s))
-- `slice` (37 edge(s))
 - `execFileSync` (37 edge(s))
 - `deepStrictEqual` (37 edge(s))
+- `throws` (34 edge(s))
 - `step` (34 edge(s))
-- `map` (31 edge(s))
-- `throws` (30 edge(s))
 
 ### Incoming
 
-- `equal` (212 edge(s))
+- `equal` (250 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
 - `join` (65 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (56 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (54 edge(s))
 - `strictEqual` (50 edge(s))
-- `deepEqual` (42 edge(s))
+- `deepEqual` (50 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `throws` (30 edge(s))
+- `throws` (34 edge(s))
+- `match` (27 edge(s))
 - `./packages/shared/src/agent/framework.js` (26 edge(s))
 - `execFileSync` (26 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
+- `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/settings-policy.js` (24 edge(s))
-- `./packages/shared/src/agent/coder.js` (22 edge(s))
-- `tmpdir` (20 edge(s))

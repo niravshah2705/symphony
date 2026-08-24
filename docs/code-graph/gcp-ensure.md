@@ -7,16 +7,16 @@
 Community of 3 nodes
 
 - **Size**: 3 nodes
-- **Cohesion**: 0.0909
+- **Cohesion**: 0.0870
 - **Dominant Language**: bash
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| ensure_secret | Function | ./deploy/gcp/bootstrap.sh | 126-127 |
-| has_version | Function | ./deploy/gcp/bootstrap.sh | 128-129 |
-| seed | Function | ./deploy/gcp/bootstrap.sh | 130-131 |
+| ensure_secret | Function | ./deploy/gcp/bootstrap.sh | 127-128 |
+| has_version | Function | ./deploy/gcp/bootstrap.sh | 129-130 |
+| seed | Function | ./deploy/gcp/bootstrap.sh | 131-132 |
 
 ## Execution Flows
 
@@ -33,4 +33,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/bootstrap.sh` (12 edge(s))
+- `./deploy/gcp/bootstrap.sh` (13 edge(s))

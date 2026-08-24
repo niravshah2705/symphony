@@ -4,10 +4,10 @@
 
 ## Overview
 
-Directory-based community: services/email
+Community of 54 nodes
 
-- **Size**: 71 nodes
-- **Cohesion**: 0.2079
+- **Size**: 54 nodes
+- **Cohesion**: 0.3393
 - **Dominant Language**: javascript
 
 ## Members
@@ -23,7 +23,6 @@ Directory-based community: services/email
 | post | Function | ./services/email/src/app.test.js | 74-80 |
 | test:health is live while readiness reflects the SMTP transport@L82 | Test | ./services/email/src/app.test.js | 82-93 |
 | test:push authentication runs before delivery@L95 | Test | ./services/email/src/app.test.js | 95-106 |
-| authenticatePush | Function | ./services/email/src/app.test.js | 98-98 |
 | test:delivers a valid invitation once and acknowledges a duplicate@L108 | Test | ./services/email/src/app.test.js | 108-120 |
 | test:does not acknowledge a concurrent redelivery while SMTP is unresolved@L122 | Test | ./services/email/src/app.test.js | 122-138 |
 | test:dispatches the allow-listed billing alert contract@L140 | Test | ./services/email/src/app.test.js | 140-152 |
@@ -35,76 +34,77 @@ Directory-based community: services/email
 | configErrors | Function | ./services/email/src/config.js | 33-49 |
 | test:accepts a complete fixed SMTP configuration@L7 | Test | ./services/email/src/config.test.js | 7-17 |
 | test:rejects partial SMTP auth, header controls, and mutable URL fragments@L19 | Test | ./services/email/src/config.test.js | 19-27 |
-| documentId | Function | ./services/email/src/idempotency.js | 8-10 |
-| MemoryIdempotencyStore | Class | ./services/email/src/idempotency.js | 12-53 |
-| constructor | Function | ./services/email/src/idempotency.js | 13-17 |
-| claim | Function | ./services/email/src/idempotency.js | 19-34 |
-| complete | Function | ./services/email/src/idempotency.js | 36-46 |
-| release | Function | ./services/email/src/idempotency.js | 48-52 |
-| FirestoreIdempotencyStore | Class | ./services/email/src/idempotency.js | 55-108 |
-| constructor | Function | ./services/email/src/idempotency.js | 56-61 |
-| claim | Function | ./services/email/src/idempotency.js | 63-82 |
-| complete | Function | ./services/email/src/idempotency.js | 84-98 |
-| release | Function | ./services/email/src/idempotency.js | 100-107 |
 | createIdempotencyStore | Function | ./services/email/src/idempotency.js | 110-118 |
-| test:document ids are stable hashes and never expose the caller key@L7 | Test | ./services/email/src/idempotency.test.js | 7-12 |
-| test:a completed key is deduplicated for the retention window@L14 | Test | ./services/email/src/idempotency.test.js | 14-22 |
-| test:a failed claim can be released and retried@L24 | Test | ./services/email/src/idempotency.test.js | 24-31 |
 | start | Function | ./services/email/src/index.js | 8-22 |
-| shutdown | Function | ./services/email/src/index.js | 15-18 |
 | createTransport | Function | ./services/email/src/mailer.js | 7-25 |
 | createMailer | Function | ./services/email/src/mailer.js | 27-70 |
 | ready | Function | ./services/email/src/mailer.js | 30-34 |
 | send | Function | ./services/email/src/mailer.js | 36-54 |
 | sendInvitation | Function | ./services/email/src/mailer.js | 57-59 |
 | sendBillingAlert | Function | ./services/email/src/mailer.js | 61-63 |
-| close | Function | ./services/email/src/mailer.js | 65-67 |
 | config | Function | ./services/email/src/mailer.test.js | 9-19 |
 | job | Function | ./services/email/src/mailer.test.js | 21-28 |
 | test:uses the injected SMTP transport with fixed template fields only@L30 | Test | ./services/email/src/mailer.test.js | 30-48 |
 | test:readiness is false and sending fails closed when required config is absent@L50 | Test | ./services/email/src/mailer.test.js | 50-56 |
 | test:billing alerts use the same fixed SMTP envelope and server-rendered body@L58 | Test | ./services/email/src/mailer.test.js | 58-76 |
+| InvalidEmailJob | Class | ./services/email/src/templates.js | 3-9 |
+| constructor | Function | ./services/email/src/templates.js | 4-8 |
+| boundedText | Function | ./services/email/src/templates.js | 11-17 |
+| boundedBody | Function | ./services/email/src/templates.js | 19-25 |
+| mailbox | Function | ./services/email/src/templates.js | 27-31 |
+| idempotencyKey | Function | ./services/email/src/templates.js | 33-37 |
+| parseInvitationJob | Function | ./services/email/src/templates.js | 39-62 |
+| parseBillingAlertJob | Function | ./services/email/src/templates.js | 64-82 |
+| parseEmailJob | Function | ./services/email/src/templates.js | 84-89 |
+| escapeHtml | Function | ./services/email/src/templates.js | 91-98 |
+| invitationUrl | Function | ./services/email/src/templates.js | 100-108 |
+| renderInvitation | Function | ./services/email/src/templates.js | 110-134 |
+| renderBillingAlert | Function | ./services/email/src/templates.js | 136-150 |
+| message | Function | ./services/email/src/templates.test.js | 15-29 |
+| test:parses only the invitation contract and normalizes the recipient@L31 | Test | ./services/email/src/templates.test.js | 31-38 |
+| test:uses the Pub/Sub message id when a caller idempotency key is absent@L40 | Test | ./services/email/src/templates.test.js | 40-44 |
+| test:rejects arbitrary templates, invalid mailboxes, controls, and unsafe keys@L46 | Test | ./services/email/src/templates.test.js | 46-55 |
 
-*... and 21 more members.*
+*... and 4 more members.*
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **start** (criticality: 0.62, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (55 edge(s))
-- `String` (18 edge(s))
+- `equal` (50 edge(s))
+- `String` (17 edge(s))
 - `trim` (14 edge(s))
 - `push` (14 edge(s))
-- `json` (10 edge(s))
-- `status` (10 edge(s))
-- `close` (10 edge(s))
-- `match` (9 edge(s))
-- `get` (8 edge(s))
+- `json` (9 edge(s))
+- `status` (9 edge(s))
+- `close` (8 edge(s))
 - `test` (8 edge(s))
-- `claim` (7 edge(s))
-- `includes` (7 edge(s))
+- `match` (8 edge(s))
 - `freeze` (7 edge(s))
-- `loadConfig` (6 edge(s))
-- `createMailer` (5 edge(s))
+- `includes` (6 edge(s))
+- `stringify` (5 edge(s))
+- `isArray` (5 edge(s))
+- `throws` (5 edge(s))
+- `end` (4 edge(s))
 
 ### Incoming
 
-- `equal` (55 edge(s))
+- `equal` (50 edge(s))
 - `./services/email/src/templates.js` (20 edge(s))
-- `./services/email/src/app.test.js` (15 edge(s))
-- `match` (9 edge(s))
-- `./services/email/src/mailer.js` (9 edge(s))
+- `./services/email/src/app.test.js` (14 edge(s))
 - `close` (8 edge(s))
-- `./services/email/src/idempotency.js` (8 edge(s))
+- `./services/email/src/mailer.js` (8 edge(s))
+- `match` (8 edge(s))
 - `./services/email/src/templates.test.js` (8 edge(s))
 - `./services/email/src/config.js` (6 edge(s))
-- `claim` (6 edge(s))
-- `deepEqual` (5 edge(s))
 - `./services/email/src/mailer.test.js` (5 edge(s))
-- `parseBillingAlertJob` (5 edge(s))
 - `throws` (5 edge(s))
-- `includes` (4 edge(s))
+- `push` (4 edge(s))
+- `includes` (3 edge(s))
+- `stringify` (3 edge(s))
+- `deepEqual` (3 edge(s))
+- `./services/email/src/index.js` (3 edge(s))

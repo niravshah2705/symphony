@@ -4,27 +4,35 @@
 
 ## Overview
 
-Community of 11 nodes
+Community of 19 nodes
 
-- **Size**: 11 nodes
-- **Cohesion**: 0.3333
+- **Size**: 19 nodes
+- **Cohesion**: 0.3448
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| ConversationError | Class | ./packages/shared/src/agent/conversations.js | 22-28 |
-| constructor | Function | ./packages/shared/src/agent/conversations.js | 23-27 |
-| bound | Function | ./packages/shared/src/agent/conversations.js | 31-33 |
-| normalizeMessage | Function | ./packages/shared/src/agent/conversations.js | 35-60 |
-| normalizeMessages | Function | ./packages/shared/src/agent/conversations.js | 63-71 |
-| normalizeTitle | Function | ./packages/shared/src/agent/conversations.js | 79-83 |
-| test:normalizeMessages keeps only allowlisted fields per role (no mass assignment)@L14 | Test | ./packages/shared/src/agent/conversations.test.js | 14-24 |
-| test:normalizeMessages validates array shape and size@L26 | Test | ./packages/shared/src/agent/conversations.test.js | 26-30 |
-| test:normalizeMessages enforces role and required content@L32 | Test | ./packages/shared/src/agent/conversations.test.js | 32-36 |
-| test:normalizeMessages bounds long fields@L38 | Test | ./packages/shared/src/agent/conversations.test.js | 38-41 |
-| test:normalizeTitle trims/bounds and rejects empty@L49 | Test | ./packages/shared/src/agent/conversations.test.js | 49-52 |
+| ConversationError | Class | ./packages/shared/src/agent/conversations.js | 26-32 |
+| constructor | Function | ./packages/shared/src/agent/conversations.js | 27-31 |
+| bound | Function | ./packages/shared/src/agent/conversations.js | 35-37 |
+| normalizeAttachmentRef | Function | ./packages/shared/src/agent/conversations.js | 40-52 |
+| normalizeAttachmentRefs | Function | ./packages/shared/src/agent/conversations.js | 54-61 |
+| normalizeCitation | Function | ./packages/shared/src/agent/conversations.js | 64-74 |
+| normalizeCitations | Function | ./packages/shared/src/agent/conversations.js | 76-83 |
+| normalizeMessage | Function | ./packages/shared/src/agent/conversations.js | 85-113 |
+| normalizeMessages | Function | ./packages/shared/src/agent/conversations.js | 116-124 |
+| normalizeTitle | Function | ./packages/shared/src/agent/conversations.js | 132-136 |
+| test:normalizeMessages keeps only allowlisted fields per role (no mass assignment)@L15 | Test | ./packages/shared/src/agent/conversations.test.js | 15-25 |
+| test:normalizeMessages validates array shape and size@L27 | Test | ./packages/shared/src/agent/conversations.test.js | 27-31 |
+| test:normalizeMessages enforces role and required content@L33 | Test | ./packages/shared/src/agent/conversations.test.js | 33-37 |
+| test:normalizeMessages bounds long fields@L39 | Test | ./packages/shared/src/agent/conversations.test.js | 39-42 |
+| test:normalizeTitle trims/bounds and rejects empty@L50 | Test | ./packages/shared/src/agent/conversations.test.js | 50-53 |
+| test:normalizeMessages keeps a bounded attachments array on user messages, omitted when absent@L55 | Test | ./packages/shared/src/agent/conversations.test.js | 55-62 |
+| test:normalizeMessages rejects malformed or oversized attachment references@L64 | Test | ./packages/shared/src/agent/conversations.test.js | 64-82 |
+| test:normalizeMessages keeps a bounded citations array on assistant messages, omitted when absent@L84 | Test | ./packages/shared/src/agent/conversations.test.js | 84-93 |
+| test:normalizeMessages rejects malformed citations@L95 | Test | ./packages/shared/src/agent/conversations.test.js | 95-104 |
 
 ## Execution Flows
 
@@ -34,28 +42,30 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `throws` (7 edge(s))
-- `equal` (5 edge(s))
+- `throws` (13 edge(s))
+- `isArray` (6 edge(s))
+- `equal` (6 edge(s))
+- `deepEqual` (5 edge(s))
+- `trim` (4 edge(s))
+- `String` (4 edge(s))
+- `map` (3 edge(s))
+- `sort` (3 edge(s))
+- `keys` (3 edge(s))
 - `slice` (2 edge(s))
-- `trim` (2 edge(s))
-- `String` (2 edge(s))
-- `isArray` (2 edge(s))
-- `deepEqual` (2 edge(s))
-- `sort` (2 edge(s))
-- `keys` (2 edge(s))
-- `map` (1 edge(s))
+- `test` (2 edge(s))
+- `fill` (2 edge(s))
+- `Number` (1 edge(s))
+- `isFinite` (1 edge(s))
 - `replace` (1 edge(s))
-- `repeat` (1 edge(s))
-- `fill` (1 edge(s))
 
 ### Incoming
 
-- `./packages/shared/src/agent/conversations.js` (9 edge(s))
-- `throws` (7 edge(s))
-- `./packages/shared/src/agent/conversations.test.js` (5 edge(s))
-- `equal` (5 edge(s))
-- `deepEqual` (2 edge(s))
-- `sort` (2 edge(s))
-- `keys` (2 edge(s))
+- `./packages/shared/src/agent/conversations.js` (15 edge(s))
+- `throws` (13 edge(s))
+- `./packages/shared/src/agent/conversations.test.js` (9 edge(s))
+- `equal` (6 edge(s))
+- `deepEqual` (5 edge(s))
+- `sort` (3 edge(s))
+- `keys` (3 edge(s))
+- `fill` (2 edge(s))
 - `repeat` (1 edge(s))
-- `fill` (1 edge(s))

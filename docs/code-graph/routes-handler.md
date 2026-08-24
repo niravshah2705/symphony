@@ -4,31 +4,34 @@
 
 ## Overview
 
-Community of 15 nodes
+Community of 18 nodes
 
-- **Size**: 15 nodes
-- **Cohesion**: 0.3020
+- **Size**: 18 nodes
+- **Cohesion**: 0.4979
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:normalizeStore migrates the legacy localLlm* slot keys into byom*@L18 | Test | ./packages/shared/src/store-byom-migration.test.js | 18-28 |
-| test:normalizeStore migrates a legacy localActiveModel into byomActiveModel@L30 | Test | ./packages/shared/src/store-byom-migration.test.js | 30-34 |
-| test:a new byom* value wins over a legacy localLlm* value and the legacy key is dropped@L36 | Test | ./packages/shared/src/store-byom-migration.test.js | 36-42 |
-| handlerFor | Function | ./services/planner/src/routes/agent.test.js | 17-22 |
-| call | Function | ./services/planner/src/routes/agent.test.js | 37-44 |
-| test:memory write, list, and delete round-trip with server-side validation@L144 | Test | ./services/planner/src/routes/agent.test.js | 144-173 |
-| test:memory-search detects scope from the query and returns scoped stored matches@L175 | Test | ./services/planner/src/routes/agent.test.js | 175-190 |
-| test:memory records are stamped and isolated by selected organization/project@L192 | Test | ./services/planner/src/routes/agent.test.js | 192-228 |
-| test:message yields a confirmable memory draft and canPrepare, never auto-writing@L230 | Test | ./services/planner/src/routes/agent.test.js | 230-240 |
-| test:business/prepare re-blocks unsafe input without a model call@L242 | Test | ./services/planner/src/routes/agent.test.js | 242-247 |
-| test:business/prepare resolves the linked business and forwards pipeline output@L249 | Test | ./services/planner/src/routes/agent.test.js | 249-264 |
-| test:conversation threads: create, append (auto-title), list, get, rename, delete@L266 | Test | ./services/planner/src/routes/agent.test.js | 266-308 |
-| test:conversation routes reject malformed ids and unknown threads@L310 | Test | ./services/planner/src/routes/agent.test.js | 310-316 |
-| test:planner job and status routes honor the exact selected organization and project@L355 | Test | ./services/planner/src/routes/agent.test.js | 355-473 |
-| test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L475 | Test | ./services/planner/src/routes/agent.test.js | 475-540 |
+| handlerFor | Function | ./services/planner/src/routes/agent-attachments.test.js | 10-15 |
+| call | Function | ./services/planner/src/routes/agent-attachments.test.js | 18-25 |
+| freshRouter | Function | ./services/planner/src/routes/agent-attachments.test.js | 35-54 |
+| test:GET /attachment-types is a pure passthrough of the canonical table@L56 | Test | ./services/planner/src/routes/agent-attachments.test.js | 56-61 |
+| test:mint/complete/list/delete all reject when org or project context is missing@L63 | Test | ./services/planner/src/routes/agent-attachments.test.js | 63-79 |
+| test:routes reject an unknown/foreign conversation even with valid org/project headers@L81 | Test | ./services/planner/src/routes/agent-attachments.test.js | 81-89 |
+| test:a conversation that exists but belongs to a different org is 404, not 403 (no existence oracle)@L91 | Test | ./services/planner/src/routes/agent-attachments.test.js | 91-112 |
+| reqFor | Function | ./services/planner/src/routes/agent-attachments.test.js | 102-102 |
+| test:mint validates the conversation id shape before touching the service@L114 | Test | ./services/planner/src/routes/agent-attachments.test.js | 114-123 |
+| test:mint forwards org/project/conversation and body fields to the service, and returns 201@L125 | Test | ./services/planner/src/routes/agent-attachments.test.js | 125-147 |
+| test:complete rejects a malformed attachment id before touching the service@L149 | Test | ./services/planner/src/routes/agent-attachments.test.js | 149-157 |
+| test:complete forwards ids to the service and returns its result@L159 | Test | ./services/planner/src/routes/agent-attachments.test.js | 159-171 |
+| test:list and delete forward to the service correctly@L173 | Test | ./services/planner/src/routes/agent-attachments.test.js | 173-193 |
+| test:search returns [] without calling the service for an empty query, and maps/bounds results otherwise@L195 | Test | ./services/planner/src/routes/agent-attachments.test.js | 195-210 |
+| test:ask returns a friendly no-attachments message and never calls the LLM when nothing is retrieved@L212 | Test | ./services/planner/src/routes/agent-attachments.test.js | 212-226 |
+| test:ask rejects an empty question before touching the service@L228 | Test | ./services/planner/src/routes/agent-attachments.test.js | 228-236 |
+| test:ask returns 400 when no thinking model is configured@L238 | Test | ./services/planner/src/routes/agent-attachments.test.js | 238-250 |
+| test:ask assembles retrieved excerpts into the model prompt and returns a bounded, cited answer@L252 | Test | ./services/planner/src/routes/agent-attachments.test.js | 252-278 |
 
 ## Execution Flows
 
@@ -38,36 +41,27 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (42 edge(s))
-- `ok` (22 edge(s))
-- `require` (13 edge(s))
-- `includes` (10 edge(s))
-- `resolve` (9 edge(s))
-- `after` (7 edge(s))
-- `filter` (7 edge(s))
-- `deepEqual` (7 edge(s))
-- `some` (7 edge(s))
-- `map` (6 edge(s))
-- `assign` (5 edge(s))
-- `store` (5 edge(s))
-- `call` (4 edge(s))
-- `rejects` (4 edge(s))
-- `./packages/shared/src/store.js::normalizeStore` (3 edge(s))
+- `equal` (29 edge(s))
+- `match` (7 edge(s))
+- `assign` (4 edge(s))
+- `resolve` (3 edge(s))
+- `deepEqual` (3 edge(s))
+- `attachmentsService` (2 edge(s))
+- `llm` (2 edge(s))
+- `ok` (2 edge(s))
+- `catch` (1 edge(s))
+- `then` (1 edge(s))
+- `handler` (1 edge(s))
+- `after` (1 edge(s))
+- `require` (1 edge(s))
+- `find` (1 edge(s))
+- `toUpperCase` (1 edge(s))
 
 ### Incoming
 
-- `equal` (42 edge(s))
-- `ok` (21 edge(s))
-- `require` (13 edge(s))
-- `./services/planner/src/routes/agent.test.js` (12 edge(s))
-- `includes` (10 edge(s))
-- `resolve` (7 edge(s))
-- `after` (7 edge(s))
-- `filter` (7 edge(s))
-- `deepEqual` (7 edge(s))
-- `some` (7 edge(s))
-- `map` (6 edge(s))
-- `assign` (5 edge(s))
-- `call` (4 edge(s))
-- `rejects` (4 edge(s))
-- `./packages/shared/src/store-byom-migration.test.js` (3 edge(s))
+- `equal` (29 edge(s))
+- `./services/planner/src/routes/agent-attachments.test.js` (18 edge(s))
+- `match` (7 edge(s))
+- `deepEqual` (3 edge(s))
+- `ok` (1 edge(s))
+- `repeat` (1 edge(s))

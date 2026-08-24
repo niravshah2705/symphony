@@ -15,8 +15,8 @@ Community of 3 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | callRoute | Function | ./services/planner/src/routes/agent.test.js | 47-64 |
-| next | Function | ./services/planner/src/routes/agent.test.js | 410-410 |
-| test:enqueue is role-gated, validates projectId, and queues exactly one project@L318 | Test | ./services/planner/src/routes/agent.test.js | 318-353 |
+| next | Function | ./services/planner/src/routes/agent.test.js | 492-492 |
+| test:enqueue is role-gated, validates projectId, and queues exactly one project@L400 | Test | ./services/planner/src/routes/agent.test.js | 400-435 |
 
 ## Execution Flows
 

@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| deriveTitle | Function | ./packages/shared/src/agent/conversations.js | 74-77 |
-| test:deriveTitle collapses to a single bounded line, with a fallback@L43 | Test | ./packages/shared/src/agent/conversations.test.js | 43-47 |
+| deriveTitle | Function | ./packages/shared/src/agent/conversations.js | 127-130 |
+| test:deriveTitle collapses to a single bounded line, with a fallback@L44 | Test | ./packages/shared/src/agent/conversations.test.js | 44-48 |
 
 ## Execution Flows
 

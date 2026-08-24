@@ -7,14 +7,14 @@
 Community of 2 nodes
 
 - **Size**: 2 nodes
-- **Cohesion**: 0.1905
+- **Cohesion**: 0.1600
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:only knowledge search bypasses agent authentication; tenant agent and coder data stay protected@L96 | Test | ./services/gateway/src/dependency-boundary.test.js | 96-146 |
+| test:only knowledge search bypasses agent authentication; tenant agent and coder data stay protected@L96 | Test | ./services/gateway/src/dependency-boundary.test.js | 96-176 |
 | routeIndex | Function | ./services/gateway/src/dependency-boundary.test.js | 98-105 |
 
 ## Execution Flows
@@ -25,10 +25,11 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `match` (4 edge(s))
-- `replace` (2 edge(s))
+- `match` (5 edge(s))
+- `replace` (4 edge(s))
 - `matchAll` (2 edge(s))
 - `ok` (2 edge(s))
+- `doesNotMatch` (2 edge(s))
 - `equal` (1 edge(s))
 - `toUpperCase` (1 edge(s))
 - `readFileSync` (1 edge(s))
@@ -36,18 +37,17 @@ No execution flows pass through this community.
 - `map` (1 edge(s))
 - `deepEqual` (1 edge(s))
 - `slice` (1 edge(s))
-- `doesNotMatch` (1 edge(s))
 
 ### Incoming
 
-- `match` (4 edge(s))
+- `match` (5 edge(s))
+- `replace` (3 edge(s))
 - `./services/gateway/src/dependency-boundary.test.js` (2 edge(s))
 - `ok` (2 edge(s))
+- `doesNotMatch` (2 edge(s))
 - `readFileSync` (1 edge(s))
 - `join` (1 edge(s))
 - `map` (1 edge(s))
 - `matchAll` (1 edge(s))
 - `deepEqual` (1 edge(s))
 - `slice` (1 edge(s))
-- `replace` (1 edge(s))
-- `doesNotMatch` (1 edge(s))
