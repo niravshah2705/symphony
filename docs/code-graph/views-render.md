@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 750 nodes
-- **Cohesion**: 0.4603
+- **Size**: 753 nodes
+- **Cohesion**: 0.4607
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: public/js
 | beginMicrosoftSignIn | Function | ./public/js/app.js | 506-514 |
 | authProviderButtons | Function | ./public/js/app.js | 521-539 |
 
-*... and 700 more members.*
+*... and 703 more members.*
 
 ## Execution Flows
 
@@ -85,7 +85,7 @@ Directory-based community: public/js
 
 ### Outgoing
 
-- `append` (216 edge(s))
+- `append` (217 edge(s))
 - `addEventListener` (212 edge(s))
 - `map` (152 edge(s))
 - `String` (115 edge(s))
@@ -95,9 +95,9 @@ Directory-based community: public/js
 - `setAttribute` (67 edge(s))
 - `isArray` (65 edge(s))
 - `has` (65 edge(s))
+- `catch` (59 edge(s))
+- `querySelector` (59 edge(s))
 - `Boolean` (58 edge(s))
-- `catch` (58 edge(s))
-- `querySelector` (58 edge(s))
 - `slice` (51 edge(s))
 - `test` (45 edge(s))
 
@@ -106,7 +106,7 @@ Directory-based community: public/js
 - `./public/js/api.js` (172 edge(s))
 - `./public/js/workflow-designer-model.mjs` (145 edge(s))
 - `./public/js/views/settings.js` (132 edge(s))
-- `./public/js/views/agent.js` (106 edge(s))
+- `./public/js/views/agent.js` (109 edge(s))
 - `./public/js/app.js` (102 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (89 edge(s))
 - `./public/js/google-analytics.test.mjs` (69 edge(s))

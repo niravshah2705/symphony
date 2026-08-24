@@ -242,6 +242,12 @@ export async function renderAgent(view) {
   } finally {
     seedRequest.dispose();
     if (bootstrapController === controller) bootstrapController = null;
+    // Whatever happened above — success, the early "superseded" return, or an
+    // unexpected exception — this generation's composer must not stay
+    // disabled once it is (still) the active mount. A stale generation's own
+    // isCurrentMount() check stays false here too, so it never touches a
+    // newer mount's DOM.
+    if (isCurrentMount()) setComposerReady(scaffold.root, true);
   }
 }
 
@@ -828,14 +834,25 @@ function buildComposer(stream, railBody, generation = renderGeneration) {
       // Public conversations stay browser-local. Persist only after the
       // application has established an authenticated identity.
       if (getAuthenticationState().authenticated) {
+        const attemptPersist = () => persistTurn(
+          outgoing,
+          result,
+          generation,
+          targetConversationId || persistedConversationId
+        );
         persistenceQueue = persistenceQueue.then(async () => {
-          const persistedId = await persistTurn(
-            outgoing,
-            result,
-            generation,
-            targetConversationId || persistedConversationId
-          );
-          if (persistedId) persistedConversationId = persistedId;
+          const outcome = await attemptPersist();
+          if (outcome.conversationId) persistedConversationId = outcome.conversationId;
+          if (outcome.ok) return;
+          toast('Couldn’t save this message — it’s shown here but not saved yet.', 'err');
+          if (isCurrentComposer()) {
+            stream.append(renderPersistFailureNotice(async () => {
+              const retry = await attemptPersist();
+              if (retry.conversationId) persistedConversationId = retry.conversationId;
+              return retry.ok;
+            }));
+            scrollConversationToEnd();
+          }
         });
       }
       // A build request runs a guided, human-in-the-loop flow inline in the chat.
@@ -1360,7 +1377,7 @@ function compactAssistant(userText, result) {
 }
 
 async function persistTurn(userText, result, generation, conversationId) {
-  if (!getAuthenticationState().authenticated) return null;
+  if (!getAuthenticationState().authenticated) return { ok: true, conversationId: null };
   let targetConversationId = conversationId;
   try {
     if (!targetConversationId && generation === renderGeneration && agentRouteActive()) {
@@ -1379,11 +1396,35 @@ async function persistTurn(userText, result, generation, conversationId) {
       compactAssistant(userText, result),
     ]);
     if (agentRouteActive()) void refreshThreadRail();
-    return targetConversationId;
-  } catch (_) {
-    // A persistence failure should never break the live conversation.
-    return targetConversationId;
+    return { ok: true, conversationId: targetConversationId };
+  } catch (error) {
+    // A persistence failure should never break the live conversation — the
+    // caller decides how to surface it and offers a retry.
+    return { ok: false, conversationId: targetConversationId, error };
   }
+}
+
+/** Non-blocking notice appended when persistTurn() fails. Never touches the
+ * already-rendered optimistic bubbles — only offers a way to retry the save,
+ * and removes itself once a retry succeeds. */
+function renderPersistFailureNotice(onRetry) {
+  const notice = assistantMessage(
+    'Not saved yet',
+    'This exchange is shown here, but the last message wasn’t saved to your conversation history.',
+    [{ label: 'Retry save', action: () => { void attempt(); } }],
+    'notice message-persist-error'
+  );
+  const button = notice.querySelector('.message-links button');
+  async function attempt() {
+    button.disabled = true;
+    button.textContent = 'Retrying…';
+    const ok = await onRetry();
+    if (ok) { notice.remove(); return; }
+    button.disabled = false;
+    button.textContent = 'Retry save';
+    toast('Still couldn’t save this message. You can try again.', 'err');
+  }
+  return notice;
 }
 
 async function refreshThreadRail() {
@@ -1513,7 +1554,17 @@ async function uploadAttachmentFile(conversationId, chipRow, file) {
 
 function buildThreadRail(summaries) {
   const newChat = el('button', { class: 'conversation-new', type: 'button' }, '+ New chat');
-  newChat.addEventListener('click', () => { window.location.hash = '#/agent/new'; });
+  newChat.addEventListener('click', () => {
+    // Browsers do not fire `hashchange` when the hash is unchanged, so
+    // clicking this while already on the unsent "new" thread would otherwise
+    // be a silent no-op. Re-run the same reset a real navigation would trigger.
+    if (location.hash === '#/agent/new') {
+      const view = document.getElementById('view');
+      if (view) void renderAgent(clear(view)).catch(() => { /* app.js's render() has a try/catch this bypass skips */ });
+      return;
+    }
+    window.location.hash = '#/agent/new';
+  });
   const list = el('div', { class: 'conversation-thread-list' }, summaries.length
     ? summaries.map((summary) => threadItem(summary))
     : [el('p', { class: 'rail-copy' }, 'No conversations yet. Start one below.')]);

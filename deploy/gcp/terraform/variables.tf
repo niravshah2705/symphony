@@ -392,7 +392,7 @@ variable "max_instances" {
 variable "container_concurrency" {
   type        = number
   description = "Maximum concurrent requests per Cloud Run service instance. Values above 1 require service containers with at least 1 vCPU."
-  default     = 10
+  default     = 1000
 
   validation {
     condition     = var.container_concurrency >= 1 && var.container_concurrency <= 1000 && floor(var.container_concurrency) == var.container_concurrency

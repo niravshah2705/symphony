@@ -6,8 +6,8 @@
 
 Directory-based community: e2e
 
-- **Size**: 135 nodes
-- **Cohesion**: 0.1092
+- **Size**: 138 nodes
+- **Cohesion**: 0.1094
 - **Dominant Language**: javascript
 
 ## Members
@@ -42,30 +42,30 @@ Directory-based community: e2e
 | test:conversation history: sending lazily creates a thread that survives reload, plus new chat and delete@L413 | Test | ./e2e/agent-workspace.spec.js | 413-445 |
 | test:a send that outlives a navigate still lands in the thread rail once persistence completes@L447 | Test | ./e2e/agent-workspace.spec.js | 447-482 |
 | createRequested | Function | ./e2e/agent-workspace.spec.js | 469-469 |
-| test:remember phrasing surfaces a confirm-before-save memory draft@L484 | Test | ./e2e/agent-workspace.spec.js | 484-500 |
-| test:troubleshooting requests combine diagnostic checks with retained log signals@L502 | Test | ./e2e/agent-workspace.spec.js | 502-541 |
-| test:implementation drafts require project selection and explicit approval before task creation@L543 | Test | ./e2e/agent-workspace.spec.js | 543-590 |
-| installFakeSpeechRecognition | Function | ./e2e/agent-workspace.spec.js | 594-617 |
-| FakeSpeechRecognition | Class | ./e2e/agent-workspace.spec.js | 596-613 |
-| start | Function | ./e2e/agent-workspace.spec.js | 597-609 |
-| stop | Function | ./e2e/agent-workspace.spec.js | 610-612 |
-| test:mic dictation button has a distinct accessible name from Send@L619 | Test | ./e2e/agent-workspace.spec.js | 619-626 |
-| test:dictation button degrades gracefully when the browser has no SpeechRecognition@L628 | Test | ./e2e/agent-workspace.spec.js | 628-643 |
-| test:a successful dictation appends the transcript to the composer@L645 | Test | ./e2e/agent-workspace.spec.js | 645-658 |
-| test:a denied microphone permission surfaces a toast and leaves the composer usable@L660 | Test | ./e2e/agent-workspace.spec.js | 660-672 |
-| test:attaching a file before any conversation exists shows a helpful toast and never calls the service@L674 | Test | ./e2e/agent-workspace.spec.js | 674-685 |
-| test:attaching a file after sending a message uploads it and shows a ready chip@L687 | Test | ./e2e/agent-workspace.spec.js | 687-701 |
-| test:removing an attachment deletes it server-side and the chip disappears@L703 | Test | ./e2e/agent-workspace.spec.js | 703-717 |
-| test:dropping a file directly onto the composer uploads it@L719 | Test | ./e2e/agent-workspace.spec.js | 719-736 |
-| test:a rejected file oversize check surfaces a toast and never calls the service@L738 | Test | ./e2e/agent-workspace.spec.js | 738-750 |
-| test:the "Ask about files" affordance stays hidden until an attachment is ready, then answers with citations@L752 | Test | ./e2e/agent-workspace.spec.js | 752-773 |
+| test:a persistence failure surfaces a visible error and a working retry@L484 | Test | ./e2e/agent-workspace.spec.js | 484-512 |
+| test:clicking "+ New chat" while already on the unsent new thread resets compose state@L514 | Test | ./e2e/agent-workspace.spec.js | 514-536 |
+| test:rapid re-entry into "+ New chat" never leaves the composer stuck disabled@L538 | Test | ./e2e/agent-workspace.spec.js | 538-568 |
+| test:remember phrasing surfaces a confirm-before-save memory draft@L570 | Test | ./e2e/agent-workspace.spec.js | 570-586 |
+| test:troubleshooting requests combine diagnostic checks with retained log signals@L588 | Test | ./e2e/agent-workspace.spec.js | 588-627 |
+| test:implementation drafts require project selection and explicit approval before task creation@L629 | Test | ./e2e/agent-workspace.spec.js | 629-676 |
+| installFakeSpeechRecognition | Function | ./e2e/agent-workspace.spec.js | 680-703 |
+| FakeSpeechRecognition | Class | ./e2e/agent-workspace.spec.js | 682-699 |
+| start | Function | ./e2e/agent-workspace.spec.js | 683-695 |
+| stop | Function | ./e2e/agent-workspace.spec.js | 696-698 |
+| test:mic dictation button has a distinct accessible name from Send@L705 | Test | ./e2e/agent-workspace.spec.js | 705-712 |
+| test:dictation button degrades gracefully when the browser has no SpeechRecognition@L714 | Test | ./e2e/agent-workspace.spec.js | 714-729 |
+| test:a successful dictation appends the transcript to the composer@L731 | Test | ./e2e/agent-workspace.spec.js | 731-744 |
+| test:a denied microphone permission surfaces a toast and leaves the composer usable@L746 | Test | ./e2e/agent-workspace.spec.js | 746-758 |
+| test:attaching a file before any conversation exists shows a helpful toast and never calls the service@L760 | Test | ./e2e/agent-workspace.spec.js | 760-771 |
+| test:attaching a file after sending a message uploads it and shows a ready chip@L773 | Test | ./e2e/agent-workspace.spec.js | 773-787 |
+| test:removing an attachment deletes it server-side and the chip disappears@L789 | Test | ./e2e/agent-workspace.spec.js | 789-803 |
+| test:dropping a file directly onto the composer uploads it@L805 | Test | ./e2e/agent-workspace.spec.js | 805-822 |
+| test:a rejected file oversize check surfaces a toast and never calls the service@L824 | Test | ./e2e/agent-workspace.spec.js | 824-836 |
+| test:the "Ask about files" affordance stays hidden until an attachment is ready, then answers with citations@L838 | Test | ./e2e/agent-workspace.spec.js | 838-859 |
 | json | Function | ./e2e/anonymous-agent.spec.js | 5-11 |
 | authConfig | Function | ./e2e/anonymous-agent.spec.js | 36-50 |
-| apiRecord | Function | ./e2e/anonymous-agent.spec.js | 52-65 |
-| callLabel | Function | ./e2e/anonymous-agent.spec.js | 67-69 |
-| isShellRequest | Function | ./e2e/anonymous-agent.spec.js | 71-75 |
 
-*... and 85 more members.*
+*... and 88 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (574 edge(s))
-- `locator` (293 edge(s))
-- `route` (171 edge(s))
-- `getByRole` (114 edge(s))
-- `toBeVisible` (104 edge(s))
-- `toHaveCount` (79 edge(s))
-- `evaluate` (77 edge(s))
+- `expect` (589 edge(s))
+- `locator` (305 edge(s))
+- `route` (173 edge(s))
+- `getByRole` (121 edge(s))
+- `toBeVisible` (106 edge(s))
+- `toHaveCount` (83 edge(s))
+- `evaluate` (78 edge(s))
 - `toBe` (62 edge(s))
-- `click` (56 edge(s))
+- `click` (61 edge(s))
+- `request` (56 edge(s))
 - `toHaveAttribute` (52 edge(s))
-- `request` (52 edge(s))
+- `toContainText` (51 edge(s))
 - `toEqual` (51 edge(s))
-- `toContainText` (50 edge(s))
 - `goto` (46 edge(s))
 - `push` (46 edge(s))
 
 ### Incoming
 
-- `expect` (551 edge(s))
-- `locator` (281 edge(s))
-- `getByRole` (109 edge(s))
-- `route` (108 edge(s))
-- `toBeVisible` (99 edge(s))
-- `toHaveCount` (76 edge(s))
-- `evaluate` (70 edge(s))
+- `expect` (566 edge(s))
+- `locator` (293 edge(s))
+- `getByRole` (116 edge(s))
+- `route` (110 edge(s))
+- `toBeVisible` (101 edge(s))
+- `toHaveCount` (80 edge(s))
+- `evaluate` (71 edge(s))
+- `click` (59 edge(s))
 - `toBe` (59 edge(s))
-- `click` (54 edge(s))
-- `toContainText` (49 edge(s))
+- `toContainText` (50 edge(s))
 - `toEqual` (49 edge(s))
 - `toHaveAttribute` (48 edge(s))
 - `goto` (42 edge(s))
 - `toHaveText` (39 edge(s))
-- `url` (29 edge(s))
+- `url` (31 edge(s))

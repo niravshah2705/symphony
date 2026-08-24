@@ -2,7 +2,7 @@
 # Cloud Run — gateway (public), planner (internal), coder-control (internal),
 # and the coder-worker Job.
 # -----------------------------------------------------------------------------
-# By default all services scale from zero to one instance, accept up to ten
+# By default all services scale from zero to one instance, accept up to 1000
 # concurrent requests per instance, and throttle idle CPU. The defaults remain
 # configurable through the scaling/concurrency variables in variables.tf.
 
