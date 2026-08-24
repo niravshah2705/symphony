@@ -481,6 +481,92 @@ test('a send that outlives a navigate still lands in the thread rail once persis
   await expect(rail.locator('.conversation-thread-open strong')).toContainText('Search docs & memory');
 });
 
+test('a persistence failure surfaces a visible error and a working retry', async ({ page }) => {
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+  const rail = page.locator('.conversation-rail');
+
+  // Fail the conversation-create call exactly once; the retry falls through
+  // to the default in-memory store handler registered by mockAgentWorkspace.
+  let attempts = 0;
+  await page.route('**/api/agent/conversations**', async (route) => {
+    const rest = new URL(route.request().url()).pathname.split('/api/agent/conversations')[1] || '';
+    const segs = rest.split('/').filter(Boolean);
+    if (route.request().method() === 'POST' && segs.length === 0) {
+      attempts += 1;
+      if (attempts === 1) return json(route, { error: 'Select an organization before using this workspace.' }, 403);
+    }
+    await route.fallback();
+  });
+
+  await routeRequest(page, 'Search docs & memory for revenue decisions');
+  // The optimistic bubbles render regardless of persistence outcome.
+  await expect(page.locator('.intent-message[data-agent-intent="knowledge"]')).toBeVisible();
+  await expect(page.locator('#toast')).toContainText(/couldn.t save/i);
+  await expect(page.locator('.message-persist-error')).toBeVisible();
+  await expect(rail.locator('.conversation-thread')).toHaveCount(0);
+
+  await page.locator('.message-persist-error').getByRole('button', { name: /retry/i }).click();
+  await expect(page.locator('.message-persist-error')).toHaveCount(0);
+  await expect(rail.locator('.conversation-thread')).toHaveCount(1);
+});
+
+test('clicking "+ New chat" while already on the unsent new thread resets compose state', async ({ page }) => {
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+  const rail = page.locator('.conversation-rail');
+
+  await routeRequest(page, 'Search docs & memory for revenue decisions');
+  await expect(page).toHaveURL(/#\/agent\/conv_/);
+
+  await rail.getByRole('button', { name: '+ New chat' }).click();
+  await expect(page).toHaveURL(/#\/agent\/new$/);
+
+  // Mark the current scaffold node. The unsent "new" compose view looks
+  // identical before and after a reset (nothing to send yet), so the only way
+  // to prove a second click actually re-mounted — rather than being a no-op,
+  // since the hash stays `#/agent/new` and a real hashchange will not fire —
+  // is to check that this exact DOM node got replaced.
+  await page.locator('[data-agent-scaffold]').evaluate((node) => { node.dataset.testMarker = 'stale'; });
+
+  await rail.getByRole('button', { name: '+ New chat' }).click();
+  await expect(page).toHaveURL(/#\/agent\/new$/);
+  await expect(page.locator('[data-agent-scaffold][data-test-marker="stale"]')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Ask or act from the Agent omnibox' })).toBeEnabled();
+});
+
+test('rapid re-entry into "+ New chat" never leaves the composer stuck disabled', async ({ page }) => {
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+  const rail = page.locator('.conversation-rail');
+
+  await routeRequest(page, 'Search docs & memory for revenue decisions');
+  await expect(page).toHaveURL(/#\/agent\/conv_/);
+
+  // Gate the thread-list fetch so two "+ New chat" mounts overlap in flight.
+  let releaseThreads;
+  const gate = new Promise((resolve) => { releaseThreads = resolve; });
+  let gated = false;
+  await page.route('**/api/agent/conversations**', async (route) => {
+    const rest = new URL(route.request().url()).pathname.split('/api/agent/conversations')[1] || '';
+    const segs = rest.split('/').filter(Boolean);
+    if (route.request().method() === 'GET' && segs.length === 0 && !gated) {
+      gated = true;
+      await gate;
+    }
+    await route.fallback();
+  });
+
+  const newChat = rail.getByRole('button', { name: '+ New chat' });
+  await newChat.click();
+  await newChat.click();
+  releaseThreads();
+
+  await expect(page).toHaveURL(/#\/agent\/new$/);
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+  await expect(page.getByRole('textbox', { name: 'Ask or act from the Agent omnibox' })).toBeEnabled();
+});
+
 test('remember phrasing surfaces a confirm-before-save memory draft', async ({ page }) => {
   const { memoryPosts } = await mockAgentWorkspace(page);
   await openAgent(page);

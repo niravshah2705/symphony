@@ -12,7 +12,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 |-----------|------|------|
 | agent-model | 1840 | [agent-model.md](agent-model.md) |
 | core-org | 506 | [core-org.md](core-org.md) |
-| e2e-json | 135 | [e2e-json.md](e2e-json.md) |
+| e2e-json | 138 | [e2e-json.md](e2e-json.md) |
 | e2e-live-tenant | 25 | [e2e-live-tenant.md](e2e-live-tenant.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
 | gcp-cloud | 54 | [gcp-cloud.md](gcp-cloud.md) |
@@ -34,4 +34,4 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-test:coder | 107 | [src-test-coder.md](src-test-coder.md) |
 | src-token | 112 | [src-token.md](src-token.md) |
 | support-parse | 59 | [support-parse.md](support-parse.md) |
-| views-render | 750 | [views-render.md](views-render.md) |
+| views-render | 753 | [views-render.md](views-render.md) |

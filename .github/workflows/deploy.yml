@@ -384,6 +384,38 @@ jobs:
           echo "::add-mask::$token"
           printf 'TF_VAR_internal_api_token=%s\n' "$token" >> "$GITHUB_ENV"
 
+      # Secret VALUES are out-of-band (never in Terraform state/source — see
+      # deploy/gcp/terraform/secrets.tf). Only deploy.sh/bootstrap.sh seeded
+      # them until now, so a newly-added mandatory secret (e.g.
+      # identity-hash-pepper) had no version the first time this workflow's
+      # plain `terraform apply` touched it. Ensure both container secrets
+      # exist, then seed any with no ENABLED version — idempotent, mirrors
+      # deploy.sh's has_version/seed_secret helpers (deploy/gcp/deploy.sh).
+      - name: Stage mandatory secret versions
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          terraform apply -input=false -auto-approve \
+            -var="project_id=${PROJECT_ID}" \
+            -var="region=${REGION}" \
+            -var="spa_bucket_name=${{ vars.SPA_BUCKET }}" \
+            -target=google_secret_manager_secret.stream_token_secret \
+            -target=google_secret_manager_secret.identity_hash_pepper
+
+          has_version() { gcloud secrets versions list "$1" --project "$PROJECT_ID" \
+            --filter='state=ENABLED' --format='value(name)' 2>/dev/null | grep -q .; }
+          seed_secret() { # id
+            if has_version "$1"; then echo "  $1: already has a version (unchanged)";
+            else
+              openssl rand -base64 48 | tr -d '\n' | gcloud secrets versions add "$1" --project "$PROJECT_ID" --data-file=- >/dev/null
+              echo "  $1: seeded"
+            fi
+          }
+          seed_secret stream-token-secret
+          seed_secret identity-hash-pepper
+
       - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}
         run: |
