@@ -7,7 +7,7 @@
 Directory-based community: services/gateway
 
 - **Size**: 337 nodes
-- **Cohesion**: 0.1910
+- **Cohesion**: 0.1905
 - **Dominant Language**: javascript
 
 ## Members
@@ -115,6 +115,6 @@ Directory-based community: services/gateway
 - `./services/gateway/src/eula.test.js` (18 edge(s))
 - `./services/gateway/src/request-context.js` (18 edge(s))
 - `ok` (17 edge(s))
+- `match` (16 edge(s))
 - `rejects` (16 edge(s))
 - `./services/gateway/src/config-resolver.test.js` (15 edge(s))
-- `match` (15 edge(s))

@@ -6,29 +6,33 @@
 
 Directory-based community: services/identity-verification
 
-- **Size**: 43 nodes
-- **Cohesion**: 0.1618
+- **Size**: 81 nodes
+- **Cohesion**: 0.2090
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| cleanId | Function | ./services/identity-verification/src/app.js | 16-19 |
-| requestContext | Function | ./services/identity-verification/src/app.js | 21-27 |
-| safeSession | Function | ./services/identity-verification/src/app.js | 29-33 |
-| createIdentityService | Function | ./services/identity-verification/src/app.js | 35-164 |
-| createSession | Function | ./services/identity-verification/src/app.js | 44-68 |
-| getOwnedSession | Function | ./services/identity-verification/src/app.js | 70-74 |
-| processSession | Function | ./services/identity-verification/src/app.js | 76-132 |
-| validateOauthState | Function | ./services/identity-verification/src/app.js | 134-141 |
-| revokeSession | Function | ./services/identity-verification/src/app.js | 143-161 |
-| createApp | Function | ./services/identity-verification/src/app.js | 166-239 |
+| cleanId | Function | ./services/identity-verification/src/app.js | 15-18 |
+| requestContext | Function | ./services/identity-verification/src/app.js | 20-26 |
+| safeSession | Function | ./services/identity-verification/src/app.js | 28-32 |
+| createIdentityService | Function | ./services/identity-verification/src/app.js | 34-170 |
+| createSession | Function | ./services/identity-verification/src/app.js | 50-74 |
+| getOwnedSession | Function | ./services/identity-verification/src/app.js | 76-80 |
+| processSession | Function | ./services/identity-verification/src/app.js | 82-138 |
+| validateOauthState | Function | ./services/identity-verification/src/app.js | 140-147 |
+| revokeSession | Function | ./services/identity-verification/src/app.js | 149-167 |
+| createApp | Function | ./services/identity-verification/src/app.js | 172-245 |
 | service | Function | ./services/identity-verification/src/app.test.js | 12-19 |
 | test:session completes to normalized public facts without raw claim hashes@L21 | Test | ./services/identity-verification/src/app.test.js | 21-30 |
 | test:same PAN or APAAR cannot be claimed by another user@L32 | Test | ./services/identity-verification/src/app.test.js | 32-41 |
 | test:same user can rerun verification for an existing PAN claim@L43 | Test | ./services/identity-verification/src/app.test.js | 43-50 |
 | test:OAuth callback state validation fails closed@L52 | Test | ./services/identity-verification/src/app.test.js | 52-59 |
+| javascriptFiles | Function | ./services/identity-verification/src/dependency-boundary.test.js | 13-19 |
+| staticRequires | Function | ./services/identity-verification/src/dependency-boundary.test.js | 21-23 |
+| test:identity verification source imports shared-core and no heavy AI workspace@L25 | Test | ./services/identity-verification/src/dependency-boundary.test.js | 25-44 |
+| test:identity verification image copies only its service and shared-core workspaces@L46 | Test | ./services/identity-verification/src/dependency-boundary.test.js | 46-60 |
 | nowIso | Function | ./services/identity-verification/src/identity.js | 9-11 |
 | normalizeChecks | Function | ./services/identity-verification/src/identity.js | 13-18 |
 | normalizePan | Function | ./services/identity-verification/src/identity.js | 20-23 |
@@ -48,15 +52,20 @@ Directory-based community: services/identity-verification
 | fetchVerifiedFacts | Function | ./services/identity-verification/src/provider.js | 40-42 |
 | revoke | Function | ./services/identity-verification/src/provider.js | 43-43 |
 | createDigiLockerProvider | Function | ./services/identity-verification/src/provider.js | 34-45 |
-| emptyState | Function | ./services/identity-verification/src/repository.js | 6-8 |
-| createInMemoryRepository | Function | ./services/identity-verification/src/repository.js | 10-29 |
-| transact | Function | ./services/identity-verification/src/repository.js | 27-27 |
-| read | Function | ./services/identity-verification/src/repository.js | 24-24 |
-| getSession | Function | ./services/identity-verification/src/repository.js | 25-25 |
-| getResult | Function | ./services/identity-verification/src/repository.js | 26-26 |
-| createFileRepository | Function | ./services/identity-verification/src/repository.js | 31-59 |
-| load | Function | ./services/identity-verification/src/repository.js | 36-42 |
-| persist | Function | ./services/identity-verification/src/repository.js | 44-47 |
+| emptyState | Function | ./services/identity-verification/src/repository.js | 8-10 |
+| createInMemoryRepository | Function | ./services/identity-verification/src/repository.js | 12-31 |
+| transact | Function | ./services/identity-verification/src/repository.js | 29-29 |
+| read | Function | ./services/identity-verification/src/repository.js | 26-26 |
+| getSession | Function | ./services/identity-verification/src/repository.js | 27-27 |
+| getResult | Function | ./services/identity-verification/src/repository.js | 28-28 |
+| createFileRepository | Function | ./services/identity-verification/src/repository.js | 33-61 |
+| load | Function | ./services/identity-verification/src/repository.js | 38-44 |
+| persist | Function | ./services/identity-verification/src/repository.js | 46-49 |
+| clone | Function | ./services/identity-verification/src/repository.js | 63-65 |
+| documentId | Function | ./services/identity-verification/src/repository.js | 67-69 |
+| FirestoreIdentityRepository | Class | ./services/identity-verification/src/repository.js | 71-172 |
+
+*... and 31 more members.*
 
 ## Execution Flows
 
@@ -66,33 +75,36 @@ Directory-based community: services/identity-verification
 
 ### Outgoing
 
+- `String` (17 edge(s))
 - `json` (17 edge(s))
-- `String` (15 edge(s))
-- `trim` (9 edge(s))
+- `equal` (15 edge(s))
+- `get` (14 edge(s))
+- `trim` (10 edge(s))
+- `createSession` (10 edge(s))
+- `parse` (10 edge(s))
 - `status` (9 edge(s))
-- `get` (8 edge(s))
-- `parse` (8 edge(s))
-- `stringify` (7 edge(s))
+- `processSession` (9 edge(s))
+- `join` (9 edge(s))
+- `stringify` (8 edge(s))
 - `next` (6 edge(s))
 - `now` (6 edge(s))
-- `equal` (6 edge(s))
-- `toISOString` (5 edge(s))
-- `createSession` (5 edge(s))
-- `assign` (4 edge(s))
-- `processSession` (4 edge(s))
-- `post` (3 edge(s))
+- `match` (6 edge(s))
+- `slice` (6 edge(s))
 
 ### Incoming
 
+- `./services/identity-verification/src/repository.js` (22 edge(s))
 - `./services/identity-verification/src/identity.js` (19 edge(s))
+- `equal` (15 edge(s))
 - `./services/identity-verification/src/app.js` (13 edge(s))
-- `./services/identity-verification/src/repository.js` (13 edge(s))
 - `./services/identity-verification/src/provider.js` (12 edge(s))
-- `equal` (6 edge(s))
+- `./services/identity-verification/src/repository.test.js` (12 edge(s))
+- `createSession` (10 edge(s))
+- `processSession` (9 edge(s))
+- `join` (7 edge(s))
+- `match` (6 edge(s))
 - `./services/identity-verification/src/app.test.js` (5 edge(s))
-- `createSession` (5 edge(s))
-- `processSession` (4 edge(s))
+- `./services/identity-verification/src/dependency-boundary.test.js` (4 edge(s))
 - `./services/identity-verification/src/index.js` (4 edge(s))
-- `throws` (1 edge(s))
-- `validateOauthState` (1 edge(s))
-- `rejects` (1 edge(s))
+- `readFileSync` (3 edge(s))
+- `rejects` (2 edge(s))

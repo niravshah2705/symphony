@@ -1,5 +1,6 @@
-import { api } from '../api.js';
+import { api, uploadToSignedUrl } from '../api.js';
 import { el, clear, toast } from '../dom.js';
+import { icon } from '../icons.js';
 import { t } from '../i18n.js';
 import { agentPauseCopy, agentPauseInfo, agentPauseNotice, hasAgentPauseContract } from '../agent-pause.js';
 import { state, setCurrentProject } from '../state.js';
@@ -229,6 +230,7 @@ export async function renderAgent(view) {
     scaffold.root.removeAttribute('data-i18n-skip');
     scaffold.root.dataset.agentScaffold = 'hydrated';
     setComposerReady(scaffold.root, true);
+    void refreshAttachmentChips(activeConversationId);
     requestAnimationFrame(scrollConversationToEnd);
 
     // Live updates over SSE replace the old 5s polling of /status + /jobs + /coder.
@@ -379,7 +381,9 @@ function setComposerReady(root, ready) {
   const composer = root.querySelector('[data-agent-composer]');
   if (!composer) return;
   composer.toggleAttribute('aria-busy', !ready);
-  for (const control of composer.querySelectorAll('button, textarea')) control.disabled = !ready;
+  for (const control of composer.querySelectorAll('button, textarea')) {
+    control.disabled = control.dataset.forceDisabled ? true : !ready;
+  }
 }
 
 function replaceThreadRail(scaffold, summaries) {
@@ -672,6 +676,62 @@ function buildComposer(stream, railBody, generation = renderGeneration) {
   });
   const count = el('span', { class: 'composer-count' }, '0 / 8,000');
   const send = el('button', { class: 'primary scenario-submit', type: 'button' }, 'Send');
+
+  const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const speechSupported = typeof SpeechRecognitionCtor !== 'undefined';
+  const mic = el('button', {
+    class: 'composer-mic icon-button',
+    type: 'button',
+    'aria-label': 'Dictate message',
+    title: speechSupported ? 'Dictate message' : 'Speech input is not supported in this browser',
+    disabled: !speechSupported,
+    dataset: speechSupported ? undefined : { forceDisabled: 'true' },
+  }, icon('microphone', { size: 16 }));
+  let recognition = null;
+  let listening = false;
+  const stopListening = () => {
+    listening = false;
+    mic.classList.remove('is-listening');
+  };
+  mic.addEventListener('click', () => {
+    if (listening) {
+      recognition?.stop();
+      return;
+    }
+    try {
+      recognition = new SpeechRecognitionCtor();
+      recognition.lang = document.documentElement.lang || 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.onresult = (event) => {
+        if (!isCurrentComposer()) return;
+        const transcript = Array.from(event.results).map((r) => r[0].transcript).join(' ').trim();
+        if (!transcript) return;
+        const sep = input.value && !/\s$/.test(input.value) ? ' ' : '';
+        input.value = `${input.value}${sep}${transcript}`;
+        input.dispatchEvent(new Event('input'));
+        input.focus();
+      };
+      recognition.onerror = (event) => {
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          toast('Microphone access was not granted.', 'err');
+        } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          toast('Dictation failed. You can type your message instead.', 'err');
+        }
+      };
+      recognition.onend = () => {
+        stopListening();
+        recognition = null;
+      };
+      recognition.start();
+      listening = true;
+      mic.classList.add('is-listening');
+    } catch (_) {
+      stopListening();
+      toast('Dictation could not start in this browser.', 'err');
+    }
+  });
+
   let persistenceQueue = Promise.resolve();
   let persistedConversationId = null;
   let submitting = false;
@@ -812,6 +872,122 @@ function buildComposer(stream, railBody, generation = renderGeneration) {
   });
   send.addEventListener('click', submit);
 
+  // Attachments: mint -> PUT direct to GCS -> complete. Requires an already-
+  // active conversation (mirrors targetConversationId's own resolution in
+  // submit() above) — a brand-new, never-sent thread has nowhere server-side
+  // to scope an attachment to yet.
+  const chipRow = el('div', { class: 'attachment-chip-row' });
+  const fileInput = el('input', { type: 'file', multiple: true, class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true' });
+  // Lazy, not fetched at mount: the public/anonymous Agent view reuses this
+  // same buildComposer (hydratePublicAgent), which must never fire a tenant
+  // network call just from rendering — only from an actual attach attempt.
+  let attachmentTypesCache = null;
+  const loadAttachmentTypes = async () => {
+    if (attachmentTypesCache) return attachmentTypesCache;
+    attachmentTypesCache = await api.getAttachmentTypes().catch(() => ({ types: {}, maxBytes: 20 * 1024 * 1024 }));
+    const accept = Object.values(attachmentTypesCache.types).flatMap((t) => t.extensions).join(',');
+    if (accept) fileInput.setAttribute('accept', accept);
+    return attachmentTypesCache;
+  };
+
+  const handleFiles = async (files) => {
+    if (!files.length || !isCurrentComposer()) return;
+    const conversationId = activeConversationId || persistedConversationId;
+    if (!conversationId) {
+      toast('Send a message first, then you can attach files.', 'err');
+      return;
+    }
+    const { maxBytes } = await loadAttachmentTypes();
+    for (const file of files) {
+      if (file.size > maxBytes) {
+        toast(`"${file.name}" is larger than the ${Math.round(maxBytes / (1024 * 1024))}MB limit.`, 'err');
+        continue;
+      }
+      void uploadAttachmentFile(conversationId, chipRow, file);
+    }
+  };
+
+  const attach = el('button', {
+    class: 'composer-attach icon-button',
+    type: 'button',
+    'aria-label': 'Attach files',
+    title: 'Attach files',
+  }, icon('paperclip', { size: 16 }));
+  attach.addEventListener('click', () => {
+    // Fire-and-forget: fileInput.click() must stay in the same synchronous
+    // gesture-handling task to reliably open the native picker in all
+    // browsers, so this can't be awaited first. Sets `accept` for next time
+    // if this is the first attach attempt in this mount.
+    void loadAttachmentTypes();
+    fileInput.click();
+  });
+  fileInput.addEventListener('change', () => {
+    const files = Array.from(fileInput.files || []);
+    fileInput.value = '';
+    void handleFiles(files);
+  });
+
+  const askAttachments = el('button', {
+    class: 'composer-ask-attachments',
+    type: 'button',
+    hidden: true,
+    dataset: { forceDisabled: 'true' }, // enabled only once refreshAttachmentChips finds a ready attachment
+  }, 'Ask about files');
+  askAttachments.addEventListener('click', async () => {
+    const conversationId = activeConversationId || persistedConversationId;
+    const question = input.value.trim();
+    if (!conversationId || !question) {
+      toast('Type your question above, then click "Ask about files."', 'err');
+      return;
+    }
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    askAttachments.disabled = true;
+    const pending = assistantMessage('Reading your attachments…', 'Searching the files attached to this conversation for an answer.');
+    pending.classList.add('is-pending');
+    stream.append(pending);
+    scrollConversationToEnd();
+    try {
+      const { answer, citations = [] } = await api.askAboutAttachments(conversationId, question);
+      if (!isCurrentComposer()) return;
+      const sources = citations.length ? `\n\nSources: ${citations.map((c) => c.filename).join(', ')}` : '';
+      pending.replaceWith(assistantMessage('Answer from your attachments', `${answer}${sources}`, [], 'notice'));
+    } catch (error) {
+      if (!isCurrentComposer()) return;
+      pending.replaceWith(assistantMessage(
+        'Could not answer from your attachments',
+        error && error.message ? error.message : 'The request failed.',
+        [],
+        'error'
+      ));
+    } finally {
+      if (isCurrentComposer()) setAskButtonEnabled(askAttachments, chipRow);
+    }
+  });
+
+  const surface = el('div', { class: 'composer-surface' }, [
+    input,
+    chipRow,
+    el('div', { class: 'composer-actions' }, [
+      el('span', { class: 'privacy-chip' }, 'Intent-aware route'),
+      count,
+      el('span', { class: 'spacer' }),
+      el('span', { class: 'composer-hint' }, 'Enter to send · Shift+Enter for a new line'),
+      askAttachments,
+      attach,
+      fileInput,
+      mic,
+      send,
+    ]),
+  ]);
+  surface.addEventListener('dragover', (event) => { event.preventDefault(); surface.classList.add('is-dragover'); });
+  surface.addEventListener('dragleave', () => surface.classList.remove('is-dragover'));
+  surface.addEventListener('drop', (event) => {
+    event.preventDefault();
+    surface.classList.remove('is-dragover');
+    void handleFiles(Array.from((event.dataTransfer && event.dataTransfer.files) || []));
+  });
+
   const suggestions = [
     { label: 'Search docs & memory', prompt: 'Search docs & memory for ' },
     { label: 'Assess a business idea', prompt: 'Assess this business idea: ' },
@@ -829,16 +1005,7 @@ function buildComposer(stream, railBody, generation = renderGeneration) {
         },
       }, suggestion.label)
     )),
-    el('div', { class: 'composer-surface' }, [
-      input,
-      el('div', { class: 'composer-actions' }, [
-        el('span', { class: 'privacy-chip' }, 'Intent-aware route'),
-        count,
-        el('span', { class: 'spacer' }),
-        el('span', { class: 'composer-hint' }, 'Enter to send · Shift+Enter for a new line'),
-        send,
-      ]),
-    ]),
+    surface,
   ]);
 }
 
@@ -1211,7 +1378,7 @@ async function persistTurn(userText, result, generation, conversationId) {
       { role: 'user', text: userText },
       compactAssistant(userText, result),
     ]);
-    if (generation === renderGeneration && agentRouteActive()) void refreshThreadRail();
+    if (agentRouteActive()) void refreshThreadRail();
     return targetConversationId;
   } catch (_) {
     // A persistence failure should never break the live conversation.
@@ -1230,6 +1397,118 @@ async function refreshThreadRail() {
     return;
   }
   for (const summary of conversations) host.append(threadItem(summary));
+}
+
+// Attachments belong to the conversation record on the server, not to any one
+// composer instance, so — like refreshThreadRail above — these live at module
+// scope and re-query the live DOM rather than closing over buildComposer state.
+const ATTACHMENT_STATUS_LABEL = Object.freeze({
+  pending: 'Uploading…',
+  processing: 'Processing…',
+  ready: 'Ready',
+  unsupported: 'Not indexed',
+  failed: 'Failed',
+});
+
+function composerElements() {
+  const root = document.querySelector('[data-agent-composer]');
+  return {
+    chipRow: root && root.querySelector('.attachment-chip-row'),
+    askButton: root && root.querySelector('.composer-ask-attachments'),
+  };
+}
+
+function setAskButtonEnabled(askButton, chipRow) {
+  if (!askButton) return;
+  const hasReady = !!(chipRow && chipRow.querySelector('.attachment-chip.is-ready'));
+  askButton.hidden = !hasReady;
+  askButton.disabled = !hasReady;
+}
+
+function attachmentChip(conversationId, attachment) {
+  const statusEl = el('span', { class: 'attachment-chip-status' }, ATTACHMENT_STATUS_LABEL[attachment.status] || attachment.status);
+  const chip = el('span', {
+    class: `attachment-chip is-${attachment.status}`,
+    dataset: attachment.attachmentId ? { attachmentId: attachment.attachmentId } : undefined,
+  }, [
+    icon('file', { size: 12 }),
+    el('span', { class: 'attachment-chip-name' }, attachment.filename),
+    statusEl,
+    el('button', {
+      type: 'button',
+      class: 'attachment-chip-remove',
+      'aria-label': `Remove ${attachment.filename}`,
+      title: 'Remove attachment',
+      onclick: async () => {
+        // Read the LIVE attribute, not the `attachment` param captured at chip
+        // creation — setChipStatus() updates chip.dataset.attachmentId on the
+        // DOM node once mint resolves, but never mutates this closure's object.
+        const currentId = chip.dataset.attachmentId;
+        if (!currentId) {
+          chip.remove(); // never persisted server-side (mint failed) — dismiss locally
+          const { chipRow, askButton } = composerElements();
+          setAskButtonEnabled(askButton, chipRow);
+          return;
+        }
+        chip.classList.add('is-removing');
+        try {
+          await api.deleteAttachment(conversationId, currentId);
+          chip.remove();
+          const { chipRow, askButton } = composerElements();
+          setAskButtonEnabled(askButton, chipRow);
+        } catch (_) {
+          toast('Could not remove the attachment.', 'err');
+          chip.classList.remove('is-removing');
+        }
+      },
+    }, '×'),
+  ]);
+  return chip;
+}
+
+function setChipStatus(chip, status, label) {
+  chip.className = `attachment-chip is-${status}`;
+  chip.querySelector('.attachment-chip-status').textContent = label || ATTACHMENT_STATUS_LABEL[status] || status;
+  const { chipRow, askButton } = composerElements();
+  setAskButtonEnabled(askButton, chipRow);
+}
+
+/** Populate the chip row for the conversation now active — called once the
+ * bootstrap flow resolves activeConversationId (buildComposer runs earlier,
+ * before that's known). */
+async function refreshAttachmentChips(conversationId) {
+  const { chipRow, askButton } = composerElements();
+  if (!chipRow) return;
+  clear(chipRow);
+  if (!conversationId) {
+    setAskButtonEnabled(askButton, chipRow);
+    return;
+  }
+  const { attachments = [] } = await api.listAttachments(conversationId).catch(() => ({ attachments: [] }));
+  for (const attachment of attachments) chipRow.append(attachmentChip(conversationId, attachment));
+  setAskButtonEnabled(askButton, chipRow);
+}
+
+async function uploadAttachmentFile(conversationId, chipRow, file) {
+  const chip = attachmentChip(conversationId, { filename: file.name, status: 'pending' });
+  chipRow.append(chip);
+  try {
+    const minted = await api.mintAttachmentUpload(conversationId, {
+      filename: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      size: file.size,
+    });
+    chip.dataset.attachmentId = minted.attachmentId;
+    await uploadToSignedUrl(minted.uploadUrl, file, {
+      onProgress: (fraction) => setChipStatus(chip, 'pending', `Uploading ${Math.round(fraction * 100)}%`),
+    });
+    setChipStatus(chip, 'processing');
+    const { attachment } = await api.completeAttachmentUpload(conversationId, minted.attachmentId);
+    setChipStatus(chip, attachment.status);
+  } catch (error) {
+    setChipStatus(chip, 'failed');
+    toast(`Could not attach "${file.name}": ${error && error.message ? error.message : 'upload failed'}.`, 'err');
+  }
 }
 
 function buildThreadRail(summaries) {

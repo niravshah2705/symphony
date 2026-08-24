@@ -17,6 +17,7 @@
     "./util": "./src/util.js",
     "./internal-auth": "./src/internal-auth.js",
     "./agent/*": "./src/agent/*.js",
+    "./attachments/*": "./src/attachments/*.js",
     "./provisioning": "./src/provisioning/index.js",
     "./provisioning/*": "./src/provisioning/*.js",
     "./billing": "./src/billing/index.js",

@@ -200,6 +200,64 @@ async function mockAgentWorkspace(page, {
     if (method === 'DELETE') { conversationStore.splice(conversationStore.indexOf(conv), 1); return json(route, { ok: true }); }
     return json(route, { error: 'method' }, 405);
   });
+  // Attachments: a per-conversation in-memory store, plus a fake signed-URL
+  // target so uploadToSignedUrl()'s PUT has somewhere to land.
+  const attachmentStore = new Map();
+  let attachmentSeq = 0;
+  await page.route('**/api/agent/attachment-types', (route) => json(route, {
+    types: {
+      pdf: { extensions: ['.pdf'], mimeTypes: ['application/pdf'], kind: 'text', extractable: true },
+      txt: { extensions: ['.txt'], mimeTypes: ['text/plain'], kind: 'text', extractable: true },
+      jpg: { extensions: ['.jpg', '.jpeg'], mimeTypes: ['image/jpeg'], kind: 'image', extractable: false },
+    },
+    maxBytes: 20 * 1024 * 1024,
+  }));
+  await page.route('**/fake-gcs-upload/**', (route) => route.fulfill({ status: 200, body: '' }));
+  await page.route('**/api/agent/conversations/*/attachments**', (route) => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+    const convId = url.pathname.match(/\/conversations\/([^/]+)\/attachments/)[1];
+    const rest = url.pathname.split('/attachments')[1] || '';
+    const segs = rest.split('/').filter(Boolean);
+    const list = attachmentStore.get(convId) || [];
+    attachmentStore.set(convId, list);
+
+    if (segs.length === 0) {
+      if (method === 'GET') return json(route, { attachments: list });
+      if (method === 'POST') {
+        attachmentSeq += 1;
+        const body = route.request().postDataJSON() || {};
+        const attachmentId = `att_${attachmentSeq}`;
+        list.push({ attachmentId, filename: body.filename, mimeType: body.mimeType, size: body.size, status: 'pending' });
+        return json(route, {
+          attachmentId,
+          uploadUrl: `${url.origin}/fake-gcs-upload/${attachmentId}`,
+          gcsPath: `fake/${attachmentId}`,
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        }, 201);
+      }
+      return json(route, { error: 'method' }, 405);
+    }
+    if (segs[0] === 'search') return json(route, { results: [] });
+    if (segs[0] === 'ask' && method === 'POST') {
+      const ready = list.filter((a) => a.status === 'ready');
+      return json(route, {
+        answer: 'Mock answer built from your attachments.',
+        citations: ready.map((a) => ({ attachmentId: a.attachmentId, filename: a.filename, snippet: 'mock snippet' })),
+      });
+    }
+    const attachment = list.find((a) => a.attachmentId === segs[0]);
+    if (!attachment) return json(route, { error: 'not found' }, 404);
+    if (segs[1] === 'complete' && method === 'POST') {
+      attachment.status = 'ready';
+      return json(route, { attachment });
+    }
+    if (method === 'DELETE') {
+      attachmentStore.set(convId, list.filter((a) => a.attachmentId !== segs[0]));
+      return json(route, { ok: true });
+    }
+    return json(route, { error: 'method' }, 405);
+  });
   await page.route('**/api/issues', (route) => {
     if (route.request().method() !== 'POST') return json(route, { error: 'Unexpected issue request' }, 405);
     const payload = route.request().postDataJSON();
@@ -215,7 +273,7 @@ async function mockAgentWorkspace(page, {
     });
   });
 
-  return { issuePosts, routedInputs, memoryPosts, evaluateInputs, prepareInputs, enqueuePosts, conversationStore };
+  return { issuePosts, routedInputs, memoryPosts, evaluateInputs, prepareInputs, enqueuePosts, conversationStore, attachmentStore };
 }
 
 async function openAgent(page) {
@@ -386,6 +444,43 @@ test('conversation history: sending lazily creates a thread that survives reload
   await expect(rail.locator('.conversation-thread')).toHaveCount(1);
 });
 
+test('a send that outlives a navigate still lands in the thread rail once persistence completes', async ({ page }) => {
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+
+  // Hold the conversation-create response open so we can navigate away mid-flight.
+  let releaseCreate;
+  const createGate = new Promise((resolve) => { releaseCreate = resolve; });
+  let createRequested = false;
+  await page.route('**/api/agent/conversations**', async (route) => {
+    const rest = new URL(route.request().url()).pathname.split('/api/agent/conversations')[1] || '';
+    const segs = rest.split('/').filter(Boolean);
+    if (route.request().method() === 'POST' && segs.length === 0) {
+      createRequested = true;
+      await createGate;
+    }
+    await route.fallback();
+  });
+
+  const rail = page.locator('.conversation-rail');
+  await expect(rail.locator('.conversation-thread')).toHaveCount(0);
+
+  await routeRequest(page, 'Search docs & memory for revenue decisions');
+  await expect.poll(() => createRequested).toBe(true);
+
+  // Navigate away (remounts the agent view, bumping renderGeneration) before the
+  // create+append round trip resolves.
+  await rail.getByRole('button', { name: '+ New chat' }).click();
+  await expect(page).toHaveURL(/#\/agent\/new$/);
+  await expect(rail.locator('.conversation-thread')).toHaveCount(0);
+
+  // Now let the stale generation's persistence finish. The backend write lands
+  // either way; the thread must still surface in the rail without a reload.
+  releaseCreate();
+  await expect(rail.locator('.conversation-thread')).toHaveCount(1);
+  await expect(rail.locator('.conversation-thread-open strong')).toContainText('Search docs & memory');
+});
+
 test('remember phrasing surfaces a confirm-before-save memory draft', async ({ page }) => {
   const { memoryPosts } = await mockAgentWorkspace(page);
   await openAgent(page);
@@ -492,4 +587,187 @@ test('implementation drafts require project selection and explicit approval befo
   });
   expect(issuePosts[0].description).toContain('**Acceptance criteria**');
   expect(issuePosts[0].idempotencyKey).toMatch(/^agent:/);
+});
+
+// A fake SpeechRecognition installed before the app loads, so dictation tests
+// are deterministic regardless of the real browser's speech backend.
+function installFakeSpeechRecognition(page, { finalTranscript, errorCode } = {}) {
+  return page.addInitScript(({ finalTranscript, errorCode }) => {
+    class FakeSpeechRecognition extends EventTarget {
+      start() {
+        setTimeout(() => {
+          if (errorCode) {
+            this.onerror && this.onerror({ error: errorCode });
+            this.onend && this.onend();
+            return;
+          }
+          if (finalTranscript) {
+            this.onresult && this.onresult({ results: [[{ transcript: finalTranscript }]] });
+          }
+          this.onend && this.onend();
+        }, 0);
+      }
+      stop() {
+        this.onend && this.onend();
+      }
+    }
+    window.SpeechRecognition = FakeSpeechRecognition;
+    window.webkitSpeechRecognition = FakeSpeechRecognition;
+  }, { finalTranscript, errorCode });
+}
+
+test('mic dictation button has a distinct accessible name from Send', async ({ page }) => {
+  await installFakeSpeechRecognition(page, {});
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+
+  await expect(page.getByRole('button', { name: 'Dictate message' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toHaveCount(1);
+});
+
+test('dictation button degrades gracefully when the browser has no SpeechRecognition', async ({ page }) => {
+  await page.addInitScript(() => {
+    delete window.SpeechRecognition;
+    delete window.webkitSpeechRecognition;
+  });
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+
+  const mic = page.getByRole('button', { name: 'Dictate message' });
+  await expect(mic).toBeDisabled();
+  await expect(mic).toHaveAttribute('title', /not supported/i);
+
+  // Composer stays fully usable without dictation.
+  await routeRequest(page, 'Hello!');
+  await expect(page.locator('.intent-message[data-agent-intent="salutation"]')).toBeVisible();
+});
+
+test('a successful dictation appends the transcript to the composer', async ({ page }) => {
+  await installFakeSpeechRecognition(page, { finalTranscript: 'assess a subscription business idea' });
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+
+  const composer = page.getByRole('textbox', { name: 'Ask or act from the Agent omnibox' });
+  const mic = page.getByRole('button', { name: 'Dictate message' });
+  await composer.fill('Please ');
+  await mic.click();
+
+  await expect(composer).toHaveValue('Please assess a subscription business idea');
+  await expect(page.locator('.composer-count')).toContainText('/ 8,000');
+  await expect(mic).not.toHaveClass(/is-listening/);
+});
+
+test('a denied microphone permission surfaces a toast and leaves the composer usable', async ({ page }) => {
+  await installFakeSpeechRecognition(page, { errorCode: 'not-allowed' });
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+
+  const mic = page.getByRole('button', { name: 'Dictate message' });
+  await mic.click();
+
+  await expect(page.locator('#toast')).toContainText(/microphone access/i);
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+  await routeRequest(page, 'Hello!');
+  await expect(page.locator('.intent-message[data-agent-intent="salutation"]')).toBeVisible();
+});
+
+test('attaching a file before any conversation exists shows a helpful toast and never calls the service', async ({ page }) => {
+  const { attachmentStore } = await mockAgentWorkspace(page);
+  await openAgent(page);
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'report.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4 fake'),
+  });
+  await expect(page.locator('#toast')).toContainText('Send a message first');
+  await expect(page.locator('.attachment-chip')).toHaveCount(0);
+  expect(attachmentStore.size).toBe(0);
+});
+
+test('attaching a file after sending a message uploads it and shows a ready chip', async ({ page }) => {
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+  await routeRequest(page, 'Hello!');
+  await expect(page).toHaveURL(/#\/agent\/conv_/); // waits out persistTurn's lazy create (fire-and-forget)
+
+  const fileInput = page.locator('input[type="file"]');
+  await fileInput.setInputFiles({ name: 'report.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fake') });
+
+  const chip = page.locator('.attachment-chip');
+  await expect(chip).toHaveCount(1);
+  await expect(chip.locator('.attachment-chip-name')).toHaveText('report.pdf');
+  await expect(chip).toHaveClass(/is-ready/);
+  await expect(chip.locator('.attachment-chip-status')).toHaveText('Ready');
+});
+
+test('removing an attachment deletes it server-side and the chip disappears', async ({ page }) => {
+  const { attachmentStore } = await mockAgentWorkspace(page);
+  await openAgent(page);
+  await routeRequest(page, 'Hello!');
+  await expect(page).toHaveURL(/#\/agent\/conv_/);
+
+  await page.locator('input[type="file"]').setInputFiles({ name: 'a.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
+  const chip = page.locator('.attachment-chip');
+  await expect(chip).toHaveClass(/is-ready/);
+
+  await chip.locator('.attachment-chip-remove').click();
+  await expect(page.locator('.attachment-chip')).toHaveCount(0);
+  const [conversationId] = attachmentStore.keys();
+  expect(attachmentStore.get(conversationId)).toEqual([]);
+});
+
+test('dropping a file directly onto the composer uploads it', async ({ page }) => {
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+  await routeRequest(page, 'Hello!');
+  await expect(page).toHaveURL(/#\/agent\/conv_/);
+
+  await page.locator('.composer-surface').evaluate((surface) => {
+    const file = new File(['dropped content'], 'dropped.txt', { type: 'text/plain' });
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    surface.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+  });
+
+  const chip = page.locator('.attachment-chip');
+  await expect(chip).toHaveCount(1);
+  await expect(chip.locator('.attachment-chip-name')).toHaveText('dropped.txt');
+  await expect(chip).toHaveClass(/is-ready/);
+});
+
+test('a rejected file oversize check surfaces a toast and never calls the service', async ({ page }) => {
+  const { attachmentStore } = await mockAgentWorkspace(page);
+  await openAgent(page);
+  await routeRequest(page, 'Hello!');
+  await expect(page).toHaveURL(/#\/agent\/conv_/);
+
+  const oversized = Buffer.alloc(21 * 1024 * 1024, 'x'); // over the 20MB mock limit
+  await page.locator('input[type="file"]').setInputFiles({ name: 'huge.pdf', mimeType: 'application/pdf', buffer: oversized });
+
+  await expect(page.locator('#toast')).toContainText(/larger than the 20MB limit/);
+  await expect(page.locator('.attachment-chip')).toHaveCount(0);
+  expect(attachmentStore.size).toBe(0); // rejected client-side — the mint endpoint was never even hit
+});
+
+test('the "Ask about files" affordance stays hidden until an attachment is ready, then answers with citations', async ({ page }) => {
+  await mockAgentWorkspace(page);
+  await openAgent(page);
+  await routeRequest(page, 'Hello!');
+  await expect(page).toHaveURL(/#\/agent\/conv_/);
+
+  const askButton = page.getByRole('button', { name: 'Ask about files' });
+  await expect(askButton).toBeHidden();
+
+  await page.locator('input[type="file"]').setInputFiles({ name: 'revenue.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fake') });
+  await expect(page.locator('.attachment-chip')).toHaveClass(/is-ready/);
+  await expect(askButton).toBeVisible();
+  await expect(askButton).toBeEnabled();
+
+  const composer = page.getByRole('textbox', { name: 'Ask or act from the Agent omnibox' });
+  await composer.fill('What does the revenue report say?');
+  await askButton.click();
+
+  await expect(page.locator('.conversation-message.notice')).toContainText('Mock answer built from your attachments');
+  await expect(page.locator('.conversation-message.notice')).toContainText('revenue.pdf');
+  await expect(composer).toHaveValue('');
 });

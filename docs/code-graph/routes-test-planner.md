@@ -6,8 +6,8 @@
 
 Directory-based community: services/planner
 
-- **Size**: 187 nodes
-- **Cohesion**: 0.1783
+- **Size**: 219 nodes
+- **Cohesion**: 0.2099
 - **Dominant Language**: javascript
 
 ## Members
@@ -63,14 +63,15 @@ Directory-based community: services/planner
 | error | Function | ./services/planner/src/pubsub.test.js | 230-230 |
 | warn | Function | ./services/planner/src/pubsub.test.js | 230-230 |
 | test:planner orchestrator rollout keeps billing sweeps but suppresses autonomous planning@L223 | Test | ./services/planner/src/pubsub.test.js | 223-239 |
-| redactUserText | Function | ./services/planner/src/routes/agent.js | 57-57 |
+| redactUserText | Function | ./services/planner/src/routes/agent-attachments.js | 29-29 |
 
-*... and 137 more members.*
+*... and 169 more members.*
 
 ## Execution Flows
 
 - **recordForRequest** (criticality: 0.57, depth: 3)
 - **sanitizeConfig** (criticality: 0.53, depth: 1)
+- **conversationForRequest** (criticality: 0.50, depth: 2)
 - **conversationForRequest** (criticality: 0.50, depth: 2)
 - **jobsForRequest** (criticality: 0.49, depth: 2)
 - **createLocalizationRouter** (criticality: 0.49, depth: 2)
@@ -79,36 +80,36 @@ Directory-based community: services/planner
 
 ### Outgoing
 
-- `equal` (167 edge(s))
-- `deepEqual` (40 edge(s))
-- `ok` (34 edge(s))
-- `resolve` (30 edge(s))
-- `require` (30 edge(s))
-- `map` (22 edge(s))
+- `equal` (202 edge(s))
+- `deepEqual` (44 edge(s))
+- `require` (37 edge(s))
+- `resolve` (36 edge(s))
+- `ok` (36 edge(s))
+- `map` (23 edge(s))
+- `after` (22 edge(s))
 - `includes` (19 edge(s))
-- `after` (18 edge(s))
+- `String` (17 edge(s))
 - `filter` (17 edge(s))
-- `String` (16 edge(s))
 - `push` (16 edge(s))
-- `find` (13 edge(s))
+- `find` (14 edge(s))
+- `isArray` (13 edge(s))
+- `assign` (13 edge(s))
 - `trim` (12 edge(s))
-- `isArray` (12 edge(s))
-- `some` (11 edge(s))
 
 ### Incoming
 
-- `equal` (167 edge(s))
-- `./services/planner/src/routes/agent.js` (57 edge(s))
+- `equal` (202 edge(s))
+- `./services/planner/src/routes/agent.js` (59 edge(s))
 - `./services/planner/src/routes/settings.js` (57 edge(s))
-- `deepEqual` (40 edge(s))
+- `deepEqual` (44 edge(s))
+- `require` (33 edge(s))
+- `./services/planner/src/routes/agent.test.js` (30 edge(s))
 - `./services/planner/src/pubsub.js` (28 edge(s))
-- `require` (27 edge(s))
-- `ok` (27 edge(s))
-- `./services/planner/src/routes/agent.test.js` (27 edge(s))
+- `ok` (28 edge(s))
+- `./services/planner/src/routes/agent-attachments.js` (28 edge(s))
 - `./services/planner/src/routes/businesses.js` (24 edge(s))
 - `./services/planner/src/pipeline-stage.test.js` (21 edge(s))
+- `./services/planner/src/routes/agent-attachments.test.js` (21 edge(s))
+- `resolve` (19 edge(s))
+- `after` (19 edge(s))
 - `./services/planner/src/pipeline-stage.js` (18 edge(s))
-- `resolve` (16 edge(s))
-- `after` (16 edge(s))
-- `./services/planner/src/pubsub.test.js` (14 edge(s))
-- `push` (13 edge(s))

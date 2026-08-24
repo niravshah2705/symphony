@@ -14,6 +14,7 @@
     "./pipeline/*": "./src/pipeline/*.js",
     "./agent/*": "./src/agent/*.js",
     "./agent/harness-catalog.json": "./src/agent/harness-catalog.json",
+    "./attachments/*": "./src/attachments/*.js",
     "./messaging/*": "./src/messaging/*.js",
     "./billing/*": "./src/billing/*.js",
     "./provisioning": "./src/provisioning/index.js",
@@ -30,6 +31,9 @@
     "@google-cloud/pubsub": "^6.0.0",
     "@google-cloud/run": "^4.0.0",
     "@google-cloud/scheduler": "^6.0.0",
-    "google-auth-library": "^11.0.1"
+    "@google-cloud/storage": "^8.0.1",
+    "google-auth-library": "^11.0.1",
+    "mammoth": "^1.12.1",
+    "pdf-parse": "^2.4.5"
   }
 }

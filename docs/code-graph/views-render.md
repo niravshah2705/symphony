@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 740 nodes
-- **Cohesion**: 0.4614
+- **Size**: 750 nodes
+- **Cohesion**: 0.4603
 - **Dominant Language**: javascript
 
 ## Members
@@ -32,13 +32,14 @@ Directory-based community: public/js
 | errorCode | Function | ./public/js/api.js | 83-86 |
 | getApiBase | Function | ./public/js/api.js | 94-97 |
 | setApiBase | Function | ./public/js/api.js | 108-111 |
-| notifyAuthenticationRequired | Function | ./public/js/api.js | 113-117 |
-| request | Function | ./public/js/api.js | 119-197 |
-| openStream | Function | ./public/js/api.js | 224-303 |
-| mintFailureCanRetry | Function | ./public/js/api.js | 231-235 |
-| scheduleReconnect | Function | ./public/js/api.js | 237-250 |
-| connect | Function | ./public/js/api.js | 252-285 |
-| close | Function | ./public/js/api.js | 297-301 |
+| uploadToSignedUrl | Function | ./public/js/api.js | 119-136 |
+| notifyAuthenticationRequired | Function | ./public/js/api.js | 138-142 |
+| request | Function | ./public/js/api.js | 144-222 |
+| openStream | Function | ./public/js/api.js | 249-328 |
+| mintFailureCanRetry | Function | ./public/js/api.js | 256-260 |
+| scheduleReconnect | Function | ./public/js/api.js | 262-275 |
+| connect | Function | ./public/js/api.js | 277-310 |
+| close | Function | ./public/js/api.js | 322-326 |
 | ensureStylesheet | Function | ./public/js/app.js | 44-66 |
 | route | Function | ./public/js/app.js | 68-87 |
 | load | Function | ./public/js/app.js | 73-85 |
@@ -63,9 +64,8 @@ Directory-based community: public/js
 | beginSignIn | Function | ./public/js/app.js | 496-504 |
 | beginMicrosoftSignIn | Function | ./public/js/app.js | 506-514 |
 | authProviderButtons | Function | ./public/js/app.js | 521-539 |
-| beginSignOut | Function | ./public/js/app.js | 541-549 |
 
-*... and 690 more members.*
+*... and 700 more members.*
 
 ## Execution Flows
 
@@ -85,29 +85,29 @@ Directory-based community: public/js
 
 ### Outgoing
 
-- `append` (213 edge(s))
-- `addEventListener` (205 edge(s))
-- `map` (150 edge(s))
+- `append` (216 edge(s))
+- `addEventListener` (212 edge(s))
+- `map` (152 edge(s))
 - `String` (115 edge(s))
 - `push` (102 edge(s))
-- `trim` (93 edge(s))
+- `trim` (95 edge(s))
 - `filter` (81 edge(s))
-- `setAttribute` (66 edge(s))
+- `setAttribute` (67 edge(s))
 - `isArray` (65 edge(s))
 - `has` (65 edge(s))
 - `Boolean` (58 edge(s))
-- `catch` (56 edge(s))
-- `querySelector` (53 edge(s))
+- `catch` (58 edge(s))
+- `querySelector` (58 edge(s))
 - `slice` (51 edge(s))
-- `test` (44 edge(s))
+- `test` (45 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (164 edge(s))
+- `./public/js/api.js` (172 edge(s))
 - `./public/js/workflow-designer-model.mjs` (145 edge(s))
 - `./public/js/views/settings.js` (132 edge(s))
+- `./public/js/views/agent.js` (106 edge(s))
 - `./public/js/app.js` (102 edge(s))
-- `./public/js/views/agent.js` (97 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (89 edge(s))
 - `./public/js/google-analytics.test.mjs` (69 edge(s))
 - `./public/js/views/workflows.js` (63 edge(s))
