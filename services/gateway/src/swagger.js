@@ -7,9 +7,25 @@ const { CONFIG } = require('@ai-fleet/shared-core/config');
 // Production mode requires this header to access API docs.
 // In dev/local (MESSAGING_MODE !== 'pubsub'), docs are always available.
 const API_DOCS_HEADER = 'x-ai-fleet-api-docs';
-const API_DOCS_MODES = new Set(['enabled', 'true', '1']);
 
 const IS_CLOUD = CONFIG.MESSAGING_MODE === 'pubsub';
+
+/**
+ * Pure gating decision — kept free of Express/CONFIG so it is directly testable.
+ * Local dev (isCloud=false) always allows access; cloud requires any non-empty
+ * header value.
+ */
+function docsAllowed({ isCloud, headerValue }) {
+  if (!isCloud) return true;
+  return typeof headerValue === 'string' && headerValue.trim() !== '';
+}
+
+/** Read the docs header off a request, tolerating both Express and plain req shapes. */
+function readDocsHeader(req) {
+  if (req && typeof req.get === 'function') return req.get(API_DOCS_HEADER) || '';
+  if (req && req.headers) return req.headers[API_DOCS_HEADER] || '';
+  return '';
+}
 
 /**
  * Check if API docs should be accessible for this request.
@@ -17,15 +33,7 @@ const IS_CLOUD = CONFIG.MESSAGING_MODE === 'pubsub';
  * Local dev always allows access (no header needed).
  */
 function isApiDocsEnabled(req) {
-  // Dev/local: always enabled
-  if (!IS_CLOUD) {
-    return true;
-  }
-  // Production: check for mode header (any non-empty value is treated as enabled)
-  const headerValue = (req && typeof req.get === 'function')
-    ? req.get(API_DOCS_HEADER) || ''
-    : '';
-  return headerValue.trim() !== '';
+  return docsAllowed({ isCloud: IS_CLOUD, headerValue: readDocsHeader(req) });
 }
 
 /**
@@ -87,5 +95,7 @@ module.exports = {
   createSwaggerUISetup,
   swaggerDocument,
   isApiDocsEnabled,
+  docsAllowed,
+  readDocsHeader,
   API_DOCS_HEADER,
 };

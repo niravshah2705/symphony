@@ -1,104 +1,70 @@
 'use strict';
 
-const assert = require('assert');
-const { isApiDocsEnabled, API_DOCS_HEADER } = require('./swagger');
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
 
-describe('Swagger API Docs Gating', () => {
+const {
+  docsAllowed,
+  readDocsHeader,
+  isApiDocsEnabled,
+  API_DOCS_HEADER,
+} = require('./swagger');
+
+describe('swagger API docs gating', () => {
+  describe('docsAllowed (pure decision)', () => {
+    it('always allows in local dev regardless of header', () => {
+      assert.equal(docsAllowed({ isCloud: false, headerValue: '' }), true);
+      assert.equal(docsAllowed({ isCloud: false, headerValue: 'enabled' }), true);
+      assert.equal(docsAllowed({ isCloud: false, headerValue: undefined }), true);
+    });
+
+    it('requires a non-empty header in cloud', () => {
+      assert.equal(docsAllowed({ isCloud: true, headerValue: 'enabled' }), true);
+      assert.equal(docsAllowed({ isCloud: true, headerValue: '1' }), true);
+      assert.equal(docsAllowed({ isCloud: true, headerValue: 'anything' }), true);
+    });
+
+    it('denies in cloud when the header is missing, empty, or whitespace', () => {
+      assert.equal(docsAllowed({ isCloud: true, headerValue: '' }), false);
+      assert.equal(docsAllowed({ isCloud: true, headerValue: '   ' }), false);
+      assert.equal(docsAllowed({ isCloud: true, headerValue: '\t\n' }), false);
+      assert.equal(docsAllowed({ isCloud: true, headerValue: undefined }), false);
+    });
+  });
+
+  describe('readDocsHeader', () => {
+    it('reads via Express req.get()', () => {
+      const req = { get: (name) => (name === API_DOCS_HEADER ? 'enabled' : '') };
+      assert.equal(readDocsHeader(req), 'enabled');
+    });
+
+    it('falls back to req.headers when get() is absent', () => {
+      const req = { headers: { [API_DOCS_HEADER]: 'enabled' } };
+      assert.equal(readDocsHeader(req), 'enabled');
+    });
+
+    it('returns empty string for null/undefined/blank requests', () => {
+      assert.equal(readDocsHeader(null), '');
+      assert.equal(readDocsHeader(undefined), '');
+      assert.equal(readDocsHeader({}), '');
+    });
+  });
+
   describe('isApiDocsEnabled', () => {
-    it('should be enabled when MESSAGING_MODE is not pubsub (dev)', () => {
-      // In dev, isApiDocsEnabled should check CONFIG.MESSAGING_MODE
-      // This test assumes CONFIG.MESSAGING_MODE is NOT 'pubsub'
-      const mockReq = {
-        get: () => undefined,
-      };
-      // Dev mode: docs always enabled regardless of header
-      const result = isApiDocsEnabled(mockReq);
-      // Result depends on CONFIG.MESSAGING_MODE, so we can't assert directly
-      // Instead, we test the function exists and is callable
-      assert.strictEqual(typeof isApiDocsEnabled, 'function');
-    });
-
-    it('should require header when MESSAGING_MODE is pubsub (cloud)', () => {
-      // Create a mock request without the header
-      const mockReqNoHeader = {
-        get: (name) => {
-          if (name === API_DOCS_HEADER) return undefined;
-          return '';
-        },
-      };
-
-      // Create a mock request with the header
-      const mockReqWithHeader = {
-        get: (name) => {
-          if (name === API_DOCS_HEADER) return 'enabled';
-          return '';
-        },
-      };
-
-      // The actual behavior depends on CONFIG.MESSAGING_MODE
-      // So we verify that:
-      // 1. With header, should return true (in cloud)
-      // 2. Without header, should return false (in cloud)
-      assert.strictEqual(typeof isApiDocsEnabled, 'function');
-      assert.strictEqual(typeof isApiDocsEnabled(mockReqNoHeader), 'boolean');
-      assert.strictEqual(typeof isApiDocsEnabled(mockReqWithHeader), 'boolean');
-    });
-
-    it('should accept any non-empty header value', () => {
-      const validValues = ['enabled', 'true', '1', 'yes', 'x', 'anything'];
-      const mockReq = (value) => ({
-        get: (name) => (name === API_DOCS_HEADER ? value : ''),
-      });
-
-      validValues.forEach((value) => {
-        const req = mockReq(value);
-        const result = isApiDocsEnabled(req);
-        // In cloud mode, any non-empty value should enable docs
-        assert.strictEqual(typeof result, 'boolean');
-      });
-    });
-
-    it('should reject empty or whitespace-only header values', () => {
-      const invalidValues = ['', '  ', '\t', '\n'];
-      const mockReq = (value) => ({
-        get: (name) => (name === API_DOCS_HEADER ? value : ''),
-      });
-
-      invalidValues.forEach((value) => {
-        const req = mockReq(value);
-        const result = isApiDocsEnabled(req);
-        assert.strictEqual(typeof result, 'boolean');
-      });
-    });
-
-    it('should handle requests without get() method gracefully', () => {
-      const mockReqNoGet = {
-        headers: {
-          [API_DOCS_HEADER]: 'enabled',
-        },
-      };
-
-      const result = isApiDocsEnabled(mockReqNoGet);
-      assert.strictEqual(typeof result, 'boolean');
-    });
-
-    it('should handle null/undefined requests gracefully', () => {
-      const result1 = isApiDocsEnabled(null);
-      const result2 = isApiDocsEnabled(undefined);
-
-      assert.strictEqual(typeof result1, 'boolean');
-      assert.strictEqual(typeof result2, 'boolean');
+    // Unit tests run without MESSAGING_MODE=pubsub, so IS_CLOUD is false and
+    // docs are always enabled here. This asserts the dev default holds and that
+    // the function tolerates odd request shapes without throwing.
+    it('is enabled in the local/dev test environment', () => {
+      assert.equal(isApiDocsEnabled({ get: () => '' }), true);
+      assert.equal(isApiDocsEnabled(null), true);
+      assert.equal(isApiDocsEnabled(undefined), true);
     });
   });
 
   describe('API_DOCS_HEADER constant', () => {
-    it('should be defined', () => {
-      assert.strictEqual(typeof API_DOCS_HEADER, 'string');
-      assert.strictEqual(API_DOCS_HEADER, 'x-ai-fleet-api-docs');
-    });
-
-    it('should be lowercase (HTTP standard)', () => {
-      assert.strictEqual(API_DOCS_HEADER, API_DOCS_HEADER.toLowerCase());
+    it('is the expected lowercase header name', () => {
+      assert.equal(API_DOCS_HEADER, 'x-ai-fleet-api-docs');
+      assert.equal(API_DOCS_HEADER, API_DOCS_HEADER.toLowerCase());
     });
   });
 });
