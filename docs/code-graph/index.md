@@ -26,7 +26,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-back | 18 | [src-back.md](src-back.md) |
 | src-body | 17 | [src-body.md](src-body.md) |
 | src-body | 17 | [src-body-2.md](src-body-2.md) |
-| src-context | 337 | [src-context.md](src-context.md) |
+| src-context | 354 | [src-context.md](src-context.md) |
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
 | src-session | 81 | [src-session.md](src-session.md) |
 | src-stage | 179 | [src-stage.md](src-stage.md) |
