@@ -6,8 +6,8 @@
 
 Directory-based community: packages/shared
 
-- **Size**: 1832 nodes
-- **Cohesion**: 0.1241
+- **Size**: 1840 nodes
+- **Cohesion**: 0.1240
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Directory-based community: packages/shared
 | issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
 | applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-222 |
 
-*... and 1782 more members.*
+*... and 1790 more members.*
 
 ## Execution Flows
 
@@ -79,37 +79,37 @@ Directory-based community: packages/shared
 - **getTeams** (criticality: 0.48, depth: 1)
 - **updateIssueState** (criticality: 0.48, depth: 1)
 - **updateIssue** (criticality: 0.48, depth: 1)
-- *... and 9 more flows.*
+- *... and 7 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (1708 edge(s))
-- `deepEqual` (332 edge(s))
-- `String` (261 edge(s))
+- `equal` (1709 edge(s))
+- `deepEqual` (335 edge(s))
+- `String` (263 edge(s))
 - `join` (247 edge(s))
 - `push` (188 edge(s))
 - `includes` (188 edge(s))
 - `ok` (154 edge(s))
-- `trim` (143 edge(s))
-- `map` (136 edge(s))
+- `trim` (145 edge(s))
+- `map` (138 edge(s))
 - `strictEqual` (132 edge(s))
 - `match` (119 edge(s))
+- `isArray` (109 edge(s))
 - `slice` (108 edge(s))
-- `isArray` (105 edge(s))
+- `throws` (103 edge(s))
 - `filter` (100 edge(s))
-- `throws` (97 edge(s))
 
 ### Incoming
 
-- `equal` (1698 edge(s))
-- `deepEqual` (330 edge(s))
+- `equal` (1699 edge(s))
+- `deepEqual` (333 edge(s))
 - `ok` (154 edge(s))
 - `strictEqual` (132 edge(s))
+- `throws` (103 edge(s))
 - `match` (101 edge(s))
 - `join` (98 edge(s))
-- `throws` (97 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (96 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (80 edge(s))
 - `./packages/shared/src/linear.js` (74 edge(s))

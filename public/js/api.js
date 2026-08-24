@@ -110,6 +110,31 @@ export function setApiBase(url) {
   window.__API_BASE__ = url ? String(url).replace(/\/+$/, '') : '';
 }
 
+/**
+ * PUT a file's raw bytes directly to a v4 signed GCS URL minted by
+ * api.mintAttachmentUpload(). Deliberately NOT routed through request() —
+ * this targets GCS, not our API base, and carries no auth header (the signed
+ * URL itself is the credential). XMLHttpRequest, not fetch, for upload progress.
+ */
+export function uploadToSignedUrl(url, file, { onProgress } = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    if (typeof onProgress === 'function') {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(event.loaded / event.total);
+      };
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Upload failed (${xhr.status}).`));
+    };
+    xhr.onerror = () => reject(new Error('Upload failed due to a network error.'));
+    xhr.send(file);
+  });
+}
+
 function notifyAuthenticationRequired(error) {
   window.dispatchEvent(new CustomEvent('ai-fleet:auth-required', {
     detail: { message: error?.message || 'Authentication required' },
@@ -474,6 +499,21 @@ export const api = {
   renameConversation: (id, title) =>
     request(`/agent/conversations/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
   deleteConversation: (id) => request(`/agent/conversations/${id}`, { method: 'DELETE' }),
+  // Chat attachments: mint a signed GCS upload URL, then PUT bytes directly to
+  // it via uploadToSignedUrl() below (not through this request() wrapper —
+  // that targets our own API base, not GCS).
+  getAttachmentTypes: () => request('/agent/attachment-types'),
+  mintAttachmentUpload: (conversationId, { filename, mimeType, size }) =>
+    request(`/agent/conversations/${conversationId}/attachments`, { method: 'POST', body: JSON.stringify({ filename, mimeType, size }) }),
+  completeAttachmentUpload: (conversationId, attachmentId) =>
+    request(`/agent/conversations/${conversationId}/attachments/${attachmentId}/complete`, { method: 'POST' }),
+  listAttachments: (conversationId) => request(`/agent/conversations/${conversationId}/attachments`),
+  deleteAttachment: (conversationId, attachmentId) =>
+    request(`/agent/conversations/${conversationId}/attachments/${attachmentId}`, { method: 'DELETE' }),
+  searchAttachments: (conversationId, query) =>
+    request(`/agent/conversations/${conversationId}/attachments/search?q=${encodeURIComponent(query)}`),
+  askAboutAttachments: (conversationId, question) =>
+    request(`/agent/conversations/${conversationId}/attachments/ask`, { method: 'POST', body: JSON.stringify({ question }) }),
   enrichInput: (payload) =>
     request('/agent/enrich-input', { method: 'POST', body: JSON.stringify(payload) }),
   settingsCommand: (payload) =>

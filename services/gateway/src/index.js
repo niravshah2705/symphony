@@ -226,6 +226,14 @@ app.post('/api/agent/knowledge-search', requirePermission('workspace', { level: 
 // it needs EULA acceptance. Registered before the catch-all so this exact path
 // wins; everything else on /api/agent keeps the plain workspace:write gate.
 app.post('/api/agent/business/prepare', requirePermission('workspace'), requireOrganizationContext(), requireEulaAccepted(), plannerProxy);
+// Attachment upload/ingest and the LLM-backed "ask" both do real work (GCS
+// writes, embedding calls, a hosted LLM call) — EULA-gated like business/prepare,
+// registered before the catch-all so these exact paths win. Read-only attachment
+// routes (list/search/attachment-types) and delete fall through to the plain
+// workspace:write gate below, same as conversation delete.
+app.post('/api/agent/conversations/:id/attachments', requirePermission('workspace'), requireOrganizationContext(), requireEulaAccepted(), plannerProxy);
+app.post('/api/agent/conversations/:id/attachments/:attachmentId/complete', requirePermission('workspace'), requireOrganizationContext(), requireEulaAccepted(), plannerProxy);
+app.post('/api/agent/conversations/:id/attachments/ask', requirePermission('workspace'), requireOrganizationContext(), requireEulaAccepted(), plannerProxy);
 app.use('/api/agent', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), plannerProxy);
 app.use('/api/coder', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), createProxy(CONFIG.SERVICES.coderUrl));
 
