@@ -4,117 +4,112 @@
 
 ## Overview
 
-Directory-based community: packages/shared
+Community of 392 nodes
 
-- **Size**: 1840 nodes
-- **Cohesion**: 0.1240
+- **Size**: 392 nodes
+- **Cohesion**: 0.3156
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| boundedInteger | Function | ./packages/shared/src/agent/analytics.js | 12-16 |
-| finiteMetric | Function | ./packages/shared/src/agent/analytics.js | 18-22 |
-| cleanText | Function | ./packages/shared/src/agent/analytics.js | 24-27 |
-| metadataFor | Function | ./packages/shared/src/agent/analytics.js | 29-32 |
-| invocationFor | Function | ./packages/shared/src/agent/analytics.js | 34-38 |
-| firstText | Function | ./packages/shared/src/agent/analytics.js | 40-46 |
-| resourceNames | Function | ./packages/shared/src/agent/analytics.js | 56-68 |
-| topResources | Function | ./packages/shared/src/agent/analytics.js | 71-82 |
-| runtimeAndModel | Function | ./packages/shared/src/agent/analytics.js | 84-106 |
-| metricFromParts | Function | ./packages/shared/src/agent/analytics.js | 108-115 |
-| latencyMs | Function | ./packages/shared/src/agent/analytics.js | 117-122 |
-| isErrorRun | Function | ./packages/shared/src/agent/analytics.js | 124-127 |
-| safeTraceUrl | Function | ./packages/shared/src/agent/analytics.js | 129-148 |
-| normalizeRun | Function | ./packages/shared/src/agent/analytics.js | 150-212 |
-| sumAvailable | Function | ./packages/shared/src/agent/analytics.js | 214-224 |
-| percentile | Function | ./packages/shared/src/agent/analytics.js | 226-231 |
-| aggregateRuns | Function | ./packages/shared/src/agent/analytics.js | 233-267 |
-| unavailable | Function | ./packages/shared/src/agent/analytics.js | 269-284 |
-| normalizeOptions | Function | ./packages/shared/src/agent/analytics.js | 286-292 |
-| loadAnalytics | Function | ./packages/shared/src/agent/analytics.js | 299-362 |
-| test:analytics query options are bounded@L15 | Test | ./packages/shared/src/agent/analytics.test.js | 15-21 |
-| test:root runs aggregate cost, tokens, latency, errors, runtime, model, and change identity@L23 | Test | ./packages/shared/src/agent/analytics.test.js | 23-69 |
-| test:missing cost and token telemetry stays null instead of becoming zero@L71 | Test | ./packages/shared/src/agent/analytics.test.js | 71-77 |
-| test:trace links stay on the trusted LangSmith origin@L79 | Test | ./packages/shared/src/agent/analytics.test.js | 79-90 |
-| test:SDK trace metadata supplies usage and cost when LangSmith run totals are absent@L92 | Test | ./packages/shared/src/agent/analytics.test.js | 92-114 |
-| test:LangSmith query uses a bounded root-run window and limit@L116 | Test | ./packages/shared/src/agent/analytics.test.js | 116-136 |
-| listRuns | Function | ./packages/shared/src/agent/analytics.test.js | 161-161 |
-| test:LangSmith client construction has a bounded request timeout and retry count@L138 | Test | ./packages/shared/src/agent/analytics.test.js | 138-151 |
-| StubClient | Class | ./packages/shared/src/agent/analytics.test.js | 140-143 |
-| constructor | Function | ./packages/shared/src/agent/analytics.test.js | 141-141 |
-| listRuns | Function | ./packages/shared/src/agent/analytics.test.js | 142-142 |
-| test:analytics degrades honestly when tracing or LangSmith is unavailable@L153 | Test | ./packages/shared/src/agent/analytics.test.js | 153-165 |
-| test:normalizeRun reads resource metadata from array values@L171 | Test | ./packages/shared/src/agent/analytics.test.js | 171-194 |
-| test:normalizeRun tolerates comma-separated resource metadata and de-dupes@L196 | Test | ./packages/shared/src/agent/analytics.test.js | 196-204 |
-| test:aggregateRuns rolls up top resource usage, preferring used over configured@L206 | Test | ./packages/shared/src/agent/analytics.test.js | 206-220 |
-| test:config exposes antigravity as a hosted Gemini-backed provider@L22 | Test | ./packages/shared/src/agent/antigravity.test.js | 22-26 |
 | test:resolveLlm builds a Gemini-key descriptor carrying the OpenAI-compatible endpoint@L28 | Test | ./packages/shared/src/agent/antigravity.test.js | 28-37 |
 | test:resolveLlm applies the config-driven agent-id override and model default@L39 | Test | ./packages/shared/src/agent/antigravity.test.js | 39-44 |
 | test:llmReady requires the Gemini key; notReadyReason names the Gemini API key@L46 | Test | ./packages/shared/src/agent/antigravity.test.js | 46-50 |
 | test:createChatModel maps antigravity to a ChatOpenAI targeting the Gemini endpoint@L52 | Test | ./packages/shared/src/agent/antigravity.test.js | 52-58 |
-| test:catalog exposes hosted antigravity presets and maps params to antigravity* settings@L60 | Test | ./packages/shared/src/agent/antigravity.test.js | 60-71 |
 | test:availability probes the Gemini key against the OpenAI-compatible endpoint@L73 | Test | ./packages/shared/src/agent/antigravity.test.js | 73-86 |
 | test:availability fails fast when the Gemini key is missing@L88 | Test | ./packages/shared/src/agent/antigravity.test.js | 88-94 |
-| resolveTaskLabelId | Function | ./packages/shared/src/agent/apply.js | 13-21 |
-| withCriteria | Function | ./packages/shared/src/agent/apply.js | 24-28 |
-| modelLabelForSize | Function | ./packages/shared/src/agent/apply.js | 31-33 |
-| makeLabelResolver | Function | ./packages/shared/src/agent/apply.js | 40-55 |
-| makeModelLabelResolver | Function | ./packages/shared/src/agent/apply.js | 63-83 |
-| issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
-| applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-222 |
+| statusOf | Function | ./packages/shared/src/agent/availability.js | 43-46 |
+| publicAvailabilityMessage | Function | ./packages/shared/src/agent/availability.js | 48-73 |
+| pauseReasonFor | Function | ./packages/shared/src/agent/availability.js | 75-87 |
+| isRepositoryAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 89-99 |
+| isModelAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 101-118 |
+| selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 120-125 |
+| normalize | Function | ./packages/shared/src/agent/availability.js | 123-123 |
+| probeModelAvailability | Function | ./packages/shared/src/agent/availability.js | 127-223 |
+| probeRepositoryAvailability | Function | ./packages/shared/src/agent/availability.js | 225-280 |
+| response | Function | ./packages/shared/src/agent/availability.test.js | 18-24 |
+| test:pause reasons expose a stable, nontechnical UI contract@L26 | Test | ./packages/shared/src/agent/availability.test.js | 26-42 |
+| test:repository preflight converts provider 403 into a sanitized availability error@L44 | Test | ./packages/shared/src/agent/availability.test.js | 44-67 |
+| test:repository preflight requires write permission before dispatch@L69 | Test | ./packages/shared/src/agent/availability.test.js | 69-77 |
+| test:local model preflight verifies that the selected model is loaded@L79 | Test | ./packages/shared/src/agent/availability.test.js | 79-93 |
+| test:model classifier recognizes hosted authorization and network availability failures@L95 | Test | ./packages/shared/src/agent/availability.test.js | 95-119 |
+| test:repository classifier distinguishes remote outages from local workflow errors@L121 | Test | ./packages/shared/src/agent/availability.test.js | 121-142 |
+| messageText | Function | ./packages/shared/src/agent/business-pipeline.js | 71-77 |
+| parseJsonObject | Function | ./packages/shared/src/agent/business-pipeline.js | 79-85 |
+| realResolveModel | Function | ./packages/shared/src/agent/business-pipeline.js | 89-94 |
+| invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
+| defaultCallJson | Function | ./packages/shared/src/agent/business-pipeline.js | 112-114 |
+| defaultCallText | Function | ./packages/shared/src/agent/business-pipeline.js | 116-118 |
+| test:parseVerdict reads a fenced verdict JSON block (completed)@L25 | Test | ./packages/shared/src/agent/coder-flow.test.js | 25-30 |
+| test:parseVerdict reads an insufficient JSON verdict with its reason@L32 | Test | ./packages/shared/src/agent/coder-flow.test.js | 32-36 |
+| test:parseVerdict extracts the merged PR URL when completed@L38 | Test | ./packages/shared/src/agent/coder-flow.test.js | 38-43 |
+| test:parseVerdict leaves pr null when absent@L45 | Test | ./packages/shared/src/agent/coder-flow.test.js | 45-48 |
+| test:parseVerdict accepts a plain VERDICT: line@L50 | Test | ./packages/shared/src/agent/coder-flow.test.js | 50-54 |
+| test:parseVerdict normalizes case in the status field@L56 | Test | ./packages/shared/src/agent/coder-flow.test.js | 56-59 |
+| test:parseVerdict defaults to insufficient when no verdict is present@L61 | Test | ./packages/shared/src/agent/coder-flow.test.js | 61-65 |
+| test:parseVerdict defaults to insufficient on empty/nullish input@L67 | Test | ./packages/shared/src/agent/coder-flow.test.js | 67-70 |
+| test:Git 403 preflight stops before model resolution, job creation, or issue transition@L96 | Test | ./packages/shared/src/agent/coder-flow.test.js | 96-133 |
+| test:model preflight stops before job creation or issue transition@L135 | Test | ./packages/shared/src/agent/coder-flow.test.js | 135-165 |
+| test:successful readiness is probed again for every later dispatch@L167 | Test | ./packages/shared/src/agent/coder-flow.test.js | 167-188 |
+| test:manual readiness guard establishes the same sanitized global pause@L190 | Test | ./packages/shared/src/agent/coder-flow.test.js | 190-218 |
+| test:manual readiness guard preserves policy denial without creating a model pause@L220 | Test | ./packages/shared/src/agent/coder-flow.test.js | 220-247 |
+| test:runtime policy denial is never classified as a model availability pause@L249 | Test | ./packages/shared/src/agent/coder-flow.test.js | 249-265 |
+| test:selected autonomous policy resolution rejects missing effective policy while local mode stays compatible@L267 | Test | ./packages/shared/src/agent/coder-flow.test.js | 267-292 |
+| test:proxy-vault autonomous polling needs no stored Linear key and uses the sentinel for every Linear read@L294 | Test | ./packages/shared/src/agent/coder-flow.test.js | 294-321 |
+| test:autonomous planned coder threads selected policy and loads only permitted MCP plugins@L323 | Test | ./packages/shared/src/agent/coder-flow.test.js | 323-438 |
+| test:runtime outage helper pauses direct runs on the execution role regardless of legacy size label@L488 | Test | ./packages/shared/src/agent/coder-flow.test.js | 488-528 |
+| test:coder pause recovery waits, reschedules failed probes, and clears after a ready settings change@L530 | Test | ./packages/shared/src/agent/coder-flow.test.js | 530-577 |
+| now | Function | ./packages/shared/src/agent/coder-flow.test.js | 547-547 |
+| test:runtime repository unavailability pauses safely without finishing the Linear issue@L579 | Test | ./packages/shared/src/agent/coder-flow.test.js | 579-640 |
+| test:planned runtime policy denial records a governed error without pausing or finalizing the issue@L642 | Test | ./packages/shared/src/agent/coder-flow.test.js | 642-697 |
 
-*... and 1790 more members.*
+*... and 342 more members.*
 
 ## Execution Flows
 
-- **internalServiceAuth** (criticality: 0.61, depth: 1)
-- **executeClaude** (criticality: 0.53, depth: 1)
-- **requestIp** (criticality: 0.48, depth: 1)
-- **pipelineStageAuth** (criticality: 0.48, depth: 1)
-- **applySettingsPatch** (criticality: 0.48, depth: 1)
-- **prepareWorkspace** (criticality: 0.48, depth: 1)
-- **getViewer** (criticality: 0.48, depth: 1)
-- **getTeams** (criticality: 0.48, depth: 1)
-- **updateIssueState** (criticality: 0.48, depth: 1)
-- **updateIssue** (criticality: 0.48, depth: 1)
-- *... and 4 more flows.*
+- **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
+- **resume** (criticality: 0.67, depth: 8)
+- **startScheduler** (criticality: 0.66, depth: 6)
+- **generatePlan** (criticality: 0.66, depth: 4)
+- **executeClaude** (criticality: 0.61, depth: 2)
+- **executeCodex** (criticality: 0.60, depth: 2)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (1709 edge(s))
-- `deepEqual` (335 edge(s))
-- `String` (263 edge(s))
-- `join` (247 edge(s))
-- `push` (188 edge(s))
-- `includes` (188 edge(s))
-- `ok` (154 edge(s))
-- `trim` (145 edge(s))
-- `map` (138 edge(s))
-- `strictEqual` (132 edge(s))
-- `match` (119 edge(s))
-- `isArray` (109 edge(s))
-- `slice` (108 edge(s))
-- `throws` (103 edge(s))
-- `filter` (100 edge(s))
+- `equal` (332 edge(s))
+- `deepEqual` (76 edge(s))
+- `String` (52 edge(s))
+- `strictEqual` (48 edge(s))
+- `Number` (43 edge(s))
+- `warn` (31 edge(s))
+- `Boolean` (30 edge(s))
+- `match` (29 edge(s))
+- `push` (28 edge(s))
+- `ok` (26 edge(s))
+- `replace` (26 edge(s))
+- `rejects` (25 edge(s))
+- `includes` (25 edge(s))
+- `trim` (24 edge(s))
+- `toISOString` (23 edge(s))
 
 ### Incoming
 
-- `equal` (1699 edge(s))
-- `deepEqual` (333 edge(s))
-- `ok` (154 edge(s))
-- `strictEqual` (132 edge(s))
-- `throws` (103 edge(s))
-- `match` (101 edge(s))
-- `join` (98 edge(s))
-- `./packages/shared/src/agent/repository-broker.js` (96 edge(s))
-- `./packages/shared/src/agent/coder-orchestrator.js` (80 edge(s))
-- `./packages/shared/src/linear.js` (74 edge(s))
-- `includes` (71 edge(s))
-- `rejects` (64 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (60 edge(s))
-- `./packages/shared/src/agent/repository-broker.test.js` (60 edge(s))
-- `./packages/shared/src/agent/coder-flow.test.js` (58 edge(s))
+- `equal` (332 edge(s))
+- `deepEqual` (76 edge(s))
+- `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
+- `./packages/shared/src/agent/scheduler.js` (53 edge(s))
+- `strictEqual` (48 edge(s))
+- `./packages/shared/src/agent/localization.js` (48 edge(s))
+- `./packages/shared/src/agent/llm.js` (42 edge(s))
+- `./packages/shared/src/agent/local-intelligence.js` (38 edge(s))
+- `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
+- `ok` (26 edge(s))
+- `rejects` (25 edge(s))
+- `match` (24 edge(s))
+- `after` (21 edge(s))
+- `./packages/shared/src/agent/scheduler.test.js` (18 edge(s))
+- `./packages/shared/src/agent/availability.js` (17 edge(s))

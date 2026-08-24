@@ -4,20 +4,20 @@
 
 ## Overview
 
-Directory-based community: services/settings
+Community of 444 nodes
 
-- **Size**: 506 nodes
-- **Cohesion**: 0.3749
+- **Size**: 444 nodes
+- **Cohesion**: 0.4196
 - **Dominant Language**: python
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:concurrent Firestore context initialization is deduplicated per backend@L176 | Test | ./packages/shared/src/store-workspace-isolation.test.js | 176-220 |
 | get_org_connectors | Function | ./services/settings/app/api/v1/routes_connectors.py | 22-26 |
 | put_org_connectors | Function | ./services/settings/app/api/v1/routes_connectors.py | 30-35 |
 | get_org_connectors_readiness | Function | ./services/settings/app/api/v1/routes_connectors.py | 39-46 |
-| health | Function | ./services/settings/app/api/v1/routes_health.py | 13-15 |
 | readiness | Function | ./services/settings/app/api/v1/routes_health.py | 19-22 |
 | get_effective_config | Function | ./services/settings/app/api/v1/routes_internal.py | 58-70 |
 | require_internal_token | Function | ./services/settings/app/api/v1/routes_internal.py | 73-77 |
@@ -50,7 +50,6 @@ Directory-based community: services/settings
 | get_principal | Function | ./services/settings/app/auth/dependencies.py | 13-22 |
 | get_current_user | Function | ./services/settings/app/auth/dependencies.py | 25-33 |
 | _client | Function | ./services/settings/app/auth/idp.py | 23-28 |
-| reset_client | Function | ./services/settings/app/auth/idp.py | 31-34 |
 | is_idp_issuer | Function | ./services/settings/app/auth/idp.py | 37-39 |
 | decode_idp_token | Function | ./services/settings/app/auth/idp.py | 42-55 |
 | create_access_token | Function | ./services/settings/app/auth/jwt_local.py | 24-46 |
@@ -64,57 +63,58 @@ Directory-based community: services/settings
 | _items | Function | ./services/settings/app/auth/org_context.py | 56-57 |
 | parse_context_payload | Function | ./services/settings/app/auth/org_context.py | 60-138 |
 | _audience | Function | ./services/settings/app/auth/org_context.py | 141-143 |
+| _cloud_run_token | Function | ./services/settings/app/auth/org_context.py | 146-153 |
 
-*... and 456 more members.*
+*... and 394 more members.*
 
 ## Execution Flows
 
-- **get_org_secrets** (criticality: 0.93, depth: 3)
-- **get_project_secrets** (criticality: 0.93, depth: 3)
-- **set_org_secrets** (criticality: 0.92, depth: 5)
-- **set_project_secrets** (criticality: 0.92, depth: 5)
-- **resolve_secrets_for_org** (criticality: 0.91, depth: 4)
-- **import_codex_tokens** (criticality: 0.89, depth: 4)
-- **rotate_codex_tokens** (criticality: 0.89, depth: 4)
-- **__call__** (criticality: 0.85, depth: 4)
-- **set_selection** (criticality: 0.82, depth: 4)
-- **set_project_selection** (criticality: 0.82, depth: 4)
-- *... and 42 more flows.*
+- **get_org_secrets** (criticality: 0.94, depth: 4)
+- **get_project_secrets** (criticality: 0.94, depth: 4)
+- **resolve_secrets_for_org** (criticality: 0.90, depth: 4)
+- **set_org_secrets** (criticality: 0.90, depth: 5)
+- **set_project_secrets** (criticality: 0.90, depth: 5)
+- **import_codex_tokens** (criticality: 0.86, depth: 4)
+- **rotate_codex_tokens** (criticality: 0.85, depth: 4)
+- **credential_readiness_for_org** (criticality: 0.84, depth: 2)
+- **set_selection** (criticality: 0.83, depth: 5)
+- **set_project_selection** (criticality: 0.83, depth: 5)
+- *... and 31 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (205 edge(s))
-- `str` (102 edge(s))
-- `uuid4` (82 edge(s))
-- `json` (76 edge(s))
+- `get` (182 edge(s))
+- `str` (85 edge(s))
+- `uuid4` (81 edge(s))
+- `json` (75 edge(s))
 - `put` (72 edge(s))
 - `Depends` (61 edge(s))
-- `ValueError` (47 edge(s))
-- `set` (33 edge(s))
-- `BaseModel` (30 edge(s))
-- `strip` (26 edge(s))
-- `items` (21 edge(s))
-- `append` (20 edge(s))
-- `len` (16 edge(s))
+- `set` (26 edge(s))
+- `BaseModel` (20 edge(s))
+- `append` (17 edge(s))
+- `items` (16 edge(s))
 - `list` (15 edge(s))
-- `lower` (14 edge(s))
+- `bool` (13 edge(s))
+- `post` (13 edge(s))
+- `ValueError` (11 edge(s))
+- `strip` (10 edge(s))
 
 ### Incoming
 
 - `uuid4` (78 edge(s))
-- `json` (75 edge(s))
+- `json` (74 edge(s))
 - `put` (72 edge(s))
-- `get` (64 edge(s))
+- `get` (60 edge(s))
 - `./services/settings/app/services/secrets_service.py` (26 edge(s))
-- `./services/settings/tests/integration/test_secrets_vault.py` (20 edge(s))
-- `./services/settings/app/errors.py` (18 edge(s))
-- `./services/settings/tests/unit/test_resolver.py` (18 edge(s))
-- `./services/settings/app/services/policy_service.py` (17 edge(s))
-- `./services/settings/app/schemas/policy.py` (15 edge(s))
+- `./services/settings/tests/integration/test_secrets_vault.py` (19 edge(s))
+- `./services/settings/tests/unit/test_resolver.py` (17 edge(s))
+- `./services/settings/app/services/policy_service.py` (16 edge(s))
+- `./services/settings/app/api/v1/routes_internal.py` (15 edge(s))
 - `post` (13 edge(s))
 - `./services/settings/tests/integration/test_settings.py` (13 edge(s))
-- `./services/settings/tests/integration/test_authz.py` (12 edge(s))
+- `./services/settings/app/errors.py` (12 edge(s))
 - `str` (12 edge(s))
+- `./services/settings/app/api/v1/routes_settings.py` (11 edge(s))
 - `./services/settings/app/domain/resolver.py` (11 edge(s))

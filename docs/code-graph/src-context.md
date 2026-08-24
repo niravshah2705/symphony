@@ -4,41 +4,31 @@
 
 ## Overview
 
-Directory-based community: services/gateway
+Community of 196 nodes
 
-- **Size**: 357 nodes
-- **Cohesion**: 0.1886
+- **Size**: 196 nodes
+- **Cohesion**: 0.3425
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| main | Function | ./services/gateway/scripts/set-user-role.js | 23-48 |
 | authError | Function | ./services/gateway/src/auth.js | 25-30 |
 | authorizationError | Function | ./services/gateway/src/auth.js | 32-37 |
 | boundedClaim | Function | ./services/gateway/src/auth.js | 39-44 |
 | bearerToken | Function | ./services/gateway/src/auth.js | 46-51 |
 | denyAccess | Function | ./services/gateway/src/auth.js | 53-61 |
-| getFirebaseAuth | Function | ./services/gateway/src/auth.js | 66-73 |
-| defaultVerify | Function | ./services/gateway/src/auth.js | 75-77 |
 | verifyFirebaseIdToken | Function | ./services/gateway/src/auth.js | 83-111 |
 | createAuthenticationMiddleware | Function | ./services/gateway/src/auth.js | 128-157 |
 | requirePermission | Function | ./services/gateway/src/auth.js | 166-176 |
 | requireAuthenticated | Function | ./services/gateway/src/auth.js | 184-191 |
 | publicAuthConfig | Function | ./services/gateway/src/auth.js | 194-219 |
-| authEnabled | Function | ./services/gateway/src/auth.js | 222-224 |
 | firebaseConfig | Function | ./services/gateway/src/auth.test.js | 9-24 |
 | verifierReturning | Function | ./services/gateway/src/auth.test.js | 27-32 |
 | req | Function | ./services/gateway/src/auth.test.js | 35-37 |
 | responseRecorder | Function | ./services/gateway/src/auth.test.js | 38-47 |
-| status | Function | ./services/gateway/src/auth.test.js | 43-43 |
-| set | Function | ./services/gateway/src/auth.test.js | 44-44 |
-| json | Function | ./services/gateway/src/auth.test.js | 45-45 |
 | tick | Function | ./services/gateway/src/auth.test.js | 48-48 |
-| test:buildFirebaseAuthConfig: disabled by default (local, open)@L52 | Test | ./services/gateway/src/auth.test.js | 52-54 |
-| test:buildFirebaseAuthConfig: firebase mode derives issuer/audience/authDomain@L56 | Test | ./services/gateway/src/auth.test.js | 56-62 |
-| test:buildFirebaseAuthConfig: fails closed on missing project/api key and in production@L64 | Test | ./services/gateway/src/auth.test.js | 64-69 |
 | test:publicAuthConfig exposes only the public Firebase web config (no authz secrets)@L73 | Test | ./services/gateway/src/auth.test.js | 73-88 |
 | test:publicAuthConfig surfaces the public One Tap client id when configured@L90 | Test | ./services/gateway/src/auth.test.js | 90-93 |
 | test:publicAuthConfig surfaces provider availability flags + Microsoft tenant (no secret)@L95 | Test | ./services/gateway/src/auth.test.js | 95-102 |
@@ -60,61 +50,62 @@ Directory-based community: services/gateway
 | test:requireAuthenticated: any signed-in user passes regardless of role@L244 | Test | ./services/gateway/src/auth.test.js | 244-250 |
 | test:requireAuthenticated: anonymous/public → 401@L252 | Test | ./services/gateway/src/auth.test.js | 252-259 |
 | test:requireAuthenticated: OPTIONS preflight is never gated@L261 | Test | ./services/gateway/src/auth.test.js | 261-265 |
-| test:buildFirebaseAuthConfig: One Tap client id from either env alias (public)@L267 | Test | ./services/gateway/src/auth.test.js | 267-272 |
-| test:buildFirebaseAuthConfig: provider flags default google on / microsoft off@L274 | Test | ./services/gateway/src/auth.test.js | 274-279 |
-| test:buildFirebaseAuthConfig: reads AUTH_MICROSOFT_ENABLED and Microsoft tenant (either alias)@L281 | Test | ./services/gateway/src/auth.test.js | 281-289 |
-| test:buildFirebaseAuthConfig: rejects a non-boolean provider flag@L291 | Test | ./services/gateway/src/auth.test.js | 291-296 |
+| createConfigResolver | Function | ./services/gateway/src/config-resolver.js | 21-63 |
+| makeReq | Function | ./services/gateway/src/config-resolver.test.js | 9-23 |
+| makeRes | Function | ./services/gateway/src/config-resolver.test.js | 25-34 |
+| test:anonymous caller: authenticated:false, same-origin, never hits the org service@L36 | Test | ./services/gateway/src/config-resolver.test.js | 36-45 |
+| test:authenticated + org resolves shared: gatewayUrl empty (same-origin)@L47 | Test | ./services/gateway/src/config-resolver.test.js | 47-54 |
+| test:authenticated + org provisioned: re-points to the per-tenant gateway URL@L56 | Test | ./services/gateway/src/config-resolver.test.js | 56-67 |
+| test:provisioning status keeps the SPA on the shared gateway@L69 | Test | ./services/gateway/src/config-resolver.test.js | 69-77 |
+| test:provisioned WITHOUT a url fails closed instead of guessing same-origin@L79 | Test | ./services/gateway/src/config-resolver.test.js | 79-87 |
+| test:forwards the already-validated selected context on the correct S2S path@L89 | Test | ./services/gateway/src/config-resolver.test.js | 89-105 |
+| test:never leaks internal service URLs to the browser@L107 | Test | ./services/gateway/src/config-resolver.test.js | 107-122 |
+| test:org-service error fails closed instead of guessing the shared gateway@L124 | Test | ./services/gateway/src/config-resolver.test.js | 124-130 |
+| test:callJson throwing fails closed instead of guessing the shared gateway@L132 | Test | ./services/gateway/src/config-resolver.test.js | 132-138 |
+| items | Function | ./services/gateway/src/context-validator.js | 8-10 |
+| itemId | Function | ./services/gateway/src/context-validator.js | 12-14 |
 
-*... and 307 more members.*
+*... and 146 more members.*
 
 ## Execution Flows
 
-- **mintWorkspaceToken** (criticality: 0.63, depth: 3)
-- **createAuthenticationMiddleware** (criticality: 0.62, depth: 2)
-- **forwardRequestContext** (criticality: 0.62, depth: 2)
-- **enforcePinnedOrganization** (criticality: 0.62, depth: 2)
-- **requireOrganizationContext** (criticality: 0.62, depth: 2)
-- **verifyStreamToken** (criticality: 0.62, depth: 2)
-- **defaultVerify** (criticality: 0.61, depth: 1)
-- **requirePermission** (criticality: 0.61, depth: 1)
-- **requireAuthenticated** (criticality: 0.61, depth: 1)
-- **mintConversation** (criticality: 0.61, depth: 1)
-- *... and 3 more flows.*
+- **resolveCallerOrg** (criticality: 0.76, depth: 2)
+- **resolveOrgMembership** (criticality: 0.76, depth: 3)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (289 edge(s))
-- `deepEqual` (74 edge(s))
-- `trim` (56 edge(s))
-- `String` (55 edge(s))
-- `json` (41 edge(s))
-- `status` (36 edge(s))
-- `map` (26 edge(s))
-- `next` (25 edge(s))
-- `push` (24 edge(s))
-- `toLowerCase` (23 edge(s))
-- `includes` (21 edge(s))
-- `throws` (20 edge(s))
-- `isArray` (18 edge(s))
-- `join` (17 edge(s))
-- `ok` (17 edge(s))
+- `equal` (170 edge(s))
+- `deepEqual` (56 edge(s))
+- `trim` (51 edge(s))
+- `String` (41 edge(s))
+- `json` (29 edge(s))
+- `map` (23 edge(s))
+- `includes` (19 edge(s))
+- `status` (18 edge(s))
+- `push` (18 edge(s))
+- `isArray` (17 edge(s))
+- `next` (16 edge(s))
+- `rejects` (16 edge(s))
+- `throws` (15 edge(s))
+- `toLowerCase` (14 edge(s))
+- `freeze` (13 edge(s))
 
 ### Incoming
 
-- `equal` (288 edge(s))
-- `deepEqual` (74 edge(s))
-- `./services/gateway/src/pipeline-admission.js` (44 edge(s))
-- `./services/gateway/src/pipeline-admission.test.js` (42 edge(s))
-- `./services/gateway/src/auth.test.js` (36 edge(s))
-- `./services/gateway/src/routes/billing.js` (25 edge(s))
-- `./services/gateway/src/auth.js` (20 edge(s))
-- `throws` (20 edge(s))
-- `./services/gateway/src/stream-token.js` (20 edge(s))
-- `./services/gateway/src/eula.test.js` (18 edge(s))
+- `equal` (170 edge(s))
+- `./services/gateway/src/index.js` (89 edge(s))
+- `deepEqual` (56 edge(s))
+- `./services/gateway/src/pipeline-admission.js` (42 edge(s))
+- `./services/gateway/src/pipeline-admission.test.js` (29 edge(s))
+- `./services/gateway/src/auth.test.js` (26 edge(s))
 - `./services/gateway/src/request-context.js` (18 edge(s))
-- `ok` (17 edge(s))
-- `match` (16 edge(s))
+- `./services/gateway/src/auth.js` (16 edge(s))
 - `rejects` (16 edge(s))
-- `./services/gateway/src/config-resolver.test.js` (15 edge(s))
+- `throws` (15 edge(s))
+- `./services/gateway/src/stream-token.js` (15 edge(s))
+- `ok` (13 edge(s))
+- `./services/gateway/src/stream-token.test.js` (13 edge(s))
+- `./services/gateway/src/config-resolver.test.js` (11 edge(s))
+- `./services/gateway/src/request-context.test.js` (10 edge(s))

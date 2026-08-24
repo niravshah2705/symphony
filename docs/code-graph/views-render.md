@@ -4,16 +4,18 @@
 
 ## Overview
 
-Directory-based community: public/js
+Community of 659 nodes
 
-- **Size**: 753 nodes
-- **Cohesion**: 0.4607
+- **Size**: 659 nodes
+- **Cohesion**: 0.4939
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:a terminal workspace stream-token rejection never opens or retries the SSE stream@L13 | Test | ./e2e/workspace-stream-failure.spec.js | 13-69 |
+| test:a blank minted token never opens the workspace SSE stream@L71 | Test | ./e2e/workspace-stream-failure.spec.js | 71-111 |
 | pauseCode | Function | ./public/js/agent-pause.js | 36-42 |
 | pauseCandidate | Function | ./public/js/agent-pause.js | 44-70 |
 | agentPauseInfo | Function | ./public/js/agent-pause.js | 76-87 |
@@ -24,9 +26,7 @@ Directory-based community: public/js
 | setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
 | contextId | Function | ./public/js/api.js | 20-23 |
 | setRequestContext | Function | ./public/js/api.js | 26-31 |
-| getRequestContext | Function | ./public/js/api.js | 33-35 |
 | llmGatewayFlag | Function | ./public/js/api.js | 46-53 |
-| requestContextQuerySuffix | Function | ./public/js/api.js | 57-63 |
 | refreshAccessToken | Function | ./public/js/api.js | 68-71 |
 | readJson | Function | ./public/js/api.js | 73-79 |
 | errorCode | Function | ./public/js/api.js | 83-86 |
@@ -41,7 +41,6 @@ Directory-based community: public/js
 | connect | Function | ./public/js/api.js | 277-310 |
 | close | Function | ./public/js/api.js | 322-326 |
 | ensureStylesheet | Function | ./public/js/app.js | 44-66 |
-| route | Function | ./public/js/app.js | 68-87 |
 | load | Function | ./public/js/app.js | 73-85 |
 | currentRoute | Function | ./public/js/app.js | 137-144 |
 | applyMenuPermissions | Function | ./public/js/app.js | 148-159 |
@@ -64,57 +63,58 @@ Directory-based community: public/js
 | beginSignIn | Function | ./public/js/app.js | 496-504 |
 | beginMicrosoftSignIn | Function | ./public/js/app.js | 506-514 |
 | authProviderButtons | Function | ./public/js/app.js | 521-539 |
+| beginSignOut | Function | ./public/js/app.js | 541-549 |
 
-*... and 703 more members.*
+*... and 609 more members.*
 
 ## Execution Flows
 
 - **renderWorkflows** (criticality: 0.82, depth: 5)
-- **beginSignIn** (criticality: 0.81, depth: 6)
-- **beginMicrosoftSignIn** (criticality: 0.81, depth: 6)
 - **start** (criticality: 0.81, depth: 6)
 - **initializeAuthentication** (criticality: 0.80, depth: 4)
-- **beginSignOut** (criticality: 0.80, depth: 6)
 - **onMove** (criticality: 0.79, depth: 9)
-- **render** (criticality: 0.78, depth: 6)
+- **maybeRefreshConnection** (criticality: 0.76, depth: 3)
 - **onUp** (criticality: 0.76, depth: 6)
+- **beginSignIn** (criticality: 0.76, depth: 7)
+- **beginMicrosoftSignIn** (criticality: 0.76, depth: 7)
 - **hostedConnection** (criticality: 0.75, depth: 8)
-- *... and 19 more flows.*
+- **render** (criticality: 0.75, depth: 6)
+- *... and 15 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `append` (217 edge(s))
-- `addEventListener` (212 edge(s))
-- `map` (152 edge(s))
-- `String` (115 edge(s))
-- `push` (102 edge(s))
-- `trim` (95 edge(s))
-- `filter` (81 edge(s))
-- `setAttribute` (67 edge(s))
-- `isArray` (65 edge(s))
-- `has` (65 edge(s))
-- `catch` (59 edge(s))
-- `querySelector` (59 edge(s))
-- `Boolean` (58 edge(s))
-- `slice` (51 edge(s))
-- `test` (45 edge(s))
+- `append` (206 edge(s))
+- `addEventListener` (204 edge(s))
+- `map` (140 edge(s))
+- `String` (99 edge(s))
+- `push` (81 edge(s))
+- `trim` (74 edge(s))
+- `filter` (69 edge(s))
+- `setAttribute` (62 edge(s))
+- `isArray` (59 edge(s))
+- `has` (57 edge(s))
+- `Boolean` (54 edge(s))
+- `querySelector` (53 edge(s))
+- `catch` (48 edge(s))
+- `find` (40 edge(s))
+- `add` (39 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (172 edge(s))
-- `./public/js/workflow-designer-model.mjs` (145 edge(s))
-- `./public/js/views/settings.js` (132 edge(s))
-- `./public/js/views/agent.js` (109 edge(s))
-- `./public/js/app.js` (102 edge(s))
-- `./public/js/workflow-designer-model.test.mjs` (89 edge(s))
-- `./public/js/google-analytics.test.mjs` (69 edge(s))
-- `./public/js/views/workflows.js` (63 edge(s))
+- `./public/js/api.js` (167 edge(s))
+- `./public/js/views/settings.js` (131 edge(s))
+- `./public/js/views/agent.js` (103 edge(s))
+- `./public/js/app.js` (86 edge(s))
+- `./public/js/workflow-designer-model.test.mjs` (78 edge(s))
+- `./public/js/views/workflows.js` (61 edge(s))
+- `./public/js/workflow-designer-model.mjs` (56 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
-- `./public/js/i18n.js` (35 edge(s))
+- `./public/js/i18n.js` (34 edge(s))
 - `./public/js/auth.js` (24 edge(s))
-- `./public/js/google-analytics.mjs` (22 edge(s))
-- `./public/js/omnibox-router.mjs` (16 edge(s))
 - `./public/js/views/organization.js` (13 edge(s))
+- `./public/js/workspace-context.mjs` (13 edge(s))
+- `./public/js/auth-retry.test.mjs` (12 edge(s))
+- `./public/js/views/cost.js` (12 edge(s))

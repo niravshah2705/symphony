@@ -4,10 +4,10 @@
 
 ## Overview
 
-Directory-based community: services/org
+Community of 526 nodes
 
-- **Size**: 579 nodes
-- **Cohesion**: 0.4427
+- **Size**: 526 nodes
+- **Cohesion**: 0.5063
 - **Dominant Language**: python
 
 ## Members
@@ -22,9 +22,7 @@ Directory-based community: services/org
 | logout | Function | ./services/org/app/api/v1/routes_auth.py | 59-64 |
 | verify_email | Function | ./services/org/app/api/v1/routes_auth.py | 68-73 |
 | me | Function | ./services/org/app/api/v1/routes_auth.py | 77-78 |
-| health | Function | ./services/org/app/api/v1/routes_health.py | 13-15 |
 | readiness | Function | ./services/org/app/api/v1/routes_health.py | 19-22 |
-| DeploymentWriteback | Class | ./services/org/app/api/v1/routes_internal.py | 34-37 |
 | require_internal_token | Function | ./services/org/app/api/v1/routes_internal.py | 40-44 |
 | write_deployments | Function | ./services/org/app/api/v1/routes_internal.py | 48-60 |
 | create_invitation | Function | ./services/org/app/api/v1/routes_invitations.py | 26-31 |
@@ -64,57 +62,59 @@ Directory-based community: services/org
 | list_project_tags | Function | ./services/org/app/api/v1/routes_projects.py | 70-71 |
 | attach_project_tag | Function | ./services/org/app/api/v1/routes_projects.py | 75-81 |
 | detach_project_tag | Function | ./services/org/app/api/v1/routes_projects.py | 85-90 |
+| list_tags | Function | ./services/org/app/api/v1/routes_tags.py | 21-27 |
+| create_tag | Function | ./services/org/app/api/v1/routes_tags.py | 31-36 |
 
-*... and 529 more members.*
+*... and 476 more members.*
 
 ## Execution Flows
 
-- **refresh** (criticality: 0.85, depth: 3)
-- **login** (criticality: 0.84, depth: 3)
-- **__call__** (criticality: 0.83, depth: 4)
-- **register** (criticality: 0.79, depth: 3)
-- **change_password** (criticality: 0.75, depth: 1)
-- **get_project_context** (criticality: 0.74, depth: 1)
-- **verify_email** (criticality: 0.73, depth: 1)
-- **lifespan** (criticality: 0.73, depth: 4)
-- **resend_invitation** (criticality: 0.72, depth: 3)
-- **create_invitation** (criticality: 0.71, depth: 2)
-- *... and 41 more flows.*
+- **logout** (criticality: 0.82, depth: 3)
+- **change_password** (criticality: 0.80, depth: 3)
+- **login** (criticality: 0.77, depth: 3)
+- **refresh** (criticality: 0.77, depth: 3)
+- **verify_email** (criticality: 0.75, depth: 2)
+- **__call__** (criticality: 0.75, depth: 5)
+- **register** (criticality: 0.73, depth: 5)
+- **get_current_user** (criticality: 0.72, depth: 3)
+- **get_project_context** (criticality: 0.72, depth: 1)
+- **change_own_password** (criticality: 0.70, depth: 3)
+- *... and 43 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (187 edge(s))
+- `get` (214 edge(s))
 - `Depends` (140 edge(s))
-- `str` (116 edge(s))
+- `str` (115 edge(s))
 - `json` (76 edge(s))
-- `post` (55 edge(s))
-- `BaseModel` (44 edge(s))
-- `from_doc` (32 edge(s))
-- `add` (31 edge(s))
-- `query` (30 edge(s))
+- `post` (54 edge(s))
+- `add` (38 edge(s))
+- `delete` (32 edge(s))
 - `setattr` (29 edge(s))
-- `delete` (28 edge(s))
-- `set` (26 edge(s))
-- `append` (24 edge(s))
-- `track` (23 edge(s))
-- `raises` (23 edge(s))
+- `set` (27 edge(s))
+- `raises` (22 edge(s))
+- `BaseModel` (21 edge(s))
+- `append` (16 edge(s))
+- `uuid4` (16 edge(s))
+- `patch` (16 edge(s))
+- `len` (15 edge(s))
 
 ### Incoming
 
 - `json` (67 edge(s))
-- `get` (53 edge(s))
-- `post` (49 edge(s))
+- `post` (48 edge(s))
+- `get` (34 edge(s))
 - `setattr` (29 edge(s))
-- `raises` (23 edge(s))
-- `./services/org/app/errors.py` (19 edge(s))
+- `raises` (22 edge(s))
 - `patch` (16 edge(s))
+- `./services/org/app/api/v1/routes_org.py` (15 edge(s))
 - `delete` (13 edge(s))
 - `./services/org/tests/unit/test_services.py` (13 edge(s))
-- `./services/org/app/services/auth_service.py` (12 edge(s))
+- `./services/org/app/api/v1/routes_auth.py` (12 edge(s))
+- `./services/org/app/errors.py` (12 edge(s))
 - `./services/org/app/services/invitation_service.py` (12 edge(s))
 - `create_user` (12 edge(s))
-- `./services/org/app/api/v1/routes_org.py` (11 edge(s))
-- `uuid4` (11 edge(s))
-- `./services/org/tests/unit/test_provisioning_trigger.py` (11 edge(s))
+- `./services/org/app/api/v1/routes_projects.py` (11 edge(s))
+- `./services/org/app/services/auth_service.py` (11 edge(s))
