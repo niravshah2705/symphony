@@ -35,6 +35,7 @@ test('all Cloud Run services use the gen2 execution environment', () => {
     ['org_service.tf', ['org']],
     ['settings_service.tf', ['settings']],
     ['email_service.tf', ['email']],
+    ['identity_service.tf', ['identity']],
     ['pipeline.tf', ['orchestrator', 'tester', 'deployer']],
     ['provisioner.tf', ['provisioner']],
     ['stream_token_service.tf', ['stream_token_broker']],
@@ -42,7 +43,7 @@ test('all Cloud Run services use the gen2 execution environment', () => {
   const expectedInventory = [...servicesByFile]
     .flatMap(([file, services]) => services.map((service) => [file, service]))
     .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
-  assert.equal(expectedInventory.length, 11);
+  assert.equal(expectedInventory.length, 12);
 
   const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
   const actualInventory = fs.readdirSync(terraformDir)
@@ -185,9 +186,41 @@ test('deploy workflow does not query disabled optional Cloud Run services', () =
     ['org', 'org-service'],
     ['settings', 'settings-service'],
     ['email', 'email-service'],
+    ['identity', 'identity-verification'],
   ]) {
     assert.match(workflow, new RegExp(`write_tag ${id} resolve ${id} ${service}`));
   }
+});
+
+test('identity verification is deployed as an internal Firestore-backed gateway dependency', () => {
+  const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
+  const identity = read('deploy/gcp/terraform/identity_service.tf');
+  const locals = read('deploy/gcp/terraform/locals.tf');
+  const variables = read('deploy/gcp/terraform/variables.tf');
+  const workflow = read('.github/workflows/deploy.yml');
+  const deploy = read('deploy/gcp/deploy.sh');
+  const bootstrap = read('deploy/gcp/bootstrap.sh');
+
+  const service = resourceBlock(identity, 'google_cloud_run_v2_service', 'identity');
+  assert.match(variableBlock(variables, 'identity_service_name'), /default\s*=\s*"identity-verification"/);
+  assert.match(locals, /identity_image\s*=\s*"\$\{local\.image_base\}\/\$\{var\.identity_service_name\}:\$\{local\.identity_tag\}"/);
+  assert.match(locals, /identity_url\s*=\s*"https:\/\/\$\{var\.identity_service_name\}-\$\{local\.run_url_suffix\}"/);
+  assert.match(cloudRun, /IDENTITY_URL\s*=\s*local\.identity_url/);
+  assert.match(service, /ingress\s*=\s*var\.internal_ingress/);
+  assert.match(service, /IDENTITY_STORE_BACKEND\s*=\s*"firestore"/);
+  assert.match(service, /IDENTITY_PROVIDER\s*=\s*"digilocker"/);
+  assert.match(service, /name\s*=\s*"IDENTITY_HASH_PEPPER"/);
+  assert.match(identity, /resource\s+"google_cloud_run_v2_service_iam_member"\s+"gateway_invokes_identity"/);
+  assert.match(identity, /role\s*=\s*"roles\/run\.invoker"/);
+  assert.match(identity, /member\s*=\s*"serviceAccount:\$\{google_service_account\.gateway\.email\}"/);
+  assert.match(identity, /role\s*=\s*"roles\/datastore\.user"/);
+  assert.match(workflow, /identity: \['services\/identity-verification\/\*\*', 'deploy\/gcp\/Dockerfile\.identity-verification'\]/);
+  assert.match(workflow, /write_tag identity resolve identity identity-verification/);
+  assert.match(workflow, /identity_image_tag=\$\{\{ steps\.tags\.outputs\.identity \}\}/);
+  assert.match(deploy, /build_push identity-verification Dockerfile\.identity-verification/);
+  assert.match(deploy, /seed_secret identity-hash-pepper "\$IDENTITY_HASH_PEPPER"/);
+  assert.match(bootstrap, /seed identity-hash-pepper "\$IDENTITY_HASH_PEPPER"/);
+  assert.match(bootstrap, /google_secret_manager_secret\.identity_hash_pepper/);
 });
 
 test('optional image resolver uses a SHA placeholder only while disabled', () => {

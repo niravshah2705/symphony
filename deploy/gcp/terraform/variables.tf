@@ -102,6 +102,12 @@ variable "email_image_tag" {
   default     = ""
 }
 
+variable "identity_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the identity verification service."
+  default     = ""
+}
+
 # --- Cloud Run service / job names -------------------------------------------
 
 variable "gateway_service_name" {
@@ -147,6 +153,18 @@ variable "settings_service_name" {
 variable "email_service_name" {
   type    = string
   default = "email-service"
+}
+
+variable "identity_service_name" {
+  type        = string
+  description = "Cloud Run service name for DigiLocker / APAAR identity verification."
+  default     = "identity-verification"
+}
+
+variable "identity_hash_pepper_secret_id" {
+  type        = string
+  description = "Secret Manager secret id containing the HMAC pepper for PAN / APAAR claim hashes. The secret value is seeded out of band by bootstrap/deploy scripts."
+  default     = "identity-hash-pepper"
 }
 
 variable "coder_job_name" {

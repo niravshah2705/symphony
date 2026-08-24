@@ -6,8 +6,8 @@
 
 Directory-based community: public/js
 
-- **Size**: 745 nodes
-- **Cohesion**: 0.4589
+- **Size**: 750 nodes
+- **Cohesion**: 0.4603
 - **Dominant Language**: javascript
 
 ## Members
@@ -43,29 +43,29 @@ Directory-based community: public/js
 | ensureStylesheet | Function | ./public/js/app.js | 44-66 |
 | route | Function | ./public/js/app.js | 68-87 |
 | load | Function | ./public/js/app.js | 73-85 |
-| currentRoute | Function | ./public/js/app.js | 135-142 |
-| applyMenuPermissions | Function | ./public/js/app.js | 146-157 |
-| organizationContextRequired | Function | ./public/js/app.js | 161-167 |
-| maybeRefreshConnection | Function | ./public/js/app.js | 169-176 |
-| maybeRefreshRole | Function | ./public/js/app.js | 177-186 |
-| syncShell | Function | ./public/js/app.js | 188-239 |
-| syncSidebar | Function | ./public/js/app.js | 241-280 |
-| syncSidebarCollapsed | Function | ./public/js/app.js | 282-292 |
-| copyWithLegacyFallback | Function | ./public/js/app.js | 294-309 |
-| copyAdlcPrompt | Function | ./public/js/app.js | 311-322 |
-| initShellInteractions | Function | ./public/js/app.js | 324-398 |
-| syncFooterHeight | Function | ./public/js/app.js | 337-341 |
-| prepareNavigationTarget | Function | ./public/js/app.js | 357-360 |
-| closeAtBreakpoint | Function | ./public/js/app.js | 393-396 |
-| refreshConnection | Function | ./public/js/app.js | 400-449 |
-| refreshRole | Function | ./public/js/app.js | 452-470 |
-| freshView | Function | ./public/js/app.js | 474-483 |
-| setAuthenticationLocked | Function | ./public/js/app.js | 485-492 |
-| beginSignIn | Function | ./public/js/app.js | 494-502 |
-| beginMicrosoftSignIn | Function | ./public/js/app.js | 504-512 |
-| authProviderButtons | Function | ./public/js/app.js | 519-537 |
+| currentRoute | Function | ./public/js/app.js | 137-144 |
+| applyMenuPermissions | Function | ./public/js/app.js | 148-159 |
+| organizationContextRequired | Function | ./public/js/app.js | 163-169 |
+| maybeRefreshConnection | Function | ./public/js/app.js | 171-178 |
+| maybeRefreshRole | Function | ./public/js/app.js | 179-188 |
+| syncShell | Function | ./public/js/app.js | 190-241 |
+| syncSidebar | Function | ./public/js/app.js | 243-282 |
+| syncSidebarCollapsed | Function | ./public/js/app.js | 284-294 |
+| copyWithLegacyFallback | Function | ./public/js/app.js | 296-311 |
+| copyAdlcPrompt | Function | ./public/js/app.js | 313-324 |
+| initShellInteractions | Function | ./public/js/app.js | 326-400 |
+| syncFooterHeight | Function | ./public/js/app.js | 339-343 |
+| prepareNavigationTarget | Function | ./public/js/app.js | 359-362 |
+| closeAtBreakpoint | Function | ./public/js/app.js | 395-398 |
+| refreshConnection | Function | ./public/js/app.js | 402-451 |
+| refreshRole | Function | ./public/js/app.js | 454-472 |
+| freshView | Function | ./public/js/app.js | 476-485 |
+| setAuthenticationLocked | Function | ./public/js/app.js | 487-494 |
+| beginSignIn | Function | ./public/js/app.js | 496-504 |
+| beginMicrosoftSignIn | Function | ./public/js/app.js | 506-514 |
+| authProviderButtons | Function | ./public/js/app.js | 521-539 |
 
-*... and 695 more members.*
+*... and 700 more members.*
 
 ## Execution Flows
 
@@ -79,35 +79,35 @@ Directory-based community: public/js
 - **render** (criticality: 0.78, depth: 6)
 - **onUp** (criticality: 0.76, depth: 6)
 - **hostedConnection** (criticality: 0.75, depth: 8)
-- *... and 17 more flows.*
+- *... and 19 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `append` (213 edge(s))
-- `addEventListener` (207 edge(s))
-- `map` (150 edge(s))
+- `append` (216 edge(s))
+- `addEventListener` (212 edge(s))
+- `map` (152 edge(s))
 - `String` (115 edge(s))
-- `push` (98 edge(s))
+- `push` (102 edge(s))
 - `trim` (95 edge(s))
 - `filter` (81 edge(s))
 - `setAttribute` (67 edge(s))
 - `isArray` (65 edge(s))
-- `has` (64 edge(s))
+- `has` (65 edge(s))
 - `Boolean` (58 edge(s))
+- `catch` (58 edge(s))
 - `querySelector` (58 edge(s))
-- `catch` (57 edge(s))
 - `slice` (51 edge(s))
 - `test` (45 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (167 edge(s))
+- `./public/js/api.js` (172 edge(s))
 - `./public/js/workflow-designer-model.mjs` (145 edge(s))
 - `./public/js/views/settings.js` (132 edge(s))
 - `./public/js/views/agent.js` (106 edge(s))
-- `./public/js/app.js` (101 edge(s))
+- `./public/js/app.js` (102 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (89 edge(s))
 - `./public/js/google-analytics.test.mjs` (69 edge(s))
 - `./public/js/views/workflows.js` (63 edge(s))

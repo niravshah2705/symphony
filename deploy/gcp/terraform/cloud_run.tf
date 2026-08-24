@@ -33,6 +33,7 @@ locals {
     ORCHESTRATOR_URL = local.orchestrator_url
     ORG_URL          = local.org_url      # org service (proxied at /api/org/*)
     SETTINGS_URL     = local.settings_url # settings service (proxied at /api/settings-policy/*)
+    IDENTITY_URL     = local.identity_url # identity verification service (proxied at /api/identity/*)
     # Use the provider-returned origin rather than reconstructing the run.app
     # hostname: Cloud Run ID-token audiences must match the deployed service
     # URL exactly, including projects that still use a legacy hash-style URL.
@@ -302,6 +303,8 @@ resource "google_cloud_run_v2_service" "gateway" {
     google_secret_manager_secret_iam_member.gateway_one_tap,
     google_cloud_run_v2_service.stream_token_broker,
     google_cloud_run_v2_service_iam_member.gateway_invokes_stream_token_broker,
+    google_cloud_run_v2_service.identity,
+    google_cloud_run_v2_service_iam_member.gateway_invokes_identity,
   ]
 }
 

@@ -1,0 +1,20 @@
+{
+  "name": "@ai-fleet/identity-verification",
+  "version": "1.0.0",
+  "description": "Consent-driven DigiLocker, PAN, age proof, APAAR, and academic verification service.",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env src/index.js",
+    "dev": "node --watch --env-file-if-exists=../../.env src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^8.7.1",
+    "@ai-fleet/shared-core": "*",
+    "express": "^5.2.1"
+  }
+}

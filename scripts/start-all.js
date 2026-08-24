@@ -54,6 +54,7 @@ const LOCAL_DEPENDENCIES = [
 const pipelineEnabled = String(process.env.PIPELINE_ORCHESTRATOR_ENABLED || '').trim().toLowerCase() === 'true';
 const SERVICES = [
   { name: 'email', entry: 'services/email/src/index.js' },
+  { name: 'identity-verification', entry: 'services/identity-verification/src/index.js' },
   { name: 'planner', entry: 'services/planner/src/index.js' },
   { name: 'coder', entry: 'services/coder/src/index.js' },
   ...(pipelineEnabled ? [

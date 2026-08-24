@@ -72,6 +72,7 @@ jobs:
             org:      ['services/org/**']
             settings: ['services/settings/**']
             email:    ['services/email/**', 'deploy/gcp/Dockerfile.email']
+            identity: ['services/identity-verification/**', 'deploy/gcp/Dockerfile.identity-verification']
 
       - id: plan
         env:
@@ -92,6 +93,7 @@ jobs:
           ORG: ${{ steps.filter.outputs.org }}
           SETTINGS: ${{ steps.filter.outputs.settings }}
           EMAIL: ${{ steps.filter.outputs.email }}
+          IDENTITY: ${{ steps.filter.outputs.identity }}
         run: |
           set -euo pipefail
           # A shared-code / root-deps change (or a forced run) rebuilds the Node
@@ -111,6 +113,7 @@ jobs:
           if [ "$all" = "true" ] || [ "$TESTER" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push tester pipeline-tester deploy/gcp/Dockerfile.tester . ; fi
           if [ "$all" = "true" ] || [ "$DEPLOYER" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push deployer pipeline-deployer deploy/gcp/Dockerfile.deployer . ; fi
           if [ "$all" = "true" ] || [ "$EMAIL"   = "true" ]; then push email   email-service deploy/gcp/Dockerfile.email   . ; fi
+          if [ "$all" = "true" ] || [ "$IDENTITY" = "true" ]; then push identity identity-verification deploy/gcp/Dockerfile.identity-verification . ; fi
           # The provisioner is a Node service (rebuilds on shared/root/force too).
           # Its image is built even while provisioning is disabled so enabling is a
           # one-var flip; terraform only creates the service when provisioning_enabled.
@@ -352,6 +355,7 @@ jobs:
             write_tag org resolve org org-service
             write_tag settings resolve settings settings-service
             write_tag email resolve email email-service
+            write_tag identity resolve identity identity-verification
           } >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
@@ -430,6 +434,7 @@ jobs:
           [ -n "${{ steps.tags.outputs.org }}" ]     && apply_args+=(-var="org_image_tag=${{ steps.tags.outputs.org }}") || true
           [ -n "${{ steps.tags.outputs.settings }}" ] && apply_args+=(-var="settings_image_tag=${{ steps.tags.outputs.settings }}") || true
           [ -n "${{ steps.tags.outputs.email }}" ] && apply_args+=(-var="email_image_tag=${{ steps.tags.outputs.email }}") || true
+          [ -n "${{ steps.tags.outputs.identity }}" ] && apply_args+=(-var="identity_image_tag=${{ steps.tags.outputs.identity }}") || true
 
           terraform apply -input=false -auto-approve "${apply_args[@]}"
 

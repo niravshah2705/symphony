@@ -51,13 +51,13 @@ Directory-based community: scripts
 | test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L35 | Test | ./scripts/seo-discovery.test.js | 35-50 |
 | test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-68 |
 | test:persistent ADLC launcher has five named, local-icon assistant links@L70 | Test | ./scripts/seo-discovery.test.js | 70-81 |
-| envFor | Function | ./scripts/start-all.js | 75-120 |
-| prefixStream | Function | ./scripts/start-all.js | 122-133 |
-| startService | Function | ./scripts/start-all.js | 135-151 |
-| waitForHealth | Function | ./scripts/start-all.js | 153-170 |
-| probe | Function | ./scripts/start-all.js | 156-167 |
-| shutdown | Function | ./scripts/start-all.js | 172-179 |
-| main | Function | ./scripts/start-all.js | 181-188 |
+| envFor | Function | ./scripts/start-all.js | 76-121 |
+| prefixStream | Function | ./scripts/start-all.js | 123-134 |
+| startService | Function | ./scripts/start-all.js | 136-152 |
+| waitForHealth | Function | ./scripts/start-all.js | 154-171 |
+| probe | Function | ./scripts/start-all.js | 157-168 |
+| shutdown | Function | ./scripts/start-all.js | 173-180 |
+| main | Function | ./scripts/start-all.js | 182-189 |
 | test:local stream-token broker is standalone and exclusively receives its secret@L6 | Test | ./scripts/start-all.test.js | 6-32 |
 
 ## Execution Flows

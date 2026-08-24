@@ -4,7 +4,7 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 24
+**Total communities**: 25
 
 ## Communities
 
@@ -15,7 +15,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | e2e-json | 135 | [e2e-json.md](e2e-json.md) |
 | e2e-live-tenant | 25 | [e2e-live-tenant.md](e2e-live-tenant.md) |
 | gateway-agent-endpoints-login | 4 | [gateway-agent-endpoints-login.md](gateway-agent-endpoints-login.md) |
-| gcp-cloud | 53 | [gcp-cloud.md](gcp-cloud.md) |
+| gcp-cloud | 54 | [gcp-cloud.md](gcp-cloud.md) |
 | harness-registry-install | 160 | [harness-registry-install.md](harness-registry-install.md) |
 | openswe-local | 6 | [openswe-local.md](openswe-local.md) |
 | registry-stage | 784 | [registry-stage.md](registry-stage.md) |
@@ -28,9 +28,10 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-body | 17 | [src-body-2.md](src-body-2.md) |
 | src-context | 337 | [src-context.md](src-context.md) |
 | src-invitation | 71 | [src-invitation.md](src-invitation.md) |
+| src-session | 81 | [src-session.md](src-session.md) |
 | src-stage | 179 | [src-stage.md](src-stage.md) |
 | src-test:build | 172 | [src-test-build.md](src-test-build.md) |
 | src-test:coder | 107 | [src-test-coder.md](src-test-coder.md) |
 | src-token | 112 | [src-token.md](src-token.md) |
 | support-parse | 59 | [support-parse.md](support-parse.md) |
-| views-render | 745 | [views-render.md](views-render.md) |
+| views-render | 750 | [views-render.md](views-render.md) |

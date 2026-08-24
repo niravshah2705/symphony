@@ -491,6 +491,7 @@ const CODER_SERVICE_PORT = Number(process.env.CODER_SERVICE_PORT) || 4020;
 const TESTER_SERVICE_PORT = Number(process.env.TESTER_SERVICE_PORT) || 4050;
 const DEPLOYER_SERVICE_PORT = Number(process.env.DEPLOYER_SERVICE_PORT) || 4060;
 const ORCHESTRATOR_SERVICE_PORT = Number(process.env.ORCHESTRATOR_SERVICE_PORT) || 4070;
+const IDENTITY_SERVICE_PORT = Number(process.env.IDENTITY_SERVICE_PORT) || 4080;
 const EMAIL_SERVICE_PORT = Number(process.env.EMAIL_SERVICE_PORT) || 4040;
 const ORG_SERVICE_PORT = Number(process.env.ORG_SERVICE_PORT) || 8000;
 // Settings-policy service (Python/FastAPI, Firestore). Local default 8100 so it
@@ -503,6 +504,7 @@ const SERVICES = Object.freeze({
   testerPort: TESTER_SERVICE_PORT,
   deployerPort: DEPLOYER_SERVICE_PORT,
   orchestratorPort: ORCHESTRATOR_SERVICE_PORT,
+  identityPort: IDENTITY_SERVICE_PORT,
   emailPort: EMAIL_SERVICE_PORT,
   settingsPort: SETTINGS_SERVICE_PORT,
   plannerUrl: process.env.PLANNER_URL || `http://localhost:${PLANNER_PORT}`,
@@ -510,6 +512,7 @@ const SERVICES = Object.freeze({
   testerUrl: process.env.TESTER_URL || `http://localhost:${TESTER_SERVICE_PORT}`,
   deployerUrl: process.env.DEPLOYER_URL || `http://localhost:${DEPLOYER_SERVICE_PORT}`,
   orchestratorUrl: process.env.ORCHESTRATOR_URL || `http://localhost:${ORCHESTRATOR_SERVICE_PORT}`,
+  identityUrl: process.env.IDENTITY_URL || (process.env.NODE_ENV === 'production' ? '' : `http://localhost:${IDENTITY_SERVICE_PORT}`),
   // Shared transactional email service. Producers publish allow-listed jobs to
   // Pub/Sub in cloud mode and use this push-compatible endpoint in local mode.
   emailUrl: process.env.EMAIL_URL || `http://localhost:${EMAIL_SERVICE_PORT}`,

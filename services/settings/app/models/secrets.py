@@ -48,6 +48,8 @@ SECRET_KEYS: tuple[str, ...] = (
     "openaiApiKey",
     "huggingfaceApiKey",
     "langsmithApiKey",
+    "digilockerClientId",
+    "digilockerClientSecret",
     # JSON-encoded OpenAI/Codex OAuth token bundle. Provisioned only through the
     # direct org-admin operator surface; never accepted by the browser gateway.
     "codexTokenBundle",
@@ -83,6 +85,8 @@ CUSTOMER_ONLY_SECRET_KEYS: frozenset[str] = frozenset(
         "asanaAccessToken",
         "omlxApiKey",
         "slackWebhookUrl",
+        "digilockerClientId",
+        "digilockerClientSecret",
     }
 )
 
