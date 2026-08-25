@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Secure Isolation: How Credentials Stay Protected — ADLC Blog</title>
+    <meta
+      name="description"
+      content="Learn about the egress proxy pattern that keeps raw credentials out of agent containers, enabling safe credential injection for approved destinations only."
+    />
+    <meta name="theme-color" content="#16201d" />
+    <link rel="canonical" href="https://adlc-9e72f.web.app/adlc/blog/isolation/" />
+    <link rel="stylesheet" href="/adlc/styles.css" />
+    <style>
+      .article-content {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: clamp(32px, 5vw, 64px) clamp(18px, 5vw, 72px);
+      }
+
+      .article-header {
+        margin-bottom: 48px;
+      }
+
+      .article-header .blog-tag {
+        display: inline-block;
+        padding: 4px 10px;
+        margin-bottom: 12px;
+        background: #f0f5f3;
+        color: var(--green);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 4px;
+      }
+
+      .article-header h1 {
+        margin-bottom: 16px;
+      }
+
+      .article-content > section {
+        margin-bottom: 48px;
+      }
+
+      .article-content > section > h2 {
+        margin-top: 32px;
+        margin-bottom: 18px;
+      }
+
+      .article-content > section > h3 {
+        margin-top: 24px;
+        margin-bottom: 12px;
+      }
+
+      .article-content p,
+      .article-content li {
+        color: var(--muted);
+        line-height: 1.7;
+        margin-bottom: 16px;
+      }
+
+      .article-content ul,
+      .article-content ol {
+        margin: 0 0 24px;
+        padding-left: 24px;
+      }
+
+      .article-content li {
+        margin-bottom: 8px;
+      }
+
+      .article-content strong {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .article-content code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+      }
+
+      .article-content a {
+        color: var(--blue);
+        text-decoration: none;
+      }
+
+      .article-content a:hover {
+        text-decoration: underline;
+      }
+
+      .metadata {
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 32px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .back-link {
+        display: inline-block;
+        margin-bottom: 32px;
+        color: var(--blue);
+        text-decoration: none;
+        font-size: 14px;
+      }
+
+      .back-link:hover {
+        text-decoration: underline;
+      }
+
+      .diagram {
+        margin: 24px 0;
+        padding: 16px;
+        background: #f9fbf8;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        line-height: 1.6;
+        overflow-x: auto;
+      }
+    </style>
+    <script src="/adlc/config.js"></script>
+    <script defer src="/adlc/app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/adlc/" aria-label="ADLC home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>ADLC</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="/adlc/#process">Process</a>
+        <a href="/adlc/#evidence">Evidence</a>
+        <a href="/adlc/blog/">Blog</a>
+      </nav>
+      <a class="header-cta" href="/#/agent" data-try-now>Try now</a>
+    </header>
+
+    <main>
+      <article class="article-content">
+        <a href="/adlc/blog/" class="back-link">← Back to Blog</a>
+
+        <div class="article-header">
+          <span class="blog-tag">Architecture</span>
+          <h1>Secure Isolation: How Credentials Stay Protected</h1>
+          <div class="metadata">
+            <span>6 min read</span> • <span>Aug 14, 2026</span>
+          </div>
+        </div>
+
+        <section>
+          <p>
+            A critical security requirement for ADLC is simple: agent containers must never
+            hold raw credentials. Not GitHub tokens, not API keys, not database passwords.
+            This article explains how the egress proxy pattern achieves this without
+            sacrificing functionality.
+          </p>
+        </section>
+
+        <section>
+          <h2>The Threat Model</h2>
+          <p>
+            When you run an AI agent in a container, the code running inside that container
+            can read environment variables, access files, and exfiltrate secrets to external
+            services. If a model generates malicious code or if an injection attack succeeds,
+            raw credentials become an immediate liability.
+          </p>
+          <p>
+            ADLC solves this by ensuring credentials never reach the agent container in the
+            first place.
+          </p>
+        </section>
+
+        <section>
+          <h2>The Egress Proxy Pattern</h2>
+          <p>
+            Instead of giving the agent direct access to GitHub, Linear, or your cloud
+            infrastructure, we run a lightweight <strong>egress proxy sidecar</strong>
+            co-located with the agent container.
+          </p>
+
+          <div class="diagram">
+Agent Container          Egress Proxy Sidecar      Upstream Services
+┌─────────────┐         ┌──────────────┐          ┌──────────────┐
+│  Planner    │──POST──→│   Proxy      │──auth──→ │  GitHub API  │
+│  (no creds) │ /repos  │ (has token)  │          └──────────────┘
+│             │         │              │
+│  Coder      │         │ Injects real │          ┌──────────────┐
+│  (no creds) │         │ credentials  │──auth──→ │  Linear API  │
+│             │         │              │          └──────────────┘
+└─────────────┘         └──────────────┘
+          </div>
+
+          <p>
+            The agent makes requests to <code>http://localhost:8080</code> with a
+            <strong>sentinel token</strong>—a placeholder that proves the request came
+            from an approved container. The proxy:
+          </p>
+          <ol>
+            <li>Verifies the sentinel token matches the container's identity.</li>
+            <li>Strips the sentinel token from the request.</li>
+            <li>Injects the real credential (GitHub token, API key, etc.).</li>
+            <li>Forwards the authenticated request to the upstream service.</li>
+            <li>Returns the response to the agent.</li>
+          </ol>
+          <p>
+            From the agent's perspective, it just makes normal HTTP calls. From the
+            upstream service's perspective, it received a properly authenticated request.
+            The real credential never touched the agent container.
+          </p>
+        </section>
+
+        <section>
+          <h2>How Credentials Are Stored</h2>
+          <p>
+            Credentials are managed in a secure, centralized location:
+          </p>
+          <ul>
+            <li>
+              <strong>Managed credentials:</strong> Platform-provided keys for shared services
+              (like a GitHub App) are mounted on the egress proxy at startup as read-only
+              files or environment variables, separate from agent containers.
+            </li>
+            <li>
+              <strong>Customer credentials:</strong> Organization-specific API keys are stored
+              encrypted in a per-organization vault using Cloud KMS envelope encryption. The
+              egress proxy queries the vault on a per-request basis and never caches the key
+              in memory longer than needed.
+            </li>
+            <li>
+              <strong>No agent access:</strong> Agents cannot query the vault or read the
+              egress proxy configuration. They only know the loopback address and the sentinel
+              token they were issued.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Per-Request Isolation</h2>
+          <p>
+            Each agent task gets a unique sentinel token with an expiration time. If a token
+            is compromised:
+          </p>
+          <ul>
+            <li>It only works for a limited window (minutes to hours).</li>
+            <li>It only authenticates requests from that specific task's container.</li>
+            <li>It can be revoked immediately if an issue is detected.</li>
+          </ul>
+          <p>
+            This means a compromised token cannot be used to access other tasks' work or to
+            create persistent backdoors.
+          </p>
+        </section>
+
+        <section>
+          <h2>Audit and Compliance</h2>
+          <p>
+            Every credential use is logged by the egress proxy:
+          </p>
+          <ul>
+            <li>Which agent task requested authentication.</li>
+            <li>Which service was accessed (GitHub, Linear, etc.).</li>
+            <li>The timestamp and outcome of the request.</li>
+            <li>The HTTP method and resource path (for security review).</li>
+          </ul>
+          <p>
+            This audit trail is essential for compliance audits and for investigating
+            unusual activity. If a task behaves unexpectedly, you can trace every
+            authenticated request it made.
+          </p>
+        </section>
+
+        <section>
+          <h2>Deployment Considerations</h2>
+          <p>
+            ADLC is typically deployed as multi-container workloads where both the agent
+            and the proxy run in the same network namespace:
+          </p>
+          <ul>
+            <li>
+              <strong>Cloud Run:</strong> Multi-container deployments with shared loopback
+              networking. The proxy and agent communicate over <code>localhost</code>.
+            </li>
+            <li>
+              <strong>Kubernetes:</strong> Sidecar pattern where both containers share a Pod.
+              Network policies prevent external access to the proxy.
+            </li>
+            <li>
+              <strong>Local development:</strong> The same proxy runs locally so development
+              workflows are identical to production.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>What This Enables</h2>
+          <p>
+            By isolating credentials, ADLC enables:
+          </p>
+          <ul>
+            <li>
+              <strong>Safe model experimentation:</strong> Test new models or vendors without
+              exposing credentials to third-party inference services.
+            </li>
+            <li>
+              <strong>Reduced secret sprawl:</strong> No need to create service accounts for
+              each agent instance. One set of credentials, safely injected.
+            </li>
+            <li>
+              <strong>Confident delegation:</strong> Teams can run agents in cloud infrastructure
+              without worrying that a compromised model will exfiltrate secrets.
+            </li>
+            <li>
+              <strong>Compliance alignment:</strong> Meet requirements like "no secrets in
+              containers" and "all credential access audited."
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <p>
+            <strong>Read the full brief:</strong> <a href="/adlc/brief/">ADLC Brief</a>
+            <br>
+            <strong>Back to blog:</strong> <a href="/adlc/blog/">All posts</a>
+          </p>
+        </section>
+      </article>
+    </main>
+  </body>
+</html>

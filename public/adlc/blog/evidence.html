@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Evidence Over Claims: Building Durable Artifacts — ADLC Blog</title>
+    <meta
+      name="description"
+      content="Why ADLC prioritizes observable evidence at every stage—from plans and logs to test results and review notes—instead of relying on agent summaries."
+    />
+    <meta name="theme-color" content="#16201d" />
+    <link rel="canonical" href="https://adlc-9e72f.web.app/adlc/blog/evidence/" />
+    <link rel="stylesheet" href="/adlc/styles.css" />
+    <style>
+      .article-content { max-width: 680px; margin: 0 auto; padding: clamp(32px, 5vw, 64px) clamp(18px, 5vw, 72px); }
+      .article-header { margin-bottom: 48px; }
+      .article-header .blog-tag { display: inline-block; padding: 4px 10px; margin-bottom: 12px; background: #f0f5f3; color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; border-radius: 4px; }
+      .article-header h1 { margin-bottom: 16px; }
+      .article-content > section { margin-bottom: 48px; }
+      .article-content > section > h2 { margin-top: 32px; margin-bottom: 18px; }
+      .article-content > section > h3 { margin-top: 24px; margin-bottom: 12px; }
+      .article-content p, .article-content li { color: var(--muted); line-height: 1.7; margin-bottom: 16px; }
+      .article-content ul, .article-content ol { margin: 0 0 24px; padding-left: 24px; }
+      .article-content li { margin-bottom: 8px; }
+      .article-content strong { color: var(--ink); font-weight: 700; }
+      .article-content code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+      .article-content a { color: var(--blue); text-decoration: none; }
+      .article-content a:hover { text-decoration: underline; }
+      .metadata { color: var(--muted); font-size: 13px; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+      .back-link { display: inline-block; margin-bottom: 32px; color: var(--blue); text-decoration: none; font-size: 14px; }
+      .back-link:hover { text-decoration: underline; }
+    </style>
+    <script src="/adlc/config.js"></script>
+    <script defer src="/adlc/app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/adlc/" aria-label="ADLC home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>ADLC</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="/adlc/#process">Process</a>
+        <a href="/adlc/#evidence">Evidence</a>
+        <a href="/adlc/blog/">Blog</a>
+      </nav>
+      <a class="header-cta" href="/#/agent" data-try-now>Try now</a>
+    </header>
+
+    <main>
+      <article class="article-content">
+        <a href="/adlc/blog/" class="back-link">← Back to Blog</a>
+
+        <div class="article-header">
+          <span class="blog-tag">Process</span>
+          <h1>Evidence Over Claims: Building Durable Artifacts</h1>
+          <div class="metadata">
+            <span>7 min read</span> • <span>Aug 13, 2026</span>
+          </div>
+        </div>
+
+        <section>
+          <p>
+            One of the easiest ways to build false confidence in agentic systems is to trust
+            agent summaries over actual output. An agent might claim "I ran the tests and they
+            passed," but did it really? ADLC solves this by demanding that every stage of work
+            produces durable, observable artifacts that humans can inspect.
+          </p>
+        </section>
+
+        <section>
+          <h2>The Problem: Trusting Summaries</h2>
+          <p>
+            When an agent completes a task, it typically returns a human-readable summary:
+            "I wrote the feature, added tests, and verified that it works." But this summary
+            is just a claim. It's not evidence.
+          </p>
+          <p>
+            What actually happened?
+          </p>
+          <ul>
+            <li>Did the tests actually pass, or did the agent skip slow tests?</li>
+            <li>Are the added tests meaningful, or just smoke tests?</li>
+            <li>What code was written? Did it introduce new dependencies or security issues?</li>
+            <li>What assumptions did the planning agent make that the implementation agent didn't catch?</li>
+          </ul>
+          <p>
+            Without looking at the actual artifacts, you're flying blind.
+          </p>
+        </section>
+
+        <section>
+          <h2>Seven Types of Artifacts</h2>
+          <p>ADLC captures evidence at every stage:</p>
+          <ol>
+            <li>
+              <strong>Plans:</strong> Not just the ticket, but the research behind it. What
+              viability checks did the planner run? What are the explicit assumptions and
+              dependencies? Are there flagged risks?
+            </li>
+            <li>
+              <strong>Context:</strong> What code, docs, and workspace history did the agent
+              reference? This helps future agents understand what sources were trusted.
+            </li>
+            <li>
+              <strong>Run logs:</strong> Full stdout/stderr from the agent's execution, including
+              all tool calls, timestamps, and any errors or warnings that occurred.
+            </li>
+            <li>
+              <strong>Code diff:</strong> The exact changes proposed, with line-by-line diff
+              format so reviewers can see what was added, removed, or modified.
+            </li>
+            <li>
+              <strong>Test output:</strong> Full test runner output, including pass/fail status,
+              coverage percentages, timing data, and any skipped or flaky tests.
+            </li>
+            <li>
+              <strong>Review notes:</strong> Comments from automated checkers (lint, security
+              scan, type check) and notes from human reviewers.
+            </li>
+            <li>
+              <strong>Delivery evidence:</strong> The PR/MR link, merge status, deployment
+              timestamp, and post-deployment health checks.
+            </li>
+          </ol>
+        </section>
+
+        <section>
+          <h2>Why Artifacts Matter</h2>
+          <p>
+            These artifacts serve multiple purposes:
+          </p>
+          <ul>
+            <li>
+              <strong>Review:</strong> Humans can make informed decisions based on facts, not
+              abstracts. They can question assumptions and spot issues before they ship.
+            </li>
+            <li>
+              <strong>Debugging:</strong> When something goes wrong, the artifacts are a
+              complete record of what the agents did. No guessing or re-running tasks.
+            </li>
+            <li>
+              <strong>Learning:</strong> Future agents can search and analyze these artifacts.
+              "What similar problems have we solved?" "Why did this assumption fail last time?"
+            </li>
+            <li>
+              <strong>Compliance:</strong> For regulated industries, these artifacts are the
+              audit trail. Every decision is documented with its supporting evidence.
+            </li>
+            <li>
+              <strong>Optimization:</strong> Tracking latency, cost, and failure patterns across
+              hundreds of tasks reveals where to improve the system.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Structuring Artifacts for Query</h2>
+          <p>
+            ADLC doesn't just dump logs into a bucket. Artifacts are structured:
+          </p>
+          <ul>
+            <li>
+              <strong>Metadata:</strong> Task ID, timestamps, agent type, model used, token
+              counts, cost, and outcome status.
+            </li>
+            <li>
+              <strong>Full-text indexed:</strong> Plan descriptions, code comments, test names,
+              error messages are searchable by future agents and humans.
+            </li>
+            <li>
+              <strong>Linked:</strong> Each stage references the previous stages, so tracing
+              a decision back to its origin is straightforward.
+            </li>
+            <li>
+              <strong>Retention policy:</strong> Artifacts follow configurable retention
+              (keep forever for compliance, or archive after 1 year for cost).
+            </li>
+          </ul>
+          <p>
+            This structure means that when a future planner asks "Has anyone tried adding
+            WebAssembly support?", the system can search all historical plans and show
+            what was learned.
+          </p>
+        </section>
+
+        <section>
+          <h2>What NOT to Rely On</h2>
+          <p>
+            Some outputs are useful but not authoritative:
+          </p>
+          <ul>
+            <li>
+              <strong>Agent summaries:</strong> Used for human readability, but not for
+              determining success or failure.
+            </li>
+            <li>
+              <strong>Telemetry gaps:</strong> If a test didn't run, that's not evidence
+              that everything is fine—it's evidence that testing was incomplete.
+            </li>
+            <li>
+              <strong>Agent confidence scores:</strong> An agent claiming 95% confidence
+              means nothing. Show the evidence that backs it up.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Implementing Evidence Capture</h2>
+          <p>
+            In practice, this means:
+          </p>
+          <ul>
+            <li>Every tool call is logged with input, output, and any errors.</li>
+            <li>Test runs save the full output, not just a pass/fail bit.</li>
+            <li>Diffs are stored in their original format (unified diff) plus parsed into a queryable format.</li>
+            <li>Reviews capture not just decisions but the reasoning for each decision.</li>
+            <li>All artifacts are immutable once the stage completes (prevent retroactive claim changes).</li>
+          </ul>
+        </section>
+
+        <section>
+          <p>
+            <strong>Read the full brief:</strong> <a href="/adlc/brief/">ADLC Brief</a>
+            <br>
+            <strong>Back to blog:</strong> <a href="/adlc/blog/">All posts</a>
+          </p>
+        </section>
+      </article>
+    </main>
+  </body>
+</html>
