@@ -1,10 +1,18 @@
-const CACHE_NAME = 'adlc-landing-v1';
+const CACHE_NAME = 'adlc-landing-v2';
 const ASSETS = [
   '/adlc/',
   '/adlc/index.html',
   '/adlc/styles.css',
   '/adlc/app.js',
-  '/adlc/manifest.webmanifest'
+  '/adlc/manifest.webmanifest',
+  '/adlc/blog/',
+  '/adlc/brief/',
+  '/adlc/blog/governance/',
+  '/adlc/blog/isolation/',
+  '/adlc/blog/evidence/',
+  '/adlc/blog/lifecycle/',
+  '/adlc/blog/integration/',
+  '/adlc/blog/getting-started/'
 ];
 
 self.addEventListener('install', (event) => {
