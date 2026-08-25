@@ -7,7 +7,7 @@
 Community of 5 nodes
 
 - **Size**: 5 nodes
-- **Cohesion**: 0.1101
+- **Cohesion**: 0.1062
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,8 +17,8 @@ Community of 5 nodes
 | readPublic | Function | ./scripts/seo-discovery.test.js | 9-9 |
 | test:SPA publishes complete ADLC search metadata and valid JSON-LD@L11 | Test | ./scripts/seo-discovery.test.js | 11-33 |
 | test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L35 | Test | ./scripts/seo-discovery.test.js | 35-50 |
-| test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-68 |
-| test:persistent ADLC launcher has five named, local-icon assistant links@L70 | Test | ./scripts/seo-discovery.test.js | 70-81 |
+| test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-84 |
+| test:persistent ADLC launcher has five named, local-icon assistant links@L86 | Test | ./scripts/seo-discovery.test.js | 86-97 |
 
 ## Execution Flows
 
@@ -28,7 +28,7 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `match` (20 edge(s))
+- `match` (21 edge(s))
 - `equal` (7 edge(s))
 - `doesNotMatch` (4 edge(s))
 - `ok` (3 edge(s))
@@ -39,10 +39,11 @@ No execution flows pass through this community.
 - `readFileSync` (1 edge(s))
 - `join` (1 edge(s))
 - `parse` (1 edge(s))
+- `replace` (1 edge(s))
 
 ### Incoming
 
-- `match` (20 edge(s))
+- `match` (21 edge(s))
 - `equal` (7 edge(s))
 - `./scripts/seo-discovery.test.js` (5 edge(s))
 - `doesNotMatch` (4 edge(s))
@@ -52,3 +53,4 @@ No execution flows pass through this community.
 - `find` (2 edge(s))
 - `matchAll` (2 edge(s))
 - `parse` (1 edge(s))
+- `replace` (1 edge(s))

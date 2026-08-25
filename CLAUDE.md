@@ -40,12 +40,29 @@ or grepping; fall back in this order (fewest tokens / most precise first):
 3. **grep / read — last resort.** Only for what the graphs don't index: config,
    logs, string literals, comments.
 
+> **Language coverage.** Both graphs index Terraform (`.tf`/`.hcl`, e.g.
+> `deploy/gcp/terraform/`) — CRG via its bundled tree-sitter grammar pack (no
+> extra install needed), graphify only with `graphifyy>=0.9` **and** the
+> `terraform` extra: `uv tool install "graphifyy[terraform]"` (or `pip install
+> "graphifyy[terraform]"`). Without that extra, `.tf` files silently
+> contribute 0 nodes to `graphify-out/` (a `tree_sitter_hcl not installed`
+> warning prints during `graphify update`). Neither graph indexes generic
+> YAML (`.github/workflows/*.yml`, `compose.yaml`, k8s manifests) — CRG only
+> parses Ansible/Spring-config YAML, and graphify's extension allowlist
+> excludes YAML outright. GitHub Actions workflows stay grep/read territory
+> regardless of graph freshness.
+
 Both are **local, gitignored** indexes. Build/refresh them (they also refresh
 automatically in the background after each commit — see `.githooks/post-commit`):
 
 ```bash
 npm run graph:build     # builds .code-review-graph/graph.db  AND  graphify-out/
 ```
+
+> If your local CRG index predates newly-added language support (e.g.
+> Terraform), the background incremental `update` won't retroactively
+> re-parse unchanged files — force a full re-parse once with
+> `npm run graph:build -- --clean`.
 
 ### Query commands
 
