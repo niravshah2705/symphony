@@ -27,6 +27,11 @@ locals {
   # override convention as the skills bucket above.
   attachments_bucket_name = var.attachments_bucket_name != "" ? var.attachments_bucket_name : "${var.project_id}-aifleet-attachments"
 
+  # Model weights registry bucket (models.tf) — same derived-default-with-
+  # override convention as the skills bucket above. Consumed only by the
+  # standalone inference-ollama/inference-vllm demo (inference.tf).
+  models_bucket_name = var.models_bucket_name != "" ? var.models_bucket_name : "${var.project_id}-aifleet-models"
+
   # Artifact Registry image references. Each service resolves its own tag,
   # falling back to var.image_tag when no per-service override is set — this is
   # what lets the CD pipeline roll ONE service (its tag = new SHA) while every

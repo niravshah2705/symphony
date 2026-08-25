@@ -116,6 +116,21 @@ output "registry_bucket" {
   value       = one(google_storage_bucket.registry[*].name)
 }
 
+output "models_bucket" {
+  description = "Terraform-created GCS bucket holding versioned Ollama/vLLM model weights for the standalone inference demo (null when models_enabled = false). Name defaults to '<project_id>-aifleet-models'. Not wired into the fleet's egress proxy or agent runtime — see inference.tf."
+  value       = one(google_storage_bucket.models[*].name)
+}
+
+output "inference_ollama_uri" {
+  description = "Standalone Ollama inference demo URL (null when inference_ollama_enabled = false). IAM-gated with no invoker bindings — grant yourself roles/run.invoker to test (see inference.tf's header comment)."
+  value       = one(google_cloud_run_v2_service.inference_ollama[*].uri)
+}
+
+output "inference_vllm_uri" {
+  description = "Standalone vLLM inference demo URL (null when inference_vllm_enabled = false). Best-effort/CPU-only — IAM-gated with no invoker bindings, same access pattern as inference_ollama_uri."
+  value       = one(google_cloud_run_v2_service.inference_vllm[*].uri)
+}
+
 output "artifact_registry_repo" {
   description = "Artifact Registry Docker repo path (images are pushed here as <repo>/<service>:<tag>)."
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}"

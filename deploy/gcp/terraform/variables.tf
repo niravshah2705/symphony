@@ -808,3 +808,150 @@ variable "environment" {
   description = "Deployment environment label (e.g. prod, staging) — added to every resource for billing breakdown by environment."
   default     = "prod"
 }
+
+# -----------------------------------------------------------------------------
+# Model inference demo (Ollama/vLLM on Cloud Run + GCS model registry).
+# -----------------------------------------------------------------------------
+# STANDALONE DEMO — see inference.tf's header comment. None of this is wired
+# into the egress proxy or any agent runtime; every resource is gated behind
+# its own `*_enabled` toggle and defaults OFF, so an existing deployment that
+# doesn't opt in creates nothing new and pays nothing extra.
+
+variable "models_enabled" {
+  type        = bool
+  description = "Create the Terraform-managed model-weights registry GCS bucket (+ IAM). Required by inference_ollama_enabled/inference_vllm_enabled's gcsfuse mount. Default off — this is a standalone demo feature, not part of the core deploy."
+  default     = false
+}
+
+variable "models_mount_enabled" {
+  type        = bool
+  description = "Mount the models bucket read-only via gcsfuse on the inference-ollama/inference-vllm services. Requires models_enabled. Off → those services (if enabled) have no model weights available."
+  default     = false
+}
+
+variable "models_bucket_name" {
+  type        = string
+  description = "OPTIONAL override for the models bucket name. Empty ('') derives a stable default of '<project_id>-aifleet-models' (see locals.tf). Terraform CREATES this bucket — it is NOT assumed to pre-exist. Ignored when models_enabled = false."
+  default     = ""
+}
+
+variable "models_bucket_force_destroy" {
+  type        = bool
+  description = "Allow `terraform destroy` to delete the models bucket even if it still holds objects."
+  default     = false
+}
+
+variable "models_bucket_ttl_days" {
+  type        = number
+  description = "Age out noncurrent object generations (created by bucket versioning) after this many days, since model weights are GB-sized and every published version otherwise persists forever. Set to 0 to disable pruning."
+  default     = 30
+
+  validation {
+    condition     = var.models_bucket_ttl_days >= 0 && floor(var.models_bucket_ttl_days) == var.models_bucket_ttl_days
+    error_message = "models_bucket_ttl_days must be a non-negative integer."
+  }
+}
+
+variable "models_publisher_member" {
+  type        = string
+  description = "Optional IAM member (e.g. serviceAccount:gh-deployer@PROJECT.iam.gserviceaccount.com) granted objectAdmin on the models bucket so the publish-models workflow can push new bundles. Empty = no grant (manage the deployer SA's write access out-of-band)."
+  default     = ""
+}
+
+variable "ollama_model_version" {
+  type        = string
+  description = "Model bundle version the Ollama inference service PINS (MODEL_VERSION). Reads /models/ollama/<version>/. Must match a published `ollama/<version>/` prefix in the models bucket (see deploy/models/manifest.json + publish-models.yml)."
+  default     = "v1"
+}
+
+variable "vllm_model_version" {
+  type        = string
+  description = "Model bundle version the vLLM inference service PINS (MODEL_VERSION). Reads /models/vllm/<version>/<model-name>/. Must match a published `vllm/<version>/` prefix in the models bucket."
+  default     = "v1"
+}
+
+variable "vllm_model_name" {
+  type        = string
+  description = "Which model (by its manifest `name`) the vLLM inference service serves — vLLM serves exactly one model per instance, unlike Ollama which can hold several pulled models. Must match a `deploy/models/manifest.json` vllm.models[].name published under vllm/<vllm_model_version>/<name>/."
+  default     = "qwen2.5-0.5b-instruct"
+}
+
+variable "inference_ollama_enabled" {
+  type        = bool
+  description = "Create the standalone inference-ollama Cloud Run service (demo — not wired to the egress proxy or any agent runtime). Requires models_enabled + models_mount_enabled to actually serve real weights."
+  default     = false
+}
+
+variable "inference_ollama_service_name" {
+  type        = string
+  description = "Cloud Run service name for the Ollama inference demo."
+  default     = "inference-ollama"
+}
+
+variable "inference_ollama_image" {
+  type        = string
+  description = "Full image reference for the Ollama inference service. Defaults to the public upstream image (no custom build/CD wiring needed for this demo) — pin a specific tag (not `latest`) for reproducibility."
+  default     = "ollama/ollama:latest"
+}
+
+variable "inference_ollama_cpu" {
+  type        = string
+  description = "vCPU limit for the Ollama inference service (CPU-only demo — no GPU). Dedicated from cloud_run_service_cpu because that variable is capped at 2 vCPU for services carrying a fixed 512Mi sidecar; this service has no sidecar and needs headroom to run a real model."
+  default     = "4"
+
+  validation {
+    condition     = contains(["1", "2", "4", "6", "8"], var.inference_ollama_cpu)
+    error_message = "inference_ollama_cpu must be one of the Cloud Run gen2 CPU-only vCPU tiers: 1, 2, 4, 6, 8."
+  }
+}
+
+variable "inference_ollama_memory" {
+  type        = string
+  description = "Memory limit for the Ollama inference service (e.g. '8Gi'). Sized for a small (1-3B, quantized) model; increase for larger models."
+  default     = "8Gi"
+
+  validation {
+    condition     = can(regex("^[0-9]+(Mi|Gi)$", var.inference_ollama_memory))
+    error_message = "inference_ollama_memory must look like '512Mi' or '8Gi'."
+  }
+}
+
+variable "inference_vllm_enabled" {
+  type        = bool
+  description = "Create the standalone inference-vllm Cloud Run service (demo — not wired to the egress proxy or any agent runtime). BEST-EFFORT: vLLM's published image is CUDA-only, so this requires a custom CPU image built from vLLM's docker/Dockerfile.cpu (see deploy/gcp/Dockerfile.inference-vllm) and pushed manually to inference_vllm_image — not part of the shared CD pipeline. Requires models_enabled + models_mount_enabled to actually serve real weights."
+  default     = false
+}
+
+variable "inference_vllm_service_name" {
+  type        = string
+  description = "Cloud Run service name for the vLLM inference demo."
+  default     = "inference-vllm"
+}
+
+variable "inference_vllm_image" {
+  type        = string
+  description = "Full image reference for the custom-built vLLM CPU image (see deploy/gcp/Dockerfile.inference-vllm). No public default exists — must be set (and the image built + pushed) before inference_vllm_enabled can be turned on."
+  default     = ""
+}
+
+variable "inference_vllm_cpu" {
+  type        = string
+  description = "vCPU limit for the vLLM inference service (CPU-only, best-effort demo — no GPU). Defaults higher than Ollama's: vLLM's baseline RAM/startup footprint is materially larger even for small models."
+  default     = "8"
+
+  validation {
+    condition     = contains(["1", "2", "4", "6", "8"], var.inference_vllm_cpu)
+    error_message = "inference_vllm_cpu must be one of the Cloud Run gen2 CPU-only vCPU tiers: 1, 2, 4, 6, 8."
+  }
+}
+
+variable "inference_vllm_memory" {
+  type        = string
+  description = "Memory limit for the vLLM inference service (e.g. '32Gi'). vLLM-CPU is memory-hungry even for small models; size close to the platform's CPU-only ceiling."
+  default     = "32Gi"
+
+  validation {
+    condition     = can(regex("^[0-9]+(Mi|Gi)$", var.inference_vllm_memory))
+    error_message = "inference_vllm_memory must look like '512Mi' or '32Gi'."
+  }
+}
