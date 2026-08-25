@@ -41,9 +41,11 @@ resource "google_cloud_run_v2_service" "inference_ollama" {
   deletion_protection = false
 
   template {
-    service_account                  = google_service_account.inference_ollama[0].email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2" # required for the gcsfuse volume below
-    max_instance_request_concurrency = 1                            # CPU-bound model server: serialize generations, don't share cores across requests
+    service_account = google_service_account.inference_ollama[0].email
+    # gen2 is required for the gcsfuse volume below.
+    execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
+    # CPU-bound model server: serialize generations, don't share cores across requests.
+    max_instance_request_concurrency = 1
 
     scaling {
       min_instance_count = 0 # scale-to-zero accepted for this demo (see header comment) — real cold-start cost
@@ -151,9 +153,11 @@ resource "google_cloud_run_v2_service" "inference_vllm" {
   }
 
   template {
-    service_account                  = google_service_account.inference_vllm[0].email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2" # required for the gcsfuse volume below
-    max_instance_request_concurrency = 1                            # CPU-bound model server: serialize generations, don't share cores across requests
+    service_account = google_service_account.inference_vllm[0].email
+    # gen2 is required for the gcsfuse volume below.
+    execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
+    # CPU-bound model server: serialize generations, don't share cores across requests.
+    max_instance_request_concurrency = 1
 
     scaling {
       min_instance_count = 0 # scale-to-zero accepted for this demo (see header comment) — real cold-start cost

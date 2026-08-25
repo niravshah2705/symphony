@@ -36,6 +36,7 @@ test('all Cloud Run services use the gen2 execution environment', () => {
     ['settings_service.tf', ['settings']],
     ['email_service.tf', ['email']],
     ['identity_service.tf', ['identity']],
+    ['inference.tf', ['inference_ollama', 'inference_vllm']],
     ['pipeline.tf', ['orchestrator', 'tester', 'deployer']],
     ['provisioner.tf', ['provisioner']],
     ['stream_token_service.tf', ['stream_token_broker']],
@@ -43,7 +44,7 @@ test('all Cloud Run services use the gen2 execution environment', () => {
   const expectedInventory = [...servicesByFile]
     .flatMap(([file, services]) => services.map((service) => [file, service]))
     .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
-  assert.equal(expectedInventory.length, 12);
+  assert.equal(expectedInventory.length, 14);
 
   const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
   const actualInventory = fs.readdirSync(terraformDir)
