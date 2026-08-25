@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Seven Stages: A Deep Dive into ADLC Workflow — ADLC Blog</title>
+    <meta
+      name="description"
+      content="Walk through each stage of the agentic development lifecycle, from intent capture through operational learning, with real examples of how humans and agents collaborate."
+    />
+    <meta name="theme-color" content="#16201d" />
+    <link rel="canonical" href="https://adlc-9e72f.web.app/adlc/blog/lifecycle/" />
+    <link rel="stylesheet" href="/adlc/styles.css" />
+    <style>
+      .article-content { max-width: 680px; margin: 0 auto; padding: clamp(32px, 5vw, 64px) clamp(18px, 5vw, 72px); }
+      .article-header { margin-bottom: 48px; }
+      .article-header .blog-tag { display: inline-block; padding: 4px 10px; margin-bottom: 12px; background: #f0f5f3; color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; border-radius: 4px; }
+      .article-header h1 { margin-bottom: 16px; }
+      .article-content > section { margin-bottom: 48px; }
+      .article-content > section > h2 { margin-top: 32px; margin-bottom: 18px; }
+      .article-content > section > h3 { margin-top: 24px; margin-bottom: 12px; }
+      .article-content p, .article-content li { color: var(--muted); line-height: 1.7; margin-bottom: 16px; }
+      .article-content ul, .article-content ol { margin: 0 0 24px; padding-left: 24px; }
+      .article-content li { margin-bottom: 8px; }
+      .article-content strong { color: var(--ink); font-weight: 700; }
+      .article-content code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+      .article-content a { color: var(--blue); text-decoration: none; }
+      .article-content a:hover { text-decoration: underline; }
+      .metadata { color: var(--muted); font-size: 13px; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+      .back-link { display: inline-block; margin-bottom: 32px; color: var(--blue); text-decoration: none; font-size: 14px; }
+      .back-link:hover { text-decoration: underline; }
+      .stage-example { margin: 24px 0; padding: 16px; background: #f9fbf8; border-left: 3px solid var(--blue); }
+      .stage-example strong { color: var(--blue); }
+    </style>
+    <script src="/adlc/config.js"></script>
+    <script defer src="/adlc/app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/adlc/" aria-label="ADLC home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>ADLC</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="/adlc/#process">Process</a>
+        <a href="/adlc/#evidence">Evidence</a>
+        <a href="/adlc/blog/">Blog</a>
+      </nav>
+      <a class="header-cta" href="/#/agent" data-try-now>Try now</a>
+    </header>
+
+    <main>
+      <article class="article-content">
+        <a href="/adlc/blog/" class="back-link">← Back to Blog</a>
+
+        <div class="article-header">
+          <span class="blog-tag">Guide</span>
+          <h1>The Seven Stages: A Deep Dive into ADLC Workflow</h1>
+          <div class="metadata">
+            <span>10 min read</span> • <span>Aug 12, 2026</span>
+          </div>
+        </div>
+
+        <section>
+          <p>
+            The ADLC lifecycle is built on seven sequential stages, each with clear entry
+            and exit criteria, evidence production, and decision gates. This article walks
+            through a real example: implementing a new feature to export billing reports.
+          </p>
+        </section>
+
+        <section>
+          <h2>Stage 1: Intent and Context</h2>
+          <p>
+            A product manager posts: "Add ability to export monthly billing reports as CSV
+            and PDF for customers. Needed by end of quarter for enterprise customers."
+          </p>
+          <p>
+            The workspace intent agent:
+          </p>
+          <ul>
+            <li>Captures the request and classifies it as a feature request.</li>
+            <li>Searches workspace history for related work (do we have report builders? PDF libraries?)</li>
+            <li>Identifies stakeholders (product, engineering, compliance team).</li>
+            <li>Flags any policy constraints (data retention, audit logging for exports).</li>
+            <li>Routes to the next stage: planning.</li>
+          </ul>
+
+          <div class="stage-example">
+            <strong>Artifact produced:</strong> Intent record with classification, context search results,
+            flagged policies, and recommended stakeholders.
+          </div>
+        </section>
+
+        <section>
+          <h2>Stage 2: Plan and Decompose</h2>
+          <p>
+            The planning agent now researches and decomposes the feature:
+          </p>
+          <ul>
+            <li>
+              <strong>Research viability:</strong> Are there existing PDF libraries? How much
+              storage do we need? What are the GDPR implications of exporting customer data?
+            </li>
+            <li>
+              <strong>Decompose into tasks:</strong> Create report schema, implement CSV export,
+              add PDF rendering, wire UI buttons, add audit logging, write tests.
+            </li>
+            <li>
+              <strong>Define acceptance criteria:</strong> "CSV export includes all fields,
+              respects date filters, runs in <5 seconds for 1M rows."
+            </li>
+            <li>
+              <strong>Estimate and sequence:</strong> Some tasks can run in parallel (CSV and PDF
+              implementation), but both depend on the schema task.
+            </li>
+            <li>
+              <strong>Flag assumptions:</strong> "Assumes billing data is immutable after 30 days.
+              If this changes, export logic needs revision."
+            </li>
+          </ul>
+
+          <div class="stage-example">
+            <strong>Artifact produced:</strong> Plan document with viability research, task list,
+            acceptance criteria, dependency graph, estimated effort, and explicit assumptions.
+          </div>
+
+          <p>
+            A human reviews the plan. If it makes sense, they approve and the plan moves to
+            implementation. If the scope is too large or assumptions are questionable, they
+            send it back to planning for revision.
+          </p>
+        </section>
+
+        <section>
+          <h2>Stage 3: Implement</h2>
+          <p>
+            The coder agent now picks up one task at a time, working in an isolated branch:
+          </p>
+          <ul>
+            <li>Task 1: "Create report schema and database migration."</li>
+            <li>
+              The agent clones the repo, creates a feature branch, writes the schema definition,
+              creates a database migration, and runs local tests.
+            </li>
+            <li>
+              It maintains a review workpad: "Here's what I did, here are the files I modified,
+              here are the edge cases I considered."
+            </li>
+            <li>
+              When the task is complete, it creates a draft PR with the changes.
+            </li>
+          </ul>
+
+          <p>
+            Then it moves to Task 2: "Implement CSV export." The process repeats. The agent
+            may revise its own work in the same branch (fixing lint issues, improving tests)
+            or ask for human guidance if it gets stuck.
+          </p>
+
+          <div class="stage-example">
+            <strong>Artifact produced:</strong> Code diffs, intermediate commits, review workpad,
+            and draft PRs for each task.
+          </div>
+        </section>
+
+        <section>
+          <h2>Stage 4: Verify</h2>
+          <p>
+            The tester agent (or automated testing suite) now validates the implementation:
+          </p>
+          <ul>
+            <li>
+              <strong>Run unit tests:</strong> "Do the new export functions work with various
+              inputs?" Coverage: 92%.
+            </li>
+            <li>
+              <strong>Run integration tests:</strong> "Does the database schema apply cleanly?
+              Do the new endpoints return the right data?"
+            </li>
+            <li>
+              <strong>Run smoke tests:</strong> "Can I generate a CSV and PDF end-to-end?
+              Do the files open in Excel and PDF readers?"
+            </li>
+            <li>
+              <strong>Check policy compliance:</strong> "Are all exports logged? Do we avoid
+              exporting PII outside the allowed scope?"
+            </li>
+            <li>
+              <strong>Measure performance:</strong> "Does exporting 1M rows still run in <5 seconds?"
+            </li>
+          </ul>
+
+          <p>
+            If tests fail, verification stops and the implementation stage loops back.
+            If everything passes, all evidence is attached to the work item.
+          </p>
+
+          <div class="stage-example">
+            <strong>Artifact produced:</strong> Test output (pass/fail, coverage %), performance
+            benchmarks, policy compliance checklist, and any failures or warnings.
+          </div>
+        </section>
+
+        <section>
+          <h2>Stage 5: Review and Govern</h2>
+          <p>
+            Now a human review gate applies. The reviewer sees:
+          </p>
+          <ul>
+            <li>The original intent and plan.</li>
+            <li>The actual code changes, organized by task.</li>
+            <li>Test results and coverage metrics.</li>
+            <li>The workpad explaining design decisions.</li>
+            <li>Any policy checklist items that were flagged.</li>
+          </ul>
+
+          <p>
+            The reviewer can:
+          </p>
+          <ul>
+            <li>
+              <strong>Approve:</strong> "Looks good. The implementation matches the plan,
+              tests pass, no new risks."
+            </li>
+            <li>
+              <strong>Request changes:</strong> "Please add validation to reject exports >1M rows.
+              The query planning could return bad results without it."
+            </li>
+            <li>
+              <strong>Reject:</strong> "This doesn't match the original intent. The PM said
+              'enterprise customers only' but this exports for all customers. Back to planning."
+            </li>
+          </ul>
+
+          <div class="stage-example">
+            <strong>Artifact produced:</strong> Review decision, reviewer notes, requested changes,
+            and approval chain (who reviewed, when, what conditions).
+          </div>
+        </section>
+
+        <section>
+          <h2>Stage 6: Deliver</h2>
+          <p>
+            If approved, the implementation moves to delivery:
+          </p>
+          <ul>
+            <li>PRs are merged to main branch.</li>
+            <li>Code is deployed to staging environment.</li>
+            <li>Smoke tests run against staging to verify deployment.</li>
+            <li>Feature flag is toggled for 5% of traffic (canary release).</li>
+            <li>Errors and latency are monitored.</li>
+            <li>Once stable, full rollout to 100%.</li>
+          </ul>
+
+          <div class="stage-example">
+            <strong>Artifact produced:</strong> Merge timestamps, PR links, deployment logs,
+            canary monitoring data, and rollout status.
+          </div>
+        </section>
+
+        <section>
+          <h2>Stage 7: Observe and Learn</h2>
+          <p>
+            Finally, the system records what happened:
+          </p>
+          <ul>
+            <li>
+              <strong>Success metrics:</strong> The feature shipped on time. All tests passed.
+              No production issues in the first week.
+            </li>
+            <li>
+              <strong>Cost tracking:</strong> This task took 2 hours of planner time, 4 hours of
+              coder time, and $0.12 in API costs. Future similar tasks cost roughly the same.
+            </li>
+            <li>
+              <strong>Feedback:</strong> Customers loved the PDF export. CSV export is rarely used.
+              Future work on formats should prioritize PDF.
+            </li>
+            <li>
+              <strong>Learnings:</strong> "Our schema migration pattern worked well. Assumptions
+              about billing data immutability held up. Testing strategy was effective."
+            </li>
+          </ul>
+
+          <p>
+            This data is indexed and searchable. The next time a planner sees a similar feature
+            request, it can query: "Has anyone built data export features? What did they learn?"
+          </p>
+
+          <div class="stage-example">
+            <strong>Artifact produced:</strong> Success summary, cost breakdown, user feedback,
+            and structured learnings for future work.
+          </div>
+        </section>
+
+        <section>
+          <h2>The Loop</h2>
+          <p>
+            This seven-stage cycle repeats for every feature, bug fix, and infrastructure
+            change. Humans and agents collaborate at each gate. Evidence flows from one stage
+            to the next. Decisions are reversible because they're documented. Learning compounds
+            because outcomes are recorded.
+          </p>
+          <p>
+            The result: faster, more accountable, verifiable software delivery.
+          </p>
+        </section>
+
+        <section>
+          <p>
+            <strong>Read the full brief:</strong> <a href="/adlc/brief/">ADLC Brief</a>
+            <br>
+            <strong>Back to blog:</strong> <a href="/adlc/blog/">All posts</a>
+          </p>
+        </section>
+      </article>
+    </main>
+  </body>
+</html>

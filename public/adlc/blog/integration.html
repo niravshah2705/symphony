@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Integrating ADLC with Your Tools — ADLC Blog</title>
+    <meta
+      name="description"
+      content="A practical guide to connecting ADLC with GitHub, GitLab, Linear, Jira, and other tools, with configuration patterns and best practices for your team."
+    />
+    <meta name="theme-color" content="#16201d" />
+    <link rel="canonical" href="https://adlc-9e72f.web.app/adlc/blog/integration/" />
+    <link rel="stylesheet" href="/adlc/styles.css" />
+    <style>
+      .article-content { max-width: 680px; margin: 0 auto; padding: clamp(32px, 5vw, 64px) clamp(18px, 5vw, 72px); }
+      .article-header { margin-bottom: 48px; }
+      .article-header .blog-tag { display: inline-block; padding: 4px 10px; margin-bottom: 12px; background: #f0f5f3; color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; border-radius: 4px; }
+      .article-header h1 { margin-bottom: 16px; }
+      .article-content > section { margin-bottom: 48px; }
+      .article-content > section > h2 { margin-top: 32px; margin-bottom: 18px; }
+      .article-content > section > h3 { margin-top: 24px; margin-bottom: 12px; }
+      .article-content p, .article-content li { color: var(--muted); line-height: 1.7; margin-bottom: 16px; }
+      .article-content ul, .article-content ol { margin: 0 0 24px; padding-left: 24px; }
+      .article-content li { margin-bottom: 8px; }
+      .article-content strong { color: var(--ink); font-weight: 700; }
+      .article-content code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+      .article-content a { color: var(--blue); text-decoration: none; }
+      .article-content a:hover { text-decoration: underline; }
+      .metadata { color: var(--muted); font-size: 13px; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+      .back-link { display: inline-block; margin-bottom: 32px; color: var(--blue); text-decoration: none; font-size: 14px; }
+      .back-link:hover { text-decoration: underline; }
+      .tool-matrix { margin: 24px 0; overflow-x: auto; }
+      .tool-matrix table { width: 100%; border-collapse: collapse; }
+      .tool-matrix th { background: #f0f5f3; color: var(--ink); font-weight: 700; text-align: left; padding: 12px; border: 1px solid var(--line); }
+      .tool-matrix td { padding: 10px 12px; border: 1px solid var(--line); }
+    </style>
+    <script src="/adlc/config.js"></script>
+    <script defer src="/adlc/app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/adlc/" aria-label="ADLC home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>ADLC</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="/adlc/#process">Process</a>
+        <a href="/adlc/#evidence">Evidence</a>
+        <a href="/adlc/blog/">Blog</a>
+      </nav>
+      <a class="header-cta" href="/#/agent" data-try-now>Try now</a>
+    </header>
+
+    <main>
+      <article class="article-content">
+        <a href="/adlc/blog/" class="back-link">← Back to Blog</a>
+
+        <div class="article-header">
+          <span class="blog-tag">Setup</span>
+          <h1>Integrating ADLC with Your Tools</h1>
+          <div class="metadata">
+            <span>8 min read</span> • <span>Aug 11, 2026</span>
+          </div>
+        </div>
+
+        <section>
+          <p>
+            ADLC is designed to work with the tools your team already uses. This guide walks
+            through configuring repository hosting, issue tracking, and model providers.
+          </p>
+        </section>
+
+        <section>
+          <h2>Repository Hosting</h2>
+          <p>
+            ADLC supports both GitHub and GitLab. The integration allows agents to clone,
+            branch, commit, and create pull/merge requests.
+          </p>
+
+          <h3>GitHub</h3>
+          <ul>
+            <li>
+              <strong>Setup:</strong> Create a GitHub App with the "Contents", "Pull Requests",
+              and "Checks" permissions, or use a personal access token with <code>repo</code>
+              and <code>workflow</code> scopes.
+            </li>
+            <li>
+              <strong>Security best practice:</strong> Use fine-grained personal access tokens
+              scoped to specific repositories where possible. Rotate monthly.
+            </li>
+            <li>
+              <strong>Deployment:</strong> Store the token in the organization vault (encrypted
+              per-org or use a managed key if deployed by the platform).
+            </li>
+          </ul>
+
+          <h3>GitLab</h3>
+          <ul>
+            <li>
+              <strong>Setup:</strong> Create a project access token or group access token with
+              <code>api</code>, <code>read_repository</code>, and <code>write_repository</code>
+              scopes.
+            </li>
+            <li>
+              <strong>Security best practice:</strong> Bind tokens to specific projects when
+              possible. Set expiration dates and rotate periodically.
+            </li>
+            <li>
+              <strong>Deployment:</strong> Same vault pattern as GitHub.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Issue Tracking</h2>
+          <p>
+            ADLC agents read and update tickets from your tracking system. Supported platforms:
+          </p>
+
+          <h3>Linear</h3>
+          <ul>
+            <li>
+              <strong>Setup:</strong> Generate an API key from Linear settings. The key allows
+              reading and updating issues, creating sub-issues, and managing relationships.
+            </li>
+            <li>
+              <strong>Best practice:</strong> Create a dedicated "AI Fleet" bot user in Linear,
+              then generate the API key for that bot. Makes audit trails clear.
+            </li>
+          </ul>
+
+          <h3>Jira</h3>
+          <ul>
+            <li>
+              <strong>Setup:</strong> Create a service account with "Jira Software" and
+              "Jira Service Management" access, then generate an API token.
+            </li>
+            <li>
+              <strong>Note:</strong> Requires Jira Cloud (jira.atlassian.net). On-premise Jira
+              Server is not supported.
+            </li>
+          </ul>
+
+          <h3>Asana</h3>
+          <ul>
+            <li>
+              <strong>Setup:</strong> Create a personal access token scoped to the projects
+              where agents will work.
+            </li>
+            <li>
+              <strong>Limitation:</strong> Asana's API does not support creating parent-child
+              task relationships programmatically, so agents cannot auto-decompose tasks into
+              subtasks. Plan decomposition must be manual or use an intermediate representation.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Model Providers</h2>
+          <p>
+            ADLC agents can use different LLM providers for planning, implementation, and testing.
+            Configure these in your workspace settings.
+          </p>
+
+          <h3>Anthropic (Claude)</h3>
+          <ul>
+            <li>
+              <strong>API key:</strong> Generate from console.anthropic.com. Store in the
+              organization vault.
+            </li>
+            <li>
+              <strong>Model selection:</strong> Use Claude 3.5 Sonnet for planning and review,
+              Opus for research-heavy tasks, Haiku for lightweight per-token tasks.
+            </li>
+          </ul>
+
+          <h3>OpenAI (GPT)</h3>
+          <ul>
+            <li>
+              <strong>API key:</strong> Create from platform.openai.com. Requires payment method.
+            </li>
+            <li>
+              <strong>Model selection:</strong> Use GPT-4 for complex tasks, GPT-4 Turbo for
+              faster execution, GPT-3.5 Turbo for cost optimization on simple tasks.
+            </li>
+          </ul>
+
+          <h3>Local Models (Ollama, LM Studio)</h3>
+          <ul>
+            <li>
+              <strong>Setup:</strong> Point ADLC to a local model endpoint (e.g.,
+              <code>http://localhost:11434</code> for Ollama).
+            </li>
+            <li>
+              <strong>Best for:</strong> Experimentation, privacy-sensitive work (medical,
+              legal), or air-gapped environments.
+            </li>
+            <li>
+              <strong>Tradeoff:</strong> Slower inference than cloud providers. Requires
+              powerful hardware to run larger models.
+            </li>
+          </ul>
+
+          <h3>Gemini (Google)</h3>
+          <ul>
+            <li>
+              <strong>API key:</strong> Generate from makersuite.google.com.
+            </li>
+            <li>
+              <strong>Note:</strong> Gemini is cost-effective for high-volume tasks but has
+              lower latency tolerance (some endpoints have global rate limits).
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Configuration Patterns</h2>
+          <p>
+            Here are common configurations by team size and use case:
+          </p>
+
+          <h3>Startup (GitHub + Linear + Claude)</h3>
+          <ul>
+            <li>GitHub for repositories (one org, multiple repos).</li>
+            <li>Linear for planning (easier to use than Jira at small scale).</li>
+            <li>Claude for planning and coding (best reasoning, reliable).</li>
+          </ul>
+
+          <h3>Enterprise (GitHub + Linear + Multiple Providers)</h3>
+          <ul>
+            <li>GitHub for primary development, GitLab for infrastructure-as-code.</li>
+            <li>Linear for product work, Jira for ops/infra tracking.</li>
+            <li>Claude for complex planning, GPT-4 for coding (lower cost at scale), Ollama for
+            sensitive work.</li>
+          </ul>
+
+          <h3>Privacy-First (Self-Hosted)</h3>
+          <ul>
+            <li>GitLab self-hosted for code.</li>
+            <li>Jira self-hosted for tracking.</li>
+            <li>Ollama local for all inference (zero external API calls).</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Multi-Provider Strategies</h2>
+          <p>
+            Some teams use multiple providers for different lifecycle stages:
+          </p>
+          <ul>
+            <li>
+              <strong>Purpose routing:</strong> Planning uses Claude (best for reasoning),
+              coding uses GPT-4 (fast and reliable), testing uses Haiku (cheap per-token).
+            </li>
+            <li>
+              <strong>Vendor diversity:</strong> Fallback to a secondary provider if the primary
+              is rate-limited or down (e.g., Claude → OpenAI for failover).
+            </li>
+            <li>
+              <strong>Cost optimization:</strong> Use Haiku for fast tasks under 5 minutes, Claude
+              for complex tasks over 30 minutes, GPT-4 for balanced cost/performance.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Troubleshooting Integration Issues</h2>
+          <p>
+            Common problems and solutions:
+          </p>
+          <ul>
+            <li>
+              <strong>"Unauthorized" when accessing repositories:</strong> Check that the
+              repository access token has the correct scopes (read + write). Generate a new
+              token if needed. For GitHub Apps, verify the installation is enabled for the org.
+            </li>
+            <li>
+              <strong>Agents cannot find or update tickets:</strong> Verify the issue tracking
+              token has access to the target projects. For Jira, confirm the account has the
+              right project permissions, not just workspace permissions.
+            </li>
+            <li>
+              <strong>LLM rate limiting:</strong> If agents are being rate-limited, reduce
+              concurrency (run fewer parallel agents) or distribute load across multiple API keys.
+            </li>
+            <li>
+              <strong>Stale credentials:</strong> If a token has been rotated, manually update it
+              in the vault. ADLC does not auto-detect stale credentials; it fails on the first
+              request.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <p>
+            <strong>Read the full brief:</strong> <a href="/adlc/brief/">ADLC Brief</a>
+            <br>
+            <strong>Back to blog:</strong> <a href="/adlc/blog/">All posts</a>
+          </p>
+        </section>
+      </article>
+    </main>
+  </body>
+</html>

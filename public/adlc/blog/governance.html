@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Keeping Humans in Control: ADLC Governance Model — ADLC Blog</title>
+    <meta
+      name="description"
+      content="Explore how ADLC maintains human oversight through policy-aware handoffs, approval gates, and evidence-driven decisions while leveraging AI agents for bounded work."
+    />
+    <meta name="theme-color" content="#16201d" />
+    <link rel="canonical" href="https://adlc-9e72f.web.app/adlc/blog/governance/" />
+    <link rel="stylesheet" href="/adlc/styles.css" />
+    <style>
+      .article-content {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: clamp(32px, 5vw, 64px) clamp(18px, 5vw, 72px);
+      }
+
+      .article-header {
+        margin-bottom: 48px;
+      }
+
+      .article-header .blog-tag {
+        display: inline-block;
+        padding: 4px 10px;
+        margin-bottom: 12px;
+        background: #f0f5f3;
+        color: var(--green);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 4px;
+      }
+
+      .article-header h1 {
+        margin-bottom: 16px;
+      }
+
+      .article-content > section {
+        margin-bottom: 48px;
+      }
+
+      .article-content > section > h2 {
+        margin-top: 32px;
+        margin-bottom: 18px;
+      }
+
+      .article-content > section > h3 {
+        margin-top: 24px;
+        margin-bottom: 12px;
+      }
+
+      .article-content p,
+      .article-content li {
+        color: var(--muted);
+        line-height: 1.7;
+        margin-bottom: 16px;
+      }
+
+      .article-content ul,
+      .article-content ol {
+        margin: 0 0 24px;
+        padding-left: 24px;
+      }
+
+      .article-content li {
+        margin-bottom: 8px;
+      }
+
+      .article-content strong {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .article-content code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+      }
+
+      .article-content a {
+        color: var(--blue);
+        text-decoration: none;
+      }
+
+      .article-content a:hover {
+        text-decoration: underline;
+      }
+
+      .metadata {
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 32px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .back-link {
+        display: inline-block;
+        margin-bottom: 32px;
+        color: var(--blue);
+        text-decoration: none;
+        font-size: 14px;
+      }
+
+      .back-link:hover {
+        text-decoration: underline;
+      }
+    </style>
+    <script src="/adlc/config.js"></script>
+    <script defer src="/adlc/app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/adlc/" aria-label="ADLC home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>ADLC</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="/adlc/#process">Process</a>
+        <a href="/adlc/#evidence">Evidence</a>
+        <a href="/adlc/blog/">Blog</a>
+      </nav>
+      <a class="header-cta" href="/#/agent" data-try-now>Try now</a>
+    </header>
+
+    <main>
+      <article class="article-content">
+        <a href="/adlc/blog/" class="back-link">← Back to Blog</a>
+
+        <div class="article-header">
+          <span class="blog-tag">Governance</span>
+          <h1>Keeping Humans in Control: ADLC Governance Model</h1>
+          <div class="metadata">
+            <span>5 min read</span> • <span>Aug 15, 2026</span>
+          </div>
+        </div>
+
+        <section>
+          <p>
+            One of the core principles of ADLC is that humans remain accountable. While
+            agents can plan, code, test, and review, they cannot approve consequential
+            changes or bypass policy. This article explores how the ADLC governance model
+            achieves this balance.
+          </p>
+        </section>
+
+        <section>
+          <h2>The Problem We're Solving</h2>
+          <p>
+            Traditional agent-based workflows often suffer from two extremes:
+          </p>
+          <ul>
+            <li>
+              <strong>No guardrails:</strong> Agents autonomously make decisions, ship code,
+              and manage infrastructure with minimal oversight, creating liability and risk.
+            </li>
+            <li>
+              <strong>Excessive friction:</strong> Humans must manually approve every step,
+              nullifying the efficiency gains of using agents in the first place.
+            </li>
+          </ul>
+          <p>
+            ADLC splits the difference by defining approval gates where they matter most:
+            at policy boundaries, not at every keystroke.
+          </p>
+        </section>
+
+        <section>
+          <h2>Policy-Aware Handoffs</h2>
+          <p>
+            Each stage of the ADLC lifecycle can declare intent and constraints upfront.
+            For example:
+          </p>
+          <ul>
+            <li>
+              <strong>Planning stage:</strong> "This task must not modify authentication or
+              billing logic. Flag for manual review if dependencies cross these boundaries."
+            </li>
+            <li>
+              <strong>Implementation stage:</strong> "Do not add external network calls without
+              documentation. Verify all new imports against the approved list."
+            </li>
+            <li>
+              <strong>Verification stage:</strong> "All changes must maintain ≥80% test coverage
+              in modified files. Failed tests block delivery."
+            </li>
+          </ul>
+          <p>
+            The agent performs its work, and the system automatically escalates violations
+            to human reviewers rather than silently passing or failing.
+          </p>
+        </section>
+
+        <section>
+          <h2>Approval Gates</h2>
+          <p>
+            ADLC defines three types of approval gates:
+          </p>
+          <ul>
+            <li>
+              <strong>Automatic gates:</strong> Verification rules that block or pass without
+              human intervention (test coverage, lint checks, secret scanning).
+            </li>
+            <li>
+              <strong>Policy gates:</strong> Human review required for specific change types
+              (infrastructure, auth, critical paths) based on org policy.
+            </li>
+            <li>
+              <strong>Intent gates:</strong> Human approval to proceed from planning to
+              implementation, ensuring the plan aligns with the original request.
+            </li>
+          </ul>
+          <p>
+            These gates are defined once at the organization level and apply to all agent
+            work automatically. No per-task configuration needed.
+          </p>
+        </section>
+
+        <section>
+          <h2>Evidence-Driven Decisions</h2>
+          <p>
+            Every approval gate has supporting evidence attached:
+          </p>
+          <ul>
+            <li>For plans: the research backing assumptions, viability checks, and acceptance criteria.</li>
+            <li>For implementations: diffs, test results, lint output, security scans, and change traces.</li>
+            <li>For reviews: comparison against the original intent, change impact analysis, and rollback plans.</li>
+          </ul>
+          <p>
+            Human approvers don't have to reverse-engineer what happened. They see the
+            complete story in structured, reviewable form.
+          </p>
+        </section>
+
+        <section>
+          <h2>Bounded Agent Permissions</h2>
+          <p>
+            Agents cannot escalate their own permissions. They work within scoped access:
+          </p>
+          <ul>
+            <li>Repository access is scoped to specific branches or files.</li>
+            <li>Tracker access is limited to assigned tickets and approved projects.</li>
+            <li>Credentials are proxied and injected only for approved destinations.</li>
+            <li>Runtime limits (context, time, cost) prevent runaway execution.</li>
+          </ul>
+          <p>
+            If a task requires new permissions, the agent flags it and pauses. A human
+            explicitly grants expanded access before the agent can proceed.
+          </p>
+        </section>
+
+        <section>
+          <h2>Learning and Accountability</h2>
+          <p>
+            All agent work is logged and auditable:
+          </p>
+          <ul>
+            <li>Who initiated the work and when.</li>
+            <li>What the agent planned and what assumptions it made.</li>
+            <li>What code was written, tested, and reviewed.</li>
+            <li>Who approved each stage and any conditions on approval.</li>
+            <li>Cost, latency, and failure signals for future optimization.</li>
+          </ul>
+          <p>
+            This audit trail is not just compliance overhead—it's the foundation for learning.
+            Future planning agents can search this history to understand what worked, what didn't,
+            and why certain decisions were made.
+          </p>
+        </section>
+
+        <section>
+          <h2>Getting Started with Governance</h2>
+          <p>
+            If you're deploying ADLC in your organization:
+          </p>
+          <ol>
+            <li>Define your policy gates: what changes require human review in your domain?</li>
+            <li>Set automatic thresholds: coverage targets, lint rules, secret patterns.</li>
+            <li>Scope agent permissions: which repos, projects, and services can agents access?</li>
+            <li>Create approval chains: who reviews plans, implementations, and deliverables?</li>
+            <li>Document exceptions: when can the gates be overridden and who decides?</li>
+          </ol>
+          <p>
+            ADLC governance is most effective when it's explicit and organization-wide, not
+            bespoke per-task or hidden in custom scripts.
+          </p>
+        </section>
+
+        <section>
+          <p>
+            <strong>Read the full brief:</strong> <a href="/adlc/brief/">ADLC Brief</a>
+            <br>
+            <strong>Back to blog:</strong> <a href="/adlc/blog/">All posts</a>
+          </p>
+        </section>
+      </article>
+    </main>
+  </body>
+</html>

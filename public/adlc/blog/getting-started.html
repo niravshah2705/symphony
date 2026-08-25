@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Getting Started with ADLC — ADLC Blog</title>
+    <meta
+      name="description"
+      content="Your first steps with the ADLC workspace: setting up authentication, creating your first task, understanding the planning interface, and reviewing outcomes."
+    />
+    <meta name="theme-color" content="#16201d" />
+    <link rel="canonical" href="https://adlc-9e72f.web.app/adlc/blog/getting-started/" />
+    <link rel="stylesheet" href="/adlc/styles.css" />
+    <style>
+      .article-content { max-width: 680px; margin: 0 auto; padding: clamp(32px, 5vw, 64px) clamp(18px, 5vw, 72px); }
+      .article-header { margin-bottom: 48px; }
+      .article-header .blog-tag { display: inline-block; padding: 4px 10px; margin-bottom: 12px; background: #f0f5f3; color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; border-radius: 4px; }
+      .article-header h1 { margin-bottom: 16px; }
+      .article-content > section { margin-bottom: 48px; }
+      .article-content > section > h2 { margin-top: 32px; margin-bottom: 18px; }
+      .article-content > section > h3 { margin-top: 24px; margin-bottom: 12px; }
+      .article-content p, .article-content li { color: var(--muted); line-height: 1.7; margin-bottom: 16px; }
+      .article-content ul, .article-content ol { margin: 0 0 24px; padding-left: 24px; }
+      .article-content li { margin-bottom: 8px; }
+      .article-content strong { color: var(--ink); font-weight: 700; }
+      .article-content code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+      .article-content a { color: var(--blue); text-decoration: none; }
+      .article-content a:hover { text-decoration: underline; }
+      .metadata { color: var(--muted); font-size: 13px; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+      .back-link { display: inline-block; margin-bottom: 32px; color: var(--blue); text-decoration: none; font-size: 14px; }
+      .back-link:hover { text-decoration: underline; }
+      .step-box { margin: 24px 0; padding: 16px; background: #f9fbf8; border-left: 3px solid var(--green); }
+      .step-box strong { color: var(--green); }
+    </style>
+    <script src="/adlc/config.js"></script>
+    <script defer src="/adlc/app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/adlc/" aria-label="ADLC home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>ADLC</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="/adlc/#process">Process</a>
+        <a href="/adlc/#evidence">Evidence</a>
+        <a href="/adlc/blog/">Blog</a>
+      </nav>
+      <a class="header-cta" href="/#/agent" data-try-now>Try now</a>
+    </header>
+
+    <main>
+      <article class="article-content">
+        <a href="/adlc/blog/" class="back-link">← Back to Blog</a>
+
+        <div class="article-header">
+          <span class="blog-tag">Tutorial</span>
+          <h1>Getting Started with ADLC</h1>
+          <div class="metadata">
+            <span>6 min read</span> • <span>Aug 10, 2026</span>
+          </div>
+        </div>
+
+        <section>
+          <p>
+            Ready to try ADLC? This guide walks you through your first task, from intent
+            capture through review. We'll assume you're using GitHub and Linear; the concepts
+            apply to other tools as well.
+          </p>
+        </section>
+
+        <section>
+          <h2>Step 1: Access the Workspace</h2>
+          <p>
+            Visit the ADLC workspace at <a href="https://adlc-9e72f.web.app/">adlc-9e72f.web.app</a>.
+            You can authenticate with a personal Google account or your organization's identity.
+          </p>
+
+          <div class="step-box">
+            <strong>Note:</strong> The workspace is public for read-only access. To create and run
+            tasks, you need to be added to an organization by an admin.
+          </div>
+        </section>
+
+        <section>
+          <h2>Step 2: Connect Your Tools</h2>
+          <p>
+            Before creating a task, configure your integrations:
+          </p>
+          <ol>
+            <li>
+              <strong>Settings → Repositories:</strong> Connect your GitHub or GitLab account.
+              Grant the requested permissions (read and write access to repositories).
+            </li>
+            <li>
+              <strong>Settings → Tracking:</strong> Connect Linear, Jira, or Asana. ADLC will
+              read and create tickets in these systems.
+            </li>
+            <li>
+              <strong>Settings → Models:</strong> Choose your LLM provider (Anthropic, OpenAI,
+              local Ollama, etc.) and add your API keys.
+            </li>
+          </ol>
+
+          <div class="step-box">
+            <strong>Security:</strong> API keys are stored encrypted in a per-organization vault.
+            They never appear in logs or agent containers. The egress proxy injects them securely.
+          </div>
+        </section>
+
+        <section>
+          <h2>Step 3: Create Your First Task</h2>
+          <p>
+            Click the "New Task" button in the workspace. You'll see:
+          </p>
+          <ul>
+            <li>
+              <strong>Intent input:</strong> Describe what you want to build. Be specific: "Fix
+              the checkout latency issue by optimizing the SQL query in cart.ts" vs. "Make
+              checkout faster."
+            </li>
+            <li>
+              <strong>Source context:</strong> Optionally attach relevant code, design docs, or
+              previous incidents. ADLC will use this to make better plans.
+            </li>
+            <li>
+              <strong>Policy constraints:</strong> If your org has policies, you can flag them
+              here: "This must not modify authentication logic" or "Must maintain 80%+ test
+              coverage."
+            </li>
+            <li>
+              <strong>Repository and branch:</strong> Select which repo and target branch (usually
+              main or dev).
+            </li>
+          </ul>
+
+          <div class="step-box">
+            <strong>Example:</strong>
+            <br>
+            <strong>Intent:</strong> "Add API endpoint to fetch user billing history for the
+            past 3 months. Include pagination and sorting by date. Return CSV and JSON formats."
+            <br>
+            <strong>Context:</strong> [Attach the existing billing API docs and schema]
+            <br>
+            <strong>Constraints:</strong> "Must use the audit log for all data access. No
+            direct database queries."
+          </div>
+        </section>
+
+        <section>
+          <h2>Step 4: Review the Plan</h2>
+          <p>
+            After you submit, ADLC's planning agent kicks off. It:
+          </p>
+          <ul>
+            <li>Researches your codebase for similar features.</li>
+            <li>Breaks the feature into implementable tasks.</li>
+            <li>Defines acceptance criteria for each task.</li>
+            <li>Flags any risky assumptions or dependencies.</li>
+          </ul>
+
+          <p>
+            The plan appears in the workspace within a few minutes. You can:
+          </p>
+          <ul>
+            <li>
+              <strong>Approve:</strong> The plan looks good. Proceed to implementation.
+            </li>
+            <li>
+              <strong>Request changes:</strong> "Add a caching layer to reduce database load" or
+              "Remove the CSV format requirement—JSON only."
+            </li>
+            <li>
+              <strong>Reject:</strong> "This doesn't match the intent. I only asked for billing
+              history, not a full dashboard."
+            </li>
+          </ul>
+
+          <div class="step-box">
+            <strong>What you're looking at:</strong> Task decomposition, acceptance criteria,
+            estimated effort, dependencies, and research notes. Everything the implementation
+            agent will use.
+          </div>
+        </section>
+
+        <section>
+          <h2>Step 5: Implementation Begins</h2>
+          <p>
+            Once you approve the plan, the coder agent takes over. It:
+          </p>
+          <ul>
+            <li>Clones the repository into an isolated workspace.</li>
+            <li>Creates a feature branch.</li>
+            <li>Works through each task sequentially (or in parallel if they don't depend on each other).</li>
+            <li>Commits changes and runs tests as it goes.</li>
+          </ul>
+
+          <p>
+            You can watch progress in real-time in the workspace. You'll see:
+          </p>
+          <ul>
+            <li>Commits being created.</li>
+            <li>Test results streaming in.</li>
+            <li>The agent's review workpad (notes on design decisions).</li>
+            <li>Any errors or need for human help.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Step 6: Verify and Test</h2>
+          <p>
+            As the coder finishes each task, ADLC's testing agent runs:
+          </p>
+          <ul>
+            <li>Unit tests (do the new functions work?).</li>
+            <li>Integration tests (does it work with the rest of the system?).</li>
+            <li>Linting and type checking (is the code clean?).</li>
+            <li>Policy checks (does it follow your org's standards?).</li>
+          </ul>
+
+          <p>
+            Results appear in the workspace with full output. If any tests fail, the
+            implementation agent loops back to fix them.
+          </p>
+        </section>
+
+        <section>
+          <h2>Step 7: Human Review</h2>
+          <p>
+            Once all tasks are complete and tested, the workspace shows you:
+          </p>
+          <ul>
+            <li>The full code diff (organized by task).</li>
+            <li>Test coverage metrics and results.</li>
+            <li>The implementation agent's review notes.</li>
+            <li>Any policy violations or warnings.</li>
+          </ul>
+
+          <p>
+            You can:
+          </p>
+          <ul>
+            <li>
+              <strong>Approve:</strong> ADLC creates a pull request and merges (or deploys,
+              depending on your setup).
+            </li>
+            <li>
+              <strong>Request changes:</strong> Leave specific comments. The implementation agent
+              will see them and revise the code.
+            </li>
+            <li>
+              <strong>Reject:</strong> If the result doesn't match the original intent, start over.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Step 8: Delivery and Learning</h2>
+          <p>
+            If approved, ADLC merges the PR and (optionally) deploys to production. The
+            workspace records:
+          </p>
+          <ul>
+            <li>Merge timestamp and PR link.</li>
+            <li>Deployment status and any errors.</li>
+            <li>Customer feedback and usage metrics.</li>
+            <li>Cost breakdown (planner time, coder time, LLM API calls).</li>
+          </ul>
+
+          <p>
+            This data is searchable by future planning agents. The next time someone asks
+            "Has anyone built a billing feature?", ADLC can show what was learned.
+          </p>
+        </section>
+
+        <section>
+          <h2>Pro Tips</h2>
+          <ul>
+            <li>
+              <strong>Be specific in intents:</strong> Vague requests lead to mediocre plans.
+              "Optimize database queries in the user service" → results. "Make things faster" →
+              confusion.
+            </li>
+            <li>
+              <strong>Attach source context:</strong> If you paste the current code or link to
+              relevant docs, ADLC makes better decisions.
+            </li>
+            <li>
+              <strong>Use policy constraints strategically:</strong> Don't restrict everything.
+              Flag only the areas that truly matter for your org.
+            </li>
+            <li>
+              <strong>Review the plan carefully:</strong> This is your last chance to catch
+              misunderstandings before coding starts. If the plan is wrong, reject it.
+            </li>
+            <li>
+              <strong>Watch the real-time stream:</strong> If the agent gets stuck or does
+              something unexpected, you can pause and add guidance.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Next Steps</h2>
+          <p>
+            Once you've completed your first task:
+          </p>
+          <ul>
+            <li>Explore the workspace history to see past tasks and outcomes.</li>
+            <li>Read <a href="/adlc/blog/governance/">the governance article</a> to understand
+            how to set up approval gates and policies.</li>
+            <li>Check <a href="/adlc/blog/integration/">the integration guide</a> to add more
+            tools or LLM providers.</li>
+            <li>Review <a href="/adlc/brief/">the full brief</a> for a complete conceptual
+            overview of ADLC.</li>
+          </ul>
+        </section>
+
+        <section>
+          <p>
+            <strong>Ready to try?</strong> <a href="/#/agent" data-try-now>Open the workspace →</a>
+          </p>
+          <p>
+            <strong>Back to blog:</strong> <a href="/adlc/blog/">All posts</a>
+          </p>
+        </section>
+      </article>
+    </main>
+  </body>
+</html>
