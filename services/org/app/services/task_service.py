@@ -5,7 +5,6 @@ import uuid
 
 from app.core.database import Uow
 
-from app.authz.principal import Principal
 from app.errors import NotFoundError, ValidationAppError
 from app.models.enums import TaskStatus
 from app.models.project import Project
@@ -28,10 +27,14 @@ async def _validate_assignee(
 
 
 async def create_task(
-    session: Uow, principal: Principal, project: Project, data: TaskCreate
+    session: Uow, project: Project, data: TaskCreate
 ) -> Task:
     await _validate_assignee(session, project, data.assignee_id)
-    tags = await tag_service.resolve_org_tags(session, data.tag_ids, principal.org_id)
+    # Tags and the task both belong to the project's OWNER org, which is NOT the
+    # caller's org for a cross-org collaborator — resolve against project.org_id
+    # so a foreign caller can never stamp their own org's tag ids onto this
+    # tenant's task (invariant #7 / cross-tenant isolation).
+    tags = await tag_service.resolve_org_tags(session, data.tag_ids, project.org_id)
     task = Task(
         project_id=project.id,
         title=data.title,
@@ -87,11 +90,12 @@ async def delete_task(session: Uow, project: Project, task: Task) -> None:
 
 async def set_task_tags(
     session: Uow,
-    principal: Principal,
+    project: Project,
     task: Task,
     tag_ids: list[uuid.UUID],
 ) -> Task:
-    task.tags = await tag_service.resolve_org_tags(session, tag_ids, principal.org_id)
+    # Scope tags to the project's OWNER org (not the caller's) — see create_task.
+    task.tags = await tag_service.resolve_org_tags(session, tag_ids, project.org_id)
     return task
 
 

@@ -6,6 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.enums import ProjectAccessMode
 from app.schemas.tag import TagResponse
 
 
@@ -19,6 +20,10 @@ class ProjectUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
 
 
+class ProjectAccessModeUpdate(BaseModel):
+    access_mode: ProjectAccessMode
+
+
 class ProjectResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -26,6 +31,7 @@ class ProjectResponse(BaseModel):
     org_id: uuid.UUID
     name: str
     description: str | None
+    access_mode: ProjectAccessMode = ProjectAccessMode.INVITE_ONLY
     tags: list[TagResponse] = []
     created_at: datetime
     updated_at: datetime

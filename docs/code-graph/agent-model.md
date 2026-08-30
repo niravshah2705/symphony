@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 371 nodes
+Community of 410 nodes
 
-- **Size**: 371 nodes
-- **Cohesion**: 0.3124
+- **Size**: 410 nodes
+- **Cohesion**: 0.3221
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,6 +20,21 @@ Community of 371 nodes
 | test:createChatModel maps antigravity to a ChatOpenAI targeting the Gemini endpoint@L52 | Test | ./packages/shared/src/agent/antigravity.test.js | 52-58 |
 | test:availability probes the Gemini key against the OpenAI-compatible endpoint@L73 | Test | ./packages/shared/src/agent/antigravity.test.js | 73-86 |
 | test:availability fails fast when the Gemini key is missing@L88 | Test | ./packages/shared/src/agent/antigravity.test.js | 88-94 |
+| resolveTaskLabelId | Function | ./packages/shared/src/agent/apply.js | 13-21 |
+| withCriteria | Function | ./packages/shared/src/agent/apply.js | 24-28 |
+| modelLabelForSize | Function | ./packages/shared/src/agent/apply.js | 31-33 |
+| makeLabelResolver | Function | ./packages/shared/src/agent/apply.js | 40-55 |
+| makeModelLabelResolver | Function | ./packages/shared/src/agent/apply.js | 63-83 |
+| issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
+| applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-222 |
+| applyIssuesForMilestones | Function | ./packages/shared/src/agent/apply.js | 229-290 |
+| applyAidone | Function | ./packages/shared/src/agent/apply.js | 293-302 |
+| applyAiplanned | Function | ./packages/shared/src/agent/apply.js | 309-318 |
+| applyAifail | Function | ./packages/shared/src/agent/apply.js | 325-346 |
+| startIssue | Function | ./packages/shared/src/agent/apply.js | 355-370 |
+| finishIssue | Function | ./packages/shared/src/agent/apply.js | 378-410 |
+| safeAt | Function | ./packages/shared/src/agent/apply.js | 412-414 |
+| errMsg | Function | ./packages/shared/src/agent/apply.js | 416-418 |
 | statusOf | Function | ./packages/shared/src/agent/availability.js | 43-46 |
 | publicAvailabilityMessage | Function | ./packages/shared/src/agent/availability.js | 48-73 |
 | pauseReasonFor | Function | ./packages/shared/src/agent/availability.js | 75-87 |
@@ -49,23 +64,8 @@ Community of 371 nodes
 | test:parseVerdict accepts a plain VERDICT: line@L50 | Test | ./packages/shared/src/agent/coder-flow.test.js | 50-54 |
 | test:parseVerdict normalizes case in the status field@L56 | Test | ./packages/shared/src/agent/coder-flow.test.js | 56-59 |
 | test:parseVerdict defaults to insufficient when no verdict is present@L61 | Test | ./packages/shared/src/agent/coder-flow.test.js | 61-65 |
-| test:parseVerdict defaults to insufficient on empty/nullish input@L67 | Test | ./packages/shared/src/agent/coder-flow.test.js | 67-70 |
-| test:Git 403 preflight stops before model resolution, job creation, or issue transition@L96 | Test | ./packages/shared/src/agent/coder-flow.test.js | 96-133 |
-| test:model preflight stops before job creation or issue transition@L135 | Test | ./packages/shared/src/agent/coder-flow.test.js | 135-165 |
-| test:successful readiness is probed again for every later dispatch@L167 | Test | ./packages/shared/src/agent/coder-flow.test.js | 167-188 |
-| test:manual readiness guard establishes the same sanitized global pause@L190 | Test | ./packages/shared/src/agent/coder-flow.test.js | 190-218 |
-| test:manual readiness guard preserves policy denial without creating a model pause@L220 | Test | ./packages/shared/src/agent/coder-flow.test.js | 220-247 |
-| test:runtime policy denial is never classified as a model availability pause@L249 | Test | ./packages/shared/src/agent/coder-flow.test.js | 249-265 |
-| test:selected autonomous policy resolution rejects missing effective policy while local mode stays compatible@L267 | Test | ./packages/shared/src/agent/coder-flow.test.js | 267-292 |
-| test:proxy-vault autonomous polling needs no stored Linear key and uses the sentinel for every Linear read@L294 | Test | ./packages/shared/src/agent/coder-flow.test.js | 294-321 |
-| test:autonomous planned coder threads selected policy and loads only permitted MCP plugins@L323 | Test | ./packages/shared/src/agent/coder-flow.test.js | 323-438 |
-| test:runtime outage helper pauses direct runs on the execution role regardless of legacy size label@L488 | Test | ./packages/shared/src/agent/coder-flow.test.js | 488-528 |
-| test:coder pause recovery waits, reschedules failed probes, and clears after a ready settings change@L530 | Test | ./packages/shared/src/agent/coder-flow.test.js | 530-577 |
-| now | Function | ./packages/shared/src/agent/coder-flow.test.js | 547-547 |
-| test:runtime repository unavailability pauses safely without finishing the Linear issue@L579 | Test | ./packages/shared/src/agent/coder-flow.test.js | 579-640 |
-| test:planned runtime policy denial records a governed error without pausing or finalizing the issue@L642 | Test | ./packages/shared/src/agent/coder-flow.test.js | 642-697 |
 
-*... and 321 more members.*
+*... and 360 more members.*
 
 ## Execution Flows
 
@@ -78,36 +78,36 @@ Community of 371 nodes
 
 ### Outgoing
 
-- `equal` (318 edge(s))
-- `deepEqual` (69 edge(s))
-- `strictEqual` (48 edge(s))
-- `String` (46 edge(s))
-- `Number` (43 edge(s))
-- `match` (29 edge(s))
-- `push` (28 edge(s))
+- `equal` (277 edge(s))
+- `strictEqual` (68 edge(s))
+- `deepEqual` (64 edge(s))
+- `String` (59 edge(s))
+- `step` (37 edge(s))
+- `push` (37 edge(s))
+- `Number` (37 edge(s))
+- `filter` (31 edge(s))
+- `Boolean` (28 edge(s))
 - `warn` (28 edge(s))
-- `Boolean` (27 edge(s))
+- `map` (27 edge(s))
+- `trim` (25 edge(s))
+- `match` (24 edge(s))
+- `require` (24 edge(s))
 - `toISOString` (23 edge(s))
-- `slice` (23 edge(s))
-- `includes` (23 edge(s))
-- `require` (22 edge(s))
-- `ok` (22 edge(s))
-- `replace` (22 edge(s))
 
 ### Incoming
 
-- `equal` (318 edge(s))
-- `deepEqual` (69 edge(s))
-- `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
+- `equal` (277 edge(s))
+- `./packages/shared/src/agent/coder-orchestrator.js` (77 edge(s))
+- `./packages/shared/src/linear.js` (72 edge(s))
+- `strictEqual` (68 edge(s))
+- `deepEqual` (64 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (53 edge(s))
-- `strictEqual` (48 edge(s))
-- `./packages/shared/src/agent/localization.js` (48 edge(s))
 - `./packages/shared/src/agent/llm.js` (40 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (38 edge(s))
-- `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
-- `match` (24 edge(s))
-- `ok` (22 edge(s))
+- `./packages/shared/src/agent/coder-flow.test.js` (32 edge(s))
+- `./packages/shared/src/agent/apply.js` (22 edge(s))
 - `after` (21 edge(s))
+- `match` (20 edge(s))
 - `rejects` (18 edge(s))
 - `./packages/shared/src/agent/scheduler.test.js` (18 edge(s))
 - `./packages/shared/src/agent/availability.js` (17 edge(s))

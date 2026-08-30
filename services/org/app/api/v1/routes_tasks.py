@@ -46,10 +46,10 @@ async def list_tasks(
 async def create_task(
     body: TaskCreate,
     ctx: ProjectContext = Depends(require_project(can_write_task)),
-    principal: Principal = Depends(require_org_member),
+    _principal: Principal = Depends(require_org_member),
     session: Uow = Depends(get_session),
 ):
-    return await task_service.create_task(session, principal, ctx.project, body)
+    return await task_service.create_task(session, ctx.project, body)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -94,11 +94,11 @@ async def set_task_tags(
     task_id: uuid.UUID,
     body: TaskTagsSet,
     ctx: ProjectContext = Depends(require_project(can_write_task)),
-    principal: Principal = Depends(require_org_member),
+    _principal: Principal = Depends(require_org_member),
     session: Uow = Depends(get_session),
 ):
     task = await task_service.get_task(session, ctx.project, task_id)
-    return await task_service.set_task_tags(session, principal, task, body.tag_ids)
+    return await task_service.set_task_tags(session, ctx.project, task, body.tag_ids)
 
 
 @router.delete("/{task_id}/tags/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)

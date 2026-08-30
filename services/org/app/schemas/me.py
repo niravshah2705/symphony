@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import MembershipStatus, OrgRole, ProjectRole
+from app.models.enums import MembershipStatus, OrgRole, Persona, ProjectRole
 
 
 class MeResponse(BaseModel):
@@ -15,9 +15,41 @@ class MeResponse(BaseModel):
     user_id: uuid.UUID
     email: str
     full_name: str | None = None
+    persona: Persona | None = None
     has_organization: bool
     org_id: uuid.UUID | None = None
     org_role: str | None = None
+
+
+class PersonaUpdate(BaseModel):
+    """Self-declared actor persona, captured once at onboarding."""
+
+    persona: Persona
+
+
+class LinkIdentityRequest(BaseModel):
+    """Link a second sign-in method, proven by a valid external-IdP token."""
+
+    token: str = Field(min_length=1, max_length=4096)
+
+
+class LinkedIdentityResponse(BaseModel):
+    provider: str
+    subject: str
+    linked_at: datetime
+
+
+class PendingInvitationResponse(BaseModel):
+    """A pending org/project invitation surfaced by email at first login.
+    Surfacing only — acceptance still consumes the single-use token."""
+
+    kind: str  # "org" | "project"
+    organization_id: uuid.UUID | None = None
+    organization_name: str | None = None
+    project_id: uuid.UUID | None = None
+    project_name: str | None = None
+    role: str | None = None
+    expires_at: datetime | None = None
 
 
 class PersonalProjectResponse(BaseModel):
@@ -40,6 +72,7 @@ class ContextUserResponse(BaseModel):
     id: uuid.UUID
     email: str
     full_name: str | None = None
+    persona: Persona | None = None
     is_super_admin: bool
 
 

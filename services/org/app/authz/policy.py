@@ -43,3 +43,13 @@ def can_update_project(role: ProjectRole) -> bool:
 
 def can_manage_project_tags(role: ProjectRole) -> bool:
     return role in _PROJECT_ADMINS
+
+
+def can_set_project_access_mode(role: ProjectRole) -> bool:
+    """Flip a project between INVITE_ONLY and ORG_WIDE."""
+    return role in _PROJECT_ADMINS
+
+
+def can_manage_project_collaborators(role: ProjectRole) -> bool:
+    """Invite outside individuals and grant/revoke partner-org access."""
+    return role in _PROJECT_ADMINS

@@ -79,7 +79,7 @@ Community of 199 nodes
 - **isBillingBlocked** (criticality: 0.61, depth: 4)
 - **consumeLogin** (criticality: 0.61, depth: 1)
 - **consumeLogin** (criticality: 0.61, depth: 1)
-- *... and 44 more flows.*
+- *... and 36 more flows.*
 
 ## Dependencies
 

@@ -247,7 +247,7 @@ async def test_tag_service_crud_and_attach(db_session):
     await tag_service.detach_org_tag(db_session, org_obj, tag.id)
     assert org_obj.applied_tags == []
 
-    await tag_service.attach_project_tag(db_session, admin, project, tag.id)
+    await tag_service.attach_project_tag(db_session, project, tag.id)
     assert len(project.tags) == 1
     await tag_service.detach_project_tag(db_session, project, tag.id)
     assert project.tags == []
@@ -270,7 +270,6 @@ async def test_task_service(db_session):
 
     task = await task_service.create_task(
         db_session,
-        admin,
         project,
         TaskCreate(title="T", assignee_id=dev.id, tag_ids=[tag.id]),
     )
@@ -279,7 +278,7 @@ async def test_task_service(db_session):
     # Assignee must be a project member.
     with pytest.raises(ValidationAppError):
         await task_service.create_task(
-            db_session, admin, project, TaskCreate(title="X", assignee_id=uuid.uuid4())
+            db_session, project, TaskCreate(title="X", assignee_id=uuid.uuid4())
         )
 
     fetched = await task_service.get_task(db_session, project, task.id)
@@ -295,7 +294,7 @@ async def test_task_service(db_session):
     rows, total = await task_service.list_tasks(db_session, project, PageParams(), status=TaskStatus.DONE)
     assert total == 1
 
-    await task_service.set_task_tags(db_session, admin, task, [])
+    await task_service.set_task_tags(db_session, project, task, [])
     assert task.tags == []
     await task_service.delete_task(db_session, project, task)
     with pytest.raises(NotFoundError):

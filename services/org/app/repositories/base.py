@@ -37,6 +37,14 @@ UNIQUE_LINKED_IDENTITIES = "unique_linked_identities"
 # doc id requires org_id up front). Surfacing only — accepting still goes
 # through the existing single-use token_hash flow.
 EMAIL_INVITATION_INDEX = "email_invitation_index"
+# project_owner_index/{project_id} -> {owner_org_id}. A project is stored under
+# organizations/{owner_org}/projects/{id}, so a cross-org collaborator (who
+# knows only the project id, not the owner org) cannot locate it. This flat
+# top-level index maps a project id back to its owning org so `get_project_context`
+# can resolve cross-org access without a collection-group query (the `Db`
+# abstraction has none). Maintained on org-project create/delete only; personal
+# projects (users/{owner}/projects) are never indexed.
+PROJECT_OWNER_INDEX = "project_owner_index"
 
 
 def projects_col(org_id: uuid.UUID) -> str:

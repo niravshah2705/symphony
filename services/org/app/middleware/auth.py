@@ -16,17 +16,17 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app.auth.idp import decode_idp_token, is_idp_issuer
+from app.auth.idp import decode_idp_token, idp_provider, is_idp_issuer
 from app.auth.jwt_local import decode_access_token, get_unverified_issuer
 from app.authz.principal import Principal
+from app.authz.project_access import resolve_project_access
 from app.core.database import new_uow
 from app.core.logging import get_logger
 from app.core.timeutils import ensure_aware
 from app.errors import ConflictError
 from app.models.enums import AuthProvider, OrgRole
 from app.models.user import User
-from app.repositories.base import ORGS, projects_col
-from app.repositories.membership_repo import MembershipRepository
+from app.repositories.base import ORGS
 from app.repositories.organization_membership_repo import OrganizationMembershipRepository
 from app.repositories.user_repo import UserRepository
 
@@ -139,6 +139,11 @@ class AuthContextMiddleware:
             subject = claims.get("sub")
             user = await repo.get_by_external_subject(str(subject)) if subject else None
             if user is None and subject is not None:
+                # A person who added this as a SECONDARY sign-in method resolves
+                # to their existing account (identity dedup) rather than getting a
+                # brand-new org-less user.
+                user = await repo.get_by_linked_identity(idp_provider(claims), str(subject))
+            if user is None and subject is not None:
                 user = await self._provision_external_user(repo, claims, str(subject))
         else:
             claims = decode_access_token(token)
@@ -214,12 +219,19 @@ class AuthContextMiddleware:
             project_id = uuid.UUID(selected_header)
         except (TypeError, ValueError):
             raise _ContextFailure()
-        if org_id is None or await uow.get(projects_col(org_id), str(project_id)) is None:
+        # Validate the selected project through the SAME resolver the route
+        # guards use, so a project the caller can reach cross-org (external grant
+        # or cross-org membership) is selectable, and an inaccessible one is a
+        # context failure — never an existence oracle.
+        ctx = await resolve_project_access(
+            uow,
+            user_id=user_id,
+            org_id=org_id,
+            org_role=org_role,
+            project_id=project_id,
+        )
+        if ctx is None:
             raise _ContextFailure()
-        if org_role != OrgRole.ORG_ADMIN:
-            project_membership = await MembershipRepository(uow).get(org_id, project_id, user_id)
-            if project_membership is None:
-                raise _ContextFailure()
         return project_id
 
     async def _load_local_user(self, repo: UserRepository, subject) -> User | None:  # type: ignore[no-untyped-def]

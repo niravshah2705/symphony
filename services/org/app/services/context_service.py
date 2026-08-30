@@ -75,6 +75,7 @@ async def get_context(session: Uow, principal: Principal, user: User) -> MeConte
             id=user.id,
             email=user.email,
             full_name=user.full_name,
+            persona=user.persona,
             is_super_admin=user.is_super_admin,
         ),
         organizations=organizations,
