@@ -58,6 +58,7 @@ async def get_context(session: Uow, principal: Principal, user: User) -> MeConte
             ContextOrganizationResponse(
                 id=org.id,
                 name=org.name,
+                parent_org_id=org.parent_org_id,
                 membership_id=membership.id,
                 role=membership.role,
                 status=membership.status,
@@ -75,6 +76,7 @@ async def get_context(session: Uow, principal: Principal, user: User) -> MeConte
             id=user.id,
             email=user.email,
             full_name=user.full_name,
+            persona=user.persona,
             is_super_admin=user.is_super_admin,
         ),
         organizations=organizations,

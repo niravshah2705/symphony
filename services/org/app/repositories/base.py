@@ -24,6 +24,27 @@ UNIQUE_EXTERNAL_SUBJECTS = "unique_external_subjects"
 USER_ORG_LOCKS = "user_org_locks"
 INVITATION_TOKENS = "organization_invitation_tokens"
 PENDING_INVITATIONS = "organization_pending_invitations"
+# Guard collections for ProjectInvitation, mirroring INVITATION_TOKENS /
+# PENDING_INVITATIONS one level down (project-scoped rather than org-scoped).
+PROJECT_INVITATION_TOKENS = "project_invitation_tokens"
+PROJECT_PENDING_INVITATIONS = "project_pending_invitations"
+# Guard-doc collection for LinkedIdentity uniqueness, keyed `{provider}:{subject}`
+# -> {user_id}, mirroring the UNIQUE_EXTERNAL_SUBJECTS atomic-uniqueness pattern.
+UNIQUE_LINKED_IDENTITIES = "unique_linked_identities"
+# email_invitation_index/{sha256(email)} -> {entries: [...]}. Lets first-login
+# provisioning discover any pending org/project invitation for an email
+# without already knowing the org_id (unlike PENDING_INVITATIONS, whose guard
+# doc id requires org_id up front). Surfacing only — accepting still goes
+# through the existing single-use token_hash flow.
+EMAIL_INVITATION_INDEX = "email_invitation_index"
+# project_owner_index/{project_id} -> {owner_org_id}. A project is stored under
+# organizations/{owner_org}/projects/{id}, so a cross-org collaborator (who
+# knows only the project id, not the owner org) cannot locate it. This flat
+# top-level index maps a project id back to its owning org so `get_project_context`
+# can resolve cross-org access without a collection-group query (the `Db`
+# abstraction has none). Maintained on org-project create/delete only; personal
+# projects (users/{owner}/projects) are never indexed.
+PROJECT_OWNER_INDEX = "project_owner_index"
 
 
 def projects_col(org_id: uuid.UUID) -> str:
@@ -59,6 +80,14 @@ def user_organizations_col(user_id: uuid.UUID) -> str:
 
 def invitations_col(org_id: uuid.UUID) -> str:
     return f"{ORGS}/{org_id}/invitations"
+
+
+def project_invitations_col(org_id: uuid.UUID, project_id: uuid.UUID) -> str:
+    return f"{ORGS}/{org_id}/projects/{project_id}/invitations"
+
+
+def project_external_grants_col(org_id: uuid.UUID, project_id: uuid.UUID) -> str:
+    return f"{ORGS}/{org_id}/projects/{project_id}/external_grants"
 
 
 async def paginate(

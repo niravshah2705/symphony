@@ -21,11 +21,11 @@ Community of 12 nodes
 | test:fixed language groups mark, but never auto-apply, the IP recommendation@L184 | Test | ./e2e/page-loading.spec.js | 184-219 |
 | test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221 | Test | ./e2e/page-loading.spec.js | 221-475 |
 | authorizedJson | Function | ./e2e/page-loading.spec.js | 242-248 |
-| test:authenticated users without an organization route to onboarding before workspace requests@L477 | Test | ./e2e/page-loading.spec.js | 477-548 |
-| test:Settings Policy uses the active native project and selected-context roles@L550 | Test | ./e2e/page-loading.spec.js | 550-612 |
-| test:selected organization admins can open scoped policy without global settings write@L614 | Test | ./e2e/page-loading.spec.js | 614-655 |
-| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L657 | Test | ./e2e/page-loading.spec.js | 657-706 |
-| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L708 | Test | ./e2e/page-loading.spec.js | 708-731 |
+| test:authenticated users without an organization route to onboarding before workspace requests@L477 | Test | ./e2e/page-loading.spec.js | 477-551 |
+| test:Settings Policy uses the active native project and selected-context roles@L553 | Test | ./e2e/page-loading.spec.js | 553-615 |
+| test:selected organization admins can open scoped policy without global settings write@L617 | Test | ./e2e/page-loading.spec.js | 617-658 |
+| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660 | Test | ./e2e/page-loading.spec.js | 660-709 |
+| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L711 | Test | ./e2e/page-loading.spec.js | 711-734 |
 
 ## Execution Flows
 

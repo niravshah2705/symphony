@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 431 nodes
+Community of 386 nodes
 
-- **Size**: 431 nodes
-- **Cohesion**: 0.2896
+- **Size**: 386 nodes
+- **Cohesion**: 0.2897
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 431 nodes
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
 
-*... and 381 more members.*
+*... and 336 more members.*
 
 ## Execution Flows
 
@@ -82,36 +82,36 @@ Community of 431 nodes
 
 ### Outgoing
 
-- `equal` (259 edge(s))
-- `join` (140 edge(s))
-- `String` (86 edge(s))
+- `equal` (213 edge(s))
+- `join` (137 edge(s))
+- `String` (82 edge(s))
 - `includes` (76 edge(s))
-- `deepEqual` (52 edge(s))
 - `strictEqual` (50 edge(s))
-- `isArray` (48 edge(s))
-- `trim` (45 edge(s))
-- `map` (42 edge(s))
-- `slice` (39 edge(s))
+- `isArray` (44 edge(s))
+- `deepEqual` (44 edge(s))
+- `trim` (43 edge(s))
 - `endsWith` (39 edge(s))
+- `slice` (37 edge(s))
 - `execFileSync` (37 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `throws` (34 edge(s))
 - `step` (34 edge(s))
+- `map` (31 edge(s))
+- `throws` (30 edge(s))
 
 ### Incoming
 
-- `equal` (258 edge(s))
+- `equal` (212 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
 - `join` (65 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (56 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (54 edge(s))
 - `strictEqual` (50 edge(s))
-- `deepEqual` (50 edge(s))
+- `deepEqual` (42 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `throws` (34 edge(s))
-- `match` (27 edge(s))
+- `throws` (30 edge(s))
 - `./packages/shared/src/agent/framework.js` (26 edge(s))
 - `execFileSync` (26 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
-- `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/settings-policy.js` (24 edge(s))
+- `./packages/shared/src/agent/coder.js` (22 edge(s))
+- `tmpdir` (20 edge(s))

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 200 nodes
+Community of 199 nodes
 
-- **Size**: 200 nodes
-- **Cohesion**: 0.1953
+- **Size**: 199 nodes
+- **Cohesion**: 0.1986
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 200 nodes
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 | billingStatus | Function | ./packages/shared-core/src/billing/gate.js | 13-33 |
 
-*... and 150 more members.*
+*... and 149 more members.*
 
 ## Execution Flows
 
@@ -79,21 +79,21 @@ Community of 200 nodes
 - **isBillingBlocked** (criticality: 0.61, depth: 4)
 - **consumeLogin** (criticality: 0.61, depth: 1)
 - **consumeLogin** (criticality: 0.61, depth: 1)
-- *... and 44 more flows.*
+- *... and 35 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (83 edge(s))
+- `equal` (78 edge(s))
 - `String` (27 edge(s))
-- `filter` (26 edge(s))
+- `filter` (25 edge(s))
 - `includes` (23 edge(s))
 - `isArray` (23 edge(s))
 - `set` (18 edge(s))
 - `slice` (18 edge(s))
 - `trim` (18 edge(s))
-- `toISOString` (18 edge(s))
+- `toISOString` (17 edge(s))
 - `call` (16 edge(s))
 - `isFinite` (15 edge(s))
 - `find` (15 edge(s))
@@ -104,7 +104,7 @@ Community of 200 nodes
 ### Incoming
 
 - `./packages/shared-core/src/store.js` (182 edge(s))
-- `equal` (83 edge(s))
+- `equal` (78 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))

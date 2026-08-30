@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 8 nodes
+Community of 12 nodes
 
-- **Size**: 8 nodes
-- **Cohesion**: 0.1118
+- **Size**: 12 nodes
+- **Cohesion**: 0.1141
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,13 +15,17 @@ Community of 8 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | json | Function | ./e2e/organization-flow.spec.js | 9-11 |
-| makeOrgState | Function | ./e2e/organization-flow.spec.js | 16-27 |
-| createStateOrg | Function | ./e2e/organization-flow.spec.js | 29-40 |
-| organizationIdFor | Function | ./e2e/organization-flow.spec.js | 42-47 |
-| installStubs | Function | ./e2e/organization-flow.spec.js | 49-189 |
-| page1 | Function | ./e2e/organization-flow.spec.js | 85-85 |
-| test:user creates orgs and projects, then manages pending invitations@L191 | Test | ./e2e/organization-flow.spec.js | 191-248 |
-| test:fragment invitation requires an explicit accept and refreshes selectable context@L250 | Test | ./e2e/organization-flow.spec.js | 250-275 |
+| makeOrgState | Function | ./e2e/organization-flow.spec.js | 16-30 |
+| createStateOrg | Function | ./e2e/organization-flow.spec.js | 32-43 |
+| organizationIdFor | Function | ./e2e/organization-flow.spec.js | 45-50 |
+| installStubs | Function | ./e2e/organization-flow.spec.js | 52-252 |
+| page1 | Function | ./e2e/organization-flow.spec.js | 88-88 |
+| test:user creates orgs and projects, then manages pending invitations@L254 | Test | ./e2e/organization-flow.spec.js | 254-311 |
+| test:fragment invitation requires an explicit accept and refreshes selectable context@L313 | Test | ./e2e/organization-flow.spec.js | 313-338 |
+| test:captures a persona at onboarding and reflects it after reload@L340 | Test | ./e2e/organization-flow.spec.js | 340-362 |
+| test:manages a project access mode, outside collaborators, and partner-org grants@L364 | Test | ./e2e/organization-flow.spec.js | 364-403 |
+| test@L376 | Test | ./e2e/organization-flow.spec.js | 376-376 |
+| test@L377 | Test | ./e2e/organization-flow.spec.js | 377-377 |
 
 ## Execution Flows
 
@@ -31,36 +35,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (22 edge(s))
-- `route` (16 edge(s))
-- `getByRole` (12 edge(s))
-- `toBeVisible` (9 edge(s))
-- `click` (9 edge(s))
-- `method` (8 edge(s))
-- `request` (8 edge(s))
-- `push` (6 edge(s))
-- `postDataJSON` (6 edge(s))
-- `url` (6 edge(s))
-- `locator` (6 edge(s))
-- `getByPlaceholder` (6 edge(s))
-- `fill` (5 edge(s))
-- `fulfill` (4 edge(s))
-- `toBe` (4 edge(s))
+- `expect` (30 edge(s))
+- `route` (22 edge(s))
+- `getByRole` (18 edge(s))
+- `method` (17 edge(s))
+- `request` (15 edge(s))
+- `postDataJSON` (15 edge(s))
+- `toBeVisible` (14 edge(s))
+- `click` (14 edge(s))
+- `url` (11 edge(s))
+- `locator` (11 edge(s))
+- `push` (9 edge(s))
+- `match` (8 edge(s))
+- `getByText` (8 edge(s))
+- `getByPlaceholder` (8 edge(s))
+- `fill` (7 edge(s))
 
 ### Incoming
 
-- `expect` (22 edge(s))
-- `getByRole` (12 edge(s))
-- `toBeVisible` (9 edge(s))
-- `click` (9 edge(s))
-- `./e2e/organization-flow.spec.js` (8 edge(s))
-- `locator` (6 edge(s))
-- `getByPlaceholder` (6 edge(s))
-- `fill` (5 edge(s))
-- `url` (4 edge(s))
-- `toBe` (4 edge(s))
-- `getByText` (4 edge(s))
-- `on` (3 edge(s))
-- `all` (3 edge(s))
-- `waitForNavigation` (3 edge(s))
-- `method` (2 edge(s))
+- `expect` (30 edge(s))
+- `getByRole` (18 edge(s))
+- `toBeVisible` (14 edge(s))
+- `click` (14 edge(s))
+- `locator` (11 edge(s))
+- `./e2e/organization-flow.spec.js` (10 edge(s))
+- `getByText` (8 edge(s))
+- `getByPlaceholder` (8 edge(s))
+- `fill` (7 edge(s))
+- `method` (6 edge(s))
+- `url` (6 edge(s))
+- `on` (5 edge(s))
+- `postDataJSON` (5 edge(s))
+- `toEqual` (5 edge(s))
+- `addInitScript` (4 edge(s))

@@ -39,6 +39,9 @@ function normalizeOrganization(value) {
     id,
     name: boundedText(value.name || value.org_name || value.organization_name) || id,
     role: boundedText(value.role, 80),
+    // Parent org id for sub-org hierarchy (null for top-level orgs). Lets the
+    // account picker render a "sub-org of X" hint when the parent is also listed.
+    parentOrgId: boundedId(value.parent_org_id || value.parentOrgId) || null,
     projects,
   };
 }
@@ -57,6 +60,9 @@ export function normalizeWorkspaceContext(payload, fallbackUser = {}) {
       sourceUser.full_name || sourceUser.name || sourceUser.display_name ||
       fallbackUser.full_name || fallbackUser.name || fallbackUser.displayName
     ),
+    // Self-declared actor persona (ENGINEER / CLIENT / ORG_MANAGER); null until
+    // captured at onboarding. Drives persona-aware UI (e.g. client brainstorm-only).
+    persona: boundedText(sourceUser.persona || fallbackUser.persona, 40) || null,
   };
   const seen = new Set();
   const organizations = (Array.isArray(body.organizations)

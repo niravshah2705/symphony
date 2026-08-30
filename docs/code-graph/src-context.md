@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 155 nodes
+Community of 156 nodes
 
-- **Size**: 155 nodes
-- **Cohesion**: 0.3460
+- **Size**: 156 nodes
+- **Cohesion**: 0.3474
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 155 nodes
 | items | Function | ./services/gateway/src/context-validator.js | 8-10 |
 | itemId | Function | ./services/gateway/src/context-validator.js | 12-14 |
 
-*... and 105 more members.*
+*... and 106 more members.*
 
 ## Execution Flows
 
@@ -76,7 +76,7 @@ Community of 155 nodes
 
 ### Outgoing
 
-- `equal` (135 edge(s))
+- `equal` (140 edge(s))
 - `deepEqual` (48 edge(s))
 - `trim` (37 edge(s))
 - `String` (30 edge(s))
@@ -94,7 +94,7 @@ Community of 155 nodes
 
 ### Incoming
 
-- `equal` (135 edge(s))
+- `equal` (140 edge(s))
 - `./services/gateway/src/index.js` (79 edge(s))
 - `deepEqual` (48 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
@@ -105,7 +105,7 @@ Community of 155 nodes
 - `throws` (14 edge(s))
 - `./services/gateway/src/config-resolver.test.js` (11 edge(s))
 - `rejects` (11 edge(s))
+- `./services/gateway/src/context-validator.test.js` (10 edge(s))
 - `./services/gateway/src/request-context.test.js` (10 edge(s))
 - `handler` (9 edge(s))
 - `push` (9 edge(s))
-- `./services/gateway/src/context-validator.test.js` (9 edge(s))

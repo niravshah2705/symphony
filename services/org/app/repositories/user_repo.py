@@ -6,15 +6,22 @@ from __future__ import annotations
 import uuid
 
 from app.core.database import Uow
+from app.core.timeutils import utcnow
 from app.errors import ConflictError
 from app.models.enums import AuthProvider
-from app.models.user import User
+from app.models.user import LinkedIdentity, User
 from app.repositories.base import (
     UNIQUE_EMAILS,
     UNIQUE_EXTERNAL_SUBJECTS,
+    UNIQUE_LINKED_IDENTITIES,
     USERS,
 )
 from app.schemas.common import PageParams
+
+
+def linked_identity_id(provider: str, subject: str) -> str:
+    """Guard-doc id for a linked identity — ``{provider}:{subject}``."""
+    return f"{provider}:{subject}"
 
 
 class UserRepository:
@@ -40,6 +47,40 @@ class UserRepository:
             limit=1,
         )
         return self.uow.track(USERS, User.from_doc(rows[0])) if rows else None
+
+    async def get_by_linked_identity(self, provider: str, subject: str) -> User | None:
+        """Resolve a user via a SECONDARY (linked) sign-in method. Complements
+        ``get_by_external_subject`` (the primary identity) so a person who added
+        a second provider is recognized as the same account."""
+        index = await self.uow.get(UNIQUE_LINKED_IDENTITIES, linked_identity_id(provider, subject))
+        if not index:
+            return None
+        try:
+            user_id = uuid.UUID(str(index["user_id"]))
+        except (KeyError, TypeError, ValueError):
+            return None
+        return await self.get_by_id(user_id)
+
+    async def link_identity(self, user: User, provider: str, subject: str) -> LinkedIdentity:
+        """Attach an additional sign-in method to ``user``.
+
+        The ``{provider}:{subject}`` uniqueness guard (create-if-absent) makes
+        the same identity impossible to attach to two users. Also rejects a
+        subject already claimed as a primary ``external_subject`` to keep the two
+        identity spaces disjoint.
+        """
+        if await self.get_by_external_subject(subject) is not None:
+            raise ConflictError("Identity already registered")
+        if not await self.uow.db.create(
+            UNIQUE_LINKED_IDENTITIES,
+            linked_identity_id(provider, subject),
+            {"user_id": str(user.id)},
+        ):
+            raise ConflictError("Identity already linked")
+        identity = LinkedIdentity(provider=provider, subject=subject)
+        user.linked_identities = [*user.linked_identities, identity]
+        user.updated_at = utcnow()
+        return identity
 
     async def get_super_admin(self) -> User | None:
         rows = await self.uow.query(USERS, [("is_super_admin", True)], limit=1)

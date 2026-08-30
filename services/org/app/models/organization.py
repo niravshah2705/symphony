@@ -37,6 +37,15 @@ class Organization:
     # Tags applied to the org entity. This is the source of truth; the repository
     # hydrates it on load and to_doc persists it as an id array.
     applied_tags: list["Tag"] = field(default_factory=list, compare=False, repr=False)
+    # Verified corporate email domains owned by this org (a company may own
+    # more than one, e.g. acme.com and acme.io).
+    domains: list[str] = field(default_factory=list)
+    # Self-referential, nullable parent org id. None (the common case) means a
+    # top-level org; set to enable a sub-org hierarchy. `Project.org_id` already
+    # points at any `Organization` doc, so hierarchy composes for free through
+    # that existing FK — no further change needed for a project to belong to a
+    # sub-org.
+    parent_org_id: uuid.UUID | None = None
 
     def __post_init__(self) -> None:
         # Derive the deployment slug once from the org id when absent. from_doc
@@ -56,12 +65,15 @@ class Organization:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "applied_tag_ids": [uuid_str(t.id) for t in self.applied_tags],
+            "domains": self.domains,
+            "parent_org_id": uuid_str(self.parent_org_id),
         }
 
     @classmethod
     def from_doc(cls, doc: dict) -> "Organization":
         # applied_tags is hydrated by the repository from doc["applied_tag_ids"].
         deployments = doc.get("deployments")
+        domains = doc.get("domains")
         return cls(
             id=to_uuid(doc["id"]),
             name=doc.get("name", ""),
@@ -69,6 +81,8 @@ class Organization:
             slug=doc.get("slug", ""),
             deployment_slug=doc.get("deployment_slug", ""),
             deployments=deployments if isinstance(deployments, dict) else {},
+            domains=list(domains) if isinstance(domains, list) else [],
+            parent_org_id=to_uuid(doc.get("parent_org_id")),
             created_at=doc.get("created_at") or utcnow(),
             updated_at=doc.get("updated_at") or utcnow(),
         )

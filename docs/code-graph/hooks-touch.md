@@ -4,20 +4,23 @@
 
 ## Overview
 
-Community of 4 nodes
+Community of 7 nodes
 
-- **Size**: 4 nodes
-- **Cohesion**: 0.1333
+- **Size**: 7 nodes
+- **Cohesion**: 0.1538
 - **Dominant Language**: python
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| touch | Function | ./.claude/hooks/crg-before-grep.py | 39-43 |
-| repo_root_for | Function | ./.claude/hooks/crg-before-grep.py | 46-57 |
-| is_broad_source_grep | Function | ./.claude/hooks/crg-before-grep.py | 60-70 |
-| main | Function | ./.claude/hooks/crg-before-grep.py | 73-106 |
+| touch | Function | ./.claude/hooks/crg-before-grep.py | 30-34 |
+| repo_root_for | Function | ./.claude/hooks/crg-before-grep.py | 37-47 |
+| statements | Function | ./.claude/hooks/crg-before-grep.py | 50-52 |
+| stages | Function | ./.claude/hooks/crg-before-grep.py | 55-57 |
+| cmd_name | Function | ./.claude/hooks/crg-before-grep.py | 60-62 |
+| classify | Function | ./.claude/hooks/crg-before-grep.py | 65-125 |
+| main | Function | ./.claude/hooks/crg-before-grep.py | 128-158 |
 
 ## Execution Flows
 
@@ -27,22 +30,22 @@ No execution flows pass through this community.
 
 ### Outgoing
 
+- `search` (5 edge(s))
 - `get` (4 edge(s))
-- `search` (3 edge(s))
+- `strip` (4 edge(s))
+- `split` (3 edge(s))
+- `enumerate` (1 edge(s))
 - `findall` (1 edge(s))
 - `all` (1 edge(s))
 - `lower` (1 edge(s))
+- `len` (1 edge(s))
+- `match` (1 edge(s))
+- `group` (1 edge(s))
 - `load` (1 edge(s))
 - `getcwd` (1 edge(s))
 - `sub` (1 edge(s))
 - `join` (1 edge(s))
-- `isfile` (1 edge(s))
-- `exists` (1 edge(s))
-- `print` (1 edge(s))
-- `run` (1 edge(s))
-- `strip` (1 edge(s))
-- `close` (1 edge(s))
 
 ### Incoming
 
-- `./.claude/hooks/crg-before-grep.py` (5 edge(s))
+- `./.claude/hooks/crg-before-grep.py` (8 edge(s))

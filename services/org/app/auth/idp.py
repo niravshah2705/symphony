@@ -40,6 +40,17 @@ def is_idp_issuer(issuer: str | None) -> bool:
     return bool(settings.idp_enabled and issuer and issuer == settings.idp_issuer)
 
 
+def idp_provider(claims: dict) -> str:
+    """Stable provider label for a linked identity — the Firebase
+    ``sign_in_provider`` (e.g. ``google.com``, ``microsoft.com``) when present,
+    else the issuer. Single source of truth shared by the auth middleware's dedup
+    lookup and the account-linking flow so the two always agree on the label."""
+    firebase = claims.get("firebase")
+    if isinstance(firebase, dict) and firebase.get("sign_in_provider"):
+        return str(firebase["sign_in_provider"])
+    return str(claims.get("iss") or "external")
+
+
 def decode_idp_token(token: str) -> dict:
     """Verify and decode an external IdP token. Raises jwt.PyJWTError on failure."""
     settings = get_settings()

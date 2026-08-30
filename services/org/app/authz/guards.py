@@ -8,27 +8,27 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 
 from fastapi import Depends
 
 from app.auth.dependencies import get_principal
 from app.authz.policy import is_org_admin
 from app.authz.principal import Principal
+from app.authz.project_access import ProjectContext, resolve_project_access
 from app.core.database import Uow, get_session
 from app.errors import ForbiddenError, NotFoundError
 from app.models.enums import ProjectRole
-from app.models.project import Project
-from app.repositories.membership_repo import MembershipRepository
-from app.repositories.project_repo import ProjectRepository
 
-
-@dataclass(frozen=True)
-class ProjectContext:
-    """A project the caller may access, plus their effective role on it."""
-
-    project: Project
-    role: ProjectRole
+# ProjectContext is defined in project_access (shared with the auth middleware);
+# re-exported here so routes keep importing it from app.authz.guards.
+__all__ = [
+    "ProjectContext",
+    "require_super_admin",
+    "require_org_admin",
+    "require_org_member",
+    "get_project_context",
+    "require_project",
+]
 
 
 def require_super_admin(principal: Principal = Depends(get_principal)) -> Principal:
@@ -55,34 +55,28 @@ async def get_project_context(
     principal: Principal = Depends(get_principal),
     session: Uow = Depends(get_session),
 ) -> ProjectContext:
-    """Load a project scoped to the caller's org and resolve the effective role.
+    """Resolve the caller's effective role on a project (own-org or cross-org).
 
-    404 when the project is not in the caller's org or the caller has no
-    membership (no existence oracle). ORG_ADMIN is elevated to PROJECT_ADMIN.
+    404 (no existence oracle) when the caller has no access. Same-org resolution
+    (ORG_ADMIN → PROJECT_ADMIN, explicit membership, ORG_WIDE) and cross-org
+    resolution (external grant / cross-org membership) both live in
+    ``resolve_project_access``.
     """
-    if principal.org_id is None:
-        raise NotFoundError("Project not found")
-
     # An explicit validated project selection narrows the request. A caller may
-    # not select one project and operate on another path id in the same org.
+    # not select one project and operate on another path id.
     if principal.project_id is not None and principal.project_id != project_id:
         raise NotFoundError("Project not found")
 
-    # Path-scoped read: organizations/{caller_org}/projects/{id} — a project in
-    # another org is unreachable, not merely filtered.
-    project = await ProjectRepository(session).get(project_id, principal.org_id)
-    if project is None:
-        raise NotFoundError("Project not found")
-
-    if is_org_admin(principal):
-        return ProjectContext(project=project, role=ProjectRole.PROJECT_ADMIN)
-
-    membership = await MembershipRepository(session).get(
-        principal.org_id, project_id, principal.user_id
+    ctx = await resolve_project_access(
+        session,
+        user_id=principal.user_id,
+        org_id=principal.org_id,
+        org_role=principal.org_role,
+        project_id=project_id,
     )
-    if membership is None:
+    if ctx is None:
         raise NotFoundError("Project not found")
-    return ProjectContext(project=project, role=membership.role)
+    return ctx
 
 
 def require_project(
