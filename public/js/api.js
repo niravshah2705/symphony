@@ -574,6 +574,16 @@ export const api = {
     updatePersonalProject: (id, payload) =>
       request(`/org/me/projects/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     deletePersonalProject: (id) => request(`/org/me/projects/${id}`, { method: 'DELETE' }),
+    // Self-declared actor persona (engineer / client / org-manager), captured
+    // once at onboarding.
+    setPersona: (persona) =>
+      request('/org/me/persona', { method: 'PUT', body: JSON.stringify({ persona }) }),
+    // Pending org/project invitations addressed to the caller's email (surfacing
+    // only — acceptance still consumes the emailed single-use token).
+    listPendingInvitations: () => request('/org/me/pending-invitations'),
+    // Link a second sign-in method, proven by a second IdP token.
+    linkIdentity: (token) =>
+      request('/org/me/linked-identities', { method: 'POST', body: JSON.stringify({ token }) }),
 
     // Organization tenant surface — /api/org/*
     getCurrentOrganization: () => request('/org/organizations/current'),
@@ -595,6 +605,26 @@ export const api = {
       request(`/org/projects/${projectId}/members`, { method: 'POST', body: JSON.stringify(payload) }),
     removeProjectMember: (projectId, userId) =>
       request(`/org/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
+
+    // Project access mode: INVITE_ONLY (default) vs ORG_WIDE (every org member).
+    setProjectAccessMode: (projectId, accessMode) =>
+      request(`/org/projects/${projectId}/access-mode`, {
+        method: 'PATCH', body: JSON.stringify({ access_mode: accessMode }),
+      }),
+    // Per-project invitations for a single outside-domain individual.
+    listProjectInvitations: (projectId) => request(`/org/projects/${projectId}/invitations`),
+    createProjectInvitation: (projectId, payload) =>
+      request(`/org/projects/${projectId}/invitations`, { method: 'POST', body: JSON.stringify(payload) }),
+    revokeProjectInvitation: (projectId, invitationId) =>
+      request(`/org/projects/${projectId}/invitations/${encodeURIComponent(invitationId)}`, { method: 'DELETE' }),
+    acceptProjectInvitation: (token) =>
+      request('/org/project-invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
+    // External-org grants: hand a whole project to a partner org (outsourcing).
+    listExternalGrants: (projectId) => request(`/org/projects/${projectId}/external-grants`),
+    createExternalGrant: (projectId, payload) =>
+      request(`/org/projects/${projectId}/external-grants`, { method: 'POST', body: JSON.stringify(payload) }),
+    revokeExternalGrant: (projectId, collaboratorOrgId) =>
+      request(`/org/projects/${projectId}/external-grants/${encodeURIComponent(collaboratorOrgId)}`, { method: 'DELETE' }),
   },
 
   // Settings-policy service (services/settings via /api/settings-policy/*). Stores

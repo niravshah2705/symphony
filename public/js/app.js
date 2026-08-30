@@ -589,12 +589,18 @@ function renderAuthControl() {
     ]),
     el('span', { class: 'account-context-chevron', 'aria-hidden': 'true' }, '⌄'),
   ]);
+  const persona = context.user?.persona || '';
+  const personaBadge = persona
+    ? el('span', { class: 'badge', title: 'Your self-declared role' },
+        persona.charAt(0) + persona.slice(1).toLowerCase().replace('_', ' '))
+    : null;
   const panel = el('div', { class: 'account-context-panel' });
   panel.append(el('div', { class: 'account-context-identity' }, [
     el('span', { class: 'avatar', 'aria-hidden': 'true' }, initials(label)),
     el('span', { class: 'account-context-identity-copy' }, [
       el('strong', { dataset: { userContent: 'true' } }, label),
       email ? el('small', { dataset: { userContent: 'true' } }, email) : null,
+      personaBadge,
     ]),
   ]));
 
@@ -613,12 +619,17 @@ function renderAuthControl() {
     if (!context.organizations.length) {
       organizationSelect.append(el('option', { value: '', selected: true }, t('noOrganization')));
     } else {
+      // Sub-org awareness: when an org's parent is also one the user belongs to,
+      // label it as a sub-org so the hierarchy is legible in the flat picker.
+      const namesById = new Map(context.organizations.map((o) => [o.id, o.name]));
       for (const item of context.organizations) {
+        const parentName = item.parentOrgId ? namesById.get(item.parentOrgId) : '';
+        const optionLabel = parentName ? `${item.name} — sub-org of ${parentName}` : item.name;
         organizationSelect.append(el('option', {
           value: item.id,
           selected: item.id === context.organizationId,
           dataset: { userContent: 'true' },
-        }, item.name));
+        }, optionLabel));
       }
     }
     organizationSelect.addEventListener('change', () => {

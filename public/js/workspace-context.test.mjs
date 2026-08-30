@@ -19,23 +19,32 @@ function memoryStorage() {
 }
 
 const context = normalizeWorkspaceContext({
-  user: { id: 'user-1', email: 'ada@example.com', full_name: 'Ada Operator' },
+  user: { id: 'user-1', email: 'ada@example.com', full_name: 'Ada Operator', persona: 'ENGINEER' },
   organizations: [
     { id: 'org-a', name: 'Alpha', role: 'ORG_ADMIN', projects: [
       { id: 'project-a1', name: 'Atlas', role: 'PROJECT_ADMIN' },
       { id: 'project-a2', name: 'Apollo', role: 'DEVELOPER' },
     ] },
-    { org_id: 'org-b', org_name: 'Beta', projects: [
+    { org_id: 'org-b', org_name: 'Beta', parent_org_id: 'org-a', projects: [
       { project_id: 'project-b1', project_name: 'Beacon' },
     ] },
   ],
 });
 
 test('normalizes the context contract and tolerated snake-case identifiers', () => {
-  assert.deepEqual(context.user, { id: 'user-1', email: 'ada@example.com', fullName: 'Ada Operator' });
+  assert.deepEqual(context.user, {
+    id: 'user-1', email: 'ada@example.com', fullName: 'Ada Operator', persona: 'ENGINEER',
+  });
   assert.equal(context.organizations[1].id, 'org-b');
   assert.equal(context.organizations[1].name, 'Beta');
   assert.equal(context.organizations[1].projects[0].id, 'project-b1');
+});
+
+test('carries persona and sub-org parent id, defaulting to null when absent', () => {
+  assert.equal(context.organizations[1].parentOrgId, 'org-a'); // sub-org of Alpha
+  assert.equal(context.organizations[0].parentOrgId, null);    // top-level org
+  const orgless = normalizeWorkspaceContext({ user: { id: 'u', email: 'e@x.com' } });
+  assert.equal(orgless.user.persona, null);
 });
 
 test('stale choices fall back to the first accessible organization and project', () => {

@@ -3,17 +3,26 @@ import { el, clear } from '../dom.js';
 import { t } from '../i18n.js';
 
 export function invitationTokenFromHash(hash = window.location.hash) {
+  return parseInvitationHash(hash).token;
+}
+
+// Parse #/invite?token=…&kind=org|project. `kind` selects the accept endpoint —
+// a project invitation grants access to one project, an org invitation to the org.
+export function parseInvitationHash(hash = window.location.hash) {
   const match = String(hash || '').match(/^#\/invite(?:\?([^#]*))?$/);
-  if (!match) return '';
+  if (!match) return { token: '', kind: 'org' };
   try {
-    return new URLSearchParams(match[1] || '').get('token')?.trim() || '';
+    const params = new URLSearchParams(match[1] || '');
+    const token = params.get('token')?.trim() || '';
+    const kind = params.get('kind') === 'project' ? 'project' : 'org';
+    return { token, kind };
   } catch (_) {
-    return '';
+    return { token: '', kind: 'org' };
   }
 }
 
 export async function renderInvitation(view) {
-  const token = invitationTokenFromHash();
+  const { token, kind } = parseInvitationHash();
   clear(view);
   const status = el('p', { class: 'auth-copy', role: 'status' },
     token ? t('invitationBody') : t('invalidInvitation'));
@@ -29,7 +38,9 @@ export async function renderInvitation(view) {
     accept.textContent = t('acceptingInvitation');
     status.textContent = t('acceptingInvitation');
     try {
-      await api.org.acceptInvitation(token);
+      await (kind === 'project'
+        ? api.org.acceptProjectInvitation(token)
+        : api.org.acceptInvitation(token));
       // Remove the sensitive fragment from browser history before the post-accept
       // reload refreshes accessible context. The token never enters location.search.
       window.history.replaceState(null, '', '#/organization');

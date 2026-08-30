@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 425 nodes
+Community of 376 nodes
 
-- **Size**: 425 nodes
-- **Cohesion**: 0.2902
+- **Size**: 376 nodes
+- **Cohesion**: 0.2900
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,10 +18,6 @@ Community of 425 nodes
 | test:coder results report the broker branch after an automatic retry rotation@L77 | Test | ./packages/shared/src/agent/coder-flow.test.js | 77-81 |
 | test:planned coder results export the broker-authoritative artifact receipt@L83 | Test | ./packages/shared/src/agent/coder-flow.test.js | 83-94 |
 | test:proxied coding isolates DeepAgent shell and developer-tool contexts@L440 | Test | ./packages/shared/src/agent/coder-flow.test.js | 440-486 |
-| test:recordStackLink persists the link and recovers the blocker identifier@L952 | Test | ./packages/shared/src/agent/coder-flow.test.js | 952-973 |
-| test:recordStackLink is a no-op when the run was not stacked@L975 | Test | ./packages/shared/src/agent/coder-flow.test.js | 975-984 |
-| resolveRole | Function | ./packages/shared/src/agent/coder-orchestrator.js | 363-372 |
-| recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 689-709 |
 | buildTicketPrompt | Function | ./packages/shared/src/agent/coder.js | 42-76 |
 | isCoderLlmUsable | Function | ./packages/shared/src/agent/coder.js | 79-84 |
 | assertOpenSweRepositoryProvider | Function | ./packages/shared/src/agent/coder.js | 86-93 |
@@ -64,8 +60,12 @@ Community of 425 nodes
 | normalizeFsToolArgs | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 41-49 |
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
+| test:remaps aliases for write_file and edit_file too@L21 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 21-30 |
+| test:honors alias priority: prefers `path` over lower-priority keys@L32 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 32-35 |
+| test:leaves a correct call untouched (same reference, no rewrite)@L37 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 37-40 |
+| test:does not rewrite glob/grep, which legitimately use `path@L42 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 42-47 |
 
-*... and 375 more members.*
+*... and 326 more members.*
 
 ## Execution Flows
 
@@ -82,36 +82,36 @@ Community of 425 nodes
 
 ### Outgoing
 
-- `equal` (251 edge(s))
-- `join` (140 edge(s))
-- `String` (86 edge(s))
+- `equal` (206 edge(s))
+- `join` (137 edge(s))
+- `String` (82 edge(s))
 - `includes` (76 edge(s))
-- `deepEqual` (52 edge(s))
-- `strictEqual` (50 edge(s))
-- `isArray` (48 edge(s))
-- `trim` (45 edge(s))
-- `map` (42 edge(s))
-- `slice` (39 edge(s))
+- `isArray` (43 edge(s))
+- `trim` (43 edge(s))
+- `deepEqual` (43 edge(s))
+- `strictEqual` (42 edge(s))
 - `endsWith` (39 edge(s))
+- `slice` (37 edge(s))
 - `execFileSync` (37 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `throws` (34 edge(s))
 - `step` (34 edge(s))
+- `map` (30 edge(s))
+- `Boolean` (29 edge(s))
 
 ### Incoming
 
-- `equal` (250 edge(s))
+- `equal` (205 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
 - `join` (65 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (56 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
-- `strictEqual` (50 edge(s))
-- `deepEqual` (50 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (52 edge(s))
+- `strictEqual` (42 edge(s))
+- `deepEqual` (41 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `throws` (34 edge(s))
-- `match` (27 edge(s))
+- `throws` (27 edge(s))
 - `./packages/shared/src/agent/framework.js` (26 edge(s))
 - `execFileSync` (26 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
-- `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/settings-policy.js` (24 edge(s))
+- `./packages/shared/src/agent/coder.js` (22 edge(s))
+- `tmpdir` (20 edge(s))

@@ -86,6 +86,7 @@ class ContextProjectResponse(BaseModel):
 class ContextOrganizationResponse(BaseModel):
     id: uuid.UUID
     name: str
+    parent_org_id: uuid.UUID | None = None
     membership_id: uuid.UUID
     role: OrgRole
     status: MembershipStatus

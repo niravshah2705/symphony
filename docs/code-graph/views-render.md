@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 671 nodes
+Community of 698 nodes
 
-- **Size**: 671 nodes
-- **Cohesion**: 0.4889
+- **Size**: 698 nodes
+- **Cohesion**: 0.4822
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 671 nodes
 | authProviderButtons | Function | ./public/js/app.js | 521-539 |
 | beginSignOut | Function | ./public/js/app.js | 541-549 |
 
-*... and 621 more members.*
+*... and 648 more members.*
 
 ## Execution Flows
 
@@ -79,33 +79,33 @@ Community of 671 nodes
 - **beginMicrosoftSignIn** (criticality: 0.76, depth: 7)
 - **hostedConnection** (criticality: 0.75, depth: 8)
 - **render** (criticality: 0.75, depth: 6)
-- *... and 15 more flows.*
+- *... and 16 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `append` (216 edge(s))
-- `addEventListener` (204 edge(s))
-- `map` (140 edge(s))
-- `String` (102 edge(s))
-- `push` (95 edge(s))
-- `trim` (85 edge(s))
-- `filter` (69 edge(s))
+- `append` (218 edge(s))
+- `addEventListener` (210 edge(s))
+- `map` (150 edge(s))
+- `String` (111 edge(s))
+- `push` (109 edge(s))
+- `trim` (92 edge(s))
+- `filter` (77 edge(s))
+- `isArray` (67 edge(s))
 - `setAttribute` (66 edge(s))
-- `isArray` (59 edge(s))
-- `has` (59 edge(s))
-- `Boolean` (55 edge(s))
+- `has` (62 edge(s))
+- `catch` (59 edge(s))
+- `Boolean` (56 edge(s))
 - `querySelector` (53 edge(s))
-- `catch` (48 edge(s))
-- `slice` (40 edge(s))
-- `find` (40 edge(s))
+- `slice` (48 edge(s))
+- `find` (42 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (167 edge(s))
+- `./public/js/api.js` (178 edge(s))
 - `./public/js/views/settings.js` (131 edge(s))
-- `./public/js/views/agent.js` (103 edge(s))
+- `./public/js/views/agent.js` (108 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (78 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
@@ -114,7 +114,7 @@ Community of 671 nodes
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
 - `./public/js/auth.js` (24 edge(s))
-- `./public/js/views/organization.js` (13 edge(s))
+- `./public/js/views/organization.js` (20 edge(s))
+- `./public/js/omnibox-router.mjs` (14 edge(s))
 - `./public/js/workspace-context.mjs` (13 edge(s))
 - `./public/js/auth-retry.test.mjs` (12 edge(s))
-- `./public/js/legal-markdown.mjs` (12 edge(s))

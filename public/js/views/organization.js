@@ -16,6 +16,16 @@ function banner(message) {
   return el('div', { class: 'error-banner' }, message || 'Something went wrong.');
 }
 
+const PERSONAS = [
+  { value: 'ENGINEER', label: 'Engineer', hint: 'You build and implement. Projects default to a developer role.' },
+  { value: 'CLIENT', label: 'Client', hint: 'You brainstorm and review. Implementation is handled by your collaborators.' },
+  { value: 'ORG_MANAGER', label: 'Org manager', hint: 'You manage the organization, its people, and projects.' },
+];
+
+function personaLabel(value) {
+  return (PERSONAS.find((p) => p.value === value) || {}).label || value;
+}
+
 function pageHead() {
   return el('div', { class: 'page-head' }, [
     el('h1', {}, 'Organization & projects'),
@@ -184,6 +194,170 @@ async function renderMembers(host, projectId, orgUsers, rerender) {
   ]));
 }
 
+// A segmented access-mode control for the active project (INVITE_ONLY vs
+// ORG_WIDE). The org API validates the path project against the selected-project
+// header, so this is only offered for the active project.
+function accessModeControl(project) {
+  const current = String(project.access_mode || 'INVITE_ONLY').toUpperCase();
+  const select = el('select', { 'aria-label': 'Project access mode' }, [
+    el('option', { value: 'INVITE_ONLY' }, 'Invite only'),
+    el('option', { value: 'ORG_WIDE' }, 'Everyone in the org'),
+  ]);
+  select.value = current === 'ORG_WIDE' ? 'ORG_WIDE' : 'INVITE_ONLY';
+  select.addEventListener('change', async () => {
+    const next = select.value;
+    select.disabled = true;
+    try {
+      await api.org.setProjectAccessMode(project.id, next);
+      toast(next === 'ORG_WIDE'
+        ? 'Every organization member can now access this project.'
+        : 'This project is now invite-only.');
+    } catch (err) {
+      toast(err.message || 'Could not change access mode.');
+      select.value = current === 'ORG_WIDE' ? 'ORG_WIDE' : 'INVITE_ONLY';
+    } finally {
+      select.disabled = false;
+    }
+  });
+  return el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Access'), select]);
+}
+
+// Invite a single outside-domain person (e.g. a freelance engineer's personal
+// email) to just this project.
+async function renderProjectInvitations(host, projectId, defaultRole, rerender) {
+  let invitations = [];
+  try {
+    invitations = await api.org.listProjectInvitations(projectId);
+  } catch (err) {
+    host.replaceChildren(banner(err.message));
+    return;
+  }
+  const pending = (Array.isArray(invitations) ? invitations : invitations.data || [])
+    .filter((invite) => (invite.status || 'PENDING') === 'PENDING');
+  const rows = pending.length
+    ? pending.map((invite) => {
+        const revoke = el('button', { class: 'ghost danger', type: 'button' }, 'Revoke');
+        revoke.addEventListener('click', async () => {
+          revoke.disabled = true;
+          try {
+            await api.org.revokeProjectInvitation(projectId, invite.id);
+            toast('Invitation revoked.');
+            await rerender();
+          } catch (err) {
+            toast(err.message || 'Could not revoke.');
+            revoke.disabled = false;
+          }
+        });
+        return projectRow(invite.email, `Pending · Role: ${invite.role || 'DEVELOPER'}`, invite.id ? [revoke] : []);
+      })
+    : [el('p', { class: 'muted' }, 'No outside collaborators invited yet.')];
+
+  const email = el('input', { type: 'email', placeholder: 'person@example.com', 'aria-label': 'Collaborator email' });
+  const role = el('select', { 'aria-label': 'Project role' }, [
+    el('option', { value: 'DEVELOPER' }, 'Developer'),
+    el('option', { value: 'TEAM_LEAD' }, 'Team lead'),
+    el('option', { value: 'PROJECT_ADMIN' }, 'Project admin'),
+  ]);
+  role.value = defaultRole || 'DEVELOPER';
+  const addBtn = el('button', { class: 'primary', type: 'submit' }, 'Invite collaborator');
+  const form = el('form', { class: 'org-form org-form-wide' }, [email, role, addBtn]);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!email.value.trim()) return;
+    addBtn.disabled = true;
+    try {
+      const delivery = await api.org.createProjectInvitation(projectId, {
+        email: email.value.trim(), role: role.value,
+      });
+      toast(delivery?.delivery_status === 'failed'
+        ? 'Invitation saved, but its email could not be queued.'
+        : 'Invitation email queued. They join this project after accepting it.');
+      await rerender();
+    } catch (err) {
+      toast(err.message || 'Could not send the invitation.');
+      addBtn.disabled = false;
+    }
+  });
+
+  host.replaceChildren(el('div', { class: 'org-members' }, [el('div', { class: 'org-list' }, rows), form]));
+}
+
+// Grant a whole partner organization access to this project (outsourcing). The
+// org service rejects PROJECT_ADMIN for a whole-org grant, so it is omitted here.
+async function renderExternalGrants(host, projectId, rerender) {
+  let grants = [];
+  try {
+    grants = await api.org.listExternalGrants(projectId);
+  } catch (err) {
+    host.replaceChildren(banner(err.message));
+    return;
+  }
+  const list = Array.isArray(grants) ? grants : grants.data || [];
+  const rows = list.length
+    ? list.map((grant) => {
+        const revoke = el('button', { class: 'ghost danger', type: 'button' }, 'Revoke');
+        revoke.addEventListener('click', async () => {
+          revoke.disabled = true;
+          try {
+            await api.org.revokeExternalGrant(projectId, grant.collaborator_org_id);
+            toast('Partner access revoked.');
+            await rerender();
+          } catch (err) {
+            toast(err.message || 'Could not revoke.');
+            revoke.disabled = false;
+          }
+        });
+        return projectRow(
+          grant.collaborator_org_id,
+          `Partner org · Default role: ${grant.default_role || 'DEVELOPER'}`,
+          [revoke],
+        );
+      })
+    : [el('p', { class: 'muted' }, 'No partner organizations have access.')];
+
+  const orgId = el('input', { type: 'text', placeholder: 'Partner organization ID', 'aria-label': 'Collaborator organization ID' });
+  const role = el('select', { 'aria-label': 'Default role for partner members' }, [
+    el('option', { value: 'DEVELOPER' }, 'Developer'),
+    el('option', { value: 'TEAM_LEAD' }, 'Team lead'),
+  ]);
+  const addBtn = el('button', { class: 'primary', type: 'submit' }, 'Grant access');
+  const form = el('form', { class: 'org-form org-form-wide' }, [orgId, role, addBtn]);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!orgId.value.trim()) return;
+    addBtn.disabled = true;
+    try {
+      await api.org.createExternalGrant(projectId, {
+        collaborator_org_id: orgId.value.trim(), default_role: role.value,
+      });
+      toast('Partner organization granted access.');
+      await rerender();
+    } catch (err) {
+      toast(err.message || 'Could not grant access.');
+      addBtn.disabled = false;
+    }
+  });
+
+  host.replaceChildren(el('div', { class: 'org-members' }, [
+    el('div', { class: 'org-list' }, rows),
+    el('p', { class: 'muted' }, 'Every member of the partner organization gets access with the default role.'),
+    form,
+  ]));
+}
+
+// A labelled collapsible panel button that lazy-renders its body on first open.
+function collapsiblePanel(label, host, loadBody) {
+  const toggle = el('button', { class: 'ghost', type: 'button' }, label);
+  let open = false;
+  toggle.addEventListener('click', async () => {
+    open = !open;
+    if (!open) { host.replaceChildren(); return; }
+    host.replaceChildren(loading(`Loading ${label.toLowerCase()}…`));
+    await loadBody(host);
+  });
+  return toggle;
+}
+
 async function renderOrgProjects(section, organization, orgUsers, rerender) {
   const isAdmin = String(organization.role || '').toUpperCase() === 'ORG_ADMIN';
   const activeProjectId = activeWorkspaceProject(getWorkspaceContext())?.id || null;
@@ -194,26 +368,44 @@ async function renderOrgProjects(section, organization, orgUsers, rerender) {
     section.replaceChildren(banner(err.message));
     return;
   }
+  const persona = String(getWorkspaceContext().user?.persona || '').toUpperCase();
+  // Engineers default new collaborators to a developer role; others to developer too
+  // (least surprising) — clients rarely add implementers directly.
+  const defaultCollaboratorRole = persona === 'CLIENT' ? 'TEAM_LEAD' : 'DEVELOPER';
   const projects = page.data || [];
   const rows = projects.length
     ? projects.map((project) => {
         const contextProject = organization.projects.find((item) => item.id === project.id);
         // The org API validates the path project against the top selection.
         // Never offer a sibling-project action that would (correctly) 404.
-        const canManageMembers = project.id === activeProjectId
+        const canManage = project.id === activeProjectId
           && (isAdmin || String(contextProject?.role || '').toUpperCase() === 'PROJECT_ADMIN');
         const membersHost = el('div', { class: 'org-members-host' });
-        const toggle = el('button', { class: 'ghost', type: 'button' }, 'Members');
-        let open = false;
-        toggle.addEventListener('click', async () => {
-          open = !open;
-          if (!open) { membersHost.replaceChildren(); return; }
-          membersHost.replaceChildren(loading('Loading members…'));
-          await renderMembers(membersHost, project.id, orgUsers, rerender);
-        });
+        const collaboratorsHost = el('div', { class: 'org-members-host' });
+        const outsourceHost = el('div', { class: 'org-members-host' });
+
+        const actions = [];
+        if (canManage) {
+          actions.push(accessModeControl(project));
+          actions.push(collapsiblePanel('Members', membersHost,
+            (host) => renderMembers(host, project.id, orgUsers, rerender)));
+          actions.push(collapsiblePanel('Collaborators', collaboratorsHost,
+            (host) => renderProjectInvitations(host, project.id, defaultCollaboratorRole, rerender)));
+          actions.push(collapsiblePanel('Outsource', outsourceHost,
+            (host) => renderExternalGrants(host, project.id, rerender)));
+        }
+        const accessBadge = String(project.access_mode || '').toUpperCase() === 'ORG_WIDE'
+          ? el('span', { class: 'badge' }, 'Org-wide')
+          : null;
         return el('div', { class: 'org-row-group' }, [
-          projectRow(project.name, project.description, canManageMembers ? [toggle] : []),
+          projectRow(
+            project.name,
+            project.description,
+            [...(accessBadge ? [accessBadge] : []), ...actions],
+          ),
           membersHost,
+          collaboratorsHost,
+          outsourceHost,
         ]);
       })
     : [el('div', { class: 'empty compact-empty' }, [el('p', { class: 'muted' }, 'No organization projects yet.')])];
@@ -369,6 +561,84 @@ async function renderOrg(section, organization, rerender) {
   if (peopleSection) await renderPeople(peopleSection, rerender);
 }
 
+// Self-declared persona capture (asked once at onboarding). Descriptive only —
+// it does not gate access (roles do); it tailors UI defaults/copy.
+async function renderPersona(section, workspace, rerender) {
+  const current = workspace.user?.persona || null;
+  const children = [];
+
+  if (!current) {
+    children.push(el('p', { class: 'muted' }, 'Tell us how you plan to use AI Fleet so we can tailor your workspace.'));
+    const choices = el('div', { class: 'org-row-actions' }, PERSONAS.map((persona) => {
+      const btn = el('button', { class: 'ghost', type: 'button' }, persona.label);
+      btn.addEventListener('click', async () => {
+        choices.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+        try {
+          await api.org.setPersona(persona.value);
+          toast(`Set up as ${persona.label}.`);
+          // Persona rides on /me/context (a sign-in snapshot); reload so the rest
+          // of the workspace sees it.
+          window.location.reload();
+        } catch (err) {
+          toast(err.message || 'Could not save your selection.');
+          choices.querySelectorAll('button').forEach((b) => { b.disabled = false; });
+        }
+      });
+      return btn;
+    }));
+    children.push(choices);
+  } else {
+    const info = PERSONAS.find((p) => p.value === current);
+    children.push(el('p', { class: 'muted' }, [
+      'You are set up as ',
+      el('strong', {}, personaLabel(current)),
+      info ? `. ${info.hint}` : '.',
+    ]));
+    if (current === 'CLIENT') {
+      children.push(el('div', { class: 'empty compact-empty' }, [
+        el('p', { class: 'muted' },
+          'Brainstorm-only: implementation actions are performed by the engineers you collaborate with.'),
+      ]));
+    }
+  }
+
+  section.replaceChildren();
+  section.append(...Array.from(block(
+    current ? 'Your role' : 'Welcome — pick your role',
+    null,
+    children,
+  ).childNodes));
+}
+
+// Surface pending org/project invitations addressed to the signed-in email.
+// Surfacing only: acceptance uses the emailed single-use link, so we point the
+// user to their email rather than exposing a token here.
+async function renderPendingInvitations(section) {
+  let pending = [];
+  try {
+    pending = await api.org.listPendingInvitations();
+  } catch (_) {
+    section.replaceChildren();
+    return; // best-effort surfacing — never block the page on it
+  }
+  if (!Array.isArray(pending) || pending.length === 0) {
+    section.replaceChildren();
+    return;
+  }
+  const rows = pending.map((invite) => {
+    const scope = invite.kind === 'project'
+      ? `Project “${invite.project_name || invite.project_id}”`
+      : `Organization “${invite.organization_name || invite.organization_id}”`;
+    return projectRow(scope, `Pending invitation · Role: ${invite.role || 'MEMBER'}`);
+  });
+  section.replaceChildren();
+  section.append(...Array.from(block(
+    'You have pending invitations',
+    'Check your email for the invitation link to accept. Accepting adds you to that workspace.',
+    [el('div', { class: 'org-list' }, rows)],
+  ).childNodes));
+}
+
 export async function renderOrganization(view) {
   clear(view).append(loading('Loading your workspace…'));
   const rerender = () => renderOrganization(view);
@@ -381,14 +651,20 @@ export async function renderOrganization(view) {
     return;
   }
 
+  const personaSection = el('section', { class: 'org-block' });
+  const pendingSection = el('section', { class: 'org-block' });
   const personalSection = el('section', { class: 'org-block' });
   const orgSection = el('section', { class: 'org-block' });
   const createOrgSection = el('section', { class: 'org-block' });
   const workspace = getWorkspaceContext();
   const organization = activeWorkspaceOrganization(workspace);
-  clear(view).append(pageHead(), personalSection, orgSection, createOrgSection);
+  clear(view).append(
+    pageHead(), personaSection, pendingSection, personalSection, orgSection, createOrgSection,
+  );
 
   await Promise.all([
+    renderPersona(personaSection, workspace, rerender),
+    renderPendingInvitations(pendingSection),
     renderPersonal(personalSection, rerender),
     renderOrg(orgSection, organization, rerender),
     renderCreateOrg(createOrgSection, { hasOrganizations: workspace.organizations.length > 0 }),
