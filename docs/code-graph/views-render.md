@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 698 nodes
+Community of 687 nodes
 
-- **Size**: 698 nodes
-- **Cohesion**: 0.4822
+- **Size**: 687 nodes
+- **Cohesion**: 0.4869
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 698 nodes
 | authProviderButtons | Function | ./public/js/app.js | 521-539 |
 | beginSignOut | Function | ./public/js/app.js | 541-549 |
 
-*... and 648 more members.*
+*... and 637 more members.*
 
 ## Execution Flows
 
@@ -73,32 +73,32 @@ Community of 698 nodes
 - **start** (criticality: 0.81, depth: 6)
 - **initializeAuthentication** (criticality: 0.80, depth: 4)
 - **onMove** (criticality: 0.79, depth: 9)
+- **beginSignIn** (criticality: 0.77, depth: 6)
+- **beginMicrosoftSignIn** (criticality: 0.77, depth: 6)
 - **maybeRefreshConnection** (criticality: 0.76, depth: 3)
+- **beginSignOut** (criticality: 0.76, depth: 6)
 - **onUp** (criticality: 0.76, depth: 6)
-- **beginSignIn** (criticality: 0.76, depth: 7)
-- **beginMicrosoftSignIn** (criticality: 0.76, depth: 7)
 - **hostedConnection** (criticality: 0.75, depth: 8)
-- **render** (criticality: 0.75, depth: 6)
 - *... and 16 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `append` (218 edge(s))
 - `addEventListener` (210 edge(s))
+- `append` (208 edge(s))
 - `map` (150 edge(s))
-- `String` (111 edge(s))
-- `push` (109 edge(s))
-- `trim` (92 edge(s))
+- `String` (108 edge(s))
+- `push` (95 edge(s))
+- `trim` (81 edge(s))
 - `filter` (77 edge(s))
 - `isArray` (67 edge(s))
-- `setAttribute` (66 edge(s))
-- `has` (62 edge(s))
+- `setAttribute` (62 edge(s))
+- `has` (60 edge(s))
 - `catch` (59 edge(s))
-- `Boolean` (56 edge(s))
+- `Boolean` (55 edge(s))
 - `querySelector` (53 edge(s))
-- `slice` (48 edge(s))
+- `slice` (42 edge(s))
 - `find` (42 edge(s))
 
 ### Incoming
@@ -114,7 +114,7 @@ Community of 698 nodes
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
 - `./public/js/auth.js` (24 edge(s))
-- `./public/js/views/organization.js` (20 edge(s))
+- `./public/js/views/organization.js` (22 edge(s))
 - `./public/js/omnibox-router.mjs` (14 edge(s))
 - `./public/js/workspace-context.mjs` (13 edge(s))
 - `./public/js/auth-retry.test.mjs` (12 edge(s))

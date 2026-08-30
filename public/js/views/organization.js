@@ -224,7 +224,10 @@ function accessModeControl(project) {
 
 // Invite a single outside-domain person (e.g. a freelance engineer's personal
 // email) to just this project.
-async function renderProjectInvitations(host, projectId, defaultRole, rerender) {
+async function renderProjectInvitations(host, projectId, defaultRole) {
+  // Refresh THIS panel in place (not the whole view) so it stays open and shows
+  // the change immediately.
+  const reload = () => renderProjectInvitations(host, projectId, defaultRole);
   let invitations = [];
   try {
     invitations = await api.org.listProjectInvitations(projectId);
@@ -242,7 +245,7 @@ async function renderProjectInvitations(host, projectId, defaultRole, rerender) 
           try {
             await api.org.revokeProjectInvitation(projectId, invite.id);
             toast('Invitation revoked.');
-            await rerender();
+            await reload();
           } catch (err) {
             toast(err.message || 'Could not revoke.');
             revoke.disabled = false;
@@ -272,7 +275,7 @@ async function renderProjectInvitations(host, projectId, defaultRole, rerender) 
       toast(delivery?.delivery_status === 'failed'
         ? 'Invitation saved, but its email could not be queued.'
         : 'Invitation email queued. They join this project after accepting it.');
-      await rerender();
+      await reload();
     } catch (err) {
       toast(err.message || 'Could not send the invitation.');
       addBtn.disabled = false;
@@ -284,7 +287,8 @@ async function renderProjectInvitations(host, projectId, defaultRole, rerender) 
 
 // Grant a whole partner organization access to this project (outsourcing). The
 // org service rejects PROJECT_ADMIN for a whole-org grant, so it is omitted here.
-async function renderExternalGrants(host, projectId, rerender) {
+async function renderExternalGrants(host, projectId) {
+  const reload = () => renderExternalGrants(host, projectId);
   let grants = [];
   try {
     grants = await api.org.listExternalGrants(projectId);
@@ -301,7 +305,7 @@ async function renderExternalGrants(host, projectId, rerender) {
           try {
             await api.org.revokeExternalGrant(projectId, grant.collaborator_org_id);
             toast('Partner access revoked.');
-            await rerender();
+            await reload();
           } catch (err) {
             toast(err.message || 'Could not revoke.');
             revoke.disabled = false;
@@ -331,7 +335,7 @@ async function renderExternalGrants(host, projectId, rerender) {
         collaborator_org_id: orgId.value.trim(), default_role: role.value,
       });
       toast('Partner organization granted access.');
-      await rerender();
+      await reload();
     } catch (err) {
       toast(err.message || 'Could not grant access.');
       addBtn.disabled = false;
@@ -390,9 +394,9 @@ async function renderOrgProjects(section, organization, orgUsers, rerender) {
           actions.push(collapsiblePanel('Members', membersHost,
             (host) => renderMembers(host, project.id, orgUsers, rerender)));
           actions.push(collapsiblePanel('Collaborators', collaboratorsHost,
-            (host) => renderProjectInvitations(host, project.id, defaultCollaboratorRole, rerender)));
+            (host) => renderProjectInvitations(host, project.id, defaultCollaboratorRole)));
           actions.push(collapsiblePanel('Outsource', outsourceHost,
-            (host) => renderExternalGrants(host, project.id, rerender)));
+            (host) => renderExternalGrants(host, project.id)));
         }
         const accessBadge = String(project.access_mode || '').toUpperCase() === 'ORG_WIDE'
           ? el('span', { class: 'badge' }, 'Org-wide')
