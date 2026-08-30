@@ -11,7 +11,33 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from app.models.base import new_uuid, to_uuid, utcnow, uuid_str
-from app.models.enums import AuthProvider, OrgRole
+from app.models.enums import AuthProvider, OrgRole, Persona
+
+
+@dataclass
+class LinkedIdentity:
+    """An additional sign-in method linked to a `User`, persisted inline
+    (embedded, not a separate collection) — see `Organization.applied_tags`
+    for the same embedding pattern applied to a related-object list."""
+
+    provider: str = ""
+    subject: str = ""
+    linked_at: datetime = field(default_factory=utcnow)
+
+    def to_doc(self) -> dict:
+        return {
+            "provider": self.provider,
+            "subject": self.subject,
+            "linked_at": self.linked_at,
+        }
+
+    @classmethod
+    def from_doc(cls, doc: dict) -> "LinkedIdentity":
+        return cls(
+            provider=doc.get("provider", ""),
+            subject=doc.get("subject", ""),
+            linked_at=doc.get("linked_at") or utcnow(),
+        )
 
 
 @dataclass
@@ -33,6 +59,15 @@ class User:
     password_changed_at: datetime | None = None
     email_verification_token_hash: str | None = None
     email_verification_expires_at: datetime | None = None
+    # Self-declared actor persona (engineer / client / org-managing admin),
+    # captured once at onboarding. Orthogonal to OrgRole/ProjectRole — "what
+    # kind of person is this," not "what can they do." Null until asked.
+    persona: Persona | None = None
+    # Additional sign-in methods for this same person (e.g. a corporate SSO
+    # identity added on top of the personal identity used at signup).
+    # `external_subject` above remains the primary identity for backward
+    # compatibility.
+    linked_identities: list[LinkedIdentity] = field(default_factory=list)
     id: uuid.UUID = field(default_factory=new_uuid)
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
@@ -54,12 +89,15 @@ class User:
             "password_changed_at": self.password_changed_at,
             "email_verification_token_hash": self.email_verification_token_hash,
             "email_verification_expires_at": self.email_verification_expires_at,
+            "persona": self.persona.value if self.persona is not None else None,
+            "linked_identities": [i.to_doc() for i in self.linked_identities],
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
 
     @classmethod
     def from_doc(cls, doc: dict) -> "User":
+        persona = doc.get("persona")
         return cls(
             id=to_uuid(doc["id"]),
             org_id=to_uuid(doc.get("org_id")),
@@ -76,6 +114,10 @@ class User:
             password_changed_at=doc.get("password_changed_at"),
             email_verification_token_hash=doc.get("email_verification_token_hash"),
             email_verification_expires_at=doc.get("email_verification_expires_at"),
+            persona=Persona(persona) if persona else None,
+            linked_identities=[
+                LinkedIdentity.from_doc(i) for i in doc.get("linked_identities") or []
+            ],
             created_at=doc.get("created_at") or utcnow(),
             updated_at=doc.get("updated_at") or utcnow(),
         )

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 690 nodes
+Community of 682 nodes
 
-- **Size**: 690 nodes
-- **Cohesion**: 0.4830
+- **Size**: 682 nodes
+- **Cohesion**: 0.4861
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 690 nodes
 | authProviderButtons | Function | ./public/js/app.js | 521-539 |
 | beginSignOut | Function | ./public/js/app.js | 541-549 |
 
-*... and 640 more members.*
+*... and 632 more members.*
 
 ## Execution Flows
 
@@ -85,21 +85,21 @@ Community of 690 nodes
 
 ### Outgoing
 
-- `append` (216 edge(s))
+- `append` (206 edge(s))
 - `addEventListener` (204 edge(s))
 - `map` (145 edge(s))
-- `String` (108 edge(s))
-- `push` (101 edge(s))
-- `trim` (88 edge(s))
+- `String` (105 edge(s))
+- `push` (87 edge(s))
+- `trim` (78 edge(s))
 - `filter` (76 edge(s))
-- `setAttribute` (66 edge(s))
 - `isArray` (64 edge(s))
-- `has` (62 edge(s))
+- `setAttribute` (62 edge(s))
+- `has` (61 edge(s))
 - `catch` (59 edge(s))
 - `Boolean` (56 edge(s))
 - `querySelector` (53 edge(s))
-- `slice` (47 edge(s))
-- `test` (40 edge(s))
+- `slice` (41 edge(s))
+- `get` (40 edge(s))
 
 ### Incoming
 
@@ -115,6 +115,6 @@ Community of 690 nodes
 - `./public/js/i18n.js` (34 edge(s))
 - `./public/js/auth.js` (24 edge(s))
 - `./public/js/omnibox-router.mjs` (14 edge(s))
+- `./public/js/google-analytics.test.mjs` (13 edge(s))
 - `./public/js/views/organization.js` (13 edge(s))
 - `./public/js/workspace-context.mjs` (13 edge(s))
-- `./public/js/auth-retry.test.mjs` (12 edge(s))

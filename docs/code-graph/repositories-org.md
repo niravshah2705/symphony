@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 526 nodes
+Community of 547 nodes
 
-- **Size**: 526 nodes
-- **Cohesion**: 0.5063
+- **Size**: 547 nodes
+- **Cohesion**: 0.5046
 - **Dominant Language**: python
 
 ## Members
@@ -65,41 +65,41 @@ Community of 526 nodes
 | list_tags | Function | ./services/org/app/api/v1/routes_tags.py | 21-27 |
 | create_tag | Function | ./services/org/app/api/v1/routes_tags.py | 31-36 |
 
-*... and 476 more members.*
+*... and 497 more members.*
 
 ## Execution Flows
 
 - **logout** (criticality: 0.82, depth: 3)
 - **change_password** (criticality: 0.80, depth: 3)
-- **login** (criticality: 0.77, depth: 3)
-- **refresh** (criticality: 0.77, depth: 3)
-- **verify_email** (criticality: 0.75, depth: 2)
-- **__call__** (criticality: 0.75, depth: 5)
-- **register** (criticality: 0.73, depth: 5)
-- **get_current_user** (criticality: 0.72, depth: 3)
+- **login** (criticality: 0.76, depth: 3)
+- **refresh** (criticality: 0.76, depth: 3)
+- **__call__** (criticality: 0.74, depth: 5)
+- **verify_email** (criticality: 0.73, depth: 2)
+- **register** (criticality: 0.72, depth: 5)
 - **get_project_context** (criticality: 0.72, depth: 1)
-- **change_own_password** (criticality: 0.70, depth: 3)
+- **get_current_user** (criticality: 0.70, depth: 3)
+- **accept_invitation** (criticality: 0.69, depth: 4)
 - *... and 43 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (214 edge(s))
+- `get` (242 edge(s))
 - `Depends` (140 edge(s))
-- `str` (115 edge(s))
+- `str` (117 edge(s))
 - `json` (76 edge(s))
 - `post` (54 edge(s))
 - `add` (38 edge(s))
 - `delete` (32 edge(s))
 - `setattr` (29 edge(s))
 - `set` (27 edge(s))
+- `uuid4` (27 edge(s))
 - `raises` (22 edge(s))
 - `BaseModel` (21 edge(s))
+- `to_doc` (17 edge(s))
 - `append` (16 edge(s))
-- `uuid4` (16 edge(s))
 - `patch` (16 edge(s))
-- `len` (15 edge(s))
 
 ### Incoming
 
@@ -107,6 +107,7 @@ Community of 526 nodes
 - `post` (48 edge(s))
 - `get` (34 edge(s))
 - `setattr` (29 edge(s))
+- `uuid4` (22 edge(s))
 - `raises` (22 edge(s))
 - `patch` (16 edge(s))
 - `./services/org/app/api/v1/routes_org.py` (15 edge(s))
@@ -117,4 +118,3 @@ Community of 526 nodes
 - `./services/org/app/services/invitation_service.py` (12 edge(s))
 - `create_user` (12 edge(s))
 - `./services/org/app/api/v1/routes_projects.py` (11 edge(s))
-- `./services/org/app/services/auth_service.py` (11 edge(s))
