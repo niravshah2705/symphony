@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 15 nodes
+Community of 30 nodes
 
-- **Size**: 15 nodes
-- **Cohesion**: 0.1623
+- **Size**: 30 nodes
+- **Cohesion**: 0.1669
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,18 +16,33 @@ Community of 15 nodes
 |------|------|------|-------|
 | json | Function | ./e2e/agent-workspace.spec.js | 7-13 |
 | defaultPreparedBusiness | Function | ./e2e/agent-workspace.spec.js | 15-48 |
-| mockAgentWorkspace | Function | ./e2e/agent-workspace.spec.js | 50-219 |
+| mockAgentWorkspace | Function | ./e2e/agent-workspace.spec.js | 50-277 |
 | test@L124 | Test | ./e2e/agent-workspace.spec.js | 124-124 |
-| openAgent | Function | ./e2e/agent-workspace.spec.js | 221-226 |
-| routeRequest | Function | ./e2e/agent-workspace.spec.js | 228-232 |
-| test:greetings and unsafe scam requests stay on non-mutating routes@L234 | Test | ./e2e/agent-workspace.spec.js | 234-254 |
-| test:business requests evaluate first, then prepare on demand, rendering the staged decision rail and metric tones@L264 | Test | ./e2e/agent-workspace.spec.js | 264-305 |
-| test:knowledge requests report typed memory, documents, and workspace matches@L307 | Test | ./e2e/agent-workspace.spec.js | 307-328 |
-| test:build requests run a guided project -> planner flow with human-in-the-loop steps@L330 | Test | ./e2e/agent-workspace.spec.js | 330-353 |
-| test:conversation history: sending lazily creates a thread that survives reload, plus new chat and delete@L355 | Test | ./e2e/agent-workspace.spec.js | 355-387 |
-| test:remember phrasing surfaces a confirm-before-save memory draft@L389 | Test | ./e2e/agent-workspace.spec.js | 389-405 |
-| test:troubleshooting requests combine diagnostic checks with retained log signals@L407 | Test | ./e2e/agent-workspace.spec.js | 407-446 |
-| test:implementation drafts require project selection and explicit approval before task creation@L448 | Test | ./e2e/agent-workspace.spec.js | 448-495 |
+| openAgent | Function | ./e2e/agent-workspace.spec.js | 279-284 |
+| routeRequest | Function | ./e2e/agent-workspace.spec.js | 286-290 |
+| test:greetings and unsafe scam requests stay on non-mutating routes@L292 | Test | ./e2e/agent-workspace.spec.js | 292-312 |
+| test:business requests evaluate first, then prepare on demand, rendering the staged decision rail and metric tones@L322 | Test | ./e2e/agent-workspace.spec.js | 322-363 |
+| test:knowledge requests report typed memory, documents, and workspace matches@L365 | Test | ./e2e/agent-workspace.spec.js | 365-386 |
+| test:build requests run a guided project -> planner flow with human-in-the-loop steps@L388 | Test | ./e2e/agent-workspace.spec.js | 388-411 |
+| test:conversation history: sending lazily creates a thread that survives reload, plus new chat and delete@L413 | Test | ./e2e/agent-workspace.spec.js | 413-445 |
+| test:a send that outlives a navigate still lands in the thread rail once persistence completes@L447 | Test | ./e2e/agent-workspace.spec.js | 447-482 |
+| test:a persistence failure surfaces a visible error and a working retry@L484 | Test | ./e2e/agent-workspace.spec.js | 484-512 |
+| test:clicking "+ New chat" while already on the unsent new thread resets compose state@L514 | Test | ./e2e/agent-workspace.spec.js | 514-536 |
+| test:rapid re-entry into "+ New chat" never leaves the composer stuck disabled@L538 | Test | ./e2e/agent-workspace.spec.js | 538-568 |
+| test:remember phrasing surfaces a confirm-before-save memory draft@L570 | Test | ./e2e/agent-workspace.spec.js | 570-586 |
+| test:troubleshooting requests combine diagnostic checks with retained log signals@L588 | Test | ./e2e/agent-workspace.spec.js | 588-627 |
+| test:implementation drafts require project selection and explicit approval before task creation@L629 | Test | ./e2e/agent-workspace.spec.js | 629-676 |
+| installFakeSpeechRecognition | Function | ./e2e/agent-workspace.spec.js | 680-703 |
+| test:mic dictation button has a distinct accessible name from Send@L705 | Test | ./e2e/agent-workspace.spec.js | 705-712 |
+| test:dictation button degrades gracefully when the browser has no SpeechRecognition@L714 | Test | ./e2e/agent-workspace.spec.js | 714-729 |
+| test:a successful dictation appends the transcript to the composer@L731 | Test | ./e2e/agent-workspace.spec.js | 731-744 |
+| test:a denied microphone permission surfaces a toast and leaves the composer usable@L746 | Test | ./e2e/agent-workspace.spec.js | 746-758 |
+| test:attaching a file before any conversation exists shows a helpful toast and never calls the service@L760 | Test | ./e2e/agent-workspace.spec.js | 760-771 |
+| test:attaching a file after sending a message uploads it and shows a ready chip@L773 | Test | ./e2e/agent-workspace.spec.js | 773-787 |
+| test:removing an attachment deletes it server-side and the chip disappears@L789 | Test | ./e2e/agent-workspace.spec.js | 789-803 |
+| test:dropping a file directly onto the composer uploads it@L805 | Test | ./e2e/agent-workspace.spec.js | 805-822 |
+| test:a rejected file oversize check surfaces a toast and never calls the service@L824 | Test | ./e2e/agent-workspace.spec.js | 824-836 |
+| test:the "Ask about files" affordance stays hidden until an attachment is ready, then answers with citations@L838 | Test | ./e2e/agent-workspace.spec.js | 838-859 |
 | route | Function | ./public/js/omnibox-router.mjs | 56-59 |
 
 ## Execution Flows
@@ -38,36 +53,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (84 edge(s))
-- `locator` (53 edge(s))
-- `toBeVisible` (25 edge(s))
-- `toContainText` (19 edge(s))
-- `getByRole` (16 edge(s))
-- `request` (15 edge(s))
+- `expect` (143 edge(s))
+- `locator` (95 edge(s))
+- `getByRole` (33 edge(s))
+- `toBeVisible` (30 edge(s))
+- `toContainText` (27 edge(s))
+- `request` (24 edge(s))
+- `toHaveCount` (22 edge(s))
+- `click` (19 edge(s))
+- `toHaveURL` (13 edge(s))
+- `postDataJSON` (11 edge(s))
 - `toHaveLength` (11 edge(s))
-- `postDataJSON` (10 edge(s))
-- `click` (9 edge(s))
-- `toHaveCount` (8 edge(s))
-- `push` (7 edge(s))
-- `toHaveAttribute` (5 edge(s))
-- `method` (4 edge(s))
-- `toBeDisabled` (3 edge(s))
-- `selectOption` (3 edge(s))
+- `split` (10 edge(s))
+- `method` (8 edge(s))
+- `push` (8 edge(s))
+- `filter` (7 edge(s))
 
 ### Incoming
 
-- `expect` (81 edge(s))
-- `locator` (51 edge(s))
-- `toBeVisible` (24 edge(s))
-- `toContainText` (19 edge(s))
-- `getByRole` (14 edge(s))
-- `./e2e/agent-workspace.spec.js` (13 edge(s))
+- `expect` (140 edge(s))
+- `locator` (93 edge(s))
+- `getByRole` (31 edge(s))
+- `toBeVisible` (29 edge(s))
+- `./e2e/agent-workspace.spec.js` (28 edge(s))
+- `toContainText` (27 edge(s))
+- `toHaveCount` (22 edge(s))
+- `click` (18 edge(s))
+- `toHaveURL` (13 edge(s))
 - `toHaveLength` (11 edge(s))
 - `./public/js/omnibox-router.mjs::classifyOmniboxIntent` (9 edge(s))
-- `click` (8 edge(s))
-- `toHaveCount` (8 edge(s))
-- `toHaveAttribute` (4 edge(s))
-- `toBeDisabled` (3 edge(s))
-- `selectOption` (3 edge(s))
-- `toHaveValue` (2 edge(s))
-- `toBe` (2 edge(s))
+- `toBeEnabled` (7 edge(s))
+- `split` (6 edge(s))
+- `request` (6 edge(s))
+- `setInputFiles` (5 edge(s))

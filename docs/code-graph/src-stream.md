@@ -7,7 +7,7 @@
 Community of 41 nodes
 
 - **Size**: 41 nodes
-- **Cohesion**: 0.3234
+- **Cohesion**: 0.3212
 - **Dominant Language**: javascript
 
 ## Members
@@ -86,9 +86,9 @@ No execution flows pass through this community.
 - `./services/gateway/src/stream-token.js` (15 edge(s))
 - `./services/gateway/src/stream-token.test.js` (13 edge(s))
 - `./services/gateway/src/sse.test.js` (10 edge(s))
+- `./services/gateway/src/index.js` (10 edge(s))
 - `./services/gateway/src/sse.js` (9 edge(s))
 - `deepEqual` (8 edge(s))
-- `./services/gateway/src/index.js` (7 edge(s))
 - `parse` (6 edge(s))
 - `emit` (6 edge(s))
 - `ok` (5 edge(s))

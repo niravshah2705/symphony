@@ -34,6 +34,9 @@ or grepping; fall back in this order (fewest tokens / most precise first):
 1. **code-review-graph (CRG) — precise symbol lookup.** SQLite structural graph
    of functions/classes/tests with `CALLS`/`IMPORTS` edges + full-text search.
    Best for *"where is X"*, *"who calls X"*, *"what breaks if I change X"*.
+   `search` first to find/confirm the qualified name, then pick the exact
+   `query` kind from the decision table below — don't guess a kind and let it
+   0-result before falling back.
 2. **graphify — broad architectural exploration (on a CRG miss).** AST knowledge
    graph with community clustering across the whole repo. Best for *"what
    connects A to B"*, *"what's in this subsystem"*, multi-hop neighborhoods.
@@ -66,18 +69,56 @@ npm run graph:build     # builds .code-review-graph/graph.db  AND  graphify-out/
 
 ### Query commands
 
-**CRG (structural).** If the CRG MCP server is installed, use its tools
-(`semantic_search_nodes_tool`, `query_graph_tool`, `get_impact_radius_tool`, …).
-Otherwise query the SQLite graph directly:
+**CRG (structural) — use the CLI directly, don't `--help` your way to it.**
+This is the full command surface; copy it as-is instead of rediscovering it:
+
+```bash
+# 1. find where a symbol/string is declared — start here, always
+code-review-graph search "<term>" [--kind Function|Class|File|Type|Test] [--limit 10]
+
+# 2. graph relationships — pick the kind that matches the question, don't guess:
+code-review-graph query callers_of     <target>   # who calls this?
+code-review-graph query callees_of     <target>   # what does this call?
+code-review-graph query imports_of     <target>   # what does this file import?
+code-review-graph query importers_of   <target>   # what imports this file/module?
+code-review-graph query children_of    <target>   # subclasses / nested defs
+code-review-graph query tests_for      <target>   # tests covering this symbol
+code-review-graph query inheritors_of  <target>   # subclasses of this class
+code-review-graph query file_summary   <target>   # all symbols in a file
+
+# 3. blast radius of a change
+code-review-graph impact --files <path> [--depth N]
+```
+
+`<target>` takes a bare name, qualified name, or file path. Run `search`
+first to get the exact qualified name, then feed that into `query`/`impact` —
+this is the only reliable way to avoid a 0-result guess on the wrong kind.
+
+**Keep output lean.** CRG's default JSON (full `qualified_name`, `_hints.next_steps`
+suggestions, etc.) runs ~2.5x the size of an equivalent grep match. Cap
+`--limit` and strip hints when scanning results, not reading one:
+
+```bash
+code-review-graph search "<term>" --limit 5 | jq -c '.results[] | {name,file_path,line_start}'
+```
+
+> **Known gap — Terraform variable *usage* is not a graph edge.** CRG indexes
+> `.tf` declarations fine (`search "var_name"` finds the definition site), but
+> `importers_of`/`callers_of` do **not** track `var.X` interpolation inside a
+> resource block — there is no query kind for it (the only kinds are the eight
+> listed above). For "where is this Terraform variable *used*", skip straight
+> to `grep -rn 'var\.<name>' deploy/` — don't burn a call finding out CRG
+> returns 0 results first.
+
+If the CRG MCP server is installed, its tools (`semantic_search_nodes_tool`,
+`query_graph_tool`, `get_impact_radius_tool`, …) wrap this same CLI — the
+lean-output and Terraform caveats above apply there too. Only if both the
+CLI and MCP are unavailable, fall back to the raw SQLite:
 
 ```bash
 DB=.code-review-graph/graph.db
-# where is a symbol defined?
 sqlite3 -box "$DB" "SELECT kind,name,file_path,line_start||'-'||line_end AS lines
                     FROM nodes WHERE name='<Symbol>';"
-# who calls it?
-sqlite3 -box "$DB" "SELECT DISTINCT source_qualified,line FROM edges
-                    WHERE kind='CALLS' AND target_qualified LIKE '%<Symbol>%';"
 ```
 
 **graphify (architectural).** CLI over `graphify-out/graph.json`:
