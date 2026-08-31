@@ -1,0 +1,15 @@
+{
+  "updatedAt": "2026-08-25",
+  "ollama": {
+    "version": "v1",
+    "models": [
+      { "name": "llama3.2-1b", "tag": "llama3.2:1b" }
+    ]
+  },
+  "vllm": {
+    "version": "v1",
+    "models": [
+      { "name": "qwen2.5-0.5b-instruct", "hfRepo": "Qwen/Qwen2.5-0.5B-Instruct", "revision": "main" }
+    ]
+  }
+}

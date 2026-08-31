@@ -1,0 +1,224 @@
+name: Publish Model Registry (Ollama/vLLM demo)
+
+# STANDALONE DEMO — publishes model weights for the inference-ollama /
+# inference-vllm Cloud Run services (deploy/gcp/terraform/inference.tf), which
+# are NOT wired into the fleet's egress proxy or any agent runtime (see that
+# file's header comment). This workflow is not part of the main deploy.yml CD
+# pipeline.
+#
+# Publishes deploy/models/manifest.json's model list to the GCS model registry
+# as VERSIONED bundles, one prefix per engine:
+#   gs://<bucket>/ollama/<version>/...   (Ollama's native blobs/+manifests/ layout)
+#   gs://<bucket>/vllm/<version>/<model>/...   (raw HuggingFace repo files)
+# Terraform CREATES the bucket (deploy/gcp/terraform/models.tf) with a derived
+# name ("<GCP_PROJECT_ID>-aifleet-models"); this workflow derives the SAME name
+# from the GCP_PROJECT_ID repo variable, so there is no MODELS_BUCKET repo-var
+# dependency for the name (MODELS_BUCKET remains an OPTIONAL override, matching
+# var.models_bucket_name). inference.tf mounts that bucket read-only via
+# gcsfuse and PINS a version per engine (var.ollama_model_version /
+# var.vllm_model_version), so publishing a new version never disturbs an
+# older pinned deployment. See docs/GCP_DEPLOY.md ("Inference demo").
+#
+# Auth is keyless via Workload Identity Federation (same provider/SA as
+# deploy.yml / publish-skills.yml).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/models/manifest.json"
+  workflow_dispatch:
+    inputs:
+      engines:
+        description: "Which engine(s) to publish"
+        type: choice
+        options: [both, ollama, vllm]
+        default: both
+
+# Never let two publishes race the same bucket.
+concurrency:
+  group: models-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for Workload Identity Federation
+
+env:
+  MANIFEST_PATH: deploy/models/manifest.json
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # Resolve the target bucket + per-engine versions once, shared by both engine
+  # jobs below (avoids duplicating the manifest-parsing/validation logic).
+  # ----------------------------------------------------------------------------
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      bucket: ${{ steps.resolve.outputs.bucket }}
+      ollama_version: ${{ steps.resolve.outputs.ollama_version }}
+      vllm_version: ${{ steps.resolve.outputs.vllm_version }}
+      run_ollama: ${{ steps.resolve.outputs.run_ollama }}
+      run_vllm: ${{ steps.resolve.outputs.run_vllm }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_ENGINES: ${{ inputs.engines }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          MODELS_BUCKET_OVERRIDE: ${{ vars.MODELS_BUCKET }}
+        run: |
+          set -euo pipefail
+          test -f "$MANIFEST_PATH" || { echo "Missing $MANIFEST_PATH" >&2; exit 1; }
+
+          # Must be a single safe path segment before it becomes a GCS prefix
+          # (defends against a poisoned manifest edit, mirrors publish-skills.yml).
+          validate_version() {
+            case "$1" in
+              "" | "." | ".." | */* | *[!A-Za-z0-9._-]*)
+                echo "Refusing invalid model version: '$1'" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          OLLAMA_VERSION="$(jq -r '.ollama.version' "$MANIFEST_PATH")"
+          VLLM_VERSION="$(jq -r '.vllm.version' "$MANIFEST_PATH")"
+          validate_version "$OLLAMA_VERSION"
+          validate_version "$VLLM_VERSION"
+
+          BUCKET="${MODELS_BUCKET_OVERRIDE:-}"
+          if [ -z "$BUCKET" ]; then
+            if [ -z "${GCP_PROJECT_ID:-}" ]; then
+              echo "GCP_PROJECT_ID repo variable is not set — cannot derive the models bucket name." >&2
+              echo "Set it with: gh variable set GCP_PROJECT_ID --body <project-id>" >&2
+              exit 1
+            fi
+            BUCKET="${GCP_PROJECT_ID}-aifleet-models"
+          fi
+
+          RUN_OLLAMA=true
+          RUN_VLLM=true
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            case "$INPUT_ENGINES" in
+              ollama) RUN_VLLM=false ;;
+              vllm) RUN_OLLAMA=false ;;
+            esac
+          fi
+
+          {
+            echo "bucket=$BUCKET"
+            echo "ollama_version=$OLLAMA_VERSION"
+            echo "vllm_version=$VLLM_VERSION"
+            echo "run_ollama=$RUN_OLLAMA"
+            echo "run_vllm=$RUN_VLLM"
+          } >> "$GITHUB_OUTPUT"
+          echo "Target bucket: $BUCKET (ollama=$OLLAMA_VERSION run=$RUN_OLLAMA, vllm=$VLLM_VERSION run=$RUN_VLLM)"
+
+  # ----------------------------------------------------------------------------
+  # Ollama: pull each manifest tag into Ollama's own content-addressed store,
+  # then mirror that store to the versioned bucket prefix.
+  # ----------------------------------------------------------------------------
+  publish-ollama:
+    needs: resolve
+    if: needs.resolve.outputs.run_ollama == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install + start Ollama
+        run: |
+          set -euo pipefail
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:11434/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+      - name: Pull manifest models
+        run: |
+          set -euo pipefail
+          jq -r '.ollama.models[].tag' "$MANIFEST_PATH" | while read -r tag; do
+            echo "Pulling $tag"
+            ollama pull "$tag"
+          done
+
+      - name: Publish to GCS
+        env:
+          BUCKET: ${{ needs.resolve.outputs.bucket }}
+          VERSION: ${{ needs.resolve.outputs.ollama_version }}
+        run: |
+          set -euo pipefail
+          SRC="${OLLAMA_MODELS:-$HOME/.ollama/models}"
+          test -d "$SRC" || { echo "Ollama model store not found at $SRC" >&2; exit 1; }
+          DEST="gs://${BUCKET}/ollama/${VERSION}"
+          echo "Publishing $SRC -> $DEST"
+          gsutil -m rsync -r -d "$SRC" "$DEST"
+          echo "Published Ollama bundle to $DEST"
+          gsutil ls -r "$DEST" | head -50
+
+  # ----------------------------------------------------------------------------
+  # vLLM: download each manifest HF repo (raw checkpoint files), publish one
+  # directory per model under the versioned bucket prefix.
+  # ----------------------------------------------------------------------------
+  publish-vllm:
+    needs: resolve
+    if: needs.resolve.outputs.run_vllm == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install huggingface_hub CLI
+        run: pip install -U "huggingface_hub[cli]"
+
+      - name: Download + publish manifest models
+        env:
+          BUCKET: ${{ needs.resolve.outputs.bucket }}
+          VERSION: ${{ needs.resolve.outputs.vllm_version }}
+          # Optional: only needed for gated HF repos. huggingface_hub reads this
+          # env var automatically; unset is fine for public repos.
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          jq -c '.vllm.models[]' "$MANIFEST_PATH" | while read -r entry; do
+            name="$(jq -r '.name' <<<"$entry")"
+            repo="$(jq -r '.hfRepo' <<<"$entry")"
+            revision="$(jq -r '.revision' <<<"$entry")"
+            case "$name" in
+              "" | "." | ".." | */* | *[!A-Za-z0-9._-]*)
+                echo "Refusing invalid model name: '$name'" >&2
+                exit 1
+                ;;
+            esac
+            LOCAL_DIR="/tmp/models/vllm/${name}"
+            echo "Downloading $repo@$revision -> $LOCAL_DIR"
+            huggingface-cli download "$repo" --revision "$revision" --local-dir "$LOCAL_DIR"
+
+            DEST="gs://${BUCKET}/vllm/${VERSION}/${name}"
+            echo "Publishing $LOCAL_DIR -> $DEST"
+            gsutil -m rsync -r -d "$LOCAL_DIR" "$DEST"
+          done
+          echo "Published vLLM bundle(s) to gs://${BUCKET}/vllm/${VERSION}/"
+          gsutil ls -r "gs://${BUCKET}/vllm/${VERSION}" | head -50

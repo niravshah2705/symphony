@@ -1,0 +1,20 @@
+# BEST-EFFORT / standalone demo — see deploy/gcp/terraform/inference.tf's header
+# comment. vLLM's published `vllm/vllm-openai` image is CUDA-only, so this
+# extends a locally-built CPU base image (produced by
+# deploy/gcp/build-vllm-cpu-base.sh from vLLM's own docker/Dockerfile.cpu) —
+# there is no public CPU tag to FROM directly.
+#
+# Build:
+#   VLLM_TAG=v0.27.1 ./deploy/gcp/build-vllm-cpu-base.sh
+#   docker build -f deploy/gcp/Dockerfile.inference-vllm \
+#     --build-arg VLLM_BASE_IMAGE=vllm-cpu-base:v0.27.1 \
+#     -t <your-artifact-registry-tag> deploy/gcp
+# Then push <your-artifact-registry-tag> and set it as
+# `inference_vllm_image` in Terraform (no CD wiring — this is manual).
+ARG VLLM_BASE_IMAGE=vllm-cpu-base:v0.27.1
+FROM ${VLLM_BASE_IMAGE}
+
+COPY inference-vllm-entrypoint.sh /usr/local/bin/inference-vllm-entrypoint.sh
+RUN chmod +x /usr/local/bin/inference-vllm-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/inference-vllm-entrypoint.sh"]
