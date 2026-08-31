@@ -26,7 +26,7 @@ npm run docs:code     # rebuild the graph + docs/code-graph/
 > behind on a machine without the hook installed. Trust the source when they
 > disagree, then regenerate.
 
-## Querying the code — use the graphs before grep
+## Querying the code — must use the graphs before grep, sed, readfile. If needed follow impact analysis for better understanding of code
 
 Two complementary graphs index this repo. Prefer them over reading whole files
 or grepping; fall back in this order (fewest tokens / most precise first):
