@@ -290,7 +290,7 @@ function isHarnessStateFile(root, file) {
     'home/.omp/plugins/cache/',
     'home/.omp/marketplaces/',
     'home/.dsh/skills/',
-    'home/.opencode/',
+    'home/.config/opencode/',
     'project/.agent/',
     'project/.agents/',
   ];
@@ -1220,9 +1220,13 @@ function installOpencode(context) {
     }
   }
   runEccProfile({ ...context, target: 'opencode', profile: 'full', enableHooks: true });
-  const statePath = path.join(context.homeRoot, '.opencode', 'ecc-install-state.json');
+  // ECC 2.2.x installs the opencode target under the XDG config root
+  // (XDG_CONFIG_HOME/opencode → homeRoot/.config/opencode), not the legacy
+  // ~/.opencode. The build environment pins XDG_CONFIG_HOME to homeRoot/.config.
+  const opencodeConfigRoot = path.join(context.homeRoot, '.config', 'opencode');
+  const statePath = path.join(opencodeConfigRoot, 'ecc-install-state.json');
   if (!fs.existsSync(statePath)) throw new Error('OpenCode adapter did not write install state');
-  pinMutableMcpDependencies(path.join(context.homeRoot, '.opencode'));
+  pinMutableMcpDependencies(opencodeConfigRoot);
 }
 
 function installPi(context) {

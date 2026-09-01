@@ -630,14 +630,14 @@ test('secret-like state and temporary build paths are rejected', (t) => {
 
   fs.rmSync(path.join(tree, 'home', '.config', 'state.json'));
   const syntheticToken = `sk-${'a'.repeat(32)}`;
-  writeJson(path.join(tree, 'home', '.opencode', 'ecc-install-state.json'), {
+  writeJson(path.join(tree, 'home', '.config', 'opencode', 'ecc-install-state.json'), {
     schemaVersion: 'ecc.install.v1',
     credential: syntheticToken,
   });
   assert.throws(() => scanTreeForLeaks(tree), /credential-like content/i);
 
-  fs.rmSync(path.join(tree, 'home', '.opencode', 'ecc-install-state.json'));
-  writeJson(path.join(tree, 'home', '.opencode', 'docs', 'synthetic-security-fixture.json'), {
+  fs.rmSync(path.join(tree, 'home', '.config', 'opencode', 'ecc-install-state.json'));
+  writeJson(path.join(tree, 'home', '.config', 'opencode', 'docs', 'synthetic-security-fixture.json'), {
     syntheticToken,
   });
   assert.doesNotThrow(() => scanTreeForLeaks(tree));
