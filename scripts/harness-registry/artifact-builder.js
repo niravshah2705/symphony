@@ -914,13 +914,23 @@ function normalizeVolatileState(root) {
   });
 }
 
-function runEccProfile({ sourceRoot, homeRoot, projectRoot, env, target, profile }) {
-  const installOutput = run(process.execPath, [
+function runEccProfile(
+  { sourceRoot, homeRoot, projectRoot, env, target, profile, enableHooks = false },
+  dependencies = {}
+) {
+  const runCommand = dependencies.runCommand || run;
+  const installArguments = [
     path.join(sourceRoot, 'scripts', 'install-apply.js'),
     '--profile', profile,
     '--target', target,
-    '--json',
-  ], { cwd: projectRoot, env });
+  ];
+  // ECC 2.2.x fails closed when the selected profile materializes its automatic
+  // hook runtime unless the caller explicitly confirms it. Opt in only for
+  // targets whose strategy declares hooks as a native capability, so hook-free
+  // profiles keep their unchanged, non-interactive install path.
+  if (enableHooks) installArguments.push('--enable-hooks');
+  installArguments.push('--json');
+  const installOutput = runCommand(process.execPath, installArguments, { cwd: projectRoot, env });
   const installDocument = parseJsonOutput(installOutput, `ECC ${target} installer`);
   if (
     installDocument.dryRun !== false
@@ -931,7 +941,7 @@ function runEccProfile({ sourceRoot, homeRoot, projectRoot, env, target, profile
   ) {
     throw new Error(`ECC ${target} installer did not apply a non-empty plan`);
   }
-  const listDocument = parseJsonOutput(run(process.execPath, [
+  const listDocument = parseJsonOutput(runCommand(process.execPath, [
     path.join(sourceRoot, 'scripts', 'list-installed.js'),
     '--target', target,
     '--json',
@@ -1209,7 +1219,7 @@ function installOpencode(context) {
       throw new Error(`OpenCode build did not produce ${relative.join('/')}`);
     }
   }
-  runEccProfile({ ...context, target: 'opencode', profile: 'full' });
+  runEccProfile({ ...context, target: 'opencode', profile: 'full', enableHooks: true });
   const statePath = path.join(context.homeRoot, '.opencode', 'ecc-install-state.json');
   if (!fs.existsSync(statePath)) throw new Error('OpenCode adapter did not write install state');
   pinMutableMcpDependencies(path.join(context.homeRoot, '.opencode'));
@@ -1604,6 +1614,7 @@ module.exports = {
   readResolvedSource,
   relativizeContainedAbsoluteSymlinks,
   resolveSource,
+  runEccProfile,
   scanTreeForLeaks,
   selectPiEccPackage,
   stageClaudeMarketplace,
