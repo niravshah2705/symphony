@@ -25,6 +25,7 @@ const {
   installDeepseek,
   readResolvedSource,
   relativizeContainedAbsoluteSymlinks,
+  runEccProfile,
   scanTreeForLeaks,
   selectPiEccPackage,
   stageDshSkills,
@@ -261,6 +262,68 @@ test('Antigravity uses the current plural compatibility-state directory', () => 
     path.join('/artifact/project', '.agents', 'ecc-install-state.json')
   );
   assert.doesNotMatch(STRATEGY_METADATA['antigravity-sdk'].limitations.join(' '), /\.agent compatibility/);
+});
+
+test('runEccProfile confirms the hook runtime only when the caller opts in', () => {
+  function fakeRunner() {
+    const calls = [];
+    const runCommand = (command, args, options) => {
+      calls.push({ command, args, options });
+      const requestedTarget = args[args.indexOf('--target') + 1];
+      if (args.some((value) => String(value).endsWith('install-apply.js'))) {
+        return JSON.stringify({
+          dryRun: false,
+          result: { applied: true, operations: [{ type: 'copy' }] },
+        });
+      }
+      return JSON.stringify({
+        records: [{
+          state: {
+            schemaVersion: 'ecc.install.v1',
+            target: { target: requestedTarget },
+            operations: [{ type: 'copy' }],
+          },
+        }],
+      });
+    };
+    return { calls, runCommand };
+  }
+
+  const optIn = fakeRunner();
+  runEccProfile({
+    sourceRoot: '/source',
+    homeRoot: '/home',
+    projectRoot: '/project',
+    env: { CI: 'true' },
+    target: 'opencode',
+    profile: 'full',
+    enableHooks: true,
+  }, { runCommand: optIn.runCommand });
+  const optInInstall = optIn.calls.find((call) => (
+    call.args.some((value) => String(value).endsWith('install-apply.js'))
+  ));
+  assert.ok(optInInstall.args.includes('--enable-hooks'));
+  assert.deepEqual(optInInstall.args, [
+    path.join('/source', 'scripts', 'install-apply.js'),
+    '--profile', 'full',
+    '--target', 'opencode',
+    '--enable-hooks',
+    '--json',
+  ]);
+
+  const hookFree = fakeRunner();
+  runEccProfile({
+    sourceRoot: '/source',
+    homeRoot: '/home',
+    projectRoot: '/project',
+    env: { CI: 'true' },
+    target: 'antigravity',
+    profile: 'minimal',
+  }, { runCommand: hookFree.runCommand });
+  const hookFreeInstall = hookFree.calls.find((call) => (
+    call.args.some((value) => String(value).endsWith('install-apply.js'))
+  ));
+  assert.equal(hookFreeInstall.args.includes('--enable-hooks'), false);
 });
 
 test('Pi selects the compatible root manifest instead of a nested same-name manifest', (t) => {
