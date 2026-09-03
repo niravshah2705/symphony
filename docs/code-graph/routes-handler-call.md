@@ -26,7 +26,6 @@ Community of 15 nodes
 | test:conversation routes reject malformed ids and unknown threads@L310 | Test | ./services/planner/src/routes/agent.test.js | 310-316 |
 | test:deleting a conversation cascades to its attachments (best-effort) before removing it@L318 | Test | ./services/planner/src/routes/agent.test.js | 318-345 |
 | test:a cascade failure never blocks the conversation delete itself@L347 | Test | ./services/planner/src/routes/agent.test.js | 347-372 |
-| test:a conversation with no org/project context skips the cascade entirely (nothing could have been attached without it)@L374 | Test | ./services/planner/src/routes/agent.test.js | 374-398 |
 | test:planner job and status routes honor the exact selected organization and project@L437 | Test | ./services/planner/src/routes/agent.test.js | 437-555 |
 | test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L557 | Test | ./services/planner/src/routes/agent.test.js | 557-622 |
 
@@ -38,15 +37,15 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (40 edge(s))
+- `equal` (38 edge(s))
 - `ok` (22 edge(s))
-- `require` (19 edge(s))
-- `resolve` (12 edge(s))
-- `after` (10 edge(s))
+- `require` (17 edge(s))
+- `resolve` (11 edge(s))
 - `includes` (10 edge(s))
-- `assign` (8 edge(s))
-- `store` (8 edge(s))
+- `after` (9 edge(s))
 - `deepEqual` (8 edge(s))
+- `assign` (7 edge(s))
+- `store` (7 edge(s))
 - `filter` (7 edge(s))
 - `some` (7 edge(s))
 - `map` (6 edge(s))
@@ -56,15 +55,15 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (40 edge(s))
+- `equal` (38 edge(s))
 - `ok` (21 edge(s))
-- `require` (19 edge(s))
-- `./services/planner/src/routes/agent.test.js` (15 edge(s))
-- `resolve` (10 edge(s))
-- `after` (10 edge(s))
+- `require` (17 edge(s))
+- `./services/planner/src/routes/agent.test.js` (14 edge(s))
 - `includes` (10 edge(s))
-- `assign` (8 edge(s))
+- `resolve` (9 edge(s))
+- `after` (9 edge(s))
 - `deepEqual` (8 edge(s))
+- `assign` (7 edge(s))
 - `filter` (7 edge(s))
 - `some` (7 edge(s))
 - `map` (6 edge(s))

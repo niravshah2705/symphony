@@ -61,6 +61,11 @@ ENV NODE_ENV=production \
 COPY --from=builder --chown=node:node /app /app
 COPY --from=sandbox-builder /out/ai-fleet-network-sandbox /usr/local/bin/ai-fleet-network-sandbox
 
+# Writable canonical root for lazily-materialized harness-registry artifacts
+# (HARNESS_REGISTRY_ROOT=/opt/ai-fleet/harnesses). Owned by node so the runtime
+# copy-in works as non-root; stays empty (and unused) while the mount is off.
+RUN mkdir -p /opt/ai-fleet/harnesses && chown -R node:node /opt/ai-fleet
+
 # Non-root (infra-misconfig checklist). The worker clones into /tmp (see the
 # CODER_WORKSPACE_ROOT env set on the Cloud Run Job) so it needs no writable
 # path outside /tmp.

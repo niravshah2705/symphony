@@ -21,6 +21,21 @@ locals {
     SKILLS_VERSION = var.skills_version
   } : {}
 
+  # Harness-native artifact registry (registry.tf). Terraform CREATES the bucket
+  # when registry_enabled. The runtime MOUNT is a SEPARATE toggle,
+  # registry_mount_enabled, default OFF. It uses COPY-IN (a GCS download+extract
+  # to the canonical /opt/ai-fleet/harnesses/<id>, lazily on first harness use and
+  # eagerly on the worker Job), NOT gcsfuse — so it adds no template volume and,
+  # unlike the skills mount, never gates a container's startup probe. Mount off →
+  # harnesses use only the state baked into the image. Requires the bucket → ANDed
+  # with registry_enabled. The planner/coder SAs already read the bucket (registry.tf).
+  registry_mount_enabled = var.registry_mount_enabled && var.registry_enabled
+  registry_env = local.registry_mount_enabled ? {
+    HARNESS_REGISTRY_ROOT    = var.registry_mount_path
+    HARNESS_REGISTRY_VERSION = var.registry_version
+    HARNESS_REGISTRY_BUCKET  = google_storage_bucket.registry[0].name
+  } : {}
+
   # Plain (non-secret) env per service. Secrets are mounted as separate env
   # blocks below via secret_key_ref.
   gateway_env = merge(local.common_env, {
@@ -108,6 +123,7 @@ locals {
       PIPELINE_STAGE_STORE_BACKEND       = "firestore"
     } : {},
     local.skills_env,
+    local.registry_env,
     local.egress_env,
   )
 
@@ -134,6 +150,7 @@ locals {
       PIPELINE_STAGE_STORE_BACKEND       = "firestore"
     } : {},
     local.skills_env,
+    local.registry_env,
     local.egress_env,
   )
 
@@ -151,7 +168,7 @@ locals {
     SETTINGS_URL = local.settings_url
     # ISSUE_ID (+ CONVERSATION_ID) are supplied per-execution by coder-control
     # as container overrides — see packages/shared/src/messaging/jobs.js.
-  }, local.skills_env, local.egress_env)
+  }, local.skills_env, local.registry_env, local.egress_env)
 }
 
 # --- Google One Tap client id (Secret Manager) --------------------------------

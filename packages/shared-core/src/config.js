@@ -651,6 +651,62 @@ const SKILLS = Object.freeze({
 });
 
 /**
+ * Harness-native artifact registry root resolution.
+ *
+ * Each harness's native CLI/plugin/skill state is published to the
+ * aifleet-registry GCS bucket as a versioned, "ready-to-copy" rootfs bundle:
+ * gs://<bucket>/<version>/harnesses/<id>/rootfs.tar.gz. The bundle's internal
+ * paths are pre-baked to the canonical on-disk mount `/opt/ai-fleet/harnesses/<id>`
+ * (registry schema HARNESS_ARTIFACT_MOUNT_ROOT), so at runtime the coder/planner
+ * materialize (download + extract) each harness's bundle to that exact path and
+ * point the harness at it — no path rewriting. Like SKILLS this is TRUSTED
+ * server-side config (env from Terraform), gated OFF by default (root unset).
+ *
+ *   HARNESS_REGISTRY_ROOT     canonical on-disk mount root that holds <id>/ dirs.
+ *                             Empty ('') = feature off (harness uses baked state).
+ *   HARNESS_REGISTRY_VERSION  the version subdirectory pinned in GCS.
+ *   HARNESS_REGISTRY_BUCKET   the GCS bucket the rootfs is downloaded from.
+ *
+ * HARNESS_REGISTRY_VERSION forms a filesystem/object path, so it is validated to
+ * a single safe path segment (defense-in-depth), mirroring SKILLS_VERSION.
+ */
+const HARNESS_ARTIFACT_MOUNT_ROOT = '/opt/ai-fleet/harnesses';
+
+function assertSafeRegistryVersion(version) {
+  if (version === '') return version;
+  if (version === '.' || version === '..' || !/^[A-Za-z0-9._-]+$/.test(version)) {
+    throw new Error(`HARNESS_REGISTRY_VERSION must be a single path segment (got: ${version})`);
+  }
+  return version;
+}
+
+/**
+ * Resolve the canonical on-disk root a harness's materialized artifact lives at,
+ * or null when the registry mount is disabled (HARNESS_REGISTRY_ROOT unset). Pure
+ * + env-injectable for offline testing. The returned path matches the bundle's
+ * baked canonical mount (`<root>/<id>`) so staged state resolves without rewriting.
+ * @param {string} harnessId canonical lowercase harness id (e.g. 'deepseek').
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string|null}
+ */
+function resolveHarnessArtifactRoot(harnessId, env = process.env) {
+  const root = String(env.HARNESS_REGISTRY_ROOT || '').trim();
+  if (!root) return null;
+  if (typeof harnessId !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(harnessId)) {
+    throw new Error(`harness id must be a lowercase kebab segment (got: ${JSON.stringify(harnessId)})`);
+  }
+  return path.join(root, harnessId);
+}
+
+const HARNESS_REGISTRY = Object.freeze({
+  root: String(process.env.HARNESS_REGISTRY_ROOT || '').trim(),
+  version: assertSafeRegistryVersion(String(process.env.HARNESS_REGISTRY_VERSION || '').trim()),
+  bucket: String(process.env.HARNESS_REGISTRY_BUCKET || '').trim(),
+  mountRoot: HARNESS_ARTIFACT_MOUNT_ROOT,
+  enabled: Boolean(String(process.env.HARNESS_REGISTRY_ROOT || '').trim()),
+});
+
+/**
  * Billing / cost-metering knobs. All optional and INERT for local dev — billing
  * only meters and sweeps when explicitly enabled. Money is handled in INTEGER
  * paise everywhere (never floating INR) to avoid rounding drift.
@@ -762,6 +818,7 @@ const CONFIG = Object.freeze({
   TOOLS,
   AUTH,
   SKILLS,
+  HARNESS_REGISTRY,
   BILLING,
 });
 
@@ -778,4 +835,10 @@ function namespaceCollection(base) {
   return STORE_NAMESPACE ? `${base}__${STORE_NAMESPACE}` : base;
 }
 
-module.exports = { CONFIG, buildFirebaseAuthConfig, resolveSkillsSrc, namespaceCollection };
+module.exports = {
+  CONFIG,
+  buildFirebaseAuthConfig,
+  resolveSkillsSrc,
+  resolveHarnessArtifactRoot,
+  namespaceCollection,
+};

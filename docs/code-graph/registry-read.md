@@ -4,16 +4,32 @@
 
 ## Overview
 
-Community of 294 nodes
+Community of 302 nodes
 
-- **Size**: 294 nodes
-- **Cohesion**: 0.2615
+- **Size**: 302 nodes
+- **Cohesion**: 0.2597
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| sha256File | Function | ./packages/shared-core/src/agent/registry/archive.js | 18-32 |
+| toPosix | Function | ./packages/shared-core/src/agent/registry/archive.js | 34-36 |
+| assertSafeArchivePath | Function | ./packages/shared-core/src/agent/registry/archive.js | 38-52 |
+| collectEntries | Function | ./packages/shared-core/src/agent/registry/archive.js | 54-90 |
+| walk | Function | ./packages/shared-core/src/agent/registry/archive.js | 59-86 |
+| writeText | Function | ./packages/shared-core/src/agent/registry/archive.js | 92-96 |
+| writeOctal | Function | ./packages/shared-core/src/agent/registry/archive.js | 98-103 |
+| splitTarPath | Function | ./packages/shared-core/src/agent/registry/archive.js | 105-120 |
+| tarHeader | Function | ./packages/shared-core/src/agent/registry/archive.js | 122-145 |
+| createDeterministicTarGz | Function | ./packages/shared-core/src/agent/registry/archive.js | 147-170 |
+| readString | Function | ./packages/shared-core/src/agent/registry/archive.js | 172-176 |
+| readOctal | Function | ./packages/shared-core/src/agent/registry/archive.js | 178-183 |
+| parseTar | Function | ./packages/shared-core/src/agent/registry/archive.js | 185-242 |
+| listTarGz | Function | ./packages/shared-core/src/agent/registry/archive.js | 244-246 |
+| assertNoSymlinkParent | Function | ./packages/shared-core/src/agent/registry/archive.js | 248-258 |
+| extractTarGz | Function | ./packages/shared-core/src/agent/registry/archive.js | 260-290 |
 | writeJson | Function | ./packages/shared-core/src/agent/registry/bundle-writer.js | 28-33 |
 | toPublicRegistry | Function | ./packages/shared-core/src/agent/registry/bundle-writer.js | 36-49 |
 | copyFileGuarded | Function | ./packages/shared-core/src/agent/registry/bundle-writer.js | 52-56 |
@@ -48,64 +64,48 @@ Community of 294 nodes
 | test:parses Claude-style front-matter and body@L35 | Test | ./packages/shared-core/src/agent/registry/frontmatter.test.js | 35-41 |
 | test:skillFields normalizes tools and nested Codex metadata@L43 | Test | ./packages/shared-core/src/agent/registry/frontmatter.test.js | 43-54 |
 | test:parses inline flow arrays with quoted entries@L56 | Test | ./packages/shared-core/src/agent/registry/frontmatter.test.js | 56-60 |
-| test:toToolList accepts string, comma-list and array@L62 | Test | ./packages/shared-core/src/agent/registry/frontmatter.test.js | 62-67 |
-| test:returns empty data when there is no front-matter@L69 | Test | ./packages/shared-core/src/agent/registry/frontmatter.test.js | 69-73 |
-| test:strips unquoted trailing comments but keeps # inside quotes@L75 | Test | ./packages/shared-core/src/agent/registry/frontmatter.test.js | 75-79 |
-| lstatOrNull | Function | ./packages/shared-core/src/agent/registry/fs-guards.js | 32-39 |
-| assertContained | Function | ./packages/shared-core/src/agent/registry/fs-guards.js | 72-77 |
-| assertNoSymlinks | Function | ./packages/shared-core/src/agent/registry/fs-guards.js | 80-90 |
-| claimSkillsDirectory | Function | ./packages/shared-core/src/agent/registry/fs-guards.js | 97-126 |
-| safeCopyDir | Function | ./packages/shared-core/src/agent/registry/fs-guards.js | 133-141 |
-| tmp | Function | ./packages/shared-core/src/agent/registry/fs-guards.test.js | 17-19 |
-| test:assertContained blocks escapes from the root@L28 | Test | ./packages/shared-core/src/agent/registry/fs-guards.test.js | 28-33 |
-| test:assertNoSymlinks refuses a symlinked entry@L35 | Test | ./packages/shared-core/src/agent/registry/fs-guards.test.js | 35-44 |
-| test:claimSkillsDirectory refuses an unmarked pre-existing dir@L46 | Test | ./packages/shared-core/src/agent/registry/fs-guards.test.js | 46-52 |
-| test:claimSkillsDirectory creates + marks a fresh dir, then reuses it@L54 | Test | ./packages/shared-core/src/agent/registry/fs-guards.test.js | 54-60 |
-| test:safeCopyDir copies a clean tree and refuses a symlinked source@L62 | Test | ./packages/shared-core/src/agent/registry/fs-guards.test.js | 62-75 |
-| incompletePlugin | Function | ./packages/shared-core/src/agent/registry/index.js | 37-51 |
-| readRawRecords | Function | ./packages/shared-core/src/agent/registry/index.js | 54-100 |
 
-*... and 244 more members.*
+*... and 252 more members.*
 
 ## Execution Flows
 
-- **main** (criticality: 0.70, depth: 7)
+- **main** (criticality: 0.71, depth: 7)
 - **main** (criticality: 0.69, depth: 7)
 
 ## Dependencies
 
 ### Outgoing
 
-- `join` (400 edge(s))
-- `equal` (160 edge(s))
-- `push` (67 edge(s))
-- `map` (55 edge(s))
-- `throws` (55 edge(s))
-- `existsSync` (52 edge(s))
-- `deepEqual` (50 edge(s))
-- `mkdirSync` (49 edge(s))
-- `ok` (40 edge(s))
-- `String` (38 edge(s))
-- `includes` (38 edge(s))
-- `stringify` (35 edge(s))
-- `readFileSync` (33 edge(s))
-- `writeFileSync` (32 edge(s))
+- `join` (397 edge(s))
+- `equal` (162 edge(s))
+- `push` (70 edge(s))
+- `existsSync` (55 edge(s))
+- `map` (54 edge(s))
+- `mkdirSync` (51 edge(s))
+- `throws` (51 edge(s))
+- `deepEqual` (49 edge(s))
+- `ok` (43 edge(s))
+- `String` (42 edge(s))
+- `includes` (40 edge(s))
+- `stringify` (39 edge(s))
 - `realpathSync` (31 edge(s))
+- `readFileSync` (31 edge(s))
+- `writeFileSync` (30 edge(s))
 
 ### Incoming
 
-- `join` (201 edge(s))
-- `equal` (160 edge(s))
-- `./scripts/harness-registry/artifact-builder.js` (98 edge(s))
-- `throws` (55 edge(s))
-- `deepEqual` (50 edge(s))
-- `ok` (40 edge(s))
+- `join` (192 edge(s))
+- `equal` (162 edge(s))
+- `./scripts/harness-registry/artifact-builder.js` (99 edge(s))
+- `throws` (51 edge(s))
+- `deepEqual` (49 edge(s))
+- `ok` (43 edge(s))
 - `./packages/shared-core/src/agent/registry/schema.js` (32 edge(s))
-- `existsSync` (29 edge(s))
-- `./scripts/harness-registry/artifact-builder.test.js` (23 edge(s))
-- `./scripts/harness-registry/archive.js` (22 edge(s))
-- `rmSync` (21 edge(s))
+- `existsSync` (31 edge(s))
+- `./scripts/harness-registry/artifact-builder.test.js` (26 edge(s))
+- `./packages/shared-core/src/agent/registry/archive.js` (22 edge(s))
 - `./packages/shared-core/src/agent/registry/native-reader.js` (20 edge(s))
 - `./packages/shared-core/src/agent/registry/loader.js` (19 edge(s))
-- `after` (18 edge(s))
-- `writeFileSync` (17 edge(s))
+- `mkdirSync` (17 edge(s))
+- `rmSync` (17 edge(s))
+- `writeFileSync` (15 edge(s))

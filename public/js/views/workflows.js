@@ -915,6 +915,7 @@ export async function renderWorkflows(view) {
       option('deep-agent', 'DeepAgent', existing?.runtime === 'deep-agent'),
       option('codex-sdk', 'Codex SDK', existing?.runtime === 'codex-sdk'),
       option('claude-agent-sdk', 'Claude Agent SDK', existing?.runtime === 'claude-agent-sdk'),
+      option('deepseek', 'DeepSeek Harness', existing?.runtime === 'deepseek'),
       option('manual', 'Manual handoff', existing?.runtime === 'manual'),
     ]);
     const model = el('select', {}, [

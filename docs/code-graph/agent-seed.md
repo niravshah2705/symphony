@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 113 nodes
+Community of 111 nodes
 
-- **Size**: 113 nodes
-- **Cohesion**: 0.3247
+- **Size**: 111 nodes
+- **Cohesion**: 0.3324
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 113 nodes
 | scoreEvaluation | Function | ./packages/shared/src/agent/business-pipeline.js | 399-408 |
 | evaluateRequirement | Function | ./packages/shared/src/agent/business-pipeline.js | 418-440 |
 
-*... and 63 more members.*
+*... and 61 more members.*
 
 ## Execution Flows
 
@@ -75,33 +75,33 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (135 edge(s))
+- `equal` (129 edge(s))
 - `String` (19 edge(s))
-- `push` (19 edge(s))
 - `test` (18 edge(s))
+- `push` (17 edge(s))
 - `ok` (15 edge(s))
 - `slice` (14 edge(s))
 - `replace` (14 edge(s))
 - `match` (10 edge(s))
-- `map` (9 edge(s))
-- `toISOString` (8 edge(s))
 - `now` (8 edge(s))
-- `deepEqual` (8 edge(s))
 - `join` (8 edge(s))
 - `filter` (8 edge(s))
+- `map` (8 edge(s))
 - `trim` (7 edge(s))
+- `deepEqual` (7 edge(s))
+- `isArray` (7 edge(s))
 
 ### Incoming
 
-- `equal` (135 edge(s))
+- `equal` (129 edge(s))
 - `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
 - `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
 - `./packages/shared/src/agent/approval-gate.js` (15 edge(s))
 - `ok` (15 edge(s))
 - `./packages/shared/src/agent/memory.js` (14 edge(s))
 - `./packages/shared/src/agent/approval-gate.test.js` (13 edge(s))
-- `deepEqual` (8 edge(s))
 - `./packages/shared/src/agent/memory.test.js` (8 edge(s))
+- `deepEqual` (7 edge(s))
 - `match` (7 edge(s))
 - `./packages/shared/src/agent/workspace-router.js` (7 edge(s))
 - `throws` (6 edge(s))

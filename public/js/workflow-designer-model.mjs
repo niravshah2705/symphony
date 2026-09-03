@@ -13,6 +13,7 @@ export const AGENT_RUNTIME_OPTIONS = Object.freeze([
   'deep-agent',
   'codex-sdk',
   'claude-agent-sdk',
+  'deepseek',
   'manual',
 ]);
 export const AGENT_MODEL_PREFERENCES = Object.freeze([

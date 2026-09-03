@@ -22,7 +22,7 @@ Community of 13 nodes
 | urls | Function | ./packages/shared-core/src/provisioning/naming.js | 67-82 |
 | deriveOrgInternalToken | Function | ./packages/shared-core/src/provisioning/plan.js | 8-16 |
 | labelValue | Function | ./packages/shared-core/src/provisioning/plan.js | 19-21 |
-| buildPlan | Function | ./packages/shared-core/src/provisioning/plan.js | 56-460 |
+| buildPlan | Function | ./packages/shared-core/src/provisioning/plan.js | 56-469 |
 | withComponent | Function | ./packages/shared-core/src/provisioning/plan.js | 102-102 |
 | nowIso | Function | ./packages/shared-core/src/provisioning/provisioner.js | 26-29 |
 | provision | Function | ./packages/shared-core/src/provisioning/provisioner.js | 37-90 |
