@@ -4,35 +4,61 @@
 
 ## Overview
 
-Community of 19 nodes
+Community of 45 nodes
 
-- **Size**: 19 nodes
-- **Cohesion**: 0.3448
+- **Size**: 45 nodes
+- **Cohesion**: 0.2762
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| ConversationError | Class | ./packages/shared/src/agent/conversations.js | 26-32 |
-| constructor | Function | ./packages/shared/src/agent/conversations.js | 27-31 |
-| bound | Function | ./packages/shared/src/agent/conversations.js | 35-37 |
-| normalizeAttachmentRef | Function | ./packages/shared/src/agent/conversations.js | 40-52 |
-| normalizeAttachmentRefs | Function | ./packages/shared/src/agent/conversations.js | 54-61 |
-| normalizeCitation | Function | ./packages/shared/src/agent/conversations.js | 64-74 |
-| normalizeCitations | Function | ./packages/shared/src/agent/conversations.js | 76-83 |
-| normalizeMessage | Function | ./packages/shared/src/agent/conversations.js | 85-113 |
-| normalizeMessages | Function | ./packages/shared/src/agent/conversations.js | 116-124 |
-| normalizeTitle | Function | ./packages/shared/src/agent/conversations.js | 132-136 |
-| test:normalizeMessages keeps only allowlisted fields per role (no mass assignment)@L15 | Test | ./packages/shared/src/agent/conversations.test.js | 15-25 |
-| test:normalizeMessages validates array shape and size@L27 | Test | ./packages/shared/src/agent/conversations.test.js | 27-31 |
-| test:normalizeMessages enforces role and required content@L33 | Test | ./packages/shared/src/agent/conversations.test.js | 33-37 |
-| test:normalizeMessages bounds long fields@L39 | Test | ./packages/shared/src/agent/conversations.test.js | 39-42 |
-| test:normalizeTitle trims/bounds and rejects empty@L50 | Test | ./packages/shared/src/agent/conversations.test.js | 50-53 |
-| test:normalizeMessages keeps a bounded attachments array on user messages, omitted when absent@L55 | Test | ./packages/shared/src/agent/conversations.test.js | 55-62 |
-| test:normalizeMessages rejects malformed or oversized attachment references@L64 | Test | ./packages/shared/src/agent/conversations.test.js | 64-82 |
-| test:normalizeMessages keeps a bounded citations array on assistant messages, omitted when absent@L84 | Test | ./packages/shared/src/agent/conversations.test.js | 84-93 |
-| test:normalizeMessages rejects malformed citations@L95 | Test | ./packages/shared/src/agent/conversations.test.js | 95-104 |
+| LocalizationError | Class | ./packages/shared/src/agent/localization.js | 74-80 |
+| constructor | Function | ./packages/shared/src/agent/localization.js | 75-79 |
+| cleanInline | Function | ./packages/shared/src/agent/localization.js | 82-89 |
+| normalizeLocaleTag | Function | ./packages/shared/src/agent/localization.js | 92-101 |
+| supportedLocale | Function | ./packages/shared/src/agent/localization.js | 104-109 |
+| parseLanguageHints | Function | ./packages/shared/src/agent/localization.js | 112-145 |
+| normalizeCountryCode | Function | ./packages/shared/src/agent/localization.js | 147-150 |
+| normalizeGeoResult | Function | ./packages/shared/src/agent/localization.js | 152-158 |
+| languageSuggestions | Function | ./packages/shared/src/agent/localization.js | 164-222 |
+| add | Function | ./packages/shared/src/agent/localization.js | 178-183 |
+| normalizeIp | Function | ./packages/shared/src/agent/localization.js | 224-231 |
+| isPublicIp | Function | ./packages/shared/src/agent/localization.js | 234-259 |
+| ipwhoRequest | Function | ./packages/shared/src/agent/localization.js | 261-271 |
+| locateIp | Function | ./packages/shared/src/agent/localization.js | 277-295 |
+| locateCurrentIp | Function | ./packages/shared/src/agent/localization.js | 303-336 |
+| clearCurrentLocationCache | Function | ./packages/shared/src/agent/localization.js | 338-340 |
+| requestIp | Function | ./packages/shared/src/agent/localization.js | 342-346 |
+| normalizeTranslationRequest | Function | ./packages/shared/src/agent/localization.js | 348-368 |
+| protectedRanges | Function | ./packages/shared/src/agent/localization.js | 370-407 |
+| addMatches | Function | ./packages/shared/src/agent/localization.js | 372-374 |
+| protectText | Function | ./packages/shared/src/agent/localization.js | 409-426 |
+| restoreProtected | Function | ./packages/shared/src/agent/localization.js | 428-443 |
+| normalizeTranslationModel | Function | ./packages/shared/src/agent/localization.js | 445-459 |
+| translationPrompt | Function | ./packages/shared/src/agent/localization.js | 461-482 |
+| TranslationCache | Class | ./packages/shared/src/agent/localization.js | 484-515 |
+| constructor | Function | ./packages/shared/src/agent/localization.js | 485-489 |
+| get | Function | ./packages/shared/src/agent/localization.js | 491-501 |
+| set | Function | ./packages/shared/src/agent/localization.js | 503-510 |
+| clear | Function | ./packages/shared/src/agent/localization.js | 512-514 |
+| cacheKey | Function | ./packages/shared/src/agent/localization.js | 528-533 |
+| translateTexts | Function | ./packages/shared/src/agent/localization.js | 536-597 |
+| test:locale tags are canonical BCP 47 values resolved against a small catalog@L28 | Test | ./packages/shared/src/agent/localization.test.js | 28-48 |
+| test:language hints honor quality, canonicalize, deduplicate, and ignore unsupported tags@L50 | Test | ./packages/shared/src/agent/localization.test.js | 50-58 |
+| test:suggestions keep English selected and expose IP location as a recommendation only@L60 | Test | ./packages/shared/src/agent/localization.test.js | 60-77 |
+| test:Maharashtra recommends Marathi and the rest of India recommends Hindi@L79 | Test | ./packages/shared/src/agent/localization.test.js | 79-88 |
+| test:IP handling accepts public addresses and rejects local or reserved addresses@L90 | Test | ./packages/shared/src/agent/localization.test.js | 90-99 |
+| test:IP geolocation returns only a bounded country/region and fails closed offline@L101 | Test | ./packages/shared/src/agent/localization.test.js | 101-117 |
+| test:localhost geolocation uses public egress lookup without returning an address@L119 | Test | ./packages/shared/src/agent/localization.test.js | 119-135 |
+| test:proxy geolocation uses the fixed IPWho route and validated project context@L137 | Test | ./packages/shared/src/agent/localization.test.js | 137-159 |
+| test:translation request bounds string count, item size, and total size@L161 | Test | ./packages/shared/src/agent/localization.test.js | 161-173 |
+| test:translation protection preserves placeholders, URLs, HTML, printf values, and code byte-for-byte@L175 | Test | ./packages/shared/src/agent/localization.test.js | 175-195 |
+| test:Gujarati prompt explicitly requests all UI and internal-status communication@L197 | Test | ./packages/shared/src/agent/localization.test.js | 197-206 |
+| test:translation uses exact deterministic source fallback when local inference is unavailable@L208 | Test | ./packages/shared/src/agent/localization.test.js | 208-222 |
+| test:successful local translations are cached by model, locale, and input without raw cache keys@L224 | Test | ./packages/shared/src/agent/localization.test.js | 224-251 |
+| test:English identity translation does not invoke a model@L253 | Test | ./packages/shared/src/agent/localization.test.js | 253-266 |
 
 ## Execution Flows
 
@@ -42,30 +68,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `throws` (13 edge(s))
-- `isArray` (6 edge(s))
-- `equal` (6 edge(s))
-- `deepEqual` (5 edge(s))
-- `trim` (4 edge(s))
-- `String` (4 edge(s))
-- `map` (3 edge(s))
-- `sort` (3 edge(s))
-- `keys` (3 edge(s))
-- `slice` (2 edge(s))
-- `test` (2 edge(s))
-- `fill` (2 edge(s))
-- `Number` (1 edge(s))
-- `isFinite` (1 edge(s))
-- `replace` (1 edge(s))
+- `equal` (43 edge(s))
+- `deepEqual` (12 edge(s))
+- `slice` (10 edge(s))
+- `push` (9 edge(s))
+- `map` (8 edge(s))
+- `includes` (8 edge(s))
+- `ok` (8 edge(s))
+- `trim` (7 edge(s))
+- `max` (6 edge(s))
+- `Number` (6 edge(s))
+- `replace` (6 edge(s))
+- `some` (6 edge(s))
+- `throws` (6 edge(s))
+- `split` (5 edge(s))
+- `match` (5 edge(s))
 
 ### Incoming
 
-- `./packages/shared/src/agent/conversations.js` (15 edge(s))
-- `throws` (13 edge(s))
-- `./packages/shared/src/agent/conversations.test.js` (9 edge(s))
-- `equal` (6 edge(s))
-- `deepEqual` (5 edge(s))
-- `sort` (3 edge(s))
-- `keys` (3 edge(s))
-- `fill` (2 edge(s))
-- `repeat` (1 edge(s))
+- `./packages/shared/src/agent/localization.js` (47 edge(s))
+- `equal` (43 edge(s))
+- `./packages/shared/src/agent/localization.test.js` (14 edge(s))
+- `deepEqual` (12 edge(s))
+- `ok` (8 edge(s))
+- `throws` (6 edge(s))
+- `some` (5 edge(s))
+- `match` (4 edge(s))
+- `fail` (2 edge(s))
+- `doesNotMatch` (2 edge(s))
+- `hasOwn` (2 edge(s))
+- `./packages/shared/src/agent/localization.js::LANGUAGE_CATALOG.find` (2 edge(s))
+- `includes` (2 edge(s))
+- `push` (1 edge(s))
+- `from` (1 edge(s))

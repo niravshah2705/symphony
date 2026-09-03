@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 57 nodes
+Community of 56 nodes
 
-- **Size**: 57 nodes
-- **Cohesion**: 0.3896
+- **Size**: 56 nodes
+- **Cohesion**: 0.3890
 - **Dominant Language**: javascript
 
 ## Members
@@ -45,7 +45,6 @@ Community of 57 nodes
 | _streamResponseChunks | Function | ./packages/shared/src/agent/llm.js | 517-524 |
 | _streamChatModelEvents | Function | ./packages/shared/src/agent/llm.js | 525-527 |
 | withConfig | Function | ./packages/shared/src/agent/llm.js | 528-540 |
-| RetryingChatOllama | Class | ./packages/shared/src/agent/llm.js | 553-568 |
 | _streamResponseChunks | Function | ./packages/shared/src/agent/llm.js | 561-567 |
 | messageType | Function | ./packages/shared/src/agent/lmstudio-context.js | 44-50 |
 | contentToText | Function | ./packages/shared/src/agent/lmstudio-context.js | 53-58 |
@@ -64,8 +63,9 @@ Community of 57 nodes
 | prepareMessages | Function | ./packages/shared/src/agent/lmstudio-context.js | 207-225 |
 | est | Function | ./packages/shared/src/agent/lmstudio-context.test.js | 16-16 |
 | buildConvo | Function | ./packages/shared/src/agent/lmstudio-context.test.js | 20-30 |
+| test:splitForBudget keeps system + first human as the head@L34 | Test | ./packages/shared/src/agent/lmstudio-context.test.js | 34-39 |
 
-*... and 7 more members.*
+*... and 6 more members.*
 
 ## Execution Flows
 
@@ -99,7 +99,7 @@ No execution flows pass through this community.
 - `./packages/shared/src/agent/lmstudio-context.test.js` (9 edge(s))
 - `strictEqual` (9 edge(s))
 - `./packages/shared/src/agent/llm-retry.js` (7 edge(s))
-- `./packages/shared/src/agent/llm.js` (7 edge(s))
+- `./packages/shared/src/agent/llm.js` (6 edge(s))
 - `ok` (6 edge(s))
 - `deepStrictEqual` (5 edge(s))
 - `rejects` (3 edge(s))
@@ -107,4 +107,4 @@ No execution flows pass through this community.
 - `startsWith` (2 edge(s))
 - `push` (1 edge(s))
 - `deepEqual` (1 edge(s))
-- `some` (1 edge(s))
+- `./packages/shared/src/agent/llm.js::RetryingChatOllama` (1 edge(s))

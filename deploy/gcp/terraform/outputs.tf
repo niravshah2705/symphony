@@ -116,6 +116,16 @@ output "registry_bucket" {
   value       = one(google_storage_bucket.registry[*].name)
 }
 
+output "memory_bucket" {
+  description = "Terraform-created GCS bucket holding AI-compressed agent memories (null when memory_enabled = false). Name defaults to '<project_id>-aifleet-memory'. Mounted READ-WRITE on planner + coder at /memory when memory_mount_enabled; the runtime pins var.memory_version."
+  value       = one(google_storage_bucket.memory[*].name)
+}
+
+output "memory_version_pinned" {
+  description = "Memory layout version the planner/coder pin (MEMORY_VERSION), or null when the mount is disabled."
+  value       = local.memory_mount_enabled ? var.memory_version : null
+}
+
 output "artifact_registry_repo" {
   description = "Artifact Registry Docker repo path (images are pushed here as <repo>/<service>:<tag>)."
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}"

@@ -4,13 +4,12 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 225
+**Total communities**: 223
 
 ## Communities
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-agent | 386 | [agent-agent.md](agent-agent.md) |
 | agent-agent-availability-error | 2 | [agent-agent-availability-error.md](agent-agent-availability-error.md) |
 | agent-agent-error | 2 | [agent-agent-error.md](agent-agent-error.md) |
 | agent-b64url | 2 | [agent-b64url.md](agent-b64url.md) |
@@ -25,36 +24,36 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-fake | 4 | [agent-fake.md](agent-fake.md) |
 | agent-fake-codex | 3 | [agent-fake-codex.md](agent-fake-codex.md) |
 | agent-fake-constructor | 3 | [agent-fake-constructor.md](agent-fake-constructor.md) |
-| agent-gate | 114 | [agent-gate.md](agent-gate.md) |
 | agent-gate-error | 2 | [agent-gate-error.md](agent-gate-error.md) |
 | agent-id | 2 | [agent-id.md](agent-id.md) |
 | agent-knowledge-search-error | 2 | [agent-knowledge-search-error.md](agent-knowledge-search-error.md) |
 | agent-local-intelligence-error | 2 | [agent-local-intelligence-error.md](agent-local-intelligence-error.md) |
+| agent-memory | 252 | [agent-memory.md](agent-memory.md) |
 | agent-metric | 31 | [agent-metric.md](agent-metric.md) |
-| agent-model | 370 | [agent-model.md](agent-model.md) |
+| agent-model | 440 | [agent-model.md](agent-model.md) |
 | agent-models | 41 | [agent-models.md](agent-models.md) |
-| agent-normalize | 19 | [agent-normalize.md](agent-normalize.md) |
+| agent-normalize | 45 | [agent-normalize.md](agent-normalize.md) |
+| agent-normalize-attachment | 19 | [agent-normalize-attachment.md](agent-normalize-attachment.md) |
 | agent-organization-context-mismatch | 2 | [agent-organization-context-mismatch.md](agent-organization-context-mismatch.md) |
 | agent-param | 6 | [agent-param.md](agent-param.md) |
 | agent-parse | 2 | [agent-parse.md](agent-parse.md) |
 | agent-path | 3 | [agent-path.md](agent-path.md) |
 | agent-pattern | 6 | [agent-pattern.md](agent-pattern.md) |
 | agent-plan | 3 | [agent-plan.md](agent-plan.md) |
-| agent-policy | 21 | [agent-policy.md](agent-policy.md) |
 | agent-policy-denied-error | 2 | [agent-policy-denied-error.md](agent-policy-denied-error.md) |
 | agent-policy-unavailable-error | 2 | [agent-policy-unavailable-error.md](agent-policy-unavailable-error.md) |
 | agent-query | 11 | [agent-query.md](agent-query.md) |
+| agent-receipt | 347 | [agent-receipt.md](agent-receipt.md) |
 | agent-repository-broker-error | 2 | [agent-repository-broker-error.md](agent-repository-broker-error.md) |
 | agent-resolve | 7 | [agent-resolve.md](agent-resolve.md) |
 | agent-resolve-effective | 2 | [agent-resolve-effective.md](agent-resolve-effective.md) |
 | agent-response | 2 | [agent-response.md](agent-response.md) |
-| agent-rubric | 39 | [agent-rubric.md](agent-rubric.md) |
 | agent-scope | 21 | [agent-scope.md](agent-scope.md) |
 | agent-settings | 6 | [agent-settings.md](agent-settings.md) |
 | agent-stage | 164 | [agent-stage.md](agent-stage.md) |
 | agent-stage-execution-error | 2 | [agent-stage-execution-error.md](agent-stage-execution-error.md) |
 | agent-stage-execution-store-error | 2 | [agent-stage-execution-store-error.md](agent-stage-execution-store-error.md) |
-| agent-stream | 57 | [agent-stream.md](agent-stream.md) |
+| agent-stream | 56 | [agent-stream.md](agent-stream.md) |
 | agent-stub | 3 | [agent-stub.md](agent-stub.md) |
 | agent-summarize | 2 | [agent-summarize.md](agent-summarize.md) |
 | agent-system | 4 | [agent-system.md](agent-system.md) |
@@ -71,7 +70,6 @@ Auto-generated documentation from the code knowledge graph community structure.
 | commands-resolve | 136 | [commands-resolve.md](commands-resolve.md) |
 | core-org | 444 | [core-org.md](core-org.md) |
 | domain-catalog | 3 | [domain-catalog.md](domain-catalog.md) |
-| e2e-agent | 30 | [e2e-agent.md](e2e-agent.md) |
 | e2e-disabled | 19 | [e2e-disabled.md](e2e-disabled.md) |
 | e2e-fake | 3 | [e2e-fake.md](e2e-fake.md) |
 | e2e-json | 12 | [e2e-json.md](e2e-json.md) |
@@ -101,6 +99,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | js-fake-text-node | 2 | [js-fake-text-node.md](js-fake-text-node.md) |
 | js-legal | 12 | [js-legal.md](js-legal.md) |
 | js-minted | 2 | [js-minted.md](js-minted.md) |
+| js-workspace | 49 | [js-workspace.md](js-workspace.md) |
 | messaging-decode | 2 | [messaging-decode.md](messaging-decode.md) |
 | messaging-direct | 7 | [messaging-direct.md](messaging-direct.md) |
 | messaging-job | 3 | [messaging-job.md](messaging-job.md) |
@@ -117,7 +116,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | provisioning-fake | 6 | [provisioning-fake.md](provisioning-fake.md) |
 | provisioning-job | 32 | [provisioning-job.md](provisioning-job.md) |
 | provisioning-provision | 13 | [provisioning-provision.md](provisioning-provision.md) |
-| registry-read | 294 | [registry-read.md](registry-read.md) |
+| registry-read | 296 | [registry-read.md](registry-read.md) |
 | registry-validate | 2 | [registry-validate.md](registry-validate.md) |
 | repositories-entries | 7 | [repositories-entries.md](repositories-entries.md) |
 | repositories-project | 638 | [repositories-project.md](repositories-project.md) |
@@ -165,7 +164,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-config | 69 | [src-config.md](src-config.md) |
 | src-configured | 2 | [src-configured.md](src-configured.md) |
 | src-constant | 5 | [src-constant.md](src-constant.md) |
-| src-context | 156 | [src-context.md](src-context.md) |
+| src-context | 197 | [src-context.md](src-context.md) |
 | src-context-trusted | 7 | [src-context-trusted.md](src-context-trusted.md) |
 | src-cors | 6 | [src-cors.md](src-cors.md) |
 | src-docs | 18 | [src-docs.md](src-docs.md) |
@@ -183,8 +182,8 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-issue | 24 | [src-issue.md](src-issue.md) |
 | src-javascript | 3 | [src-javascript.md](src-javascript.md) |
 | src-javascript-files | 3 | [src-javascript-files.md](src-javascript-files.md) |
-| src-label | 86 | [src-label.md](src-label.md) |
 | src-linear-error | 2 | [src-linear-error.md](src-linear-error.md) |
+| src-memory | 2 | [src-memory.md](src-memory.md) |
 | src-message | 3 | [src-message.md](src-message.md) |
 | src-message-workspace | 3 | [src-message-workspace.md](src-message-workspace.md) |
 | src-mint | 9 | [src-mint.md](src-mint.md) |
@@ -211,7 +210,6 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-stage | 43 | [src-stage.md](src-stage.md) |
 | src-state | 6 | [src-state.md](src-state.md) |
 | src-status | 5 | [src-status.md](src-status.md) |
-| src-stream | 41 | [src-stream.md](src-stream.md) |
 | src-stream-token-unavailable-error | 2 | [src-stream-token-unavailable-error.md](src-stream-token-unavailable-error.md) |
 | src-tick | 4 | [src-tick.md](src-tick.md) |
 | src-tick-autonomous | 4 | [src-tick-autonomous.md](src-tick-autonomous.md) |
@@ -225,7 +223,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | store-workspace-context-error | 2 | [store-workspace-context-error.md](store-workspace-context-error.md) |
 | store-workspace-organization | 2 | [store-workspace-organization.md](store-workspace-organization.md) |
 | support-parse | 107 | [support-parse.md](support-parse.md) |
-| terraform-google | 350 | [terraform-google.md](terraform-google.md) |
+| terraform-google | 363 | [terraform-google.md](terraform-google.md) |
 | tools-arg | 2 | [tools-arg.md](tools-arg.md) |
 | tools-fail | 3 | [tools-fail.md](tools-fail.md) |
 | tools-image | 2 | [tools-image.md](tools-image.md) |
@@ -234,4 +232,4 @@ Auto-generated documentation from the code knowledge graph community structure.
 | tools-render-devcontainer | 2 | [tools-render-devcontainer.md](tools-render-devcontainer.md) |
 | tools-render-dockerignore | 2 | [tools-render-dockerignore.md](tools-render-dockerignore.md) |
 | tools-safe | 2 | [tools-safe.md](tools-safe.md) |
-| views-render | 687 | [views-render.md](views-render.md) |
+| views-render | 668 | [views-render.md](views-render.md) |

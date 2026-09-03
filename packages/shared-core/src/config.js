@@ -651,6 +651,45 @@ const SKILLS = Object.freeze({
 });
 
 /**
+ * Agent memory store (claude-mem, harness-agnostic). The MemoryMiddleware
+ * captures + compresses finished runs and injects durable memory into future
+ * ones. Persistence is a GCS bucket mounted READ-WRITE via gcsfuse at MEMORY_ROOT
+ * (mirrors the read-only skills mount), version-pinned by MEMORY_VERSION:
+ *
+ *   MEMORY_ROOT     gcsfuse RW mount root. Empty ('') ⇒ the feature is DORMANT
+ *                   and the middleware falls back to the Firestore/file store.
+ *   MEMORY_VERSION  version subdirectory under MEMORY_ROOT (validated segment).
+ *   MEMORY_ENABLED  opt-in gate ('true'); off by default. The middleware also
+ *                   honors a per-org `memoryEnabled` setting.
+ *
+ * The canonical path resolver used by the shared-layer store lives in
+ * packages/shared/src/agent/memory-store/paths.js (kept self-contained so it
+ * never depends on this not-yet-published addition); this mirror is for ops
+ * discoverability + a fail-fast MEMORY_VERSION validation at startup.
+ */
+function assertSafeMemoryVersion(version) {
+  if (version === '') return version;
+  if (version === '.' || version === '..' || !/^[A-Za-z0-9._-]+$/.test(version)) {
+    throw new Error(`MEMORY_VERSION must be a single path segment (got: ${version})`);
+  }
+  return version;
+}
+
+function resolveMemorySrc(env = process.env) {
+  const root = String(env.MEMORY_ROOT || '').trim();
+  if (!root) return null;
+  const version = assertSafeMemoryVersion(String(env.MEMORY_VERSION || '').trim());
+  return version ? path.join(root, version) : root;
+}
+
+const MEMORY = Object.freeze({
+  root: String(process.env.MEMORY_ROOT || '').trim(),
+  version: String(process.env.MEMORY_VERSION || '').trim(),
+  enabled: String(process.env.MEMORY_ENABLED || '').trim().toLowerCase() === 'true',
+  src: resolveMemorySrc(),
+});
+
+/**
  * Billing / cost-metering knobs. All optional and INERT for local dev — billing
  * only meters and sweeps when explicitly enabled. Money is handled in INTEGER
  * paise everywhere (never floating INR) to avoid rounding drift.
@@ -762,6 +801,7 @@ const CONFIG = Object.freeze({
   TOOLS,
   AUTH,
   SKILLS,
+  MEMORY,
   BILLING,
 });
 
@@ -778,4 +818,4 @@ function namespaceCollection(base) {
   return STORE_NAMESPACE ? `${base}__${STORE_NAMESPACE}` : base;
 }
 
-module.exports = { CONFIG, buildFirebaseAuthConfig, resolveSkillsSrc, namespaceCollection };
+module.exports = { CONFIG, buildFirebaseAuthConfig, resolveSkillsSrc, resolveMemorySrc, namespaceCollection };
