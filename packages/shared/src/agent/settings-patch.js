@@ -26,7 +26,7 @@ const COMPLEXITY_TIER_VALUES = Object.freeze([...COMPLEXITY_TIER_IDS, 'custom'])
 const BYOM_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'huggingface']);
 const PLANNING_PROVIDERS = Object.freeze(['linear', 'jira', 'asana']);
 const REPOSITORY_PROVIDERS = Object.freeze(['github', 'gitlab']);
-const RUNTIME_IDS = Object.freeze(['deepagent', 'codex-sdk', 'claude-agent-sdk', 'antigravity-sdk']);
+const RUNTIME_IDS = Object.freeze(['deepagent', 'codex-sdk', 'claude-agent-sdk', 'antigravity-sdk', 'deepseek']);
 const WORKFLOW_PATTERN_IDS = Object.freeze(['sequential', 'parallel', 'evaluator', 'supervisor']);
 const CONTEXT_MODES = Object.freeze(['summarize', 'trim', 'none']);
 // Upper bound on the LLM stream retry count; matches the clamp in agent/llm.js.
@@ -246,7 +246,7 @@ function describeEditableSettings() {
     EDITABLE_KEYS.join(', '),
     '',
     'Enum values:',
-    `- agentRuntime (harness): ${RUNTIME_IDS.join(' | ')} (deepagent=DeepAgent, codex-sdk=Codex, claude-agent-sdk=ClaudeCode, antigravity-sdk=Antigravity)`,
+    `- agentRuntime (harness): ${RUNTIME_IDS.join(' | ')} (deepagent=DeepAgent, codex-sdk=Codex, claude-agent-sdk=ClaudeCode, antigravity-sdk=Antigravity, deepseek=DeepSeek)`,
     `- workflowPattern: ${WORKFLOW_PATTERN_IDS.join(' | ')}`,
     `- llmProvider / thinkingLlmProvider / executionLlmProvider / testingLlmProvider / deploymentLlmProvider: ${ALL_PROVIDERS.join(' | ')}`,
     `- byomProvider: ${BYOM_PROVIDERS.join(' | ')}`,

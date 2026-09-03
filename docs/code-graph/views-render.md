@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 687 nodes
+Community of 699 nodes
 
-- **Size**: 687 nodes
-- **Cohesion**: 0.4869
+- **Size**: 699 nodes
+- **Cohesion**: 0.4823
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 687 nodes
 | authProviderButtons | Function | ./public/js/app.js | 521-539 |
 | beginSignOut | Function | ./public/js/app.js | 541-549 |
 
-*... and 637 more members.*
+*... and 649 more members.*
 
 ## Execution Flows
 
@@ -85,20 +85,20 @@ Community of 687 nodes
 
 ### Outgoing
 
+- `append` (218 edge(s))
 - `addEventListener` (210 edge(s))
-- `append` (208 edge(s))
 - `map` (150 edge(s))
-- `String` (108 edge(s))
-- `push` (95 edge(s))
-- `trim` (81 edge(s))
+- `String` (111 edge(s))
+- `push` (109 edge(s))
+- `trim` (92 edge(s))
 - `filter` (77 edge(s))
 - `isArray` (67 edge(s))
-- `setAttribute` (62 edge(s))
-- `has` (60 edge(s))
+- `setAttribute` (66 edge(s))
+- `has` (62 edge(s))
 - `catch` (59 edge(s))
-- `Boolean` (55 edge(s))
+- `Boolean` (56 edge(s))
 - `querySelector` (53 edge(s))
-- `slice` (42 edge(s))
+- `slice` (48 edge(s))
 - `find` (42 edge(s))
 
 ### Incoming

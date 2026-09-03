@@ -134,6 +134,15 @@ function buildPlan(slug, cfg) {
   const agentEnv = {
     ...commonEnv,
     EGRESS_PROXY_URL: 'http://127.0.0.1:4030',
+    // Harness-registry mount pointer. cloneContainers REPLACES the primary
+    // container's plain env with spec.env, so this must be re-emitted here or the
+    // tenant planner/coder/worker would lose it (volumeMounts, by contrast, carry
+    // from the source automatically). Inert when the mount is disabled (root '').
+    ...(cfg.harnessRegistryRoot ? {
+      HARNESS_REGISTRY_ROOT: cfg.harnessRegistryRoot,
+      HARNESS_REGISTRY_VERSION: cfg.harnessRegistryVersion || '',
+      HARNESS_REGISTRY_BUCKET: cfg.harnessRegistryBucket || '',
+    } : {}),
   };
 
   // Per-tenant patch overlaid onto the cloned egress-proxy SIDECAR container

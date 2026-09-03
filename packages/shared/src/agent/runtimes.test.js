@@ -47,7 +47,7 @@ function chatgptCodexLlm() {
 }
 
 test('runtime and workflow registries use stable canonical ids and aliases', () => {
-  assert.deepEqual(runtimeCatalog().map((item) => item.id), ['deepagent', 'codex-sdk', 'claude-agent-sdk', 'antigravity-sdk']);
+  assert.deepEqual(runtimeCatalog().map((item) => item.id), ['deepagent', 'codex-sdk', 'claude-agent-sdk', 'antigravity-sdk', 'deepseek']);
   assert.deepEqual(workflowPatternCatalog().map((item) => item.id), [
     'sequential',
     'parallel',

@@ -10,7 +10,6 @@ Auto-generated documentation from the code knowledge graph community structure.
 
 | Community | Size | Link |
 |-----------|------|------|
-| agent-agent | 386 | [agent-agent.md](agent-agent.md) |
 | agent-agent-availability-error | 2 | [agent-agent-availability-error.md](agent-agent-availability-error.md) |
 | agent-agent-error | 2 | [agent-agent-error.md](agent-agent-error.md) |
 | agent-b64url | 2 | [agent-b64url.md](agent-b64url.md) |
@@ -18,20 +17,20 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-business-pipeline-error | 2 | [agent-business-pipeline-error.md](agent-business-pipeline-error.md) |
 | agent-checks | 16 | [agent-checks.md](agent-checks.md) |
 | agent-coder-error | 2 | [agent-coder-error.md](agent-coder-error.md) |
+| agent-context | 394 | [agent-context.md](agent-context.md) |
 | agent-convo | 5 | [agent-convo.md](agent-convo.md) |
+| agent-deployment | 172 | [agent-deployment.md](agent-deployment.md) |
 | agent-derive | 2 | [agent-derive.md](agent-derive.md) |
 | agent-factory | 2 | [agent-factory.md](agent-factory.md) |
 | agent-failing | 3 | [agent-failing.md](agent-failing.md) |
 | agent-fake | 4 | [agent-fake.md](agent-fake.md) |
 | agent-fake-codex | 3 | [agent-fake-codex.md](agent-fake-codex.md) |
 | agent-fake-constructor | 3 | [agent-fake-constructor.md](agent-fake-constructor.md) |
-| agent-gate | 114 | [agent-gate.md](agent-gate.md) |
 | agent-gate-error | 2 | [agent-gate-error.md](agent-gate-error.md) |
 | agent-id | 2 | [agent-id.md](agent-id.md) |
 | agent-knowledge-search-error | 2 | [agent-knowledge-search-error.md](agent-knowledge-search-error.md) |
 | agent-local-intelligence-error | 2 | [agent-local-intelligence-error.md](agent-local-intelligence-error.md) |
 | agent-metric | 31 | [agent-metric.md](agent-metric.md) |
-| agent-model | 370 | [agent-model.md](agent-model.md) |
 | agent-models | 41 | [agent-models.md](agent-models.md) |
 | agent-normalize | 19 | [agent-normalize.md](agent-normalize.md) |
 | agent-organization-context-mismatch | 2 | [agent-organization-context-mismatch.md](agent-organization-context-mismatch.md) |
@@ -40,16 +39,16 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-path | 3 | [agent-path.md](agent-path.md) |
 | agent-pattern | 6 | [agent-pattern.md](agent-pattern.md) |
 | agent-plan | 3 | [agent-plan.md](agent-plan.md) |
-| agent-policy | 21 | [agent-policy.md](agent-policy.md) |
 | agent-policy-denied-error | 2 | [agent-policy-denied-error.md](agent-policy-denied-error.md) |
 | agent-policy-unavailable-error | 2 | [agent-policy-unavailable-error.md](agent-policy-unavailable-error.md) |
+| agent-prompt | 271 | [agent-prompt.md](agent-prompt.md) |
 | agent-query | 11 | [agent-query.md](agent-query.md) |
 | agent-repository-broker-error | 2 | [agent-repository-broker-error.md](agent-repository-broker-error.md) |
 | agent-resolve | 7 | [agent-resolve.md](agent-resolve.md) |
 | agent-resolve-effective | 2 | [agent-resolve-effective.md](agent-resolve-effective.md) |
 | agent-response | 2 | [agent-response.md](agent-response.md) |
-| agent-rubric | 39 | [agent-rubric.md](agent-rubric.md) |
 | agent-scope | 21 | [agent-scope.md](agent-scope.md) |
+| agent-seed | 111 | [agent-seed.md](agent-seed.md) |
 | agent-settings | 6 | [agent-settings.md](agent-settings.md) |
 | agent-stage | 164 | [agent-stage.md](agent-stage.md) |
 | agent-stage-execution-error | 2 | [agent-stage-execution-error.md](agent-stage-execution-error.md) |
@@ -93,13 +92,14 @@ Auto-generated documentation from the code knowledge graph community structure.
 | gcp-version | 2 | [gcp-version.md](gcp-version.md) |
 | gcp-workflow | 5 | [gcp-workflow.md](gcp-workflow.md) |
 | harness-registry-entries | 4 | [harness-registry-entries.md](harness-registry-entries.md) |
+| harness-registry-fixture | 4 | [harness-registry-fixture.md](harness-registry-fixture.md) |
 | harness-registry-json | 45 | [harness-registry-json.md](harness-registry-json.md) |
 | harnesses-agent-runtime-error | 2 | [harnesses-agent-runtime-error.md](harnesses-agent-runtime-error.md) |
+| harnesses-default | 3 | [harnesses-default.md](harnesses-default.md) |
 | hooks-touch | 7 | [hooks-touch.md](hooks-touch.md) |
 | js-analytics | 27 | [js-analytics.md](js-analytics.md) |
 | js-fake | 4 | [js-fake.md](js-fake.md) |
 | js-fake-text-node | 2 | [js-fake-text-node.md](js-fake-text-node.md) |
-| js-legal | 12 | [js-legal.md](js-legal.md) |
 | js-minted | 2 | [js-minted.md](js-minted.md) |
 | messaging-decode | 2 | [messaging-decode.md](messaging-decode.md) |
 | messaging-direct | 7 | [messaging-direct.md](messaging-direct.md) |
@@ -117,7 +117,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | provisioning-fake | 6 | [provisioning-fake.md](provisioning-fake.md) |
 | provisioning-job | 32 | [provisioning-job.md](provisioning-job.md) |
 | provisioning-provision | 13 | [provisioning-provision.md](provisioning-provision.md) |
-| registry-read | 294 | [registry-read.md](registry-read.md) |
+| registry-read | 302 | [registry-read.md](registry-read.md) |
 | registry-validate | 2 | [registry-validate.md](registry-validate.md) |
 | repositories-entries | 7 | [repositories-entries.md](repositories-entries.md) |
 | repositories-project | 638 | [repositories-project.md](repositories-project.md) |
@@ -225,7 +225,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | store-workspace-context-error | 2 | [store-workspace-context-error.md](store-workspace-context-error.md) |
 | store-workspace-organization | 2 | [store-workspace-organization.md](store-workspace-organization.md) |
 | support-parse | 107 | [support-parse.md](support-parse.md) |
-| terraform-google | 350 | [terraform-google.md](terraform-google.md) |
+| terraform-google | 354 | [terraform-google.md](terraform-google.md) |
 | tools-arg | 2 | [tools-arg.md](tools-arg.md) |
 | tools-fail | 3 | [tools-fail.md](tools-fail.md) |
 | tools-image | 2 | [tools-image.md](tools-image.md) |
@@ -234,4 +234,4 @@ Auto-generated documentation from the code knowledge graph community structure.
 | tools-render-devcontainer | 2 | [tools-render-devcontainer.md](tools-render-devcontainer.md) |
 | tools-render-dockerignore | 2 | [tools-render-dockerignore.md](tools-render-dockerignore.md) |
 | tools-safe | 2 | [tools-safe.md](tools-safe.md) |
-| views-render | 687 | [views-render.md](views-render.md) |
+| views-render | 699 | [views-render.md](views-render.md) |

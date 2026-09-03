@@ -16,6 +16,15 @@
 #
 # Provider credentials live in the organization vault exposed by SETTINGS_URL.
 # The stream secret is supplied only to the dedicated broker process.
+#
+# Harness runtime disk (deepseek): the DeepSeek `dsh` runtime is deliberately NOT
+# baked into the planner/coder image (its tree is large — that is the point of the
+# mount disk). Provide it via a mounted runtime disk (set DSH_BIN, or DSH_RUNTIME_DIR
+# with the arch binary); for local dev you can instead `npm i @deepseek-ai/dsh` so
+# the adapter resolves the bundled CLI. The Cloud Run state-disk path
+# (HARNESS_REGISTRY_ROOT/VERSION/BUCKET → copy-in from GCS to /opt/ai-fleet/harnesses/<id>)
+# is OFF by default and needs a registry bucket, so it is exercised in the cloud,
+# not this loopback-only compose stack.
 
 services:
   # -------- egress proxy sidecar (holds the credentials) --------------------

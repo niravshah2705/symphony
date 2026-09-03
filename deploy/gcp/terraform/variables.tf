@@ -740,6 +740,24 @@ variable "registry_publisher_member" {
   default     = ""
 }
 
+variable "registry_mount_enabled" {
+  type        = bool
+  description = "Materialize per-harness registry rootfs bundles at runtime (COPY-IN from GCS to /opt/ai-fleet/harnesses/<id>) on planner/coder/worker, exposing HARNESS_REGISTRY_ROOT/VERSION/BUCKET. Default OFF, like skills_mount_enabled. Unlike the skills gcsfuse mount this adds NO template volume, so it does not gate a container's startup probe (materialization is lazy/eager off the startup path). Requires registry_enabled. Off → harnesses use only the state baked into the image."
+  default     = false
+}
+
+variable "registry_version" {
+  type        = string
+  description = "Harness-registry bundle version the runtime PINS (HARNESS_REGISTRY_VERSION). planner/coder/worker read gs://<registry_bucket>/<registry_version>/harnesses/<id>/rootfs.tar.gz, so bumping the published bundle does NOT affect a deployment until this is bumped. Must match a published `<version>/` prefix and the REGISTRY_VERSION the sync workflow writes."
+  default     = "v1"
+}
+
+variable "registry_mount_path" {
+  type        = string
+  description = "Canonical on-disk root the harness rootfs is materialized at (HARNESS_REGISTRY_ROOT). MUST equal the registry schema HARNESS_ARTIFACT_MOUNT_ROOT ('/opt/ai-fleet/harnesses') that the bundles' internal paths are baked to — do not change without rebuilding all artifacts."
+  default     = "/opt/ai-fleet/harnesses"
+}
+
 # --- Gateway public URL / Firebase auth --------------------------------------
 
 variable "api_base_url" {

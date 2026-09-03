@@ -778,6 +778,7 @@ const FALLBACK_HARNESSES = Object.freeze([
   { id: 'codex-sdk', label: 'Codex SDK', availability: 'available', stages: ['planning', 'coding', 'testing'], brokeredStages: ['planning', 'testing'] },
   { id: 'claude-agent-sdk', label: 'Claude Agent SDK', availability: 'available', stages: ['planning', 'coding', 'testing'], brokeredStages: ['planning', 'testing'] },
   { id: 'antigravity-sdk', label: 'Antigravity SDK', availability: 'available', stages: ['planning'], brokeredStages: ['planning'] },
+  { id: 'deepseek', label: 'DeepSeek Harness', availability: 'available', stages: ['planning', 'coding', 'testing'], brokeredStages: [] },
 ]);
 
 const PIPELINE_HARNESS_STAGES = Object.freeze([

@@ -84,7 +84,7 @@
       "harnessName": "deepseek",
       "packageName": "@deepseek-ai/dsh",
       "requiresProvider": null,
-      "availability": "experimental",
+      "availability": "available",
       "capabilities": ["planning", "coding", "testing", "subagents"],
       "stages": ["planning", "coding", "testing"],
       "brokeredStages": []
