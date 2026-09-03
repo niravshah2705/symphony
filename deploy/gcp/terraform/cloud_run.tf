@@ -21,6 +21,22 @@ locals {
     SKILLS_VERSION = var.skills_version
   } : {}
 
+  # Agent memory store (memory.tf). Terraform CREATES the bucket when
+  # memory_enabled. The READ-WRITE gcsfuse MOUNT (+ MEMORY_ROOT env) is a SEPARATE
+  # toggle, memory_mount_enabled, default OFF (same gen2-fuse startup-probe caveat
+  # as the skills mount). Mount off → MEMORY_ROOT unset and the MemoryMiddleware
+  # falls back to the Firestore/file memories store (or stays dormant until the
+  # per-org memoryEnabled opt-in is set). MEMORY_ENABLED is intentionally NOT set
+  # here: mounting the disk only makes the store AVAILABLE; activation stays an
+  # explicit per-org opt-in. The mount requires the bucket, so it is ANDed with
+  # memory_enabled.
+  memory_enabled       = var.memory_enabled
+  memory_mount_enabled = var.memory_mount_enabled && var.memory_enabled
+  memory_env = local.memory_mount_enabled ? {
+    MEMORY_ROOT    = "/memory"
+    MEMORY_VERSION = var.memory_version
+  } : {}
+
   # Plain (non-secret) env per service. Secrets are mounted as separate env
   # blocks below via secret_key_ref.
   gateway_env = merge(local.common_env, {
@@ -108,6 +124,7 @@ locals {
       PIPELINE_STAGE_STORE_BACKEND       = "firestore"
     } : {},
     local.skills_env,
+    local.memory_env,
     local.egress_env,
   )
 
@@ -134,6 +151,7 @@ locals {
       PIPELINE_STAGE_STORE_BACKEND       = "firestore"
     } : {},
     local.skills_env,
+    local.memory_env,
     local.egress_env,
   )
 
@@ -151,7 +169,7 @@ locals {
     SETTINGS_URL = local.settings_url
     # ISSUE_ID (+ CONVERSATION_ID) are supplied per-execution by coder-control
     # as container overrides — see packages/shared/src/messaging/jobs.js.
-  }, local.skills_env, local.egress_env)
+  }, local.skills_env, local.memory_env, local.egress_env)
 }
 
 # --- Google One Tap client id (Secret Manager) --------------------------------
@@ -363,6 +381,19 @@ resource "google_cloud_run_v2_service" "planner" {
       }
     }
 
+    # Agent memory store mounted READ-WRITE via gcsfuse (memory.tf). The
+    # MemoryMiddleware persists compressed memories here and reads them back.
+    dynamic "volumes" {
+      for_each = local.memory_mount_enabled ? [1] : []
+      content {
+        name = "memory"
+        gcs {
+          bucket    = google_storage_bucket.memory[0].name
+          read_only = false
+        }
+      }
+    }
+
     containers {
       name       = "app"
       image      = local.planner_image
@@ -386,6 +417,14 @@ resource "google_cloud_run_v2_service" "planner" {
         content {
           name       = "skills"
           mount_path = "/skills"
+        }
+      }
+      # Mount the memory store at MEMORY_ROOT (/memory), read-write.
+      dynamic "volume_mounts" {
+        for_each = local.memory_mount_enabled ? [1] : []
+        content {
+          name       = "memory"
+          mount_path = "/memory"
         }
       }
 
@@ -478,6 +517,18 @@ resource "google_cloud_run_v2_service" "coder_control" {
       }
     }
 
+    # Agent memory store mounted READ-WRITE via gcsfuse (memory.tf).
+    dynamic "volumes" {
+      for_each = local.memory_mount_enabled ? [1] : []
+      content {
+        name = "memory"
+        gcs {
+          bucket    = google_storage_bucket.memory[0].name
+          read_only = false
+        }
+      }
+    }
+
     containers {
       name       = "app"
       image      = local.coder_image
@@ -501,6 +552,14 @@ resource "google_cloud_run_v2_service" "coder_control" {
         content {
           name       = "skills"
           mount_path = "/skills"
+        }
+      }
+      # Mount the memory store at MEMORY_ROOT (/memory), read-write.
+      dynamic "volume_mounts" {
+        for_each = local.memory_mount_enabled ? [1] : []
+        content {
+          name       = "memory"
+          mount_path = "/memory"
         }
       }
 
@@ -554,6 +613,7 @@ resource "google_cloud_run_v2_service" "coder_control" {
     google_firestore_database.default,
     google_project_iam_member.coder_datastore,
     google_storage_bucket.skills,
+    google_storage_bucket.memory,
   ]
 }
 
@@ -578,9 +638,10 @@ resource "google_cloud_run_v2_job" "coder_worker" {
       max_retries     = 1
 
       # gcsfuse GCS volume mounts run on the gen2 execution environment. The
-      # worker is where the coder agent actually installs skills, so it needs the
-      # same versioned mount as the services. null when the registry is disabled.
-      execution_environment = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
+      # worker is where the coder agent actually installs skills AND persists
+      # memories, so it needs the same versioned mounts as the services. gen2 is
+      # selected when EITHER mount is enabled; null when both are disabled.
+      execution_environment = (local.skills_mount_enabled || local.memory_mount_enabled) ? "EXECUTION_ENVIRONMENT_GEN2" : null
 
       dynamic "volumes" {
         for_each = local.skills_mount_enabled ? [1] : []
@@ -589,6 +650,18 @@ resource "google_cloud_run_v2_job" "coder_worker" {
           gcs {
             bucket    = google_storage_bucket.skills[0].name
             read_only = true
+          }
+        }
+      }
+
+      # Agent memory store mounted READ-WRITE via gcsfuse (memory.tf).
+      dynamic "volumes" {
+        for_each = local.memory_mount_enabled ? [1] : []
+        content {
+          name = "memory"
+          gcs {
+            bucket    = google_storage_bucket.memory[0].name
+            read_only = false
           }
         }
       }
@@ -613,6 +686,14 @@ resource "google_cloud_run_v2_job" "coder_worker" {
           content {
             name       = "skills"
             mount_path = "/skills"
+          }
+        }
+        # Mount the memory store at MEMORY_ROOT (/memory), read-write.
+        dynamic "volume_mounts" {
+          for_each = local.memory_mount_enabled ? [1] : []
+          content {
+            name       = "memory"
+            mount_path = "/memory"
           }
         }
 
@@ -664,5 +745,6 @@ resource "google_cloud_run_v2_job" "coder_worker" {
     google_firestore_database.default,
     google_project_iam_member.coder_datastore,
     google_storage_bucket.skills,
+    google_storage_bucket.memory,
   ]
 }

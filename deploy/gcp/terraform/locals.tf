@@ -27,6 +27,10 @@ locals {
   # override convention as the skills bucket above.
   attachments_bucket_name = var.attachments_bucket_name != "" ? var.attachments_bucket_name : "${var.project_id}-aifleet-attachments"
 
+  # Agent memory bucket (memory.tf) — same derived-default-with-override
+  # convention. The agents WRITE here at runtime (read-write gcsfuse mount).
+  memory_bucket_name = var.memory_bucket_name != "" ? var.memory_bucket_name : "${var.project_id}-aifleet-memory"
+
   # Artifact Registry image references. Each service resolves its own tag,
   # falling back to var.image_tag when no per-service override is set — this is
   # what lets the CD pipeline roll ONE service (its tag = new SHA) while every

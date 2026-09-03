@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 687 nodes
+Community of 668 nodes
 
-- **Size**: 687 nodes
-- **Cohesion**: 0.4869
+- **Size**: 668 nodes
+- **Cohesion**: 0.4929
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 687 nodes
 | authProviderButtons | Function | ./public/js/app.js | 521-539 |
 | beginSignOut | Function | ./public/js/app.js | 541-549 |
 
-*... and 637 more members.*
+*... and 618 more members.*
 
 ## Execution Flows
 
@@ -87,25 +87,25 @@ Community of 687 nodes
 
 - `addEventListener` (210 edge(s))
 - `append` (208 edge(s))
-- `map` (150 edge(s))
-- `String` (108 edge(s))
-- `push` (95 edge(s))
-- `trim` (81 edge(s))
-- `filter` (77 edge(s))
-- `isArray` (67 edge(s))
+- `map` (145 edge(s))
+- `String` (102 edge(s))
+- `push` (89 edge(s))
+- `trim` (78 edge(s))
+- `filter` (70 edge(s))
+- `isArray` (62 edge(s))
 - `setAttribute` (62 edge(s))
-- `has` (60 edge(s))
-- `catch` (59 edge(s))
-- `Boolean` (55 edge(s))
+- `has` (57 edge(s))
+- `Boolean` (54 edge(s))
 - `querySelector` (53 edge(s))
-- `slice` (42 edge(s))
+- `catch` (48 edge(s))
 - `find` (42 edge(s))
+- `get` (40 edge(s))
 
 ### Incoming
 
 - `./public/js/api.js` (178 edge(s))
 - `./public/js/views/settings.js` (131 edge(s))
-- `./public/js/views/agent.js` (108 edge(s))
+- `./public/js/views/agent.js` (103 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (78 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
@@ -115,6 +115,6 @@ Community of 687 nodes
 - `./public/js/i18n.js` (34 edge(s))
 - `./public/js/auth.js` (24 edge(s))
 - `./public/js/views/organization.js` (22 edge(s))
-- `./public/js/omnibox-router.mjs` (14 edge(s))
 - `./public/js/workspace-context.mjs` (13 edge(s))
 - `./public/js/auth-retry.test.mjs` (12 edge(s))
+- `./public/js/views/cost.js` (12 edge(s))

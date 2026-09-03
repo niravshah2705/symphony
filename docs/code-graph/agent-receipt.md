@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 348 nodes
+Community of 347 nodes
 
-- **Size**: 348 nodes
-- **Cohesion**: 0.2729
+- **Size**: 347 nodes
+- **Cohesion**: 0.2726
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,12 +65,13 @@ Community of 348 nodes
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
 
-*... and 298 more members.*
+*... and 297 more members.*
 
 ## Execution Flows
 
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
+- **createMemoryMiddleware** (criticality: 0.66, depth: 5)
 - **startScheduler** (criticality: 0.66, depth: 6)
 - **generatePlan** (criticality: 0.66, depth: 4)
 - **runCoder** (criticality: 0.65, depth: 5)

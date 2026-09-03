@@ -710,6 +710,41 @@ variable "skills_publisher_member" {
   default     = ""
 }
 
+# --- Agent memory store (GCS bucket, memory.tf) ------------------------------
+# The MemoryMiddleware persists AI-compressed agent memories here and injects
+# them into future runs. Unlike skills/registry, the agents WRITE at runtime, so
+# the mount is read-write and the SAs get objectAdmin. Opt-in, off by default.
+
+variable "memory_enabled" {
+  type        = bool
+  description = "Create the Terraform-managed agent-memory GCS bucket (+ read/write IAM for planner/coder). true creates and owns the bucket; false disables the feature entirely. The read-write gcsfuse MOUNT is a separate toggle (memory_mount_enabled)."
+  default     = false
+}
+
+variable "memory_mount_enabled" {
+  type        = bool
+  description = "Mount the memory bucket read-write via gcsfuse (+ MEMORY_ROOT/MEMORY_VERSION env) on planner/coder. Default OFF: the gen2 fuse mount is fragile (same startup-probe caveat as the skills mount) and needs validation before enabling. Requires memory_enabled. Off → MEMORY_ROOT unset and the middleware falls back to the Firestore/file memories store (or stays dormant until the per-org memoryEnabled opt-in is set)."
+  default     = false
+}
+
+variable "memory_version" {
+  type        = string
+  description = "Memory bundle version the runtime PINS (MEMORY_VERSION). The planner/coder read/write /memory/<memory_version>/<orgKey>/... so multiple layout versions can coexist. Must be a single safe path segment."
+  default     = "v1"
+}
+
+variable "memory_bucket_name" {
+  type        = string
+  description = "OPTIONAL override for the memory bucket name. Empty ('') derives a stable default of '<project_id>-aifleet-memory' (see locals.tf). Terraform CREATES this bucket. Set only to pin a custom globally-unique name. Ignored when memory_enabled = false."
+  default     = ""
+}
+
+variable "memory_bucket_force_destroy" {
+  type        = bool
+  description = "Allow `terraform destroy` to delete the memory bucket even if it still holds objects. Default false: it holds real compressed agent memories."
+  default     = false
+}
+
 # --- Harness registry bucket (see registry.tf) -------------------------------
 # The weekly sync-harness-registry workflow publishes versioned, harness-native
 # rootfs artifacts plus their v2 descriptors and inert non-ECC resources here.
