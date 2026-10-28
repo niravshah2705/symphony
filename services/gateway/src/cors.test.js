@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createCorsMiddleware } = require('./cors');
+const { parseSpaOrigins } = require('@ai-fleet/shared-core/config');
 
 function makeRes() {
   return {
@@ -52,4 +53,32 @@ test('is a no-op passthrough when no origins are configured (local same-origin)'
   cors({ method: 'GET', get: () => 'https://spa.example.com' }, res, () => { nexted += 1; });
   assert.equal(res.headers['access-control-allow-origin'], undefined);
   assert.equal(nexted, 1);
+});
+
+test('reflects custom domain origin configured in allowlist', () => {
+  const cors = createCorsMiddleware(['https://adlc-9e72f.web.app', 'https://platform.archagentix.com']);
+  const res = makeRes();
+  let nexted = 0;
+  cors({ method: 'GET', get: (n) => (n === 'origin' ? 'https://platform.archagentix.com' : '') }, res, () => { nexted += 1; });
+  assert.equal(res.headers['access-control-allow-origin'], 'https://platform.archagentix.com');
+  assert.equal(res.headers.vary, 'Origin');
+  assert.equal(nexted, 1);
+});
+
+test('parseSpaOrigins combines SPA_ORIGIN and FIREBASE_CUSTOM_DOMAIN with normalization', () => {
+  const origins = parseSpaOrigins({
+    SPA_ORIGIN: 'https://adlc-9e72f.web.app, https://storage.googleapis.com',
+    FIREBASE_CUSTOM_DOMAIN: 'platform.archagentix.com, https://custom.example.com',
+  });
+  assert.deepEqual(origins, [
+    'https://adlc-9e72f.web.app',
+    'https://storage.googleapis.com',
+    'https://platform.archagentix.com',
+    'https://custom.example.com',
+  ]);
+});
+
+test('parseSpaOrigins handles empty or unset env', () => {
+  assert.deepEqual(parseSpaOrigins({}), []);
+  assert.deepEqual(parseSpaOrigins(undefined), []);
 });

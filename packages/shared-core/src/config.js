@@ -555,6 +555,24 @@ const STORE_NAMESPACE = String(process.env.STORE_NAMESPACE || '')
   .trim()
   .toLowerCase()
   .replace(/[^a-z0-9-]/g, '');
+
+/**
+ * Parse and normalize browser origins permitted via CORS from SPA_ORIGIN
+ * and FIREBASE_CUSTOM_DOMAIN.
+ */
+function parseSpaOrigins(env = process.env) {
+  const spaOrigins = String(env?.SPA_ORIGIN || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const customDomains = String(env?.FIREBASE_CUSTOM_DOMAIN || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((domain) => (/^https?:\/\//i.test(domain) ? domain : `https://${domain}`));
+  return Object.freeze(Array.from(new Set([...spaOrigins, ...customDomains])));
+}
+
 const GCP = Object.freeze({
   projectId: process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || '',
   region: process.env.GCP_REGION || 'us-central1',
@@ -581,9 +599,11 @@ const GCP = Object.freeze({
   //   pushServiceAccount  the SA email Pub/Sub is configured to sign push tokens as
   pushAudience: String(process.env.PUBSUB_PUSH_AUDIENCE || '').trim(),
   pushServiceAccount: String(process.env.PUBSUB_PUSH_SA || '').trim(),
+  // Custom domain(s) for Firebase Hosting
+  customDomain: String(process.env.FIREBASE_CUSTOM_DOMAIN || '').trim(),
   // Allowlist of browser origins permitted via CORS (the SPA's GCS/website
-  // origin). Empty in local dev (same-origin — no CORS needed).
-  spaOrigins: String(process.env.SPA_ORIGIN || '').split(',').map((value) => value.trim()).filter(Boolean),
+  // origin, plus any custom domain configured via FIREBASE_CUSTOM_DOMAIN). Empty in local dev (same-origin — no CORS needed).
+  spaOrigins: parseSpaOrigins(process.env),
   // Absolute base URL of the gateway API, injected into the SPA at deploy time.
   apiBaseUrl: String(process.env.API_BASE_URL || '').trim(),
 });
@@ -778,4 +798,4 @@ function namespaceCollection(base) {
   return STORE_NAMESPACE ? `${base}__${STORE_NAMESPACE}` : base;
 }
 
-module.exports = { CONFIG, buildFirebaseAuthConfig, resolveSkillsSrc, namespaceCollection };
+module.exports = { CONFIG, buildFirebaseAuthConfig, resolveSkillsSrc, namespaceCollection, parseSpaOrigins };

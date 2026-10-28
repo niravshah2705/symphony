@@ -55,10 +55,10 @@ resource "google_firebase_hosting_custom_domain" "default" {
   for_each = toset(var.custom_domain)
   provider = google-beta
 
-  project  = var.project_id
-  site_id  = var.project_id
+  project       = var.project_id
+  site_id       = var.project_id
   custom_domain = each.value
-  depends_on = [google_firebase_hosting_site.default]
+  depends_on    = [google_firebase_hosting_site.default]
 }
 
 # Identity Platform (Firebase Authentication) project config. Manages the
