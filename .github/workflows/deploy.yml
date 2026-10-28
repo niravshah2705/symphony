@@ -474,20 +474,6 @@ jobs:
           [ -n "${{ steps.tags.outputs.email }}" ] && apply_args+=(-var="email_image_tag=${{ steps.tags.outputs.email }}") || true
           [ -n "${{ steps.tags.outputs.identity }}" ] && apply_args+=(-var="identity_image_tag=${{ steps.tags.outputs.identity }}") || true
 
-          # Idempotently import custom domains that already exist in Firebase Hosting
-          if [ -n "${{ vars.FIREBASE_CUSTOM_DOMAIN }}" ]; then
-            for cd in $(echo "${{ vars.FIREBASE_CUSTOM_DOMAIN }}" | tr ',' ' '); do
-              cd="$(echo "$cd" | sed -E 's|^https?://||; s|/+$||' | xargs)"
-              [ -z "$cd" ] && continue
-              addr="google_firebase_hosting_custom_domain.default[\"$cd\"]"
-              if ! terraform state list 2>/dev/null | grep -qxF "$addr"; then
-                echo "Importing existing Firebase custom domain $cd into Terraform state..."
-                terraform import -input=false "${apply_args[@]}" \
-                  "$addr" "projects/${{ vars.GCP_PROJECT_ID }}/sites/${{ vars.GCP_PROJECT_ID }}/customDomains/$cd" || true
-              fi
-            done
-          fi
-
           # Idempotently import pre-existing Firestore composite indexes if missing from state
           chunks_idx_addr="google_firestore_index.attachment_chunks_by_conversation_and_embedding"
           if ! terraform state list 2>/dev/null | grep -qxF "$chunks_idx_addr"; then

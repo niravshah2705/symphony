@@ -271,20 +271,6 @@ gsutil -m setmeta -h "Content-Type:text/javascript" "gs://${SPA_BUCKET}/**/*.mjs
 # --- 8. Full apply ----------------------------------------------------------
 log "Full apply (Cloud Run services + job, Pub/Sub, Scheduler, Firestore, IAM)"
 
-# Idempotently import custom domains that already exist in Firebase Hosting
-if [ -n "$FIREBASE_CUSTOM_DOMAIN" ]; then
-  for cd in $(echo "$FIREBASE_CUSTOM_DOMAIN" | tr ',' ' '); do
-    cd="$(echo "$cd" | sed -E 's|^https?://||; s|/+$||' | xargs)"
-    [ -z "$cd" ] && continue
-    addr="google_firebase_hosting_custom_domain.default[\"$cd\"]"
-    if ! terraform -chdir="$TF_DIR" state list 2>/dev/null | grep -qxF "$addr"; then
-      echo "Importing existing Firebase custom domain $cd into Terraform state..."
-      terraform -chdir="$TF_DIR" import -input=false "${TFVARS[@]}" -var="api_base_url=${GATEWAY_URL}" \
-        "$addr" "projects/${PROJECT_ID}/sites/${PROJECT_ID}/customDomains/$cd" || true
-    fi
-  done
-fi
-
 # Idempotently import pre-existing Firestore composite indexes if missing from state
 chunks_idx_addr="google_firestore_index.attachment_chunks_by_conversation_and_embedding"
 if ! terraform -chdir="$TF_DIR" state list 2>/dev/null | grep -qxF "$chunks_idx_addr"; then
