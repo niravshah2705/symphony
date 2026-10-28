@@ -51,19 +51,13 @@ resource "google_firebase_hosting_site" "default" {
   depends_on = [google_firebase_project.default]
 }
 
-resource "google_firebase_hosting_custom_domain" "default" {
-  for_each = toset(var.custom_domain)
-  provider = google-beta
-
-  project  = var.project_id
-  site_id  = var.project_id
-  custom_domain = each.value
-  depends_on = [google_firebase_hosting_site.default]
-}
-
 # Identity Platform (Firebase Authentication) project config. Manages the
 # authorized domains that sign-in popups are allowed to run on. The list mirrors
-# the live config (incl. legacy GCS origins from before the Firebase-Hosting move).
+# the live config (incl. legacy GCS origins from before the Firebase-Hosting move)
+# and custom domain(s) configured for the project.
+#
+# Firebase Hosting custom domains are registered via Firebase Console / CLI
+# to manage DNS records and SSL cert provisioning out-of-band.
 resource "google_identity_platform_config" "default" {
   provider = google-beta
   project  = var.project_id

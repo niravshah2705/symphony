@@ -108,6 +108,8 @@ test('plan encodes tenant isolation: STORE_NAMESPACE, per-tenant topics, shared 
   assert.equal(plan.services.gateway.env.ORG_URL, CFG.sharedOrgUrl);
   assert.equal(plan.services.gateway.env.SETTINGS_URL, CFG.sharedSettingsUrl);
   assert.equal(plan.services.gateway.env.API_BASE_URL, u.gateway);
+  assert.equal(plan.services.gateway.env.SPA_ORIGIN, CFG.spaOrigin);
+  assert.equal(plan.services.gateway.env.FIREBASE_CUSTOM_DOMAIN, '');
   assert.equal(plan.services.gateway.env.FLEET_ORG_ID, ORG_ID);
   assert.equal(plan.services.gateway.env.TRUST_PROXY_HOPS, '1');
   assert.equal(plan.services.gateway.env.STREAM_TOKEN_SERVICE_URL, CFG.streamTokenServiceUrl);
@@ -121,6 +123,11 @@ test('plan encodes tenant isolation: STORE_NAMESPACE, per-tenant topics, shared 
     assert.equal(service.requireEgressProxy, true);
     assert.equal(service.sidecarEnv.PROXY_CAPABILITIES, 'egress');
   }
+});
+
+test('plan: passes customDomain as FIREBASE_CUSTOM_DOMAIN to tenant gateway', () => {
+  const plan = buildPlan(SLUG, { ...CFG, customDomain: 'platform.archagentix.com' });
+  assert.equal(plan.services.gateway.env.FIREBASE_CUSTOM_DOMAIN, 'platform.archagentix.com');
 });
 
 test('plan: only gateway is unauthenticated; agents are network-reachable but IAM-gated', () => {
