@@ -44,6 +44,7 @@ TF_STATE_PREFIX="${TF_STATE_PREFIX:-ai-fleet/gcp}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://storage.googleapis.com}"
 FIREBASE_ALLOWED_DOMAIN="${FIREBASE_ALLOWED_DOMAIN:-}"
+FIREBASE_CUSTOM_DOMAIN="${FIREBASE_CUSTOM_DOMAIN:-}"
 GOOGLE_ONE_TAP_CLIENT_ID="${GOOGLE_ONE_TAP_CLIENT_ID:-}"  # public OAuth Web client id for Google One Tap (optional)
 GOOGLE_ANALYTICS_MEASUREMENT_ID="${GOOGLE_ANALYTICS_MEASUREMENT_ID:-}"
 AUTH_ADMIN_EMAILS="${AUTH_ADMIN_EMAILS:-}"
@@ -127,6 +128,7 @@ TFVARS=(
   -var="lmstudio_proxy_upstream=${LMSTUDIO_PROXY_UPSTREAM}"
   -var="openswe_proxy_upstream=${OPENSWE_PROXY_UPSTREAM}"
 )
+[ -n "$FIREBASE_CUSTOM_DOMAIN" ] && TFVARS+=( -var="custom_domain=[\"${FIREBASE_CUSTOM_DOMAIN}\"]" )
 
 # --- 1. Enable APIs ---------------------------------------------------------
 log "Enabling required APIs"
