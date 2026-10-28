@@ -647,7 +647,7 @@ variable "spa_bucket_force_destroy" {
 
 variable "spa_origin" {
   type        = string
-  description = "Browser origin the SPA is served from, used as the gateway CORS allowlist (SPA_ORIGIN). For direct GCS hosting the browser Origin is the scheme+host only. Override for a custom domain / CDN in front of the bucket."
+  description = "Browser origin the SPA is served from, used as the gateway CORS allowlist (SPA_ORIGIN). For direct GCS hosting the browser Origin is the scheme+host only. Can be a comma-separated list of origins. Override for a custom domain / CDN in front of the bucket."
   default     = "https://storage.googleapis.com"
 }
 

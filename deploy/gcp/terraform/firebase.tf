@@ -64,6 +64,8 @@ resource "google_identity_platform_config" "default" {
     "${var.project_id}.web.app",
     "storage.googleapis.com",
     "${var.spa_bucket_name}.storage.googleapis.com",
+    "platform.archagentix.com",
+    "archagentix.com",
   ]
 
   depends_on = [google_project_service.services]
