@@ -67,8 +67,8 @@ test('reflects custom domain origin configured in allowlist', () => {
 
 test('parseSpaOrigins combines SPA_ORIGIN and FIREBASE_CUSTOM_DOMAIN with normalization', () => {
   const origins = parseSpaOrigins({
-    SPA_ORIGIN: 'https://adlc-9e72f.web.app, https://storage.googleapis.com',
-    FIREBASE_CUSTOM_DOMAIN: 'platform.archagentix.com, https://custom.example.com',
+    SPA_ORIGIN: 'https://adlc-9e72f.web.app/, https://storage.googleapis.com',
+    FIREBASE_CUSTOM_DOMAIN: 'platform.archagentix.com/, https://custom.example.com/',
   });
   assert.deepEqual(origins, [
     'https://adlc-9e72f.web.app',

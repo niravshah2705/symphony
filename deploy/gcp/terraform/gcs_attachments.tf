@@ -20,7 +20,7 @@ resource "google_storage_bucket" "attachments" {
   force_destroy               = var.attachments_bucket_force_destroy
 
   cors {
-    origin          = concat([var.spa_origin], [for d in var.custom_domain : startswith(d, "http://") || startswith(d, "https://") ? d : "https://${d}"]) # the real app origin(s) — not "*", this bucket holds tenant content
+    origin          = concat([var.spa_origin], [for d in local.custom_domains : "https://${d}"]) # the real app origin(s) — not "*", this bucket holds tenant content
     method          = ["PUT", "GET"]
     response_header = ["*"]
     max_age_seconds = 3600

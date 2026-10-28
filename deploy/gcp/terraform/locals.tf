@@ -107,4 +107,12 @@ locals {
     FIREBASE_PROJECT_ID = var.project_id
     FIREBASE_API_KEY    = data.google_firebase_web_app_config.default.api_key
   }
+
+  # Normalized custom domains: bare hostnames (e.g. "platform.archagentix.com") without scheme or trailing slash.
+  # This guarantees compatibility with Firebase Hosting custom domain IDs and Identity Platform authorized domains.
+  custom_domains = distinct([
+    for d in var.custom_domain :
+    trimsuffix(trimprefix(trimprefix(trimspace(d), "https://"), "http://"), "/")
+    if length(trimsuffix(trimprefix(trimprefix(trimspace(d), "https://"), "http://"), "/")) > 0
+  ])
 }

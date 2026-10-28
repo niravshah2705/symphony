@@ -52,7 +52,7 @@ resource "google_firebase_hosting_site" "default" {
 }
 
 resource "google_firebase_hosting_custom_domain" "default" {
-  for_each = toset(var.custom_domain)
+  for_each = toset(local.custom_domains)
   provider = google-beta
 
   project       = var.project_id
@@ -74,7 +74,7 @@ resource "google_identity_platform_config" "default" {
     "${var.project_id}.web.app",
     "storage.googleapis.com",
     "${var.spa_bucket_name}.storage.googleapis.com",
-  ], var.custom_domain)
+  ], local.custom_domains)
 
   depends_on = [google_project_service.services]
 }

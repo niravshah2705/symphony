@@ -425,7 +425,7 @@ jobs:
 
           CUSTOM_DOMAIN_ARG="[]"
           if [ -n "${{ vars.FIREBASE_CUSTOM_DOMAIN }}" ]; then
-            CUSTOM_DOMAIN_ARG="[\"${{ vars.FIREBASE_CUSTOM_DOMAIN }}\"]"
+            CUSTOM_DOMAIN_ARG="$(echo "${{ vars.FIREBASE_CUSTOM_DOMAIN }}" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "") | gsub("^https?://"; "") | gsub("/+$"; "")) | map(select(length > 0))')"
           fi
 
           # Every service tag above is either this run's immutable SHA or a
@@ -473,6 +473,39 @@ jobs:
           [ -n "${{ steps.tags.outputs.settings }}" ] && apply_args+=(-var="settings_image_tag=${{ steps.tags.outputs.settings }}") || true
           [ -n "${{ steps.tags.outputs.email }}" ] && apply_args+=(-var="email_image_tag=${{ steps.tags.outputs.email }}") || true
           [ -n "${{ steps.tags.outputs.identity }}" ] && apply_args+=(-var="identity_image_tag=${{ steps.tags.outputs.identity }}") || true
+
+          # Idempotently import custom domains that already exist in Firebase Hosting
+          if [ -n "${{ vars.FIREBASE_CUSTOM_DOMAIN }}" ]; then
+            for cd in $(echo "${{ vars.FIREBASE_CUSTOM_DOMAIN }}" | tr ',' ' '); do
+              cd="$(echo "$cd" | sed -E 's|^https?://||; s|/+$||' | xargs)"
+              [ -z "$cd" ] && continue
+              addr="google_firebase_hosting_custom_domain.default[\"$cd\"]"
+              if ! terraform state list 2>/dev/null | grep -qxF "$addr"; then
+                echo "Importing existing Firebase custom domain $cd into Terraform state..."
+                terraform import -input=false "${apply_args[@]}" \
+                  "$addr" "projects/${{ vars.GCP_PROJECT_ID }}/sites/${{ vars.GCP_PROJECT_ID }}/customDomains/$cd" || true
+              fi
+            done
+          fi
+
+          # Idempotently import pre-existing Firestore composite indexes if missing from state
+          chunks_idx_addr="google_firestore_index.attachment_chunks_by_conversation_and_embedding"
+          if ! terraform state list 2>/dev/null | grep -qxF "$chunks_idx_addr"; then
+            existing_chunks_idx="$(gcloud firestore indexes composite list --project="${{ vars.GCP_PROJECT_ID }}" --format=json 2>/dev/null | jq -r '.[] | select((.queryScope=="COLLECTION_GROUP" or .queryScope==null) and ((.name | contains("/collectionGroups/chunks/indexes/")) or (.fields[0].fieldPath=="conversationId" and .fields[1].fieldPath=="embedding"))) | .name' 2>/dev/null | head -n 1 || true)"
+            if [ -n "$existing_chunks_idx" ]; then
+              echo "Importing existing Firestore attachment chunks vector index ($existing_chunks_idx) into Terraform state..."
+              terraform import -input=false "${apply_args[@]}" "$chunks_idx_addr" "$existing_chunks_idx" || true
+            fi
+          fi
+
+          users_idx_addr="google_firestore_index.org_users_by_created_at"
+          if ! terraform state list 2>/dev/null | grep -qxF "$users_idx_addr"; then
+            existing_users_idx="$(gcloud firestore indexes composite list --project="${{ vars.GCP_PROJECT_ID }}" --format=json 2>/dev/null | jq -r '.[] | select((.name | contains("/collectionGroups/users/indexes/")) or (.fields[0].fieldPath=="org_id" and .fields[1].fieldPath=="created_at")) | .name' 2>/dev/null | head -n 1 || true)"
+            if [ -n "$existing_users_idx" ]; then
+              echo "Importing existing Firestore org users index ($existing_users_idx) into Terraform state..."
+              terraform import -input=false "${apply_args[@]}" "$users_idx_addr" "$existing_users_idx" || true
+            fi
+          fi
 
           terraform apply -input=false -auto-approve "${apply_args[@]}"
 

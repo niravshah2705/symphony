@@ -563,11 +563,11 @@ const STORE_NAMESPACE = String(process.env.STORE_NAMESPACE || '')
 function parseSpaOrigins(env = process.env) {
   const spaOrigins = String(env?.SPA_ORIGIN || '')
     .split(',')
-    .map((value) => value.trim())
+    .map((value) => value.trim().replace(/\/+$/, ''))
     .filter(Boolean);
   const customDomains = String(env?.FIREBASE_CUSTOM_DOMAIN || '')
     .split(',')
-    .map((value) => value.trim())
+    .map((value) => value.trim().replace(/\/+$/, ''))
     .filter(Boolean)
     .map((domain) => (/^https?:\/\//i.test(domain) ? domain : `https://${domain}`));
   return Object.freeze(Array.from(new Set([...spaOrigins, ...customDomains])));
