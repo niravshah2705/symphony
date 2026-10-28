@@ -24,7 +24,7 @@
 #
 # Optional env: REGION (asia-south1), SPA_BUCKET (<project>-aifleet-spa),
 #   TF_STATE_BUCKET (<project>-tfstate), FIRESTORE_LOCATION (nam5),
-#   SPA_ORIGIN (https://<project>.web.app), FIREBASE_ALLOWED_DOMAIN,
+#   SPA_ORIGIN (https://<project>.web.app), FIREBASE_ALLOWED_DOMAIN, FIREBASE_CUSTOM_DOMAIN,
 #   GOOGLE_ANALYTICS_MEASUREMENT_ID (public GA4 G-... id; empty disables analytics),
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, STREAM_TOKEN_SECRET (auto-generated if unset),
 #   IDENTITY_HASH_PEPPER (auto-generated if unset),
@@ -41,6 +41,7 @@ TF_STATE_BUCKET="${TF_STATE_BUCKET:-${PROJECT_ID}-tfstate}"
 TF_STATE_PREFIX="${TF_STATE_PREFIX:-ai-fleet/gcp}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://${PROJECT_ID}.web.app}"
+FIREBASE_CUSTOM_DOMAIN="${FIREBASE_CUSTOM_DOMAIN:-platform.archagentix.com}"
 EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://${PROJECT_ID}.web.app}"
 GOOGLE_ANALYTICS_MEASUREMENT_ID="${GOOGLE_ANALYTICS_MEASUREMENT_ID:-}"
 DEPLOYER="gh-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -185,13 +186,14 @@ if command -v gh >/dev/null 2>&1; then
   gh variable set EMAIL_SMTP_AUTH_ENABLED --repo "$REPO" --body "$EMAIL_SMTP_AUTH_ENABLED"
   gh variable set EMAIL_PUBLIC_APP_URL --repo "$REPO" --body "$EMAIL_PUBLIC_APP_URL"
   [ -n "${FIREBASE_ALLOWED_DOMAIN:-}" ] && gh variable set FIREBASE_ALLOWED_DOMAIN --repo "$REPO" --body "$FIREBASE_ALLOWED_DOMAIN" || true
+  [ -n "${FIREBASE_CUSTOM_DOMAIN:-}" ] && gh variable set FIREBASE_CUSTOM_DOMAIN --repo "$REPO" --body "$FIREBASE_CUSTOM_DOMAIN" || true
   echo "  set (FIREBASE_API_KEY is NOT needed — Terraform derives it from the web app)"
 else
   log "gh CLI not found — set these repo secrets/variables manually"
   echo "  secret GCP_WIF_PROVIDER = $WIF_PROVIDER"
   echo "  secret GCP_DEPLOYER_SA  = $DEPLOYER"
   echo "  vars: GCP_PROJECT_ID=$PROJECT_ID GCP_REGION=$REGION SPA_BUCKET=$SPA_BUCKET"
-  echo "        TF_STATE_BUCKET=$TF_STATE_BUCKET FIRESTORE_LOCATION=$FIRESTORE_LOCATION SPA_ORIGIN=$SPA_ORIGIN"
+  echo "        TF_STATE_BUCKET=$TF_STATE_BUCKET FIRESTORE_LOCATION=$FIRESTORE_LOCATION SPA_ORIGIN=$SPA_ORIGIN FIREBASE_CUSTOM_DOMAIN=$FIREBASE_CUSTOM_DOMAIN"
   [ -n "$GOOGLE_ANALYTICS_MEASUREMENT_ID" ] && echo "        GOOGLE_ANALYTICS_MEASUREMENT_ID=$GOOGLE_ANALYTICS_MEASUREMENT_ID"
   echo "        EMAIL_SMTP_AUTH_ENABLED=$EMAIL_SMTP_AUTH_ENABLED EMAIL_PUBLIC_APP_URL=$EMAIL_PUBLIC_APP_URL"
 fi

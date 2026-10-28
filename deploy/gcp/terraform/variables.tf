@@ -770,6 +770,11 @@ variable "auth_default_role" {
   default     = "viewer"
 }
 
+variable "custom_domain" {
+  type        = list(string)
+  description = "Custom domain(s) for Firebase Hosting."
+  default     = []
+}
 variable "firebase_allowed_domain" {
   type        = string
   description = "Optional: restrict app login to this email domain; empty = any verified user (Google OR Microsoft)."

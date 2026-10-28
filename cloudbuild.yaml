@@ -30,6 +30,7 @@ substitutions:
   _TF_STATE_PREFIX: "ai-fleet/gcp"
   _FIRESTORE_LOCATION: "nam5"
   _FIREBASE_ALLOWED_DOMAIN: "" # empty = any verified user
+  _FIREBASE_CUSTOM_DOMAIN: ""
   _SPA_ORIGIN: "https://storage.googleapis.com"
   _SPA_OBFUSCATION_STRENGTH: "light" # light | balanced | maximum
   _GOOGLE_ANALYTICS_MEASUREMENT_ID: "" # optional public GA4 id (G-...); empty = disabled
@@ -401,6 +402,10 @@ steps:
         if [ -z "$${EMAIL_PUBLIC_APP_URL}" ]; then
           EMAIL_PUBLIC_APP_URL="https://storage.googleapis.com/${_BUCKET}/index.html"
         fi
+        CUSTOM_DOMAIN_ARG="[]"
+        if [ -n "${_FIREBASE_CUSTOM_DOMAIN}" ]; then
+          CUSTOM_DOMAIN_ARG="[\"${_FIREBASE_CUSTOM_DOMAIN}\"]"
+        fi
         terraform apply -input=false -auto-approve \
           -var-file=/workspace/email-auth.auto.tfvars \
           -var-file=/workspace/pipeline-secret.auto.tfvars.json \
@@ -417,6 +422,7 @@ steps:
           -var="spa_origin=${_SPA_ORIGIN}" \
           -var="api_base_url=$${API_BASE_URL}" \
           -var="firebase_allowed_domain=${_FIREBASE_ALLOWED_DOMAIN}" \
+          -var="custom_domain=$${CUSTOM_DOMAIN_ARG}" \
           -var="pipeline_orchestrator_enabled=${_PIPELINE_ORCHESTRATOR_ENABLED}" \
           -var="pipeline_deployment_enabled=${_PIPELINE_DEPLOYMENT_ENABLED}" \
           -var="settings_operator_invoker=${_SETTINGS_OPERATOR_INVOKER}" \
