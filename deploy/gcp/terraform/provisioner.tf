@@ -201,7 +201,7 @@ resource "google_cloud_run_v2_service" "provisioner" {
             SETTINGS_URL             = local.settings_url
             STREAM_TOKEN_SERVICE_URL = google_cloud_run_v2_service.stream_token_broker.uri
             SPA_ORIGIN               = var.spa_origin
-            FIREBASE_CUSTOM_DOMAIN   = join(",", var.custom_domain)
+            FIREBASE_CUSTOM_DOMAIN   = join(",", local.custom_domains)
             FIREBASE_PROJECT_ID      = var.project_id
             PUBSUB_PUSH_AUDIENCE     = local.provisioner_url
             PUBSUB_PUSH_SA           = google_service_account.pubsub_push.email

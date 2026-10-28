@@ -50,7 +50,7 @@ locals {
     },
     var.firebase_auth_domain != "" ? { FIREBASE_AUTH_DOMAIN = var.firebase_auth_domain } : {},
     var.firebase_allowed_domain != "" ? { FIREBASE_ALLOWED_DOMAIN = var.firebase_allowed_domain } : {},
-    length(var.custom_domain) > 0 ? { FIREBASE_CUSTOM_DOMAIN = join(",", var.custom_domain) } : {},
+    length(local.custom_domains) > 0 ? { FIREBASE_CUSTOM_DOMAIN = join(",", local.custom_domains) } : {},
     var.auth_admin_emails != "" ? { AUTH_ADMIN_EMAILS = var.auth_admin_emails } : {},
     # Sign-in providers. Both are public config (the Azure client secret lives only
     # in the Firebase console). Only set the Microsoft flag when enabled so the

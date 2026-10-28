@@ -43,6 +43,11 @@ resource "google_firestore_index" "org_users_by_created_at" {
     order      = "DESCENDING"
   }
 
+  timeouts {
+    create = "30m"
+    delete = "30m"
+  }
+
   depends_on = [google_firestore_database.default]
 }
 
@@ -81,6 +86,11 @@ resource "google_firestore_index" "attachment_chunks_by_conversation_and_embeddi
       dimension = 768 # matches EMBEDDING_DIMENSION in packages/shared-core/src/attachments/embed.js
       flat {}
     }
+  }
+
+  timeouts {
+    create = "30m"
+    delete = "30m"
   }
 
   depends_on = [google_firestore_database.default]
