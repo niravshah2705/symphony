@@ -25,6 +25,7 @@ test('reflects an allowlisted origin and calls next', () => {
   assert.equal(res.headers.vary, 'Origin');
   assert.match(res.headers['access-control-allow-headers'], /X-AI-Fleet-Organization-Id/);
   assert.match(res.headers['access-control-allow-headers'], /X-AI-Fleet-Project-Id/);
+  assert.match(res.headers['access-control-allow-headers'], /X-AI-Fleet-Api-Docs/);
   assert.equal(nexted, 1);
 });
 
