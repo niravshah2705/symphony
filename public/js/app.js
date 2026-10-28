@@ -663,13 +663,26 @@ function renderAuthControl() {
       window.setTimeout(() => window.location.reload(), 0);
     });
 
+    const orgTags = (organization?.tags || []).map((tag) =>
+      el('span', { class: 'badge sm', dataset: { userContent: 'true' } }, tag.name || tag)
+    );
+    const projectTags = (project?.tags || []).map((tag) =>
+      el('span', { class: 'badge sm', dataset: { userContent: 'true' } }, tag.name || tag)
+    );
+
     panel.append(
       el('label', { class: 'account-context-field', for: 'account-organization-select' }, [
-        el('span', { dataset: { i18n: 'organization' } }, t('organization')),
+        el('div', { class: 'account-context-field-header' }, [
+          el('span', { dataset: { i18n: 'organization' } }, t('organization')),
+          ...(orgTags.length ? [el('div', { class: 'account-context-tags' }, orgTags)] : []),
+        ]),
         organizationSelect,
       ]),
       el('label', { class: 'account-context-field', for: 'account-project-select' }, [
-        el('span', { dataset: { i18n: 'aiFleetProject' } }, t('aiFleetProject')),
+        el('div', { class: 'account-context-field-header' }, [
+          el('span', { dataset: { i18n: 'aiFleetProject' } }, t('aiFleetProject')),
+          ...(projectTags.length ? [el('div', { class: 'account-context-tags' }, projectTags)] : []),
+        ]),
         projectSelect,
       ])
     );

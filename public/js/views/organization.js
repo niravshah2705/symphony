@@ -401,11 +401,15 @@ async function renderOrgProjects(section, organization, orgUsers, rerender) {
         const accessBadge = String(project.access_mode || '').toUpperCase() === 'ORG_WIDE'
           ? el('span', { class: 'badge' }, 'Org-wide')
           : null;
+        const rawTags = project.tags || contextProject?.tags || [];
+        const tagBadges = (Array.isArray(rawTags) ? rawTags : []).map((tag) =>
+          el('span', { class: 'badge sm' }, typeof tag === 'string' ? tag : tag.name || tag.id || '')
+        );
         return el('div', { class: 'org-row-group' }, [
           projectRow(
             project.name,
             project.description,
-            [...(accessBadge ? [accessBadge] : []), ...actions],
+            [...tagBadges, ...(accessBadge ? [accessBadge] : []), ...actions],
           ),
           membersHost,
           collaboratorsHost,
@@ -548,8 +552,15 @@ async function renderOrg(section, organization, rerender) {
   const hasProjectAdminRole = organization.projects.some(
     (project) => String(project.role || '').toUpperCase() === 'PROJECT_ADMIN'
   );
+  const orgRawTags = org.tags || organization.tags || [];
+  const orgTagBadges = (Array.isArray(orgRawTags) ? orgRawTags : []).map((tag) =>
+    el('span', { class: 'badge sm' }, typeof tag === 'string' ? tag : tag.name || tag.id || '')
+  );
   const header = el('div', { class: 'org-block-head' }, [
-    el('h2', {}, org.name || organization.name || 'Your organization'),
+    el('div', { class: 'org-block-head-title' }, [
+      el('h2', {}, org.name || organization.name || 'Your organization'),
+      ...orgTagBadges,
+    ]),
     el('p', { class: 'muted' }, `Your role: ${organization.role || 'MEMBER'}${org.description ? ` · ${org.description}` : ''}`),
   ]);
 

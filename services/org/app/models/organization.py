@@ -47,6 +47,14 @@ class Organization:
     # sub-org.
     parent_org_id: uuid.UUID | None = None
 
+    @property
+    def tags(self) -> list["Tag"]:
+        return self.applied_tags
+
+    @tags.setter
+    def tags(self, value: list["Tag"]) -> None:
+        self.applied_tags = value
+
     def __post_init__(self) -> None:
         # Derive the deployment slug once from the org id when absent. from_doc
         # passes the stored value through so an existing slug is preserved verbatim
