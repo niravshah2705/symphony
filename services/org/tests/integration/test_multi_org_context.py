@@ -39,7 +39,7 @@ async def test_context_discovers_multiple_orgs_and_accessible_native_projects(cl
     assert secondary["role"] == "ORG_ADMIN"
     assert secondary["status"] == "ACTIVE"
     assert secondary["projects"] == [
-        {"id": project_id, "name": "Native", "role": "PROJECT_ADMIN", "status": "ACTIVE"}
+        {"id": project_id, "name": "Native", "role": "PROJECT_ADMIN", "status": "ACTIVE", "tags": []}
     ]
 
     # Organization and project headers are validated together. A known project

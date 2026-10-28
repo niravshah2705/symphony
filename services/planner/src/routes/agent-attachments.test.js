@@ -60,8 +60,11 @@ test('GET /attachment-types is a pure passthrough of the canonical table', async
   assert.equal(result.body.maxBytes, 20 * 1024 * 1024);
 });
 
-test('mint/complete/list/delete all reject when org or project context is missing', async (t) => {
-  const router = freshRouter(t, { service: { mintUpload: async () => ({}) } });
+test('mint/complete/delete all reject and list returns empty when org or project context is missing', async (t) => {
+  const router = freshRouter(t, {
+    getConversation: () => ({ id: 'conv_1', title: 'T', messages: [] }),
+    service: { mintUpload: async () => ({}) },
+  });
   const noHeaders = { params: { id: 'conv_1' }, body: {} };
 
   const mint = await call(handlerFor(router, 'post', '/conversations/:id/attachments'), noHeaders);
@@ -72,10 +75,32 @@ test('mint/complete/list/delete all reject when org or project context is missin
   assert.equal(complete.status, 400);
 
   const list = await call(handlerFor(router, 'get', '/conversations/:id/attachments'), { params: { id: 'conv_1' } });
-  assert.equal(list.status, 400);
+  assert.equal(list.status, 200);
+  assert.deepEqual(list.body, { attachments: [] });
 
   const del = await call(handlerFor(router, 'delete', '/conversations/:id/attachments/:attachmentId'), { params: { id: 'conv_1', attachmentId: 'att_12345678' } });
   assert.equal(del.status, 400);
+});
+
+test('routes fall back to stored conversation org and project context when headers are omitted', async (t) => {
+  let captured = null;
+  const router = freshRouter(t, {
+    getConversation: () => CONV,
+    service: {
+      mintUpload: async (args) => { captured = args; return { attachmentId: 'att_x' }; },
+      listAttachments: async () => [{ attachmentId: 'att_1' }],
+    },
+  });
+  const noHeaders = { params: { id: 'conv_1' }, body: { filename: 'a.pdf', mimeType: 'application/pdf', size: 10 } };
+
+  const mint = await call(handlerFor(router, 'post', '/conversations/:id/attachments'), noHeaders);
+  assert.equal(mint.status, 201);
+  assert.equal(captured.orgId, 'org-a');
+  assert.equal(captured.projectId, 'project-a');
+
+  const list = await call(handlerFor(router, 'get', '/conversations/:id/attachments'), { params: { id: 'conv_1' } });
+  assert.equal(list.status, 200);
+  assert.equal(list.body.attachments.length, 1);
 });
 
 test('routes reject an unknown/foreign conversation even with valid org/project headers', async (t) => {
