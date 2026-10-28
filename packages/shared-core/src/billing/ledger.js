@@ -16,9 +16,13 @@ const { CONFIG } = require('../config');
 const DEFAULT_ALERT_THRESHOLDS_PAISE = Object.freeze([10000, 0]);
 const DEFAULT_AUTO_RECHARGE = Object.freeze({
   enabled: false,
-  thresholdPaise: 0, // recharge when balance drops below this
-  amountPaise: 50000, // top up 500 INR
+  mode: 'amount', // 'amount' | 'percentage'
+  thresholdPaise: 0, // recharge when balance drops below this (in paise)
+  thresholdPercent: 20, // recharge when balance drops below this % of initial credit
+  amountPaise: 50000, // top up 500 INR (50000 paise)
   lastRechargedAt: null,
+  cashfreeSubscriptionId: null,
+  paymentMethodType: null,
 });
 
 /** Signed sum (paise) of all ledger entries for an org — the true balance. */

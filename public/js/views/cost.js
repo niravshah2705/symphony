@@ -252,7 +252,21 @@ async function loadLedger(view) {
   ]));
 }
 
+function loadCashfreeSdk() {
+  if (window.Cashfree) return Promise.resolve(window.Cashfree);
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+    script.onload = () => resolve(window.Cashfree);
+    script.onerror = () => reject(new Error('Failed to load Cashfree Checkout SDK'));
+    document.head.appendChild(script);
+  });
+}
+
 function adminPanel(view, summary) {
+  const ar = summary.autoRecharge || {};
+  const currentMode = ar.mode || 'amount';
+
   const amount = el('input', { type: 'number', min: '1', step: '1', placeholder: 'Amount (INR)' });
   const addBtn = el('button', { type: 'button', class: 'btn primary' }, 'Add credits');
   addBtn.addEventListener('click', async () => {
@@ -270,18 +284,49 @@ function adminPanel(view, summary) {
   });
 
   const thresholds = el('input', { type: 'text', value: (summary.alertThresholdsInr || []).join(', '), placeholder: 'e.g. 100, 0' });
-  const arEnabled = el('input', { type: 'checkbox', ...(summary.autoRecharge.enabled ? { checked: 'checked' } : {}) });
-  const arThreshold = el('input', { type: 'number', step: '1', value: String(summary.autoRecharge.thresholdInr ?? 0) });
-  const arAmount = el('input', { type: 'number', step: '1', value: String(summary.autoRecharge.amountInr ?? 0) });
+  const arEnabled = el('input', { type: 'checkbox', ...(ar.enabled ? { checked: 'checked' } : {}) });
+
+  // Mode selection: Specific Amount vs Percentage
+  const modeAmountRadio = el('input', { type: 'radio', name: 'arMode', value: 'amount', ...(currentMode === 'amount' ? { checked: 'checked' } : {}) });
+  const modePercentRadio = el('input', { type: 'radio', name: 'arMode', value: 'percentage', ...(currentMode === 'percentage' ? { checked: 'checked' } : {}) });
+
+  const arThresholdInr = el('input', { type: 'number', step: '1', value: String(ar.thresholdInr ?? 0), placeholder: 'Threshold (INR)' });
+  const arThresholdPercent = el('input', { type: 'number', min: '1', max: '100', step: '1', value: String(ar.thresholdPercent ?? 20), placeholder: 'Threshold (%)' });
+  const arAmount = el('input', { type: 'number', step: '1', value: String(ar.amountInr ?? 0), placeholder: 'Reload Amount (INR)' });
+
+  const amountGroup = el('label', { class: 'field', id: 'ar-amount-field' }, [el('span', {}, 'When balance falls below (INR)'), arThresholdInr]);
+  const percentGroup = el('label', { class: 'field', id: 'ar-percent-field' }, [el('span', {}, 'When balance falls below (% of credit)'), arThresholdPercent]);
+
+  const updateModeVisibility = () => {
+    if (modeAmountRadio.checked) {
+      amountGroup.style.display = 'flex';
+      percentGroup.style.display = 'none';
+    } else {
+      amountGroup.style.display = 'none';
+      percentGroup.style.display = 'flex';
+    }
+  };
+
+  modeAmountRadio.addEventListener('change', updateModeVisibility);
+  modePercentRadio.addEventListener('change', updateModeVisibility);
+
   const chBrowser = el('input', { type: 'checkbox', ...(summary.notifyChannels.browser !== false ? { checked: 'checked' } : {}) });
   const chEmail = el('input', { type: 'checkbox', ...(summary.notifyChannels.email ? { checked: 'checked' } : {}) });
   const chSlack = el('input', { type: 'checkbox', ...(summary.notifyChannels.slack ? { checked: 'checked' } : {}) });
   const gateEnabled = el('input', { type: 'checkbox', ...(summary.gateEnabled !== false ? { checked: 'checked' } : {}) });
+
   const saveBtn = el('button', { type: 'button', class: 'btn' }, 'Save settings');
   saveBtn.addEventListener('click', async () => {
+    const selectedMode = modePercentRadio.checked ? 'percentage' : 'amount';
     const payload = {
       alertThresholdsInr: thresholds.value.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n)),
-      autoRecharge: { enabled: arEnabled.checked, thresholdInr: Number(arThreshold.value) || 0, amountInr: Number(arAmount.value) || 0 },
+      autoRecharge: {
+        enabled: arEnabled.checked,
+        mode: selectedMode,
+        thresholdInr: Number(arThresholdInr.value) || 0,
+        thresholdPercent: Number(arThresholdPercent.value) || 20,
+        amountInr: Number(arAmount.value) || 0,
+      },
       notifyChannels: { browser: chBrowser.checked, email: chEmail.checked, slack: chSlack.checked },
       gateEnabled: gateEnabled.checked,
     };
@@ -296,16 +341,86 @@ function adminPanel(view, summary) {
     }
   });
 
+  // Cashfree Mandate Section
+  const hasSub = Boolean(ar.cashfreeSubscriptionId);
+  const subStatusBadge = el('span', { class: `status-pill ${hasSub ? 'ok' : 'neutral'}` }, hasSub ? `Active Mandate: ${ar.cashfreeSubscriptionId}` : 'No Mandate');
+  const authMandateBtn = el('button', { type: 'button', class: 'btn primary' }, 'Authorize Payment Method (UPI / Card / eNACH)');
+
+  authMandateBtn.addEventListener('click', async () => {
+    authMandateBtn.disabled = true;
+    try {
+      const res = await api.billing.createCashfreeMandate({
+        returnUrl: window.location.href,
+      });
+
+      if (!res.subscriptionSessionId) {
+        throw new Error('Did not receive subscription session ID from Cashfree.');
+      }
+
+      toast('Opening Cashfree Payment Authorization…', 'ok');
+      const CashfreeSdk = await loadCashfreeSdk();
+      const cashfree = CashfreeSdk({ mode: 'sandbox' });
+
+      cashfree.subscriptionsCheckout({
+        subsSessionId: res.subscriptionSessionId,
+        redirectTarget: '_blank',
+      }).then(async (result) => {
+        if (result && result.error) {
+          toast(`Authorization error: ${result.error.message}`, 'error');
+          authMandateBtn.disabled = false;
+        } else {
+          toast('Verifying mandate authorization…', 'ok');
+          await api.billing.verifyCashfreeMandate(res.subscriptionId);
+          renderCost(view);
+        }
+      }).catch((err) => {
+        toast((err && err.message) || 'Checkout window closed or failed', 'warn');
+        authMandateBtn.disabled = false;
+      });
+    } catch (err) {
+      toast((err && err.message) || 'Failed to initialize Cashfree mandate', 'error');
+      authMandateBtn.disabled = false;
+    }
+  });
+
   const field = (label, input) => el('label', { class: 'field' }, [el('span', {}, label), input]);
-  return el('section', { class: 'operational-panel' }, [
-    el('div', { class: 'panel-heading' }, [el('div', {}, [el('h2', {}, 'Billing settings'), el('p', { class: 'muted' }, 'Admin only. Alert thresholds are INR balances; auto-recharge tops up a simulated credit (wire a real gateway later).')])]),
+
+  const panel = el('section', { class: 'operational-panel' }, [
+    el('div', { class: 'panel-heading' }, [
+      el('div', {}, [
+        el('h2', {}, 'Billing settings'),
+        el('p', { class: 'muted' }, 'Admin only. Auto-reload with Cashfree Payments threshold (% or amount) and mandate authorization.'),
+      ]),
+    ]),
     el('div', { class: 'form-grid' }, [
       el('div', { class: 'row' }, [amount, addBtn]),
       field('Alert thresholds (INR, comma-separated)', thresholds),
-      el('div', { class: 'row' }, [field('Auto-recharge', arEnabled), field('When below (INR)', arThreshold), field('Top up (INR)', arAmount)]),
+      el('div', { class: 'field-group' }, [
+        el('strong', {}, 'Auto-Reload Threshold Method (OpenAI style)'),
+        el('div', { class: 'row' }, [
+          el('label', { class: 'radio-label' }, [modeAmountRadio, el('span', {}, 'Specific Amount (INR)')]),
+          el('label', { class: 'radio-label' }, [modePercentRadio, el('span', {}, 'Percentage (%) of Credit')]),
+        ]),
+      ]),
+      el('div', { class: 'row' }, [
+        field('Enable Auto-Reload', arEnabled),
+        amountGroup,
+        percentGroup,
+        field('Reload Amount (INR)', arAmount),
+      ]),
+      el('div', { class: 'field-group' }, [
+        el('strong', {}, 'Cashfree Payments Mandate (UPI AutoPay, Cards SI, eNACH)'),
+        el('div', { class: 'row' }, [
+          subStatusBadge,
+          authMandateBtn,
+        ]),
+      ]),
       el('div', { class: 'row' }, [field('Notify: browser', chBrowser), field('Email', chEmail), field('Slack', chSlack)]),
       field('Pause runners on negative balance', gateEnabled),
       saveBtn,
     ]),
   ]);
+
+  setTimeout(updateModeVisibility, 0);
+  return panel;
 }

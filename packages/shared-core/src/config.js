@@ -698,6 +698,7 @@ const BILLING = Object.freeze({
   orgId: String(process.env.FLEET_ORG_ID || process.env.PROXY_ORG_ID || '').trim(),
   usageRetentionDays: toPositiveNumber(process.env.BILLING_USAGE_RETENTION_DAYS, 90),
   slackWebhookUrl: proxied('/slack-webhook', process.env.BILLING_SLACK_WEBHOOK_URL, ''),
+  rechargeIntervalMin: toPositiveNumber(process.env.BILLING_RECHARGE_INTERVAL_MIN, 60),
 });
 
 /** Server configuration and shared constants. */

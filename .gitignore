@@ -45,3 +45,8 @@ registry-bundle-out/
 registry-bundle/
 # Added by code-review-graph
 .code-review-graph/
+.agent/skills/cashfree-skills/
+.claude/skills/
+.agents/skills/cashfree-skills/
+.kiro/skills/
+.opencode/skills/cashfree-skills/

@@ -15,11 +15,13 @@ const gate = require('./gate');
 const recharge = require('./recharge');
 const notify = require('./notify');
 const sweep = require('./sweep');
+const cashfreeClient = require('./cashfree-client');
 
 module.exports = {
   ...pricing,
   ...orgContext,
   ledger,
+  cashfreeClient,
   recordUsage: usage.recordUsage,
   pickUsage: usage.pickUsage,
   billingStatus: gate.billingStatus,
