@@ -25,6 +25,15 @@ const DEFAULT_AUTO_RECHARGE = Object.freeze({
   paymentMethodType: null,
 });
 
+const DEFAULT_PAYMENT_INFO = Object.freeze({
+  billingName: '',
+  billingEmail: '',
+  billingPhone: '',
+  taxId: '',
+  address: null,
+  updatedAt: null,
+});
+
 /** Signed sum (paise) of all ledger entries for an org — the true balance. */
 function balanceFromLedger(orgId) {
   return store
@@ -64,6 +73,7 @@ function ensureAccount(orgId) {
     notifyChannels: { browser: true, email: false, slack: false },
     notifyEmails: [],
     autoRecharge: { ...DEFAULT_AUTO_RECHARGE },
+    paymentInfo: { ...DEFAULT_PAYMENT_INFO },
     gateEnabled: true,
   });
 }
@@ -108,6 +118,7 @@ function currentBalancePaise(orgId) {
 module.exports = {
   DEFAULT_ALERT_THRESHOLDS_PAISE,
   DEFAULT_AUTO_RECHARGE,
+  DEFAULT_PAYMENT_INFO,
   balanceFromLedger,
   ensureAccount,
   refreshBalance,

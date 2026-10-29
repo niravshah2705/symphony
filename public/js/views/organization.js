@@ -610,6 +610,8 @@ async function renderOrgBilling(section, organization, isAdmin) {
   const isAutoEnabled = Boolean(ar.enabled);
   const currentMode = ar.mode || 'amount';
 
+  const pi = summary.paymentInfo || {};
+
   const rows = [
     el('div', { class: 'org-row' }, [
       el('div', { class: 'org-row-copy' }, [
@@ -629,6 +631,129 @@ async function renderOrgBilling(section, organization, isAdmin) {
       el('span', {}, 'Sandbox creation and scheduled calls are paused until payment is added or auto-renew triggers.'),
     ]));
   }
+
+  if (isAdmin) {
+    // 1. On-demand Reload with Cashfree Checkout
+    const reloadInput = el('input', { type: 'number', min: '10', step: '100', value: '500', style: 'width: 120px;' });
+    const payCashfreeBtn = el('button', { type: 'button', class: 'primary' }, 'Reload via Cashfree (UPI / Card / Netbanking)');
+
+    payCashfreeBtn.addEventListener('click', async () => {
+      const val = Number(reloadInput.value);
+      if (!Number.isFinite(val) || val <= 0) return toast('Enter a valid reload amount');
+      payCashfreeBtn.disabled = true;
+      try {
+        toast('Creating Cashfree order…');
+        const orderRes = await api.billing.createCashfreeOrder({
+          amountInr: val,
+          customerName: pi.billingName || organization.name || 'Organization Admin',
+          customerEmail: pi.billingEmail || 'billing@example.com',
+          customerPhone: pi.billingPhone || '9999999999',
+        });
+
+        if (!orderRes.paymentSessionId) {
+          throw new Error('No payment session received from Cashfree.');
+        }
+
+        toast('Launching Cashfree Checkout…');
+        const CashfreeSdk = await loadCashfreeSdk();
+        const cashfree = CashfreeSdk({ mode: 'sandbox' });
+
+        cashfree.checkout({
+          paymentSessionId: orderRes.paymentSessionId,
+          redirectTarget: '_modal',
+        }).then(async (result) => {
+          if (result && result.error) {
+            toast(`Payment error: ${result.error.message}`);
+            payCashfreeBtn.disabled = false;
+          } else {
+            toast('Verifying payment with Cashfree…');
+            const verifyRes = await api.billing.verifyCashfreeOrder(orderRes.orderId);
+            if (verifyRes.status === 'PAID') {
+              toast(`Payment successful! Reloaded ${inr(val)}.`);
+            } else {
+              toast(`Payment status: ${verifyRes.status}`);
+            }
+            await reload();
+          }
+        }).catch((err) => {
+          toast((err && err.message) || 'Checkout failed or modal dismissed');
+          payCashfreeBtn.disabled = false;
+        });
+      } catch (err) {
+        toast((err && err.message) || 'Failed to initialize Cashfree reload');
+        payCashfreeBtn.disabled = false;
+      }
+    });
+
+    rows.push(el('div', { class: 'org-row' }, [
+      el('div', { class: 'org-row-copy' }, [
+        el('strong', {}, 'On-Demand Reload'),
+        el('small', { class: 'muted' }, 'Add funds instantly to this organization via Cashfree (Cards, UPI, Netbanking).'),
+      ]),
+      el('div', { class: 'org-row-actions', style: 'display: flex; gap: 8px; align-items: center;' }, [
+        el('span', { class: 'muted' }, '₹'),
+        reloadInput,
+        payCashfreeBtn,
+      ]),
+    ]));
+
+    // 2. Organization Billing & Tax Information
+    const billingNameInput = el('input', { type: 'text', placeholder: 'Acme Corp / John Doe', value: pi.billingName || '' });
+    const billingEmailInput = el('input', { type: 'email', placeholder: 'billing@example.com', value: pi.billingEmail || '' });
+    const billingPhoneInput = el('input', { type: 'tel', placeholder: '9876543210', value: pi.billingPhone || '' });
+    const taxIdInput = el('input', { type: 'text', placeholder: 'GSTIN / PAN / VAT (optional)', value: pi.taxId || '' });
+    const addressInput = el('input', { type: 'text', placeholder: 'Street address', value: pi.billingAddress?.line1 || '' });
+    const cityInput = el('input', { type: 'text', placeholder: 'City', value: pi.billingAddress?.city || '' });
+    const stateInput = el('input', { type: 'text', placeholder: 'State / Province', value: pi.billingAddress?.state || '' });
+    const postalCodeInput = el('input', { type: 'text', placeholder: 'Postal code', value: pi.billingAddress?.postalCode || '' });
+    const countryInput = el('input', { type: 'text', placeholder: 'IN', value: pi.billingAddress?.country || 'IN' });
+
+    const savePiBtn = el('button', { type: 'submit', class: 'btn' }, 'Save Billing Information');
+    const piForm = el('form', { class: 'org-form org-form-wide', style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;' }, [
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Billing Contact / Entity Name'), billingNameInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Billing Email'), billingEmailInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Billing Phone'), billingPhoneInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Tax ID (GSTIN / VAT / PAN)'), taxIdInput]),
+      el('label', { class: 'org-inline-field', style: 'grid-column: 1 / -1;' }, [el('span', { class: 'muted' }, 'Billing Address'), addressInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'City'), cityInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'State / Region'), stateInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Postal Code'), postalCodeInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Country'), countryInput]),
+      el('div', { style: 'grid-column: 1 / -1; margin-top: 6px;' }, [savePiBtn]),
+    ]);
+
+    piForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      savePiBtn.disabled = true;
+      try {
+        await api.billing.updateConfig({
+          paymentInfo: {
+            billingName: billingNameInput.value.trim(),
+            billingEmail: billingEmailInput.value.trim(),
+            billingPhone: billingPhoneInput.value.trim(),
+            taxId: taxIdInput.value.trim(),
+            billingAddress: {
+              line1: addressInput.value.trim(),
+              city: cityInput.value.trim(),
+              state: stateInput.value.trim(),
+              postalCode: postalCodeInput.value.trim(),
+              country: countryInput.value.trim() || 'IN',
+            },
+          },
+        });
+        toast('Billing & payment information saved.');
+        await reload();
+      } catch (err) {
+        toast((err && err.message) || 'Failed to save payment info.');
+        savePiBtn.disabled = false;
+      }
+    });
+
+    rows.push(el('div', { class: 'org-row-group', style: 'margin-top: 12px;' }, [
+      el('strong', {}, 'Organisation Billing & Tax Information'),
+      el('p', { class: 'muted', style: 'margin: 4px 0 8px;' }, 'Required entity details used on invoices and Cashfree payment sessions.'),
+      piForm,
+    ]));
 
   if (isAdmin) {
     // Payment Mandate row

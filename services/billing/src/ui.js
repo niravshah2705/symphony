@@ -17,6 +17,10 @@ function renderDashboardHtml(data = {}) {
   const thresholdPercent = Number(autoRecharge.thresholdPercent) || 20;
   const rechargeAmountInr = ((Number(autoRecharge.amountPaise) || 0) / 100).toFixed(2);
   const subscriptionId = autoRecharge.cashfreeSubscriptionId || '';
+  const paymentInfo = account.paymentInfo || {};
+  const billingName = paymentInfo.billingName || 'Not configured';
+  const billingEmail = paymentInfo.billingEmail || 'Not configured';
+  const taxId = paymentInfo.taxId || 'None';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -211,6 +215,13 @@ function renderDashboardHtml(data = {}) {
           ${subscriptionId ? subscriptionId : 'Not Configured'}
         </div>
         <div class="metric-sub">${subscriptionId ? 'UPI AutoPay / eNACH / Card SI active' : 'Authorize via UI to enable auto-charge'}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Billing Entity & Tax</div>
+        <div class="metric" style="font-size: 1.1rem; font-weight: 500;">
+          ${billingName}
+        </div>
+        <div class="metric-sub">${billingEmail} · Tax ID: ${taxId}</div>
       </div>
     </div>
 

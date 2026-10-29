@@ -129,6 +129,14 @@ router.get('/summary', asyncHandler(async (req, res) => {
       month: sumWindow(records, PERIOD_DAYS.month, now),
     },
     alertThresholdsInr: (account && account.alertThresholdsPaise ? account.alertThresholdsPaise : []).map(paiseToInr),
+    paymentInfo: (account && account.paymentInfo) || {
+      billingName: '',
+      billingEmail: '',
+      billingPhone: '',
+      taxId: '',
+      address: null,
+      updatedAt: null,
+    },
     autoRecharge: account && account.autoRecharge
       ? {
           enabled: Boolean(account.autoRecharge.enabled),
@@ -291,6 +299,26 @@ router.put('/config', asyncHandler(async (req, res) => {
       lastRechargedAt: null,
     };
   }
+  if (body.paymentInfo && typeof body.paymentInfo === 'object') {
+    const existingAccount = store.getBillingAccount(caller.orgId);
+    const existingInfo = (existingAccount && existingAccount.paymentInfo) || {};
+    patch.paymentInfo = {
+      billingName: String(body.paymentInfo.billingName || existingInfo.billingName || '').slice(0, 100),
+      billingEmail: String(body.paymentInfo.billingEmail || existingInfo.billingEmail || '').slice(0, 100),
+      billingPhone: String(body.paymentInfo.billingPhone || existingInfo.billingPhone || '').slice(0, 20),
+      taxId: String(body.paymentInfo.taxId || existingInfo.taxId || '').slice(0, 50),
+      address: body.paymentInfo.address && typeof body.paymentInfo.address === 'object'
+        ? {
+            line1: String(body.paymentInfo.address.line1 || '').slice(0, 120),
+            city: String(body.paymentInfo.address.city || '').slice(0, 60),
+            state: String(body.paymentInfo.address.state || '').slice(0, 60),
+            postalCode: String(body.paymentInfo.address.postalCode || '').slice(0, 20),
+            country: String(body.paymentInfo.address.country || 'IN').slice(0, 10),
+          }
+        : (existingInfo.address || null),
+      updatedAt: new Date().toISOString(),
+    };
+  }
   if (body.notifyChannels && typeof body.notifyChannels === 'object') {
     patch.notifyChannels = {
       browser: body.notifyChannels.browser !== false,
@@ -310,6 +338,7 @@ router.put('/config', asyncHandler(async (req, res) => {
   res.json({
     orgId: caller.orgId,
     alertThresholdsInr: (account.alertThresholdsPaise || []).map(paiseToInr),
+    paymentInfo: account.paymentInfo || null,
     autoRecharge: {
       enabled: Boolean(account.autoRecharge && account.autoRecharge.enabled),
       mode: account.autoRecharge && account.autoRecharge.mode || 'amount',
@@ -353,6 +382,107 @@ router.post('/cashfree/create-mandate', asyncHandler(async (req, res) => {
     subscriptionSessionId: sub.subscription_session_id || sub.cf_subscription_id || '',
     status: sub.subscription_status || 'INITIALIZED',
     cashfreeData: sub,
+  });
+}));
+
+// POST /api/billing/cashfree/create-order — create Cashfree PG order for on-demand reload
+router.post('/cashfree/create-order', asyncHandler(async (req, res) => {
+  const caller = await resolveCallerOrg(req);
+  if (!requireAdmin(caller, res)) return;
+
+  const amountInr = Number(req.body && req.body.amountInr);
+  const amountPaise = inrToPaise(amountInr);
+  if (!Number.isFinite(amountPaise) || amountPaise <= 0 || amountPaise > MAX_RECHARGE_PAISE) {
+    return res.status(400).json({ error: `amountInr must be between ₹1 and ₹${MAX_RECHARGE_PAISE / 100}`, code: 'invalid_amount' });
+  }
+
+  const account = store.getBillingAccount(caller.orgId);
+  const paymentInfo = (account && account.paymentInfo) || {};
+  const sanitizedOrg = String(caller.orgId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const orderId = `order_${sanitizedOrg}_${Date.now()}`;
+  const customerId = `cust_${sanitizedOrg}`;
+  const customerName = req.body?.customerName || paymentInfo.billingName || 'Admin User';
+  const customerEmail = req.body?.customerEmail || paymentInfo.billingEmail || 'admin@aifleet.local';
+  const customerPhone = req.body?.customerPhone || paymentInfo.billingPhone || '9999999999';
+  const returnUrl = req.body?.returnUrl || '';
+
+  const order = await cashfreeClient.createOrder({
+    orderId,
+    orderAmount: amountInr,
+    customerId,
+    customerName,
+    customerEmail,
+    customerPhone,
+    returnUrl,
+    orderNote: `AI Fleet Wallet Reload for Org ${caller.orgId}`,
+  });
+
+  res.json({
+    orgId: caller.orgId,
+    orderId,
+    amountInr,
+    paymentSessionId: order.payment_session_id || '',
+    orderStatus: order.order_status || 'ACTIVE',
+    cashfreeData: order,
+  });
+}));
+
+// POST /api/billing/cashfree/verify-order — verify Cashfree PG payment and post ledger credit
+router.post('/cashfree/verify-order', asyncHandler(async (req, res) => {
+  const caller = await resolveCallerOrg(req);
+  if (!requireAdmin(caller, res)) return;
+
+  const orderId = String(req.body && req.body.orderId || '').trim();
+  if (!orderId) {
+    return res.status(400).json({ error: 'orderId is required', code: 'missing_order_id' });
+  }
+
+  // Idempotency: verify order not already processed
+  const existingEntries = store.listLedgerEntries({ orgId: caller.orgId });
+  const alreadyCredited = existingEntries.find((e) => e.meta && e.meta.cashfreeOrderId === orderId);
+  if (alreadyCredited) {
+    const account = store.getBillingAccount(caller.orgId);
+    return res.json({
+      success: true,
+      alreadyProcessed: true,
+      orderId,
+      orderStatus: 'PAID',
+      balanceInr: paiseToInr(account ? account.balancePaise : 0),
+      balancePaise: account ? account.balancePaise : 0,
+    });
+  }
+
+  const order = await cashfreeClient.getOrder(orderId);
+  const status = String(order.order_status || '').toUpperCase();
+
+  if (status === 'PAID') {
+    const amountInr = Number(order.order_amount);
+    const amountPaise = inrToPaise(amountInr);
+    const { entry, account } = ledger.postEntry(caller.orgId, {
+      type: 'recharge',
+      amountPaise,
+      description: `Cashfree recharge (${orderId})`,
+      meta: {
+        cashfreeOrderId: orderId,
+        cfOrderId: order.cf_order_id || null,
+        paymentSessionId: order.payment_session_id || null,
+      },
+    });
+
+    return res.json({
+      success: true,
+      orderId,
+      orderStatus: status,
+      entry: { ...entry, amountInr: paiseToInr(entry.amountPaise) },
+      balanceInr: paiseToInr(account.balancePaise),
+      balancePaise: account.balancePaise,
+    });
+  }
+
+  return res.status(400).json({
+    error: 'Order is not in PAID status',
+    orderStatus: status,
+    orderId,
   });
 }));
 
@@ -429,6 +559,27 @@ router.post('/cashfree/webhook', asyncHandler(async (req, res) => {
             description: `Auto-recharge webhook payment (${paymentId || subId})`,
             meta: { cashfreeSubscriptionId: subId, paymentId },
           });
+        }
+      }
+    }
+  } else if (eventType === 'ORDER_PAID_SUCCESS' || eventType === 'PAYMENT_SUCCESS_WEBHOOK') {
+    const order = data.order || {};
+    const orderId = order.order_id || (data.payment && data.payment.order_id);
+    const amount = order.order_amount || (data.payment && data.payment.payment_amount);
+    if (orderId && amount) {
+      for (const acc of store.listBillingAccounts()) {
+        const orgPrefix = `order_${String(acc.id).replace(/[^a-zA-Z0-9_-]/g, '_')}_`;
+        if (orderId.startsWith(orgPrefix)) {
+          const orgId = acc.id;
+          const existing = store.listLedgerEntries({ orgId }).find((e) => e.meta && e.meta.cashfreeOrderId === orderId);
+          if (!existing) {
+            ledger.postEntry(orgId, {
+              type: 'recharge',
+              amountPaise: Math.round(Number(amount) * 100),
+              description: `Cashfree order paid webhook (${orderId})`,
+              meta: { cashfreeOrderId: orderId, webhook: true },
+            });
+          }
         }
       }
     }

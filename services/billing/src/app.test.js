@@ -136,3 +136,102 @@ test('cashfree create and verify mandate mock flow', async () => {
     await server.close();
   }
 });
+
+test('billing paymentInfo update, cashfree create-order and verify-order flow', async () => {
+  const app = createApp();
+  const server = await listen(app);
+  try {
+    const orgId = 'org-cf-order-test';
+
+    // 1. Update Payment Info
+    const updateRes = await fetch(`${server.url}/api/billing/config`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ai-fleet-organization-id': orgId,
+      },
+      body: JSON.stringify({
+        paymentInfo: {
+          billingName: 'Acme Test Corp',
+          billingEmail: 'billing@acmetest.com',
+          billingPhone: '9876543210',
+          taxId: '27AABCU9603R1ZM',
+          billingAddress: {
+            line1: '100 Main St',
+            city: 'Bengaluru',
+            state: 'KA',
+            postalCode: '560001',
+            country: 'IN',
+          },
+        },
+      }),
+    });
+    assert.equal(updateRes.status, 200);
+
+    // Verify summary contains paymentInfo
+    const summaryRes = await fetch(`${server.url}/api/billing/summary`, {
+      headers: { 'x-ai-fleet-organization-id': orgId },
+    });
+    const summary = await summaryRes.json();
+    assert.equal(summary.paymentInfo.billingName, 'Acme Test Corp');
+    assert.equal(summary.paymentInfo.taxId, '27AABCU9603R1ZM');
+    const initialBalanceInr = summary.balanceInr;
+
+    // 2. Create Cashfree Order
+    const createOrderRes = await fetch(`${server.url}/api/billing/cashfree/create-order`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ai-fleet-organization-id': orgId,
+      },
+      body: JSON.stringify({
+        amountInr: 1000,
+        customerName: 'Acme Test Corp',
+        customerEmail: 'billing@acmetest.com',
+        customerPhone: '9876543210',
+      }),
+    });
+    assert.equal(createOrderRes.status, 200);
+    const orderData = await createOrderRes.json();
+    assert.ok(orderData.orderId);
+    assert.ok(orderData.paymentSessionId);
+
+    // 3. Verify Order & Credit Ledger
+    const verifyOrderRes = await fetch(`${server.url}/api/billing/cashfree/verify-order`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ai-fleet-organization-id': orgId,
+      },
+      body: JSON.stringify({ orderId: orderData.orderId }),
+    });
+    assert.equal(verifyOrderRes.status, 200);
+    const verifyData = await verifyOrderRes.json();
+    assert.equal(verifyData.orderStatus, 'PAID');
+    assert.equal(verifyData.orderId, orderData.orderId);
+
+    // 4. Verify balance increased by 1000 INR
+    const afterSummaryRes = await fetch(`${server.url}/api/billing/summary`, {
+      headers: { 'x-ai-fleet-organization-id': orgId },
+    });
+    const afterSummary = await afterSummaryRes.json();
+    assert.equal(afterSummary.balanceInr, initialBalanceInr + 100); // mock getOrder returns order_amount: 100
+
+    // 5. Test idempotency: re-verify should not double credit
+    await fetch(`${server.url}/api/billing/cashfree/verify-order`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ai-fleet-organization-id': orgId,
+      },
+      body: JSON.stringify({ orderId: orderData.orderId }),
+    });
+    const idempotentSummaryRes = await fetch(`${server.url}/api/billing/summary`, {
+      headers: { 'x-ai-fleet-organization-id': orgId },
+    });
+    const idempotentSummary = await idempotentSummaryRes.json();
+    assert.equal(idempotentSummary.balanceInr, initialBalanceInr + 100);
+  } finally {
+    await server.close();
+  }
+});

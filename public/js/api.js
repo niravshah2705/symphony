@@ -547,6 +547,8 @@ export const api = {
     updateConfig: (payload) => request('/billing/config', { method: 'PUT', body: JSON.stringify(payload) }),
     createCashfreeMandate: (payload = {}) => request('/billing/cashfree/create-mandate', { method: 'POST', body: JSON.stringify(payload) }),
     verifyCashfreeMandate: (subscriptionId) => request('/billing/cashfree/verify-mandate', { method: 'POST', body: JSON.stringify({ subscriptionId }) }),
+    createCashfreeOrder: (payload = {}) => request('/billing/cashfree/create-order', { method: 'POST', body: JSON.stringify(payload) }),
+    verifyCashfreeOrder: (orderId) => request('/billing/cashfree/verify-order', { method: 'POST', body: JSON.stringify({ orderId }) }),
   },
 
   identity: {
