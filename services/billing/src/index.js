@@ -6,7 +6,7 @@ const { createApp } = require('./app');
 
 function start(options = {}) {
   const app = options.app || createApp(options);
-  const port = Number(options.port) || Number(process.env.PORT) || CONFIG.SERVICES.billingPort || 4050;
+  const port = Number(options.port) || Number(process.env.BILLING_SERVICE_PORT) || CONFIG.SERVICES.billingPort || 4050;
   const server = app.listen(port, () => log.info(`AI Fleet billing service listening on :${port}`));
   const shutdown = () => server.close();
   process.once('SIGTERM', shutdown);
