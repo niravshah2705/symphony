@@ -8,8 +8,9 @@ This document describes how to configure environment variables and secrets for t
 
 | Variable | Sensitive? | Purpose | Default / Example |
 |---|---|---|---|
-| `CASHFREE_APP_ID` | **Yes** | Cashfree merchant App ID (client ID) | Test: `TEST10...` / Prod: `PROD...` |
+| `CASHFREE_APP_ID` | **Yes** | Cashfree merchant App ID (client ID) | Test: `TEST10...` / Prod: `1438233e...` |
 | `CASHFREE_SECRET_KEY` | **Yes** | Cashfree API Secret Key (client secret) | `cfsk_ma_...` |
+| `CASHFREE_BASE_URL` | No | Cashfree Base URL (Sandbox or Production) | `https://sandbox.cashfree.com` or `https://api.cashfree.com` |
 | `CASHFREE_ENV` | No | Cashfree target environment | `sandbox` (default) or `production` |
 | `BILLING_SERVICE_PORT` | No | Local HTTP listen port for billing service | `4050` (in container: `8080`) |
 | `BILLING_URL` | No | Base URL for billing service S2S calls | `http://localhost:4050` |
@@ -23,7 +24,30 @@ This document describes how to configure environment variables and secrets for t
 
 ## 2. Where to Set Variables
 
-### A. Local Development (`.env` file)
+### A. GitHub Actions Secrets & Variables (CI/CD)
+
+For automated workflows, tests, and deployments via GitHub Actions:
+
+1. **GitHub Environment / Repository Variables (`vars`)**:
+   - `CASHFREE_BASE_URL`: `https://sandbox.cashfree.com` (or `https://api.cashfree.com` for production)
+   - Configure via GitHub CLI or Web UI:
+     ```bash
+     gh variable set CASHFREE_BASE_URL --body "https://sandbox.cashfree.com"
+     ```
+
+2. **GitHub Actions Secrets (`secrets`)**:
+   - `CASHFREE_APP_ID`: Always passed as an env var/secret (`CASHFREE_APP_ID`).
+   - `CASHFREE_SECRET_KEY`: Always passed as an env var/secret (`CASHFREE_SECRET_KEY`).
+   - Configure via GitHub CLI:
+     ```bash
+     gh secret set CASHFREE_APP_ID --body "<YOUR_APP_ID>"
+     gh secret set CASHFREE_SECRET_KEY --body "<YOUR_SECRET_KEY>"
+     ```
+   *(Note: API keys are maintained securely in GitHub Secrets and must never be committed to source control).*
+
+---
+
+### B. Local Development (`.env` file)
 
 In local development, all services inherit variables from the root `.env` file. Create or edit `.env` in the root of the repository:
 

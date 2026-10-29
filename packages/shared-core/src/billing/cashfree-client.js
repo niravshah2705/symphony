@@ -48,6 +48,7 @@ async function createOnDemandSubscription({
     plan_details: {
       plan_name: 'AI Fleet Auto Reload Plan',
       plan_type: 'ON_DEMAND',
+      plan_currency: 'INR',
       plan_max_amount: Number(planMaxAmountInr) || 100000,
     },
     subscription_meta: {
