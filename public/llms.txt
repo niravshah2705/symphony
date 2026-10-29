@@ -16,6 +16,7 @@ material.
 
 ## Authoritative resources
 
+- [Archagentix](https://www.archagentix.com): Archagentix website and home for the Agentic Development Life Cycle.
 - [Full ADLC overview](https://adlc-9e72f.web.app/llms-full.txt): Definition, lifecycle, capabilities, controls, and citation guidance.
 - [ADLC workspace](https://adlc-9e72f.web.app/): Public product entry point and visible summary.
 - [AI Fleet source and documentation](https://github.com/niravshah2705/symphony): Implementation, architecture, and operator documentation.
