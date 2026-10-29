@@ -108,8 +108,8 @@ test('matrix provisions only the harness-specific runtimes and publishes registr
   assert.equal(nodeVersions.length, 3);
   assert.deepEqual(nodeVersions, ['22.19.0', '22.19.0', '22.19.0']);
 
-  assert.match(build, /Set up Python for DCode[\s\S]*if: \$\{\{ matrix\.python \}\}[\s\S]*python-version: "3\.13"/);
-  assert.match(build, /Set up Bun for Oh My Pi[\s\S]*if: \$\{\{ matrix\.bun \}\}[\s\S]*bun-version: "1\.3\.14"/);
+  assert.match(build, /Set up Python for DCode[\s\S]*if: \$\{\{ matrix\.python \}\}[\s\S]*python-version: "3\.14"/);
+  assert.match(build, /Set up Bun for Oh My Pi[\s\S]*if: \$\{\{ matrix\.bun \}\}[\s\S]*bun-version: "1\.4\.4"/);
   assert.match(build, /HOME: \$\{\{ runner\.temp \}\}\/harness-home/);
   assert.match(build, /GIT_TERMINAL_PROMPT: "0"/);
   assert.match(build, /build-harness-artifact\.js build/);
