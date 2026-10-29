@@ -181,19 +181,6 @@ export async function renderAgent(view) {
       }
       return status;
     });
-  const activeProj = resolveActiveProject();
-  const sandboxPromise = api.loadProjectSandbox({
-    projectId: activeProj.projectId,
-    projectName: activeProj.projectName,
-  })
-    .catch(() => null)
-    .then((res) => {
-      if (res?.sandbox && isCurrentMount()) {
-        setProjectSandbox(activeProj.projectId, res.sandbox);
-        refreshSeedChrome();
-      }
-      return res;
-    });
   const threadsPromise = api.listConversations(requestOptions)
     .catch(() => ({ conversations: [] }))
     .then((response) => {
@@ -223,7 +210,6 @@ export async function renderAgent(view) {
       coderPromise,
       threadsPromise,
       activeConversationPromise,
-      sandboxPromise,
     ]);
     if (!isCurrentMount()) return;
 
@@ -1137,6 +1123,7 @@ async function resolveOmniboxRequest(text) {
         input: text,
         projectId: activeProj.projectId,
         projectName: activeProj.projectName,
+        sandboxChat: Boolean(state.sandbox || state.currentProjectId),
       });
       if (routed && routed.sandboxChat && routed.sandboxChat.sandbox) {
         setProjectSandbox(activeProj.projectId, routed.sandboxChat.sandbox);

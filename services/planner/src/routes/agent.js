@@ -588,8 +588,9 @@ router.post(
     }
 
     // Route chat box messages to the project's NVIDIA OpenShell sandbox chat
-    // unless the message was rejected by the safety gate or explicitly opted out.
-    if (!route.rejected && body.sandboxChat !== false && route.input) {
+    // when a project sandbox is active or explicitly requested (and not rejected
+    // by the safety gate or a simple salutation).
+    if (!route.rejected && route.intent !== 'salutation' && body.sandboxChat === true && route.input) {
       const context = requestWorkspaceContext(req);
       const projectId =
         (typeof body.projectId === 'string' && body.projectId.trim()) ||
