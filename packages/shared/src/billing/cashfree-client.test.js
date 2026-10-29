@@ -48,3 +48,27 @@ test('cashfreeClient verifies webhook signatures', () => {
   const isInvalid = cashfreeClient.verifyWebhookSignature({ 'x-webhook-signature': 'bad', 'x-webhook-timestamp': timestamp }, rawBody);
   assert.equal(isInvalid, false);
 });
+
+test('cashfreeClient getBaseUrl respects CASHFREE_BASE_URL and CASHFREE_ENV', () => {
+  const origBase = process.env.CASHFREE_BASE_URL;
+  const origEnv = process.env.CASHFREE_ENV;
+  try {
+    delete process.env.CASHFREE_BASE_URL;
+    process.env.CASHFREE_ENV = 'sandbox';
+    assert.equal(cashfreeClient.getBaseUrl(), 'https://sandbox.cashfree.com/pg');
+
+    process.env.CASHFREE_ENV = 'production';
+    assert.equal(cashfreeClient.getBaseUrl(), 'https://api.cashfree.com/pg');
+
+    process.env.CASHFREE_BASE_URL = 'https://sandbox.cashfree.com';
+    assert.equal(cashfreeClient.getBaseUrl(), 'https://sandbox.cashfree.com/pg');
+
+    process.env.CASHFREE_BASE_URL = 'https://sandbox.cashfree.com/pg/';
+    assert.equal(cashfreeClient.getBaseUrl(), 'https://sandbox.cashfree.com/pg');
+  } finally {
+    if (origBase !== undefined) process.env.CASHFREE_BASE_URL = origBase;
+    else delete process.env.CASHFREE_BASE_URL;
+    if (origEnv !== undefined) process.env.CASHFREE_ENV = origEnv;
+    else delete process.env.CASHFREE_ENV;
+  }
+});

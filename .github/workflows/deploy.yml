@@ -474,6 +474,7 @@ jobs:
             -var="email_smtp_auth_enabled=${{ vars.EMAIL_SMTP_AUTH_ENABLED || 'false' }}"
             -var="email_from=${{ vars.EMAIL_FROM }}"
             -var="email_public_app_url=${{ vars.EMAIL_PUBLIC_APP_URL }}"
+            -var="cashfree_base_url=${{ vars.CASHFREE_BASE_URL || 'https://sandbox.cashfree.com' }}"
           )
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")

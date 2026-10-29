@@ -85,6 +85,7 @@ resource "google_cloud_run_v2_service" "billing" {
           STORE_BACKEND         = "firestore"
           BILLING_SWEEP_ENABLED = "true"
           CASHFREE_ENV          = var.cashfree_env
+          CASHFREE_BASE_URL     = var.cashfree_base_url
         })
         content {
           name  = env.key
