@@ -545,6 +545,8 @@ export const api = {
     getLedger: (limit = 50) => request(`/billing/ledger?limit=${encodeURIComponent(limit)}`),
     recharge: (amountInr) => request('/billing/recharge', { method: 'POST', body: JSON.stringify({ amountInr }) }),
     updateConfig: (payload) => request('/billing/config', { method: 'PUT', body: JSON.stringify(payload) }),
+    createCashfreeMandate: (payload = {}) => request('/billing/cashfree/create-mandate', { method: 'POST', body: JSON.stringify(payload) }),
+    verifyCashfreeMandate: (subscriptionId) => request('/billing/cashfree/verify-mandate', { method: 'POST', body: JSON.stringify({ subscriptionId }) }),
   },
 
   identity: {

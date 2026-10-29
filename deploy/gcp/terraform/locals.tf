@@ -42,6 +42,7 @@ locals {
   settings_tag     = var.settings_image_tag != "" ? var.settings_image_tag : var.image_tag
   email_tag        = var.email_image_tag != "" ? var.email_image_tag : var.image_tag
   identity_tag     = var.identity_image_tag != "" ? var.identity_image_tag : var.image_tag
+  billing_tag      = var.billing_image_tag != "" ? var.billing_image_tag : var.image_tag
   proxy_tag        = var.proxy_image_tag != "" ? var.proxy_image_tag : var.image_tag
 
   gateway_image      = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
@@ -54,6 +55,7 @@ locals {
   settings_image     = "${local.image_base}/${var.settings_service_name}:${local.settings_tag}"
   email_image        = "${local.image_base}/${var.email_service_name}:${local.email_tag}"
   identity_image     = "${local.image_base}/${var.identity_service_name}:${local.identity_tag}"
+  billing_image      = "${local.image_base}/${var.billing_service_name}:${local.billing_tag}"
   proxy_image        = "${local.image_base}/${var.proxy_service_name}:${local.proxy_tag}"
 
   # Cloud Run's deterministic per-project URL:
@@ -75,6 +77,7 @@ locals {
   settings_url     = "https://${var.settings_service_name}-${local.run_url_suffix}"
   email_url        = "https://${var.email_service_name}-${local.run_url_suffix}"
   identity_url     = "https://${var.identity_service_name}-${local.run_url_suffix}"
+  billing_url      = "https://${var.billing_service_name}-${local.run_url_suffix}"
 
   # Pub/Sub's Google-managed service agent — needs publisher on the dead-letter
   # topic, subscriber on the source subscriptions, and token-creator on the push

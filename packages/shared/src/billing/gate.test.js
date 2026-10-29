@@ -14,7 +14,7 @@ process.env.FLEET_ORG_ID = 'org-gate';
 
 const store = require('../store');
 const ledger = require('./ledger');
-const { billingStatus, isBillingBlocked } = require('./gate');
+const { billingStatus, isBillingBlocked, getOrgFundStatus } = require('./gate');
 
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
@@ -26,10 +26,22 @@ test('no account yet → not blocked (first sweep seeds credit)', () => {
 test('positive balance → not blocked; negative balance → blocked with a reason', () => {
   ledger.ensureAccount('org-gate');
   assert.equal(isBillingBlocked({}), false);
+  let fundStatus = getOrgFundStatus('org-gate');
+  assert.equal(fundStatus.fundsAvailable, true);
+  assert.equal(fundStatus.fundStatus, 'available');
+  assert.equal(fundStatus.sandboxCreationDisabled, false);
+  assert.equal(fundStatus.scheduledCallsDisabled, false);
+
   ledger.postEntry('org-gate', { type: 'usage', amountPaise: -60000, description: 'drain past zero' });
   const status = billingStatus({});
   assert.equal(status.blocked, true);
   assert.match(status.reason, /balance/i);
+
+  fundStatus = getOrgFundStatus('org-gate');
+  assert.equal(fundStatus.fundsAvailable, false);
+  assert.equal(fundStatus.fundStatus, 'unavailable');
+  assert.equal(fundStatus.sandboxCreationDisabled, true);
+  assert.equal(fundStatus.scheduledCallsDisabled, true);
 });
 
 test('gateEnabled:false opts out of the pause even when negative', () => {

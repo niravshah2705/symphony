@@ -7,6 +7,7 @@ const store = require('@ai-fleet/shared-core/store');
 const ledger = require('@ai-fleet/shared-core/billing/ledger');
 const { paiseToInr } = require('@ai-fleet/shared-core/billing/pricing');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
+const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
 const { bearerToken } = require('../auth');
 const { callJson } = require('../service-client');
 const { requestContext } = require('../request-context');
@@ -107,6 +108,7 @@ router.get('/summary', asyncHandler(async (req, res) => {
   const caller = await resolveCallerOrg(req);
   const account = store.getBillingAccount(caller.orgId);
   const balancePaise = account ? Number(account.balancePaise) || 0 : ledger.balanceFromLedger(caller.orgId);
+  const fundsAvailable = balancePaise > 0;
   const records = scopedUsageRecords(caller);
   const now = Date.now();
   res.json({
@@ -115,6 +117,10 @@ router.get('/summary', asyncHandler(async (req, res) => {
     currency: 'INR',
     balanceInr: paiseToInr(balancePaise),
     balancePaise,
+    fundsAvailable,
+    fundStatus: fundsAvailable ? 'available' : 'unavailable',
+    sandboxCreationDisabled: !fundsAvailable,
+    scheduledCallsDisabled: !fundsAvailable,
     initialCreditInr: account ? paiseToInr(account.initialCreditPaise) : paiseToInr(CONFIG.BILLING.initialCreditPaise),
     fxUsdToInr: CONFIG.BILLING.usdToInr,
     spend: {
@@ -126,10 +132,24 @@ router.get('/summary', asyncHandler(async (req, res) => {
     autoRecharge: account && account.autoRecharge
       ? {
           enabled: Boolean(account.autoRecharge.enabled),
+          mode: account.autoRecharge.mode || 'amount',
           thresholdInr: paiseToInr(account.autoRecharge.thresholdPaise),
+          thresholdPercent: account.autoRecharge.thresholdPercent || 20,
           amountInr: paiseToInr(account.autoRecharge.amountPaise),
+          cashfreeSubscriptionId: account.autoRecharge.cashfreeSubscriptionId || null,
+          paymentMethodType: account.autoRecharge.paymentMethodType || null,
+          cashfreeConfigured: cashfreeClient.isConfigured(),
         }
-      : { enabled: false, thresholdInr: 0, amountInr: 0 },
+      : {
+          enabled: false,
+          mode: 'amount',
+          thresholdInr: 0,
+          thresholdPercent: 20,
+          amountInr: 0,
+          cashfreeSubscriptionId: null,
+          paymentMethodType: null,
+          cashfreeConfigured: cashfreeClient.isConfigured(),
+        },
     notifyChannels: (account && account.notifyChannels) || { browser: true, email: false, slack: false },
     gateEnabled: account ? account.gateEnabled !== false : true,
     sweepEnabled: CONFIG.BILLING.sweepEnabled,
@@ -253,11 +273,20 @@ router.put('/config', asyncHandler(async (req, res) => {
   }
   if (body.autoRecharge && typeof body.autoRecharge === 'object') {
     const ar = body.autoRecharge;
+    const existingAccount = store.getBillingAccount(caller.orgId);
+    const existingAr = (existingAccount && existingAccount.autoRecharge) || {};
+
+    const mode = ['amount', 'percentage'].includes(ar.mode) ? ar.mode : 'amount';
     const thresholdPaise = inrToPaise(ar.thresholdInr);
     const amountPaise = inrToPaise(ar.amountInr);
+    const thresholdPercent = Number.isFinite(Number(ar.thresholdPercent)) ? Math.max(1, Math.min(100, Number(ar.thresholdPercent))) : 20;
+
     patch.autoRecharge = {
+      ...existingAr,
       enabled: Boolean(ar.enabled),
+      mode,
       thresholdPaise: Number.isFinite(thresholdPaise) ? thresholdPaise : 0,
+      thresholdPercent,
       amountPaise: Number.isFinite(amountPaise) && amountPaise > 0 ? Math.min(amountPaise, MAX_RECHARGE_PAISE) : 0,
       lastRechargedAt: null,
     };
@@ -283,13 +312,129 @@ router.put('/config', asyncHandler(async (req, res) => {
     alertThresholdsInr: (account.alertThresholdsPaise || []).map(paiseToInr),
     autoRecharge: {
       enabled: Boolean(account.autoRecharge && account.autoRecharge.enabled),
+      mode: account.autoRecharge && account.autoRecharge.mode || 'amount',
       thresholdInr: paiseToInr(account.autoRecharge && account.autoRecharge.thresholdPaise),
+      thresholdPercent: account.autoRecharge && account.autoRecharge.thresholdPercent || 20,
       amountInr: paiseToInr(account.autoRecharge && account.autoRecharge.amountPaise),
+      cashfreeSubscriptionId: account.autoRecharge && account.autoRecharge.cashfreeSubscriptionId || null,
+      paymentMethodType: account.autoRecharge && account.autoRecharge.paymentMethodType || null,
     },
     notifyChannels: account.notifyChannels,
     notifyEmails: account.notifyEmails || [],
     gateEnabled: account.gateEnabled !== false,
   });
+}));
+
+// POST /api/billing/cashfree/create-mandate — create On-Demand Cashfree subscription for mandate setup
+router.post('/cashfree/create-mandate', asyncHandler(async (req, res) => {
+  const caller = await resolveCallerOrg(req);
+  if (!requireAdmin(caller, res)) return;
+
+  if (!cashfreeClient.isConfigured()) {
+    return res.status(400).json({ error: 'Cashfree Payments is not configured on this server.' });
+  }
+
+  const sanitizedOrg = String(caller.orgId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const subscriptionId = `sub_${sanitizedOrg}_${Date.now()}`;
+  const returnUrl = req.body && req.body.returnUrl ? String(req.body.returnUrl) : '';
+
+  const sub = await cashfreeClient.createOnDemandSubscription({
+    subscriptionId,
+    customerName: req.body?.customerName || 'Admin User',
+    customerEmail: req.body?.customerEmail || 'admin@aifleet.local',
+    customerPhone: req.body?.customerPhone || '9999999999',
+    planMaxAmountInr: req.body?.maxAmountInr || 100000,
+    returnUrl,
+  });
+
+  res.json({
+    orgId: caller.orgId,
+    subscriptionId,
+    subscriptionSessionId: sub.subscription_session_id || sub.cf_subscription_id || '',
+    status: sub.subscription_status || 'INITIALIZED',
+    cashfreeData: sub,
+  });
+}));
+
+// POST /api/billing/cashfree/verify-mandate — verify and associate Cashfree subscription mandate
+router.post('/cashfree/verify-mandate', asyncHandler(async (req, res) => {
+  const caller = await resolveCallerOrg(req);
+  if (!requireAdmin(caller, res)) return;
+
+  const subscriptionId = String(req.body && req.body.subscriptionId || '').trim();
+  if (!subscriptionId) {
+    return res.status(400).json({ error: 'subscriptionId is required' });
+  }
+
+  const subDetails = await cashfreeClient.getSubscription(subscriptionId);
+  const status = String(subDetails.subscription_status || '').toUpperCase();
+
+  const account = store.getBillingAccount(caller.orgId);
+  const existingAr = account?.autoRecharge || {};
+
+  if (['ACTIVE', 'INITIALIZED', 'BANK_APPROVAL_PENDING'].includes(status)) {
+    store.upsertBillingAccount(caller.orgId, {
+      autoRecharge: {
+        ...existingAr,
+        cashfreeSubscriptionId: subscriptionId,
+        paymentMethodType: subDetails.payment_method || existingAr.paymentMethodType || 'cashfree',
+      },
+    });
+  }
+
+  res.json({
+    orgId: caller.orgId,
+    subscriptionId,
+    status,
+    subDetails,
+  });
+}));
+
+// POST /api/billing/cashfree/webhook — incoming Cashfree subscription webhook events
+router.post('/cashfree/webhook', asyncHandler(async (req, res) => {
+  const rawBody = req.rawBody || JSON.stringify(req.body || {});
+  const isValid = cashfreeClient.verifyWebhookSignature(req.headers, rawBody);
+
+  if (!isValid && process.env.NODE_ENV === 'production') {
+    return res.status(401).json({ error: 'Invalid webhook signature' });
+  }
+
+  const eventType = req.body && req.body.type;
+  const data = (req.body && req.body.data) || {};
+
+  if (eventType === 'SUBSCRIPTION_AUTH_STATUS' || eventType === 'SUBSCRIPTION_STATUS_CHANGED') {
+    const subId = data.subscription && data.subscription.subscription_id;
+    const status = data.subscription && data.subscription.subscription_status;
+    if (subId && status === 'ACTIVE') {
+      for (const acc of store.listBillingAccounts()) {
+        if (acc.autoRecharge && acc.autoRecharge.cashfreeSubscriptionId === subId) {
+          store.upsertBillingAccount(acc.id, {
+            autoRecharge: { ...acc.autoRecharge, status: 'ACTIVE' },
+          });
+        }
+      }
+    }
+  } else if (eventType === 'SUBSCRIPTION_PAYMENT_SUCCESS') {
+    const subId = data.subscription && data.subscription.subscription_id;
+    const paymentAmount = data.payment && data.payment.payment_amount;
+    const paymentId = data.payment && data.payment.payment_id;
+
+    if (subId && paymentAmount) {
+      for (const acc of store.listBillingAccounts()) {
+        if (acc.autoRecharge && acc.autoRecharge.cashfreeSubscriptionId === subId) {
+          const amountPaise = Math.round(Number(paymentAmount) * 100);
+          ledger.postEntry(acc.id, {
+            type: 'recharge',
+            amountPaise,
+            description: `Auto-recharge webhook payment (${paymentId || subId})`,
+            meta: { cashfreeSubscriptionId: subId, paymentId },
+          });
+        }
+      }
+    }
+  }
+
+  res.json({ status: 'ok' });
 }));
 
 module.exports = router;

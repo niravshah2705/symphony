@@ -493,6 +493,7 @@ const DEPLOYER_SERVICE_PORT = Number(process.env.DEPLOYER_SERVICE_PORT) || 4060;
 const ORCHESTRATOR_SERVICE_PORT = Number(process.env.ORCHESTRATOR_SERVICE_PORT) || 4070;
 const IDENTITY_SERVICE_PORT = Number(process.env.IDENTITY_SERVICE_PORT) || 4080;
 const EMAIL_SERVICE_PORT = Number(process.env.EMAIL_SERVICE_PORT) || 4040;
+const BILLING_SERVICE_PORT = Number(process.env.BILLING_SERVICE_PORT) || 4050;
 const ORG_SERVICE_PORT = Number(process.env.ORG_SERVICE_PORT) || 8000;
 // Settings-policy service (Python/FastAPI, Firestore). Local default 8100 so it
 // does not clash with the org service's 8000 when both run on one host.
@@ -506,6 +507,7 @@ const SERVICES = Object.freeze({
   orchestratorPort: ORCHESTRATOR_SERVICE_PORT,
   identityPort: IDENTITY_SERVICE_PORT,
   emailPort: EMAIL_SERVICE_PORT,
+  billingPort: BILLING_SERVICE_PORT,
   settingsPort: SETTINGS_SERVICE_PORT,
   plannerUrl: process.env.PLANNER_URL || `http://localhost:${PLANNER_PORT}`,
   coderUrl: process.env.CODER_URL || `http://localhost:${CODER_SERVICE_PORT}`,
@@ -516,6 +518,7 @@ const SERVICES = Object.freeze({
   // Shared transactional email service. Producers publish allow-listed jobs to
   // Pub/Sub in cloud mode and use this push-compatible endpoint in local mode.
   emailUrl: process.env.EMAIL_URL || `http://localhost:${EMAIL_SERVICE_PORT}`,
+  billingUrl: process.env.BILLING_URL || (process.env.NODE_ENV === 'production' ? '' : `http://localhost:${BILLING_SERVICE_PORT}`),
   // Organization service (Python/FastAPI, Firestore). The gateway proxies
   // /api/org/* -> orgUrl/api/v1/* (see services/gateway/src/index.js). Empty
   // when unset so the gateway can 501 the org routes rather than crash.
@@ -698,6 +701,7 @@ const BILLING = Object.freeze({
   orgId: String(process.env.FLEET_ORG_ID || process.env.PROXY_ORG_ID || '').trim(),
   usageRetentionDays: toPositiveNumber(process.env.BILLING_USAGE_RETENTION_DAYS, 90),
   slackWebhookUrl: proxied('/slack-webhook', process.env.BILLING_SLACK_WEBHOOK_URL, ''),
+  rechargeIntervalMin: toPositiveNumber(process.env.BILLING_RECHARGE_INTERVAL_MIN, 60),
 });
 
 /** Server configuration and shared constants. */
