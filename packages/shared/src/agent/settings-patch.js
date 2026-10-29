@@ -175,6 +175,9 @@ const ALLOWED = Object.freeze({
   langsmithEndpoint: httpUrl(),
   langsmithTracing: bool(),
 
+  // NVIDIA OpenShell gateway URL (non-secret; defaults to https://openshell.archagentix.com)
+  openshellUrl: httpUrl(),
+
   // Planning + repository (non-secret only; tokens keep dedicated endpoints)
   planningProvider: oneOf(PLANNING_PROVIDERS),
   repositoryProvider: oneOf(REPOSITORY_PROVIDERS),

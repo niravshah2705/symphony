@@ -465,6 +465,14 @@ export const api = {
   }),
   routeAgentMessage: (payload) =>
     request('/agent/message', { method: 'POST', body: JSON.stringify(payload) }),
+  getSandboxStatus: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/agent/sandbox${query ? `?${query}` : ''}`);
+  },
+  loadProjectSandbox: (payload = {}) =>
+    request('/agent/sandbox/load', { method: 'POST', body: JSON.stringify(payload) }),
+  chatWithSandbox: (payload = {}) =>
+    request('/agent/sandbox/chat', { method: 'POST', body: JSON.stringify(payload) }),
   searchAgentKnowledge: (payload) =>
     request('/agent/knowledge-search', { method: 'POST', body: JSON.stringify(payload) }),
   // Typed workspace memory (user | business | project | task | workspace).

@@ -1,10 +1,37 @@
 import { api } from '../api.js';
 import { el, clear, loading, toast } from '../dom.js';
+import { setCurrentProject, setProjectSandbox } from '../state.js';
 import {
   activeWorkspaceOrganization,
   activeWorkspaceProject,
+  changeWorkspaceProject,
   getWorkspaceContext,
 } from '../workspace-context.js';
+
+async function loadProjectIntoOpenShell(project, { openChat = true } = {}) {
+  const projectId = project?.id || '';
+  const projectName = project?.name || projectId || 'default';
+  setCurrentProject(projectId, projectName);
+  try { changeWorkspaceProject(projectId); } catch (_) { /* personal projects may not be in org context */ }
+  try {
+    const res = await api.loadProjectSandbox({
+      projectId,
+      projectName,
+      repositoryUrl: project?.repositoryUrl || '',
+    });
+    if (res && res.sandbox) {
+      setProjectSandbox(projectId, res.sandbox);
+      const gh = res.sandbox.secrets?.github?.configured ? 'GitHub ✓' : 'GitHub —';
+      const or = res.sandbox.secrets?.openrouter?.configured ? 'OpenRouter ✓' : 'OpenRouter —';
+      toast(`NVIDIA OpenShell sandbox ${res.sandbox.name} loaded (${gh}, ${or}).`, 'ok');
+    }
+  } catch (err) {
+    toast(err.message || 'Could not load NVIDIA OpenShell sandbox.', 'err');
+  }
+  if (openChat) {
+    window.location.hash = '#/agent';
+  }
+}
 
 // Organization & projects view (org service via /api/org/*). Three tiers:
 //   - Personal projects: any signed-in user, private, single-owner.
@@ -44,12 +71,20 @@ function block(title, subtitle, children) {
   ]);
 }
 
-function projectRow(name, description, actions = []) {
+function projectRow(name, description, actions = [], onSelect = null) {
+  const copy = el('div', {
+    class: 'org-row-copy',
+    style: onSelect ? 'cursor:pointer' : '',
+    title: onSelect ? `Click to load NVIDIA OpenShell sandbox for ${name}` : '',
+  }, [
+    el('strong', {}, name),
+    description ? el('small', { class: 'muted' }, description) : null,
+  ]);
+  if (typeof onSelect === 'function') {
+    copy.addEventListener('click', onSelect);
+  }
   return el('div', { class: 'org-row' }, [
-    el('div', { class: 'org-row-copy' }, [
-      el('strong', {}, name),
-      description ? el('small', { class: 'muted' }, description) : null,
-    ]),
+    copy,
     actions.length ? el('div', { class: 'org-row-actions' }, actions) : null,
   ]);
 }
@@ -90,6 +125,13 @@ async function renderPersonal(section, rerender) {
   const rows = projects.length
     ? projects.map((project) => projectRow(project.name, project.description, [
         (() => {
+          const openSb = el('button', { class: 'ghost', type: 'button' }, 'Open Sandbox Chat');
+          openSb.addEventListener('click', () => {
+            void loadProjectIntoOpenShell(project, { openChat: true });
+          });
+          return openSb;
+        })(),
+        (() => {
           const del = el('button', { class: 'ghost danger', type: 'button' }, 'Delete');
           del.addEventListener('click', async () => {
             del.disabled = true;
@@ -103,7 +145,7 @@ async function renderPersonal(section, rerender) {
           });
           return del;
         })(),
-      ]))
+      ], () => void loadProjectIntoOpenShell(project, { openChat: true })))
     : [el('div', { class: 'empty compact-empty' }, [el('p', { class: 'muted' }, 'No personal projects yet.')])];
 
   // block() returns a <section>; move its content into the provided `section`.
@@ -388,7 +430,11 @@ async function renderOrgProjects(section, organization, orgUsers, rerender) {
         const collaboratorsHost = el('div', { class: 'org-members-host' });
         const outsourceHost = el('div', { class: 'org-members-host' });
 
-        const actions = [];
+        const openSbBtn = el('button', { class: 'ghost', type: 'button' }, 'Open Sandbox Chat');
+        openSbBtn.addEventListener('click', () => {
+          void loadProjectIntoOpenShell(project, { openChat: true });
+        });
+        const actions = [openSbBtn];
         if (canManage) {
           actions.push(accessModeControl(project));
           actions.push(collapsiblePanel('Members', membersHost,
@@ -410,6 +456,7 @@ async function renderOrgProjects(section, organization, orgUsers, rerender) {
             project.name,
             project.description,
             [...tagBadges, ...(accessBadge ? [accessBadge] : []), ...actions],
+            () => void loadProjectIntoOpenShell(project, { openChat: true }),
           ),
           membersHost,
           collaboratorsHost,

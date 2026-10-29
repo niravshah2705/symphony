@@ -254,6 +254,8 @@ const DEFAULT_STORE = Object.freeze({
     // GitHub token (fine-grained PAT) for the code-writer's git clone/push against
     // the configured repo. Stored server-side only; masked in responses, never logged.
     githubToken: '',
+    openrouterApiKey: '',
+    openshellUrl: CONFIG.OPENSHELL.url,
     langsmithApiKey: '', // LangSmith tracing key
     langsmithProject: 'linear-manager',
     langsmithEndpoint: 'https://api.smith.langchain.com',
@@ -625,6 +627,7 @@ const SECRET_ENV = Object.freeze({
   // Managed LLM API keys (alternative to OAuth), matching the vault's managed set.
   anthropicApiKey: 'ANTHROPIC_API_KEY',
   openaiApiKey: 'OPENAI_API_KEY',
+  openrouterApiKey: 'OPENROUTER_API_KEY',
   digilockerClientId: 'DIGILOCKER_CLIENT_ID',
   digilockerClientSecret: 'DIGILOCKER_CLIENT_SECRET',
 });
