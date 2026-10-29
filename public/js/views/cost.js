@@ -72,18 +72,19 @@ export async function renderCost(view) {
       el('span', {}, ' Usage is recorded, but the periodic sweep and negative-balance pause are off until BILLING_SWEEP_ENABLED is set.'),
     ]));
   }
-  if (Number(summary.balancePaise) < 0) {
+  if (summary.fundStatus === 'unavailable' || Number(summary.balancePaise) <= 0) {
     content.push(el('div', { class: 'notice operational-notice operational-notice-warn' }, [
-      el('strong', {}, 'Balance exhausted — runners paused'),
-      el('span', {}, ` Balance is ${inr(summary.balanceInr)}. Add credits${summary.isAdmin ? ' below' : ''} to resume runner activity.`),
+      el('strong', {}, 'Funds Unavailable — Runners, Sandbox Creation & Scheduled Calls Disabled'),
+      el('span', {}, ` Organization balance is ${inr(summary.balanceInr)}. Add credits or configure auto-reload${summary.isAdmin ? ' below' : ''} to re-enable sandbox provisioning and scheduled ticks.`),
     ]));
   }
 
   content.push(
     el('section', { class: 'metric-grid', 'aria-label': 'Billing summary' }, [
       metric('Balance', inr(summary.balanceInr), `${summary.currency} · seeded ${inr(summary.initialCreditInr)}`),
+      metric('Fund Status', summary.fundStatus === 'unavailable' ? 'Unavailable' : 'Available',
+        summary.fundStatus === 'unavailable' ? 'Sandbox & scheduler paused' : 'Active & ready'),
       metric('Spend (7 days)', inr(summary.spend.week.costInr), `${formatNumber(summary.spend.week.runs)} runs · ${formatNumber(summary.spend.week.tokens)} tokens`),
-      metric('Spend (30 days)', inr(summary.spend.month.costInr), `${formatNumber(summary.spend.month.runs)} runs`),
       metric('Auto-recharge', summary.autoRecharge.enabled ? 'On' : 'Off',
         summary.autoRecharge.enabled ? `+${inr(summary.autoRecharge.amountInr)} below ${inr(summary.autoRecharge.thresholdInr)}` : `FX ₹${summary.fxUsdToInr}/USD`),
     ]),
