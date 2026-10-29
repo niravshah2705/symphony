@@ -755,7 +755,6 @@ async function renderOrgBilling(section, organization, isAdmin) {
       piForm,
     ]));
 
-  if (isAdmin) {
     // Payment Mandate row
     const hasSub = Boolean(ar.cashfreeSubscriptionId);
     const subBadge = el('span', { class: `status-pill ${hasSub ? 'ok' : 'neutral'}` }, hasSub ? `Active Mandate: ${ar.cashfreeSubscriptionId}` : 'No Mandate Configured');
