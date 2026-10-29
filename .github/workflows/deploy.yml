@@ -73,6 +73,7 @@ jobs:
             settings: ['services/settings/**']
             email:    ['services/email/**', 'deploy/gcp/Dockerfile.email']
             identity: ['services/identity-verification/**', 'deploy/gcp/Dockerfile.identity-verification']
+            billing:  ['services/billing/**', 'deploy/gcp/Dockerfile.billing']
 
       - id: plan
         env:
@@ -94,6 +95,7 @@ jobs:
           SETTINGS: ${{ steps.filter.outputs.settings }}
           EMAIL: ${{ steps.filter.outputs.email }}
           IDENTITY: ${{ steps.filter.outputs.identity }}
+          BILLING: ${{ steps.filter.outputs.billing }}
         run: |
           set -euo pipefail
           # A shared-code / root-deps change (or a forced run) rebuilds the Node
@@ -114,6 +116,7 @@ jobs:
           if [ "$all" = "true" ] || [ "$DEPLOYER" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push deployer pipeline-deployer deploy/gcp/Dockerfile.deployer . ; fi
           if [ "$all" = "true" ] || [ "$EMAIL"   = "true" ]; then push email   email-service deploy/gcp/Dockerfile.email   . ; fi
           if [ "$all" = "true" ] || [ "$IDENTITY" = "true" ]; then push identity identity-verification deploy/gcp/Dockerfile.identity-verification . ; fi
+          if [ "$all" = "true" ] || [ "$BILLING"  = "true" ]; then push billing billing deploy/gcp/Dockerfile.billing . ; fi
           # The provisioner is a Node service (rebuilds on shared/root/force too).
           # Its image is built even while provisioning is disabled so enabling is a
           # one-var flip; terraform only creates the service when provisioning_enabled.
@@ -356,6 +359,7 @@ jobs:
             write_tag settings resolve settings settings-service
             write_tag email resolve email email-service
             write_tag identity resolve identity identity-verification
+            write_tag billing resolve billing billing
           } >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
@@ -395,6 +399,8 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          CASHFREE_APP_ID: ${{ secrets.CASHFREE_APP_ID }}
+          CASHFREE_SECRET_KEY: ${{ secrets.CASHFREE_SECRET_KEY }}
         run: |
           set -euo pipefail
           terraform apply -input=false -auto-approve \
@@ -402,19 +408,27 @@ jobs:
             -var="region=${REGION}" \
             -var="spa_bucket_name=${{ vars.SPA_BUCKET }}" \
             -target=google_secret_manager_secret.stream_token_secret \
-            -target=google_secret_manager_secret.identity_hash_pepper
+            -target=google_secret_manager_secret.identity_hash_pepper \
+            -target=google_secret_manager_secret.cashfree_app_id \
+            -target=google_secret_manager_secret.cashfree_secret_key
 
           has_version() { gcloud secrets versions list "$1" --project "$PROJECT_ID" \
             --filter='state=ENABLED' --format='value(name)' 2>/dev/null | grep -q .; }
-          seed_secret() { # id
-            if has_version "$1"; then echo "  $1: already has a version (unchanged)";
+          seed_secret() { # id [optional_value]
+            local id="$1" val="${2:-}"
+            if has_version "$id"; then echo "  $id: already has a version (unchanged)";
+            elif [ -n "$val" ]; then
+              printf '%s' "$val" | gcloud secrets versions add "$id" --project "$PROJECT_ID" --data-file=- >/dev/null
+              echo "  $id: seeded from environment"
             else
-              openssl rand -base64 48 | tr -d '\n' | gcloud secrets versions add "$1" --project "$PROJECT_ID" --data-file=- >/dev/null
-              echo "  $1: seeded"
+              openssl rand -base64 48 | tr -d '\n' | gcloud secrets versions add "$id" --project "$PROJECT_ID" --data-file=- >/dev/null
+              echo "  $id: seeded (random fallback)"
             fi
           }
           seed_secret stream-token-secret
           seed_secret identity-hash-pepper
+          seed_secret cashfree-app-id "${CASHFREE_APP_ID:-}"
+          seed_secret cashfree-secret-key "${CASHFREE_SECRET_KEY:-}"
 
       - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}
@@ -473,6 +487,7 @@ jobs:
           [ -n "${{ steps.tags.outputs.settings }}" ] && apply_args+=(-var="settings_image_tag=${{ steps.tags.outputs.settings }}") || true
           [ -n "${{ steps.tags.outputs.email }}" ] && apply_args+=(-var="email_image_tag=${{ steps.tags.outputs.email }}") || true
           [ -n "${{ steps.tags.outputs.identity }}" ] && apply_args+=(-var="identity_image_tag=${{ steps.tags.outputs.identity }}") || true
+          [ -n "${{ steps.tags.outputs.billing }}" ] && apply_args+=(-var="billing_image_tag=${{ steps.tags.outputs.billing }}") || true
 
           # Idempotently import pre-existing Firestore composite indexes if missing from state
           chunks_idx_addr="google_firestore_index.attachment_chunks_by_conversation_and_embedding"
