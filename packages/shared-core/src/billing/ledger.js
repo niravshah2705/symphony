@@ -50,9 +50,14 @@ function ensureAccount(orgId) {
       meta: {},
     });
   }
+  const fundsAvailable = initial > 0;
   return store.upsertBillingAccount(orgId, {
     currency: 'INR',
     balancePaise: initial,
+    fundsAvailable,
+    fundStatus: fundsAvailable ? 'available' : 'unavailable',
+    sandboxCreationDisabled: !fundsAvailable,
+    scheduledCallsDisabled: !fundsAvailable,
     initialCreditPaise: initial,
     alertThresholdsPaise: [...DEFAULT_ALERT_THRESHOLDS_PAISE],
     lastAlertedThresholdPaise: null,
@@ -65,7 +70,15 @@ function ensureAccount(orgId) {
 
 /** Recompute the account balance snapshot from the ledger and persist it. */
 function refreshBalance(orgId) {
-  return store.upsertBillingAccount(orgId, { balancePaise: balanceFromLedger(orgId) });
+  const balancePaise = balanceFromLedger(orgId);
+  const fundsAvailable = balancePaise > 0;
+  return store.upsertBillingAccount(orgId, {
+    balancePaise,
+    fundsAvailable,
+    fundStatus: fundsAvailable ? 'available' : 'unavailable',
+    sandboxCreationDisabled: !fundsAvailable,
+    scheduledCallsDisabled: !fundsAvailable,
+  });
 }
 
 /**

@@ -65,11 +65,16 @@ function createBillingRouter() {
       ? Math.round((Number(account.initialCreditPaise || 0) * (Number(autoRecharge.thresholdPercent) || 20)) / 100)
       : (Number(autoRecharge.thresholdPaise) || 0);
 
+    const fundsAvailable = (Number(account.balancePaise) || 0) > 0;
     return res.json({
       orgId,
       currency: account.currency || 'INR',
       balancePaise: account.balancePaise,
       balanceInr: paiseToInr(account.balancePaise),
+      fundsAvailable,
+      fundStatus: fundsAvailable ? 'available' : 'unavailable',
+      sandboxCreationDisabled: !fundsAvailable,
+      scheduledCallsDisabled: !fundsAvailable,
       initialCreditPaise: account.initialCreditPaise,
       initialCreditInr: paiseToInr(account.initialCreditPaise),
       totalDepositedPaise: account.totalDepositedPaise,

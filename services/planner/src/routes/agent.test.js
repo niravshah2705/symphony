@@ -432,6 +432,16 @@ test('enqueue is role-gated, validates projectId, and queues exactly one project
   assert.equal(enqueued.length, 1);
   assert.equal(enqueued[0].projectId, 'proj_1');
   assert.equal(enqueued[0].assumedRole.id, 'r1');
+
+  // Organization-level fund gating rejects with 402 when funds are unavailable
+  store.upsertBillingAccount('org_broke', { balancePaise: -500, gateEnabled: true });
+  const blocked = await callRoute(router, 'post', '/enqueue', {
+    headers: { 'x-ai-fleet-organization-id': 'org_broke' },
+    body: { projectId: 'proj_1' },
+  });
+  assert.equal(blocked.status, 402);
+  assert.equal(blocked.body.code, 'funds_unavailable');
+  assert.equal(blocked.body.fundsAvailable, false);
 });
 
 test('planner job and status routes honor the exact selected organization and project', async (t) => {

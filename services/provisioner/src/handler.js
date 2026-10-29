@@ -1,5 +1,7 @@
 'use strict';
 
+const { getOrgFundStatus } = require('@ai-fleet/shared-core/billing/gate');
+
 /**
  * Transport-agnostic provision/teardown dispatch. The Pub/Sub push surface
  * decodes the message and calls this; tests call it directly with injected deps.
@@ -8,6 +10,7 @@
  *   provisionTenant(slug, cfg) -> deployments map
  *   teardownTenant(slug, cfg)  -> {}
  *   writeBack(orgId, deployments) -> persists to the org service
+ *   checkFundStatus(orgId)        -> { fundsAvailable, fundStatus, reason, ... }
  *   cfg  provisioning config (project/region/urls/SAs/…)
  *   log  optional logger
  *
@@ -19,7 +22,7 @@ function nowIso() {
 }
 
 async function handleMessage(message, deps) {
-  const { provisionTenant, teardownTenant, writeBack, cfg, log } = deps;
+  const { provisionTenant, teardownTenant, writeBack, checkFundStatus = getOrgFundStatus, cfg, log } = deps;
   const orgId = message && message.org_id;
   const slug = message && message.slug;
   const action = (message && message.action) || 'provision';
@@ -36,6 +39,26 @@ async function handleMessage(message, deps) {
       await writeBack(orgId, { status: 'shared', slug, error: null, updated_at: nowIso() });
       return { ok: true, action };
     }
+
+    // Organization-level fund gating: refuse sandbox/tenant provisioning if funds are unavailable
+    const fundInfo = await Promise.resolve(checkFundStatus(orgId));
+    if (fundInfo && fundInfo.fundsAvailable === false) {
+      const reason = fundInfo.reason || 'Organization funds unavailable — sandbox creation is disabled.';
+      log && log.warn && log.warn(`provisioner ${action} ${slug} blocked: ${reason}`);
+      try {
+        await writeBack(orgId, {
+          status: 'disabled',
+          sandbox_creation_disabled: true,
+          slug,
+          error: reason,
+          updated_at: nowIso(),
+        });
+      } catch (_) {
+        /* best-effort */
+      }
+      return { ok: false, action, reason: 'sandbox_creation_disabled', error: reason };
+    }
+
     // Thread the org id so per-tenant resources are labeled organization=<id>.
     const deployments = await provisionTenant(slug, { ...cfg, orgId });
     await writeBack(orgId, deployments);

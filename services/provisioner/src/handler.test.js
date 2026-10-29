@@ -14,6 +14,7 @@ function deps(overrides = {}) {
     provisionTenant: async (slug, cfg) => { calls.provision.push({ slug, cfg }); return { status: 'provisioned', slug, gateway: { url: 'https://gw' } }; },
     teardownTenant: async (slug, cfg) => { calls.teardown.push({ slug, cfg }); return {}; },
     writeBack: async (orgId, deployments) => { calls.writeBack.push({ orgId, deployments }); },
+    checkFundStatus: async () => ({ fundsAvailable: true, fundStatus: 'available' }),
     ...overrides,
   };
 }
@@ -68,4 +69,22 @@ test('write-back failure on the failure path is swallowed (no throw)', async () 
   });
   const r = await handleMessage({ org_id: 'org1', slug: 't3abc' }, d);
   assert.equal(r.ok, false); // does not throw
+});
+
+test('provision blocked when org funds are unavailable', async () => {
+  const d = deps({
+    checkFundStatus: async () => ({
+      fundsAvailable: false,
+      fundStatus: 'unavailable',
+      reason: 'Low balance',
+      sandboxCreationDisabled: true,
+    }),
+  });
+  const r = await handleMessage({ org_id: 'org1', slug: 't3abc', action: 'provision' }, d);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'sandbox_creation_disabled');
+  assert.equal(d.calls.provision.length, 0); // did not provision
+  assert.equal(d.calls.writeBack.length, 1);
+  assert.equal(d.calls.writeBack[0].deployments.status, 'disabled');
+  assert.equal(d.calls.writeBack[0].deployments.sandbox_creation_disabled, true);
 });

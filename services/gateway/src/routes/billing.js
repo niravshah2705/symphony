@@ -108,6 +108,7 @@ router.get('/summary', asyncHandler(async (req, res) => {
   const caller = await resolveCallerOrg(req);
   const account = store.getBillingAccount(caller.orgId);
   const balancePaise = account ? Number(account.balancePaise) || 0 : ledger.balanceFromLedger(caller.orgId);
+  const fundsAvailable = balancePaise > 0;
   const records = scopedUsageRecords(caller);
   const now = Date.now();
   res.json({
@@ -116,6 +117,10 @@ router.get('/summary', asyncHandler(async (req, res) => {
     currency: 'INR',
     balanceInr: paiseToInr(balancePaise),
     balancePaise,
+    fundsAvailable,
+    fundStatus: fundsAvailable ? 'available' : 'unavailable',
+    sandboxCreationDisabled: !fundsAvailable,
+    scheduledCallsDisabled: !fundsAvailable,
     initialCreditInr: account ? paiseToInr(account.initialCreditPaise) : paiseToInr(CONFIG.BILLING.initialCreditPaise),
     fxUsdToInr: CONFIG.BILLING.usdToInr,
     spend: {
