@@ -4,6 +4,10 @@ const crypto = require('crypto');
 const log = require('../logger');
 
 const getBaseUrl = () => {
+  if (process.env.CASHFREE_BASE_URL) {
+    const raw = String(process.env.CASHFREE_BASE_URL).trim().replace(/\/+$/, '');
+    return raw.endsWith('/pg') ? raw : `${raw}/pg`;
+  }
   const env = String(process.env.CASHFREE_ENV || 'sandbox').toLowerCase();
   return env === 'production' || env === 'prod'
     ? 'https://api.cashfree.com/pg'
@@ -147,6 +151,7 @@ function verifyWebhookSignature(headers = {}, rawBody = '') {
 }
 
 module.exports = {
+  getBaseUrl,
   isConfigured,
   createOnDemandSubscription,
   getSubscription,

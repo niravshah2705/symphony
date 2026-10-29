@@ -197,6 +197,12 @@ variable "cashfree_env" {
   default     = "sandbox"
 }
 
+variable "cashfree_base_url" {
+  type        = string
+  description = "Cashfree base API URL (e.g. https://sandbox.cashfree.com or https://api.cashfree.com)."
+  default     = "https://sandbox.cashfree.com"
+}
+
 variable "coder_job_name" {
   type        = string
   description = "Cloud Run Job name. MUST match the CODER_JOB_NAME env the coder-control service uses to launch it."
