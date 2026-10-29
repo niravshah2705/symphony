@@ -19,6 +19,7 @@
     "start:deployer": "npm start -w @ai-fleet/deployer",
     "start:orchestrator": "npm start -w @ai-fleet/orchestrator",
     "start:email": "npm start -w @ai-fleet/email",
+    "start:billing": "npm start -w @ai-fleet/billing",
     "adlc": "node --env-file-if-exists=.env packages/cli/bin/adlc.js",
     "test": "node --test",
     "test:e2e": "playwright test",

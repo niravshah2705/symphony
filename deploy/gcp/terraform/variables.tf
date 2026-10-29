@@ -167,6 +167,42 @@ variable "identity_hash_pepper_secret_id" {
   default     = "identity-hash-pepper"
 }
 
+variable "billing_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the billing service."
+  default     = ""
+}
+
+variable "billing_service_name" {
+  type        = string
+  description = "Cloud Run service name for billing and Cashfree payments."
+  default     = "billing"
+}
+
+variable "cashfree_app_id_secret_id" {
+  type        = string
+  description = "Secret Manager secret id containing the Cashfree App ID."
+  default     = "cashfree-app-id"
+}
+
+variable "cashfree_secret_key_secret_id" {
+  type        = string
+  description = "Secret Manager secret id containing the Cashfree Secret Key."
+  default     = "cashfree-secret-key"
+}
+
+variable "cashfree_env" {
+  type        = string
+  description = "Cashfree environment: sandbox or production."
+  default     = "sandbox"
+}
+
+variable "cashfree_base_url" {
+  type        = string
+  description = "Cashfree base API URL (e.g. https://sandbox.cashfree.com or https://api.cashfree.com)."
+  default     = "https://sandbox.cashfree.com"
+}
+
 variable "coder_job_name" {
   type        = string
   description = "Cloud Run Job name. MUST match the CODER_JOB_NAME env the coder-control service uses to launch it."

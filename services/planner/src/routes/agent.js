@@ -48,6 +48,7 @@ const {
   ensureProjectSandbox,
   chatWithProjectSandbox,
 } = require('@ai-fleet/shared/agent/openshell');
+const { getOrgFundStatus } = require('@ai-fleet/shared/billing/gate');
 
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const CONV_ID_PATTERN = /^conv_[A-Za-z0-9_-]{1,64}$/;
@@ -957,11 +958,23 @@ router.post(
     if (!projectId || projectId.length > 200) return res.status(400).json({ error: 'projectId is required.' });
     const projectName = typeof body.projectName === 'string' ? body.projectName.slice(0, 200) : projectId;
     const context = requestWorkspaceContext(req);
+    const orgId = context.organizationId || null;
+    if (orgId) {
+      const fundInfo = getOrgFundStatus(orgId);
+      if (fundInfo && fundInfo.fundsAvailable === false) {
+        return res.status(402).json({
+          error: fundInfo.reason || 'Organization funds unavailable — scheduled calls and enqueue disabled.',
+          code: 'funds_unavailable',
+          fundStatus: 'unavailable',
+          fundsAvailable: false,
+        });
+      }
+    }
     const job = scheduler.enqueue({
       projectId,
       projectName,
       assumedRole: req.assumedRole,
-      orgId: context.organizationId || null,
+      orgId,
       nativeProjectId: context.projectId || null,
     });
     // Fire-and-forget tick; the queued job is processed on this (or the next) tick.
@@ -976,6 +989,18 @@ router.post(
   requireAssumedRole,
   asyncHandler(async (req, res) => {
     const context = requestWorkspaceContext(req);
+    const orgId = context.organizationId || null;
+    if (orgId) {
+      const fundInfo = getOrgFundStatus(orgId);
+      if (fundInfo && fundInfo.fundsAvailable === false) {
+        return res.status(402).json({
+          error: fundInfo.reason || 'Organization funds unavailable — scheduled calls disabled.',
+          code: 'funds_unavailable',
+          fundStatus: 'unavailable',
+          fundsAvailable: false,
+        });
+      }
+    }
     const result = await scheduler.processPending();
     res.json({ result, status: schedulerStatusForContext(context) });
   })

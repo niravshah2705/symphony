@@ -71,7 +71,7 @@ async function processBillingSweep(deps = {}) {
     for (const account of store.listBillingAccounts()) {
       try {
         await notify.checkThresholdsAndNotify(store.getBillingAccount(account.id));
-        recharge.maybeAutoRecharge(account.id, deps.nowMs || Date.now());
+        await recharge.maybeAutoRecharge(account.id, deps.nowMs || Date.now());
         // A recharge may have re-armed the alert state — re-check after it.
         await notify.checkThresholdsAndNotify(store.getBillingAccount(account.id));
       } catch (err) {

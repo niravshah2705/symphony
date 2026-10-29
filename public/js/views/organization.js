@@ -612,19 +612,206 @@ async function renderOrg(section, organization, rerender) {
   ]);
 
   const projectsSection = el('section', { class: 'org-block' });
+  const billingSection = el('section', { class: 'org-block' });
   const peopleSection = isAdmin ? el('section', { class: 'org-block' }) : null;
-  section.replaceChildren(header, projectsSection, ...(peopleSection ? [peopleSection] : []));
+  section.replaceChildren(header, projectsSection, billingSection, ...(peopleSection ? [peopleSection] : []));
 
   // People must load first so the members picker has candidates.
   const orgUsers = isAdmin || hasProjectAdminRole
     ? await api.org.listOrgUsers().then((p) => p.data || []).catch(() => [])
     : [];
   await renderOrgProjects(projectsSection, organization, orgUsers, rerender);
+  await renderOrgBilling(billingSection, organization, isAdmin);
   if (peopleSection) await renderPeople(peopleSection, rerender);
 }
 
 // Self-declared persona capture (asked once at onboarding). Descriptive only —
 // it does not gate access (roles do); it tailors UI defaults/copy.
+function loadCashfreeSdk() {
+  if (window.Cashfree) return Promise.resolve(window.Cashfree);
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+    script.onload = () => resolve(window.Cashfree);
+    script.onerror = () => reject(new Error('Failed to load Cashfree Checkout SDK'));
+    document.head.appendChild(script);
+  });
+}
+
+async function renderOrgBilling(section, organization, isAdmin) {
+  const reload = () => renderOrgBilling(section, organization, isAdmin);
+  let summary;
+  try {
+    summary = await api.billing.getSummary();
+  } catch (err) {
+    section.replaceChildren(el('div', { class: 'empty compact-empty' }, [
+      el('p', { class: 'muted' }, (err && err.message) || 'Billing details currently unavailable.'),
+    ]));
+    return;
+  }
+
+  const inr = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(val) || 0);
+  const isAvailable = summary.fundStatus !== 'unavailable' && Number(summary.balancePaise) > 0;
+  const statusBadge = el('span', { class: `badge ${isAvailable ? 'active' : 'warn'}` }, isAvailable ? 'Funds Available' : 'Funds Unavailable');
+  const ar = summary.autoRecharge || {};
+  const isAutoEnabled = Boolean(ar.enabled);
+  const currentMode = ar.mode || 'amount';
+
+  const rows = [
+    el('div', { class: 'org-row' }, [
+      el('div', { class: 'org-row-copy' }, [
+        el('strong', {}, 'Current Balance'),
+        el('small', { class: 'muted' }, `Seeded credit: ${inr(summary.initialCreditInr)} · Sandbox creation: ${summary.sandboxCreationDisabled ? 'Disabled (Low Balance)' : 'Enabled'}`),
+      ]),
+      el('div', { class: 'org-row-actions' }, [
+        el('span', { class: 'cost-cell', style: 'font-size: 16px; margin-right: 8px;' }, inr(summary.balanceInr)),
+        statusBadge,
+      ]),
+    ]),
+  ];
+
+  if (!isAvailable) {
+    rows.push(el('div', { class: 'notice operational-notice operational-notice-warn', style: 'margin-top: 10px;' }, [
+      el('strong', {}, 'Account Low / Negative: '),
+      el('span', {}, 'Sandbox creation and scheduled calls are paused until payment is added or auto-renew triggers.'),
+    ]));
+  }
+
+  if (isAdmin) {
+    // Payment Mandate row
+    const hasSub = Boolean(ar.cashfreeSubscriptionId);
+    const subBadge = el('span', { class: `status-pill ${hasSub ? 'ok' : 'neutral'}` }, hasSub ? `Active Mandate: ${ar.cashfreeSubscriptionId}` : 'No Mandate Configured');
+    const authBtn = el('button', { type: 'button', class: 'primary' }, 'Authorize Payment Mandate (UPI / Card / eNACH)');
+
+    authBtn.addEventListener('click', async () => {
+      authBtn.disabled = true;
+      try {
+        const res = await api.billing.createCashfreeMandate({
+          returnUrl: window.location.href,
+        });
+        if (!res.subscriptionSessionId) {
+          throw new Error('Did not receive subscription session ID from Cashfree.');
+        }
+        toast('Opening Cashfree Payment Authorization…');
+        const CashfreeSdk = await loadCashfreeSdk();
+        const cashfree = CashfreeSdk({ mode: 'sandbox' });
+
+        cashfree.subscriptionsCheckout({
+          subsSessionId: res.subscriptionSessionId,
+          redirectTarget: '_blank',
+        }).then(async (result) => {
+          if (result && result.error) {
+            toast(`Authorization error: ${result.error.message}`);
+            authBtn.disabled = false;
+          } else {
+            toast('Verifying mandate authorization…');
+            await api.billing.verifyCashfreeMandate(res.subscriptionId);
+            await reload();
+          }
+        }).catch((err) => {
+          toast((err && err.message) || 'Checkout window closed or failed');
+          authBtn.disabled = false;
+        });
+      } catch (err) {
+        toast((err && err.message) || 'Failed to initialize Cashfree mandate');
+        authBtn.disabled = false;
+      }
+    });
+
+    rows.push(el('div', { class: 'org-row' }, [
+      el('div', { class: 'org-row-copy' }, [
+        el('strong', {}, 'Payment Mandate & Auto-Charge'),
+        el('small', { class: 'muted' }, 'Authorize recurring debit via Cashfree for automatic balance replenishment.'),
+      ]),
+      el('div', { class: 'org-row-actions' }, [subBadge, authBtn]),
+    ]));
+
+    // Auto-reload configuration form
+    const arCheckbox = el('input', { type: 'checkbox', ...(isAutoEnabled ? { checked: 'checked' } : {}) });
+    const modeAmountRadio = el('input', { type: 'radio', name: 'orgArMode', value: 'amount', ...(currentMode === 'amount' ? { checked: 'checked' } : {}) });
+    const modePercentRadio = el('input', { type: 'radio', name: 'orgArMode', value: 'percentage', ...(currentMode === 'percentage' ? { checked: 'checked' } : {}) });
+
+    const thresholdAmountInput = el('input', { type: 'number', min: '0', step: '10', value: String(ar.thresholdInr ?? 0) });
+    const thresholdPercentInput = el('input', { type: 'number', min: '1', max: '100', step: '1', value: String(ar.thresholdPercent ?? 20) });
+    const reloadAmountInput = el('input', { type: 'number', min: '100', step: '100', value: String(ar.amountInr ?? 500) });
+
+    const amountField = el('label', { class: 'org-inline-field', id: 'org-ar-amount-field' }, [
+      el('span', { class: 'muted' }, 'Threshold Amount (INR)'),
+      thresholdAmountInput,
+    ]);
+    const percentField = el('label', { class: 'org-inline-field', id: 'org-ar-percent-field' }, [
+      el('span', { class: 'muted' }, 'Threshold (% of Credit)'),
+      thresholdPercentInput,
+    ]);
+
+    const updateVisibility = () => {
+      amountField.style.display = modeAmountRadio.checked ? 'flex' : 'none';
+      percentField.style.display = modePercentRadio.checked ? 'flex' : 'none';
+    };
+    modeAmountRadio.addEventListener('change', updateVisibility);
+    modePercentRadio.addEventListener('change', updateVisibility);
+    updateVisibility();
+
+    const saveConfigBtn = el('button', { type: 'submit', class: 'primary' }, 'Save Auto-Renew Settings');
+    const configForm = el('form', { class: 'org-form org-form-wide', style: 'display: grid; gap: 12px; margin-top: 10px;' }, [
+      el('label', { class: 'radio-label', style: 'display: flex; align-items: center; gap: 8px;' }, [
+        arCheckbox,
+        el('strong', {}, 'Enable Auto-Reload for this Organization'),
+      ]),
+      el('div', { style: 'display: flex; gap: 16px; align-items: center;' }, [
+        el('label', { class: 'radio-label', style: 'display: flex; align-items: center; gap: 6px;' }, [
+          modeAmountRadio,
+          el('span', {}, 'Fixed Amount (INR)'),
+        ]),
+        el('label', { class: 'radio-label', style: 'display: flex; align-items: center; gap: 6px;' }, [
+          modePercentRadio,
+          el('span', {}, 'Percentage of Credit (%)'),
+        ]),
+      ]),
+      el('div', { style: 'display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;' }, [
+        amountField,
+        percentField,
+        el('label', { class: 'org-inline-field' }, [
+          el('span', { class: 'muted' }, 'Reload Amount (INR)'),
+          reloadAmountInput,
+        ]),
+        saveConfigBtn,
+      ]),
+    ]);
+
+    configForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      saveConfigBtn.disabled = true;
+      try {
+        await api.billing.updateConfig({
+          autoRecharge: {
+            enabled: arCheckbox.checked,
+            mode: modePercentRadio.checked ? 'percentage' : 'amount',
+            thresholdInr: Number(thresholdAmountInput.value) || 0,
+            thresholdPercent: Number(thresholdPercentInput.value) || 20,
+            amountInr: Number(reloadAmountInput.value) || 0,
+          },
+        });
+        toast('Organization billing settings saved.');
+        await reload();
+      } catch (err) {
+        toast((err && err.message) || 'Failed to save billing settings.');
+        saveConfigBtn.disabled = false;
+      }
+    });
+
+    rows.push(el('div', { class: 'org-row-group', style: 'margin-top: 12px;' }, [
+      el('strong', {}, 'Configure Auto-Reload Policy'),
+      configForm,
+    ]));
+  }
+
+  section.replaceChildren();
+  section.append(...Array.from(block('Organization Payment & Billing',
+    isAdmin ? 'Manage fund availability, payment mandates, and auto-renew thresholds for your organisation.' : 'View organisation balance and fund status.',
+    rows).childNodes));
+}
+
 async function renderPersona(section, workspace, rerender) {
   const current = workspace.user?.persona || null;
   const children = [];

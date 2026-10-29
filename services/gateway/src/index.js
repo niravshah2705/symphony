@@ -194,12 +194,18 @@ app.use('/api/issues', requirePermission('planning'), requireOrganizationContext
 app.use('/api/businesses', requirePermission('planning'), requireOrganizationContext(), plannerProxy);
 app.use('/api/roles', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), plannerProxy);
 app.use('/api/observability', requirePermission('insights'), requireOrganizationContext(), plannerProxy);
-// Cost-monitoring + billing. 'insights' is the coarse gate (GET → read,
-// mutations → write); the router additionally resolves the caller's org
-// server-side and requires org-admin for recharge/config (cross-tenant safe).
-// Billing authorization is selected-org dependent (the router resolves member
-// vs ORG_ADMIN server-side), so the gateway performs authentication only.
-app.use('/api/billing', requireAuthenticated(), billingRoutes);
+// Cost-monitoring + billing. Forwarded to the dedicated Cloud Run billing
+// service when configured, with user authentication and selected-org context.
+// Webhook route from Cashfree bypasses session auth (HMAC-verified at billing).
+if (CONFIG.SERVICES.billingUrl) {
+  const billingProxy = createProxy(CONFIG.SERVICES.billingUrl, {
+    forwardUserAuth: true,
+  });
+  app.post('/api/billing/cashfree/webhook', billingProxy);
+  app.use('/api/billing', requireAuthenticated(), billingProxy);
+} else {
+  app.use('/api/billing', requireAuthenticated(), billingRoutes);
+}
 // Locale is non-sensitive UI strings — available to public + authenticated.
 // Translation is model-backed, so both locale routes execute in the planner.
 app.use('/api/locale', localeProxy);

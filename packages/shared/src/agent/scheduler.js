@@ -21,7 +21,7 @@ const {
 } = require('./policy-runtime');
 const workspaceEvents = require('./workspace-events');
 const { processBillingSweep } = require('../billing/sweep');
-const { billingStatus } = require('../billing/gate');
+const { billingStatus, getOrgFundStatus } = require('../billing/gate');
 const {
   normalizeWorkspaceContext,
   currentWorkspaceContext,
@@ -222,6 +222,18 @@ function enqueue({ projectId, projectName, assumedRole, orgId = null, nativeProj
   }
   const selectedOrgId = requestedContext.organizationId || null;
   const selectedProjectId = requestedContext.projectId || null;
+
+  // Organization-level fund gating: disallow enqueue if funds are unavailable
+  if (selectedOrgId) {
+    const fundInfo = getOrgFundStatus(selectedOrgId);
+    if (fundInfo && fundInfo.fundsAvailable === false) {
+      const error = new Error('Cannot enqueue work: organization funds unavailable.');
+      error.code = 'funds_unavailable';
+      error.status = 402;
+      throw error;
+    }
+  }
+
   const active = store.listJobs('enrichment').some(
     (j) => j.projectId === projectId
       && (j.orgId || null) === selectedOrgId
@@ -538,8 +550,16 @@ async function processPending(context, options = {}) {
       log.warn(`Tick skipped: ${runtime.lastError}`);
       return { skipped: 'no-role', reason: runtime.lastError };
     }
-    // Negative-balance gate: pause enrichment when the org's credit is exhausted.
-    // Inert unless billing is enabled + the account opts in (see billing/gate.js).
+    // Organization-level fund gating: pause enrichment & disallow scheduled calls
+    // when org balance is exhausted / low (<= 0).
+    const fundInfo = getOrgFundStatus(selected.organizationId || undefined);
+    if (fundInfo && fundInfo.fundsAvailable === false) {
+      const reason = fundInfo.reason || 'Organization funds unavailable — scheduled calls disabled.';
+      runtime.lastError = reason;
+      log.warn(`Tick skipped: ${reason}`);
+      return { skipped: 'funds_unavailable', reason };
+    }
+
     const billing = billingStatus({ orgId: selected.organizationId || undefined });
     if (billing.blocked) {
       runtime.lastError = billing.reason;

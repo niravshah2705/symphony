@@ -41,3 +41,23 @@ test('shared account with no user identity exposes nothing granular (safe defaul
   const anon = billingRoute.scopedUsageRecords({ orgId: SHARED_ORG_ID, userId: null });
   assert.equal(anon.length, 0);
 });
+
+test('autoRecharge configuration preserves cashfree fields and calculates threshold', () => {
+  store.upsertBillingAccount('org-test-ar', {
+    autoRecharge: {
+      enabled: true,
+      mode: 'percentage',
+      thresholdPercent: 25,
+      thresholdPaise: 0,
+      amountPaise: 50000,
+      cashfreeSubscriptionId: 'sub_test_123',
+      paymentMethodType: 'upi_autopay',
+    },
+  });
+  const account = store.getBillingAccount('org-test-ar');
+  assert.equal(account.autoRecharge.enabled, true);
+  assert.equal(account.autoRecharge.mode, 'percentage');
+  assert.equal(account.autoRecharge.thresholdPercent, 25);
+  assert.equal(account.autoRecharge.cashfreeSubscriptionId, 'sub_test_123');
+  assert.equal(account.autoRecharge.paymentMethodType, 'upi_autopay');
+});

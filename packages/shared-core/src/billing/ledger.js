@@ -16,9 +16,13 @@ const { CONFIG } = require('../config');
 const DEFAULT_ALERT_THRESHOLDS_PAISE = Object.freeze([10000, 0]);
 const DEFAULT_AUTO_RECHARGE = Object.freeze({
   enabled: false,
-  thresholdPaise: 0, // recharge when balance drops below this
-  amountPaise: 50000, // top up 500 INR
+  mode: 'amount', // 'amount' | 'percentage'
+  thresholdPaise: 0, // recharge when balance drops below this (in paise)
+  thresholdPercent: 20, // recharge when balance drops below this % of initial credit
+  amountPaise: 50000, // top up 500 INR (50000 paise)
   lastRechargedAt: null,
+  cashfreeSubscriptionId: null,
+  paymentMethodType: null,
 });
 
 /** Signed sum (paise) of all ledger entries for an org — the true balance. */
@@ -46,9 +50,14 @@ function ensureAccount(orgId) {
       meta: {},
     });
   }
+  const fundsAvailable = initial > 0;
   return store.upsertBillingAccount(orgId, {
     currency: 'INR',
     balancePaise: initial,
+    fundsAvailable,
+    fundStatus: fundsAvailable ? 'available' : 'unavailable',
+    sandboxCreationDisabled: !fundsAvailable,
+    scheduledCallsDisabled: !fundsAvailable,
     initialCreditPaise: initial,
     alertThresholdsPaise: [...DEFAULT_ALERT_THRESHOLDS_PAISE],
     lastAlertedThresholdPaise: null,
@@ -61,7 +70,15 @@ function ensureAccount(orgId) {
 
 /** Recompute the account balance snapshot from the ledger and persist it. */
 function refreshBalance(orgId) {
-  return store.upsertBillingAccount(orgId, { balancePaise: balanceFromLedger(orgId) });
+  const balancePaise = balanceFromLedger(orgId);
+  const fundsAvailable = balancePaise > 0;
+  return store.upsertBillingAccount(orgId, {
+    balancePaise,
+    fundsAvailable,
+    fundStatus: fundsAvailable ? 'available' : 'unavailable',
+    sandboxCreationDisabled: !fundsAvailable,
+    scheduledCallsDisabled: !fundsAvailable,
+  });
 }
 
 /**

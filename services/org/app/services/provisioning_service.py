@@ -20,9 +20,9 @@ from app.core.database import Uow
 from app.core.timeutils import utcnow
 from app.models.organization import Organization
 
-# Statuses that mean a provision is already in-flight or done — re-triggering is
+# Statuses that mean a provision is already in-flight, done, or disabled — re-triggering is
 # a no-op (idempotent; no duplicate publish).
-_INFLIGHT = frozenset({"provisioning", "provisioned"})
+_INFLIGHT = frozenset({"provisioning", "provisioned", "disabled"})
 
 
 async def trigger_provisioning(session: Uow, org: Organization) -> None:
