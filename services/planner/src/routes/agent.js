@@ -42,6 +42,12 @@ const workspaceEvents = require('@ai-fleet/shared/agent/workspace-events');
 const { normalizeEventContext, matchesEventContext } = require('@ai-fleet/shared/messaging/events');
 const { redactSecrets } = require('@ai-fleet/shared/agent/tools/exec');
 const attachmentsService = require('@ai-fleet/shared/attachments/service');
+const {
+  getGatewayStatus,
+  getProjectSandboxStatus,
+  ensureProjectSandbox,
+  chatWithProjectSandbox,
+} = require('@ai-fleet/shared/agent/openshell');
 const { getOrgFundStatus } = require('@ai-fleet/shared/billing/gate');
 
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -358,18 +364,206 @@ router.get('/jobs', (req, res) => {
   res.json({ jobs: jobsForRequest(req) });
 });
 
+/**
+ * Resolve GitHub + OpenRouter secrets for NVIDIA OpenShell sandbox loading.
+ * Checks explicit request body overrides, S2S settings service vault/managed
+ * resolver when configured, and local store / process.env fallbacks.
+ */
+async function resolveProjectSecrets(req, { projectId } = {}) {
+  const settings = getSettings();
+  const context = requestWorkspaceContext(req);
+  const body = (req && req.body) || {};
+
+  let githubToken =
+    (typeof body.githubToken === 'string' && body.githubToken.trim()) ||
+    settings.githubToken ||
+    process.env.GITHUB_TOKEN ||
+    '';
+  let openrouterApiKey =
+    (typeof body.openrouterApiKey === 'string' && body.openrouterApiKey.trim()) ||
+    settings.openrouterApiKey ||
+    process.env.OPENROUTER_API_KEY ||
+    '';
+  const openshellUrl =
+    (typeof body.openshellUrl === 'string' && body.openshellUrl.trim()) ||
+    settings.openshellUrl ||
+    CONFIG.OPENSHELL?.url ||
+    'https://openshell.archagentix.com';
+
+  // If S2S settings service is configured and tokens are not yet resolved, query S2S resolver
+  const settingsBase = CONFIG.SERVICES && CONFIG.SERVICES.settingsUrl;
+  if (settingsBase && (!githubToken || !openrouterApiKey)) {
+    const orgId = context.organizationId || process.env.PROXY_ORG_ID || process.env.FLEET_ORG_ID || '';
+    const effectiveProjectId = projectId || context.projectId || '';
+    const orgInternalToken = String(process.env.ORG_INTERNAL_API_TOKEN || '').trim();
+    const internalToken = String(process.env.INTERNAL_API_TOKEN || '').trim();
+    try {
+      let path = null;
+      let headers = {};
+      if (orgId && orgInternalToken) {
+        const qs = effectiveProjectId ? `?project_id=${encodeURIComponent(effectiveProjectId)}` : '';
+        path = `/api/v1/internal/s2s/orgs/${encodeURIComponent(orgId)}/secrets${qs}`;
+        headers = { 'x-org-internal-token': orgInternalToken };
+      } else if (internalToken) {
+        path = '/api/v1/internal/s2s/managed-secrets';
+        headers = { 'x-internal-token': internalToken };
+      }
+      if (path) {
+        const resp = await fetch(`${String(settingsBase).replace(/\/$/, '')}${path}`, {
+          headers,
+          signal: AbortSignal.timeout(4000),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const secrets = (data && data.secrets) || {};
+          if (!githubToken && secrets.githubToken && secrets.githubToken.value) {
+            githubToken = String(secrets.githubToken.value).trim();
+          }
+          if (!openrouterApiKey && secrets.openrouterApiKey && secrets.openrouterApiKey.value) {
+            openrouterApiKey = String(secrets.openrouterApiKey.value).trim();
+          }
+        }
+      }
+    } catch (_) {
+      // Best-effort S2S secret lookup; fall back to local store settings
+    }
+  }
+
+  return {
+    githubToken,
+    openrouterApiKey,
+    openshellUrl,
+    repositoryUrl:
+      (typeof body.repositoryUrl === 'string' && body.repositoryUrl.trim()) ||
+      settings.repositoryUrl ||
+      '',
+  };
+}
+
+// GET /api/agent/sandbox — NVIDIA OpenShell gateway health + active project sandbox status.
+router.get(
+  '/sandbox',
+  asyncHandler(async (req, res) => {
+    const context = requestWorkspaceContext(req);
+    const settings = getSettings();
+    const projectId =
+      (typeof req.query.projectId === 'string' && req.query.projectId.trim()) ||
+      context.projectId ||
+      'default';
+    const projectName =
+      (typeof req.query.projectName === 'string' && req.query.projectName.trim()) ||
+      projectId;
+    const url = settings.openshellUrl || CONFIG.OPENSHELL?.url || 'https://openshell.archagentix.com';
+
+    const [gateway, sandbox] = await Promise.all([
+      getGatewayStatus({ url }),
+      getProjectSandboxStatus({ url, projectId, projectName }),
+    ]);
+
+    res.json({
+      gateway,
+      sandbox: {
+        ...sandbox,
+        hasGithubSecret: Boolean(
+          sandbox?.secrets?.github?.configured || settings.githubToken || process.env.GITHUB_TOKEN
+        ),
+        hasOpenrouterSecret: Boolean(
+          sandbox?.secrets?.openrouter?.configured || settings.openrouterApiKey || process.env.OPENROUTER_API_KEY
+        ),
+      },
+    });
+  })
+);
+
+// POST /api/agent/sandbox/load — Load/provision NVIDIA OpenShell sandbox for a project
+// with the configured GitHub token and OpenRouter token synced as NVIDIA OpenShell secrets.
+router.post(
+  '/sandbox/load',
+  asyncHandler(async (req, res) => {
+    const context = requestWorkspaceContext(req);
+    const body = req.body || {};
+    const projectId =
+      (typeof body.projectId === 'string' && body.projectId.trim()) ||
+      context.projectId ||
+      'default';
+    const projectName =
+      (typeof body.projectName === 'string' && body.projectName.trim()) ||
+      projectId;
+
+    const resolved = await resolveProjectSecrets(req, { projectId });
+    const sandbox = await ensureProjectSandbox({
+      url: resolved.openshellUrl,
+      projectId,
+      projectName,
+      repositoryUrl: resolved.repositoryUrl,
+      githubToken: resolved.githubToken,
+      openrouterApiKey: resolved.openrouterApiKey,
+    });
+
+    res.json({
+      ok: true,
+      sandbox,
+    });
+  })
+);
+
+// POST /api/agent/sandbox/chat — Direct chat turn against the project's NVIDIA OpenShell sandbox.
+router.post(
+  '/sandbox/chat',
+  asyncHandler(async (req, res) => {
+    const context = requestWorkspaceContext(req);
+    const body = req.body || {};
+    const rawMessage = typeof body.message === 'string' ? body.message : typeof body.input === 'string' ? body.input : '';
+    const cleanMessage = redactUserText(rawMessage).trim();
+    if (!cleanMessage) {
+      return res.status(400).json({ error: 'message is required.' });
+    }
+
+    const projectId =
+      (typeof body.projectId === 'string' && body.projectId.trim()) ||
+      context.projectId ||
+      'default';
+    const projectName =
+      (typeof body.projectName === 'string' && body.projectName.trim()) ||
+      projectId;
+
+    const resolved = await resolveProjectSecrets(req, { projectId });
+    const result = await chatWithProjectSandbox({
+      url: resolved.openshellUrl,
+      projectId,
+      projectName,
+      repositoryUrl: resolved.repositoryUrl,
+      message: cleanMessage,
+      history: Array.isArray(body.history) ? body.history : [],
+      githubToken: resolved.githubToken,
+      openrouterApiKey: resolved.openrouterApiKey,
+    });
+
+    res.json({
+      ok: true,
+      reply: result.reply,
+      model: result.model,
+      sandbox: result.sandbox,
+      commandOutput: result.commandOutput,
+    });
+  })
+);
+
 // POST /api/agent/message — deterministic intent and safety gate for the Agent
 // omnibox. Greetings and rejected abuse never reach retrieval, a model, tools,
 // or a mutation. Business/general requests may use the configured local model
-// only to enrich their bounded, already-routed context.
+// only to enrich their bounded, already-routed context, and also route to the
+// active project's NVIDIA OpenShell sandbox chat when enabled.
 router.post(
   '/message',
   asyncHandler(async (req, res) => {
-    const route = workspaceRouter.classifyIntent(redactUserText(req.body && req.body.input));
+    const body = req.body || {};
+    const route = workspaceRouter.classifyIntent(redactUserText(body.input));
     let enrichment = null;
     let warning = null;
     let memoryDraft = null;
     let canPrepare = false;
+    let sandboxChat = null;
 
     if (route.intent === 'business') {
       // Keep /message fast: the real 6-step pipeline (fraud, revenue, memory,
@@ -394,7 +588,38 @@ router.post(
       memoryDraft = memory.detectMemoryWrite(route.input);
     }
 
-    res.json({ route, enrichment, warning, memoryDraft, canPrepare });
+    // Route chat box messages to the project's NVIDIA OpenShell sandbox chat
+    // when a project sandbox is active or explicitly requested (and not rejected
+    // by the safety gate or a simple salutation).
+    if (!route.rejected && route.intent !== 'salutation' && body.sandboxChat === true && route.input) {
+      const context = requestWorkspaceContext(req);
+      const projectId =
+        (typeof body.projectId === 'string' && body.projectId.trim()) ||
+        context.projectId ||
+        'default';
+      const projectName =
+        (typeof body.projectName === 'string' && body.projectName.trim()) ||
+        projectId;
+      try {
+        const resolved = await resolveProjectSecrets(req, { projectId });
+        sandboxChat = await chatWithProjectSandbox({
+          url: resolved.openshellUrl,
+          projectId,
+          projectName,
+          repositoryUrl: resolved.repositoryUrl,
+          message: route.input,
+          history: Array.isArray(body.history) ? body.history : [],
+          githubToken: resolved.githubToken,
+          openrouterApiKey: resolved.openrouterApiKey,
+        });
+      } catch (err) {
+        sandboxChat = {
+          error: err && err.message ? err.message : String(err),
+        };
+      }
+    }
+
+    res.json({ route, enrichment, warning, memoryDraft, canPrepare, sandboxChat });
   })
 );
 

@@ -358,6 +358,21 @@ const ANTIGRAVITY = Object.freeze({
 });
 
 /**
+ * OpenRouter + NVIDIA OpenShell configuration.
+ * OpenShell runs at https://openshell.archagentix.com by default and receives
+ * project-scoped GitHub + OpenRouter secrets as NVIDIA OpenShell Providers.
+ */
+const OPENROUTER = Object.freeze({
+  defaultHost: proxied('/openrouter', process.env.OPENROUTER_API_URL, 'https://openrouter.ai/api/v1'),
+});
+
+const OPENSHELL = Object.freeze({
+  url: process.env.OPENSHELL_URL || 'https://openshell.archagentix.com',
+  workspace: process.env.OPENSHELL_WORKSPACE || 'default',
+  defaultImage: process.env.OPENSHELL_DEFAULT_IMAGE || 'ubuntu:24.04',
+});
+
+/**
  * Code-writer deep agent + workflow config (an equivalent of OpenAI Symphony's
  * WORKFLOW.md frontmatter). The agent works a Linear ticket end-to-end in an
  * isolated git workspace, driving it through the ticket state machine while
@@ -781,6 +796,8 @@ const CONFIG = Object.freeze({
   OMLX,
   HUGGINGFACE,
   ANTIGRAVITY,
+  OPENROUTER,
+  OPENSHELL,
   CODER,
   MCP,
   TOOLS,

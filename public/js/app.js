@@ -5,6 +5,8 @@ import {
   state,
   isImmersiveRoute,
   setActiveRoute,
+  setCurrentProject,
+  setProjectSandbox,
   setSidebarOpen,
   setSidebarCollapsed,
 } from './state.js';
@@ -657,10 +659,18 @@ function renderAuthControl() {
       }
     }
     projectSelect.addEventListener('change', () => {
-      if (!changeWorkspaceProject(projectSelect.value)) return;
+      const nextProjectId = projectSelect.value;
+      const chosen = projects.find((p) => p.id === nextProjectId);
+      if (nextProjectId) {
+        setCurrentProject(nextProjectId, chosen?.name || '');
+        void api.loadProjectSandbox({ projectId: nextProjectId, projectName: chosen?.name || nextProjectId })
+          .then((res) => { if (res?.sandbox) setProjectSandbox(nextProjectId, res.sandbox); })
+          .catch(() => {});
+      }
+      if (!changeWorkspaceProject(nextProjectId)) return;
       panel.setAttribute('aria-busy', 'true');
       projectSelect.disabled = true;
-      window.setTimeout(() => window.location.reload(), 0);
+      window.setTimeout(() => window.location.reload(), 120);
     });
 
     const orgTags = (organization?.tags || []).map((tag) =>
