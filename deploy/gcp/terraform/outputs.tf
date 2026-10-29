@@ -76,6 +76,11 @@ output "identity_service_uri" {
   value       = google_cloud_run_v2_service.identity.uri
 }
 
+output "billing_service_uri" {
+  description = "Billing and Cashfree service URL — internal and gateway-invoked only."
+  value       = google_cloud_run_v2_service.billing.uri
+}
+
 output "email_topic_name" {
   description = "Pub/Sub topic that accepts allow-listed transactional email jobs."
   value       = google_pubsub_topic.email.name
