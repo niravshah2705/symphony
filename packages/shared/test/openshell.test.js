@@ -4,10 +4,17 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   sanitizeSandboxName,
+  resolveOpenShellWorkspace,
+  encodeObjectMeta,
+  decodeObjectMeta,
+  buildDockerConfigJson,
+  buildOrgImagePullSecretManifest,
   getGatewayStatus,
   syncNvidiaSecrets,
   ensureProjectSandbox,
   chatWithProjectSandbox,
+  getSampleNetworkPolicy,
+  runSandboxSecurityChecks,
 } = require('../src/agent/openshell');
 
 // Helper to build a protobuf wire response for tests
@@ -192,4 +199,103 @@ test('chatWithProjectSandbox executes inside the project sandbox and returns rep
   assert.equal(response.sandbox.name, 'sb-chat-proj');
   assert.match(response.reply, /NVIDIA OpenShell Sandbox `sb-chat-proj`/);
   assert.match(response.reply, /Check sandbox environment/);
+});
+
+test('resolveOpenShellWorkspace maps default to tenant-a and preserves allowed tenant workspaces', () => {
+  assert.equal(resolveOpenShellWorkspace('default'), 'tenant-a');
+  assert.equal(resolveOpenShellWorkspace(''), 'tenant-a');
+  assert.equal(resolveOpenShellWorkspace('tenant-a'), 'tenant-a');
+  assert.equal(resolveOpenShellWorkspace('tenant-b'), 'tenant-b');
+});
+
+test('encodeObjectMeta and decodeObjectMeta use datamodel.proto field numbers (labels=4, resourceVersion=5, workspace=7)', () => {
+  const buf = encodeObjectMeta({
+    name: 'sb-tenant-test',
+    workspace: 'tenant-a',
+    labels: { 'aifleet.io/org-id': 'org-123' },
+  });
+  const decoded = decodeObjectMeta(buf);
+  assert.equal(decoded.name, 'sb-tenant-test');
+  assert.equal(decoded.workspace, 'tenant-a');
+  assert.equal(decoded.labels['aifleet.io/org-id'], 'org-123');
+});
+
+test('buildDockerConfigJson and buildOrgImagePullSecretManifest generate per-organization image registry secret', () => {
+  const cfgStr = buildDockerConfigJson({
+    registryUrl: 'ghcr.io',
+    username: 'org-bot',
+    password: 'ghp_secret_registry_token',
+  });
+  const parsed = JSON.parse(cfgStr);
+  assert.ok(parsed.auths['ghcr.io']);
+  assert.equal(parsed.auths['ghcr.io'].username, 'org-bot');
+
+  const manifestYaml = buildOrgImagePullSecretManifest({
+    workspace: 'tenant-a',
+    organizationId: 'org-acme',
+    registryUrl: 'ghcr.io',
+    username: 'org-bot',
+    password: 'ghp_secret_registry_token',
+  });
+  assert.match(manifestYaml, /kind: Secret/);
+  assert.match(manifestYaml, /type: kubernetes\.io\/dockerconfigjson/);
+  assert.match(manifestYaml, /namespace: tenant-a/);
+  assert.match(manifestYaml, /aifleet\.nvidia\.com\/organization-id: "org-acme"/);
+});
+
+test('syncNvidiaSecrets syncs per-organization imageRegistry secret alongside github and openrouter', async () => {
+  const synced = await syncNvidiaSecrets({
+    url: 'https://openshell.archagentix.com',
+    workspace: 'tenant-a',
+    organizationId: 'org-acme',
+    githubToken: 'ghp_org1',
+    openrouterApiKey: 'sk-or-v1-org1',
+    imageRegistryUrl: 'ghcr.io',
+    imageRegistryUsername: 'acme-user',
+    imageRegistryPassword: 'acme-reg-password',
+    transport: async () => okFrame(),
+  });
+  assert.equal(synced.workspace, 'tenant-a');
+  assert.equal(synced.secrets.imageRegistry.configured, true);
+  assert.equal(synced.secrets.imageRegistry.synced, true);
+  assert.equal(synced.secrets.imageRegistry.registryUrl, 'ghcr.io');
+  assert.ok(synced.providers.includes('image-registry'));
+  assert.match(synced.secrets.imageRegistry.secretManifestYaml, /kind: Secret/);
+});
+
+test('getSampleNetworkPolicy and runSandboxSecurityChecks validate tenant isolation and security', async () => {
+  const policy = getSampleNetworkPolicy({ workspace: 'tenant-a', organizationId: 'org-acme' });
+  assert.equal(policy.name, 'openshell-tenant-sandbox-policy');
+  assert.equal(policy.namespace, 'tenant-a');
+  assert.match(policy.yaml, /169\.254\.169\.254\/32/);
+
+  const mockTransport = async (method) => {
+    if (method === 'Health') {
+      return okFrame(Buffer.concat([encodeTag(1, 0), encodeVarint(1), encodeString(2, '0.1.5')]));
+    }
+    if (method === 'GetSandbox') {
+      return okFrame(buildSandboxResponse({ name: 'sb-sec-proj', id: 'uid-sec-1', phase: 2 }));
+    }
+    if (method === 'ExecSandbox') {
+      const stdoutChunk = encodeMessage(
+        1,
+        encodeString(
+          1,
+          'UID_CHECK=10001\nUSER_CHECK=sandbox\nWORKSPACE_WRITABLE=yes\nOPENCODE_BIN=/sandbox/.local/bin/opencode\nDOCKER_CONFIG=present\n'
+        )
+      );
+      return okFrame(stdoutChunk);
+    }
+    return okFrame();
+  };
+
+  const sec = await runSandboxSecurityChecks({
+    url: 'https://openshell.archagentix.com',
+    projectId: 'sec-proj',
+    workspace: 'tenant-a',
+    transport: mockTransport,
+  });
+  assert.equal(sec.passed, true);
+  assert.equal(sec.checks.length, 6);
+  assert.ok(sec.checks.every((c) => c.passed));
 });

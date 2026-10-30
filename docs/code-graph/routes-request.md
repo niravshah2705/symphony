@@ -4,24 +4,25 @@
 
 ## Overview
 
-Community of 8 nodes
+Community of 9 nodes
 
-- **Size**: 8 nodes
-- **Cohesion**: 0.1481
+- **Size**: 9 nodes
+- **Cohesion**: 0.0918
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| requestWorkspaceContext | Function | ./services/planner/src/routes/agent.js | 62-71 |
-| getHeader | Function | ./services/planner/src/routes/agent.js | 63-66 |
-| jobsForContext | Function | ./services/planner/src/routes/agent.js | 73-79 |
-| jobsForRequest | Function | ./services/planner/src/routes/agent.js | 81-83 |
-| recordsForRequest | Function | ./services/planner/src/routes/agent.js | 85-90 |
-| recordForRequest | Function | ./services/planner/src/routes/agent.js | 92-94 |
-| stampRequestContext | Function | ./services/planner/src/routes/agent.js | 96-103 |
-| conversationForRequest | Function | ./services/planner/src/routes/agent.js | 109-114 |
+| requestWorkspaceContext | Function | ./services/planner/src/routes/agent.js | 78-87 |
+| getHeader | Function | ./services/planner/src/routes/agent.js | 79-82 |
+| jobsForContext | Function | ./services/planner/src/routes/agent.js | 89-95 |
+| jobsForRequest | Function | ./services/planner/src/routes/agent.js | 97-99 |
+| recordsForRequest | Function | ./services/planner/src/routes/agent.js | 101-106 |
+| recordForRequest | Function | ./services/planner/src/routes/agent.js | 108-110 |
+| stampRequestContext | Function | ./services/planner/src/routes/agent.js | 112-119 |
+| conversationForRequest | Function | ./services/planner/src/routes/agent.js | 125-130 |
+| resolveProjectSecrets | Function | ./services/planner/src/routes/agent.js | 382-490 |
 
 ## Execution Flows
 
@@ -31,14 +32,22 @@ Community of 8 nodes
 
 ### Outgoing
 
+- `trim` (15 edge(s))
+- `String` (5 edge(s))
 - `matchesEventContext` (3 edge(s))
 - `filter` (2 edge(s))
+- `encodeURIComponent` (2 edge(s))
 - `getConversation` (1 edge(s))
 - `get` (1 edge(s))
 - `listJobs` (1 edge(s))
 - `find` (1 edge(s))
 - `normalizeEventContext` (1 edge(s))
+- `getSettings` (1 edge(s))
+- `resolveOpenShellWorkspace` (1 edge(s))
+- `fetch` (1 edge(s))
+- `replace` (1 edge(s))
+- `timeout` (1 edge(s))
 
 ### Incoming
 
-- `./services/planner/src/routes/agent.js` (36 edge(s))
+- `./services/planner/src/routes/agent.js` (51 edge(s))

@@ -4,33 +4,34 @@
 
 ## Overview
 
-Community of 17 nodes
+Community of 18 nodes
 
-- **Size**: 17 nodes
-- **Cohesion**: 0.1868
+- **Size**: 18 nodes
+- **Cohesion**: 0.1884
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| resolveStrength | Function | ./scripts/obfuscate-spa.js | 135-141 |
-| collectJsFiles | Function | ./scripts/obfuscate-spa.js | 148-157 |
-| obfuscateCode | Function | ./scripts/obfuscate-spa.js | 167-174 |
-| obfuscateFile | Function | ./scripts/obfuscate-spa.js | 182-188 |
-| obfuscateTree | Function | ./scripts/obfuscate-spa.js | 196-212 |
-| run | Function | ./scripts/obfuscate-spa.js | 219-243 |
+| getObfuscator | Function | ./scripts/obfuscate-spa.js | 42-56 |
+| resolveStrength | Function | ./scripts/obfuscate-spa.js | 151-157 |
+| collectJsFiles | Function | ./scripts/obfuscate-spa.js | 164-173 |
+| obfuscateCode | Function | ./scripts/obfuscate-spa.js | 183-190 |
+| obfuscateFile | Function | ./scripts/obfuscate-spa.js | 198-204 |
+| obfuscateTree | Function | ./scripts/obfuscate-spa.js | 212-228 |
+| run | Function | ./scripts/obfuscate-spa.js | 235-259 |
 | makeFixture | Function | ./scripts/obfuscate-spa.test.js | 19-54 |
-| test:preserves ES-module export/import names while scrambling locals and strings@L56 | Test | ./scripts/obfuscate-spa.test.js | 56-73 |
-| test:copies non-JS assets and vendor code verbatim@L75 | Test | ./scripts/obfuscate-spa.test.js | 75-93 |
-| test:obfuscated module is still executable and behaviourally identical@L95 | Test | ./scripts/obfuscate-spa.test.js | 95-106 |
-| test:obfuscated build preserves a native dynamic-import module edge@L108 | Test | ./scripts/obfuscate-spa.test.js | 108-119 |
-| test:in-place mode rewrites source files without a copy@L121 | Test | ./scripts/obfuscate-spa.test.js | 121-133 |
-| test:resolveStrength: flag > env var > default, and rejects unknown names@L143 | Test | ./scripts/obfuscate-spa.test.js | 143-160 |
-| test:light leaves strings in clear text; balanced and maximum encode them@L162 | Test | ./scripts/obfuscate-spa.test.js | 162-172 |
-| readBoard | Function | ./scripts/obfuscate-spa.test.js | 164-168 |
-| test:maximum preset still produces an executable, correct module@L174 | Test | ./scripts/obfuscate-spa.test.js | 174-180 |
-| test:obfuscateCode surfaces a labelled error on invalid input@L182 | Test | ./scripts/obfuscate-spa.test.js | 182-184 |
+| test:preserves ES-module export/import names while scrambling locals and strings@L64 | Test | ./scripts/obfuscate-spa.test.js | 64-81 |
+| test:copies non-JS assets and vendor code verbatim@L83 | Test | ./scripts/obfuscate-spa.test.js | 83-101 |
+| test:obfuscated module is still executable and behaviourally identical@L103 | Test | ./scripts/obfuscate-spa.test.js | 103-114 |
+| test:obfuscated build preserves a native dynamic-import module edge@L116 | Test | ./scripts/obfuscate-spa.test.js | 116-127 |
+| test:in-place mode rewrites source files without a copy@L129 | Test | ./scripts/obfuscate-spa.test.js | 129-141 |
+| test:resolveStrength: flag > env var > default, and rejects unknown names@L151 | Test | ./scripts/obfuscate-spa.test.js | 151-168 |
+| test:light leaves strings in clear text; balanced and maximum encode them@L170 | Test | ./scripts/obfuscate-spa.test.js | 170-180 |
+| readBoard | Function | ./scripts/obfuscate-spa.test.js | 172-176 |
+| test:maximum preset still produces an executable, correct module@L182 | Test | ./scripts/obfuscate-spa.test.js | 182-188 |
+| test:obfuscateCode surfaces a labelled error on invalid input@L190 | Test | ./scripts/obfuscate-spa.test.js | 190-192 |
 
 ## Execution Flows
 
@@ -59,7 +60,7 @@ No execution flows pass through this community.
 ### Incoming
 
 - `join` (18 edge(s))
-- `./scripts/obfuscate-spa.js` (12 edge(s))
+- `./scripts/obfuscate-spa.js` (13 edge(s))
 - `equal` (12 edge(s))
 - `./scripts/obfuscate-spa.test.js` (11 edge(s))
 - `readFileSync` (10 edge(s))

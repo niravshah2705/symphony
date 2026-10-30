@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 134 nodes
+Community of 141 nodes
 
-- **Size**: 134 nodes
-- **Cohesion**: 0.5014
+- **Size**: 141 nodes
+- **Cohesion**: 0.4484
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 134 nodes
 | validateStageCommandV1 | Function | ./packages/shared-core/src/pipeline/contracts.js | 456-456 |
 | validateStageResultV1 | Function | ./packages/shared-core/src/pipeline/contracts.js | 457-457 |
 
-*... and 84 more members.*
+*... and 91 more members.*
 
 ## Execution Flows
 
@@ -75,13 +75,14 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (74 edge(s))
+- `equal` (96 edge(s))
+- `deepEqual` (23 edge(s))
 - `throws` (23 edge(s))
-- `deepEqual` (19 edge(s))
 - `stringify` (15 edge(s))
 - `has` (15 edge(s))
+- `getRun` (15 edge(s))
 - `includes` (14 edge(s))
-- `getRun` (14 edge(s))
+- `./services/orchestrator/src/app.test.js::jsonRequest` (14 edge(s))
 - `./packages/shared-core/src/pipeline/repository.js::PipelineRunRepository.clock` (12 edge(s))
 - `test` (11 edge(s))
 - `setRun` (11 edge(s))
@@ -89,15 +90,15 @@ No execution flows pass through this community.
 - `map` (10 edge(s))
 - `transaction` (10 edge(s))
 - `parse` (9 edge(s))
-- `get` (8 edge(s))
 
 ### Incoming
 
-- `equal` (74 edge(s))
+- `equal` (96 edge(s))
 - `./packages/shared-core/src/pipeline/contracts.js` (40 edge(s))
+- `deepEqual` (23 edge(s))
 - `throws` (23 edge(s))
-- `deepEqual` (19 edge(s))
 - `./packages/shared-core/src/pipeline/repository.test.js` (18 edge(s))
+- `./services/orchestrator/src/app.test.js::jsonRequest` (14 edge(s))
 - `./packages/shared-core/src/pipeline/repository.js` (12 edge(s))
 - `./packages/shared-core/src/pipeline/bus.js` (11 edge(s))
 - `./packages/shared-core/src/pipeline/contracts.test.js` (10 edge(s))
@@ -105,6 +106,5 @@ No execution flows pass through this community.
 - `repeat` (8 edge(s))
 - `rejects` (8 edge(s))
 - `./packages/shared-core/src/pipeline/bus.test.js` (7 edge(s))
-- `dispatch` (5 edge(s))
-- `isFrozen` (3 edge(s))
-- `getRun` (3 edge(s))
+- `after` (7 edge(s))
+- `./services/orchestrator/src/app.test.js` (6 edge(s))

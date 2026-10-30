@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 6 nodes
+Community of 3 nodes
 
-- **Size**: 6 nodes
-- **Cohesion**: 0.1463
+- **Size**: 3 nodes
+- **Cohesion**: 0.0909
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,10 +16,7 @@ Community of 6 nodes
 |------|------|------|-------|
 | plannerHandler | Function | ./services/planner/src/pubsub.test.js | 11-15 |
 | invoke | Function | ./services/planner/src/pubsub.test.js | 17-28 |
-| test:planner Pub/Sub scopes every conversation event to the native workspace context@L30 | Test | ./services/planner/src/pubsub.test.js | 30-78 |
 | test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L80 | Test | ./services/planner/src/pubsub.test.js | 80-103 |
-| test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L105 | Test | ./services/planner/src/pubsub.test.js | 105-155 |
-| test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L157 | Test | ./services/planner/src/pubsub.test.js | 157-185 |
 
 ## Execution Flows
 
@@ -29,36 +26,31 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (7 edge(s))
-- `deepEqual` (6 edge(s))
-- `resolve` (5 edge(s))
-- `push` (5 edge(s))
-- `currentWorkspaceContext` (4 edge(s))
-- `after` (4 edge(s))
-- `require` (4 edge(s))
-- `ok` (2 edge(s))
-- `finish` (2 edge(s))
-- `setImmediate` (2 edge(s))
-- `sort` (2 edge(s))
-- `some` (2 edge(s))
+- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L105` (3 edge(s))
+- `equal` (3 edge(s))
+- `resolve` (2 edge(s))
+- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub scopes every conversation event to the native workspace context@L30` (2 edge(s))
+- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L157` (2 edge(s))
 - `handler` (1 edge(s))
 - `toPushEnvelope` (1 edge(s))
 - `reject` (1 edge(s))
+- `find` (1 edge(s))
+- `ok` (1 edge(s))
+- `at` (1 edge(s))
+- `push` (1 edge(s))
+- `after` (1 edge(s))
+- `require` (1 edge(s))
+- `deepEqual` (1 edge(s))
 
 ### Incoming
 
-- `equal` (7 edge(s))
-- `./services/planner/src/pubsub.test.js` (6 edge(s))
-- `deepEqual` (6 edge(s))
-- `push` (5 edge(s))
-- `resolve` (4 edge(s))
-- `currentWorkspaceContext` (4 edge(s))
-- `after` (4 edge(s))
-- `require` (4 edge(s))
-- `finish` (2 edge(s))
-- `setImmediate` (2 edge(s))
-- `sort` (2 edge(s))
-- `some` (2 edge(s))
-- `all` (1 edge(s))
-- `map` (1 edge(s))
-- `ok` (1 edge(s))
+- `./services/planner/src/pubsub.test.js` (3 edge(s))
+- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L105` (3 edge(s))
+- `equal` (3 edge(s))
+- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub scopes every conversation event to the native workspace context@L30` (2 edge(s))
+- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L157` (2 edge(s))
+- `resolve` (1 edge(s))
+- `push` (1 edge(s))
+- `after` (1 edge(s))
+- `require` (1 edge(s))
+- `deepEqual` (1 edge(s))

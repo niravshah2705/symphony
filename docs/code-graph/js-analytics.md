@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 27 nodes
+Community of 46 nodes
 
-- **Size**: 27 nodes
-- **Cohesion**: 0.1889
+- **Size**: 46 nodes
+- **Cohesion**: 0.3591
 - **Dominant Language**: javascript
 
 ## Members
@@ -41,35 +41,64 @@ Community of 27 nodes
 | initialize | Function | ./public/js/google-analytics.mjs | 291-304 |
 | trackPageView | Function | ./public/js/google-analytics.mjs | 306-362 |
 | trackGoogleAnalyticsPageView | Function | ./public/js/google-analytics.mjs | 373-376 |
+| memoryStorage | Function | ./public/js/google-analytics.test.mjs | 17-24 |
+| fakeBrowser | Function | ./public/js/google-analytics.test.mjs | 26-50 |
+| callsOf | Function | ./public/js/google-analytics.test.mjs | 52-56 |
+| test:accepts only normalized GA4 measurement IDs@L58 | Test | ./public/js/google-analytics.test.mjs | 58-64 |
+| test:normalizes the two persisted analytics choices and defaults invalid data to enabled@L66 | Test | ./public/js/google-analytics.test.mjs | 66-83 |
+| test:accepts only bounded opaque GA4 user IDs@L85 | Test | ./public/js/google-analytics.test.mjs | 85-102 |
+| test:blank or invalid configuration is a network-free no-op@L104 | Test | ./public/js/google-analytics.test.mjs | 104-115 |
+| test:a persisted opt-out suppresses all GA initialization side effects@L117 | Test | ./public/js/google-analytics.test.mjs | 117-128 |
+| test:queues gtag calls as Arguments objects@L130 | Test | ./public/js/google-analytics.test.mjs | 130-140 |
+| test:loads gtag once and configures privacy-safe manual page views@L142 | Test | ./public/js/google-analytics.test.mjs | 142-190 |
+| test:strips invite tokens, IDs, hash parameters, and UI titles from page-view data@L192 | Test | ./public/js/google-analytics.test.mjs | 192-221 |
+| test:sets user_id after login and clears invalid identity or logout without leaking it into events@L223 | Test | ./public/js/google-analytics.test.mjs | 223-263 |
+| test:same-route auth expiry clears target config without sending another page view@L265 | Test | ./public/js/google-analytics.test.mjs | 265-281 |
+| test:persisted revocation updates a loaded tag, clears GA cookies, and suppresses future views@L283 | Test | ./public/js/google-analytics.test.mjs | 283-319 |
+| test@L313 | Test | ./public/js/google-analytics.test.mjs | 313-313 |
+| test:a failed preference write does not revoke loaded consent or clear cookies@L321 | Test | ./public/js/google-analytics.test.mjs | 321-340 |
+| test:deduplicates shell rerenders but tracks a route when it is revisited@L342 | Test | ./public/js/google-analytics.test.mjs | 342-361 |
+| test:normalizes only the top-level hash route@L363 | Test | ./public/js/google-analytics.test.mjs | 363-375 |
+| test:the analytics allowlist covers every application route and nothing else@L377 | Test | ./public/js/google-analytics.test.mjs | 377-387 |
 
 ## Execution Flows
 
-- **render** (criticality: 0.75, depth: 6)
+- **render** (criticality: 0.73, depth: 6)
 
 ## Dependencies
 
 ### Outgoing
 
+- `equal` (67 edge(s))
+- `deepEqual` (14 edge(s))
+- `map` (9 edge(s))
+- `includes` (7 edge(s))
 - `querySelector` (6 edge(s))
 - `addEventListener` (6 edge(s))
 - `focus` (6 edge(s))
 - `preventDefault` (5 edge(s))
 - `trim` (5 edge(s))
 - `split` (5 edge(s))
+- `push` (5 edge(s))
+- `stringify` (5 edge(s))
+- `filter` (4 edge(s))
 - `test` (4 edge(s))
-- `filter` (3 edge(s))
-- `getElementById` (3 edge(s))
-- `freeze` (3 edge(s))
-- `toLowerCase` (3 edge(s))
-- `map` (3 edge(s))
-- `has` (3 edge(s))
-- `String` (2 edge(s))
-- `push` (2 edge(s))
+- `get` (4 edge(s))
 
 ### Incoming
 
-- `./public/js/google-analytics.test.mjs` (56 edge(s))
+- `equal` (67 edge(s))
 - `./public/js/google-analytics.mjs` (22 edge(s))
+- `./public/js/google-analytics.test.mjs` (18 edge(s))
+- `deepEqual` (14 edge(s))
+- `includes` (7 edge(s))
 - `./public/js/cookie-preferences.js` (5 edge(s))
+- `map` (5 edge(s))
+- `stringify` (5 edge(s))
+- `ok` (4 edge(s))
+- `defineProperty` (2 edge(s))
+- `push` (2 edge(s))
+- `repeat` (2 edge(s))
+- `every` (2 edge(s))
+- `some` (2 edge(s))
 - `./public/js/app.js` (1 edge(s))
-- `./public/js/app.js::syncShell` (1 edge(s))

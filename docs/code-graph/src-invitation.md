@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 54 nodes
+Community of 53 nodes
 
-- **Size**: 54 nodes
-- **Cohesion**: 0.3393
+- **Size**: 53 nodes
+- **Cohesion**: 0.3445
 - **Dominant Language**: javascript
 
 ## Members
@@ -21,7 +21,6 @@ Community of 54 nodes
 | testConfig | Function | ./services/email/src/app.test.js | 47-53 |
 | start | Function | ./services/email/src/app.test.js | 55-72 |
 | post | Function | ./services/email/src/app.test.js | 74-80 |
-| test:health is live while readiness reflects the SMTP transport@L82 | Test | ./services/email/src/app.test.js | 82-93 |
 | test:push authentication runs before delivery@L95 | Test | ./services/email/src/app.test.js | 95-106 |
 | test:delivers a valid invitation once and acknowledges a duplicate@L108 | Test | ./services/email/src/app.test.js | 108-120 |
 | test:does not acknowledge a concurrent redelivery while SMTP is unresolved@L122 | Test | ./services/email/src/app.test.js | 122-138 |
@@ -64,8 +63,9 @@ Community of 54 nodes
 | test:parses only the invitation contract and normalizes the recipient@L31 | Test | ./services/email/src/templates.test.js | 31-38 |
 | test:uses the Pub/Sub message id when a caller idempotency key is absent@L40 | Test | ./services/email/src/templates.test.js | 40-44 |
 | test:rejects arbitrary templates, invalid mailboxes, controls, and unsafe keys@L46 | Test | ./services/email/src/templates.test.js | 46-55 |
+| test:renders a fixed invitation template and escapes values and token URL@L57 | Test | ./services/email/src/templates.test.js | 57-65 |
 
-*... and 4 more members.*
+*... and 3 more members.*
 
 ## Execution Flows
 
@@ -75,15 +75,15 @@ Community of 54 nodes
 
 ### Outgoing
 
-- `equal` (50 edge(s))
+- `equal` (48 edge(s))
 - `String` (17 edge(s))
 - `trim` (14 edge(s))
 - `push` (14 edge(s))
-- `json` (9 edge(s))
 - `status` (9 edge(s))
-- `close` (8 edge(s))
+- `json` (8 edge(s))
 - `test` (8 edge(s))
 - `match` (8 edge(s))
+- `close` (7 edge(s))
 - `freeze` (7 edge(s))
 - `includes` (6 edge(s))
 - `stringify` (5 edge(s))
@@ -93,18 +93,18 @@ Community of 54 nodes
 
 ### Incoming
 
-- `equal` (50 edge(s))
+- `equal` (48 edge(s))
 - `./services/email/src/templates.js` (20 edge(s))
-- `./services/email/src/app.test.js` (14 edge(s))
-- `close` (8 edge(s))
+- `./services/email/src/app.test.js` (13 edge(s))
 - `./services/email/src/mailer.js` (8 edge(s))
 - `match` (8 edge(s))
 - `./services/email/src/templates.test.js` (8 edge(s))
+- `close` (7 edge(s))
 - `./services/email/src/config.js` (6 edge(s))
 - `./services/email/src/mailer.test.js` (5 edge(s))
 - `throws` (5 edge(s))
 - `push` (4 edge(s))
 - `includes` (3 edge(s))
 - `stringify` (3 edge(s))
-- `deepEqual` (3 edge(s))
 - `./services/email/src/index.js` (3 edge(s))
+- `./services/email/src/app.js` (2 edge(s))

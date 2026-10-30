@@ -7,7 +7,7 @@
 Community of 4 nodes
 
 - **Size**: 4 nodes
-- **Cohesion**: 0.0714
+- **Cohesion**: 0.0698
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,8 +16,8 @@ Community of 4 nodes
 |------|------|------|-------|
 | proxied | Function | ./packages/shared-core/src/config.js | 20-21 |
 | llmGatewayUpstream | Function | ./packages/shared-core/src/egress.js | 54-56 |
-| normalizeProxyBase | Function | ./packages/shared-core/src/egress.js | 108-110 |
-| egressUrl | Function | ./packages/shared-core/src/egress.js | 126-131 |
+| normalizeProxyBase | Function | ./packages/shared-core/src/egress.js | 110-112 |
+| egressUrl | Function | ./packages/shared-core/src/egress.js | 128-133 |
 
 ## Execution Flows
 
@@ -33,5 +33,5 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./packages/shared-core/src/config.js` (29 edge(s))
+- `./packages/shared-core/src/config.js` (30 edge(s))
 - `./packages/shared-core/src/egress.js` (7 edge(s))

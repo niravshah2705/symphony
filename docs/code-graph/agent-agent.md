@@ -71,8 +71,8 @@ Community of 386 nodes
 
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
-- **startScheduler** (criticality: 0.66, depth: 6)
 - **generatePlan** (criticality: 0.66, depth: 4)
+- **startScheduler** (criticality: 0.66, depth: 6)
 - **runCoder** (criticality: 0.65, depth: 5)
 - **runPlannedCoder** (criticality: 0.65, depth: 5)
 - **executeClaude** (criticality: 0.61, depth: 2)

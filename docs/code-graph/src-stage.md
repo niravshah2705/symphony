@@ -4,98 +4,107 @@
 
 ## Overview
 
-Community of 43 nodes
+Community of 106 nodes
 
-- **Size**: 43 nodes
-- **Cohesion**: 0.4013
+- **Size**: 106 nodes
+- **Cohesion**: 0.3328
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| approvalFromClaim | Function | ./services/orchestrator/src/controller.js | 12-26 |
-| PipelineOrchestrator | Class | ./services/orchestrator/src/controller.js | 28-293 |
-| constructor | Function | ./services/orchestrator/src/controller.js | 29-57 |
-| info | Function | ./services/orchestrator/src/controller.js | 48-48 |
-| error | Function | ./services/orchestrator/src/controller.js | 48-48 |
-| start | Function | ./services/orchestrator/src/controller.js | 59-76 |
-| advance | Function | ./services/orchestrator/src/controller.js | 78-108 |
-| _deploymentApprovalFor | Function | ./services/orchestrator/src/controller.js | 110-171 |
-| _dispatchNewStage | Function | ./services/orchestrator/src/controller.js | 173-213 |
-| _dispatchStageRun | Function | ./services/orchestrator/src/controller.js | 215-224 |
-| handleStageResult | Function | ./services/orchestrator/src/controller.js | 226-245 |
-| resume | Function | ./services/orchestrator/src/controller.js | 247-266 |
-| cancel | Function | ./services/orchestrator/src/controller.js | 268-288 |
-| status | Function | ./services/orchestrator/src/controller.js | 290-292 |
-| clock | Function | ./services/orchestrator/src/controller.test.js | 13-13 |
-| start | Function | ./services/orchestrator/src/controller.test.js | 15-26 |
-| result | Function | ./services/orchestrator/src/controller.test.js | 28-42 |
-| setup | Function | ./services/orchestrator/src/controller.test.js | 44-74 |
-| test:start checkpoints preflight and dispatches the first requested stage@L76 | Test | ./services/orchestrator/src/controller.test.js | 76-84 |
-| test:deferred start durably admits without dispatching until advance@L86 | Test | ./services/orchestrator/src/controller.test.js | 86-96 |
-| test:successful completion resumes from the durable checkpoint and dispatches the next selected stage@L98 | Test | ./services/orchestrator/src/controller.test.js | 98-110 |
-| test:redelivery advances a completion committed before graph resume@L112 | Test | ./services/orchestrator/src/controller.test.js | 112-124 |
-| test:redelivery retries only a next-stage command whose publish failed@L126 | Test | ./services/orchestrator/src/controller.test.js | 126-150 |
-| test:resume after reconstruction safely re-dispatches the same active idempotency key@L152 | Test | ./services/orchestrator/src/controller.test.js | 152-164 |
-| test:a failed stage remains terminal until explicit retry, which creates the next attempt@L166 | Test | ./services/orchestrator/src/controller.test.js | 166-179 |
-| test:cancel records an active cancellation request and a late result stops rather than advances the graph@L181 | Test | ./services/orchestrator/src/controller.test.js | 181-192 |
-| test:a positive stage-bus cancellation receipt confirms that active work actually stopped@L194 | Test | ./services/orchestrator/src/controller.test.js | 194-205 |
-| test:dispatch failure leaves a resumable checkpoint instead of creating a second attempt@L207 | Test | ./services/orchestrator/src/controller.test.js | 207-225 |
-| test:production deployment pauses after test and resume attaches only post-test server approval@L227 | Test | ./services/orchestrator/src/controller.test.js | 227-293 |
-| test:a consumed deployment approval survives a crash before the deploy command claim@L295 | Test | ./services/orchestrator/src/controller.test.js | 295-348 |
-| routeNextStage | Function | ./services/orchestrator/src/graph.js | 12-26 |
-| loadLangGraph | Function | ./services/orchestrator/src/graph.js | 28-32 |
-| createPipelineGraph | Function | ./services/orchestrator/src/graph.js | 34-64 |
-| test:routeNextStage follows only the explicit ordered subset and ignores labels@L9 | Test | ./services/orchestrator/src/graph.test.js | 9-27 |
-| test:routeNextStage refuses a checkpoint that is not a prefix of requestedStages@L29 | Test | ./services/orchestrator/src/graph.test.js | 29-35 |
-| test:the compiled graph has fixed plan/code/test/deploy nodes and conditionally dispatches one stage@L37 | Test | ./services/orchestrator/src/graph.test.js | 37-63 |
-| SnapshotPreflight | Class | ./services/orchestrator/src/preflight.js | 10-58 |
-| constructor | Function | ./services/orchestrator/src/preflight.js | 11-17 |
-| capture | Function | ./services/orchestrator/src/preflight.js | 19-57 |
-| clock | Function | ./services/orchestrator/src/preflight.test.js | 9-9 |
-| fullRun | Function | ./services/orchestrator/src/preflight.test.js | 11-19 |
-| test:deployment is disabled by default@L21 | Test | ./services/orchestrator/src/preflight.test.js | 21-26 |
-| test:enabled deployment preflight strips every caller approval before persistence@L28 | Test | ./services/orchestrator/src/preflight.test.js | 28-43 |
+| header | Function | ./services/orchestrator/src/app.js | 17-19 |
+| safeEqual | Function | ./services/orchestrator/src/app.js | 21-25 |
+| asyncRoute | Function | ./services/orchestrator/src/app.js | 27-29 |
+| requestScope | Function | ./services/orchestrator/src/app.js | 31-36 |
+| assertScope | Function | ./services/orchestrator/src/app.js | 38-51 |
+| internalResultAuth | Function | ./services/orchestrator/src/app.js | 53-94 |
+| controlApiAuth | Function | ./services/orchestrator/src/app.js | 96-114 |
+| resultFromBody | Function | ./services/orchestrator/src/app.js | 116-121 |
+| errorResponse | Function | ./services/orchestrator/src/app.js | 123-141 |
+| createApp | Function | ./services/orchestrator/src/app.js | 143-280 |
+| warn | Function | ./services/orchestrator/src/app.js | 146-146 |
+| error | Function | ./services/orchestrator/src/app.js | 146-146 |
+| setup | Function | ./services/orchestrator/src/app.test.js | 33-70 |
+| listen | Function | ./services/orchestrator/src/app.test.js | 72-76 |
+| jsonRequest | Function | ./services/orchestrator/src/app.test.js | 78-88 |
+| integratedSetup | Function | ./services/orchestrator/src/app.test.js | 90-123 |
+| waitFor | Function | ./services/orchestrator/src/app.test.js | 125-131 |
+| test:control API starts, reads, resumes, and cancels a scoped run@L133 | Test | ./services/orchestrator/src/app.test.js | 133-162 |
+| test:direct HTTP start returns after durable admission without waiting for stage execution@L259 | Test | ./services/orchestrator/src/app.test.js | 259-295 |
+| test:authoritative context cannot be overridden and cross-scope status is hidden as 404@L297 | Test | ./services/orchestrator/src/app.test.js | 297-315 |
+| test:cloud mode exposes no direct internal result ingress despite a valid shared token@L350 | Test | ./services/orchestrator/src/app.test.js | 350-370 |
+| test:direct result ingress requires the shared token when configured@L395 | Test | ./services/orchestrator/src/app.test.js | 395-409 |
+| test:direct stage-specific result ingress enforces the stage in its URL@L411 | Test | ./services/orchestrator/src/app.test.js | 411-428 |
+| test:cloud internal ingress has neither a stage-specific nor generic shared-token bypass@L430 | Test | ./services/orchestrator/src/app.test.js | 430-453 |
+| test:cloud result ingress fails closed when OIDC identity constraints are absent@L455 | Test | ./services/orchestrator/src/app.test.js | 455-468 |
+| requiredString | Function | ./services/orchestrator/src/checkpointer.js | 24-27 |
+| checkpointIdFromConfig | Function | ./services/orchestrator/src/checkpointer.js | 29-33 |
+| configParts | Function | ./services/orchestrator/src/checkpointer.js | 35-44 |
+| DurablePipelineCheckpointer | Class | ./services/orchestrator/src/checkpointer.js | 258-378 |
+| constructor | Function | ./services/orchestrator/src/checkpointer.js | 259-263 |
+| serialize | Function | ./services/orchestrator/src/checkpointer.js | 265-268 |
+| deserialize | Function | ./services/orchestrator/src/checkpointer.js | 270-272 |
+| tuple | Function | ./services/orchestrator/src/checkpointer.js | 274-304 |
+| getTuple | Function | ./services/orchestrator/src/checkpointer.js | 306-309 |
+| list | Function | ./services/orchestrator/src/checkpointer.js | 311-332 |
+| put | Function | ./services/orchestrator/src/checkpointer.js | 334-355 |
+| putWrites | Function | ./services/orchestrator/src/checkpointer.js | 357-372 |
+| deleteThread | Function | ./services/orchestrator/src/checkpointer.js | 374-377 |
+| createPipelineCheckpointer | Function | ./services/orchestrator/src/checkpointer.js | 380-401 |
+| checkpoint | Function | ./services/orchestrator/src/checkpointer.test.js | 11-20 |
+| test:JSON LangGraph checkpoints and pending writes survive process reconstruction@L22 | Test | ./services/orchestrator/src/checkpointer.test.js | 22-47 |
+| test:the cloud checkpointer factory rejects memory and constructs a Firestore-backed saver@L49 | Test | ./services/orchestrator/src/checkpointer.test.js | 49-56 |
+| bool | Function | ./services/orchestrator/src/config.js | 5-8 |
+| csv | Function | ./services/orchestrator/src/config.js | 10-12 |
+| stageEndpoint | Function | ./services/orchestrator/src/config.js | 14-17 |
+| loadConfig | Function | ./services/orchestrator/src/config.js | 19-57 |
+| test:PIPELINE_ORCHESTRATOR_ENABLED is an explicit rollback switch and defaults off@L9 | Test | ./services/orchestrator/src/config.test.js | 9-12 |
+| test:production defaults deployment approval on while deployment itself stays off@L14 | Test | ./services/orchestrator/src/config.test.js | 14-21 |
+| test:settings approval service URL is explicit and normalized@L23 | Test | ./services/orchestrator/src/config.test.js | 23-26 |
+| test:pipeline messaging uses dedicated StageCommand topics@L28 | Test | ./services/orchestrator/src/config.test.js | 28-40 |
+
+*... and 56 more members.*
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **start** (criticality: 0.62, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (49 edge(s))
-- `deepEqual` (14 edge(s))
-- `map` (7 edge(s))
+- `equal` (100 edge(s))
+- `json` (25 edge(s))
+- `deepEqual` (23 edge(s))
+- `status` (22 edge(s))
+- `String` (18 edge(s))
+- `trim` (15 edge(s))
+- `map` (10 edge(s))
+- `after` (9 edge(s))
+- `next` (8 edge(s))
+- `close` (8 edge(s))
+- `./services/orchestrator/src/app.test.js::test:direct HTTP cancellation reports requested until the active worker result actually stops it@L181` (7 edge(s))
 - `repeat` (7 edge(s))
-- `Annotation` (6 edge(s))
-- `includes` (4 edge(s))
-- `getRun` (4 edge(s))
-- `has` (4 edge(s))
-- `rejects` (4 edge(s))
-- `at` (3 edge(s))
-- `trim` (2 edge(s))
-- `listStageRuns` (2 edge(s))
-- `parse` (2 edge(s))
-- `invoke` (2 edge(s))
-- `toISOString` (2 edge(s))
+- `post` (6 edge(s))
+- `includes` (6 edge(s))
+- `./services/orchestrator/src/app.test.js::test:direct HTTP retry returns typed 409 at attempt 100 without reopening the failed run@L224` (6 edge(s))
 
 ### Incoming
 
-- `equal` (49 edge(s))
+- `equal` (100 edge(s))
+- `deepEqual` (23 edge(s))
+- `./services/orchestrator/src/app.js` (17 edge(s))
 - `./services/orchestrator/src/controller.test.js` (16 edge(s))
-- `deepEqual` (14 edge(s))
+- `./services/orchestrator/src/app.test.js` (13 edge(s))
+- `after` (9 edge(s))
+- `close` (8 edge(s))
+- `./services/orchestrator/src/index.js` (8 edge(s))
+- `./services/orchestrator/src/app.test.js::test:direct HTTP cancellation reports requested until the active worker result actually stops it@L181` (7 edge(s))
+- `./services/orchestrator/src/checkpointer.js` (7 edge(s))
+- `./services/orchestrator/src/index.test.js` (7 edge(s))
+- `./services/orchestrator/src/app.test.js::test:direct HTTP retry returns typed 409 at attempt 100 without reopening the failed run@L224` (6 edge(s))
 - `repeat` (6 edge(s))
 - `map` (6 edge(s))
-- `./services/orchestrator/src/graph.js` (5 edge(s))
-- `rejects` (4 edge(s))
-- `./services/orchestrator/src/preflight.test.js` (4 edge(s))
-- `./services/orchestrator/src/controller.js` (3 edge(s))
-- `at` (3 edge(s))
-- `./services/orchestrator/src/graph.test.js` (3 edge(s))
-- `assign` (2 edge(s))
-- `./services/orchestrator/src/preflight.js` (2 edge(s))
-- `getRun` (1 edge(s))
-- `completeStage` (1 edge(s))
+- `json` (5 edge(s))

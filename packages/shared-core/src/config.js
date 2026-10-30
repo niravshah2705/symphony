@@ -368,8 +368,10 @@ const OPENROUTER = Object.freeze({
 
 const OPENSHELL = Object.freeze({
   url: process.env.OPENSHELL_URL || 'https://openshell.archagentix.com',
-  workspace: process.env.OPENSHELL_WORKSPACE || 'default',
+  workspace: process.env.OPENSHELL_WORKSPACE || 'tenant-a',
+  allowedWorkspaces: Object.freeze(['tenant-a', 'tenant-b']),
   defaultImage: process.env.OPENSHELL_DEFAULT_IMAGE || 'ubuntu:24.04',
+  token: process.env.OPENSHELL_TOKEN || process.env.OPENSHELL_API_KEY || '',
 });
 
 /**

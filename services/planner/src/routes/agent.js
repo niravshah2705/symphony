@@ -4,6 +4,7 @@ const express = require('express');
 const {
   getApiKey,
   getSettings,
+  patchSettings,
   getAssumedRole,
   getAgentConfig,
   setAgentConfig,
@@ -47,6 +48,14 @@ const {
   getProjectSandboxStatus,
   ensureProjectSandbox,
   chatWithProjectSandbox,
+  execInSandbox,
+  syncNvidiaSecrets,
+  resolveOpenShellWorkspace,
+  getSampleNetworkPolicy,
+  runSandboxSecurityChecks,
+  buildOrgImagePullSecretManifest,
+  FREE_OPENROUTER_MODELS,
+  DEFAULT_OPENROUTER_MODEL,
 } = require('@ai-fleet/shared/agent/openshell');
 const { getOrgFundStatus } = require('@ai-fleet/shared/billing/gate');
 
@@ -365,14 +374,34 @@ router.get('/jobs', (req, res) => {
 });
 
 /**
- * Resolve GitHub + OpenRouter secrets for NVIDIA OpenShell sandbox loading.
+ * Resolve per-organization GitHub + OpenRouter + Container Image Registry secrets
+ * for NVIDIA OpenShell sandbox loading.
  * Checks explicit request body overrides, S2S settings service vault/managed
- * resolver when configured, and local store / process.env fallbacks.
+ * resolver when configured, and per-organization store / process.env fallbacks.
  */
-async function resolveProjectSecrets(req, { projectId } = {}) {
+async function resolveProjectSecrets(req, { projectId, organizationId: explicitOrgId } = {}) {
   const settings = getSettings();
   const context = requestWorkspaceContext(req);
   const body = (req && req.body) || {};
+  const query = (req && req.query) || {};
+
+  const organizationId =
+    explicitOrgId ||
+    (typeof body.organizationId === 'string' && body.organizationId.trim()) ||
+    (typeof query.organizationId === 'string' && query.organizationId.trim()) ||
+    context.organizationId ||
+    process.env.PROXY_ORG_ID ||
+    process.env.FLEET_ORG_ID ||
+    'default';
+
+  const workspace = resolveOpenShellWorkspace({
+    workspace:
+      (typeof body.workspace === 'string' && body.workspace.trim()) ||
+      (typeof query.workspace === 'string' && query.workspace.trim()) ||
+      settings.openshellWorkspace,
+    organizationId,
+    projectId,
+  });
 
   let githubToken =
     (typeof body.githubToken === 'string' && body.githubToken.trim()) ||
@@ -383,6 +412,21 @@ async function resolveProjectSecrets(req, { projectId } = {}) {
     (typeof body.openrouterApiKey === 'string' && body.openrouterApiKey.trim()) ||
     settings.openrouterApiKey ||
     process.env.OPENROUTER_API_KEY ||
+    '';
+  const imageRegistryUrl =
+    (typeof body.imageRegistryUrl === 'string' && body.imageRegistryUrl.trim()) ||
+    settings.imageRegistryUrl ||
+    process.env.ORG_IMAGE_REGISTRY_URL ||
+    'ghcr.io';
+  const imageRegistryUsername =
+    (typeof body.imageRegistryUsername === 'string' && body.imageRegistryUsername.trim()) ||
+    settings.imageRegistryUsername ||
+    process.env.ORG_IMAGE_REGISTRY_USERNAME ||
+    '';
+  const imageRegistryPassword =
+    (typeof body.imageRegistryPassword === 'string' && body.imageRegistryPassword.trim()) ||
+    settings.imageRegistryPassword ||
+    process.env.ORG_IMAGE_REGISTRY_PASSWORD ||
     '';
   const openshellUrl =
     (typeof body.openshellUrl === 'string' && body.openshellUrl.trim()) ||
@@ -430,8 +474,13 @@ async function resolveProjectSecrets(req, { projectId } = {}) {
   }
 
   return {
+    organizationId,
+    workspace,
     githubToken,
     openrouterApiKey,
+    imageRegistryUrl,
+    imageRegistryUsername,
+    imageRegistryPassword,
     openshellUrl,
     repositoryUrl:
       (typeof body.repositoryUrl === 'string' && body.repositoryUrl.trim()) ||
@@ -440,12 +489,16 @@ async function resolveProjectSecrets(req, { projectId } = {}) {
   };
 }
 
-// GET /api/agent/sandbox — NVIDIA OpenShell gateway health + active project sandbox status.
+// GET /api/agent/sandbox — NVIDIA OpenShell gateway health + active project sandbox status + per-org policy & secret status.
 router.get(
   '/sandbox',
   asyncHandler(async (req, res) => {
     const context = requestWorkspaceContext(req);
     const settings = getSettings();
+    const organizationId =
+      (typeof req.query.organizationId === 'string' && req.query.organizationId.trim()) ||
+      context.organizationId ||
+      'default';
     const projectId =
       (typeof req.query.projectId === 'string' && req.query.projectId.trim()) ||
       context.projectId ||
@@ -453,30 +506,75 @@ router.get(
     const projectName =
       (typeof req.query.projectName === 'string' && req.query.projectName.trim()) ||
       projectId;
+    const workspace = resolveOpenShellWorkspace({
+      workspace:
+        (typeof req.query.workspace === 'string' && req.query.workspace.trim()) ||
+        settings.openshellWorkspace,
+      organizationId,
+      projectId,
+    });
     const url = settings.openshellUrl || CONFIG.OPENSHELL?.url || 'https://openshell.archagentix.com';
 
     const [gateway, sandbox] = await Promise.all([
-      getGatewayStatus({ url }),
-      getProjectSandboxStatus({ url, projectId, projectName }),
+      getGatewayStatus({ url, workspace }),
+      getProjectSandboxStatus({ url, workspace, organizationId, projectId, projectName }),
     ]);
+
+    const samplePolicy = getSampleNetworkPolicy({ workspace, organizationId, projectId });
+    if (settings.openshellNetworkPolicy && String(settings.openshellNetworkPolicy).trim()) {
+      samplePolicy.yaml = String(settings.openshellNetworkPolicy);
+    }
+
+    const hasGithubSecret = Boolean(
+      sandbox?.secrets?.github?.configured || settings.githubToken || process.env.GITHUB_TOKEN
+    );
+    const hasOpenrouterSecret = Boolean(
+      sandbox?.secrets?.openrouter?.configured || settings.openrouterApiKey || process.env.OPENROUTER_API_KEY
+    );
+    const hasImageRegistrySecret = Boolean(
+      sandbox?.secrets?.imageRegistry?.configured ||
+        (settings.imageRegistryUsername && settings.imageRegistryPassword) ||
+        (process.env.ORG_IMAGE_REGISTRY_USERNAME && process.env.ORG_IMAGE_REGISTRY_PASSWORD)
+    );
 
     res.json({
       gateway,
       sandbox: {
         ...sandbox,
-        hasGithubSecret: Boolean(
-          sandbox?.secrets?.github?.configured || settings.githubToken || process.env.GITHUB_TOKEN
-        ),
-        hasOpenrouterSecret: Boolean(
-          sandbox?.secrets?.openrouter?.configured || settings.openrouterApiKey || process.env.OPENROUTER_API_KEY
-        ),
+        organizationId,
+        workspace,
+        freeModels: FREE_OPENROUTER_MODELS,
+        defaultModel: DEFAULT_OPENROUTER_MODEL,
+        hasGithubSecret,
+        hasOpenrouterSecret,
+        hasImageRegistrySecret,
+        imageRegistryUrl: settings.imageRegistryUrl || 'ghcr.io',
+        imageRegistryUsername: settings.imageRegistryUsername || '',
+      },
+      networkPolicy: samplePolicy,
+      orgConfig: {
+        organizationId,
+        workspace,
+        openshellUrl: url,
+        hasGithubSecret,
+        hasOpenrouterSecret,
+        hasImageRegistrySecret,
+        imageRegistryUrl: settings.imageRegistryUrl || 'ghcr.io',
+        imageRegistryUsername: settings.imageRegistryUsername || '',
+        secretManifestYaml: buildOrgImagePullSecretManifest({
+          organizationId,
+          workspace,
+          registryUrl: settings.imageRegistryUrl || 'ghcr.io',
+          username: settings.imageRegistryUsername || '',
+          password: hasImageRegistrySecret ? '***REDACTED***' : '',
+        }),
       },
     });
   })
 );
 
 // POST /api/agent/sandbox/load — Load/provision NVIDIA OpenShell sandbox for a project
-// with the configured GitHub token and OpenRouter token synced as NVIDIA OpenShell secrets.
+// with per-organization GitHub, OpenRouter, and Container Image Registry secrets synced.
 router.post(
   '/sandbox/load',
   asyncHandler(async (req, res) => {
@@ -493,21 +591,36 @@ router.post(
     const resolved = await resolveProjectSecrets(req, { projectId });
     const sandbox = await ensureProjectSandbox({
       url: resolved.openshellUrl,
+      workspace: resolved.workspace,
+      organizationId: resolved.organizationId,
       projectId,
       projectName,
       repositoryUrl: resolved.repositoryUrl,
       githubToken: resolved.githubToken,
       openrouterApiKey: resolved.openrouterApiKey,
+      imageRegistryUrl: resolved.imageRegistryUrl,
+      imageRegistryUsername: resolved.imageRegistryUsername,
+      imageRegistryPassword: resolved.imageRegistryPassword,
     });
 
     res.json({
       ok: true,
-      sandbox,
+      sandbox: {
+        ...sandbox,
+        hasGithubSecret: Boolean(resolved.githubToken || sandbox?.secrets?.github?.configured),
+        hasOpenrouterSecret: Boolean(
+          resolved.openrouterApiKey || sandbox?.secrets?.openrouter?.configured
+        ),
+        hasImageRegistrySecret: Boolean(
+          (resolved.imageRegistryUsername && resolved.imageRegistryPassword) ||
+            sandbox?.secrets?.imageRegistry?.configured
+        ),
+      },
     });
   })
 );
 
-// POST /api/agent/sandbox/chat — Direct chat turn against the project's NVIDIA OpenShell sandbox.
+// POST /api/agent/sandbox/chat — Direct chat or terminal turn against the project's NVIDIA OpenShell sandbox.
 router.post(
   '/sandbox/chat',
   asyncHandler(async (req, res) => {
@@ -526,10 +639,16 @@ router.post(
     const projectName =
       (typeof body.projectName === 'string' && body.projectName.trim()) ||
       projectId;
+    const model =
+      typeof body.model === 'string' && body.model.trim()
+        ? body.model.trim()
+        : DEFAULT_OPENROUTER_MODEL;
 
     const resolved = await resolveProjectSecrets(req, { projectId });
     const result = await chatWithProjectSandbox({
       url: resolved.openshellUrl,
+      workspace: resolved.workspace,
+      organizationId: resolved.organizationId,
       projectId,
       projectName,
       repositoryUrl: resolved.repositoryUrl,
@@ -537,6 +656,10 @@ router.post(
       history: Array.isArray(body.history) ? body.history : [],
       githubToken: resolved.githubToken,
       openrouterApiKey: resolved.openrouterApiKey,
+      imageRegistryUrl: resolved.imageRegistryUrl,
+      imageRegistryUsername: resolved.imageRegistryUsername,
+      imageRegistryPassword: resolved.imageRegistryPassword,
+      model,
     });
 
     res.json({
@@ -545,6 +668,219 @@ router.post(
       model: result.model,
       sandbox: result.sandbox,
       commandOutput: result.commandOutput,
+    });
+  })
+);
+
+// POST /api/agent/sandbox/exec — Execute a terminal command directly inside the running OpenShell sandbox pod.
+router.post(
+  '/sandbox/exec',
+  asyncHandler(async (req, res) => {
+    const context = requestWorkspaceContext(req);
+    const body = req.body || {};
+    const command = typeof body.command === 'string' ? body.command.trim() : '';
+    if (!command) {
+      return res.status(400).json({ error: 'command is required.' });
+    }
+    const projectId =
+      (typeof body.projectId === 'string' && body.projectId.trim()) ||
+      context.projectId ||
+      'default';
+    const projectName =
+      (typeof body.projectName === 'string' && body.projectName.trim()) ||
+      projectId;
+
+    const resolved = await resolveProjectSecrets(req, { projectId });
+    const sandbox = await ensureProjectSandbox({
+      url: resolved.openshellUrl,
+      workspace: resolved.workspace,
+      organizationId: resolved.organizationId,
+      projectId,
+      projectName,
+      repositoryUrl: resolved.repositoryUrl,
+      githubToken: resolved.githubToken,
+      openrouterApiKey: resolved.openrouterApiKey,
+      imageRegistryUrl: resolved.imageRegistryUrl,
+      imageRegistryUsername: resolved.imageRegistryUsername,
+      imageRegistryPassword: resolved.imageRegistryPassword,
+    });
+
+    const wrappedCmd = `[ -f /tmp/.aifleet-env ] && . /tmp/.aifleet-env; export PATH="/sandbox/.local/bin:/usr/local/bin:$PATH"; cd /workspace 2>/dev/null || true; ${command}`;
+    const execResult = await execInSandbox({
+      url: resolved.openshellUrl,
+      workspace: resolved.workspace,
+      organizationId: resolved.organizationId,
+      projectId,
+      sandboxName: sandbox.name,
+      command: ['sh', '-c', wrappedCmd],
+    });
+
+    res.json({
+      ok: true,
+      sandbox,
+      command,
+      stdout: execResult.stdout,
+      stderr: execResult.stderr,
+      exitCode: execResult.exitCode,
+    });
+  })
+);
+
+// GET /api/agent/sandbox/policy — Get the organization's OpenShell Kubernetes NetworkPolicy.
+router.get('/sandbox/policy', (req, res) => {
+  const context = requestWorkspaceContext(req);
+  const settings = getSettings();
+  const organizationId =
+    (typeof req.query.organizationId === 'string' && req.query.organizationId.trim()) ||
+    context.organizationId ||
+    'default';
+  const projectId =
+    (typeof req.query.projectId === 'string' && req.query.projectId.trim()) ||
+    context.projectId ||
+    'default';
+  const workspace = resolveOpenShellWorkspace({
+    workspace: settings.openshellWorkspace,
+    organizationId,
+    projectId,
+  });
+  const policy = getSampleNetworkPolicy({ workspace, organizationId, projectId });
+  if (settings.openshellNetworkPolicy && String(settings.openshellNetworkPolicy).trim()) {
+    policy.yaml = String(settings.openshellNetworkPolicy);
+  }
+  res.json({ ok: true, networkPolicy: policy });
+});
+
+// POST /api/agent/sandbox/policy — Save per-organization OpenShell NetworkPolicy YAML.
+router.post('/sandbox/policy', (req, res) => {
+  const context = requestWorkspaceContext(req);
+  const body = req.body || {};
+  const yaml = typeof body.yaml === 'string' ? body.yaml.trim() : '';
+  const organizationId =
+    (typeof body.organizationId === 'string' && body.organizationId.trim()) ||
+    context.organizationId ||
+    'default';
+  const projectId =
+    (typeof body.projectId === 'string' && body.projectId.trim()) ||
+    context.projectId ||
+    'default';
+  const workspace = resolveOpenShellWorkspace({
+    workspace: body.workspace || getSettings().openshellWorkspace,
+    organizationId,
+    projectId,
+  });
+  patchSettings({
+    openshellWorkspace: workspace,
+    ...(yaml ? { openshellNetworkPolicy: yaml } : {}),
+  });
+  const policy = getSampleNetworkPolicy({ workspace, organizationId, projectId });
+  if (yaml) policy.yaml = yaml;
+  res.json({ ok: true, networkPolicy: policy });
+});
+
+// POST /api/agent/sandbox/security-check — Run live security & isolation verification on the OpenShell sandbox.
+router.post(
+  '/sandbox/security-check',
+  asyncHandler(async (req, res) => {
+    const context = requestWorkspaceContext(req);
+    const body = req.body || {};
+    const projectId =
+      (typeof body.projectId === 'string' && body.projectId.trim()) ||
+      context.projectId ||
+      'default';
+    const projectName =
+      (typeof body.projectName === 'string' && body.projectName.trim()) ||
+      projectId;
+    const resolved = await resolveProjectSecrets(req, { projectId });
+    const report = await runSandboxSecurityChecks({
+      url: resolved.openshellUrl,
+      workspace: resolved.workspace,
+      organizationId: resolved.organizationId,
+      projectId,
+      projectName,
+    });
+    res.json({ ok: true, report });
+  })
+);
+
+// PUT /api/agent/sandbox/org-config — Save & sync per-organization OpenShell secrets and container image push/pull registry credentials.
+router.put(
+  '/sandbox/org-config',
+  asyncHandler(async (req, res) => {
+    const context = requestWorkspaceContext(req);
+    const body = req.body || {};
+    const current = getSettings();
+    const organizationId =
+      (typeof body.organizationId === 'string' && body.organizationId.trim()) ||
+      context.organizationId ||
+      'default';
+    const projectId =
+      (typeof body.projectId === 'string' && body.projectId.trim()) ||
+      context.projectId ||
+      'default';
+
+    const workspace = resolveOpenShellWorkspace({
+      workspace:
+        typeof body.workspace === 'string' && body.workspace.trim()
+          ? body.workspace.trim()
+          : current.openshellWorkspace,
+      organizationId,
+      projectId,
+    });
+
+    const patch = { openshellWorkspace: workspace };
+    if (typeof body.openshellUrl === 'string' && body.openshellUrl.trim()) {
+      patch.openshellUrl = body.openshellUrl.trim();
+    }
+    if (typeof body.githubToken === 'string' && body.githubToken.trim()) {
+      patch.githubToken = body.githubToken.trim();
+    }
+    if (typeof body.openrouterApiKey === 'string' && body.openrouterApiKey.trim()) {
+      patch.openrouterApiKey = body.openrouterApiKey.trim();
+    }
+    if (typeof body.imageRegistryUrl === 'string' && body.imageRegistryUrl.trim()) {
+      patch.imageRegistryUrl = body.imageRegistryUrl.trim();
+    }
+    if (typeof body.imageRegistryUsername === 'string') {
+      patch.imageRegistryUsername = body.imageRegistryUsername.trim();
+    }
+    if (typeof body.imageRegistryPassword === 'string' && body.imageRegistryPassword.trim()) {
+      patch.imageRegistryPassword = body.imageRegistryPassword.trim();
+    }
+    if (typeof body.openshellNetworkPolicy === 'string' && body.openshellNetworkPolicy.trim()) {
+      patch.openshellNetworkPolicy = body.openshellNetworkPolicy.trim();
+    }
+
+    patchSettings(patch);
+    const updated = getSettings();
+
+    const syncResult = await syncNvidiaSecrets({
+      url: updated.openshellUrl || CONFIG.OPENSHELL?.url,
+      workspace,
+      organizationId,
+      projectId,
+      githubToken: updated.githubToken,
+      openrouterApiKey: updated.openrouterApiKey,
+      imageRegistryUrl: updated.imageRegistryUrl,
+      imageRegistryUsername: updated.imageRegistryUsername,
+      imageRegistryPassword: updated.imageRegistryPassword,
+    });
+
+    res.json({
+      ok: true,
+      orgConfig: {
+        organizationId,
+        workspace,
+        openshellUrl: updated.openshellUrl || CONFIG.OPENSHELL?.url,
+        hasGithubSecret: Boolean(updated.githubToken),
+        hasOpenrouterSecret: Boolean(updated.openrouterApiKey),
+        hasImageRegistrySecret: Boolean(
+          updated.imageRegistryUsername && updated.imageRegistryPassword
+        ),
+        imageRegistryUrl: updated.imageRegistryUrl || 'ghcr.io',
+        imageRegistryUsername: updated.imageRegistryUsername || '',
+        providers: syncResult.providers,
+        secretManifestYaml: syncResult.secrets?.imageRegistry?.secretManifestYaml || '',
+      },
     });
   })
 );
