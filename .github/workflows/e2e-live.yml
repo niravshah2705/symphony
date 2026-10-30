@@ -28,7 +28,7 @@ concurrency:
 jobs:
   live-security:
     name: Chrome live security journey
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     environment: qa-e2e
     env:
@@ -82,11 +82,11 @@ jobs:
           done
           jq -e 'type == "object"' <<<"$E2E_QA_FIXTURES_JSON" >/dev/null
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Authenticate as the dedicated E2E approver
         id: google-auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v4
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_E2E_OPERATOR_SA }}
@@ -130,11 +130,11 @@ jobs:
           chmod 600 "$adc_path"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$adc_path" >>"$GITHUB_ENV"
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install locked dependencies

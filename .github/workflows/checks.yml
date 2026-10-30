@@ -14,15 +14,15 @@ concurrency:
 jobs:
   node-tests:
     name: Node unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: npm ci
-      # Pass explicit *.test.* globs, not bare source dirs: on Node 22 `node
+      # Pass explicit *.test.* globs, not bare source dirs: on Node 24 `node
       # --test <dir>` runs the directory as an entry module (globbing was the
       # Node 20 behavior), which would execute services/gateway/src/index.js and
       # boot the server → hang. Node expands the quoted globs (needs Node 21+).
@@ -44,12 +44,12 @@ jobs:
 
   e2e:
     name: Playwright E2E
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: npm ci
       # The e2e project uses the "chrome" channel (see playwright.config.js).
@@ -61,13 +61,13 @@ jobs:
 
   org-tests:
     name: Org service (pytest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: services/org
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: pip install -e '.[test]'
@@ -76,13 +76,13 @@ jobs:
 
   settings-tests:
     name: Settings service (pytest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: services/settings
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: pip install -e '.[test]'
