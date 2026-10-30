@@ -10,7 +10,7 @@ const FREE_OPENROUTER_MODELS = [
 ];
 
 export async function renderOpenShell(view) {
-  clear(view).append(loading('Provisioning and connecting to OpenShell sandbox environment…'));
+  clear(view).append(loading('Checking OpenShell sandbox status…'));
 
   const context = getWorkspaceContext();
   const orgId = context?.organizationId || 'default-org';
@@ -23,27 +23,12 @@ export async function renderOpenShell(view) {
   let securityResult = null;
   let errorMsg = null;
   let selectedModel = FREE_OPENROUTER_MODELS[0].id;
+  let isActionLoading = false;
 
-  try {
-    // Automatically provision or ensure real sandbox pod is running for the active org & project
-    const loadRes = await api.loadProjectSandbox({
-      projectId,
-      projectName,
-      organizationId: orgId,
-    });
-    if (loadRes?.sandbox) {
-      sandboxStatus = loadRes.sandbox;
-    }
-    if (loadRes?.orgConfig) {
-      orgConfig = loadRes.orgConfig;
-    }
-  } catch (err) {
-    errorMsg = err.message || 'Failed to auto-provision OpenShell sandbox.';
-  }
-
+  // 1. Fetch current sandbox status FIRST without forcing auto-creation if not running
   try {
     const statusRes = await api.getSandboxStatus({ projectId, projectName });
-    if (!sandboxStatus && statusRes?.sandbox) {
+    if (statusRes?.sandbox) {
       sandboxStatus = statusRes.sandbox;
     }
     if (statusRes?.orgConfig) {
@@ -52,8 +37,27 @@ export async function renderOpenShell(view) {
     if (statusRes?.networkPolicy) {
       policyData = statusRes.networkPolicy;
     }
-  } catch (_) {
-    // Best-effort status enrichment
+  } catch (err) {
+    // Non-fatal status fetch
+  }
+
+  // If status check returned no active sandbox, auto-load/start it
+  if (!sandboxStatus) {
+    try {
+      const loadRes = await api.loadProjectSandbox({
+        projectId,
+        projectName,
+        organizationId: orgId,
+      });
+      if (loadRes?.sandbox) {
+        sandboxStatus = loadRes.sandbox;
+      }
+      if (loadRes?.orgConfig) {
+        orgConfig = loadRes.orgConfig;
+      }
+    } catch (err) {
+      errorMsg = err.message || 'Failed to connect or provision OpenShell sandbox.';
+    }
   }
 
   const activeWorkspace = sandboxStatus?.workspace || orgConfig?.workspace || 'tenant-a';
@@ -80,17 +84,90 @@ export async function renderOpenShell(view) {
       ]),
     ]);
 
-    if (errorMsg && !sandboxStatus) {
-      view.append(head, el('div', { class: 'error-banner' }, errorMsg));
-      return;
-    }
-
-    const phase = sandboxStatus?.phase || 'READY';
+    const isRunning = sandboxStatus?.exists && (sandboxStatus?.phase === 'READY' || sandboxStatus?.phase === 'RUNNING');
+    const phase = sandboxStatus?.phase || (sandboxStatus?.exists ? 'STOPPED' : 'NOT_LOADED');
     const sbName = sandboxStatus?.name || `sb-${projectId}`;
+    const currentImage = sandboxStatus?.image || 'ubuntu:24.04';
     const gatewayUrl = sandboxStatus?.url || 'https://openshell.archagentix.com';
     const imageRegBadge = orgConfig?.imageRegistryConfigured
       ? `Configured (${orgConfig.imageRegistryUrl || 'ghcr.io'})`
       : 'Not set (configure in Organization tab)';
+
+    // Image Change & Sandbox Lifecycle Control Buttons
+    const btnChangeImage = el('button', {
+      class: 'ghost',
+      type: 'button',
+      style: 'font-size: 12px;',
+      disabled: isActionLoading ? 'disabled' : null,
+    }, currentImage === 'openeuler/opencode:latest' ? 'Image: openeuler/opencode:latest ✓' : 'Switch Image to openeuler/opencode:latest');
+
+    const btnStartStop = el('button', {
+      class: isRunning ? 'ghost' : 'primary',
+      type: 'button',
+      style: `font-size: 12px; ${isRunning ? 'color: #f85149; border-color: #f85149;' : 'background: #238636; border-color: #238636;'}`,
+      disabled: isActionLoading ? 'disabled' : null,
+    }, isRunning ? 'Stop Sandbox' : 'Start Sandbox');
+
+    btnChangeImage.addEventListener('click', async () => {
+      isActionLoading = true;
+      btnChangeImage.disabled = true;
+      btnChangeImage.textContent = 'Updating Sandbox Image to openeuler/opencode:latest…';
+      try {
+        const res = await api.loadProjectSandbox({
+          projectId,
+          projectName,
+          organizationId: orgId,
+          image: 'openeuler/opencode:latest',
+        });
+        if (res?.sandbox) sandboxStatus = res.sandbox;
+        toast('Sandbox container image updated to openeuler/opencode:latest', 'ok');
+      } catch (err) {
+        toast(err.message || 'Failed to update sandbox image.');
+      } finally {
+        isActionLoading = false;
+        renderView();
+      }
+    });
+
+    btnStartStop.addEventListener('click', async () => {
+      isActionLoading = true;
+      btnStartStop.disabled = true;
+      if (isRunning) {
+        btnStartStop.textContent = 'Stopping Sandbox…';
+        try {
+          const res = await api.saveSandboxOrgConfig({
+            workspace: activeWorkspace,
+            stopSandbox: true,
+            projectId,
+          });
+          if (res?.sandbox) sandboxStatus = res.sandbox;
+          else sandboxStatus = { ...sandboxStatus, phase: 'STOPPED', exists: false };
+          toast(`Sandbox ${sbName} stopped.`, 'ok');
+        } catch (err) {
+          toast(err.message || 'Failed to stop sandbox.');
+        } finally {
+          isActionLoading = false;
+          renderView();
+        }
+      } else {
+        btnStartStop.textContent = 'Starting Sandbox…';
+        try {
+          const res = await api.loadProjectSandbox({
+            projectId,
+            projectName,
+            organizationId: orgId,
+            image: currentImage,
+          });
+          if (res?.sandbox) sandboxStatus = res.sandbox;
+          toast(`Sandbox ${sbName} started successfully.`, 'ok');
+        } catch (err) {
+          toast(err.message || 'Failed to start sandbox.');
+        } finally {
+          isActionLoading = false;
+          renderView();
+        }
+      }
+    });
 
     const modelSelect = el('select', {
       id: 'openshell-model-select',
@@ -105,34 +182,53 @@ export async function renderOpenShell(view) {
     });
 
     // Status Panel
+    const phaseBadgeColor = isRunning ? 'var(--green)' : '#ffa657';
     const statusPanel = el('div', { class: 'panel', style: 'margin-bottom: 20px; padding: 16px;' }, [
       el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;' }, [
         el('h3', { style: 'margin: 0;' }, 'Kubernetes Sandbox Pod Status'),
-        el('div', { style: 'display: flex; align-items: center; gap: 8px;' }, [
-          el('label', { for: 'openshell-model-select', style: 'font-size: 12px; color: var(--muted);' }, 'OpenCode Free Model:'),
+        el('div', { style: 'display: flex; align-items: center; gap: 8px; flex-wrap: wrap;' }, [
+          btnChangeImage,
+          btnStartStop,
+          el('label', { for: 'openshell-model-select', style: 'font-size: 12px; color: var(--muted); margin-left: 8px;' }, 'OpenCode Model:'),
           modelSelect,
         ]),
       ]),
       el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; font-size: 13px;' }, [
         el('div', {}, [el('strong', {}, 'Sandbox Pod: '), el('code', {}, sbName)]),
+        el('div', {}, [el('strong', {}, 'Container Image: '), el('code', {}, currentImage)]),
         el('div', {}, [el('strong', {}, 'K8s Namespace: '), el('code', {}, activeWorkspace)]),
-        el('div', {}, [el('strong', {}, 'Gateway: '), el('code', {}, gatewayUrl)]),
         el('div', {}, [
           el('strong', {}, 'Phase: '),
-          el('span', { style: 'color: var(--green); font-weight: bold;' }, phase),
+          el('span', { style: `color: ${phaseBadgeColor}; font-weight: bold;` }, phase),
         ]),
+        el('div', {}, [el('strong', {}, 'Gateway: '), el('code', {}, gatewayUrl)]),
         el('div', {}, [el('strong', {}, 'Org Image Pull/Push Secret: '), imageRegBadge]),
-        el('div', {}, [el('strong', {}, 'Provider: '), 'OpenCode + OpenRouter (Free Tier)']),
       ]),
     ]);
 
-    // Interactive Terminal
+    // IF SANDBOX IS NOT LOADED / NOT RUNNING, SHOW DISCONNECTED NOTICE PAGE (OTHER PAGE VISIBLE)
+    if (!isRunning) {
+      const notLoadedPage = el('div', { class: 'panel', style: 'padding: 30px; text-align: center; margin-top: 10px; background: var(--panel); border-radius: 8px;' }, [
+        el('h2', { style: 'margin-bottom: 8px; color: var(--text);' }, `OpenShell Sandbox is currently ${phase}`),
+        el('p', { class: 'muted', style: 'max-width: 600px; margin: 0 auto 20px auto; font-size: 14px;' },
+          `The sandbox container (${sbName} using image ${currentImage}) is not currently active in namespace '${activeWorkspace}'. Click Start Sandbox above to launch or resume your interactive environment.`),
+        el('div', { style: 'display: flex; gap: 12px; justify-content: center;' }, [
+          btnStartStop,
+          el('a', { href: '#/organization', class: 'button ghost' }, 'Manage Organization Secrets & Config'),
+        ]),
+      ]);
+
+      clear(view).append(head, statusPanel, notLoadedPage);
+      return;
+    }
+
+    // Interactive Terminal (Rendered when sandbox is LOADED & RUNNING)
     const terminalOutput = el('div', {
       id: 'terminal-output',
       style: 'background: #0d1117; color: #58a6ff; font-family: monospace; padding: 14px; height: 320px; overflow-y: auto; border-radius: 6px; font-size: 13px; margin-bottom: 10px; line-height: 1.5; border: 1px solid #30363d;',
     }, [
       el('div', { style: 'color: #8b949e;' }, `OpenShell Multi-Tenant Kubernetes Sandbox v0.1.5`),
-      el('div', { style: 'color: #8b949e;' }, `Pod: ${sbName} · Namespace: ${activeWorkspace} · Org: ${orgId}`),
+      el('div', { style: 'color: #8b949e;' }, `Pod: ${sbName} · Image: ${currentImage} · Namespace: ${activeWorkspace} · Org: ${orgId}`),
       el('div', { style: 'color: #8b949e; margin-bottom: 8px;' }, `OpenCode CLI ready with free OpenRouter models (${selectedModel}). Type any shell command or 'opencode <prompt>' below.`),
       el('div', { style: 'color: #7ee787;' }, `[OK] Connected to live OpenShell gateway (${gatewayUrl}) — Pod ${sbName} is ${phase} in namespace '${activeWorkspace}'.`),
     ]);
@@ -191,7 +287,7 @@ export async function renderOpenShell(view) {
       { label: 'opencode models', cmd: 'opencode models' },
       { label: 'Pod OS & UID (uname -a && id)', cmd: 'uname -a && id' },
       { label: 'List /workspace', cmd: 'ls -la /workspace' },
-      { label: 'Check Docker Registry Config', cmd: 'ls -la /sandbox/.docker/config.json 2>/dev/null || echo "No registry secret synced yet"' },
+      { label: 'Check Container Image', cmd: 'cat /etc/os-release | grep PRETTY_NAME || uname -a' },
     ];
 
     const quickBar = el('div', { style: 'display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;' },
