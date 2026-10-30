@@ -48,6 +48,10 @@ resource "google_firestore_index" "org_users_by_created_at" {
     delete = "30m"
   }
 
+  lifecycle {
+    ignore_changes = [fields]
+  }
+
   depends_on = [google_firestore_database.default]
 }
 
@@ -91,6 +95,10 @@ resource "google_firestore_index" "attachment_chunks_by_conversation_and_embeddi
   timeouts {
     create = "30m"
     delete = "30m"
+  }
+
+  lifecycle {
+    ignore_changes = [fields]
   }
 
   depends_on = [google_firestore_database.default]
