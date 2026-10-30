@@ -42,7 +42,7 @@ jobs:
   #    rebuild + whether the SPA / Terraform steps need to run at all).
   # --------------------------------------------------------------------------
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       services: ${{ steps.plan.outputs.services }} # JSON array of {id,image,dockerfile}
       spa: ${{ steps.plan.outputs.spa }}
@@ -155,7 +155,7 @@ jobs:
   build:
     needs: changes
     if: needs.changes.outputs.services != '[]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     name: build ${{ matrix.svc.id }}
     strategy:
       fail-fast: true
@@ -196,7 +196,7 @@ jobs:
   deploy-spa:
     needs: changes
     if: needs.changes.outputs.spa == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 
@@ -263,7 +263,7 @@ jobs:
       always() &&
       needs.changes.outputs.run_terraform == 'true' &&
       needs.build.result != 'failure' && needs.build.result != 'cancelled'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 

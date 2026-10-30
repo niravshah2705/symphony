@@ -28,7 +28,7 @@ concurrency:
 jobs:
   live-security:
     name: Chrome live security journey
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     environment: qa-e2e
     env:

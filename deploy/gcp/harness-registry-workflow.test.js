@@ -67,8 +67,8 @@ test('only the publish job can mint cloud credentials', () => {
   assert.doesNotMatch(assemble, /id-token:|secrets\.|google-github-actions\/auth/);
   assert.match(publish, /id-token: write/);
   assert.doesNotMatch(publish, /contents: read/);
-  assert.match(publish, /google-github-actions\/auth@v2/);
-  assert.equal((source.match(/google-github-actions\/auth@v2/g) || []).length, 1);
+  assert.match(publish, /google-github-actions\/auth@v4/);
+  assert.equal((source.match(/google-github-actions\/auth@v4/g) || []).length, 1);
   assert.equal((source.match(/id-token: write/g) || []).length, 1);
 
   const validate = publish.indexOf('Validate publish payload');
@@ -106,7 +106,7 @@ test('matrix provisions only the harness-specific runtimes and publishes registr
   const nodeVersions = [...source.matchAll(/^\s+node-version: "([^"]+)"$/gm)]
     .map((match) => match[1]);
   assert.equal(nodeVersions.length, 3);
-  assert.deepEqual(nodeVersions, ['22.19.0', '22.19.0', '22.19.0']);
+  assert.deepEqual(nodeVersions, ['24', '24', '24']);
 
   assert.match(build, /Set up Python for DCode[\s\S]*if: \$\{\{ matrix\.python \}\}[\s\S]*python-version: "3\.14"/);
   assert.match(build, /Set up Bun for Oh My Pi[\s\S]*if: \$\{\{ matrix\.bun \}\}[\s\S]*bun-version: "1\.4\.4"/);
