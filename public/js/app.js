@@ -116,6 +116,7 @@ const AUTHENTICATION_INDEPENDENT_ROUTES = new Set(['privacy', 'terms']);
 
 const routeMeta = {
   agent: { titleKey: 'agentWorkspace', eyebrowKey: 'workspace' },
+  openshell: { title: 'OpenShell Sandbox', eyebrow: 'Workspace' },
   workflows: { titleKey: 'workflows', eyebrowKey: 'workspace' },
   'agent-jobs': { titleKey: 'agentJobs', eyebrowKey: 'workspace' },
   calls: { titleKey: 'callRecorder', eyebrowKey: 'workspace' },
@@ -258,8 +259,7 @@ function syncSidebar(open, { restoreFocus = false } = {}) {
   backdrop.hidden = !state.sidebarOpen;
   document.body.classList.toggle('nav-open', state.sidebarOpen);
   sidebar.inert = compact && !state.sidebarOpen;
-  if (compact && !state.sidebarOpen) sidebar.setAttribute('aria-hidden', 'true');
-  else sidebar.removeAttribute('aria-hidden');
+  sidebar.removeAttribute('aria-hidden');
 
   const backgroundInert = compact && state.sidebarOpen;
   const view = document.getElementById('view');
