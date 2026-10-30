@@ -67,8 +67,8 @@ test('only the publish job can mint cloud credentials', () => {
   assert.doesNotMatch(assemble, /id-token:|secrets\.|google-github-actions\/auth/);
   assert.match(publish, /id-token: write/);
   assert.doesNotMatch(publish, /contents: read/);
-  assert.match(publish, /google-github-actions\/auth@v4/);
-  assert.equal((source.match(/google-github-actions\/auth@v4/g) || []).length, 1);
+  assert.match(publish, /google-github-actions\/auth@v2/);
+  assert.equal((source.match(/google-github-actions\/auth@v2/g) || []).length, 1);
   assert.equal((source.match(/id-token: write/g) || []).length, 1);
 
   const validate = publish.indexOf('Validate publish payload');
