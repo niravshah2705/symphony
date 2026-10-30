@@ -612,17 +612,193 @@ async function renderOrg(section, organization, rerender) {
   ]);
 
   const projectsSection = el('section', { class: 'org-block' });
+  const openshellSection = el('section', { class: 'org-block' });
   const billingSection = el('section', { class: 'org-block' });
   const peopleSection = isAdmin ? el('section', { class: 'org-block' }) : null;
-  section.replaceChildren(header, projectsSection, billingSection, ...(peopleSection ? [peopleSection] : []));
+  section.replaceChildren(
+    header,
+    projectsSection,
+    openshellSection,
+    billingSection,
+    ...(peopleSection ? [peopleSection] : []),
+  );
 
   // People must load first so the members picker has candidates.
   const orgUsers = isAdmin || hasProjectAdminRole
     ? await api.org.listOrgUsers().then((p) => p.data || []).catch(() => [])
     : [];
   await renderOrgProjects(projectsSection, organization, orgUsers, rerender);
+  await renderOrgOpenShellConfig(openshellSection, organization, isAdmin);
   await renderOrgBilling(billingSection, organization, isAdmin);
   if (peopleSection) await renderPeople(peopleSection, rerender);
+}
+
+async function renderOrgOpenShellConfig(section, organization, isAdmin) {
+  let sbStatus = null;
+  try {
+    sbStatus = await api.getSandboxStatus();
+  } catch (_) {
+    // Non-fatal fallback
+  }
+
+  const orgConfig = sbStatus?.orgConfig || {};
+  const policyObj = sbStatus?.networkPolicy || {};
+  const currentWorkspace = orgConfig.workspace || 'tenant-a';
+
+  const wsSelect = el('select', { 'aria-label': 'OpenShell Workspace Namespace' }, [
+    el('option', { value: 'tenant-a', selected: currentWorkspace === 'tenant-a' ? 'selected' : null }, 'tenant-a (Allowed K8s Namespace)'),
+    el('option', { value: 'tenant-b', selected: currentWorkspace === 'tenant-b' ? 'selected' : null }, 'tenant-b (Allowed K8s Namespace)'),
+  ]);
+
+  const openrouterInput = el('input', {
+    type: 'password',
+    placeholder: orgConfig.openrouterConfigured ? '•••••••• (Configured for this Org)' : 'sk-or-v1-... (Optional for free models)',
+    'aria-label': 'OpenRouter API Key',
+  });
+  const githubInput = el('input', {
+    type: 'password',
+    placeholder: orgConfig.githubConfigured ? '•••••••• (Configured for this Org)' : 'ghp_... (Per-Org GitHub Token)',
+    'aria-label': 'GitHub Token',
+  });
+
+  const regUrlInput = el('input', {
+    type: 'text',
+    value: orgConfig.imageRegistryUrl || 'ghcr.io',
+    placeholder: 'ghcr.io or us-central1-docker.pkg.dev',
+    'aria-label': 'Container Registry URL',
+  });
+  const regUserInput = el('input', {
+    type: 'text',
+    value: orgConfig.imageRegistryUsername || '',
+    placeholder: 'Registry username / _json_key',
+    'aria-label': 'Container Registry Username',
+  });
+  const regPassInput = el('input', {
+    type: 'password',
+    placeholder: orgConfig.imageRegistryConfigured ? '•••••••• (Configured for this Org)' : 'Registry push/pull token or password',
+    'aria-label': 'Container Registry Password / Token',
+  });
+
+  const saveSecretsBtn = el('button', { class: 'primary', type: 'button' }, 'Save & Sync Org Secrets to OpenShell');
+  const openTerminalLink = el('a', { href: '#/openshell', class: 'button ghost' }, 'Open OpenShell Terminal');
+
+  saveSecretsBtn.addEventListener('click', async () => {
+    saveSecretsBtn.disabled = true;
+    try {
+      const payload = {
+        openshellWorkspace: wsSelect.value,
+        imageRegistryUrl: regUrlInput.value.trim() || 'ghcr.io',
+        imageRegistryUsername: regUserInput.value.trim(),
+      };
+      if (openrouterInput.value.trim()) payload.openrouterApiKey = openrouterInput.value.trim();
+      if (githubInput.value.trim()) payload.githubToken = githubInput.value.trim();
+      if (regPassInput.value.trim()) payload.imageRegistryPassword = regPassInput.value.trim();
+
+      await api.saveSandboxOrgConfig(payload);
+      toast(`Synced per-organization secrets & image registry credentials to OpenShell (${wsSelect.value}).`, 'ok');
+      await renderOrgOpenShellConfig(section, organization, isAdmin);
+    } catch (err) {
+      toast(err.message || 'Could not save organization OpenShell config.');
+      saveSecretsBtn.disabled = false;
+    }
+  });
+
+  const defaultPolicyYaml = policyObj.yaml || `apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openshell-tenant-sandbox-policy
+  namespace: ${currentWorkspace}
+spec:
+  podSelector:
+    matchLabels:
+      openshell.ai/sandbox: "true"
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: openshell-supervisor
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 443`;
+
+  const policyTextarea = el('textarea', {
+    rows: '14',
+    style: 'width: 100%; font-family: monospace; font-size: 12px; padding: 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; margin-top: 8px;',
+  }, defaultPolicyYaml);
+
+  const savePolicyBtn = el('button', { class: 'ghost', type: 'button' }, 'Save Sample NetworkPolicy');
+  savePolicyBtn.addEventListener('click', async () => {
+    savePolicyBtn.disabled = true;
+    try {
+      await api.saveSandboxNetworkPolicy({
+        workspace: wsSelect.value,
+        yaml: policyTextarea.value,
+      });
+      toast(`Saved NetworkPolicy for namespace ${wsSelect.value}.`, 'ok');
+    } catch (err) {
+      toast(err.message || 'Could not save NetworkPolicy.');
+    } finally {
+      savePolicyBtn.disabled = false;
+    }
+  });
+
+  const secretBadges = el('div', { style: 'display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;' }, [
+    el('span', { class: `badge ${orgConfig.openrouterConfigured ? 'active' : ''}` },
+      `OpenRouter Key: ${orgConfig.openrouterConfigured ? 'Configured' : 'Free Tier Default'}`),
+    el('span', { class: `badge ${orgConfig.githubConfigured ? 'active' : ''}` },
+      `GitHub Secret: ${orgConfig.githubConfigured ? 'Configured' : 'Not Set'}`),
+    el('span', { class: `badge ${orgConfig.imageRegistryConfigured ? 'active' : ''}` },
+      `Image Push/Pull Secret: ${orgConfig.imageRegistryConfigured ? `Active (${orgConfig.imageRegistryUrl || 'ghcr.io'})` : 'Not Set'}`),
+  ]);
+
+  const children = [
+    secretBadges,
+    el('div', { class: 'org-form org-form-wide', style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 12px;' }, [
+      wsSelect,
+      openrouterInput,
+      githubInput,
+      regUrlInput,
+      regUserInput,
+      regPassInput,
+    ]),
+    el('div', { class: 'org-row-actions', style: 'margin-bottom: 16px;' }, [
+      saveSecretsBtn,
+      openTerminalLink,
+    ]),
+    el('h3', { style: 'margin-bottom: 4px;' }, `Sample Kubernetes NetworkPolicy (${policyObj.name || 'openshell-tenant-sandbox-policy'})`),
+    el('p', { class: 'muted', style: 'font-size: 12px; margin: 0;' },
+      'Enforces tenant namespace isolation, allows ingress only from os-supervisor, permits DNS (53) + HTTPS (443) to OpenRouter/GitHub/Container Registry, and blocks RFC1918 + cloud metadata (169.254.169.254/32).'),
+    policyTextarea,
+    el('div', { class: 'org-row-actions', style: 'margin-top: 8px;' }, [savePolicyBtn]),
+  ];
+
+  section.replaceChildren();
+  section.append(...Array.from(block(
+    'OpenShell Sandbox, Per-Organization Image Registry Secrets & NetworkPolicy',
+    'Manage per-organization OpenShell Kubernetes namespace, container image push/pull credentials (dockerconfigjson), OpenRouter/GitHub secrets, and tenant NetworkPolicy.',
+    children,
+  ).childNodes));
 }
 
 // Self-declared persona capture (asked once at onboarding). Descriptive only —

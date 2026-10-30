@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 3 nodes
 
-- **Size**: 5 nodes
-- **Cohesion**: 0.1453
+- **Size**: 3 nodes
+- **Cohesion**: 0.1449
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,8 +17,6 @@ Community of 5 nodes
 | workflowText | Function | ./deploy/gcp/harness-registry-workflow.test.js | 10-12 |
 | jobBlock | Function | ./deploy/gcp/harness-registry-workflow.test.js | 14-21 |
 | test:harness registry workflow has isolated resolve, eight-leg build, assemble, and publish jobs@L23 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 23-56 |
-| test:only the publish job can mint cloud credentials@L58 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 58-99 |
-| test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 101-134 |
 
 ## Execution Flows
 
@@ -28,34 +26,26 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `match` (31 edge(s))
-- `indexOf` (11 edge(s))
-- `ok` (8 edge(s))
-- `doesNotMatch` (6 edge(s))
-- `equal` (5 edge(s))
-- `slice` (3 edge(s))
-- `deepEqual` (3 edge(s))
-- `map` (2 edge(s))
-- `matchAll` (2 edge(s))
+- `match` (13 edge(s))
+- `./deploy/gcp/harness-registry-workflow.test.js::test:only the publish job can mint cloud credentials@L58` (5 edge(s))
+- `./deploy/gcp/harness-registry-workflow.test.js::test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101` (3 edge(s))
+- `slice` (2 edge(s))
+- `indexOf` (1 edge(s))
 - `notEqual` (1 edge(s))
 - `search` (1 edge(s))
-- `split` (1 edge(s))
-- `trim` (1 edge(s))
-- `replaceAll` (1 edge(s))
+- `map` (1 edge(s))
+- `matchAll` (1 edge(s))
+- `deepEqual` (1 edge(s))
+- `equal` (1 edge(s))
 - `readFileSync` (1 edge(s))
 
 ### Incoming
 
-- `match` (31 edge(s))
-- `indexOf` (10 edge(s))
-- `ok` (8 edge(s))
-- `doesNotMatch` (6 edge(s))
-- `./deploy/gcp/harness-registry-workflow.test.js` (5 edge(s))
-- `equal` (5 edge(s))
-- `deepEqual` (3 edge(s))
-- `map` (2 edge(s))
-- `matchAll` (2 edge(s))
-- `slice` (1 edge(s))
-- `split` (1 edge(s))
-- `trim` (1 edge(s))
-- `replaceAll` (1 edge(s))
+- `match` (13 edge(s))
+- `./deploy/gcp/harness-registry-workflow.test.js::test:only the publish job can mint cloud credentials@L58` (5 edge(s))
+- `./deploy/gcp/harness-registry-workflow.test.js` (3 edge(s))
+- `./deploy/gcp/harness-registry-workflow.test.js::test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101` (3 edge(s))
+- `map` (1 edge(s))
+- `matchAll` (1 edge(s))
+- `deepEqual` (1 edge(s))
+- `equal` (1 edge(s))

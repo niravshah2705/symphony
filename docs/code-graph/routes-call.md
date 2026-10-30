@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 2 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.1489
+- **Size**: 2 nodes
+- **Cohesion**: 0.0455
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,8 +15,7 @@ Community of 3 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | callRoute | Function | ./services/planner/src/routes/agent.test.js | 47-64 |
-| next | Function | ./services/planner/src/routes/agent.test.js | 492-492 |
-| test:enqueue is role-gated, validates projectId, and queues exactly one project@L400 | Test | ./services/planner/src/routes/agent.test.js | 400-435 |
+| next | Function | ./services/planner/src/routes/agent.test.js | 502-502 |
 
 ## Execution Flows
 
@@ -26,24 +25,17 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (8 edge(s))
-- `resolve` (3 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:enqueue is role-gated, validates projectId, and queues exactly one project@L400` (4 edge(s))
+- `resolve` (2 edge(s))
 - `reject` (2 edge(s))
-- `require` (2 edge(s))
 - `find` (1 edge(s))
 - `ok` (1 edge(s))
 - `toUpperCase` (1 edge(s))
 - `map` (1 edge(s))
 - `catch` (1 edge(s))
 - `handle` (1 edge(s))
-- `push` (1 edge(s))
-- `after` (1 edge(s))
 
 ### Incoming
 
-- `equal` (8 edge(s))
-- `./services/planner/src/routes/agent.test.js` (4 edge(s))
-- `require` (2 edge(s))
-- `resolve` (1 edge(s))
-- `push` (1 edge(s))
-- `after` (1 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:enqueue is role-gated, validates projectId, and queues exactly one project@L400` (4 edge(s))
+- `./services/planner/src/routes/agent.test.js` (3 edge(s))

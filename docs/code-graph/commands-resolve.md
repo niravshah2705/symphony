@@ -4,20 +4,45 @@
 
 ## Overview
 
-Community of 136 nodes
+Community of 191 nodes
 
-- **Size**: 136 nodes
-- **Cohesion**: 0.2205
+- **Size**: 191 nodes
+- **Cohesion**: 0.0688
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:deploy entry points share the blank/valid/invalid GA4 id contract@L35 | Test | ./deploy/gcp/analytics-config.test.js | 35-45 |
 | test:blank or unset bootstrap input removes a stale repo variable and gh failures remain fatal@L59 | Test | ./deploy/gcp/analytics-config.test.js | 59-77 |
+| test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-92 |
+| test:only the publish job can mint cloud credentials@L58 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 58-99 |
+| test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 101-134 |
+| test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L115 | Test | ./deploy/gcp/pipeline-infra.test.js | 115-148 |
+| test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L150 | Test | ./deploy/gcp/pipeline-infra.test.js | 150-164 |
+| test:deploy workflow does not query disabled optional Cloud Run services@L166 | Test | ./deploy/gcp/pipeline-infra.test.js | 166-195 |
+| test:pipeline topology enforces dedicated topics and brokered agent egress@L300 | Test | ./deploy/gcp/pipeline-infra.test.js | 300-350 |
+| test:stream-token broker owns the signing secret behind private IAM@L352 | Test | ./deploy/gcp/pipeline-infra.test.js | 352-448 |
+| test:OpenSWE upstream is trusted proxy-only deployment configuration@L457 | Test | ./deploy/gcp/pipeline-infra.test.js | 457-473 |
+| test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-26 |
 | test:ADLC manifest is served as a static resource@L28 | Test | ./e2e/adlc.spec.js | 28-35 |
+| test:existing Agent workspace route still renders directly@L37 | Test | ./e2e/adlc.spec.js | 37-45 |
+| test:Agent jobs restores complete grouped planner and coding history@L99 | Test | ./e2e/agent-jobs.spec.js | 99-166 |
+| test:direct Agent jobs navigation is hidden and gated for a public visitor@L237 | Test | ./e2e/anonymous-agent.spec.js | 237-246 |
+| test:parallel application-auth failures expire an authenticated session once and stop private loading@L342 | Test | ./e2e/anonymous-agent.spec.js | 342-367 |
 | test:settings renders task-model controls without a view error@L39 | Test | ./e2e/page-loading.spec.js | 39-59 |
+| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
+| test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
+| test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148 | Test | ./e2e/page-loading.spec.js | 148-182 |
+| test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221 | Test | ./e2e/page-loading.spec.js | 221-475 |
+| test:authenticated users without an organization route to onboarding before workspace requests@L477 | Test | ./e2e/page-loading.spec.js | 477-551 |
+| test:Settings Policy uses the active native project and selected-context roles@L553 | Test | ./e2e/page-loading.spec.js | 553-615 |
+| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660 | Test | ./e2e/page-loading.spec.js | 660-709 |
+| test:one stable footer survives view replacement across every application and legal route@L196 | Test | ./e2e/persistent-footer.spec.js | 196-243 |
+| test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
 | test:SEO and AI discovery resources bypass the SPA fallback@L212 | Test | ./e2e/route-loading.spec.js | 212-228 |
+| test:an authenticated user without an organization is routed to organization onboarding@L389 | Test | ./e2e/workflow-designer.spec.js | 389-401 |
 | topUsage | Function | ./packages/cli/bin/adlc.js | 23-45 |
 | main | Function | ./packages/cli/bin/adlc.js | 47-72 |
 | parseArgs | Function | ./packages/cli/src/args.js | 13-46 |
@@ -39,33 +64,8 @@ Community of 136 nodes
 | test:resolveBaseUrl falls back to $ADLC_API_URL@L38 | Test | ./packages/cli/src/client.test.js | 38-42 |
 | test:resolveToken reads ADLC_TOKEN from the environment only@L44 | Test | ./packages/cli/src/client.test.js | 44-51 |
 | test:request sends a bearer Authorization header when a token is set@L53 | Test | ./packages/cli/src/client.test.js | 53-64 |
-| test:request omits Authorization when no token is configured@L66 | Test | ./packages/cli/src/client.test.js | 66-75 |
-| test:request serializes a JSON body and sets Content-Type@L77 | Test | ./packages/cli/src/client.test.js | 77-87 |
-| test:request accepts caller context headers without replacing auth or version headers@L89 | Test | ./packages/cli/src/client.test.js | 89-108 |
-| test:non-2xx throws with the server error message and status@L110 | Test | ./packages/cli/src/client.test.js | 110-122 |
-| test:a network failure surfaces a reachability hint@L124 | Test | ./packages/cli/src/client.test.js | 124-130 |
-| test:every request carries the adlc version (User-Agent + X-Adlc-Version)@L132 | Test | ./packages/cli/src/client.test.js | 132-142 |
-| test:a 401 attaches a re-login hint@L144 | Test | ./packages/cli/src/client.test.js | 144-155 |
-| test:resolveToken prefers $ADLC_TOKEN, else the stored credential@L157 | Test | ./packages/cli/src/client.test.js | 157-176 |
-| jwtExpiry | Function | ./packages/cli/src/commands/admin.js | 34-43 |
-| normalizeBundle | Function | ./packages/cli/src/commands/admin.js | 45-66 |
-| readBundle | Function | ./packages/cli/src/commands/admin.js | 68-82 |
-| operatorUrl | Function | ./packages/cli/src/commands/admin.js | 84-96 |
-| requestOperator | Function | ./packages/cli/src/commands/admin.js | 108-148 |
-| pendingDeploymentApproval | Function | ./packages/cli/src/commands/admin.js | 150-193 |
-| run | Function | ./packages/cli/src/commands/admin.js | 195-251 |
-| test:operator URL permits loopback HTTP but rejects remote plaintext and embedded credentials@L8 | Test | ./packages/cli/src/commands/admin.test.js | 8-21 |
-| test:normalizeBundle accepts Codex CLI auth.json shape without retaining unrelated fields@L23 | Test | ./packages/cli/src/commands/admin.test.js | 23-43 |
-| test:operator request separates Cloud Run IAM and forwarded user identity@L45 | Test | ./packages/cli/src/commands/admin.test.js | 45-66 |
-| test:operator request supports a run-bound deployment approval path@L68 | Test | ./packages/cli/src/commands/admin.test.js | 68-86 |
-| test:deployment approval lineage is derived from the authenticated, scoped pipeline status@L88 | Test | ./packages/cli/src/commands/admin.test.js | 88-135 |
-| test:deployment approval refuses a mismatched pending scope@L137 | Test | ./packages/cli/src/commands/admin.test.js | 137-166 |
-| promptSecret | Function | ./packages/cli/src/commands/auth.js | 32-47 |
-| write | Function | ./packages/cli/src/commands/auth.js | 35-37 |
-| resolveInputToken | Function | ./packages/cli/src/commands/auth.js | 50-65 |
-| login | Function | ./packages/cli/src/commands/auth.js | 67-102 |
 
-*... and 86 more members.*
+*... and 141 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 136 nodes
 
 ### Outgoing
 
-- `equal` (101 edge(s))
-- `ok` (50 edge(s))
-- `String` (26 edge(s))
-- `request` (24 edge(s))
-- `deepEqual` (22 edge(s))
-- `trim` (21 edge(s))
-- `expect` (17 edge(s))
-- `join` (17 edge(s))
-- `match` (11 edge(s))
-- `test` (11 edge(s))
-- `includes` (10 edge(s))
-- `indexOf` (9 edge(s))
-- `parse` (9 edge(s))
-- `slice` (8 edge(s))
-- `Number` (8 edge(s))
+- `equal` (261 edge(s))
+- `expect` (173 edge(s))
+- `ok` (140 edge(s))
+- `match` (125 edge(s))
+- `locator` (82 edge(s))
+- `route` (58 edge(s))
+- `deepEqual` (47 edge(s))
+- `includes` (42 edge(s))
+- `indexOf` (37 edge(s))
+- `request` (33 edge(s))
+- `filter` (29 edge(s))
+- `toBeVisible` (29 edge(s))
+- `./e2e/page-loading.spec.js::json` (29 edge(s))
+- `String` (28 edge(s))
+- `doesNotMatch` (27 edge(s))
 
 ### Incoming
 
-- `equal` (101 edge(s))
-- `ok` (50 edge(s))
-- `deepEqual` (22 edge(s))
-- `expect` (17 edge(s))
-- `./packages/cli/src/output.js` (16 edge(s))
-- `./packages/cli/src/credentials.js` (14 edge(s))
-- `./packages/cli/src/client.test.js` (13 edge(s))
-- `./packages/cli/src/commands/admin.js` (13 edge(s))
-- `match` (11 edge(s))
-- `./packages/cli/src/stream.js` (9 edge(s))
-- `indexOf` (8 edge(s))
-- `./packages/cli/src/args.test.js` (8 edge(s))
-- `./packages/cli/src/client.js` (8 edge(s))
-- `./packages/cli/src/commands/auth.js` (8 edge(s))
-- `./packages/cli/src/stream.test.js` (8 edge(s))
+- `equal` (261 edge(s))
+- `expect` (173 edge(s))
+- `ok` (140 edge(s))
+- `match` (125 edge(s))
+- `locator` (82 edge(s))
+- `route` (58 edge(s))
+- `deepEqual` (47 edge(s))
+- `includes` (39 edge(s))
+- `indexOf` (36 edge(s))
+- `toBeVisible` (29 edge(s))
+- `./e2e/page-loading.spec.js::json` (29 edge(s))
+- `filter` (28 edge(s))
+- `doesNotMatch` (27 edge(s))
+- `./services/planner/src/routes/agent.test.js::call` (26 edge(s))
+- `./services/planner/src/routes/agent.test.js::handlerFor` (26 edge(s))

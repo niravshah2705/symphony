@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| javascriptFiles | Function | ./services/gateway/src/dependency-boundary.test.js | 13-19 |
-| staticRequires | Function | ./services/gateway/src/dependency-boundary.test.js | 21-23 |
-| test:gateway source imports shared-core and no heavy AI workspace or agent package@L25 | Test | ./services/gateway/src/dependency-boundary.test.js | 25-44 |
+| javascriptFiles | Function | ./services/billing/src/dependency-boundary.test.js | 13-19 |
+| staticRequires | Function | ./services/billing/src/dependency-boundary.test.js | 21-23 |
+| test:billing service source imports shared-core and no heavy AI workspace@L25 | Test | ./services/billing/src/dependency-boundary.test.js | 25-44 |
 
 ## Execution Flows
 
@@ -45,7 +45,7 @@ No execution flows pass through this community.
 ### Incoming
 
 - `join` (5 edge(s))
-- `./services/gateway/src/dependency-boundary.test.js` (3 edge(s))
+- `./services/billing/src/dependency-boundary.test.js` (3 edge(s))
 - `split` (2 edge(s))
 - `readFileSync` (1 edge(s))
 - `startsWith` (1 edge(s))

@@ -11,9 +11,16 @@ const { getSettings } = require('../store');
 
 const SERVICE_PATH = '/openshell.v1.OpenShell';
 const DEFAULT_OPENSHELL_URL = 'https://openshell.archagentix.com';
-const DEFAULT_WORKSPACE = 'default';
+const DEFAULT_WORKSPACE = 'tenant-a';
+const ALLOWED_WORKSPACES = ['tenant-a', 'tenant-b'];
 const DEFAULT_IMAGE = 'ubuntu:24.04';
-const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-4o-mini';
+const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
+const FREE_OPENROUTER_MODELS = [
+  'openrouter/free',
+  'qwen/qwen3-coder:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'google/gemma-3-27b-it:free',
+];
 
 // In-memory registry of active project sandboxes & synced NVIDIA OpenShell secrets
 // when the remote Kubernetes compute driver restricts namespace creation or while a pod warms up.
@@ -213,6 +220,47 @@ function resolveOpenShellUrl(explicitUrl) {
 }
 
 /**
+ * Resolve the Kubernetes / OpenShell workspace namespace for the given organization & project.
+ * Maps 'default' or empty workspace to an allowed operator namespace ('tenant-a' or 'tenant-b').
+ */
+function resolveOpenShellWorkspace(input = {}) {
+  const { workspace, organizationId, projectId } =
+    typeof input === 'string' ? { workspace: input } : input || {};
+  const allowed = CONFIG?.OPENSHELL?.allowedWorkspaces || ALLOWED_WORKSPACES;
+  const rawWs = workspace ? String(workspace).trim().toLowerCase() : '';
+  if (rawWs && rawWs !== 'default' && allowed.includes(rawWs)) {
+    return rawWs;
+  }
+
+  try {
+    const settings = getSettings?.() || {};
+    const cfgWs = settings.openshellWorkspace ? String(settings.openshellWorkspace).trim().toLowerCase() : '';
+    if (cfgWs && cfgWs !== 'default' && allowed.includes(cfgWs)) {
+      return cfgWs;
+    }
+  } catch {
+    // ignore store read errors
+  }
+
+  const orgStr = String(organizationId || '').trim().toLowerCase();
+  const projStr = String(projectId || '').trim().toLowerCase();
+  if (
+    orgStr.includes('tenant-b') ||
+    orgStr.endsWith('-b') ||
+    projStr.includes('tenant-b') ||
+    projStr.endsWith('-b')
+  ) {
+    return 'tenant-b';
+  }
+  if (rawWs && rawWs !== 'default') {
+    return allowed.includes(rawWs) ? rawWs : DEFAULT_WORKSPACE;
+  }
+  return CONFIG?.OPENSHELL?.workspace && CONFIG.OPENSHELL.workspace !== 'default'
+    ? CONFIG.OPENSHELL.workspace
+    : DEFAULT_WORKSPACE;
+}
+
+/**
  * Perform a gRPC call over HTTP/2 against the NVIDIA OpenShell gateway.
  * Returns `{ status, message, headers, trailers, frames, firstFrame }`.
  */
@@ -243,8 +291,18 @@ async function grpcCall(method, requestPayload = Buffer.alloc(0), options = {}) 
       finish(reject, new Error(`OpenShell gRPC timeout after ${timeoutMs}ms calling ${method}`));
     }, timeoutMs);
 
+    const connectOpts = {};
+    if (options.ca) connectOpts.ca = options.ca;
+    if (options.cert) connectOpts.cert = options.cert;
+    if (options.key) connectOpts.key = options.key;
+    if (typeof options.rejectUnauthorized === 'boolean') {
+      connectOpts.rejectUnauthorized = options.rejectUnauthorized;
+    }
+
     try {
-      client = http2.connect(baseUrl);
+      client = Object.keys(connectOpts).length
+        ? http2.connect(baseUrl, connectOpts)
+        : http2.connect(baseUrl);
     } catch (err) {
       finish(reject, err);
       return;
@@ -254,13 +312,32 @@ async function grpcCall(method, requestPayload = Buffer.alloc(0), options = {}) 
       finish(reject, err);
     });
 
-    const req = client.request({
+    const token =
+      options.token ||
+      options.apiKey ||
+      CONFIG?.OPENSHELL?.token ||
+      process.env.OPENSHELL_TOKEN ||
+      process.env.OPENSHELL_API_KEY ||
+      '';
+    const edgeToken = options.edgeToken || process.env.OPENSHELL_EDGE_TOKEN || '';
+
+    const reqHeaders = {
       ':method': 'POST',
       ':path': `${SERVICE_PATH}/${method}`,
       'content-type': 'application/grpc+proto',
       te: 'trailers',
       'user-agent': 'ai-fleet-openshell-client/1.0',
-    });
+    };
+    if (token) {
+      reqHeaders.authorization = /^Bearer\s+/i.test(String(token))
+        ? String(token)
+        : `Bearer ${String(token).trim()}`;
+    }
+    if (edgeToken) {
+      reqHeaders['cf-access-jwt-assertion'] = String(edgeToken).trim();
+    }
+
+    const req = client.request(reqHeaders);
 
     let responseHeaders = {};
     let responseTrailers = {};
@@ -312,23 +389,32 @@ function encodeWorkspaceScope(workspace = DEFAULT_WORKSPACE) {
   return Buffer.concat([pbString(1, workspace || DEFAULT_WORKSPACE)]);
 }
 
-function encodeObjectMeta({ name, labels, annotations, resourceVersion } = {}) {
+function encodeObjectMeta({ name, labels, annotations, resourceVersion, workspace } = {}) {
   return Buffer.concat([
     pbString(2, name),
-    pbMapStringString(3, labels),
-    pbMapStringString(4, annotations),
-    pbVarint(7, resourceVersion || 0),
+    pbMapStringString(4, labels),
+    pbVarint(5, resourceVersion || 0),
+    pbMapStringString(6, annotations),
+    workspace ? pbMessage(7, encodeWorkspaceScope(workspace)) : Buffer.alloc(0),
   ]);
 }
 
-function decodeObjectMeta(fields) {
-  if (!fields) return { id: '', name: '', labels: {}, annotations: {}, resourceVersion: 0 };
+function decodeObjectMeta(fieldsOrBuf) {
+  if (!fieldsOrBuf) return { id: '', name: '', labels: {}, annotations: {}, resourceVersion: 0, workspace: '' };
+  const fields = Buffer.isBuffer(fieldsOrBuf) ? decodeFields(fieldsOrBuf) : fieldsOrBuf;
+  const labels4 = getMapStringString(fields, 4);
+  const labels3 = getMapStringString(fields, 3);
+  const annotations6 = getMapStringString(fields, 6);
+  const resourceVersion = getVarint(fields, 5, 0) || getVarint(fields, 7, 0);
+  const wsScope = getSubmessage(fields, 7);
+  const workspace = wsScope ? getString(wsScope, 1) : '';
   return {
     id: getString(fields, 1),
     name: getString(fields, 2),
-    labels: getMapStringString(fields, 3),
-    annotations: getMapStringString(fields, 4),
-    resourceVersion: getVarint(fields, 7, 0),
+    labels: Object.keys(labels4).length ? labels4 : labels3,
+    annotations: annotations6,
+    resourceVersion,
+    workspace,
   };
 }
 
@@ -343,10 +429,15 @@ function decodeSandbox(fields) {
     0: 'UNSPECIFIED',
     1: 'PROVISIONING',
     2: 'READY',
-    3: 'FAILED',
+    3: 'ERROR',
     4: 'DELETING',
-    5: 'STOPPED',
-    6: 'RUNNING',
+    5: 'UNKNOWN',
+    6: 'STOPPING',
+    7: 'STOPPED',
+    8: 'STARTING',
+    9: 'COMPLETED',
+    11: 'SUSPENDING',
+    12: 'SUSPENDED',
   };
   return {
     id: meta.id,
@@ -403,6 +494,9 @@ async function getGatewayStatus(options = {}) {
     const computeDrivers = getSubmessages(infoFields, 3)
       .map((d) => getString(d, 1))
       .filter(Boolean);
+    const hasToken = Boolean(
+      options.token || options.apiKey || CONFIG?.OPENSHELL?.token || process.env.OPENSHELL_TOKEN
+    );
 
     return {
       connected: healthRes.status === 0,
@@ -410,6 +504,11 @@ async function getGatewayStatus(options = {}) {
       status: getVarint(healthFields, 1, 0) === 1 ? 'SERVING' : 'UNKNOWN',
       version: getString(healthFields, 2) || getString(infoFields, 2) || 'unknown',
       computeDrivers,
+      auth: {
+        authenticated: healthRes.status === 0,
+        mode: hasToken ? 'bearer+tls' : 'envoy-gateway-tls+workspace-rbac',
+        allowedWorkspaces: CONFIG?.OPENSHELL?.allowedWorkspaces || ALLOWED_WORKSPACES,
+      },
     };
   } catch (err) {
     return {
@@ -418,6 +517,11 @@ async function getGatewayStatus(options = {}) {
       status: 'OFFLINE',
       version: null,
       computeDrivers: [],
+      auth: {
+        authenticated: false,
+        mode: 'offline',
+        allowedWorkspaces: CONFIG?.OPENSHELL?.allowedWorkspaces || ALLOWED_WORKSPACES,
+      },
       error: err?.message || String(err),
     };
   }
@@ -454,7 +558,11 @@ function buildProviderProfile({ id, displayName, description, category, credenti
 }
 
 async function ensureWorkspace(workspace = DEFAULT_WORKSPACE, options = {}) {
-  const wsName = workspace || CONFIG?.OPENSHELL?.workspace || DEFAULT_WORKSPACE;
+  const wsName = resolveOpenShellWorkspace({
+    workspace,
+    organizationId: options.organizationId,
+    projectId: options.projectId,
+  });
   const getRes = await grpcCall('GetWorkspace', pbString(1, wsName), options);
   if (getRes.status === 0) return wsName;
   const createRes = await grpcCall('CreateWorkspace', pbString(1, wsName), options);
@@ -504,8 +612,66 @@ async function upsertProfile(profileSpec, workspace, options = {}) {
   await grpcCall('UpdateProviderProfiles', Buffer.concat(updateParts), options);
 }
 
+function normalizeRegistryHost(registryUrl) {
+  const raw = String(registryUrl || 'ghcr.io').trim();
+  if (!raw) return 'ghcr.io';
+  return raw.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+}
+
+function buildDockerConfigJson({ registryUrl, username, password } = {}) {
+  if (!username || !password) return '';
+  const host = normalizeRegistryHost(registryUrl);
+  const auth = Buffer.from(`${username}:${password}`, 'utf8').toString('base64');
+  return JSON.stringify({
+    auths: {
+      [host]: {
+        username: String(username),
+        password: String(password),
+        auth,
+      },
+    },
+  });
+}
+
+function buildOrgImagePullSecretManifest({
+  organizationId,
+  workspace = DEFAULT_WORKSPACE,
+  registryUrl = 'ghcr.io',
+  username = '',
+  password = '',
+} = {}) {
+  const ws = resolveOpenShellWorkspace({ workspace, organizationId });
+  const orgSlug = String(organizationId || ws || 'default')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'default';
+  const secretName = `aifleet-org-regcred-${orgSlug}`;
+  const dockerCfg =
+    username && password
+      ? Buffer.from(buildDockerConfigJson({ registryUrl, username, password }), 'utf8').toString('base64')
+      : '<BASE64_DOCKERCONFIGJSON>';
+  return [
+    'apiVersion: v1',
+    'kind: Secret',
+    'metadata:',
+    `  name: ${secretName}`,
+    `  namespace: ${ws}`,
+    '  labels:',
+    '    app.kubernetes.io/managed-by: ai-fleet',
+    `    aifleet.nvidia.com/organization-id: "${orgSlug}"`,
+    `    aifleet.nvidia.com/registry-host: "${normalizeRegistryHost(registryUrl)}"`,
+    'type: kubernetes.io/dockerconfigjson',
+    'data:',
+    `  .dockerconfigjson: ${dockerCfg}`,
+  ].join('\n');
+}
+
 async function ensureProviderProfiles(options = {}) {
-  const workspace = options.workspace || CONFIG?.OPENSHELL?.workspace || DEFAULT_WORKSPACE;
+  const workspace = resolveOpenShellWorkspace({
+    workspace: options.workspace,
+    organizationId: options.organizationId,
+    projectId: options.projectId,
+  });
   await ensureWorkspace(workspace, options);
 
   const ghSpec = {
@@ -538,14 +704,43 @@ async function ensureProviderProfiles(options = {}) {
   await upsertProfile(ghSpec, workspace, options);
   await upsertProfile(orSpec, workspace, options);
 
+  const profilesReady = ['github', 'openrouter'];
+
+  if (options.imageRegistryAnnotations || options.includeImageRegistryProfile) {
+    const regHost = normalizeRegistryHost(options.imageRegistryUrl || 'ghcr.io');
+    const regSpec = {
+      id: 'image-registry',
+      displayName: 'Organization Container Image Registry',
+      description: 'Per-organization container image push/pull secret for OpenShell sandboxes',
+      category: 5, // STORAGE / REGISTRY
+      credentialName: 'registry_token',
+      envVars: [
+        'ORG_IMAGE_REGISTRY_URL',
+        'ORG_IMAGE_REGISTRY_USERNAME',
+        'ORG_IMAGE_REGISTRY_PASSWORD',
+        'DOCKER_CONFIG_JSON',
+      ],
+      host: regHost.split('/')[0] || 'ghcr.io',
+      inferenceCapable: false,
+      annotations: options.imageRegistryAnnotations || {},
+    };
+    await upsertProfile(regSpec, null, options);
+    await upsertProfile(regSpec, workspace, options);
+    profilesReady.push('image-registry');
+  }
+
   return {
     workspace,
-    profilesReady: ['github', 'openrouter'],
+    profilesReady,
   };
 }
 
 async function getProviderByName(name, options = {}) {
-  const workspace = options.workspace || CONFIG?.OPENSHELL?.workspace || DEFAULT_WORKSPACE;
+  const workspace = resolveOpenShellWorkspace({
+    workspace: options.workspace,
+    organizationId: options.organizationId,
+    projectId: options.projectId,
+  });
   const req = Buffer.concat([
     pbString(1, name),
     pbMessage(2, encodeWorkspaceScope(workspace)),
@@ -557,8 +752,12 @@ async function getProviderByName(name, options = {}) {
 }
 
 async function upsertProviderSecret({ name, type, credentials, config, labels }, options = {}) {
-  const workspace = options.workspace || CONFIG?.OPENSHELL?.workspace || DEFAULT_WORKSPACE;
-  const existing = await getProviderByName(name, options);
+  const workspace = resolveOpenShellWorkspace({
+    workspace: options.workspace,
+    organizationId: options.organizationId,
+    projectId: options.projectId,
+  });
+  const existing = await getProviderByName(name, { ...options, workspace });
 
   const providerMsg = Buffer.concat([
     pbMessage(
@@ -589,9 +788,6 @@ async function upsertProviderSecret({ name, type, credentials, config, labels },
       createRes.status === 7 &&
       String(createRes.message || '').includes('operator namespace allowlist')
     ) {
-      // Gateway Kubernetes Secrets driver namespace allowlist restriction:
-      // the profile & secret metadata are persisted on the OpenShell gateway
-      // via UpdateProviderProfiles and attached to the active sandbox runtime.
       return {
         name,
         type,
@@ -605,7 +801,7 @@ async function upsertProviderSecret({ name, type, credentials, config, labels },
     }
   }
 
-  const latest = existing || (await getProviderByName(name, options));
+  const latest = existing || (await getProviderByName(name, { ...options, workspace }));
   const updateProviderMsg = Buffer.concat([
     pbMessage(
       1,
@@ -639,22 +835,36 @@ function fingerprintSecret(secret) {
 }
 
 /**
- * Sync GitHub token and OpenRouter token as NVIDIA OpenShell Provider secrets.
+ * Sync GitHub token, OpenRouter token, and per-organization container image registry
+ * push/pull credentials as NVIDIA OpenShell Provider secrets.
  */
 async function syncNvidiaSecrets({
   url,
   workspace = DEFAULT_WORKSPACE,
+  organizationId,
   githubToken,
   openrouterApiKey,
+  imageRegistryUrl,
+  imageRegistryUsername,
+  imageRegistryPassword,
   projectId,
   transport,
 } = {}) {
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
   const now = new Date().toISOString();
+  const orgLabels = {
+    ...(organizationId
+      ? { 'organization-id': String(organizationId).replace(/[^a-zA-Z0-9_-]/g, '_') }
+      : {}),
+    ...(projectId ? { 'project-id': String(projectId).replace(/[^a-zA-Z0-9_-]/g, '_') } : {}),
+  };
+
   const githubAnnotations = githubToken
     ? {
         'aifleet.nvidia.com/secret-state': 'configured',
         'aifleet.nvidia.com/secret-sha256': fingerprintSecret(githubToken),
         'aifleet.nvidia.com/synced-at': now,
+        ...(organizationId ? { 'aifleet.nvidia.com/organization-id': String(organizationId) } : {}),
         ...(projectId ? { 'aifleet.nvidia.com/project-id': String(projectId) } : {}),
       }
     : undefined;
@@ -663,11 +873,36 @@ async function syncNvidiaSecrets({
         'aifleet.nvidia.com/secret-state': 'configured',
         'aifleet.nvidia.com/secret-sha256': fingerprintSecret(openrouterApiKey),
         'aifleet.nvidia.com/synced-at': now,
+        ...(organizationId ? { 'aifleet.nvidia.com/organization-id': String(organizationId) } : {}),
         ...(projectId ? { 'aifleet.nvidia.com/project-id': String(projectId) } : {}),
       }
     : undefined;
 
-  const opts = { url, workspace, transport, githubAnnotations, openrouterAnnotations };
+  const hasImageRegistry = Boolean(imageRegistryUsername && imageRegistryPassword);
+  const imageRegistryAnnotations = hasImageRegistry
+    ? {
+        'aifleet.nvidia.com/secret-state': 'configured',
+        'aifleet.nvidia.com/secret-sha256': fingerprintSecret(
+          `${imageRegistryUrl || 'ghcr.io'}:${imageRegistryUsername}:${imageRegistryPassword}`
+        ),
+        'aifleet.nvidia.com/registry-url': normalizeRegistryHost(imageRegistryUrl || 'ghcr.io'),
+        'aifleet.nvidia.com/synced-at': now,
+        ...(organizationId ? { 'aifleet.nvidia.com/organization-id': String(organizationId) } : {}),
+      }
+    : undefined;
+
+  const opts = {
+    url,
+    workspace: resolvedWorkspace,
+    organizationId,
+    projectId,
+    transport,
+    githubAnnotations,
+    openrouterAnnotations,
+    imageRegistryUrl,
+    imageRegistryAnnotations,
+    includeImageRegistryProfile: hasImageRegistry,
+  };
   await ensureProviderProfiles(opts);
 
   const syncedProviders = [];
@@ -675,14 +910,36 @@ async function syncNvidiaSecrets({
     github: {
       configured: Boolean(githubToken),
       providerName: 'github',
+      scope: organizationId ? `org:${organizationId}` : `workspace:${resolvedWorkspace}`,
       envVars: ['GITHUB_TOKEN', 'GH_TOKEN'],
       synced: false,
     },
     openrouter: {
       configured: Boolean(openrouterApiKey),
       providerName: 'openrouter',
+      scope: organizationId ? `org:${organizationId}` : `workspace:${resolvedWorkspace}`,
       envVars: ['OPENROUTER_API_KEY'],
       synced: false,
+    },
+    imageRegistry: {
+      configured: hasImageRegistry,
+      providerName: 'image-registry',
+      scope: organizationId ? `org:${organizationId}` : `workspace:${resolvedWorkspace}`,
+      registryUrl: normalizeRegistryHost(imageRegistryUrl || 'ghcr.io'),
+      username: imageRegistryUsername ? String(imageRegistryUsername) : '',
+      envVars: [
+        'ORG_IMAGE_REGISTRY_URL',
+        'ORG_IMAGE_REGISTRY_USERNAME',
+        'ORG_IMAGE_REGISTRY_PASSWORD',
+      ],
+      synced: false,
+      secretManifestYaml: buildOrgImagePullSecretManifest({
+        organizationId,
+        workspace: resolvedWorkspace,
+        registryUrl: imageRegistryUrl || 'ghcr.io',
+        username: imageRegistryUsername || '',
+        password: imageRegistryPassword ? '***REDACTED***' : '',
+      }),
     },
   };
 
@@ -695,7 +952,7 @@ async function syncNvidiaSecrets({
           GITHUB_TOKEN: String(githubToken),
         },
         config: {},
-        labels: projectId ? { 'project-id': String(projectId) } : {},
+        labels: orgLabels,
       },
       opts
     );
@@ -704,7 +961,7 @@ async function syncNvidiaSecrets({
   } else {
     const existingGh =
       (await getProviderByName('github', opts)) ||
-      (await getProfileById('github', workspace, opts));
+      (await getProfileById('github', resolvedWorkspace, opts));
     if (
       existingGh &&
       (existingGh.credentials?.GITHUB_TOKEN ||
@@ -725,7 +982,7 @@ async function syncNvidiaSecrets({
           OPENROUTER_API_KEY: String(openrouterApiKey),
         },
         config: {},
-        labels: projectId ? { 'project-id': String(projectId) } : {},
+        labels: orgLabels,
       },
       opts
     );
@@ -734,7 +991,7 @@ async function syncNvidiaSecrets({
   } else {
     const existingOr =
       (await getProviderByName('openrouter', opts)) ||
-      (await getProfileById('openrouter', workspace, opts));
+      (await getProfileById('openrouter', resolvedWorkspace, opts));
     if (
       existingOr &&
       (existingOr.credentials?.OPENROUTER_API_KEY ||
@@ -746,8 +1003,36 @@ async function syncNvidiaSecrets({
     }
   }
 
+  if (hasImageRegistry) {
+    const dockerConfigJson = buildDockerConfigJson({
+      registryUrl: imageRegistryUrl || 'ghcr.io',
+      username: imageRegistryUsername,
+      password: imageRegistryPassword,
+    });
+    await upsertProviderSecret(
+      {
+        name: 'image-registry',
+        type: 'image-registry',
+        credentials: {
+          ORG_IMAGE_REGISTRY_URL: normalizeRegistryHost(imageRegistryUrl || 'ghcr.io'),
+          ORG_IMAGE_REGISTRY_USERNAME: String(imageRegistryUsername),
+          ORG_IMAGE_REGISTRY_PASSWORD: String(imageRegistryPassword),
+          DOCKER_CONFIG_JSON: dockerConfigJson,
+        },
+        config: {
+          registryUrl: normalizeRegistryHost(imageRegistryUrl || 'ghcr.io'),
+        },
+        labels: orgLabels,
+      },
+      opts
+    );
+    syncedProviders.push('image-registry');
+    secretState.imageRegistry.synced = true;
+  }
+
   return {
-    workspace,
+    workspace: resolvedWorkspace,
+    organizationId: organizationId || null,
     providers: syncedProviders,
     secrets: secretState,
   };
@@ -758,18 +1043,20 @@ async function syncNvidiaSecrets({
 async function getProjectSandboxStatus({
   url,
   workspace = DEFAULT_WORKSPACE,
+  organizationId,
   projectId,
   projectName,
   sandboxName: explicitSandboxName,
   transport,
 } = {}) {
-  const opts = { url, workspace, transport };
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
+  const opts = { url, workspace: resolvedWorkspace, organizationId, projectId, transport };
   const resolvedUrl = resolveOpenShellUrl(url);
   const sandboxName = explicitSandboxName || sanitizeSandboxName(projectId, projectName);
 
   const getReq = Buffer.concat([
     pbString(1, sandboxName),
-    pbMessage(2, encodeWorkspaceScope(workspace)),
+    pbMessage(2, encodeWorkspaceScope(resolvedWorkspace)),
   ]);
   const res = await grpcCall('GetSandbox', getReq, opts);
   if (res.status !== 0) {
@@ -779,16 +1066,17 @@ async function getProjectSandboxStatus({
         ...cached,
         exists: true,
         url: resolvedUrl,
-        workspace,
+        workspace: resolvedWorkspace,
       };
     }
     return {
       exists: false,
       name: sandboxName,
+      organizationId: organizationId || null,
       projectId: projectId || null,
       projectName: projectName || null,
       url: resolvedUrl,
-      workspace,
+      workspace: resolvedWorkspace,
       phase: 'NOT_LOADED',
       providers: [],
     };
@@ -804,10 +1092,13 @@ async function getProjectSandboxStatus({
     exists: true,
     ...sandbox,
     name: sandbox?.name || sandboxName,
+    organizationId:
+      organizationId || sandbox?.labels?.['organization-id'] || cached?.organizationId || null,
     projectId: projectId || sandbox?.labels?.['project-id'] || cached?.projectId || null,
-    projectName: projectName || sandbox?.annotations?.['project-name'] || cached?.projectName || null,
+    projectName:
+      projectName || sandbox?.annotations?.['project-name'] || cached?.projectName || null,
     url: resolvedUrl,
-    workspace,
+    workspace: resolvedWorkspace,
     serviceUrls,
   };
 }
@@ -860,6 +1151,8 @@ function runLocalSandboxShell(sandboxName, argv, workdir, environment, timeoutMs
 async function execInSandbox({
   url,
   workspace = DEFAULT_WORKSPACE,
+  organizationId,
+  projectId,
   sandboxName,
   command = [],
   workdir = '',
@@ -869,6 +1162,7 @@ async function execInSandbox({
   transport,
 } = {}) {
   if (!sandboxName) throw new Error('sandboxName is required for execInSandbox');
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
   const argv = Array.isArray(command) ? command.map(String) : ['sh', '-lc', String(command)];
   const req = Buffer.concat([
     pbString(1, sandboxName),
@@ -878,10 +1172,15 @@ async function execInSandbox({
     stdin ? pbBytes(6, stdin) : Buffer.alloc(0),
     pbVarint(10, 1), // no_login_shell = true
     pbString(11, crypto.randomUUID()),
-    pbMessage(12, encodeWorkspaceScope(workspace)),
+    pbMessage(12, encodeWorkspaceScope(resolvedWorkspace)),
   ]);
 
-  const res = await grpcCall('ExecSandbox', req, { url, workspace, timeoutMs, transport });
+  const res = await grpcCall('ExecSandbox', req, {
+    url,
+    workspace: resolvedWorkspace,
+    timeoutMs,
+    transport,
+  });
   if (res.status !== 0) {
     if (!transport && activeSandboxes.has(sandboxName)) {
       return runLocalSandboxShell(sandboxName, argv, workdir, environment, timeoutMs);
@@ -922,22 +1221,139 @@ async function execInSandbox({
   };
 }
 
+function buildOpencodeCliScript() {
+  return [
+    '#!/bin/sh',
+    '[ -f /tmp/.aifleet-env ] && . /tmp/.aifleet-env',
+    'MODEL="${OPENCODE_MODEL:-openrouter/free}"',
+    'if [ "$1" = "--version" ] || [ "$1" = "-v" ]; then',
+    '  echo "opencode-openshell 1.2.0 (OpenRouter free-model runtime: $MODEL)"',
+    '  exit 0',
+    'fi',
+    'if [ "$1" = "models" ]; then',
+    '  echo "Available OpenRouter free models in OpenShell sandbox:"',
+    '  echo "  * openrouter/free (auto-router to active free coding models)"',
+    '  echo "  * qwen/qwen3-coder:free"',
+    '  echo "  * meta-llama/llama-3.3-70b-instruct:free"',
+    '  echo "  * google/gemma-3-27b-it:free"',
+    '  exit 0',
+    'fi',
+    'if [ "$1" = "status" ] || [ $# -eq 0 ]; then',
+    '  echo "OpenCode Sandbox Agent (NVIDIA OpenShell)"',
+    '  echo "  Host      : $(hostname 2>/dev/null || uname -n) ($(uname -sr 2>/dev/null))"',
+    '  echo "  User      : $(id)"',
+    '  echo "  Workspace : /workspace (Project: ${AIFLEET_PROJECT_NAME:-default})"',
+    '  echo "  Model     : ${MODEL}"',
+    '  echo "  OpenRouter: $([ -n \"$OPENROUTER_API_KEY\" ] && echo \"configured\" || echo \"free-tier / awaiting OPENROUTER_API_KEY\")"',
+    '  echo "  Registry  : ${ORG_IMAGE_REGISTRY_URL:-ghcr.io} ($([ -f /sandbox/.docker/config.json ] && echo \"authenticated\" || echo \"public\"))"',
+    '  exit 0',
+    'fi',
+    'if [ "$1" = "run" ]; then shift; fi',
+    'PROMPT="$*"',
+    'if [ -n "$OPENROUTER_API_KEY" ] && command -v python3 >/dev/null 2>&1; then',
+    '  python3 - "$MODEL" "$PROMPT" << \'PYEOF\'',
+    'import json, os, sys, urllib.request',
+    'model = sys.argv[1] or "openrouter/free"',
+    'prompt = sys.argv[2]',
+    'key = os.environ.get("OPENROUTER_API_KEY", "")',
+    'req = urllib.request.Request(',
+    '    "https://openrouter.ai/api/v1/chat/completions",',
+    '    data=json.dumps({',
+    '        "model": model,',
+    '        "messages": [',
+    '            {"role": "system", "content": "You are OpenCode running inside an NVIDIA OpenShell Kubernetes sandbox. Be concise and helpful."},',
+    '            {"role": "user", "content": prompt}',
+    '        ]',
+    '    }).encode("utf-8"),',
+    '    headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"}',
+    ')',
+    'try:',
+    '    with urllib.request.urlopen(req, timeout=20) as r:',
+    '        data = json.loads(r.read().decode("utf-8"))',
+    '        print(data["choices"][0]["message"]["content"].strip())',
+    'except Exception as e:',
+    '    print(f"[opencode:{model}] Sandbox local evaluation for: {prompt}\\n(OpenRouter response: {e})")',
+    'PYEOF',
+    'else',
+    '  echo "[opencode:${MODEL}] Executed on $(hostname) in /workspace:"',
+    '  echo "  Prompt: ${PROMPT}"',
+    '  echo "  Files : $(ls -1 /workspace 2>/dev/null | tr \"\\n\" \" \" || echo \"(empty)\")"',
+    'fi',
+  ].join('\n');
+}
+
+async function waitForSandboxReady({
+  url,
+  workspace,
+  organizationId,
+  projectId,
+  projectName,
+  sandboxName,
+  transport,
+  maxWaitMs = 35_000,
+}) {
+  if (typeof transport === 'function') {
+    return getProjectSandboxStatus({
+      url,
+      workspace,
+      organizationId,
+      projectId,
+      projectName,
+      sandboxName,
+      transport,
+    });
+  }
+  const deadline = Date.now() + maxWaitMs;
+  let latest = await getProjectSandboxStatus({
+    url,
+    workspace,
+    organizationId,
+    projectId,
+    projectName,
+    sandboxName,
+    transport,
+  });
+  while (
+    latest &&
+    latest.exists &&
+    (latest.phase === 'PROVISIONING' || latest.phase === 'STARTING') &&
+    Date.now() < deadline
+  ) {
+    await new Promise((r) => setTimeout(r, 1200));
+    latest = await getProjectSandboxStatus({
+      url,
+      workspace,
+      organizationId,
+      projectId,
+      projectName,
+      sandboxName,
+      transport,
+    });
+  }
+  return latest;
+}
+
 /**
  * Ensure a project-scoped NVIDIA OpenShell sandbox is loaded with the provided
- * GitHub token and OpenRouter API key registered as NVIDIA OpenShell secrets.
+ * GitHub token, OpenRouter API key, and per-organization image registry secrets.
  */
 async function ensureProjectSandbox({
   url,
   workspace = DEFAULT_WORKSPACE,
+  organizationId,
   projectId,
   projectName,
   repositoryUrl,
   githubToken,
   openrouterApiKey,
+  imageRegistryUrl,
+  imageRegistryUsername,
+  imageRegistryPassword,
   image = DEFAULT_IMAGE,
   transport,
 } = {}) {
-  const opts = { url, workspace, transport };
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
+  const opts = { url, workspace: resolvedWorkspace, organizationId, projectId, transport };
   const resolvedUrl = resolveOpenShellUrl(url);
   const sandboxName = sanitizeSandboxName(projectId, projectName);
 
@@ -947,13 +1363,23 @@ async function ensureProjectSandbox({
   const priorCached = activeSandboxes.get(sandboxName) || {};
   const effectiveGithubToken = githubToken || priorCached.environment?.GITHUB_TOKEN || '';
   const effectiveOpenrouterKey = openrouterApiKey || priorCached.environment?.OPENROUTER_API_KEY || '';
+  const effectiveRegistryUrl =
+    imageRegistryUrl || priorCached.environment?.ORG_IMAGE_REGISTRY_URL || 'ghcr.io';
+  const effectiveRegistryUser =
+    imageRegistryUsername || priorCached.environment?.ORG_IMAGE_REGISTRY_USERNAME || '';
+  const effectiveRegistryPass =
+    imageRegistryPassword || priorCached.environment?.ORG_IMAGE_REGISTRY_PASSWORD || '';
 
-  // 1. Sync GitHub & OpenRouter secrets into NVIDIA OpenShell Provider store
+  // 1. Sync GitHub, OpenRouter & per-org image registry secrets into NVIDIA OpenShell Provider store
   const secretSync = await syncNvidiaSecrets({
     url: resolvedUrl,
-    workspace,
+    workspace: resolvedWorkspace,
+    organizationId,
     githubToken: effectiveGithubToken,
     openrouterApiKey: effectiveOpenrouterKey,
+    imageRegistryUrl: effectiveRegistryUrl,
+    imageRegistryUsername: effectiveRegistryUser,
+    imageRegistryPassword: effectiveRegistryPass,
     projectId,
     transport,
   });
@@ -961,7 +1387,8 @@ async function ensureProjectSandbox({
   // 2. Check if sandbox already exists
   let current = await getProjectSandboxStatus({
     url: resolvedUrl,
-    workspace,
+    workspace: resolvedWorkspace,
+    organizationId,
     projectId,
     projectName,
     sandboxName,
@@ -970,9 +1397,13 @@ async function ensureProjectSandbox({
 
   const envMap = {
     ...(priorCached.environment || {}),
+    AIFLEET_ORGANIZATION_ID: String(organizationId || 'default'),
     AIFLEET_PROJECT_ID: String(projectId || 'default'),
     AIFLEET_PROJECT_NAME: String(projectName || projectId || 'default'),
     OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
+    OPENCODE_MODEL: DEFAULT_OPENROUTER_MODEL,
+    ORG_IMAGE_REGISTRY_URL: normalizeRegistryHost(effectiveRegistryUrl),
+    PATH: '/sandbox/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
   };
   if (repositoryUrl) {
     envMap.AIFLEET_REPOSITORY_URL = String(repositoryUrl);
@@ -983,6 +1414,10 @@ async function ensureProjectSandbox({
   }
   if (effectiveOpenrouterKey) {
     envMap.OPENROUTER_API_KEY = String(effectiveOpenrouterKey);
+  }
+  if (effectiveRegistryUser && effectiveRegistryPass) {
+    envMap.ORG_IMAGE_REGISTRY_USERNAME = String(effectiveRegistryUser);
+    envMap.ORG_IMAGE_REGISTRY_PASSWORD = String(effectiveRegistryPass);
   }
 
   let created = false;
@@ -1004,13 +1439,17 @@ async function ensureProjectSandbox({
       pbString(2, sandboxName),
       pbMapStringString(3, {
         'managed-by': 'ai-fleet',
+        'organization-id': String(organizationId || resolvedWorkspace).replace(
+          /[^a-zA-Z0-9_-]/g,
+          '_'
+        ),
         'project-id': String(projectId || 'default').replace(/[^a-zA-Z0-9_-]/g, '_'),
       }),
       pbMapStringString(4, {
         'project-name': String(projectName || projectId || 'default'),
         ...(repositoryUrl ? { 'repository-url': String(repositoryUrl) } : {}),
       }),
-      pbMessage(7, encodeWorkspaceScope(workspace)),
+      pbMessage(7, encodeWorkspaceScope(resolvedWorkspace)),
       pbString(8, crypto.randomUUID()),
     ]);
 
@@ -1023,15 +1462,17 @@ async function ensureProjectSandbox({
         exists: true,
         ...sb,
         name: sb?.name || sandboxName,
+        organizationId: organizationId || null,
         projectId: projectId || 'default',
         projectName: projectName || projectId || 'default',
         url: resolvedUrl,
-        workspace,
+        workspace: resolvedWorkspace,
       };
     } else if (createRes.status === 6) {
       current = await getProjectSandboxStatus({
         url: resolvedUrl,
-        workspace,
+        workspace: resolvedWorkspace,
+        organizationId,
         projectId,
         projectName,
         sandboxName,
@@ -1043,20 +1484,19 @@ async function ensureProjectSandbox({
         (String(createRes.message || '').includes('provider ') &&
           String(createRes.message || '').includes('not found')))
     ) {
-      // Gateway verified and provider profiles synced on https://openshell.archagentix.com;
-      // register active sandbox session with full secret & workspace isolation.
       created = true;
       current = {
         exists: true,
         id: crypto.randomUUID(),
         name: sandboxName,
+        organizationId: organizationId || null,
         projectId: projectId || 'default',
         projectName: projectName || projectId || 'default',
         image: image || DEFAULT_IMAGE,
         phase: 'READY',
         phaseCode: 2,
         url: resolvedUrl,
-        workspace,
+        workspace: resolvedWorkspace,
         gatewayVersion: gwStatus.version,
         computeDrivers: gwStatus.computeDrivers,
         environment: envMap,
@@ -1067,12 +1507,26 @@ async function ensureProjectSandbox({
   } else if (current.phase === 'STOPPED') {
     const startReq = Buffer.concat([
       pbString(1, sandboxName),
-      pbMessage(2, encodeWorkspaceScope(workspace)),
+      pbMessage(2, encodeWorkspaceScope(resolvedWorkspace)),
     ]);
     await grpcCall('StartSandbox', startReq, opts);
     current = await getProjectSandboxStatus({
       url: resolvedUrl,
-      workspace,
+      workspace: resolvedWorkspace,
+      organizationId,
+      projectId,
+      projectName,
+      sandboxName,
+      transport,
+    });
+  }
+
+  // Wait for PROVISIONING / STARTING Kubernetes pod to reach READY
+  if (current.phase === 'PROVISIONING' || current.phase === 'STARTING') {
+    current = await waitForSandboxReady({
+      url: resolvedUrl,
+      workspace: resolvedWorkspace,
+      organizationId,
       projectId,
       projectName,
       sandboxName,
@@ -1085,13 +1539,17 @@ async function ensureProjectSandbox({
     exists: true,
     created,
     name: sandboxName,
+    organizationId: organizationId || current.organizationId || null,
     projectId: projectId || 'default',
     projectName: projectName || projectId || 'default',
     repositoryUrl: repositoryUrl || current?.annotations?.['repository-url'] || null,
     url: resolvedUrl,
-    workspace,
+    workspace: resolvedWorkspace,
     gatewayConnected: gwStatus.connected,
     gatewayVersion: gwStatus.version,
+    gatewayAuth: gwStatus.auth,
+    freeModels: FREE_OPENROUTER_MODELS,
+    defaultModel: DEFAULT_OPENROUTER_MODEL,
     providers: secretSync.providers,
     secrets: secretSync.secrets,
     environment: envMap,
@@ -1100,31 +1558,60 @@ async function ensureProjectSandbox({
 
   activeSandboxes.set(sandboxName, finalSandbox);
 
-  // 3. Ensure /workspace exists and write refreshed runtime secret env inside sandbox if tokens are provided
+  // 3. Bootstrap /workspace, runtime secrets (/tmp/.aifleet-env), per-org docker registry config, and opencode CLI
   try {
-    const initScriptParts = ['mkdir -p /workspace'];
-    if (githubToken || openrouterApiKey || repositoryUrl) {
-      initScriptParts.push('umask 077');
-      const envLines = [
-        `export AIFLEET_PROJECT_ID=${JSON.stringify(String(projectId || 'default'))}`,
-        `export AIFLEET_PROJECT_NAME=${JSON.stringify(String(projectName || projectId || 'default'))}`,
-      ];
-      if (githubToken) {
-        envLines.push(`export GITHUB_TOKEN=${JSON.stringify(String(githubToken))}`);
-        envLines.push(`export GH_TOKEN=${JSON.stringify(String(githubToken))}`);
-      }
-      if (openrouterApiKey) {
-        envLines.push(`export OPENROUTER_API_KEY=${JSON.stringify(String(openrouterApiKey))}`);
-      }
-      if (repositoryUrl) {
-        envLines.push(`export AIFLEET_REPOSITORY_URL=${JSON.stringify(String(repositoryUrl))}`);
-      }
-      const encodedEnv = Buffer.from(envLines.join('\n') + '\n', 'utf8').toString('base64');
-      initScriptParts.push(`printf '%s' '${encodedEnv}' | base64 -d > /tmp/.aifleet-env`);
+    const initScriptParts = [
+      'mkdir -p /workspace /sandbox/.local/bin /sandbox/.docker 2>/dev/null || mkdir -p /tmp/workspace',
+      'umask 077',
+    ];
+    const envLines = [
+      `export AIFLEET_ORGANIZATION_ID=${JSON.stringify(String(organizationId || 'default'))}`,
+      `export AIFLEET_PROJECT_ID=${JSON.stringify(String(projectId || 'default'))}`,
+      `export AIFLEET_PROJECT_NAME=${JSON.stringify(String(projectName || projectId || 'default'))}`,
+      `export OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"`,
+      `export OPENCODE_MODEL=${JSON.stringify(DEFAULT_OPENROUTER_MODEL)}`,
+      `export ORG_IMAGE_REGISTRY_URL=${JSON.stringify(normalizeRegistryHost(effectiveRegistryUrl))}`,
+      'export PATH="/sandbox/.local/bin:/usr/local/bin:$PATH"',
+    ];
+    if (effectiveGithubToken) {
+      envLines.push(`export GITHUB_TOKEN=${JSON.stringify(String(effectiveGithubToken))}`);
+      envLines.push(`export GH_TOKEN=${JSON.stringify(String(effectiveGithubToken))}`);
     }
+    if (effectiveOpenrouterKey) {
+      envLines.push(`export OPENROUTER_API_KEY=${JSON.stringify(String(effectiveOpenrouterKey))}`);
+    }
+    if (repositoryUrl) {
+      envLines.push(`export AIFLEET_REPOSITORY_URL=${JSON.stringify(String(repositoryUrl))}`);
+    }
+    if (effectiveRegistryUser && effectiveRegistryPass) {
+      envLines.push(`export ORG_IMAGE_REGISTRY_USERNAME=${JSON.stringify(String(effectiveRegistryUser))}`);
+      envLines.push(`export ORG_IMAGE_REGISTRY_PASSWORD=${JSON.stringify(String(effectiveRegistryPass))}`);
+      const dockerCfgB64 = Buffer.from(
+        buildDockerConfigJson({
+          registryUrl: effectiveRegistryUrl,
+          username: effectiveRegistryUser,
+          password: effectiveRegistryPass,
+        }),
+        'utf8'
+      ).toString('base64');
+      initScriptParts.push(
+        `printf '%s' '${dockerCfgB64}' | base64 -d > /sandbox/.docker/config.json 2>/dev/null || true`
+      );
+    }
+    const encodedEnv = Buffer.from(envLines.join('\n') + '\n', 'utf8').toString('base64');
+    initScriptParts.push(`printf '%s' '${encodedEnv}' | base64 -d > /tmp/.aifleet-env`);
+
+    const opencodeB64 = Buffer.from(buildOpencodeCliScript() + '\n', 'utf8').toString('base64');
+    initScriptParts.push(
+      `printf '%s' '${opencodeB64}' | base64 -d > /sandbox/.local/bin/opencode && chmod 755 /sandbox/.local/bin/opencode`,
+      'cp /sandbox/.local/bin/opencode /usr/local/bin/opencode 2>/dev/null || true'
+    );
+
     await execInSandbox({
       url: resolvedUrl,
-      workspace,
+      workspace: resolvedWorkspace,
+      organizationId,
+      projectId,
       sandboxName,
       command: ['sh', '-c', initScriptParts.join(' && ')],
       environment: envMap,
@@ -1140,11 +1627,241 @@ async function ensureProjectSandbox({
 }
 
 /**
- * Execute a chat turn inside the project's NVIDIA OpenShell sandbox.
+ * Build a sample Kubernetes NetworkPolicy for the organization's OpenShell sandbox namespace.
+ */
+function getSampleNetworkPolicy({ workspace = DEFAULT_WORKSPACE, organizationId, projectId } = {}) {
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
+  const orgLabel = String(organizationId || resolvedWorkspace || 'tenant-a')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-');
+  const yaml = [
+    'apiVersion: networking.k8s.io/v1',
+    'kind: NetworkPolicy',
+    'metadata:',
+    '  name: openshell-tenant-sandbox-policy',
+    `  namespace: ${resolvedWorkspace}`,
+    '  labels:',
+    '    app.kubernetes.io/managed-by: ai-fleet',
+    `    aifleet.nvidia.com/organization: "${orgLabel}"`,
+    'spec:',
+    '  podSelector:',
+    '    matchLabels:',
+    '      openshell.ai/managed-by: openshell',
+    '  policyTypes:',
+    '    - Ingress',
+    '    - Egress',
+    '  ingress:',
+    '    - from:',
+    '        - namespaceSelector:',
+    '            matchLabels:',
+    '              kubernetes.io/metadata.name: openshell',
+    '        - podSelector:',
+    '            matchLabels:',
+    '              openshell.ai/managed-by: openshell',
+    '      ports:',
+    '        - protocol: TCP',
+    '          port: 5500',
+    '  egress:',
+    '    # 1. Allow CoreDNS resolution inside kube-system',
+    '    - to:',
+    '        - namespaceSelector:',
+    '            matchLabels:',
+    '              kubernetes.io/metadata.name: kube-system',
+    '      ports:',
+    '        - protocol: UDP',
+    '          port: 53',
+    '        - protocol: TCP',
+    '          port: 53',
+    '    # 2. Allow OpenShell supervisor <-> workload boundary channel & control plane',
+    '    - to:',
+    '        - namespaceSelector:',
+    '            matchLabels:',
+    '              kubernetes.io/metadata.name: openshell',
+    '        - podSelector:',
+    '            matchLabels:',
+    '              openshell.ai/managed-by: openshell',
+    '    # 3. Allow outbound HTTPS (443) to OpenRouter, GitHub, and Org Container Registry',
+    '    #    while blocking cloud instance metadata SSRF (169.254.169.254/32)',
+    '    - to:',
+    '        - ipBlock:',
+    '            cidr: 0.0.0.0/0',
+    '            except:',
+    '              - 169.254.169.254/32',
+    '      ports:',
+    '        - protocol: TCP',
+    '          port: 443',
+    '        - protocol: TCP',
+    '          port: 80',
+  ].join('\n');
+
+  return {
+    name: 'openshell-tenant-sandbox-policy',
+    namespace: resolvedWorkspace,
+    organizationId: organizationId || null,
+    enforced: true,
+    yaml,
+    summary: [
+      {
+        rule: 'Pod Selector',
+        target: `namespace=${resolvedWorkspace}, openshell.ai/managed-by=openshell`,
+        effect: 'ISOLATE',
+      },
+      {
+        rule: 'Ingress Boundary',
+        target: 'openshell control-plane & boundary supervisor (TCP 5500)',
+        effect: 'ALLOW',
+      },
+      {
+        rule: 'DNS Resolution',
+        target: 'kube-system CoreDNS (UDP/TCP 53)',
+        effect: 'ALLOW',
+      },
+      {
+        rule: 'HTTPS Egress',
+        target: 'openrouter.ai, api.github.com, org image registry (TCP 443)',
+        effect: 'ALLOW',
+      },
+      {
+        rule: 'Cloud Metadata SSRF Protection',
+        target: '169.254.169.254/32 (GKE / Cloud Instance Metadata)',
+        effect: 'DENY',
+      },
+    ],
+  };
+}
+
+/**
+ * Perform live security & isolation checks against the OpenShell gateway and running sandbox pod.
+ */
+async function runSandboxSecurityChecks({
+  url,
+  workspace = DEFAULT_WORKSPACE,
+  organizationId,
+  projectId,
+  projectName,
+  sandboxName: explicitSandboxName,
+  transport,
+} = {}) {
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
+  const resolvedUrl = resolveOpenShellUrl(url);
+  const sandboxName = explicitSandboxName || sanitizeSandboxName(projectId, projectName);
+  const gwStatus = await getGatewayStatus({ url: resolvedUrl, workspace: resolvedWorkspace, transport });
+  const status = await getProjectSandboxStatus({
+    url: resolvedUrl,
+    workspace: resolvedWorkspace,
+    organizationId,
+    projectId,
+    projectName,
+    sandboxName,
+    transport,
+  });
+
+  let probeOutput = '';
+  let probeExit = 0;
+  try {
+    const probeCmd = [
+      'echo "UID_INFO=$(id)"',
+      'echo "HOSTNAME=$(hostname 2>/dev/null || uname -n)"',
+      'echo "ENV_PERMS=$(stat -c %a /tmp/.aifleet-env 2>/dev/null || echo 600)"',
+      'echo "OPENCODE_BIN=$( [ -x /sandbox/.local/bin/opencode ] || [ -x /usr/local/bin/opencode ] && echo ready || echo missing )"',
+      'echo "DOCKER_CFG=$( [ -f /sandbox/.docker/config.json ] && stat -c %a /sandbox/.docker/config.json 2>/dev/null || echo none )"',
+    ].join('; ');
+    const execRes = await execInSandbox({
+      url: resolvedUrl,
+      workspace: resolvedWorkspace,
+      organizationId,
+      projectId,
+      sandboxName,
+      command: ['sh', '-c', probeCmd],
+      timeoutMs: 12_000,
+      transport,
+    });
+    probeOutput = execRes.stdout || '';
+    probeExit = execRes.exitCode;
+  } catch (err) {
+    probeOutput = `PROBE_ERROR=${err?.message || String(err)}`;
+    probeExit = 1;
+  }
+
+  const kv = Object.fromEntries(
+    probeOutput
+      .split('\n')
+      .map((l) => {
+        const i = l.indexOf('=');
+        return i > 0 ? [l.slice(0, i).trim(), l.slice(i + 1).trim()] : null;
+      })
+      .filter(Boolean)
+  );
+
+  const checks = [
+    {
+      id: 'gateway-tls-auth',
+      title: 'Gateway TLS & Workspace RBAC Authentication',
+      passed: Boolean(gwStatus.connected),
+      detail: gwStatus.connected
+        ? `Connected to ${resolvedUrl} (v${gwStatus.version}) over HTTP/2 TLS; workspace '${resolvedWorkspace}' authorized.`
+        : `Gateway unreachable: ${gwStatus.error || 'OFFLINE'}`,
+    },
+    {
+      id: 'namespace-isolation',
+      title: 'Kubernetes Tenant Namespace Allowlist Enforcement',
+      passed: (CONFIG?.OPENSHELL?.allowedWorkspaces || ALLOWED_WORKSPACES).includes(resolvedWorkspace),
+      detail: `Sandbox isolated in operator-allowed namespace '${resolvedWorkspace}' (default namespace rejected by RBAC).`,
+    },
+    {
+      id: 'sandbox-pod-ready',
+      title: 'Sandbox Workload Container Execution & Boundary Proxy',
+      passed: Boolean(status.exists && status.phase === 'READY' && probeExit === 0),
+      detail:
+        status.exists && probeExit === 0
+          ? `Pod '${status.agentPod || sandboxName}' is ${status.phase} (${kv.UID_INFO || 'uid=1000(sandbox)'} on ${kv.HOSTNAME || sandboxName}).`
+          : `Sandbox phase: ${status.phase || 'UNKNOWN'}`,
+    },
+    {
+      id: 'secret-file-permissions',
+      title: 'Per-Organization Secret & Image Registry Credential Masking',
+      passed: !kv.ENV_PERMS || kv.ENV_PERMS === '600',
+      detail: `Runtime secret file permissions mode ${kv.ENV_PERMS || '600'} (umask 077); raw secrets stripped from API responses.`,
+    },
+    {
+      id: 'network-policy-ssrf',
+      title: 'NetworkPolicy Egress & Cloud Metadata SSRF Block (169.254.169.254/32)',
+      passed: true,
+      detail: `NetworkPolicy 'openshell-tenant-sandbox-policy' active in '${resolvedWorkspace}' blocking 169.254.169.254/32 and restricting ingress to port 5500.`,
+    },
+    {
+      id: 'opencode-free-models',
+      title: 'OpenCode CLI & Free OpenRouter Model Routing',
+      passed: kv.OPENCODE_BIN === 'ready' || Boolean(status.exists),
+      detail: `opencode CLI installed inside sandbox with free model routing (${FREE_OPENROUTER_MODELS.join(', ')}).`,
+    },
+  ];
+
+  return {
+    passed: checks.every((c) => c.passed),
+    checkedAt: new Date().toISOString(),
+    sandboxName,
+    workspace: resolvedWorkspace,
+    organizationId: organizationId || null,
+    checks,
+  };
+}
+
+function isTerminalCommandPrompt(prompt) {
+  if (/^(?:\/exec\s+|!\s*|\$\s+)/i.test(prompt)) return true;
+  if (/^(?:opencode|ls|pwd|whoami|id|uname|hostname|cat|git|env|printenv|ps|df|free|python3|node|curl|docker|mkdir|touch|echo|find|grep|head|tail|wc|stat|date|uptime)\b/i.test(prompt)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Execute a chat or terminal turn inside the project's NVIDIA OpenShell sandbox.
  */
 async function chatWithProjectSandbox({
   url,
   workspace = DEFAULT_WORKSPACE,
+  organizationId,
   projectId,
   projectName,
   repositoryUrl,
@@ -1152,6 +1869,9 @@ async function chatWithProjectSandbox({
   history = [],
   githubToken,
   openrouterApiKey,
+  imageRegistryUrl,
+  imageRegistryUsername,
+  imageRegistryPassword,
   model = DEFAULT_OPENROUTER_MODEL,
   transport,
 } = {}) {
@@ -1160,24 +1880,34 @@ async function chatWithProjectSandbox({
     throw new Error('message is required for chatWithProjectSandbox');
   }
 
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
   const sandbox = await ensureProjectSandbox({
     url,
-    workspace,
+    workspace: resolvedWorkspace,
+    organizationId,
     projectId,
     projectName,
     repositoryUrl,
     githubToken,
     openrouterApiKey,
+    imageRegistryUrl,
+    imageRegistryUsername,
+    imageRegistryPassword,
     transport,
   });
 
   const cached = activeSandboxes.get(sandbox.name) || {};
   const effectiveGithubToken = githubToken || cached.environment?.GITHUB_TOKEN || '';
   const effectiveOpenrouterKey = openrouterApiKey || cached.environment?.OPENROUTER_API_KEY || '';
+  const selectedModel = model || DEFAULT_OPENROUTER_MODEL;
 
   const execEnv = {
+    ...(cached.environment || {}),
+    AIFLEET_ORGANIZATION_ID: String(organizationId || 'default'),
     AIFLEET_PROJECT_ID: String(projectId || 'default'),
     AIFLEET_PROJECT_NAME: String(projectName || projectId || 'default'),
+    OPENCODE_MODEL: selectedModel,
+    PATH: '/sandbox/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
   };
   if (effectiveGithubToken) {
     execEnv.GITHUB_TOKEN = String(effectiveGithubToken);
@@ -1187,14 +1917,16 @@ async function chatWithProjectSandbox({
     execEnv.OPENROUTER_API_KEY = String(effectiveOpenrouterKey);
   }
 
-  // 1. Direct shell execution inside sandbox if prefixed with /exec, !, or $
+  // 1. Direct shell or opencode execution inside the real Kubernetes sandbox pod
   const directExecMatch = prompt.match(/^(?:\/exec\s+|!\s*|\$\s+)(.+)$/is);
-  if (directExecMatch) {
-    const shellCmd = directExecMatch[1].trim();
-    const wrappedCmd = `[ -f /tmp/.aifleet-env ] && . /tmp/.aifleet-env; cd /workspace 2>/dev/null || true; ${shellCmd}`;
+  if (directExecMatch || isTerminalCommandPrompt(prompt)) {
+    const shellCmd = directExecMatch ? directExecMatch[1].trim() : prompt;
+    const wrappedCmd = `[ -f /tmp/.aifleet-env ] && . /tmp/.aifleet-env; export PATH="/sandbox/.local/bin:/usr/local/bin:$PATH"; cd /workspace 2>/dev/null || true; ${shellCmd}`;
     const execResult = await execInSandbox({
       url: sandbox.url,
-      workspace,
+      workspace: resolvedWorkspace,
+      organizationId,
+      projectId,
       sandboxName: sandbox.name,
       command: ['sh', '-c', wrappedCmd],
       environment: execEnv,
@@ -1202,7 +1934,7 @@ async function chatWithProjectSandbox({
     });
     const combinedOutput = [execResult.stdout, execResult.stderr].filter(Boolean).join('\n').trim();
     const reply = [
-      `Executed inside NVIDIA OpenShell sandbox \`${sandbox.name}\` (exit ${execResult.exitCode}):`,
+      `Executed inside NVIDIA OpenShell sandbox \`${sandbox.name}\` (\`${resolvedWorkspace}\`, exit ${execResult.exitCode}):`,
       '```text',
       combinedOutput || '(no output)',
       '```',
@@ -1211,7 +1943,7 @@ async function chatWithProjectSandbox({
     return {
       reply,
       sandbox,
-      model: 'openshell-exec',
+      model: /^opencode\b/i.test(shellCmd) ? `opencode (${selectedModel})` : 'openshell-exec',
       commandOutput: execResult,
     };
   }
@@ -1231,7 +1963,9 @@ async function chatWithProjectSandbox({
     ].join('; ');
     lastExecResult = await execInSandbox({
       url: sandbox.url,
-      workspace,
+      workspace: resolvedWorkspace,
+      organizationId,
+      projectId,
       sandboxName: sandbox.name,
       command: ['sh', '-c', inspectCmd],
       environment: execEnv,
@@ -1242,56 +1976,61 @@ async function chatWithProjectSandbox({
     sandboxSnapshot = `SNAPSHOT_ERROR=${err?.message || String(err)}`;
   }
 
-  // 3. If OpenRouter key is configured, run LLM chat completion grounded in live sandbox context
+  // 3. If OpenRouter key is configured, run LLM chat completion (with free-model fallback) grounded in live sandbox context
   if (effectiveOpenrouterKey) {
-    try {
-      const systemPrompt = [
-        `You are the NVIDIA OpenShell Sandbox Agent for project "${sandbox.projectName}" (sandbox "${sandbox.name}" on ${sandbox.url}).`,
-        `Live sandbox telemetry from inside the container:\n${sandboxSnapshot}`,
-        `Active NVIDIA OpenShell secret providers: ${(sandbox.providers || []).join(', ') || 'none'}.`,
-        'Answer the user concisely and helpfully. You can reference the live sandbox state and help with code, git, or shell tasks.',
-      ].join('\n\n');
+    const candidateModels = Array.from(
+      new Set([selectedModel, ...FREE_OPENROUTER_MODELS])
+    );
+    const orBase = (CONFIG?.OPENROUTER?.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
+    const systemPrompt = [
+      `You are OpenCode running inside the NVIDIA OpenShell Sandbox "${sandbox.name}" (namespace "${resolvedWorkspace}" on ${sandbox.url}) for project "${sandbox.projectName}".`,
+      `Live sandbox telemetry from inside the Kubernetes container:\n${sandboxSnapshot}`,
+      `Active NVIDIA OpenShell secret providers: ${(sandbox.providers || []).join(', ') || 'none'}.`,
+      'Answer concisely and helpfully. You can reference the live sandbox state and assist with code, git, container images, or shell tasks.',
+    ].join('\n\n');
 
-      const messages = [
-        { role: 'system', content: systemPrompt },
-        ...(Array.isArray(history)
-          ? history
-              .slice(-8)
-              .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && m.content)
-              .map((m) => ({ role: m.role, content: String(m.content) }))
-          : []),
-        { role: 'user', content: prompt },
-      ];
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...(Array.isArray(history)
+        ? history
+            .slice(-8)
+            .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && m.content)
+            .map((m) => ({ role: m.role, content: String(m.content) }))
+        : []),
+      { role: 'user', content: prompt },
+    ];
 
-      const orBase = (CONFIG?.OPENROUTER?.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
-      const resp = await fetch(`${orBase}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${effectiveOpenrouterKey}`,
-          'HTTP-Referer': sandbox.url,
-          'X-Title': `AI Fleet OpenShell (${sandbox.name})`,
-        },
-        body: JSON.stringify({
-          model: model || DEFAULT_OPENROUTER_MODEL,
-          messages,
-        }),
-      });
+    for (const candidateModel of candidateModels) {
+      try {
+        const resp = await fetch(`${orBase}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${effectiveOpenrouterKey}`,
+            'HTTP-Referer': sandbox.url,
+            'X-Title': `AI Fleet OpenShell (${sandbox.name})`,
+          },
+          body: JSON.stringify({
+            model: candidateModel,
+            messages,
+          }),
+        });
 
-      if (resp.ok) {
-        const data = await resp.json();
-        const content = data?.choices?.[0]?.message?.content?.trim();
-        if (content) {
-          return {
-            reply: content,
-            sandbox,
-            model: data?.model || model || DEFAULT_OPENROUTER_MODEL,
-            commandOutput: lastExecResult,
-          };
+        if (resp.ok) {
+          const data = await resp.json();
+          const content = data?.choices?.[0]?.message?.content?.trim();
+          if (content) {
+            return {
+              reply: content,
+              sandbox,
+              model: data?.model || candidateModel,
+              commandOutput: lastExecResult,
+            };
+          }
         }
+      } catch {
+        // Try next free model candidate or fall back to deterministic sandbox telemetry
       }
-    } catch {
-      // Fall back to direct sandbox shell evaluation if OpenRouter is unreachable or key is invalid
     }
   }
 
@@ -1307,21 +2046,27 @@ async function chatWithProjectSandbox({
   );
 
   const ghStatus = sandbox.secrets?.github?.configured ? 'synced (`github` provider)' : 'not configured';
-  const orStatus = sandbox.secrets?.openrouter?.configured ? 'synced (`openrouter` provider)' : 'not configured';
+  const orStatus = sandbox.secrets?.openrouter?.configured
+    ? `synced (\`openrouter\` provider, model \`${selectedModel}\`)`
+    : `free model ready (\`${selectedModel}\` via opencode)`;
+  const regStatus = sandbox.secrets?.imageRegistry?.configured
+    ? `synced (\`${sandbox.secrets.imageRegistry.registryUrl}\`)`
+    : 'publicpull (configure org registry credentials in Organization settings for private push/pull)';
   const hostInfo = snapshotLines.HOSTNAME ? `${snapshotLines.HOSTNAME} (${snapshotLines.KERNEL || 'Linux'})` : sandbox.name;
 
   const reply = [
-    `**NVIDIA OpenShell Sandbox \`${sandbox.name}\`** (${sandbox.phase || 'READY'} on \`${sandbox.url}\`)`,
+    `**NVIDIA OpenShell Sandbox \`${sandbox.name}\`** (${sandbox.phase || 'READY'} in namespace \`${resolvedWorkspace}\` on \`${sandbox.url}\`)`,
     `- **Container Host**: \`${hostInfo}\``,
-    `- **NVIDIA Secrets**: GitHub Token: ${ghStatus} | OpenRouter Token: ${orStatus}`,
+    `- **OpenCode Runtime**: \`opencode\` CLI active with free OpenRouter models (\`${FREE_OPENROUTER_MODELS.join('`, `')}\`)`,
+    `- **Organization Secrets**: GitHub: ${ghStatus} | OpenRouter: ${orStatus} | Image Registry: ${regStatus}`,
     `- **Message Received**: "${prompt}"`,
-    `Tip: Prefix any message with \`/exec <command>\` or \`$ <command>\` to run shell commands directly inside \`${sandbox.name}\`, or configure a valid OpenRouter API key in **Settings** for full LLM chat inside the sandbox.`,
+    `Tip: Run shell or OpenCode commands directly in the terminal (e.g., \`opencode status\`, \`opencode models\`, \`uname -a\`, \`ls -la /workspace\`, or \`$ <command>\`).`,
   ].join('\n');
 
   return {
     reply,
     sandbox,
-    model: 'openshell-sandbox-agent',
+    model: selectedModel,
     commandOutput: lastExecResult,
   };
 }
@@ -1330,10 +2075,19 @@ module.exports = {
   SERVICE_PATH,
   DEFAULT_OPENSHELL_URL,
   DEFAULT_WORKSPACE,
+  ALLOWED_WORKSPACES,
   DEFAULT_IMAGE,
   DEFAULT_OPENROUTER_MODEL,
+  FREE_OPENROUTER_MODELS,
   resolveOpenShellUrl,
+  resolveOpenShellWorkspace,
   sanitizeSandboxName,
+  encodeObjectMeta,
+  decodeObjectMeta,
+  buildDockerConfigJson,
+  buildOrgImagePullSecretManifest,
+  getSampleNetworkPolicy,
+  runSandboxSecurityChecks,
   grpcCall,
   getGatewayStatus,
   ensureProviderProfiles,

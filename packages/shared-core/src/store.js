@@ -256,6 +256,11 @@ const DEFAULT_STORE = Object.freeze({
     githubToken: '',
     openrouterApiKey: '',
     openshellUrl: CONFIG.OPENSHELL.url,
+    openshellWorkspace: CONFIG.OPENSHELL.workspace || 'tenant-a',
+    openshellNetworkPolicy: '',
+    imageRegistryUrl: 'ghcr.io',
+    imageRegistryUsername: '',
+    imageRegistryPassword: '',
     langsmithApiKey: '', // LangSmith tracing key
     langsmithProject: 'linear-manager',
     langsmithEndpoint: 'https://api.smith.langchain.com',

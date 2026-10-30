@@ -4,16 +4,18 @@
 
 ## Overview
 
-Community of 16 nodes
+Community of 18 nodes
 
-- **Size**: 16 nodes
-- **Cohesion**: 0.2185
+- **Size**: 18 nodes
+- **Cohesion**: 0.0551
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:implementation drafts require project selection and explicit approval before task creation@L629 | Test | ./e2e/agent-workspace.spec.js | 629-676 |
+| test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L351 | Test | ./e2e/persistent-footer.spec.js | 351-455 |
 | boundedTimeout | Function | ./packages/shared-core/src/agent/diagnostics.js | 12-16 |
 | configuredToken | Function | ./packages/shared-core/src/agent/diagnostics.js | 18-20 |
 | validHttpUrl | Function | ./packages/shared-core/src/agent/diagnostics.js | 22-29 |
@@ -39,24 +41,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
+- `expect` (46 edge(s))
+- `getByRole` (12 edge(s))
+- `evaluate` (10 edge(s))
 - `Boolean` (9 edge(s))
-- `filter` (4 edge(s))
+- `toBeVisible` (8 edge(s))
+- `toBe` (8 edge(s))
+- `press` (8 edge(s))
+- `filter` (7 edge(s))
+- `locator` (6 edge(s))
+- `toBeFocused` (5 edge(s))
+- `toBeDisabled` (4 edge(s))
+- `toHaveLength` (4 edge(s))
+- `call` (4 edge(s))
+- `map` (4 edge(s))
 - `String` (4 edge(s))
-- `some` (4 edge(s))
-- `includes` (3 edge(s))
-- `map` (3 edge(s))
-- `Number` (2 edge(s))
-- `min` (2 edge(s))
-- `max` (2 edge(s))
-- `toString` (2 edge(s))
-- `split` (2 edge(s))
-- `all` (2 edge(s))
-- `test` (2 edge(s))
-- `isFinite` (1 edge(s))
-- `round` (1 edge(s))
 
 ### Incoming
 
+- `expect` (46 edge(s))
 - `./packages/shared-core/src/agent/diagnostics.js` (23 edge(s))
-- `./services/org/tests/unit/test_policy.py` (1 edge(s))
-- `check` (1 edge(s))
+- `getByRole` (12 edge(s))
+- `evaluate` (10 edge(s))
+- `toBeVisible` (8 edge(s))
+- `toBe` (8 edge(s))
+- `press` (8 edge(s))
+- `locator` (6 edge(s))
+- `toBeFocused` (5 edge(s))
+- `toBeDisabled` (4 edge(s))
+- `toHaveLength` (4 edge(s))
+- `call` (4 edge(s))
+- `selectOption` (3 edge(s))
+- `check` (3 edge(s))
+- `click` (3 edge(s))

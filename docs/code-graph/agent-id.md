@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 2 nodes
+Community of 3 nodes
 
-- **Size**: 2 nodes
+- **Size**: 3 nodes
 - **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
@@ -15,6 +15,7 @@ Community of 2 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | accountIdFromIdToken | Function | ./packages/shared-core/src/agent/oauth.js | 172-182 |
+| test:accountIdFromIdToken extracts the ChatGPT account id from the id_token@L75 | Test | ./packages/shared/src/agent/oauth.test.js | 75-84 |
 | test:accountIdFromIdToken returns empty string on missing/malformed input@L86 | Test | ./packages/shared/src/agent/oauth.test.js | 86-92 |
 
 ## Execution Flows
@@ -25,23 +26,25 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (4 edge(s))
-- `accountIdFromIdToken` (4 edge(s))
+- `equal` (5 edge(s))
+- `accountIdFromIdToken` (5 edge(s))
 - `toString` (2 edge(s))
 - `from` (2 edge(s))
+- `join` (2 edge(s))
+- `./packages/shared/src/agent/oauth.test.js::b64url` (2 edge(s))
 - `split` (1 edge(s))
 - `String` (1 edge(s))
 - `parse` (1 edge(s))
-- `join` (1 edge(s))
 - `stringify` (1 edge(s))
 
 ### Incoming
 
-- `equal` (4 edge(s))
-- `accountIdFromIdToken` (4 edge(s))
+- `equal` (5 edge(s))
+- `accountIdFromIdToken` (5 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (2 edge(s))
-- `./packages/shared/src/agent/oauth.test.js` (1 edge(s))
-- `join` (1 edge(s))
+- `./packages/shared/src/agent/oauth.test.js` (2 edge(s))
+- `join` (2 edge(s))
+- `./packages/shared/src/agent/oauth.test.js::b64url` (2 edge(s))
 - `toString` (1 edge(s))
 - `from` (1 edge(s))
 - `stringify` (1 edge(s))

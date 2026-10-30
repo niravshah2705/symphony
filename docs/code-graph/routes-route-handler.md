@@ -4,22 +4,21 @@
 
 ## Overview
 
-Community of 6 nodes
+Community of 5 nodes
 
-- **Size**: 6 nodes
-- **Cohesion**: 0.2903
+- **Size**: 5 nodes
+- **Cohesion**: 0.1364
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| routeHandler | Function | ./services/planner/src/routes/settings.credentials.test.js | 8-14 |
-| invoke | Function | ./services/planner/src/routes/settings.credentials.test.js | 16-30 |
-| withRouter | Function | ./services/planner/src/routes/settings.credentials.test.js | 32-53 |
-| test:public planner settings never derive credential state from legacy plaintext store fields@L55 | Test | ./services/planner/src/routes/settings.credentials.test.js | 55-63 |
-| test:legacy planner credential routes and integration fields fail explicitly without writes@L65 | Test | ./services/planner/src/routes/settings.credentials.test.js | 65-81 |
-| test:planner integration route still accepts non-secret provider and repository choices@L83 | Test | ./services/planner/src/routes/settings.credentials.test.js | 83-96 |
+| routeHandler | Function | ./services/planner/src/routes/settings.complexity.test.js | 15-21 |
+| invoke | Function | ./services/planner/src/routes/settings.complexity.test.js | 23-37 |
+| withRouter | Function | ./services/planner/src/routes/settings.complexity.test.js | 39-58 |
+| test@L90 | Test | ./services/planner/src/routes/settings.complexity.test.js | 90-90 |
+| test:PUT /complexity rejects an unknown tier without writing history@L93 | Test | ./services/planner/src/routes/settings.complexity.test.js | 93-99 |
 
 ## Execution Flows
 
@@ -29,28 +28,24 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (7 edge(s))
-- `toUpperCase` (2 edge(s))
-- `deepEqual` (2 edge(s))
+- `./services/planner/src/routes/settings.complexity.test.js::test:GET settings reports the stored tier only while it still matches (else custom)@L101` (6 edge(s))
+- `./services/planner/src/routes/settings.complexity.test.js::test:planner PUT /complexity applies a tier to every task role and records history@L60` (3 edge(s))
+- `equal` (2 edge(s))
 - `handler` (1 edge(s))
 - `catch` (1 edge(s))
 - `reject` (1 edge(s))
 - `find` (1 edge(s))
 - `ok` (1 edge(s))
-- `match` (1 edge(s))
-- `includes` (1 edge(s))
-- `stringify` (1 edge(s))
+- `toUpperCase` (1 edge(s))
+- `resolve` (1 edge(s))
 - `originalGet` (1 edge(s))
 - `push` (1 edge(s))
-- `assign` (1 edge(s))
-- `resolve` (1 edge(s))
+- `require` (1 edge(s))
+- `after` (1 edge(s))
 
 ### Incoming
 
-- `equal` (7 edge(s))
-- `./services/planner/src/routes/settings.credentials.test.js` (6 edge(s))
-- `deepEqual` (2 edge(s))
-- `toUpperCase` (1 edge(s))
-- `match` (1 edge(s))
-- `includes` (1 edge(s))
-- `stringify` (1 edge(s))
+- `./services/planner/src/routes/settings.complexity.test.js::test:GET settings reports the stored tier only while it still matches (else custom)@L101` (6 edge(s))
+- `./services/planner/src/routes/settings.complexity.test.js` (4 edge(s))
+- `./services/planner/src/routes/settings.complexity.test.js::test:planner PUT /complexity applies a tier to every task role and records history@L60` (4 edge(s))
+- `equal` (2 edge(s))

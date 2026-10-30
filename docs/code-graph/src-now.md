@@ -4,32 +4,33 @@
 
 ## Overview
 
-Community of 17 nodes
+Community of 18 nodes
 
-- **Size**: 17 nodes
-- **Cohesion**: 0.2400
+- **Size**: 18 nodes
+- **Cohesion**: 0.2384
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| nowIso | Function | ./services/provisioner/src/handler.js | 17-19 |
-| handleMessage | Function | ./services/provisioner/src/handler.js | 21-54 |
-| deps | Function | ./services/provisioner/src/handler.test.js | 8-19 |
-| test:provision: calls provisionTenant then writes back the deployments map@L21 | Test | ./services/provisioner/src/handler.test.js | 21-29 |
-| test:action defaults to provision when omitted@L31 | Test | ./services/provisioner/src/handler.test.js | 31-36 |
-| test:teardown: calls teardownTenant then writes back shared@L38 | Test | ./services/provisioner/src/handler.test.js | 38-44 |
-| test:malformed message: no provision, no write-back@L46 | Test | ./services/provisioner/src/handler.test.js | 46-53 |
-| test:provision failure: records status=failed via write-back@L55 | Test | ./services/provisioner/src/handler.test.js | 55-62 |
-| test:write-back failure on the failure path is swallowed (no throw)@L64 | Test | ./services/provisioner/src/handler.test.js | 64-71 |
-| buildCfg | Function | ./services/provisioner/src/index.js | 28-68 |
+| nowIso | Function | ./services/provisioner/src/handler.js | 20-22 |
+| handleMessage | Function | ./services/provisioner/src/handler.js | 24-77 |
+| deps | Function | ./services/provisioner/src/handler.test.js | 8-20 |
+| test:provision: calls provisionTenant then writes back the deployments map@L22 | Test | ./services/provisioner/src/handler.test.js | 22-30 |
+| test:action defaults to provision when omitted@L32 | Test | ./services/provisioner/src/handler.test.js | 32-37 |
+| test:teardown: calls teardownTenant then writes back shared@L39 | Test | ./services/provisioner/src/handler.test.js | 39-45 |
+| test:malformed message: no provision, no write-back@L47 | Test | ./services/provisioner/src/handler.test.js | 47-54 |
+| test:provision failure: records status=failed via write-back@L56 | Test | ./services/provisioner/src/handler.test.js | 56-63 |
+| test:write-back failure on the failure path is swallowed (no throw)@L65 | Test | ./services/provisioner/src/handler.test.js | 65-72 |
+| test:provision blocked when org funds are unavailable@L74 | Test | ./services/provisioner/src/handler.test.js | 74-90 |
+| buildCfg | Function | ./services/provisioner/src/index.js | 28-69 |
 | enabled | Function | ./services/provisioner/src/index.js | 29-32 |
-| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 71-81 |
-| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 85-97 |
-| writeBack | Function | ./services/provisioner/src/index.js | 99-112 |
-| createApp | Function | ./services/provisioner/src/index.js | 114-135 |
-| start | Function | ./services/provisioner/src/index.js | 137-145 |
+| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 72-82 |
+| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 86-98 |
+| writeBack | Function | ./services/provisioner/src/index.js | 100-113 |
+| createApp | Function | ./services/provisioner/src/index.js | 115-136 |
+| start | Function | ./services/provisioner/src/index.js | 138-146 |
 | test:buildCfg passes the shared stream-token broker URL into tenant plans@L8 | Test | ./services/provisioner/src/index.test.js | 8-20 |
 
 ## Execution Flows
@@ -40,27 +41,27 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (16 edge(s))
+- `equal` (22 edge(s))
 - `error` (4 edge(s))
-- `writeBack` (3 edge(s))
+- `writeBack` (4 edge(s))
 - `String` (3 edge(s))
 - `push` (3 edge(s))
 - `trim` (3 edge(s))
 - `stringify` (2 edge(s))
 - `teardownTenant` (2 edge(s))
+- `resolve` (2 edge(s))
 - `provisionTenant` (2 edge(s))
 - `match` (2 edge(s))
 - `deepEqual` (2 edge(s))
 - `use` (2 edge(s))
 - `json` (2 edge(s))
 - `get` (2 edge(s))
-- `info` (2 edge(s))
 
 ### Incoming
 
-- `equal` (16 edge(s))
+- `equal` (22 edge(s))
 - `./services/provisioner/src/index.js` (11 edge(s))
-- `./services/provisioner/src/handler.test.js` (7 edge(s))
+- `./services/provisioner/src/handler.test.js` (8 edge(s))
 - `./services/provisioner/src/handler.js` (3 edge(s))
 - `match` (2 edge(s))
 - `deepEqual` (2 edge(s))

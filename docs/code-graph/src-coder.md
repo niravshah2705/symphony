@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 3 nodes
 
-- **Size**: 5 nodes
-- **Cohesion**: 0.1928
+- **Size**: 3 nodes
+- **Cohesion**: 0.1333
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,9 +16,7 @@ Community of 5 nodes
 |------|------|------|-------|
 | coderHandler | Function | ./services/coder/src/pubsub.test.js | 9-13 |
 | invoke | Function | ./services/coder/src/pubsub.test.js | 15-22 |
-| test:coder Pub/Sub binds concurrent decoded contexts for the full async dispatch@L24 | Test | ./services/coder/src/pubsub.test.js | 24-73 |
 | test:coder Pub/Sub threads the allowlisted llm-gateway flag into runTicket@L75 | Test | ./services/coder/src/pubsub.test.js | 75-101 |
-| test:coder Pub/Sub missing context retains the legacy empty workspace@L103 | Test | ./services/coder/src/pubsub.test.js | 103-125 |
 
 ## Execution Flows
 
@@ -28,35 +26,30 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `resolve` (5 edge(s))
 - `find` (3 edge(s))
-- `finish` (3 edge(s))
-- `after` (3 edge(s))
-- `require` (3 edge(s))
-- `equal` (3 edge(s))
-- `push` (2 edge(s))
-- `currentWorkspaceContext` (2 edge(s))
-- `deepEqual` (2 edge(s))
+- `./services/coder/src/pubsub.test.js::test:coder Pub/Sub binds concurrent decoded contexts for the full async dispatch@L24` (3 edge(s))
+- `resolve` (3 edge(s))
+- `./services/coder/src/pubsub.test.js::test:coder Pub/Sub missing context retains the legacy empty workspace@L103` (2 edge(s))
+- `equal` (2 edge(s))
 - `ok` (1 edge(s))
 - `at` (1 edge(s))
 - `catch` (1 edge(s))
 - `handler` (1 edge(s))
 - `toPushEnvelope` (1 edge(s))
-- `setImmediate` (1 edge(s))
+- `push` (1 edge(s))
+- `finish` (1 edge(s))
+- `after` (1 edge(s))
+- `require` (1 edge(s))
 
 ### Incoming
 
-- `./services/coder/src/pubsub.test.js` (5 edge(s))
-- `resolve` (3 edge(s))
-- `finish` (3 edge(s))
-- `after` (3 edge(s))
-- `require` (3 edge(s))
-- `equal` (3 edge(s))
-- `push` (2 edge(s))
-- `currentWorkspaceContext` (2 edge(s))
-- `deepEqual` (2 edge(s))
+- `./services/coder/src/pubsub.test.js` (3 edge(s))
+- `./services/coder/src/pubsub.test.js::test:coder Pub/Sub binds concurrent decoded contexts for the full async dispatch@L24` (3 edge(s))
+- `./services/coder/src/pubsub.test.js::test:coder Pub/Sub missing context retains the legacy empty workspace@L103` (2 edge(s))
+- `equal` (2 edge(s))
 - `find` (2 edge(s))
-- `setImmediate` (1 edge(s))
-- `all` (1 edge(s))
-- `sort` (1 edge(s))
-- `localeCompare` (1 edge(s))
+- `resolve` (1 edge(s))
+- `push` (1 edge(s))
+- `finish` (1 edge(s))
+- `after` (1 edge(s))
+- `require` (1 edge(s))
