@@ -24,7 +24,7 @@ const sse = require('./sse');
 const { mintStreamToken, mintWorkspaceToken } = require('./stream-token');
 const { createStreamTokenHandlers } = require('./stream-token-handlers');
 const { configureTrustProxy } = require('./trust-proxy');
-const { enforcePinnedOrganization, requestContext, requireOrganizationContext, notificationsRequested } = require('./request-context');
+const { enforcePinnedOrganization, requestContext, requireOrganizationContext, notificationsRequested, deprecatedUiRequested } = require('./request-context');
 const { createContextValidationMiddleware } = require('./context-validator');
 const { createStoreContextMiddleware } = require('./store-context');
 const { createApiDocsGate, serveSwaggerJson, createSwaggerMiddleware, createSwaggerUISetup } = require('./swagger');
@@ -79,7 +79,11 @@ app.use(express.json({ limit: '1mb' }));
 // No other API route is mounted ahead of the authentication boundary.
 app.get('/healthz', (req, res) => res.json({ status: 'ok' }));
 app.get('/api/auth/config', (req, res) => {
-  res.set('Cache-Control', 'no-store').json(publicAuthConfig());
+  res.set('Cache-Control', 'no-store').json({
+    ...publicAuthConfig(),
+    // Off by default — see request-context.js DEPRECATED_HEADER.
+    deprecatedUiEnabled: deprecatedUiRequested(req),
+  });
 });
 
 // Swagger/OpenAPI documentation — gated by x-ai-fleet-api-docs header in production.
@@ -142,6 +146,8 @@ app.get('/api/auth/me', (req, res) => {
     permissions: req.auth.permissions,
     // Off by default — see request-context.js NOTIFICATIONS_HEADER.
     notificationsEnabled: notificationsRequested(req),
+    // Off by default — see request-context.js DEPRECATED_HEADER.
+    deprecatedUiEnabled: deprecatedUiRequested(req),
   });
 });
 

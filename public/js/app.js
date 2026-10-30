@@ -28,7 +28,7 @@ import { initThemeToggle } from './theme.js';
 import { initCookiePreferences } from './cookie-preferences.js';
 import { initNotifications } from './notifications.js';
 import { trackGoogleAnalyticsPageView } from './google-analytics.mjs';
-import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
+import { canAccessRoute, menuRouteVisible, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 import {
   activeWorkspaceOrganization,
   activeWorkspaceProject,
@@ -152,7 +152,7 @@ function applyMenuPermissions(session) {
   const nav = document.getElementById('tabs');
   if (!nav) return;
   nav.querySelectorAll('a[data-route]').forEach((link) => {
-    link.hidden = !canAccessRoute(session, link.dataset.route);
+    link.hidden = !menuRouteVisible(session, link.dataset.route);
   });
   nav.querySelectorAll('.nav-section').forEach((section) => {
     const links = section.querySelectorAll('a[data-route]');
