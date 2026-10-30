@@ -239,7 +239,7 @@ jobs:
 
       - name: Upload sanitized evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v8
         with:
           name: e2e-live-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/ai-fleet-e2e-artifacts-${{ github.run_id }}-${{ github.run_attempt }}/evidence
@@ -248,7 +248,7 @@ jobs:
 
       - name: Upload sanitized HTML report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v8
         with:
           name: e2e-live-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/ai-fleet-e2e-artifacts-${{ github.run_id }}-${{ github.run_attempt }}/report
@@ -257,7 +257,7 @@ jobs:
 
       - name: Upload recorded videos
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v8
         with:
           name: e2e-live-videos-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/ai-fleet-e2e-artifacts-${{ github.run_id }}-${{ github.run_attempt }}/videos
