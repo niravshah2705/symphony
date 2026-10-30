@@ -98,7 +98,7 @@ jobs:
           echo "Resolved ECC $VERSION at $COMMIT"
 
       - name: Upload immutable source
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ecc-resolved-source
           path: ${{ runner.temp }}/resolved-source
@@ -168,7 +168,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Download resolved ECC source
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: ecc-resolved-source
           path: ${{ runner.temp }}/resolved-source
@@ -225,7 +225,7 @@ jobs:
           test "$(stat -c %s "$LEG_DIR/rootfs.tar.gz")" -le 1073741824
 
       - name: Upload harness artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: harness-${{ matrix.harness }}
           path: ${{ runner.temp }}/harness-artifact
@@ -254,13 +254,13 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Download all harness artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           pattern: harness-*
           path: ${{ runner.temp }}/harness-inputs/harnesses
 
       - name: Download resolved source metadata and inert bundles
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: ecc-resolved-source
           path: ${{ runner.temp }}/harness-inputs/resolve
@@ -289,7 +289,7 @@ jobs:
             "$INDEX" >/dev/null
 
       - name: Upload verified registry
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: harness-registry-v1
           path: ${{ runner.temp }}/registry/v1
@@ -308,7 +308,7 @@ jobs:
       # No repository checkout and no registry code execution occurs in this job.
       # Validate the artifact before acquiring cloud credentials.
       - name: Download verified registry
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: harness-registry-v1
           path: ${{ runner.temp }}/registry/v1
