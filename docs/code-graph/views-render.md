@@ -7,7 +7,7 @@
 Community of 725 nodes
 
 - **Size**: 725 nodes
-- **Cohesion**: 0.5019
+- **Cohesion**: 0.5020
 - **Dominant Language**: javascript
 
 ## Members
@@ -35,13 +35,13 @@ Community of 725 nodes
 | close | Function | ./public/js/api.js | 322-326 |
 | ensureStylesheet | Function | ./public/js/app.js | 46-68 |
 | load | Function | ./public/js/app.js | 75-87 |
-| currentRoute | Function | ./public/js/app.js | 140-147 |
-| applyMenuPermissions | Function | ./public/js/app.js | 151-162 |
-| organizationContextRequired | Function | ./public/js/app.js | 166-172 |
-| maybeRefreshConnection | Function | ./public/js/app.js | 174-181 |
-| maybeRefreshRole | Function | ./public/js/app.js | 182-191 |
-| syncShell | Function | ./public/js/app.js | 193-244 |
-| syncSidebar | Function | ./public/js/app.js | 246-285 |
+| currentRoute | Function | ./public/js/app.js | 141-148 |
+| applyMenuPermissions | Function | ./public/js/app.js | 152-163 |
+| organizationContextRequired | Function | ./public/js/app.js | 167-173 |
+| maybeRefreshConnection | Function | ./public/js/app.js | 175-182 |
+| maybeRefreshRole | Function | ./public/js/app.js | 183-192 |
+| syncShell | Function | ./public/js/app.js | 194-245 |
+| syncSidebar | Function | ./public/js/app.js | 247-285 |
 | syncSidebarCollapsed | Function | ./public/js/app.js | 287-297 |
 | copyWithLegacyFallback | Function | ./public/js/app.js | 299-314 |
 | copyAdlcPrompt | Function | ./public/js/app.js | 316-327 |
@@ -96,7 +96,7 @@ Community of 725 nodes
 - `isArray` (71 edge(s))
 - `catch` (66 edge(s))
 - `Boolean` (66 edge(s))
-- `setAttribute` (62 edge(s))
+- `setAttribute` (61 edge(s))
 - `has` (59 edge(s))
 - `querySelector` (53 edge(s))
 - `find` (48 edge(s))
