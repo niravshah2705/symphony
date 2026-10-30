@@ -269,7 +269,7 @@ function adminPanel(view, summary) {
   const currentMode = ar.mode || 'amount';
 
   const amount = el('input', { type: 'number', min: '1', step: '1', placeholder: 'Amount (INR)' });
-  const addBtn = el('button', { type: 'button', class: 'btn primary' }, 'Add credits');
+  const addBtn = el('button', { type: 'button', class: 'btn' }, 'Add credits (manual)');
   addBtn.addEventListener('click', async () => {
     const value = Number(amount.value);
     if (!Number.isFinite(value) || value <= 0) return toast('Enter a positive amount', 'warn');
@@ -281,6 +281,51 @@ function adminPanel(view, summary) {
     } catch (err) {
       toast((err && err.message) || 'Recharge failed', 'error');
       addBtn.disabled = false;
+    }
+  });
+
+  const payCashfreeBtn = el('button', { type: 'button', class: 'btn primary' }, 'Pay with Cashfree');
+  payCashfreeBtn.addEventListener('click', async () => {
+    const value = Number(amount.value);
+    if (!Number.isFinite(value) || value <= 0) return toast('Enter a positive amount', 'warn');
+    payCashfreeBtn.disabled = true;
+    try {
+      toast('Creating Cashfree order…', 'ok');
+      const pi = summary.paymentInfo || {};
+      const orderRes = await api.billing.createCashfreeOrder({
+        amountInr: value,
+        customerName: pi.billingName || 'Admin',
+        customerEmail: pi.billingEmail || 'billing@example.com',
+        customerPhone: pi.billingPhone || '9999999999',
+      });
+      if (!orderRes.paymentSessionId) throw new Error('No payment session returned from Cashfree.');
+      
+      const CashfreeSdk = await loadCashfreeSdk();
+      const cashfree = CashfreeSdk({ mode: 'sandbox' });
+      cashfree.checkout({
+        paymentSessionId: orderRes.paymentSessionId,
+        redirectTarget: '_modal',
+      }).then(async (result) => {
+        if (result && result.error) {
+          toast(`Payment error: ${result.error.message}`, 'error');
+          payCashfreeBtn.disabled = false;
+        } else {
+          toast('Verifying payment…', 'ok');
+          const verifyRes = await api.billing.verifyCashfreeOrder(orderRes.orderId);
+          if (verifyRes.status === 'PAID') {
+            toast(`Payment successful! Reloaded ₹${value}.`, 'ok');
+          } else {
+            toast(`Payment status: ${verifyRes.status}`, 'warn');
+          }
+          renderCost(view);
+        }
+      }).catch((err) => {
+        toast((err && err.message) || 'Checkout modal dismissed', 'warn');
+        payCashfreeBtn.disabled = false;
+      });
+    } catch (err) {
+      toast((err && err.message) || 'Failed to start Cashfree checkout', 'error');
+      payCashfreeBtn.disabled = false;
     }
   });
 
@@ -394,7 +439,7 @@ function adminPanel(view, summary) {
       ]),
     ]),
     el('div', { class: 'form-grid' }, [
-      el('div', { class: 'row' }, [amount, addBtn]),
+      el('div', { class: 'row' }, [amount, payCashfreeBtn, addBtn]),
       field('Alert thresholds (INR, comma-separated)', thresholds),
       el('div', { class: 'field-group' }, [
         el('strong', {}, 'Auto-Reload Threshold Method (OpenAI style)'),

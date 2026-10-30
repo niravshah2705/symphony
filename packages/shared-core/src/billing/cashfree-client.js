@@ -150,9 +150,90 @@ function verifyWebhookSignature(headers = {}, rawBody = '') {
   }
 }
 
+async function createOrder({
+  orderId,
+  orderAmount,
+  customerId = 'cust_default',
+  customerName = 'Admin User',
+  customerEmail = 'admin@aifleet.local',
+  customerPhone = '9999999999',
+  returnUrl = '',
+  orderNote = 'Wallet reload',
+}) {
+  if (!isConfigured()) {
+    return {
+      order_id: orderId,
+      order_status: 'ACTIVE',
+      payment_session_id: `mock_session_${crypto.randomUUID()}`,
+      mock: true,
+    };
+  }
+
+  const url = `${getBaseUrl()}/orders`;
+  const body = {
+    order_id: orderId,
+    order_amount: Number(orderAmount),
+    order_currency: 'INR',
+    customer_details: {
+      customer_id: customerId,
+      customer_name: customerName,
+      customer_email: customerEmail,
+      customer_phone: customerPhone,
+    },
+    order_meta: {
+      return_url: returnUrl || undefined,
+      notify_url: undefined,
+    },
+    order_note: orderNote,
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  const responseData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    log.error('Cashfree createOrder failed', { status: res.status, data: responseData });
+    const msg = responseData.message || responseData.reason || 'Failed to create Cashfree order';
+    throw new Error(`Cashfree error (${res.status}): ${msg}`);
+  }
+
+  return responseData;
+}
+
+async function getOrder(orderId) {
+  if (!isConfigured()) {
+    return {
+      order_id: orderId,
+      order_status: 'PAID',
+      order_amount: 100,
+      mock: true,
+    };
+  }
+
+  const url = `${getBaseUrl()}/orders/${encodeURIComponent(orderId)}`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: getHeaders(),
+  });
+
+  const responseData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    log.error('Cashfree getOrder failed', { status: res.status, data: responseData });
+    const msg = responseData.message || 'Failed to get Cashfree order details';
+    throw new Error(`Cashfree error (${res.status}): ${msg}`);
+  }
+
+  return responseData;
+}
+
 module.exports = {
   getBaseUrl,
   isConfigured,
+  createOrder,
+  getOrder,
   createOnDemandSubscription,
   getSubscription,
   chargeSubscription,

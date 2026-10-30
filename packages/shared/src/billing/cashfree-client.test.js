@@ -72,3 +72,28 @@ test('cashfreeClient getBaseUrl respects CASHFREE_BASE_URL and CASHFREE_ENV', ()
     else delete process.env.CASHFREE_ENV;
   }
 });
+
+test('cashfreeClient createOrder and getOrder fallback to mock when credentials missing', async () => {
+  const origAppId = process.env.CASHFREE_APP_ID;
+  const origSecret = process.env.CASHFREE_SECRET_KEY;
+  try {
+    delete process.env.CASHFREE_APP_ID;
+    delete process.env.CASHFREE_SECRET_KEY;
+
+    const orderRes = await cashfreeClient.createOrder({
+      orderId: 'order_test_123',
+      orderAmount: 500,
+      orderCurrency: 'INR',
+      customerDetails: { customerId: 'org_1', customerPhone: '9999999999' },
+    });
+    assert.equal(orderRes.order_id, 'order_test_123');
+    assert.ok(orderRes.payment_session_id);
+
+    const getRes = await cashfreeClient.getOrder('order_test_123');
+    assert.equal(getRes.order_id, 'order_test_123');
+    assert.equal(getRes.order_status, 'PAID');
+  } finally {
+    if (origAppId) process.env.CASHFREE_APP_ID = origAppId;
+    if (origSecret) process.env.CASHFREE_SECRET_KEY = origSecret;
+  }
+});

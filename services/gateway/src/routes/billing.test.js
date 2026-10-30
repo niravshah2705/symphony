@@ -61,3 +61,25 @@ test('autoRecharge configuration preserves cashfree fields and calculates thresh
   assert.equal(account.autoRecharge.cashfreeSubscriptionId, 'sub_test_123');
   assert.equal(account.autoRecharge.paymentMethodType, 'upi_autopay');
 });
+
+test('billing paymentInfo is stored and returned', () => {
+  store.upsertBillingAccount('org-test-pi', {
+    paymentInfo: {
+      billingName: 'Gateway Test Org',
+      billingEmail: 'admin@gatewaytest.com',
+      billingPhone: '9876543210',
+      taxId: '27AABCU9603R1ZM',
+      billingAddress: {
+        line1: '123 Tech Park',
+        city: 'Bengaluru',
+        state: 'KA',
+        postalCode: '560001',
+        country: 'IN',
+      },
+    },
+  });
+  const account = store.getBillingAccount('org-test-pi');
+  assert.equal(account.paymentInfo.billingName, 'Gateway Test Org');
+  assert.equal(account.paymentInfo.taxId, '27AABCU9603R1ZM');
+  assert.equal(account.paymentInfo.billingAddress.city, 'Bengaluru');
+});

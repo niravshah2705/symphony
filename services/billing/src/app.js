@@ -95,6 +95,14 @@ function createBillingRouter() {
         lastRechargedAt: autoRecharge.lastRechargedAt || null,
         cashfreeSubscriptionId: autoRecharge.cashfreeSubscriptionId || null,
       },
+      paymentInfo: account.paymentInfo || {
+        billingName: '',
+        billingEmail: '',
+        billingPhone: '',
+        taxId: '',
+        address: null,
+        updatedAt: null,
+      },
       notifyChannels: account.notifyChannels || { browser: true, email: false, slack: false },
       gateEnabled: account.gateEnabled !== false,
       sweepEnabled: CONFIG.BILLING.sweepEnabled,
@@ -211,6 +219,26 @@ function createBillingRouter() {
       };
     }
 
+    let paymentInfo = account.paymentInfo || {};
+    if (body.paymentInfo && typeof body.paymentInfo === 'object') {
+      paymentInfo = {
+        billingName: String(body.paymentInfo.billingName || paymentInfo.billingName || '').slice(0, 100),
+        billingEmail: String(body.paymentInfo.billingEmail || paymentInfo.billingEmail || '').slice(0, 100),
+        billingPhone: String(body.paymentInfo.billingPhone || paymentInfo.billingPhone || '').slice(0, 20),
+        taxId: String(body.paymentInfo.taxId || paymentInfo.taxId || '').slice(0, 50),
+        address: body.paymentInfo.address && typeof body.paymentInfo.address === 'object'
+          ? {
+              line1: String(body.paymentInfo.address.line1 || '').slice(0, 120),
+              city: String(body.paymentInfo.address.city || '').slice(0, 60),
+              state: String(body.paymentInfo.address.state || '').slice(0, 60),
+              postalCode: String(body.paymentInfo.address.postalCode || '').slice(0, 20),
+              country: String(body.paymentInfo.address.country || 'IN').slice(0, 10),
+            }
+          : (paymentInfo.address || null),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
     const notifyChannels = body.notifyChannels && typeof body.notifyChannels === 'object'
       ? {
           browser: body.notifyChannels.browser !== false,
@@ -224,11 +252,12 @@ function createBillingRouter() {
     store.upsertBillingAccount(orgId, {
       alertThresholdsInr,
       autoRecharge,
+      paymentInfo,
       notifyChannels,
       gateEnabled,
     });
 
-    return res.json({ success: true, autoRecharge, alertThresholdsInr, notifyChannels, gateEnabled });
+    return res.json({ success: true, autoRecharge, paymentInfo, alertThresholdsInr, notifyChannels, gateEnabled });
   }));
 
   // Cashfree Mandate Creation
@@ -267,6 +296,102 @@ function createBillingRouter() {
     });
 
     return res.json(sub);
+  }));
+
+  // Cashfree Order Creation (On-Demand Reload)
+  router.post('/cashfree/create-order', asyncHandler(async (req, res) => {
+    const { orgId, userId } = resolveOrgContext(req);
+    const amountInr = Number(req.body && req.body.amountInr);
+    const amountPaise = inrToPaise(amountInr);
+    if (!Number.isFinite(amountPaise) || amountPaise <= 0 || amountPaise > MAX_RECHARGE_PAISE) {
+      return res.status(400).json({ error: `Amount must be between ₹1 and ₹${MAX_RECHARGE_PAISE / 100}`, code: 'invalid_amount' });
+    }
+
+    const account = ledger.ensureAccount(orgId);
+    const orderId = `order_${orgId.replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}`;
+    const customerId = `cust_${orgId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const paymentInfo = account.paymentInfo || {};
+    const customerName = req.body.customerName || paymentInfo.billingName || 'Admin User';
+    const customerEmail = req.body.customerEmail || paymentInfo.billingEmail || `${userId || 'admin'}@fleet.local`;
+    const customerPhone = req.body.customerPhone || paymentInfo.billingPhone || '9999999999';
+    const returnUrl = req.body.returnUrl || '';
+
+    const order = await cashfreeClient.createOrder({
+      orderId,
+      orderAmount: amountInr,
+      customerId,
+      customerName,
+      customerEmail,
+      customerPhone,
+      returnUrl,
+      orderNote: `AI Fleet Wallet Reload for Org ${orgId}`,
+    });
+
+    return res.json({
+      orgId,
+      orderId,
+      amountInr,
+      paymentSessionId: order.payment_session_id || '',
+      orderStatus: order.order_status || 'ACTIVE',
+      cashfreeData: order,
+    });
+  }));
+
+  // Cashfree Order Verification & Credit Fulfillment
+  router.post('/cashfree/verify-order', asyncHandler(async (req, res) => {
+    const { orgId } = resolveOrgContext(req);
+    const orderId = String((req.body && req.body.orderId) || '').trim();
+    if (!orderId) {
+      return res.status(400).json({ error: 'orderId is required', code: 'missing_order_id' });
+    }
+
+    // Idempotency: verify this order hasn't already been credited in the ledger
+    const existingEntries = store.listLedgerEntries({ orgId });
+    const alreadyCredited = existingEntries.find((e) => e.meta && e.meta.cashfreeOrderId === orderId);
+    if (alreadyCredited) {
+      const account = ledger.ensureAccount(orgId);
+      return res.json({
+        success: true,
+        alreadyProcessed: true,
+        orderId,
+        orderStatus: 'PAID',
+        balanceInr: paiseToInr(account.balancePaise),
+        balancePaise: account.balancePaise,
+      });
+    }
+
+    const order = await cashfreeClient.getOrder(orderId);
+    const status = String(order.order_status || '').toUpperCase();
+
+    if (status === 'PAID') {
+      const amountInr = Number(order.order_amount);
+      const amountPaise = inrToPaise(amountInr);
+      const { entry, account } = ledger.postEntry(orgId, {
+        type: 'recharge',
+        amountPaise,
+        description: `Cashfree recharge (${orderId})`,
+        meta: {
+          cashfreeOrderId: orderId,
+          cfOrderId: order.cf_order_id || null,
+          paymentSessionId: order.payment_session_id || null,
+        },
+      });
+
+      return res.json({
+        success: true,
+        orderId,
+        orderStatus: status,
+        entry: { ...entry, amountInr: paiseToInr(entry.amountPaise) },
+        balanceInr: paiseToInr(account.balancePaise),
+        balancePaise: account.balancePaise,
+      });
+    }
+
+    return res.status(400).json({
+      error: 'Order is not in PAID status',
+      orderStatus: status,
+      orderId,
+    });
   }));
 
   // Cashfree Mandate Verification
@@ -324,6 +449,28 @@ function createBillingRouter() {
         for (const acc of store.listBillingAccounts()) {
           if (acc.autoRecharge && acc.autoRecharge.cashfreeSubscriptionId === subscriptionId) {
             log.info(`Cashfree webhook confirmed active mandate ${subscriptionId} for org ${acc.orgId}`);
+          }
+        }
+      }
+    } else if (type === 'ORDER_PAID_SUCCESS' || type === 'PAYMENT_SUCCESS_WEBHOOK') {
+      const order = data.order || {};
+      const orderId = order.order_id || (data.payment && data.payment.order_id);
+      const amount = order.order_amount || (data.payment && data.payment.payment_amount);
+      if (orderId && amount) {
+        for (const acc of store.listBillingAccounts()) {
+          const orgPrefix = `order_${String(acc.orgId || acc.id).replace(/[^a-zA-Z0-9_-]/g, '_')}_`;
+          if (orderId.startsWith(orgPrefix)) {
+            const orgId = acc.orgId || acc.id;
+            const existing = store.listLedgerEntries({ orgId }).find((e) => e.meta && e.meta.cashfreeOrderId === orderId);
+            if (!existing) {
+              ledger.postEntry(orgId, {
+                type: 'recharge',
+                amountPaise: Math.round(Number(amount) * 100),
+                description: `Cashfree order paid webhook (${orderId})`,
+                meta: { cashfreeOrderId: orderId, webhook: true },
+              });
+              log.info(`Cashfree webhook credited order ${orderId} (${amount} INR) to org ${orgId}`);
+            }
           }
         }
       }
