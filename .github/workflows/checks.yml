@@ -16,13 +16,13 @@ jobs:
     name: Node unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: npm ci
-      # Pass explicit *.test.* globs, not bare source dirs: on Node 22 `node
+      # Pass explicit *.test.* globs, not bare source dirs: on Node 24 `node
       # --test <dir>` runs the directory as an entry module (globbing was the
       # Node 20 behavior), which would execute services/gateway/src/index.js and
       # boot the server → hang. Node expands the quoted globs (needs Node 21+).
@@ -46,10 +46,10 @@ jobs:
     name: Playwright E2E
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: npm ci
       # The e2e project uses the "chrome" channel (see playwright.config.js).
@@ -66,7 +66,7 @@ jobs:
       run:
         working-directory: services/org
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -81,7 +81,7 @@ jobs:
       run:
         working-directory: services/settings
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
