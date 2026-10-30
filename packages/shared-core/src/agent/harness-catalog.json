@@ -82,7 +82,7 @@
       "id": "deepseek",
       "label": "DeepSeek Harness",
       "harnessName": "deepseek",
-      "packageName": "@deepseek-ai/dsh",
+      "packageName": "@deepseek-ai/dsh-sdk-client",
       "requiresProvider": null,
       "availability": "experimental",
       "capabilities": ["planning", "coding", "testing", "subagents"],
