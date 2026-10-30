@@ -103,6 +103,35 @@ function decodeVarint(buf, offset) {
   throw new Error('Truncated protobuf varint');
 }
 
+function skipWireType(buf, offset, wireType) {
+  if (wireType === 0) {
+    const v = decodeVarint(buf, offset);
+    return v.nextOffset;
+  } else if (wireType === 1) {
+    return offset + 8;
+  } else if (wireType === 2) {
+    const len = decodeVarint(buf, offset);
+    return len.nextOffset + Number(len.value);
+  } else if (wireType === 3) {
+    // Start group: skip fields until end group (wireType 4) matching fieldNumber or group end
+    let currentOffset = offset;
+    while (currentOffset < buf.length) {
+      const tag = decodeVarint(buf, currentOffset);
+      currentOffset = tag.nextOffset;
+      const subWireType = Number(tag.value & 0x7n);
+      if (subWireType === 4) {
+        break; // End group
+      }
+      currentOffset = skipWireType(buf, currentOffset, subWireType);
+    }
+    return currentOffset;
+  } else if (wireType === 5) {
+    return offset + 4;
+  } else {
+    throw new Error(`Unsupported protobuf wire type: ${wireType}`);
+  }
+}
+
 function decodeFields(buf) {
   const fields = new Map();
   let offset = 0;
@@ -125,6 +154,14 @@ function decodeFields(buf) {
       const byteLen = Number(len.value);
       value = buf.subarray(offset, offset + byteLen);
       offset += byteLen;
+    } else if (wireType === 3) {
+      // Start group: skip until group end (wireType 4)
+      const groupStart = offset;
+      offset = skipWireType(buf, offset, 3);
+      value = buf.subarray(groupStart, offset);
+    } else if (wireType === 4) {
+      // End group marker, stop parsing if present at top level
+      break;
     } else if (wireType === 5) {
       value = buf.subarray(offset, offset + 4);
       offset += 4;
