@@ -98,7 +98,7 @@ jobs:
           echo "Resolved ECC $VERSION at $COMMIT"
 
       - name: Upload immutable source
-        uses: actions/upload-artifact@v8
+        uses: actions/upload-artifact@v7
         with:
           name: ecc-resolved-source
           path: ${{ runner.temp }}/resolved-source
@@ -225,7 +225,7 @@ jobs:
           test "$(stat -c %s "$LEG_DIR/rootfs.tar.gz")" -le 1073741824
 
       - name: Upload harness artifact
-        uses: actions/upload-artifact@v8
+        uses: actions/upload-artifact@v7
         with:
           name: harness-${{ matrix.harness }}
           path: ${{ runner.temp }}/harness-artifact
@@ -289,7 +289,7 @@ jobs:
             "$INDEX" >/dev/null
 
       - name: Upload verified registry
-        uses: actions/upload-artifact@v8
+        uses: actions/upload-artifact@v7
         with:
           name: harness-registry-v1
           path: ${{ runner.temp }}/registry/v1
