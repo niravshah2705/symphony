@@ -222,65 +222,113 @@ export async function renderOpenShell(view) {
       return;
     }
 
-    // Interactive Terminal (Rendered when sandbox is LOADED & RUNNING)
-    const terminalOutput = el('div', {
-      id: 'terminal-output',
-      style: 'background: #0d1117; color: #58a6ff; font-family: monospace; padding: 14px; height: 320px; overflow-y: auto; border-radius: 6px; font-size: 13px; margin-bottom: 10px; line-height: 1.5; border: 1px solid #30363d;',
-    }, [
-      el('div', { style: 'color: #8b949e;' }, `OpenShell Multi-Tenant Kubernetes Sandbox v0.1.5`),
-      el('div', { style: 'color: #8b949e;' }, `Pod: ${sbName} · Image: ${currentImage} · Namespace: ${activeWorkspace} · Org: ${orgId}`),
-      el('div', { style: 'color: #8b949e; margin-bottom: 8px;' }, `OpenCode CLI ready with free OpenRouter models (${selectedModel}). Type any shell command or 'opencode <prompt>' below.`),
-      el('div', { style: 'color: #7ee787;' }, `[OK] Connected to live OpenShell gateway (${gatewayUrl}) — Pod ${sbName} is ${phase} in namespace '${activeWorkspace}'.`),
-    ]);
-
-    const termInput = el('input', {
-      type: 'text',
-      placeholder: 'Run shell command or OpenCode prompt (e.g., opencode status, uname -a && id, opencode Write a hello world script)',
-      style: 'flex: 1; padding: 8px 12px; background: var(--panel); border: 1px solid var(--border); color: var(--text); border-radius: 4px; font-family: monospace;',
+    // Interactive xterm.js Terminal Container
+    const termContainer = el('div', {
+      id: 'terminal-container',
+      style: 'background: #0d1117; padding: 10px; height: 360px; border-radius: 6px; border: 1px solid #30363d; margin-bottom: 10px; font-family: monospace;',
     });
 
-    const sendBtn = el('button', { class: 'primary', type: 'button' }, 'Execute in Pod');
+    let xterm = null;
+    let fitAddon = null;
+    let inputBuffer = '';
 
-    async function executeCommand(rawCmd) {
-      const msg = (rawCmd ?? termInput.value).trim();
-      if (!msg) return;
-      if (rawCmd === undefined) termInput.value = '';
-
-      terminalOutput.append(
-        el('div', { style: 'color: #edf0f5; margin-top: 8px; font-weight: bold;' }, `sandbox@${sbName}:/workspace$ ${msg}`)
-      );
-      terminalOutput.scrollTop = terminalOutput.scrollHeight;
-      sendBtn.disabled = true;
-
-      try {
-        const chatRes = await api.chatWithSandbox({
-          projectId,
-          projectName,
-          workspace: activeWorkspace,
-          model: selectedModel,
-          message: msg,
-        });
-
-        const reply = chatRes?.reply || '[OpenShell] Command completed (exit 0).';
-        terminalOutput.append(
-          el('div', {
-            style: `${chatRes?.exitCode && chatRes.exitCode !== 0 ? 'color: #ffa657;' : 'color: #7ee787;'} white-space: pre-wrap; margin-bottom: 6px;`,
-          }, reply)
-        );
-      } catch (err) {
-        terminalOutput.append(
-          el('div', { style: 'color: #f85149; white-space: pre-wrap; margin-bottom: 6px;' }, `Error: ${err.message}`)
-        );
-      } finally {
-        sendBtn.disabled = false;
-        terminalOutput.scrollTop = terminalOutput.scrollHeight;
+    function initXterm() {
+      if (typeof window.Terminal !== 'function') {
+        termContainer.append(el('div', { style: 'color: #8b949e; padding: 10px;' }, 'Loading xterm.js terminal engine…'));
+        return;
       }
+
+      xterm = new window.Terminal({
+        cursorBlink: true,
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        fontSize: 13,
+        theme: {
+          background: '#0d1117',
+          foreground: '#58a6ff',
+          cursor: '#58a6ff',
+          selectionBackground: '#163356',
+        },
+      });
+
+      if (window.FitAddon?.FitAddon) {
+        fitAddon = new window.FitAddon.FitAddon();
+        xterm.loadAddon(fitAddon);
+      }
+
+      xterm.open(termContainer);
+      if (fitAddon) {
+        setTimeout(() => { try { fitAddon.fit(); } catch (_) {} }, 100);
+      }
+
+      xterm.writeln('\x1b[38;5;244mOpenShell Multi-Tenant Kubernetes Sandbox v0.1.5 (xterm.js Active)\x1b[0m');
+      xterm.writeln(`\x1b[38;5;244mPod: ${sbName} · Image: ${currentImage} · Namespace: ${activeWorkspace} · Org: ${orgId}\x1b[0m`);
+      xterm.writeln(`\x1b[38;5;244mOpenCode CLI ready with free OpenRouter models (${selectedModel}). Type any shell command or 'opencode <prompt>' below.\x1b[0m`);
+      xterm.writeln(`\x1b[38;5;82m[OK] Connected to live OpenShell gateway (${gatewayUrl}) — Pod ${sbName} is ${phase} in namespace '${activeWorkspace}'.\x1b[0m\n`);
+
+      const promptStr = `\x1b[38;5;75msandbox@${sbName}:/workspace$\x1b[0m `;
+      xterm.write(promptStr);
+
+      xterm.onData(async (data) => {
+        const code = data.charCodeAt(0);
+        if (code === 13) { // Enter key
+          xterm.write('\r\n');
+          const cmd = inputBuffer.trim();
+          inputBuffer = '';
+          if (cmd) {
+            try {
+              const chatRes = await api.chatWithSandbox({
+                projectId,
+                projectName,
+                workspace: activeWorkspace,
+                model: selectedModel,
+                message: cmd,
+              });
+              const reply = chatRes?.reply || '[OpenShell] Command completed (exit 0).';
+              xterm.writeln(reply);
+            } catch (err) {
+              xterm.writeln(`\x1b[31mError: ${err.message || String(err)}\x1b[0m`);
+            }
+          }
+          xterm.write(promptStr);
+        } else if (code === 127) { // Backspace
+          if (inputBuffer.length > 0) {
+            inputBuffer = inputBuffer.slice(0, -1);
+            xterm.write('\b \b');
+          }
+        } else if (code === 3) { // Ctrl+C
+          xterm.write('^C\r\n');
+          inputBuffer = '';
+          xterm.write(promptStr);
+        } else if (code >= 32) { // Printable characters
+          inputBuffer += data;
+          xterm.write(data);
+        }
+      });
     }
 
-    sendBtn.addEventListener('click', () => void executeCommand());
-    termInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') void executeCommand();
-    });
+    // Initialize xterm upon DOM mount
+    setTimeout(() => initXterm(), 50);
+
+    async function executeCommand(rawCmd) {
+      if (!rawCmd) return;
+      if (xterm) {
+        xterm.writeln(`\x1b[38;5;75msandbox@${sbName}:/workspace$\x1b[0m ${rawCmd}`);
+        try {
+          const chatRes = await api.chatWithSandbox({
+            projectId,
+            projectName,
+            workspace: activeWorkspace,
+            model: selectedModel,
+            message: rawCmd,
+          });
+          const reply = chatRes?.reply || '[OpenShell] Command completed (exit 0).';
+          xterm.writeln(reply);
+        } catch (err) {
+          xterm.writeln(`\x1b[31mError: ${err.message || String(err)}\x1b[0m`);
+        }
+        xterm.write(`\x1b[38;5;75msandbox@${sbName}:/workspace$\x1b[0m `);
+      }
+    }
 
     const quickCommands = [
       { label: 'opencode status', cmd: 'opencode status' },
@@ -299,10 +347,9 @@ export async function renderOpenShell(view) {
     );
 
     const terminalSection = el('div', { class: 'panel', style: 'margin-bottom: 20px; padding: 16px;' }, [
-      el('h3', { style: 'margin-top: 0; margin-bottom: 8px;' }, 'Interactive Sandbox Terminal (OpenCode + OpenRouter Free Models)'),
+      el('h3', { style: 'margin-top: 0; margin-bottom: 8px;' }, 'Interactive Sandbox Terminal (xterm.js + OpenCode)'),
       quickBar,
-      terminalOutput,
-      el('div', { style: 'display: flex; gap: 10px;' }, [termInput, sendBtn]),
+      termContainer,
     ]);
 
     // Security & Network Policy Validation Section
