@@ -9,6 +9,7 @@ const {
   enforcePinnedOrganization,
   requireOrganizationContext,
   notificationsRequested,
+  deprecatedUiRequested,
 } = require('./request-context');
 
 function req(headers = {}) {
@@ -75,6 +76,15 @@ test('notifications flag: off by default, on for any non-blank header value', ()
   assert.equal(notificationsRequested(req({ 'x-ai-fleet-notifications': '   ' })), false);
   assert.equal(notificationsRequested(req({ 'x-ai-fleet-notifications': 'enabled' })), true);
   assert.equal(notificationsRequested(req({ 'x-ai-fleet-notifications': '1' })), true);
+});
+
+test('deprecated-tabs flag: off unless the header is exactly true', () => {
+  assert.equal(deprecatedUiRequested(req()), false);
+  assert.equal(deprecatedUiRequested(req({ 'x-ai-fleet-deprecated': '' })), false);
+  assert.equal(deprecatedUiRequested(req({ 'x-ai-fleet-deprecated': 'false' })), false);
+  assert.equal(deprecatedUiRequested(req({ 'x-ai-fleet-deprecated': '1' })), false);
+  assert.equal(deprecatedUiRequested(req({ 'x-ai-fleet-deprecated': 'true' })), true);
+  assert.equal(deprecatedUiRequested(req({ 'x-ai-fleet-deprecated': ' TRUE ' })), true);
 });
 
 test('dedicated gateway rejects a different selected organization', () => {
