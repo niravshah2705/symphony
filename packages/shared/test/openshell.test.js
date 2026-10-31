@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   sanitizeSandboxName,
+  normalizeSandboxName,
   resolveOpenShellWorkspace,
   encodeObjectMeta,
   decodeObjectMeta,
@@ -12,6 +13,12 @@ const {
   getGatewayStatus,
   syncNvidiaSecrets,
   ensureProjectSandbox,
+  stopProjectSandbox,
+  startProjectSandbox,
+  deleteProjectSandbox,
+  changeSandboxImage,
+  listSandboxes,
+  execInteractiveSandboxCommand,
   chatWithProjectSandbox,
   getSampleNetworkPolicy,
   runSandboxSecurityChecks,
@@ -298,4 +305,177 @@ test('getSampleNetworkPolicy and runSandboxSecurityChecks validate tenant isolat
   assert.equal(sec.passed, true);
   assert.equal(sec.checks.length, 6);
   assert.ok(sec.checks.every((c) => c.passed));
+});
+
+test('changeSandboxImage and ensureProjectSandbox support changing container image from backend and UI', async () => {
+  const rpcCalls = [];
+  let currentImageInGateway = 'ubuntu:24.04';
+  const mockTransport = async (method, payload) => {
+    rpcCalls.push(method);
+    if (method === 'Health') {
+      return okFrame(Buffer.concat([encodeTag(1, 0), encodeVarint(1), encodeString(2, '0.1.5')]));
+    }
+    if (method === 'GetSandbox') {
+      const meta = Buffer.concat([encodeString(1, 'uid-img-1'), encodeString(2, 'sb-img-test')]);
+      const template = encodeString(1, currentImageInGateway);
+      const spec = encodeMessage(6, template);
+      const status = Buffer.concat([encodeTag(6, 0), encodeVarint(2)]);
+      const sb = Buffer.concat([encodeMessage(1, meta), encodeMessage(2, spec), encodeMessage(3, status)]);
+      return okFrame(encodeMessage(1, sb));
+    }
+    if (method === 'DeleteSandbox') {
+      return okFrame();
+    }
+    if (method === 'CreateSandbox') {
+      // Verify the new image string is encoded in CreateSandbox request
+      assert.ok(payload.toString('utf8').includes('openeuler/opencode:latest'));
+      currentImageInGateway = 'openeuler/opencode:latest';
+      const meta = Buffer.concat([encodeString(1, 'uid-img-2'), encodeString(2, 'sb-img-test')]);
+      const template = encodeString(1, currentImageInGateway);
+      const spec = encodeMessage(6, template);
+      const status = Buffer.concat([encodeTag(6, 0), encodeVarint(2)]);
+      const sb = Buffer.concat([encodeMessage(1, meta), encodeMessage(2, spec), encodeMessage(3, status)]);
+      return okFrame(encodeMessage(1, sb));
+    }
+    return okFrame();
+  };
+
+  const updated = await changeSandboxImage({
+    url: 'https://openshell.archagentix.com',
+    workspace: 'tenant-a',
+    organizationId: 'org-acme',
+    projectId: 'img-test',
+    sandboxName: 'sb-img-test',
+    image: 'openeuler/opencode:latest',
+    transport: mockTransport,
+  });
+
+  assert.equal(updated.name, 'sb-img-test');
+  assert.equal(updated.image, 'openeuler/opencode:latest');
+  assert.ok(rpcCalls.includes('DeleteSandbox'));
+  assert.ok(rpcCalls.includes('CreateSandbox'));
+});
+
+test('multi-sandbox lifecycle: user can create, list, stop, start, and delete multiple sandboxes', async () => {
+  const mockTransport = async (method) => {
+    if (method === 'Health') {
+      return okFrame(Buffer.concat([encodeTag(1, 0), encodeVarint(1), encodeString(2, '0.1.5')]));
+    }
+    if (method === 'GetSandbox') {
+      return { status: 5, message: 'not found', frames: [], firstFrame: Buffer.alloc(0) };
+    }
+    if (method === 'CreateSandbox') {
+      return okFrame(buildSandboxResponse({ name: 'sb-worker-two', id: 'uid-w2', phase: 2 }));
+    }
+    return okFrame();
+  };
+
+  const sb1 = await ensureProjectSandbox({
+    url: 'https://openshell.archagentix.com',
+    workspace: 'tenant-a',
+    organizationId: 'org-multi',
+    projectId: 'multi-proj',
+    sandboxName: 'sb-worker-one',
+    image: 'ubuntu:24.04',
+    transport: mockTransport,
+  });
+
+  const sb2 = await ensureProjectSandbox({
+    url: 'https://openshell.archagentix.com',
+    workspace: 'tenant-a',
+    organizationId: 'org-multi',
+    projectId: 'multi-proj',
+    sandboxName: 'sb-worker-two',
+    image: 'openeuler/opencode:latest',
+    transport: mockTransport,
+  });
+
+  assert.equal(sb1.name, 'sb-worker-one');
+  assert.equal(sb2.name, 'sb-worker-two');
+  assert.equal(sb2.image, 'openeuler/opencode:latest');
+
+  const all = await listSandboxes({
+    url: 'https://openshell.archagentix.com',
+    workspace: 'tenant-a',
+    organizationId: 'org-multi',
+    projectId: 'multi-proj',
+    transport: mockTransport,
+  });
+  const names = all.map((s) => s.name);
+  assert.ok(names.includes('sb-worker-one'));
+  assert.ok(names.includes('sb-worker-two'));
+
+  const stopped = await stopProjectSandbox({
+    url: 'https://openshell.archagentix.com',
+    workspace: 'tenant-a',
+    organizationId: 'org-multi',
+    projectId: 'multi-proj',
+    sandboxName: 'sb-worker-two',
+    transport: mockTransport,
+  });
+  assert.equal(stopped.phase, 'STOPPED');
+
+  const restarted = await startProjectSandbox({
+    url: 'https://openshell.archagentix.com',
+    workspace: 'tenant-a',
+    organizationId: 'org-multi',
+    projectId: 'multi-proj',
+    sandboxName: 'sb-worker-two',
+    image: 'openeuler/opencode:latest',
+    transport: mockTransport,
+  });
+  assert.equal(restarted.phase, 'READY');
+
+  const deleted = await deleteProjectSandbox({
+    url: 'https://openshell.archagentix.com',
+    workspace: 'tenant-a',
+    organizationId: 'org-multi',
+    projectId: 'multi-proj',
+    sandboxName: 'sb-worker-two',
+    transport: mockTransport,
+  });
+  assert.equal(deleted.deleted, true);
+  assert.equal(deleted.name, 'sb-worker-two');
+});
+
+test('execInteractiveSandboxCommand preserves working directory (cwd) across commands and strips internal state marker', async () => {
+  const mockTransport = async (method, payload) => {
+    if (method === 'ExecSandbox') {
+      const reqStr = payload.toString('utf8');
+      const markerMatch = reqStr.match(/__AIFLEET_STATE_[0-9a-f]+__/);
+      const marker = markerMatch ? markerMatch[0] : '__AIFLEET_STATE_00000000__';
+      const isCd = reqStr.includes('cd /workspace/subdir');
+      const outText = isCd
+        ? `\n${marker}:0:/workspace/subdir:sandbox:sb-inter-1\n`
+        : `hello-interactive\n${marker}:0:/workspace/subdir:sandbox:sb-inter-1\n`;
+      const stdoutChunk = encodeMessage(1, encodeString(1, outText));
+      return okFrame(stdoutChunk);
+    }
+    return okFrame();
+  };
+
+  const step1 = await execInteractiveSandboxCommand({
+    url: 'https://openshell.archagentix.com',
+    workspace: 'tenant-a',
+    projectId: 'inter-proj',
+    sandboxName: 'sb-inter-1',
+    command: 'cd /workspace/subdir',
+    cwd: '/workspace',
+    transport: mockTransport,
+  });
+  assert.equal(step1.cwd, '/workspace/subdir');
+  assert.equal(step1.user, 'sandbox');
+  assert.equal(step1.stdout, '');
+
+  const step2 = await execInteractiveSandboxCommand({
+    url: 'https://openshell.archagentix.com',
+    workspace: 'tenant-a',
+    projectId: 'inter-proj',
+    sandboxName: 'sb-inter-1',
+    command: 'echo hello-interactive',
+    transport: mockTransport,
+  });
+  assert.equal(step2.cwd, '/workspace/subdir');
+  assert.equal(step2.stdout, 'hello-interactive');
+  assert.ok(!step2.stdout.includes('__AIFLEET_STATE_'));
 });

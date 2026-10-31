@@ -7,22 +7,22 @@
 Community of 9 nodes
 
 - **Size**: 9 nodes
-- **Cohesion**: 0.0918
+- **Cohesion**: 0.0811
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| requestWorkspaceContext | Function | ./services/planner/src/routes/agent.js | 78-87 |
-| getHeader | Function | ./services/planner/src/routes/agent.js | 79-82 |
-| jobsForContext | Function | ./services/planner/src/routes/agent.js | 89-95 |
-| jobsForRequest | Function | ./services/planner/src/routes/agent.js | 97-99 |
-| recordsForRequest | Function | ./services/planner/src/routes/agent.js | 101-106 |
-| recordForRequest | Function | ./services/planner/src/routes/agent.js | 108-110 |
-| stampRequestContext | Function | ./services/planner/src/routes/agent.js | 112-119 |
-| conversationForRequest | Function | ./services/planner/src/routes/agent.js | 125-130 |
-| resolveProjectSecrets | Function | ./services/planner/src/routes/agent.js | 382-490 |
+| requestWorkspaceContext | Function | ./services/planner/src/routes/agent.js | 88-97 |
+| getHeader | Function | ./services/planner/src/routes/agent.js | 89-92 |
+| jobsForContext | Function | ./services/planner/src/routes/agent.js | 99-105 |
+| jobsForRequest | Function | ./services/planner/src/routes/agent.js | 107-109 |
+| recordsForRequest | Function | ./services/planner/src/routes/agent.js | 111-116 |
+| recordForRequest | Function | ./services/planner/src/routes/agent.js | 118-120 |
+| stampRequestContext | Function | ./services/planner/src/routes/agent.js | 122-129 |
+| conversationForRequest | Function | ./services/planner/src/routes/agent.js | 135-140 |
+| resolveProjectSecrets | Function | ./services/planner/src/routes/agent.js | 392-500 |
 
 ## Execution Flows
 
@@ -50,4 +50,4 @@ Community of 9 nodes
 
 ### Incoming
 
-- `./services/planner/src/routes/agent.js` (51 edge(s))
+- `./services/planner/src/routes/agent.js` (64 edge(s))

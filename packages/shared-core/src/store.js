@@ -257,6 +257,8 @@ const DEFAULT_STORE = Object.freeze({
     openrouterApiKey: '',
     openshellUrl: CONFIG.OPENSHELL.url,
     openshellWorkspace: CONFIG.OPENSHELL.workspace || 'tenant-a',
+    openshellDefaultImage: 'ubuntu:24.04',
+    openshellSandboxes: [],
     openshellNetworkPolicy: '',
     imageRegistryUrl: 'ghcr.io',
     imageRegistryUsername: '',

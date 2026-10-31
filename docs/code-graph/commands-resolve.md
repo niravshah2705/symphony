@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 191 nodes
+Community of 194 nodes
 
-- **Size**: 191 nodes
-- **Cohesion**: 0.0688
+- **Size**: 194 nodes
+- **Cohesion**: 0.0678
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 191 nodes
 | test:resolveToken reads ADLC_TOKEN from the environment only@L44 | Test | ./packages/cli/src/client.test.js | 44-51 |
 | test:request sends a bearer Authorization header when a token is set@L53 | Test | ./packages/cli/src/client.test.js | 53-64 |
 
-*... and 141 more members.*
+*... and 144 more members.*
 
 ## Execution Flows
 
@@ -77,14 +77,14 @@ Community of 191 nodes
 
 ### Outgoing
 
-- `equal` (261 edge(s))
+- `equal` (275 edge(s))
 - `expect` (173 edge(s))
-- `ok` (140 edge(s))
+- `ok` (145 edge(s))
 - `match` (125 edge(s))
 - `locator` (82 edge(s))
 - `route` (58 edge(s))
+- `includes` (47 edge(s))
 - `deepEqual` (47 edge(s))
-- `includes` (42 edge(s))
 - `indexOf` (37 edge(s))
 - `request` (33 edge(s))
 - `filter` (29 edge(s))
@@ -95,14 +95,14 @@ Community of 191 nodes
 
 ### Incoming
 
-- `equal` (261 edge(s))
+- `equal` (275 edge(s))
 - `expect` (173 edge(s))
-- `ok` (140 edge(s))
+- `ok` (145 edge(s))
 - `match` (125 edge(s))
 - `locator` (82 edge(s))
 - `route` (58 edge(s))
 - `deepEqual` (47 edge(s))
-- `includes` (39 edge(s))
+- `includes` (44 edge(s))
 - `indexOf` (36 edge(s))
 - `toBeVisible` (29 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
