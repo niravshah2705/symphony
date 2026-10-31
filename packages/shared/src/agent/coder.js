@@ -192,6 +192,20 @@ async function executeCodingRuntime({
     );
   }
 
+  let routingMetrics = null;
+  let activeSkillPaths = skillPaths;
+  if (Array.isArray(activeSkillPaths) && activeSkillPaths.length > 1 && prompt) {
+    try {
+      const { routeSkillsForTurn } = require('./skill-router');
+      const routing = await routeSkillsForTurn(prompt, activeSkillPaths, {
+        rootDir: workDir,
+        ...(keys.skillRouterOptions || {}),
+      });
+      activeSkillPaths = routing.selectedSkillPaths;
+      routingMetrics = routing.metrics;
+    } catch (_) {}
+  }
+
   if (runtime === 'deepagent') {
     // The Linear key stays behind linear_graphql. Repository auth stays behind
     // one branch/repo-scoped broker tool; neither secret enters ctx or shell env.
@@ -207,12 +221,13 @@ async function executeCodingRuntime({
       workflow: effectiveWorkflow,
       llm,
       rootDir: workDir,
-      skillPaths,
+      skillPaths: activeSkillPaths,
       // `cwd` scopes the developer tools (docker/build/env/…) to this isolated
       // workspace; they refuse to operate outside it.
       ctx: agentCtx,
       extraTools,
       env,
+      skillRouterMetrics: routingMetrics,
     });
     resolvedTools = tools;
     resolvedSkills = builtSkills;
@@ -225,7 +240,7 @@ async function executeCodingRuntime({
 
   step(
     `Running code-writer (runtime ${runtime}, pattern ${keys.workflowPattern || 'sequential'}, ` +
-    `provider ${llm.provider}, model ${llm.model}, ${skillPaths.length} skills, max ${CONFIG.CODER.maxTurns} turns)…`
+    `provider ${llm.provider}, model ${llm.model}, ${activeSkillPaths.length} skills, max ${CONFIG.CODER.maxTurns} turns)…`
   );
   // Stamp the configured skills/tools/plugins onto the trace so coder runs are
   // filterable/summarisable by which resources were made available.
@@ -256,6 +271,8 @@ async function executeCodingRuntime({
     settings,
     // Billing attribution for first-party usage metering (see billing/usage.js).
     attribution,
+    skillPaths: activeSkillPaths,
+    skillRouterMetrics: routingMetrics,
   });
 }
 

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 156 nodes
+Community of 158 nodes
 
-- **Size**: 156 nodes
-- **Cohesion**: 0.3463
+- **Size**: 158 nodes
+- **Cohesion**: 0.3513
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 156 nodes
 | items | Function | ./services/gateway/src/context-validator.js | 8-10 |
 | itemId | Function | ./services/gateway/src/context-validator.js | 12-14 |
 
-*... and 106 more members.*
+*... and 108 more members.*
 
 ## Execution Flows
 
@@ -76,9 +76,9 @@ Community of 156 nodes
 
 ### Outgoing
 
-- `equal` (140 edge(s))
+- `equal` (146 edge(s))
 - `deepEqual` (48 edge(s))
-- `trim` (37 edge(s))
+- `trim` (38 edge(s))
 - `String` (30 edge(s))
 - `json` (26 edge(s))
 - `map` (23 edge(s))
@@ -87,25 +87,25 @@ Community of 156 nodes
 - `isArray` (17 edge(s))
 - `next` (16 edge(s))
 - `status` (15 edge(s))
+- `toLowerCase` (14 edge(s))
 - `throws` (14 edge(s))
 - `freeze` (13 edge(s))
-- `toLowerCase` (13 edge(s))
 - `get` (11 edge(s))
 
 ### Incoming
 
-- `equal` (140 edge(s))
-- `./services/gateway/src/index.js` (81 edge(s))
+- `equal` (146 edge(s))
+- `./services/gateway/src/index.js` (83 edge(s))
 - `deepEqual` (48 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (29 edge(s))
 - `./services/gateway/src/auth.test.js` (26 edge(s))
-- `./services/gateway/src/request-context.js` (18 edge(s))
+- `./services/gateway/src/request-context.js` (20 edge(s))
 - `./services/gateway/src/auth.js` (16 edge(s))
 - `throws` (14 edge(s))
 - `./services/gateway/src/routes/billing.js` (12 edge(s))
 - `./services/gateway/src/config-resolver.test.js` (11 edge(s))
 - `rejects` (11 edge(s))
+- `./services/gateway/src/request-context.test.js` (11 edge(s))
 - `./services/gateway/src/context-validator.test.js` (10 edge(s))
-- `./services/gateway/src/request-context.test.js` (10 edge(s))
 - `handler` (9 edge(s))

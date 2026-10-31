@@ -79,6 +79,9 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
           }
         }
         const value = await runOnce(runPrompt);
+        if (options.skillRouterMetrics && value && !value.skillRouterMetrics) {
+          value.skillRouterMetrics = options.skillRouterMetrics;
+        }
         const reviewed = reviewEnabled
           ? await applyRubricMiddleware(options, value, runPrompt, runOnce)
           : value;

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 396 nodes
+Community of 430 nodes
 
-- **Size**: 396 nodes
-- **Cohesion**: 0.7599
+- **Size**: 430 nodes
+- **Cohesion**: 0.7544
 - **Dominant Language**: hcl
 
 ## Members
@@ -26,6 +26,11 @@ Community of 396 nodes
 | resource.google_cloud_run_v2_service.billing | Class | ./deploy/gcp/terraform/billing_service.tf | 56-154 |
 | resource.google_cloud_run_v2_service_iam_member.gateway_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 156-162 |
 | resource.google_cloud_run_v2_service_iam_member.push_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 164-170 |
+| resource.google_service_account.clm_inference | Class | ./deploy/gcp/terraform/clm_inference.tf | 6-10 |
+| resource.google_cloud_run_v2_service.clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 12-76 |
+| resource.google_cloud_run_v2_service_iam_member.planner_invokes_clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 79-85 |
+| resource.google_cloud_run_v2_service_iam_member.coder_invokes_clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 87-93 |
+| resource.google_cloud_run_v2_service_iam_member.gateway_invokes_clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 95-101 |
 | local.skills_enabled | Function | ./deploy/gcp/terraform/cloud_run.tf | 17-17 |
 | local.skills_mount_enabled | Function | ./deploy/gcp/terraform/cloud_run.tf | 18-18 |
 | local.skills_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 19-22 |
@@ -59,13 +64,8 @@ Community of 396 nodes
 | resource.google_pubsub_topic.email | Class | ./deploy/gcp/terraform/email_service.tf | 203-209 |
 | resource.google_pubsub_topic_iam_member.email_publishers | Class | ./deploy/gcp/terraform/email_service.tf | 213-222 |
 | resource.google_pubsub_subscription.email_push | Class | ./deploy/gcp/terraform/email_service.tf | 224-257 |
-| resource.google_pubsub_subscription_iam_member.agent_sub_email | Class | ./deploy/gcp/terraform/email_service.tf | 261-266 |
-| resource.google_firebase_project.default | Class | ./deploy/gcp/terraform/firebase.tf | 16-21 |
-| resource.google_firebase_web_app.default | Class | ./deploy/gcp/terraform/firebase.tf | 25-32 |
-| data.google_firebase_web_app_config.default | Class | ./deploy/gcp/terraform/firebase.tf | 38-42 |
-| resource.google_firebase_hosting_site.default | Class | ./deploy/gcp/terraform/firebase.tf | 46-52 |
 
-*... and 346 more members.*
+*... and 380 more members.*
 
 ## Execution Flows
 
@@ -75,10 +75,10 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform/variables.tf` (127 edge(s))
-- `./deploy/gcp/terraform/locals.tf` (46 edge(s))
+- `./deploy/gcp/terraform/variables.tf` (143 edge(s))
+- `./deploy/gcp/terraform/locals.tf` (52 edge(s))
 - `./deploy/gcp/terraform/pipeline.tf` (29 edge(s))
-- `./deploy/gcp/terraform/outputs.tf` (25 edge(s))
+- `./deploy/gcp/terraform/outputs.tf` (27 edge(s))
 - `./deploy/gcp/terraform/iam.tf` (21 edge(s))
 - `./deploy/gcp/terraform/cloud_run.tf` (20 edge(s))
 - `./deploy/gcp/terraform/settings_service.tf` (19 edge(s))

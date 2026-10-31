@@ -285,17 +285,32 @@ async function runWorkflow({
     let deepAgentInvoke;
     let resolvedTools = null;
     let resolvedSkills = null;
+    let routingMetrics = null;
+    let activeSkillPaths = skillPaths;
+    if (Array.isArray(activeSkillPaths) && activeSkillPaths.length > 1 && userMessage) {
+      try {
+        const { routeSkillsForTurn } = require('./skill-router');
+        const routing = await routeSkillsForTurn(userMessage, activeSkillPaths, {
+          rootDir,
+          ...(ctx.skillRouterOptions || {}),
+        });
+        activeSkillPaths = routing.selectedSkillPaths;
+        routingMetrics = routing.metrics;
+      } catch (_) {}
+    }
+
     if (runtimeId === 'deepagent') {
       const mcpTools = await require('./mcp').loadMcpTools(effectiveWorkflow.mcp, ctx);
       const { agent, tools, skillPaths: builtSkills } = buildAgent({
         workflow: effectiveWorkflow,
         llm,
         backend,
-        skillPaths,
+        skillPaths: activeSkillPaths,
         rootDir,
         ctx,
         extraTools: [...mcpTools, ...extraTools],
         env,
+        skillRouterMetrics: routingMetrics,
       });
       resolvedTools = tools;
       resolvedSkills = builtSkills;
@@ -334,6 +349,8 @@ async function runWorkflow({
       tags: effectiveWorkflow.tags || [],
       deepAgentInvoke,
       lastText,
+      skillPaths: activeSkillPaths,
+      skillRouterMetrics: routingMetrics,
       // Optional RubricMiddleware completion review. Absent → no review runs.
       rubric,
       rubricOptions,
