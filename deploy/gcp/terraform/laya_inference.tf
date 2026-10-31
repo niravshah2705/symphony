@@ -36,6 +36,37 @@ resource "google_cloud_run_v2_service" "laya" {
         container_port = 8080
       }
 
+      # OpenAI-compatible backend contract. Empty INFERENCE_BASE_URL keeps the
+      # service on its deterministic in-process fallback.
+      env {
+        name  = "INFERENCE_BASE_URL"
+        value = local.laya_inference_base_url
+      }
+      env {
+        name  = "INFERENCE_MODEL"
+        value = local.laya_inference_model
+      }
+      env {
+        name  = "INFERENCE_AUTH_MODE"
+        value = var.laya_inference_auth_mode
+      }
+      env {
+        name  = "INFERENCE_TIMEOUT_MS"
+        value = tostring(var.laya_inference_timeout_ms)
+      }
+      dynamic "env" {
+        for_each = local.laya_inference_base_url != "" && var.laya_inference_auth_mode == "bearer" && local.inference_api_key_secret_id != "" ? [1] : []
+        content {
+          name = "INFERENCE_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.inference_api_key[0].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
       resources {
         limits = {
           cpu    = var.laya_cpu

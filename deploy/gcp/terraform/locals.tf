@@ -27,6 +27,11 @@ locals {
   # override convention as the skills bucket above.
   attachments_bucket_name = var.attachments_bucket_name != "" ? var.attachments_bucket_name : "${var.project_id}-aifleet-attachments"
 
+  # Model weights registry bucket (models.tf) — same derived-default-with-
+  # override convention as the skills bucket above. Consumed by the
+  # inference-ollama/inference-vllm backends (inference.tf).
+  models_bucket_name = var.models_bucket_name != "" ? var.models_bucket_name : "${var.project_id}-aifleet-models"
+
   # Agent memory Cloud SQL instance (memory.tf) — same derived-default-with-
   # override convention. Instance names must be lowercase alphanumeric/hyphen
   # and unique within the project.

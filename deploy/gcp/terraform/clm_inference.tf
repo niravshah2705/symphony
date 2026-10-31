@@ -36,6 +36,37 @@ resource "google_cloud_run_v2_service" "clm" {
         container_port = 8080
       }
 
+      # OpenAI-compatible backend contract. Empty INFERENCE_BASE_URL keeps the
+      # service on its deterministic local-embedding fallback.
+      env {
+        name  = "INFERENCE_BASE_URL"
+        value = local.clm_inference_base_url
+      }
+      env {
+        name  = "INFERENCE_EMBEDDING_MODEL"
+        value = local.clm_inference_embedding_model
+      }
+      env {
+        name  = "INFERENCE_AUTH_MODE"
+        value = var.clm_inference_auth_mode
+      }
+      env {
+        name  = "INFERENCE_TIMEOUT_MS"
+        value = tostring(var.clm_inference_timeout_ms)
+      }
+      dynamic "env" {
+        for_each = local.clm_inference_base_url != "" && var.clm_inference_auth_mode == "bearer" && local.inference_api_key_secret_id != "" ? [1] : []
+        content {
+          name = "INFERENCE_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.inference_api_key[0].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
       resources {
         limits = {
           cpu    = var.clm_cpu

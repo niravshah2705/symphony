@@ -287,6 +287,70 @@ variable "clm_container_concurrency" {
   default     = 80
 }
 
+# --- Laya/CLM upstream model backends ---------------------------------------
+# The services call an OpenAI-compatible endpoint described entirely by these
+# env vars. Empty base URL = deterministic in-process heuristic fallback (no
+# model call). Defaults point at the vLLM services in inference.tf when their
+# toggles are on.
+
+variable "laya_inference_base_url" {
+  type        = string
+  description = "OPTIONAL override for Laya's INFERENCE_BASE_URL (OpenAI-compatible, include /v1). Empty derives the deployed inference-vllm URL; if that is disabled Laya stays on its heuristic fallback."
+  default     = ""
+}
+
+variable "laya_inference_model" {
+  type        = string
+  description = "Model id Laya sends to the backend (vLLM --served-model-name / Ollama tag). Empty derives vllm_model_name."
+  default     = ""
+}
+
+variable "laya_inference_auth_mode" {
+  type        = string
+  description = "How Laya authenticates to the backend: bearer (INFERENCE_API_KEY), iam (Cloud Run ID token, for Ollama), or none. vLLM backends require bearer."
+  default     = "bearer"
+
+  validation {
+    condition     = contains(["bearer", "iam", "none"], var.laya_inference_auth_mode)
+    error_message = "laya_inference_auth_mode must be bearer, iam, or none."
+  }
+}
+
+variable "laya_inference_timeout_ms" {
+  type        = number
+  description = "Timeout for Laya's backend model call in milliseconds."
+  default     = 2000
+}
+
+variable "clm_inference_base_url" {
+  type        = string
+  description = "OPTIONAL override for CLM's INFERENCE_BASE_URL (OpenAI-compatible, include /v1). Empty derives the deployed inference-vllm-embed URL, then inference-vllm; if neither is enabled CLM stays on its deterministic embedding fallback."
+  default     = ""
+}
+
+variable "clm_inference_embedding_model" {
+  type        = string
+  description = "Embedding model id CLM sends to the backend. Empty derives vllm_embed_model_name."
+  default     = ""
+}
+
+variable "clm_inference_auth_mode" {
+  type        = string
+  description = "How CLM authenticates to the backend: bearer (INFERENCE_API_KEY), iam (Cloud Run ID token, for Ollama), or none. vLLM backends require bearer."
+  default     = "bearer"
+
+  validation {
+    condition     = contains(["bearer", "iam", "none"], var.clm_inference_auth_mode)
+    error_message = "clm_inference_auth_mode must be bearer, iam, or none."
+  }
+}
+
+variable "clm_inference_timeout_ms" {
+  type        = number
+  description = "Timeout for CLM's backend embedding call in milliseconds."
+  default     = 2000
+}
+
 variable "cashfree_app_id_secret_id" {
   type        = string
   description = "Secret Manager secret id containing the Cashfree App ID."
@@ -1016,4 +1080,181 @@ variable "environment" {
   type        = string
   description = "Deployment environment label (e.g. prod, staging) — added to every resource for billing breakdown by environment."
   default     = "prod"
+}
+
+# -----------------------------------------------------------------------------
+# Hosted inference backends (Ollama/vLLM on Cloud Run + GCS model registry).
+# -----------------------------------------------------------------------------
+# See inference.tf's header comment. Laya/CLM consume these through the
+# INFERENCE_BASE_URL + INFERENCE_API_KEY env contract; every resource is gated
+# behind its own `*_enabled` toggle and defaults OFF, so an existing deployment
+# that doesn't opt in creates nothing new and pays nothing extra.
+
+variable "models_enabled" {
+  type        = bool
+  description = "Create the Terraform-managed model-weights registry GCS bucket (+ IAM). Required by the inference_ollama/inference_vllm gcsfuse mounts. Default off."
+  default     = false
+}
+
+variable "models_mount_enabled" {
+  type        = bool
+  description = "Mount the models bucket read-only via gcsfuse on the inference-ollama/inference-vllm services. Requires models_enabled. Off → those services (if enabled) have no model weights available."
+  default     = false
+}
+
+variable "models_bucket_name" {
+  type        = string
+  description = "OPTIONAL override for the models bucket name. Empty ('') derives a stable default of '<project_id>-aifleet-models' (see locals.tf). Terraform CREATES this bucket — it is NOT assumed to pre-exist. Ignored when models_enabled = false."
+  default     = ""
+}
+
+variable "models_bucket_force_destroy" {
+  type        = bool
+  description = "Allow `terraform destroy` to delete the models bucket even if it still holds objects."
+  default     = false
+}
+
+variable "models_bucket_ttl_days" {
+  type        = number
+  description = "Age out noncurrent object generations (created by bucket versioning) after this many days, since model weights are GB-sized and every published version otherwise persists forever. Set to 0 to disable pruning."
+  default     = 30
+
+  validation {
+    condition     = var.models_bucket_ttl_days >= 0 && floor(var.models_bucket_ttl_days) == var.models_bucket_ttl_days
+    error_message = "models_bucket_ttl_days must be a non-negative integer."
+  }
+}
+
+variable "models_publisher_member" {
+  type        = string
+  description = "Optional IAM member (e.g. serviceAccount:gh-deployer@PROJECT.iam.gserviceaccount.com) granted objectAdmin on the models bucket so the publish-models workflow can push new bundles. Empty = no grant (manage the deployer SA's write access out-of-band)."
+  default     = ""
+}
+
+variable "ollama_model_version" {
+  type        = string
+  description = "Model bundle version the Ollama inference service PINS (MODEL_VERSION). Reads /models/ollama/<version>/. Must match a published `ollama/<version>/` prefix in the models bucket (see deploy/models/manifest.json + publish-models.yml)."
+  default     = "v2"
+}
+
+variable "vllm_model_version" {
+  type        = string
+  description = "Model bundle version the vLLM inference services PIN (MODEL_VERSION). Reads /models/vllm/<version>/<model-name>/. Must match a published `vllm/<version>/` prefix in the models bucket."
+  default     = "v2"
+}
+
+variable "vllm_model_name" {
+  type        = string
+  description = "Gemma chat model (by its manifest `name`) served by inference-vllm — vLLM serves exactly one model per instance. Must match a `deploy/models/manifest.json` vllm.models[].name published under vllm/<vllm_model_version>/<name>/. Used as the OpenAI `model` id by Laya."
+  default     = "gemma-3-1b-it"
+}
+
+variable "vllm_embed_model_name" {
+  type        = string
+  description = "EmbeddingGemma model (by its manifest `name`) served by inference-vllm-embed. Must match a `deploy/models/manifest.json` vllm.models[].name published under vllm/<vllm_model_version>/<name>/. Used as the OpenAI `model` id by CLM."
+  default     = "embeddinggemma-300m"
+}
+
+variable "vllm_embed_extra_args" {
+  type        = string
+  description = "Extra CLI args appended to `vllm serve` for the embedding backend (space-separated). Empty for current vLLM releases, which auto-detect pooling/embedding models; set e.g. '--task embed' for older builds."
+  default     = ""
+}
+
+variable "inference_ollama_enabled" {
+  type        = bool
+  description = "Create the inference-ollama Cloud Run service (alternate engine). Requires models_enabled + models_mount_enabled to serve real weights; callers must use INFERENCE_AUTH_MODE=iam."
+  default     = false
+}
+
+variable "inference_ollama_service_name" {
+  type        = string
+  description = "Cloud Run service name for Ollama inference."
+  default     = "inference-ollama"
+}
+
+variable "inference_ollama_image" {
+  type        = string
+  description = "Full image reference for the Ollama inference service. Defaults to the public upstream image (no custom build/CD wiring needed for this demo) — pin a specific tag (not `latest`) for reproducibility."
+  default     = "ollama/ollama:latest"
+}
+
+variable "inference_ollama_cpu" {
+  type        = string
+  description = "vCPU limit for the Ollama inference service (CPU-only demo — no GPU). Dedicated from cloud_run_service_cpu because that variable is capped at 2 vCPU for services carrying a fixed 512Mi sidecar; this service has no sidecar and needs headroom to run a real model."
+  default     = "4"
+
+  validation {
+    condition     = contains(["1", "2", "4", "6", "8"], var.inference_ollama_cpu)
+    error_message = "inference_ollama_cpu must be one of the Cloud Run gen2 CPU-only vCPU tiers: 1, 2, 4, 6, 8."
+  }
+}
+
+variable "inference_ollama_memory" {
+  type        = string
+  description = "Memory limit for the Ollama inference service (e.g. '8Gi'). Sized for a small (1-3B, quantized) model; increase for larger models."
+  default     = "8Gi"
+
+  validation {
+    condition     = can(regex("^[0-9]+(Mi|Gi)$", var.inference_ollama_memory))
+    error_message = "inference_ollama_memory must look like '512Mi' or '8Gi'."
+  }
+}
+
+variable "inference_vllm_enabled" {
+  type        = bool
+  description = "Create the inference-vllm Cloud Run service (Gemma chat/completions, Laya's default backend). BEST-EFFORT: vLLM's published image is CUDA-only, so this requires a custom CPU image built from vLLM's docker/Dockerfile.cpu (see deploy/gcp/Dockerfile.inference-vllm) and pushed manually to inference_vllm_image. Requires models_enabled + models_mount_enabled to serve real weights, and inference_api_key_secret_id (vLLM enforces --api-key)."
+  default     = false
+}
+
+variable "inference_vllm_service_name" {
+  type        = string
+  description = "Cloud Run service name for the Gemma chat vLLM backend."
+  default     = "inference-vllm"
+}
+
+variable "inference_vllm_embed_enabled" {
+  type        = bool
+  description = "Create the inference-vllm-embed Cloud Run service (EmbeddingGemma embeddings, CLM's default backend). Same image/toggles as inference_vllm; scales to zero independently."
+  default     = false
+}
+
+variable "inference_vllm_embed_service_name" {
+  type        = string
+  description = "Cloud Run service name for the EmbeddingGemma vLLM backend."
+  default     = "inference-vllm-embed"
+}
+
+variable "inference_api_key_secret_id" {
+  type        = string
+  description = "Secret Manager secret id holding the bearer key Laya/CLM send to the inference backend and vLLM enforces via --api-key. The secret must already exist with an enabled version (Terraform only grants accessor IAM). Empty = no key (vLLM backends then fail their precondition)."
+  default     = "inference-api-key"
+}
+
+variable "inference_vllm_image" {
+  type        = string
+  description = "Full image reference for the custom-built vLLM CPU image (see deploy/gcp/Dockerfile.inference-vllm). No public default exists — must be set (and the image built + pushed) before inference_vllm_enabled can be turned on."
+  default     = ""
+}
+
+variable "inference_vllm_cpu" {
+  type        = string
+  description = "vCPU limit for the vLLM inference service (CPU-only, best-effort demo — no GPU). Defaults higher than Ollama's: vLLM's baseline RAM/startup footprint is materially larger even for small models."
+  default     = "8"
+
+  validation {
+    condition     = contains(["1", "2", "4", "6", "8"], var.inference_vllm_cpu)
+    error_message = "inference_vllm_cpu must be one of the Cloud Run gen2 CPU-only vCPU tiers: 1, 2, 4, 6, 8."
+  }
+}
+
+variable "inference_vllm_memory" {
+  type        = string
+  description = "Memory limit for the vLLM inference service (e.g. '32Gi'). vLLM-CPU is memory-hungry even for small models; size close to the platform's CPU-only ceiling."
+  default     = "32Gi"
+
+  validation {
+    condition     = can(regex("^[0-9]+(Mi|Gi)$", var.inference_vllm_memory))
+    error_message = "inference_vllm_memory must look like '512Mi' or '32Gi'."
+  }
 }

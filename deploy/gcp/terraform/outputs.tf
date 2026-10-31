@@ -131,6 +131,26 @@ output "registry_bucket" {
   value       = one(google_storage_bucket.registry[*].name)
 }
 
+output "models_bucket" {
+  description = "Terraform-created GCS bucket holding versioned Ollama/vLLM model weights for the inference backends (null when models_enabled = false). Name defaults to '<project_id>-aifleet-models'."
+  value       = one(google_storage_bucket.models[*].name)
+}
+
+output "inference_ollama_uri" {
+  description = "Ollama inference backend URL (null when inference_ollama_enabled = false). Internal ingress; fleet callers use the URL + INFERENCE_API_KEY env contract."
+  value       = one(google_cloud_run_v2_service.inference_ollama[*].uri)
+}
+
+output "inference_vllm_uri" {
+  description = "vLLM inference backend URL (null when inference_vllm_enabled = false). Internal ingress; fleet callers use the URL + INFERENCE_API_KEY env contract."
+  value       = one(google_cloud_run_v2_service.inference_vllm[*].uri)
+}
+
+output "inference_openai_base_url" {
+  description = "OpenAI-compatible base URL for the default Laya/CLM inference backend (vLLM), including the /v1 suffix. Null when inference_vllm_enabled = false."
+  value       = one(google_cloud_run_v2_service.inference_vllm[*].uri) != null ? "${one(google_cloud_run_v2_service.inference_vllm[*].uri)}/v1" : null
+}
+
 output "memory_db_instance" {
   description = "Terraform-created Cloud SQL Postgres instance holding AI-compressed agent memories (null when memory_enabled = false). Name defaults to '<project_id>-aifleet-memory'."
   value       = one(google_sql_database_instance.memory[*].name)
