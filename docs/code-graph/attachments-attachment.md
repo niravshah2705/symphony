@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 96 nodes
+Community of 104 nodes
 
-- **Size**: 96 nodes
-- **Cohesion**: 0.3993
+- **Size**: 104 nodes
+- **Cohesion**: 0.3850
 - **Dominant Language**: javascript
 
 ## Members
@@ -23,6 +23,14 @@ Community of 96 nodes
 | test:chunkText uses default CHUNK_SIZE/CHUNK_OVERLAP when options are omitted@L35 | Test | ./packages/shared-core/src/attachments/chunk.test.js | 35-40 |
 | test:chunkText respects maxChunks and marks the result truncated@L42 | Test | ./packages/shared-core/src/attachments/chunk.test.js | 42-47 |
 | test:chunkText never infinite-loops when overlap >= chunkSize@L49 | Test | ./packages/shared-core/src/attachments/chunk.test.js | 49-53 |
+| batchOf | Function | ./packages/shared-core/src/attachments/embed.js | 15-19 |
+| embedTexts | Function | ./packages/shared-core/src/attachments/embed.js | 27-50 |
+| fakeFetch | Function | ./packages/shared-core/src/attachments/embed.test.js | 7-24 |
+| test:embedTexts returns [] without making a request for an empty input@L26 | Test | ./packages/shared-core/src/attachments/embed.test.js | 26-31 |
+| test:embedTexts posts one vector per input text, in order, at the configured dimension@L33 | Test | ./packages/shared-core/src/attachments/embed.test.js | 33-43 |
+| test:embedTexts batches beyond MAX_TEXTS_PER_BATCH into multiple requests@L45 | Test | ./packages/shared-core/src/attachments/embed.test.js | 45-53 |
+| test:embedTexts sends the sentinel token instead of the real key when EGRESS_PROXY_URL is set@L55 | Test | ./packages/shared-core/src/attachments/embed.test.js | 55-72 |
+| test:embedTexts throws with response detail on a non-ok response@L74 | Test | ./packages/shared-core/src/attachments/embed.test.js | 74-77 |
 | boundText | Function | ./packages/shared-core/src/attachments/extract.js | 5-11 |
 | extractPdf | Function | ./packages/shared-core/src/attachments/extract.js | 13-23 |
 | extractDocx | Function | ./packages/shared-core/src/attachments/extract.js | 25-29 |
@@ -56,16 +64,8 @@ Community of 96 nodes
 | revalidateUploadedObject | Function | ./packages/shared-core/src/attachments/model.js | 65-76 |
 | isValidAttachmentId | Function | ./packages/shared-core/src/attachments/model.js | 78-80 |
 | test:sanitizeFilename strips path separators and control characters, bounds length@L16 | Test | ./packages/shared-core/src/attachments/model.test.js | 16-23 |
-| test:newAttachmentId/newChunkId produce distinct, prefixed, pattern-valid ids@L25 | Test | ./packages/shared-core/src/attachments/model.test.js | 25-32 |
-| test:validateUploadRequest accepts a well-formed pdf request@L34 | Test | ./packages/shared-core/src/attachments/model.test.js | 34-40 |
-| test:validateUploadRequest rejects missing filename@L42 | Test | ./packages/shared-core/src/attachments/model.test.js | 42-44 |
-| test:validateUploadRequest rejects unsupported type@L46 | Test | ./packages/shared-core/src/attachments/model.test.js | 46-51 |
-| test:validateUploadRequest rejects non-positive or non-numeric size@L53 | Test | ./packages/shared-core/src/attachments/model.test.js | 53-56 |
-| test:validateUploadRequest rejects a file over the size limit@L58 | Test | ./packages/shared-core/src/attachments/model.test.js | 58-63 |
-| test:revalidateUploadedObject accepts an object matching declared metadata@L65 | Test | ./packages/shared-core/src/attachments/model.test.js | 65-70 |
-| test:revalidateUploadedObject rejects an object whose actual content type does not match@L72 | Test | ./packages/shared-core/src/attachments/model.test.js | 72-78 |
 
-*... and 46 more members.*
+*... and 54 more members.*
 
 ## Execution Flows
 
@@ -75,25 +75,25 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (68 edge(s))
+- `equal` (80 edge(s))
 - `from` (12 edge(s))
 - `ok` (9 edge(s))
 - `throws` (8 edge(s))
 - `String` (7 edge(s))
+- `deepEqual` (7 edge(s))
+- `map` (7 edge(s))
+- `slice` (6 edge(s))
 - `repeat` (6 edge(s))
-- `deepEqual` (6 edge(s))
-- `map` (6 edge(s))
-- `require` (5 edge(s))
-- `rejects` (5 edge(s))
-- `match` (5 edge(s))
+- `match` (6 edge(s))
+- `require` (6 edge(s))
+- `rejects` (6 edge(s))
 - `get` (5 edge(s))
-- `slice` (4 edge(s))
+- `resolve` (4 edge(s))
 - `file` (4 edge(s))
-- `collection` (4 edge(s))
 
 ### Incoming
 
-- `equal` (68 edge(s))
+- `equal` (80 edge(s))
 - `./packages/shared-core/src/attachments/store.js` (22 edge(s))
 - `./packages/shared-core/src/attachments/gcs.js` (14 edge(s))
 - `./packages/shared-core/src/attachments/model.js` (14 edge(s))
@@ -104,7 +104,7 @@ No execution flows pass through this community.
 - `ok` (9 edge(s))
 - `throws` (8 edge(s))
 - `./packages/shared-core/src/attachments/store.test.js` (8 edge(s))
+- `deepEqual` (7 edge(s))
 - `./packages/shared-core/src/attachments/chunk.test.js` (6 edge(s))
 - `repeat` (6 edge(s))
-- `deepEqual` (6 edge(s))
-- `./packages/shared-core/src/attachments/extract.js` (6 edge(s))
+- `./packages/shared-core/src/attachments/embed.test.js` (6 edge(s))

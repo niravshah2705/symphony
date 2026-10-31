@@ -27,10 +27,10 @@ Community of 430 nodes
 | resource.google_cloud_run_v2_service_iam_member.gateway_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 156-162 |
 | resource.google_cloud_run_v2_service_iam_member.push_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 164-170 |
 | resource.google_service_account.clm_inference | Class | ./deploy/gcp/terraform/clm_inference.tf | 6-10 |
-| resource.google_cloud_run_v2_service.clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 12-76 |
-| resource.google_cloud_run_v2_service_iam_member.planner_invokes_clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 79-85 |
-| resource.google_cloud_run_v2_service_iam_member.coder_invokes_clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 87-93 |
-| resource.google_cloud_run_v2_service_iam_member.gateway_invokes_clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 95-101 |
+| resource.google_cloud_run_v2_service.clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 12-71 |
+| resource.google_cloud_run_v2_service_iam_member.planner_invokes_clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 74-80 |
+| resource.google_cloud_run_v2_service_iam_member.coder_invokes_clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 82-88 |
+| resource.google_cloud_run_v2_service_iam_member.gateway_invokes_clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 90-96 |
 | local.skills_enabled | Function | ./deploy/gcp/terraform/cloud_run.tf | 17-17 |
 | local.skills_mount_enabled | Function | ./deploy/gcp/terraform/cloud_run.tf | 18-18 |
 | local.skills_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 19-22 |

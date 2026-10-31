@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 729 nodes
+Community of 730 nodes
 
-- **Size**: 729 nodes
-- **Cohesion**: 0.4986
+- **Size**: 730 nodes
+- **Cohesion**: 0.4983
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 729 nodes
 | capitalize | Function | ./public/js/app.js | 905-908 |
 | start | Function | ./public/js/app.js | 912-920 |
 
-*... and 679 more members.*
+*... and 680 more members.*
 
 ## Execution Flows
 
@@ -93,8 +93,8 @@ Community of 729 nodes
 - `push` (100 edge(s))
 - `equal` (88 edge(s))
 - `filter` (78 edge(s))
+- `Boolean` (72 edge(s))
 - `isArray` (71 edge(s))
-- `Boolean` (71 edge(s))
 - `catch` (66 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (59 edge(s))
@@ -113,7 +113,7 @@ Community of 729 nodes
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
 - `./public/js/views/organization.js` (29 edge(s))
-- `./public/js/auth.js` (23 edge(s))
+- `./public/js/auth.js` (24 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
 - `./public/js/omnibox-router.mjs` (14 edge(s))

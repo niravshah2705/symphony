@@ -7,7 +7,7 @@
 Community of 209 nodes
 
 - **Size**: 209 nodes
-- **Cohesion**: 0.3316
+- **Cohesion**: 0.3054
 - **Dominant Language**: javascript
 
 ## Members
@@ -41,10 +41,6 @@ Community of 209 nodes
 | applyRubricMiddleware | Function | ./packages/shared/src/agent/harnesses/contract.js | 254-291 |
 | runAgent | Function | ./packages/shared/src/agent/harnesses/contract.js | 262-267 |
 | reviewMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 293-305 |
-| mcpServerFromToolName | Function | ./packages/shared/src/agent/harnesses/contract.js | 323-328 |
-| toolCallsFromMessage | Function | ./packages/shared/src/agent/harnesses/contract.js | 337-361 |
-| skillFromReadCall | Function | ./packages/shared/src/agent/harnesses/contract.js | 364-370 |
-| extractUsedResources | Function | ./packages/shared/src/agent/harnesses/contract.js | 376-395 |
 | usedResourceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 398-414 |
 | skillRouterTraceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 417-437 |
 | traceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 439-466 |
@@ -64,6 +60,10 @@ Community of 209 nodes
 | withStubbedMiddleware | Function | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 24-32 |
 | test:memory ON — dispatch injects into the prompt and captures the finished run@L34 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 34-48 |
 | test:memory OFF — dispatch is byte-identical (no injection, no capture)@L50 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 50-63 |
+| test:a throwing inject can never fail the run — the original prompt is used@L65 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 65-77 |
+| fakeRegistry | Function | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 16-34 |
+| failingRegistry | Function | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 36-47 |
+| test:dispatcher routes candidate skills and stamps skillRouterMetrics and skillPaths on success@L49 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 49-77 |
 
 *... and 159 more members.*
 
@@ -72,43 +72,41 @@ Community of 209 nodes
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **generatePlan** (criticality: 0.67, depth: 6)
 - **createMemoryMiddleware** (criticality: 0.65, depth: 5)
-- **executeClaude** (criticality: 0.61, depth: 2)
-- **executeCodex** (criticality: 0.60, depth: 2)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (142 edge(s))
-- `String` (46 edge(s))
-- `isArray` (34 edge(s))
-- `match` (29 edge(s))
-- `deepEqual` (28 edge(s))
+- `equal` (147 edge(s))
+- `join` (53 edge(s))
+- `String` (43 edge(s))
+- `isArray` (35 edge(s))
+- `deepEqual` (29 edge(s))
+- `match` (28 edge(s))
 - `map` (24 edge(s))
-- `join` (23 edge(s))
-- `includes` (20 edge(s))
+- `ok` (24 edge(s))
+- `includes` (19 edge(s))
+- `require` (16 edge(s))
 - `slice` (16 edge(s))
-- `require` (15 edge(s))
 - `trim` (15 edge(s))
-- `push` (14 edge(s))
-- `ok` (14 edge(s))
+- `writeFileSync` (14 edge(s))
 - `throws` (14 edge(s))
-- `filter` (13 edge(s))
+- `mkdirSync` (13 edge(s))
 
 ### Incoming
 
-- `equal` (142 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (59 edge(s))
-- `deepEqual` (28 edge(s))
+- `equal` (147 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (54 edge(s))
+- `join` (33 edge(s))
+- `deepEqual` (29 edge(s))
+- `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
 - `match` (25 edge(s))
+- `ok` (24 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
-- `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
-- `ok` (14 edge(s))
 - `throws` (14 edge(s))
 - `./packages/shared/src/agent/memory.js` (14 edge(s))
-- `./packages/shared/src/agent/memory-middleware.test.js` (12 edge(s))
-- `./packages/shared/src/agent/memory-store/postgres-backend.test.js` (11 edge(s))
-- `./packages/shared/src/agent/harnesses/claude.js` (9 edge(s))
+- `writeFileSync` (13 edge(s))
+- `mkdirSync` (12 edge(s))
