@@ -1,189 +1,278 @@
 [
   {
-    "id": "deepseek-v3",
-    "name": "DeepSeek V3",
-    "provider": "DeepSeek",
-    "model_type": "open_source",
-    "parameters": {
-      "total": "671B",
-      "active": "37B",
-      "context_window": 128000
-    },
-    "cost": {
-      "prompt_per_1m": 0.14,
-      "completion_per_1m": 0.28,
-      "cached_input_per_1m": 0.014
-    },
-    "features": {
-      "prompt_cache_supported": true,
-      "cache_discount_pct": 90,
-      "auto_fallback_enabled": true,
-      "fallback_targets": ["Qwen 2.5 72B Instruct"],
-      "rate_limits": {
-        "rpm": 5000,
-        "tpm": 2000000,
-        "concurrent": 100
-      }
-    },
-    "benchmarks": {
-      "swe_bench": 49.2,
-      "mmlu_pro": 75.6,
-      "human_eval": 90.2,
-      "gpqa": 59.1,
-      "output_tps": 65
-    },
-    "hosting": {
-      "regions": ["us-central1", "europe-west1", "asia-east1"],
-      "distributors": [
-        {"name": "DeepSeek Direct", "prompt_cost": 0.14, "completion_cost": 0.28},
-        {"name": "Together AI", "prompt_cost": 0.60, "completion_cost": 0.60},
-        {"name": "Fireworks AI", "prompt_cost": 0.90, "completion_cost": 0.90}
-      ],
-      "uptime_link": "https://status.deepseek.com",
-      "paper_link": "https://github.com/deepseek-ai/DeepSeek-V3",
-      "weights_link": "https://huggingface.co/deepseek-ai/DeepSeek-V3"
-    },
-    "simple_score": 92.4,
-    "rank": 1
-  },
-  {
     "id": "claude-3-5-sonnet",
     "name": "Claude 3.5 Sonnet",
     "provider": "Anthropic",
     "model_type": "proprietary",
+    "agentic_features": {
+      "supports_agentic_development": true,
+      "tool_use": true,
+      "function_calling": true,
+      "computer_use": true,
+      "reasoning_effort_control": false
+    },
     "parameters": {
-      "total": "Undisclosed",
-      "active": "Undisclosed",
-      "context_window": 200000
+      "total_params": "Undisclosed",
+      "active_params": "Undisclosed",
+      "context_window_tokens": 200000,
+      "max_output_tokens": 8192
     },
-    "cost": {
-      "prompt_per_1m": 3.00,
-      "completion_per_1m": 15.00,
-      "cached_input_per_1m": 0.30
-    },
-    "features": {
-      "prompt_cache_supported": true,
-      "cache_discount_pct": 90,
-      "auto_fallback_enabled": true,
-      "fallback_targets": ["Claude 3.5 Haiku"],
-      "rate_limits": {
-        "rpm": 4000,
-        "tpm": 400000,
-        "concurrent": 80
+    "cloud_inference_metrics": {
+      "aws_bedrock": {
+        "supported": true,
+        "region": "us-east-1 (Global & Regional)",
+        "prompt_cost_per_1m": 3.00,
+        "completion_cost_per_1m": 15.00,
+        "cached_prompt_cost_per_1m": 0.30,
+        "regional_compliance_surcharge_pct": 10,
+        "rate_limits": { "rpm": 4000, "tpm": 2000000, "concurrent": 80 },
+        "uptime_link": "https://health.aws.amazon.com"
+      },
+      "gcp_vertex_ai": {
+        "supported": true,
+        "region": "us-east5 (us-central1, europe-west1)",
+        "prompt_cost_per_1m": 3.00,
+        "completion_cost_per_1m": 15.00,
+        "cached_prompt_cost_per_1m": 0.30,
+        "batch_discount_pct": 50,
+        "rate_limits": { "rpm": 3000, "tpm": 1500000, "concurrent": 60 },
+        "uptime_link": "https://status.cloud.google.com"
+      },
+      "digital_ocean_gradient": {
+        "supported": false,
+        "note": "Proprietary model not hosted natively on DigitalOcean serverless"
+      },
+      "alibaba_dashscope": {
+        "supported": false,
+        "note": "Proprietary model not hosted natively on DashScope"
       }
     },
     "benchmarks": {
-      "swe_bench": 49.0,
+      "swe_bench_verified": 49.0,
       "mmlu_pro": 78.0,
       "human_eval": 93.7,
       "gpqa": 65.0,
       "output_tps": 72
     },
-    "hosting": {
-      "regions": ["us-east-1", "us-west-2", "eu-west-1"],
-      "distributors": [
-        {"name": "Anthropic Direct", "prompt_cost": 3.00, "completion_cost": 15.00},
-        {"name": "AWS Bedrock", "prompt_cost": 3.00, "completion_cost": 15.00},
-        {"name": "GCP Vertex AI", "prompt_cost": 3.00, "completion_cost": 15.00}
-      ],
-      "uptime_link": "https://status.anthropic.com",
-      "paper_link": "https://www.anthropic.com/news/claude-3-5-sonnet",
-      "weights_link": null
+    "relations": {
+      "best_cloud_provider_for_cost": "GCP Vertex AI (Batch) / AWS Bedrock (Standard)",
+      "agentic_suitability_score": 98.5,
+      "primary_fallback_model_id": "claude-3-5-haiku"
     },
-    "simple_score": 88.6,
-    "rank": 2
+    "links": {
+      "paper_link": "https://www.anthropic.com/news/claude-3-5-sonnet",
+      "status_page": "https://status.anthropic.com"
+    },
+    "simple_score": 94.2,
+    "rank": 1
   },
   {
-    "id": "gpt-4o",
-    "name": "GPT-4o",
-    "provider": "OpenAI",
-    "model_type": "proprietary",
+    "id": "deepseek-v3",
+    "name": "DeepSeek V3",
+    "provider": "DeepSeek",
+    "model_type": "open_source",
+    "agentic_features": {
+      "supports_agentic_development": true,
+      "tool_use": true,
+      "function_calling": true,
+      "computer_use": false,
+      "reasoning_effort_control": true
+    },
     "parameters": {
-      "total": "Undisclosed",
-      "active": "Undisclosed",
-      "context_window": 128000
+      "total_params": "671B",
+      "active_params": "37B MoE",
+      "context_window_tokens": 128000,
+      "max_output_tokens": 8192
     },
-    "cost": {
-      "prompt_per_1m": 2.50,
-      "completion_per_1m": 10.00,
-      "cached_input_per_1m": 1.25
-    },
-    "features": {
-      "prompt_cache_supported": true,
-      "cache_discount_pct": 50,
-      "auto_fallback_enabled": true,
-      "fallback_targets": ["GPT-4o mini"],
-      "rate_limits": {
-        "rpm": 10000,
-        "tpm": 3000000,
-        "concurrent": 500
+    "cloud_inference_metrics": {
+      "aws_bedrock": {
+        "supported": true,
+        "region": "us-east-1",
+        "prompt_cost_per_1m": 0.60,
+        "completion_cost_per_1m": 0.60,
+        "cached_prompt_cost_per_1m": 0.15,
+        "rate_limits": { "rpm": 2000, "tpm": 1000000, "concurrent": 50 },
+        "uptime_link": "https://health.aws.amazon.com"
+      },
+      "gcp_vertex_ai": {
+        "supported": true,
+        "region": "us-central1",
+        "prompt_cost_per_1m": 0.55,
+        "completion_cost_per_1m": 0.55,
+        "cached_prompt_cost_per_1m": 0.14,
+        "rate_limits": { "rpm": 2500, "tpm": 1200000, "concurrent": 60 },
+        "uptime_link": "https://status.cloud.google.com"
+      },
+      "digital_ocean_gradient": {
+        "supported": true,
+        "region": "nyc3 / ams3",
+        "prompt_cost_per_1m": 0.42,
+        "completion_cost_per_1m": 0.42,
+        "cached_prompt_cost_per_1m": 0.10,
+        "rate_limits": { "rpm": 1200, "tpm": 1500000, "concurrent": 40 },
+        "uptime_link": "https://status.digitalocean.com"
+      },
+      "alibaba_dashscope": {
+        "supported": true,
+        "region": "cn-hangzhou / ap-southeast-1",
+        "prompt_cost_per_1m": 0.20,
+        "completion_cost_per_1m": 0.40,
+        "cached_prompt_cost_per_1m": 0.05,
+        "rate_limits": { "rpm": 5000, "tpm": 3000000, "concurrent": 150 },
+        "uptime_link": "https://status.alibabacloud.com"
       }
     },
     "benchmarks": {
-      "swe_bench": 38.8,
-      "mmlu_pro": 72.6,
+      "swe_bench_verified": 49.2,
+      "mmlu_pro": 75.6,
       "human_eval": 90.2,
-      "gpqa": 53.6,
-      "output_tps": 105
+      "gpqa": 59.1,
+      "output_tps": 65
     },
-    "hosting": {
-      "regions": ["us-east-1", "sweden-central", "west-us"],
-      "distributors": [
-        {"name": "OpenAI Direct", "prompt_cost": 2.50, "completion_cost": 10.00},
-        {"name": "Azure OpenAI", "prompt_cost": 2.50, "completion_cost": 10.00}
-      ],
-      "uptime_link": "https://status.openai.com",
-      "paper_link": "https://openai.com/index/hello-gpt-4o/",
-      "weights_link": null
+    "relations": {
+      "best_cloud_provider_for_cost": "Alibaba DashScope ($0.20/1M Prompt)",
+      "agentic_suitability_score": 96.0,
+      "primary_fallback_model_id": "qwen-2-5-coder-32b"
     },
-    "simple_score": 83.1,
-    "rank": 3
+    "links": {
+      "paper_link": "https://github.com/deepseek-ai/DeepSeek-V3",
+      "weights_link": "https://huggingface.co/deepseek-ai/DeepSeek-V3"
+    },
+    "simple_score": 95.8,
+    "rank": 2
   },
   {
     "id": "qwen-2-5-coder-32b",
     "name": "Qwen 2.5 Coder 32B",
     "provider": "Alibaba Cloud",
     "model_type": "open_source",
+    "agentic_features": {
+      "supports_agentic_development": true,
+      "tool_use": true,
+      "function_calling": true,
+      "computer_use": false,
+      "reasoning_effort_control": false
+    },
     "parameters": {
-      "total": "32B",
-      "active": "32B",
-      "context_window": 128000
+      "total_params": "32.5B",
+      "active_params": "32.5B Dense",
+      "context_window_tokens": 128000,
+      "max_output_tokens": 8192
     },
-    "cost": {
-      "prompt_per_1m": 0.08,
-      "completion_per_1m": 0.16,
-      "cached_input_per_1m": 0.02
-    },
-    "features": {
-      "prompt_cache_supported": true,
-      "cache_discount_pct": 75,
-      "auto_fallback_enabled": true,
-      "fallback_targets": ["Qwen 2.5 14B Coder"],
-      "rate_limits": {
-        "rpm": 3000,
-        "tpm": 1500000,
-        "concurrent": 60
+    "cloud_inference_metrics": {
+      "aws_bedrock": {
+        "supported": true,
+        "region": "us-east-1",
+        "prompt_cost_per_1m": 0.20,
+        "completion_cost_per_1m": 0.20,
+        "rate_limits": { "rpm": 3000, "tpm": 1500000, "concurrent": 60 },
+        "uptime_link": "https://health.aws.amazon.com"
+      },
+      "gcp_vertex_ai": {
+        "supported": true,
+        "region": "us-central1",
+        "prompt_cost_per_1m": 0.18,
+        "completion_cost_per_1m": 0.18,
+        "rate_limits": { "rpm": 3000, "tpm": 1500000, "concurrent": 60 },
+        "uptime_link": "https://status.cloud.google.com"
+      },
+      "digital_ocean_gradient": {
+        "supported": true,
+        "region": "nyc3",
+        "prompt_cost_per_1m": 0.15,
+        "completion_cost_per_1m": 0.15,
+        "rate_limits": { "rpm": 1200, "tpm": 1000000, "concurrent": 40 },
+        "uptime_link": "https://status.digitalocean.com"
+      },
+      "alibaba_dashscope": {
+        "supported": true,
+        "region": "cn-hangzhou / ap-southeast-1 / us-west-1",
+        "prompt_cost_per_1m": 0.08,
+        "completion_cost_per_1m": 0.16,
+        "cached_prompt_cost_per_1m": 0.02,
+        "rate_limits": { "rpm": 10000, "tpm": 5000000, "concurrent": 300 },
+        "uptime_link": "https://status.alibabacloud.com"
       }
     },
     "benchmarks": {
-      "swe_bench": 41.2,
+      "swe_bench_verified": 41.2,
       "mmlu_pro": 69.4,
       "human_eval": 92.7,
       "gpqa": 48.5,
       "output_tps": 85
     },
-    "hosting": {
-      "regions": ["cn-hangzhou", "us-central1", "europe-west3"],
-      "distributors": [
-        {"name": "Alibaba DashScope", "prompt_cost": 0.08, "completion_cost": 0.16},
-        {"name": "Together AI", "prompt_cost": 0.20, "completion_cost": 0.20},
-        {"name": "Groq", "prompt_cost": 0.29, "completion_cost": 0.29}
-      ],
-      "uptime_link": "https://status.alibabacloud.com",
+    "relations": {
+      "best_cloud_provider_for_cost": "Alibaba DashScope ($0.08/1M Prompt)",
+      "agentic_suitability_score": 92.0,
+      "primary_fallback_model_id": "deepseek-v3"
+    },
+    "links": {
       "paper_link": "https://qwenlm.github.io/blog/qwen2.5-coder/",
       "weights_link": "https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct"
     },
-    "simple_score": 89.8,
+    "simple_score": 91.5,
+    "rank": 3
+  },
+  {
+    "id": "gemini-1-5-pro",
+    "name": "Gemini 1.5 Pro",
+    "provider": "Google",
+    "model_type": "proprietary",
+    "agentic_features": {
+      "supports_agentic_development": true,
+      "tool_use": true,
+      "function_calling": true,
+      "computer_use": false,
+      "reasoning_effort_control": true
+    },
+    "parameters": {
+      "total_params": "Undisclosed",
+      "active_params": "Undisclosed",
+      "context_window_tokens": 2000000,
+      "max_output_tokens": 8192
+    },
+    "cloud_inference_metrics": {
+      "aws_bedrock": {
+        "supported": false,
+        "note": "Proprietary Google model not hosted on AWS Bedrock"
+      },
+      "gcp_vertex_ai": {
+        "supported": true,
+        "region": "us-central1 (Global)",
+        "prompt_cost_per_1m": 1.25,
+        "completion_cost_per_1m": 5.00,
+        "cached_prompt_cost_per_1m": 0.3125,
+        "long_context_surcharge_threshold_tokens": 128000,
+        "batch_discount_pct": 50,
+        "rate_limits": { "rpm": 2000, "tpm": 4000000, "concurrent": 100 },
+        "uptime_link": "https://status.cloud.google.com"
+      },
+      "digital_ocean_gradient": {
+        "supported": false,
+        "note": "Proprietary model not hosted natively on DigitalOcean"
+      },
+      "alibaba_dashscope": {
+        "supported": false,
+        "note": "Proprietary model not hosted natively on DashScope"
+      }
+    },
+    "benchmarks": {
+      "swe_bench_verified": 35.8,
+      "mmlu_pro": 73.2,
+      "human_eval": 84.1,
+      "gpqa": 58.0,
+      "output_tps": 78
+    },
+    "relations": {
+      "best_cloud_provider_for_cost": "GCP Vertex AI Direct",
+      "agentic_suitability_score": 90.0,
+      "primary_fallback_model_id": "claude-3-5-sonnet"
+    },
+    "links": {
+      "paper_link": "https://deepmind.google/technologies/gemini/1-5-pro/",
+      "status_page": "https://status.cloud.google.com"
+    },
+    "simple_score": 87.2,
     "rank": 4
   }
 ]
