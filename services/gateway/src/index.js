@@ -103,6 +103,79 @@ app.post('/internal/events', (req, res) => {
   return res.status(204).end();
 });
 
+// Public Benchmarks API endpoint for ArchAgentix
+app.get('/api/benchmarks', (req, res) => {
+  try {
+    const catalog = [
+      {
+        id: "deepseek-v3",
+        name: "DeepSeek V3",
+        provider: "DeepSeek",
+        model_type: "open_source",
+        parameters: { total: "671B", active: "37B", context_window: 128000 },
+        cost: { prompt_per_1m: 0.14, completion_per_1m: 0.28, cached_input_per_1m: 0.014 },
+        features: { prompt_cache_supported: true, cache_discount_pct: 90, auto_fallback_enabled: true, fallback_targets: ["Qwen 2.5 72B Instruct"], rate_limits: { rpm: 5000, tpm: 2000000, concurrent: 100 } },
+        benchmarks: { swe_bench: 49.2, mmlu_pro: 75.6, human_eval: 90.2, gpqa: 59.1, output_tps: 65 },
+        hosting: { regions: ["us-central1", "europe-west1", "asia-east1"], distributors: [{ name: "DeepSeek Direct", prompt_cost: 0.14, completion_cost: 0.28 }, { name: "Together AI", prompt_cost: 0.60, completion_cost: 0.60 }], uptime_link: "https://status.deepseek.com", paper_link: "https://github.com/deepseek-ai/DeepSeek-V3", weights_link: "https://huggingface.co/deepseek-ai/DeepSeek-V3" },
+        simple_score: 92.4,
+        rank: 1
+      },
+      {
+        id: "qwen-2-5-coder-32b",
+        name: "Qwen 2.5 Coder 32B",
+        provider: "Alibaba Cloud",
+        model_type: "open_source",
+        parameters: { total: "32B", active: "32B", context_window: 128000 },
+        cost: { prompt_per_1m: 0.08, completion_per_1m: 0.16, cached_input_per_1m: 0.02 },
+        features: { prompt_cache_supported: true, cache_discount_pct: 75, auto_fallback_enabled: true, fallback_targets: ["Qwen 2.5 14B Coder"], rate_limits: { rpm: 3000, tpm: 1500000, concurrent: 60 } },
+        benchmarks: { swe_bench: 41.2, mmlu_pro: 69.4, human_eval: 92.7, gpqa: 48.5, output_tps: 85 },
+        hosting: { regions: ["cn-hangzhou", "us-central1"], distributors: [{ name: "Alibaba DashScope", prompt_cost: 0.08, completion_cost: 0.16 }, { name: "Together AI", prompt_cost: 0.20, completion_cost: 0.20 }], uptime_link: "https://status.alibabacloud.com", paper_link: "https://qwenlm.github.io/blog/qwen2.5-coder/", weights_link: "https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct" },
+        simple_score: 89.8,
+        rank: 2
+      },
+      {
+        id: "claude-3-5-sonnet",
+        name: "Claude 3.5 Sonnet",
+        provider: "Anthropic",
+        model_type: "proprietary",
+        parameters: { total: "Undisclosed", active: "Undisclosed", context_window: 200000 },
+        cost: { prompt_per_1m: 3.00, completion_per_1m: 15.00, cached_input_per_1m: 0.30 },
+        features: { prompt_cache_supported: true, cache_discount_pct: 90, auto_fallback_enabled: true, fallback_targets: ["Claude 3.5 Haiku"], rate_limits: { rpm: 4000, tpm: 400000, concurrent: 80 } },
+        benchmarks: { swe_bench: 49.0, mmlu_pro: 78.0, human_eval: 93.7, gpqa: 65.0, output_tps: 72 },
+        hosting: { regions: ["us-east-1", "us-west-2"], distributors: [{ name: "Anthropic Direct", prompt_cost: 3.00, completion_cost: 15.00 }, { name: "AWS Bedrock", prompt_cost: 3.00, completion_cost: 15.00 }], uptime_link: "https://status.anthropic.com", paper_link: "https://www.anthropic.com/news/claude-3-5-sonnet", weights_link: null },
+        simple_score: 88.6,
+        rank: 3
+      },
+      {
+        id: "gpt-4o",
+        name: "GPT-4o",
+        provider: "OpenAI",
+        model_type: "proprietary",
+        parameters: { total: "Undisclosed", active: "Undisclosed", context_window: 128000 },
+        cost: { prompt_per_1m: 2.50, completion_per_1m: 10.00, cached_input_per_1m: 1.25 },
+        features: { prompt_cache_supported: true, cache_discount_pct: 50, auto_fallback_enabled: true, fallback_targets: ["GPT-4o mini"], rate_limits: { rpm: 10000, tpm: 3000000, concurrent: 500 } },
+        benchmarks: { swe_bench: 38.8, mmlu_pro: 72.6, human_eval: 90.2, gpqa: 53.6, output_tps: 105 },
+        hosting: { regions: ["us-east-1", "sweden-central"], distributors: [{ name: "OpenAI Direct", prompt_cost: 2.50, completion_cost: 10.00 }, { name: "Azure OpenAI", prompt_cost: 2.50, completion_cost: 10.00 }], uptime_link: "https://status.openai.com", paper_link: "https://openai.com/index/hello-gpt-4o/", weights_link: null },
+        simple_score: 83.1,
+        rank: 4
+      }
+    ];
+
+    res.set('Cache-Control', 'public, max-age=300, s-maxage=600');
+    let items = catalog;
+    const { provider, model_type, min_swe, limit = 50 } = req.query || {};
+
+    if (provider) items = items.filter(m => m.provider.toLowerCase() === provider.toLowerCase());
+    if (model_type) items = items.filter(m => m.model_type.toLowerCase() === model_type.toLowerCase());
+    if (min_swe) items = items.filter(m => (m.benchmarks?.swe_bench || 0) >= parseFloat(min_swe));
+
+    const limitNum = parseInt(limit, 10);
+    return res.json({ status: 'success', total: items.length, count: Math.min(items.length, limitNum), data: items.slice(0, limitNum) });
+  } catch (err) {
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 // The Firebase Web SDK is a static asset under public/vendor/firebase/ (served
 // by express.static locally and from GCS in the cloud) — no gateway route needed.
 
