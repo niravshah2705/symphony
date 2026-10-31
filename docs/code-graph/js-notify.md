@@ -7,7 +7,7 @@
 Community of 22 nodes
 
 - **Size**: 22 nodes
-- **Cohesion**: 0.1329
+- **Cohesion**: 0.1324
 - **Dominant Language**: javascript
 
 ## Members
@@ -35,7 +35,7 @@ Community of 22 nodes
 | test:shouldNotifyAuthenticationRequired: anonymous provider-less identity 401 does not notify@L64 | Test | ./public/js/auth-retry.test.mjs | 64-71 |
 | test:shouldNotifyAuthenticationRequired: signed-in identity 401 notifies@L73 | Test | ./public/js/auth-retry.test.mjs | 73-80 |
 | test:shouldNotifyAuthenticationRequired: unrelated provider 401 never notifies@L82 | Test | ./public/js/auth-retry.test.mjs | 82-89 |
-| loadConfiguration | Function | ./public/js/auth.js | 59-88 |
+| loadConfiguration | Function | ./public/js/auth.js | 62-93 |
 
 ## Execution Flows
 
@@ -49,9 +49,9 @@ Community of 22 nodes
 - `set` (6 edge(s))
 - `delete` (3 edge(s))
 - `fetch` (3 edge(s))
+- `Boolean` (3 edge(s))
 - `json` (2 edge(s))
 - `accessTokenProvider` (2 edge(s))
-- `Boolean` (2 edge(s))
 - `String` (1 edge(s))
 - `replace` (1 edge(s))
 - `toLowerCase` (1 edge(s))

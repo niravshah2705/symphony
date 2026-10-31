@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 726 nodes
+Community of 729 nodes
 
-- **Size**: 726 nodes
-- **Cohesion**: 0.5005
+- **Size**: 729 nodes
+- **Cohesion**: 0.4986
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 726 nodes
 | capitalize | Function | ./public/js/app.js | 905-908 |
 | start | Function | ./public/js/app.js | 912-920 |
 
-*... and 676 more members.*
+*... and 679 more members.*
 
 ## Execution Flows
 
@@ -91,11 +91,11 @@ Community of 726 nodes
 - `String` (115 edge(s))
 - `trim` (101 edge(s))
 - `push` (100 edge(s))
-- `equal` (83 edge(s))
+- `equal` (88 edge(s))
 - `filter` (78 edge(s))
 - `isArray` (71 edge(s))
+- `Boolean` (71 edge(s))
 - `catch` (66 edge(s))
-- `Boolean` (66 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (59 edge(s))
 - `querySelector` (53 edge(s))
@@ -105,8 +105,8 @@ Community of 726 nodes
 
 - `./public/js/views/settings.js` (131 edge(s))
 - `./public/js/views/agent.js` (109 edge(s))
+- `equal` (88 edge(s))
 - `./public/js/app.js` (86 edge(s))
-- `equal` (83 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/workflow-designer-model.mjs` (56 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))

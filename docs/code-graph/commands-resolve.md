@@ -19,12 +19,12 @@ Community of 191 nodes
 | test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-92 |
 | test:only the publish job can mint cloud credentials@L58 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 58-99 |
 | test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 101-134 |
-| test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L115 | Test | ./deploy/gcp/pipeline-infra.test.js | 115-148 |
-| test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L150 | Test | ./deploy/gcp/pipeline-infra.test.js | 150-164 |
-| test:deploy workflow does not query disabled optional Cloud Run services@L166 | Test | ./deploy/gcp/pipeline-infra.test.js | 166-195 |
-| test:pipeline topology enforces dedicated topics and brokered agent egress@L300 | Test | ./deploy/gcp/pipeline-infra.test.js | 300-350 |
-| test:stream-token broker owns the signing secret behind private IAM@L352 | Test | ./deploy/gcp/pipeline-infra.test.js | 352-448 |
-| test:OpenSWE upstream is trusted proxy-only deployment configuration@L457 | Test | ./deploy/gcp/pipeline-infra.test.js | 457-473 |
+| test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L117 | Test | ./deploy/gcp/pipeline-infra.test.js | 117-150 |
+| test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L152 | Test | ./deploy/gcp/pipeline-infra.test.js | 152-166 |
+| test:deploy workflow does not query disabled optional Cloud Run services@L168 | Test | ./deploy/gcp/pipeline-infra.test.js | 168-197 |
+| test:pipeline topology enforces dedicated topics and brokered agent egress@L302 | Test | ./deploy/gcp/pipeline-infra.test.js | 302-352 |
+| test:stream-token broker owns the signing secret behind private IAM@L354 | Test | ./deploy/gcp/pipeline-infra.test.js | 354-450 |
+| test:OpenSWE upstream is trusted proxy-only deployment configuration@L459 | Test | ./deploy/gcp/pipeline-infra.test.js | 459-475 |
 | test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-26 |
 | test:ADLC manifest is served as a static resource@L28 | Test | ./e2e/adlc.spec.js | 28-35 |
 | test:existing Agent workspace route still renders directly@L37 | Test | ./e2e/adlc.spec.js | 37-45 |

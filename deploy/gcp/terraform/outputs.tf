@@ -81,6 +81,16 @@ output "billing_service_uri" {
   value       = google_cloud_run_v2_service.billing.uri
 }
 
+output "laya_service_uri" {
+  description = "Laya decision model inference service URL — internal only."
+  value       = google_cloud_run_v2_service.laya.uri
+}
+
+output "clm_service_uri" {
+  description = "CLM contrastive inference service URL — internal only."
+  value       = google_cloud_run_v2_service.clm.uri
+}
+
 output "email_topic_name" {
   description = "Pub/Sub topic that accepts allow-listed transactional email jobs."
   value       = google_pubsub_topic.email.name

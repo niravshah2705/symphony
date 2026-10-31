@@ -544,6 +544,14 @@ const SERVICES = Object.freeze({
   // /api/settings-policy/* -> settingsUrl/api/v1/*. Empty when unset in
   // production so the gateway can 501 the routes rather than crash.
   settingsUrl: process.env.SETTINGS_URL || (process.env.NODE_ENV === 'production' ? '' : `http://localhost:${SETTINGS_SERVICE_PORT}`),
+  layaUrl: process.env.LAYA_INFERENCE_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8088'),
+  clmUrl: process.env.CLM_INFERENCE_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8089'),
+  skillRouter: Object.freeze({
+    backend: process.env.SKILL_ROUTER_BACKEND || 'laya',
+    timeoutMs: Math.max(10, Number(process.env.SKILL_ROUTER_TIMEOUT_MS) || 150),
+    topK: Math.max(1, Number(process.env.SKILL_ROUTER_TOP_K) || 3),
+    enabled: process.env.SKILL_ROUTER_ENABLED !== 'false',
+  }),
 });
 
 /**

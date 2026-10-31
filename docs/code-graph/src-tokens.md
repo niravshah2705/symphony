@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 234 nodes
+Community of 243 nodes
 
-- **Size**: 234 nodes
-- **Cohesion**: 0.1758
+- **Size**: 243 nodes
+- **Cohesion**: 0.1759
 - **Dominant Language**: javascript
 
 ## Members
@@ -63,9 +63,9 @@ Community of 234 nodes
 | generateVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 17-19 |
 | challengeFromVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 22-24 |
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
-| getBaseUrl | Function | ./packages/shared-core/src/billing/cashfree-client.js | 6-15 |
+| batchOf | Function | ./packages/shared-core/src/attachments/embed.js | 15-19 |
 
-*... and 184 more members.*
+*... and 193 more members.*
 
 ## Execution Flows
 
@@ -85,36 +85,36 @@ Community of 234 nodes
 
 ### Outgoing
 
-- `equal` (125 edge(s))
+- `equal` (142 edge(s))
 - `Number` (30 edge(s))
-- `filter` (27 edge(s))
+- `filter` (28 edge(s))
 - `isArray` (24 edge(s))
 - `includes` (22 edge(s))
 - `String` (21 edge(s))
+- `toISOString` (21 edge(s))
 - `isFinite` (20 edge(s))
+- `slice` (20 edge(s))
 - `trim` (20 edge(s))
-- `toISOString` (20 edge(s))
 - `set` (19 edge(s))
-- `slice` (18 edge(s))
 - `call` (16 edge(s))
+- `map` (15 edge(s))
 - `find` (15 edge(s))
-- `map` (14 edge(s))
-- `upsertBillingAccount` (12 edge(s))
+- `deepEqual` (13 edge(s))
 
 ### Incoming
 
 - `./packages/shared-core/src/store.js` (169 edge(s))
-- `equal` (125 edge(s))
+- `equal` (142 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
 - `./packages/shared-core/src/billing/cashfree-client.js` (14 edge(s))
+- `deepEqual` (13 edge(s))
 - `upsertBillingAccount` (12 edge(s))
-- `deepEqual` (12 edge(s))
 - `./packages/shared-core/src/billing/ledger.js` (10 edge(s))
 - `./packages/shared-core/src/billing/notify.js` (10 edge(s))
 - `./packages/shared-core/src/billing/pricing.js` (10 edge(s))
+- `resolve` (9 edge(s))
 - `ok` (9 edge(s))
 - `ensureAccount` (9 edge(s))
-- `postEntry` (9 edge(s))

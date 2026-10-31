@@ -179,6 +179,114 @@ variable "billing_service_name" {
   default     = "billing"
 }
 
+# --- Laya & CLM Inference Services ------------------------------------------
+
+variable "laya_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the dedicated Laya inference service."
+  default     = ""
+}
+
+variable "laya_service_name" {
+  type        = string
+  description = "Cloud Run service name for dedicated Laya inference."
+  default     = "laya-inference"
+}
+
+variable "laya_ingress" {
+  type        = string
+  description = "Ingress for Laya inference service. Defaults to INGRESS_TRAFFIC_INTERNAL_ONLY."
+  default     = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+
+  validation {
+    condition     = contains(["INGRESS_TRAFFIC_ALL", "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER", "INGRESS_TRAFFIC_INTERNAL_ONLY"], var.laya_ingress)
+    error_message = "laya_ingress must be a valid Cloud Run v2 ingress value."
+  }
+}
+
+variable "laya_cpu" {
+  type        = string
+  description = "CPU allocated to Laya container (1, 2, or 4 vCPU)."
+  default     = "2"
+}
+
+variable "laya_memory" {
+  type        = string
+  description = "Memory allocated to Laya container."
+  default     = "4Gi"
+}
+
+variable "laya_min_instances" {
+  type        = number
+  description = "Minimum instances for Laya inference service."
+  default     = 0
+}
+
+variable "laya_max_instances" {
+  type        = number
+  description = "Maximum instances for Laya inference service."
+  default     = 5
+}
+
+variable "laya_container_concurrency" {
+  type        = number
+  description = "Container concurrency for Laya inference service."
+  default     = 80
+}
+
+variable "clm_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the dedicated CLM inference service."
+  default     = ""
+}
+
+variable "clm_service_name" {
+  type        = string
+  description = "Cloud Run service name for dedicated CLM inference."
+  default     = "clm-inference"
+}
+
+variable "clm_ingress" {
+  type        = string
+  description = "Ingress for CLM inference service. Defaults to INGRESS_TRAFFIC_INTERNAL_ONLY."
+  default     = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+
+  validation {
+    condition     = contains(["INGRESS_TRAFFIC_ALL", "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER", "INGRESS_TRAFFIC_INTERNAL_ONLY"], var.clm_ingress)
+    error_message = "clm_ingress must be a valid Cloud Run v2 ingress value."
+  }
+}
+
+variable "clm_cpu" {
+  type        = string
+  description = "CPU allocated to CLM container (2, 4, or 8 vCPU)."
+  default     = "4"
+}
+
+variable "clm_memory" {
+  type        = string
+  description = "Memory allocated to CLM container."
+  default     = "8Gi"
+}
+
+variable "clm_min_instances" {
+  type        = number
+  description = "Minimum instances for CLM inference service."
+  default     = 0
+}
+
+variable "clm_max_instances" {
+  type        = number
+  description = "Maximum instances for CLM inference service."
+  default     = 5
+}
+
+variable "clm_container_concurrency" {
+  type        = number
+  description = "Container concurrency for CLM inference service."
+  default     = 80
+}
+
 variable "cashfree_app_id_secret_id" {
   type        = string
   description = "Secret Manager secret id containing the Cashfree App ID."

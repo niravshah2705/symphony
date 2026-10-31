@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 396 nodes
+Community of 435 nodes
 
-- **Size**: 396 nodes
-- **Cohesion**: 0.3144
+- **Size**: 435 nodes
+- **Cohesion**: 0.3270
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,6 +20,28 @@ Community of 396 nodes
 | test:createChatModel maps antigravity to a ChatOpenAI targeting the Gemini endpoint@L52 | Test | ./packages/shared/src/agent/antigravity.test.js | 52-58 |
 | test:availability probes the Gemini key against the OpenAI-compatible endpoint@L73 | Test | ./packages/shared/src/agent/antigravity.test.js | 73-86 |
 | test:availability fails fast when the Gemini key is missing@L88 | Test | ./packages/shared/src/agent/antigravity.test.js | 88-94 |
+| resolveDeps | Function | ./packages/shared/src/agent/approval-gate.js | 32-48 |
+| bp | Function | ./packages/shared/src/agent/approval-gate.js | 34-34 |
+| defaultResolveBusiness | Function | ./packages/shared/src/agent/approval-gate.js | 50-64 |
+| computeDeadline | Function | ./packages/shared/src/agent/approval-gate.js | 67-71 |
+| createGate | Function | ./packages/shared/src/agent/approval-gate.js | 77-98 |
+| proceedGate | Function | ./packages/shared/src/agent/approval-gate.js | 107-166 |
+| approveGate | Function | ./packages/shared/src/agent/approval-gate.js | 169-175 |
+| reevaluateGate | Function | ./packages/shared/src/agent/approval-gate.js | 182-221 |
+| sweepExpiredGates | Function | ./packages/shared/src/agent/approval-gate.js | 229-254 |
+| makeStore | Function | ./packages/shared/src/agent/approval-gate.test.js | 9-33 |
+| getApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 21-21 |
+| updateApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 22-27 |
+| makeDeps | Function | ./packages/shared/src/agent/approval-gate.test.js | 36-50 |
+| test:createGate sets deadline = createdAt + waitMinutes exactly and starts awaiting@L52 | Test | ./packages/shared/src/agent/approval-gate.test.js | 52-58 |
+| test:sweepExpiredGates auto-approves a past-deadline gate once and documents the decision@L60 | Test | ./packages/shared/src/agent/approval-gate.test.js | 60-76 |
+| test:sweepExpiredGates leaves a gate whose deadline is still in the future@L78 | Test | ./packages/shared/src/agent/approval-gate.test.js | 78-85 |
+| test:proceedGate is idempotent — prepareBusiness runs once across repeated calls@L87 | Test | ./packages/shared/src/agent/approval-gate.test.js | 87-97 |
+| test:approveGate proceeds a human decision; a non-awaiting or missing gate throws GateError@L99 | Test | ./packages/shared/src/agent/approval-gate.test.js | 99-108 |
+| test:sweepExpiredGates recovers gates decided but not yet proceeded (crash between)@L110 | Test | ./packages/shared/src/agent/approval-gate.test.js | 110-121 |
+| test:reevaluateGate supersedes the old gate; green returns no gate, amber creates a fresh one with attempts+1@L123 | Test | ./packages/shared/src/agent/approval-gate.test.js | 123-146 |
+| test:gate lifecycle preserves native context and publishes only to that workspace@L148 | Test | ./packages/shared/src/agent/approval-gate.test.js | 148-169 |
+| test:default business resolution selects only the gate workspace when ids collide@L171 | Test | ./packages/shared/src/agent/approval-gate.test.js | 171-192 |
 | statusOf | Function | ./packages/shared/src/agent/availability.js | 43-46 |
 | publicAvailabilityMessage | Function | ./packages/shared/src/agent/availability.js | 48-73 |
 | pauseReasonFor | Function | ./packages/shared/src/agent/availability.js | 75-87 |
@@ -36,78 +58,56 @@ Community of 396 nodes
 | test:local model preflight verifies that the selected model is loaded@L79 | Test | ./packages/shared/src/agent/availability.test.js | 79-93 |
 | test:model classifier recognizes hosted authorization and network availability failures@L95 | Test | ./packages/shared/src/agent/availability.test.js | 95-119 |
 | test:repository classifier distinguishes remote outages from local workflow errors@L121 | Test | ./packages/shared/src/agent/availability.test.js | 121-142 |
+| clean | Function | ./packages/shared/src/agent/business-pipeline.js | 62-64 |
+| fenced | Function | ./packages/shared/src/agent/business-pipeline.js | 67-69 |
 | messageText | Function | ./packages/shared/src/agent/business-pipeline.js | 71-77 |
 | parseJsonObject | Function | ./packages/shared/src/agent/business-pipeline.js | 79-85 |
 | realResolveModel | Function | ./packages/shared/src/agent/business-pipeline.js | 89-94 |
 | invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
-| defaultCallJson | Function | ./packages/shared/src/agent/business-pipeline.js | 112-114 |
-| defaultCallText | Function | ./packages/shared/src/agent/business-pipeline.js | 116-118 |
-| test:parseVerdict reads a fenced verdict JSON block (completed)@L25 | Test | ./packages/shared/src/agent/coder-flow.test.js | 25-30 |
-| test:parseVerdict reads an insufficient JSON verdict with its reason@L32 | Test | ./packages/shared/src/agent/coder-flow.test.js | 32-36 |
-| test:parseVerdict extracts the merged PR URL when completed@L38 | Test | ./packages/shared/src/agent/coder-flow.test.js | 38-43 |
-| test:parseVerdict leaves pr null when absent@L45 | Test | ./packages/shared/src/agent/coder-flow.test.js | 45-48 |
-| test:parseVerdict accepts a plain VERDICT: line@L50 | Test | ./packages/shared/src/agent/coder-flow.test.js | 50-54 |
-| test:parseVerdict normalizes case in the status field@L56 | Test | ./packages/shared/src/agent/coder-flow.test.js | 56-59 |
-| test:parseVerdict defaults to insufficient when no verdict is present@L61 | Test | ./packages/shared/src/agent/coder-flow.test.js | 61-65 |
-| test:parseVerdict defaults to insufficient on empty/nullish input@L67 | Test | ./packages/shared/src/agent/coder-flow.test.js | 67-70 |
-| test:Git 403 preflight stops before model resolution, job creation, or issue transition@L96 | Test | ./packages/shared/src/agent/coder-flow.test.js | 96-133 |
-| test:model preflight stops before job creation or issue transition@L135 | Test | ./packages/shared/src/agent/coder-flow.test.js | 135-165 |
-| test:successful readiness is probed again for every later dispatch@L167 | Test | ./packages/shared/src/agent/coder-flow.test.js | 167-188 |
-| test:manual readiness guard establishes the same sanitized global pause@L190 | Test | ./packages/shared/src/agent/coder-flow.test.js | 190-218 |
-| test:manual readiness guard preserves policy denial without creating a model pause@L220 | Test | ./packages/shared/src/agent/coder-flow.test.js | 220-247 |
-| test:runtime policy denial is never classified as a model availability pause@L249 | Test | ./packages/shared/src/agent/coder-flow.test.js | 249-265 |
-| test:selected autonomous policy resolution rejects missing effective policy while local mode stays compatible@L267 | Test | ./packages/shared/src/agent/coder-flow.test.js | 267-292 |
-| test:proxy-vault autonomous polling needs no stored Linear key and uses the sentinel for every Linear read@L294 | Test | ./packages/shared/src/agent/coder-flow.test.js | 294-321 |
-| test:autonomous planned coder threads selected policy and loads only permitted MCP plugins@L323 | Test | ./packages/shared/src/agent/coder-flow.test.js | 323-438 |
-| test:runtime outage helper pauses direct runs on the execution role regardless of legacy size label@L488 | Test | ./packages/shared/src/agent/coder-flow.test.js | 488-528 |
-| test:coder pause recovery waits, reschedules failed probes, and clears after a ready settings change@L530 | Test | ./packages/shared/src/agent/coder-flow.test.js | 530-577 |
-| now | Function | ./packages/shared/src/agent/coder-flow.test.js | 547-547 |
-| test:runtime repository unavailability pauses safely without finishing the Linear issue@L579 | Test | ./packages/shared/src/agent/coder-flow.test.js | 579-640 |
-| test:planned runtime policy denial records a governed error without pausing or finalizing the issue@L642 | Test | ./packages/shared/src/agent/coder-flow.test.js | 642-697 |
 
-*... and 346 more members.*
+*... and 385 more members.*
 
 ## Execution Flows
 
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
-- **generatePlan** (criticality: 0.66, depth: 4)
+- **generatePlan** (criticality: 0.67, depth: 6)
 - **startScheduler** (criticality: 0.66, depth: 6)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (330 edge(s))
-- `deepEqual` (76 edge(s))
-- `String` (53 edge(s))
+- `equal` (370 edge(s))
+- `deepEqual` (69 edge(s))
+- `String` (64 edge(s))
 - `strictEqual` (48 edge(s))
-- `Number` (45 edge(s))
-- `warn` (32 edge(s))
+- `Number` (44 edge(s))
+- `push` (37 edge(s))
+- `replace` (33 edge(s))
+- `toISOString` (31 edge(s))
+- `warn` (31 edge(s))
+- `require` (30 edge(s))
 - `Boolean` (30 edge(s))
-- `match` (29 edge(s))
-- `replace` (27 edge(s))
-- `push` (27 edge(s))
-- `rejects` (25 edge(s))
-- `ok` (25 edge(s))
-- `require` (24 edge(s))
-- `trim` (24 edge(s))
-- `toISOString` (24 edge(s))
+- `ok` (29 edge(s))
+- `rejects` (28 edge(s))
+- `match` (28 edge(s))
+- `isFinite` (26 edge(s))
 
 ### Incoming
 
-- `equal` (330 edge(s))
-- `deepEqual` (76 edge(s))
+- `equal` (370 edge(s))
+- `deepEqual` (69 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
-- `./packages/shared/src/agent/scheduler.js` (53 edge(s))
+- `./packages/shared/src/agent/scheduler.js` (55 edge(s))
 - `strictEqual` (48 edge(s))
-- `./packages/shared/src/agent/localization.js` (48 edge(s))
+- `./packages/shared/src/agent/business-pipeline.js` (46 edge(s))
 - `./packages/shared/src/agent/llm.js` (40 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (38 edge(s))
+- `ok` (29 edge(s))
+- `rejects` (28 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
-- `rejects` (25 edge(s))
-- `ok` (25 edge(s))
 - `match` (24 edge(s))
-- `after` (21 edge(s))
-- `./packages/shared/src/agent/scheduler.test.js` (18 edge(s))
-- `./packages/shared/src/agent/availability.js` (17 edge(s))
+- `after` (22 edge(s))
+- `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
+- `./packages/shared/src/agent/scheduler.test.js` (19 edge(s))

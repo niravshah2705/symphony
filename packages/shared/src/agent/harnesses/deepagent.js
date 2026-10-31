@@ -82,7 +82,7 @@ function buildBackend(kind, rootDir, opts = {}, deps = {}) {
  * generic framework wrapper when a caller provides only a root directory. It
  * stays injected here to avoid a deepagent↔framework module cycle.
  */
-function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, extraTools = [], env }, deps = {}) {
+function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, extraTools = [], env, skillRouterMetrics = null }, deps = {}) {
   const deepagents = deps.deepagents || require('deepagents');
   const makeChatModel = deps.createChatModel || createChatModel;
   const install = deps.installSkills;
@@ -129,12 +129,22 @@ function buildAgent({ workflow, llm, backend, skillPaths, rootDir, ctx = {}, ext
     middleware,
     permissions: Array.isArray(effectiveWorkflow.permissions) ? effectiveWorkflow.permissions : [],
   });
-  return { agent, backend: be, skillPaths: skills, tools };
+  return { agent, backend: be, skillPaths: skills, tools, skillRouterMetrics };
 }
 
 async function executeDeepAgent(options, prompt) {
   if (typeof options.deepAgentInvoke !== 'function') {
     throw new AgentRuntimeError('DeepAgent runtime was selected without a prepared agent.', 'runtime_not_prepared', 500);
+  }
+  let routingMetrics = (options && options.skillRouterMetrics) || null;
+  let skillPaths = (options && (options.skillPaths || options.skills)) || null;
+  if (!routingMetrics && (skillPaths || (options && options.rootDir))) {
+    try {
+      const { resolveAndRouteSkills } = require('../skill-router');
+      const routed = await resolveAndRouteSkills(options, prompt);
+      routingMetrics = routed.routingMetrics;
+      skillPaths = routed.selectedSkillPaths;
+    } catch (_) {}
   }
   const result = await options.deepAgentInvoke(prompt, options.invokeConfig || {});
   const messages = (result && result.messages) || [];
@@ -149,6 +159,8 @@ async function executeDeepAgent(options, prompt) {
     usage: deepAgentUsage(messages),
     costUsd: deepAgentCost(messages),
     sessionId: null,
+    skillRouterMetrics: (result && result.skillRouterMetrics) || routingMetrics || null,
+    skillPaths: (result && result.skillPaths) || skillPaths || null,
   };
 }
 

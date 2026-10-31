@@ -413,6 +413,29 @@ function usedResourceMetadata(resultOrError) {
   return metadata;
 }
 
+/** Trace-metadata fragment for skill router context reduction and performance. */
+function skillRouterTraceMetadata(resultOrError) {
+  const metrics = resultOrError && resultOrError.skillRouterMetrics;
+  if (!metrics) return {};
+  const metadata = {
+    skill_router_backend: metrics.backend,
+    skill_router_fallback_applied: Boolean(metrics.fallbackApplied),
+    skill_router_latency_ms: metrics.routingLatencyMs,
+    skill_router_total_skills: metrics.totalSkills,
+    skill_router_used_skills: metrics.usedSkills,
+  };
+  if (typeof metrics.totalContextSize === 'number') {
+    metadata.skill_router_total_context_size = metrics.totalContextSize;
+    metadata.skill_router_used_context_size = metrics.usedContextSize;
+    metadata.skill_router_saved_context_size = metrics.savedContextSize;
+    metadata.skill_router_context_reduction_percent = metrics.contextReductionPercent;
+    metadata.skill_router_estimated_tokens_total = metrics.estimatedTokensTotal;
+    metadata.skill_router_estimated_tokens_used = metrics.estimatedTokensUsed;
+    metadata.skill_router_estimated_tokens_saved = metrics.estimatedTokensSaved;
+  }
+  return metadata;
+}
+
 function traceMetadata(resultOrError) {
   const usage = resultOrError && resultOrError.usage;
   const costUsd = finiteNumber(resultOrError && resultOrError.costUsd);
@@ -438,6 +461,7 @@ function traceMetadata(resultOrError) {
     ...metadata,
     ...usedResourceMetadata(resultOrError),
     ...reviewMetadata(resultOrError && resultOrError.review),
+    ...skillRouterTraceMetadata(resultOrError),
   };
 }
 
@@ -526,6 +550,14 @@ function meterRun(options, resultOrError) {
   }
 }
 
+/**
+ * Lazy helper delegating candidate skill discovery and turn routing to the skill-router.
+ */
+async function resolveAndRouteSkills(options = {}, prompt = '') {
+  const { resolveAndRouteSkills: impl } = require('../skill-router');
+  return impl(options, prompt);
+}
+
 module.exports = {
   WORKFLOW_PATTERNS,
   AgentRuntimeError,
@@ -556,4 +588,5 @@ module.exports = {
   plannerWebSearchAllowed,
   safePathIn,
   meterRun,
+  resolveAndRouteSkills,
 };
