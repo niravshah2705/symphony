@@ -6,7 +6,7 @@ import test from 'node:test';
 // package is CommonJS. Import the module source as ESM so these stay pure unit
 // tests without adding a DOM or changing the production module boundary.
 const source = await readFile(new URL('./permissions.js', import.meta.url), 'utf8');
-const { canAccessRoute } = await import(
+const { canAccessRoute, menuRouteVisible } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 );
 
@@ -45,6 +45,23 @@ test('legal routes remain public and organization-independent', () => {
     assert.equal(canAccessRoute(publicSession, route), true);
     assert.equal(canAccessRoute(viewerSession, route), true);
   }
+});
+
+test('deprecated routes are hidden by default and restored by the header opt-in', () => {
+  const deprecatedRoutes = ['business', 'board', 'identity', 'agent-jobs'];
+  const optedIn = Object.freeze({ ...viewerSession, deprecatedUiEnabled: true });
+  for (const route of deprecatedRoutes) {
+    assert.equal(menuRouteVisible(viewerSession, route), false, `${route} is hidden by default`);
+    assert.equal(menuRouteVisible(optedIn, route), true, `${route} returns with x-ai-fleet-deprecated: true`);
+  }
+});
+
+test('the deprecated opt-in does not bypass permissions or sign-in', () => {
+  const publicOptIn = Object.freeze({ ...publicSession, deprecatedUiEnabled: true });
+  assert.equal(menuRouteVisible(publicOptIn, 'agent-jobs'), false, 'agent jobs stays signed-in only');
+  assert.equal(menuRouteVisible(publicOptIn, 'business'), false, 'planning read is still required');
+  // Direct links are unchanged: the removal is nav-only.
+  assert.equal(canAccessRoute(viewerSession, 'business'), true);
 });
 
 test('session-aware route checks preserve unrelated permission requirements', () => {
