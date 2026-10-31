@@ -27,6 +27,11 @@ locals {
   # override convention as the skills bucket above.
   attachments_bucket_name = var.attachments_bucket_name != "" ? var.attachments_bucket_name : "${var.project_id}-aifleet-attachments"
 
+  # Agent memory Cloud SQL instance (memory.tf) — same derived-default-with-
+  # override convention. Instance names must be lowercase alphanumeric/hyphen
+  # and unique within the project.
+  memory_db_instance_name = var.memory_db_instance_name != "" ? var.memory_db_instance_name : "${var.project_id}-aifleet-memory"
+
   # Artifact Registry image references. Each service resolves its own tag,
   # falling back to var.image_tag when no per-service override is set — this is
   # what lets the CD pipeline roll ONE service (its tag = new SHA) while every

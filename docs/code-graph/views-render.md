@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 725 nodes
+Community of 726 nodes
 
-- **Size**: 725 nodes
-- **Cohesion**: 0.5020
+- **Size**: 726 nodes
+- **Cohesion**: 0.5005
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 725 nodes
 | capitalize | Function | ./public/js/app.js | 905-908 |
 | start | Function | ./public/js/app.js | 912-920 |
 
-*... and 675 more members.*
+*... and 676 more members.*
 
 ## Execution Flows
 
@@ -86,9 +86,9 @@ Community of 725 nodes
 ### Outgoing
 
 - `addEventListener` (232 edge(s))
-- `append` (218 edge(s))
+- `append` (216 edge(s))
 - `map` (161 edge(s))
-- `String` (113 edge(s))
+- `String` (115 edge(s))
 - `trim` (101 edge(s))
 - `push` (100 edge(s))
 - `equal` (83 edge(s))

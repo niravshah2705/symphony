@@ -37,7 +37,6 @@
     "@google-cloud/run": "^4.0.0",
     "@google-cloud/scheduler": "^6.0.0",
     "@google/genai": "^2.32.0",
-    "google-auth-library": "^11.0.1",
     "@langchain/anthropic": "^1.5.2",
     "@langchain/core": "^1.2.3",
     "@langchain/langgraph": "^1.4.8",
@@ -47,7 +46,9 @@
     "@langchain/openai": "^1.5.5",
     "@openai/codex-sdk": "^0.166.0",
     "deepagents": "^1.16.2",
+    "google-auth-library": "^11.0.1",
     "langchain": "^1.5.4",
-    "langsmith": "^0.7.17"
+    "langsmith": "^0.7.17",
+    "pg": "^8.23.1"
   }
 }

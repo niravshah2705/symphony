@@ -44,6 +44,18 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
     }
     const reviewEnabled = Boolean(options.rubric || options.rubricMiddleware);
 
+    // MemoryMiddleware (claude-mem, harness-agnostic) — opt-in, off by default,
+    // and fully isolated so it can never fail a real run. Gate resolution is
+    // cheap and never throws; the inject/capture calls are individually guarded.
+    let memory = null;
+    let memoryOn = false;
+    try {
+      memory = require('../memory-middleware');
+      memoryOn = memory.isEnabled(options);
+    } catch (_) {
+      memoryOn = false;
+    }
+
     const execute = async () => {
       try {
         // Factories receive trusted construction-time dependencies separately
@@ -57,12 +69,30 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
           );
         }
         const runOnce = (promptText) => executor(runtimeOptions, promptText);
-        const value = await runOnce(prompt);
+        // SessionStart / UserPromptSubmit equivalent: recall + inject durable memory.
+        let runPrompt = prompt;
+        if (memoryOn) {
+          try {
+            runPrompt = await memory.inject(prompt, runtimeOptions);
+          } catch (_) {
+            runPrompt = prompt;
+          }
+        }
+        const value = await runOnce(runPrompt);
         const reviewed = reviewEnabled
-          ? await applyRubricMiddleware(options, value, prompt, runOnce)
+          ? await applyRubricMiddleware(options, value, runPrompt, runOnce)
           : value;
         annotateTrace(reviewed, options.getCurrentRunTree || getCurrentRunTree);
         meterRun(options, reviewed);
+        // Stop / SessionEnd equivalent: compress + persist. Awaited because Cloud
+        // Run has no reliable post-response background window; fully fail-open.
+        if (memoryOn) {
+          try {
+            await memory.capture(reviewed, runtimeOptions);
+          } catch (_) {
+            /* memory capture is best-effort — never fail a completed run */
+          }
+        }
         return reviewed;
       } catch (error) {
         const wrapped = wrapExecutionError(definition.label, error);

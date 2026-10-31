@@ -691,6 +691,32 @@ const SKILLS = Object.freeze({
 });
 
 /**
+ * Agent memory store (claude-mem, harness-agnostic). The MemoryMiddleware
+ * captures + compresses finished runs and injects durable memory into future
+ * ones. Persistence is a Cloud SQL for PostgreSQL instance (memory.tf) reached
+ * over the Cloud Run /cloudsql unix socket:
+ *
+ *   MEMORY_DATABASE_URL       postgres connection string, e.g.
+ *                             postgresql://user:pass@/aifleet_memory?host=/cloudsql/<conn>.
+ *   MEMORY_DATABASE_URL_FILE  path to a mounted secret file holding the same
+ *                             URL (Cloud Run uses this so the agent primary
+ *                             stays secret-env-free). Read lazily by the store.
+ *                             Neither set ⇒ the feature is DORMANT and the
+ *                             middleware falls back to the Firestore/file store.
+ *   MEMORY_ENABLED            opt-in gate ('true'); off by default. The
+ *                             middleware also honors a per-org `memoryEnabled`
+ *                             setting.
+ *
+ * The canonical selector + schema live in packages/shared/src/agent/
+ * memory-store/; this mirror is for ops discoverability.
+ */
+const MEMORY = Object.freeze({
+  enabled: String(process.env.MEMORY_ENABLED || '').trim().toLowerCase() === 'true',
+  databaseUrl: String(process.env.MEMORY_DATABASE_URL || '').trim(),
+  databaseUrlFile: String(process.env.MEMORY_DATABASE_URL_FILE || '').trim(),
+});
+
+/**
  * Billing / cost-metering knobs. All optional and INERT for local dev — billing
  * only meters and sweeps when explicitly enabled. Money is handled in INTEGER
  * paise everywhere (never floating INR) to avoid rounding drift.
@@ -805,6 +831,7 @@ const CONFIG = Object.freeze({
   TOOLS,
   AUTH,
   SKILLS,
+  MEMORY,
   BILLING,
 });
 
@@ -821,4 +848,10 @@ function namespaceCollection(base) {
   return STORE_NAMESPACE ? `${base}__${STORE_NAMESPACE}` : base;
 }
 
-module.exports = { CONFIG, buildFirebaseAuthConfig, resolveSkillsSrc, namespaceCollection, parseSpaOrigins };
+module.exports = {
+  CONFIG,
+  buildFirebaseAuthConfig,
+  resolveSkillsSrc,
+  namespaceCollection,
+  parseSpaOrigins,
+};

@@ -121,6 +121,16 @@ output "registry_bucket" {
   value       = one(google_storage_bucket.registry[*].name)
 }
 
+output "memory_db_instance" {
+  description = "Terraform-created Cloud SQL Postgres instance holding AI-compressed agent memories (null when memory_enabled = false). Name defaults to '<project_id>-aifleet-memory'."
+  value       = one(google_sql_database_instance.memory[*].name)
+}
+
+output "memory_db_connection_name" {
+  description = "Cloud SQL connection name (project:region:instance) the planner/coder mount as the /cloudsql unix socket."
+  value       = one(google_sql_database_instance.memory[*].connection_name)
+}
+
 output "artifact_registry_repo" {
   description = "Artifact Registry Docker repo path (images are pushed here as <repo>/<service>:<tag>)."
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}"

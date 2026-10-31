@@ -746,6 +746,66 @@ variable "skills_publisher_member" {
   default     = ""
 }
 
+# --- Agent memory store (Cloud SQL Postgres, memory.tf) ----------------------
+# The MemoryMiddleware persists AI-compressed agent memories here and injects
+# them into future runs. Agents WRITE at runtime over the Cloud Run /cloudsql
+# unix socket (Cloud SQL Auth Proxy; no VPC connector). Opt-in, off by default —
+# Cloud SQL does not scale to zero, so enabling it adds a fixed monthly cost.
+
+variable "memory_enabled" {
+  type        = bool
+  description = "Create the Terraform-managed Cloud SQL for PostgreSQL memory instance (+ database/user/URL secret) and wire MEMORY_DATABASE_URL + the /cloudsql socket into planner/coder. false disables the feature entirely and keeps the stack at $0."
+  default     = false
+}
+
+variable "memory_db_version" {
+  type        = string
+  description = "Cloud SQL Postgres engine version (POSTGRES_16 / POSTGRES_17)."
+  default     = "POSTGRES_16"
+}
+
+variable "memory_db_tier" {
+  type        = string
+  description = "Cloud SQL machine tier. db-f1-micro is the cheapest usable tier; raise it for higher traffic/concurrency. See https://cloud.google.com/sql/pricing."
+  default     = "db-f1-micro"
+}
+
+variable "memory_db_disk_size_gb" {
+  type        = number
+  description = "Initial SSD size for the memory instance. Autoresize is on, so this is a floor, not a cap."
+  default     = 10
+}
+
+variable "memory_db_backups_enabled" {
+  type        = bool
+  description = "Enable automated daily backups of the memory database."
+  default     = true
+}
+
+variable "memory_db_deletion_protection" {
+  type        = bool
+  description = "Block `terraform destroy` of the memory instance. Default true: it holds real compressed agent memories. Set false only for a deliberate teardown."
+  default     = true
+}
+
+variable "memory_db_instance_name" {
+  type        = string
+  description = "OPTIONAL override for the Cloud SQL instance name. Empty ('') derives '<project_id>-aifleet-memory' (see locals.tf). Lowercase letters, digits, hyphens only."
+  default     = ""
+}
+
+variable "memory_db_name" {
+  type        = string
+  description = "Database name inside the memory instance."
+  default     = "aifleet_memory"
+}
+
+variable "memory_db_user" {
+  type        = string
+  description = "Database user the runtime connects as (password is generated into Secret Manager)."
+  default     = "aifleet_memory"
+}
+
 # --- Harness registry bucket (see registry.tf) -------------------------------
 # The weekly sync-harness-registry workflow publishes versioned, harness-native
 # rootfs artifacts plus their v2 descriptors and inert non-ECC resources here.

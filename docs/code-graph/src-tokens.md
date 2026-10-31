@@ -79,7 +79,7 @@ Community of 234 nodes
 - **refreshTokens** (criticality: 0.67, depth: 2)
 - **getSampleNetworkPolicy** (criticality: 0.67, depth: 8)
 - **runSandboxSecurityChecks** (criticality: 0.67, depth: 8)
-- *... and 31 more flows.*
+- *... and 30 more flows.*
 
 ## Dependencies
 

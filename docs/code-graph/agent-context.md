@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 392 nodes
+Community of 396 nodes
 
-- **Size**: 392 nodes
-- **Cohesion**: 0.3155
+- **Size**: 396 nodes
+- **Cohesion**: 0.3144
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 392 nodes
 | test:runtime repository unavailability pauses safely without finishing the Linear issue@L579 | Test | ./packages/shared/src/agent/coder-flow.test.js | 579-640 |
 | test:planned runtime policy denial records a governed error without pausing or finalizing the issue@L642 | Test | ./packages/shared/src/agent/coder-flow.test.js | 642-697 |
 
-*... and 342 more members.*
+*... and 346 more members.*
 
 ## Execution Flows
 
@@ -80,19 +80,19 @@ Community of 392 nodes
 
 - `equal` (330 edge(s))
 - `deepEqual` (76 edge(s))
-- `String` (52 edge(s))
+- `String` (53 edge(s))
 - `strictEqual` (48 edge(s))
 - `Number` (45 edge(s))
 - `warn` (32 edge(s))
 - `Boolean` (30 edge(s))
 - `match` (29 edge(s))
+- `replace` (27 edge(s))
 - `push` (27 edge(s))
-- `replace` (26 edge(s))
 - `rejects` (25 edge(s))
 - `ok` (25 edge(s))
+- `require` (24 edge(s))
 - `trim` (24 edge(s))
 - `toISOString` (24 edge(s))
-- `includes` (24 edge(s))
 
 ### Incoming
 
