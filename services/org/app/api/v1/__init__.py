@@ -14,6 +14,8 @@ from app.api.v1 import (
     routes_me,
     routes_members,
     routes_org,
+    routes_project_grants,
+    routes_project_invitations,
     routes_projects,
     routes_tags,
     routes_tasks,
@@ -30,6 +32,9 @@ api_router.include_router(routes_org.router)
 api_router.include_router(routes_users.router)
 api_router.include_router(routes_projects.router)
 api_router.include_router(routes_members.router)
+api_router.include_router(routes_project_invitations.router)
+api_router.include_router(routes_project_invitations.accept_router)
+api_router.include_router(routes_project_grants.router)
 api_router.include_router(routes_tasks.router)
 api_router.include_router(routes_tags.router)
 

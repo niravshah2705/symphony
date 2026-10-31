@@ -14,6 +14,10 @@ const LLM_GATEWAY_MODES = new Set(['langsmith']);
 // continuously billed (cpu_idle only saves cost in gaps BETWEEN requests, and a
 // long-lived stream never creates one), so nobody gets it unless they ask.
 const NOTIFICATIONS_HEADER = 'x-ai-fleet-notifications';
+// Per-request opt-in (browser header) for the deprecated SPA tabs (Business,
+// Board, Identity, Agent jobs). They are removed from the default sidebar and
+// stay reachable only when the request carries `x-ai-fleet-deprecated: true`.
+const DEPRECATED_HEADER = 'x-ai-fleet-deprecated';
 const MAX_CONTEXT_ID_CHARS = 160;
 
 function cleanContextId(value) {
@@ -39,6 +43,11 @@ function cleanLlmGateway(value) {
 /** True when the request opted into the notifications stream via any non-blank header value. */
 function notificationsRequested(req) {
   return header(req, NOTIFICATIONS_HEADER).trim() !== '';
+}
+
+/** True only when the request explicitly opted into the deprecated SPA tabs. */
+function deprecatedUiRequested(req) {
+  return header(req, DEPRECATED_HEADER).trim().toLowerCase() === 'true';
 }
 
 /**
@@ -116,10 +125,12 @@ module.exports = {
   PROJECT_HEADER,
   LLM_GATEWAY_HEADER,
   NOTIFICATIONS_HEADER,
+  DEPRECATED_HEADER,
   MAX_CONTEXT_ID_CHARS,
   cleanContextId,
   cleanLlmGateway,
   notificationsRequested,
+  deprecatedUiRequested,
   requestContext,
   contextHeaders,
   forwardRequestContext,

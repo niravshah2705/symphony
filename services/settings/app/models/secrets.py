@@ -48,6 +48,7 @@ SECRET_KEYS: tuple[str, ...] = (
     "openaiApiKey",
     "huggingfaceApiKey",
     "langsmithApiKey",
+    "openrouterApiKey",
     "digilockerClientId",
     "digilockerClientSecret",
     # JSON-encoded OpenAI/Codex OAuth token bundle. Provisioned only through the

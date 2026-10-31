@@ -4,34 +4,22 @@
 
 ## Overview
 
-Community of 18 nodes
+Community of 6 nodes
 
-- **Size**: 18 nodes
-- **Cohesion**: 0.4979
+- **Size**: 6 nodes
+- **Cohesion**: 0.2623
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| handlerFor | Function | ./services/planner/src/routes/agent-attachments.test.js | 10-15 |
-| call | Function | ./services/planner/src/routes/agent-attachments.test.js | 18-25 |
-| freshRouter | Function | ./services/planner/src/routes/agent-attachments.test.js | 35-54 |
-| test:GET /attachment-types is a pure passthrough of the canonical table@L56 | Test | ./services/planner/src/routes/agent-attachments.test.js | 56-61 |
-| test:mint/complete/list/delete all reject when org or project context is missing@L63 | Test | ./services/planner/src/routes/agent-attachments.test.js | 63-79 |
-| test:routes reject an unknown/foreign conversation even with valid org/project headers@L81 | Test | ./services/planner/src/routes/agent-attachments.test.js | 81-89 |
-| test:a conversation that exists but belongs to a different org is 404, not 403 (no existence oracle)@L91 | Test | ./services/planner/src/routes/agent-attachments.test.js | 91-112 |
-| reqFor | Function | ./services/planner/src/routes/agent-attachments.test.js | 102-102 |
-| test:mint validates the conversation id shape before touching the service@L114 | Test | ./services/planner/src/routes/agent-attachments.test.js | 114-123 |
-| test:mint forwards org/project/conversation and body fields to the service, and returns 201@L125 | Test | ./services/planner/src/routes/agent-attachments.test.js | 125-147 |
-| test:complete rejects a malformed attachment id before touching the service@L149 | Test | ./services/planner/src/routes/agent-attachments.test.js | 149-157 |
-| test:complete forwards ids to the service and returns its result@L159 | Test | ./services/planner/src/routes/agent-attachments.test.js | 159-171 |
-| test:list and delete forward to the service correctly@L173 | Test | ./services/planner/src/routes/agent-attachments.test.js | 173-193 |
-| test:search returns [] without calling the service for an empty query, and maps/bounds results otherwise@L195 | Test | ./services/planner/src/routes/agent-attachments.test.js | 195-210 |
-| test:ask returns a friendly no-attachments message and never calls the LLM when nothing is retrieved@L212 | Test | ./services/planner/src/routes/agent-attachments.test.js | 212-226 |
-| test:ask rejects an empty question before touching the service@L228 | Test | ./services/planner/src/routes/agent-attachments.test.js | 228-236 |
-| test:ask returns 400 when no thinking model is configured@L238 | Test | ./services/planner/src/routes/agent-attachments.test.js | 238-250 |
-| test:ask assembles retrieved excerpts into the model prompt and returns a bounded, cited answer@L252 | Test | ./services/planner/src/routes/agent-attachments.test.js | 252-278 |
+| postHandler | Function | ./services/coder/src/routes/coder.test.js | 9-15 |
+| invoke | Function | ./services/coder/src/routes/coder.test.js | 17-24 |
+| routeHandler | Function | ./services/coder/src/routes/coder.test.js | 26-32 |
+| test:manual coder route forwards the gateway-validated organization and native project@L34 | Test | ./services/coder/src/routes/coder.test.js | 34-67 |
+| test:coder status and monitor lifecycle use the exact selected context@L69 | Test | ./services/coder/src/routes/coder.test.js | 69-108 |
+| request | Function | ./services/coder/src/routes/coder.test.js | 93-96 |
 
 ## Execution Flows
 
@@ -41,27 +29,31 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (29 edge(s))
-- `match` (7 edge(s))
-- `assign` (4 edge(s))
-- `resolve` (3 edge(s))
-- `deepEqual` (3 edge(s))
-- `attachmentsService` (2 edge(s))
-- `llm` (2 edge(s))
+- `resolve` (4 edge(s))
+- `find` (2 edge(s))
 - `ok` (2 edge(s))
+- `after` (2 edge(s))
+- `require` (2 edge(s))
+- `deepEqual` (2 edge(s))
 - `catch` (1 edge(s))
-- `then` (1 edge(s))
 - `handler` (1 edge(s))
-- `after` (1 edge(s))
-- `require` (1 edge(s))
-- `find` (1 edge(s))
+- `toLowerCase` (1 edge(s))
+- `String` (1 edge(s))
 - `toUpperCase` (1 edge(s))
+- `at` (1 edge(s))
+- `keys` (1 edge(s))
+- `push` (1 edge(s))
+- `assign` (1 edge(s))
 
 ### Incoming
 
-- `equal` (29 edge(s))
-- `./services/planner/src/routes/agent-attachments.test.js` (18 edge(s))
-- `match` (7 edge(s))
-- `deepEqual` (3 edge(s))
-- `ok` (1 edge(s))
-- `repeat` (1 edge(s))
+- `./services/coder/src/routes/coder.test.js` (6 edge(s))
+- `resolve` (2 edge(s))
+- `after` (2 edge(s))
+- `require` (2 edge(s))
+- `deepEqual` (2 edge(s))
+- `keys` (1 edge(s))
+- `push` (1 edge(s))
+- `assign` (1 edge(s))
+- `map` (1 edge(s))
+- `equal` (1 edge(s))

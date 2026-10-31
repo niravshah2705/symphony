@@ -35,6 +35,9 @@ let authState = Object.freeze({
   // the server echoes it back on — opt-in only, see request-context.js
   // NOTIFICATIONS_HEADER.
   notificationsEnabled: false,
+  // Deprecated tabs opt-in (Business, Board, Identity, Agent jobs). Off unless
+  // the gateway echoes `x-ai-fleet-deprecated: true` back on the request.
+  deprecatedUiEnabled: false,
 });
 
 function setState(next) {
@@ -79,7 +82,9 @@ async function loadConfiguration() {
     // The error below is intentionally stable and does not expose proxy HTML.
   }
   if (!response.ok) throw new Error(payload.error || 'Authentication configuration could not be loaded.');
-  if (!payload.enabled || payload.mode === 'disabled') return { mode: 'disabled', enabled: false };
+  if (!payload.enabled || payload.mode === 'disabled') {
+    return { mode: 'disabled', enabled: false, deprecatedUiEnabled: Boolean(payload.deprecatedUiEnabled) };
+  }
   const firebase = payload.firebase || {};
   if (payload.mode !== 'firebase' || !firebase.apiKey || !firebase.projectId || !firebase.authDomain) {
     throw new Error('Authentication configuration is incomplete.');
@@ -196,7 +201,7 @@ export async function initializeAuthentication() {
     auth = null;
     setAccessTokenProvider(null);
     clearWorkspaceContext();
-    return setState({ mode: 'disabled', enabled: false, authenticated: true, role: 'admin', permissions: ADMIN_PERMISSIONS, user: null, error: '', notificationsEnabled: false });
+    return setState({ mode: 'disabled', enabled: false, authenticated: true, role: 'admin', permissions: ADMIN_PERMISSIONS, user: null, error: '', notificationsEnabled: false, deprecatedUiEnabled: Boolean(configuration.deprecatedUiEnabled) });
   }
 
   const publicPermissions = configuration.publicPermissions || FALLBACK_PUBLIC_PERMISSIONS;
@@ -215,7 +220,7 @@ export async function initializeAuthentication() {
     // No signed-in user → public visitor (read-only Agent workspace).
     setAccessTokenProvider(null);
     clearWorkspaceContext();
-    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: '', notificationsEnabled: false });
+    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: '', notificationsEnabled: false, deprecatedUiEnabled: Boolean(configuration.deprecatedUiEnabled) });
   }
 
   let identity;
@@ -226,7 +231,7 @@ export async function initializeAuthentication() {
     setAccessTokenProvider(null);
     clearWorkspaceContext();
     try { await authSdk.signOut(auth); } catch (_) { /* ignore */ }
-    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: error?.message || 'This account is not allowed.', notificationsEnabled: false });
+    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: error?.message || 'This account is not allowed.', notificationsEnabled: false, deprecatedUiEnabled: Boolean(configuration.deprecatedUiEnabled) });
   }
 
   // Validate the device-local org/project choice before any workspace calls.
@@ -249,6 +254,7 @@ export async function initializeAuthentication() {
     deploymentStatus: deployment.deploymentStatus,
     orgName: deployment.orgName,
     notificationsEnabled: Boolean(identity.notificationsEnabled),
+    deprecatedUiEnabled: Boolean(identity.deprecatedUiEnabled ?? configuration.deprecatedUiEnabled),
   });
 }
 
@@ -291,7 +297,14 @@ export function expireAuthentication(message = '') {
   clearWorkspaceContext();
   // Drop back to the public surface rather than a locked state.
   const permissions = (configuration && configuration.publicPermissions) || FALLBACK_PUBLIC_PERMISSIONS;
-  return setState({ authenticated: false, role: 'public', permissions, user: null, error: message });
+  return setState({
+    authenticated: false,
+    role: 'public',
+    permissions,
+    user: null,
+    error: message,
+    deprecatedUiEnabled: Boolean(configuration?.deprecatedUiEnabled),
+  });
 }
 
 // Run a Firebase popup sign-in for the given provider, then authorize the

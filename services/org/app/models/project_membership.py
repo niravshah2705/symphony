@@ -20,6 +20,11 @@ class ProjectMembership:
     id: uuid.UUID = field(default_factory=new_uuid)
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
+    # The member's own home org. None (the default) preserves today's implicit
+    # assumption that a project member belongs to the project's own org; set it
+    # only when the person is a cross-org collaborator or an org-less
+    # individual who accepted a ProjectInvitation.
+    member_org_id: uuid.UUID | None = None
 
     @staticmethod
     def doc_id(project_id: uuid.UUID, user_id: uuid.UUID) -> str:
@@ -33,6 +38,7 @@ class ProjectMembership:
             "role": self.role.value,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "member_org_id": uuid_str(self.member_org_id),
         }
 
     @classmethod
@@ -44,4 +50,5 @@ class ProjectMembership:
             role=ProjectRole(doc.get("role", ProjectRole.DEVELOPER.value)),
             created_at=doc.get("created_at") or utcnow(),
             updated_at=doc.get("updated_at") or utcnow(),
+            member_org_id=to_uuid(doc.get("member_org_id")),
         )

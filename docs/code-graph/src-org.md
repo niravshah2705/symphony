@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 134 nodes
+Community of 133 nodes
 
-- **Size**: 134 nodes
-- **Cohesion**: 0.2954
+- **Size**: 133 nodes
+- **Cohesion**: 0.2968
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 134 nodes
 | test:GitLab REST and smart-HTTP routes use provider-specific injection@L148 | Test | ./services/proxy/src/proxy.test.js | 148-156 |
 | test:Asana route injects a required vault bearer@L158 | Test | ./services/proxy/src/proxy.test.js | 158-163 |
 
-*... and 84 more members.*
+*... and 83 more members.*
 
 ## Execution Flows
 
@@ -75,17 +75,17 @@ Community of 134 nodes
 
 ### Outgoing
 
-- `equal` (119 edge(s))
-- `deepEqual` (32 edge(s))
-- `String` (27 edge(s))
+- `equal` (116 edge(s))
+- `deepEqual` (30 edge(s))
+- `String` (26 edge(s))
 - `trim` (21 edge(s))
 - `rejects` (14 edge(s))
-- `fetch` (13 edge(s))
 - `end` (12 edge(s))
 - `stringify` (12 edge(s))
+- `fetch` (12 edge(s))
 - `resolve` (10 edge(s))
-- `json` (10 edge(s))
 - `toLowerCase` (9 edge(s))
+- `json` (9 edge(s))
 - `toString` (8 edge(s))
 - `from` (8 edge(s))
 - `writeHead` (8 edge(s))
@@ -93,18 +93,18 @@ Community of 134 nodes
 
 ### Incoming
 
-- `equal` (119 edge(s))
+- `equal` (116 edge(s))
 - `./services/proxy/src/proxy.test.js` (33 edge(s))
-- `deepEqual` (32 edge(s))
+- `deepEqual` (30 edge(s))
 - `./services/proxy/src/credentials.js` (26 edge(s))
 - `rejects` (14 edge(s))
 - `./services/proxy/src/secrets-client.js` (13 edge(s))
-- `./services/proxy/src/stream-token-server.test.js` (13 edge(s))
-- `fetch` (12 edge(s))
+- `./services/proxy/src/stream-token-server.test.js` (12 edge(s))
+- `fetch` (11 edge(s))
 - `./services/proxy/src/proxy.js` (11 edge(s))
 - `./services/proxy/src/stream-token-rpc.js` (10 edge(s))
 - `./services/proxy/src/stream-token-rpc.test.js` (10 edge(s))
-- `json` (9 edge(s))
 - `close` (8 edge(s))
+- `json` (8 edge(s))
 - `./services/proxy/src/index.js` (7 edge(s))
 - `./services/proxy/src/stream-token.test.js` (7 edge(s))

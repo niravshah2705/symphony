@@ -1,6 +1,33 @@
 import { api } from '../api.js';
-import { state, setCurrentProject } from '../state.js';
-import { el, clear, fmtDate, fmtPercent, esc, loading } from '../dom.js';
+import { state, setCurrentProject, setProjectSandbox } from '../state.js';
+import { el, clear, fmtDate, fmtPercent, esc, loading, toast } from '../dom.js';
+
+async function activateProjectSandbox(project, { openChat = false } = {}) {
+  const projectId = project?.id || '';
+  const projectName = project?.name || projectId || 'default';
+  setCurrentProject(projectId, projectName);
+  state.sandboxLoading = true;
+  try {
+    const res = await api.loadProjectSandbox({
+      projectId,
+      projectName,
+      repositoryUrl: project?.repositoryUrl || '',
+    });
+    if (res && res.sandbox) {
+      setProjectSandbox(projectId, res.sandbox);
+      const gh = res.sandbox.secrets?.github?.configured ? 'GitHub ✓' : 'GitHub —';
+      const or = res.sandbox.secrets?.openrouter?.configured ? 'OpenRouter ✓' : 'OpenRouter —';
+      toast(`NVIDIA OpenShell sandbox ${res.sandbox.name} ready (${gh}, ${or}).`, 'ok');
+    }
+  } catch (err) {
+    toast(err.message || 'Could not load NVIDIA OpenShell sandbox.', 'err');
+  } finally {
+    state.sandboxLoading = false;
+  }
+  if (openChat) {
+    window.location.hash = '#/agent';
+  }
+}
 
 function hashProjectId() {
   const parts = window.location.hash.replace(/^#\//, '').split('/');
@@ -29,10 +56,31 @@ export async function renderProjects(view) {
 
 function projectCard(p) {
   const pct = fmtPercent(p.progress);
+  const existingSandbox = state.sandboxesByProject[p.id] || (state.sandbox?.projectId === p.id ? state.sandbox : null);
+  const sandboxBadge = el(
+    'span',
+    {
+      class: 'badge',
+      style: existingSandbox?.phase === 'READY'
+        ? 'background:rgba(16,185,129,0.16);color:var(--green)'
+        : 'background:rgba(99,102,241,0.14);color:var(--accent-2)',
+    },
+    existingSandbox ? `OpenShell: ${existingSandbox.name} (${existingSandbox.phase || 'READY'})` : 'NVIDIA OpenShell Sandbox'
+  );
+  const openChatBtn = el('button', {
+    class: 'ghost',
+    type: 'button',
+    style: 'font-size:12px;padding:4px 8px',
+    onclick: (event) => {
+      event.stopPropagation();
+      void activateProjectSandbox(p, { openChat: true });
+    },
+  }, 'Open Sandbox Chat →');
   const card = el('div', { class: 'project-card card' }, [
     el('div', { class: 'row' }, [
       el('h3', { dataset: { userContent: 'true' } }, p.name),
       el('span', { class: 'spacer' }),
+      sandboxBadge,
       el('span', { class: `badge state-${esc(p.state || '')}` }, p.state || 'no state'),
     ]),
     p.description ? el('p', { class: 'muted', style: 'margin:0;font-size:13px', dataset: { userContent: 'true' } }, truncate(p.description, 120)) : null,
@@ -41,10 +89,11 @@ function projectCard(p) {
       el('span', {}, `${pct}% complete`),
       el('span', { class: 'spacer' }),
       el('span', {}, `Target: ${fmtDate(p.targetDate)}`),
+      openChatBtn,
     ]),
   ]);
   card.addEventListener('click', () => {
-    setCurrentProject(p.id);
+    void activateProjectSandbox(p, { openChat: false });
     window.location.hash = `#/projects/${encodeURIComponent(p.id)}`;
   });
   return card;
@@ -56,7 +105,7 @@ async function renderPlanning(view, projectId) {
     api.getMilestones(projectId),
     api.getBoard(projectId).catch(() => ({ columns: [] })),
   ]);
-  setCurrentProject(projectId);
+  void activateProjectSandbox(project, { openChat: false });
 
   // Group issues by milestone id (plus an "Unscheduled" bucket).
   const issues = (board.columns || []).flatMap((c) => c.issues);
@@ -75,6 +124,11 @@ async function renderPlanning(view, projectId) {
         el('span', { class: `badge state-${esc(project.state || '')}` }, project.state || ''),
       ]),
       el('div', { class: 'row' }, [
+        el('button', {
+          class: 'primary',
+          type: 'button',
+          onclick: () => void activateProjectSandbox(project, { openChat: true }),
+        }, 'Open NVIDIA Sandbox Chat →'),
         el('a', { class: 'btn', href: '#/board' }, 'Open Board →'),
       ]),
     ])

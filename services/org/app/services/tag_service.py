@@ -88,13 +88,16 @@ async def detach_org_tag(
 
 
 async def attach_project_tag(
-    session: Uow, principal: Principal, project: Project, tag_id: uuid.UUID
+    session: Uow, project: Project, tag_id: uuid.UUID
 ) -> list[Tag]:
-    tag = await TagRepository(session).get_in_org(tag_id, principal.org_id)
+    # Tags belong to the project's OWNER org — validate against project.org_id,
+    # not the caller's org, so a cross-org collaborator cannot attach (or probe)
+    # their own org's tags on this tenant's project (invariant #7).
+    tag = await TagRepository(session).get_in_org(tag_id, project.org_id)
     if tag is None:
         raise ValidationAppError("Tag does not exist in this organization")
     if all(t.id != tag.id for t in project.tags):
-        project.tags.append(tag)
+        project.tags = [*project.tags, tag]
     return project.tags
 
 

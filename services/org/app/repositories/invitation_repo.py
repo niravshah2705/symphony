@@ -11,6 +11,7 @@ from app.models.enums import InvitationStatus
 from app.models.organization_invitation import OrganizationInvitation
 from app.models.organization_membership import OrganizationMembership
 from app.models.user import User
+from app.repositories import email_index
 from app.repositories.base import (
     INVITATION_TOKENS,
     ORGS,
@@ -24,6 +25,16 @@ from app.repositories.base import (
 
 def pending_guard_id(org_id: uuid.UUID, email: str) -> str:
     return hashlib.sha256(f"{org_id}:{email}".encode("utf-8")).hexdigest()
+
+
+def _org_index_entry(invitation: OrganizationInvitation) -> dict:
+    return email_index.make_entry(
+        kind="org",
+        org_id=invitation.org_id,
+        invitation_id=invitation.id,
+        role=invitation.role.value,
+        expires_at=invitation.expires_at,
+    )
 
 
 class InvitationRepository:
@@ -60,6 +71,8 @@ class InvitationRepository:
                 return False
             if await txn.get(INVITATION_TOKENS, invitation.token_hash) is not None:
                 return False
+            # READ before any write (Firestore read-before-write).
+            index_entries = await email_index.read_entries(txn, invitation.email)
             doc = invitation.to_doc()
             txn.set(invitations_col(org_id), str(invitation.id), doc)
             txn.set(
@@ -71,6 +84,9 @@ class InvitationRepository:
                 INVITATION_TOKENS,
                 invitation.token_hash,
                 {"org_id": str(org_id), "invitation_id": str(invitation.id)},
+            )
+            email_index.write_add(
+                txn, invitation.email, index_entries, _org_index_entry(invitation)
             )
             return True
 
@@ -90,6 +106,8 @@ class InvitationRepository:
             live = await txn.get(invitations_col(org_id), str(invitation.id))
             old_index = await txn.get(INVITATION_TOKENS, old_hash)
             new_index = await txn.get(INVITATION_TOKENS, new_token_hash)
+            # READ before any write (Firestore read-before-write).
+            index_entries = await email_index.read_entries(txn, invitation.email)
             if (
                 live is None
                 or live.get("status") != InvitationStatus.PENDING.value
@@ -106,6 +124,10 @@ class InvitationRepository:
                 INVITATION_TOKENS,
                 new_token_hash,
                 {"org_id": str(org_id), "invitation_id": str(invitation.id)},
+            )
+            # Refresh the surfacing entry (expiry/role may have changed on resend).
+            email_index.write_add(
+                txn, invitation.email, index_entries, _org_index_entry(invitation)
             )
             return True
 
@@ -127,6 +149,8 @@ class InvitationRepository:
             raise ValueError("Invitation requires org_id")
         async def _close(txn):  # type: ignore[no-untyped-def]
             live = await txn.get(invitations_col(org_id), str(invitation.id))
+            # READ before any write (Firestore read-before-write).
+            index_entries = await email_index.read_entries(txn, invitation.email)
             if (
                 live is None
                 or live.get("status") != InvitationStatus.PENDING.value
@@ -142,6 +166,7 @@ class InvitationRepository:
             if invitation.token_hash:
                 txn.delete(INVITATION_TOKENS, invitation.token_hash)
             txn.delete(PENDING_INVITATIONS, pending_guard_id(org_id, invitation.email))
+            email_index.write_remove(txn, invitation.email, index_entries, invitation.id)
             return True
 
         if not await self.uow.db.run_transaction(_close):
@@ -185,6 +210,8 @@ class InvitationRepository:
             existing_membership = await txn.get(source, str(user.id))
             user_doc = await txn.get(USERS, str(user.id))
             org_doc = await txn.get(ORGS, str(org_id))
+            # READ before any write (Firestore read-before-write).
+            index_entries = await email_index.read_entries(txn, invitation.email)
             if (
                 live is None
                 or live.get("status") != InvitationStatus.PENDING.value
@@ -211,6 +238,7 @@ class InvitationRepository:
             txn.set(invitations_col(org_id), str(invitation.id), invitation.to_doc())
             txn.delete(INVITATION_TOKENS, invitation.token_hash)
             txn.delete(PENDING_INVITATIONS, pending_guard_id(org_id, invitation.email))
+            email_index.write_remove(txn, invitation.email, index_entries, invitation.id)
 
             # Keep the legacy scalar as a default context for old consumers,
             # without changing it when the user already has an organization.

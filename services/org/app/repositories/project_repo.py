@@ -6,7 +6,15 @@ import uuid
 from app.core.database import Uow
 from app.models.base import id_list
 from app.models.project import Project
-from app.repositories.base import memberships_col, paginate, projects_col, tasks_col
+from app.repositories.base import (
+    PROJECT_OWNER_INDEX,
+    memberships_col,
+    paginate,
+    projects_col,
+    tasks_col,
+)
+from app.repositories.project_external_grant_repo import cleanup_project_external_grants
+from app.repositories.project_invitation_repo import cleanup_project_invitations
 from app.repositories.tag_repo import load_tags
 from app.schemas.common import PageParams
 
@@ -45,7 +53,18 @@ class ProjectRepository:
         return [await self._hydrate(org_id, Project.from_doc(d), d) for d in page], total
 
     async def add(self, project: Project) -> Project:
-        return await self.uow.add(projects_col(project.org_id), project)
+        stored = await self.uow.add(projects_col(project.org_id), project)
+        await self.ensure_owner_index(project)
+        return stored
+
+    async def ensure_owner_index(self, project: Project) -> None:
+        """Write the flat project -> owner-org index so a cross-org collaborator
+        can locate this project by id (see PROJECT_OWNER_INDEX). Idempotent, so
+        it also lazily backfills projects created before the index existed —
+        callers that enable cross-org access (grants/invitations) invoke it."""
+        await self.uow.db.set(
+            PROJECT_OWNER_INDEX, str(project.id), {"owner_org_id": str(project.org_id)}
+        )
 
     async def delete(self, project: Project) -> None:
         db = self.uow.db
@@ -54,5 +73,9 @@ class ProjectRepository:
             await db.delete(tasks_col(oid, pid), task["id"])
         for m in await db.query(memberships_col(oid), [("project_id", str(pid))]):
             await db.delete(memberships_col(oid), m["id"])
+        # Cross-org collaboration subcollections + the owner index.
+        await cleanup_project_invitations(db, oid, pid)
+        await cleanup_project_external_grants(db, oid, pid)
+        await db.delete(PROJECT_OWNER_INDEX, str(pid))
         self.uow.forget(projects_col(oid), project)
         await db.delete(projects_col(oid), str(pid))

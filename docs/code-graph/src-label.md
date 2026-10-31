@@ -71,8 +71,6 @@ Community of 86 nodes
 
 - **resume** (criticality: 0.67, depth: 8)
 - **startScheduler** (criticality: 0.66, depth: 6)
-- **fetchPlannedProjects** (criticality: 0.56, depth: 1)
-- **linearGraphqlTool** (criticality: 0.56, depth: 1)
 
 ## Dependencies
 

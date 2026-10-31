@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 12 nodes
+Community of 17 nodes
 
-- **Size**: 12 nodes
-- **Cohesion**: 0.2045
+- **Size**: 17 nodes
+- **Cohesion**: 0.2194
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,11 +26,15 @@ Community of 12 nodes
 | appendInline | Function | ./public/js/legal-markdown.mjs | 249-282 |
 | appendBlock | Function | ./public/js/legal-markdown.mjs | 284-315 |
 | renderLegalMarkdown | Function | ./public/js/legal-markdown.mjs | 318-331 |
+| descendants | Function | ./public/js/legal-markdown.test.mjs | 41-43 |
+| textOf | Function | ./public/js/legal-markdown.test.mjs | 45-48 |
+| test:parses the restricted legal Markdown block and inline vocabulary@L50 | Test | ./public/js/legal-markdown.test.mjs | 50-83 |
+| test:accepts navigational URLs and rejects executable or ambiguous destinations@L85 | Test | ./public/js/legal-markdown.test.mjs | 85-108 |
+| test:renders semantic nodes while leaving raw markup inert and unsafe links unlinked@L110 | Test | ./public/js/legal-markdown.test.mjs | 110-141 |
 
 ## Execution Flows
 
-- **renderPrivacy** (criticality: 0.57, depth: 5)
-- **renderTerms** (criticality: 0.57, depth: 5)
+No execution flows pass through this community.
 
 ## Dependencies
 
@@ -39,21 +43,28 @@ Community of 12 nodes
 - `push` (14 edge(s))
 - `trim` (11 edge(s))
 - `append` (10 edge(s))
+- `equal` (10 edge(s))
 - `createElement` (8 edge(s))
 - `test` (7 edge(s))
 - `slice` (6 edge(s))
+- `match` (6 edge(s))
 - `setAttribute` (4 edge(s))
 - `indexOf` (4 edge(s))
 - `startsWith` (4 edge(s))
-- `match` (4 edge(s))
+- `map` (4 edge(s))
 - `String` (3 edge(s))
-- `createTextNode` (2 edge(s))
-- `has` (2 edge(s))
-- `replace` (2 edge(s))
-- `join` (2 edge(s))
+- `join` (3 edge(s))
+- `deepEqual` (3 edge(s))
 
 ### Incoming
 
 - `./public/js/legal-markdown.mjs` (12 edge(s))
-- `./public/js/legal-markdown.test.mjs` (4 edge(s))
+- `equal` (10 edge(s))
+- `./public/js/legal-markdown.test.mjs` (5 edge(s))
+- `deepEqual` (3 edge(s))
+- `map` (3 edge(s))
+- `includes` (2 edge(s))
+- `match` (2 edge(s))
 - `./public/js/views/legal.js::renderLegalDocument` (1 edge(s))
+- `ok` (1 edge(s))
+- `filter` (1 edge(s))

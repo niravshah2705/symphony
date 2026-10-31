@@ -76,6 +76,21 @@ output "identity_service_uri" {
   value       = google_cloud_run_v2_service.identity.uri
 }
 
+output "billing_service_uri" {
+  description = "Billing and Cashfree service URL — internal and gateway-invoked only."
+  value       = google_cloud_run_v2_service.billing.uri
+}
+
+output "laya_service_uri" {
+  description = "Laya decision model inference service URL — internal only."
+  value       = google_cloud_run_v2_service.laya.uri
+}
+
+output "clm_service_uri" {
+  description = "CLM contrastive inference service URL — internal only."
+  value       = google_cloud_run_v2_service.clm.uri
+}
+
 output "email_topic_name" {
   description = "Pub/Sub topic that accepts allow-listed transactional email jobs."
   value       = google_pubsub_topic.email.name
@@ -117,18 +132,33 @@ output "registry_bucket" {
 }
 
 output "models_bucket" {
-  description = "Terraform-created GCS bucket holding versioned Ollama/vLLM model weights for the standalone inference demo (null when models_enabled = false). Name defaults to '<project_id>-aifleet-models'. Not wired into the fleet's egress proxy or agent runtime — see inference.tf."
+  description = "Terraform-created GCS bucket holding versioned Ollama/vLLM model weights for the inference backends (null when models_enabled = false). Name defaults to '<project_id>-aifleet-models'."
   value       = one(google_storage_bucket.models[*].name)
 }
 
 output "inference_ollama_uri" {
-  description = "Standalone Ollama inference demo URL (null when inference_ollama_enabled = false). IAM-gated with no invoker bindings — grant yourself roles/run.invoker to test (see inference.tf's header comment)."
+  description = "Ollama inference backend URL (null when inference_ollama_enabled = false). Internal ingress; fleet callers use the URL + INFERENCE_API_KEY env contract."
   value       = one(google_cloud_run_v2_service.inference_ollama[*].uri)
 }
 
 output "inference_vllm_uri" {
-  description = "Standalone vLLM inference demo URL (null when inference_vllm_enabled = false). Best-effort/CPU-only — IAM-gated with no invoker bindings, same access pattern as inference_ollama_uri."
+  description = "vLLM inference backend URL (null when inference_vllm_enabled = false). Internal ingress; fleet callers use the URL + INFERENCE_API_KEY env contract."
   value       = one(google_cloud_run_v2_service.inference_vllm[*].uri)
+}
+
+output "inference_openai_base_url" {
+  description = "OpenAI-compatible base URL for the default Laya/CLM inference backend (vLLM), including the /v1 suffix. Null when inference_vllm_enabled = false."
+  value       = one(google_cloud_run_v2_service.inference_vllm[*].uri) != null ? "${one(google_cloud_run_v2_service.inference_vllm[*].uri)}/v1" : null
+}
+
+output "memory_db_instance" {
+  description = "Terraform-created Cloud SQL Postgres instance holding AI-compressed agent memories (null when memory_enabled = false). Name defaults to '<project_id>-aifleet-memory'."
+  value       = one(google_sql_database_instance.memory[*].name)
+}
+
+output "memory_db_connection_name" {
+  description = "Cloud SQL connection name (project:region:instance) the planner/coder mount as the /cloudsql unix socket."
+  value       = one(google_sql_database_instance.memory[*].connection_name)
 }
 
 output "artifact_registry_repo" {

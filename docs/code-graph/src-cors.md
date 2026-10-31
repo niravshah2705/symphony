@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 6 nodes
+Community of 7 nodes
 
-- **Size**: 6 nodes
-- **Cohesion**: 0.2500
+- **Size**: 7 nodes
+- **Cohesion**: 0.2597
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,11 +15,12 @@ Community of 6 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | createCorsMiddleware | Function | ./services/gateway/src/cors.js | 13-34 |
-| makeRes | Function | ./services/gateway/src/cors.test.js | 8-17 |
-| test:reflects an allowlisted origin and calls next@L19 | Test | ./services/gateway/src/cors.test.js | 19-29 |
-| test:does not reflect a non-allowlisted origin@L31 | Test | ./services/gateway/src/cors.test.js | 31-36 |
-| test:answers preflight with 204 (and does not call next)@L38 | Test | ./services/gateway/src/cors.test.js | 38-46 |
-| test:is a no-op passthrough when no origins are configured (local same-origin)@L48 | Test | ./services/gateway/src/cors.test.js | 48-55 |
+| makeRes | Function | ./services/gateway/src/cors.test.js | 9-18 |
+| test:reflects an allowlisted origin and calls next@L20 | Test | ./services/gateway/src/cors.test.js | 20-30 |
+| test:does not reflect a non-allowlisted origin@L32 | Test | ./services/gateway/src/cors.test.js | 32-37 |
+| test:answers preflight with 204 (and does not call next)@L39 | Test | ./services/gateway/src/cors.test.js | 39-47 |
+| test:is a no-op passthrough when no origins are configured (local same-origin)@L49 | Test | ./services/gateway/src/cors.test.js | 49-56 |
+| test:reflects custom domain origin configured in allowlist@L58 | Test | ./services/gateway/src/cors.test.js | 58-66 |
 
 ## Execution Flows
 
@@ -29,9 +30,9 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (9 edge(s))
+- `equal` (12 edge(s))
 - `set` (5 edge(s))
-- `cors` (4 edge(s))
+- `cors` (5 edge(s))
 - `match` (2 edge(s))
 - `get` (1 edge(s))
 - `has` (1 edge(s))
@@ -41,9 +42,9 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (9 edge(s))
-- `./services/gateway/src/cors.test.js` (5 edge(s))
-- `cors` (4 edge(s))
+- `equal` (12 edge(s))
+- `./services/gateway/src/cors.test.js` (6 edge(s))
+- `cors` (5 edge(s))
 - `./services/gateway/src/cors.js` (2 edge(s))
 - `match` (2 edge(s))
 - `./services/gateway/src/index.js` (1 edge(s))

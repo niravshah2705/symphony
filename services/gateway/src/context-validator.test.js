@@ -123,3 +123,14 @@ test('only store-free locale suggestions bypass workspace validation', () => {
   assert.equal(shouldSkip({ originalUrl: '/api/locale/suggestions?languages=gu-IN' }), true);
   assert.equal(shouldSkip({ originalUrl: '/api/locale/translate' }), false);
 });
+
+test('context-independent org endpoints bypass selected-context validation', () => {
+  // Token-gated accept + first-login personal endpoints must work before any
+  // org is selected and for org-less/multi-org callers.
+  assert.equal(shouldSkip({ originalUrl: '/api/org/project-invitations/accept' }), true);
+  assert.equal(shouldSkip({ originalUrl: '/api/org/me/pending-invitations' }), true);
+  assert.equal(shouldSkip({ originalUrl: '/api/org/me/persona' }), true);
+  // Org/project-scoped org endpoints are still validated.
+  assert.equal(shouldSkip({ originalUrl: '/api/org/projects/p1/invitations' }), false);
+  assert.equal(shouldSkip({ originalUrl: '/api/org/projects/p1/access-mode' }), false);
+});

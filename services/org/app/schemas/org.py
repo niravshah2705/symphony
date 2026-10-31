@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.schemas.tag import TagResponse
+
 
 class OrgResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -14,6 +16,7 @@ class OrgResponse(BaseModel):
     name: str
     description: str | None
     slug: str
+    tags: list[TagResponse] = []
     created_at: datetime
     updated_at: datetime
 

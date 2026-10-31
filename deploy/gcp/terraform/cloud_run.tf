@@ -21,6 +21,21 @@ locals {
     SKILLS_VERSION = var.skills_version
   } : {}
 
+  # Agent memory store (memory.tf) — Cloud SQL for PostgreSQL. Terraform CREATES
+  # the instance when memory_enabled. The planner/coder get a cloud_sql volume
+  # mounted at /cloudsql (the Auth Proxy socket) + MEMORY_DATABASE_URL as a
+  # secret env. MEMORY_ENABLED is intentionally NOT set here: a reachable
+  # database only makes the store AVAILABLE; activation stays an explicit
+  # per-org opt-in (the middleware also honors a per-org memoryEnabled setting).
+  #
+  # The connection string is delivered as a mounted SECRET FILE, not a secret
+  # env: per-tenant provisioning requires agent primaries to be secret-env-free
+  # (packages/shared-core/src/provisioning/index.js requireSecretFreePrimary).
+  memory_enabled = var.memory_enabled
+  memory_env = local.memory_enabled ? {
+    MEMORY_DATABASE_URL_FILE = "/secrets/memory-db/url"
+  } : {}
+
   # Plain (non-secret) env per service. Secrets are mounted as separate env
   # blocks below via secret_key_ref.
   gateway_env = merge(local.common_env, {
@@ -50,6 +65,7 @@ locals {
     },
     var.firebase_auth_domain != "" ? { FIREBASE_AUTH_DOMAIN = var.firebase_auth_domain } : {},
     var.firebase_allowed_domain != "" ? { FIREBASE_ALLOWED_DOMAIN = var.firebase_allowed_domain } : {},
+    length(local.custom_domains) > 0 ? { FIREBASE_CUSTOM_DOMAIN = join(",", local.custom_domains) } : {},
     var.auth_admin_emails != "" ? { AUTH_ADMIN_EMAILS = var.auth_admin_emails } : {},
     # Sign-in providers. Both are public config (the Azure client secret lives only
     # in the Firebase console). Only set the Microsoft flag when enabled so the
@@ -108,6 +124,7 @@ locals {
       PIPELINE_STAGE_STORE_BACKEND       = "firestore"
     } : {},
     local.skills_env,
+    local.memory_env,
     local.egress_env,
   )
 
@@ -134,6 +151,7 @@ locals {
       PIPELINE_STAGE_STORE_BACKEND       = "firestore"
     } : {},
     local.skills_env,
+    local.memory_env,
     local.egress_env,
   )
 
@@ -151,7 +169,7 @@ locals {
     SETTINGS_URL = local.settings_url
     # ISSUE_ID (+ CONVERSATION_ID) are supplied per-execution by coder-control
     # as container overrides — see packages/shared/src/messaging/jobs.js.
-  }, local.skills_env, local.egress_env)
+  }, local.skills_env, local.memory_env, local.egress_env)
 }
 
 # --- Google One Tap client id (Secret Manager) --------------------------------
@@ -363,6 +381,34 @@ resource "google_cloud_run_v2_service" "planner" {
       }
     }
 
+    # Cloud SQL Auth Proxy socket + the connection-string secret file
+    # (memory.tf). The MemoryMiddleware reads MEMORY_DATABASE_URL_FILE and
+    # connects over /cloudsql/<connection_name>; the proxy is created by Cloud
+    # Run. A secret FILE (not secret env) keeps agent primaries secret-env-free.
+    dynamic "volumes" {
+      for_each = local.memory_enabled ? [1] : []
+      content {
+        name = "cloudsql"
+        cloud_sql {
+          instances = [google_sql_database_instance.memory[0].connection_name]
+        }
+      }
+    }
+
+    dynamic "volumes" {
+      for_each = local.memory_enabled ? [1] : []
+      content {
+        name = "memory-db-url"
+        secret {
+          secret = google_secret_manager_secret.memory_database_url[0].secret_id
+          items {
+            version = "latest"
+            path    = "url"
+          }
+        }
+      }
+    }
+
     containers {
       name       = "app"
       image      = local.planner_image
@@ -386,6 +432,22 @@ resource "google_cloud_run_v2_service" "planner" {
         content {
           name       = "skills"
           mount_path = "/skills"
+        }
+      }
+      # /cloudsql unix socket the connection-string host points at.
+      dynamic "volume_mounts" {
+        for_each = local.memory_enabled ? [1] : []
+        content {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+      # MEMORY_DATABASE_URL_FILE (/secrets/memory-db/url) — secret file mount.
+      dynamic "volume_mounts" {
+        for_each = local.memory_enabled ? [1] : []
+        content {
+          name       = "memory-db-url"
+          mount_path = "/secrets/memory-db"
         }
       }
 
@@ -441,6 +503,10 @@ resource "google_cloud_run_v2_service" "planner" {
     google_firestore_database.default,
     google_project_iam_member.planner_datastore,
     google_storage_bucket.skills,
+    google_sql_database_instance.memory,
+    google_secret_manager_secret_version.memory_database_url,
+    google_secret_manager_secret_iam_member.planner_memory_database_url,
+    google_project_iam_member.planner_memory_db_client,
   ]
 }
 
@@ -478,6 +544,32 @@ resource "google_cloud_run_v2_service" "coder_control" {
       }
     }
 
+    # Cloud SQL Auth Proxy socket + connection-string secret file (memory.tf).
+    # See the planner note.
+    dynamic "volumes" {
+      for_each = local.memory_enabled ? [1] : []
+      content {
+        name = "cloudsql"
+        cloud_sql {
+          instances = [google_sql_database_instance.memory[0].connection_name]
+        }
+      }
+    }
+
+    dynamic "volumes" {
+      for_each = local.memory_enabled ? [1] : []
+      content {
+        name = "memory-db-url"
+        secret {
+          secret = google_secret_manager_secret.memory_database_url[0].secret_id
+          items {
+            version = "latest"
+            path    = "url"
+          }
+        }
+      }
+    }
+
     containers {
       name       = "app"
       image      = local.coder_image
@@ -501,6 +593,22 @@ resource "google_cloud_run_v2_service" "coder_control" {
         content {
           name       = "skills"
           mount_path = "/skills"
+        }
+      }
+      # /cloudsql unix socket the connection-string host points at.
+      dynamic "volume_mounts" {
+        for_each = local.memory_enabled ? [1] : []
+        content {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+      # MEMORY_DATABASE_URL_FILE (/secrets/memory-db/url) — secret file mount.
+      dynamic "volume_mounts" {
+        for_each = local.memory_enabled ? [1] : []
+        content {
+          name       = "memory-db-url"
+          mount_path = "/secrets/memory-db"
         }
       }
 
@@ -554,6 +662,10 @@ resource "google_cloud_run_v2_service" "coder_control" {
     google_firestore_database.default,
     google_project_iam_member.coder_datastore,
     google_storage_bucket.skills,
+    google_sql_database_instance.memory,
+    google_secret_manager_secret_version.memory_database_url,
+    google_secret_manager_secret_iam_member.coder_memory_database_url,
+    google_project_iam_member.coder_memory_db_client,
   ]
 }
 
@@ -578,8 +690,8 @@ resource "google_cloud_run_v2_job" "coder_worker" {
       max_retries     = 1
 
       # gcsfuse GCS volume mounts run on the gen2 execution environment. The
-      # worker is where the coder agent actually installs skills, so it needs the
-      # same versioned mount as the services. null when the registry is disabled.
+      # worker is where the coder agent installs skills, so it needs the same
+      # versioned mount as the services. null when the mount is disabled.
       execution_environment = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
 
       dynamic "volumes" {
@@ -589,6 +701,32 @@ resource "google_cloud_run_v2_job" "coder_worker" {
           gcs {
             bucket    = google_storage_bucket.skills[0].name
             read_only = true
+          }
+        }
+      }
+
+      # Cloud SQL Auth Proxy socket + connection-string secret file (memory.tf).
+      # See the planner note.
+      dynamic "volumes" {
+        for_each = local.memory_enabled ? [1] : []
+        content {
+          name = "cloudsql"
+          cloud_sql {
+            instances = [google_sql_database_instance.memory[0].connection_name]
+          }
+        }
+      }
+
+      dynamic "volumes" {
+        for_each = local.memory_enabled ? [1] : []
+        content {
+          name = "memory-db-url"
+          secret {
+            secret = google_secret_manager_secret.memory_database_url[0].secret_id
+            items {
+              version = "latest"
+              path    = "url"
+            }
           }
         }
       }
@@ -613,6 +751,22 @@ resource "google_cloud_run_v2_job" "coder_worker" {
           content {
             name       = "skills"
             mount_path = "/skills"
+          }
+        }
+        # /cloudsql unix socket the connection-string host points at.
+        dynamic "volume_mounts" {
+          for_each = local.memory_enabled ? [1] : []
+          content {
+            name       = "cloudsql"
+            mount_path = "/cloudsql"
+          }
+        }
+        # MEMORY_DATABASE_URL_FILE (/secrets/memory-db/url) — secret file mount.
+        dynamic "volume_mounts" {
+          for_each = local.memory_enabled ? [1] : []
+          content {
+            name       = "memory-db-url"
+            mount_path = "/secrets/memory-db"
           }
         }
 
@@ -664,5 +818,9 @@ resource "google_cloud_run_v2_job" "coder_worker" {
     google_firestore_database.default,
     google_project_iam_member.coder_datastore,
     google_storage_bucket.skills,
+    google_sql_database_instance.memory,
+    google_secret_manager_secret_version.memory_database_url,
+    google_secret_manager_secret_iam_member.coder_memory_database_url,
+    google_project_iam_member.coder_memory_db_client,
   ]
 }

@@ -45,6 +45,17 @@ don't pile up rebuilds. Logs to `.code-review-graph/post-commit.log`.
 - This does **not** touch committed docs — that's the `pre-commit` gate above.
 - Rebuild on demand any time: `npm run graph:build`.
 - Bypass: `SKIP_GRAPH_REFRESH=1 git commit …`
+- Requires the `graphify` CLI (v0.9+, **with the `terraform` extra** for this
+  repo's `deploy/gcp/terraform/` coverage — without it, `.tf` files silently
+  contribute 0 nodes):
+  ```bash
+  uv tool install "graphifyy[terraform]"
+  ```
+  or via pip: `pip install "graphifyy[terraform]"`.
+- A pre-existing `.code-review-graph/graph.db` won't retroactively re-parse
+  files under newly-added language support (incremental `update` only
+  touches changed files) — force one full rebuild with
+  `npm run graph:build -- --clean`.
 
 > Enforcement is **local only** — a git hook cannot be enforced server-side and
 > can be bypassed. To also block *merges*, add `npm run docs:code` as a job in

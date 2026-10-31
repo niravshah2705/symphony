@@ -20,4 +20,16 @@ else
   exit 1
 fi
 
-exec vllm serve "$DEST" --host 0.0.0.0 --port 8080 --served-model-name "$MODEL_NAME"
+# vLLM enforces the same bearer key Laya/CLM send (INFERENCE_API_KEY). Cloud Run
+# IAM would use the same Authorization header, so the Cloud Run services allow
+# unauthenticated invocation and this key is the application-level gate.
+ARGS=(serve "$DEST" --host 0.0.0.0 --port 8080 --served-model-name "$MODEL_NAME")
+if [ -n "${INFERENCE_API_KEY:-}" ]; then
+  ARGS+=(--api-key "$INFERENCE_API_KEY")
+fi
+if [ -n "${VLLM_EXTRA_ARGS:-}" ]; then
+  # shellcheck disable=SC2206
+  ARGS+=(${VLLM_EXTRA_ARGS})
+fi
+
+exec vllm "${ARGS[@]}"

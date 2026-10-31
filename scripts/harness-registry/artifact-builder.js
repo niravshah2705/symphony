@@ -29,19 +29,19 @@ const COMMAND_TIMEOUT_MS = 20 * 60 * 1000;
 const CHROME_DEVTOOLS_MCP_VERSION = '1.6.0';
 
 const TOOL_VERSIONS = Object.freeze({
-  dcode: '0.1.55',
-  codex: '0.146.1',
-  claude: '2.1.198',
-  deepseek: '0.1.0-rc.6',
-  pi: '0.84.1',
-  omp: '17.2.15',
+  dcode: '0.2.2',
+  codex: '0.165.0',
+  claude: '2.1.312',
+  deepseek: '0.2.1-rc.5',
+  pi: '1.4.0',
+  omp: '18.13.3',
   'ecc-installer': '2.2.x',
 });
 
 const NPM_CLI_PACKAGES = Object.freeze({
   codex: '@openai/codex',
   claude: '@anthropic-ai/claude-code',
-  deepseek: '@deepseek-ai/dsh',
+  deepseek: '@deepseek-ai/dsh-sdk-client',
   pi: '@earendil-works/pi-coding-agent',
 });
 
@@ -290,7 +290,7 @@ function isHarnessStateFile(root, file) {
     'home/.omp/plugins/cache/',
     'home/.omp/marketplaces/',
     'home/.dsh/skills/',
-    'home/.opencode/',
+    'home/.config/opencode/',
     'project/.agent/',
     'project/.agents/',
   ];
@@ -914,13 +914,23 @@ function normalizeVolatileState(root) {
   });
 }
 
-function runEccProfile({ sourceRoot, homeRoot, projectRoot, env, target, profile }) {
-  const installOutput = run(process.execPath, [
+function runEccProfile(
+  { sourceRoot, homeRoot, projectRoot, env, target, profile, enableHooks = false },
+  dependencies = {}
+) {
+  const runCommand = dependencies.runCommand || run;
+  const installArguments = [
     path.join(sourceRoot, 'scripts', 'install-apply.js'),
     '--profile', profile,
     '--target', target,
-    '--json',
-  ], { cwd: projectRoot, env });
+  ];
+  // ECC 2.2.x fails closed when the selected profile materializes its automatic
+  // hook runtime unless the caller explicitly confirms it. Opt in only for
+  // targets whose strategy declares hooks as a native capability, so hook-free
+  // profiles keep their unchanged, non-interactive install path.
+  if (enableHooks) installArguments.push('--enable-hooks');
+  installArguments.push('--json');
+  const installOutput = runCommand(process.execPath, installArguments, { cwd: projectRoot, env });
   const installDocument = parseJsonOutput(installOutput, `ECC ${target} installer`);
   if (
     installDocument.dryRun !== false
@@ -931,7 +941,7 @@ function runEccProfile({ sourceRoot, homeRoot, projectRoot, env, target, profile
   ) {
     throw new Error(`ECC ${target} installer did not apply a non-empty plan`);
   }
-  const listDocument = parseJsonOutput(run(process.execPath, [
+  const listDocument = parseJsonOutput(runCommand(process.execPath, [
     path.join(sourceRoot, 'scripts', 'list-installed.js'),
     '--target', target,
     '--json',
@@ -1209,10 +1219,14 @@ function installOpencode(context) {
       throw new Error(`OpenCode build did not produce ${relative.join('/')}`);
     }
   }
-  runEccProfile({ ...context, target: 'opencode', profile: 'full' });
-  const statePath = path.join(context.homeRoot, '.opencode', 'ecc-install-state.json');
+  runEccProfile({ ...context, target: 'opencode', profile: 'full', enableHooks: true });
+  // ECC 2.2.x installs the opencode target under the XDG config root
+  // (XDG_CONFIG_HOME/opencode → homeRoot/.config/opencode), not the legacy
+  // ~/.opencode. The build environment pins XDG_CONFIG_HOME to homeRoot/.config.
+  const opencodeConfigRoot = path.join(context.homeRoot, '.config', 'opencode');
+  const statePath = path.join(opencodeConfigRoot, 'ecc-install-state.json');
   if (!fs.existsSync(statePath)) throw new Error('OpenCode adapter did not write install state');
-  pinMutableMcpDependencies(path.join(context.homeRoot, '.opencode'));
+  pinMutableMcpDependencies(opencodeConfigRoot);
 }
 
 function installPi(context) {
@@ -1604,6 +1618,7 @@ module.exports = {
   readResolvedSource,
   relativizeContainedAbsoluteSymlinks,
   resolveSource,
+  runEccProfile,
   scanTreeForLeaks,
   selectPiEccPackage,
   stageClaudeMarketplace,

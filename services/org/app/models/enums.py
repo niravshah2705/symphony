@@ -36,3 +36,17 @@ class TaskStatus(str, enum.Enum):
     IN_PROGRESS = "IN_PROGRESS"
     IN_REVIEW = "IN_REVIEW"
     DONE = "DONE"
+
+
+class Persona(str, enum.Enum):
+    ENGINEER = "ENGINEER"
+    CLIENT = "CLIENT"
+    # Deliberately not "ADMIN" — avoids reading next to OrgRole.ORG_ADMIN as if
+    # it were the same axis. Persona is "what kind of person is this," OrgRole
+    # is "what can they do."
+    ORG_MANAGER = "ORG_MANAGER"
+
+
+class ProjectAccessMode(str, enum.Enum):
+    INVITE_ONLY = "INVITE_ONLY"  # default — matches today's actual behavior
+    ORG_WIDE = "ORG_WIDE"  # every member of the project's own org has access

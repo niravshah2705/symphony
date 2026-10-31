@@ -22,6 +22,9 @@ function makeOrgState() {
     usersByOrg: {},
     invitationsByOrg: {},
     members: {},
+    persona: null,
+    projectInvitationsByProject: {},
+    grantsByProject: {},
     seq: 0,
   };
 }
@@ -85,18 +88,27 @@ async function installStubs(page, state) {
   const page1 = (rows) => ({ data: rows, meta: { total: rows.length, page: 1, limit: 20 } });
 
   await page.route('**/api/org/me/context', (route) => json(route, {
-    user: { id: uid, email: 'ada@example.com', full_name: 'Ada Operator' },
+    user: { id: uid, email: 'ada@example.com', full_name: 'Ada Operator', persona: state.persona },
     organizations: state.organizations
       .filter((org) => state.userOrgIds.has(org.id))
       .map((org) => ({
         id: org.id,
         name: org.name,
+        parent_org_id: org.parent_org_id || null,
         role: 'ORG_ADMIN',
         projects: state.projectsByOrg[org.id].map((project) => ({
           id: project.id, name: project.name, role: 'PROJECT_ADMIN',
         })),
       })),
   }));
+  await page.route('**/api/org/me/persona', (route) => {
+    if (route.request().method() === 'PUT') {
+      state.persona = (route.request().postDataJSON() || {}).persona || null;
+      return json(route, { user_id: uid, email: 'ada@example.com', persona: state.persona, has_organization: state.userOrgIds.size > 0 });
+    }
+    return json(route, { error: 'method not allowed' }, 405);
+  });
+  await page.route('**/api/org/me/pending-invitations', (route) => json(route, []));
   await page.route('**/api/org/me', (route) => {
     const firstOrgId = [...state.userOrgIds][0] || null;
     return json(route, {
@@ -186,6 +198,57 @@ async function installStubs(page, state) {
     state.members[projectId] = state.members[projectId] || [];
     return json(route, state.members[projectId]);
   });
+  await page.route('**/api/org/projects/*/access-mode', (route) => {
+    const orgId = organizationIdFor(route, state);
+    const match = new URL(route.request().url()).pathname.match(/\/projects\/([^/]+)\/access-mode/);
+    const projectId = match && match[1];
+    const body = route.request().postDataJSON() || {};
+    const project = (state.projectsByOrg[orgId] || []).find((p) => p.id === projectId);
+    if (project) project.access_mode = body.access_mode;
+    return json(route, project || { error: 'not found' }, project ? 200 : 404);
+  });
+  await page.route('**/api/org/projects/*/invitations**', (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const projectId = url.pathname.match(/\/projects\/([^/]+)\/invitations/)[1];
+    const list = state.projectInvitationsByProject[projectId] = state.projectInvitationsByProject[projectId] || [];
+    const item = url.pathname.match(/\/invitations\/([^/]+)$/);
+    if (request.method() === 'DELETE' && item) {
+      const index = list.findIndex((c) => c.id === decodeURIComponent(item[1]));
+      if (index >= 0) list.splice(index, 1);
+      return route.fulfill({ status: 204, body: '' });
+    }
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() || {};
+      const invitation = { id: `pinv-${++state.seq}`, project_id: projectId, email: body.email, role: body.role, status: 'PENDING', delivery_status: 'queued', created_at: TS };
+      list.push(invitation);
+      return json(route, invitation, 201);
+    }
+    return json(route, list.filter((i) => i.status === 'PENDING'));
+  });
+  await page.route('**/api/org/projects/*/external-grants**', (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const projectId = url.pathname.match(/\/projects\/([^/]+)\/external-grants/)[1];
+    const list = state.grantsByProject[projectId] = state.grantsByProject[projectId] || [];
+    const item = url.pathname.match(/\/external-grants\/([^/]+)$/);
+    if (request.method() === 'DELETE' && item) {
+      const index = list.findIndex((g) => g.collaborator_org_id === decodeURIComponent(item[1]));
+      if (index >= 0) list.splice(index, 1);
+      return route.fulfill({ status: 204, body: '' });
+    }
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() || {};
+      const grant = { id: `grant-${++state.seq}`, project_id: projectId, owner_org_id: organizationIdFor(route, state), collaborator_org_id: body.collaborator_org_id, default_role: body.default_role, created_at: TS };
+      list.push(grant);
+      return json(route, grant, 201);
+    }
+    return json(route, list);
+  });
+  await page.route('**/api/org/project-invitations/accept', (route) => {
+    const token = (route.request().postDataJSON() || {}).token;
+    return json(route, token ? { invitation_status: 'ACCEPTED', membership: { role: 'DEVELOPER' } } : { error: 'invalid' }, token ? 200 : 404);
+  });
 }
 
 test('user creates orgs and projects, then manages pending invitations', async ({ page }) => {
@@ -272,4 +335,69 @@ test('fragment invitation requires an explicit accept and refreshes selectable c
   await expect(page.getByRole('heading', { name: 'Invited Org', exact: true })).toBeVisible();
   expect(accepted).toBe(true);
   expect(page.url()).not.toContain('opaque');
+});
+
+test('captures a persona at onboarding and reflects it after reload', async ({ page }) => {
+  const state = makeOrgState();
+  createStateOrg(state, 'Acme'); // joined so the org view is the landing screen
+  let personaBody = null;
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && new URL(request.url()).pathname.endsWith('/api/org/me/persona')) {
+      personaBody = request.postDataJSON();
+    }
+  });
+  await page.addInitScript(() => localStorage.setItem('ai-fleet.locale', 'en'));
+  await installStubs(page, state);
+
+  await page.goto('/#/organization', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'Welcome — pick your role' })).toBeVisible();
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+    page.getByRole('button', { name: 'Engineer' }).click(),
+  ]);
+  expect(personaBody).toEqual({ persona: 'ENGINEER' });
+  // After reload the persona rides on /me/context and the compact summary shows.
+  await expect(page.getByText('You are set up as')).toBeVisible();
+  await expect(page.locator('#view')).toContainText('Engineer');
+});
+
+test('manages a project access mode, outside collaborators, and partner-org grants', async ({ page }) => {
+  const state = makeOrgState();
+  state.persona = 'ENGINEER';
+  const org = createStateOrg(state, 'Acme');
+  state.projectsByOrg[org.id].push({
+    id: 'project-active', org_id: org.id, name: 'Active Project',
+    description: null, tags: [], access_mode: 'INVITE_ONLY', created_at: TS, updated_at: TS,
+  });
+  let accessBody = null; let collaboratorBody = null; let grantBody = null;
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'PATCH' && path.endsWith('/access-mode')) accessBody = request.postDataJSON();
+    if (request.method() === 'POST' && /\/projects\/[^/]+\/invitations$/.test(path)) collaboratorBody = request.postDataJSON();
+    if (request.method() === 'POST' && /\/projects\/[^/]+\/external-grants$/.test(path)) grantBody = request.postDataJSON();
+  });
+  await page.addInitScript(() => localStorage.setItem('ai-fleet.locale', 'en'));
+  await installStubs(page, state);
+
+  await page.goto('/#/organization', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#view')).toHaveAttribute('aria-busy', 'false');
+  await expect(page.locator('#view').getByText('Active Project', { exact: true })).toBeVisible();
+
+  // Access mode → org-wide.
+  await page.getByLabel('Project access mode').selectOption('ORG_WIDE');
+  await expect.poll(() => accessBody).toEqual({ access_mode: 'ORG_WIDE' });
+
+  // Invite a single outside-domain collaborator to just this project.
+  await page.getByRole('button', { name: 'Collaborators' }).click();
+  await page.getByPlaceholder('person@example.com').fill('freelancer@gmail.com');
+  await page.getByRole('button', { name: 'Invite collaborator' }).click();
+  await expect.poll(() => collaboratorBody).toEqual({ email: 'freelancer@gmail.com', role: 'DEVELOPER' });
+  await expect(page.locator('#view').getByText('freelancer@gmail.com')).toBeVisible();
+
+  // Outsource the whole project to a partner organization.
+  await page.getByRole('button', { name: 'Outsource' }).click();
+  await page.getByPlaceholder('Partner organization ID').fill('org-partner-123');
+  await page.getByRole('button', { name: 'Grant access' }).click();
+  await expect.poll(() => grantBody).toEqual({ collaborator_org_id: 'org-partner-123', default_role: 'DEVELOPER' });
+  await expect(page.locator('#view').getByText('org-partner-123')).toBeVisible();
 });

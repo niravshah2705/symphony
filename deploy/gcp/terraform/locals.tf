@@ -28,9 +28,14 @@ locals {
   attachments_bucket_name = var.attachments_bucket_name != "" ? var.attachments_bucket_name : "${var.project_id}-aifleet-attachments"
 
   # Model weights registry bucket (models.tf) — same derived-default-with-
-  # override convention as the skills bucket above. Consumed only by the
-  # standalone inference-ollama/inference-vllm demo (inference.tf).
+  # override convention as the skills bucket above. Consumed by the
+  # inference-ollama/inference-vllm backends (inference.tf).
   models_bucket_name = var.models_bucket_name != "" ? var.models_bucket_name : "${var.project_id}-aifleet-models"
+
+  # Agent memory Cloud SQL instance (memory.tf) — same derived-default-with-
+  # override convention. Instance names must be lowercase alphanumeric/hyphen
+  # and unique within the project.
+  memory_db_instance_name = var.memory_db_instance_name != "" ? var.memory_db_instance_name : "${var.project_id}-aifleet-memory"
 
   # Artifact Registry image references. Each service resolves its own tag,
   # falling back to var.image_tag when no per-service override is set — this is
@@ -47,7 +52,10 @@ locals {
   settings_tag     = var.settings_image_tag != "" ? var.settings_image_tag : var.image_tag
   email_tag        = var.email_image_tag != "" ? var.email_image_tag : var.image_tag
   identity_tag     = var.identity_image_tag != "" ? var.identity_image_tag : var.image_tag
+  billing_tag      = var.billing_image_tag != "" ? var.billing_image_tag : var.image_tag
   proxy_tag        = var.proxy_image_tag != "" ? var.proxy_image_tag : var.image_tag
+  laya_tag         = var.laya_image_tag != "" ? var.laya_image_tag : var.image_tag
+  clm_tag          = var.clm_image_tag != "" ? var.clm_image_tag : var.image_tag
 
   gateway_image      = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
   planner_image      = "${local.image_base}/${var.planner_service_name}:${local.planner_tag}"
@@ -59,7 +67,10 @@ locals {
   settings_image     = "${local.image_base}/${var.settings_service_name}:${local.settings_tag}"
   email_image        = "${local.image_base}/${var.email_service_name}:${local.email_tag}"
   identity_image     = "${local.image_base}/${var.identity_service_name}:${local.identity_tag}"
+  billing_image      = "${local.image_base}/${var.billing_service_name}:${local.billing_tag}"
   proxy_image        = "${local.image_base}/${var.proxy_service_name}:${local.proxy_tag}"
+  laya_image         = "${local.image_base}/${var.laya_service_name}:${local.laya_tag}"
+  clm_image          = "${local.image_base}/${var.clm_service_name}:${local.clm_tag}"
 
   # Cloud Run's deterministic per-project URL:
   #   https://<service>-<project_number>.<region>.run.app
@@ -80,6 +91,9 @@ locals {
   settings_url     = "https://${var.settings_service_name}-${local.run_url_suffix}"
   email_url        = "https://${var.email_service_name}-${local.run_url_suffix}"
   identity_url     = "https://${var.identity_service_name}-${local.run_url_suffix}"
+  billing_url      = "https://${var.billing_service_name}-${local.run_url_suffix}"
+  laya_url         = "https://${var.laya_service_name}-${local.run_url_suffix}"
+  clm_url          = "https://${var.clm_service_name}-${local.run_url_suffix}"
 
   # Pub/Sub's Google-managed service agent — needs publisher on the dead-letter
   # topic, subscriber on the source subscriptions, and token-creator on the push
@@ -112,4 +126,12 @@ locals {
     FIREBASE_PROJECT_ID = var.project_id
     FIREBASE_API_KEY    = data.google_firebase_web_app_config.default.api_key
   }
+
+  # Normalized custom domains: bare hostnames (e.g. "platform.archagentix.com") without scheme or trailing slash.
+  # This guarantees compatibility with Firebase Hosting custom domain IDs and Identity Platform authorized domains.
+  custom_domains = distinct([
+    for d in var.custom_domain :
+    trimsuffix(trimprefix(trimprefix(trimspace(d), "https://"), "http://"), "/")
+    if length(trimsuffix(trimprefix(trimprefix(trimspace(d), "https://"), "http://"), "/")) > 0
+  ])
 }

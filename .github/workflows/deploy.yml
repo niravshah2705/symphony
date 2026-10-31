@@ -42,15 +42,15 @@ jobs:
   #    rebuild + whether the SPA / Terraform steps need to run at all).
   # --------------------------------------------------------------------------
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       services: ${{ steps.plan.outputs.services }} # JSON array of {id,image,dockerfile}
       spa: ${{ steps.plan.outputs.spa }}
       run_terraform: ${{ steps.plan.outputs.run_terraform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -73,6 +73,9 @@ jobs:
             settings: ['services/settings/**']
             email:    ['services/email/**', 'deploy/gcp/Dockerfile.email']
             identity: ['services/identity-verification/**', 'deploy/gcp/Dockerfile.identity-verification']
+            billing:  ['services/billing/**', 'deploy/gcp/Dockerfile.billing']
+            laya:     ['services/laya-inference/**', 'deploy/gcp/Dockerfile.laya-inference']
+            clm:      ['services/clm-inference/**',  'deploy/gcp/Dockerfile.clm-inference']
 
       - id: plan
         env:
@@ -94,6 +97,9 @@ jobs:
           SETTINGS: ${{ steps.filter.outputs.settings }}
           EMAIL: ${{ steps.filter.outputs.email }}
           IDENTITY: ${{ steps.filter.outputs.identity }}
+          BILLING: ${{ steps.filter.outputs.billing }}
+          LAYA: ${{ steps.filter.outputs.laya }}
+          CLM: ${{ steps.filter.outputs.clm }}
         run: |
           set -euo pipefail
           # A shared-code / root-deps change (or a forced run) rebuilds the Node
@@ -114,6 +120,10 @@ jobs:
           if [ "$all" = "true" ] || [ "$DEPLOYER" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push deployer pipeline-deployer deploy/gcp/Dockerfile.deployer . ; fi
           if [ "$all" = "true" ] || [ "$EMAIL"   = "true" ]; then push email   email-service deploy/gcp/Dockerfile.email   . ; fi
           if [ "$all" = "true" ] || [ "$IDENTITY" = "true" ]; then push identity identity-verification deploy/gcp/Dockerfile.identity-verification . ; fi
+          if [ "$all" = "true" ] || [ "$BILLING"  = "true" ]; then push billing billing deploy/gcp/Dockerfile.billing . ; fi
+          # Dedicated inference microservices (Python apps).
+          if [ "$FORCE_ALL" = "true" ] || [ "$all" = "true" ] || [ "$LAYA" = "true" ] || [ "$INFRA" = "true" ]; then push laya laya-inference deploy/gcp/Dockerfile.laya-inference . ; fi
+          if [ "$FORCE_ALL" = "true" ] || [ "$all" = "true" ] || [ "$CLM"  = "true" ] || [ "$INFRA" = "true" ]; then push clm clm-inference deploy/gcp/Dockerfile.clm-inference . ; fi
           # The provisioner is a Node service (rebuilds on shared/root/force too).
           # Its image is built even while provisioning is disabled so enabling is a
           # one-var flip; terraform only creates the service when provisioning_enabled.
@@ -152,22 +162,22 @@ jobs:
   build:
     needs: changes
     if: needs.changes.outputs.services != '[]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     name: build ${{ matrix.svc.id }}
     strategy:
       fail-fast: true
       matrix:
         svc: ${{ fromJSON(needs.changes.outputs.services) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - id: auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOYER_SA }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v3
 
       - name: Ensure Artifact Registry repo exists
         run: |
@@ -193,22 +203,22 @@ jobs:
   deploy-spa:
     needs: changes
     if: needs.changes.outputs.spa == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - id: auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOYER_SA }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v3
 
       # Obfuscate the SPA's client JS before it ships. Rewrites public/js/** in
       # this ephemeral checkout only (source in git stays readable); config.js is
@@ -260,19 +270,19 @@ jobs:
       always() &&
       needs.changes.outputs.run_terraform == 'true' &&
       needs.build.result != 'failure' && needs.build.result != 'cancelled'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - id: auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOYER_SA }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v3
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "1.9.8"
           terraform_wrapper: false
@@ -356,6 +366,9 @@ jobs:
             write_tag settings resolve settings settings-service
             write_tag email resolve email email-service
             write_tag identity resolve identity identity-verification
+            write_tag billing resolve billing billing
+            write_tag laya resolve laya laya-inference
+            write_tag clm resolve clm clm-inference
           } >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
@@ -395,6 +408,8 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          CASHFREE_APP_ID: ${{ secrets.CASHFREE_APP_ID }}
+          CASHFREE_SECRET_KEY: ${{ secrets.CASHFREE_SECRET_KEY }}
         run: |
           set -euo pipefail
           terraform apply -input=false -auto-approve \
@@ -402,19 +417,27 @@ jobs:
             -var="region=${REGION}" \
             -var="spa_bucket_name=${{ vars.SPA_BUCKET }}" \
             -target=google_secret_manager_secret.stream_token_secret \
-            -target=google_secret_manager_secret.identity_hash_pepper
+            -target=google_secret_manager_secret.identity_hash_pepper \
+            -target=google_secret_manager_secret.cashfree_app_id \
+            -target=google_secret_manager_secret.cashfree_secret_key
 
           has_version() { gcloud secrets versions list "$1" --project "$PROJECT_ID" \
             --filter='state=ENABLED' --format='value(name)' 2>/dev/null | grep -q .; }
-          seed_secret() { # id
-            if has_version "$1"; then echo "  $1: already has a version (unchanged)";
+          seed_secret() { # id [optional_value]
+            local id="$1" val="${2:-}"
+            if has_version "$id"; then echo "  $id: already has a version (unchanged)";
+            elif [ -n "$val" ]; then
+              printf '%s' "$val" | gcloud secrets versions add "$id" --project "$PROJECT_ID" --data-file=- >/dev/null
+              echo "  $id: seeded from environment"
             else
-              openssl rand -base64 48 | tr -d '\n' | gcloud secrets versions add "$1" --project "$PROJECT_ID" --data-file=- >/dev/null
-              echo "  $1: seeded"
+              openssl rand -base64 48 | tr -d '\n' | gcloud secrets versions add "$id" --project "$PROJECT_ID" --data-file=- >/dev/null
+              echo "  $id: seeded (random fallback)"
             fi
           }
           seed_secret stream-token-secret
           seed_secret identity-hash-pepper
+          seed_secret cashfree-app-id "${CASHFREE_APP_ID:-}"
+          seed_secret cashfree-secret-key "${CASHFREE_SECRET_KEY:-}"
 
       - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}
@@ -422,6 +445,11 @@ jobs:
           set -euo pipefail
           PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
           GATEWAY_URL="https://${{ vars.GATEWAY_SERVICE_NAME || 'gateway' }}-${PROJECT_NUMBER}.${REGION}.run.app"
+
+          CUSTOM_DOMAIN_ARG="[]"
+          if [ -n "${{ vars.FIREBASE_CUSTOM_DOMAIN }}" ]; then
+            CUSTOM_DOMAIN_ARG="$(echo "${{ vars.FIREBASE_CUSTOM_DOMAIN }}" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "") | gsub("^https?://"; "") | gsub("/+$"; "")) | map(select(length > 0))')"
+          fi
 
           # Every service tag above is either this run's immutable SHA or a
           # successfully resolved live tag. An unresolved tag aborts deployment.
@@ -434,6 +462,7 @@ jobs:
             -var="spa_origin=${{ vars.SPA_ORIGIN || 'https://storage.googleapis.com' }}"
             -var="api_base_url=${GATEWAY_URL}"
             -var="firebase_allowed_domain=${{ vars.FIREBASE_ALLOWED_DOMAIN }}"
+            -var="custom_domain=${CUSTOM_DOMAIN_ARG}"
             -var="auth_admin_emails=${{ vars.AUTH_ADMIN_EMAILS }}"
             -var="auth_default_role=${{ vars.AUTH_DEFAULT_ROLE || 'viewer' }}"
             -var="google_one_tap_client_id=${{ vars.GOOGLE_ONE_TAP_CLIENT_ID }}"
@@ -454,6 +483,7 @@ jobs:
             -var="email_smtp_auth_enabled=${{ vars.EMAIL_SMTP_AUTH_ENABLED || 'false' }}"
             -var="email_from=${{ vars.EMAIL_FROM }}"
             -var="email_public_app_url=${{ vars.EMAIL_PUBLIC_APP_URL }}"
+            -var="cashfree_base_url=${{ vars.CASHFREE_BASE_URL || 'https://sandbox.cashfree.com' }}"
           )
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
@@ -467,6 +497,28 @@ jobs:
           [ -n "${{ steps.tags.outputs.settings }}" ] && apply_args+=(-var="settings_image_tag=${{ steps.tags.outputs.settings }}") || true
           [ -n "${{ steps.tags.outputs.email }}" ] && apply_args+=(-var="email_image_tag=${{ steps.tags.outputs.email }}") || true
           [ -n "${{ steps.tags.outputs.identity }}" ] && apply_args+=(-var="identity_image_tag=${{ steps.tags.outputs.identity }}") || true
+          [ -n "${{ steps.tags.outputs.billing }}" ] && apply_args+=(-var="billing_image_tag=${{ steps.tags.outputs.billing }}") || true
+          [ -n "${{ steps.tags.outputs.laya }}" ] && apply_args+=(-var="laya_image_tag=${{ steps.tags.outputs.laya }}") || true
+          [ -n "${{ steps.tags.outputs.clm }}" ] && apply_args+=(-var="clm_image_tag=${{ steps.tags.outputs.clm }}") || true
+
+          # Idempotently import pre-existing Firestore composite indexes if missing from state
+          chunks_idx_addr="google_firestore_index.attachment_chunks_by_conversation_and_embedding"
+          if ! terraform state list 2>/dev/null | grep -qxF "$chunks_idx_addr"; then
+            existing_chunks_idx="$(gcloud firestore indexes composite list --project="${{ vars.GCP_PROJECT_ID }}" --format=json 2>/dev/null | jq -r '.[] | select((.queryScope=="COLLECTION_GROUP" or .queryScope==null) and ((.name | contains("/collectionGroups/chunks/indexes/")) or (.fields[0].fieldPath=="conversationId" and .fields[1].fieldPath=="embedding"))) | .name' 2>/dev/null | head -n 1 || true)"
+            if [ -n "$existing_chunks_idx" ]; then
+              echo "Importing existing Firestore attachment chunks vector index ($existing_chunks_idx) into Terraform state..."
+              terraform import -input=false "${apply_args[@]}" "$chunks_idx_addr" "$existing_chunks_idx" || true
+            fi
+          fi
+
+          users_idx_addr="google_firestore_index.org_users_by_created_at"
+          if ! terraform state list 2>/dev/null | grep -qxF "$users_idx_addr"; then
+            existing_users_idx="$(gcloud firestore indexes composite list --project="${{ vars.GCP_PROJECT_ID }}" --format=json 2>/dev/null | jq -r '.[] | select((.name | contains("/collectionGroups/users/indexes/")) or (.fields[0].fieldPath=="org_id" and .fields[1].fieldPath=="created_at")) | .name' 2>/dev/null | head -n 1 || true)"
+            if [ -n "$existing_users_idx" ]; then
+              echo "Importing existing Firestore org users index ($existing_users_idx) into Terraform state..."
+              terraform import -input=false "${apply_args[@]}" "$users_idx_addr" "$existing_users_idx" || true
+            fi
+          fi
 
           terraform apply -input=false -auto-approve "${apply_args[@]}"
 

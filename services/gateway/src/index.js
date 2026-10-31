@@ -24,7 +24,7 @@ const sse = require('./sse');
 const { mintStreamToken, mintWorkspaceToken } = require('./stream-token');
 const { createStreamTokenHandlers } = require('./stream-token-handlers');
 const { configureTrustProxy } = require('./trust-proxy');
-const { enforcePinnedOrganization, requestContext, requireOrganizationContext, notificationsRequested } = require('./request-context');
+const { enforcePinnedOrganization, requestContext, requireOrganizationContext, notificationsRequested, deprecatedUiRequested } = require('./request-context');
 const { createContextValidationMiddleware } = require('./context-validator');
 const { createStoreContextMiddleware } = require('./store-context');
 const { createApiDocsGate, serveSwaggerJson, createSwaggerMiddleware, createSwaggerUISetup } = require('./swagger');
@@ -79,7 +79,11 @@ app.use(express.json({ limit: '1mb' }));
 // No other API route is mounted ahead of the authentication boundary.
 app.get('/healthz', (req, res) => res.json({ status: 'ok' }));
 app.get('/api/auth/config', (req, res) => {
-  res.set('Cache-Control', 'no-store').json(publicAuthConfig());
+  res.set('Cache-Control', 'no-store').json({
+    ...publicAuthConfig(),
+    // Off by default — see request-context.js DEPRECATED_HEADER.
+    deprecatedUiEnabled: deprecatedUiRequested(req),
+  });
 });
 
 // Swagger/OpenAPI documentation — gated by x-ai-fleet-api-docs header in production.
@@ -142,6 +146,8 @@ app.get('/api/auth/me', (req, res) => {
     permissions: req.auth.permissions,
     // Off by default — see request-context.js NOTIFICATIONS_HEADER.
     notificationsEnabled: notificationsRequested(req),
+    // Off by default — see request-context.js DEPRECATED_HEADER.
+    deprecatedUiEnabled: deprecatedUiRequested(req),
   });
 });
 
@@ -194,12 +200,18 @@ app.use('/api/issues', requirePermission('planning'), requireOrganizationContext
 app.use('/api/businesses', requirePermission('planning'), requireOrganizationContext(), plannerProxy);
 app.use('/api/roles', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), plannerProxy);
 app.use('/api/observability', requirePermission('insights'), requireOrganizationContext(), plannerProxy);
-// Cost-monitoring + billing. 'insights' is the coarse gate (GET → read,
-// mutations → write); the router additionally resolves the caller's org
-// server-side and requires org-admin for recharge/config (cross-tenant safe).
-// Billing authorization is selected-org dependent (the router resolves member
-// vs ORG_ADMIN server-side), so the gateway performs authentication only.
-app.use('/api/billing', requireAuthenticated(), billingRoutes);
+// Cost-monitoring + billing. Forwarded to the dedicated Cloud Run billing
+// service when configured, with user authentication and selected-org context.
+// Webhook route from Cashfree bypasses session auth (HMAC-verified at billing).
+if (CONFIG.SERVICES.billingUrl) {
+  const billingProxy = createProxy(CONFIG.SERVICES.billingUrl, {
+    forwardUserAuth: true,
+  });
+  app.post('/api/billing/cashfree/webhook', billingProxy);
+  app.use('/api/billing', requireAuthenticated(), billingProxy);
+} else {
+  app.use('/api/billing', requireAuthenticated(), billingRoutes);
+}
 // Locale is non-sensitive UI strings — available to public + authenticated.
 // Translation is model-backed, so both locale routes execute in the planner.
 app.use('/api/locale', localeProxy);

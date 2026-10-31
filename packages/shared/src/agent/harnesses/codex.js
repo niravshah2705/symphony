@@ -25,6 +25,7 @@ const {
   normalizeUsage,
   assistantMessagesFromText,
   wrapExecutionError,
+  resolveAndRouteSkills,
 } = require('./contract');
 
 const ID = 'codex-sdk';
@@ -142,6 +143,10 @@ async function executeCodex(options, prompt) {
     throw new AgentRuntimeError('The installed Codex SDK does not export Codex.', 'runtime_unavailable', 503);
   }
   const cwd = assertWorkingDirectory(options.rootDir);
+  const { selectedSkillPaths, routingMetrics } = await resolveAndRouteSkills(
+    { ...options, rootDir: cwd },
+    prompt,
+  );
   // In include-SDK proxy mode the agent has no real ChatGPT tokens (accessToken
   // is a sentinel, authTokens null), so the auth.json path can't be used. Route
   // the ChatGPT backend through the proxy's /codex prefix with the sentinel via
@@ -229,6 +234,8 @@ async function executeCodex(options, prompt) {
       // Codex SDK currently exposes token usage but no billed USD amount.
       costUsd: null,
       sessionId: thread.id || null,
+      skillRouterMetrics: routingMetrics,
+      skillPaths: selectedSkillPaths,
     };
   } catch (error) {
     throw wrapExecutionError(LABEL, error);

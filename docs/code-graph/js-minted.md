@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 2 nodes
+Community of 4 nodes
 
-- **Size**: 2 nodes
-- **Cohesion**: 0.1538
+- **Size**: 4 nodes
+- **Cohesion**: 0.2857
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,6 +16,8 @@ Community of 2 nodes
 |------|------|------|-------|
 | mintedStreamContextQuerySuffix | Function | ./public/js/stream-context.mjs | 3-15 |
 | valid | Function | ./public/js/stream-context.mjs | 4-7 |
+| test:SSE query uses the authoritative context returned by token minting@L6 | Test | ./public/js/stream-context.test.mjs | 6-15 |
+| test:SSE query drops malformed minted context ids@L17 | Test | ./public/js/stream-context.test.mjs | 17-25 |
 
 ## Execution Flows
 
@@ -26,6 +28,7 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `set` (2 edge(s))
+- `equal` (2 edge(s))
 - `toString` (1 edge(s))
 - `trim` (1 edge(s))
 - `test` (1 edge(s))
@@ -35,3 +38,4 @@ No execution flows pass through this community.
 - `./public/js/api.js` (2 edge(s))
 - `./public/js/stream-context.mjs` (2 edge(s))
 - `./public/js/stream-context.test.mjs` (2 edge(s))
+- `equal` (2 edge(s))

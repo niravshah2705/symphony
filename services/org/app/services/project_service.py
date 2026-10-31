@@ -5,6 +5,7 @@ from app.core.database import Uow
 
 from app.authz.policy import is_org_admin
 from app.authz.principal import Principal
+from app.models.enums import ProjectAccessMode
 from app.models.project import Project
 from app.repositories.project_repo import ProjectRepository
 from app.schemas.common import PageParams
@@ -37,6 +38,15 @@ async def update_project(
         project.name = data.name
     if data.description is not None:
         project.description = data.description
+    return project
+
+
+async def set_access_mode(
+    session: Uow, project: Project, access_mode: ProjectAccessMode
+) -> Project:
+    """Flip a project between INVITE_ONLY and ORG_WIDE. The project is tracked
+    by the repository, so the field mutation flushes on commit."""
+    project.access_mode = access_mode
     return project
 
 

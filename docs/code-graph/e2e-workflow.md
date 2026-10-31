@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 12 nodes
+Community of 11 nodes
 
-- **Size**: 12 nodes
-- **Cohesion**: 0.1009
+- **Size**: 11 nodes
+- **Cohesion**: 0.0995
 - **Dominant Language**: javascript
 
 ## Members
@@ -25,7 +25,6 @@ Community of 12 nodes
 | test:lazy Workflows route renders the selected organization and five realistic examples@L177 | Test | ./e2e/workflow-designer.spec.js | 177-233 |
 | test:organization admin creates a safe custom agent, links nodes, and persists isolated drafts@L235 | Test | ./e2e/workflow-designer.spec.js | 235-359 |
 | test:organization members can inspect workflows but cannot mutate the local copy@L361 | Test | ./e2e/workflow-designer.spec.js | 361-387 |
-| test:an authenticated user without an organization is routed to organization onboarding@L389 | Test | ./e2e/workflow-designer.spec.js | 389-401 |
 
 ## Execution Flows
 
@@ -35,15 +34,15 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (63 edge(s))
-- `locator` (38 edge(s))
-- `getByRole` (35 edge(s))
-- `toHaveCount` (13 edge(s))
-- `toBeVisible` (10 edge(s))
+- `expect` (58 edge(s))
+- `locator` (37 edge(s))
+- `getByRole` (33 edge(s))
+- `toHaveCount` (12 edge(s))
 - `evaluate` (10 edge(s))
 - `click` (10 edge(s))
 - `fill` (9 edge(s))
 - `toBeDisabled` (9 edge(s))
+- `toBeVisible` (8 edge(s))
 - `selectOption` (8 edge(s))
 - `getItem` (8 edge(s))
 - `toHaveAttribute` (7 edge(s))
@@ -53,18 +52,18 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `expect` (55 edge(s))
-- `getByRole` (35 edge(s))
-- `locator` (33 edge(s))
-- `toHaveCount` (12 edge(s))
-- `./e2e/workflow-designer.spec.js` (11 edge(s))
+- `expect` (50 edge(s))
+- `getByRole` (33 edge(s))
+- `locator` (32 edge(s))
+- `toHaveCount` (11 edge(s))
+- `./e2e/workflow-designer.spec.js` (10 edge(s))
 - `evaluate` (10 edge(s))
 - `click` (10 edge(s))
-- `toBeVisible` (9 edge(s))
 - `fill` (9 edge(s))
 - `toBeDisabled` (9 edge(s))
 - `selectOption` (8 edge(s))
 - `getItem` (8 edge(s))
+- `toBeVisible` (7 edge(s))
 - `toHaveAttribute` (6 edge(s))
 - `toContainText` (6 edge(s))
 - `poll` (6 edge(s))

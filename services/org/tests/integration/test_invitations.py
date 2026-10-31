@@ -96,6 +96,7 @@ async def test_invitation_delivery_resend_and_explicit_acceptance(client, monkey
             "name": "Accessible",
             "role": "TEAM_LEAD",
             "status": "ACTIVE",
+            "tags": [],
         }
     ]
 

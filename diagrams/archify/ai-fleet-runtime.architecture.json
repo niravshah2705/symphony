@@ -1,0 +1,343 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "AI Fleet Runtime Architecture",
+    "output": "diagrams/archify/ai-fleet-runtime.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/niravshah2705/symphony.git",
+      "revision": "7920832ec6fb2e81b88ed72077bff97a4823821a"
+    },
+    "viewBox": [1460, 980],
+    "views": [
+      {
+        "id": "primary-run",
+        "label": "Primary run path",
+        "focus": ["browser", "gateway", "orchestrator", "pubsub", "workers", "proxy", "providers"],
+        "note": "A browser-started run is admitted, scheduled, executed, and sent out only through the sidecar."
+      },
+      {
+        "id": "tenant-control",
+        "label": "Tenant control plane",
+        "focus": ["gateway", "org", "settings", "firestore"],
+        "note": "Identity, RBAC, selected org/project context, policies, and secret material are resolved outside agent code."
+      },
+      {
+        "id": "egress-boundary",
+        "label": "Egress boundary",
+        "focus": ["workers", "proxy", "settings", "providers"],
+        "note": "Agents send sentinel credentials to loopback; the proxy resolves and injects real credentials."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "frontend",
+      "label": "Browser SPA",
+      "pos": [40, 418],
+      "size": [142, 68],
+      "sources": [
+        { "path": "README.md", "line": 33, "label": "quick start" },
+        { "path": "services/gateway/src/index.js", "line": 361, "label": "static SPA" }
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "security",
+      "label": "Gateway",
+      "tag": "public origin",
+      "pos": [214, 416],
+      "size": [166, 72],
+      "sources": [
+        { "path": "services/gateway/src/index.js", "line": 42, "end_line": 50, "label": "gateway role" },
+        { "path": "services/gateway/package.json", "line": 4, "label": "package" }
+      ]
+    },
+    {
+      "id": "org",
+      "type": "backend",
+      "label": "Org Service",
+      "pos": [428, 184],
+      "size": [154, 68],
+      "sources": [
+        { "path": "services/org/CLAUDE.md", "line": 9, "end_line": 23, "label": "org service" },
+        { "path": "services/gateway/src/index.js", "line": 252, "end_line": 268, "label": "org proxy" }
+      ]
+    },
+    {
+      "id": "settings",
+      "type": "security",
+      "label": "Settings Vault",
+      "tag": "secret owner",
+      "pos": [428, 634],
+      "size": [166, 72],
+      "sources": [
+        { "path": "services/settings/README.md", "line": 40, "end_line": 82, "label": "vault API" },
+        { "path": "services/proxy/src/secrets-client.js", "line": 104, "label": "S2S secrets" }
+      ]
+    },
+    {
+      "id": "planner",
+      "type": "backend",
+      "label": "Planner Service",
+      "pos": [428, 340],
+      "size": [164, 70],
+      "sources": [
+        { "path": "services/planner/package.json", "line": 4, "label": "package" },
+        { "path": "services/gateway/src/index.js", "line": 187, "end_line": 196, "label": "planner routes" }
+      ]
+    },
+    {
+      "id": "coder",
+      "type": "backend",
+      "label": "Coder Service",
+      "pos": [428, 488],
+      "size": [164, 70],
+      "sources": [
+        { "path": "services/coder/package.json", "line": 4, "label": "package" },
+        { "path": "services/gateway/src/index.js", "line": 245, "label": "coder proxy" }
+      ]
+    },
+    {
+      "id": "orchestrator",
+      "type": "backend",
+      "label": "Pipeline Orchestrator",
+      "tag": "durable control",
+      "pos": [650, 415],
+      "size": [184, 74],
+      "sources": [
+        { "path": "README.md", "line": 148, "end_line": 157, "label": "pipeline" },
+        { "path": "services/orchestrator/src/index.js", "line": 17, "end_line": 55, "label": "service factory" }
+      ]
+    },
+    {
+      "id": "pubsub",
+      "type": "messagebus",
+      "label": "Stage Bus",
+      "pos": [870, 418],
+      "size": [158, 68],
+      "sources": [
+        { "path": "services/orchestrator/src/index.js", "line": 15, "end_line": 29, "label": "bus factory" },
+        { "path": "README.md", "line": 156, "end_line": 164, "label": "topics" }
+      ]
+    },
+    {
+      "id": "workers",
+      "type": "backend",
+      "label": "Stage Workers",
+      "pos": [1066, 416],
+      "size": [174, 72],
+      "sources": [
+        { "path": "services/planner/package.json", "line": 4, "label": "planner" },
+        { "path": "services/coder/package.json", "line": 4, "label": "coder" },
+        { "path": "README.md", "line": 164, "end_line": 172, "label": "tester/deployer" }
+      ]
+    },
+    {
+      "id": "proxy",
+      "type": "security",
+      "label": "Egress Proxy Sidecar",
+      "tag": "loopback only",
+      "pos": [1066, 610],
+      "size": [182, 74],
+      "sources": [
+        { "path": "services/proxy/CLAUDE.md", "line": 9, "end_line": 18, "label": "sidecar" },
+        { "path": "packages/shared-core/src/egress.js", "line": 1, "end_line": 29, "label": "contract" }
+      ]
+    },
+    {
+      "id": "firestore",
+      "type": "database",
+      "label": "Firestore",
+      "pos": [626, 706],
+      "size": [166, 70],
+      "sources": [
+        { "path": "services/org/CLAUDE.md", "line": 11, "end_line": 14, "label": "org store" },
+        { "path": "README.md", "line": 153, "end_line": 156, "label": "pipeline state" }
+      ]
+    },
+    {
+      "id": "providers",
+      "type": "external",
+      "label": "External APIs",
+      "pos": [1272, 609],
+      "size": [146, 76],
+      "sources": [
+        { "path": "packages/shared-core/src/egress.js", "line": 45, "end_line": 100, "label": "routes" },
+        { "path": "README.md", "line": 82, "end_line": 113, "label": "integrations" }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "public browser boundary",
+      "wraps": ["browser"],
+      "pad": 16
+    },
+    {
+      "kind": "region",
+      "label": "AI Fleet trusted service plane",
+      "wraps": ["gateway", "org", "settings", "planner", "coder", "orchestrator", "pubsub", "workers", "firestore"],
+      "pad": 24
+    },
+    {
+      "kind": "security-group",
+      "label": "agent runtime without raw provider secrets",
+      "wraps": ["workers", "proxy"],
+      "pad": 18
+    },
+    {
+      "kind": "security-group",
+      "label": "external APIs",
+      "wraps": ["providers"],
+      "pad": 18
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser_gateway",
+      "from": "browser",
+      "to": "gateway",
+      "label": "HTTPS /api + SSE token stream",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "route": "straight",
+      "labelAt": [192, 502]
+    },
+    {
+      "id": "gateway_orchestrator",
+      "from": "gateway",
+      "to": "orchestrator",
+      "label": "authenticated pipeline start",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelAt": [546, 442]
+    },
+    {
+      "id": "orchestrator_bus",
+      "from": "orchestrator",
+      "to": "pubsub",
+      "label": "StageCommandV1",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelAt": [836, 502]
+    },
+    {
+      "id": "bus_workers",
+      "from": "pubsub",
+      "to": "workers",
+      "label": "stage delivery",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelAt": [1032, 502]
+    },
+    {
+      "id": "workers_proxy",
+      "from": "workers",
+      "to": "proxy",
+      "label": "loopback sentinel auth",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [1158, 560]
+    },
+    {
+      "id": "proxy_providers",
+      "from": "proxy",
+      "to": "providers",
+      "label": "TLS + injected credential",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "route": "straight",
+      "labelAt": [1248, 712]
+    },
+    {
+      "id": "gateway_planner",
+      "from": "gateway",
+      "to": "planner",
+      "variant": "dashed"
+    },
+    {
+      "id": "gateway_coder",
+      "from": "gateway",
+      "to": "coder",
+      "variant": "dashed"
+    },
+    {
+      "id": "gateway_org",
+      "from": "gateway",
+      "to": "org",
+      "variant": "security"
+    },
+    {
+      "id": "gateway_settings",
+      "from": "gateway",
+      "to": "settings",
+      "variant": "security"
+    },
+    {
+      "id": "settings_proxy",
+      "from": "settings",
+      "to": "proxy",
+      "label": "S2S vault resolution",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [[610, 670], [610, 852], [1157, 852]],
+      "labelAt": [904, 870]
+    },
+    {
+      "id": "runtime_state",
+      "from": "orchestrator",
+      "to": "firestore",
+      "label": "durable state + checkpoints",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [608, 620]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Primary Path",
+      "items": [
+        "Browser requests enter through the Gateway, which owns auth, EULA, billing, SSE, and same-origin API proxying.",
+        "Pipeline starts are admitted once, then the Orchestrator emits typed stage commands over Pub/Sub or local HTTP.",
+        "Workers execute plan/code/test/deploy stages and persist results before publishing outcomes."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust Boundaries",
+      "items": [
+        "Agent workers do not receive raw third-party provider credentials in their environment.",
+        "With EGRESS_PROXY_URL set, SDK and fetch base URLs point at the sidecar and cannot bypass provider-specific routes.",
+        "The proxy strips inbound auth, matches only fixed route prefixes, and injects the resolved credential upstream."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Tenant And Secret Control",
+      "items": [
+        "The Org service validates memberships and selected organization/project context.",
+        "The Settings service stores policies and KMS-envelope-encrypted organization/project vault credentials.",
+        "The proxy resolves managed or customer credentials through internal S2S endpoints and fails closed on missing required keys."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "External Dependencies",
+      "items": [
+        "LLM providers include OpenAI/Codex, Anthropic/Claude, Gemini, Hugging Face, local Ollama/LM Studio/OMLX, and optional LangSmith LLM Gateway.",
+        "Planning and repository integrations include Linear, Jira, Asana, GitHub, GitLab, and LangSmith tracing.",
+        "Cloud runtime depends on Firestore state/checkpoints and authenticated Pub/Sub messaging."
+      ]
+    }
+  ]
+}

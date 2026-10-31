@@ -25,6 +25,7 @@ const {
   installDeepseek,
   readResolvedSource,
   relativizeContainedAbsoluteSymlinks,
+  runEccProfile,
   scanTreeForLeaks,
   selectPiEccPackage,
   stageDshSkills,
@@ -263,6 +264,68 @@ test('Antigravity uses the current plural compatibility-state directory', () => 
   assert.doesNotMatch(STRATEGY_METADATA['antigravity-sdk'].limitations.join(' '), /\.agent compatibility/);
 });
 
+test('runEccProfile confirms the hook runtime only when the caller opts in', () => {
+  function fakeRunner() {
+    const calls = [];
+    const runCommand = (command, args, options) => {
+      calls.push({ command, args, options });
+      const requestedTarget = args[args.indexOf('--target') + 1];
+      if (args.some((value) => String(value).endsWith('install-apply.js'))) {
+        return JSON.stringify({
+          dryRun: false,
+          result: { applied: true, operations: [{ type: 'copy' }] },
+        });
+      }
+      return JSON.stringify({
+        records: [{
+          state: {
+            schemaVersion: 'ecc.install.v1',
+            target: { target: requestedTarget },
+            operations: [{ type: 'copy' }],
+          },
+        }],
+      });
+    };
+    return { calls, runCommand };
+  }
+
+  const optIn = fakeRunner();
+  runEccProfile({
+    sourceRoot: '/source',
+    homeRoot: '/home',
+    projectRoot: '/project',
+    env: { CI: 'true' },
+    target: 'opencode',
+    profile: 'full',
+    enableHooks: true,
+  }, { runCommand: optIn.runCommand });
+  const optInInstall = optIn.calls.find((call) => (
+    call.args.some((value) => String(value).endsWith('install-apply.js'))
+  ));
+  assert.ok(optInInstall.args.includes('--enable-hooks'));
+  assert.deepEqual(optInInstall.args, [
+    path.join('/source', 'scripts', 'install-apply.js'),
+    '--profile', 'full',
+    '--target', 'opencode',
+    '--enable-hooks',
+    '--json',
+  ]);
+
+  const hookFree = fakeRunner();
+  runEccProfile({
+    sourceRoot: '/source',
+    homeRoot: '/home',
+    projectRoot: '/project',
+    env: { CI: 'true' },
+    target: 'antigravity',
+    profile: 'minimal',
+  }, { runCommand: hookFree.runCommand });
+  const hookFreeInstall = hookFree.calls.find((call) => (
+    call.args.some((value) => String(value).endsWith('install-apply.js'))
+  ));
+  assert.equal(hookFreeInstall.args.includes('--enable-hooks'), false);
+});
+
 test('Pi selects the compatible root manifest instead of a nested same-name manifest', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-pi-manifest-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -415,8 +478,8 @@ test('DeepSeek stages ECC skills through the pinned first-party dsh contract', (
   assert.deepEqual(Object.keys(HARNESS_INSTALLERS), HARNESS_IDS);
   assert.deepEqual(Object.keys(STRATEGY_METADATA), HARNESS_IDS);
   assert.deepEqual(calls[0].options, {
-    name: '@deepseek-ai/dsh',
-    version: '0.1.0-rc.6',
+    name: '@deepseek-ai/dsh-sdk-client',
+    version: TOOL_VERSIONS.deepseek,
     binary: 'dsh',
     toolsRoot,
     env: { CI: 'true', DSH_HOME: fs.realpathSync(path.join(homeRoot, '.dsh')) },
@@ -567,14 +630,14 @@ test('secret-like state and temporary build paths are rejected', (t) => {
 
   fs.rmSync(path.join(tree, 'home', '.config', 'state.json'));
   const syntheticToken = `sk-${'a'.repeat(32)}`;
-  writeJson(path.join(tree, 'home', '.opencode', 'ecc-install-state.json'), {
+  writeJson(path.join(tree, 'home', '.config', 'opencode', 'ecc-install-state.json'), {
     schemaVersion: 'ecc.install.v1',
     credential: syntheticToken,
   });
   assert.throws(() => scanTreeForLeaks(tree), /credential-like content/i);
 
-  fs.rmSync(path.join(tree, 'home', '.opencode', 'ecc-install-state.json'));
-  writeJson(path.join(tree, 'home', '.opencode', 'docs', 'synthetic-security-fixture.json'), {
+  fs.rmSync(path.join(tree, 'home', '.config', 'opencode', 'ecc-install-state.json'));
+  writeJson(path.join(tree, 'home', '.config', 'opencode', 'docs', 'synthetic-security-fixture.json'), {
     syntheticToken,
   });
   assert.doesNotThrow(() => scanTreeForLeaks(tree));

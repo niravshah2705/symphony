@@ -543,6 +543,9 @@ test('authenticated users without an organization route to onboarding before wor
     'GET /api/locale/suggestions',
     'GET /api/org/me',
     'GET /api/org/me/projects',
+    // Surfacing any pending org/project invitation is part of the onboarding
+    // landing (see organization view renderPendingInvitations).
+    'GET /api/org/me/pending-invitations',
   ]);
   expect(apiRequests.filter((request) => !onboardingRequests.has(request))).toEqual([]);
 });

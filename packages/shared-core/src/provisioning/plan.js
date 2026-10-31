@@ -47,6 +47,7 @@ function labelValue(value) {
  * @param {string} cfg.sharedSettingsUrl   SHARED settings service URL
  * @param {string} cfg.streamTokenServiceUrl SHARED stream-token broker URL
  * @param {string} cfg.spaOrigin           SPA origin(s) for the tenant gateway CORS
+ * @param {string} [cfg.customDomain]      Custom domain(s) for Firebase Hosting / tenant gateway CORS
  * @param {string} cfg.firebaseProjectId
  * @param {string} cfg.firebaseApiKey
  * @param {string} cfg.deadLetterTopic     shared dead-letter topic id
@@ -171,6 +172,7 @@ function buildPlan(slug, cfg) {
       AUTH_MODE: 'firebase',
       TRUST_PROXY_HOPS: '1',
       SPA_ORIGIN: cfg.spaOrigin || '',
+      FIREBASE_CUSTOM_DOMAIN: cfg.customDomain || '',
       API_BASE_URL: u.gateway,
       PLANNER_URL: u.planner, // this tenant's planner
       CODER_URL: u.coder, //     this tenant's coder-control

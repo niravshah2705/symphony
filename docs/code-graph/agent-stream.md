@@ -69,7 +69,7 @@ Community of 57 nodes
 
 ## Execution Flows
 
-- **_generate** (criticality: 0.56, depth: 6)
+No execution flows pass through this community.
 
 ## Dependencies
 

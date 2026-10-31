@@ -1,0 +1,94 @@
+[
+  {
+    "id": "gemini-1-5-pro",
+    "name": "Gemini 1.5 Pro",
+    "provider": "Google (First Party)",
+    "model_type": "proprietary",
+    "agentic_features": { "supports_agentic_development": true, "tool_use": true, "function_calling": true, "reasoning_effort_control": true },
+    "parameters": { "total_params": "Undisclosed", "context_window_tokens": 2000000, "max_output_tokens": 8192 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m": 1.25, "completion_cost_per_1m": 5.00 },
+      "long_context_over_128k": { "prompt_cost_per_1m": 2.50, "completion_cost_per_1m": 10.00 },
+      "cached": { "prompt_cost_per_1m": 0.3125, "discount_pct": 75 },
+      "batch": { "prompt_cost_per_1m": 0.625, "completion_cost_per_1m": 2.50, "discount_pct": 50 }
+    },
+    "supported_regions": [
+      { "code": "us-central1", "name": "Iowa", "surcharge_pct": 0 },
+      { "code": "europe-west1", "name": "Belgium", "surcharge_pct": 0 },
+      { "code": "asia-east1", "name": "Taiwan", "surcharge_pct": 5 }
+    ],
+    "benchmarks": { "swe_bench_verified": 35.8, "mmlu_pro": 73.2, "human_eval": 84.1 },
+    "simple_score": 87.2, "rank": 4
+  },
+  {
+    "id": "gemini-1-5-flash",
+    "name": "Gemini 1.5 Flash",
+    "provider": "Google (First Party)",
+    "model_type": "proprietary",
+    "agentic_features": { "supports_agentic_development": true, "tool_use": true, "function_calling": true, "reasoning_effort_control": false },
+    "parameters": { "total_params": "Undisclosed", "context_window_tokens": 1000000, "max_output_tokens": 8192 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m": 0.075, "completion_cost_per_1m": 0.30 },
+      "long_context_over_128k": { "prompt_cost_per_1m": 0.15, "completion_cost_per_1m": 0.60 },
+      "cached": { "prompt_cost_per_1m": 0.01875, "discount_pct": 75 },
+      "batch": { "prompt_cost_per_1m": 0.0375, "completion_cost_per_1m": 0.15, "discount_pct": 50 }
+    },
+    "supported_regions": [
+      { "code": "us-central1", "name": "Iowa", "surcharge_pct": 0 },
+      { "code": "europe-west1", "name": "Belgium", "surcharge_pct": 0 }
+    ],
+    "benchmarks": { "swe_bench_verified": 28.5, "mmlu_pro": 65.0, "human_eval": 78.2 },
+    "simple_score": 85.1, "rank": 6
+  },
+  {
+    "id": "codey-code-bison",
+    "name": "Codey (Code Bison / Chat)",
+    "provider": "Google (First Party)",
+    "model_type": "proprietary",
+    "agentic_features": { "supports_agentic_development": true, "tool_use": false, "function_calling": false, "reasoning_effort_control": false },
+    "parameters": { "total_params": "Undisclosed", "context_window_tokens": 16384, "max_output_tokens": 2048 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m_chars": 0.50, "completion_cost_per_1m_chars": 0.50 },
+      "batch": { "prompt_cost_per_1m_chars": 0.25, "completion_cost_per_1m_chars": 0.25, "discount_pct": 50 }
+    },
+    "supported_regions": [
+      { "code": "us-central1", "name": "Iowa", "surcharge_pct": 0 }
+    ],
+    "benchmarks": { "swe_bench_verified": 21.0, "human_eval": 72.0 },
+    "simple_score": 75.0, "rank": 10
+  },
+  {
+    "id": "imagen-3",
+    "name": "Imagen 3",
+    "provider": "Google (First Party)",
+    "model_type": "proprietary",
+    "agentic_features": { "supports_agentic_development": false, "tool_use": false, "function_calling": false },
+    "parameters": { "total_params": "Undisclosed", "context_window_tokens": 1024, "max_output_tokens": 1 },
+    "cost_options": {
+      "standard": { "cost_per_image": 0.03 },
+      "fast_batch": { "cost_per_image": 0.015, "discount_pct": 50 }
+    },
+    "supported_regions": [
+      { "code": "us-central1", "name": "Iowa", "surcharge_pct": 0 }
+    ],
+    "benchmarks": { "fid_score": 5.2 },
+    "simple_score": 80.0, "rank": 11
+  },
+  {
+    "id": "chirp-v2",
+    "name": "Chirp v2 (Speech-to-Text)",
+    "provider": "Google (First Party)",
+    "model_type": "proprietary",
+    "agentic_features": { "supports_agentic_development": false, "tool_use": false, "function_calling": false },
+    "parameters": { "total_params": "2B", "context_window_tokens": 0, "max_output_tokens": 0 },
+    "cost_options": {
+      "standard": { "cost_per_audio_minute": 0.016 },
+      "batch": { "cost_per_audio_minute": 0.008, "discount_pct": 50 }
+    },
+    "supported_regions": [
+      { "code": "global", "name": "Global Routing", "surcharge_pct": 0 }
+    ],
+    "benchmarks": { "wer_percentage": 5.4 },
+    "simple_score": 82.0, "rank": 12
+  }
+]

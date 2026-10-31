@@ -5,6 +5,8 @@ import {
   state,
   isImmersiveRoute,
   setActiveRoute,
+  setCurrentProject,
+  setProjectSandbox,
   setSidebarOpen,
   setSidebarCollapsed,
 } from './state.js';
@@ -26,7 +28,7 @@ import { initThemeToggle } from './theme.js';
 import { initCookiePreferences } from './cookie-preferences.js';
 import { initNotifications } from './notifications.js';
 import { trackGoogleAnalyticsPageView } from './google-analytics.mjs';
-import { canAccessRoute, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
+import { canAccessRoute, menuRouteVisible, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 import {
   activeWorkspaceOrganization,
   activeWorkspaceProject,
@@ -88,6 +90,7 @@ function route(loader, exportName, styles = []) {
 
 const routes = Object.freeze({
   agent: route(() => import('./views/agent.js'), 'renderAgent', ['/styles/immersive.css']),
+  openshell: route(() => import('./views/openshell.js'), 'renderOpenShell', ['/styles/immersive.css']),
   workflows: route(() => import('./views/workflows.js'), 'renderWorkflows', ['/styles/workflows.css']),
   'agent-jobs': route(() => import('./views/agent-jobs.js'), 'renderAgentJobs', ['/styles/operations.css']),
   calls: route(() => import('./views/calls.js'), 'renderCalls', ['/styles/immersive.css']),
@@ -113,6 +116,7 @@ const AUTHENTICATION_INDEPENDENT_ROUTES = new Set(['privacy', 'terms']);
 
 const routeMeta = {
   agent: { titleKey: 'agentWorkspace', eyebrowKey: 'workspace' },
+  openshell: { title: 'OpenShell Sandbox', eyebrow: 'Workspace' },
   workflows: { titleKey: 'workflows', eyebrowKey: 'workspace' },
   'agent-jobs': { titleKey: 'agentJobs', eyebrowKey: 'workspace' },
   calls: { titleKey: 'callRecorder', eyebrowKey: 'workspace' },
@@ -149,7 +153,7 @@ function applyMenuPermissions(session) {
   const nav = document.getElementById('tabs');
   if (!nav) return;
   nav.querySelectorAll('a[data-route]').forEach((link) => {
-    link.hidden = !canAccessRoute(session, link.dataset.route);
+    link.hidden = !menuRouteVisible(session, link.dataset.route);
   });
   nav.querySelectorAll('.nav-section').forEach((section) => {
     const links = section.querySelectorAll('a[data-route]');
@@ -255,8 +259,7 @@ function syncSidebar(open, { restoreFocus = false } = {}) {
   backdrop.hidden = !state.sidebarOpen;
   document.body.classList.toggle('nav-open', state.sidebarOpen);
   sidebar.inert = compact && !state.sidebarOpen;
-  if (compact && !state.sidebarOpen) sidebar.setAttribute('aria-hidden', 'true');
-  else sidebar.removeAttribute('aria-hidden');
+  sidebar.removeAttribute('aria-hidden');
 
   const backgroundInert = compact && state.sidebarOpen;
   const view = document.getElementById('view');
@@ -589,12 +592,18 @@ function renderAuthControl() {
     ]),
     el('span', { class: 'account-context-chevron', 'aria-hidden': 'true' }, '⌄'),
   ]);
+  const persona = context.user?.persona || '';
+  const personaBadge = persona
+    ? el('span', { class: 'badge', title: 'Your self-declared role' },
+        persona.charAt(0) + persona.slice(1).toLowerCase().replace('_', ' '))
+    : null;
   const panel = el('div', { class: 'account-context-panel' });
   panel.append(el('div', { class: 'account-context-identity' }, [
     el('span', { class: 'avatar', 'aria-hidden': 'true' }, initials(label)),
     el('span', { class: 'account-context-identity-copy' }, [
       el('strong', { dataset: { userContent: 'true' } }, label),
       email ? el('small', { dataset: { userContent: 'true' } }, email) : null,
+      personaBadge,
     ]),
   ]));
 
@@ -613,12 +622,17 @@ function renderAuthControl() {
     if (!context.organizations.length) {
       organizationSelect.append(el('option', { value: '', selected: true }, t('noOrganization')));
     } else {
+      // Sub-org awareness: when an org's parent is also one the user belongs to,
+      // label it as a sub-org so the hierarchy is legible in the flat picker.
+      const namesById = new Map(context.organizations.map((o) => [o.id, o.name]));
       for (const item of context.organizations) {
+        const parentName = item.parentOrgId ? namesById.get(item.parentOrgId) : '';
+        const optionLabel = parentName ? `${item.name} — sub-org of ${parentName}` : item.name;
         organizationSelect.append(el('option', {
           value: item.id,
           selected: item.id === context.organizationId,
           dataset: { userContent: 'true' },
-        }, item.name));
+        }, optionLabel));
       }
     }
     organizationSelect.addEventListener('change', () => {
@@ -646,19 +660,40 @@ function renderAuthControl() {
       }
     }
     projectSelect.addEventListener('change', () => {
-      if (!changeWorkspaceProject(projectSelect.value)) return;
+      const nextProjectId = projectSelect.value;
+      const chosen = projects.find((p) => p.id === nextProjectId);
+      if (nextProjectId) {
+        setCurrentProject(nextProjectId, chosen?.name || '');
+        void api.loadProjectSandbox({ projectId: nextProjectId, projectName: chosen?.name || nextProjectId })
+          .then((res) => { if (res?.sandbox) setProjectSandbox(nextProjectId, res.sandbox); })
+          .catch(() => {});
+      }
+      if (!changeWorkspaceProject(nextProjectId)) return;
       panel.setAttribute('aria-busy', 'true');
       projectSelect.disabled = true;
-      window.setTimeout(() => window.location.reload(), 0);
+      window.setTimeout(() => window.location.reload(), 120);
     });
+
+    const orgTags = (organization?.tags || []).map((tag) =>
+      el('span', { class: 'badge sm', dataset: { userContent: 'true' } }, tag.name || tag)
+    );
+    const projectTags = (project?.tags || []).map((tag) =>
+      el('span', { class: 'badge sm', dataset: { userContent: 'true' } }, tag.name || tag)
+    );
 
     panel.append(
       el('label', { class: 'account-context-field', for: 'account-organization-select' }, [
-        el('span', { dataset: { i18n: 'organization' } }, t('organization')),
+        el('div', { class: 'account-context-field-header' }, [
+          el('span', { dataset: { i18n: 'organization' } }, t('organization')),
+          ...(orgTags.length ? [el('div', { class: 'account-context-tags' }, orgTags)] : []),
+        ]),
         organizationSelect,
       ]),
       el('label', { class: 'account-context-field', for: 'account-project-select' }, [
-        el('span', { dataset: { i18n: 'aiFleetProject' } }, t('aiFleetProject')),
+        el('div', { class: 'account-context-field-header' }, [
+          el('span', { dataset: { i18n: 'aiFleetProject' } }, t('aiFleetProject')),
+          ...(projectTags.length ? [el('div', { class: 'account-context-tags' }, projectTags)] : []),
+        ]),
         projectSelect,
       ])
     );

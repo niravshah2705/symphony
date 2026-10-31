@@ -41,16 +41,27 @@ function requestWorkspaceContext(req) {
   });
 }
 
-function conversationForRequest(req, id) {
-  const conversation = getConversation(id);
-  return conversation && matchesEventContext(conversation, requestWorkspaceContext(req)) ? conversation : null;
+function resolveOrgProjectContext(req, conversation = null) {
+  const reqContext = requestWorkspaceContext(req);
+  const organizationId = reqContext.organizationId || (conversation && (conversation.orgId || conversation.organizationId)) || '';
+  const projectId = reqContext.projectId || (conversation && (conversation.nativeProjectId || conversation.projectId)) || '';
+  return normalizeEventContext({ organizationId, projectId });
 }
 
-// Attachments/RAG never use the "no headers = trusted local" fallback that
-// conversation routes tolerate — both an organization and a project must be
-// selected for any attachment request.
-function requireOrgProjectContext(req, res) {
-  const context = requestWorkspaceContext(req);
+function conversationForRequest(req, id) {
+  const conversation = getConversation(id);
+  if (!conversation) return null;
+  const headerContext = requestWorkspaceContext(req);
+  if (headerContext.organizationId || headerContext.projectId) {
+    return matchesEventContext(conversation, headerContext) ? conversation : null;
+  }
+  return conversation;
+}
+
+// Attachments/RAG require organization and project context, resolved either from
+// explicit request headers or falling back to the conversation's stored context.
+function requireOrgProjectContext(req, res, conversation = null) {
+  const context = resolveOrgProjectContext(req, conversation);
   if (!context.organizationId || !context.projectId) {
     res.status(400).json({ error: 'An organization and project must be selected to use attachments.' });
     return null;
@@ -92,9 +103,10 @@ router.post(
   asyncHandler(async (req, res) => {
     const id = String(req.params.id || '');
     if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
-    const context = requireOrgProjectContext(req, res);
+    const conversation = conversationForRequest(req, id);
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+    const context = requireOrgProjectContext(req, res, conversation);
     if (!context) return;
-    if (!conversationForRequest(req, id)) return res.status(404).json({ error: 'Conversation not found.' });
 
     const body = req.body || {};
     const result = await attachmentsService.mintUpload(
@@ -122,9 +134,10 @@ router.post(
     const attachmentId = String(req.params.attachmentId || '');
     if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
     if (!isValidAttachmentId(attachmentId)) return res.status(400).json({ error: 'Invalid attachment id.' });
-    const context = requireOrgProjectContext(req, res);
+    const conversation = conversationForRequest(req, id);
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+    const context = requireOrgProjectContext(req, res, conversation);
     if (!context) return;
-    if (!conversationForRequest(req, id)) return res.status(404).json({ error: 'Conversation not found.' });
 
     const attachment = await attachmentsService.completeUpload(
       { orgId: context.organizationId, projectId: context.projectId, conversationId: id, attachmentId },
@@ -141,15 +154,19 @@ router.get(
   asyncHandler(async (req, res) => {
     const id = String(req.params.id || '');
     if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
-    const context = requireOrgProjectContext(req, res);
-    if (!context) return;
-    if (!conversationForRequest(req, id)) return res.status(404).json({ error: 'Conversation not found.' });
+    const conversation = conversationForRequest(req, id);
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+
+    const context = resolveOrgProjectContext(req, conversation);
+    if (!context.organizationId || !context.projectId) {
+      return res.json({ attachments: [] });
+    }
 
     const attachments = await attachmentsService.listAttachments(
       { orgId: context.organizationId, projectId: context.projectId, conversationId: id },
       attachmentDeps(context)
     );
-    res.json({ attachments });
+    res.json({ attachments: attachments || [] });
   })
 );
 
@@ -161,9 +178,10 @@ router.delete(
     const attachmentId = String(req.params.attachmentId || '');
     if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
     if (!isValidAttachmentId(attachmentId)) return res.status(400).json({ error: 'Invalid attachment id.' });
-    const context = requireOrgProjectContext(req, res);
+    const conversation = conversationForRequest(req, id);
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+    const context = requireOrgProjectContext(req, res, conversation);
     if (!context) return;
-    if (!conversationForRequest(req, id)) return res.status(404).json({ error: 'Conversation not found.' });
 
     await attachmentsService.removeAttachment(
       { orgId: context.organizationId, projectId: context.projectId, conversationId: id, attachmentId },
@@ -181,9 +199,10 @@ router.get(
   asyncHandler(async (req, res) => {
     const id = String(req.params.id || '');
     if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
-    const context = requireOrgProjectContext(req, res);
-    if (!context) return;
-    if (!conversationForRequest(req, id)) return res.status(404).json({ error: 'Conversation not found.' });
+    const conversation = conversationForRequest(req, id);
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+    const context = resolveOrgProjectContext(req, conversation);
+    if (!context.organizationId || !context.projectId) return res.json({ results: [] });
 
     const query = redactUserText(String((req.query && req.query.q) || '').trim());
     if (!query) return res.json({ results: [] });
@@ -212,9 +231,10 @@ router.post(
   asyncHandler(async (req, res) => {
     const id = String(req.params.id || '');
     if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
-    const context = requireOrgProjectContext(req, res);
+    const conversation = conversationForRequest(req, id);
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+    const context = requireOrgProjectContext(req, res, conversation);
     if (!context) return;
-    if (!conversationForRequest(req, id)) return res.status(404).json({ error: 'Conversation not found.' });
 
     const question = redactUserText(String((req.body && req.body.question) || '').trim());
     if (!question) return res.status(400).json({ error: 'question is required.' });

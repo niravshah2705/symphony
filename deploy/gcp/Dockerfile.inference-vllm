@@ -1,6 +1,7 @@
-# BEST-EFFORT / standalone demo — see deploy/gcp/terraform/inference.tf's header
-# comment. vLLM's published `vllm/vllm-openai` image is CUDA-only, so this
-# extends a locally-built CPU base image (produced by
+# CPU vLLM image for the Gemma chat + EmbeddingGemma backends — see
+# deploy/gcp/terraform/inference.tf's header comment. vLLM's published
+# `vllm/vllm-openai` image is CUDA-only, so this extends a locally-built CPU
+# base image (produced by
 # deploy/gcp/build-vllm-cpu-base.sh from vLLM's own docker/Dockerfile.cpu) —
 # there is no public CPU tag to FROM directly.
 #

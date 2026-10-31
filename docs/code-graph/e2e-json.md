@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 12 nodes
+Community of 5 nodes
 
-- **Size**: 12 nodes
-- **Cohesion**: 0.0947
+- **Size**: 5 nodes
+- **Cohesion**: 0.0686
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,17 +15,10 @@ Community of 12 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | json | Function | ./e2e/page-loading.spec.js | 5-11 |
-| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
-| test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
-| test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148 | Test | ./e2e/page-loading.spec.js | 148-182 |
 | test:fixed language groups mark, but never auto-apply, the IP recommendation@L184 | Test | ./e2e/page-loading.spec.js | 184-219 |
-| test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221 | Test | ./e2e/page-loading.spec.js | 221-475 |
 | authorizedJson | Function | ./e2e/page-loading.spec.js | 242-248 |
-| test:authenticated users without an organization route to onboarding before workspace requests@L477 | Test | ./e2e/page-loading.spec.js | 477-548 |
-| test:Settings Policy uses the active native project and selected-context roles@L550 | Test | ./e2e/page-loading.spec.js | 550-612 |
-| test:selected organization admins can open scoped policy without global settings write@L614 | Test | ./e2e/page-loading.spec.js | 614-655 |
-| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L657 | Test | ./e2e/page-loading.spec.js | 657-706 |
-| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L708 | Test | ./e2e/page-loading.spec.js | 708-731 |
+| test:selected organization admins can open scoped policy without global settings write@L617 | Test | ./e2e/page-loading.spec.js | 617-658 |
+| test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L711 | Test | ./e2e/page-loading.spec.js | 711-734 |
 
 ## Execution Flows
 
@@ -35,36 +28,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (88 edge(s))
-- `route` (64 edge(s))
-- `locator` (35 edge(s))
-- `fulfill` (16 edge(s))
-- `toEqual` (16 edge(s))
-- `toBe` (14 edge(s))
-- `push` (13 edge(s))
-- `setItem` (12 edge(s))
-- `toBeVisible` (12 edge(s))
-- `url` (11 edge(s))
-- `goto` (10 edge(s))
-- `filter` (10 edge(s))
-- `toHaveText` (9 edge(s))
-- `toContain` (9 edge(s))
-- `on` (9 edge(s))
+- `expect` (21 edge(s))
+- `route` (14 edge(s))
+- `locator` (12 edge(s))
+- `./e2e/page-loading.spec.js::test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221` (11 edge(s))
+- `./e2e/page-loading.spec.js::test:Settings Policy uses the active native project and selected-context roles@L553` (8 edge(s))
+- `./e2e/page-loading.spec.js::test:workspace renders while optional locale and Linear discovery are stalled@L61` (7 edge(s))
+- `./e2e/page-loading.spec.js::test:authenticated users without an organization route to onboarding before workspace requests@L477` (6 edge(s))
+- `fulfill` (5 edge(s))
+- `./e2e/page-loading.spec.js::test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660` (4 edge(s))
+- `toHaveText` (4 edge(s))
+- `request` (3 edge(s))
+- `toBe` (3 edge(s))
+- `goto` (3 edge(s))
+- `setItem` (3 edge(s))
+- `nth` (3 edge(s))
 
 ### Incoming
 
-- `expect` (86 edge(s))
-- `route` (64 edge(s))
-- `locator` (35 edge(s))
-- `toEqual` (16 edge(s))
-- `fulfill` (15 edge(s))
-- `toBe` (13 edge(s))
-- `./e2e/page-loading.spec.js` (12 edge(s))
-- `setItem` (12 edge(s))
-- `push` (12 edge(s))
-- `toBeVisible` (12 edge(s))
-- `goto` (10 edge(s))
-- `url` (10 edge(s))
-- `filter` (10 edge(s))
-- `toHaveText` (9 edge(s))
-- `toContain` (9 edge(s))
+- `expect` (19 edge(s))
+- `route` (14 edge(s))
+- `locator` (12 edge(s))
+- `./e2e/page-loading.spec.js::test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221` (11 edge(s))
+- `./e2e/page-loading.spec.js::test:Settings Policy uses the active native project and selected-context roles@L553` (8 edge(s))
+- `./e2e/page-loading.spec.js::test:workspace renders while optional locale and Linear discovery are stalled@L61` (7 edge(s))
+- `./e2e/page-loading.spec.js::test:authenticated users without an organization route to onboarding before workspace requests@L477` (6 edge(s))
+- `./e2e/page-loading.spec.js` (5 edge(s))
+- `./e2e/page-loading.spec.js::test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660` (4 edge(s))
+- `toHaveText` (4 edge(s))
+- `fulfill` (4 edge(s))
+- `goto` (3 edge(s))
+- `setItem` (3 edge(s))
+- `nth` (3 edge(s))
+- `./e2e/page-loading.spec.js::test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148` (2 edge(s))

@@ -60,15 +60,26 @@ def _matches(doc: dict, filters: list[tuple[str, Any]] | None) -> bool:
 class _InMemoryTxn:
     def __init__(self, db: "InMemoryDb") -> None:
         self._db = db
+        # Firestore requires every read to precede every write in a transaction.
+        # The fake enforces it so a read-after-write (which aborts on real
+        # Firestore but would silently succeed here) fails loudly in tests.
+        self._wrote = False
 
     async def get(self, collection: str, doc_id: str) -> dict | None:
+        if self._wrote:
+            raise RuntimeError(
+                "Firestore transaction read-after-write: all reads must precede "
+                f"writes (get {collection}/{doc_id} after a set/delete)"
+            )
         doc = self._db._store.get(collection, {}).get(doc_id)
         return copy.deepcopy(doc) if doc is not None else None
 
     def set(self, collection: str, doc_id: str, data: dict) -> None:
+        self._wrote = True
         self._db._store.setdefault(collection, {})[doc_id] = copy.deepcopy(data)
 
     def delete(self, collection: str, doc_id: str) -> None:
+        self._wrote = True
         self._db._store.get(collection, {}).pop(doc_id, None)
 
 

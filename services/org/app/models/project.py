@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from app.models.base import new_uuid, to_uuid, utcnow, uuid_str
+from app.models.enums import ProjectAccessMode
 
 if True:
     from app.models.tag import Tag
@@ -21,6 +22,10 @@ class Project:
     updated_at: datetime = field(default_factory=utcnow)
     # Source of truth for the project's tags; persisted as an id array.
     tags: list["Tag"] = field(default_factory=list, compare=False, repr=False)
+    # INVITE_ONLY (default) matches today's actual behavior — every existing
+    # project keeps behaving exactly as it does today. ORG_WIDE means every
+    # member of the project's own org has access.
+    access_mode: ProjectAccessMode = ProjectAccessMode.INVITE_ONLY
 
     def to_doc(self) -> dict:
         return {
@@ -31,6 +36,7 @@ class Project:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "tag_ids": [uuid_str(t.id) for t in self.tags],
+            "access_mode": self.access_mode.value,
         }
 
     @classmethod
@@ -42,4 +48,7 @@ class Project:
             description=doc.get("description"),
             created_at=doc.get("created_at") or utcnow(),
             updated_at=doc.get("updated_at") or utcnow(),
+            access_mode=ProjectAccessMode(
+                doc.get("access_mode", ProjectAccessMode.INVITE_ONLY.value)
+            ),
         )

@@ -62,7 +62,15 @@ function shouldSkip(req) {
     // Location/language suggestions are advisory and store-free. Translation,
     // however, resolves model settings and must follow the selected workspace.
     || path === '/api/locale/suggestions'
-    || path === '/api/org/me/context';
+    || path === '/api/org/me/context'
+    // Context-independent org-service endpoints keyed by identity or a token,
+    // not by a selected org/project. They must work at first login (before any
+    // org is selected) and for org-less/multi-org callers, so they must not be
+    // gated by selected-context validation (which 400s a multi-org caller with
+    // no org header). The org service enforces its own auth on each.
+    || path === '/api/org/project-invitations/accept' // token-gated invite accept
+    || path === '/api/org/me/pending-invitations'      // first-login surfacing
+    || path === '/api/org/me/persona';                 // onboarding persona capture
 }
 
 /**

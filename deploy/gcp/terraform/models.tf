@@ -1,18 +1,18 @@
 # -----------------------------------------------------------------------------
-# Model weights registry (GCS bucket + gcsfuse mount) — Ollama/vLLM inference demo.
+# Model weights registry (GCS bucket + gcsfuse mount) for hosted inference.
 # -----------------------------------------------------------------------------
 # Model weights (Ollama pulls + HuggingFace checkpoints) are published as
 # VERSIONED bundles to this bucket by .github/workflows/publish-models.yml
 # (objects laid out as `ollama/<version>/...` and `vllm/<version>/<model>/...`
-# per deploy/models/manifest.json). The inference-ollama / inference-vllm Cloud
-# Run services (inference.tf) mount it read-only via a gen2 GCS volume at
-# /models and PIN a version per engine (see inference.tf), so multiple
+# per deploy/models/manifest.json). The inference-ollama / inference-vllm /
+# inference-vllm-embed Cloud Run services (inference.tf) mount it read-only via
+# a gen2 GCS volume at /models and PIN a version per engine, so multiple
 # versions coexist and an older pinned deployment keeps working while a new
 # version is published. Mirrors skills.tf's registry pattern.
 #
-# THIS IS A STANDALONE DEMO — this bucket/mount is consumed only by
-# inference-ollama/inference-vllm (inference.tf). It is NOT wired into the
-# egress proxy or any agent runtime; see inference.tf's header comment.
+# The bucket is consumed only by the inference backends; Laya/CLM reach those
+# backends over HTTP via INFERENCE_BASE_URL + INFERENCE_API_KEY. See
+# inference.tf's header comment.
 #
 # Terraform CREATES and OWNS this bucket — it is NOT assumed to pre-exist. The
 # name defaults to a stable derived value (local.models_bucket_name =
@@ -76,7 +76,7 @@ resource "google_storage_bucket_iam_member" "inference_ollama_models_read" {
 }
 
 resource "google_storage_bucket_iam_member" "inference_vllm_models_read" {
-  count  = var.models_enabled && var.inference_vllm_enabled ? 1 : 0
+  count  = var.models_enabled && (var.inference_vllm_enabled || var.inference_vllm_embed_enabled) ? 1 : 0
   bucket = google_storage_bucket.models[0].name
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.inference_vllm[0].email}"

@@ -14,11 +14,20 @@ from app.authz.guards import (
     require_org_member,
     require_project,
 )
-from app.authz.policy import can_manage_project_tags, can_update_project
+from app.authz.policy import (
+    can_manage_project_tags,
+    can_set_project_access_mode,
+    can_update_project,
+)
 from app.authz.principal import Principal
 from app.core.database import get_session
 from app.schemas.common import Page, PageParams
-from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
+from app.schemas.project import (
+    ProjectAccessModeUpdate,
+    ProjectCreate,
+    ProjectResponse,
+    ProjectUpdate,
+)
 from app.schemas.tag import TagResponse
 from app.services import project_service, tag_service
 
@@ -66,6 +75,15 @@ async def delete_project(
     await project_service.delete_project(session, ctx.project)
 
 
+@router.patch("/{project_id}/access-mode", response_model=ProjectResponse)
+async def set_project_access_mode(
+    body: ProjectAccessModeUpdate,
+    ctx: ProjectContext = Depends(require_project(can_set_project_access_mode)),
+    session: Uow = Depends(get_session),
+):
+    return await project_service.set_access_mode(session, ctx.project, body.access_mode)
+
+
 @router.get("/{project_id}/tags", response_model=list[TagResponse])
 async def list_project_tags(ctx: ProjectContext = Depends(get_project_context)):
     return ctx.project.tags
@@ -75,10 +93,10 @@ async def list_project_tags(ctx: ProjectContext = Depends(get_project_context)):
 async def attach_project_tag(
     tag_id: uuid.UUID = Body(embed=True),
     ctx: ProjectContext = Depends(require_project(can_manage_project_tags)),
-    principal: Principal = Depends(require_org_member),
+    _principal: Principal = Depends(require_org_member),
     session: Uow = Depends(get_session),
 ):
-    return await tag_service.attach_project_tag(session, principal, ctx.project, tag_id)
+    return await tag_service.attach_project_tag(session, ctx.project, tag_id)
 
 
 @router.delete("/{project_id}/tags/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)

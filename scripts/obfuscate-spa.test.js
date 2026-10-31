@@ -53,7 +53,15 @@ function makeFixture() {
   return root;
 }
 
-test('preserves ES-module export/import names while scrambling locals and strings', () => {
+let hasObfuscator = true;
+try {
+  require.resolve('javascript-obfuscator');
+} catch {
+  hasObfuscator = false;
+}
+const skipWithoutObfuscator = hasObfuscator ? false : 'javascript-obfuscator not installed';
+
+test('preserves ES-module export/import names while scrambling locals and strings', { skip: skipWithoutObfuscator }, () => {
   // Arrange
   const src = makeFixture();
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'spa-obf-out-'));
@@ -72,7 +80,7 @@ test('preserves ES-module export/import names while scrambling locals and string
   assert.doesNotMatch(board, /secretLabel/, 'local identifier renamed');
 });
 
-test('copies non-JS assets and vendor code verbatim', () => {
+test('copies non-JS assets and vendor code verbatim', { skip: skipWithoutObfuscator }, () => {
   // Arrange
   const src = makeFixture();
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'spa-obf-out-'));
@@ -92,7 +100,7 @@ test('copies non-JS assets and vendor code verbatim', () => {
   assert.equal(fs.readFileSync(path.join(out, 'vendor', 'lib.js'), 'utf8'), 'export const VENDOR = 1;\n');
 });
 
-test('obfuscated module is still executable and behaviourally identical', async () => {
+test('obfuscated module is still executable and behaviourally identical', { skip: skipWithoutObfuscator }, async () => {
   // Arrange
   const src = makeFixture();
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'spa-obf-out-'));
@@ -105,7 +113,7 @@ test('obfuscated module is still executable and behaviourally identical', async 
   assert.deepEqual(mod.add(2, 3), { tag: 'sum', value: 5 });
 });
 
-test('obfuscated build preserves a native dynamic-import module edge', async () => {
+test('obfuscated build preserves a native dynamic-import module edge', { skip: skipWithoutObfuscator }, async () => {
   // This mirrors route-level code splitting in the browser: the entry module
   // is obfuscated independently, then resolves another obfuscated file at run
   // time using its unchanged relative specifier.
@@ -118,7 +126,7 @@ test('obfuscated build preserves a native dynamic-import module edge', async () 
   assert.deepEqual(await entry.lazyAdd(20, 22), { tag: 'sum', value: 42 });
 });
 
-test('in-place mode rewrites source files without a copy', () => {
+test('in-place mode rewrites source files without a copy', { skip: skipWithoutObfuscator }, () => {
   // Arrange
   const src = makeFixture();
   const before = fs.readFileSync(path.join(src, 'js', 'dom.js'), 'utf8');
@@ -159,7 +167,7 @@ test('resolveStrength: flag > env var > default, and rejects unknown names', () 
   }
 });
 
-test('light leaves strings in clear text; balanced and maximum encode them', () => {
+test('light leaves strings in clear text; balanced and maximum encode them', { skip: skipWithoutObfuscator }, () => {
   const src = makeFixture();
   const readBoard = (strength) => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), `spa-obf-${strength}-`));
@@ -171,7 +179,7 @@ test('light leaves strings in clear text; balanced and maximum encode them', () 
   assert.doesNotMatch(readBoard('maximum'), /super-secret-endpoint/, 'maximum encodes strings');
 });
 
-test('maximum preset still produces an executable, correct module', async () => {
+test('maximum preset still produces an executable, correct module', { skip: skipWithoutObfuscator }, async () => {
   const src = makeFixture();
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'spa-obf-max-'));
   run({ src, out, inPlace: false, strength: 'maximum' });
@@ -179,6 +187,6 @@ test('maximum preset still produces an executable, correct module', async () => 
   assert.deepEqual(mod.add(2, 3), { tag: 'sum', value: 5 });
 });
 
-test('obfuscateCode surfaces a labelled error on invalid input', () => {
+test('obfuscateCode surfaces a labelled error on invalid input', { skip: skipWithoutObfuscator }, () => {
   assert.throws(() => obfuscateCode('const = = =;', 'broken.js', PRESETS.balanced), /Failed to obfuscate broken\.js/);
 });

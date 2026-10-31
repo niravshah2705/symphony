@@ -256,22 +256,51 @@ publish an initial version by running the **Publish Skills Bundle** workflow
 `packages/shared-core/src/agent/skills/**`. No `SKILLS_BUCKET` repo variable is
 required — the workflow derives the name from `GCP_PROJECT_ID`.
 
-## Inference demo (Ollama/vLLM, GCS + gcsfuse)
+## Hosted inference backends (Ollama/vLLM Gemma, GCS + gcsfuse)
 
-**This is a standalone demo/spike, not a fleet integration.** It stands up
-Cloud Run services running Ollama and (best-effort) vLLM, backed by a GCS
-model registry — but neither service is wired into
-`packages/shared-core/src/egress.js`, `services/proxy`, or any agent runtime.
-Nothing in the fleet routes real traffic here; it exists to be deployed and
-exercised on its own. Everything is gated behind its own toggle and defaults
-**off**, so an existing deployment that doesn't opt in creates nothing new.
+The inference backends are fleet services, not a demo: `laya-inference` and
+`clm-inference` route skills through an OpenAI-compatible endpoint configured
+entirely by environment variables. The default deployment runs Gemma on vLLM:
+
+| Service | Backend | Model |
+|---|---|---|
+| `laya-inference` | `inference-vllm` (`/v1/chat/completions`) | `google/gemma-3-1b-it` |
+| `clm-inference` | `inference-vllm-embed` (`/v1/embeddings`) | `google/embeddinggemma-300m` |
+| alternate (optional) | `inference-ollama` (`/v1/*`) | `gemma3:1b`, `embeddinggemma:300m` |
+
+**Env contract (Laya/CLM).** Both services read the same variables, so any
+OpenAI-compatible host works (Cloud Run vLLM, Ollama, or an external endpoint):
+
+| Variable | Meaning |
+|---|---|
+| `INFERENCE_BASE_URL` | Base URL **including `/v1`**. Empty → deterministic in-process fallback (no model call). |
+| `INFERENCE_API_KEY` | Bearer key. In Cloud Run it is injected from Secret Manager (`inference-api-key`). |
+| `INFERENCE_AUTH_MODE` | `bearer` (API key), `iam` (Cloud Run ID token — required for Ollama), or `none`. |
+| `INFERENCE_MODEL` | Laya model id (vLLM `--served-model-name` / Ollama tag). |
+| `INFERENCE_EMBEDDING_MODEL` | CLM embedding model id. |
+| `INFERENCE_TIMEOUT_MS` | Backend request timeout (default 2000). |
+
+Terraform sets these automatically from the deployed backend URIs when
+`inference_vllm_enabled` / `inference_vllm_embed_enabled` are on; override the
+URLs with `laya_inference_base_url` / `clm_inference_base_url` to point at an
+external host. The skill-router's client-side budget is separate: its default
+`SKILL_ROUTER_TIMEOUT_MS=150` is far below CPU model latency, so raise it
+(e.g. 3000) on the planner/coder when routing through these backends.
+
+> **Auth choice.** Cloud Run IAM and vLLM both use `Authorization: Bearer`, so
+> they cannot coexist on one request. The vLLM services therefore use
+> `INGRESS_TRAFFIC_INTERNAL_ONLY` + allow-unauthenticated invocation and rely
+> on the vLLM `--api-key` as the application gate. Ollama has no native key
+> support, so it stays Cloud Run IAM-gated (`INFERENCE_AUTH_MODE=iam`) with
+> `run.invoker` granted only to the Laya/CLM service accounts.
 
 **How it fits together**
 
 - **Manifest** — `deploy/models/manifest.json` lists which models to publish,
   one section per engine (`ollama.models[]` as `{name, tag}` Ollama pull
   strings; `vllm.models[]` as `{name, hfRepo, revision}` HuggingFace repos),
-  each with its own `version` (see `deploy/models/README.md`).
+  each with its own `version` (see `deploy/models/README.md`). Gemma repos are
+  HF-gated — set the `HF_TOKEN` repo secret.
 - **CI publish** — `.github/workflows/publish-models.yml` runs on any push
   touching `deploy/models/manifest.json` (or `workflow_dispatch`, optionally
   scoped to one engine). It authenticates via WIF, `ollama pull`s each
@@ -279,43 +308,30 @@ exercised on its own. Everything is gated behind its own toggle and defaults
   `gs://<bucket>/ollama/<version>/`, and downloads each manifest HF repo via
   `huggingface-cli` and mirrors it to `gs://<bucket>/vllm/<version>/<model>/`.
   It derives `<bucket>` from the `GCP_PROJECT_ID` repo variable the same way
-  Terraform does (`<project_id>-aifleet-models`) — no `MODELS_BUCKET` repo var
-  is needed unless overriding the default name.
+  Terraform does (`<project_id>-aifleet-models`).
 - **Mount** — `deploy/gcp/terraform/models.tf` **CREATES and owns** the bucket
-  (toggle with `var.models_enabled`, default `false`). Unlike the skills
-  bucket, model weights are GB-sized, so a `lifecycle_rule` ages out
-  noncurrent object versions after `var.models_bucket_ttl_days` (default 30).
-  `deploy/gcp/terraform/inference.tf` mounts it **read-only** via a gen2
-  **gcsfuse** volume at `/models` on the `inference-ollama` /
-  `inference-vllm` services (toggle each mount with `var.models_mount_enabled`,
-  toggle each *service* independently with `var.inference_ollama_enabled` /
-  `var.inference_vllm_enabled`).
+  (`var.models_enabled`, default `false`). Model weights are GB-sized, so a
+  `lifecycle_rule` ages out noncurrent object versions after
+  `var.models_bucket_ttl_days` (default 30). `inference.tf` mounts it
+  **read-only** via a gen2 **gcsfuse** volume at `/models` on the
+  `inference-ollama` / `inference-vllm` / `inference-vllm-embed` services
+  (`var.models_mount_enabled`; each service has its own `*_enabled` toggle).
 - **Version-pinned, served off local disk** — gcsfuse is a poor fit for
-  GGUF/safetensors' mmap/random-read pattern (the skills gcsfuse mount is
-  already documented above as failing a startup probe on a far smaller
-  payload), so each container's entrypoint copies its pinned version's models
-  from the read-only mount to local disk once at cold start, then serves
-  locally: Ollama reads `MODEL_VERSION` and copies `/models/ollama/<version>/`
-  before `ollama serve`; vLLM reads `MODEL_VERSION` + `MODEL_NAME` and copies
-  `/models/vllm/<version>/<name>/` before `vllm serve`
+  GGUF/safetensors' mmap/random-read pattern, so each container copies its
+  pinned version from the read-only mount to local disk once at cold start,
+  then serves locally: Ollama copies `/models/ollama/<version>/` before
+  `ollama serve`; vLLM copies `/models/vllm/<version>/<name>/` before
+  `vllm serve --api-key "$INFERENCE_API_KEY"`
   (`deploy/gcp/inference-vllm-entrypoint.sh`).
-- **Access** — both services are IAM-gated like planner/coder-control (no
-  `allUsers` invoker), but **no caller service account is granted
-  `roles/run.invoker`** — nothing in-fleet is meant to call them. To exercise
-  a deployed instance by hand:
-  ```
-  gcloud run services add-iam-policy-binding <service-name> \
-    --project <project> --region <region> \
-    --member="user:<you>@example.com" --role="roles/run.invoker"
-  gcloud run services proxy <service-name> --project <project> --region <region>
-  ```
-  then call the Ollama/vLLM OpenAI-compatible endpoint on `localhost` as
-  usual.
-- **Scale-to-zero, deliberately** — both services set
-  `min_instance_count = 0`. Combined with copying weights off gcsfuse on
-  every cold start, the first request after idle will be slow (multi-GB
-  copies + engine load time) — an accepted tradeoff for a demo. Revisit
-  (e.g. `min_instance_count = 1`) before any real integration.
+- **Scale-to-zero, deliberately** — all backends set
+  `min_instance_count = 0`. Combined with the local-disk copy, the first
+  request after idle is slow (multi-GB copies + engine load). Raise
+  `min_instance_count` (not currently parameterized) before latency-sensitive
+  production use.
+- **Secrets** — `inference-api-key` is a pre-existing Secret Manager secret
+  managed out-of-band (same posture as `stream-token-secret`); Terraform only
+  grants `secretAccessor` to Laya/CLM/vLLM. Create it with a version before
+  apply (see below).
 
 **vLLM is best-effort.** vLLM's published Docker image is CUDA-only; running
 it CPU-only means building from vLLM's own `docker/Dockerfile.cpu` source
@@ -330,16 +346,30 @@ directly before trusting it. There is no default image; `inference.tf` fails
 
 **Set-up (one-off, manual — no CD wiring)**
 
-1. `terraform apply -var=models_enabled=true -var=models_mount_enabled=true`
-   creates the bucket (mount stays empty until step 2).
-2. Run **Publish Model Registry** (`publish-models.yml`, `workflow_dispatch`)
-   once, or push a change to `deploy/models/manifest.json`.
-3. Ollama: `terraform apply -var=inference_ollama_enabled=true` — it uses the
-   public `ollama/ollama` image directly, no build step needed.
-4. vLLM (optional, best-effort): build + push the image per the callout
-   above, then `terraform apply -var=inference_vllm_enabled=true -var=inference_vllm_image=<your pushed tag>`.
-5. Grant yourself `roles/run.invoker` on whichever service you want to poke
-   at, per the **Access** bullet above.
+1. Create the key value (Terraform does not create the secret):
+   ```
+   printf %s "$(openssl rand -hex 32)" | \
+     gcloud secrets create inference-api-key --data-file=- --replication-policy=automatic
+   ```
+   If the secret already exists, add a version instead:
+   `... | gcloud secrets versions add inference-api-key --data-file=-`.
+2. `terraform apply -var=models_enabled=true -var=models_mount_enabled=true`
+   creates the bucket (mount stays empty until step 3).
+3. Run **Publish Model Registry** (`publish-models.yml`, `workflow_dispatch`)
+   once, or push a change to `deploy/models/manifest.json` (publishes `v2`).
+4. Build + push the vLLM CPU image per the callout above, then
+   `terraform apply -var=inference_vllm_enabled=true -var=inference_vllm_embed_enabled=true -var=inference_vllm_image=<your pushed tag>`.
+   Laya/CLM pick up the backend URLs + key automatically.
+5. Ollama (optional alternate engine):
+   `terraform apply -var=inference_ollama_enabled=true`, then point Laya/CLM
+   at it with `laya_inference_base_url=<ollama-url>/v1`,
+   `clm_inference_base_url=<ollama-url>/v1`, and
+   `laya_inference_auth_mode=iam` / `clm_inference_auth_mode=iam`; set
+   `laya_inference_model=gemma3:1b` and
+   `clm_inference_embedding_model=embeddinggemma:300m`.
+6. Verify: `curl -H "Authorization: Bearer $KEY" <vllm-url>/v1/models` (the
+   vLLM services are internal-only — use `gcloud run services proxy` or call
+   from a workload in the VPC).
 
 ## Roles & access control (RBAC)
 

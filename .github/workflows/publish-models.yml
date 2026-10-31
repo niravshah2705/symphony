@@ -1,10 +1,9 @@
-name: Publish Model Registry (Ollama/vLLM demo)
+name: Publish Model Registry (Gemma backends)
 
-# STANDALONE DEMO — publishes model weights for the inference-ollama /
-# inference-vllm Cloud Run services (deploy/gcp/terraform/inference.tf), which
-# are NOT wired into the fleet's egress proxy or any agent runtime (see that
-# file's header comment). This workflow is not part of the main deploy.yml CD
-# pipeline.
+# Publishes model weights for the inference-ollama / inference-vllm /
+# inference-vllm-embed Cloud Run services (deploy/gcp/terraform/inference.tf)
+# that back Laya and CLM. Separate from the main deploy.yml CD pipeline because
+# weights are versioned and published rarely.
 #
 # Publishes deploy/models/manifest.json's model list to the GCS model registry
 # as VERSIONED bundles, one prefix per engine:
@@ -17,7 +16,7 @@ name: Publish Model Registry (Ollama/vLLM demo)
 # var.models_bucket_name). inference.tf mounts that bucket read-only via
 # gcsfuse and PINS a version per engine (var.ollama_model_version /
 # var.vllm_model_version), so publishing a new version never disturbs an
-# older pinned deployment. See docs/GCP_DEPLOY.md ("Inference demo").
+# older pinned deployment. See docs/GCP_DEPLOY.md ("Hosted inference backends").
 #
 # Auth is keyless via Workload Identity Federation (same provider/SA as
 # deploy.yml / publish-skills.yml).

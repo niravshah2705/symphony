@@ -41,3 +41,45 @@ test('shared account with no user identity exposes nothing granular (safe defaul
   const anon = billingRoute.scopedUsageRecords({ orgId: SHARED_ORG_ID, userId: null });
   assert.equal(anon.length, 0);
 });
+
+test('autoRecharge configuration preserves cashfree fields and calculates threshold', () => {
+  store.upsertBillingAccount('org-test-ar', {
+    autoRecharge: {
+      enabled: true,
+      mode: 'percentage',
+      thresholdPercent: 25,
+      thresholdPaise: 0,
+      amountPaise: 50000,
+      cashfreeSubscriptionId: 'sub_test_123',
+      paymentMethodType: 'upi_autopay',
+    },
+  });
+  const account = store.getBillingAccount('org-test-ar');
+  assert.equal(account.autoRecharge.enabled, true);
+  assert.equal(account.autoRecharge.mode, 'percentage');
+  assert.equal(account.autoRecharge.thresholdPercent, 25);
+  assert.equal(account.autoRecharge.cashfreeSubscriptionId, 'sub_test_123');
+  assert.equal(account.autoRecharge.paymentMethodType, 'upi_autopay');
+});
+
+test('billing paymentInfo is stored and returned', () => {
+  store.upsertBillingAccount('org-test-pi', {
+    paymentInfo: {
+      billingName: 'Gateway Test Org',
+      billingEmail: 'admin@gatewaytest.com',
+      billingPhone: '9876543210',
+      taxId: '27AABCU9603R1ZM',
+      billingAddress: {
+        line1: '123 Tech Park',
+        city: 'Bengaluru',
+        state: 'KA',
+        postalCode: '560001',
+        country: 'IN',
+      },
+    },
+  });
+  const account = store.getBillingAccount('org-test-pi');
+  assert.equal(account.paymentInfo.billingName, 'Gateway Test Org');
+  assert.equal(account.paymentInfo.taxId, '27AABCU9603R1ZM');
+  assert.equal(account.paymentInfo.billingAddress.city, 'Bengaluru');
+});

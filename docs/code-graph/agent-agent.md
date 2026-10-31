@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 424 nodes
+Community of 432 nodes
 
-- **Size**: 424 nodes
-- **Cohesion**: 0.2900
+- **Size**: 432 nodes
+- **Cohesion**: 0.2887
 - **Dominant Language**: javascript
 
 ## Members
@@ -28,11 +28,11 @@ Community of 424 nodes
 | activeRepositoryBranch | Function | ./packages/shared/src/agent/coder.js | 95-99 |
 | activeRepositoryArtifactReceipt | Function | ./packages/shared/src/agent/coder.js | 101-104 |
 | resolvePlannedRepository | Function | ./packages/shared/src/agent/coder.js | 111-142 |
-| executeCodingRuntime | Function | ./packages/shared/src/agent/coder.js | 149-260 |
-| runCoderLocal | Function | ./packages/shared/src/agent/coder.js | 267-321 |
-| runCoder | Function | ./packages/shared/src/agent/coder.js | 329-336 |
-| runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 344-451 |
-| runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 454-472 |
+| executeCodingRuntime | Function | ./packages/shared/src/agent/coder.js | 149-277 |
+| runCoderLocal | Function | ./packages/shared/src/agent/coder.js | 284-338 |
+| runCoder | Function | ./packages/shared/src/agent/coder.js | 346-353 |
+| runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 361-468 |
+| runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 471-489 |
 | installSkills | Function | ./packages/shared/src/agent/framework.js | 52-86 |
 | validateSkillName | Function | ./packages/shared/src/agent/framework.js | 88-100 |
 | trackedSkillPaths | Function | ./packages/shared/src/agent/framework.js | 102-113 |
@@ -46,10 +46,10 @@ Community of 424 nodes
 | cleanup | Function | ./packages/shared/src/agent/framework.js | 206-206 |
 | buildAgent | Function | ./packages/shared/src/agent/framework.js | 211-213 |
 | configuredResourceNames | Function | ./packages/shared/src/agent/framework.js | 223-232 |
-| runWorkflow | Function | ./packages/shared/src/agent/framework.js | 240-349 |
-| contentToText | Function | ./packages/shared/src/agent/framework.js | 352-356 |
-| messageText | Function | ./packages/shared/src/agent/framework.js | 365-371 |
-| lastText | Function | ./packages/shared/src/agent/framework.js | 373-376 |
+| runWorkflow | Function | ./packages/shared/src/agent/framework.js | 240-366 |
+| contentToText | Function | ./packages/shared/src/agent/framework.js | 369-373 |
+| messageText | Function | ./packages/shared/src/agent/framework.js | 382-388 |
+| lastText | Function | ./packages/shared/src/agent/framework.js | 390-393 |
 | withSkillsEnv | Function | ./packages/shared/src/agent/framework.test.js | 26-38 |
 | test:installSkills refuses a symbolic-link destination without writing outside the root@L40 | Test | ./packages/shared/src/agent/framework.test.js | 40-56 |
 | test:installSkills refuses tracked project-owned .agent-skills files@L58 | Test | ./packages/shared/src/agent/framework.test.js | 58-73 |
@@ -65,14 +65,14 @@ Community of 424 nodes
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
 
-*... and 374 more members.*
+*... and 382 more members.*
 
 ## Execution Flows
 
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
-- **startScheduler** (criticality: 0.66, depth: 6)
 - **generatePlan** (criticality: 0.66, depth: 4)
+- **startScheduler** (criticality: 0.66, depth: 6)
 - **runCoder** (criticality: 0.65, depth: 5)
 - **runPlannedCoder** (criticality: 0.65, depth: 5)
 - **executeClaude** (criticality: 0.61, depth: 2)
@@ -82,15 +82,15 @@ Community of 424 nodes
 
 ### Outgoing
 
-- `equal` (251 edge(s))
-- `join` (140 edge(s))
+- `equal` (259 edge(s))
+- `join` (142 edge(s))
 - `String` (86 edge(s))
 - `includes` (76 edge(s))
 - `deepEqual` (52 edge(s))
+- `isArray` (51 edge(s))
 - `strictEqual` (50 edge(s))
-- `isArray` (48 edge(s))
 - `trim` (45 edge(s))
-- `map` (42 edge(s))
+- `map` (43 edge(s))
 - `slice` (39 edge(s))
 - `endsWith` (39 edge(s))
 - `execFileSync` (37 edge(s))
@@ -100,10 +100,10 @@ Community of 424 nodes
 
 ### Incoming
 
-- `equal` (250 edge(s))
+- `equal` (258 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
 - `join` (65 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (56 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (57 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
 - `strictEqual` (50 edge(s))
 - `deepEqual` (50 edge(s))

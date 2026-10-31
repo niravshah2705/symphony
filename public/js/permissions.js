@@ -35,6 +35,11 @@ export const MENU_PERMISSIONS = Object.freeze({
 export const DEFAULT_PUBLIC_ROUTE = 'agent';
 const AUTHENTICATED_ONLY_ROUTES = new Set(['agent-jobs']);
 
+// Surfaces removed from the default sidebar. They stay reachable (nav + direct
+// links) only for requests that opt in with `x-ai-fleet-deprecated: true`,
+// which the gateway echoes as `deprecatedUiEnabled` (request-context.js).
+export const DEPRECATED_ROUTES = new Set(['business', 'board', 'identity', 'agent-jobs']);
+
 const LEVEL_RANK = { read: 1, write: 2 };
 
 export function permitted(permissions, domain, level) {
@@ -49,4 +54,11 @@ export function canAccessRoute(session, route) {
   const need = MENU_PERMISSIONS[route];
   if (!need) return true; // routes without an entry are not permission-gated
   return permitted(permissions, need.domain, need.level);
+}
+
+// Sidebar visibility: permission check plus the deprecated-tabs opt-in. Direct
+// links keep working (canAccessRoute above) so bookmarks don't break.
+export function menuRouteVisible(session, route) {
+  if (DEPRECATED_ROUTES.has(route) && !session?.deprecatedUiEnabled) return false;
+  return canAccessRoute(session, route);
 }

@@ -30,14 +30,23 @@ from app.repositories.org_repo import OrgRepository
 from app.schemas.common import Page, PageParams
 from app.schemas.me import (
     CreateOrgRequest,
+    LinkedIdentityResponse,
+    LinkIdentityRequest,
     MeContextResponse,
     MeDeploymentResponse,
     MeResponse,
+    PendingInvitationResponse,
+    PersonaUpdate,
     PersonalProjectResponse,
 )
 from app.schemas.org import OrgResponse
 from app.schemas.project import ProjectCreate, ProjectUpdate
-from app.services import context_service, onboarding_service, personal_project_service
+from app.services import (
+    context_service,
+    me_service,
+    onboarding_service,
+    personal_project_service,
+)
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -51,10 +60,51 @@ async def get_me(
         user_id=user.id,
         email=user.email,
         full_name=user.full_name,
+        persona=user.persona,
         has_organization=principal.org_id is not None,
         org_id=principal.org_id,
         org_role=principal.org_role.value if principal.org_id is not None else None,
     )
+
+
+@router.put("/persona", response_model=MeResponse)
+async def set_my_persona(
+    body: PersonaUpdate,
+    user: User = Depends(get_current_user),
+    principal: Principal = Depends(get_principal),
+    session: Uow = Depends(get_session),
+):
+    updated = await me_service.set_persona(session, user, body.persona)
+    return MeResponse(
+        user_id=updated.id,
+        email=updated.email,
+        full_name=updated.full_name,
+        persona=updated.persona,
+        has_organization=principal.org_id is not None,
+        org_id=principal.org_id,
+        org_role=principal.org_role.value if principal.org_id is not None else None,
+    )
+
+
+@router.get("/pending-invitations", response_model=list[PendingInvitationResponse])
+async def list_my_pending_invitations(
+    user: User = Depends(get_current_user),
+    session: Uow = Depends(get_session),
+):
+    return await me_service.list_pending_invitations(session, user)
+
+
+@router.post(
+    "/linked-identities",
+    response_model=LinkedIdentityResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def link_my_identity(
+    body: LinkIdentityRequest,
+    user: User = Depends(get_current_user),
+    session: Uow = Depends(get_session),
+):
+    return await me_service.link_identity(session, user, body.token)
 
 
 @router.get("/context", response_model=MeContextResponse)

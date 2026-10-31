@@ -38,6 +38,7 @@ function buildCfg(projectNumber) {
     sharedSettingsUrl: CONFIG.SERVICES.settingsUrl,
     streamTokenServiceUrl: process.env.STREAM_TOKEN_SERVICE_URL || '',
     spaOrigin: (CONFIG.GCP.spaOrigins && CONFIG.GCP.spaOrigins[0]) || '',
+    customDomain: CONFIG.GCP.customDomain || '',
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID || CONFIG.GCP.projectId,
     firebaseApiKey: process.env.FIREBASE_API_KEY || '',
     deadLetterTopic: process.env.PUBSUB_DEADLETTER_TOPIC || 'agent-requests-deadletter',

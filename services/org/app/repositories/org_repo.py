@@ -15,6 +15,7 @@ from app.repositories.base import (
     INVITATION_TOKENS,
     ORGS,
     PENDING_INVITATIONS,
+    PROJECT_OWNER_INDEX,
     USERS,
     USER_ORG_LOCKS,
     invitations_col,
@@ -25,7 +26,10 @@ from app.repositories.base import (
     tags_col,
     tasks_col,
 )
+from app.repositories import email_index
 from app.repositories.invitation_repo import pending_guard_id
+from app.repositories.project_external_grant_repo import cleanup_project_external_grants
+from app.repositories.project_invitation_repo import cleanup_project_invitations
 from app.repositories.organization_membership_repo import OrganizationMembershipRepository
 from app.repositories.user_repo import UserRepository
 from app.repositories.tag_repo import load_tags
@@ -67,7 +71,11 @@ class OrgRepository:
         db = self.uow.db
         oid = org.id
         for project in await db.query(projects_col(oid)):
-            await _delete_all(db, tasks_col(oid, project["id"]))
+            pid = uuid.UUID(project["id"])
+            await _delete_all(db, tasks_col(oid, pid))
+            await cleanup_project_invitations(db, oid, pid)
+            await cleanup_project_external_grants(db, oid, pid)
+            await db.delete(PROJECT_OWNER_INDEX, project["id"])
             await db.delete(projects_col(oid), project["id"])
         await _delete_all(db, memberships_col(oid))
         await _delete_all(db, tags_col(oid))
@@ -103,6 +111,7 @@ class OrgRepository:
             email = invitation.get("email")
             if email:
                 await db.delete(PENDING_INVITATIONS, pending_guard_id(oid, email))
+                await email_index.remove_direct(db, email, invitation.get("id"))
             await db.delete(invitations_col(oid), invitation["id"])
         for user_id in member_user_ids:
             lock = await db.get(USER_ORG_LOCKS, str(user_id))

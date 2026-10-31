@@ -12,14 +12,41 @@ function boundedId(value) {
   return /^[A-Za-z0-9._:-]+$/.test(id) ? id : '';
 }
 
+function normalizeTags(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((tag) => {
+      if (typeof tag === 'string') {
+        const name = boundedText(tag, 160);
+        return name ? { name } : null;
+      }
+      if (tag && typeof tag === 'object' && !Array.isArray(tag)) {
+        const id = boundedId(tag.id || tag.tag_id);
+        const name = boundedText(tag.name || tag.tag_name, 160);
+        if (!name && !id) return null;
+        return {
+          id: id || null,
+          name: name || id,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
 function normalizeProject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const id = boundedId(value.id || value.project_id);
   if (!id) return null;
+  const tags = normalizeTags(value.tags || value.applied_tags);
+  const tagNames = tags.map((t) => t.name.toLowerCase());
+  const isDefault = tagNames.includes('default=true') || value.name === 'default';
   return {
     id,
     name: boundedText(value.name || value.project_name) || id,
     role: boundedText(value.role, 80),
+    tags,
+    isDefault,
   };
 }
 
@@ -35,11 +62,19 @@ function normalizeOrganization(value) {
       seen.add(project.id);
       return true;
     });
+  const tags = normalizeTags(value.tags || value.applied_tags);
+  const tagNames = tags.map((t) => t.name.toLowerCase());
+  const isDefault = tagNames.includes('default=true') || value.name === 'default';
   return {
     id,
     name: boundedText(value.name || value.org_name || value.organization_name) || id,
     role: boundedText(value.role, 80),
+    // Parent org id for sub-org hierarchy (null for top-level orgs). Lets the
+    // account picker render a "sub-org of X" hint when the parent is also listed.
+    parentOrgId: boundedId(value.parent_org_id || value.parentOrgId) || null,
     projects,
+    tags,
+    isDefault,
   };
 }
 
@@ -57,6 +92,9 @@ export function normalizeWorkspaceContext(payload, fallbackUser = {}) {
       sourceUser.full_name || sourceUser.name || sourceUser.display_name ||
       fallbackUser.full_name || fallbackUser.name || fallbackUser.displayName
     ),
+    // Self-declared actor persona (ENGINEER / CLIENT / ORG_MANAGER); null until
+    // captured at onboarding. Drives persona-aware UI (e.g. client brainstorm-only).
+    persona: boundedText(sourceUser.persona || fallbackUser.persona, 40) || null,
   };
   const seen = new Set();
   const organizations = (Array.isArray(body.organizations)

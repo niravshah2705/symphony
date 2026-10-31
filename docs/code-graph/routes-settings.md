@@ -7,7 +7,7 @@
 Community of 3 nodes
 
 - **Size**: 3 nodes
-- **Cohesion**: 0.0769
+- **Cohesion**: 0.0741
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,7 +16,7 @@ Community of 3 nodes
 |------|------|------|-------|
 | settingsMatchTier | Function | ./services/planner/src/routes/settings.js | 70-74 |
 | effectiveComplexityTier | Function | ./services/planner/src/routes/settings.js | 77-80 |
-| publicSettings | Function | ./services/planner/src/routes/settings.js | 134-269 |
+| publicSettings | Function | ./services/planner/src/routes/settings.js | 134-272 |
 
 ## Execution Flows
 
@@ -26,9 +26,9 @@ No execution flows pass through this community.
 
 ### Outgoing
 
+- `Boolean` (2 edge(s))
 - `getSettings` (1 edge(s))
 - `includes` (1 edge(s))
-- `Boolean` (1 edge(s))
 - `normalizeAgentRuntime` (1 edge(s))
 - `normalizeWorkflowPattern` (1 edge(s))
 - `isFinite` (1 edge(s))

@@ -21,6 +21,8 @@ locals {
     "firebase.googleapis.com",
     "firebasehosting.googleapis.com",
     "identitytoolkit.googleapis.com",
+    # Cloud SQL for PostgreSQL — the agent memory store (memory.tf).
+    "sqladmin.googleapis.com",
   ]
 }
 

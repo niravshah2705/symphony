@@ -14,7 +14,7 @@ Community of 4 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| scopedUsageRecords | Function | ./services/gateway/src/routes/billing.js | 80-89 |
+| scopedUsageRecords | Function | ./services/gateway/src/routes/billing.js | 81-90 |
 | test:scopedUsageRecords returns only the caller org’s records (cross-tenant isolation)@L26 | Test | ./services/gateway/src/routes/billing.test.js | 26-32 |
 | test:shared account scopes drill-down to the caller’s own user (no cross-personal leak)@L34 | Test | ./services/gateway/src/routes/billing.test.js | 34-38 |
 | test:shared account with no user identity exposes nothing granular (safe default)@L40 | Test | ./services/gateway/src/routes/billing.test.js | 40-43 |

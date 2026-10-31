@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 164 nodes
+Community of 163 nodes
 
-- **Size**: 164 nodes
-- **Cohesion**: 0.3040
+- **Size**: 163 nodes
+- **Cohesion**: 0.3062
 - **Dominant Language**: javascript
 
 ## Members
@@ -49,7 +49,6 @@ Community of 164 nodes
 | command | Function | ./packages/shared/src/agent/pipeline-stage-execution-store.test.js | 23-41 |
 | result | Function | ./packages/shared/src/agent/pipeline-stage-execution-store.test.js | 43-53 |
 | test:memory store claims once and replays the exact durable completion@L55 | Test | ./packages/shared/src/agent/pipeline-stage-execution-store.test.js | 55-71 |
-| test:expired execution lease fails safe to a durable unknown-outcome result without reacquisition@L73 | Test | ./packages/shared/src/agent/pipeline-stage-execution-store.test.js | 73-96 |
 | test:local file store replays a completion after a new store instance starts@L98 | Test | ./packages/shared/src/agent/pipeline-stage-execution-store.test.js | 98-113 |
 | test:Firestore store transactionally replays a completion across worker instances@L115 | Test | ./packages/shared/src/agent/pipeline-stage-execution-store.test.js | 115-145 |
 | test:production worker store refuses non-Firestore durability@L147 | Test | ./packages/shared/src/agent/pipeline-stage-execution-store.test.js | 147-155 |
@@ -64,8 +63,9 @@ Community of 164 nodes
 | artifactFromResult | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 52-67 |
 | sameArtifact | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 69-71 |
 | preflightDecisionDigest | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 73-79 |
+| evidencePayload | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 81-98 |
 
-*... and 114 more members.*
+*... and 113 more members.*
 
 ## Execution Flows
 
@@ -75,10 +75,10 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (104 edge(s))
+- `equal` (100 edge(s))
 - `String` (40 edge(s))
 - `join` (33 edge(s))
-- `deepEqual` (29 edge(s))
+- `deepEqual` (28 edge(s))
 - `trim` (26 edge(s))
 - `push` (16 edge(s))
 - `toLowerCase` (15 edge(s))
@@ -86,17 +86,17 @@ No execution flows pass through this community.
 - `stringify` (13 edge(s))
 - `parse` (11 edge(s))
 - `includes` (11 edge(s))
-- `claim` (11 edge(s))
 - `existsSync` (10 edge(s))
 - `throws` (10 edge(s))
 - `slice` (10 edge(s))
+- `rejects` (10 edge(s))
 
 ### Incoming
 
-- `equal` (104 edge(s))
+- `equal` (100 edge(s))
 - `./packages/shared/src/agent/pipeline-stage-runtime.js` (46 edge(s))
 - `./packages/shared/src/agent/tools/environments.js` (35 edge(s))
-- `deepEqual` (29 edge(s))
+- `deepEqual` (28 edge(s))
 - `./packages/shared/src/agent/tools/exec.js` (26 edge(s))
 - `./packages/shared/src/agent/pipeline-stage-service.js` (21 edge(s))
 - `./packages/shared/src/agent/pipeline-stage-execution-store.js` (20 edge(s))
@@ -106,5 +106,5 @@ No execution flows pass through this community.
 - `./packages/shared/src/agent/pipeline-stage-service.test.js` (14 edge(s))
 - `./packages/shared/src/agent/tools/security.js` (11 edge(s))
 - `./packages/shared/src/agent/tools/exec.test.js` (11 edge(s))
-- `claim` (10 edge(s))
 - `throws` (10 edge(s))
+- `rejects` (10 edge(s))

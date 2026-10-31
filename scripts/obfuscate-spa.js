@@ -37,7 +37,23 @@
 
 const fs = require('fs');
 const path = require('path');
-const JavaScriptObfuscator = require('javascript-obfuscator');
+
+let JavaScriptObfuscator;
+function getObfuscator() {
+  if (!JavaScriptObfuscator) {
+    try {
+      JavaScriptObfuscator = require('javascript-obfuscator');
+    } catch (err) {
+      if (err && err.code === 'MODULE_NOT_FOUND') {
+        const error = new Error("javascript-obfuscator is not installed. Run 'npm install' to install it.");
+        error.code = 'MODULE_NOT_FOUND';
+        throw error;
+      }
+      throw err;
+    }
+  }
+  return JavaScriptObfuscator;
+}
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
@@ -166,7 +182,7 @@ function collectJsFiles(dir) {
  */
 function obfuscateCode(code, label, options) {
   try {
-    return JavaScriptObfuscator.obfuscate(code, options).getObfuscatedCode();
+    return getObfuscator().obfuscate(code, options).getObfuscatedCode();
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to obfuscate ${label}: ${reason}`);

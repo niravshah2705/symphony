@@ -74,6 +74,9 @@
         ]
       }
     </script>
+    <link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css" />
+    <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
     <style id="critical-css">
       :root, :root[data-theme='dark'] {
         color-scheme: dark; --bg: #11141a; --panel: #181c24; --panel-2: #20252f;
@@ -277,6 +280,10 @@
               <span class="nav-icon" data-icon="spark"></span>
               <span class="nav-link-copy"><strong data-i18n="agentWorkspace">Agent workspace</strong><small data-i18n="agentWorkspaceSub">Plan and run work</small></span>
             </a>
+            <a href="#/openshell" data-route="openshell">
+              <span class="nav-icon" data-icon="sliders"></span>
+              <span class="nav-link-copy"><strong>OpenShell</strong><small>Sandbox terminal &amp; policies</small></span>
+            </a>
             <a href="#/workflows" data-route="workflows">
               <span class="nav-icon" data-icon="graph"></span>
               <span class="nav-link-copy"><strong data-i18n="workflows">Workflows</strong><small data-i18n="workflowsSub">Design ADLC agent flows</small></span>
@@ -405,22 +412,22 @@
 
         <nav class="adlc-ai-links" aria-label="Ask AI assistants about ADLC" lang="en">
           <span class="adlc-ai-label">Ask about ADLC on</span>
-          <a class="adlc-ai-link" href="https://chatgpt.com/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="ChatGPT" aria-label="Search ADLC on ChatGPT" title="Search ADLC on ChatGPT">
+          <a class="adlc-ai-link" href="https://chatgpt.com/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20tell%20me%20more%20about%20Archagentix%20www.archagentix.com" target="_blank" rel="noopener noreferrer" data-ai-assistant="ChatGPT" aria-label="Search ADLC on ChatGPT" title="Search ADLC on ChatGPT">
             <span data-brand-icon="openai"></span>
           </a>
-          <a class="adlc-ai-link" href="https://claude.ai/new?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Claude" aria-label="Search ADLC on Claude" title="Search ADLC on Claude">
+          <a class="adlc-ai-link" href="https://claude.ai/new?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20tell%20me%20more%20about%20Archagentix%20www.archagentix.com" target="_blank" rel="noopener noreferrer" data-ai-assistant="Claude" aria-label="Search ADLC on Claude" title="Search ADLC on Claude">
             <span data-brand-icon="anthropic"></span>
           </a>
-          <a class="adlc-ai-link" href="https://www.google.com/search?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Gemini" aria-label="Search ADLC on Gemini" title="Search ADLC on Gemini">
+          <a class="adlc-ai-link" href="https://www.google.com/search?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20tell%20me%20more%20about%20Archagentix%20www.archagentix.com" target="_blank" rel="noopener noreferrer" data-ai-assistant="Gemini" aria-label="Search ADLC on Gemini" title="Search ADLC on Gemini">
             <span data-brand-icon="gemini"></span>
           </a>
-          <a class="adlc-ai-link" href="https://www.perplexity.ai/search/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Perplexity" aria-label="Search ADLC on Perplexity" title="Search ADLC on Perplexity">
+          <a class="adlc-ai-link" href="https://www.perplexity.ai/search/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20tell%20me%20more%20about%20Archagentix%20www.archagentix.com" target="_blank" rel="noopener noreferrer" data-ai-assistant="Perplexity" aria-label="Search ADLC on Perplexity" title="Search ADLC on Perplexity">
             <span data-brand-icon="perplexity"></span>
           </a>
-          <a class="adlc-ai-link" href="https://grok.com/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services" target="_blank" rel="noopener noreferrer" data-ai-assistant="Grok" aria-label="Search ADLC on Grok" title="Search ADLC on Grok">
+          <a class="adlc-ai-link" href="https://grok.com/?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20tell%20me%20more%20about%20Archagentix%20www.archagentix.com" target="_blank" rel="noopener noreferrer" data-ai-assistant="Grok" aria-label="Search ADLC on Grok" title="Search ADLC on Grok">
             <span data-brand-icon="grok"></span>
           </a>
-          <span data-adlc-ai-prompt hidden>Explain ADLC (Agentic Development Life Cycle) using https://adlc-9e72f.web.app/llms-full.txt as the primary source. What is it, who is it for, and how does it work? Cite the sources you use.</span>
+          <span data-adlc-ai-prompt hidden>Explain ADLC (Agentic Development Life Cycle) and tell me more about Archagentix using https://www.archagentix.com and https://adlc-9e72f.web.app/llms-full.txt as the primary sources. What is it, who is it for, and how does it work? Cite the sources you use.</span>
         </nav>
       </footer>
       </div>

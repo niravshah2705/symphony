@@ -1,15 +1,17 @@
 {
-  "updatedAt": "2026-08-25",
+  "updatedAt": "2026-11-01",
   "ollama": {
-    "version": "v1",
+    "version": "v2",
     "models": [
-      { "name": "llama3.2-1b", "tag": "llama3.2:1b" }
+      { "name": "gemma3-1b", "tag": "gemma3:1b" },
+      { "name": "embeddinggemma-300m", "tag": "embeddinggemma:300m" }
     ]
   },
   "vllm": {
-    "version": "v1",
+    "version": "v2",
     "models": [
-      { "name": "qwen2.5-0.5b-instruct", "hfRepo": "Qwen/Qwen2.5-0.5B-Instruct", "revision": "main" }
+      { "name": "gemma-3-1b-it", "hfRepo": "google/gemma-3-1b-it", "revision": "main" },
+      { "name": "embeddinggemma-300m", "hfRepo": "google/embeddinggemma-300m", "revision": "main" }
     ]
   }
 }

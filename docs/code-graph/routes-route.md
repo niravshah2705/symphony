@@ -4,23 +4,22 @@
 
 ## Overview
 
-Community of 7 nodes
+Community of 6 nodes
 
-- **Size**: 7 nodes
-- **Cohesion**: 0.2660
+- **Size**: 6 nodes
+- **Cohesion**: 0.2903
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| routeHandler | Function | ./services/planner/src/routes/settings.complexity.test.js | 15-21 |
-| invoke | Function | ./services/planner/src/routes/settings.complexity.test.js | 23-37 |
-| withRouter | Function | ./services/planner/src/routes/settings.complexity.test.js | 39-58 |
-| test:planner PUT /complexity applies a tier to every task role and records history@L60 | Test | ./services/planner/src/routes/settings.complexity.test.js | 60-91 |
-| test@L90 | Test | ./services/planner/src/routes/settings.complexity.test.js | 90-90 |
-| test:PUT /complexity rejects an unknown tier without writing history@L93 | Test | ./services/planner/src/routes/settings.complexity.test.js | 93-99 |
-| test:GET settings reports the stored tier only while it still matches (else custom)@L101 | Test | ./services/planner/src/routes/settings.complexity.test.js | 101-117 |
+| routeHandler | Function | ./services/planner/src/routes/settings.credentials.test.js | 8-14 |
+| invoke | Function | ./services/planner/src/routes/settings.credentials.test.js | 16-30 |
+| withRouter | Function | ./services/planner/src/routes/settings.credentials.test.js | 32-53 |
+| test:public planner settings never derive credential state from legacy plaintext store fields@L55 | Test | ./services/planner/src/routes/settings.credentials.test.js | 55-63 |
+| test:legacy planner credential routes and integration fields fail explicitly without writes@L65 | Test | ./services/planner/src/routes/settings.credentials.test.js | 65-81 |
+| test:planner integration route still accepts non-secret provider and repository choices@L83 | Test | ./services/planner/src/routes/settings.credentials.test.js | 83-96 |
 
 ## Execution Flows
 
@@ -30,31 +29,28 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (17 edge(s))
-- `require` (3 edge(s))
-- `find` (2 edge(s))
-- `ok` (2 edge(s))
+- `equal` (7 edge(s))
+- `toUpperCase` (2 edge(s))
+- `deepEqual` (2 edge(s))
 - `handler` (1 edge(s))
 - `catch` (1 edge(s))
 - `reject` (1 edge(s))
-- `toUpperCase` (1 edge(s))
-- `settingsPatchForTier` (1 edge(s))
-- `getState` (1 edge(s))
-- `publicCatalog` (1 edge(s))
-- `round` (1 edge(s))
+- `find` (1 edge(s))
+- `ok` (1 edge(s))
+- `match` (1 edge(s))
+- `includes` (1 edge(s))
 - `stringify` (1 edge(s))
-- `resolve` (1 edge(s))
 - `originalGet` (1 edge(s))
+- `push` (1 edge(s))
+- `assign` (1 edge(s))
+- `resolve` (1 edge(s))
 
 ### Incoming
 
-- `equal` (17 edge(s))
-- `./services/planner/src/routes/settings.complexity.test.js` (6 edge(s))
-- `require` (2 edge(s))
-- `settingsPatchForTier` (1 edge(s))
-- `getState` (1 edge(s))
-- `ok` (1 edge(s))
-- `find` (1 edge(s))
-- `publicCatalog` (1 edge(s))
-- `round` (1 edge(s))
+- `equal` (7 edge(s))
+- `./services/planner/src/routes/settings.credentials.test.js` (6 edge(s))
+- `deepEqual` (2 edge(s))
+- `toUpperCase` (1 edge(s))
+- `match` (1 edge(s))
+- `includes` (1 edge(s))
 - `stringify` (1 edge(s))

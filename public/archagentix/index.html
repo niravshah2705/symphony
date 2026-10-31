@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ArchAgentix — LLM Benchmarks, Costs, Rate Limits & Evaluator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="navbar">
+    <div class="logo">
+      <span class="brand">ArchAgentix</span>
+      <span class="badge">Model Intelligence</span>
+    </div>
+    <nav class="nav-links">
+      <a href="#benchmarks" class="active">Benchmarks & Rank</a>
+      <a href="#providers">Provider Matrix</a>
+      <a href="#evaluator">Interactive Evaluator</a>
+      <a href="#slm-chat">AI Assistant</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h1>Frontier & Open Source Model Benchmarks</h1>
+      <p>Compare cost, rate limits, prompt caching discounts, auto-fallback resilience, regions, and SWE-bench efficiency.</p>
+    </section>
+
+    <!-- Controls & Filters -->
+    <section class="controls-card">
+      <div class="filter-group">
+        <label for="filter-provider">Provider</label>
+        <select id="filter-provider">
+          <option value="">All Providers</option>
+          <option value="DeepSeek">DeepSeek</option>
+          <option value="Anthropic">Anthropic</option>
+          <option value="OpenAI">OpenAI</option>
+          <option value="Alibaba Cloud">Alibaba Cloud</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="filter-type">Model Type</label>
+        <select id="filter-type">
+          <option value="">All Types</option>
+          <option value="open_source">Open Source</option>
+          <option value="proprietary">Proprietary</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="search-input">Search Model</label>
+        <input type="text" id="search-input" placeholder="e.g. DeepSeek V3, Sonnet...">
+      </div>
+    </section>
+
+    <!-- Main Benchmarks Table -->
+    <section id="benchmarks" class="table-section">
+      <div class="section-header">
+        <h2>Model Rankings & Features</h2>
+        <span class="formula-note">Simple Score Formula: 40% SWE + 25% MMLU + 20% Cost Efficiency + 15% Features</span>
+      </div>
+
+      <div class="table-wrapper">
+        <table id="benchmarks-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Model Name</th>
+              <th>Simple Score</th>
+              <th>SWE-bench</th>
+              <th>MMLU-Pro</th>
+              <th>Prompt / 1M</th>
+              <th>Cache Support</th>
+              <th>Auto Fallback</th>
+              <th>Rate Limits</th>
+              <th>Links</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <!-- Dynamic Insertion -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Interactive Evaluator & ROI Calculator -->
+    <section id="evaluator" class="evaluator-section">
+      <h2>Interactive Workload Evaluator</h2>
+      <div class="evaluator-grid">
+        <div class="evaluator-card">
+          <h3>Workload Parameters</h3>
+          <div class="form-group">
+            <label for="eval-prompts">Monthly Prompt Tokens (Millions)</label>
+            <input type="number" id="eval-prompts" value="100" min="1">
+          </div>
+          <div class="form-group">
+            <label for="eval-completions">Monthly Completion Tokens (Millions)</label>
+            <input type="number" id="eval-completions" value="50" min="1">
+          </div>
+          <div class="form-group">
+            <label for="eval-cache-hit">Expected Prompt Cache Hit Ratio (%)</label>
+            <input type="range" id="eval-cache-hit" value="60" min="0" max="95">
+            <span id="cache-hit-val">60%</span>
+          </div>
+        </div>
+
+        <div class="evaluator-card result-card">
+          <h3>Cost & Score Comparison</h3>
+          <div id="eval-results">
+            <!-- Computed Results -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- On-Device SLM Browser Assistant -->
+    <section id="slm-chat" class="slm-section">
+      <h2>Browser AI Assistant (On-Device SLM / window.ai)</h2>
+      <p class="slm-desc">Asks questions grounded directly on fetched benchmark & rate limit data.</p>
+      
+      <div class="chat-container">
+        <div id="chat-messages" class="messages-list">
+          <div class="msg bot">Hello! Ask me anything about LLM costs, rate limits, prompt caching, or benchmark rankings.</div>
+        </div>
+        <div class="chat-input-bar">
+          <input type="text" id="chat-input" placeholder="e.g. Which open source model has the highest SWE-bench score under $0.50/1M?">
+          <button id="send-btn">Ask SLM</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
