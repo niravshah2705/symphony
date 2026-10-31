@@ -136,6 +136,16 @@ async function executeDeepAgent(options, prompt) {
   if (typeof options.deepAgentInvoke !== 'function') {
     throw new AgentRuntimeError('DeepAgent runtime was selected without a prepared agent.', 'runtime_not_prepared', 500);
   }
+  let routingMetrics = (options && options.skillRouterMetrics) || null;
+  let skillPaths = (options && (options.skillPaths || options.skills)) || null;
+  if (!routingMetrics && (skillPaths || (options && options.rootDir))) {
+    try {
+      const { resolveAndRouteSkills } = require('../skill-router');
+      const routed = await resolveAndRouteSkills(options, prompt);
+      routingMetrics = routed.routingMetrics;
+      skillPaths = routed.selectedSkillPaths;
+    } catch (_) {}
+  }
   const result = await options.deepAgentInvoke(prompt, options.invokeConfig || {});
   const messages = (result && result.messages) || [];
   return {
@@ -149,7 +159,8 @@ async function executeDeepAgent(options, prompt) {
     usage: deepAgentUsage(messages),
     costUsd: deepAgentCost(messages),
     sessionId: null,
-    skillRouterMetrics: (result && result.skillRouterMetrics) || options.skillRouterMetrics || null,
+    skillRouterMetrics: (result && result.skillRouterMetrics) || routingMetrics || null,
+    skillPaths: (result && result.skillPaths) || skillPaths || null,
   };
 }
 

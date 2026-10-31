@@ -25,6 +25,7 @@ const {
   finiteNumber,
   safePathIn,
   wrapExecutionError,
+  resolveAndRouteSkills,
 } = require('./contract');
 
 const ID = 'claude-agent-sdk';
@@ -111,27 +112,10 @@ async function executeClaude(options, prompt) {
     sdkTools.push('Agent');
   }
 
-  let routingMetrics = options.skillRouterMetrics || null;
-  let candidateSkills = options.skillPaths || options.skills;
-  if (!candidateSkills && cwd) {
-    const agentSkillsDir = path.join(cwd, '.agent-skills');
-    try {
-      if (fs.existsSync(agentSkillsDir)) {
-        candidateSkills = fs.readdirSync(agentSkillsDir)
-          .filter((n) => !n.startsWith('.'))
-          .map((n) => path.join(agentSkillsDir, n));
-      }
-    } catch (_) {}
-  }
-
-  if (!routingMetrics && Array.isArray(candidateSkills) && candidateSkills.length > 1) {
-    const { routeSkillsForTurn } = require('../skill-router');
-    const routing = await routeSkillsForTurn(prompt, candidateSkills, {
-      rootDir: cwd,
-      ...(options.skillRouterOptions || {}),
-    });
-    routingMetrics = routing.metrics;
-  }
+  const { selectedSkillPaths, routingMetrics } = await resolveAndRouteSkills(
+    { ...options, rootDir: cwd },
+    prompt,
+  );
 
   const messages = [];
   let outcome = null;
@@ -184,6 +168,7 @@ async function executeClaude(options, prompt) {
     costUsd: finiteNumber(outcome.total_cost_usd),
     sessionId: outcome.session_id || null,
     skillRouterMetrics: routingMetrics,
+    skillPaths: selectedSkillPaths,
   };
 }
 

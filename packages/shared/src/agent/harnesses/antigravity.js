@@ -20,6 +20,7 @@ const {
   normalizeUsage,
   assistantMessagesFromText,
   wrapExecutionError,
+  resolveAndRouteSkills,
 } = require('./contract');
 
 const ID = 'antigravity-sdk';
@@ -101,6 +102,10 @@ async function executeAntigravity(options, prompt) {
     throw new AgentRuntimeError('The installed @google/genai does not export GoogleGenAI.', 'runtime_unavailable', 503);
   }
   const cwd = assertWorkingDirectory(options.rootDir);
+  const { selectedSkillPaths, routingMetrics } = await resolveAndRouteSkills(
+    { ...options, rootDir: cwd },
+    prompt,
+  );
   try {
     // Route native genai through the proxy's /gemini-native prefix when enabled.
     const genaiOptions = proxySdk
@@ -154,6 +159,8 @@ async function executeAntigravity(options, prompt) {
       // The Gemini API reports token usage but no billed USD amount.
       costUsd: null,
       sessionId,
+      skillRouterMetrics: routingMetrics,
+      skillPaths: selectedSkillPaths,
     };
   } catch (error) {
     throw wrapExecutionError(LABEL, error);

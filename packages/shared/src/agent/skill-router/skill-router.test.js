@@ -9,6 +9,7 @@ const http = require('node:http');
 
 const {
   routeSkillsForTurn,
+  resolveAndRouteSkills,
   extractSkillMetadata,
   measureSkillContextSize,
   computeContextMetrics,
@@ -304,4 +305,52 @@ test('LangChainSkillRouter adapter integrates with LangChain Runnable pattern', 
 
   assert.deepEqual(output.selectedSkillIds, ['test-runner']);
   assert.equal(output.fallbackApplied, false);
+});
+
+test('resolveAndRouteSkills discovers candidate skills from .agent-skills directory', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-skills-test-'));
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  const agentSkillsDir = path.join(tmpDir, '.agent-skills');
+  const skillADir = path.join(agentSkillsDir, 'skill-a');
+  const skillBDir = path.join(agentSkillsDir, 'skill-b');
+  fs.mkdirSync(skillADir, { recursive: true });
+  fs.mkdirSync(skillBDir, { recursive: true });
+  fs.writeFileSync(path.join(skillADir, 'SKILL.md'), 'Skill A instructions');
+  fs.writeFileSync(path.join(skillBDir, 'SKILL.md'), 'Skill B instructions');
+
+  const resolved = await resolveAndRouteSkills({ rootDir: tmpDir }, 'Run task');
+  assert.equal(resolved.candidateSkills.length, 2);
+  assert.ok(resolved.selectedSkillPaths.length > 0);
+});
+
+test('resolveAndRouteSkills respects pre-computed skillRouterMetrics and short-circuits', async () => {
+  const existingMetrics = {
+    backend: 'laya',
+    totalSkills: 5,
+    usedSkills: 2,
+    contextReductionPercent: 60.0,
+  };
+  const preSelectedPaths = ['/skills/alpha', '/skills/beta'];
+
+  const resolved = await resolveAndRouteSkills({
+    skillPaths: preSelectedPaths,
+    skillRouterMetrics: existingMetrics,
+  }, 'Any prompt');
+
+  assert.equal(resolved.routingMetrics, existingMetrics);
+  assert.deepEqual(resolved.selectedSkillPaths, preSelectedPaths);
+  assert.deepEqual(resolved.candidateSkills, preSelectedPaths);
+});
+
+test('resolveAndRouteSkills handles empty or single candidates gracefully without error', async () => {
+  const emptyResult = await resolveAndRouteSkills({}, 'Hello world');
+  assert.deepEqual(emptyResult.candidateSkills, []);
+  assert.deepEqual(emptyResult.selectedSkillPaths, []);
+  assert.equal(emptyResult.routingMetrics, null);
+
+  const singleResult = await resolveAndRouteSkills({ skillPaths: ['/skills/one'] }, 'Hello world');
+  assert.deepEqual(singleResult.candidateSkills, ['/skills/one']);
+  assert.deepEqual(singleResult.selectedSkillPaths, ['/skills/one']);
+  assert.equal(singleResult.routingMetrics, null);
 });

@@ -287,15 +287,16 @@ async function runWorkflow({
     let resolvedSkills = null;
     let routingMetrics = null;
     let activeSkillPaths = skillPaths;
-    if (Array.isArray(activeSkillPaths) && activeSkillPaths.length > 1 && userMessage) {
+    if (userMessage) {
       try {
-        const { routeSkillsForTurn } = require('./skill-router');
-        const routing = await routeSkillsForTurn(userMessage, activeSkillPaths, {
+        const { resolveAndRouteSkills } = require('./skill-router');
+        const routing = await resolveAndRouteSkills({
+          skillPaths: activeSkillPaths,
           rootDir,
-          ...(ctx.skillRouterOptions || {}),
-        });
+          skillRouterOptions: ctx.skillRouterOptions,
+        }, userMessage);
         activeSkillPaths = routing.selectedSkillPaths;
-        routingMetrics = routing.metrics;
+        routingMetrics = routing.routingMetrics;
       } catch (_) {}
     }
 

@@ -148,8 +148,53 @@ async function routeSkillsForTurn(prompt, availableSkillPaths = [], options = {}
   };
 }
 
+/**
+ * Universal harness helper to discover candidate skills and route them for a turn.
+ * @param {object} [options]
+ * @param {string} [prompt]
+ * @returns {Promise<{ selectedSkillPaths: string[], routingMetrics: object | null, candidateSkills: string[] }>}
+ */
+async function resolveAndRouteSkills(options = {}, prompt = '') {
+  let routingMetrics = options.skillRouterMetrics || null;
+  let candidateSkills = options.skillPaths || options.skills || null;
+  const cwd = options.rootDir || options.cwd || null;
+
+  if (!candidateSkills && cwd) {
+    const agentSkillsDir = path.join(cwd, '.agent-skills');
+    try {
+      if (fs.existsSync(agentSkillsDir)) {
+        candidateSkills = fs.readdirSync(agentSkillsDir)
+          .filter((n) => !n.startsWith('.'))
+          .map((n) => path.join(agentSkillsDir, n));
+      }
+    } catch (_) {}
+  }
+
+  let selectedSkillPaths = Array.isArray(candidateSkills) ? candidateSkills : [];
+
+  if (!routingMetrics && Array.isArray(candidateSkills) && candidateSkills.length > 1 && prompt) {
+    try {
+      const routing = await routeSkillsForTurn(prompt, candidateSkills, {
+        rootDir: cwd,
+        ...(options.skillRouterOptions || {}),
+      });
+      selectedSkillPaths = routing.selectedSkillPaths;
+      routingMetrics = routing.metrics;
+    } catch (_) {
+      selectedSkillPaths = candidateSkills;
+    }
+  }
+
+  return {
+    candidateSkills: candidateSkills || [],
+    selectedSkillPaths,
+    routingMetrics,
+  };
+}
+
 module.exports = {
   routeSkillsForTurn,
+  resolveAndRouteSkills,
   extractSkillMetadata,
   measureSkillContextSize,
   computeContextMetrics,

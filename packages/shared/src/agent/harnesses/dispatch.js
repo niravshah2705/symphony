@@ -18,6 +18,7 @@ const {
   langSmithProvider,
   meterRun,
   wrapExecutionError,
+  resolveAndRouteSkills,
 } = require('./contract');
 
 /** Build a dispatcher against a registry (the factory keeps tests isolated). */
@@ -43,6 +44,23 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
       );
     }
     const reviewEnabled = Boolean(options.rubric || options.rubricMiddleware);
+
+    // Progressive disclosure: route skills dynamically per turn using Laya / CLM / LangChain.
+    let routingMetrics = runtimeOptions.skillRouterMetrics || null;
+    let routedSkillPaths = runtimeOptions.skillPaths || runtimeOptions.skills || null;
+    if (!routingMetrics) {
+      try {
+        const routingResult = await resolveAndRouteSkills(runtimeOptions, prompt);
+        if (routingResult && routingResult.routingMetrics) {
+          routingMetrics = routingResult.routingMetrics;
+          routedSkillPaths = routingResult.selectedSkillPaths;
+          runtimeOptions.skillRouterMetrics = routingMetrics;
+          if (routedSkillPaths && routedSkillPaths.length) {
+            runtimeOptions.skillPaths = routedSkillPaths;
+          }
+        }
+      } catch (_) {}
+    }
 
     // MemoryMiddleware (claude-mem, harness-agnostic) — opt-in, off by default,
     // and fully isolated so it can never fail a real run. Gate resolution is
@@ -79,8 +97,11 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
           }
         }
         const value = await runOnce(runPrompt);
-        if (options.skillRouterMetrics && value && !value.skillRouterMetrics) {
-          value.skillRouterMetrics = options.skillRouterMetrics;
+        if (routingMetrics && value && !value.skillRouterMetrics) {
+          value.skillRouterMetrics = routingMetrics;
+        }
+        if (routedSkillPaths && value && !value.skillPaths) {
+          value.skillPaths = routedSkillPaths;
         }
         const reviewed = reviewEnabled
           ? await applyRubricMiddleware(options, value, runPrompt, runOnce)
@@ -99,6 +120,9 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
         return reviewed;
       } catch (error) {
         const wrapped = wrapExecutionError(definition.label, error);
+        if (routingMetrics && wrapped && !wrapped.skillRouterMetrics) {
+          wrapped.skillRouterMetrics = routingMetrics;
+        }
         annotateTrace(wrapped, options.getCurrentRunTree || getCurrentRunTree);
         meterRun(options, wrapped);
         throw wrapped;

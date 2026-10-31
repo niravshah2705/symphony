@@ -550,6 +550,14 @@ function meterRun(options, resultOrError) {
   }
 }
 
+/**
+ * Lazy helper delegating candidate skill discovery and turn routing to the skill-router.
+ */
+async function resolveAndRouteSkills(options = {}, prompt = '') {
+  const { resolveAndRouteSkills: impl } = require('../skill-router');
+  return impl(options, prompt);
+}
+
 module.exports = {
   WORKFLOW_PATTERNS,
   AgentRuntimeError,
@@ -580,4 +588,5 @@ module.exports = {
   plannerWebSearchAllowed,
   safePathIn,
   meterRun,
+  resolveAndRouteSkills,
 };

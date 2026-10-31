@@ -194,15 +194,16 @@ async function executeCodingRuntime({
 
   let routingMetrics = null;
   let activeSkillPaths = skillPaths;
-  if (Array.isArray(activeSkillPaths) && activeSkillPaths.length > 1 && prompt) {
+  if (prompt) {
     try {
-      const { routeSkillsForTurn } = require('./skill-router');
-      const routing = await routeSkillsForTurn(prompt, activeSkillPaths, {
+      const { resolveAndRouteSkills } = require('./skill-router');
+      const routing = await resolveAndRouteSkills({
+        skillPaths: activeSkillPaths,
         rootDir: workDir,
-        ...(keys.skillRouterOptions || {}),
-      });
+        skillRouterOptions: keys.skillRouterOptions,
+      }, prompt);
       activeSkillPaths = routing.selectedSkillPaths;
-      routingMetrics = routing.metrics;
+      routingMetrics = routing.routingMetrics;
     } catch (_) {}
   }
 
