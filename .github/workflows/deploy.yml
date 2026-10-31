@@ -74,6 +74,8 @@ jobs:
             email:    ['services/email/**', 'deploy/gcp/Dockerfile.email']
             identity: ['services/identity-verification/**', 'deploy/gcp/Dockerfile.identity-verification']
             billing:  ['services/billing/**', 'deploy/gcp/Dockerfile.billing']
+            laya:     ['services/laya-inference/**', 'deploy/gcp/Dockerfile.laya-inference']
+            clm:      ['services/clm-inference/**',  'deploy/gcp/Dockerfile.clm-inference']
 
       - id: plan
         env:
@@ -96,6 +98,8 @@ jobs:
           EMAIL: ${{ steps.filter.outputs.email }}
           IDENTITY: ${{ steps.filter.outputs.identity }}
           BILLING: ${{ steps.filter.outputs.billing }}
+          LAYA: ${{ steps.filter.outputs.laya }}
+          CLM: ${{ steps.filter.outputs.clm }}
         run: |
           set -euo pipefail
           # A shared-code / root-deps change (or a forced run) rebuilds the Node
@@ -117,6 +121,9 @@ jobs:
           if [ "$all" = "true" ] || [ "$EMAIL"   = "true" ]; then push email   email-service deploy/gcp/Dockerfile.email   . ; fi
           if [ "$all" = "true" ] || [ "$IDENTITY" = "true" ]; then push identity identity-verification deploy/gcp/Dockerfile.identity-verification . ; fi
           if [ "$all" = "true" ] || [ "$BILLING"  = "true" ]; then push billing billing deploy/gcp/Dockerfile.billing . ; fi
+          # Dedicated inference microservices (Python apps).
+          if [ "$FORCE_ALL" = "true" ] || [ "$all" = "true" ] || [ "$LAYA" = "true" ] || [ "$INFRA" = "true" ]; then push laya laya-inference deploy/gcp/Dockerfile.laya-inference . ; fi
+          if [ "$FORCE_ALL" = "true" ] || [ "$all" = "true" ] || [ "$CLM"  = "true" ] || [ "$INFRA" = "true" ]; then push clm clm-inference deploy/gcp/Dockerfile.clm-inference . ; fi
           # The provisioner is a Node service (rebuilds on shared/root/force too).
           # Its image is built even while provisioning is disabled so enabling is a
           # one-var flip; terraform only creates the service when provisioning_enabled.
@@ -360,6 +367,8 @@ jobs:
             write_tag email resolve email email-service
             write_tag identity resolve identity identity-verification
             write_tag billing resolve billing billing
+            write_tag laya resolve laya laya-inference
+            write_tag clm resolve clm clm-inference
           } >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
@@ -489,6 +498,8 @@ jobs:
           [ -n "${{ steps.tags.outputs.email }}" ] && apply_args+=(-var="email_image_tag=${{ steps.tags.outputs.email }}") || true
           [ -n "${{ steps.tags.outputs.identity }}" ] && apply_args+=(-var="identity_image_tag=${{ steps.tags.outputs.identity }}") || true
           [ -n "${{ steps.tags.outputs.billing }}" ] && apply_args+=(-var="billing_image_tag=${{ steps.tags.outputs.billing }}") || true
+          [ -n "${{ steps.tags.outputs.laya }}" ] && apply_args+=(-var="laya_image_tag=${{ steps.tags.outputs.laya }}") || true
+          [ -n "${{ steps.tags.outputs.clm }}" ] && apply_args+=(-var="clm_image_tag=${{ steps.tags.outputs.clm }}") || true
 
           # Idempotently import pre-existing Firestore composite indexes if missing from state
           chunks_idx_addr="google_firestore_index.attachment_chunks_by_conversation_and_embedding"

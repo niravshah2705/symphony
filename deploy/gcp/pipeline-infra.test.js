@@ -203,6 +203,8 @@ test('deploy workflow does not query disabled optional Cloud Run services', () =
     ['email', 'email-service'],
     ['identity', 'identity-verification'],
     ['billing', 'billing'],
+    ['laya', 'laya-inference'],
+    ['clm', 'clm-inference'],
   ]) {
     assert.match(workflow, new RegExp(`write_tag ${id} resolve ${id} ${service}`));
   }

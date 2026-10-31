@@ -250,6 +250,9 @@ else
   build_push email-service Dockerfile.email
   build_push identity-verification Dockerfile.identity-verification
   build_push provisioner Dockerfile.provisioner
+  build_push billing Dockerfile.billing
+  build_push laya-inference Dockerfile.laya-inference
+  build_push clm-inference Dockerfile.clm-inference
   build_push_context org-service services/org/Dockerfile services/org
   # Settings copies the shared-core harness catalog, so it builds at repo root.
   build_push_context settings-service services/settings/Dockerfile .

@@ -21,10 +21,10 @@ Community of 191 nodes
 | test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 101-134 |
 | test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L129 | Test | ./deploy/gcp/pipeline-infra.test.js | 129-162 |
 | test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L164 | Test | ./deploy/gcp/pipeline-infra.test.js | 164-178 |
-| test:deploy workflow does not query disabled optional Cloud Run services@L180 | Test | ./deploy/gcp/pipeline-infra.test.js | 180-209 |
-| test:pipeline topology enforces dedicated topics and brokered agent egress@L314 | Test | ./deploy/gcp/pipeline-infra.test.js | 314-364 |
-| test:stream-token broker owns the signing secret behind private IAM@L366 | Test | ./deploy/gcp/pipeline-infra.test.js | 366-462 |
-| test:OpenSWE upstream is trusted proxy-only deployment configuration@L471 | Test | ./deploy/gcp/pipeline-infra.test.js | 471-487 |
+| test:deploy workflow does not query disabled optional Cloud Run services@L180 | Test | ./deploy/gcp/pipeline-infra.test.js | 180-211 |
+| test:pipeline topology enforces dedicated topics and brokered agent egress@L316 | Test | ./deploy/gcp/pipeline-infra.test.js | 316-366 |
+| test:stream-token broker owns the signing secret behind private IAM@L368 | Test | ./deploy/gcp/pipeline-infra.test.js | 368-464 |
+| test:OpenSWE upstream is trusted proxy-only deployment configuration@L473 | Test | ./deploy/gcp/pipeline-infra.test.js | 473-489 |
 | test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-26 |
 | test:ADLC manifest is served as a static resource@L28 | Test | ./e2e/adlc.spec.js | 28-35 |
 | test:existing Agent workspace route still renders directly@L37 | Test | ./e2e/adlc.spec.js | 37-45 |
