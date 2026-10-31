@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 199 nodes
+Community of 234 nodes
 
-- **Size**: 199 nodes
-- **Cohesion**: 0.1986
+- **Size**: 234 nodes
+- **Cohesion**: 0.1758
 - **Dominant Language**: javascript
 
 ## Members
@@ -63,58 +63,58 @@ Community of 199 nodes
 | generateVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 17-19 |
 | challengeFromVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 22-24 |
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
-| billingStatus | Function | ./packages/shared-core/src/billing/gate.js | 13-33 |
+| getBaseUrl | Function | ./packages/shared-core/src/billing/cashfree-client.js | 6-15 |
 
-*... and 149 more members.*
+*... and 184 more members.*
 
 ## Execution Flows
 
+- **processBillingSweep** (criticality: 0.69, depth: 4)
 - **ensureFreshCodexTokens** (criticality: 0.69, depth: 6)
 - **ensureFreshClaudeTokens** (criticality: 0.69, depth: 6)
+- **chatWithProjectSandbox** (criticality: 0.68, depth: 8)
 - **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
 - **refreshTokens** (criticality: 0.67, depth: 2)
 - **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
 - **refreshTokens** (criticality: 0.67, depth: 2)
-- **getGithubToken** (criticality: 0.62, depth: 8)
-- **isBillingBlocked** (criticality: 0.61, depth: 4)
-- **consumeLogin** (criticality: 0.61, depth: 1)
-- **consumeLogin** (criticality: 0.61, depth: 1)
-- *... and 34 more flows.*
+- **getSampleNetworkPolicy** (criticality: 0.67, depth: 8)
+- **runSandboxSecurityChecks** (criticality: 0.67, depth: 8)
+- *... and 30 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (78 edge(s))
-- `String` (27 edge(s))
-- `filter` (25 edge(s))
-- `includes` (23 edge(s))
-- `isArray` (23 edge(s))
-- `set` (18 edge(s))
+- `equal` (125 edge(s))
+- `Number` (30 edge(s))
+- `filter` (27 edge(s))
+- `isArray` (24 edge(s))
+- `includes` (22 edge(s))
+- `String` (21 edge(s))
+- `isFinite` (20 edge(s))
+- `trim` (20 edge(s))
+- `toISOString` (20 edge(s))
+- `set` (19 edge(s))
 - `slice` (18 edge(s))
-- `trim` (18 edge(s))
-- `toISOString` (17 edge(s))
 - `call` (16 edge(s))
-- `isFinite` (15 edge(s))
 - `find` (15 edge(s))
-- `Number` (12 edge(s))
-- `map` (12 edge(s))
-- `has` (11 edge(s))
+- `map` (14 edge(s))
+- `upsertBillingAccount` (12 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/store.js` (182 edge(s))
-- `equal` (78 edge(s))
+- `./packages/shared-core/src/store.js` (169 edge(s))
+- `equal` (125 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
+- `./packages/shared-core/src/billing/cashfree-client.js` (14 edge(s))
+- `upsertBillingAccount` (12 edge(s))
+- `deepEqual` (12 edge(s))
 - `./packages/shared-core/src/billing/ledger.js` (10 edge(s))
-- `upsertBillingAccount` (9 edge(s))
+- `./packages/shared-core/src/billing/notify.js` (10 edge(s))
+- `./packages/shared-core/src/billing/pricing.js` (10 edge(s))
+- `ok` (9 edge(s))
 - `ensureAccount` (9 edge(s))
 - `postEntry` (9 edge(s))
-- `./packages/shared/src/store-workspace-isolation.test.js::inWorkspace` (9 edge(s))
-- `./packages/shared-core/src/agent/pkce.js` (8 edge(s))
-- `ok` (8 edge(s))
-- `getSettings` (8 edge(s))
-- `./packages/shared/src/store.eula.test.js` (8 edge(s))

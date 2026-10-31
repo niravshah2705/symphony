@@ -27,7 +27,7 @@ from app.errors import ConflictError, UnauthorizedError, ValidationAppError
 from app.models.enums import AuthProvider, OrgRole
 from app.models.organization import Organization
 from app.models.organization_membership import OrganizationMembership
-from app.services import provisioning_service
+from app.services import onboarding_service, provisioning_service
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.repositories.base import REFRESH_TOKENS, USERS
@@ -134,6 +134,9 @@ async def login(session: Uow, data: LoginRequest) -> TokenResponse:
     # Identical failure for every case — no user/tenant/status enumeration.
     if user is None or not user.is_active or not verify_password(data.password, user.password_hash):
         raise UnauthorizedError("Invalid credentials")
+    memberships = await OrganizationMembershipRepository(session).list_for_user(user.id, legacy_user=user)
+    if not memberships:
+        await onboarding_service.ensure_default_organization_and_project(session, user)
     return await _issue_tokens(session, user)
 
 

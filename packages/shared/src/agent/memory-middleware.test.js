@@ -2,15 +2,8 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
 
 const mw = require('./memory-middleware');
-
-function tmpRoot() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'mem-mw-'));
-}
 
 /* -------------------------------- enablement ------------------------------- */
 
@@ -109,27 +102,53 @@ test('capture fails open — compressor error yields saved:0, empty finalText sk
   assert.equal(called, 1, 'empty finalText never invokes the model');
 });
 
-/* ------------------------ end-to-end through the disk ---------------------- */
+/* --------------------- end-to-end through Postgres ------------------------ */
 
-test('capture then inject round-trips through the real disk-backed memory store', async () => {
+/** Minimal in-memory pg.Pool stand-in (insert → select) for the real backend. */
+function memoryPool() {
+  const rows = new Map();
+  return {
+    async query(sql, params) {
+      const text = String(sql).trim();
+      if (/^(CREATE|CREATE INDEX)/i.test(text)) return { rows: [] };
+      if (/^INSERT/i.test(text)) {
+        const [id, orgKey, scope, title, body, tags, source, refId, createdAt, embedding] = params;
+        rows.set(id, { id, org_key: orgKey, scope, title, body, tags: JSON.parse(tags), source, ref_id: refId, created_at: new Date(createdAt), embedding });
+        return { rows: [] };
+      }
+      if (/^SELECT/i.test(text)) {
+        const [orgKey, scope, cap] = params;
+        return {
+          rows: [...rows.values()]
+            .filter((row) => row.org_key === orgKey && (!scope || row.scope === scope))
+            .sort((a, b) => b.created_at - a.created_at)
+            .slice(0, cap)
+            .map((row) => ({ ...row, text: row.body })),
+        };
+      }
+      return { rows: [] };
+    },
+  };
+}
+
+test('capture then inject round-trips through the real Postgres-backed store', async () => {
   const { runWithWorkspaceContext } = require('@ai-fleet/shared-core/store/workspace-context');
-  const prev = process.env.MEMORY_ROOT;
-  const prevV = process.env.MEMORY_VERSION;
-  process.env.MEMORY_ROOT = tmpRoot();
-  delete process.env.MEMORY_VERSION;
+  const { createPostgresBackend } = require('./memory-store/postgres-backend');
+  const { recallMemories } = require('./memory-store/recall');
+  const store = createPostgresBackend({ pool: memoryPool() });
+  const backend = {
+    persist: store.persist,
+    load: store.load,
+    recall: (args) => recallMemories({ ...args, loadVector: store.readVector }),
+  };
   const embed = async (texts) => texts.map(() => [0.2, 0.4, 0.6, 0.8]);
   const callJson = async () => ({ json: { observations: [
     { scope: 'project', title: 'Datastore', text: 'Durable state lives in Firestore for this project' },
   ] } });
-  try {
-    await runWithWorkspaceContext({ organizationId: 'orgZ' }, async () => {
-      const cap = await mw.capture({ finalText: 'we chose firestore' }, { workflow: 'coding' }, { embed, callJson });
-      assert.equal(cap.saved, 1);
-      const out = await mw.inject('which datastore holds durable state?', {}, { embed });
-      assert.match(out, /Durable state lives in Firestore/);
-    });
-  } finally {
-    if (prev === undefined) delete process.env.MEMORY_ROOT; else process.env.MEMORY_ROOT = prev;
-    if (prevV === undefined) delete process.env.MEMORY_VERSION; else process.env.MEMORY_VERSION = prevV;
-  }
+  await runWithWorkspaceContext({ organizationId: 'orgZ' }, async () => {
+    const cap = await mw.capture({ finalText: 'we chose firestore' }, { workflow: 'coding' }, { embed, callJson, backend });
+    assert.equal(cap.saved, 1);
+    const out = await mw.inject('which datastore holds durable state?', {}, { embed, backend });
+    assert.match(out, /Durable state lives in Firestore/);
+  });
 });

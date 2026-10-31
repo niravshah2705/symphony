@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 347 nodes
+Community of 341 nodes
 
-- **Size**: 347 nodes
-- **Cohesion**: 0.2726
+- **Size**: 341 nodes
+- **Cohesion**: 0.2730
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,15 +65,15 @@ Community of 347 nodes
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
 
-*... and 297 more members.*
+*... and 291 more members.*
 
 ## Execution Flows
 
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
 - **createMemoryMiddleware** (criticality: 0.66, depth: 5)
-- **startScheduler** (criticality: 0.66, depth: 6)
 - **generatePlan** (criticality: 0.66, depth: 4)
+- **startScheduler** (criticality: 0.66, depth: 6)
 - **runCoder** (criticality: 0.65, depth: 5)
 - **runPlannedCoder** (criticality: 0.65, depth: 5)
 - **executeClaude** (criticality: 0.61, depth: 2)
@@ -85,19 +85,19 @@ Community of 347 nodes
 
 - `equal` (195 edge(s))
 - `join` (132 edge(s))
-- `String` (73 edge(s))
-- `includes` (66 edge(s))
+- `String` (70 edge(s))
+- `includes` (65 edge(s))
 - `strictEqual` (50 edge(s))
-- `isArray` (41 edge(s))
 - `endsWith` (39 edge(s))
 - `trim` (38 edge(s))
 - `execFileSync` (37 edge(s))
 - `deepEqual` (37 edge(s))
 - `deepStrictEqual` (37 edge(s))
+- `isArray` (36 edge(s))
 - `step` (34 edge(s))
 - `slice` (34 edge(s))
-- `Boolean` (28 edge(s))
 - `map` (28 edge(s))
+- `Boolean` (26 edge(s))
 
 ### Incoming
 
@@ -106,9 +106,9 @@ Community of 347 nodes
 - `join` (65 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
 - `strictEqual` (50 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (42 edge(s))
 - `deepStrictEqual` (37 edge(s))
 - `deepEqual` (35 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (31 edge(s))
 - `./packages/shared/src/agent/framework.js` (26 edge(s))
 - `execFileSync` (26 edge(s))
 - `throws` (24 edge(s))

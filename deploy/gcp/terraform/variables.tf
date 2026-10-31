@@ -167,6 +167,42 @@ variable "identity_hash_pepper_secret_id" {
   default     = "identity-hash-pepper"
 }
 
+variable "billing_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the billing service."
+  default     = ""
+}
+
+variable "billing_service_name" {
+  type        = string
+  description = "Cloud Run service name for billing and Cashfree payments."
+  default     = "billing"
+}
+
+variable "cashfree_app_id_secret_id" {
+  type        = string
+  description = "Secret Manager secret id containing the Cashfree App ID."
+  default     = "cashfree-app-id"
+}
+
+variable "cashfree_secret_key_secret_id" {
+  type        = string
+  description = "Secret Manager secret id containing the Cashfree Secret Key."
+  default     = "cashfree-secret-key"
+}
+
+variable "cashfree_env" {
+  type        = string
+  description = "Cashfree environment: sandbox or production."
+  default     = "sandbox"
+}
+
+variable "cashfree_base_url" {
+  type        = string
+  description = "Cashfree base API URL (e.g. https://sandbox.cashfree.com or https://api.cashfree.com)."
+  default     = "https://sandbox.cashfree.com"
+}
+
 variable "coder_job_name" {
   type        = string
   description = "Cloud Run Job name. MUST match the CODER_JOB_NAME env the coder-control service uses to launch it."
@@ -710,39 +746,64 @@ variable "skills_publisher_member" {
   default     = ""
 }
 
-# --- Agent memory store (GCS bucket, memory.tf) ------------------------------
+# --- Agent memory store (Cloud SQL Postgres, memory.tf) ----------------------
 # The MemoryMiddleware persists AI-compressed agent memories here and injects
-# them into future runs. Unlike skills/registry, the agents WRITE at runtime, so
-# the mount is read-write and the SAs get objectAdmin. Opt-in, off by default.
+# them into future runs. Agents WRITE at runtime over the Cloud Run /cloudsql
+# unix socket (Cloud SQL Auth Proxy; no VPC connector). Opt-in, off by default —
+# Cloud SQL does not scale to zero, so enabling it adds a fixed monthly cost.
 
 variable "memory_enabled" {
   type        = bool
-  description = "Create the Terraform-managed agent-memory GCS bucket (+ read/write IAM for planner/coder). true creates and owns the bucket; false disables the feature entirely. The read-write gcsfuse MOUNT is a separate toggle (memory_mount_enabled)."
+  description = "Create the Terraform-managed Cloud SQL for PostgreSQL memory instance (+ database/user/URL secret) and wire MEMORY_DATABASE_URL + the /cloudsql socket into planner/coder. false disables the feature entirely and keeps the stack at $0."
   default     = false
 }
 
-variable "memory_mount_enabled" {
+variable "memory_db_version" {
+  type        = string
+  description = "Cloud SQL Postgres engine version (POSTGRES_16 / POSTGRES_17)."
+  default     = "POSTGRES_16"
+}
+
+variable "memory_db_tier" {
+  type        = string
+  description = "Cloud SQL machine tier. db-f1-micro is the cheapest usable tier; raise it for higher traffic/concurrency. See https://cloud.google.com/sql/pricing."
+  default     = "db-f1-micro"
+}
+
+variable "memory_db_disk_size_gb" {
+  type        = number
+  description = "Initial SSD size for the memory instance. Autoresize is on, so this is a floor, not a cap."
+  default     = 10
+}
+
+variable "memory_db_backups_enabled" {
   type        = bool
-  description = "Mount the memory bucket read-write via gcsfuse (+ MEMORY_ROOT/MEMORY_VERSION env) on planner/coder. Default OFF: the gen2 fuse mount is fragile (same startup-probe caveat as the skills mount) and needs validation before enabling. Requires memory_enabled. Off → MEMORY_ROOT unset and the middleware falls back to the Firestore/file memories store (or stays dormant until the per-org memoryEnabled opt-in is set)."
-  default     = false
+  description = "Enable automated daily backups of the memory database."
+  default     = true
 }
 
-variable "memory_version" {
-  type        = string
-  description = "Memory bundle version the runtime PINS (MEMORY_VERSION). The planner/coder read/write /memory/<memory_version>/<orgKey>/... so multiple layout versions can coexist. Must be a single safe path segment."
-  default     = "v1"
+variable "memory_db_deletion_protection" {
+  type        = bool
+  description = "Block `terraform destroy` of the memory instance. Default true: it holds real compressed agent memories. Set false only for a deliberate teardown."
+  default     = true
 }
 
-variable "memory_bucket_name" {
+variable "memory_db_instance_name" {
   type        = string
-  description = "OPTIONAL override for the memory bucket name. Empty ('') derives a stable default of '<project_id>-aifleet-memory' (see locals.tf). Terraform CREATES this bucket. Set only to pin a custom globally-unique name. Ignored when memory_enabled = false."
+  description = "OPTIONAL override for the Cloud SQL instance name. Empty ('') derives '<project_id>-aifleet-memory' (see locals.tf). Lowercase letters, digits, hyphens only."
   default     = ""
 }
 
-variable "memory_bucket_force_destroy" {
-  type        = bool
-  description = "Allow `terraform destroy` to delete the memory bucket even if it still holds objects. Default false: it holds real compressed agent memories."
-  default     = false
+variable "memory_db_name" {
+  type        = string
+  description = "Database name inside the memory instance."
+  default     = "aifleet_memory"
+}
+
+variable "memory_db_user" {
+  type        = string
+  description = "Database user the runtime connects as (password is generated into Secret Manager)."
+  default     = "aifleet_memory"
 }
 
 # --- Harness registry bucket (see registry.tf) -------------------------------
@@ -805,6 +866,11 @@ variable "auth_default_role" {
   default     = "viewer"
 }
 
+variable "custom_domain" {
+  type        = list(string)
+  description = "Custom domain(s) for Firebase Hosting."
+  default     = []
+}
 variable "firebase_allowed_domain" {
   type        = string
   description = "Optional: restrict app login to this email domain; empty = any verified user (Google OR Microsoft)."

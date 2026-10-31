@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 296 nodes
+Community of 293 nodes
 
-- **Size**: 296 nodes
-- **Cohesion**: 0.2599
+- **Size**: 293 nodes
+- **Cohesion**: 0.2631
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 296 nodes
 | incompletePlugin | Function | ./packages/shared-core/src/agent/registry/index.js | 37-51 |
 | readRawRecords | Function | ./packages/shared-core/src/agent/registry/index.js | 54-100 |
 
-*... and 246 more members.*
+*... and 243 more members.*
 
 ## Execution Flows
 
@@ -76,30 +76,30 @@ Community of 296 nodes
 
 ### Outgoing
 
-- `join` (401 edge(s))
-- `equal` (161 edge(s))
+- `join` (400 edge(s))
+- `equal` (155 edge(s))
 - `push` (70 edge(s))
-- `map` (55 edge(s))
 - `throws` (55 edge(s))
+- `map` (53 edge(s))
 - `existsSync` (52 edge(s))
-- `deepEqual` (51 edge(s))
 - `mkdirSync` (49 edge(s))
-- `ok` (41 edge(s))
+- `deepEqual` (48 edge(s))
 - `String` (41 edge(s))
-- `includes` (40 edge(s))
 - `stringify` (37 edge(s))
+- `includes` (37 edge(s))
 - `readFileSync` (33 edge(s))
 - `writeFileSync` (32 edge(s))
+- `ok` (32 edge(s))
 - `realpathSync` (31 edge(s))
 
 ### Incoming
 
-- `join` (202 edge(s))
-- `equal` (161 edge(s))
+- `join` (201 edge(s))
+- `equal` (155 edge(s))
 - `./scripts/harness-registry/artifact-builder.js` (99 edge(s))
 - `throws` (55 edge(s))
-- `deepEqual` (51 edge(s))
-- `ok` (41 edge(s))
+- `deepEqual` (48 edge(s))
+- `ok` (32 edge(s))
 - `./packages/shared-core/src/agent/registry/schema.js` (32 edge(s))
 - `existsSync` (29 edge(s))
 - `./scripts/harness-registry/artifact-builder.test.js` (26 edge(s))

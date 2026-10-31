@@ -4,100 +4,107 @@
 
 ## Overview
 
-Community of 45 nodes
+Community of 237 nodes
 
-- **Size**: 45 nodes
-- **Cohesion**: 0.2762
+- **Size**: 237 nodes
+- **Cohesion**: 0.3458
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| LocalizationError | Class | ./packages/shared/src/agent/localization.js | 74-80 |
-| constructor | Function | ./packages/shared/src/agent/localization.js | 75-79 |
-| cleanInline | Function | ./packages/shared/src/agent/localization.js | 82-89 |
-| normalizeLocaleTag | Function | ./packages/shared/src/agent/localization.js | 92-101 |
-| supportedLocale | Function | ./packages/shared/src/agent/localization.js | 104-109 |
-| parseLanguageHints | Function | ./packages/shared/src/agent/localization.js | 112-145 |
-| normalizeCountryCode | Function | ./packages/shared/src/agent/localization.js | 147-150 |
-| normalizeGeoResult | Function | ./packages/shared/src/agent/localization.js | 152-158 |
-| languageSuggestions | Function | ./packages/shared/src/agent/localization.js | 164-222 |
-| add | Function | ./packages/shared/src/agent/localization.js | 178-183 |
-| normalizeIp | Function | ./packages/shared/src/agent/localization.js | 224-231 |
-| isPublicIp | Function | ./packages/shared/src/agent/localization.js | 234-259 |
-| ipwhoRequest | Function | ./packages/shared/src/agent/localization.js | 261-271 |
-| locateIp | Function | ./packages/shared/src/agent/localization.js | 277-295 |
-| locateCurrentIp | Function | ./packages/shared/src/agent/localization.js | 303-336 |
-| clearCurrentLocationCache | Function | ./packages/shared/src/agent/localization.js | 338-340 |
-| requestIp | Function | ./packages/shared/src/agent/localization.js | 342-346 |
-| normalizeTranslationRequest | Function | ./packages/shared/src/agent/localization.js | 348-368 |
-| protectedRanges | Function | ./packages/shared/src/agent/localization.js | 370-407 |
-| addMatches | Function | ./packages/shared/src/agent/localization.js | 372-374 |
-| protectText | Function | ./packages/shared/src/agent/localization.js | 409-426 |
-| restoreProtected | Function | ./packages/shared/src/agent/localization.js | 428-443 |
-| normalizeTranslationModel | Function | ./packages/shared/src/agent/localization.js | 445-459 |
-| translationPrompt | Function | ./packages/shared/src/agent/localization.js | 461-482 |
-| TranslationCache | Class | ./packages/shared/src/agent/localization.js | 484-515 |
-| constructor | Function | ./packages/shared/src/agent/localization.js | 485-489 |
-| get | Function | ./packages/shared/src/agent/localization.js | 491-501 |
-| set | Function | ./packages/shared/src/agent/localization.js | 503-510 |
-| clear | Function | ./packages/shared/src/agent/localization.js | 512-514 |
-| cacheKey | Function | ./packages/shared/src/agent/localization.js | 528-533 |
-| translateTexts | Function | ./packages/shared/src/agent/localization.js | 536-597 |
-| test:locale tags are canonical BCP 47 values resolved against a small catalog@L28 | Test | ./packages/shared/src/agent/localization.test.js | 28-48 |
-| test:language hints honor quality, canonicalize, deduplicate, and ignore unsupported tags@L50 | Test | ./packages/shared/src/agent/localization.test.js | 50-58 |
-| test:suggestions keep English selected and expose IP location as a recommendation only@L60 | Test | ./packages/shared/src/agent/localization.test.js | 60-77 |
-| test:Maharashtra recommends Marathi and the rest of India recommends Hindi@L79 | Test | ./packages/shared/src/agent/localization.test.js | 79-88 |
-| test:IP handling accepts public addresses and rejects local or reserved addresses@L90 | Test | ./packages/shared/src/agent/localization.test.js | 90-99 |
-| test:IP geolocation returns only a bounded country/region and fails closed offline@L101 | Test | ./packages/shared/src/agent/localization.test.js | 101-117 |
-| test:localhost geolocation uses public egress lookup without returning an address@L119 | Test | ./packages/shared/src/agent/localization.test.js | 119-135 |
-| test:proxy geolocation uses the fixed IPWho route and validated project context@L137 | Test | ./packages/shared/src/agent/localization.test.js | 137-159 |
-| test:translation request bounds string count, item size, and total size@L161 | Test | ./packages/shared/src/agent/localization.test.js | 161-173 |
-| test:translation protection preserves placeholders, URLs, HTML, printf values, and code byte-for-byte@L175 | Test | ./packages/shared/src/agent/localization.test.js | 175-195 |
-| test:Gujarati prompt explicitly requests all UI and internal-status communication@L197 | Test | ./packages/shared/src/agent/localization.test.js | 197-206 |
-| test:translation uses exact deterministic source fallback when local inference is unavailable@L208 | Test | ./packages/shared/src/agent/localization.test.js | 208-222 |
-| test:successful local translations are cached by model, locale, and input without raw cache keys@L224 | Test | ./packages/shared/src/agent/localization.test.js | 224-251 |
-| test:English identity translation does not invoke a model@L253 | Test | ./packages/shared/src/agent/localization.test.js | 253-266 |
+| resolveDeps | Function | ./packages/shared/src/agent/approval-gate.js | 32-48 |
+| bp | Function | ./packages/shared/src/agent/approval-gate.js | 34-34 |
+| defaultResolveBusiness | Function | ./packages/shared/src/agent/approval-gate.js | 50-64 |
+| computeDeadline | Function | ./packages/shared/src/agent/approval-gate.js | 67-71 |
+| createGate | Function | ./packages/shared/src/agent/approval-gate.js | 77-98 |
+| proceedGate | Function | ./packages/shared/src/agent/approval-gate.js | 107-166 |
+| approveGate | Function | ./packages/shared/src/agent/approval-gate.js | 169-175 |
+| reevaluateGate | Function | ./packages/shared/src/agent/approval-gate.js | 182-221 |
+| sweepExpiredGates | Function | ./packages/shared/src/agent/approval-gate.js | 229-254 |
+| makeStore | Function | ./packages/shared/src/agent/approval-gate.test.js | 9-33 |
+| getApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 21-21 |
+| updateApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 22-27 |
+| makeDeps | Function | ./packages/shared/src/agent/approval-gate.test.js | 36-50 |
+| test:createGate sets deadline = createdAt + waitMinutes exactly and starts awaiting@L52 | Test | ./packages/shared/src/agent/approval-gate.test.js | 52-58 |
+| test:sweepExpiredGates auto-approves a past-deadline gate once and documents the decision@L60 | Test | ./packages/shared/src/agent/approval-gate.test.js | 60-76 |
+| test:sweepExpiredGates leaves a gate whose deadline is still in the future@L78 | Test | ./packages/shared/src/agent/approval-gate.test.js | 78-85 |
+| test:proceedGate is idempotent — prepareBusiness runs once across repeated calls@L87 | Test | ./packages/shared/src/agent/approval-gate.test.js | 87-97 |
+| test:approveGate proceeds a human decision; a non-awaiting or missing gate throws GateError@L99 | Test | ./packages/shared/src/agent/approval-gate.test.js | 99-108 |
+| test:sweepExpiredGates recovers gates decided but not yet proceeded (crash between)@L110 | Test | ./packages/shared/src/agent/approval-gate.test.js | 110-121 |
+| test:reevaluateGate supersedes the old gate; green returns no gate, amber creates a fresh one with attempts+1@L123 | Test | ./packages/shared/src/agent/approval-gate.test.js | 123-146 |
+| test:gate lifecycle preserves native context and publishes only to that workspace@L148 | Test | ./packages/shared/src/agent/approval-gate.test.js | 148-169 |
+| test:default business resolution selects only the gate workspace when ids collide@L171 | Test | ./packages/shared/src/agent/approval-gate.test.js | 171-192 |
+| clean | Function | ./packages/shared/src/agent/business-pipeline.js | 62-64 |
+| fenced | Function | ./packages/shared/src/agent/business-pipeline.js | 67-69 |
+| buildDeps | Function | ./packages/shared/src/agent/business-pipeline.js | 120-131 |
+| evaluationSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 141-155 |
+| fraudSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 157-165 |
+| revenueModelSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 167-173 |
+| revenueSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 175-181 |
+| segmentsSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 183-190 |
+| architectureNodes | Function | ./packages/shared/src/agent/business-pipeline.js | 192-201 |
+| designSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 203-210 |
+| designHtmlSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 212-222 |
+| escapeHtml | Function | ./packages/shared/src/agent/business-pipeline.js | 224-227 |
+| sanitizeDesignHtml | Function | ./packages/shared/src/agent/business-pipeline.js | 237-248 |
+| evaluatePrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 258-266 |
+| fraudPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 268-274 |
+| revenuePrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 276-282 |
+| breakdownPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 284-290 |
+| designPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 292-298 |
+| clampScore | Function | ./packages/shared/src/agent/business-pipeline.js | 302-304 |
+| signalFromScore | Function | ./packages/shared/src/agent/business-pipeline.js | 306-310 |
+| normalizeCriteria | Function | ./packages/shared/src/agent/business-pipeline.js | 312-321 |
+| normalizeEvaluation | Function | ./packages/shared/src/agent/business-pipeline.js | 323-348 |
+| normalizeFraud | Function | ./packages/shared/src/agent/business-pipeline.js | 350-364 |
+| metricsFor | Function | ./packages/shared/src/agent/business-pipeline.js | 366-373 |
+| normalizeSegments | Function | ./packages/shared/src/agent/business-pipeline.js | 375-385 |
+| normalizeDesign | Function | ./packages/shared/src/agent/business-pipeline.js | 387-395 |
+| scoreEvaluation | Function | ./packages/shared/src/agent/business-pipeline.js | 399-408 |
+| evaluateRequirement | Function | ./packages/shared/src/agent/business-pipeline.js | 418-440 |
+
+*... and 187 more members.*
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **createMemoryMiddleware** (criticality: 0.66, depth: 5)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (43 edge(s))
-- `deepEqual` (12 edge(s))
-- `slice` (10 edge(s))
-- `push` (9 edge(s))
-- `map` (8 edge(s))
-- `includes` (8 edge(s))
-- `ok` (8 edge(s))
-- `trim` (7 edge(s))
-- `max` (6 edge(s))
-- `Number` (6 edge(s))
-- `replace` (6 edge(s))
-- `some` (6 edge(s))
-- `throws` (6 edge(s))
-- `split` (5 edge(s))
-- `match` (5 edge(s))
+- `equal` (204 edge(s))
+- `String` (43 edge(s))
+- `push` (31 edge(s))
+- `match` (30 edge(s))
+- `isArray` (27 edge(s))
+- `deepEqual` (26 edge(s))
+- `map` (25 edge(s))
+- `slice` (23 edge(s))
+- `includes` (21 edge(s))
+- `ok` (21 edge(s))
+- `test` (20 edge(s))
+- `join` (19 edge(s))
+- `replace` (19 edge(s))
+- `require` (17 edge(s))
+- `trim` (16 edge(s))
 
 ### Incoming
 
-- `./packages/shared/src/agent/localization.js` (47 edge(s))
-- `equal` (43 edge(s))
-- `./packages/shared/src/agent/localization.test.js` (14 edge(s))
-- `deepEqual` (12 edge(s))
-- `ok` (8 edge(s))
-- `throws` (6 edge(s))
-- `some` (5 edge(s))
-- `match` (4 edge(s))
-- `fail` (2 edge(s))
-- `doesNotMatch` (2 edge(s))
-- `hasOwn` (2 edge(s))
-- `./packages/shared/src/agent/localization.js::LANGUAGE_CATALOG.find` (2 edge(s))
-- `includes` (2 edge(s))
-- `push` (1 edge(s))
-- `from` (1 edge(s))
+- `equal` (204 edge(s))
+- `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
+- `deepEqual` (26 edge(s))
+- `match` (26 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (25 edge(s))
+- `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
+- `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))
+- `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
+- `ok` (21 edge(s))
+- `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
+- `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
+- `throws` (16 edge(s))
+- `./packages/shared/src/agent/approval-gate.js` (15 edge(s))
+- `./packages/shared/src/agent/memory.js` (14 edge(s))
+- `./packages/shared/src/agent/approval-gate.test.js` (13 edge(s))

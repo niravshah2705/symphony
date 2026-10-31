@@ -32,6 +32,7 @@ test('pipeline rollout and deployment are fail-closed Terraform defaults', () =>
 test('all Cloud Run services use the gen2 execution environment', () => {
   const servicesByFile = new Map([
     ['cloud_run.tf', ['gateway', 'planner', 'coder_control']],
+    ['billing_service.tf', ['billing']],
     ['org_service.tf', ['org']],
     ['settings_service.tf', ['settings']],
     ['email_service.tf', ['email']],
@@ -43,7 +44,7 @@ test('all Cloud Run services use the gen2 execution environment', () => {
   const expectedInventory = [...servicesByFile]
     .flatMap(([file, services]) => services.map((service) => [file, service]))
     .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
-  assert.equal(expectedInventory.length, 12);
+  assert.equal(expectedInventory.length, 13);
 
   const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
   const actualInventory = fs.readdirSync(terraformDir)
@@ -187,6 +188,7 @@ test('deploy workflow does not query disabled optional Cloud Run services', () =
     ['settings', 'settings-service'],
     ['email', 'email-service'],
     ['identity', 'identity-verification'],
+    ['billing', 'billing'],
   ]) {
     assert.match(workflow, new RegExp(`write_tag ${id} resolve ${id} ${service}`));
   }

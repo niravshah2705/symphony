@@ -5,6 +5,8 @@ import {
   state,
   isImmersiveRoute,
   setActiveRoute,
+  setCurrentProject,
+  setProjectSandbox,
   setSidebarOpen,
   setSidebarCollapsed,
 } from './state.js';
@@ -88,6 +90,7 @@ function route(loader, exportName, styles = []) {
 
 const routes = Object.freeze({
   agent: route(() => import('./views/agent.js'), 'renderAgent', ['/styles/immersive.css']),
+  openshell: route(() => import('./views/openshell.js'), 'renderOpenShell', ['/styles/immersive.css']),
   workflows: route(() => import('./views/workflows.js'), 'renderWorkflows', ['/styles/workflows.css']),
   'agent-jobs': route(() => import('./views/agent-jobs.js'), 'renderAgentJobs', ['/styles/operations.css']),
   calls: route(() => import('./views/calls.js'), 'renderCalls', ['/styles/immersive.css']),
@@ -113,6 +116,7 @@ const AUTHENTICATION_INDEPENDENT_ROUTES = new Set(['privacy', 'terms']);
 
 const routeMeta = {
   agent: { titleKey: 'agentWorkspace', eyebrowKey: 'workspace' },
+  openshell: { title: 'OpenShell Sandbox', eyebrow: 'Workspace' },
   workflows: { titleKey: 'workflows', eyebrowKey: 'workspace' },
   'agent-jobs': { titleKey: 'agentJobs', eyebrowKey: 'workspace' },
   calls: { titleKey: 'callRecorder', eyebrowKey: 'workspace' },
@@ -255,8 +259,7 @@ function syncSidebar(open, { restoreFocus = false } = {}) {
   backdrop.hidden = !state.sidebarOpen;
   document.body.classList.toggle('nav-open', state.sidebarOpen);
   sidebar.inert = compact && !state.sidebarOpen;
-  if (compact && !state.sidebarOpen) sidebar.setAttribute('aria-hidden', 'true');
-  else sidebar.removeAttribute('aria-hidden');
+  sidebar.removeAttribute('aria-hidden');
 
   const backgroundInert = compact && state.sidebarOpen;
   const view = document.getElementById('view');
@@ -657,19 +660,40 @@ function renderAuthControl() {
       }
     }
     projectSelect.addEventListener('change', () => {
-      if (!changeWorkspaceProject(projectSelect.value)) return;
+      const nextProjectId = projectSelect.value;
+      const chosen = projects.find((p) => p.id === nextProjectId);
+      if (nextProjectId) {
+        setCurrentProject(nextProjectId, chosen?.name || '');
+        void api.loadProjectSandbox({ projectId: nextProjectId, projectName: chosen?.name || nextProjectId })
+          .then((res) => { if (res?.sandbox) setProjectSandbox(nextProjectId, res.sandbox); })
+          .catch(() => {});
+      }
+      if (!changeWorkspaceProject(nextProjectId)) return;
       panel.setAttribute('aria-busy', 'true');
       projectSelect.disabled = true;
-      window.setTimeout(() => window.location.reload(), 0);
+      window.setTimeout(() => window.location.reload(), 120);
     });
+
+    const orgTags = (organization?.tags || []).map((tag) =>
+      el('span', { class: 'badge sm', dataset: { userContent: 'true' } }, tag.name || tag)
+    );
+    const projectTags = (project?.tags || []).map((tag) =>
+      el('span', { class: 'badge sm', dataset: { userContent: 'true' } }, tag.name || tag)
+    );
 
     panel.append(
       el('label', { class: 'account-context-field', for: 'account-organization-select' }, [
-        el('span', { dataset: { i18n: 'organization' } }, t('organization')),
+        el('div', { class: 'account-context-field-header' }, [
+          el('span', { dataset: { i18n: 'organization' } }, t('organization')),
+          ...(orgTags.length ? [el('div', { class: 'account-context-tags' }, orgTags)] : []),
+        ]),
         organizationSelect,
       ]),
       el('label', { class: 'account-context-field', for: 'account-project-select' }, [
-        el('span', { dataset: { i18n: 'aiFleetProject' } }, t('aiFleetProject')),
+        el('div', { class: 'account-context-field-header' }, [
+          el('span', { dataset: { i18n: 'aiFleetProject' } }, t('aiFleetProject')),
+          ...(projectTags.length ? [el('div', { class: 'account-context-tags' }, projectTags)] : []),
+        ]),
         projectSelect,
       ])
     );

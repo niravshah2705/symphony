@@ -3,8 +3,9 @@ import { el, clear, toast } from '../dom.js';
 import { icon } from '../icons.js';
 import { t } from '../i18n.js';
 import { agentPauseCopy, agentPauseInfo, agentPauseNotice, hasAgentPauseContract } from '../agent-pause.js';
-import { state, setCurrentProject } from '../state.js';
+import { state, setCurrentProject, setProjectSandbox } from '../state.js';
 import { getAuthenticationState } from '../auth.js';
+import { activeWorkspaceProject, getWorkspaceContext } from '../workspace-context.js';
 
 let workspaceStream = null; // EventSource: global status/jobs/coder/gate feed (replaces polling)
 let gateTimer = null; // display-only countdown tick for an awaiting approval gate (no fetch)
@@ -575,12 +576,24 @@ function renderPauseNotices(host, ...statuses) {
 
 function agentToolbarSignature(status) {
   const pause = agentPauseInfo(status);
+  const sb = state.sandbox;
   return JSON.stringify([
     Boolean(status && status.scheduleEnabled),
     Boolean(status && status.assumedRole),
     pause && pause.code,
     pause && pause.pausedAt,
+    sb && sb.name,
+    sb && sb.phase,
+    sb && sb.secrets?.github?.configured,
+    sb && sb.secrets?.openrouter?.configured,
   ]);
+}
+
+function resolveActiveProject() {
+  const wsProject = activeWorkspaceProject(getWorkspaceContext());
+  const projectId = state.currentProjectId || wsProject?.id || 'default';
+  const projectName = state.currentProjectName || wsProject?.name || projectId || 'default';
+  return { projectId, projectName };
 }
 
 function agentToolbar(status, view, railBody, isCurrentMount = () => view.isConnected && agentRouteActive()) {
@@ -631,6 +644,39 @@ function agentToolbar(status, view, railBody, isCurrentMount = () => view.isConn
     }
   });
 
+  const sb = state.sandbox;
+  const ghOk = Boolean(sb?.secrets?.github?.configured);
+  const orOk = Boolean(sb?.secrets?.openrouter?.configured);
+  const sbChip = el('button', {
+    class: 'tiny-link',
+    type: 'button',
+    title: sb
+      ? `NVIDIA OpenShell (${sb.url || 'https://openshell.archagentix.com'}) · Secrets: GitHub=${ghOk ? 'synced' : 'missing'}, OpenRouter=${orOk ? 'synced' : 'missing'}. Click to reload sandbox.`
+      : 'Click to load NVIDIA OpenShell sandbox for this project',
+    style: 'display:inline-flex;align-items:center;gap:6px',
+  }, [
+    el('span', {
+      style: `width:8px;height:8px;border-radius:999px;background:${sb?.phase === 'READY' ? 'var(--green)' : 'var(--amber)'}`,
+    }),
+    el('span', {}, sb ? `OpenShell: ${sb.name} (${sb.phase || 'READY'}) · GH:${ghOk ? '✓' : '—'} OR:${orOk ? '✓' : '—'}` : 'Load OpenShell Sandbox'),
+  ]);
+  sbChip.addEventListener('click', async () => {
+    sbChip.disabled = true;
+    const { projectId, projectName } = resolveActiveProject();
+    try {
+      const res = await api.loadProjectSandbox({ projectId, projectName });
+      if (res?.sandbox) {
+        setProjectSandbox(projectId, res.sandbox);
+        toast(`NVIDIA OpenShell sandbox ${res.sandbox.name} loaded.`, 'ok');
+        if (railState.mode !== 'result') renderCurrentRail(railBody);
+      }
+    } catch (err) {
+      toast(err.message || 'Could not load NVIDIA OpenShell sandbox.', 'err');
+    } finally {
+      sbChip.disabled = false;
+    }
+  });
+
   return el('div', { class: 'reader-toolbar agent-toolbar' }, [
     el('div', { class: 'breadcrumbs' }, [
       el('span', {}, 'Workspace'),
@@ -638,6 +684,7 @@ function agentToolbar(status, view, railBody, isCurrentMount = () => view.isConn
       el('strong', {}, 'Activity omnibox'),
     ]),
     el('div', { class: 'reader-actions' }, [
+      sbChip,
       toggle,
       runNow,
       el('a', { class: 'tiny-link agent-jobs-link', href: '#/agent-jobs' }, 'View all jobs'),
@@ -1062,6 +1109,7 @@ async function ensureEulaAccepted() {
 async function resolveOmniboxRequest(text) {
   const router = await loadOmniboxRouter();
   let routed;
+  const activeProj = resolveActiveProject();
   // Anonymous visitors get BASIC RAG: the server router (POST /agent/message)
   // needs workspace:write, so for a public session we classify in the browser
   // and use only the public reviewed-documentation search endpoint. This
@@ -1071,7 +1119,15 @@ async function resolveOmniboxRequest(text) {
     routed = { route: router.classifyOmniboxIntent(text), enrichment: null, offline: true };
   } else {
     try {
-      routed = await api.routeAgentMessage({ input: text });
+      routed = await api.routeAgentMessage({
+        input: text,
+        projectId: activeProj.projectId,
+        projectName: activeProj.projectName,
+        sandboxChat: Boolean(state.sandbox || state.currentProjectId),
+      });
+      if (routed && routed.sandboxChat && routed.sandboxChat.sandbox) {
+        setProjectSandbox(activeProj.projectId, routed.sandboxChat.sandbox);
+      }
     } catch (error) {
       // Keep the workspace useful during a planner restart. The same deterministic
       // classifier runs in the browser as a no-mutation fallback; server routing
@@ -1085,7 +1141,11 @@ async function resolveOmniboxRequest(text) {
     }
   }
   const route = routed.route || router.classifyOmniboxIntent(text);
-  const base = { route, warning: routed.warning || null };
+  const base = {
+    route,
+    warning: routed.warning || null,
+    sandboxChat: routed.sandboxChat || null,
+  };
 
   // Gate "actual work" behind EULA acceptance for signed-in users. RAG questions
   // fall through untouched. Anonymous visitors are not prompted here — they hit
@@ -1196,10 +1256,11 @@ async function resolveOmniboxRequest(text) {
   }
 
   if (route.intent === 'general') {
+    const sbChat = routed.sandboxChat;
     const analysis = routed.enrichment
       ? normalizeEnrichment({ enrichment: routed.enrichment })
       : {
-          summary: route.answer,
+          summary: (sbChat && sbChat.reply) || route.answer,
           goal: route.input,
           audience: '',
           constraints: [],
@@ -1207,8 +1268,8 @@ async function resolveOmniboxRequest(text) {
           questions: [],
           nextSteps: ['Clarify the intended outcome', 'Choose the workspace action that should happen next'],
           warnings: routed.warning ? [routed.warning] : [],
-          provider: 'deterministic fallback',
-          model: 'No model call',
+          provider: (sbChat && sbChat.provider) || 'deterministic fallback',
+          model: (sbChat && sbChat.model) || 'No model call',
         };
     return { ...base, analysis, payload: { analysis } };
   }
@@ -1327,6 +1388,30 @@ function renderRoutedConversation(result, railBody) {
   message.dataset.agentIntent = route.intent;
   const body = message.querySelector('.message-copy');
   body.prepend(el('span', { class: `intent-route-chip tone-${chipTone(route.intent)}` }, route.label));
+  if (result.sandboxChat && result.sandboxChat.reply) {
+    const sb = result.sandboxChat.sandbox || state.sandbox;
+    const sbName = (sb && sb.name) || result.sandboxChat.sandboxName || 'sandbox';
+    const sbPhase = (sb && sb.phase) || 'READY';
+    const env = (sb && sb.environment) || {};
+    const ghTag = env.GITHUB_TOKEN === 'SET' ? 'GH:✓' : 'GH:—';
+    const orTag = env.OPENROUTER_API_KEY === 'SET' ? 'OR:✓' : 'OR:—';
+    body.append(
+      el('div', {
+        class: 'openshell-sandbox-reply',
+        style: 'margin-top:10px;padding:10px 12px;border-radius:8px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.28);',
+      }, [
+        el('div', {
+          style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;font-size:11px;color:#10b981;font-weight:600;',
+        }, [
+          el('span', {}, `NVIDIA OpenShell Sandbox · ${sbName} (${sbPhase})`),
+          el('span', { style: 'font-family:monospace;opacity:0.9;' }, `${ghTag} ${orTag}`),
+        ]),
+        el('p', {
+          style: 'margin:0;font-size:13px;line-height:1.45;white-space:pre-wrap;',
+        }, result.sandboxChat.reply),
+      ])
+    );
+  }
   if (result.warning) body.append(el('p', { class: 'intent-warning' }, result.warning));
   return message;
 }
@@ -2395,12 +2480,21 @@ function renderAgentRail(host, status, analysis) {
   const safe = status || {};
   const counts = safe.counts || {};
   const pause = agentPauseInfo(safe);
+  const sb = state.sandbox;
+  const sbEnv = (sb && sb.environment) || {};
   host.append(
     railIntro('Workspace setup', 'Automatic planning and the model that supports this conversation.'),
     el('div', { class: 'rail-summary' }, [
       el('div', {}, [el('strong', {}, String(counts.running || 0)), el('span', {}, 'active')]),
       el('div', {}, [el('strong', {}, String(counts.done || 0)), el('span', {}, 'done')]),
       el('div', {}, [el('strong', {}, String(counts.error || 0)), el('span', {}, 'needs help')]),
+    ]),
+    el('div', { class: 'rail-section-label' }, 'NVIDIA OpenShell Sandbox'),
+    detailCard([
+      ['Gateway', 'https://openshell.archagentix.com'],
+      ['Sandbox', sb ? `${sb.name} (${sb.phase || 'READY'})` : 'Loading...'],
+      ['GitHub Secret', sbEnv.GITHUB_TOKEN || 'MISSING'],
+      ['OpenRouter Secret', sbEnv.OPENROUTER_API_KEY || 'MISSING'],
     ]),
     el('div', { class: 'rail-section-label' }, 'Current setup'),
     detailCard([

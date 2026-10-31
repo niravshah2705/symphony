@@ -465,6 +465,26 @@ export const api = {
   }),
   routeAgentMessage: (payload) =>
     request('/agent/message', { method: 'POST', body: JSON.stringify(payload) }),
+  getSandboxStatus: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/agent/sandbox${query ? `?${query}` : ''}`);
+  },
+  loadProjectSandbox: (payload = {}) =>
+    request('/agent/sandbox/load', { method: 'POST', body: JSON.stringify(payload) }),
+  chatWithSandbox: (payload = {}) =>
+    request('/agent/sandbox/chat', { method: 'POST', body: JSON.stringify(payload) }),
+  execInSandbox: (payload = {}) =>
+    request('/agent/sandbox/exec', { method: 'POST', body: JSON.stringify(payload) }),
+  getSandboxNetworkPolicy: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/agent/sandbox/policy${query ? `?${query}` : ''}`);
+  },
+  saveSandboxNetworkPolicy: (payload = {}) =>
+    request('/agent/sandbox/policy', { method: 'POST', body: JSON.stringify(payload) }),
+  runSandboxSecurityCheck: (payload = {}) =>
+    request('/agent/sandbox/security-check', { method: 'POST', body: JSON.stringify(payload) }),
+  saveSandboxOrgConfig: (payload = {}) =>
+    request('/agent/sandbox/org-config', { method: 'PUT', body: JSON.stringify(payload) }),
   searchAgentKnowledge: (payload) =>
     request('/agent/knowledge-search', { method: 'POST', body: JSON.stringify(payload) }),
   // Typed workspace memory (user | business | project | task | workspace).
@@ -545,6 +565,10 @@ export const api = {
     getLedger: (limit = 50) => request(`/billing/ledger?limit=${encodeURIComponent(limit)}`),
     recharge: (amountInr) => request('/billing/recharge', { method: 'POST', body: JSON.stringify({ amountInr }) }),
     updateConfig: (payload) => request('/billing/config', { method: 'PUT', body: JSON.stringify(payload) }),
+    createCashfreeMandate: (payload = {}) => request('/billing/cashfree/create-mandate', { method: 'POST', body: JSON.stringify(payload) }),
+    verifyCashfreeMandate: (subscriptionId) => request('/billing/cashfree/verify-mandate', { method: 'POST', body: JSON.stringify({ subscriptionId }) }),
+    createCashfreeOrder: (payload = {}) => request('/billing/cashfree/create-order', { method: 'POST', body: JSON.stringify(payload) }),
+    verifyCashfreeOrder: (orderId) => request('/billing/cashfree/verify-order', { method: 'POST', body: JSON.stringify({ orderId }) }),
   },
 
   identity: {

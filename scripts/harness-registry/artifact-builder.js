@@ -29,19 +29,19 @@ const COMMAND_TIMEOUT_MS = 20 * 60 * 1000;
 const CHROME_DEVTOOLS_MCP_VERSION = '1.6.0';
 
 const TOOL_VERSIONS = Object.freeze({
-  dcode: '0.1.55',
-  codex: '0.146.1',
-  claude: '2.1.198',
-  deepseek: '0.1.0-rc.6',
-  pi: '0.84.1',
-  omp: '17.2.15',
+  dcode: '0.2.2',
+  codex: '0.165.0',
+  claude: '2.1.312',
+  deepseek: '0.2.1-rc.5',
+  pi: '1.4.0',
+  omp: '18.13.3',
   'ecc-installer': '2.2.x',
 });
 
 const NPM_CLI_PACKAGES = Object.freeze({
   codex: '@openai/codex',
   claude: '@anthropic-ai/claude-code',
-  deepseek: '@deepseek-ai/dsh',
+  deepseek: '@deepseek-ai/dsh-sdk-client',
   pi: '@earendil-works/pi-coding-agent',
 });
 

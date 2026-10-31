@@ -42,20 +42,20 @@ resource "google_cloud_scheduler_job" "billing_tick" {
 
   http_target {
     http_method = "POST"
-    uri         = "${local.planner_url}/pubsub/billing-tick"
+    uri         = "${local.billing_url}/pubsub/billing-tick"
     headers     = { "Content-Type" = "application/json" }
     body        = base64encode("{}")
 
     oidc_token {
       service_account_email = google_service_account.pubsub_push.email
-      audience              = local.planner_url
+      audience              = local.billing_url
     }
   }
 
   depends_on = [
     google_project_service.services,
-    google_cloud_run_v2_service.planner,
-    google_cloud_run_v2_service_iam_member.push_invokes_planner,
+    google_cloud_run_v2_service.billing,
+    google_cloud_run_v2_service_iam_member.push_invokes_billing,
   ]
 }
 

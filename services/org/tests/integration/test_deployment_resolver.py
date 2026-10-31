@@ -70,16 +70,21 @@ async def test_orgless_user_stays_orgless_on_deployment_lookup(client):
 
     deployment = await client.get("/api/v1/me/deployment", headers=auth(token))
     assert deployment.status_code == 200
-    assert deployment.json() == {
-        "status": "shared",
-        "gateway_url": "",
-        "org_id": None,
-        "org_name": None,
-    }
+    assert deployment.json()["status"] == "shared"
+    assert deployment.json()["org_name"] == "default"
+    assert deployment.json()["org_id"] is not None
+
     context = await client.get("/api/v1/me/context", headers=auth(token))
-    assert context.json()["organizations"] == []
-    assert context.json()["selected"] is None
-    assert await new_uow().db.query(ORGS) == []
+    orgs = context.json()["organizations"]
+    assert len(orgs) == 1
+    assert orgs[0]["name"] == "default"
+    assert orgs[0]["role"] == "ORG_ADMIN"
+    tag_names = {t["name"] for t in orgs[0]["tags"]}
+    assert tag_names == {"default=true", "initialise=false"}
+    assert len(orgs[0]["projects"]) == 1
+    assert orgs[0]["projects"][0]["name"] == "default"
+    proj_tag_names = {t["name"] for t in orgs[0]["projects"][0]["tags"]}
+    assert proj_tag_names == {"default=true", "initialise=false"}
 
 
 @pytest.mark.asyncio

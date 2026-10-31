@@ -61,6 +61,7 @@ MANAGED_ENV = {
     "openaiApiKey": "OPENAI_API_KEY",
     "huggingfaceApiKey": "HUGGINGFACE_API_KEY",
     "langsmithApiKey": "LANGSMITH_API_KEY",
+    "openrouterApiKey": "OPENROUTER_API_KEY",
     "digilockerClientId": "DIGILOCKER_CLIENT_ID",
     "digilockerClientSecret": "DIGILOCKER_CLIENT_SECRET",
     # LangSmith LLM Gateway workspace key (managed-only; see models/secrets.py).

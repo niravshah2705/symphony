@@ -95,3 +95,33 @@ test('persists the versioned preference independently for each signed-in user', 
     },
   });
 });
+
+test('normalizes tags and default flags on organization and project', () => {
+  const defaultContext = normalizeWorkspaceContext({
+    user: { id: 'u-1', email: 'test@example.com' },
+    organizations: [
+      {
+        id: 'org-default-1',
+        name: 'default',
+        tags: [{ name: 'default=true' }, { name: 'initialise=false' }],
+        projects: [
+          {
+            id: 'proj-default-1',
+            name: 'default',
+            tags: [{ name: 'default=true' }, { name: 'initialise=false' }],
+          },
+        ],
+      },
+    ],
+  });
+
+  const org = defaultContext.organizations[0];
+  assert.equal(org.name, 'default');
+  assert.equal(org.isDefault, true);
+  assert.deepEqual(org.tags, [{ id: null, name: 'default=true' }, { id: null, name: 'initialise=false' }]);
+
+  const proj = org.projects[0];
+  assert.equal(proj.name, 'default');
+  assert.equal(proj.isDefault, true);
+  assert.deepEqual(proj.tags, [{ id: null, name: 'default=true' }, { id: null, name: 'initialise=false' }]);
+});

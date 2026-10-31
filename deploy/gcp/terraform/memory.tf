@@ -1,67 +1,157 @@
 # -----------------------------------------------------------------------------
-# Agent memory store (claude-mem, harness-agnostic) — GCS bucket + gcsfuse mount.
+# Agent memory store (claude-mem, harness-agnostic) — Cloud SQL for PostgreSQL.
 # -----------------------------------------------------------------------------
 # The MemoryMiddleware (packages/shared/src/agent/memory-middleware.js) captures
 # + AI-compresses each finished agent run and injects durable memory into future
-# ones. Persistence is this bucket, mounted READ-WRITE via gcsfuse at MEMORY_ROOT
-# (/memory) on the planner + coder services (see cloud_run.tf), version-pinned by
-# MEMORY_VERSION. On-disk layout is write-once-per-memory files, tenant-isolated
-# by an org digest, so a single shared bucket keeps tenants separate by path:
-#   /memory/<version>/<orgKey>/<scope>/<stamp>__<id>.md   frontmatter + text
-#   /memory/<version>/<orgKey>/<scope>/<stamp>__<id>.f32  768×float32 embedding
+# ones. Persistence is one Cloud SQL Postgres database; the planner + coder talk
+# to it over the Cloud Run /cloudsql unix socket (Cloud SQL Auth Proxy is created
+# by Cloud Run from the cloud_sql volume — no VPC connector, no public network
+# rule). Tenant isolation is a row-level `org_key` column (a stable digest of the
+# workspace organization), NOT a per-tenant database:
 #
-# UNLIKE the read-only skills/registry buckets, the agents WRITE here at runtime,
-# so the planner/coder SAs get objectAdmin (not objectViewer) and the volume is
-# mounted read_only = false. There is NO CI publisher — nothing pushes bundles.
+#   agent_memories(id, org_key, scope, title, body, tags, source, ref_id,
+#                  created_at, embedding bytea)
 #
-# Terraform CREATES and OWNS the bucket. The name defaults to a derived
-# "<project_id>-aifleet-memory" (override with var.memory_bucket_name). The whole
-# feature is gated by var.memory_enabled; the gcsfuse MOUNT is a SEPARATE toggle
-# (var.memory_mount_enabled, default OFF) because the gen2 fuse mount is fragile
-# (same startup-probe caveat as the skills mount). Mount off → MEMORY_ROOT is
-# unset and the middleware falls back to the Firestore/file memories store
-# (packages/shared/src/agent/memory-store/index.js), or stays dormant if the
-# per-org `memoryEnabled` opt-in is off (it is off by default).
+# The table is created lazily by the runtime
+# (packages/shared/src/agent/memory-store/postgres-backend.js), so no
+# migration job is required. Embeddings are float32 LE bytea + in-process
+# cosine — no pgvector extension, no Chroma sidecar.
+#
+# COST: Cloud SQL does NOT scale to zero. A db-f1-micro ZONAL instance with a
+# 10 GB SSD is the cheapest useful tier; leave memory_enabled = false to keep
+# the stack at $0. deletion_protection defaults true — it holds real memories.
+#
+# The password + composed connection string live in Secret Manager and are
+# mounted as MEMORY_DATABASE_URL on the agent containers (cloud_run.tf).
 
-resource "google_storage_bucket" "memory" {
-  count    = var.memory_enabled ? 1 : 0
-  project  = var.project_id
-  name     = local.memory_bucket_name
-  location = var.region
-  labels   = merge(local.common_labels, { component = "memory" })
+resource "random_password" "memory_db" {
+  count   = var.memory_enabled ? 1 : 0
+  length  = 32
+  special = false # the value is embedded in a connection-string URL
+}
 
-  # Uniform bucket-level access — no per-object ACLs (infra checklist).
-  uniform_bucket_level_access = true
+resource "google_sql_database_instance" "memory" {
+  count = var.memory_enabled ? 1 : 0
 
-  # Holds compressed agent memories (may reference internal decisions). Enforce
-  # no-public-access so an accidental allUsers grant can never expose them.
-  public_access_prevention = "enforced"
+  project          = var.project_id
+  name             = local.memory_db_instance_name
+  region           = var.region
+  database_version = var.memory_db_version
 
-  force_destroy = var.memory_bucket_force_destroy
+  # Real compressed agent memories live here; require an explicit opt-out
+  # before `terraform destroy` can drop them.
+  deletion_protection = var.memory_db_deletion_protection
 
-  # Object versioning keeps a prior generation if a memory object were ever
-  # overwritten in place; writes are write-once so this is only a safety net.
-  versioning {
-    enabled = true
+  settings {
+    tier      = var.memory_db_tier
+    edition   = "ENTERPRISE"
+    disk_size = var.memory_db_disk_size_gb
+    disk_type = "PD_SSD"
+
+    disk_autoresize   = true
+    availability_type = "ZONAL"
+    user_labels       = merge(local.common_labels, { component = "memory" })
+
+    # Public IP with NO authorized networks: only the Cloud SQL Auth Proxy
+    # (IAM-authenticated, created by Cloud Run's cloud_sql volume) can reach it.
+    # The runtime never opens a direct TCP connection.
+    ip_configuration {
+      ipv4_enabled = true
+    }
+
+    backup_configuration {
+      enabled    = var.memory_db_backups_enabled
+      start_time = "03:00"
+    }
+
+    insights_config {
+      query_insights_enabled = false
+    }
   }
 
   depends_on = [google_project_service.services]
 }
 
-# --- Read/WRITE access for the planner + coder service accounts ---------------
-# coder-sa is shared by coder-control AND the coder-worker Job, so this single
-# grant covers the worker that actually persists memories. objectAdmin (not
-# admin) — read/write objects, never change bucket IAM/config.
-resource "google_storage_bucket_iam_member" "planner_memory_write" {
-  count  = var.memory_enabled ? 1 : 0
-  bucket = google_storage_bucket.memory[0].name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.planner.email}"
+resource "google_sql_database" "memory" {
+  count = var.memory_enabled ? 1 : 0
+
+  project  = var.project_id
+  instance = google_sql_database_instance.memory[0].name
+  name     = var.memory_db_name
 }
 
-resource "google_storage_bucket_iam_member" "coder_memory_write" {
-  count  = var.memory_enabled ? 1 : 0
-  bucket = google_storage_bucket.memory[0].name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.coder.email}"
+resource "google_sql_user" "memory" {
+  count = var.memory_enabled ? 1 : 0
+
+  project  = var.project_id
+  instance = google_sql_database_instance.memory[0].name
+  name     = var.memory_db_user
+  password = random_password.memory_db[0].result
+}
+
+# --- Connection string (Secret Manager) --------------------------------------
+# host query param pins the Cloud Run /cloudsql unix socket. Matches the
+# cloud_sql volume mount path in cloud_run.tf.
+resource "google_secret_manager_secret" "memory_database_url" {
+  count = var.memory_enabled ? 1 : 0
+
+  project   = var.project_id
+  secret_id = "memory-database-url"
+  labels    = merge(local.common_labels, { component = "memory" })
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+resource "google_secret_manager_secret_version" "memory_database_url" {
+  count = var.memory_enabled ? 1 : 0
+
+  secret = google_secret_manager_secret.memory_database_url[0].id
+  secret_data = format(
+    "postgresql://%s:%s@/%s?host=/cloudsql/%s",
+    urlencode(google_sql_user.memory[0].name),
+    urlencode(random_password.memory_db[0].result),
+    google_sql_database.memory[0].name,
+    google_sql_database_instance.memory[0].connection_name,
+  )
+}
+
+# --- Access: Cloud SQL client + the connection-string secret ------------------
+# coder-sa is shared by coder-control AND the coder-worker Job, so one grant
+# covers the worker that actually persists memories.
+resource "google_project_iam_member" "planner_memory_db_client" {
+  count = var.memory_enabled ? 1 : 0
+
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.planner.email}"
+}
+
+resource "google_project_iam_member" "coder_memory_db_client" {
+  count = var.memory_enabled ? 1 : 0
+
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.coder.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "planner_memory_database_url" {
+  count = var.memory_enabled ? 1 : 0
+
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.memory_database_url[0].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.planner.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "coder_memory_database_url" {
+  count = var.memory_enabled ? 1 : 0
+
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.memory_database_url[0].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.coder.email}"
 }

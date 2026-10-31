@@ -98,7 +98,8 @@ async def test_orgless_user_creates_organization_and_becomes_admin(client):
     token = login.json()["access_token"]
 
     before = await _me(client, token)
-    assert before["has_organization"] is False
+    assert before["has_organization"] is True
+    assert before["org_role"] == "ORG_ADMIN"
 
     created = await client.post("/api/v1/me/organization", headers=auth(token), json={"name": "Solo Inc"})
     assert created.status_code == 201, created.text

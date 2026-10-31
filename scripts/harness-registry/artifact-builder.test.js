@@ -478,8 +478,8 @@ test('DeepSeek stages ECC skills through the pinned first-party dsh contract', (
   assert.deepEqual(Object.keys(HARNESS_INSTALLERS), HARNESS_IDS);
   assert.deepEqual(Object.keys(STRATEGY_METADATA), HARNESS_IDS);
   assert.deepEqual(calls[0].options, {
-    name: '@deepseek-ai/dsh',
-    version: '0.1.0-rc.6',
+    name: '@deepseek-ai/dsh-sdk-client',
+    version: TOOL_VERSIONS.deepseek,
     binary: 'dsh',
     toolsRoot,
     env: { CI: 'true', DSH_HOME: fs.realpathSync(path.join(homeRoot, '.dsh')) },

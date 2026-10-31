@@ -254,6 +254,9 @@ function publicSettings() {
     maskedAntigravityApiKey: '',
     hasGithubToken: false,
     maskedGithubToken: '',
+    hasOpenrouterApiKey: Boolean(s.openrouterApiKey),
+    maskedOpenrouterApiKey: s.openrouterApiKey ? '••••••••' : '',
+    openshellUrl: s.openshellUrl || CONFIG.OPENSHELL?.url || 'https://openshell.archagentix.com',
     hasGitlabToken: false,
     maskedGitlabToken: '',
     hasLangsmithKey: false,
@@ -718,6 +721,15 @@ router.put('/integrations', (req, res) => {
       return res.status(400).json({ error: 'Repository must be owner/name or a github.com/gitlab.com Git URL.' });
     }
     patch.repositoryUrl = repositoryUrl;
+  }
+  if (b.openshellUrl !== undefined) {
+    patch.openshellUrl = normalizeHost(b.openshellUrl, CONFIG.OPENSHELL?.url || 'https://openshell.archagentix.com');
+  }
+  if (b.openrouterApiKey !== undefined) {
+    patch.openrouterApiKey = String(b.openrouterApiKey || '').trim().slice(0, 500);
+  }
+  if (b.clearOpenrouterApiKey) {
+    patch.openrouterApiKey = '';
   }
 
   // Validate the effective pair, including provider-only API updates. This keeps

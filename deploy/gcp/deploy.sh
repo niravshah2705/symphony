@@ -44,6 +44,7 @@ TF_STATE_PREFIX="${TF_STATE_PREFIX:-ai-fleet/gcp}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://storage.googleapis.com}"
 FIREBASE_ALLOWED_DOMAIN="${FIREBASE_ALLOWED_DOMAIN:-}"
+FIREBASE_CUSTOM_DOMAIN="${FIREBASE_CUSTOM_DOMAIN:-}"
 GOOGLE_ONE_TAP_CLIENT_ID="${GOOGLE_ONE_TAP_CLIENT_ID:-}"  # public OAuth Web client id for Google One Tap (optional)
 GOOGLE_ANALYTICS_MEASUREMENT_ID="${GOOGLE_ANALYTICS_MEASUREMENT_ID:-}"
 AUTH_ADMIN_EMAILS="${AUTH_ADMIN_EMAILS:-}"
@@ -127,6 +128,10 @@ TFVARS=(
   -var="lmstudio_proxy_upstream=${LMSTUDIO_PROXY_UPSTREAM}"
   -var="openswe_proxy_upstream=${OPENSWE_PROXY_UPSTREAM}"
 )
+if [ -n "$FIREBASE_CUSTOM_DOMAIN" ]; then
+  CUSTOM_DOMAIN_JSON="$(echo "$FIREBASE_CUSTOM_DOMAIN" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "") | gsub("^https?://"; "") | gsub("/+$"; "")) | map(select(length > 0))')"
+  TFVARS+=( -var="custom_domain=${CUSTOM_DOMAIN_JSON}" )
+fi
 
 # --- 1. Enable APIs ---------------------------------------------------------
 log "Enabling required APIs"
@@ -265,6 +270,26 @@ gsutil -m setmeta -h "Content-Type:text/javascript" "gs://${SPA_BUCKET}/**/*.mjs
 
 # --- 8. Full apply ----------------------------------------------------------
 log "Full apply (Cloud Run services + job, Pub/Sub, Scheduler, Firestore, IAM)"
+
+# Idempotently import pre-existing Firestore composite indexes if missing from state
+chunks_idx_addr="google_firestore_index.attachment_chunks_by_conversation_and_embedding"
+if ! terraform -chdir="$TF_DIR" state list 2>/dev/null | grep -qxF "$chunks_idx_addr"; then
+  existing_chunks_idx="$(gcloud firestore indexes composite list --project="${PROJECT_ID}" --format=json 2>/dev/null | jq -r '.[] | select((.queryScope=="COLLECTION_GROUP" or .queryScope==null) and ((.name | contains("/collectionGroups/chunks/indexes/")) or (.fields[0].fieldPath=="conversationId" and .fields[1].fieldPath=="embedding"))) | .name' 2>/dev/null | head -n 1 || true)"
+  if [ -n "$existing_chunks_idx" ]; then
+    echo "Importing existing Firestore attachment chunks vector index ($existing_chunks_idx) into Terraform state..."
+    terraform -chdir="$TF_DIR" import -input=false "${TFVARS[@]}" -var="api_base_url=${GATEWAY_URL}" "$chunks_idx_addr" "$existing_chunks_idx" || true
+  fi
+fi
+
+users_idx_addr="google_firestore_index.org_users_by_created_at"
+if ! terraform -chdir="$TF_DIR" state list 2>/dev/null | grep -qxF "$users_idx_addr"; then
+  existing_users_idx="$(gcloud firestore indexes composite list --project="${PROJECT_ID}" --format=json 2>/dev/null | jq -r '.[] | select((.name | contains("/collectionGroups/users/indexes/")) or (.fields[0].fieldPath=="org_id" and .fields[1].fieldPath=="created_at")) | .name' 2>/dev/null | head -n 1 || true)"
+  if [ -n "$existing_users_idx" ]; then
+    echo "Importing existing Firestore org users index ($existing_users_idx) into Terraform state..."
+    terraform -chdir="$TF_DIR" import -input=false "${TFVARS[@]}" -var="api_base_url=${GATEWAY_URL}" "$users_idx_addr" "$existing_users_idx" || true
+  fi
+fi
+
 terraform -chdir="$TF_DIR" apply -input=false -auto-approve "${TFVARS[@]}" \
   -var="api_base_url=${GATEWAY_URL}"
 

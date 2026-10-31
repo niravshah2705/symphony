@@ -1709,6 +1709,11 @@ function integrationsSection(ctx, scopeState) {
   });
   const githubToken = pwd(settings.hasGithubToken ? 'Configured — paste to replace' : 'github_pat_… / ghp_…');
   const gitlabToken = pwd(settings.hasGitlabToken ? 'Configured — paste to replace' : 'glpat-…');
+  const openshellUrl = el('input', {
+    value: settings.openshellUrl || 'https://openshell.archagentix.com',
+    placeholder: 'https://openshell.archagentix.com',
+  });
+  const openrouterApiKey = pwd(settings.hasOpenrouterApiKey ? 'Configured — paste to replace' : 'sk-or-v1-…');
   const jiraBaseUrl = el('input', { value: settings.jiraBaseUrl || '', placeholder: 'https://company.atlassian.net' });
   const jiraEmail = el('input', { value: settings.jiraEmail || '', type: 'email', placeholder: 'you@company.com' });
   const jiraToken = pwd(settings.hasJiraToken ? 'Configured — paste to replace' : 'Jira API token');
@@ -1731,6 +1736,7 @@ function integrationsSection(ctx, scopeState) {
   };
   const clearGithub = removalControl(settings.hasGithubToken, 'Remove saved GitHub token', githubToken);
   const clearGitlab = removalControl(settings.hasGitlabToken, 'Remove saved GitLab token', gitlabToken);
+  const clearOpenrouter = removalControl(settings.hasOpenrouterApiKey, 'Remove saved OpenRouter token', openrouterApiKey);
   const clearJira = removalControl(settings.hasJiraToken, 'Remove saved Jira token', jiraToken);
   const clearAsana = removalControl(settings.hasAsanaToken, 'Remove saved Asana token', asanaToken);
 
@@ -1779,20 +1785,30 @@ function integrationsSection(ctx, scopeState) {
     save.disabled = true;
     save.textContent = 'Saving…';
     status.textContent = '';
-    const wantsCredentialChange = [githubToken, gitlabToken, jiraToken, asanaToken]
+    const wantsCredentialChange = [githubToken, gitlabToken, openrouterApiKey, jiraToken, asanaToken]
       .some((input) => input.value.trim())
-      || [clearGithub, clearGitlab, clearJira, clearAsana]
+      || [clearGithub, clearGitlab, clearOpenrouter, clearJira, clearAsana]
         .some((control) => control.checkbox.checked);
     const payload = {
       planningProvider: planningProvider.value,
       repositoryProvider: repositoryProvider.value,
       repositoryUrl: repositoryUrl.value.trim(),
+      openshellUrl: openshellUrl.value.trim() || 'https://openshell.archagentix.com',
     };
+    if (!vault) {
+      if (clearGithub.checkbox.checked) payload.clearGithubToken = true;
+      else if (githubToken.value.trim()) payload.githubToken = githubToken.value.trim();
+      if (clearGitlab.checkbox.checked) payload.clearGitlabToken = true;
+      else if (gitlabToken.value.trim()) payload.gitlabToken = gitlabToken.value.trim();
+      if (clearOpenrouter.checkbox.checked) payload.clearOpenrouterApiKey = true;
+      else if (openrouterApiKey.value.trim()) payload.openrouterApiKey = openrouterApiKey.value.trim();
+      if (clearJira.checkbox.checked) payload.clearJiraToken = true;
+      else if (jiraToken.value.trim()) payload.jiraToken = jiraToken.value.trim();
+      if (clearAsana.checkbox.checked) payload.clearAsanaToken = true;
+      else if (asanaToken.value.trim()) payload.asanaToken = asanaToken.value.trim();
+    }
     try {
-      if (wantsCredentialChange && !vault) {
-        throw new Error('Choose an organization or project scope you can administer.');
-      }
-      await api.saveIntegrations(payload);
+      const savedIntegrations = await api.saveIntegrations(payload);
       if (scopeState.identity?.isOrgAdmin) {
         ctx.connectors = await api.settingsPolicy.setOrgConnectors({
           jira_origin: jiraBaseUrl.value.trim(),
@@ -1805,6 +1821,7 @@ function integrationsSection(ctx, scopeState) {
       for (const [key, input, clearControl, customerOnly] of [
         ['githubToken', githubToken, clearGithub, false],
         ['gitlabToken', gitlabToken, clearGitlab, true],
+        ['openrouterApiKey', openrouterApiKey, clearOpenrouter, false],
         ['jiraApiToken', jiraToken, clearJira, true],
         ['asanaAccessToken', asanaToken, clearAsana, true],
       ]) {
@@ -1817,30 +1834,45 @@ function integrationsSection(ctx, scopeState) {
         }
       }
       let entries = settings.vaultSecrets || {};
-      if (Object.keys(values).length) {
-        if (!vault) throw new Error('Choose an organization or project scope you can administer.');
+      if (Object.keys(values).length && vault) {
         const saved = await vault.set(values, selection);
         entries = (saved && saved.secrets) || entries;
         settings.vaultSecrets = entries;
       }
       githubToken.value = '';
       gitlabToken.value = '';
+      openrouterApiKey.value = '';
       jiraToken.value = '';
       asanaToken.value = '';
+      const hasVaultEntries = Boolean(vault && Object.keys(entries).length);
       const nextState = {
-        hasGithubToken: Boolean(entries.githubToken && entries.githubToken.set),
-        hasGitlabToken: Boolean(entries.gitlabToken && entries.gitlabToken.set),
-        hasJiraToken: Boolean(entries.jiraApiToken && entries.jiraApiToken.set),
-        hasAsanaToken: Boolean(entries.asanaAccessToken && entries.asanaAccessToken.set),
+        openshellUrl: payload.openshellUrl,
+        hasGithubToken: hasVaultEntries
+          ? Boolean(entries.githubToken && entries.githubToken.set)
+          : Boolean(savedIntegrations && savedIntegrations.hasGithubToken),
+        hasGitlabToken: hasVaultEntries
+          ? Boolean(entries.gitlabToken && entries.gitlabToken.set)
+          : Boolean(savedIntegrations && savedIntegrations.hasGitlabToken),
+        hasOpenrouterApiKey: hasVaultEntries
+          ? Boolean(entries.openrouterApiKey && entries.openrouterApiKey.set)
+          : Boolean(savedIntegrations && savedIntegrations.hasOpenrouterApiKey),
+        hasJiraToken: hasVaultEntries
+          ? Boolean(entries.jiraApiToken && entries.jiraApiToken.set)
+          : Boolean(savedIntegrations && savedIntegrations.hasJiraToken),
+        hasAsanaToken: hasVaultEntries
+          ? Boolean(entries.asanaAccessToken && entries.asanaAccessToken.set)
+          : Boolean(savedIntegrations && savedIntegrations.hasAsanaToken),
       };
       Object.assign(settings, nextState);
       githubToken.placeholder = nextState.hasGithubToken ? 'Configured — paste to replace' : 'github_pat_… / ghp_…';
       gitlabToken.placeholder = nextState.hasGitlabToken ? 'Configured — paste to replace' : 'glpat-…';
+      openrouterApiKey.placeholder = nextState.hasOpenrouterApiKey ? 'Configured — paste to replace' : 'sk-or-v1-…';
       jiraToken.placeholder = nextState.hasJiraToken ? 'Configured — paste to replace' : 'Jira API token';
       asanaToken.placeholder = nextState.hasAsanaToken ? 'Configured — paste to replace' : 'Asana personal access token';
       for (const [control, saved] of [
         [clearGithub, nextState.hasGithubToken],
         [clearGitlab, nextState.hasGitlabToken],
+        [clearOpenrouter, nextState.hasOpenrouterApiKey],
         [clearJira, nextState.hasJiraToken],
         [clearAsana, nextState.hasAsanaToken],
       ]) {
@@ -1864,8 +1896,8 @@ function integrationsSection(ctx, scopeState) {
 
   const repoName = settings.repositoryProvider === 'gitlab' ? 'GitLab' : 'GitHub';
   const planName = ({ linear: 'Linear', jira: 'Jira', asana: 'Asana' })[settings.planningProvider] || 'Linear';
-  return section('Tool integrations', `${planName} · ${repoName}`, true, [
-    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Credentials are encrypted in the selected scope vault. Jira and Asana configuration can be staged, but their work-item adapters are not yet routable.'),
+  return section('Tool integrations', `${planName} · ${repoName} · NVIDIA OpenShell`, true, [
+    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Credentials are encrypted in the selected scope vault (or stored locally in direct dev mode) and synced as NVIDIA OpenShell secrets when loading project sandboxes.'),
     el('div', { class: 'subhead' }, 'Project planning'),
     field('Planning tool', planningProvider),
     linearFields,
@@ -1876,6 +1908,10 @@ function integrationsSection(ctx, scopeState) {
     field('Default repository', repositoryUrl, 'Use owner/name, group/project, or a GitHub/GitLab Git URL.'),
     githubFields,
     gitlabFields,
+    el('div', { class: 'subhead' }, 'NVIDIA OpenShell Sandbox & Secrets'),
+    field('OpenShell Gateway URL', openshellUrl, 'gRPC / HTTPS endpoint for NVIDIA OpenShell sandbox orchestration (default: https://openshell.archagentix.com).'),
+    field('OpenRouter API Key (NVIDIA Secret)', openrouterApiKey, 'Provisioned as an NVIDIA OpenShell secret (OPENROUTER_API_KEY) alongside GITHUB_TOKEN whenever a project sandbox is loaded.'),
+    clearOpenrouter.row,
     el('div', { class: 'row' }, [save, status]),
   ]);
 }

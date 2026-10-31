@@ -358,6 +358,23 @@ const ANTIGRAVITY = Object.freeze({
 });
 
 /**
+ * OpenRouter + NVIDIA OpenShell configuration.
+ * OpenShell runs at https://openshell.archagentix.com by default and receives
+ * project-scoped GitHub + OpenRouter secrets as NVIDIA OpenShell Providers.
+ */
+const OPENROUTER = Object.freeze({
+  defaultHost: proxied('/openrouter', process.env.OPENROUTER_API_URL, 'https://openrouter.ai/api/v1'),
+});
+
+const OPENSHELL = Object.freeze({
+  url: process.env.OPENSHELL_URL || 'https://openshell.archagentix.com',
+  workspace: process.env.OPENSHELL_WORKSPACE || 'tenant-a',
+  allowedWorkspaces: Object.freeze(['tenant-a', 'tenant-b']),
+  defaultImage: process.env.OPENSHELL_DEFAULT_IMAGE || 'ubuntu:24.04',
+  token: process.env.OPENSHELL_TOKEN || process.env.OPENSHELL_API_KEY || '',
+});
+
+/**
  * Code-writer deep agent + workflow config (an equivalent of OpenAI Symphony's
  * WORKFLOW.md frontmatter). The agent works a Linear ticket end-to-end in an
  * isolated git workspace, driving it through the ticket state machine while
@@ -493,6 +510,7 @@ const DEPLOYER_SERVICE_PORT = Number(process.env.DEPLOYER_SERVICE_PORT) || 4060;
 const ORCHESTRATOR_SERVICE_PORT = Number(process.env.ORCHESTRATOR_SERVICE_PORT) || 4070;
 const IDENTITY_SERVICE_PORT = Number(process.env.IDENTITY_SERVICE_PORT) || 4080;
 const EMAIL_SERVICE_PORT = Number(process.env.EMAIL_SERVICE_PORT) || 4040;
+const BILLING_SERVICE_PORT = Number(process.env.BILLING_SERVICE_PORT) || 4050;
 const ORG_SERVICE_PORT = Number(process.env.ORG_SERVICE_PORT) || 8000;
 // Settings-policy service (Python/FastAPI, Firestore). Local default 8100 so it
 // does not clash with the org service's 8000 when both run on one host.
@@ -506,6 +524,7 @@ const SERVICES = Object.freeze({
   orchestratorPort: ORCHESTRATOR_SERVICE_PORT,
   identityPort: IDENTITY_SERVICE_PORT,
   emailPort: EMAIL_SERVICE_PORT,
+  billingPort: BILLING_SERVICE_PORT,
   settingsPort: SETTINGS_SERVICE_PORT,
   plannerUrl: process.env.PLANNER_URL || `http://localhost:${PLANNER_PORT}`,
   coderUrl: process.env.CODER_URL || `http://localhost:${CODER_SERVICE_PORT}`,
@@ -516,6 +535,7 @@ const SERVICES = Object.freeze({
   // Shared transactional email service. Producers publish allow-listed jobs to
   // Pub/Sub in cloud mode and use this push-compatible endpoint in local mode.
   emailUrl: process.env.EMAIL_URL || `http://localhost:${EMAIL_SERVICE_PORT}`,
+  billingUrl: process.env.BILLING_URL || (process.env.NODE_ENV === 'production' ? '' : `http://localhost:${BILLING_SERVICE_PORT}`),
   // Organization service (Python/FastAPI, Firestore). The gateway proxies
   // /api/org/* -> orgUrl/api/v1/* (see services/gateway/src/index.js). Empty
   // when unset so the gateway can 501 the org routes rather than crash.
@@ -555,6 +575,24 @@ const STORE_NAMESPACE = String(process.env.STORE_NAMESPACE || '')
   .trim()
   .toLowerCase()
   .replace(/[^a-z0-9-]/g, '');
+
+/**
+ * Parse and normalize browser origins permitted via CORS from SPA_ORIGIN
+ * and FIREBASE_CUSTOM_DOMAIN.
+ */
+function parseSpaOrigins(env = process.env) {
+  const spaOrigins = String(env?.SPA_ORIGIN || '')
+    .split(',')
+    .map((value) => value.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+  const customDomains = String(env?.FIREBASE_CUSTOM_DOMAIN || '')
+    .split(',')
+    .map((value) => value.trim().replace(/\/+$/, ''))
+    .filter(Boolean)
+    .map((domain) => (/^https?:\/\//i.test(domain) ? domain : `https://${domain}`));
+  return Object.freeze(Array.from(new Set([...spaOrigins, ...customDomains])));
+}
+
 const GCP = Object.freeze({
   projectId: process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || '',
   region: process.env.GCP_REGION || 'us-central1',
@@ -581,9 +619,11 @@ const GCP = Object.freeze({
   //   pushServiceAccount  the SA email Pub/Sub is configured to sign push tokens as
   pushAudience: String(process.env.PUBSUB_PUSH_AUDIENCE || '').trim(),
   pushServiceAccount: String(process.env.PUBSUB_PUSH_SA || '').trim(),
+  // Custom domain(s) for Firebase Hosting
+  customDomain: String(process.env.FIREBASE_CUSTOM_DOMAIN || '').trim(),
   // Allowlist of browser origins permitted via CORS (the SPA's GCS/website
-  // origin). Empty in local dev (same-origin — no CORS needed).
-  spaOrigins: String(process.env.SPA_ORIGIN || '').split(',').map((value) => value.trim()).filter(Boolean),
+  // origin, plus any custom domain configured via FIREBASE_CUSTOM_DOMAIN). Empty in local dev (same-origin — no CORS needed).
+  spaOrigins: parseSpaOrigins(process.env),
   // Absolute base URL of the gateway API, injected into the SPA at deploy time.
   apiBaseUrl: String(process.env.API_BASE_URL || '').trim(),
 });
@@ -653,40 +693,27 @@ const SKILLS = Object.freeze({
 /**
  * Agent memory store (claude-mem, harness-agnostic). The MemoryMiddleware
  * captures + compresses finished runs and injects durable memory into future
- * ones. Persistence is a GCS bucket mounted READ-WRITE via gcsfuse at MEMORY_ROOT
- * (mirrors the read-only skills mount), version-pinned by MEMORY_VERSION:
+ * ones. Persistence is a Cloud SQL for PostgreSQL instance (memory.tf) reached
+ * over the Cloud Run /cloudsql unix socket:
  *
- *   MEMORY_ROOT     gcsfuse RW mount root. Empty ('') ⇒ the feature is DORMANT
- *                   and the middleware falls back to the Firestore/file store.
- *   MEMORY_VERSION  version subdirectory under MEMORY_ROOT (validated segment).
- *   MEMORY_ENABLED  opt-in gate ('true'); off by default. The middleware also
- *                   honors a per-org `memoryEnabled` setting.
+ *   MEMORY_DATABASE_URL       postgres connection string, e.g.
+ *                             postgresql://user:pass@/aifleet_memory?host=/cloudsql/<conn>.
+ *   MEMORY_DATABASE_URL_FILE  path to a mounted secret file holding the same
+ *                             URL (Cloud Run uses this so the agent primary
+ *                             stays secret-env-free). Read lazily by the store.
+ *                             Neither set ⇒ the feature is DORMANT and the
+ *                             middleware falls back to the Firestore/file store.
+ *   MEMORY_ENABLED            opt-in gate ('true'); off by default. The
+ *                             middleware also honors a per-org `memoryEnabled`
+ *                             setting.
  *
- * The canonical path resolver used by the shared-layer store lives in
- * packages/shared/src/agent/memory-store/paths.js (kept self-contained so it
- * never depends on this not-yet-published addition); this mirror is for ops
- * discoverability + a fail-fast MEMORY_VERSION validation at startup.
+ * The canonical selector + schema live in packages/shared/src/agent/
+ * memory-store/; this mirror is for ops discoverability.
  */
-function assertSafeMemoryVersion(version) {
-  if (version === '') return version;
-  if (version === '.' || version === '..' || !/^[A-Za-z0-9._-]+$/.test(version)) {
-    throw new Error(`MEMORY_VERSION must be a single path segment (got: ${version})`);
-  }
-  return version;
-}
-
-function resolveMemorySrc(env = process.env) {
-  const root = String(env.MEMORY_ROOT || '').trim();
-  if (!root) return null;
-  const version = assertSafeMemoryVersion(String(env.MEMORY_VERSION || '').trim());
-  return version ? path.join(root, version) : root;
-}
-
 const MEMORY = Object.freeze({
-  root: String(process.env.MEMORY_ROOT || '').trim(),
-  version: String(process.env.MEMORY_VERSION || '').trim(),
   enabled: String(process.env.MEMORY_ENABLED || '').trim().toLowerCase() === 'true',
-  src: resolveMemorySrc(),
+  databaseUrl: String(process.env.MEMORY_DATABASE_URL || '').trim(),
+  databaseUrlFile: String(process.env.MEMORY_DATABASE_URL_FILE || '').trim(),
 });
 
 /**
@@ -717,6 +744,7 @@ const BILLING = Object.freeze({
   orgId: String(process.env.FLEET_ORG_ID || process.env.PROXY_ORG_ID || '').trim(),
   usageRetentionDays: toPositiveNumber(process.env.BILLING_USAGE_RETENTION_DAYS, 90),
   slackWebhookUrl: proxied('/slack-webhook', process.env.BILLING_SLACK_WEBHOOK_URL, ''),
+  rechargeIntervalMin: toPositiveNumber(process.env.BILLING_RECHARGE_INTERVAL_MIN, 60),
 });
 
 /** Server configuration and shared constants. */
@@ -796,6 +824,8 @@ const CONFIG = Object.freeze({
   OMLX,
   HUGGINGFACE,
   ANTIGRAVITY,
+  OPENROUTER,
+  OPENSHELL,
   CODER,
   MCP,
   TOOLS,
@@ -818,4 +848,10 @@ function namespaceCollection(base) {
   return STORE_NAMESPACE ? `${base}__${STORE_NAMESPACE}` : base;
 }
 
-module.exports = { CONFIG, buildFirebaseAuthConfig, resolveSkillsSrc, resolveMemorySrc, namespaceCollection };
+module.exports = {
+  CONFIG,
+  buildFirebaseAuthConfig,
+  resolveSkillsSrc,
+  namespaceCollection,
+  parseSpaOrigins,
+};

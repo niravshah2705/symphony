@@ -93,5 +93,5 @@ test('persistent ADLC launcher has five named, local-icon assistant links', () =
   assert.equal((html.match(/class="adlc-ai-links"/g) || []).length, 1);
   assert.match(html, /Explain ADLC \(Agentic Development Life Cycle\).*llms-full\.txt/);
   assert.equal((html.match(/aria-label="Search ADLC on [^"]+"/g) || []).length, 5);
-  assert.equal((html.match(/\?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20with%20AI%20Fleet%20services/g) || []).length, 5);
+  assert.equal((html.match(/\?q=ADLC%20-%20Agentic%20Development%20Life%20Cycle%2C%20tell%20me%20more%20about%20Archagentix%20www\.archagentix\.com/g) || []).length, 5);
 });

@@ -76,6 +76,11 @@ output "identity_service_uri" {
   value       = google_cloud_run_v2_service.identity.uri
 }
 
+output "billing_service_uri" {
+  description = "Billing and Cashfree service URL — internal and gateway-invoked only."
+  value       = google_cloud_run_v2_service.billing.uri
+}
+
 output "email_topic_name" {
   description = "Pub/Sub topic that accepts allow-listed transactional email jobs."
   value       = google_pubsub_topic.email.name
@@ -116,14 +121,14 @@ output "registry_bucket" {
   value       = one(google_storage_bucket.registry[*].name)
 }
 
-output "memory_bucket" {
-  description = "Terraform-created GCS bucket holding AI-compressed agent memories (null when memory_enabled = false). Name defaults to '<project_id>-aifleet-memory'. Mounted READ-WRITE on planner + coder at /memory when memory_mount_enabled; the runtime pins var.memory_version."
-  value       = one(google_storage_bucket.memory[*].name)
+output "memory_db_instance" {
+  description = "Terraform-created Cloud SQL Postgres instance holding AI-compressed agent memories (null when memory_enabled = false). Name defaults to '<project_id>-aifleet-memory'."
+  value       = one(google_sql_database_instance.memory[*].name)
 }
 
-output "memory_version_pinned" {
-  description = "Memory layout version the planner/coder pin (MEMORY_VERSION), or null when the mount is disabled."
-  value       = local.memory_mount_enabled ? var.memory_version : null
+output "memory_db_connection_name" {
+  description = "Cloud SQL connection name (project:region:instance) the planner/coder mount as the /cloudsql unix socket."
+  value       = one(google_sql_database_instance.memory[*].connection_name)
 }
 
 output "artifact_registry_repo" {

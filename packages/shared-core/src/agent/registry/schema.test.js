@@ -200,7 +200,7 @@ test('v2 artifact descriptors capture ready-to-copy DCode plugin state', () => {
   assert.throws(() => validateArtifactDescriptor(unsafePath), /artifact\.path/);
 
   const deepseek = artifactDescriptor('deepseek');
-  deepseek.installer = { name: '@deepseek-ai/dsh', version: '0.1.0-rc.6' };
+  deepseek.installer = { name: '@deepseek-ai/dsh-sdk-client', version: '0.1.0-rc.6' };
   deepseek.compatibility = 'native-skills';
   deepseek.capabilities = { native: ['skills'], companion: [] };
   const deepseekDescriptor = validateArtifactDescriptor(deepseek);

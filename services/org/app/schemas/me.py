@@ -7,6 +7,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import MembershipStatus, OrgRole, Persona, ProjectRole
+from app.schemas.tag import TagResponse
 
 
 class MeResponse(BaseModel):
@@ -81,6 +82,7 @@ class ContextProjectResponse(BaseModel):
     name: str
     role: ProjectRole
     status: str = "ACTIVE"
+    tags: list[TagResponse] = []
 
 
 class ContextOrganizationResponse(BaseModel):
@@ -91,6 +93,7 @@ class ContextOrganizationResponse(BaseModel):
     role: OrgRole
     status: MembershipStatus
     projects: list[ContextProjectResponse]
+    tags: list[TagResponse] = []
 
 
 class SelectedContextResponse(BaseModel):

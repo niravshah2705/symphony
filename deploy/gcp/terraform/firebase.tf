@@ -51,6 +51,16 @@ resource "google_firebase_hosting_site" "default" {
   depends_on = [google_firebase_project.default]
 }
 
+resource "google_firebase_hosting_custom_domain" "default" {
+  for_each = toset(local.custom_domains)
+  provider = google-beta
+
+  project       = var.project_id
+  site_id       = var.project_id
+  custom_domain = each.value
+  depends_on    = [google_firebase_hosting_site.default]
+}
+
 # Identity Platform (Firebase Authentication) project config. Manages the
 # authorized domains that sign-in popups are allowed to run on. The list mirrors
 # the live config (incl. legacy GCS origins from before the Firebase-Hosting move).
@@ -58,13 +68,13 @@ resource "google_identity_platform_config" "default" {
   provider = google-beta
   project  = var.project_id
 
-  authorized_domains = [
+  authorized_domains = concat([
     "localhost",
     "${var.project_id}.firebaseapp.com",
     "${var.project_id}.web.app",
     "storage.googleapis.com",
     "${var.spa_bucket_name}.storage.googleapis.com",
-  ]
+  ], local.custom_domains)
 
   depends_on = [google_project_service.services]
 }

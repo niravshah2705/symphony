@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 6 nodes
+Community of 10 nodes
 
-- **Size**: 6 nodes
-- **Cohesion**: 0.2794
+- **Size**: 10 nodes
+- **Cohesion**: 0.0969
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,6 +20,10 @@ Community of 6 nodes
 | httpUrl | Function | ./packages/shared/src/agent/settings-patch.js | 65-77 |
 | localParamKeys | Function | ./packages/shared/src/agent/settings-patch.js | 97-113 |
 | hostedParamKeys | Function | ./packages/shared/src/agent/settings-patch.js | 115-126 |
+| test_gateway_org_headers_member_role_still_forbidden | Test | ./services/settings/tests/integration/test_authz.py | 42-47 |
+| test_org_admin_approval_is_post_test_and_atomically_replayable | Test | ./services/settings/tests/integration/test_deployment_approval.py | 33-91 |
+| test_approval_scope_and_timing_fail_closed | Test | ./services/settings/tests/integration/test_deployment_approval.py | 94-170 |
+| test_effective_applies_project_layer | Test | ./services/settings/tests/integration/test_settings.py | 233-253 |
 
 ## Execution Flows
 
@@ -29,16 +33,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
+- `json` (9 edge(s))
+- `uuid4` (7 edge(s))
+- `str` (7 edge(s))
+- `post` (7 edge(s))
+- `isoformat` (6 edge(s))
+- `./services/settings/tests/helpers.py::auth` (5 edge(s))
+- `./services/settings/tests/helpers.py::make_user` (4 edge(s))
+- `timedelta` (4 edge(s))
 - `trim` (3 edge(s))
 - `String` (3 edge(s))
+- `put` (3 edge(s))
+- `fromisoformat` (3 edge(s))
+- `get` (2 edge(s))
+- `./services/settings/tests/integration/test_deployment_approval.py::approval_body` (2 edge(s))
 - `replace` (1 edge(s))
-- `Number` (1 edge(s))
-- `isFinite` (1 edge(s))
-- `min` (1 edge(s))
-- `max` (1 edge(s))
-- `includes` (1 edge(s))
-- `join` (1 edge(s))
 
 ### Incoming
 
-- `./packages/shared/src/agent/settings-patch.js` (36 edge(s))
+- `./packages/shared/src/agent/settings-patch.js` (37 edge(s))
+- `json` (9 edge(s))
+- `uuid4` (7 edge(s))
+- `str` (7 edge(s))
+- `post` (7 edge(s))
+- `isoformat` (6 edge(s))
+- `./services/settings/tests/helpers.py::auth` (5 edge(s))
+- `./services/settings/tests/helpers.py::make_user` (4 edge(s))
+- `timedelta` (4 edge(s))
+- `put` (3 edge(s))
+- `fromisoformat` (3 edge(s))
+- `get` (2 edge(s))
+- `./services/settings/tests/integration/test_deployment_approval.py` (2 edge(s))
+- `./services/settings/tests/integration/test_deployment_approval.py::approval_body` (2 edge(s))
+- `./services/settings/tests/integration/test_authz.py` (1 edge(s))

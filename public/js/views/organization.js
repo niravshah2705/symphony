@@ -1,10 +1,37 @@
 import { api } from '../api.js';
 import { el, clear, loading, toast } from '../dom.js';
+import { setCurrentProject, setProjectSandbox } from '../state.js';
 import {
   activeWorkspaceOrganization,
   activeWorkspaceProject,
+  changeWorkspaceProject,
   getWorkspaceContext,
 } from '../workspace-context.js';
+
+async function loadProjectIntoOpenShell(project, { openChat = true } = {}) {
+  const projectId = project?.id || '';
+  const projectName = project?.name || projectId || 'default';
+  setCurrentProject(projectId, projectName);
+  try { changeWorkspaceProject(projectId); } catch (_) { /* personal projects may not be in org context */ }
+  try {
+    const res = await api.loadProjectSandbox({
+      projectId,
+      projectName,
+      repositoryUrl: project?.repositoryUrl || '',
+    });
+    if (res && res.sandbox) {
+      setProjectSandbox(projectId, res.sandbox);
+      const gh = res.sandbox.secrets?.github?.configured ? 'GitHub ✓' : 'GitHub —';
+      const or = res.sandbox.secrets?.openrouter?.configured ? 'OpenRouter ✓' : 'OpenRouter —';
+      toast(`NVIDIA OpenShell sandbox ${res.sandbox.name} loaded (${gh}, ${or}).`, 'ok');
+    }
+  } catch (err) {
+    toast(err.message || 'Could not load NVIDIA OpenShell sandbox.', 'err');
+  }
+  if (openChat) {
+    window.location.hash = '#/agent';
+  }
+}
 
 // Organization & projects view (org service via /api/org/*). Three tiers:
 //   - Personal projects: any signed-in user, private, single-owner.
@@ -44,12 +71,20 @@ function block(title, subtitle, children) {
   ]);
 }
 
-function projectRow(name, description, actions = []) {
+function projectRow(name, description, actions = [], onSelect = null) {
+  const copy = el('div', {
+    class: 'org-row-copy',
+    style: onSelect ? 'cursor:pointer' : '',
+    title: onSelect ? `Click to load NVIDIA OpenShell sandbox for ${name}` : '',
+  }, [
+    el('strong', {}, name),
+    description ? el('small', { class: 'muted' }, description) : null,
+  ]);
+  if (typeof onSelect === 'function') {
+    copy.addEventListener('click', onSelect);
+  }
   return el('div', { class: 'org-row' }, [
-    el('div', { class: 'org-row-copy' }, [
-      el('strong', {}, name),
-      description ? el('small', { class: 'muted' }, description) : null,
-    ]),
+    copy,
     actions.length ? el('div', { class: 'org-row-actions' }, actions) : null,
   ]);
 }
@@ -90,6 +125,13 @@ async function renderPersonal(section, rerender) {
   const rows = projects.length
     ? projects.map((project) => projectRow(project.name, project.description, [
         (() => {
+          const openSb = el('button', { class: 'ghost', type: 'button' }, 'Open Sandbox Chat');
+          openSb.addEventListener('click', () => {
+            void loadProjectIntoOpenShell(project, { openChat: true });
+          });
+          return openSb;
+        })(),
+        (() => {
           const del = el('button', { class: 'ghost danger', type: 'button' }, 'Delete');
           del.addEventListener('click', async () => {
             del.disabled = true;
@@ -103,7 +145,7 @@ async function renderPersonal(section, rerender) {
           });
           return del;
         })(),
-      ]))
+      ], () => void loadProjectIntoOpenShell(project, { openChat: true })))
     : [el('div', { class: 'empty compact-empty' }, [el('p', { class: 'muted' }, 'No personal projects yet.')])];
 
   // block() returns a <section>; move its content into the provided `section`.
@@ -388,7 +430,11 @@ async function renderOrgProjects(section, organization, orgUsers, rerender) {
         const collaboratorsHost = el('div', { class: 'org-members-host' });
         const outsourceHost = el('div', { class: 'org-members-host' });
 
-        const actions = [];
+        const openSbBtn = el('button', { class: 'ghost', type: 'button' }, 'Open Sandbox Chat');
+        openSbBtn.addEventListener('click', () => {
+          void loadProjectIntoOpenShell(project, { openChat: true });
+        });
+        const actions = [openSbBtn];
         if (canManage) {
           actions.push(accessModeControl(project));
           actions.push(collapsiblePanel('Members', membersHost,
@@ -401,11 +447,16 @@ async function renderOrgProjects(section, organization, orgUsers, rerender) {
         const accessBadge = String(project.access_mode || '').toUpperCase() === 'ORG_WIDE'
           ? el('span', { class: 'badge' }, 'Org-wide')
           : null;
+        const rawTags = project.tags || contextProject?.tags || [];
+        const tagBadges = (Array.isArray(rawTags) ? rawTags : []).map((tag) =>
+          el('span', { class: 'badge sm' }, typeof tag === 'string' ? tag : tag.name || tag.id || '')
+        );
         return el('div', { class: 'org-row-group' }, [
           projectRow(
             project.name,
             project.description,
-            [...(accessBadge ? [accessBadge] : []), ...actions],
+            [...tagBadges, ...(accessBadge ? [accessBadge] : []), ...actions],
+            () => void loadProjectIntoOpenShell(project, { openChat: true }),
           ),
           membersHost,
           collaboratorsHost,
@@ -548,25 +599,519 @@ async function renderOrg(section, organization, rerender) {
   const hasProjectAdminRole = organization.projects.some(
     (project) => String(project.role || '').toUpperCase() === 'PROJECT_ADMIN'
   );
+  const orgRawTags = org.tags || organization.tags || [];
+  const orgTagBadges = (Array.isArray(orgRawTags) ? orgRawTags : []).map((tag) =>
+    el('span', { class: 'badge sm' }, typeof tag === 'string' ? tag : tag.name || tag.id || '')
+  );
   const header = el('div', { class: 'org-block-head' }, [
-    el('h2', {}, org.name || organization.name || 'Your organization'),
+    el('div', { class: 'org-block-head-title' }, [
+      el('h2', {}, org.name || organization.name || 'Your organization'),
+      ...orgTagBadges,
+    ]),
     el('p', { class: 'muted' }, `Your role: ${organization.role || 'MEMBER'}${org.description ? ` · ${org.description}` : ''}`),
   ]);
 
   const projectsSection = el('section', { class: 'org-block' });
+  const openshellSection = el('section', { class: 'org-block' });
+  const billingSection = el('section', { class: 'org-block' });
   const peopleSection = isAdmin ? el('section', { class: 'org-block' }) : null;
-  section.replaceChildren(header, projectsSection, ...(peopleSection ? [peopleSection] : []));
+  section.replaceChildren(
+    header,
+    projectsSection,
+    openshellSection,
+    billingSection,
+    ...(peopleSection ? [peopleSection] : []),
+  );
 
   // People must load first so the members picker has candidates.
   const orgUsers = isAdmin || hasProjectAdminRole
     ? await api.org.listOrgUsers().then((p) => p.data || []).catch(() => [])
     : [];
   await renderOrgProjects(projectsSection, organization, orgUsers, rerender);
+  await renderOrgOpenShellConfig(openshellSection, organization, isAdmin);
+  await renderOrgBilling(billingSection, organization, isAdmin);
   if (peopleSection) await renderPeople(peopleSection, rerender);
+}
+
+async function renderOrgOpenShellConfig(section, organization, isAdmin) {
+  let sbStatus = null;
+  try {
+    sbStatus = await api.getSandboxStatus();
+  } catch (_) {
+    // Non-fatal fallback
+  }
+
+  const orgConfig = sbStatus?.orgConfig || {};
+  const policyObj = sbStatus?.networkPolicy || {};
+  const currentWorkspace = orgConfig.workspace || 'tenant-a';
+
+  const wsSelect = el('select', { 'aria-label': 'OpenShell Workspace Namespace' }, [
+    el('option', { value: 'tenant-a', selected: currentWorkspace === 'tenant-a' ? 'selected' : null }, 'tenant-a (Allowed K8s Namespace)'),
+    el('option', { value: 'tenant-b', selected: currentWorkspace === 'tenant-b' ? 'selected' : null }, 'tenant-b (Allowed K8s Namespace)'),
+  ]);
+
+  const openrouterInput = el('input', {
+    type: 'password',
+    placeholder: orgConfig.openrouterConfigured ? '•••••••• (Configured for this Org)' : 'sk-or-v1-... (Optional for free models)',
+    'aria-label': 'OpenRouter API Key',
+  });
+  const githubInput = el('input', {
+    type: 'password',
+    placeholder: orgConfig.githubConfigured ? '•••••••• (Configured for this Org)' : 'ghp_... (Per-Org GitHub Token)',
+    'aria-label': 'GitHub Token',
+  });
+
+  const regUrlInput = el('input', {
+    type: 'text',
+    value: orgConfig.imageRegistryUrl || 'ghcr.io',
+    placeholder: 'ghcr.io or us-central1-docker.pkg.dev',
+    'aria-label': 'Container Registry URL',
+  });
+  const regUserInput = el('input', {
+    type: 'text',
+    value: orgConfig.imageRegistryUsername || '',
+    placeholder: 'Registry username / _json_key',
+    'aria-label': 'Container Registry Username',
+  });
+  const regPassInput = el('input', {
+    type: 'password',
+    placeholder: orgConfig.imageRegistryConfigured ? '•••••••• (Configured for this Org)' : 'Registry push/pull token or password',
+    'aria-label': 'Container Registry Password / Token',
+  });
+
+  const saveSecretsBtn = el('button', { class: 'primary', type: 'button' }, 'Save & Sync Org Secrets to OpenShell');
+  const openTerminalLink = el('a', { href: '#/openshell', class: 'button ghost' }, 'Open OpenShell Terminal');
+
+  saveSecretsBtn.addEventListener('click', async () => {
+    saveSecretsBtn.disabled = true;
+    try {
+      const payload = {
+        openshellWorkspace: wsSelect.value,
+        imageRegistryUrl: regUrlInput.value.trim() || 'ghcr.io',
+        imageRegistryUsername: regUserInput.value.trim(),
+      };
+      if (openrouterInput.value.trim()) payload.openrouterApiKey = openrouterInput.value.trim();
+      if (githubInput.value.trim()) payload.githubToken = githubInput.value.trim();
+      if (regPassInput.value.trim()) payload.imageRegistryPassword = regPassInput.value.trim();
+
+      await api.saveSandboxOrgConfig(payload);
+      toast(`Synced per-organization secrets & image registry credentials to OpenShell (${wsSelect.value}).`, 'ok');
+      await renderOrgOpenShellConfig(section, organization, isAdmin);
+    } catch (err) {
+      toast(err.message || 'Could not save organization OpenShell config.');
+      saveSecretsBtn.disabled = false;
+    }
+  });
+
+  const defaultPolicyYaml = policyObj.yaml || `apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openshell-tenant-sandbox-policy
+  namespace: ${currentWorkspace}
+spec:
+  podSelector:
+    matchLabels:
+      openshell.ai/sandbox: "true"
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: openshell-supervisor
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 443`;
+
+  const policyTextarea = el('textarea', {
+    rows: '14',
+    style: 'width: 100%; font-family: monospace; font-size: 12px; padding: 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; margin-top: 8px;',
+  }, defaultPolicyYaml);
+
+  const savePolicyBtn = el('button', { class: 'ghost', type: 'button' }, 'Save Sample NetworkPolicy');
+  savePolicyBtn.addEventListener('click', async () => {
+    savePolicyBtn.disabled = true;
+    try {
+      await api.saveSandboxNetworkPolicy({
+        workspace: wsSelect.value,
+        yaml: policyTextarea.value,
+      });
+      toast(`Saved NetworkPolicy for namespace ${wsSelect.value}.`, 'ok');
+    } catch (err) {
+      toast(err.message || 'Could not save NetworkPolicy.');
+    } finally {
+      savePolicyBtn.disabled = false;
+    }
+  });
+
+  const secretBadges = el('div', { style: 'display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;' }, [
+    el('span', { class: `badge ${orgConfig.openrouterConfigured ? 'active' : ''}` },
+      `OpenRouter Key: ${orgConfig.openrouterConfigured ? 'Configured' : 'Free Tier Default'}`),
+    el('span', { class: `badge ${orgConfig.githubConfigured ? 'active' : ''}` },
+      `GitHub Secret: ${orgConfig.githubConfigured ? 'Configured' : 'Not Set'}`),
+    el('span', { class: `badge ${orgConfig.imageRegistryConfigured ? 'active' : ''}` },
+      `Image Push/Pull Secret: ${orgConfig.imageRegistryConfigured ? `Active (${orgConfig.imageRegistryUrl || 'ghcr.io'})` : 'Not Set'}`),
+  ]);
+
+  const children = [
+    secretBadges,
+    el('div', { class: 'org-form org-form-wide', style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 12px;' }, [
+      wsSelect,
+      openrouterInput,
+      githubInput,
+      regUrlInput,
+      regUserInput,
+      regPassInput,
+    ]),
+    el('div', { class: 'org-row-actions', style: 'margin-bottom: 16px;' }, [
+      saveSecretsBtn,
+      openTerminalLink,
+    ]),
+    el('h3', { style: 'margin-bottom: 4px;' }, `Sample Kubernetes NetworkPolicy (${policyObj.name || 'openshell-tenant-sandbox-policy'})`),
+    el('p', { class: 'muted', style: 'font-size: 12px; margin: 0;' },
+      'Enforces tenant namespace isolation, allows ingress only from os-supervisor, permits DNS (53) + HTTPS (443) to OpenRouter/GitHub/Container Registry, and blocks RFC1918 + cloud metadata (169.254.169.254/32).'),
+    policyTextarea,
+    el('div', { class: 'org-row-actions', style: 'margin-top: 8px;' }, [savePolicyBtn]),
+  ];
+
+  section.replaceChildren();
+  section.append(...Array.from(block(
+    'OpenShell Sandbox, Per-Organization Image Registry Secrets & NetworkPolicy',
+    'Manage per-organization OpenShell Kubernetes namespace, container image push/pull credentials (dockerconfigjson), OpenRouter/GitHub secrets, and tenant NetworkPolicy.',
+    children,
+  ).childNodes));
 }
 
 // Self-declared persona capture (asked once at onboarding). Descriptive only —
 // it does not gate access (roles do); it tailors UI defaults/copy.
+function loadCashfreeSdk() {
+  if (window.Cashfree) return Promise.resolve(window.Cashfree);
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+    script.onload = () => resolve(window.Cashfree);
+    script.onerror = () => reject(new Error('Failed to load Cashfree Checkout SDK'));
+    document.head.appendChild(script);
+  });
+}
+
+async function renderOrgBilling(section, organization, isAdmin) {
+  const reload = () => renderOrgBilling(section, organization, isAdmin);
+  let summary;
+  try {
+    summary = await api.billing.getSummary();
+  } catch (err) {
+    section.replaceChildren(el('div', { class: 'empty compact-empty' }, [
+      el('p', { class: 'muted' }, (err && err.message) || 'Billing details currently unavailable.'),
+    ]));
+    return;
+  }
+
+  const inr = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(val) || 0);
+  const isAvailable = summary.fundStatus !== 'unavailable' && Number(summary.balancePaise) > 0;
+  const statusBadge = el('span', { class: `badge ${isAvailable ? 'active' : 'warn'}` }, isAvailable ? 'Funds Available' : 'Funds Unavailable');
+  const ar = summary.autoRecharge || {};
+  const isAutoEnabled = Boolean(ar.enabled);
+  const currentMode = ar.mode || 'amount';
+
+  const pi = summary.paymentInfo || {};
+
+  const rows = [
+    el('div', { class: 'org-row' }, [
+      el('div', { class: 'org-row-copy' }, [
+        el('strong', {}, 'Current Balance'),
+        el('small', { class: 'muted' }, `Seeded credit: ${inr(summary.initialCreditInr)} · Sandbox creation: ${summary.sandboxCreationDisabled ? 'Disabled (Low Balance)' : 'Enabled'}`),
+      ]),
+      el('div', { class: 'org-row-actions' }, [
+        el('span', { class: 'cost-cell', style: 'font-size: 16px; margin-right: 8px;' }, inr(summary.balanceInr)),
+        statusBadge,
+      ]),
+    ]),
+  ];
+
+  if (!isAvailable) {
+    rows.push(el('div', { class: 'notice operational-notice operational-notice-warn', style: 'margin-top: 10px;' }, [
+      el('strong', {}, 'Account Low / Negative: '),
+      el('span', {}, 'Sandbox creation and scheduled calls are paused until payment is added or auto-renew triggers.'),
+    ]));
+  }
+
+  if (isAdmin) {
+    // 1. On-demand Reload with Cashfree Checkout
+    const reloadInput = el('input', { type: 'number', min: '10', step: '100', value: '500', style: 'width: 120px;' });
+    const payCashfreeBtn = el('button', { type: 'button', class: 'primary' }, 'Reload via Cashfree (UPI / Card / Netbanking)');
+
+    payCashfreeBtn.addEventListener('click', async () => {
+      const val = Number(reloadInput.value);
+      if (!Number.isFinite(val) || val <= 0) return toast('Enter a valid reload amount');
+      payCashfreeBtn.disabled = true;
+      try {
+        toast('Creating Cashfree order…');
+        const orderRes = await api.billing.createCashfreeOrder({
+          amountInr: val,
+          customerName: pi.billingName || organization.name || 'Organization Admin',
+          customerEmail: pi.billingEmail || 'billing@example.com',
+          customerPhone: pi.billingPhone || '9999999999',
+        });
+
+        if (!orderRes.paymentSessionId) {
+          throw new Error('No payment session received from Cashfree.');
+        }
+
+        toast('Launching Cashfree Checkout…');
+        const CashfreeSdk = await loadCashfreeSdk();
+        const cashfree = CashfreeSdk({ mode: 'sandbox' });
+
+        cashfree.checkout({
+          paymentSessionId: orderRes.paymentSessionId,
+          redirectTarget: '_modal',
+        }).then(async (result) => {
+          if (result && result.error) {
+            toast(`Payment error: ${result.error.message}`);
+            payCashfreeBtn.disabled = false;
+          } else {
+            toast('Verifying payment with Cashfree…');
+            const verifyRes = await api.billing.verifyCashfreeOrder(orderRes.orderId);
+            if (verifyRes.status === 'PAID') {
+              toast(`Payment successful! Reloaded ${inr(val)}.`);
+            } else {
+              toast(`Payment status: ${verifyRes.status}`);
+            }
+            await reload();
+          }
+        }).catch((err) => {
+          toast((err && err.message) || 'Checkout failed or modal dismissed');
+          payCashfreeBtn.disabled = false;
+        });
+      } catch (err) {
+        toast((err && err.message) || 'Failed to initialize Cashfree reload');
+        payCashfreeBtn.disabled = false;
+      }
+    });
+
+    rows.push(el('div', { class: 'org-row' }, [
+      el('div', { class: 'org-row-copy' }, [
+        el('strong', {}, 'On-Demand Reload'),
+        el('small', { class: 'muted' }, 'Add funds instantly to this organization via Cashfree (Cards, UPI, Netbanking).'),
+      ]),
+      el('div', { class: 'org-row-actions', style: 'display: flex; gap: 8px; align-items: center;' }, [
+        el('span', { class: 'muted' }, '₹'),
+        reloadInput,
+        payCashfreeBtn,
+      ]),
+    ]));
+
+    // 2. Organization Billing & Tax Information
+    const billingNameInput = el('input', { type: 'text', placeholder: 'Acme Corp / John Doe', value: pi.billingName || '' });
+    const billingEmailInput = el('input', { type: 'email', placeholder: 'billing@example.com', value: pi.billingEmail || '' });
+    const billingPhoneInput = el('input', { type: 'tel', placeholder: '9876543210', value: pi.billingPhone || '' });
+    const taxIdInput = el('input', { type: 'text', placeholder: 'GSTIN / PAN / VAT (optional)', value: pi.taxId || '' });
+    const addressInput = el('input', { type: 'text', placeholder: 'Street address', value: pi.billingAddress?.line1 || '' });
+    const cityInput = el('input', { type: 'text', placeholder: 'City', value: pi.billingAddress?.city || '' });
+    const stateInput = el('input', { type: 'text', placeholder: 'State / Province', value: pi.billingAddress?.state || '' });
+    const postalCodeInput = el('input', { type: 'text', placeholder: 'Postal code', value: pi.billingAddress?.postalCode || '' });
+    const countryInput = el('input', { type: 'text', placeholder: 'IN', value: pi.billingAddress?.country || 'IN' });
+
+    const savePiBtn = el('button', { type: 'submit', class: 'btn' }, 'Save Billing Information');
+    const piForm = el('form', { class: 'org-form org-form-wide', style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;' }, [
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Billing Contact / Entity Name'), billingNameInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Billing Email'), billingEmailInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Billing Phone'), billingPhoneInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Tax ID (GSTIN / VAT / PAN)'), taxIdInput]),
+      el('label', { class: 'org-inline-field', style: 'grid-column: 1 / -1;' }, [el('span', { class: 'muted' }, 'Billing Address'), addressInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'City'), cityInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'State / Region'), stateInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Postal Code'), postalCodeInput]),
+      el('label', { class: 'org-inline-field' }, [el('span', { class: 'muted' }, 'Country'), countryInput]),
+      el('div', { style: 'grid-column: 1 / -1; margin-top: 6px;' }, [savePiBtn]),
+    ]);
+
+    piForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      savePiBtn.disabled = true;
+      try {
+        await api.billing.updateConfig({
+          paymentInfo: {
+            billingName: billingNameInput.value.trim(),
+            billingEmail: billingEmailInput.value.trim(),
+            billingPhone: billingPhoneInput.value.trim(),
+            taxId: taxIdInput.value.trim(),
+            billingAddress: {
+              line1: addressInput.value.trim(),
+              city: cityInput.value.trim(),
+              state: stateInput.value.trim(),
+              postalCode: postalCodeInput.value.trim(),
+              country: countryInput.value.trim() || 'IN',
+            },
+          },
+        });
+        toast('Billing & payment information saved.');
+        await reload();
+      } catch (err) {
+        toast((err && err.message) || 'Failed to save payment info.');
+        savePiBtn.disabled = false;
+      }
+    });
+
+    rows.push(el('div', { class: 'org-row-group', style: 'margin-top: 12px;' }, [
+      el('strong', {}, 'Organisation Billing & Tax Information'),
+      el('p', { class: 'muted', style: 'margin: 4px 0 8px;' }, 'Required entity details used on invoices and Cashfree payment sessions.'),
+      piForm,
+    ]));
+
+    // Payment Mandate row
+    const hasSub = Boolean(ar.cashfreeSubscriptionId);
+    const subBadge = el('span', { class: `status-pill ${hasSub ? 'ok' : 'neutral'}` }, hasSub ? `Active Mandate: ${ar.cashfreeSubscriptionId}` : 'No Mandate Configured');
+    const authBtn = el('button', { type: 'button', class: 'primary' }, 'Authorize Payment Mandate (UPI / Card / eNACH)');
+
+    authBtn.addEventListener('click', async () => {
+      authBtn.disabled = true;
+      try {
+        const res = await api.billing.createCashfreeMandate({
+          returnUrl: window.location.href,
+        });
+        if (!res.subscriptionSessionId) {
+          throw new Error('Did not receive subscription session ID from Cashfree.');
+        }
+        toast('Opening Cashfree Payment Authorization…');
+        const CashfreeSdk = await loadCashfreeSdk();
+        const cashfree = CashfreeSdk({ mode: 'sandbox' });
+
+        cashfree.subscriptionsCheckout({
+          subsSessionId: res.subscriptionSessionId,
+          redirectTarget: '_blank',
+        }).then(async (result) => {
+          if (result && result.error) {
+            toast(`Authorization error: ${result.error.message}`);
+            authBtn.disabled = false;
+          } else {
+            toast('Verifying mandate authorization…');
+            await api.billing.verifyCashfreeMandate(res.subscriptionId);
+            await reload();
+          }
+        }).catch((err) => {
+          toast((err && err.message) || 'Checkout window closed or failed');
+          authBtn.disabled = false;
+        });
+      } catch (err) {
+        toast((err && err.message) || 'Failed to initialize Cashfree mandate');
+        authBtn.disabled = false;
+      }
+    });
+
+    rows.push(el('div', { class: 'org-row' }, [
+      el('div', { class: 'org-row-copy' }, [
+        el('strong', {}, 'Payment Mandate & Auto-Charge'),
+        el('small', { class: 'muted' }, 'Authorize recurring debit via Cashfree for automatic balance replenishment.'),
+      ]),
+      el('div', { class: 'org-row-actions' }, [subBadge, authBtn]),
+    ]));
+
+    // Auto-reload configuration form
+    const arCheckbox = el('input', { type: 'checkbox', ...(isAutoEnabled ? { checked: 'checked' } : {}) });
+    const modeAmountRadio = el('input', { type: 'radio', name: 'orgArMode', value: 'amount', ...(currentMode === 'amount' ? { checked: 'checked' } : {}) });
+    const modePercentRadio = el('input', { type: 'radio', name: 'orgArMode', value: 'percentage', ...(currentMode === 'percentage' ? { checked: 'checked' } : {}) });
+
+    const thresholdAmountInput = el('input', { type: 'number', min: '0', step: '10', value: String(ar.thresholdInr ?? 0) });
+    const thresholdPercentInput = el('input', { type: 'number', min: '1', max: '100', step: '1', value: String(ar.thresholdPercent ?? 20) });
+    const reloadAmountInput = el('input', { type: 'number', min: '100', step: '100', value: String(ar.amountInr ?? 500) });
+
+    const amountField = el('label', { class: 'org-inline-field', id: 'org-ar-amount-field' }, [
+      el('span', { class: 'muted' }, 'Threshold Amount (INR)'),
+      thresholdAmountInput,
+    ]);
+    const percentField = el('label', { class: 'org-inline-field', id: 'org-ar-percent-field' }, [
+      el('span', { class: 'muted' }, 'Threshold (% of Credit)'),
+      thresholdPercentInput,
+    ]);
+
+    const updateVisibility = () => {
+      amountField.style.display = modeAmountRadio.checked ? 'flex' : 'none';
+      percentField.style.display = modePercentRadio.checked ? 'flex' : 'none';
+    };
+    modeAmountRadio.addEventListener('change', updateVisibility);
+    modePercentRadio.addEventListener('change', updateVisibility);
+    updateVisibility();
+
+    const saveConfigBtn = el('button', { type: 'submit', class: 'primary' }, 'Save Auto-Renew Settings');
+    const configForm = el('form', { class: 'org-form org-form-wide', style: 'display: grid; gap: 12px; margin-top: 10px;' }, [
+      el('label', { class: 'radio-label', style: 'display: flex; align-items: center; gap: 8px;' }, [
+        arCheckbox,
+        el('strong', {}, 'Enable Auto-Reload for this Organization'),
+      ]),
+      el('div', { style: 'display: flex; gap: 16px; align-items: center;' }, [
+        el('label', { class: 'radio-label', style: 'display: flex; align-items: center; gap: 6px;' }, [
+          modeAmountRadio,
+          el('span', {}, 'Fixed Amount (INR)'),
+        ]),
+        el('label', { class: 'radio-label', style: 'display: flex; align-items: center; gap: 6px;' }, [
+          modePercentRadio,
+          el('span', {}, 'Percentage of Credit (%)'),
+        ]),
+      ]),
+      el('div', { style: 'display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;' }, [
+        amountField,
+        percentField,
+        el('label', { class: 'org-inline-field' }, [
+          el('span', { class: 'muted' }, 'Reload Amount (INR)'),
+          reloadAmountInput,
+        ]),
+        saveConfigBtn,
+      ]),
+    ]);
+
+    configForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      saveConfigBtn.disabled = true;
+      try {
+        await api.billing.updateConfig({
+          autoRecharge: {
+            enabled: arCheckbox.checked,
+            mode: modePercentRadio.checked ? 'percentage' : 'amount',
+            thresholdInr: Number(thresholdAmountInput.value) || 0,
+            thresholdPercent: Number(thresholdPercentInput.value) || 20,
+            amountInr: Number(reloadAmountInput.value) || 0,
+          },
+        });
+        toast('Organization billing settings saved.');
+        await reload();
+      } catch (err) {
+        toast((err && err.message) || 'Failed to save billing settings.');
+        saveConfigBtn.disabled = false;
+      }
+    });
+
+    rows.push(el('div', { class: 'org-row-group', style: 'margin-top: 12px;' }, [
+      el('strong', {}, 'Configure Auto-Reload Policy'),
+      configForm,
+    ]));
+  }
+
+  section.replaceChildren();
+  section.append(...Array.from(block('Organization Payment & Billing',
+    isAdmin ? 'Manage fund availability, payment mandates, and auto-renew thresholds for your organisation.' : 'View organisation balance and fund status.',
+    rows).childNodes));
+}
+
 async function renderPersona(section, workspace, rerender) {
   const current = workspace.user?.persona || null;
   const children = [];

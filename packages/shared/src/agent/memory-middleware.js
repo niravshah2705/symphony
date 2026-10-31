@@ -25,8 +25,8 @@
  *     <private>…</private> is stripped and obvious credentials are redacted
  *     before anything is persisted.
  *
- * The model + embedding seams are injectable via `deps` so the whole thing is
- * unit-testable without a live LLM, network, or disk.
+ * The model + embedding + storage seams are injectable via `deps` so the whole
+ * thing is unit-testable without a live LLM, network, or database.
  */
 
 const crypto = require('crypto');
@@ -115,7 +115,7 @@ async function inject(prompt, options = {}, deps = {}) {
   try {
     const backend = deps.backend || memoryStore;
     const context = currentWorkspaceContext();
-    const memories = backend.load({ context });
+    const memories = await backend.load({ context });
     if (!memories || !memories.length) return original;
 
     let queryVector = null;
@@ -125,7 +125,7 @@ async function inject(prompt, options = {}, deps = {}) {
       queryVector = null; // lexical-only recall when embedding is unavailable
     }
 
-    const hits = backend.recall({
+    const hits = await backend.recall({
       query: original,
       queryVector,
       context,
@@ -231,7 +231,7 @@ async function capture(result, options = {}, deps = {}) {
         } catch (_) {
           embedding = null; // persist without a vector; recall degrades to lexical
         }
-        backend.persist({ ...record, embedding }, { context });
+        await backend.persist({ ...record, embedding }, { context });
         saved += 1;
       } catch (_) {
         /* per-memory best-effort */
