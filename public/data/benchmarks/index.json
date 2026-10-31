@@ -1,299 +1,175 @@
 [
   {
-    "id": "claude-3-5-sonnet",
-    "name": "Claude 3.5 Sonnet",
-    "provider": "Anthropic",
+    "id": "grok-2",
+    "name": "Grok 2",
+    "provider": "xAI",
     "model_type": "proprietary",
-    "agentic_features": {
-      "supports_agentic_development": true,
-      "tool_use": true,
-      "function_calling": true,
-      "computer_use": true,
-      "reasoning_effort_control": false
+    "agentic_features": { "supports_agentic_development": true, "tool_use": true, "function_calling": true, "reasoning_effort_control": false },
+    "parameters": { "total_params": "Undisclosed", "context_window_tokens": 128000, "max_output_tokens": 8192 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m": 2.00, "completion_cost_per_1m": 10.00 },
+      "cached": { "prompt_cost_per_1m": 0.50, "discount_pct": 75 },
+      "batch": { "prompt_cost_per_1m": 1.60, "completion_cost_per_1m": 8.00, "discount_pct": 20 }
     },
-    "parameters": {
-      "total_params": "Undisclosed",
-      "active_params": "Undisclosed",
-      "context_window_tokens": 200000,
-      "max_output_tokens": 8192
-    },
-    "cloud_inference_metrics": {
-      "aws_bedrock": {
-        "supported": true,
-        "region": "us-east-1 (Global & Regional)",
-        "prompt_cost_per_1m": 3.00,
-        "completion_cost_per_1m": 15.00,
-        "cached_prompt_cost_per_1m": 0.30,
-        "batch_processing_supported": true,
-        "batch_discount_pct": 50,
-        "regional_compliance_surcharge_pct": 10,
-        "rate_limits": { "rpm": 4000, "tpm": 2000000, "concurrent": 80 },
-        "uptime_link": "https://health.aws.amazon.com"
-      },
-      "gcp_vertex_ai": {
-        "supported": true,
-        "region": "us-east5 (us-central1, europe-west1)",
-        "prompt_cost_per_1m": 3.00,
-        "completion_cost_per_1m": 15.00,
-        "cached_prompt_cost_per_1m": 0.30,
-        "batch_processing_supported": true,
-        "batch_discount_pct": 50,
-        "rate_limits": { "rpm": 3000, "tpm": 1500000, "concurrent": 60 },
-        "uptime_link": "https://status.cloud.google.com"
-      },
-      "digital_ocean_gradient": {
-        "supported": false,
-        "batch_processing_supported": false,
-        "note": "Proprietary model not hosted natively on DigitalOcean serverless"
-      },
-      "alibaba_dashscope": {
-        "supported": false,
-        "batch_processing_supported": false,
-        "note": "Proprietary model not hosted natively on DashScope"
-      }
-    },
-    "benchmarks": {
-      "swe_bench_verified": 49.0,
-      "mmlu_pro": 78.0,
-      "human_eval": 93.7,
-      "gpqa": 65.0,
-      "output_tps": 72
-    },
-    "relations": {
-      "best_cloud_provider_for_cost": "GCP Vertex AI (Batch) / AWS Bedrock (Batch)",
-      "agentic_suitability_score": 98.5,
-      "primary_fallback_model_id": "claude-3-5-haiku"
-    },
-    "links": {
-      "paper_link": "https://www.anthropic.com/news/claude-3-5-sonnet",
-      "status_page": "https://status.anthropic.com"
-    },
-    "simple_score": 94.2,
-    "rank": 1
+    "supported_regions": [
+      { "code": "us-east-1", "name": "US East (Virginia)", "surcharge_pct": 0 },
+      { "code": "eu-west-1", "name": "Europe (Ireland)", "surcharge_pct": 10 }
+    ],
+    "benchmarks": { "swe_bench_verified": 38.5, "mmlu_pro": 74.0, "human_eval": 88.4 },
+    "simple_score": 85.0, "rank": 6
   },
   {
     "id": "deepseek-v3",
     "name": "DeepSeek V3",
     "provider": "DeepSeek",
     "model_type": "open_source",
-    "agentic_features": {
-      "supports_agentic_development": true,
-      "tool_use": true,
-      "function_calling": true,
-      "computer_use": false,
-      "reasoning_effort_control": true
+    "agentic_features": { "supports_agentic_development": true, "tool_use": true, "function_calling": true, "reasoning_effort_control": true },
+    "parameters": { "total_params": "671B", "active_params": "37B MoE", "context_window_tokens": 128000, "max_output_tokens": 8192 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m": 0.14, "completion_cost_per_1m": 0.28 },
+      "cached": { "prompt_cost_per_1m": 0.014, "discount_pct": 90 },
+      "batch": { "prompt_cost_per_1m": 0.07, "completion_cost_per_1m": 0.14, "discount_pct": 50 }
     },
-    "parameters": {
-      "total_params": "671B",
-      "active_params": "37B MoE",
-      "context_window_tokens": 128000,
-      "max_output_tokens": 8192
+    "supported_regions": [
+      { "code": "us-central1", "name": "US Central", "surcharge_pct": 0 },
+      { "code": "cn-hangzhou", "name": "China Hangzhou", "surcharge_pct": 0 },
+      { "code": "europe-west1", "name": "Europe West", "surcharge_pct": 5 }
+    ],
+    "benchmarks": { "swe_bench_verified": 49.2, "mmlu_pro": 75.6, "human_eval": 90.2 },
+    "simple_score": 95.8, "rank": 2
+  },
+  {
+    "id": "minimax-abab6-5s",
+    "name": "MiniMax abab6.5s",
+    "provider": "MiniMax",
+    "model_type": "proprietary",
+    "agentic_features": { "supports_agentic_development": true, "tool_use": true, "function_calling": true, "reasoning_effort_control": false },
+    "parameters": { "total_params": "245B", "context_window_tokens": 245000, "max_output_tokens": 8192 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m": 1.00, "completion_cost_per_1m": 1.00 },
+      "cached": { "prompt_cost_per_1m": 0.25, "discount_pct": 75 },
+      "batch": { "prompt_cost_per_1m": 0.50, "completion_cost_per_1m": 0.50, "discount_pct": 50 }
     },
-    "cloud_inference_metrics": {
-      "aws_bedrock": {
-        "supported": true,
-        "region": "us-east-1",
-        "prompt_cost_per_1m": 0.60,
-        "completion_cost_per_1m": 0.60,
-        "cached_prompt_cost_per_1m": 0.15,
-        "batch_processing_supported": false,
-        "rate_limits": { "rpm": 2000, "tpm": 1000000, "concurrent": 50 },
-        "uptime_link": "https://health.aws.amazon.com"
-      },
-      "gcp_vertex_ai": {
-        "supported": true,
-        "region": "us-central1",
-        "prompt_cost_per_1m": 0.55,
-        "completion_cost_per_1m": 0.55,
-        "cached_prompt_cost_per_1m": 0.14,
-        "batch_processing_supported": true,
-        "batch_discount_pct": 50,
-        "rate_limits": { "rpm": 2500, "tpm": 1200000, "concurrent": 60 },
-        "uptime_link": "https://status.cloud.google.com"
-      },
-      "digital_ocean_gradient": {
-        "supported": true,
-        "region": "nyc3 / ams3",
-        "prompt_cost_per_1m": 0.42,
-        "completion_cost_per_1m": 0.42,
-        "cached_prompt_cost_per_1m": 0.10,
-        "batch_processing_supported": false,
-        "rate_limits": { "rpm": 1200, "tpm": 1500000, "concurrent": 40 },
-        "uptime_link": "https://status.digitalocean.com"
-      },
-      "alibaba_dashscope": {
-        "supported": true,
-        "region": "cn-hangzhou / ap-southeast-1",
-        "prompt_cost_per_1m": 0.20,
-        "completion_cost_per_1m": 0.40,
-        "cached_prompt_cost_per_1m": 0.05,
-        "batch_processing_supported": true,
-        "batch_discount_pct": 50,
-        "rate_limits": { "rpm": 5000, "tpm": 3000000, "concurrent": 150 },
-        "uptime_link": "https://status.alibabacloud.com"
-      }
+    "supported_regions": [
+      { "code": "ap-southeast-1", "name": "Singapore", "surcharge_pct": 0 },
+      { "code": "cn-beijing", "name": "Beijing", "surcharge_pct": 0 }
+    ],
+    "benchmarks": { "swe_bench_verified": 32.4, "mmlu_pro": 68.2, "human_eval": 82.0 },
+    "simple_score": 81.2, "rank": 8
+  },
+  {
+    "id": "moonshot-kimi-k1-5",
+    "name": "Moonshot Kimi k1.5",
+    "provider": "Moonshot AI",
+    "model_type": "proprietary",
+    "agentic_features": { "supports_agentic_development": true, "tool_use": true, "function_calling": true, "reasoning_effort_control": true },
+    "parameters": { "total_params": "Undisclosed", "context_window_tokens": 200000, "max_output_tokens": 8192 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m": 1.20, "completion_cost_per_1m": 2.40 },
+      "cached": { "prompt_cost_per_1m": 0.30, "discount_pct": 75 },
+      "batch": { "prompt_cost_per_1m": 0.60, "completion_cost_per_1m": 1.20, "discount_pct": 50 }
     },
-    "benchmarks": {
-      "swe_bench_verified": 49.2,
-      "mmlu_pro": 75.6,
-      "human_eval": 90.2,
-      "gpqa": 59.1,
-      "output_tps": 65
-    },
-    "relations": {
-      "best_cloud_provider_for_cost": "Alibaba DashScope ($0.20/1M Prompt, Batch Supported)",
-      "agentic_suitability_score": 96.0,
-      "primary_fallback_model_id": "qwen-2-5-coder-32b"
-    },
-    "links": {
-      "paper_link": "https://github.com/deepseek-ai/DeepSeek-V3",
-      "weights_link": "https://huggingface.co/deepseek-ai/DeepSeek-V3"
-    },
-    "simple_score": 95.8,
-    "rank": 2
+    "supported_regions": [
+      { "code": "cn-shanghai", "name": "Shanghai", "surcharge_pct": 0 },
+      { "code": "ap-southeast-1", "name": "Singapore", "surcharge_pct": 5 }
+    ],
+    "benchmarks": { "swe_bench_verified": 36.1, "mmlu_pro": 71.5, "human_eval": 86.4 },
+    "simple_score": 84.5, "rank": 7
   },
   {
     "id": "qwen-2-5-coder-32b",
     "name": "Qwen 2.5 Coder 32B",
     "provider": "Alibaba Cloud",
     "model_type": "open_source",
-    "agentic_features": {
-      "supports_agentic_development": true,
-      "tool_use": true,
-      "function_calling": true,
-      "computer_use": false,
-      "reasoning_effort_control": false
+    "agentic_features": { "supports_agentic_development": true, "tool_use": true, "function_calling": true, "reasoning_effort_control": false },
+    "parameters": { "total_params": "32.5B", "context_window_tokens": 128000, "max_output_tokens": 8192 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m": 0.08, "completion_cost_per_1m": 0.16 },
+      "cached": { "prompt_cost_per_1m": 0.02, "discount_pct": 75 },
+      "batch": { "prompt_cost_per_1m": 0.04, "completion_cost_per_1m": 0.08, "discount_pct": 50 }
     },
-    "parameters": {
-      "total_params": "32.5B",
-      "active_params": "32.5B Dense",
-      "context_window_tokens": 128000,
-      "max_output_tokens": 8192
-    },
-    "cloud_inference_metrics": {
-      "aws_bedrock": {
-        "supported": true,
-        "region": "us-east-1",
-        "prompt_cost_per_1m": 0.20,
-        "completion_cost_per_1m": 0.20,
-        "batch_processing_supported": false,
-        "rate_limits": { "rpm": 3000, "tpm": 1500000, "concurrent": 60 },
-        "uptime_link": "https://health.aws.amazon.com"
-      },
-      "gcp_vertex_ai": {
-        "supported": true,
-        "region": "us-central1",
-        "prompt_cost_per_1m": 0.18,
-        "completion_cost_per_1m": 0.18,
-        "batch_processing_supported": true,
-        "batch_discount_pct": 50,
-        "rate_limits": { "rpm": 3000, "tpm": 1500000, "concurrent": 60 },
-        "uptime_link": "https://status.cloud.google.com"
-      },
-      "digital_ocean_gradient": {
-        "supported": true,
-        "region": "nyc3",
-        "prompt_cost_per_1m": 0.15,
-        "completion_cost_per_1m": 0.15,
-        "batch_processing_supported": false,
-        "rate_limits": { "rpm": 1200, "tpm": 1000000, "concurrent": 40 },
-        "uptime_link": "https://status.digitalocean.com"
-      },
-      "alibaba_dashscope": {
-        "supported": true,
-        "region": "cn-hangzhou / ap-southeast-1 / us-west-1",
-        "prompt_cost_per_1m": 0.08,
-        "completion_cost_per_1m": 0.16,
-        "cached_prompt_cost_per_1m": 0.02,
-        "batch_processing_supported": true,
-        "batch_discount_pct": 50,
-        "rate_limits": { "rpm": 10000, "tpm": 5000000, "concurrent": 300 },
-        "uptime_link": "https://status.alibabacloud.com"
-      }
-    },
-    "benchmarks": {
-      "swe_bench_verified": 41.2,
-      "mmlu_pro": 69.4,
-      "human_eval": 92.7,
-      "gpqa": 48.5,
-      "output_tps": 85
-    },
-    "relations": {
-      "best_cloud_provider_for_cost": "Alibaba DashScope ($0.08/1M Prompt, Batch Supported)",
-      "agentic_suitability_score": 92.0,
-      "primary_fallback_model_id": "deepseek-v3"
-    },
-    "links": {
-      "paper_link": "https://qwenlm.github.io/blog/qwen2.5-coder/",
-      "weights_link": "https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct"
-    },
-    "simple_score": 91.5,
-    "rank": 3
+    "supported_regions": [
+      { "code": "cn-hangzhou", "name": "Hangzhou", "surcharge_pct": 0 },
+      { "code": "us-west-1", "name": "US West", "surcharge_pct": 10 },
+      { "code": "eu-central-1", "name": "Frankfurt", "surcharge_pct": 10 }
+    ],
+    "benchmarks": { "swe_bench_verified": 41.2, "mmlu_pro": 69.4, "human_eval": 92.7 },
+    "simple_score": 91.5, "rank": 3
   },
   {
-    "id": "gemini-1-5-pro",
-    "name": "Gemini 1.5 Pro",
-    "provider": "Google",
+    "id": "glm-4-plus",
+    "name": "GLM-4-Plus",
+    "provider": "Zhipu AI",
+    "model_type": "open_source",
+    "agentic_features": { "supports_agentic_development": true, "tool_use": true, "function_calling": true, "reasoning_effort_control": false },
+    "parameters": { "total_params": "130B", "context_window_tokens": 128000, "max_output_tokens": 8192 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m": 0.70, "completion_cost_per_1m": 0.70 },
+      "cached": { "prompt_cost_per_1m": 0.175, "discount_pct": 75 },
+      "batch": { "prompt_cost_per_1m": 0.35, "completion_cost_per_1m": 0.35, "discount_pct": 50 }
+    },
+    "supported_regions": [
+      { "code": "cn-beijing", "name": "Beijing", "surcharge_pct": 0 },
+      { "code": "ap-southeast-1", "name": "Singapore", "surcharge_pct": 5 }
+    ],
+    "benchmarks": { "swe_bench_verified": 34.0, "mmlu_pro": 70.2, "human_eval": 85.0 },
+    "simple_score": 82.8, "rank": 9
+  },
+  {
+    "id": "gpt-4o",
+    "name": "GPT-4o",
+    "provider": "OpenAI",
     "model_type": "proprietary",
-    "agentic_features": {
-      "supports_agentic_development": true,
-      "tool_use": true,
-      "function_calling": true,
-      "computer_use": false,
-      "reasoning_effort_control": true
+    "agentic_features": { "supports_agentic_development": true, "tool_use": true, "function_calling": true, "reasoning_effort_control": true },
+    "parameters": { "total_params": "Undisclosed", "context_window_tokens": 128000, "max_output_tokens": 16384 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m": 2.50, "completion_cost_per_1m": 10.00 },
+      "cached": { "prompt_cost_per_1m": 1.25, "discount_pct": 50 },
+      "batch": { "prompt_cost_per_1m": 1.25, "completion_cost_per_1m": 5.00, "discount_pct": 50 }
     },
-    "parameters": {
-      "total_params": "Undisclosed",
-      "active_params": "Undisclosed",
-      "context_window_tokens": 2000000,
-      "max_output_tokens": 8192
+    "supported_regions": [
+      { "code": "us-east-1", "name": "US East", "surcharge_pct": 0 },
+      { "code": "sweden-central", "name": "Sweden Central", "surcharge_pct": 5 }
+    ],
+    "benchmarks": { "swe_bench_verified": 38.8, "mmlu_pro": 72.6, "human_eval": 90.2 },
+    "simple_score": 86.5, "rank": 5
+  },
+  {
+    "id": "llama-3-3-70b",
+    "name": "Llama 3.3 70B",
+    "provider": "Meta",
+    "model_type": "open_source",
+    "agentic_features": { "supports_agentic_development": true, "tool_use": true, "function_calling": true, "reasoning_effort_control": false },
+    "parameters": { "total_params": "70B", "context_window_tokens": 128000, "max_output_tokens": 8192 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m": 0.23, "completion_cost_per_1m": 0.40 },
+      "cached": { "prompt_cost_per_1m": 0.05, "discount_pct": 75 },
+      "batch": { "prompt_cost_per_1m": 0.115, "completion_cost_per_1m": 0.20, "discount_pct": 50 }
     },
-    "cloud_inference_metrics": {
-      "aws_bedrock": {
-        "supported": false,
-        "batch_processing_supported": false,
-        "note": "Proprietary Google model not hosted on AWS Bedrock"
-      },
-      "gcp_vertex_ai": {
-        "supported": true,
-        "region": "us-central1 (Global)",
-        "prompt_cost_per_1m": 1.25,
-        "completion_cost_per_1m": 5.00,
-        "cached_prompt_cost_per_1m": 0.3125,
-        "long_context_surcharge_threshold_tokens": 128000,
-        "batch_processing_supported": true,
-        "batch_discount_pct": 50,
-        "rate_limits": { "rpm": 2000, "tpm": 4000000, "concurrent": 100 },
-        "uptime_link": "https://status.cloud.google.com"
-      },
-      "digital_ocean_gradient": {
-        "supported": false,
-        "batch_processing_supported": false,
-        "note": "Proprietary model not hosted natively on DigitalOcean"
-      },
-      "alibaba_dashscope": {
-        "supported": false,
-        "batch_processing_supported": false,
-        "note": "Proprietary model not hosted natively on DashScope"
-      }
+    "supported_regions": [
+      { "code": "us-east-1", "name": "US East", "surcharge_pct": 0 },
+      { "code": "eu-west-1", "name": "Europe West", "surcharge_pct": 10 }
+    ],
+    "benchmarks": { "swe_bench_verified": 39.5, "mmlu_pro": 72.0, "human_eval": 88.6 },
+    "simple_score": 88.2, "rank": 4
+  },
+  {
+    "id": "mistral-large-2",
+    "name": "Mistral Large 2",
+    "provider": "Mistral AI",
+    "model_type": "proprietary",
+    "agentic_features": { "supports_agentic_development": true, "tool_use": true, "function_calling": true, "reasoning_effort_control": false },
+    "parameters": { "total_params": "123B", "context_window_tokens": 128000, "max_output_tokens": 8192 },
+    "cost_options": {
+      "standard": { "prompt_cost_per_1m": 2.00, "completion_cost_per_1m": 6.00 },
+      "cached": { "prompt_cost_per_1m": 0.50, "discount_pct": 75 },
+      "batch": { "prompt_cost_per_1m": 1.00, "completion_cost_per_1m": 3.00, "discount_pct": 50 }
     },
-    "benchmarks": {
-      "swe_bench_verified": 35.8,
-      "mmlu_pro": 73.2,
-      "human_eval": 84.1,
-      "gpqa": 58.0,
-      "output_tps": 78
-    },
-    "relations": {
-      "best_cloud_provider_for_cost": "GCP Vertex AI Direct (Batch Supported)",
-      "agentic_suitability_score": 90.0,
-      "primary_fallback_model_id": "claude-3-5-sonnet"
-    },
-    "links": {
-      "paper_link": "https://deepmind.google/technologies/gemini/1-5-pro/",
-      "status_page": "https://status.cloud.google.com"
-    },
-    "simple_score": 87.2,
-    "rank": 4
+    "supported_regions": [
+      { "code": "eu-west-3", "name": "Paris", "surcharge_pct": 0 },
+      { "code": "us-east-1", "name": "US East", "surcharge_pct": 0 }
+    ],
+    "benchmarks": { "swe_bench_verified": 34.2, "mmlu_pro": 71.0, "human_eval": 89.0 },
+    "simple_score": 83.5, "rank": 10
   }
 ]

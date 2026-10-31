@@ -24,10 +24,9 @@ function renderTable(data) {
   tbody.innerHTML = '';
 
   data.forEach((m, idx) => {
-    const aws = m.cloud_inference_metrics?.aws_bedrock;
-    const gcp = m.cloud_inference_metrics?.gcp_vertex_ai;
-    const do_m = m.cloud_inference_metrics?.digital_ocean_gradient;
-    const ali = m.cloud_inference_metrics?.alibaba_dashscope;
+    const stdCost = m.cost_options?.standard;
+    const batchCost = m.cost_options?.batch;
+    const cachedCost = m.cost_options?.cached;
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -37,14 +36,13 @@ function renderTable(data) {
       <td>${m.parameters.context_window_tokens.toLocaleString()} tokens</td>
       <td>${m.benchmarks.swe_bench_verified}%</td>
       <td>
-        <small>AWS: $${aws?.supported ? aws.prompt_cost_per_1m : 'N/A'}/1M<br>
-        GCP: $${gcp?.supported ? gcp.prompt_cost_per_1m : 'N/A'}/1M<br>
-        DO: $${do_m?.supported ? do_m.prompt_cost_per_1m : 'N/A'}/1M<br>
-        Ali: $${ali?.supported ? ali.prompt_cost_per_1m : 'N/A'}/1M</small>
+        <small>Std: $${stdCost ? stdCost.prompt_cost_per_1m : 'N/A'}/1M<br>
+        Batch: $${batchCost ? batchCost.prompt_cost_per_1m : 'N/A'}/1M (${batchCost ? batchCost.discount_pct : 0}% off)<br>
+        Cache: $${cachedCost ? cachedCost.prompt_cost_per_1m : 'N/A'}/1M (${cachedCost ? cachedCost.discount_pct : 0}% off)</small>
       </td>
-      <td><span class="feature-pill">${m.relations.best_cloud_provider_for_cost}</span></td>
+      <td><small>${m.supported_regions ? m.supported_regions.map(r => r.code).join(', ') : 'Global'}</small></td>
       <td>
-        ${m.links.paper_link ? `<a href="${m.links.paper_link}" target="_blank" style="color:#58a6ff; font-size:0.8rem">Paper</a>` : ''}
+        ${m.links?.paper_link ? `<a href="${m.links.paper_link}" target="_blank" style="color:#58a6ff; font-size:0.8rem">Paper</a>` : ''}
       </td>
     `;
     tbody.appendChild(tr);
@@ -91,16 +89,17 @@ function setupEvaluator() {
 
     let html = '<div style="display:flex; flex-direction:column; gap:0.5rem">';
     benchmarkData.forEach(m => {
-      const aws = m.cloud_inference_metrics?.aws_bedrock;
-      if (aws && aws.supported) {
-        const promptCostUncached = promptM * (1 - hitRatio) * aws.prompt_cost_per_1m;
-        const promptCostCached = promptM * hitRatio * (aws.cached_prompt_cost_per_1m || aws.prompt_cost_per_1m);
-        const compCost = compM * aws.completion_cost_per_1m;
+      const std = m.cost_options?.standard;
+      const cached = m.cost_options?.cached;
+      if (std) {
+        const promptCostUncached = promptM * (1 - hitRatio) * std.prompt_cost_per_1m;
+        const promptCostCached = promptM * hitRatio * (cached?.prompt_cost_per_1m || std.prompt_cost_per_1m);
+        const compCost = compM * std.completion_cost_per_1m;
         const totalEst = promptCostUncached + promptCostCached + compCost;
 
         html += `
           <div style="display:flex; justify-content:space-between; padding:0.5rem; background:#161b22; border-radius:4px">
-            <span><strong>${m.name}</strong> <small style="color:#8b949e">(AWS Bedrock)</small></span>
+            <span><strong>${m.name}</strong> <small style="color:#8b949e">(${m.provider})</small></span>
             <span style="color:#58a6ff; font-weight:bold">$${totalEst.toFixed(2)}/mo</span>
           </div>
         `;
