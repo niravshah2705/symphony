@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 338 nodes
+Community of 377 nodes
 
-- **Size**: 338 nodes
-- **Cohesion**: 0.2529
+- **Size**: 377 nodes
+- **Cohesion**: 0.2481
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 338 nodes
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
 
-*... and 288 more members.*
+*... and 327 more members.*
 
 ## Execution Flows
 
@@ -81,36 +81,36 @@ Community of 338 nodes
 
 ### Outgoing
 
-- `equal` (220 edge(s))
-- `join` (154 edge(s))
-- `String` (65 edge(s))
-- `includes` (65 edge(s))
+- `equal` (231 edge(s))
+- `join` (181 edge(s))
+- `String` (76 edge(s))
+- `includes` (66 edge(s))
+- `isArray` (53 edge(s))
 - `strictEqual` (50 edge(s))
 - `deepEqual` (49 edge(s))
-- `isArray` (42 edge(s))
-- `trim` (40 edge(s))
+- `trim` (41 edge(s))
 - `endsWith` (39 edge(s))
 - `execFileSync` (37 edge(s))
 - `deepStrictEqual` (37 edge(s))
+- `map` (35 edge(s))
+- `slice` (35 edge(s))
 - `step` (34 edge(s))
-- `slice` (34 edge(s))
-- `map` (33 edge(s))
-- `tmpdir` (29 edge(s))
+- `mkdirSync` (34 edge(s))
 
 ### Incoming
 
-- `equal` (219 edge(s))
+- `equal` (230 edge(s))
+- `join` (104 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
-- `join` (84 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
 - `strictEqual` (50 edge(s))
 - `deepEqual` (47 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (45 edge(s))
 - `deepStrictEqual` (37 edge(s))
+- `ok` (29 edge(s))
+- `tmpdir` (28 edge(s))
+- `writeFileSync` (28 edge(s))
+- `mkdtempSync` (27 edge(s))
+- `after` (26 edge(s))
 - `./packages/shared/src/agent/framework.js` (26 edge(s))
 - `execFileSync` (26 edge(s))
-- `throws` (24 edge(s))
-- `tmpdir` (24 edge(s))
-- `./packages/shared/src/agent/settings-policy.js` (24 edge(s))
-- `mkdtempSync` (23 edge(s))
-- `after` (22 edge(s))
-- `./packages/shared/src/agent/coder.js` (22 edge(s))

@@ -7,20 +7,20 @@
 Community of 7 nodes
 
 - **Size**: 7 nodes
-- **Cohesion**: 0.5882
+- **Cohesion**: 0.6058
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| encodeVarint | Function | ./packages/shared/test/openshell.test.js | 21-30 |
-| encodeTag | Function | ./packages/shared/test/openshell.test.js | 32-34 |
-| encodeString | Function | ./packages/shared/test/openshell.test.js | 36-39 |
-| encodeMessage | Function | ./packages/shared/test/openshell.test.js | 41-43 |
-| okFrame | Function | ./packages/shared/test/openshell.test.js | 45-54 |
-| buildSandboxResponse | Function | ./packages/shared/test/openshell.test.js | 56-70 |
-| mockTransport | Function | ./packages/shared/test/openshell.test.js | 272-290 |
+| encodeVarint | Function | ./packages/shared/test/openshell.test.js | 28-37 |
+| encodeTag | Function | ./packages/shared/test/openshell.test.js | 39-41 |
+| encodeString | Function | ./packages/shared/test/openshell.test.js | 43-46 |
+| encodeMessage | Function | ./packages/shared/test/openshell.test.js | 48-50 |
+| okFrame | Function | ./packages/shared/test/openshell.test.js | 52-61 |
+| buildSandboxResponse | Function | ./packages/shared/test/openshell.test.js | 63-77 |
+| mockTransport | Function | ./packages/shared/test/openshell.test.js | 442-455 |
 
 ## Execution Flows
 
@@ -30,16 +30,20 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `concat` (9 edge(s))
-- `alloc` (4 edge(s))
-- `push` (3 edge(s))
+- `concat` (17 edge(s))
+- `alloc` (5 edge(s))
+- `push` (4 edge(s))
 - `from` (2 edge(s))
 - `Number` (2 edge(s))
+- `includes` (2 edge(s))
+- `toString` (2 edge(s))
 - `String` (1 edge(s))
 - `BigInt` (1 edge(s))
-- `./packages/shared/test/openshell.test.js::test:syncNvidiaSecrets syncs per-organization imageRegistry secret alongside github and openrouter@L246` (1 edge(s))
+- `ok` (1 edge(s))
+- `match` (1 edge(s))
+- `./packages/shared/test/openshell.test.js::test:syncNvidiaSecrets syncs per-organization imageRegistry secret alongside github and openrouter@L253` (1 edge(s))
 
 ### Incoming
 
-- `./packages/shared/test/openshell.test.js` (11 edge(s))
-- `./packages/shared/test/openshell.test.js::test:syncNvidiaSecrets syncs per-organization imageRegistry secret alongside github and openrouter@L246` (1 edge(s))
+- `./packages/shared/test/openshell.test.js` (14 edge(s))
+- `./packages/shared/test/openshell.test.js::test:syncNvidiaSecrets syncs per-organization imageRegistry secret alongside github and openrouter@L253` (1 edge(s))

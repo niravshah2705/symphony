@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 466 nodes
+Community of 460 nodes
 
-- **Size**: 466 nodes
-- **Cohesion**: 0.3186
+- **Size**: 460 nodes
+- **Cohesion**: 0.3199
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 466 nodes
 | realResolveModel | Function | ./packages/shared/src/agent/business-pipeline.js | 89-94 |
 | invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
 
-*... and 416 more members.*
+*... and 410 more members.*
 
 ## Execution Flows
 
@@ -78,25 +78,25 @@ Community of 466 nodes
 
 ### Outgoing
 
-- `equal` (412 edge(s))
+- `equal` (399 edge(s))
 - `deepEqual` (74 edge(s))
 - `String` (62 edge(s))
-- `Number` (51 edge(s))
+- `Number` (50 edge(s))
 - `strictEqual` (48 edge(s))
 - `push` (46 edge(s))
 - `replace` (35 edge(s))
-- `ok` (34 edge(s))
 - `match` (33 edge(s))
-- `toISOString` (32 edge(s))
+- `ok` (33 edge(s))
 - `slice` (32 edge(s))
+- `toISOString` (31 edge(s))
+- `require` (30 edge(s))
 - `map` (30 edge(s))
-- `require` (29 edge(s))
-- `warn` (29 edge(s))
-- `now` (28 edge(s))
+- `Boolean` (28 edge(s))
+- `warn` (28 edge(s))
 
 ### Incoming
 
-- `equal` (412 edge(s))
+- `equal` (399 edge(s))
 - `deepEqual` (74 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (55 edge(s))
@@ -105,7 +105,7 @@ Community of 466 nodes
 - `./packages/shared/src/agent/business-pipeline.js` (46 edge(s))
 - `./packages/shared/src/agent/llm.js` (40 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (38 edge(s))
-- `ok` (34 edge(s))
+- `ok` (33 edge(s))
 - `match` (28 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
 - `after` (22 edge(s))

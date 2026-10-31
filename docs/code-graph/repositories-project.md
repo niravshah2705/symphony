@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 603 nodes
+Community of 601 nodes
 
-- **Size**: 603 nodes
-- **Cohesion**: 0.5558
+- **Size**: 601 nodes
+- **Cohesion**: 0.5603
 - **Dominant Language**: python
 
 ## Members
@@ -65,7 +65,7 @@ Community of 603 nodes
 | revoke_project_invitation | Function | ./services/org/app/api/v1/routes_project_invitations.py | 61-68 |
 | accept_project_invitation | Function | ./services/org/app/api/v1/routes_project_invitations.py | 72-79 |
 
-*... and 553 more members.*
+*... and 551 more members.*
 
 ## Execution Flows
 
@@ -85,12 +85,12 @@ Community of 603 nodes
 
 ### Outgoing
 
-- `get` (245 edge(s))
+- `get` (244 edge(s))
 - `Depends` (165 edge(s))
 - `str` (160 edge(s))
 - `uuid4` (40 edge(s))
-- `delete` (37 edge(s))
 - `set` (36 edge(s))
+- `delete` (36 edge(s))
 - `raises` (35 edge(s))
 - `setattr` (33 edge(s))
 - `query` (30 edge(s))
@@ -110,7 +110,6 @@ Community of 603 nodes
 - `./services/org/app/api/v1/routes_me.py` (16 edge(s))
 - `len` (16 edge(s))
 - `./services/org/app/api/v1/routes_auth.py` (13 edge(s))
-- `json` (13 edge(s))
 - `./services/org/tests/unit/test_services.py` (13 edge(s))
 - `./services/org/app/errors.py` (12 edge(s))
 - `./services/org/app/services/invitation_service.py` (12 edge(s))
@@ -118,3 +117,4 @@ Community of 603 nodes
 - `./services/org/app/repositories/base.py` (11 edge(s))
 - `./services/org/app/services/auth_service.py` (11 edge(s))
 - `./services/org/app/services/tag_service.py` (10 edge(s))
+- `./services/org/tests/unit/test_models.py` (10 edge(s))
