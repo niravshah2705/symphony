@@ -24,6 +24,8 @@
         "prompt_cost_per_1m": 3.00,
         "completion_cost_per_1m": 15.00,
         "cached_prompt_cost_per_1m": 0.30,
+        "batch_processing_supported": true,
+        "batch_discount_pct": 50,
         "regional_compliance_surcharge_pct": 10,
         "rate_limits": { "rpm": 4000, "tpm": 2000000, "concurrent": 80 },
         "uptime_link": "https://health.aws.amazon.com"
@@ -34,16 +36,19 @@
         "prompt_cost_per_1m": 3.00,
         "completion_cost_per_1m": 15.00,
         "cached_prompt_cost_per_1m": 0.30,
+        "batch_processing_supported": true,
         "batch_discount_pct": 50,
         "rate_limits": { "rpm": 3000, "tpm": 1500000, "concurrent": 60 },
         "uptime_link": "https://status.cloud.google.com"
       },
       "digital_ocean_gradient": {
         "supported": false,
+        "batch_processing_supported": false,
         "note": "Proprietary model not hosted natively on DigitalOcean serverless"
       },
       "alibaba_dashscope": {
         "supported": false,
+        "batch_processing_supported": false,
         "note": "Proprietary model not hosted natively on DashScope"
       }
     },
@@ -55,7 +60,7 @@
       "output_tps": 72
     },
     "relations": {
-      "best_cloud_provider_for_cost": "GCP Vertex AI (Batch) / AWS Bedrock (Standard)",
+      "best_cloud_provider_for_cost": "GCP Vertex AI (Batch) / AWS Bedrock (Batch)",
       "agentic_suitability_score": 98.5,
       "primary_fallback_model_id": "claude-3-5-haiku"
     },
@@ -91,6 +96,7 @@
         "prompt_cost_per_1m": 0.60,
         "completion_cost_per_1m": 0.60,
         "cached_prompt_cost_per_1m": 0.15,
+        "batch_processing_supported": false,
         "rate_limits": { "rpm": 2000, "tpm": 1000000, "concurrent": 50 },
         "uptime_link": "https://health.aws.amazon.com"
       },
@@ -100,6 +106,8 @@
         "prompt_cost_per_1m": 0.55,
         "completion_cost_per_1m": 0.55,
         "cached_prompt_cost_per_1m": 0.14,
+        "batch_processing_supported": true,
+        "batch_discount_pct": 50,
         "rate_limits": { "rpm": 2500, "tpm": 1200000, "concurrent": 60 },
         "uptime_link": "https://status.cloud.google.com"
       },
@@ -109,6 +117,7 @@
         "prompt_cost_per_1m": 0.42,
         "completion_cost_per_1m": 0.42,
         "cached_prompt_cost_per_1m": 0.10,
+        "batch_processing_supported": false,
         "rate_limits": { "rpm": 1200, "tpm": 1500000, "concurrent": 40 },
         "uptime_link": "https://status.digitalocean.com"
       },
@@ -118,6 +127,8 @@
         "prompt_cost_per_1m": 0.20,
         "completion_cost_per_1m": 0.40,
         "cached_prompt_cost_per_1m": 0.05,
+        "batch_processing_supported": true,
+        "batch_discount_pct": 50,
         "rate_limits": { "rpm": 5000, "tpm": 3000000, "concurrent": 150 },
         "uptime_link": "https://status.alibabacloud.com"
       }
@@ -130,7 +141,7 @@
       "output_tps": 65
     },
     "relations": {
-      "best_cloud_provider_for_cost": "Alibaba DashScope ($0.20/1M Prompt)",
+      "best_cloud_provider_for_cost": "Alibaba DashScope ($0.20/1M Prompt, Batch Supported)",
       "agentic_suitability_score": 96.0,
       "primary_fallback_model_id": "qwen-2-5-coder-32b"
     },
@@ -165,6 +176,7 @@
         "region": "us-east-1",
         "prompt_cost_per_1m": 0.20,
         "completion_cost_per_1m": 0.20,
+        "batch_processing_supported": false,
         "rate_limits": { "rpm": 3000, "tpm": 1500000, "concurrent": 60 },
         "uptime_link": "https://health.aws.amazon.com"
       },
@@ -173,6 +185,8 @@
         "region": "us-central1",
         "prompt_cost_per_1m": 0.18,
         "completion_cost_per_1m": 0.18,
+        "batch_processing_supported": true,
+        "batch_discount_pct": 50,
         "rate_limits": { "rpm": 3000, "tpm": 1500000, "concurrent": 60 },
         "uptime_link": "https://status.cloud.google.com"
       },
@@ -181,6 +195,7 @@
         "region": "nyc3",
         "prompt_cost_per_1m": 0.15,
         "completion_cost_per_1m": 0.15,
+        "batch_processing_supported": false,
         "rate_limits": { "rpm": 1200, "tpm": 1000000, "concurrent": 40 },
         "uptime_link": "https://status.digitalocean.com"
       },
@@ -190,6 +205,8 @@
         "prompt_cost_per_1m": 0.08,
         "completion_cost_per_1m": 0.16,
         "cached_prompt_cost_per_1m": 0.02,
+        "batch_processing_supported": true,
+        "batch_discount_pct": 50,
         "rate_limits": { "rpm": 10000, "tpm": 5000000, "concurrent": 300 },
         "uptime_link": "https://status.alibabacloud.com"
       }
@@ -202,7 +219,7 @@
       "output_tps": 85
     },
     "relations": {
-      "best_cloud_provider_for_cost": "Alibaba DashScope ($0.08/1M Prompt)",
+      "best_cloud_provider_for_cost": "Alibaba DashScope ($0.08/1M Prompt, Batch Supported)",
       "agentic_suitability_score": 92.0,
       "primary_fallback_model_id": "deepseek-v3"
     },
@@ -234,6 +251,7 @@
     "cloud_inference_metrics": {
       "aws_bedrock": {
         "supported": false,
+        "batch_processing_supported": false,
         "note": "Proprietary Google model not hosted on AWS Bedrock"
       },
       "gcp_vertex_ai": {
@@ -243,16 +261,19 @@
         "completion_cost_per_1m": 5.00,
         "cached_prompt_cost_per_1m": 0.3125,
         "long_context_surcharge_threshold_tokens": 128000,
+        "batch_processing_supported": true,
         "batch_discount_pct": 50,
         "rate_limits": { "rpm": 2000, "tpm": 4000000, "concurrent": 100 },
         "uptime_link": "https://status.cloud.google.com"
       },
       "digital_ocean_gradient": {
         "supported": false,
+        "batch_processing_supported": false,
         "note": "Proprietary model not hosted natively on DigitalOcean"
       },
       "alibaba_dashscope": {
         "supported": false,
+        "batch_processing_supported": false,
         "note": "Proprietary model not hosted natively on DashScope"
       }
     },
@@ -264,7 +285,7 @@
       "output_tps": 78
     },
     "relations": {
-      "best_cloud_provider_for_cost": "GCP Vertex AI Direct",
+      "best_cloud_provider_for_cost": "GCP Vertex AI Direct (Batch Supported)",
       "agentic_suitability_score": 90.0,
       "primary_fallback_model_id": "claude-3-5-sonnet"
     },

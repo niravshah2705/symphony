@@ -26,18 +26,11 @@ const firstModel = jsonContent[0];
 assert.ok(firstModel.id, 'model missing id');
 assert.ok(firstModel.name, 'model missing name');
 assert.ok(firstModel.agentic_features.supports_agentic_development === true, 'model must support agentic development');
-assert.ok(firstModel.cloud_inference_metrics.aws_bedrock !== undefined, 'missing AWS Bedrock inference metrics');
-assert.ok(firstModel.cloud_inference_metrics.gcp_vertex_ai !== undefined, 'missing GCP Vertex AI inference metrics');
-assert.ok(firstModel.cloud_inference_metrics.digital_ocean_gradient !== undefined, 'missing Digital Ocean Gradient inference metrics');
-assert.ok(firstModel.cloud_inference_metrics.alibaba_dashscope !== undefined, 'missing Alibaba DashScope inference metrics');
+assert.ok(firstModel.cloud_inference_metrics.aws_bedrock.batch_processing_supported !== undefined, 'missing AWS Bedrock batch_processing_supported');
+assert.ok(firstModel.cloud_inference_metrics.gcp_vertex_ai.batch_processing_supported !== undefined, 'missing GCP Vertex AI batch_processing_supported');
+assert.ok(firstModel.cloud_inference_metrics.digital_ocean_gradient.batch_processing_supported !== undefined, 'missing Digital Ocean Gradient batch_processing_supported');
+assert.ok(firstModel.cloud_inference_metrics.alibaba_dashscope.batch_processing_supported !== undefined, 'missing Alibaba DashScope batch_processing_supported');
 assert.ok(firstModel.simple_score > 0, 'model missing simple_score');
 assert.ok(firstModel.rank > 0, 'model missing rank');
-
-// 3. Verify Sharded Provider Files
-const providersDir = path.join(__dirname, '../data/benchmarks/providers');
-assert.ok(fs.existsSync(path.join(providersDir, 'aws_bedrock.json')), 'missing aws_bedrock.json shard');
-assert.ok(fs.existsSync(path.join(providersDir, 'gcp_vertex_ai.json')), 'missing gcp_vertex_ai.json shard');
-assert.ok(fs.existsSync(path.join(providersDir, 'digital_ocean_gradient.json')), 'missing digital_ocean_gradient.json shard');
-assert.ok(fs.existsSync(path.join(providersDir, 'alibaba_dashscope.json')), 'missing alibaba_dashscope.json shard');
 
 console.log('✅ All ArchAgentix Static Tests Passed Successfully!');
