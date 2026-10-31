@@ -71,6 +71,18 @@ test('all Cloud Run services use the gen2 execution environment', () => {
   }
 });
 
+test('no Cloud Run service defines the reserved PORT env variable', () => {
+  const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
+  for (const file of fs.readdirSync(terraformDir).filter((f) => f.endsWith('.tf'))) {
+    const source = read('deploy/gcp/terraform', file);
+    assert.doesNotMatch(
+      source,
+      /env\s*\{\s*name\s*=\s*"PORT"/,
+      `${file}: Cloud Run v2 automatically manages the PORT env variable and rejects services that provide it`,
+    );
+  }
+});
+
 test('gateway sets an explicit long-lived request timeout for SSE streams', () => {
   const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
   const gateway = resourceBlock(cloudRun, 'google_cloud_run_v2_service', 'gateway');
