@@ -7,7 +7,7 @@
 Community of 360 nodes
 
 - **Size**: 360 nodes
-- **Cohesion**: 0.2564
+- **Cohesion**: 0.2565
 - **Dominant Language**: javascript
 
 ## Members

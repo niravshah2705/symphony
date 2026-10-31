@@ -8,7 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { CONFIG } = require('../../config');
+const { CONFIG, resolveSkillsSrc } = require('../../config');
 const { routeWithLaya } = require('./laya-client');
 const { routeWithClm } = require('./clm-client');
 const { routeWithLangChainRouter } = require('./langchain-adapter');
@@ -37,9 +37,8 @@ function extractSkillMetadata(skillPath, rootDir = null) {
         resolved = path.join(rootDir, '.agent-skills', normalized);
       }
     }
-    if (!fs.existsSync(resolved)) {
+    if (!fs.existsSync(resolved) && typeof resolveSkillsSrc === 'function') {
       try {
-        const { resolveSkillsSrc } = require('../../../packages/shared-core/src/config');
         const cand = path.join(resolveSkillsSrc(), id);
         if (fs.existsSync(cand)) resolved = cand;
       } catch (_) {}

@@ -7,6 +7,8 @@
  * file tool to the prepared workspace via `safePathIn`.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { CONFIG } = require('../../config');
 const { PROJECT_CONTEXT_HEADER, projectEgressHeaders } = require('../../egress');
 const { currentWorkspaceContext } = require('../../store/workspace-context');
