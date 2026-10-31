@@ -14,9 +14,15 @@ async function initApp() {
     console.error('Failed to load dataset:', err);
   }
 
-  renderTable(benchmarkData);
+  renderTable(benchmarkData.slice(0, 100)); // Paginated view of top 100
   setupFilters();
   setupEvaluator();
+}
+
+function formatVal(val) {
+  const num = parseFloat(val);
+  if (!num || num === 0) return '<em>N/A (0.0)</em>';
+  return `$${num.toFixed(3)}/1M`;
 }
 
 function renderTable(data) {
@@ -24,25 +30,18 @@ function renderTable(data) {
   tbody.innerHTML = '';
 
   data.forEach((m, idx) => {
-    const stdCost = m.cost_options?.standard;
-    const batchCost = m.cost_options?.batch;
-    const cachedCost = m.cost_options?.cached;
-
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><span class="rank-badge">${m.rank || idx + 1}</span></td>
-      <td><strong>${m.name}</strong><br><small style="color:#8b949e">${m.provider} (${m.parameters.total_params})</small></td>
-      <td><span class="score-tag">${m.simple_score}</span></td>
-      <td>${m.parameters.context_window_tokens.toLocaleString()} tokens</td>
-      <td>${m.benchmarks.swe_bench_verified}%</td>
+      <td><span class="rank-badge">${idx + 1}</span></td>
+      <td><strong>${m.model_name || m.model_id}</strong><br><small style="color:#8b949e">${m.provider} (${m.category || 'all'})</small></td>
+      <td><span class="score-tag">${m.license || 'N/A'}</span></td>
+      <td>${parseInt(m.context_length_tokens || 0).toLocaleString()} tokens</td>
+      <td>${formatVal(m.input_usd_per_1m)}</td>
+      <td>${formatVal(m.output_usd_per_1m)}</td>
+      <td><small>Batch: ${formatVal(m.batch_input_usd_per_1m)}<br>Cache Read: ${formatVal(m.cache_read_usd_per_1m)}</small></td>
+      <td><small>${m.available_regions || m.region || 'Global'}</small></td>
       <td>
-        <small>Std: $${stdCost ? stdCost.prompt_cost_per_1m : 'N/A'}/1M<br>
-        Batch: $${batchCost ? batchCost.prompt_cost_per_1m : 'N/A'}/1M (${batchCost ? batchCost.discount_pct : 0}% off)<br>
-        Cache: $${cachedCost ? cachedCost.prompt_cost_per_1m : 'N/A'}/1M (${cachedCost ? cachedCost.discount_pct : 0}% off)</small>
-      </td>
-      <td><small>${m.supported_regions ? m.supported_regions.map(r => r.code).join(', ') : 'Global'}</small></td>
-      <td>
-        ${m.links?.paper_link ? `<a href="${m.links.paper_link}" target="_blank" style="color:#58a6ff; font-size:0.8rem">Paper</a>` : ''}
+        ${m.source_url ? `<a href="${m.source_url}" target="_blank" style="color:#58a6ff; font-size:0.8rem">Source</a>` : ''}
       </td>
     `;
     tbody.appendChild(tr);
@@ -60,18 +59,18 @@ function setupFilters() {
     const q = searchInput.value.toLowerCase();
 
     const filtered = benchmarkData.filter(m => {
-      const matchProvider = !provider || m.provider.toLowerCase() === provider;
-      const matchType = !type || m.model_type.toLowerCase() === type;
-      const matchQ = !q || m.name.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q);
+      const matchProvider = !provider || (m.provider && m.provider.toLowerCase().includes(provider));
+      const matchType = !type || (m.license && m.license.toLowerCase().includes(type));
+      const matchQ = !q || (m.model_name && m.model_name.toLowerCase().includes(q)) || (m.model_id && m.model_id.toLowerCase().includes(q));
       return matchProvider && matchType && matchQ;
     });
 
-    renderTable(filtered);
+    renderTable(filtered.slice(0, 100));
   };
 
-  providerSel.addEventListener('change', filterHandler);
-  typeSel.addEventListener('change', filterHandler);
-  searchInput.addEventListener('input', filterHandler);
+  if (providerSel) providerSel.addEventListener('change', filterHandler);
+  if (typeSel) typeSel.addEventListener('change', filterHandler);
+  if (searchInput) searchInput.addEventListener('input', filterHandler);
 }
 
 function setupEvaluator() {
@@ -82,36 +81,38 @@ function setupEvaluator() {
   const resultsDiv = document.getElementById('eval-results');
 
   const recalculate = () => {
-    const promptM = parseFloat(promptInput.value) || 0;
-    const compM = parseFloat(compInput.value) || 0;
-    const hitRatio = (parseFloat(cacheHitInput.value) || 0) / 100;
-    cacheHitVal.textContent = `${cacheHitInput.value}%`;
+    const promptM = parseFloat(promptInput?.value) || 0;
+    const compM = parseFloat(compInput?.value) || 0;
+    const hitRatio = (parseFloat(cacheHitInput?.value) || 0) / 100;
+    if (cacheHitVal) cacheHitVal.textContent = `${cacheHitInput.value}%`;
 
     let html = '<div style="display:flex; flex-direction:column; gap:0.5rem">';
-    benchmarkData.forEach(m => {
-      const std = m.cost_options?.standard;
-      const cached = m.cost_options?.cached;
-      if (std) {
-        const promptCostUncached = promptM * (1 - hitRatio) * std.prompt_cost_per_1m;
-        const promptCostCached = promptM * hitRatio * (cached?.prompt_cost_per_1m || std.prompt_cost_per_1m);
-        const compCost = compM * std.completion_cost_per_1m;
+    benchmarkData.slice(0, 10).forEach(m => {
+      const inPrice = parseFloat(m.input_usd_per_1m) || 0;
+      const outPrice = parseFloat(m.output_usd_per_1m) || 0;
+      const cachePrice = parseFloat(m.cache_read_usd_per_1m) || inPrice;
+
+      if (inPrice > 0) {
+        const promptCostUncached = promptM * (1 - hitRatio) * inPrice;
+        const promptCostCached = promptM * hitRatio * cachePrice;
+        const compCost = compM * outPrice;
         const totalEst = promptCostUncached + promptCostCached + compCost;
 
         html += `
           <div style="display:flex; justify-content:space-between; padding:0.5rem; background:#161b22; border-radius:4px">
-            <span><strong>${m.name}</strong> <small style="color:#8b949e">(${m.provider})</small></span>
+            <span><strong>${m.model_name || m.model_id}</strong> <small style="color:#8b949e">(${m.provider})</small></span>
             <span style="color:#58a6ff; font-weight:bold">$${totalEst.toFixed(2)}/mo</span>
           </div>
         `;
       }
     });
     html += '</div>';
-    resultsDiv.innerHTML = html;
+    if (resultsDiv) resultsDiv.innerHTML = html;
   };
 
-  promptInput.addEventListener('input', recalculate);
-  compInput.addEventListener('input', recalculate);
-  cacheHitInput.addEventListener('input', recalculate);
+  if (promptInput) promptInput.addEventListener('input', recalculate);
+  if (compInput) compInput.addEventListener('input', recalculate);
+  if (cacheHitInput) cacheHitInput.addEventListener('input', recalculate);
   recalculate();
 }
 
@@ -143,9 +144,9 @@ function initWorker() {
     chatInput.value = '';
     messagesList.scrollTop = messagesList.scrollHeight;
 
-    slmWorker.postMessage({ query, dataset: benchmarkData });
+    slmWorker.postMessage({ query, dataset: benchmarkData.slice(0, 200) });
   };
 
-  sendBtn.addEventListener('click', sendQuery);
-  chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendQuery(); });
+  if (sendBtn) sendBtn.addEventListener('click', sendQuery);
+  if (chatInput) chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendQuery(); });
 }

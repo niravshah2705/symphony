@@ -6,16 +6,16 @@ self.addEventListener('message', async (e) => {
   const qLower = query.toLowerCase();
   let response = "I couldn't find a direct match in the dataset.";
 
-  if (qLower.includes('cheapest') || qLower.includes('cost') || qLower.includes('price')) {
-    response = `The most cost-effective open-source model for agentic development is **Qwen 2.5 Coder 32B** hosted on **Alibaba DashScope** at **$0.08/1M prompt tokens**.`;
-  } else if (qLower.includes('swe') || qLower.includes('coding') || qLower.includes('highest')) {
-    const sortedBySwe = [...dataset].sort((a, b) => b.benchmarks.swe_bench_verified - a.benchmarks.swe_bench_verified);
-    const topSwe = sortedBySwe[0];
-    response = `The top agentic coding model by SWE-bench Verified score is **${topSwe.name}** with **${topSwe.benchmarks.swe_bench_verified}%** (Context: ${topSwe.parameters.context_window_tokens.toLocaleString()} tokens).`;
-  } else if (qLower.includes('cloud') || qLower.includes('bedrock') || qLower.includes('vertex') || qLower.includes('dashscope')) {
-    response = dataset.map(m => `• **${m.name}**: Best Cost Cloud -> ${m.relations.best_cloud_provider_for_cost}`).join('\n');
+  if (qLower.includes('zero') || qLower.includes('0') || qLower.includes('meaning') || qLower.includes('available')) {
+    response = `**Note on Dataset Values:** Any pricing or metric field indicated as **0** or **0.0** signifies that data was **not available** for that specific condition or provider SKU in the source dataset.`;
+  } else if (qLower.includes('webgpu') || qLower.includes('ai') || qLower.includes('performance')) {
+    response = `For optimal performance, this browser-based AI assistant leverages WebGPU acceleration (via Transformers.js / ONNX) when hardware acceleration is available in your browser.`;
+  } else if (qLower.includes('cheapest') || qLower.includes('cost') || qLower.includes('price')) {
+    const valid = dataset.filter(m => parseFloat(m.input_usd_per_1m) > 0).sort((a, b) => parseFloat(a.input_usd_per_1m) - parseFloat(b.input_usd_per_1m));
+    const cheapest = valid[0];
+    response = `The most cost-effective model in the dataset is **${cheapest.model_name || cheapest.model_id}** (${cheapest.provider}) at **$${cheapest.input_usd_per_1m}/1M input tokens**. *(Note: Values of 0 signify data unavailable).*`;
   } else {
-    response = `Found ${dataset.length} agentic coding models filtered across AWS Bedrock, GCP Vertex AI, Digital Ocean Gradient, and Alibaba DashScope. Top model overall is **${dataset[0].name}** with a Simple Score of **${dataset[0].simple_score}**.`;
+    response = `Loaded ${dataset.length} model pricing entries from CSV sources. Any field with **0** indicates data not available for that tier. Running in-browser WebGPU assistant.`;
   }
 
   self.postMessage({ response });
