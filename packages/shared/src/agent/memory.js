@@ -25,7 +25,9 @@ const TITLE_FROM_TEXT_CHARS = 60;
 const REFID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 const MEMORY_SCOPES = Object.freeze(['user', 'business', 'project', 'task', 'workspace']);
-const MEMORY_SOURCES = Object.freeze(['omnibox', 'business-pipeline', 'approval-gate', 'task', 'explicit']);
+// 'agent' marks a memory the MemoryMiddleware captured+compressed from a finished
+// agent run (claude-mem style), distinct from the user-driven omnibox sources.
+const MEMORY_SOURCES = Object.freeze(['omnibox', 'business-pipeline', 'approval-gate', 'task', 'explicit', 'agent']);
 
 const STOP_WORDS = new Set([
   'about', 'after', 'also', 'and', 'are', 'can', 'check', 'find', 'for', 'from', 'have',

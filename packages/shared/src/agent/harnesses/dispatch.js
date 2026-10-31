@@ -18,6 +18,7 @@ const {
   langSmithProvider,
   meterRun,
   wrapExecutionError,
+  resolveAndRouteSkills,
 } = require('./contract');
 
 /** Build a dispatcher against a registry (the factory keeps tests isolated). */
@@ -44,6 +45,35 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
     }
     const reviewEnabled = Boolean(options.rubric || options.rubricMiddleware);
 
+    // Progressive disclosure: route skills dynamically per turn using Laya / CLM / LangChain.
+    let routingMetrics = runtimeOptions.skillRouterMetrics || null;
+    let routedSkillPaths = runtimeOptions.skillPaths || runtimeOptions.skills || null;
+    if (!routingMetrics) {
+      try {
+        const routingResult = await resolveAndRouteSkills(runtimeOptions, prompt);
+        if (routingResult && routingResult.routingMetrics) {
+          routingMetrics = routingResult.routingMetrics;
+          routedSkillPaths = routingResult.selectedSkillPaths;
+          runtimeOptions.skillRouterMetrics = routingMetrics;
+          if (routedSkillPaths && routedSkillPaths.length) {
+            runtimeOptions.skillPaths = routedSkillPaths;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // MemoryMiddleware (claude-mem, harness-agnostic) — opt-in, off by default,
+    // and fully isolated so it can never fail a real run. Gate resolution is
+    // cheap and never throws; the inject/capture calls are individually guarded.
+    let memory = null;
+    let memoryOn = false;
+    try {
+      memory = require('../memory-middleware');
+      memoryOn = memory.isEnabled(options);
+    } catch (_) {
+      memoryOn = false;
+    }
+
     const execute = async () => {
       try {
         // Factories receive trusted construction-time dependencies separately
@@ -57,15 +87,42 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
           );
         }
         const runOnce = (promptText) => executor(runtimeOptions, promptText);
-        const value = await runOnce(prompt);
+        // SessionStart / UserPromptSubmit equivalent: recall + inject durable memory.
+        let runPrompt = prompt;
+        if (memoryOn) {
+          try {
+            runPrompt = await memory.inject(prompt, runtimeOptions);
+          } catch (_) {
+            runPrompt = prompt;
+          }
+        }
+        const value = await runOnce(runPrompt);
+        if (routingMetrics && value && !value.skillRouterMetrics) {
+          value.skillRouterMetrics = routingMetrics;
+        }
+        if (routedSkillPaths && value && !value.skillPaths) {
+          value.skillPaths = routedSkillPaths;
+        }
         const reviewed = reviewEnabled
-          ? await applyRubricMiddleware(options, value, prompt, runOnce)
+          ? await applyRubricMiddleware(options, value, runPrompt, runOnce)
           : value;
         annotateTrace(reviewed, options.getCurrentRunTree || getCurrentRunTree);
         meterRun(options, reviewed);
+        // Stop / SessionEnd equivalent: compress + persist. Awaited because Cloud
+        // Run has no reliable post-response background window; fully fail-open.
+        if (memoryOn) {
+          try {
+            await memory.capture(reviewed, runtimeOptions);
+          } catch (_) {
+            /* memory capture is best-effort — never fail a completed run */
+          }
+        }
         return reviewed;
       } catch (error) {
         const wrapped = wrapExecutionError(definition.label, error);
+        if (routingMetrics && wrapped && !wrapped.skillRouterMetrics) {
+          wrapped.skillRouterMetrics = routingMetrics;
+        }
         annotateTrace(wrapped, options.getCurrentRunTree || getCurrentRunTree);
         meterRun(options, wrapped);
         throw wrapped;

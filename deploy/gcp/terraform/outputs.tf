@@ -81,6 +81,16 @@ output "billing_service_uri" {
   value       = google_cloud_run_v2_service.billing.uri
 }
 
+output "laya_service_uri" {
+  description = "Laya decision model inference service URL — internal only."
+  value       = google_cloud_run_v2_service.laya.uri
+}
+
+output "clm_service_uri" {
+  description = "CLM contrastive inference service URL — internal only."
+  value       = google_cloud_run_v2_service.clm.uri
+}
+
 output "email_topic_name" {
   description = "Pub/Sub topic that accepts allow-listed transactional email jobs."
   value       = google_pubsub_topic.email.name
@@ -119,6 +129,16 @@ output "skills_version_pinned" {
 output "registry_bucket" {
   description = "Terraform-created GCS bucket holding versioned harness-native rootfs artifacts, v2 descriptors, and inert resources (null when registry_enabled = false). Fixed name from var.registry_bucket_name (default 'aifleet-registry')."
   value       = one(google_storage_bucket.registry[*].name)
+}
+
+output "memory_db_instance" {
+  description = "Terraform-created Cloud SQL Postgres instance holding AI-compressed agent memories (null when memory_enabled = false). Name defaults to '<project_id>-aifleet-memory'."
+  value       = one(google_sql_database_instance.memory[*].name)
+}
+
+output "memory_db_connection_name" {
+  description = "Cloud SQL connection name (project:region:instance) the planner/coder mount as the /cloudsql unix socket."
+  value       = one(google_sql_database_instance.memory[*].connection_name)
 }
 
 output "artifact_registry_repo" {

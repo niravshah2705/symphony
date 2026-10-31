@@ -40,11 +40,13 @@ test('all Cloud Run services use the gen2 execution environment', () => {
     ['pipeline.tf', ['orchestrator', 'tester', 'deployer']],
     ['provisioner.tf', ['provisioner']],
     ['stream_token_service.tf', ['stream_token_broker']],
+    ['laya_inference.tf', ['laya']],
+    ['clm_inference.tf', ['clm']],
   ]);
   const expectedInventory = [...servicesByFile]
     .flatMap(([file, services]) => services.map((service) => [file, service]))
     .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
-  assert.equal(expectedInventory.length, 13);
+  assert.equal(expectedInventory.length, 15);
 
   const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
   const actualInventory = fs.readdirSync(terraformDir)
@@ -66,6 +68,18 @@ test('all Cloud Run services use the gen2 execution environment', () => {
         `${file}: google_cloud_run_v2_service.${service} must explicitly use gen2`,
       );
     }
+  }
+});
+
+test('no Cloud Run service defines the reserved PORT env variable', () => {
+  const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
+  for (const file of fs.readdirSync(terraformDir).filter((f) => f.endsWith('.tf'))) {
+    const source = read('deploy/gcp/terraform', file);
+    assert.doesNotMatch(
+      source,
+      /env\s*\{\s*name\s*=\s*"PORT"/,
+      `${file}: Cloud Run v2 automatically manages the PORT env variable and rejects services that provide it`,
+    );
   }
 });
 
@@ -189,6 +203,8 @@ test('deploy workflow does not query disabled optional Cloud Run services', () =
     ['email', 'email-service'],
     ['identity', 'identity-verification'],
     ['billing', 'billing'],
+    ['laya', 'laya-inference'],
+    ['clm', 'clm-inference'],
   ]) {
     assert.match(workflow, new RegExp(`write_tag ${id} resolve ${id} ${service}`));
   }

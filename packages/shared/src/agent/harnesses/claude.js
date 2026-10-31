@@ -7,6 +7,8 @@
  * file tool to the prepared workspace via `safePathIn`.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { CONFIG } = require('../../config');
 const { PROJECT_CONTEXT_HEADER, projectEgressHeaders } = require('../../egress');
 const { currentWorkspaceContext } = require('../../store/workspace-context');
@@ -23,6 +25,7 @@ const {
   finiteNumber,
   safePathIn,
   wrapExecutionError,
+  resolveAndRouteSkills,
 } = require('./contract');
 
 const ID = 'claude-agent-sdk';
@@ -108,6 +111,12 @@ async function executeClaude(options, prompt) {
   if (options.workflowPattern === 'parallel' || options.workflowPattern === 'supervisor') {
     sdkTools.push('Agent');
   }
+
+  const { selectedSkillPaths, routingMetrics } = await resolveAndRouteSkills(
+    { ...options, rootDir: cwd },
+    prompt,
+  );
+
   const messages = [];
   let outcome = null;
   const query = sdk.query({
@@ -158,6 +167,8 @@ async function executeClaude(options, prompt) {
     usage: normalizeUsage(outcome.usage),
     costUsd: finiteNumber(outcome.total_cost_usd),
     sessionId: outcome.session_id || null,
+    skillRouterMetrics: routingMetrics,
+    skillPaths: selectedSkillPaths,
   };
 }
 

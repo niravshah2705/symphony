@@ -4,16 +4,18 @@
 
 ## Overview
 
-Community of 679 nodes
+Community of 739 nodes
 
-- **Size**: 679 nodes
-- **Cohesion**: 0.5109
+- **Size**: 739 nodes
+- **Cohesion**: 0.4987
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:a terminal workspace stream-token rejection never opens or retries the SSE stream@L13 | Test | ./e2e/workspace-stream-failure.spec.js | 13-69 |
+| test:a blank minted token never opens the workspace SSE stream@L71 | Test | ./e2e/workspace-stream-failure.spec.js | 71-111 |
 | pauseCode | Function | ./public/js/agent-pause.js | 36-42 |
 | pauseCandidate | Function | ./public/js/agent-pause.js | 44-70 |
 | agentPauseInfo | Function | ./public/js/agent-pause.js | 76-87 |
@@ -21,6 +23,10 @@ Community of 679 nodes
 | agentPauseCopy | Function | ./public/js/agent-pause.js | 96-98 |
 | localized | Function | ./public/js/agent-pause.js | 100-105 |
 | agentPauseNotice | Function | ./public/js/agent-pause.js | 108-124 |
+| setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
+| contextId | Function | ./public/js/api.js | 20-23 |
+| setRequestContext | Function | ./public/js/api.js | 26-31 |
+| setApiBase | Function | ./public/js/api.js | 108-111 |
 | uploadToSignedUrl | Function | ./public/js/api.js | 119-136 |
 | openStream | Function | ./public/js/api.js | 249-328 |
 | mintFailureCanRetry | Function | ./public/js/api.js | 256-260 |
@@ -50,26 +56,22 @@ Community of 679 nodes
 | beginSignIn | Function | ./public/js/app.js | 499-507 |
 | beginMicrosoftSignIn | Function | ./public/js/app.js | 509-517 |
 | authProviderButtons | Function | ./public/js/app.js | 524-542 |
+| beginSignOut | Function | ./public/js/app.js | 544-552 |
 | renderAuthControl | Function | ./public/js/app.js | 554-717 |
 | renderAuthenticationGate | Function | ./public/js/app.js | 719-778 |
 | renderSignInRequired | Function | ./public/js/app.js | 783-805 |
 | renderAccessDenied | Function | ./public/js/app.js | 807-819 |
 | render | Function | ./public/js/app.js | 821-903 |
 | capitalize | Function | ./public/js/app.js | 905-908 |
-| getAuthenticationState | Function | ./public/js/auth.js | 255-257 |
-| ensureFreshToken | Function | ./public/js/auth.js | 265-276 |
-| getAuthProviders | Function | ./public/js/auth.js | 281-287 |
-| el | Function | ./public/js/dom.js | 4-21 |
-| esc | Function | ./public/js/dom.js | 24-30 |
-| clear | Function | ./public/js/dom.js | 32-35 |
-| fmtDate | Function | ./public/js/dom.js | 37-42 |
-| fmtPercent | Function | ./public/js/dom.js | 44-47 |
+| start | Function | ./public/js/app.js | 912-920 |
 
-*... and 629 more members.*
+*... and 689 more members.*
 
 ## Execution Flows
 
+- **start** (criticality: 0.81, depth: 6)
 - **renderWorkflows** (criticality: 0.79, depth: 5)
+- **initializeAuthentication** (criticality: 0.78, depth: 4)
 - **beginSignIn** (criticality: 0.76, depth: 6)
 - **beginMicrosoftSignIn** (criticality: 0.76, depth: 6)
 - **maybeRefreshConnection** (criticality: 0.76, depth: 3)
@@ -77,44 +79,42 @@ Community of 679 nodes
 - **beginSignOut** (criticality: 0.75, depth: 6)
 - **hostedConnection** (criticality: 0.75, depth: 8)
 - **render** (criticality: 0.73, depth: 6)
-- **onUp** (criticality: 0.73, depth: 6)
-- **render** (criticality: 0.72, depth: 5)
-- *... and 11 more flows.*
+- *... and 13 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `addEventListener` (238 edge(s))
+- `addEventListener` (240 edge(s))
 - `append` (216 edge(s))
-- `map` (159 edge(s))
-- `String` (117 edge(s))
-- `push` (105 edge(s))
-- `trim` (103 edge(s))
-- `filter` (76 edge(s))
-- `equal` (71 edge(s))
-- `isArray` (68 edge(s))
-- `Boolean` (66 edge(s))
-- `catch` (64 edge(s))
+- `map` (164 edge(s))
+- `String` (119 edge(s))
+- `push` (108 edge(s))
+- `trim` (105 edge(s))
+- `equal` (88 edge(s))
+- `isArray` (80 edge(s))
+- `filter` (79 edge(s))
+- `Boolean` (72 edge(s))
+- `catch` (66 edge(s))
 - `setAttribute` (61 edge(s))
-- `has` (58 edge(s))
+- `has` (60 edge(s))
 - `querySelector` (53 edge(s))
-- `slice` (48 edge(s))
+- `slice` (49 edge(s))
 
 ### Incoming
 
 - `./public/js/views/settings.js` (131 edge(s))
 - `./public/js/views/agent.js` (109 edge(s))
-- `./public/js/app.js` (81 edge(s))
-- `equal` (71 edge(s))
+- `equal` (88 edge(s))
+- `./public/js/app.js` (86 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/workflow-designer-model.mjs` (56 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
 - `./public/js/views/organization.js` (29 edge(s))
+- `./public/js/auth.js` (23 edge(s))
+- `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
-- `deepEqual` (16 edge(s))
 - `./public/js/views/openshell.js` (15 edge(s))
 - `./public/js/omnibox-router.mjs` (14 edge(s))
-- `match` (14 edge(s))

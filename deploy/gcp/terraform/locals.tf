@@ -27,6 +27,11 @@ locals {
   # override convention as the skills bucket above.
   attachments_bucket_name = var.attachments_bucket_name != "" ? var.attachments_bucket_name : "${var.project_id}-aifleet-attachments"
 
+  # Agent memory Cloud SQL instance (memory.tf) — same derived-default-with-
+  # override convention. Instance names must be lowercase alphanumeric/hyphen
+  # and unique within the project.
+  memory_db_instance_name = var.memory_db_instance_name != "" ? var.memory_db_instance_name : "${var.project_id}-aifleet-memory"
+
   # Artifact Registry image references. Each service resolves its own tag,
   # falling back to var.image_tag when no per-service override is set — this is
   # what lets the CD pipeline roll ONE service (its tag = new SHA) while every
@@ -44,6 +49,8 @@ locals {
   identity_tag     = var.identity_image_tag != "" ? var.identity_image_tag : var.image_tag
   billing_tag      = var.billing_image_tag != "" ? var.billing_image_tag : var.image_tag
   proxy_tag        = var.proxy_image_tag != "" ? var.proxy_image_tag : var.image_tag
+  laya_tag         = var.laya_image_tag != "" ? var.laya_image_tag : var.image_tag
+  clm_tag          = var.clm_image_tag != "" ? var.clm_image_tag : var.image_tag
 
   gateway_image      = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
   planner_image      = "${local.image_base}/${var.planner_service_name}:${local.planner_tag}"
@@ -57,6 +64,8 @@ locals {
   identity_image     = "${local.image_base}/${var.identity_service_name}:${local.identity_tag}"
   billing_image      = "${local.image_base}/${var.billing_service_name}:${local.billing_tag}"
   proxy_image        = "${local.image_base}/${var.proxy_service_name}:${local.proxy_tag}"
+  laya_image         = "${local.image_base}/${var.laya_service_name}:${local.laya_tag}"
+  clm_image          = "${local.image_base}/${var.clm_service_name}:${local.clm_tag}"
 
   # Cloud Run's deterministic per-project URL:
   #   https://<service>-<project_number>.<region>.run.app
@@ -78,6 +87,8 @@ locals {
   email_url        = "https://${var.email_service_name}-${local.run_url_suffix}"
   identity_url     = "https://${var.identity_service_name}-${local.run_url_suffix}"
   billing_url      = "https://${var.billing_service_name}-${local.run_url_suffix}"
+  laya_url         = "https://${var.laya_service_name}-${local.run_url_suffix}"
+  clm_url          = "https://${var.clm_service_name}-${local.run_url_suffix}"
 
   # Pub/Sub's Google-managed service agent — needs publisher on the dead-letter
   # topic, subscriber on the source subscriptions, and token-creator on the push

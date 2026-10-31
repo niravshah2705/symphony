@@ -79,7 +79,7 @@ Community of 235 nodes
 - **deleteProjectSandbox** (criticality: 0.67, depth: 8)
 - **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
 - **refreshTokens** (criticality: 0.67, depth: 2)
-- *... and 31 more flows.*
+- *... and 32 more flows.*
 
 ## Dependencies
 
