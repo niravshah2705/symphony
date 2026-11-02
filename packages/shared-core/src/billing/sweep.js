@@ -80,7 +80,7 @@ async function processBillingSweep(deps = {}) {
     }
 
     // 4: advance the watermark.
-    store.updateBillingState({ lastAggregatedAt: now });
+    store.setBillingState({ lastAggregatedAt: now });
 
     // 5: retention prune.
     const retentionCutoff = new Date(Date.now() - CONFIG.BILLING.usageRetentionDays * 24 * 60 * 60 * 1000).toISOString();
