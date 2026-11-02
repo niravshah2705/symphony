@@ -95,7 +95,7 @@ variable "tenants" {
 variable "machine_type" {
   description = "GKE node machine type"
   type        = string
-  default     = "e2-standard-4"
+  default     = "e2-standard-2"
 }
 
 variable "disk_size_gb" {

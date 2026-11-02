@@ -1,0 +1,216 @@
+name: OpenShell node pool resize
+
+# Resizes the openshell-multitenant GKE node pool machine type through the
+# authoritative Terraform module (deploy/gcp/terraform-openshell-gke), so GCS
+# state and the live pool stay in step — a bare `gcloud node-pools update`
+# would leave the state pointing at the old size and the next apply would
+# quietly roll it back.
+#
+# The pool's autoscaling bounds are read from the live pool and passed back in
+# unchanged, so resizing never wakes a stopped cluster (the power workflow
+# parks min at 0; the module default is 2 and would otherwise re-appear as a
+# diff).
+#
+# Plan-only by default: nothing mutates until `apply` is checked.
+
+on:
+  workflow_dispatch:
+    inputs:
+      machine_type:
+        description: Node machine type
+        type: choice
+        required: true
+        default: config default (variables.tf)
+        options:
+          - config default (variables.tf)
+          - e2-small
+          - e2-medium
+          - e2-standard-2
+          - e2-standard-4
+          - e2-standard-8
+          - e2-highmem-2
+          - e2-highmem-4
+      apply:
+        description: Apply the plan (otherwise plan only)
+        type: boolean
+        default: false
+
+# Same group as openshell-cluster-power: a resize and a start/stop must never
+# overlap on the pool.
+concurrency:
+  group: openshell-cluster-power
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  CLUSTER: ${{ vars.OPENSHELL_CLUSTER_NAME || 'openshell-multitenant' }}
+  ZONE: ${{ vars.OPENSHELL_CLUSTER_ZONE || 'asia-south1-a' }}
+  NODE_POOL: ${{ vars.OPENSHELL_NODE_POOL || 'openshell-multitenant-node-pool' }}
+  TF_DIR: deploy/gcp/terraform-openshell-gke
+  TF_STATE_PREFIX: openshell/gke
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+
+jobs:
+  resize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Read live autoscaling bounds
+        id: bounds
+        run: |
+          set -euo pipefail
+          POOL_JSON="$(gcloud container node-pools describe "$NODE_POOL" \
+            --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" --format json)"
+          # GKE omits minNodeCount when the pool is parked at 0, and omits
+          # autoscaling entirely when it is disabled — then initialNodeCount is
+          # the setting to preserve.
+          MIN="$(jq -r '.autoscaling.minNodeCount // .initialNodeCount // 0' <<<"$POOL_JSON")"
+          MAX="$(jq -r '.autoscaling.maxNodeCount // .initialNodeCount // 1' <<<"$POOL_JSON")"
+          echo "min=$MIN" >> "$GITHUB_OUTPUT"
+          echo "max=$MAX" >> "$GITHUB_OUTPUT"
+          echo "Preserving autoscaling bounds min=$MIN max=$MAX"
+
+      - name: Resolve cert_email
+        id: tfvars
+        env:
+          CERT_EMAIL: ${{ vars.OPENSHELL_CERT_EMAIL }}
+        run: |
+          set -euo pipefail
+          # cert_email is a required module variable (no default). It is unused
+          # by the targeted node-pool plan, but Terraform still needs a value.
+          if [ -z "$CERT_EMAIL" ]; then
+            echo "::error::Set the ACME email once: gh variable set OPENSHELL_CERT_EMAIL --body \"<email>\""
+            exit 1
+          fi
+          echo "cert_email=$CERT_EMAIL" >> "$GITHUB_OUTPUT"
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -euo pipefail
+          BUCKET="${TF_STATE_BUCKET:-${PROJECT_ID}-tfstate}"
+          terraform init -input=false \
+            -backend-config="bucket=$BUCKET" \
+            -backend-config="prefix=$TF_STATE_PREFIX"
+          # Refuse to act on a stack that was never imported (see IMPORT.md) —
+          # an empty state would plan a full create of the cluster.
+          STATE_COUNT="$(terraform state list | wc -l | tr -d ' ')"
+          if [ "$STATE_COUNT" -lt 1 ]; then
+            echo "::error::Remote state is empty. Run the IMPORT.md adoption pass before resizing."
+            exit 1
+          fi
+          echo "Adopted state holds $STATE_COUNT resources"
+
+      - name: Plan node pool change
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          MIN_NODES: ${{ steps.bounds.outputs.min }}
+          MAX_NODES: ${{ steps.bounds.outputs.max }}
+          MACHINE_TYPE: ${{ inputs.machine_type }}
+          CERT_EMAIL: ${{ steps.tfvars.outputs.cert_email }}
+        run: |
+          set -euo pipefail
+          common_args=(
+            -input=false
+            -var="project_id=$PROJECT_ID"
+            -var="zone=$ZONE"
+            -var="cluster_name=$CLUSTER"
+            -var="node_pool_name=$NODE_POOL"
+            -var="cert_email=$CERT_EMAIL"
+            -var="min_nodes=$MIN_NODES"
+            -var="max_nodes=$MAX_NODES"
+          )
+          if [ "$MACHINE_TYPE" != "config default (variables.tf)" ]; then
+            common_args+=(-var="machine_type=$MACHINE_TYPE")
+          fi
+          terraform plan "${common_args[@]}" \
+            -target=google_container_node_pool.primary_nodes \
+            -out=resize.tfplan
+          terraform show -json resize.tfplan > resize.json
+
+      - name: Guard the plan
+        id: guard
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -euo pipefail
+          mapfile -t CHANGED < <(jq -r '
+            .resource_changes[]?
+            | select((.change.actions | map(select(. != "no-op")) | length) > 0)
+            | .address' resize.json)
+          if [ "${#CHANGED[@]}" -eq 0 ]; then
+            echo "No changes: the pool already matches the requested machine type."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ACTIONS="$(jq -r '
+            [.resource_changes[]?
+             | select((.change.actions | map(select(. != "no-op")) | length) > 0)
+             | .change.actions[]] | unique | join(",")' resize.json)"
+          # -target keeps the plan scoped, but assert it rather than trusting it:
+          # a create or a destroy here would mean adopting drift we do not own.
+          if [ "$ACTIONS" != "update" ]; then
+            echo "::error::Refusing to apply: expected only an in-place update of the node pool, plan wants [$ACTIONS]."
+            printf '  %s\n' "${CHANGED[@]}"
+            exit 1
+          fi
+          for addr in "${CHANGED[@]}"; do
+            if [ "$addr" != "google_container_node_pool.primary_nodes" ]; then
+              echo "::error::Refusing to apply: plan also changes $addr. Resize must stay scoped to the node pool."
+              exit 1
+            fi
+          done
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          terraform show -no-color resize.tfplan
+
+      - name: Apply
+        if: inputs.apply && steps.guard.outputs.has_changes == 'true'
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -input=false resize.tfplan
+
+      - name: Wait for pool to settle
+        if: inputs.apply && steps.guard.outputs.has_changes == 'true'
+        run: |
+          set -euo pipefail
+          # An in-place machine type change rolls nodes one at a time (SURGE 1,
+          # UNAVAILABLE 0). A parked pool settles immediately.
+          for i in $(seq 1 120); do
+            STATUS="$(gcloud container node-pools describe "$NODE_POOL" \
+              --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
+              --format 'value(status)')"
+            if [ "$STATUS" = "RUNNING" ]; then
+              echo "Pool $NODE_POOL is RUNNING"
+              exit 0
+            fi
+            echo "status=$STATUS; waiting 10s..."
+            sleep 10
+          done
+          echo "::error::Node pool did not settle within 20 minutes"
+          exit 1
+
+      - name: Report machine type
+        run: |
+          set -euo pipefail
+          gcloud container node-pools list --cluster "$CLUSTER" \
+            --location "$ZONE" --project "$PROJECT_ID" \
+            --format 'table(name, status, config.machineType, autoscaling.minNodeCount, autoscaling.maxNodeCount)'
