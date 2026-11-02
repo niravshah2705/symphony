@@ -597,6 +597,34 @@ test('SDK-free local preflight enforces catalog availability, broker support, an
   });
   assert.equal(missingProvider.ready, false);
   assert.ok(missingProvider.stages[0].errors.includes('provider_credential_unavailable'));
+
+  // Qoder is a harness-only provider: planning is admitted on the org's own
+  // personal access token, while brokered coding is rejected because the sidecar
+  // cannot broker qodercli.
+  const qoderSettings = {
+    agentRuntime: 'qoder-sdk',
+    llmProvider: 'qoder',
+    thinkingLlmProvider: 'qoder',
+    executionLlmProvider: 'qoder',
+    qoderModel: 'auto',
+    qoderAccessToken: 'qoder-secret',
+  };
+  const qoderPlan = localPreflightDecision(['plan', 'code'], { plan: 'qoder-sdk', code: 'qoder-sdk' }, {
+    settings: qoderSettings,
+  });
+  assert.equal(qoderPlan.stages[0].harness, 'qoder-sdk');
+  assert.equal(qoderPlan.stages[0].credential.kind, 'qoderAccessToken');
+  assert.deepEqual(qoderPlan.stages[0].errors, []);
+  assert.equal(JSON.stringify(qoderPlan).includes('qoder-secret'), false);
+  assert.equal(qoderPlan.stages[1].brokered, false);
+  assert.ok(qoderPlan.stages[1].errors.includes('brokered_stage_unsupported'));
+  assert.equal(qoderPlan.ready, false);
+
+  const qoderMissingToken = localPreflightDecision(['plan'], { plan: 'qoder-sdk' }, {
+    settings: { ...qoderSettings, qoderAccessToken: '' },
+  });
+  assert.equal(qoderMissingToken.ready, false);
+  assert.ok(qoderMissingToken.stages[0].errors.includes('provider_credential_unavailable'));
 });
 
 test('auth-disabled local starts use SDK-free local preflight and stable nonempty scope', async () => {

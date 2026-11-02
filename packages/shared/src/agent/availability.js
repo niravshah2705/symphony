@@ -68,7 +68,9 @@ function publicAvailabilityMessage(resource, context = {}) {
             ? 'Hugging Face'
             : context.provider === 'antigravity'
               ? 'Antigravity'
-              : 'selected';
+              : context.provider === 'qoder'
+                ? 'Qoder'
+                : 'selected';
   return `The ${provider} model is unavailable. Check the model in Settings, then resume agent jobs.`;
 }
 
@@ -212,6 +214,17 @@ async function probeModelAvailability(llm, dependencies = {}) {
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) throw Object.assign(new Error('Antigravity (Gemini) rejected the readiness check.'), { status: response.status });
+      return { available: true, provider: llm.provider, model: llm.model };
+    }
+
+    if (llm.provider === 'qoder') {
+      // No HTTP surface to probe: qodercli owns inference and endpoint discovery.
+      // Availability is reported by the harness run itself
+      // (runtime_auth_unavailable / runtime_unavailable), so a configured,
+      // non-proxied personal access token is all this probe can assert.
+      if (!llm.accessToken) {
+        throw new AgentAvailabilityError('model', publicAvailabilityMessage('model', context), 401, 'model_not_configured');
+      }
       return { available: true, provider: llm.provider, model: llm.model };
     }
 

@@ -89,6 +89,7 @@ const DEFAULT_LMSTUDIO_SETTINGS = settingsPatchForPreset(recommendedPreset('lmst
 const DEFAULT_OMLX_SETTINGS = settingsPatchForPreset(recommendedPreset('omlx'));
 const DEFAULT_HUGGINGFACE_SETTINGS = settingsPatchForPreset(recommendedPreset('huggingface'));
 const DEFAULT_ANTIGRAVITY_SETTINGS = settingsPatchForPreset(recommendedPreset('antigravity'));
+const DEFAULT_QODER_SETTINGS = settingsPatchForPreset(recommendedPreset('qoder'));
 const DEFAULT_CODEX_SETTINGS = settingsForConfiguredModel(recommendedPreset('codex'));
 const DEFAULT_CLAUDE_SETTINGS = settingsForConfiguredModel(recommendedPreset('claude'));
 // The exact catalog defaults win over a same-provider recommended preset. This
@@ -231,6 +232,13 @@ const DEFAULT_STORE = Object.freeze({
     antigravityApiKey: '',
     antigravityAgentId: '',
     ...DEFAULT_ANTIGRAVITY_SETTINGS,
+    // Qoder — hosted coding agent reached through @qoder-ai/qoder-agent-sdk. The
+    // Personal Access Token is REQUIRED and lives server-side only (masked status
+    // fields; read from QODER_PERSONAL_ACCESS_TOKEN in the cloud). The provider is
+    // harness-only: qodercli owns inference, so no deep-agent chat model exists for
+    // it. qodercli also selects its own model tier (qoderModel).
+    qoderAccessToken: '',
+    ...DEFAULT_QODER_SETTINGS,
     // Codex (OpenAI) provider — endpoints/client come from CONFIG.OAUTH (trusted),
     // the browser only chooses the model. Tokens live server-side only.
     ...DEFAULT_CODEX_SETTINGS,
@@ -641,6 +649,11 @@ const SECRET_ENV = Object.freeze({
   omlxApiKey: 'OMLX_API_KEY',
   huggingfaceApiKey: 'HUGGINGFACE_API_KEY',
   antigravityApiKey: 'GEMINI_API_KEY',
+  // Qoder Personal Access Token (the org's own credential; customer-only in the
+  // vault, like omlxApiKey). The SDK hands it to the qodercli daemon, so unlike
+  // the other providers it cannot be swapped by the egress sidecar — the Qoder
+  // harness fails closed in proxy mode instead of reading this.
+  qoderAccessToken: 'QODER_PERSONAL_ACCESS_TOKEN',
   // Managed LLM API keys (alternative to OAuth), matching the vault's managed set.
   anthropicApiKey: 'ANTHROPIC_API_KEY',
   openaiApiKey: 'OPENAI_API_KEY',

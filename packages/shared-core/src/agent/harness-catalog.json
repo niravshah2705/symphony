@@ -46,6 +46,17 @@
       "brokeredStages": ["planning"]
     },
     {
+      "id": "qoder-sdk",
+      "label": "Qoder Agent SDK",
+      "harnessName": "qoder",
+      "packageName": "@qoder-ai/qoder-agent-sdk",
+      "requiresProvider": "qoder",
+      "availability": "available",
+      "capabilities": ["planning", "coding", "testing", "streaming", "subagents"],
+      "stages": ["planning", "coding", "testing"],
+      "brokeredStages": ["planning", "testing"]
+    },
+    {
       "id": "opencode",
       "label": "OpenCode",
       "harnessName": "opencode",

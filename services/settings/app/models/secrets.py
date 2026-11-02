@@ -51,6 +51,10 @@ SECRET_KEYS: tuple[str, ...] = (
     "openrouterApiKey",
     "digilockerClientId",
     "digilockerClientSecret",
+    # Qoder personal access token (the Qoder Agent SDK harness credential). It is
+    # a raw token qodercli authenticates with directly, so the egress sidecar
+    # cannot broker it and the harness refuses to run in proxy mode.
+    "qoderAccessToken",
     # JSON-encoded OpenAI/Codex OAuth token bundle. Provisioned only through the
     # direct org-admin operator surface; never accepted by the browser gateway.
     "codexTokenBundle",
@@ -88,6 +92,9 @@ CUSTOMER_ONLY_SECRET_KEYS: frozenset[str] = frozenset(
         "slackWebhookUrl",
         "digilockerClientId",
         "digilockerClientSecret",
+        # A Qoder token is the organization's own account credential; the platform
+        # holds no shared Qoder account to manage.
+        "qoderAccessToken",
     }
 )
 

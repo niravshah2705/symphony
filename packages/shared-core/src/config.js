@@ -358,6 +358,33 @@ const ANTIGRAVITY = Object.freeze({
 });
 
 /**
+ * Qoder — hosted coding agent reached through `@qoder-ai/qoder-agent-sdk`.
+ *
+ * Unlike the other hosted providers, Qoder has no OpenAI/Anthropic-compatible
+ * inference endpoint: the SDK drives a local `qodercli` daemon which owns its own
+ * account plane, model catalog, and TLS to Qoder's endpoints. Consequences:
+ *  - the `qoder` provider backs ONLY the Qoder harness (the LangChain deep-agent
+ *    path cannot target it — see llm.js createChatModel);
+ *  - the egress sidecar cannot broker it (it reverse-proxies base-URL-swappable
+ *    origins, not a CLI's own endpoint discovery + login flow), so the harness
+ *    refuses to run when EGRESS_PROXY_URL is set rather than hold a raw PAT.
+ *
+ * Auth is a Personal Access Token, held server-side only and exposed solely
+ * through masked status fields (store.js SECRET_ENV -> QODER_PERSONAL_ACCESS_TOKEN).
+ */
+const QODER = Object.freeze({
+  // Platform model tier or id sent as the SDK `model`. 'auto' defers to Qoder's
+  // server-designated default for the scene; set QODER_MODEL to pin a tier.
+  defaultModel: process.env.QODER_MODEL || 'auto',
+  // Optional absolute path to an existing qodercli entry. The SDK otherwise uses
+  // the CLI bundled with the installed package (or one found on PATH).
+  cliPath: process.env.QODERCLI_PATH || '',
+  // Env var the SDK reads when a run's credential is environment-sourced rather
+  // than passed inline. Also the name the managed secret is mounted under.
+  accessTokenEnvVar: process.env.QODER_PERSONAL_ACCESS_TOKEN_ENV_VAR || 'QODER_PERSONAL_ACCESS_TOKEN',
+});
+
+/**
  * OpenRouter + NVIDIA OpenShell configuration.
  * OpenShell runs at https://openshell.archagentix.com by default and receives
  * project-scoped GitHub + OpenRouter secrets as NVIDIA OpenShell Providers.
@@ -797,7 +824,7 @@ const CONFIG = Object.freeze({
   // this version; bumping it re-prompts everyone. Trusted server-side config.
   EULA_VERSION: String(process.env.EULA_VERSION || '1.0.0'),
   // Deep-agent LLM providers.
-  LLM_PROVIDERS: ['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity'],
+  LLM_PROVIDERS: ['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity', 'qoder'],
   // How each local provider constrains JSON output for the planner's structured
   // calls. Not every model/engine accepts the same format (e.g. some LM Studio
   // engines reject `json_object` and require `json_schema` or `text`), so the
@@ -832,6 +859,7 @@ const CONFIG = Object.freeze({
   OMLX,
   HUGGINGFACE,
   ANTIGRAVITY,
+  QODER,
   OPENROUTER,
   OPENSHELL,
   CODER,

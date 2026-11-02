@@ -571,6 +571,15 @@ function getOllamaChatModelClass() {
 
 /** Build a LangChain chat model for the given provider descriptor. */
 function createChatModel(llm, { json = false } = {}) {
+  if (llm.provider === 'qoder') {
+    // qodercli owns Qoder inference — there is no OpenAI/Anthropic-compatible
+    // endpoint for the deep-agent path to target. Runs that want Qoder select the
+    // Qoder Agent SDK harness; this keeps a mis-set role failing loudly instead of
+    // silently calling a different provider.
+    throw new TypeError(
+      'The qoder provider is harness-only: select the Qoder Agent SDK runtime (agentRuntime=qoder-sdk) instead of DeepAgent.'
+    );
+  }
   if (llm.provider === 'claude') {
     return createClaudeModel(llm, json);
   }
@@ -1065,6 +1074,26 @@ async function resolveLlm(settings, role = 'global') {
       streamRetries,
     };
   }
+  if (provider === 'qoder') {
+    // Qoder Personal Access Token (mandatory), carried as `accessToken` because the
+    // ONLY consumer is the SDK harness's auth guard — the LangChain deep-agent path
+    // refuses this provider (see createChatModel). The SDK hands the token to a
+    // qodercli daemon that discovers its own endpoints, so the egress sidecar cannot
+    // inject it: in proxy mode the descriptor is deliberately credential-free and
+    // the harness fails closed rather than run on a sentinel it cannot satisfy.
+    const accessToken = CONFIG.EGRESS_PROXY_URL ? '' : String(settings.qoderAccessToken || '');
+    return {
+      provider: 'qoder',
+      accessToken,
+      // Platform model tier or id ('auto' defers to Qoder's server default).
+      model: settings.qoderModel || CONFIG.QODER.defaultModel,
+      // Trusted deployment config, never browser- or settings-selected.
+      cliPath: CONFIG.QODER.cliPath,
+      contextWindow: settings.qoderContextWindow || null,
+      numTokens: settings.qoderMaxTokens || 8192,
+      streamRetries,
+    };
+  }
   if (provider !== 'ollama') throw new TypeError(`Unsupported LLM provider: ${provider || 'unknown'}`);
   return {
     provider: 'ollama',
@@ -1119,6 +1148,13 @@ function llmReady(settings, role = 'global') {
     // The Gemini API key is mandatory; the model falls back to the config default.
     return Boolean(settings.antigravityApiKey && (settings.antigravityModel || CONFIG.ANTIGRAVITY.defaultModel));
   }
+  if (provider === 'qoder') {
+    // The PAT is mandatory (the CLI daemon has no anonymous plane); the model tier
+    // falls back to the config default. A proxy-mode deployment can never be ready:
+    // the sidecar cannot broker qodercli's own endpoint discovery + login, so the
+    // harness fails closed there (see harnesses/qoder.js).
+    return Boolean(!CONFIG.EGRESS_PROXY_URL && settings.qoderAccessToken);
+  }
   return Boolean(settings.ollamaHost && settings.ollamaModel);
 }
 
@@ -1142,6 +1178,11 @@ function notReadyReason(settings, role = 'global') {
   }
   if (provider === 'antigravity') {
     return 'Add your Gemini API key and model in Settings → LLM to enable enrichment.';
+  }
+  if (provider === 'qoder') {
+    return CONFIG.EGRESS_PROXY_URL
+      ? 'The Qoder harness needs the qodercli daemon to log in directly, which the egress sidecar cannot broker; run it outside proxy mode.'
+      : 'Add your Qoder Personal Access Token in Settings → LLM to enable enrichment.';
   }
   return 'Set the Ollama host and model in Settings → LLM to enable enrichment.';
 }

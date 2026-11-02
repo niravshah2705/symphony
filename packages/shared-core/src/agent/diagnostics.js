@@ -188,6 +188,7 @@ function sdkChecks(settings, resolver) {
       : Boolean(settings.ollamaHost && settings.ollamaModel);
   const codexAuth = configuredToken(settings.codexTokens);
   const claudeAuth = configuredToken(settings.claudeTokens);
+  const qoderAuth = Boolean(settings.qoderAccessToken);
   const definitions = [
     {
       id: 'deepagents-sdk',
@@ -209,6 +210,13 @@ function sdkChecks(settings, resolver) {
       packageName: '@anthropic-ai/claude-agent-sdk',
       authReady: claudeAuth,
       action: 'Install the Claude Agent SDK and sign in with Claude in Settings.',
+    },
+    {
+      id: 'qoder-sdk',
+      label: 'Qoder Agent SDK',
+      packageName: '@qoder-ai/qoder-agent-sdk',
+      authReady: qoderAuth,
+      action: 'Install the Qoder Agent SDK and add a Qoder Personal Access Token in Settings → LLM.',
     },
   ];
 

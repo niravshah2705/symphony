@@ -33,6 +33,7 @@ const TOOL_VERSIONS = Object.freeze({
   codex: '0.165.0',
   claude: '2.1.312',
   deepseek: '0.2.1-rc.5',
+  qoder: '1.0.58',
   pi: '1.4.0',
   omp: '18.13.3',
   'ecc-installer': '2.2.x',
@@ -98,6 +99,15 @@ const STRATEGY_METADATA = Object.freeze({
     capabilities: { native: ['rules', 'workflows', 'skills', 'agents'], companion: [] },
     limitations: [
       'ECC targets the Antigravity .agents compatibility layout, while this repository runtime uses @google/genai rather than an Antigravity IDE plugin API.',
+    ],
+  },
+  'qoder-sdk': {
+    installer: { name: '@qoder-ai/qoder-agent-sdk', version: TOOL_VERSIONS.qoder },
+    compatibility: 'native-skills',
+    capabilities: { native: ['skills'], companion: [] },
+    limitations: [
+      'ECC ships no Qoder adapter; this artifact stages validated ECC SKILL.md bundles into ~/.qoder/skills only — commands, agents, hooks, MCP servers, and credentials are not materialized.',
+      'The Qoder Agent SDK authenticates qodercli directly with an organization-owned personal access token, so the runtime harness fails closed whenever the egress sidecar is armed; the artifact vendors no model credentials.',
     ],
   },
   opencode: {
@@ -959,15 +969,15 @@ function runEccProfile(
   return installDocument.result;
 }
 
-function validateDshSkillTree(skillsRoot, { requireDirectoryMatch = false } = {}) {
+function validateDshSkillTree(skillsRoot, { requireDirectoryMatch = false, label = 'DeepSeek' } = {}) {
   let rootStat;
   try {
     rootStat = fs.lstatSync(skillsRoot);
   } catch (_) {
-    throw new Error(`DeepSeek skill root is missing: ${skillsRoot}`);
+    throw new Error(`${label} skill root is missing: ${skillsRoot}`);
   }
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-    throw new Error(`DeepSeek skill root must be a real directory: ${skillsRoot}`);
+    throw new Error(`${label} skill root must be a real directory: ${skillsRoot}`);
   }
 
   const skills = [];
@@ -984,22 +994,22 @@ function validateDshSkillTree(skillsRoot, { requireDirectoryMatch = false } = {}
       continue;
     }
     if (!manifestStat.isFile() || manifestStat.isSymbolicLink()) {
-      throw new Error(`DeepSeek skill manifest must be a regular file: ${manifestPath}`);
+      throw new Error(`${label} skill manifest must be a regular file: ${manifestPath}`);
     }
     const fields = skillFields(parseFrontmatter(fs.readFileSync(manifestPath, 'utf8')).data);
     if (!fields.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(fields.name) || !fields.description.trim()) {
-      throw new Error(`DeepSeek skill ${entry.name} needs a kebab-case name and description frontmatter`);
+      throw new Error(`${label} skill ${entry.name} needs a kebab-case name and description frontmatter`);
     }
     if (requireDirectoryMatch && fields.name !== entry.name) {
-      throw new Error(`DeepSeek staged skill directory ${entry.name} does not match manifest name ${fields.name}`);
+      throw new Error(`${label} staged skill directory ${entry.name} does not match manifest name ${fields.name}`);
     }
     if (seenNames.has(fields.name)) {
-      throw new Error(`DeepSeek skill name is duplicated: ${fields.name}`);
+      throw new Error(`${label} skill name is duplicated: ${fields.name}`);
     }
     seenNames.add(fields.name);
     skills.push({ directory: entry.name, name: fields.name });
   }
-  if (skills.length === 0) throw new Error('ECC source provides no DeepSeek-compatible SKILL.md bundles');
+  if (skills.length === 0) throw new Error(`ECC source provides no ${label}-compatible SKILL.md bundles`);
   return skills;
 }
 
@@ -1030,20 +1040,20 @@ function prepareEmptyChildDirectory(realParent, name, label) {
   return realDirectory;
 }
 
-function stageDshSkills({ sourceRoot, homeRoot }) {
+function stageDshSkills({ sourceRoot, homeRoot }, { rootName = '.dsh', label = 'DeepSeek' } = {}) {
   const sourceSkillsRoot = path.join(sourceRoot, 'skills');
-  const sourceSkills = validateDshSkillTree(sourceSkillsRoot);
+  const sourceSkills = validateDshSkillTree(sourceSkillsRoot, { label });
   const skillNames = sourceSkills.map((skill) => skill.name).sort((left, right) => left.localeCompare(right));
-  const realHomeRoot = requireRealDirectory(homeRoot, 'DeepSeek artifact home root');
-  const realDshHome = prepareEmptyChildDirectory(realHomeRoot, '.dsh', 'DeepSeek home');
-  const destinationSkillsRoot = prepareEmptyChildDirectory(realDshHome, 'skills', 'DeepSeek skill destination');
+  const realHomeRoot = requireRealDirectory(homeRoot, `${label} artifact home root`);
+  const realDshHome = prepareEmptyChildDirectory(realHomeRoot, rootName, `${label} home`);
+  const destinationSkillsRoot = prepareEmptyChildDirectory(realDshHome, 'skills', `${label} skill destination`);
 
   for (const skill of sourceSkills) {
     const sourceSkillRoot = path.join(sourceSkillsRoot, skill.directory);
     const destinationSkillRoot = prepareEmptyChildDirectory(
       destinationSkillsRoot,
       skill.name,
-      `DeepSeek skill destination ${skill.name}`
+      `${label} skill destination ${skill.name}`
     );
     // A validated skill can legitimately contain a boundary-delimited word such
     // as "token" in its identity. Apply the secret filter to every child while
@@ -1057,11 +1067,11 @@ function stageDshSkills({ sourceRoot, homeRoot }) {
       for (const warning of warnings) log(warning);
     }
   }
-  const stagedNames = validateDshSkillTree(destinationSkillsRoot, { requireDirectoryMatch: true })
+  const stagedNames = validateDshSkillTree(destinationSkillsRoot, { requireDirectoryMatch: true, label })
     .map((skill) => skill.name)
     .sort((left, right) => left.localeCompare(right));
   if (JSON.stringify(stagedNames) !== JSON.stringify(skillNames)) {
-    throw new Error('DeepSeek staged skill set does not match the validated ECC source skills');
+    throw new Error(`${label} staged skill set does not match the validated ECC source skills`);
   }
   return { dshHome: realDshHome, skillsRoot: destinationSkillsRoot, skillNames: stagedNames };
 }
@@ -1204,6 +1214,18 @@ function installAntigravity(context) {
   if (!fs.existsSync(statePath)) throw new Error('Antigravity adapter did not write install state');
 }
 
+function installQoder(context) {
+  // qodercli reads its skill surface from ~/.qoder/skills. ECC has no Qoder
+  // target, so this artifact stages the validated SKILL.md bundles directly
+  // instead of running an ECC adapter profile.
+  const realHomeRoot = requireRealDirectory(context.homeRoot, 'Qoder artifact home root');
+  const staged = stageDshSkills(
+    { ...context, homeRoot: realHomeRoot },
+    { rootName: '.qoder', label: 'Qoder' }
+  );
+  return { stagedSkills: staged.skillNames };
+}
+
 function installOpencode(context) {
   run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], {
     cwd: context.sourceRoot,
@@ -1283,6 +1305,7 @@ const HARNESS_INSTALLERS = Object.freeze({
   'codex-sdk': installCodex,
   'claude-agent-sdk': installClaude,
   'antigravity-sdk': installAntigravity,
+  'qoder-sdk': installQoder,
   opencode: installOpencode,
   pi: installPi,
   'oh-my-pi': installOhMyPi,
@@ -1615,6 +1638,7 @@ module.exports = {
   installClaude,
   installNpmCli,
   installDeepseek,
+  installQoder,
   readResolvedSource,
   relativizeContainedAbsoluteSymlinks,
   resolveSource,

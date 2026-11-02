@@ -7,7 +7,7 @@
  * existing importer keeps working with zero call-site churn.
  *
  * Registration order defines runtimeCatalog() order — keep it stable:
- *   deepagent, codex-sdk, claude-agent-sdk, antigravity-sdk
+ *   deepagent, codex-sdk, claude-agent-sdk, antigravity-sdk, qoder-sdk
  */
 
 const registry = require('./registry');
@@ -19,6 +19,7 @@ require('./deepagent');
 const { executeCodex } = require('./codex');
 const { executeClaude, claudePermissionGuard } = require('./claude');
 require('./antigravity');
+const { qoderPermissionGuard } = require('./qoder');
 void executeCodex; void executeClaude; // referenced for clarity; registered via side effect
 
 // Bootstrap is now complete. No later registration may make the live registry
@@ -63,6 +64,7 @@ module.exports = {
   plannerWebSearchAllowed: contract.plannerWebSearchAllowed,
   executeAgentRuntime,
   claudePermissionGuard,
+  qoderPermissionGuard,
   extractUsedResources: contract.extractUsedResources,
   usedResourceMetadata: contract.usedResourceMetadata,
 };

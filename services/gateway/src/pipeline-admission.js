@@ -59,6 +59,7 @@ const PROVIDER_CREDENTIAL_KINDS = Object.freeze({
   claude: new Set(['anthropicApiKey', 'claudeTokenSet']),
   antigravity: new Set(['geminiApiKey']),
   huggingface: new Set(['huggingfaceApiKey']),
+  qoder: new Set(['qoderAccessToken']),
 });
 // Auth-disabled mode has no remote policy service, but stage workers still
 // require a concrete immutable allowlist. Keep this SDK-free list aligned with
@@ -470,7 +471,12 @@ function localProviderReadiness(provider, settings) {
         ? { ready: Boolean(settings.antigravityApiKey), kind: 'geminiApiKey' }
         : provider === 'huggingface'
           ? { ready: Boolean(settings.huggingfaceApiKey), kind: 'huggingfaceApiKey' }
-          : { ready: true, kind: null };
+          : provider === 'qoder'
+            // Harness-only provider: a raw PAT qodercli uses directly. Admission
+            // checks the token exists; the executor still refuses to run when the
+            // egress sidecar is armed (it cannot broker qodercli).
+            ? { ready: Boolean(settings.qoderAccessToken), kind: 'qoderAccessToken' }
+            : { ready: true, kind: null };
   return {
     ready: readiness.ready,
     source: readiness.ready && readiness.kind ? 'local-effective-store' : null,

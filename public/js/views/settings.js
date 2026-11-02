@@ -224,6 +224,7 @@ function overlayVaultState(settings, secrets = {}, connectors = {}, readiness = 
   settings.hasOmlxApiKey = isSet('omlxApiKey');
   settings.hasHuggingfaceApiKey = isSet('huggingfaceApiKey');
   settings.hasAntigravityApiKey = isSet('geminiApiKey');
+  settings.hasQoderAccessToken = isSet('qoderAccessToken');
   settings.hasLangsmithKey = isSet('langsmithApiKey');
   settings.jiraBaseUrl = connectors.jira_origin || '';
   settings.jiraEmail = connectors.jira_email || '';
@@ -778,6 +779,7 @@ const FALLBACK_HARNESSES = Object.freeze([
   { id: 'codex-sdk', label: 'Codex SDK', availability: 'available', stages: ['planning', 'coding', 'testing'], brokeredStages: ['planning', 'testing'] },
   { id: 'claude-agent-sdk', label: 'Claude Agent SDK', availability: 'available', stages: ['planning', 'coding', 'testing'], brokeredStages: ['planning', 'testing'] },
   { id: 'antigravity-sdk', label: 'Antigravity SDK', availability: 'available', stages: ['planning'], brokeredStages: ['planning'] },
+  { id: 'qoder-sdk', label: 'Qoder Agent SDK', availability: 'available', stages: ['planning', 'coding', 'testing'], brokeredStages: ['planning', 'testing'] },
 ]);
 
 const PIPELINE_HARNESS_STAGES = Object.freeze([
@@ -802,6 +804,7 @@ function harnessMeta(id, ctx) {
   if (id === 'codex-sdk') return ctx.codex && ctx.codex.connected ? 'Ready' : 'Admin token import needed';
   if (id === 'claude-agent-sdk') return ctx.claude && ctx.claude.connected ? 'Ready' : 'Sign-in needed';
   if (id === 'antigravity-sdk') return ctx.settings.hasAntigravityApiKey ? 'Ready' : 'Gemini API key needed';
+  if (id === 'qoder-sdk') return ctx.settings.hasQoderAccessToken ? 'Ready (direct egress only)' : 'Qoder token needed';
   return 'Ready';
 }
 
@@ -1223,6 +1226,7 @@ const VAULT_SECRETS = [
   { key: 'openaiApiKey', label: 'OpenAI API key', hint: 'Used by the OpenAI provider (managed alternative to Sign in with ChatGPT).' },
   { key: 'geminiApiKey', label: 'Gemini API key', hint: 'Used by the Gemini / Antigravity provider.' },
   { key: 'huggingfaceApiKey', label: 'Hugging Face token', hint: 'Used by the Hugging Face (BYoM) provider.' },
+  { key: 'qoderAccessToken', label: 'Qoder personal access token', hint: 'Customer-only. Used by the Qoder Agent SDK harness, which needs direct egress (the sidecar cannot broker qodercli).' },
   { key: 'langsmithApiKey', label: 'LangSmith API key', hint: 'Used for brokered tracing and evaluation.' },
   { key: 'digilockerClientId', label: 'DigiLocker client ID', hint: 'Customer-only. Used by identity verification after DigiLocker/API Setu onboarding.' },
   { key: 'digilockerClientSecret', label: 'DigiLocker client secret', hint: 'Customer-only. Used only server-side by the identity verification service.' },
@@ -1954,6 +1958,7 @@ const PROVIDER_LABELS = Object.freeze({
   claude: 'Anthropic',
   huggingface: 'Hugging Face',
   antigravity: 'Gemini',
+  qoder: 'Qoder',
 });
 
 const PROVIDER_DEPLOYMENT = Object.freeze({
@@ -1964,6 +1969,7 @@ const PROVIDER_DEPLOYMENT = Object.freeze({
   codex: 'hosted',
   claude: 'hosted',
   antigravity: 'hosted',
+  qoder: 'hosted',
 });
 
 // Task-model roles. Each role is provider-flexible and maps to its own settings
@@ -2004,12 +2010,12 @@ const ROLE_FIELDS = Object.freeze(Object.fromEntries(
 const ROLE_META = Object.freeze(Object.fromEntries(
   LLM_ROLES.map((entry) => [entry.role, { heading: entry.heading, description: entry.description }])
 ));
-const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity']);
+const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity', 'qoder']);
 const ROLE_PROVIDERS = Object.freeze({
   // Legacy provider-class slots, kept for provider-scoped callers. "byom"
   // (Bring Your Own Model) folds Hugging Face in with the local runtimes.
   byom: ['ollama', 'lmstudio', 'omlx', 'huggingface'],
-  hosted: ['codex', 'claude', 'antigravity'],
+  hosted: ['codex', 'claude', 'antigravity', 'qoder'],
   // Task roles accept any provider (BYoM or hosted).
   thinking: ALL_PROVIDERS,
   execution: ALL_PROVIDERS,
@@ -2073,6 +2079,7 @@ function providerConnected(ctx, provider) {
   if (provider === 'claude') return Boolean(ctx.claude && ctx.claude.connected);
   if (provider === 'huggingface') return Boolean(ctx.settings && ctx.settings.hasHuggingfaceApiKey);
   if (provider === 'antigravity') return Boolean(ctx.settings && ctx.settings.hasAntigravityApiKey);
+  if (provider === 'qoder') return Boolean(ctx.settings && ctx.settings.hasQoderAccessToken);
   return true;
 }
 
@@ -2638,6 +2645,18 @@ function currentParameters(settings, provider) {
     temperature: settings.huggingfaceTemperature,
     topP: null, topK: null, repeatPenalty: null,
     reasoningEffort: settings.huggingfaceReasoningEffort || 'none',
+    jsonMode: null,
+    contextMode: null,
+  };
+  if (provider === 'qoder') return {
+    // Qoder selects a model tier (auto / performance), not a listable model id,
+    // and exposes no sampling or reasoning knobs — qodercli owns inference.
+    model: settings.qoderModel || 'auto',
+    contextWindow: settings.qoderContextWindow || 200000,
+    maxOutputTokens: settings.qoderMaxTokens || 32768,
+    temperature: null,
+    topP: null, topK: null, repeatPenalty: null,
+    reasoningEffort: 'none',
     jsonMode: null,
     contextMode: null,
   };

@@ -46,6 +46,7 @@ const HARNESS_STRATEGIES = Object.freeze({
   'codex-sdk': 'codex-marketplace',
   'claude-agent-sdk': 'claude-marketplace',
   'antigravity-sdk': 'antigravity-profile',
+  'qoder-sdk': 'qoder-claude-compat',
   opencode: 'opencode-profile',
   pi: 'pi-package',
   'oh-my-pi': 'oh-my-pi-marketplace',

@@ -407,6 +407,8 @@ function readinessFingerprint(context = {}) {
     antigravityModel: settings.antigravityModel,
     antigravityAgentId: settings.antigravityAgentId,
     antigravityApiKey: settings.antigravityApiKey,
+    qoderModel: settings.qoderModel,
+    qoderAccessToken: settings.qoderAccessToken,
     codexModel: settings.codexModel,
     codexTokens: settings.codexTokens,
     claudeModel: settings.claudeModel,

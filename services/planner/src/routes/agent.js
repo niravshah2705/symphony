@@ -181,6 +181,7 @@ function activeModelFor(provider, settings) {
   if (provider === 'omlx') return settings.omlxModel;
   if (provider === 'huggingface') return settings.huggingfaceModel;
   if (provider === 'antigravity') return settings.antigravityModel || CONFIG.ANTIGRAVITY.defaultModel;
+  if (provider === 'qoder') return settings.qoderModel || CONFIG.QODER.defaultModel;
   return settings.ollamaModel;
 }
 
