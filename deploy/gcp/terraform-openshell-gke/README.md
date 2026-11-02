@@ -41,9 +41,8 @@ it adopts the live resources into remote state so the plan stays empty.
 pending sandbox pods auto-wake capacity), `start` → min 2 / max 8.
 Manual via `gh workflow run openshell-cluster-power.yml -f action=stop`.
 The nightly IST schedule is opt-in via repo variable
-`OPENSHELL_CLUSTER_AUTOSTOP=true` and needs a service account with
-`roles/container.admin` (`GCP_CONTAINER_SA` secret, or unset to reuse
-`GCP_DEPLOYER_SA`).
+`OPENSHELL_CLUSTER_AUTOSTOP=true` and authenticates as `GCP_DEPLOYER_SA`
+(`gh-deployer`), which `deploy/gcp/bootstrap.sh` grants `roles/container.admin`.
 
 ## Known hardening TODOs
 
