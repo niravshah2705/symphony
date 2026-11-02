@@ -10,6 +10,11 @@ name: Deploy to GCP
 #   • SPA source, config, or release tooling changed → Firebase Hosting deploy.
 #   • docs / anything else → nothing runs.
 #
+# NOT this workflow's business: deploy/gcp/terraform-openshell-gke/** (the
+# multi-tenant OpenShell GKE stack — its own state prefix and its own
+# reconciler, openshell-gke-sync.yml). A merge touching only that directory
+# plans and applies nothing here.
+#
 # Auth is keyless via Workload Identity Federation — see docs/GCP_CICD.md.
 on:
   push:

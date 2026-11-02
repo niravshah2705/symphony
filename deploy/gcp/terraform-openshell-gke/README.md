@@ -42,18 +42,34 @@ pending sandbox pods auto-wake capacity), `start` → min 2 / max 8.
 Manual via `gh workflow run openshell-cluster-power.yml -f action=stop`.
 The nightly IST schedule is opt-in via repo variable
 `OPENSHELL_CLUSTER_AUTOSTOP=true` and authenticates as `GCP_DEPLOYER_SA`
-(`gh-deployer`), which `deploy/gcp/bootstrap.sh` grants `roles/container.admin`.
+(`gh-deployer`), which `deploy/gcp/bootstrap.sh` grants `roles/container.admin`
+and `roles/compute.viewer`.
 
-## Resize the nodes
+## Reconcile / resize in CI
 
-Change `machine_type` here (or pass `-var=machine_type=...`) and apply from an
-identity that can read the whole adopted state — an operator with
-`roles/container.admin` + `roles/compute.viewer`, not `gh-deployer`, which
-holds only the former and 403s on the Compute refresh. Keep the pool's live
-autoscaling bounds: pass `-var=min_nodes`/`-var=max_nodes` matching the running
-pool, otherwise the apply silently resets them and wakes a parked cluster.
-Node pool changes roll in place (SURGE 1 / UNAVAILABLE 0), and
-`.github/workflows/openshell-cluster-power.yml` only ever touches min/max.
+`deploy.yml` only path-filters `deploy/gcp/terraform/**`, so this stack has its
+own reconciler: `.github/workflows/openshell-gke-sync.yml`. It plans on every
+push to main that touches this directory (diff lands in the run summary) and
+applies only when dispatched with `apply=true`, refusing to apply a plan that
+deletes anything unless `allow_destroy=true` is also set.
+
+```bash
+gh workflow run openshell-gke-sync.yml                      # plan only
+gh workflow run openshell-gke-sync.yml -f apply=true        # converge
+```
+
+Resizing the nodes is just changing `machine_type` here (or
+`-var=machine_type=...`) and letting that workflow apply it. Two things the
+workflow handles for you, and that any manual apply must too:
+
+- **Live autoscaling bounds.** It reads the pool's current min/max and passes
+  them back, so a reconcile does not silently start a parked cluster (the power
+  workflow parks min at 0; the module default is 2).
+- **Refresh.** It plans with `-refresh=false`, comparing config against the
+  adopted state, because `gh-deployer` holds `roles/container.admin` only and a
+  full refresh 403s on the Compute objects in that state. Grant it
+  `roles/compute.viewer` (`bootstrap.sh` does now) and tick `refresh` to see
+  real live drift instead.
 
 ## Known hardening TODOs
 
