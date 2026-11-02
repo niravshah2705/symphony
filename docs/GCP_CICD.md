@@ -20,6 +20,7 @@ are conditional on it:
 | `packages/shared/**` | rebuild planner, coder, tester, and deployer images |
 | root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
 | `deploy/gcp/terraform/**` | rebuild the shared proxy artifact and run `terraform apply` (required for first broker creation) |
+| `deploy/gcp/terraform-openshell-gke/**` | `gke_reconcile` job: plan **and apply** the multi-tenant OpenShell GKE module (own state prefix, no images; any delete in the plan fails the run instead of applying) |
 | `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy only (no images, no Terraform) |
 | docs / anything else | nothing runs |
 
@@ -32,6 +33,13 @@ everything except the service that changed (see the per-service
 Need a full rebuild + apply of everything (e.g. after a manual hotfix or to
 re-converge state)? Trigger the workflow manually with **`deploy_all: true`**
 (Actions → Deploy to GCP → Run workflow).
+
+The GKE stack reconciles on its own, without touching images:
+**`gke_reconcile: true`** plans and applies the module, `gke_plan_only: true`
+stops after the plan, and `gke_allow_destroy: true` is the explicit opt-in that
+lets a plan containing a delete through. See
+`deploy/gcp/terraform-openshell-gke/README.md` for what the job reads back from
+the live cluster and why.
 
 ## SPA obfuscation (release-time)
 
