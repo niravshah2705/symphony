@@ -5,11 +5,12 @@ name: OpenShell GKE reconcile
 # so a change to the OpenShell GKE module used to land with nothing checking it:
 # the module, its adopted state, and the live pool silently drifted apart.
 #
-# On every push to main that touches the module this plans it and writes the
-# diff to the run summary. It never applies on a push — a full apply here also
-# re-converges the helm releases, namespaces, and kubectl manifests of a private
-# cluster, which is a person's judgement call, not a merge's. Run it with
-# `apply=true` to converge.
+# Continuous deployment for this module, mirroring deploy.yml's posture for the
+# Cloud Run stack: every push to main that touches it plans and then applies.
+# The one hard brake is destructive — a plan containing any delete refuses to
+# apply unless the operator re-runs with allow_destroy=true, so a merge can
+# converge a cluster but cannot take one apart. Dispatch with plan_only=true to
+# inspect without converging.
 #
 # Auth is keyless via Workload Identity Federation as gh-deployer — see
 # docs/GCP_CICD.md and deploy/gcp/bootstrap.sh.
@@ -22,8 +23,8 @@ on:
       - '.github/workflows/openshell-gke-sync.yml'
   workflow_dispatch:
     inputs:
-      apply:
-        description: Apply the plan (otherwise plan only)
+      plan_only:
+        description: Plan without applying (pushes always apply)
         type: boolean
         default: false
       refresh:
@@ -31,7 +32,7 @@ on:
         type: boolean
         default: false
       allow_destroy:
-        description: Permit a plan that deletes resources (only meaningful with apply)
+        description: Permit a plan that deletes resources
         type: boolean
         default: false
 
@@ -71,6 +72,22 @@ jobs:
         uses: google-github-actions/setup-gcloud@v3
         with:
           project_id: ${{ env.PROJECT_ID }}
+
+      - name: Resolve mode
+        id: mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PLAN_ONLY: ${{ inputs.plan_only }}
+        run: |
+          set -euo pipefail
+          # A push converges; a dispatch converges too unless plan_only is set.
+          if [ "$EVENT_NAME" = "push" ] || [ "$PLAN_ONLY" != "true" ]; then
+            echo "apply=true" >> "$GITHUB_OUTPUT"
+            echo "Mode: plan + apply"
+          else
+            echo "apply=false" >> "$GITHUB_OUTPUT"
+            echo "Mode: plan only"
+          fi
 
       - name: Resolve module inputs
         id: tfvars
@@ -140,8 +157,10 @@ jobs:
           MAX_NODES: ${{ steps.bounds.outputs.max }}
           CERT_EMAIL: ${{ steps.tfvars.outputs.cert_email }}
           REFRESH: ${{ inputs.refresh }}
+          WILL_APPLY: ${{ steps.mode.outputs.apply }}
         run: |
           set -euo pipefail
+          if [ "$WILL_APPLY" = "true" ]; then MODE_LABEL="plan + apply"; else MODE_LABEL="plan only"; fi
           # Without a refresh the plan compares config against the adopted state
           # rather than against live GCP. gh-deployer holds container.admin only,
           # so a full refresh 403s on the Compute objects the state references;
@@ -161,7 +180,7 @@ jobs:
           {
             echo "## Terraform plan — OpenShell GKE"
             echo ""
-            echo "Refresh: \`${REFRESH}\` — with refresh disabled this compares the config against the adopted state, not against live GCP."
+            echo "Mode: **$MODE_LABEL** · refresh: \`${REFRESH}\` — with refresh disabled this compares the config against the adopted state, not against live GCP."
             echo ""
             echo '```'
             terraform show -no-color reconcile.tfplan
@@ -186,15 +205,16 @@ jobs:
             echo "changed=$(( ADD + CHANGE + DESTROY ))"
           } >> "$GITHUB_OUTPUT"
           echo "Plan: $ADD create, $CHANGE update, $DESTROY delete (diff in the job summary)"
-          # Push runs only plan, so say out loud that the module and the cluster
-          # are still apart — otherwise a merged .tf edit looks shipped when it
-          # is only staged in this summary.
-          if [ "${{ github.event_name }}" = "push" ] && [ "$(( ADD + CHANGE + DESTROY ))" -gt 0 ]; then
-            echo "::warning::$ADD create / $CHANGE update / $DESTROY delete pending. The GKE stack is NOT converged; run openshell-gke-sync.yml with apply=true."
+          # A plan_only run leaves the module and the cluster apart, so say so
+          # loudly — otherwise a merged .tf edit looks shipped when it is only
+          # staged in this summary.
+          if [ "$(( ADD + CHANGE + DESTROY ))" -gt 0 ] \
+            && [ "${{ steps.mode.outputs.apply }}" != "true" ]; then
+            echo "::warning::$ADD create / $CHANGE update / $DESTROY delete pending. This was a plan-only run; the GKE stack is NOT converged."
           fi
 
       - name: Block a destroying apply
-        if: inputs.apply
+        if: steps.mode.outputs.apply == 'true'
         env:
           DESTROY_COUNT: ${{ steps.plan.outputs.destroy }}
           ALLOW_DESTROY: ${{ inputs.allow_destroy }}
@@ -209,9 +229,11 @@ jobs:
           fi
 
       - name: Apply
-        if: inputs.apply && steps.plan.outputs.changed != '0'
+        if: steps.mode.outputs.apply == 'true' && steps.plan.outputs.changed != '0'
         working-directory: ${{ env.TF_DIR }}
-        run: terraform apply -input=false reconcile.tfplan
+        # Applies the exact plan reviewed in the summary (no re-solve, no
+        # prompt) — the same -auto-approve posture deploy.yml uses for Cloud Run.
+        run: terraform apply -input=false -auto-approve reconcile.tfplan
 
       - name: Report node pool
         run: |
