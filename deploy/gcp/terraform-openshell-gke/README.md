@@ -46,17 +46,14 @@ The nightly IST schedule is opt-in via repo variable
 
 ## Resize the nodes
 
-`.github/workflows/openshell-node-resize.yml` changes the pool's machine type
-through this module (never `gcloud node-pools update` alone — that would leave
-the adopted state describing the old size, and the next apply would roll it
-back). It reads the live min/max and passes them back so resizing a parked
-pool does not start it, plans first, and only applies when `apply` is checked:
-
-```bash
-gh variable set OPENSHELL_CERT_EMAIL --body "<acme email>"   # required module variable
-gh workflow run openshell-node-resize.yml -f machine_type=e2-standard-2   # plan only
-gh run watch                                                  # then re-run with -f apply=true
-```
+Change `machine_type` here (or pass `-var=machine_type=...`) and apply from an
+identity that can read the whole adopted state — an operator with
+`roles/container.admin` + `roles/compute.viewer`, not `gh-deployer`, which
+holds only the former and 403s on the Compute refresh. Keep the pool's live
+autoscaling bounds: pass `-var=min_nodes`/`-var=max_nodes` matching the running
+pool, otherwise the apply silently resets them and wakes a parked cluster.
+Node pool changes roll in place (SURGE 1 / UNAVAILABLE 0), and
+`.github/workflows/openshell-cluster-power.yml` only ever touches min/max.
 
 ## Known hardening TODOs
 
@@ -67,8 +64,3 @@ gh run watch                                                  # then re-run with
 - Node pool runs on the default compute service account; switch to a
   dedicated SA with least-privilege (`logging.logWriter`, `metrics.writer`,
   `monitoring.viewer`, `monitoring.agent`) plus Workload Identity bindings.
-- The CI identity `gh-deployer` holds `roles/container.admin` only, so it
-  cannot read the adopted Compute objects (subnet, router, NAT, address,
-  firewall). `openshell-node-resize.yml` therefore plans with
-  `-refresh=false` and reads the live autoscaling bounds with `gcloud`; grant
-  `roles/compute.viewer` to let it plan against a full refresh.
