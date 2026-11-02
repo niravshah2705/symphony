@@ -4,22 +4,31 @@
 
 ## Overview
 
-Community of 435 nodes
+Community of 378 nodes
 
-- **Size**: 435 nodes
-- **Cohesion**: 0.3270
+- **Size**: 378 nodes
+- **Cohesion**: 0.3283
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:resolveLlm builds a Gemini-key descriptor carrying the OpenAI-compatible endpoint@L28 | Test | ./packages/shared/src/agent/antigravity.test.js | 28-37 |
-| test:resolveLlm applies the config-driven agent-id override and model default@L39 | Test | ./packages/shared/src/agent/antigravity.test.js | 39-44 |
-| test:llmReady requires the Gemini key; notReadyReason names the Gemini API key@L46 | Test | ./packages/shared/src/agent/antigravity.test.js | 46-50 |
-| test:createChatModel maps antigravity to a ChatOpenAI targeting the Gemini endpoint@L52 | Test | ./packages/shared/src/agent/antigravity.test.js | 52-58 |
-| test:availability probes the Gemini key against the OpenAI-compatible endpoint@L73 | Test | ./packages/shared/src/agent/antigravity.test.js | 73-86 |
-| test:availability fails fast when the Gemini key is missing@L88 | Test | ./packages/shared/src/agent/antigravity.test.js | 88-94 |
+| resolveTaskLabelId | Function | ./packages/shared/src/agent/apply.js | 13-21 |
+| withCriteria | Function | ./packages/shared/src/agent/apply.js | 24-28 |
+| modelLabelForSize | Function | ./packages/shared/src/agent/apply.js | 31-33 |
+| makeLabelResolver | Function | ./packages/shared/src/agent/apply.js | 40-55 |
+| makeModelLabelResolver | Function | ./packages/shared/src/agent/apply.js | 63-83 |
+| issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
+| applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-222 |
+| applyIssuesForMilestones | Function | ./packages/shared/src/agent/apply.js | 229-290 |
+| applyAidone | Function | ./packages/shared/src/agent/apply.js | 293-302 |
+| applyAiplanned | Function | ./packages/shared/src/agent/apply.js | 309-318 |
+| applyAifail | Function | ./packages/shared/src/agent/apply.js | 325-346 |
+| startIssue | Function | ./packages/shared/src/agent/apply.js | 355-370 |
+| finishIssue | Function | ./packages/shared/src/agent/apply.js | 378-410 |
+| safeAt | Function | ./packages/shared/src/agent/apply.js | 412-414 |
+| errMsg | Function | ./packages/shared/src/agent/apply.js | 416-418 |
 | resolveDeps | Function | ./packages/shared/src/agent/approval-gate.js | 32-48 |
 | bp | Function | ./packages/shared/src/agent/approval-gate.js | 34-34 |
 | defaultResolveBusiness | Function | ./packages/shared/src/agent/approval-gate.js | 50-64 |
@@ -47,67 +56,56 @@ Community of 435 nodes
 | pauseReasonFor | Function | ./packages/shared/src/agent/availability.js | 75-87 |
 | isRepositoryAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 89-99 |
 | isModelAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 101-118 |
-| selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 120-125 |
-| normalize | Function | ./packages/shared/src/agent/availability.js | 123-123 |
-| probeModelAvailability | Function | ./packages/shared/src/agent/availability.js | 127-223 |
 | probeRepositoryAvailability | Function | ./packages/shared/src/agent/availability.js | 225-280 |
 | response | Function | ./packages/shared/src/agent/availability.test.js | 18-24 |
 | test:pause reasons expose a stable, nontechnical UI contract@L26 | Test | ./packages/shared/src/agent/availability.test.js | 26-42 |
 | test:repository preflight converts provider 403 into a sanitized availability error@L44 | Test | ./packages/shared/src/agent/availability.test.js | 44-67 |
 | test:repository preflight requires write permission before dispatch@L69 | Test | ./packages/shared/src/agent/availability.test.js | 69-77 |
-| test:local model preflight verifies that the selected model is loaded@L79 | Test | ./packages/shared/src/agent/availability.test.js | 79-93 |
 | test:model classifier recognizes hosted authorization and network availability failures@L95 | Test | ./packages/shared/src/agent/availability.test.js | 95-119 |
 | test:repository classifier distinguishes remote outages from local workflow errors@L121 | Test | ./packages/shared/src/agent/availability.test.js | 121-142 |
 | clean | Function | ./packages/shared/src/agent/business-pipeline.js | 62-64 |
-| fenced | Function | ./packages/shared/src/agent/business-pipeline.js | 67-69 |
-| messageText | Function | ./packages/shared/src/agent/business-pipeline.js | 71-77 |
-| parseJsonObject | Function | ./packages/shared/src/agent/business-pipeline.js | 79-85 |
-| realResolveModel | Function | ./packages/shared/src/agent/business-pipeline.js | 89-94 |
-| invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
 
-*... and 385 more members.*
+*... and 328 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
-- **generatePlan** (criticality: 0.67, depth: 6)
 - **startScheduler** (criticality: 0.66, depth: 6)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (370 edge(s))
-- `deepEqual` (69 edge(s))
-- `String` (64 edge(s))
-- `strictEqual` (48 edge(s))
-- `Number` (44 edge(s))
-- `push` (37 edge(s))
-- `replace` (33 edge(s))
+- `equal` (289 edge(s))
+- `String` (63 edge(s))
+- `push` (53 edge(s))
+- `deepEqual` (53 edge(s))
+- `strictEqual` (40 edge(s))
+- `step` (37 edge(s))
+- `filter` (34 edge(s))
 - `toISOString` (31 edge(s))
-- `warn` (31 edge(s))
-- `require` (30 edge(s))
-- `Boolean` (30 edge(s))
-- `ok` (29 edge(s))
-- `rejects` (28 edge(s))
-- `match` (28 edge(s))
-- `isFinite` (26 edge(s))
+- `warn` (30 edge(s))
+- `map` (29 edge(s))
+- `trim` (24 edge(s))
+- `ok` (24 edge(s))
+- `Number` (23 edge(s))
+- `rejects` (23 edge(s))
+- `test` (23 edge(s))
 
 ### Incoming
 
-- `equal` (370 edge(s))
-- `deepEqual` (69 edge(s))
-- `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
+- `equal` (289 edge(s))
+- `./packages/shared/src/agent/coder-orchestrator.js` (77 edge(s))
+- `./packages/shared/src/linear.js` (72 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (55 edge(s))
-- `strictEqual` (48 edge(s))
-- `./packages/shared/src/agent/business-pipeline.js` (46 edge(s))
-- `./packages/shared/src/agent/llm.js` (40 edge(s))
-- `./packages/shared/src/agent/local-intelligence.js` (38 edge(s))
-- `ok` (29 edge(s))
-- `rejects` (28 edge(s))
-- `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
-- `match` (24 edge(s))
-- `after` (22 edge(s))
+- `deepEqual` (53 edge(s))
+- `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
+- `strictEqual` (40 edge(s))
+- `./packages/shared/src/agent/coder-flow.test.js` (32 edge(s))
+- `ok` (24 edge(s))
+- `rejects` (23 edge(s))
+- `./packages/shared/src/agent/apply.js` (22 edge(s))
+- `after` (21 edge(s))
 - `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
 - `./packages/shared/src/agent/scheduler.test.js` (19 edge(s))
+- `./packages/shared/src/agent/approval-gate.js` (15 edge(s))

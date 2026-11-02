@@ -478,6 +478,7 @@ function buildRailTabs(railBody) {
     ['result', 'Result'],
     ['activity', 'Activity'],
     ['setup', 'Setup'],
+    ['coverage', 'Coverage'],
   ];
   return el('div', { class: 'rail-tabs agent-rail-tabs', role: 'tablist', 'aria-label': 'Agent side panel' }, tabs.map(([mode, label]) => {
     const active = railState.mode === mode;
@@ -541,7 +542,181 @@ function renderCurrentRail(host) {
     renderActivityRail(host, latestJobs);
     return;
   }
+  if (railState.mode === 'coverage') {
+    renderCoverageRail(host);
+    return;
+  }
   renderAgentRail(host, latestAgentStatus, null);
+}
+
+/* --------------------------- question coverage rail --------------------------- */
+
+const COVERAGE_CATEGORY_LABELS = {
+  organisation: 'Organisation',
+  person: 'Person',
+  project_business: 'Project & business',
+};
+
+const COVERAGE_STATUS_LABELS = {
+  covered: 'Answered',
+  partial: 'Partly answered',
+  gap: 'Thin evidence',
+  unanswered: 'Nothing stored',
+  not_assessed: 'Not assessed',
+  not_evaluated: 'Skipped this run',
+};
+
+// The report is heavy on the server (one recall pass over every question), so it
+// lives in a module-level cache and only the first tab click pays for it.
+let coverageCache = null;
+let coverageInFlight = null;
+let coverageFilter = 'all';
+let coverageRenderSeq = 0;
+
+function fetchCoverageReport({ refresh = false } = {}) {
+  if (coverageCache && !refresh) return Promise.resolve(coverageCache);
+  if (!coverageInFlight) {
+    coverageInFlight = api.getQuestionCoverage({ refresh })
+      .then((report) => { coverageCache = report; return report; })
+      .finally(() => { coverageInFlight = null; });
+  }
+  return coverageInFlight;
+}
+
+function coverageScoreText(value) {
+  return Number.isFinite(value) ? `${value}%` : '—';
+}
+
+function coverageMemoryNote(report) {
+  if (report.memoryState === 'disabled') return 'Agent memory is off for this organisation, so nothing was assessed.';
+  if (report.memoryState === 'unconfigured') return 'Memory storage could not be read, so nothing was assessed.';
+  if (report.memoryState === 'lexical') return 'Matched on keywords only — enable Postgres memory for semantic scoring.';
+  return `Matched against ${Number.isFinite(report.memoryCount) ? report.memoryCount : 0} stored memories.`;
+}
+
+function coverageLayaNote(report) {
+  // Surfaced because a coverage number the model did not contribute to must not
+  // imply that it did: on a stack without LAYA_INFERENCE_URL this reads as absent.
+  if (report.layaApplied) return 'Laya ordered the matched memory scopes.';
+  return `Laya did not take part (${report.layaReason || 'not attempted'}).`;
+}
+
+function coverageRows(report) {
+  const rows = Array.isArray(report.results) ? report.results : [];
+  return coverageFilter === 'all' ? rows : rows.filter((row) => row.category === coverageFilter);
+}
+
+function buildCoverageRow(row) {
+  const status = row.status || 'not_assessed';
+  const evidence = Array.isArray(row.evidence) ? row.evidence : [];
+  const item = el('li', { class: `coverage-row coverage-${status}` }, [
+    el('div', { class: 'coverage-row-head' }, [
+      el('span', { class: 'coverage-badge' }, coverageScoreText(row.score)),
+      el('span', { class: 'coverage-question' }, row.question || row.id),
+    ]),
+    el('div', { class: 'coverage-row-meta' }, [
+      el('span', {}, COVERAGE_STATUS_LABELS[status] || status),
+      el('span', {}, row.subDimension || ''),
+      el('span', {}, `${row.hitCount || 0} match${row.hitCount === 1 ? '' : 'es'}`),
+    ]),
+  ]);
+  if (evidence.length) {
+    item.append(el('details', { class: 'coverage-evidence' }, [
+      el('summary', {}, 'What memory holds'),
+      el('ul', {}, evidence.map((entry) => el('li', {}, `${entry.title || 'Memory'} — ${entry.text || ''}`))),
+    ]));
+  }
+  return item;
+}
+
+function paintCoverageRail(host, report) {
+  clear(host);
+  const overall = report.overall || {};
+  host.append(railIntro(
+    'Discovery coverage',
+    'How much of the global question bank our agent memory can already answer for this organisation.'
+  ));
+
+  const scoreValue = Number.isFinite(overall.score) ? overall.score : null;
+  const status = overall.status || 'not_assessed';
+  host.append(el('section', { class: `coverage-summary coverage-${status}`, dataset: { panelSection: 'coverage-summary' } }, [
+    el('div', { class: 'coverage-score', role: 'status', 'aria-live': 'polite' }, coverageScoreText(scoreValue)),
+    el('div', { class: 'coverage-summary-copy' }, [
+      el('strong', {}, COVERAGE_STATUS_LABELS[status] || status),
+      el('p', {}, coverageMemoryNote(report)),
+      el('p', { class: 'coverage-laya-note' }, coverageLayaNote(report)),
+      report.status === 'partial'
+        ? el('p', { class: 'coverage-partial-note' }, `This pass ran out of time: ${overall.assessedCount || 0} of ${overall.questionCount || 0} questions were checked. The rest are skipped, not scored as gaps.`)
+        : null,
+    ]),
+  ]));
+
+  const refresh = el('button', { type: 'button', class: 'coverage-refresh' }, 'Re-check memory');
+  refresh.addEventListener('click', async () => {
+    refresh.disabled = true;
+    try {
+      const latest = await fetchCoverageReport({ refresh: true });
+      if (railState.mode === 'coverage') renderCoverageRail(host, latest);
+    } catch (_) {
+      refresh.disabled = false;
+    }
+  });
+  host.append(el('div', { class: 'coverage-controls' }, [
+    refresh,
+    el('label', { class: 'coverage-filter' }, [
+      el('span', {}, 'Category'),
+      (() => {
+        const select = el('select', { 'aria-label': 'Filter coverage by category' }, [
+          el('option', { value: 'all' }, 'All categories'),
+          ...Object.entries(COVERAGE_CATEGORY_LABELS).map(([value, label]) =>
+            el('option', { value, selected: value === coverageFilter ? 'selected' : null }, label)),
+        ]);
+        select.addEventListener('change', () => {
+          coverageFilter = select.value;
+          if (coverageCache) paintCoverageRail(host, coverageCache);
+        });
+        return select;
+      })(),
+    ]),
+  ]));
+
+  const rows = coverageRows(report);
+  const groups = Object.keys(COVERAGE_CATEGORY_LABELS)
+    .map((category) => [category, rows.filter((row) => row.category === category)])
+    .filter(([, items]) => items.length);
+
+  if (!groups.length) {
+    host.append(emptyRail('Nothing to show', 'The bank has no active questions for this filter.'));
+    return;
+  }
+  for (const [category, items] of groups) {
+    host.append(el('section', { dataset: { panelSection: `coverage-${category}` } }, [
+      el('div', { class: 'rail-section-label' }, COVERAGE_CATEGORY_LABELS[category]),
+      el('ol', { class: 'coverage-list' }, items.map(buildCoverageRow)),
+    ]));
+  }
+}
+
+async function renderCoverageRail(host, preloaded) {
+  const sequence = ++coverageRenderSeq;
+  if (preloaded || !coverageCache) {
+    clear(host);
+    host.append(railIntro('Discovery coverage', 'Checking what our memory can already answer.'));
+    if (!preloaded) {
+      try {
+        preloaded = await fetchCoverageReport();
+      } catch (error) {
+        // A coverage failure is never a chat failure: say so and stop.
+        clear(host);
+        host.append(emptyRail('Coverage unavailable', `${error && error.message ? error.message : 'The memory check could not run.'}`));
+        return;
+      }
+    }
+  }
+  // A tab switch or a newer render owns the panel by now; painting anyway would
+  // replace another mode's content with a stale report.
+  if (sequence !== coverageRenderSeq || railState.mode !== 'coverage') return;
+  paintCoverageRail(host, preloaded || coverageCache);
 }
 
 function pauseSources(plannerStatus, coderStatus, jobs) {

@@ -72,12 +72,10 @@ Community of 334 nodes
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
 - **generatePlan** (criticality: 0.67, depth: 6)
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
 - **startScheduler** (criticality: 0.66, depth: 6)
-- **createMemoryMiddleware** (criticality: 0.65, depth: 5)
-- **executeClaude** (criticality: 0.61, depth: 2)
-- **executeCodex** (criticality: 0.60, depth: 2)
 
 ## Dependencies
 

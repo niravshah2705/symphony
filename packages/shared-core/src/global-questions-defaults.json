@@ -1,0 +1,855 @@
+{
+  "bankVersion": 1,
+  "notes": "Platform default discovery-question bank for the ArchAgentix intake flow. 30 organisation + 30 person + 20 project_business = 80. Authored data, never generated at runtime: AI assist proposes, a human accepts. Orgs store only their overrides (see packages/shared-core/src/store.js globalQuestions), which are merged over these rows at read time.",
+  "categories": {
+    "organisation": {
+      "count": 30,
+      "subDimensions": [
+        "org_size",
+        "org_structure",
+        "roles_responsibilities",
+        "decision_making",
+        "engineering_culture",
+        "data_governance",
+        "security_compliance",
+        "existing_tooling",
+        "integration_landscape",
+        "change_readiness"
+      ]
+    },
+    "person": {
+      "count": 30,
+      "subDimensions": [
+        "identity_role",
+        "goals_motivations",
+        "constraints",
+        "technical_depth",
+        "domain_expertise",
+        "risk_tolerance",
+        "time_availability",
+        "communication_preference",
+        "prior_attempts",
+        "success_definition"
+      ]
+    },
+    "project_business": {
+      "count": 20,
+      "subDimensions": [
+        "business_domain",
+        "current_pain_point",
+        "solutions_considered",
+        "revenue_model",
+        "risk_appetite",
+        "budget",
+        "cloud_preference",
+        "browser_application",
+        "mobile_application",
+        "connectors_only",
+        "b2b_model",
+        "existing_authentication"
+      ]
+    }
+  },
+  "questions": [
+    {
+      "id": "gq_org_01",
+      "category": "organisation",
+      "subDimension": "org_size",
+      "order": 1,
+      "question": "How many people are in the organisation today, and how many are expected to use this system daily?",
+      "whyItMatters": "Drives the tenancy model, licensing tier, and whether SSO and role scoping are required from day one.",
+      "answerType": "number",
+      "choices": []
+    },
+    {
+      "id": "gq_org_02",
+      "category": "organisation",
+      "subDimension": "org_size",
+      "order": 2,
+      "question": "How many business units or sites will the system serve, and are any of them outside your primary country?",
+      "whyItMatters": "Multi-site and cross-border units force regionalisation, data residency, and per-unit permissions before any feature work.",
+      "answerType": "number",
+      "choices": []
+    },
+    {
+      "id": "gq_org_03",
+      "category": "organisation",
+      "subDimension": "org_size",
+      "order": 3,
+      "question": "What share of the workforce is technical (engineers, analysts) versus business-only users?",
+      "whyItMatters": "A mostly non-technical user base rules out self-hosted and config-heavy architectures.",
+      "answerType": "choice",
+      "choices": ["under 10%", "10-30%", "30-60%", "over 60%"]
+    },
+    {
+      "id": "gq_org_04",
+      "category": "organisation",
+      "subDimension": "org_structure",
+      "order": 4,
+      "question": "How is the organisation structured — functional, divisional, matrix, or network/remote-first?",
+      "whyItMatters": "Structure predicts how approval paths and data boundaries will actually behave under load.",
+      "answerType": "choice",
+      "choices": ["functional", "divisional", "matrix", "network / remote-first", "flat / startup"]
+    },
+    {
+      "id": "gq_org_05",
+      "category": "organisation",
+      "subDimension": "org_structure",
+      "order": 5,
+      "question": "Which teams own software delivery today, and who owns the platform those teams run on?",
+      "whyItMatters": "Identifies whether a platform counterpart exists to operate what we build, or whether ownership is implicit.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_06",
+      "category": "organisation",
+      "subDimension": "org_structure",
+      "order": 6,
+      "question": "Is there a central IT or platform team, or does each unit procure and run its own tooling?",
+      "whyItMatters": "Federated procurement means one design cannot assume a single account, single identity, or single cloud.",
+      "answerType": "boolean",
+      "choices": []
+    },
+    {
+      "id": "gq_org_07",
+      "category": "organisation",
+      "subDimension": "roles_responsibilities",
+      "order": 7,
+      "question": "Who is accountable for the outcome of this project, and who can veto a technical decision?",
+      "whyItMatters": "Naming the veto holder prevents late redesigns discovered at the second approval layer.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_08",
+      "category": "organisation",
+      "subDimension": "roles_responsibilities",
+      "order": 8,
+      "question": "Which roles will operate the system day-to-day after go-live, and is that capacity funded?",
+      "whyItMatters": "Unfunded operations is the most common cause of a correct build degrading within a quarter.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_09",
+      "category": "organisation",
+      "subDimension": "roles_responsibilities",
+      "order": 9,
+      "question": "Who owns data quality and access decisions for the datasets this system will use?",
+      "whyItMatters": "Without a data owner, permission models are guessed and become the migration cost later.",
+      "answerType": "choice",
+      "choices": ["a single data owner", "each team owns its own data", "IT / platform team", "unclear today"]
+    },
+    {
+      "id": "gq_org_10",
+      "category": "organisation",
+      "subDimension": "decision_making",
+      "order": 10,
+      "question": "How are technology decisions made here — committee, architect-led, team-autonomous, or ad hoc?",
+      "whyItMatters": "Determines whether a recommended architecture can be adopted as proposed or needs a consensus variant.",
+      "answerType": "choice",
+      "choices": ["committee", "architect-led", "team-autonomous", "ad hoc / founder-led"]
+    },
+    {
+      "id": "gq_org_11",
+      "category": "organisation",
+      "subDimension": "decision_making",
+      "order": 11,
+      "question": "What is the typical time from project approval to first production use?",
+      "whyItMatters": "Sets the honest upper bound on delivery cadence and whether an incremental release plan is viable.",
+      "answerType": "choice",
+      "choices": ["under 1 month", "1-3 months", "3-6 months", "6-12 months", "over 12 months"]
+    },
+    {
+      "id": "gq_org_12",
+      "category": "organisation",
+      "subDimension": "decision_making",
+      "order": 12,
+      "question": "Which approvals are mandatory before something can reach production?",
+      "whyItMatters": "Each mandatory gate is a design constraint (audit trail, change control, evidence) not an afterthought.",
+      "answerType": "multi_choice",
+      "choices": ["security review", "architecture review", "legal / privacy", "change advisory board", "finance sign-off", "none"]
+    },
+    {
+      "id": "gq_org_13",
+      "category": "organisation",
+      "subDimension": "engineering_culture",
+      "order": 13,
+      "question": "How do engineers get code from laptop to production today — describe the path and its friction.",
+      "whyItMatters": "Reveals whether we can plug into an existing pipeline or must stand one up as part of the work.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_14",
+      "category": "organisation",
+      "subDimension": "engineering_culture",
+      "order": 14,
+      "question": "What is the current testing and review practice — could another engineer safely review and revert a change?",
+      "whyItMatters": "Predicts how much isolation and verification the design must carry on the team's behalf.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_15",
+      "category": "organisation",
+      "subDimension": "engineering_culture",
+      "order": 15,
+      "question": "How is technical debt handled today — scheduled, dedicated, best effort, or untracked?",
+      "whyItMatters": "Debt discipline decides whether a pragmatic first release will be maintained or rewritten.",
+      "answerType": "choice",
+      "choices": ["scheduled sprints", "dedicated team", "best effort", "not tracked"]
+    },
+    {
+      "id": "gq_org_16",
+      "category": "organisation",
+      "subDimension": "data_governance",
+      "order": 16,
+      "question": "Where does your system-of-record data live, and who else reads or writes it today?",
+      "whyItMatters": "Defines the integration and conflict surface; a system of record with silent writers is a data-quality risk.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_17",
+      "category": "organisation",
+      "subDimension": "data_governance",
+      "order": 17,
+      "question": "Is there a data classification or retention policy that applies to the data this project will hold?",
+      "whyItMatters": "Retention rules drive storage choice, deletion jobs, and backup design before anything else.",
+      "answerType": "boolean",
+      "choices": []
+    },
+    {
+      "id": "gq_org_18",
+      "category": "organisation",
+      "subDimension": "data_governance",
+      "order": 18,
+      "question": "How is master or reference data kept consistent across systems today?",
+      "whyItMatters": "If reference data is hand-copied, synchronisation becomes the core engineering problem.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_19",
+      "category": "organisation",
+      "subDimension": "security_compliance",
+      "order": 19,
+      "question": "Which regulatory or contractual regimes constrain this system?",
+      "whyItMatters": "Each regime adds concrete requirements — consent, residency, auditability, breach timelines.",
+      "answerType": "multi_choice",
+      "choices": ["GDPR", "HIPAA", "SOC 2", "ISO 27001", "DPDP Act", "PCI-DSS", "SEBI / RBI guidelines", "none", "not sure"]
+    },
+    {
+      "id": "gq_org_20",
+      "category": "organisation",
+      "subDimension": "security_compliance",
+      "order": 20,
+      "question": "What is the required data residency — must data stay inside a specific country or region?",
+      "whyItMatters": "Residency can eliminate cloud and provider options before features are considered.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_21",
+      "category": "organisation",
+      "subDimension": "security_compliance",
+      "order": 21,
+      "question": "Has the organisation passed an external security audit, and what findings remain open?",
+      "whyItMatters": "Open findings usually name the exact controls this project will be judged against.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_22",
+      "category": "organisation",
+      "subDimension": "existing_tooling",
+      "order": 22,
+      "question": "List the tools already in use for identity, source control, CI/CD, issue tracking, and chat or alerting.",
+      "whyItMatters": "Establishes the baseline the design must connect to rather than a greenfield assumption.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_23",
+      "category": "organisation",
+      "subDimension": "existing_tooling",
+      "order": 23,
+      "question": "Which of those tools are contractual commitments you cannot replace, and which are simply habit?",
+      "whyItMatters": "Separates real constraints from preference, which changes how much of the stack we are free to choose.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_24",
+      "category": "organisation",
+      "subDimension": "existing_tooling",
+      "order": 24,
+      "question": "Is there an existing cloud account, enterprise subscription tier, or startup credit programme we should build on?",
+      "whyItMatters": "An existing commitment can make one provider clearly cheaper than any neutral recommendation.",
+      "answerType": "choice",
+      "choices": ["yes, cloud account", "yes, subscription tier includes this", "yes, credits available", "no existing commitment"]
+    },
+    {
+      "id": "gq_org_25",
+      "category": "organisation",
+      "subDimension": "integration_landscape",
+      "order": 25,
+      "question": "What systems must this exchange data with, and are those integrations API-first today?",
+      "whyItMatters": "Non-API integrations convert connector work into file-drop or manual-process design.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_26",
+      "category": "organisation",
+      "subDimension": "integration_landscape",
+      "order": 26,
+      "question": "Are there systems reachable only by file export/import, screen scraping, or a manual step?",
+      "whyItMatters": "Each manual step is a reliability hole the architecture must explicitly schedule, retry, and monitor.",
+      "answerType": "boolean",
+      "choices": []
+    },
+    {
+      "id": "gq_org_27",
+      "category": "organisation",
+      "subDimension": "integration_landscape",
+      "order": 27,
+      "question": "What is the largest volume of records or requests the system must absorb in a peak day or peak hour?",
+      "whyItMatters": "Order-of-magnitude load decides whether a queue, a batch pipeline, or a simple CRUD service is correct.",
+      "answerType": "number",
+      "choices": []
+    },
+    {
+      "id": "gq_org_28",
+      "category": "organisation",
+      "subDimension": "change_readiness",
+      "order": 28,
+      "question": "How did the last significant system change land — adopted, worked around, or rejected?",
+      "whyItMatters": "History predicts the adoption plan we need; worked-around rollouts signal a training or incentives gap.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_29",
+      "category": "organisation",
+      "subDimension": "change_readiness",
+      "order": 29,
+      "question": "Who will be trained, and is time and budget allocated for that training?",
+      "whyItMatters": "Unfunded training converts a delivered system into an unused one.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_org_30",
+      "category": "organisation",
+      "subDimension": "change_readiness",
+      "order": 30,
+      "question": "What would make this project fail to be adopted even if it ships on time?",
+      "whyItMatters": "Elicits the political and workflow risks that no technical design can solve alone.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_01",
+      "category": "person",
+      "subDimension": "identity_role",
+      "order": 31,
+      "question": "What is your role, and how are you measured on this project?",
+      "whyItMatters": "What someone is measured on predicts which trade-offs they will accept.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_02",
+      "category": "person",
+      "subDimension": "identity_role",
+      "order": 32,
+      "question": "In this project, are you the decision-maker, the requester, the implementer, the operator, or an influencer?",
+      "whyItMatters": "Mismatch between who asks and who decides is the usual cause of requirements reversing mid-build.",
+      "answerType": "multi_choice",
+      "choices": ["decision maker", "requester / owner", "implementer", "day-to-day operator", "influencer / advisor"]
+    },
+    {
+      "id": "gq_per_03",
+      "category": "person",
+      "subDimension": "identity_role",
+      "order": 33,
+      "question": "Who else will use this system that you are speaking for today, and have they been asked?",
+      "whyItMatters": "Reveals silent user groups whose needs only surface after go-live.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_04",
+      "category": "person",
+      "subDimension": "goals_motivations",
+      "order": 34,
+      "question": "What outcome would make you say this project paid for itself?",
+      "whyItMatters": "Gives the acceptance criterion the architecture should be optimised for.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_05",
+      "category": "person",
+      "subDimension": "goals_motivations",
+      "order": 35,
+      "question": "What are you personally risking if this succeeds or fails?",
+      "whyItMatters": "Personal stakes shape how much risk the sponsor will actually tolerate, independent of stated appetite.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_06",
+      "category": "person",
+      "subDimension": "goals_motivations",
+      "order": 36,
+      "question": "What is the primary driver behind this project?",
+      "whyItMatters": "Survival-driven projects justify shorter, less general designs; growth-driven ones justify platform investment.",
+      "answerType": "choice",
+      "choices": ["revenue", "cost reduction", "compliance", "speed", "survival", "reputation"]
+    },
+    {
+      "id": "gq_per_07",
+      "category": "person",
+      "subDimension": "constraints",
+      "order": 37,
+      "question": "What is the hard deadline, and what happens if it is missed?",
+      "whyItMatters": "Distinguishes a real external constraint from a wishable date, which changes scope decisions.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_08",
+      "category": "person",
+      "subDimension": "constraints",
+      "order": 38,
+      "question": "What is fixed and beyond your control?",
+      "whyItMatters": "Fixing the wrong corner of the scope triangle produces a plan that cannot be delivered as stated.",
+      "answerType": "multi_choice",
+      "choices": ["budget", "headcount", "technology", "date", "regulatory deadline", "none — all negotiable"]
+    },
+    {
+      "id": "gq_per_09",
+      "category": "person",
+      "subDimension": "constraints",
+      "order": 39,
+      "question": "Are there procurement or vendor policies that limit what can be bought, hosted, or opened to third parties?",
+      "whyItMatters": "Procurement rules can eliminate SaaS and managed services regardless of technical fit.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_10",
+      "category": "person",
+      "subDimension": "technical_depth",
+      "order": 40,
+      "question": "How comfortable are you with cloud infrastructure — would you operate it, review changes to it, or expect it handed over?",
+      "whyItMatters": "Determines whether the design favours tunable primitives or managed services.",
+      "answerType": "choice",
+      "choices": ["operate it myself", "review changes only", "want it fully managed", "not sure"]
+    },
+    {
+      "id": "gq_per_11",
+      "category": "person",
+      "subDimension": "technical_depth",
+      "order": 41,
+      "question": "Do you read code, and would you review an implementation before it ships?",
+      "whyItMatters": "Sets how much explanation and evidence the delivery process must carry.",
+      "answerType": "choice",
+      "choices": ["read and review code", "read but do not review", "do not read code"]
+    },
+    {
+      "id": "gq_per_12",
+      "category": "person",
+      "subDimension": "technical_depth",
+      "order": 42,
+      "question": "Who on your side can own this system after delivery, and at what depth?",
+      "whyItMatters": "Post-handoff ownership is the strongest predictor of whether the system survives year two.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_13",
+      "category": "person",
+      "subDimension": "domain_expertise",
+      "order": 43,
+      "question": "How many years have you worked in this domain, and what do newcomers usually get wrong?",
+      "whyItMatters": "Experienced answers name the non-obvious rules the design must respect.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_14",
+      "category": "person",
+      "subDimension": "domain_expertise",
+      "order": 44,
+      "question": "What is the one domain rule an outsider would break that nobody tells them?",
+      "whyItMatters": "Implicit domain rules are the most expensive late-stage requirement changes.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_15",
+      "category": "person",
+      "subDimension": "domain_expertise",
+      "order": 45,
+      "question": "Are you the last person who knows how the current process works, or is that knowledge written down?",
+      "whyItMatters": "Tribal-only knowledge adds a documentation and interview workstream to the project.",
+      "answerType": "choice",
+      "choices": ["documented and current", "documented but stale", "mostly in my head", "in someone else's head"]
+    },
+    {
+      "id": "gq_per_16",
+      "category": "person",
+      "subDimension": "risk_tolerance",
+      "order": 46,
+      "question": "Would you rather ship something reversible and slower, or irreversible and faster?",
+      "whyItMatters": "This single answer decides rollout design, data-model conservatism, and vendor lock-in tolerance.",
+      "answerType": "choice",
+      "choices": ["reversible and slower", "irreversible and faster", "depends on the change"]
+    },
+    {
+      "id": "gq_per_17",
+      "category": "person",
+      "subDimension": "risk_tolerance",
+      "order": 47,
+      "question": "What is the worst acceptable outcome of an error this system makes?",
+      "whyItMatters": "Sets the required verification and human-in-the-loop depth.",
+      "answerType": "choice",
+      "choices": ["a wrong number displayed", "a delayed action", "an irreversible action taken", "nothing is acceptable"]
+    },
+    {
+      "id": "gq_per_18",
+      "category": "person",
+      "subDimension": "risk_tolerance",
+      "order": 48,
+      "question": "How do you feel about model-generated decisions reaching production without a human checking each one?",
+      "whyItMatters": "Determines whether approval gates belong in the core architecture or only in reporting.",
+      "answerType": "choice",
+      "choices": ["never without a human", "auto with sampled audit", "auto, audit after a confidence period", "no check needed"]
+    },
+    {
+      "id": "gq_per_19",
+      "category": "person",
+      "subDimension": "time_availability",
+      "order": 49,
+      "question": "How many hours per week can you give to this project for the next six weeks?",
+      "whyItMatters": "Access to the stakeholder limits iteration speed more than engineering capacity usually does.",
+      "answerType": "number",
+      "choices": []
+    },
+    {
+      "id": "gq_per_20",
+      "category": "person",
+      "subDimension": "time_availability",
+      "order": 50,
+      "question": "Who schedules the working sessions, and are you available in your stated timezone?",
+      "whyItMatters": "Unscheduled access becomes silent delay in the delivery plan.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_21",
+      "category": "person",
+      "subDimension": "time_availability",
+      "order": 51,
+      "question": "What else are you delivering this quarter that competes for the same hours?",
+      "whyItMatters": "Exposes the real capacity behind an enthusiastic commitment.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_22",
+      "category": "person",
+      "subDimension": "communication_preference",
+      "order": 52,
+      "question": "How do you want to receive progress — written summary, scheduled call, or a live dashboard?",
+      "whyItMatters": "Mismatched reporting cadence reads as project drift even when delivery is on track.",
+      "answerType": "choice",
+      "choices": ["written summary", "weekly call", "live dashboard", "async chat", "demo only"]
+    },
+    {
+      "id": "gq_per_23",
+      "category": "person",
+      "subDimension": "communication_preference",
+      "order": 53,
+      "question": "What is the fastest way to reach you when a blocking decision is needed?",
+      "whyItMatters": "Blocking decisions need a known short-latency channel or the schedule absorbs the wait.",
+      "answerType": "choice",
+      "choices": ["email", "chat / IM", "phone", "in person", "through my assistant"]
+    },
+    {
+      "id": "gq_per_24",
+      "category": "person",
+      "subDimension": "communication_preference",
+      "order": 54,
+      "question": "Do you want to see every intermediate step, or only checkpoints and outcomes?",
+      "whyItMatters": "Determines how much of the pipeline should be exposed as product surface versus internal logs.",
+      "answerType": "choice",
+      "choices": ["every step", "checkpoints and outcomes", "outcomes only"]
+    },
+    {
+      "id": "gq_per_25",
+      "category": "person",
+      "subDimension": "prior_attempts",
+      "order": 55,
+      "question": "What have you already tried for this problem, and why did it stop working?",
+      "whyItMatters": "Failed attempts are free constraints; repeating them is the most avoidable cost.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_26",
+      "category": "person",
+      "subDimension": "prior_attempts",
+      "order": 56,
+      "question": "Is there a failed or abandoned attempt at this inside the organisation, and what killed it?",
+      "whyItMatters": "Organisational memory of a dead project determines whether the new one gets a second chance.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_27",
+      "category": "person",
+      "subDimension": "prior_attempts",
+      "order": 57,
+      "question": "What workarounds are people using today — spreadsheets, messaging threads, manual re-entry?",
+      "whyItMatters": "Live workarounds define the real workflow and the migration path users will accept.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_28",
+      "category": "person",
+      "subDimension": "success_definition",
+      "order": 58,
+      "question": "What single number moves if this works, and what is its current value?",
+      "whyItMatters": "A measurable baseline is the only defensible success test for the delivered system.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_29",
+      "category": "person",
+      "subDimension": "success_definition",
+      "order": 59,
+      "question": "What would your most sceptical colleague point to as proof this worked?",
+      "whyItMatters": "Surfaces the evidence standard the project will actually be judged by.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_per_30",
+      "category": "person",
+      "subDimension": "success_definition",
+      "order": 60,
+      "question": "At what point would you call this finished, and who signs that off?",
+      "whyItMatters": "Undefined acceptance turns delivery into an open-ended engagement.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_pb_01",
+      "category": "project_business",
+      "subDimension": "business_domain",
+      "order": 61,
+      "question": "Describe the business in one paragraph: what is sold, to whom, and how value reaches the customer.",
+      "whyItMatters": "Domain shape determines entity model, transaction boundaries, and where the money is recorded.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_pb_02",
+      "category": "project_business",
+      "subDimension": "business_domain",
+      "order": 62,
+      "question": "Which part of the operation generates most of the margin, and which part is the bottleneck?",
+      "whyItMatters": "Automating the bottleneck is worth far more than automating the margin generator.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_pb_03",
+      "category": "project_business",
+      "subDimension": "current_pain_point",
+      "order": 63,
+      "question": "What is the single most expensive problem today, and what does it cost per month?",
+      "whyItMatters": "Quantified pain is the basis of every prioritisation trade-off in the build.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_pb_04",
+      "category": "project_business",
+      "subDimension": "current_pain_point",
+      "order": 64,
+      "question": "Where does work wait, and how long does it wait?",
+      "whyItMatters": "Waiting is where latency, queueing, and status-visibility requirements actually come from.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_pb_05",
+      "category": "project_business",
+      "subDimension": "solutions_considered",
+      "order": 65,
+      "question": "What alternatives have you evaluated, and why were they rejected?",
+      "whyItMatters": "Rejections carry the real selection criteria; re-proposing one loses credibility immediately.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_pb_06",
+      "category": "project_business",
+      "subDimension": "solutions_considered",
+      "order": 66,
+      "question": "If nothing changes, what will you be doing instead in six months?",
+      "whyItMatters": "The credible do-nothing baseline defines the true value of shipping.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_pb_07",
+      "category": "project_business",
+      "subDimension": "revenue_model",
+      "order": 67,
+      "question": "What is the revenue model for this product?",
+      "whyItMatters": "Freemium in particular forces a plan and entitlement boundary into the data model from day one.",
+      "answerType": "choice",
+      "choices": ["freemium", "subscription", "usage-based", "marketplace take rate", "licence", "services", "ads", "other"]
+    },
+    {
+      "id": "gq_pb_08",
+      "category": "project_business",
+      "subDimension": "revenue_model",
+      "order": 68,
+      "question": "Is there a free tier, and what specifically gates the upgrade — features, volume, seats, or support?",
+      "whyItMatters": "The gate determines where metering, quotas, and billing hooks must sit in the architecture.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_pb_09",
+      "category": "project_business",
+      "subDimension": "risk_appetite",
+      "order": 69,
+      "question": "How much of this build are you willing to get wrong in exchange for speed — a throwaway prototype, a pilot with real users, or production-grade from day one?",
+      "whyItMatters": "Mismatched fidelity is the most common source of both overrun and regret.",
+      "answerType": "choice",
+      "choices": ["throwaway prototype", "pilot with real users", "production-grade from day one", "prototype now, productionise later"]
+    },
+    {
+      "id": "gq_pb_10",
+      "category": "project_business",
+      "subDimension": "budget",
+      "order": 70,
+      "question": "What is the approved budget range for this project, and does it also cover running costs after delivery?",
+      "whyItMatters": "Run-cost coverage decides between managed services with a monthly bill and cheaper self-hosted options.",
+      "answerType": "choice",
+      "choices": ["under 25k", "25k-100k", "100k-500k", "over 500k", "not yet approved", "run cost excluded"]
+    },
+    {
+      "id": "gq_pb_11",
+      "category": "project_business",
+      "subDimension": "cloud_preference",
+      "order": 71,
+      "question": "Do you have an existing cloud account and commitment, or is the cloud choice open?",
+      "whyItMatters": "Existing committed spend usually dominates any neutral technical recommendation.",
+      "answerType": "choice",
+      "choices": ["AWS", "GCP", "Azure", "multi-cloud", "none — open to any", "on-premise only"]
+    },
+    {
+      "id": "gq_pb_12",
+      "category": "project_business",
+      "subDimension": "cloud_preference",
+      "order": 72,
+      "question": "Must any component stay on-premise or in a private environment, and why?",
+      "whyItMatters": "One on-prem requirement converts a managed-service design into a hybrid one with its own release pipeline.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_pb_13",
+      "category": "project_business",
+      "subDimension": "browser_application",
+      "order": 73,
+      "question": "Will users interact with this primarily through a browser application, and who are they — internal staff, customers, or both?",
+      "whyItMatters": "Internal versus customer browser surfaces differ completely on auth, branding, and accessibility requirements.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_pb_14",
+      "category": "project_business",
+      "subDimension": "browser_application",
+      "order": 74,
+      "question": "Does the browser application need to work offline, on shared machines, or behind a corporate proxy?",
+      "whyItMatters": "Each of these rules out a plain SPA and pushes work into sync, session, or network design.",
+      "answerType": "multi_choice",
+      "choices": ["offline use", "shared or kiosk machines", "corporate proxy / VPN", "very low bandwidth", "no special requirements"]
+    },
+    {
+      "id": "gq_pb_15",
+      "category": "project_business",
+      "subDimension": "mobile_application",
+      "order": 75,
+      "question": "Is a mobile application required, and is it for end customers or for your field and internal staff?",
+      "whyItMatters": "Customer apps carry store review and push-infrastructure obligations; internal apps usually do not.",
+      "answerType": "choice",
+      "choices": ["customer app", "internal / field app", "both", "not needed", "mobile web only"]
+    },
+    {
+      "id": "gq_pb_16",
+      "category": "project_business",
+      "subDimension": "mobile_application",
+      "order": 76,
+      "question": "Which mobile platforms must be supported, and do you already ship an app to either store?",
+      "whyItMatters": "Existing apps inherit their teams, pipelines, and native constraints; a new app does not.",
+      "answerType": "multi_choice",
+      "choices": ["iOS", "Android", "both", "neither yet", "no existing app"]
+    },
+    {
+      "id": "gq_pb_17",
+      "category": "project_business",
+      "subDimension": "connectors_only",
+      "order": 77,
+      "question": "Would a connectors-only solution that automates your existing tools meet this need, instead of a new application?",
+      "whyItMatters": "Connector-only scope can be a tenth of the cost, and the honest answer changes the whole proposal.",
+      "answerType": "choice",
+      "choices": ["yes, connectors only", "connectors plus a thin UI", "must be a new application", "either would work"]
+    },
+    {
+      "id": "gq_pb_18",
+      "category": "project_business",
+      "subDimension": "connectors_only",
+      "order": 78,
+      "question": "Which systems would the connectors have to reach, and do they expose APIs, webhooks, or only exports today?",
+      "whyItMatters": "Determines whether integration is configuration or custom code, and which failure modes need retries.",
+      "answerType": "free_text",
+      "choices": []
+    },
+    {
+      "id": "gq_pb_19",
+      "category": "project_business",
+      "subDimension": "b2b_model",
+      "order": 79,
+      "question": "Is this a B2B, B2C, internal-only, or B2B2C product, and whose users must be isolated from each other?",
+      "whyItMatters": "B2B mandates multi-tenancy, per-tenant permissions, and admin self-service from the first commit.",
+      "answerType": "choice",
+      "choices": ["B2B", "B2C", "internal only", "B2B2C", "mixed"]
+    },
+    {
+      "id": "gq_pb_20",
+      "category": "project_business",
+      "subDimension": "existing_authentication",
+      "order": 80,
+      "question": "How do users authenticate to your existing systems today — a directory (AD / Entra / Okta / Google Workspace), SSO, email and password, or nothing?",
+      "whyItMatters": "The existing identity mechanism decides whether we integrate, migrate, or start from scratch — and how quickly users can be onboarded.",
+      "answerType": "free_text",
+      "choices": []
+    }
+  ]
+}

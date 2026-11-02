@@ -17,7 +17,7 @@
  */
 
 const postgres = require('./postgres-backend');
-const { recallMemories } = require('./recall');
+const { scoredRecallMemories } = require('./recall');
 
 function storeBackend() {
   return require('@ai-fleet/shared-core/store');
@@ -59,15 +59,21 @@ async function load({ context, scope, limit, env = process.env } = {}) {
  * Firestore/file fallback is lexical-only.
  */
 async function recall({ query, queryVector, context, scope, limit, memories, env = process.env } = {}) {
+  const scored = await recallScored({ query, queryVector, context, scope, limit, memories, env });
+  return scored.map((entry) => entry.memory);
+}
+
+/** As `recall`, but keeps the 0..1 blended score on each record (see recall.js). */
+async function recallScored({ query, queryVector, context, scope, limit, memories, env = process.env } = {}) {
   try {
     const pool = Array.isArray(memories) ? memories : await load({ context, scope, env });
     const loadVector = isPostgresActive(env)
       ? (memory) => postgres.decodeVector(memory && memory.embedding)
       : () => null;
-    return recallMemories({ query, queryVector, memories: pool, scope, limit, loadVector });
+    return scoredRecallMemories({ query, queryVector, memories: pool, scope, limit, loadVector });
   } catch (_) {
     return [];
   }
 }
 
-module.exports = { isPostgresActive, persist, load, recall };
+module.exports = { isPostgresActive, persist, load, recall, recallScored };

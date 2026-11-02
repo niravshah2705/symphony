@@ -30,6 +30,11 @@ function cosine(a, b) {
 }
 
 /**
+ * Blended recall keeping the score. The score IS the product for anything that
+ * has to report *how well* a memory answers a query (question-bank coverage),
+ * whereas plain recall only wants the records. `recallMemories` is this function
+ * with the score stripped, so the blend math lives in exactly one place.
+ *
  * @param {object} args
  * @param {string} args.query           the incoming prompt
  * @param {number[]|null} args.queryVector  embedded query (null → lexical-only)
@@ -37,9 +42,9 @@ function cosine(a, b) {
  * @param {string} [args.scope]         restrict to one memory scope
  * @param {number} [args.limit]         top-K to return (default 5)
  * @param {(memory:object)=>number[]|null} [args.loadVector]
- * @returns {Array} the top-K memory records, highest score first
+ * @returns {Array<{memory: object, score: number}>} top-K pairs, highest score first
  */
-function recallMemories({ query, queryVector, memories, scope, limit = 5, loadVector }) {
+function scoredRecallMemories({ query, queryVector, memories, scope, limit = 5, loadVector }) {
   const pool = Array.isArray(memories) ? memories : [];
   if (!pool.length) return [];
 
@@ -62,8 +67,15 @@ function recallMemories({ query, queryVector, memories, scope, limit = 5, loadVe
     })
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, Math.max(1, Number.isFinite(limit) ? limit : 5))
-    .map((entry) => entry.memory);
+    .slice(0, Math.max(1, Number.isFinite(limit) ? limit : 5));
 }
 
-module.exports = { recallMemories, cosine, VECTOR_WEIGHT, LEXICAL_WEIGHT };
+/**
+ * @param {object} args see {@link scoredRecallMemories}
+ * @returns {Array} the top-K memory records, highest score first
+ */
+function recallMemories(args) {
+  return scoredRecallMemories(args).map((entry) => entry.memory);
+}
+
+module.exports = { recallMemories, scoredRecallMemories, cosine, VECTOR_WEIGHT, LEXICAL_WEIGHT };

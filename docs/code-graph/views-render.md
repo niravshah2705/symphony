@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 730 nodes
+Community of 738 nodes
 
-- **Size**: 730 nodes
-- **Cohesion**: 0.4983
+- **Size**: 738 nodes
+- **Cohesion**: 0.4989
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 730 nodes
 | capitalize | Function | ./public/js/app.js | 905-908 |
 | start | Function | ./public/js/app.js | 912-920 |
 
-*... and 680 more members.*
+*... and 688 more members.*
 
 ## Execution Flows
 
@@ -85,16 +85,16 @@ Community of 730 nodes
 
 ### Outgoing
 
-- `addEventListener` (232 edge(s))
-- `append` (216 edge(s))
-- `map` (161 edge(s))
+- `addEventListener` (234 edge(s))
+- `append` (224 edge(s))
+- `map` (165 edge(s))
 - `String` (115 edge(s))
 - `trim` (101 edge(s))
 - `push` (100 edge(s))
 - `equal` (88 edge(s))
-- `filter` (78 edge(s))
+- `filter` (81 edge(s))
+- `isArray` (73 edge(s))
 - `Boolean` (72 edge(s))
-- `isArray` (71 edge(s))
 - `catch` (66 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (59 edge(s))
@@ -104,7 +104,7 @@ Community of 730 nodes
 ### Incoming
 
 - `./public/js/views/settings.js` (131 edge(s))
-- `./public/js/views/agent.js` (109 edge(s))
+- `./public/js/views/agent.js` (117 edge(s))
 - `equal` (88 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))

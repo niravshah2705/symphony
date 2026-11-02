@@ -12,6 +12,7 @@ const { createPipelineRouter } = require('./routes/pipeline');
 const { createProxy } = require('./proxy');
 const { blockInternalProxy } = require('./settings-internal-guard');
 const { mountRemovedAgentRouteTombstones } = require('./removed-agent-routes');
+const { mountGlobalQuestionsRoutes } = require('./global-questions-routes');
 const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig, bearerToken } = require('./auth');
 const { callJson } = require('./service-client');
 const { createConfigResolver } = require('./config-resolver');
@@ -253,7 +254,13 @@ app.post('/api/agent/business/prepare', requirePermission('workspace'), requireO
 app.post('/api/agent/conversations/:id/attachments', requirePermission('workspace'), requireOrganizationContext(), requireEulaAccepted(), plannerProxy);
 app.post('/api/agent/conversations/:id/attachments/:attachmentId/complete', requirePermission('workspace'), requireOrganizationContext(), requireEulaAccepted(), plannerProxy);
 app.post('/api/agent/conversations/:id/attachments/ask', requirePermission('workspace'), requireOrganizationContext(), requireEulaAccepted(), plannerProxy);
+// The discovery-question bank and its memory coverage. Registered before the
+// /api/agent catch-all so the bank's own gates win; see global-questions-routes.js
+// for why coverage needs an explicit authentication check and both model-backed
+// routes need EULA acceptance.
+mountGlobalQuestionsRoutes(app);
 app.use('/api/agent', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), plannerProxy);
+
 app.use('/api/coder', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), createProxy(CONFIG.SERVICES.coderUrl));
 
 // Identity verification service (DigiLocker / PAN / age proof / APAAR / NAD).

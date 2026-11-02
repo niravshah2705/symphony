@@ -14,6 +14,8 @@ const {
   modelMessageText,
   invokeWithTimeout,
   normalizeSettingsProposal,
+  normalizeQuestionProposals,
+  parsePastedQuestions,
 } = require('./local-intelligence');
 
 test('normalizeEnrichmentRequest accepts the bounded call-recording contract', () => {
@@ -143,4 +145,63 @@ test('normalizeSettingsProposal tolerates a missing or non-object patch', () => 
   assert.deepEqual(normalizeSettingsProposal({}).patch, {});
   assert.deepEqual(normalizeSettingsProposal({ patch: 'nope', notes: 42 }).patch, {});
   assert.equal(normalizeSettingsProposal(null).notes, '');
+});
+
+test('parsePastedQuestions reads an imported list without a model', () => {
+  const scope = { category: 'project_business', subDimension: 'budget' };
+  const proposals = parsePastedQuestions(
+    [
+      '- What is the annual budget?',
+      '2. Do you already use AWS?',
+      'Who signs off the architecture?',
+      'Notes', // a heading is not a question
+      '* How fast must it ship?',
+      '',
+    ].join('\n'),
+    scope
+  );
+
+  assert.deepEqual(
+    proposals.map((proposal) => proposal.question),
+    ['What is the annual budget?', 'Do you already use AWS?', 'Who signs off the architecture?', 'How fast must it ship?']
+  );
+  assert.equal(proposals.every((proposal) => proposal.category === 'project_business' && proposal.subDimension === 'budget'), true);
+  assert.equal(proposals.every((proposal) => proposal.answerType === 'free_text'), true);
+});
+
+test('normalizeQuestionProposals keeps only rows the bank can actually store', () => {
+  const scope = { category: 'person', subDimension: 'risk_tolerance' };
+  const out = normalizeQuestionProposals(
+    {
+      questions: [
+        { question: 'What risk will you accept?', answerType: 'free_text' },
+        { question: '', answerType: 'free_text' }, // dropped: nothing asked
+        { question: 'Which cloud?', answerType: 'choice', choices: ['AWS'] }, // dropped: one option
+        { question: 'Which clouds?', answerType: 'choice', choices: ['AWS', 'GCP'] },
+        { question: 'Long enough to ignore', answerType: 'boolean', choices: ['yes', 'no'] },
+      ],
+      notes: 'drafted',
+    },
+    scope
+  );
+
+  assert.deepEqual(
+    out.proposals.map((proposal) => proposal.question),
+    ['What risk will you accept?', 'Which clouds?', 'Long enough to ignore']
+  );
+  assert.deepEqual(out.proposals[1].choices, ['AWS', 'GCP']);
+  // A non-choice answer type never carries choices, so global-questions.js accepts it.
+  assert.equal(out.proposals[0].choices.length, 0);
+  assert.equal(out.proposals[2].answerType, 'free_text');
+  assert.deepEqual(out.proposals[2].choices, []);
+  assert.equal(out.proposals.every((proposal) => proposal.category === 'person'), true);
+  assert.equal(out.notes, 'drafted');
+});
+
+test('normalizeQuestionProposals caps the batch a single assist call can propose', () => {
+  const out = normalizeQuestionProposals(
+    { questions: Array.from({ length: 120 }, (_, index) => ({ question: `Question ${index}?` })) },
+    { category: 'organisation', subDimension: 'org_size' }
+  );
+  assert.equal(out.proposals.length, 40);
 });

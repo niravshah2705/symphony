@@ -19,6 +19,7 @@ const projectsRoutes = require('./routes/projects');
 const issuesRoutes = require('./routes/issues');
 const businessesRoutes = require('./routes/businesses');
 const rolesRoutes = require('./routes/roles');
+const globalQuestionsRoutes = require('./routes/global-questions');
 const pubsubRoutes = require('./pubsub');
 const { createPlannerPipelineRouter } = require('./pipeline-stage');
 const { createStoreContextMiddleware } = require('./store-context');
@@ -50,6 +51,9 @@ app.use('/pubsub', pubsubRoutes);
 // refresh, analytics, runtime diagnostics, localization, or Linear access.
 const bindStoreContext = createStoreContextMiddleware();
 const authenticateGateway = internalServiceAuth();
+// Mounted before the general /api/agent router so these paths are not swallowed
+// by it; the agent router has no global-questions routes of its own.
+app.use('/api/agent/global-questions', authenticateGateway, bindStoreContext, globalQuestionsRoutes);
 app.use('/api/agent', authenticateGateway, bindStoreContext, agentRoutes);
 app.use('/api/settings/codex', authenticateGateway, bindStoreContext, codexRoutes);
 app.use('/api/settings/claude', authenticateGateway, bindStoreContext, claudeRoutes);

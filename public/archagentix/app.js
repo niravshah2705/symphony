@@ -1,9 +1,13 @@
+import { initQuestionBank } from './questions.js';
+
 let benchmarkData = [];
 let slmWorker = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   initApp();
   initWorker();
+  // A failed session must not take the benchmark tables down with it.
+  initQuestionBank().catch(() => {});
 });
 
 async function initApp() {
@@ -117,7 +121,9 @@ function setupEvaluator() {
 }
 
 function initWorker() {
-  slmWorker = new Worker('evaluator-worker.js');
+  // Resolved against this module, not the page URL, so the worker still loads when
+  // the panel is opened at /archagentix without its trailing slash.
+  slmWorker = new Worker(new URL('evaluator-worker.js', import.meta.url));
 
   const chatInput = document.getElementById('chat-input');
   const sendBtn = document.getElementById('send-btn');

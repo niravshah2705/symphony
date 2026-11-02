@@ -294,6 +294,12 @@ const DEFAULT_STORE = Object.freeze({
   approvals: [], // requirement-evaluation approval gates (see agent/approval-gate.js)
   stackLinks: [], // open stacked-PR links awaiting blocker merge (see agent/stack-reconcile.js)
   settingsHistory: [], // append-only model/tier selection + indicative cost records for tuning
+  // Per-org overrides of the global discovery question bank. Only the org's
+  // *edits* live here (keyed by the default bank's `id`); the 80 defaults are
+  // merged at read time in agent/global-questions.js, so shipping a new bank
+  // revision needs no migration. Deleting a default is a tombstone
+  // ({ id, active: false }) rather than removal, or the next revision revives it.
+  globalQuestions: [],
 
   // Billing / cost metering (see packages/shared/src/billing/*). All amounts are
   // integer paise. usageRecords are granular per-run events (pruned after a
@@ -414,6 +420,7 @@ function normalizeStore(parsed) {
     approvals: Array.isArray(source.approvals) ? source.approvals : [],
     stackLinks: Array.isArray(source.stackLinks) ? source.stackLinks : [],
     settingsHistory: Array.isArray(source.settingsHistory) ? source.settingsHistory : [],
+    globalQuestions: Array.isArray(source.globalQuestions) ? source.globalQuestions : [],
     usageRecords: Array.isArray(source.usageRecords) ? source.usageRecords : [],
     ledgerEntries: Array.isArray(source.ledgerEntries) ? source.ledgerEntries : [],
     billingAccounts: Array.isArray(source.billingAccounts) ? source.billingAccounts : [],
@@ -445,6 +452,9 @@ function seedStore() {
 const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig', 'eula', 'billing'];
 const STORE_COLLECTION_KEYS = [
   'jobs', 'memories', 'conversations', 'approvals', 'stackLinks', 'settingsHistory',
+  // Discovery question overrides: one doc per question, so an org that adds many
+  // custom questions never grows a single Firestore document.
+  'globalQuestions',
   // Billing: append-heavy records — each becomes one Firestore sub-collection doc
   // keyed by `id`, so no single document approaches the 1 MB limit and concurrent
   // appends never clobber one another (the ledger is the money source of truth).
@@ -948,6 +958,48 @@ function removeStackLink(id) {
   return removed;
 }
 
+/**
+ * This org's overrides of the global discovery-question bank. Only edits and
+ * custom rows live here — the platform defaults are merged at read time by
+ * agent/global-questions.js, so a new bank revision needs no migration. Legacy
+ * stores without the field read as [].
+ */
+function listGlobalQuestions() {
+  return readStore().globalQuestions || [];
+}
+
+/**
+ * Insert or merge one question override by id. The caller supplies the id (a
+ * default-bank id for an edit, `gq_custom_*` for a new row) and validated fields;
+ * `revision` counts edits and `updatedAt` is authoritative here.
+ */
+function upsertGlobalQuestion(question) {
+  const current = readStore();
+  const now = new Date().toISOString();
+  const existing = (current.globalQuestions || []).find((row) => row && row.id === question.id);
+  const record = existing
+    ? { ...existing, ...question, createdAt: existing.createdAt || now, updatedAt: now, revision: (existing.revision || 1) + 1 }
+    : { ...question, createdAt: question.createdAt || now, updatedAt: now, revision: question.revision || 1 };
+  const globalQuestions = existing
+    ? current.globalQuestions.map((row) => (row && row.id === question.id ? record : row))
+    : [...(current.globalQuestions || []), record];
+  writeStore({ ...current, globalQuestions });
+  return record;
+}
+
+/**
+ * Drop a question override by id. Used for org-authored custom rows only: a
+ * DEFAULT bank question is deactivated by writing an `active: false` tombstone,
+ * because removing the row would let the next bank revision resurrect it.
+ */
+function removeGlobalQuestion(id) {
+  const current = readStore();
+  const globalQuestions = (current.globalQuestions || []).filter((row) => row && row.id !== id);
+  const removed = globalQuestions.length !== (current.globalQuestions || []).length;
+  if (removed) writeStore({ ...current, globalQuestions });
+  return removed;
+}
+
 /* --------------------------- Billing ------------------------------------ */
 
 // All amounts are INTEGER paise. The ledger (ledgerEntries) is append-only and
@@ -1304,6 +1356,9 @@ module.exports = {
   addStackLink,
   updateStackLink,
   removeStackLink,
+  listGlobalQuestions,
+  upsertGlobalQuestion,
+  removeGlobalQuestion,
   getBillingState,
   setBillingState,
   addUsageRecord,
