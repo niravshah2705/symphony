@@ -11,11 +11,31 @@ data "kubectl_file_documents" "agent_sandbox_docs" {
   content = data.http.agent_sandbox_manifest.response_body
 }
 
+# The upstream manifest carries no scheduling hints, so the controller
+# Deployment is the only document rewritten — everything else is applied
+# verbatim to keep the CRDs byte-identical to upstream.
+locals {
+  agent_sandbox_docs = {
+    for key, doc in data.kubectl_file_documents.agent_sandbox_docs.manifests :
+    key => yamldecode(doc).kind == "Deployment" ? yamlencode(
+      merge(yamldecode(doc), {
+        spec = merge(yamldecode(doc).spec, {
+          template = merge(yamldecode(doc).spec.template, {
+            spec = merge(yamldecode(doc).spec.template.spec, {
+              nodeSelector = local.system_node_selector
+            })
+          })
+        })
+      })
+    ) : doc
+  }
+}
+
 resource "kubectl_manifest" "agent_sandbox" {
-  for_each  = data.kubectl_file_documents.agent_sandbox_docs.manifests
+  for_each  = local.agent_sandbox_docs
   yaml_body = each.value
 
-  depends_on = [google_container_node_pool.primary_nodes]
+  depends_on = [google_container_node_pool.system_nodes]
 }
 
 # ---------------------------------------------------------------------------
@@ -32,8 +52,24 @@ resource "helm_release" "envoy_gateway" {
   wait             = true
   timeout          = 600
 
+  values = [
+    yamlencode({
+      deployment = {
+        pod = {
+          nodeSelector = local.system_node_selector
+        }
+      }
+      certgen = {
+        job = {
+          nodeSelector = local.system_node_selector
+        }
+      }
+    })
+  ]
+
   depends_on = [
     kubernetes_namespace_v1.envoy_gateway_system,
+    google_container_node_pool.system_nodes,
     kubectl_manifest.agent_sandbox,
   ]
 }
@@ -49,6 +85,10 @@ spec:
   provider:
     type: Kubernetes
     kubernetes:
+      envoyDeployment:
+        pod:
+          nodeSelector:
+            "cloud.google.com/gke-nodepool": "${var.system_node_pool_name}"
       envoyService:
         type: LoadBalancer
         loadBalancerIP: "${google_compute_address.openshell_ip.address}"
@@ -99,11 +139,19 @@ resource "helm_release" "cert_manager" {
       extraArgs = [
         "--enable-gateway-api"
       ]
+      # global.nodeSelector, not the top-level nodeSelector: the latter is only
+      # read by the controller Deployment, leaving cert-manager-webhook,
+      # cert-manager-cainjector and the startupapicheck Job on any node — which
+      # would trip the power workflow's placement preflight on every stop.
+      global = {
+        nodeSelector = local.system_node_selector
+      }
     })
   ]
 
   depends_on = [
     kubernetes_namespace_v1.cert_manager,
+    google_container_node_pool.system_nodes,
     kubectl_manifest.gateway_class,
   ]
 }
@@ -319,12 +367,17 @@ resource "helm_release" "openshell" {
         }
         hostnames = [var.domain]
       }
+      # The gateway StatefulSet is a singleton: left unscheduled it lands on a
+      # tenant node, and draining that node only makes the autoscaler buy it a
+      # replacement.
+      nodeSelector = local.system_node_selector
     })
   ]
 
   depends_on = [
     kubernetes_namespace_v1.openshell,
     kubernetes_namespace_v1.openshell_credentials,
+    google_container_node_pool.system_nodes,
     kubectl_manifest.letsencrypt_prod,
     kubectl_manifest.openshell_ingress_gateway,
   ]
