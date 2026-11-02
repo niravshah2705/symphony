@@ -4,6 +4,7 @@ const express = require('express');
 const { CONFIG } = require('@ai-fleet/shared-core/config');
 const log = require('@ai-fleet/shared-core/logger');
 const { asyncHandler } = require('@ai-fleet/shared-core/util');
+const store = require('@ai-fleet/shared-core/store');
 const ledger = require('@ai-fleet/shared-core/billing/ledger');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
 const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
@@ -11,8 +12,16 @@ const { processBillingSweep } = require('@ai-fleet/shared-core/billing/sweep');
 const billingApi = require('./billing-api');
 const { renderDashboardHtml } = require('./ui');
 
+function createStoreHydrationMiddleware(initStore) {
+  return function bindStoreContext(_req, _res, next) {
+    Promise.resolve().then(() => initStore()).then(() => next(), next);
+  };
+}
+
 function createApp(options = {}) {
   const app = express();
+  const hydrateStore = createStoreHydrationMiddleware(options.initStore || store.initStore);
+
   // Cashfree signs the raw request body, so keep the bytes express consumed for
   // the webhook's HMAC check.
   app.use(express.json({
@@ -23,6 +32,15 @@ function createApp(options = {}) {
   // Probes
   app.get('/healthz', (req, res) => res.json({ status: 'ok', service: 'billing' }));
   app.get('/readyz', (req, res) => res.json({ status: 'ok', service: 'billing' }));
+
+  // Billing state (accounts, ledger, usage records) is intentionally global, so
+  // every route below reads the store's legacy entry rather than a per-workspace
+  // one. The Firestore backend refuses those reads until initStore() has hydrated
+  // the entry, and the reads are synchronous, so hydration has to happen here
+  // rather than at the call sites. initStore() is idempotent and deduplicates
+  // concurrent callers; it stays out of the probes above so readiness never
+  // depends on the database.
+  app.use(hydrateStore);
 
   // Standalone Basic UI Dashboard
   app.get('/', (req, res) => {
