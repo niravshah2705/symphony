@@ -67,3 +67,8 @@ gh run watch                                                  # then re-run with
 - Node pool runs on the default compute service account; switch to a
   dedicated SA with least-privilege (`logging.logWriter`, `metrics.writer`,
   `monitoring.viewer`, `monitoring.agent`) plus Workload Identity bindings.
+- The CI identity `gh-deployer` holds `roles/container.admin` only, so it
+  cannot read the adopted Compute objects (subnet, router, NAT, address,
+  firewall). `openshell-node-resize.yml` therefore plans with
+  `-refresh=false` and reads the live autoscaling bounds with `gcloud`; grant
+  `roles/compute.viewer` to let it plan against a full refresh.
