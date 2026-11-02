@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 334 nodes
+Community of 349 nodes
 
-- **Size**: 334 nodes
-- **Cohesion**: 0.2532
+- **Size**: 349 nodes
+- **Cohesion**: 0.2728
 - **Dominant Language**: javascript
 
 ## Members
@@ -28,11 +28,11 @@ Community of 334 nodes
 | activeRepositoryBranch | Function | ./packages/shared/src/agent/coder.js | 95-99 |
 | activeRepositoryArtifactReceipt | Function | ./packages/shared/src/agent/coder.js | 101-104 |
 | resolvePlannedRepository | Function | ./packages/shared/src/agent/coder.js | 111-142 |
-| executeCodingRuntime | Function | ./packages/shared/src/agent/coder.js | 149-278 |
-| runCoderLocal | Function | ./packages/shared/src/agent/coder.js | 285-339 |
-| runCoder | Function | ./packages/shared/src/agent/coder.js | 347-354 |
-| runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 362-469 |
-| runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 472-490 |
+| executeCodingRuntime | Function | ./packages/shared/src/agent/coder.js | 149-260 |
+| runCoderLocal | Function | ./packages/shared/src/agent/coder.js | 267-321 |
+| runCoder | Function | ./packages/shared/src/agent/coder.js | 329-336 |
+| runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 344-451 |
+| runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 454-472 |
 | installSkills | Function | ./packages/shared/src/agent/framework.js | 52-86 |
 | validateSkillName | Function | ./packages/shared/src/agent/framework.js | 88-100 |
 | trackedSkillPaths | Function | ./packages/shared/src/agent/framework.js | 102-113 |
@@ -46,10 +46,10 @@ Community of 334 nodes
 | cleanup | Function | ./packages/shared/src/agent/framework.js | 206-206 |
 | buildAgent | Function | ./packages/shared/src/agent/framework.js | 211-213 |
 | configuredResourceNames | Function | ./packages/shared/src/agent/framework.js | 223-232 |
-| runWorkflow | Function | ./packages/shared/src/agent/framework.js | 240-367 |
-| contentToText | Function | ./packages/shared/src/agent/framework.js | 370-374 |
-| messageText | Function | ./packages/shared/src/agent/framework.js | 383-389 |
-| lastText | Function | ./packages/shared/src/agent/framework.js | 391-394 |
+| runWorkflow | Function | ./packages/shared/src/agent/framework.js | 240-349 |
+| contentToText | Function | ./packages/shared/src/agent/framework.js | 352-356 |
+| messageText | Function | ./packages/shared/src/agent/framework.js | 365-371 |
+| lastText | Function | ./packages/shared/src/agent/framework.js | 373-376 |
 | withSkillsEnv | Function | ./packages/shared/src/agent/framework.test.js | 26-38 |
 | test:installSkills refuses a symbolic-link destination without writing outside the root@L40 | Test | ./packages/shared/src/agent/framework.test.js | 40-56 |
 | test:installSkills refuses tracked project-owned .agent-skills files@L58 | Test | ./packages/shared/src/agent/framework.test.js | 58-73 |
@@ -65,17 +65,16 @@ Community of 334 nodes
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
 
-*... and 284 more members.*
+*... and 299 more members.*
 
 ## Execution Flows
 
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
-- **generatePlan** (criticality: 0.67, depth: 6)
-- **runCoder** (criticality: 0.67, depth: 7)
-- **runPlannedCoder** (criticality: 0.66, depth: 7)
+- **generatePlan** (criticality: 0.66, depth: 4)
 - **startScheduler** (criticality: 0.66, depth: 6)
-- **createMemoryMiddleware** (criticality: 0.65, depth: 5)
+- **runCoder** (criticality: 0.65, depth: 5)
+- **runPlannedCoder** (criticality: 0.65, depth: 5)
 - **executeClaude** (criticality: 0.61, depth: 2)
 - **executeCodex** (criticality: 0.60, depth: 2)
 
@@ -83,36 +82,36 @@ Community of 334 nodes
 
 ### Outgoing
 
-- `equal` (220 edge(s))
-- `join` (154 edge(s))
-- `includes` (64 edge(s))
-- `String` (62 edge(s))
+- `equal` (195 edge(s))
+- `join` (132 edge(s))
+- `String` (73 edge(s))
+- `includes` (66 edge(s))
 - `strictEqual` (50 edge(s))
-- `deepEqual` (49 edge(s))
-- `trim` (40 edge(s))
+- `isArray` (41 edge(s))
 - `endsWith` (39 edge(s))
-- `isArray` (38 edge(s))
+- `trim` (38 edge(s))
 - `execFileSync` (37 edge(s))
+- `deepEqual` (37 edge(s))
 - `deepStrictEqual` (37 edge(s))
 - `step` (34 edge(s))
 - `slice` (34 edge(s))
-- `map` (33 edge(s))
-- `tmpdir` (29 edge(s))
+- `Boolean` (28 edge(s))
+- `map` (28 edge(s))
 
 ### Incoming
 
-- `equal` (219 edge(s))
+- `equal` (194 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
-- `join` (84 edge(s))
+- `join` (65 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
 - `strictEqual` (50 edge(s))
-- `deepEqual` (47 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (44 edge(s))
 - `deepStrictEqual` (37 edge(s))
+- `deepEqual` (35 edge(s))
 - `./packages/shared/src/agent/framework.js` (26 edge(s))
 - `execFileSync` (26 edge(s))
 - `throws` (24 edge(s))
-- `tmpdir` (24 edge(s))
 - `./packages/shared/src/agent/settings-policy.js` (24 edge(s))
-- `mkdtempSync` (23 edge(s))
-- `after` (22 edge(s))
 - `./packages/shared/src/agent/coder.js` (22 edge(s))
+- `tmpdir` (20 edge(s))
+- `ok` (20 edge(s))

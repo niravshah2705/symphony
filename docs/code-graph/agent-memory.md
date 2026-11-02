@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 178 nodes
+Community of 175 nodes
 
-- **Size**: 178 nodes
-- **Cohesion**: 0.3372
+- **Size**: 175 nodes
+- **Cohesion**: 0.3286
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,25 +18,22 @@ Community of 178 nodes
 | applyWorkflowPattern | Function | ./packages/shared/src/agent/harnesses/contract.js | 81-92 |
 | publicExecution | Function | ./packages/shared/src/agent/harnesses/contract.js | 218-231 |
 | applyRubricMiddleware | Function | ./packages/shared/src/agent/harnesses/contract.js | 254-291 |
-| reviewMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 293-305 |
-| mcpServerFromToolName | Function | ./packages/shared/src/agent/harnesses/contract.js | 323-328 |
-| toolCallsFromMessage | Function | ./packages/shared/src/agent/harnesses/contract.js | 337-361 |
-| skillFromReadCall | Function | ./packages/shared/src/agent/harnesses/contract.js | 364-370 |
-| extractUsedResources | Function | ./packages/shared/src/agent/harnesses/contract.js | 376-395 |
-| usedResourceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 398-414 |
-| skillRouterTraceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 417-437 |
-| traceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 439-466 |
 | langSmithProvider | Function | ./packages/shared/src/agent/harnesses/contract.js | 468-475 |
 | annotateTrace | Function | ./packages/shared/src/agent/harnesses/contract.js | 477-484 |
 | meterRun | Function | ./packages/shared/src/agent/harnesses/contract.js | 544-551 |
-| createRuntimeDispatcher | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 24-150 |
-| execute | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 59-106 |
-| runOnce | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 71-71 |
+| createRuntimeDispatcher | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 25-174 |
+| execute | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 77-130 |
+| runOnce | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 89-89 |
 | fakeRegistry | Function | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 10-22 |
 | withStubbedMiddleware | Function | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 24-32 |
 | test:memory ON — dispatch injects into the prompt and captures the finished run@L34 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 34-48 |
 | test:memory OFF — dispatch is byte-identical (no injection, no capture)@L50 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 50-63 |
 | test:a throwing inject can never fail the run — the original prompt is used@L65 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 65-77 |
+| fakeRegistry | Function | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 16-34 |
+| failingRegistry | Function | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 36-47 |
+| test:dispatcher routes candidate skills and stamps skillRouterMetrics and skillPaths on success@L49 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 49-77 |
+| test:dispatcher preserves pre-routed skillRouterMetrics and does not overwrite@L79 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 79-101 |
+| test:dispatcher attaches skillRouterMetrics to wrapped error on harness execution failure@L103 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 103-133 |
 | schemaError | Function | ./packages/shared/src/agent/harnesses/registry.js | 39-43 |
 | requiredString | Function | ./packages/shared/src/agent/harnesses/registry.js | 45-57 |
 | enumList | Function | ./packages/shared/src/agent/harnesses/registry.js | 59-75 |
@@ -64,8 +61,11 @@ Community of 178 nodes
 | test:dispatcher passes explicit construction dependencies to createExecutor@L95 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 95-128 |
 | test:throwing executor factories run inside tracing and normalized error handling@L130 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 130-161 |
 | test@L157 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 157-157 |
+| test:stage and broker constraints replace the blanket coding fallback@L163 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 163-222 |
+| test:built-in bootstrap seals one registry shared by compatibility views@L224 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 224-260 |
+| clean | Function | ./packages/shared/src/agent/memory-middleware.js | 59-61 |
 
-*... and 128 more members.*
+*... and 125 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 178 nodes
 
 ### Outgoing
 
-- `equal` (139 edge(s))
-- `String` (35 edge(s))
-- `match` (29 edge(s))
-- `isArray` (28 edge(s))
-- `deepEqual` (28 edge(s))
+- `equal` (144 edge(s))
+- `String` (32 edge(s))
+- `deepEqual` (29 edge(s))
+- `match` (28 edge(s))
+- `join` (26 edge(s))
+- `isArray` (24 edge(s))
 - `map` (22 edge(s))
-- `includes` (19 edge(s))
-- `join` (16 edge(s))
+- `includes` (18 edge(s))
+- `ok` (17 edge(s))
 - `slice` (15 edge(s))
-- `ok` (14 edge(s))
 - `trim` (14 edge(s))
 - `throws` (14 edge(s))
-- `filter` (13 edge(s))
 - `require` (12 edge(s))
-- `push` (12 edge(s))
+- `freeze` (12 edge(s))
+- `filter` (12 edge(s))
 
 ### Incoming
 
-- `equal` (139 edge(s))
-- `deepEqual` (28 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (26 edge(s))
+- `equal` (144 edge(s))
+- `deepEqual` (29 edge(s))
 - `match` (25 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
-- `ok` (14 edge(s))
+- `ok` (17 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (14 edge(s))
 - `throws` (14 edge(s))
 - `./packages/shared/src/agent/memory.js` (14 edge(s))
+- `join` (13 edge(s))
 - `./packages/shared/src/agent/memory-middleware.test.js` (12 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.test.js` (11 edge(s))
-- `./packages/shared/src/agent/memory-store/index.js` (9 edge(s))

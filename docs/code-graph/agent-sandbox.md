@@ -4,101 +4,106 @@
 
 ## Overview
 
-Community of 60 nodes
+Community of 68 nodes
 
-- **Size**: 60 nodes
-- **Cohesion**: 0.3628
+- **Size**: 68 nodes
+- **Cohesion**: 0.3549
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| encodeVarint | Function | ./packages/shared-core/src/agent/openshell.js | 31-43 |
-| encodeTag | Function | ./packages/shared-core/src/agent/openshell.js | 45-47 |
-| pbVarint | Function | ./packages/shared-core/src/agent/openshell.js | 49-55 |
-| pbBytes | Function | ./packages/shared-core/src/agent/openshell.js | 57-62 |
-| pbString | Function | ./packages/shared-core/src/agent/openshell.js | 64-67 |
-| pbMessage | Function | ./packages/shared-core/src/agent/openshell.js | 69-75 |
-| pbMapStringString | Function | ./packages/shared-core/src/agent/openshell.js | 77-86 |
-| decodeVarint | Function | ./packages/shared-core/src/agent/openshell.js | 88-104 |
-| skipWireType | Function | ./packages/shared-core/src/agent/openshell.js | 106-133 |
-| decodeFields | Function | ./packages/shared-core/src/agent/openshell.js | 135-175 |
-| getString | Function | ./packages/shared-core/src/agent/openshell.js | 177-182 |
-| getStrings | Function | ./packages/shared-core/src/agent/openshell.js | 184-189 |
-| getVarint | Function | ./packages/shared-core/src/agent/openshell.js | 191-196 |
-| getSubmessages | Function | ./packages/shared-core/src/agent/openshell.js | 198-203 |
-| getSubmessage | Function | ./packages/shared-core/src/agent/openshell.js | 205-208 |
-| getMapStringString | Function | ./packages/shared-core/src/agent/openshell.js | 210-218 |
-| frameGrpcMessage | Function | ./packages/shared-core/src/agent/openshell.js | 222-228 |
-| unframeGrpcMessages | Function | ./packages/shared-core/src/agent/openshell.js | 230-242 |
-| resolveOpenShellUrl | Function | ./packages/shared-core/src/agent/openshell.js | 244-257 |
-| resolveOpenShellWorkspace | Function | ./packages/shared-core/src/agent/openshell.js | 263-298 |
-| grpcCall | Function | ./packages/shared-core/src/agent/openshell.js | 304-421 |
-| finish | Function | ./packages/shared-core/src/agent/openshell.js | 315-325 |
-| encodeWorkspaceScope | Function | ./packages/shared-core/src/agent/openshell.js | 425-427 |
-| encodeObjectMeta | Function | ./packages/shared-core/src/agent/openshell.js | 429-437 |
-| decodeObjectMeta | Function | ./packages/shared-core/src/agent/openshell.js | 439-456 |
-| decodeSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 458-493 |
-| decodeProvider | Function | ./packages/shared-core/src/agent/openshell.js | 495-507 |
-| sanitizeSandboxName | Function | ./packages/shared-core/src/agent/openshell.js | 509-517 |
-| getGatewayStatus | Function | ./packages/shared-core/src/agent/openshell.js | 521-565 |
-| buildProviderProfile | Function | ./packages/shared-core/src/agent/openshell.js | 569-595 |
-| ensureWorkspace | Function | ./packages/shared-core/src/agent/openshell.js | 597-610 |
-| getProfileById | Function | ./packages/shared-core/src/agent/openshell.js | 612-626 |
-| upsertProfile | Function | ./packages/shared-core/src/agent/openshell.js | 628-650 |
-| normalizeRegistryHost | Function | ./packages/shared-core/src/agent/openshell.js | 652-656 |
-| buildDockerConfigJson | Function | ./packages/shared-core/src/agent/openshell.js | 658-671 |
-| buildOrgImagePullSecretManifest | Function | ./packages/shared-core/src/agent/openshell.js | 673-704 |
-| ensureProviderProfiles | Function | ./packages/shared-core/src/agent/openshell.js | 706-773 |
-| getProviderByName | Function | ./packages/shared-core/src/agent/openshell.js | 775-789 |
-| upsertProviderSecret | Function | ./packages/shared-core/src/agent/openshell.js | 791-867 |
-| fingerprintSecret | Function | ./packages/shared-core/src/agent/openshell.js | 869-872 |
-| syncNvidiaSecrets | Function | ./packages/shared-core/src/agent/openshell.js | 878-1076 |
-| getProjectSandboxStatus | Function | ./packages/shared-core/src/agent/openshell.js | 1080-1141 |
-| getLocalSandboxWorkdir | Function | ./packages/shared-core/src/agent/openshell.js | 1143-1151 |
-| runLocalSandboxShell | Function | ./packages/shared-core/src/agent/openshell.js | 1153-1186 |
-| execInSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 1188-1259 |
-| buildOpencodeCliScript | Function | ./packages/shared-core/src/agent/openshell.js | 1261-1320 |
-| waitForSandboxReady | Function | ./packages/shared-core/src/agent/openshell.js | 1322-1371 |
-| ensureProjectSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 1377-1664 |
-| getSampleNetworkPolicy | Function | ./packages/shared-core/src/agent/openshell.js | 1669-1768 |
-| runSandboxSecurityChecks | Function | ./packages/shared-core/src/agent/openshell.js | 1773-1885 |
+| encodeVarint | Function | ./packages/shared-core/src/agent/openshell.js | 39-51 |
+| encodeTag | Function | ./packages/shared-core/src/agent/openshell.js | 53-55 |
+| pbVarint | Function | ./packages/shared-core/src/agent/openshell.js | 57-63 |
+| pbBytes | Function | ./packages/shared-core/src/agent/openshell.js | 65-70 |
+| pbString | Function | ./packages/shared-core/src/agent/openshell.js | 72-75 |
+| pbMessage | Function | ./packages/shared-core/src/agent/openshell.js | 77-83 |
+| pbMapStringString | Function | ./packages/shared-core/src/agent/openshell.js | 85-94 |
+| decodeVarint | Function | ./packages/shared-core/src/agent/openshell.js | 96-112 |
+| skipWireType | Function | ./packages/shared-core/src/agent/openshell.js | 114-141 |
+| decodeFields | Function | ./packages/shared-core/src/agent/openshell.js | 143-183 |
+| getString | Function | ./packages/shared-core/src/agent/openshell.js | 185-190 |
+| getStrings | Function | ./packages/shared-core/src/agent/openshell.js | 192-197 |
+| getVarint | Function | ./packages/shared-core/src/agent/openshell.js | 199-204 |
+| getSubmessages | Function | ./packages/shared-core/src/agent/openshell.js | 206-211 |
+| getSubmessage | Function | ./packages/shared-core/src/agent/openshell.js | 213-216 |
+| getMapStringString | Function | ./packages/shared-core/src/agent/openshell.js | 218-226 |
+| frameGrpcMessage | Function | ./packages/shared-core/src/agent/openshell.js | 230-236 |
+| unframeGrpcMessages | Function | ./packages/shared-core/src/agent/openshell.js | 238-250 |
+| resolveOpenShellUrl | Function | ./packages/shared-core/src/agent/openshell.js | 252-265 |
+| resolveOpenShellWorkspace | Function | ./packages/shared-core/src/agent/openshell.js | 271-306 |
+| grpcCall | Function | ./packages/shared-core/src/agent/openshell.js | 312-429 |
+| finish | Function | ./packages/shared-core/src/agent/openshell.js | 323-333 |
+| encodeWorkspaceScope | Function | ./packages/shared-core/src/agent/openshell.js | 433-435 |
+| encodeObjectMeta | Function | ./packages/shared-core/src/agent/openshell.js | 437-445 |
+| decodeObjectMeta | Function | ./packages/shared-core/src/agent/openshell.js | 447-464 |
+| decodeSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 466-503 |
+| decodeProvider | Function | ./packages/shared-core/src/agent/openshell.js | 505-517 |
+| sanitizeSandboxName | Function | ./packages/shared-core/src/agent/openshell.js | 519-527 |
+| normalizeSandboxName | Function | ./packages/shared-core/src/agent/openshell.js | 529-543 |
+| getGatewayStatus | Function | ./packages/shared-core/src/agent/openshell.js | 547-591 |
+| buildProviderProfile | Function | ./packages/shared-core/src/agent/openshell.js | 595-621 |
+| ensureWorkspace | Function | ./packages/shared-core/src/agent/openshell.js | 623-636 |
+| getProfileById | Function | ./packages/shared-core/src/agent/openshell.js | 638-652 |
+| upsertProfile | Function | ./packages/shared-core/src/agent/openshell.js | 654-676 |
+| normalizeRegistryHost | Function | ./packages/shared-core/src/agent/openshell.js | 678-682 |
+| buildDockerConfigJson | Function | ./packages/shared-core/src/agent/openshell.js | 684-697 |
+| buildOrgImagePullSecretManifest | Function | ./packages/shared-core/src/agent/openshell.js | 699-730 |
+| ensureProviderProfiles | Function | ./packages/shared-core/src/agent/openshell.js | 732-799 |
+| getProviderByName | Function | ./packages/shared-core/src/agent/openshell.js | 801-815 |
+| upsertProviderSecret | Function | ./packages/shared-core/src/agent/openshell.js | 817-893 |
+| fingerprintSecret | Function | ./packages/shared-core/src/agent/openshell.js | 895-898 |
+| syncNvidiaSecrets | Function | ./packages/shared-core/src/agent/openshell.js | 904-1102 |
+| getProjectSandboxStatus | Function | ./packages/shared-core/src/agent/openshell.js | 1106-1186 |
+| getLocalSandboxWorkdir | Function | ./packages/shared-core/src/agent/openshell.js | 1188-1196 |
+| runLocalSandboxShell | Function | ./packages/shared-core/src/agent/openshell.js | 1198-1232 |
+| execInSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 1234-1305 |
+| buildOpencodeCliScript | Function | ./packages/shared-core/src/agent/openshell.js | 1307-1366 |
+| waitForSandboxReady | Function | ./packages/shared-core/src/agent/openshell.js | 1368-1420 |
+| ensureProjectSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 1427-1750 |
+| stopProjectSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 1755-1793 |
 
-*... and 10 more members.*
+*... and 18 more members.*
 
 ## Execution Flows
 
+- **startProjectSandbox** (criticality: 0.69, depth: 9)
+- **changeSandboxImage** (criticality: 0.69, depth: 9)
 - **chatWithProjectSandbox** (criticality: 0.68, depth: 8)
+- **stopProjectSandbox** (criticality: 0.67, depth: 8)
+- **deleteProjectSandbox** (criticality: 0.67, depth: 8)
 - **getSampleNetworkPolicy** (criticality: 0.67, depth: 8)
-- **runSandboxSecurityChecks** (criticality: 0.67, depth: 8)
-- **getGithubToken** (criticality: 0.62, depth: 8)
-- **getApiKey** (criticality: 0.58, depth: 7)
-- **getPlanningConfig** (criticality: 0.58, depth: 7)
+- **execInteractiveSandboxCommand** (criticality: 0.67, depth: 8)
+- **autocompleteSandboxInput** (criticality: 0.67, depth: 8)
+- **listSandboxes** (criticality: 0.67, depth: 8)
+- **runSandboxSecurityChecks** (criticality: 0.66, depth: 8)
+- *... and 3 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `String` (87 edge(s))
-- `concat` (32 edge(s))
+- `String` (103 edge(s))
+- `concat` (36 edge(s))
+- `trim` (28 edge(s))
 - `push` (28 edge(s))
-- `trim` (18 edge(s))
-- `join` (17 edge(s))
+- `join` (19 edge(s))
+- `get` (18 edge(s))
+- `stringify` (17 edge(s))
+- `replace` (15 edge(s))
 - `alloc` (15 edge(s))
-- `stringify` (13 edge(s))
-- `replace` (13 edge(s))
-- `get` (12 edge(s))
-- `map` (11 edge(s))
+- `map` (12 edge(s))
+- `from` (11 edge(s))
 - `includes` (11 edge(s))
-- `from` (10 edge(s))
+- `toString` (10 edge(s))
 - `Number` (10 edge(s))
-- `toString` (9 edge(s))
-- `isBuffer` (9 edge(s))
+- `isBuffer` (10 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/agent/openshell.js` (69 edge(s))
+- `./packages/shared-core/src/agent/openshell.js` (85 edge(s))
 - `./packages/shared-core/src/store.js` (13 edge(s))
 - `equal` (3 edge(s))
 - `getGithubToken` (2 edge(s))

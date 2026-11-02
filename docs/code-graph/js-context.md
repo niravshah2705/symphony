@@ -7,7 +7,7 @@
 Community of 79 nodes
 
 - **Size**: 79 nodes
-- **Cohesion**: 0.2256
+- **Cohesion**: 0.2253
 - **Dominant Language**: javascript
 
 ## Members
@@ -44,26 +44,26 @@ Community of 79 nodes
 | test:shouldNotifyAuthenticationRequired: anonymous provider-less identity 401 does not notify@L64 | Test | ./public/js/auth-retry.test.mjs | 64-71 |
 | test:shouldNotifyAuthenticationRequired: signed-in identity 401 notifies@L73 | Test | ./public/js/auth-retry.test.mjs | 73-80 |
 | test:shouldNotifyAuthenticationRequired: unrelated provider 401 never notifies@L82 | Test | ./public/js/auth-retry.test.mjs | 82-89 |
-| setState | Function | ./public/js/auth.js | 43-46 |
-| withinSessionTimeout | Function | ./public/js/auth.js | 48-60 |
-| loadConfiguration | Function | ./public/js/auth.js | 62-93 |
-| loadFirebaseSdk | Function | ./public/js/auth.js | 99-110 |
-| firstAuthUser | Function | ./public/js/auth.js | 113-121 |
-| mergeDisplayProfile | Function | ./public/js/auth.js | 123-132 |
-| emitDeploymentStatus | Function | ./public/js/auth.js | 141-147 |
-| watchProvisioning | Function | ./public/js/auth.js | 153-169 |
-| resolveDeployment | Function | ./public/js/auth.js | 171-180 |
-| confirmIdentity | Function | ./public/js/auth.js | 185-195 |
-| initializeAuthentication | Function | ./public/js/auth.js | 197-259 |
-| expireAuthentication | Function | ./public/js/auth.js | 295-308 |
-| completeSignIn | Function | ./public/js/auth.js | 315-340 |
-| signIn | Function | ./public/js/auth.js | 342-348 |
-| signInWithMicrosoft | Function | ./public/js/auth.js | 350-357 |
-| signOut | Function | ./public/js/auth.js | 359-366 |
-| loadGisScript | Function | ./public/js/auth.js | 370-383 |
-| toHex | Function | ./public/js/auth.js | 385-387 |
-| randomNonce | Function | ./public/js/auth.js | 389-393 |
-| sha256Hex | Function | ./public/js/auth.js | 395-397 |
+| setState | Function | ./public/js/auth.js | 40-43 |
+| withinSessionTimeout | Function | ./public/js/auth.js | 45-57 |
+| loadConfiguration | Function | ./public/js/auth.js | 59-88 |
+| loadFirebaseSdk | Function | ./public/js/auth.js | 94-105 |
+| firstAuthUser | Function | ./public/js/auth.js | 108-116 |
+| mergeDisplayProfile | Function | ./public/js/auth.js | 118-127 |
+| emitDeploymentStatus | Function | ./public/js/auth.js | 136-142 |
+| watchProvisioning | Function | ./public/js/auth.js | 148-164 |
+| resolveDeployment | Function | ./public/js/auth.js | 166-175 |
+| confirmIdentity | Function | ./public/js/auth.js | 180-190 |
+| initializeAuthentication | Function | ./public/js/auth.js | 192-253 |
+| expireAuthentication | Function | ./public/js/auth.js | 289-295 |
+| completeSignIn | Function | ./public/js/auth.js | 302-327 |
+| signIn | Function | ./public/js/auth.js | 329-335 |
+| signInWithMicrosoft | Function | ./public/js/auth.js | 337-344 |
+| signOut | Function | ./public/js/auth.js | 346-353 |
+| loadGisScript | Function | ./public/js/auth.js | 357-370 |
+| toHex | Function | ./public/js/auth.js | 372-374 |
+| randomNonce | Function | ./public/js/auth.js | 376-380 |
+| sha256Hex | Function | ./public/js/auth.js | 382-384 |
 
 *... and 29 more members.*
 
@@ -81,7 +81,6 @@ Community of 79 nodes
 
 - `equal` (24 edge(s))
 - `isArray` (12 edge(s))
-- `Boolean` (9 edge(s))
 - `expect` (8 edge(s))
 - `set` (7 edge(s))
 - `toEqual` (6 edge(s))
@@ -94,10 +93,11 @@ Community of 79 nodes
 - `./e2e/workspace-stream-failure.spec.js::json` (4 edge(s))
 - `toBe` (4 edge(s))
 - `reload` (4 edge(s))
+- `find` (4 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (182 edge(s))
+- `./public/js/api.js` (189 edge(s))
 - `equal` (24 edge(s))
 - `./public/js/auth.js` (21 edge(s))
 - `./public/js/workspace-context.mjs` (14 edge(s))

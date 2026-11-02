@@ -14,6 +14,12 @@ const DEFAULT_OPENSHELL_URL = 'https://openshell.archagentix.com';
 const DEFAULT_WORKSPACE = 'tenant-a';
 const ALLOWED_WORKSPACES = ['tenant-a', 'tenant-b'];
 const DEFAULT_IMAGE = 'ubuntu:24.04';
+const SUPPORTED_SANDBOX_IMAGES = [
+  'ubuntu:24.04',
+  'openeuler/opencode:latest',
+  'python:3.12-slim',
+  'node:22-bookworm',
+];
 const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
 const FREE_OPENROUTER_MODELS = [
   'openrouter/free',
@@ -25,6 +31,8 @@ const FREE_OPENROUTER_MODELS = [
 // In-memory registry of active project sandboxes & synced NVIDIA OpenShell secrets
 // when the remote Kubernetes compute driver restricts namespace creation or while a pod warms up.
 const activeSandboxes = new Map();
+// Stateful per-sandbox interactive shell sessions (cwd, user, hostname, custom env).
+const interactiveSessions = new Map();
 
 // ── Minimal Protobuf Wire Encoder / Decoder ─────────────────────────────────
 
@@ -476,13 +484,15 @@ function decodeSandbox(fields) {
     11: 'SUSPENDING',
     12: 'SUSPENDED',
   };
+  const templateImage = templateFields ? getString(templateFields, 1, '') : '';
+  const annotationImage = meta.annotations?.['sandbox-image'] || '';
   return {
     id: meta.id,
     name: meta.name,
     labels: meta.labels,
     annotations: meta.annotations,
     resourceVersion: meta.resourceVersion,
-    image: templateFields ? getString(templateFields, 1, DEFAULT_IMAGE) : DEFAULT_IMAGE,
+    image: templateImage || annotationImage || DEFAULT_IMAGE,
     providers: specFields ? getStrings(specFields, 8) : [],
     environment: specFields ? getMapStringString(specFields, 5) : {},
     phaseCode: phaseNum,
@@ -514,6 +524,22 @@ function sanitizeSandboxName(projectId, projectName) {
     .slice(0, 15)
     .replace(/-+$/g, '');
   return `sb-${base || 'default'}`;
+}
+
+function normalizeSandboxName(explicitSandboxName, projectId, projectName) {
+  if (explicitSandboxName && String(explicitSandboxName).trim()) {
+    const cleaned = String(explicitSandboxName)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 36)
+      .replace(/-+$/g, '');
+    if (cleaned) {
+      return cleaned.startsWith('sb-') ? cleaned : `sb-${cleaned}`;
+    }
+  }
+  return sanitizeSandboxName(projectId, projectName);
 }
 
 // ── Gateway Health & Info ───────────────────────────────────────────────────
@@ -1084,12 +1110,25 @@ async function getProjectSandboxStatus({
   projectId,
   projectName,
   sandboxName: explicitSandboxName,
+  ignoreStoppedCache = false,
   transport,
 } = {}) {
   const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
   const opts = { url, workspace: resolvedWorkspace, organizationId, projectId, transport };
   const resolvedUrl = resolveOpenShellUrl(url);
-  const sandboxName = explicitSandboxName || sanitizeSandboxName(projectId, projectName);
+  const sandboxName = normalizeSandboxName(explicitSandboxName, projectId, projectName);
+
+  const cached = activeSandboxes.get(sandboxName);
+  if (cached && cached.phase === 'STOPPED' && !ignoreStoppedCache) {
+    const { environment: _omitEnv, ...publicCached } = cached;
+    return {
+      ...publicCached,
+      exists: true,
+      name: sandboxName,
+      url: resolvedUrl,
+      workspace: resolvedWorkspace,
+    };
+  }
 
   const getReq = Buffer.concat([
     pbString(1, sandboxName),
@@ -1097,10 +1136,10 @@ async function getProjectSandboxStatus({
   ]);
   const res = await grpcCall('GetSandbox', getReq, opts);
   if (res.status !== 0) {
-    const cached = activeSandboxes.get(sandboxName);
     if (cached) {
+      const { environment: _omitEnv, ...publicCached } = cached;
       return {
-        ...cached,
+        ...publicCached,
         exists: true,
         url: resolvedUrl,
         workspace: resolvedWorkspace,
@@ -1112,6 +1151,7 @@ async function getProjectSandboxStatus({
       organizationId: organizationId || null,
       projectId: projectId || null,
       projectName: projectName || null,
+      image: DEFAULT_IMAGE,
       url: resolvedUrl,
       workspace: resolvedWorkspace,
       phase: 'NOT_LOADED',
@@ -1122,13 +1162,18 @@ async function getProjectSandboxStatus({
   const fields = decodeFields(res.firstFrame);
   const sandbox = decodeSandbox(getSubmessage(fields, 1));
   const serviceUrls = getMapStringString(fields, 2);
-  const cached = activeSandboxes.get(sandboxName);
+  const { environment: _omitEnv, ...publicCached } = cached || {};
 
   return {
-    ...(cached || {}),
+    ...publicCached,
     exists: true,
     ...sandbox,
     name: sandbox?.name || sandboxName,
+    image:
+      sandbox?.annotations?.['sandbox-image'] ||
+      cached?.image ||
+      sandbox?.image ||
+      DEFAULT_IMAGE,
     organizationId:
       organizationId || sandbox?.labels?.['organization-id'] || cached?.organizationId || null,
     projectId: projectId || sandbox?.labels?.['project-id'] || cached?.projectId || null,
@@ -1171,6 +1216,7 @@ function runLocalSandboxShell(sandboxName, argv, workdir, environment, timeoutMs
           ...(cached.environment || {}),
           ...(environment || {}),
           OPENSHELL_SANDBOX_NAME: sandboxName,
+          OPENSHELL_SANDBOX_IMAGE: cached.image || DEFAULT_IMAGE,
           OPENSHELL_WORKSPACE: cached.workspace || DEFAULT_WORKSPACE,
         },
       },
@@ -1337,6 +1383,7 @@ async function waitForSandboxReady({
       projectId,
       projectName,
       sandboxName,
+      ignoreStoppedCache: true,
       transport,
     });
   }
@@ -1348,6 +1395,7 @@ async function waitForSandboxReady({
     projectId,
     projectName,
     sandboxName,
+    ignoreStoppedCache: true,
     transport,
   });
   while (
@@ -1364,6 +1412,7 @@ async function waitForSandboxReady({
       projectId,
       projectName,
       sandboxName,
+      ignoreStoppedCache: true,
       transport,
     });
   }
@@ -1373,6 +1422,7 @@ async function waitForSandboxReady({
 /**
  * Ensure a project-scoped NVIDIA OpenShell sandbox is loaded with the provided
  * GitHub token, OpenRouter API key, and per-organization image registry secrets.
+ * Supports multiple sandboxes per user/project via `sandboxName` and live image switching via `image` / `recreate`.
  */
 async function ensureProjectSandbox({
   url,
@@ -1380,24 +1430,28 @@ async function ensureProjectSandbox({
   organizationId,
   projectId,
   projectName,
+  sandboxName: explicitSandboxName,
+  label,
   repositoryUrl,
   githubToken,
   openrouterApiKey,
   imageRegistryUrl,
   imageRegistryUsername,
   imageRegistryPassword,
-  image = DEFAULT_IMAGE,
+  image,
+  recreate = false,
   transport,
 } = {}) {
   const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
   const opts = { url, workspace: resolvedWorkspace, organizationId, projectId, transport };
   const resolvedUrl = resolveOpenShellUrl(url);
-  const sandboxName = sanitizeSandboxName(projectId, projectName);
+  const sandboxName = normalizeSandboxName(explicitSandboxName, projectId, projectName);
 
   // 0. Check gateway connectivity & version
   const gwStatus = await getGatewayStatus(opts);
 
   const priorCached = activeSandboxes.get(sandboxName) || {};
+  const targetImage = String(image || priorCached.image || DEFAULT_IMAGE).trim() || DEFAULT_IMAGE;
   const effectiveGithubToken = githubToken || priorCached.environment?.GITHUB_TOKEN || '';
   const effectiveOpenrouterKey = openrouterApiKey || priorCached.environment?.OPENROUTER_API_KEY || '';
   const effectiveRegistryUrl =
@@ -1429,14 +1483,34 @@ async function ensureProjectSandbox({
     projectId,
     projectName,
     sandboxName,
+    ignoreStoppedCache: true,
     transport,
   });
+
+  // If image explicitly changed or recreate requested while sandbox exists, delete and re-create pod with the new image
+  const imageChanged = Boolean(image && current.exists && current.image && current.image !== targetImage);
+  if (current.exists && (recreate || imageChanged)) {
+    const delReq = Buffer.concat([
+      pbString(1, sandboxName),
+      pbMessage(2, encodeWorkspaceScope(resolvedWorkspace)),
+    ]);
+    await grpcCall('DeleteSandbox', delReq, opts);
+    activeSandboxes.delete(sandboxName);
+    interactiveSessions.delete(`${resolvedWorkspace}:${sandboxName}`);
+    current = {
+      ...current,
+      exists: false,
+      phase: 'NOT_LOADED',
+    };
+  }
 
   const envMap = {
     ...(priorCached.environment || {}),
     AIFLEET_ORGANIZATION_ID: String(organizationId || 'default'),
     AIFLEET_PROJECT_ID: String(projectId || 'default'),
     AIFLEET_PROJECT_NAME: String(projectName || projectId || 'default'),
+    AIFLEET_SANDBOX_NAME: sandboxName,
+    AIFLEET_SANDBOX_IMAGE: targetImage,
     OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
     OPENCODE_MODEL: DEFAULT_OPENROUTER_MODEL,
     ORG_IMAGE_REGISTRY_URL: normalizeRegistryHost(effectiveRegistryUrl),
@@ -1459,7 +1533,7 @@ async function ensureProjectSandbox({
 
   let created = false;
   if (!current.exists) {
-    const templateMsg = Buffer.concat([pbString(1, image || DEFAULT_IMAGE)]);
+    const templateMsg = Buffer.concat([pbString(1, targetImage)]);
     const policyMsg = Buffer.concat([pbVarint(1, 1)]); // SandboxPolicy.version = 1
     const specMsg = Buffer.concat([
       pbString(1, 'info'),
@@ -1484,6 +1558,8 @@ async function ensureProjectSandbox({
       }),
       pbMapStringString(4, {
         'project-name': String(projectName || projectId || 'default'),
+        'sandbox-image': targetImage,
+        ...(label ? { 'sandbox-label': String(label) } : {}),
         ...(repositoryUrl ? { 'repository-url': String(repositoryUrl) } : {}),
       }),
       pbMessage(7, encodeWorkspaceScope(resolvedWorkspace)),
@@ -1499,6 +1575,7 @@ async function ensureProjectSandbox({
         exists: true,
         ...sb,
         name: sb?.name || sandboxName,
+        image: targetImage,
         organizationId: organizationId || null,
         projectId: projectId || 'default',
         projectName: projectName || projectId || 'default',
@@ -1513,8 +1590,10 @@ async function ensureProjectSandbox({
         projectId,
         projectName,
         sandboxName,
+        ignoreStoppedCache: true,
         transport,
       });
+      current.image = targetImage;
     } else if (
       (createRes.status === 9 || createRes.status === 7) &&
       (String(createRes.message || '').includes('operator namespace allowlist') ||
@@ -1529,7 +1608,7 @@ async function ensureProjectSandbox({
         organizationId: organizationId || null,
         projectId: projectId || 'default',
         projectName: projectName || projectId || 'default',
-        image: image || DEFAULT_IMAGE,
+        image: targetImage,
         phase: 'READY',
         phaseCode: 2,
         url: resolvedUrl,
@@ -1554,6 +1633,7 @@ async function ensureProjectSandbox({
       projectId,
       projectName,
       sandboxName,
+      ignoreStoppedCache: true,
       transport,
     });
   }
@@ -1576,6 +1656,9 @@ async function ensureProjectSandbox({
     exists: true,
     created,
     name: sandboxName,
+    label: label || current?.annotations?.['sandbox-label'] || priorCached.label || sandboxName,
+    image: targetImage,
+    phase: current.phase === 'STOPPED' ? 'READY' : current.phase || 'READY',
     organizationId: organizationId || current.organizationId || null,
     projectId: projectId || 'default',
     projectName: projectName || projectId || 'default',
@@ -1587,6 +1670,7 @@ async function ensureProjectSandbox({
     gatewayAuth: gwStatus.auth,
     freeModels: FREE_OPENROUTER_MODELS,
     defaultModel: DEFAULT_OPENROUTER_MODEL,
+    supportedImages: SUPPORTED_SANDBOX_IMAGES,
     providers: secretSync.providers,
     secrets: secretSync.secrets,
     environment: envMap,
@@ -1605,6 +1689,8 @@ async function ensureProjectSandbox({
       `export AIFLEET_ORGANIZATION_ID=${JSON.stringify(String(organizationId || 'default'))}`,
       `export AIFLEET_PROJECT_ID=${JSON.stringify(String(projectId || 'default'))}`,
       `export AIFLEET_PROJECT_NAME=${JSON.stringify(String(projectName || projectId || 'default'))}`,
+      `export AIFLEET_SANDBOX_NAME=${JSON.stringify(sandboxName)}`,
+      `export AIFLEET_SANDBOX_IMAGE=${JSON.stringify(targetImage)}`,
       `export OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"`,
       `export OPENCODE_MODEL=${JSON.stringify(DEFAULT_OPENROUTER_MODEL)}`,
       `export ORG_IMAGE_REGISTRY_URL=${JSON.stringify(normalizeRegistryHost(effectiveRegistryUrl))}`,
@@ -1661,6 +1747,418 @@ async function ensureProjectSandbox({
   // Return sanitized sandbox descriptor (never leak raw secret values in status responses)
   const { environment: _omitEnv, ...publicSandbox } = finalSandbox;
   return publicSandbox;
+}
+
+/**
+ * Stop a running OpenShell sandbox pod (or mark it STOPPED in cache/gateway).
+ */
+async function stopProjectSandbox({
+  url,
+  workspace = DEFAULT_WORKSPACE,
+  organizationId,
+  projectId,
+  projectName,
+  sandboxName: explicitSandboxName,
+  transport,
+} = {}) {
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
+  const resolvedUrl = resolveOpenShellUrl(url);
+  const sandboxName = normalizeSandboxName(explicitSandboxName, projectId, projectName);
+  const opts = { url: resolvedUrl, workspace: resolvedWorkspace, organizationId, projectId, transport };
+
+  const stopReq = Buffer.concat([
+    pbString(1, sandboxName),
+    pbMessage(2, encodeWorkspaceScope(resolvedWorkspace)),
+  ]);
+  await grpcCall('StopSandbox', stopReq, opts);
+
+  const cached = activeSandboxes.get(sandboxName) || {};
+  const stoppedSandbox = {
+    ...cached,
+    exists: true,
+    name: sandboxName,
+    organizationId: organizationId || cached.organizationId || null,
+    projectId: projectId || cached.projectId || 'default',
+    projectName: projectName || cached.projectName || projectId || 'default',
+    image: cached.image || DEFAULT_IMAGE,
+    phase: 'STOPPED',
+    phaseCode: 3,
+    url: resolvedUrl,
+    workspace: resolvedWorkspace,
+    stoppedAt: new Date().toISOString(),
+  };
+  activeSandboxes.set(sandboxName, stoppedSandbox);
+  const { environment: _omitEnv, ...publicSandbox } = stoppedSandbox;
+  return publicSandbox;
+}
+
+/**
+ * Start a stopped OpenShell sandbox or provision it if not yet created.
+ */
+async function startProjectSandbox(options = {}) {
+  const sandboxName = normalizeSandboxName(
+    options.sandboxName,
+    options.projectId,
+    options.projectName
+  );
+  return ensureProjectSandbox({
+    ...options,
+    sandboxName,
+  });
+}
+
+/**
+ * Delete a named OpenShell sandbox and remove its session state.
+ */
+async function deleteProjectSandbox({
+  url,
+  workspace = DEFAULT_WORKSPACE,
+  organizationId,
+  projectId,
+  projectName,
+  sandboxName: explicitSandboxName,
+  transport,
+} = {}) {
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
+  const resolvedUrl = resolveOpenShellUrl(url);
+  const sandboxName = normalizeSandboxName(explicitSandboxName, projectId, projectName);
+  const opts = { url: resolvedUrl, workspace: resolvedWorkspace, organizationId, projectId, transport };
+
+  const delReq = Buffer.concat([
+    pbString(1, sandboxName),
+    pbMessage(2, encodeWorkspaceScope(resolvedWorkspace)),
+  ]);
+  await grpcCall('DeleteSandbox', delReq, opts);
+
+  activeSandboxes.delete(sandboxName);
+  interactiveSessions.delete(`${resolvedWorkspace}:${sandboxName}`);
+
+  return {
+    deleted: true,
+    name: sandboxName,
+    workspace: resolvedWorkspace,
+    url: resolvedUrl,
+  };
+}
+
+/**
+ * Change the container image of a sandbox from either UI or backend API.
+ * Recreates the sandbox pod with the new image template (`spec.template.Image`).
+ */
+async function changeSandboxImage({
+  image,
+  sandboxName,
+  projectId,
+  projectName,
+  ...rest
+} = {}) {
+  const targetImage = String(image || '').trim();
+  if (!targetImage) {
+    throw new Error('image is required to change sandbox container image');
+  }
+  return ensureProjectSandbox({
+    ...rest,
+    projectId,
+    projectName,
+    sandboxName,
+    image: targetImage,
+    recreate: true,
+  });
+}
+
+/**
+ * List all sandboxes available to the user/organization/project across the OpenShell gateway,
+ * persisted store registry, and active runtime cache.
+ */
+async function listSandboxes({
+  url,
+  workspace = DEFAULT_WORKSPACE,
+  organizationId,
+  projectId,
+  projectName,
+  persistedSandboxes = [],
+  transport,
+} = {}) {
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
+  const resolvedUrl = resolveOpenShellUrl(url);
+  const opts = { url: resolvedUrl, workspace: resolvedWorkspace, organizationId, projectId, transport };
+
+  const byName = new Map();
+
+  // 1. Seed from persisted store list
+  if (Array.isArray(persistedSandboxes)) {
+    for (const item of persistedSandboxes) {
+      if (!item || !item.name) continue;
+      if (organizationId && item.organizationId && item.organizationId !== organizationId) continue;
+      const name = normalizeSandboxName(item.name, item.projectId || projectId, item.projectName || projectName);
+      byName.set(name, {
+        exists: Boolean(item.exists ?? true),
+        name,
+        label: item.label || name,
+        organizationId: item.organizationId || organizationId || null,
+        projectId: item.projectId || projectId || 'default',
+        projectName: item.projectName || projectName || projectId || 'default',
+        image: item.image || DEFAULT_IMAGE,
+        phase: item.phase || 'READY',
+        url: resolvedUrl,
+        workspace: item.workspace || resolvedWorkspace,
+        createdAt: item.createdAt || item.loadedAt || null,
+      });
+    }
+  }
+
+  // 2. Query live gateway ListSandboxes RPC
+  try {
+    const listReq = Buffer.concat([pbMessage(1, encodeWorkspaceScope(resolvedWorkspace))]);
+    const listRes = await grpcCall('ListSandboxes', listReq, opts);
+    if (listRes.status === 0 && listRes.firstFrame.length > 0) {
+      const fields = decodeFields(listRes.firstFrame);
+      const sbMessages = fields.get(1) || [];
+      for (const entry of sbMessages) {
+        if (!Buffer.isBuffer(entry.value)) continue;
+        const sb = decodeSandbox(decodeFields(entry.value));
+        if (!sb || !sb.name) continue;
+        const existing = byName.get(sb.name) || {};
+        const cached = activeSandboxes.get(sb.name) || {};
+        byName.set(sb.name, {
+          ...existing,
+          ...sb,
+          exists: true,
+          name: sb.name,
+          label: sb.annotations?.['sandbox-label'] || cached.label || existing.label || sb.name,
+          image:
+            sb.annotations?.['sandbox-image'] ||
+            cached.image ||
+            existing.image ||
+            sb.image ||
+            DEFAULT_IMAGE,
+          phase: cached.phase === 'STOPPED' ? 'STOPPED' : sb.phase || existing.phase || 'READY',
+          organizationId:
+            sb.labels?.['organization-id'] ||
+            cached.organizationId ||
+            existing.organizationId ||
+            organizationId ||
+            null,
+          projectId:
+            sb.labels?.['project-id'] || cached.projectId || existing.projectId || projectId || 'default',
+          projectName:
+            sb.annotations?.['project-name'] ||
+            cached.projectName ||
+            existing.projectName ||
+            projectName ||
+            'default',
+          url: resolvedUrl,
+          workspace: resolvedWorkspace,
+        });
+      }
+    }
+  } catch {
+    // Non-fatal if ListSandboxes is unsupported on mock transport
+  }
+
+  // 3. Merge in-memory activeSandboxes
+  for (const [name, cached] of activeSandboxes.entries()) {
+    if (organizationId && cached.organizationId && cached.organizationId !== organizationId) continue;
+    const { environment: _omitEnv, ...publicCached } = cached;
+    const existing = byName.get(name) || {};
+    byName.set(name, {
+      ...existing,
+      ...publicCached,
+      name,
+      label: publicCached.label || existing.label || name,
+      image: publicCached.image || existing.image || DEFAULT_IMAGE,
+      url: resolvedUrl,
+      workspace: publicCached.workspace || resolvedWorkspace,
+    });
+  }
+
+  // 4. Ensure at least the default project sandbox entry is represented
+  const defaultName = sanitizeSandboxName(projectId, projectName);
+  if (!byName.has(defaultName)) {
+    const status = await getProjectSandboxStatus({
+      url: resolvedUrl,
+      workspace: resolvedWorkspace,
+      organizationId,
+      projectId,
+      projectName,
+      sandboxName: defaultName,
+      transport,
+    });
+    byName.set(defaultName, {
+      ...status,
+      name: defaultName,
+      label: status.label || `${projectName || projectId || 'default'} (default)`,
+      image: status.image || DEFAULT_IMAGE,
+    });
+  }
+
+  return Array.from(byName.values());
+}
+
+/**
+ * Execute an interactive shell command inside the named OpenShell sandbox pod,
+ * preserving working directory (`cwd`), user, hostname, and exported session variables
+ * across turns so the frontend xterm.js terminal behaves like a real interactive shell.
+ */
+async function execInteractiveSandboxCommand({
+  url,
+  workspace = DEFAULT_WORKSPACE,
+  organizationId,
+  projectId,
+  projectName,
+  sandboxName: explicitSandboxName,
+  command,
+  cwd,
+  stdin,
+  timeoutMs = 30_000,
+  transport,
+} = {}) {
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
+  const resolvedUrl = resolveOpenShellUrl(url);
+  const sandboxName = normalizeSandboxName(explicitSandboxName, projectId, projectName);
+  const sessionKey = `${resolvedWorkspace}:${sandboxName}`;
+
+  const session = interactiveSessions.get(sessionKey) || {
+    cwd: '/workspace',
+    user: 'sandbox',
+    hostname: sandboxName,
+  };
+  const effectiveCwd = String(cwd || session.cwd || '/workspace').trim() || '/workspace';
+  const rawCmd = String(command ?? '').trim();
+
+  if (!rawCmd) {
+    return {
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+      cwd: effectiveCwd,
+      user: session.user,
+      hostname: session.hostname,
+      sandboxName,
+      workspace: resolvedWorkspace,
+    };
+  }
+
+  const cached = activeSandboxes.get(sandboxName) || {};
+  const execEnv = {
+    ...(cached.environment || {}),
+    AIFLEET_ORGANIZATION_ID: String(organizationId || cached.organizationId || 'default'),
+    AIFLEET_PROJECT_ID: String(projectId || cached.projectId || 'default'),
+    AIFLEET_PROJECT_NAME: String(projectName || cached.projectName || projectId || 'default'),
+    AIFLEET_SANDBOX_NAME: sandboxName,
+    AIFLEET_SANDBOX_IMAGE: String(cached.image || DEFAULT_IMAGE),
+    TERM: 'xterm-256color',
+    COLORTERM: 'truecolor',
+    PATH: '/sandbox/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+  };
+
+  const marker = `__AIFLEET_STATE_${crypto.randomBytes(4).toString('hex')}__`;
+  const wrappedScript = [
+    '[ -f /tmp/.aifleet-env ] && . /tmp/.aifleet-env',
+    '[ -f /tmp/.aifleet-session-env ] && . /tmp/.aifleet-session-env',
+    'export PATH="/sandbox/.local/bin:/usr/local/bin:$PATH"',
+    `cd ${JSON.stringify(effectiveCwd)} 2>/dev/null || cd /workspace 2>/dev/null || true`,
+    rawCmd,
+    '__ec=$?',
+    'export -p > /tmp/.aifleet-session-env 2>/dev/null || true',
+    `printf "\\n${marker}:%s:%s:%s:%s\\n" "$__ec" "$(pwd)" "$(whoami 2>/dev/null || id -un 2>/dev/null || echo sandbox)" "$(hostname 2>/dev/null || uname -n 2>/dev/null || echo ${sandboxName})"`,
+    'exit $__ec',
+  ].join('\n');
+
+  const res = await execInSandbox({
+    url: resolvedUrl,
+    workspace: resolvedWorkspace,
+    organizationId,
+    projectId,
+    sandboxName,
+    command: ['sh', '-c', wrappedScript],
+    workdir: effectiveCwd,
+    environment: execEnv,
+    stdin,
+    timeoutMs,
+    transport,
+  });
+
+  let stdout = String(res.stdout || '');
+  let exitCode = res.exitCode;
+  let nextCwd = effectiveCwd;
+  let nextUser = session.user || 'sandbox';
+  let nextHost = session.hostname || sandboxName;
+
+  const markerRegex = new RegExp(`\\r?\\n?${marker}:(\\d+):([^:\\r\\n]*):([^:\\r\\n]*):([^\\r\\n]*)\\r?\\n?$`);
+  const match = stdout.match(markerRegex);
+  if (match) {
+    exitCode = Number.parseInt(match[1], 10);
+    if (Number.isNaN(exitCode)) exitCode = res.exitCode;
+    if (match[2]) nextCwd = match[2].trim();
+    if (match[3]) nextUser = match[3].trim();
+    if (match[4]) nextHost = match[4].trim();
+    stdout = stdout.slice(0, match.index);
+  }
+
+  const updatedSession = {
+    cwd: nextCwd,
+    user: nextUser,
+    hostname: nextHost,
+    updatedAt: new Date().toISOString(),
+  };
+  interactiveSessions.set(sessionKey, updatedSession);
+
+  return {
+    stdout,
+    stderr: String(res.stderr || ''),
+    exitCode,
+    cwd: nextCwd,
+    user: nextUser,
+    hostname: nextHost,
+    sandboxName,
+    image: cached.image || DEFAULT_IMAGE,
+    workspace: resolvedWorkspace,
+  };
+}
+
+/**
+ * Tab auto-completion helper for the interactive terminal inside an OpenShell sandbox.
+ */
+async function autocompleteSandboxInput({
+  url,
+  workspace = DEFAULT_WORKSPACE,
+  organizationId,
+  projectId,
+  projectName,
+  sandboxName: explicitSandboxName,
+  prefix = '',
+  cwd = '/workspace',
+  transport,
+} = {}) {
+  const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
+  const resolvedUrl = resolveOpenShellUrl(url);
+  const sandboxName = normalizeSandboxName(explicitSandboxName, projectId, projectName);
+  const cleanPrefix = String(prefix || '').replace(/[^a-zA-Z0-9._/~-]/g, '');
+  const script = [
+    `cd ${JSON.stringify(cwd || '/workspace')} 2>/dev/null || true`,
+    `ls -1dp ${cleanPrefix}* 2>/dev/null | head -n 25`,
+  ].join('; ');
+  try {
+    const res = await execInSandbox({
+      url: resolvedUrl,
+      workspace: resolvedWorkspace,
+      organizationId,
+      projectId,
+      sandboxName,
+      command: ['sh', '-c', script],
+      workdir: cwd || '/workspace',
+      timeoutMs: 5_000,
+      transport,
+    });
+    const matches = String(res.stdout || '')
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return { matches, sandboxName, cwd };
+  } catch {
+    return { matches: [], sandboxName, cwd };
+  }
 }
 
 /**
@@ -1781,7 +2279,7 @@ async function runSandboxSecurityChecks({
 } = {}) {
   const resolvedWorkspace = resolveOpenShellWorkspace({ workspace, organizationId, projectId });
   const resolvedUrl = resolveOpenShellUrl(url);
-  const sandboxName = explicitSandboxName || sanitizeSandboxName(projectId, projectName);
+  const sandboxName = normalizeSandboxName(explicitSandboxName, projectId, projectName);
   const gwStatus = await getGatewayStatus({ url: resolvedUrl, workspace: resolvedWorkspace, transport });
   const status = await getProjectSandboxStatus({
     url: resolvedUrl,
@@ -1901,6 +2399,8 @@ async function chatWithProjectSandbox({
   organizationId,
   projectId,
   projectName,
+  sandboxName,
+  image,
   repositoryUrl,
   message,
   history = [],
@@ -1924,6 +2424,8 @@ async function chatWithProjectSandbox({
     organizationId,
     projectId,
     projectName,
+    sandboxName,
+    image,
     repositoryUrl,
     githubToken,
     openrouterApiKey,
@@ -1943,6 +2445,8 @@ async function chatWithProjectSandbox({
     AIFLEET_ORGANIZATION_ID: String(organizationId || 'default'),
     AIFLEET_PROJECT_ID: String(projectId || 'default'),
     AIFLEET_PROJECT_NAME: String(projectName || projectId || 'default'),
+    AIFLEET_SANDBOX_NAME: sandbox.name,
+    AIFLEET_SANDBOX_IMAGE: String(sandbox.image || DEFAULT_IMAGE),
     OPENCODE_MODEL: selectedModel,
     PATH: '/sandbox/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
   };
@@ -2020,7 +2524,7 @@ async function chatWithProjectSandbox({
     );
     const orBase = (CONFIG?.OPENROUTER?.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
     const systemPrompt = [
-      `You are OpenCode running inside the NVIDIA OpenShell Sandbox "${sandbox.name}" (namespace "${resolvedWorkspace}" on ${sandbox.url}) for project "${sandbox.projectName}".`,
+      `You are OpenCode running inside the NVIDIA OpenShell Sandbox "${sandbox.name}" (image "${sandbox.image || DEFAULT_IMAGE}", namespace "${resolvedWorkspace}" on ${sandbox.url}) for project "${sandbox.projectName}".`,
       `Live sandbox telemetry from inside the Kubernetes container:\n${sandboxSnapshot}`,
       `Active NVIDIA OpenShell secret providers: ${(sandbox.providers || []).join(', ') || 'none'}.`,
       'Answer concisely and helpfully. You can reference the live sandbox state and assist with code, git, container images, or shell tasks.',
@@ -2092,12 +2596,12 @@ async function chatWithProjectSandbox({
   const hostInfo = snapshotLines.HOSTNAME ? `${snapshotLines.HOSTNAME} (${snapshotLines.KERNEL || 'Linux'})` : sandbox.name;
 
   const reply = [
-    `**NVIDIA OpenShell Sandbox \`${sandbox.name}\`** (${sandbox.phase || 'READY'} in namespace \`${resolvedWorkspace}\` on \`${sandbox.url}\`)`,
+    `**NVIDIA OpenShell Sandbox \`${sandbox.name}\`** (image \`${sandbox.image || DEFAULT_IMAGE}\`, ${sandbox.phase || 'READY'} in namespace \`${resolvedWorkspace}\` on \`${sandbox.url}\`)`,
     `- **Container Host**: \`${hostInfo}\``,
     `- **OpenCode Runtime**: \`opencode\` CLI active with free OpenRouter models (\`${FREE_OPENROUTER_MODELS.join('`, `')}\`)`,
     `- **Organization Secrets**: GitHub: ${ghStatus} | OpenRouter: ${orStatus} | Image Registry: ${regStatus}`,
     `- **Message Received**: "${prompt}"`,
-    `Tip: Run shell or OpenCode commands directly in the terminal (e.g., \`opencode status\`, \`opencode models\`, \`uname -a\`, \`ls -la /workspace\`, or \`$ <command>\`).`,
+    `Tip: Run shell or OpenCode commands directly in the interactive terminal (e.g., \`opencode status\`, \`opencode models\`, \`uname -a\`, \`ls -la /workspace\`).`,
   ].join('\n');
 
   return {
@@ -2114,11 +2618,13 @@ module.exports = {
   DEFAULT_WORKSPACE,
   ALLOWED_WORKSPACES,
   DEFAULT_IMAGE,
+  SUPPORTED_SANDBOX_IMAGES,
   DEFAULT_OPENROUTER_MODEL,
   FREE_OPENROUTER_MODELS,
   resolveOpenShellUrl,
   resolveOpenShellWorkspace,
   sanitizeSandboxName,
+  normalizeSandboxName,
   encodeObjectMeta,
   decodeObjectMeta,
   buildDockerConfigJson,
@@ -2131,6 +2637,13 @@ module.exports = {
   syncNvidiaSecrets,
   getProjectSandboxStatus,
   execInSandbox,
+  execInteractiveSandboxCommand,
+  autocompleteSandboxInput,
   ensureProjectSandbox,
+  stopProjectSandbox,
+  startProjectSandbox,
+  deleteProjectSandbox,
+  changeSandboxImage,
+  listSandboxes,
   chatWithProjectSandbox,
 };

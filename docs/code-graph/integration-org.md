@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 55 nodes
+Community of 57 nodes
 
-- **Size**: 55 nodes
-- **Cohesion**: 0.4621
+- **Size**: 57 nodes
+- **Cohesion**: 0.4669
 - **Dominant Language**: python
 
 ## Members
@@ -15,9 +15,11 @@ Community of 55 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | test_full_lifecycle | Test | ./services/org/tests/e2e/test_lifecycle.py | 22-137 |
+| test_super_admin_org_lifecycle | Test | ./services/org/tests/e2e/test_lifecycle.py | 140-156 |
 | _me | Function | ./services/org/tests/e2e/test_personal_projects.py | 14-17 |
 | test_personal_project_crud | Test | ./services/org/tests/e2e/test_personal_projects.py | 47-70 |
 | test_personal_projects_are_isolated_per_user | Test | ./services/org/tests/e2e/test_personal_projects.py | 74-85 |
+| test_orgless_user_creates_organization_and_becomes_admin | Test | ./services/org/tests/e2e/test_personal_projects.py | 95-114 |
 | test_existing_member_can_create_another_organization | Test | ./services/org/tests/e2e/test_personal_projects.py | 118-123 |
 | auth | Function | ./services/org/tests/helpers.py | 7-8 |
 | register | Function | ./services/org/tests/helpers.py | 11-28 |
@@ -62,10 +64,8 @@ Community of 55 nodes
 | test_duplicate_member_is_conflict | Test | ./services/org/tests/integration/test_projects_tasks.py | 102-108 |
 | test_task_tags_and_assignee_validation | Test | ./services/org/tests/integration/test_projects_tasks.py | 111-142 |
 | test_tag_crud_authz | Test | ./services/org/tests/integration/test_projects_tasks.py | 145-158 |
-| test_org_admin_can_create_and_list_users | Test | ./services/org/tests/integration/test_users.py | 12-24 |
-| test_member_cannot_create_or_list_users | Test | ./services/org/tests/integration/test_users.py | 27-37 |
 
-*... and 5 more members.*
+*... and 7 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `json` (74 edge(s))
-- `get` (61 edge(s))
-- `post` (54 edge(s))
-- `delete` (16 edge(s))
-- `patch` (12 edge(s))
+- `json` (78 edge(s))
+- `get` (62 edge(s))
+- `post` (58 edge(s))
+- `delete` (17 edge(s))
+- `patch` (13 edge(s))
 - `setattr` (10 edge(s))
-- `./services/org/tests/e2e/test_lifecycle.py::test_super_admin_org_lifecycle` (5 edge(s))
 - `./services/org/app/services/invitation_notifier.py` (5 edge(s))
-- `./services/org/tests/e2e/test_personal_projects.py::test_orgless_user_creates_organization_and_becomes_admin` (4 edge(s))
 - `./services/org/app/services/invitation_service.py` (4 edge(s))
 - `next` (4 edge(s))
 - `put` (3 edge(s))
 - `./services/org/tests/integration/test_internal_writeback.py::test_writes_deployments_and_resolver_reflects_it` (3 edge(s))
 - `len` (2 edge(s))
+- `./services/org/tests/helpers.py::create_super_admin` (2 edge(s))
 - `./services/org/tests/integration/test_deployment_resolver.py::test_orgless_user_stays_orgless_on_deployment_lookup` (2 edge(s))
+- `set` (2 edge(s))
 
 ### Incoming
 
-- `json` (64 edge(s))
-- `get` (55 edge(s))
-- `post` (48 edge(s))
-- `delete` (16 edge(s))
-- `patch` (12 edge(s))
+- `json` (68 edge(s))
+- `get` (56 edge(s))
+- `post` (52 edge(s))
+- `delete` (17 edge(s))
+- `patch` (13 edge(s))
 - `setattr` (10 edge(s))
 - `./services/org/tests/helpers.py` (8 edge(s))
 - `./services/org/tests/integration/test_projects_tasks.py` (8 edge(s))
 - `./services/org/tests/integration/test_users.py` (7 edge(s))
 - `./services/org/tests/integration/test_project_collaboration.py` (6 edge(s))
-- `./services/org/tests/e2e/test_lifecycle.py::test_super_admin_org_lifecycle` (5 edge(s))
+- `./services/org/tests/e2e/test_personal_projects.py` (5 edge(s))
 - `./services/org/tests/integration/test_auth.py` (5 edge(s))
 - `./services/org/tests/integration/test_deployment_resolver.py` (5 edge(s))
-- `./services/org/tests/e2e/test_personal_projects.py` (4 edge(s))
-- `./services/org/tests/e2e/test_personal_projects.py::test_orgless_user_creates_organization_and_becomes_admin` (4 edge(s))
+- `./services/org/tests/integration/test_invitations.py` (4 edge(s))
+- `next` (4 edge(s))

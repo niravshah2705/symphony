@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 730 nodes
+Community of 739 nodes
 
-- **Size**: 730 nodes
-- **Cohesion**: 0.4983
+- **Size**: 739 nodes
+- **Cohesion**: 0.4987
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 730 nodes
 | capitalize | Function | ./public/js/app.js | 905-908 |
 | start | Function | ./public/js/app.js | 912-920 |
 
-*... and 680 more members.*
+*... and 689 more members.*
 
 ## Execution Flows
 
@@ -85,21 +85,21 @@ Community of 730 nodes
 
 ### Outgoing
 
-- `addEventListener` (232 edge(s))
+- `addEventListener` (240 edge(s))
 - `append` (216 edge(s))
-- `map` (161 edge(s))
-- `String` (115 edge(s))
-- `trim` (101 edge(s))
-- `push` (100 edge(s))
+- `map` (164 edge(s))
+- `String` (119 edge(s))
+- `push` (108 edge(s))
+- `trim` (105 edge(s))
 - `equal` (88 edge(s))
-- `filter` (78 edge(s))
+- `isArray` (80 edge(s))
+- `filter` (79 edge(s))
 - `Boolean` (72 edge(s))
-- `isArray` (71 edge(s))
 - `catch` (66 edge(s))
 - `setAttribute` (61 edge(s))
-- `has` (59 edge(s))
+- `has` (60 edge(s))
 - `querySelector` (53 edge(s))
-- `find` (48 edge(s))
+- `slice` (49 edge(s))
 
 ### Incoming
 
@@ -113,8 +113,8 @@ Community of 730 nodes
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
 - `./public/js/views/organization.js` (29 edge(s))
-- `./public/js/auth.js` (24 edge(s))
+- `./public/js/auth.js` (23 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
+- `./public/js/views/openshell.js` (15 edge(s))
 - `./public/js/omnibox-router.mjs` (14 edge(s))
-- `match` (14 edge(s))
