@@ -39,10 +39,6 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.4"
     }
-    archive = {
-      source  = "hashicorp/archive"
-      version = "~> 2.6"
-    }
   }
 
   backend "gcs" {}

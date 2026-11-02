@@ -141,18 +141,6 @@ resource "kubernetes_role_binding_v1" "tenant_admins" {
 }
 
 # 6. OpenShell workspace release per tenant (vendored chart)
-#
-# The helm provider does not hash local chart-directory contents, so chart
-# edits alone would plan as no-op. Checksum the whole chart dir via
-# archive_file and feed it in as a value: any file change under
-# charts/openshell-workspace changes global.chartHash → an in-place helm
-# upgrade. This is what the openshell-workspace-deploy.yml workflow relies on.
-data "archive_file" "workspace_chart" {
-  type        = "zip"
-  source_dir  = "${path.module}/charts/openshell-workspace"
-  output_path = "${path.module}/.chart-cache/openshell-workspace.zip"
-}
-
 resource "helm_release" "tenant_workspace" {
   for_each = toset(var.tenants)
 
@@ -160,12 +148,6 @@ resource "helm_release" "tenant_workspace" {
   chart     = "${path.module}/charts/openshell-workspace"
   namespace = kubernetes_namespace_v1.tenants[each.key].metadata[0].name
   wait      = true
-
-  set {
-    name  = "global.chartHash"
-    value = data.archive_file.workspace_chart.output_base64sha256
-    type  = "string"
-  }
 
   values = [
     yamlencode({

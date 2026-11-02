@@ -45,16 +45,6 @@ The nightly IST schedule is opt-in via repo variable
 `roles/container.admin` (`GCP_CONTAINER_SA` secret, or unset to reuse
 `GCP_DEPLOYER_SA`).
 
-## Workspace chart auto-deploy
-
-`.github/workflows/openshell-workspace-deploy.yml` runs `terraform apply`
-(targeted to the tenant resources only) whenever
-`charts/openshell-workspace/**` or `tenant_config.tf` changes on `main`.
-Change detection relies on `data.archive_file.workspace_chart` hashing the
-chart directory into `global.chartHash` — the helm provider does not
-re-hash local chart files on its own. `workflow_dispatch` supports a
-`dry_run` (plan-only) mode.
-
 ## Known hardening TODOs
 
 - `master_authorized_networks_cidr` is `0.0.0.0/0` (matches live). Restrict to
