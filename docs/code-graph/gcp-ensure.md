@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| ensure_secret | Function | ./deploy/gcp/bootstrap.sh | 128-129 |
-| has_version | Function | ./deploy/gcp/bootstrap.sh | 130-131 |
-| seed | Function | ./deploy/gcp/bootstrap.sh | 132-133 |
+| ensure_secret | Function | ./deploy/gcp/bootstrap.sh | 129-130 |
+| has_version | Function | ./deploy/gcp/bootstrap.sh | 131-132 |
+| seed | Function | ./deploy/gcp/bootstrap.sh | 133-134 |
 
 ## Execution Flows
 

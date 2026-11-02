@@ -49,6 +49,7 @@ locals {
     ORG_URL          = local.org_url      # org service (proxied at /api/org/*)
     SETTINGS_URL     = local.settings_url # settings service (proxied at /api/settings-policy/*)
     IDENTITY_URL     = local.identity_url # identity verification service (proxied at /api/identity/*)
+    BILLING_URL      = local.billing_url  # billing service (proxied at /api/billing/*)
     # Use the provider-returned origin rather than reconstructing the run.app
     # hostname: Cloud Run ID-token audiences must match the deployed service
     # URL exactly, including projects that still use a legacy hash-style URL.

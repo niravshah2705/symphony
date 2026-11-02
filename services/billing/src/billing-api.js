@@ -3,23 +3,24 @@
 const express = require('express');
 const { CONFIG } = require('@ai-fleet/shared-core/config');
 const { asyncHandler } = require('@ai-fleet/shared-core/util');
+const log = require('@ai-fleet/shared-core/logger');
 const store = require('@ai-fleet/shared-core/store');
 const ledger = require('@ai-fleet/shared-core/billing/ledger');
 const { paiseToInr } = require('@ai-fleet/shared-core/billing/pricing');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
 const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
-const { bearerToken } = require('../auth');
-const { callJson } = require('../service-client');
-const { requestContext } = require('../request-context');
 
 /**
- * Cost-monitoring + billing API (gateway-owned). Billing state lives in the
- * shared JS store; org/project/user *names* come from the usage records.
+ * Cost-monitoring + billing API. Billing state lives in the shared JS store;
+ * org/project/user *names* come from the usage records.
  *
- * CROSS-TENANT ISOLATION (critical): every read scopes to the caller's selected
- * org, resolved SERVER-SIDE from the org service (`GET /api/v1/me`). The header
- * is only a requested selection; both gateway and org service validate it.
- * Mutations additionally require org-admin. On the
+ * CROSS-TENANT ISOLATION (critical): the gateway resolves the caller's billing
+ * org + admin flag SERVER-SIDE from the org service and forwards them as the
+ * `x-ai-fleet-billing-*` headers below. Those headers are trustworthy because
+ * this service is bound to the gateway's service account by Cloud Run IAM and
+ * the gateway proxy builds its request headers from scratch — a browser value
+ * can never arrive here uninvited. Every read scopes to that org, and mutations
+ * additionally require org-admin (re-checked here, not only at the edge). On the
  * shared free-tier account (SHARED_ORG_ID) the per-project/user drill-down is
  * additionally scoped to the caller's own user so personal tenants can't see
  * each other's project names. Money is integer paise internally; INR is exposed
@@ -33,6 +34,10 @@ const PERIOD_DAYS = Object.freeze({ day: 1, week: 7, month: 30 });
 const MAX_RECHARGE_PAISE = 100000000; // ₹1,000,000 sanity cap on a single top-up
 const MAX_LEDGER_PAGE = 200;
 
+const BILLING_ORG_HEADER = 'x-ai-fleet-billing-org-id';
+const BILLING_ROLE_HEADER = 'x-ai-fleet-billing-org-role';
+const BILLING_USER_HEADER = 'x-ai-fleet-billing-user-id';
+
 function inrToPaise(inr) {
   const n = Number(inr);
   if (!Number.isFinite(n)) return NaN;
@@ -40,41 +45,18 @@ function inrToPaise(inr) {
 }
 
 /**
- * Resolve the caller's billing org + admin flag SERVER-SIDE. Never trusts client
- * input. Local dev (auth disabled) → the deployment org, admin. Otherwise the
- * org service is authoritative; an org-less (personal) user maps to the shared
- * free-tier account with no admin rights.
+ * The caller's billing org + admin flag, taken from the gateway's server-derived
+ * context. Absent headers resolve to the deployment's own org with no admin
+ * rights, so a direct caller (or a gateway that could not identify the user)
+ * reads the tenant it belongs to and can never mutate it.
  */
-async function resolveCallerOrg(req) {
-  if (req.auth && req.auth.mode === 'disabled') {
-    return { orgId: CONFIG.BILLING.orgId || SHARED_ORG_ID, userId: null, isAdmin: true };
-  }
-  let bearer = '';
-  try {
-    bearer = bearerToken(req);
-  } catch (_) {
-    bearer = '';
-  }
-  // On a dedicated stack the deployment IS one org; that identity is authoritative
-  // for which billing data exists in this (namespaced) store.
-  const deploymentOrg = CONFIG.BILLING.orgId || '';
-  if (CONFIG.SERVICES.orgUrl && bearer) {
-    try {
-      const { status, data } = await callJson(CONFIG.SERVICES.orgUrl, '/api/v1/me', {
-        userAuth: bearer,
-        context: requestContext(req),
-      });
-      if (status === 200 && data) {
-        const isAdmin = String(data.org_role || '').toUpperCase() === 'ORG_ADMIN';
-        if (data.org_id) return { orgId: deploymentOrg || String(data.org_id), userId: data.user_id || null, isAdmin };
-        // Signed in but org-less → shared free-tier account, read-only.
-        return { orgId: deploymentOrg || SHARED_ORG_ID, userId: data.user_id || null, isAdmin: false };
-      }
-    } catch (_) {
-      /* fall through to the safe default */
-    }
-  }
-  return { orgId: deploymentOrg || SHARED_ORG_ID, userId: null, isAdmin: false };
+function resolveCallerOrg(req) {
+  const orgId = String(req.get(BILLING_ORG_HEADER) || '').trim()
+    || CONFIG.BILLING.orgId
+    || SHARED_ORG_ID;
+  const userId = String(req.get(BILLING_USER_HEADER) || '').trim() || null;
+  const isAdmin = String(req.get(BILLING_ROLE_HEADER) || '').trim().toUpperCase() === 'ORG_ADMIN';
+  return { orgId, userId, isAdmin };
 }
 
 /** Usage records for a caller, strictly scoped to their org (+ user on shared). */
@@ -105,7 +87,7 @@ function requireAdmin(caller, res) {
 
 // GET /api/billing/summary — balance + period spend + config for the caller's org.
 router.get('/summary', asyncHandler(async (req, res) => {
-  const caller = await resolveCallerOrg(req);
+  const caller = resolveCallerOrg(req);
   const account = store.getBillingAccount(caller.orgId);
   const balancePaise = account ? Number(account.balancePaise) || 0 : ledger.balanceFromLedger(caller.orgId);
   const fundsAvailable = balancePaise > 0;
@@ -166,7 +148,7 @@ router.get('/summary', asyncHandler(async (req, res) => {
 
 // GET /api/billing/usage?groupBy=project|user|day&period=day|week|month
 router.get('/usage', asyncHandler(async (req, res) => {
-  const caller = await resolveCallerOrg(req);
+  const caller = resolveCallerOrg(req);
   const groupBy = ['project', 'user', 'task', 'day'].includes(req.query.groupBy) ? req.query.groupBy : 'project';
   const period = PERIOD_DAYS[req.query.period] ? req.query.period : 'week';
   const cutoff = new Date(Date.now() - PERIOD_DAYS[period] * DAY_MS).toISOString();
@@ -213,7 +195,7 @@ router.get('/usage', asyncHandler(async (req, res) => {
 
 // GET /api/billing/usage/task/:taskId — per-task drill-down (scoped to the org).
 router.get('/usage/task/:taskId', asyncHandler(async (req, res) => {
-  const caller = await resolveCallerOrg(req);
+  const caller = resolveCallerOrg(req);
   const taskId = String(req.params.taskId || '');
   const records = scopedUsageRecords(caller)
     .filter((r) => r.taskId === taskId || r.taskIdentifier === taskId)
@@ -233,7 +215,7 @@ router.get('/usage/task/:taskId', asyncHandler(async (req, res) => {
 
 // GET /api/billing/ledger?limit= — recent ledger line items (scoped to the org).
 router.get('/ledger', asyncHandler(async (req, res) => {
-  const caller = await resolveCallerOrg(req);
+  const caller = resolveCallerOrg(req);
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), MAX_LEDGER_PAGE);
   const entries = store.listLedgerEntries({ orgId: caller.orgId }).slice(0, limit).map((e) => ({
     id: e.id,
@@ -248,7 +230,7 @@ router.get('/ledger', asyncHandler(async (req, res) => {
 
 // POST /api/billing/recharge { amountInr } — manual top-up (org-admin only).
 router.post('/recharge', asyncHandler(async (req, res) => {
-  const caller = await resolveCallerOrg(req);
+  const caller = resolveCallerOrg(req);
   if (!requireAdmin(caller, res)) return;
   const amountPaise = inrToPaise(req.body && req.body.amountInr);
   if (!Number.isFinite(amountPaise) || amountPaise <= 0 || amountPaise > MAX_RECHARGE_PAISE) {
@@ -265,7 +247,7 @@ router.post('/recharge', asyncHandler(async (req, res) => {
 
 // PUT /api/billing/config — thresholds / auto-recharge / channels (org-admin only).
 router.put('/config', asyncHandler(async (req, res) => {
-  const caller = await resolveCallerOrg(req);
+  const caller = resolveCallerOrg(req);
   if (!requireAdmin(caller, res)) return;
   ledger.ensureAccount(caller.orgId);
   const body = req.body && typeof req.body === 'object' ? req.body : {};
@@ -356,7 +338,7 @@ router.put('/config', asyncHandler(async (req, res) => {
 
 // POST /api/billing/cashfree/create-mandate — create On-Demand Cashfree subscription for mandate setup
 router.post('/cashfree/create-mandate', asyncHandler(async (req, res) => {
-  const caller = await resolveCallerOrg(req);
+  const caller = resolveCallerOrg(req);
   if (!requireAdmin(caller, res)) return;
 
   if (!cashfreeClient.isConfigured()) {
@@ -387,7 +369,7 @@ router.post('/cashfree/create-mandate', asyncHandler(async (req, res) => {
 
 // POST /api/billing/cashfree/create-order — create Cashfree PG order for on-demand reload
 router.post('/cashfree/create-order', asyncHandler(async (req, res) => {
-  const caller = await resolveCallerOrg(req);
+  const caller = resolveCallerOrg(req);
   if (!requireAdmin(caller, res)) return;
 
   const amountInr = Number(req.body && req.body.amountInr);
@@ -429,7 +411,7 @@ router.post('/cashfree/create-order', asyncHandler(async (req, res) => {
 
 // POST /api/billing/cashfree/verify-order — verify Cashfree PG payment and post ledger credit
 router.post('/cashfree/verify-order', asyncHandler(async (req, res) => {
-  const caller = await resolveCallerOrg(req);
+  const caller = resolveCallerOrg(req);
   if (!requireAdmin(caller, res)) return;
 
   const orderId = String(req.body && req.body.orderId || '').trim();
@@ -488,7 +470,7 @@ router.post('/cashfree/verify-order', asyncHandler(async (req, res) => {
 
 // POST /api/billing/cashfree/verify-mandate — verify and associate Cashfree subscription mandate
 router.post('/cashfree/verify-mandate', asyncHandler(async (req, res) => {
-  const caller = await resolveCallerOrg(req);
+  const caller = resolveCallerOrg(req);
   if (!requireAdmin(caller, res)) return;
 
   const subscriptionId = String(req.body && req.body.subscriptionId || '').trim();

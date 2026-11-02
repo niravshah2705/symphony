@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 110 nodes
+Community of 172 nodes
 
-- **Size**: 110 nodes
-- **Cohesion**: 0.3421
+- **Size**: 172 nodes
+- **Cohesion**: 0.3293
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,46 +65,46 @@ Community of 110 nodes
 | scoreEvaluation | Function | ./packages/shared/src/agent/business-pipeline.js | 399-408 |
 | evaluateRequirement | Function | ./packages/shared/src/agent/business-pipeline.js | 418-440 |
 
-*... and 60 more members.*
+*... and 122 more members.*
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **createMemoryMiddleware** (criticality: 0.65, depth: 5)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (120 edge(s))
-- `String` (19 edge(s))
-- `push` (19 edge(s))
+- `equal` (161 edge(s))
+- `String` (33 edge(s))
+- `ok` (25 edge(s))
+- `push` (21 edge(s))
+- `isArray` (20 edge(s))
+- `match` (19 edge(s))
+- `slice` (18 edge(s))
+- `deepEqual` (18 edge(s))
 - `test` (18 edge(s))
-- `ok` (15 edge(s))
-- `slice` (14 edge(s))
-- `replace` (14 edge(s))
-- `map` (9 edge(s))
-- `match` (9 edge(s))
-- `toISOString` (8 edge(s))
-- `now` (8 edge(s))
-- `join` (8 edge(s))
-- `filter` (8 edge(s))
-- `trim` (7 edge(s))
-- `deepEqual` (7 edge(s))
+- `replace` (17 edge(s))
+- `map` (15 edge(s))
+- `join` (14 edge(s))
+- `toISOString` (13 edge(s))
+- `require` (12 edge(s))
+- `filter` (12 edge(s))
 
 ### Incoming
 
-- `equal` (120 edge(s))
+- `equal` (161 edge(s))
 - `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
+- `ok` (25 edge(s))
+- `./packages/shared/src/agent/memory-middleware.js` (22 edge(s))
 - `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
+- `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
+- `deepEqual` (18 edge(s))
+- `match` (16 edge(s))
 - `./packages/shared/src/agent/approval-gate.js` (15 edge(s))
-- `ok` (15 edge(s))
 - `./packages/shared/src/agent/memory.js` (14 edge(s))
 - `./packages/shared/src/agent/approval-gate.test.js` (13 edge(s))
+- `./packages/shared/src/agent/memory-middleware.test.js` (11 edge(s))
+- `./packages/shared/src/agent/memory-store/postgres-backend.test.js` (11 edge(s))
+- `./packages/shared/src/agent/memory-store/index.js` (9 edge(s))
 - `./packages/shared/src/agent/memory.test.js` (8 edge(s))
-- `deepEqual` (7 edge(s))
-- `./packages/shared/src/agent/workspace-router.js` (7 edge(s))
-- `match` (6 edge(s))
-- `throws` (6 edge(s))
-- `./packages/shared/src/agent/workspace-router.test.js` (5 edge(s))
-- `now` (4 edge(s))
-- `every` (4 edge(s))

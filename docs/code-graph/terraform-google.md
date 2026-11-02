@@ -7,7 +7,7 @@
 Community of 430 nodes
 
 - **Size**: 430 nodes
-- **Cohesion**: 0.7544
+- **Cohesion**: 0.7546
 - **Dominant Language**: hcl
 
 ## Members
@@ -36,21 +36,21 @@ Community of 430 nodes
 | local.skills_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 19-22 |
 | local.memory_enabled | Function | ./deploy/gcp/terraform/cloud_run.tf | 34-34 |
 | local.memory_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 35-37 |
-| local.gateway_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 41-78 |
-| local.egress_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 85-85 |
-| local.proxy_plain_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 91-111 |
-| local.planner_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 113-129 |
-| local.coder_control_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 131-156 |
-| local.coder_worker_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 158-172 |
-| resource.google_secret_manager_secret.google_one_tap_client_id | Class | ./deploy/gcp/terraform/cloud_run.tf | 184-195 |
-| resource.google_secret_manager_secret_version.google_one_tap_client_id | Class | ./deploy/gcp/terraform/cloud_run.tf | 197-201 |
-| resource.google_secret_manager_secret_iam_member.gateway_one_tap | Class | ./deploy/gcp/terraform/cloud_run.tf | 203-209 |
-| local.proxy_sa_members | Function | ./deploy/gcp/terraform/cloud_run.tf | 218-221 |
-| resource.google_cloud_run_v2_service_iam_member.proxy_invokes_settings | Class | ./deploy/gcp/terraform/cloud_run.tf | 224-231 |
-| resource.google_cloud_run_v2_service.gateway | Class | ./deploy/gcp/terraform/cloud_run.tf | 234-327 |
-| resource.google_cloud_run_v2_service.planner | Class | ./deploy/gcp/terraform/cloud_run.tf | 340-511 |
-| resource.google_cloud_run_v2_service.coder_control | Class | ./deploy/gcp/terraform/cloud_run.tf | 514-670 |
-| resource.google_cloud_run_v2_job.coder_worker | Class | ./deploy/gcp/terraform/cloud_run.tf | 676-826 |
+| local.gateway_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 41-79 |
+| local.egress_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 86-86 |
+| local.proxy_plain_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 92-112 |
+| local.planner_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 114-130 |
+| local.coder_control_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 132-157 |
+| local.coder_worker_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 159-173 |
+| resource.google_secret_manager_secret.google_one_tap_client_id | Class | ./deploy/gcp/terraform/cloud_run.tf | 185-196 |
+| resource.google_secret_manager_secret_version.google_one_tap_client_id | Class | ./deploy/gcp/terraform/cloud_run.tf | 198-202 |
+| resource.google_secret_manager_secret_iam_member.gateway_one_tap | Class | ./deploy/gcp/terraform/cloud_run.tf | 204-210 |
+| local.proxy_sa_members | Function | ./deploy/gcp/terraform/cloud_run.tf | 219-222 |
+| resource.google_cloud_run_v2_service_iam_member.proxy_invokes_settings | Class | ./deploy/gcp/terraform/cloud_run.tf | 225-232 |
+| resource.google_cloud_run_v2_service.gateway | Class | ./deploy/gcp/terraform/cloud_run.tf | 235-328 |
+| resource.google_cloud_run_v2_service.planner | Class | ./deploy/gcp/terraform/cloud_run.tf | 341-512 |
+| resource.google_cloud_run_v2_service.coder_control | Class | ./deploy/gcp/terraform/cloud_run.tf | 515-671 |
+| resource.google_cloud_run_v2_job.coder_worker | Class | ./deploy/gcp/terraform/cloud_run.tf | 677-827 |
 | local.email_public_app_url | Function | ./deploy/gcp/terraform/email_service.tf | 7-7 |
 | local.email_smtp_secret_refs | Function | ./deploy/gcp/terraform/email_service.tf | 8-8 |
 | resource.google_service_account.email | Class | ./deploy/gcp/terraform/email_service.tf | 11-15 |

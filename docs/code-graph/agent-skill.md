@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 377 nodes
+Community of 422 nodes
 
-- **Size**: 377 nodes
-- **Cohesion**: 0.2481
+- **Size**: 422 nodes
+- **Cohesion**: 0.2629
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,7 +20,6 @@ Community of 377 nodes
 | test:proxied coding isolates DeepAgent shell and developer-tool contexts@L440 | Test | ./packages/shared/src/agent/coder-flow.test.js | 440-486 |
 | test:recordStackLink persists the link and recovers the blocker identifier@L952 | Test | ./packages/shared/src/agent/coder-flow.test.js | 952-973 |
 | test:recordStackLink is a no-op when the run was not stacked@L975 | Test | ./packages/shared/src/agent/coder-flow.test.js | 975-984 |
-| resolveRole | Function | ./packages/shared/src/agent/coder-orchestrator.js | 363-372 |
 | recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 689-709 |
 | buildTicketPrompt | Function | ./packages/shared/src/agent/coder.js | 42-76 |
 | isCoderLlmUsable | Function | ./packages/shared/src/agent/coder.js | 79-84 |
@@ -64,8 +63,9 @@ Community of 377 nodes
 | normalizeFsToolArgs | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 41-49 |
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
+| test:remaps aliases for write_file and edit_file too@L21 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 21-30 |
 
-*... and 327 more members.*
+*... and 372 more members.*
 
 ## Execution Flows
 
@@ -81,36 +81,36 @@ Community of 377 nodes
 
 ### Outgoing
 
-- `equal` (231 edge(s))
-- `join` (181 edge(s))
-- `String` (76 edge(s))
-- `includes` (66 edge(s))
-- `isArray` (53 edge(s))
+- `equal` (260 edge(s))
+- `join` (196 edge(s))
+- `String` (85 edge(s))
+- `includes` (76 edge(s))
+- `isArray` (57 edge(s))
+- `deepEqual` (57 edge(s))
 - `strictEqual` (50 edge(s))
-- `deepEqual` (49 edge(s))
-- `trim` (41 edge(s))
+- `trim` (46 edge(s))
 - `endsWith` (39 edge(s))
+- `map` (38 edge(s))
+- `mkdirSync` (38 edge(s))
+- `writeFileSync` (38 edge(s))
+- `slice` (38 edge(s))
 - `execFileSync` (37 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `map` (35 edge(s))
-- `slice` (35 edge(s))
-- `step` (34 edge(s))
-- `mkdirSync` (34 edge(s))
 
 ### Incoming
 
-- `equal` (230 edge(s))
-- `join` (104 edge(s))
+- `equal` (259 edge(s))
+- `join` (114 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
+- `deepEqual` (55 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (55 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
 - `strictEqual` (50 edge(s))
-- `deepEqual` (47 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (45 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `ok` (29 edge(s))
-- `tmpdir` (28 edge(s))
-- `writeFileSync` (28 edge(s))
-- `mkdtempSync` (27 edge(s))
-- `after` (26 edge(s))
+- `ok` (33 edge(s))
+- `writeFileSync` (32 edge(s))
+- `throws` (30 edge(s))
+- `tmpdir` (30 edge(s))
+- `mkdtempSync` (29 edge(s))
+- `after` (28 edge(s))
 - `./packages/shared/src/agent/framework.js` (26 edge(s))
-- `execFileSync` (26 edge(s))
