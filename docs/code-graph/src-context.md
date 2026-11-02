@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 200 nodes
+Community of 174 nodes
 
-- **Size**: 200 nodes
-- **Cohesion**: 0.3446
+- **Size**: 174 nodes
+- **Cohesion**: 0.3521
 - **Dominant Language**: javascript
 
 ## Members
@@ -50,61 +50,61 @@ Community of 200 nodes
 | test:requireAuthenticated: any signed-in user passes regardless of role@L244 | Test | ./services/gateway/src/auth.test.js | 244-250 |
 | test:requireAuthenticated: anonymous/public → 401@L252 | Test | ./services/gateway/src/auth.test.js | 252-259 |
 | test:requireAuthenticated: OPTIONS preflight is never gated@L261 | Test | ./services/gateway/src/auth.test.js | 261-265 |
+| resolveCallerOrg | Function | ./services/gateway/src/billing-access.js | 43-78 |
+| requireBillingCaller | Function | ./services/gateway/src/billing-access.js | 81-89 |
+| billingTrustedHeaders | Function | ./services/gateway/src/billing-access.js | 92-100 |
+| callerReq | Function | ./services/gateway/src/billing-access.test.js | 23-31 |
+| stubOrgMe | Function | ./services/gateway/src/billing-access.test.js | 33-41 |
+| test:an org admin resolves to the trusted org + role header pair@L43 | Test | ./services/gateway/src/billing-access.test.js | 43-58 |
+| test:a member is forwarded as a non-admin and keeps read access only@L60 | Test | ./services/gateway/src/billing-access.test.js | 60-68 |
+| test:an org-less caller maps to the shared account without admin@L70 | Test | ./services/gateway/src/billing-access.test.js | 70-76 |
+| test:a rejected or absent credential fails closed, never as admin@L78 | Test | ./services/gateway/src/billing-access.test.js | 78-88 |
+| test:requireBillingCaller attaches the caller and always continues@L90 | Test | ./services/gateway/src/billing-access.test.js | 90-102 |
+| test:no headers are injected for an unresolved caller@L104 | Test | ./services/gateway/src/billing-access.test.js | 104-106 |
 | createConfigResolver | Function | ./services/gateway/src/config-resolver.js | 21-63 |
 | makeReq | Function | ./services/gateway/src/config-resolver.test.js | 9-23 |
 | makeRes | Function | ./services/gateway/src/config-resolver.test.js | 25-34 |
-| test:anonymous caller: authenticated:false, same-origin, never hits the org service@L36 | Test | ./services/gateway/src/config-resolver.test.js | 36-45 |
-| test:authenticated + org resolves shared: gatewayUrl empty (same-origin)@L47 | Test | ./services/gateway/src/config-resolver.test.js | 47-54 |
-| test:authenticated + org provisioned: re-points to the per-tenant gateway URL@L56 | Test | ./services/gateway/src/config-resolver.test.js | 56-67 |
-| test:provisioning status keeps the SPA on the shared gateway@L69 | Test | ./services/gateway/src/config-resolver.test.js | 69-77 |
-| test:provisioned WITHOUT a url fails closed instead of guessing same-origin@L79 | Test | ./services/gateway/src/config-resolver.test.js | 79-87 |
-| test:forwards the already-validated selected context on the correct S2S path@L89 | Test | ./services/gateway/src/config-resolver.test.js | 89-105 |
-| test:never leaks internal service URLs to the browser@L107 | Test | ./services/gateway/src/config-resolver.test.js | 107-122 |
-| test:org-service error fails closed instead of guessing the shared gateway@L124 | Test | ./services/gateway/src/config-resolver.test.js | 124-130 |
-| test:callJson throwing fails closed instead of guessing the shared gateway@L132 | Test | ./services/gateway/src/config-resolver.test.js | 132-138 |
-| items | Function | ./services/gateway/src/context-validator.js | 8-10 |
-| itemId | Function | ./services/gateway/src/context-validator.js | 12-14 |
 
-*... and 150 more members.*
+*... and 124 more members.*
 
 ## Execution Flows
 
-- **resolveOrgMembership** (criticality: 0.74, depth: 3)
+- **resolveOrgMembership** (criticality: 0.71, depth: 3)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (190 edge(s))
-- `deepEqual` (56 edge(s))
-- `trim` (53 edge(s))
-- `String` (41 edge(s))
-- `json` (29 edge(s))
+- `equal` (177 edge(s))
+- `deepEqual` (51 edge(s))
+- `trim` (39 edge(s))
+- `String` (32 edge(s))
+- `json` (26 edge(s))
 - `map` (23 edge(s))
-- `includes` (19 edge(s))
-- `status` (18 edge(s))
 - `push` (18 edge(s))
 - `isArray` (18 edge(s))
-- `next` (16 edge(s))
-- `toLowerCase` (16 edge(s))
-- `rejects` (16 edge(s))
-- `throws` (15 edge(s))
+- `next` (17 edge(s))
+- `includes` (17 edge(s))
+- `status` (15 edge(s))
+- `toLowerCase` (15 edge(s))
+- `throws` (14 edge(s))
 - `get` (13 edge(s))
+- `freeze` (13 edge(s))
 
 ### Incoming
 
-- `equal` (190 edge(s))
-- `./services/gateway/src/index.js` (95 edge(s))
-- `deepEqual` (56 edge(s))
+- `equal` (177 edge(s))
+- `./services/gateway/src/index.js` (86 edge(s))
+- `deepEqual` (51 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (29 edge(s))
 - `./services/gateway/src/auth.test.js` (26 edge(s))
 - `./services/gateway/src/request-context.js` (20 edge(s))
 - `./services/gateway/src/auth.js` (16 edge(s))
-- `rejects` (16 edge(s))
-- `throws` (15 edge(s))
-- `./services/gateway/src/stream-token.js` (15 edge(s))
-- `ok` (13 edge(s))
-- `./services/gateway/src/stream-token.test.js` (13 edge(s))
+- `throws` (14 edge(s))
 - `./services/gateway/src/config-resolver.test.js` (11 edge(s))
+- `rejects` (11 edge(s))
 - `./services/gateway/src/request-context.test.js` (11 edge(s))
+- `./services/gateway/src/context-validator.test.js` (10 edge(s))
+- `handler` (9 edge(s))
+- `push` (9 edge(s))
