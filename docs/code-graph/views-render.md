@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 739 nodes
+Community of 741 nodes
 
-- **Size**: 739 nodes
-- **Cohesion**: 0.4987
+- **Size**: 741 nodes
+- **Cohesion**: 0.4981
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,6 +26,7 @@ Community of 739 nodes
 | setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
 | contextId | Function | ./public/js/api.js | 20-23 |
 | setRequestContext | Function | ./public/js/api.js | 26-31 |
+| getApiBase | Function | ./public/js/api.js | 94-97 |
 | setApiBase | Function | ./public/js/api.js | 108-111 |
 | uploadToSignedUrl | Function | ./public/js/api.js | 119-136 |
 | openStream | Function | ./public/js/api.js | 249-328 |
@@ -63,9 +64,8 @@ Community of 739 nodes
 | renderAccessDenied | Function | ./public/js/app.js | 807-819 |
 | render | Function | ./public/js/app.js | 821-903 |
 | capitalize | Function | ./public/js/app.js | 905-908 |
-| start | Function | ./public/js/app.js | 912-920 |
 
-*... and 689 more members.*
+*... and 691 more members.*
 
 ## Execution Flows
 
@@ -88,13 +88,13 @@ Community of 739 nodes
 - `addEventListener` (240 edge(s))
 - `append` (216 edge(s))
 - `map` (164 edge(s))
-- `String` (119 edge(s))
+- `String` (120 edge(s))
 - `push` (108 edge(s))
 - `trim` (105 edge(s))
 - `equal` (88 edge(s))
 - `isArray` (80 edge(s))
 - `filter` (79 edge(s))
-- `Boolean` (72 edge(s))
+- `Boolean` (73 edge(s))
 - `catch` (66 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (60 edge(s))
@@ -113,8 +113,8 @@ Community of 739 nodes
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
 - `./public/js/views/organization.js` (29 edge(s))
-- `./public/js/auth.js` (23 edge(s))
+- `./public/js/auth.js` (24 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
+- `./public/js/api.js` (15 edge(s))
 - `./public/js/views/openshell.js` (15 edge(s))
-- `./public/js/omnibox-router.mjs` (14 edge(s))

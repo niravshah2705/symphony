@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 218 nodes
+Community of 221 nodes
 
-- **Size**: 218 nodes
-- **Cohesion**: 0.3021
+- **Size**: 221 nodes
+- **Cohesion**: 0.2978
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,41 +65,43 @@ Community of 218 nodes
 | test:memory ON — dispatch injects into the prompt and captures the finished run@L34 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 34-48 |
 | test:memory OFF — dispatch is byte-identical (no injection, no capture)@L50 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 50-63 |
 
-*... and 168 more members.*
+*... and 171 more members.*
 
 ## Execution Flows
 
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **generatePlan** (criticality: 0.67, depth: 6)
+- **runCoder** (criticality: 0.67, depth: 7)
+- **runPlannedCoder** (criticality: 0.66, depth: 7)
 - **createMemoryMiddleware** (criticality: 0.65, depth: 5)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (155 edge(s))
-- `join` (53 edge(s))
+- `equal` (159 edge(s))
+- `join` (58 edge(s))
 - `String` (46 edge(s))
 - `isArray` (39 edge(s))
 - `match` (29 edge(s))
 - `deepEqual` (29 edge(s))
-- `ok` (25 edge(s))
+- `ok` (26 edge(s))
 - `map` (24 edge(s))
 - `includes` (20 edge(s))
-- `slice` (16 edge(s))
+- `slice` (17 edge(s))
 - `push` (15 edge(s))
 - `require` (15 edge(s))
 - `trim` (15 edge(s))
+- `mkdirSync` (14 edge(s))
 - `writeFileSync` (14 edge(s))
-- `throws` (14 edge(s))
 
 ### Incoming
 
-- `equal` (155 edge(s))
+- `equal` (159 edge(s))
 - `./packages/shared/src/agent/harnesses/contract.js` (59 edge(s))
-- `join` (33 edge(s))
+- `join` (35 edge(s))
 - `deepEqual` (29 edge(s))
-- `ok` (25 edge(s))
+- `ok` (26 edge(s))
 - `match` (25 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))

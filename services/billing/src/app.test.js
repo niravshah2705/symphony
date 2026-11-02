@@ -47,6 +47,40 @@ test('billing standalone UI dashboard serves HTML', async () => {
   }
 });
 
+// The Firestore store backend throws on any read until initStore() has hydrated
+// its mirror, and billing's records are read synchronously inside the handlers —
+// so hydration must happen ahead of them. Unhydrated reads are what blanked the
+// Cost screen in production.
+test('billing routes hydrate the store before reading it; probes do not', async () => {
+  const calls = [];
+  const server = await listen(createApp({ initStore: async () => { calls.push('init'); } }));
+  try {
+    await fetch(`${server.url}/healthz`);
+    assert.deepEqual(calls, [], 'readiness probes must not depend on the store');
+
+    const summary = await fetch(`${server.url}/api/billing/summary`, { headers: ADMIN });
+    assert.equal(summary.status, 200);
+    assert.deepEqual(calls, ['init']);
+
+    await fetch(`${server.url}/`);
+    assert.equal(calls.length, 2, 'the dashboard reads the store too');
+  } finally {
+    await server.close();
+  }
+});
+
+test('a store that will not hydrate fails closed instead of reading stale state', async () => {
+  const server = await listen(createApp({
+    initStore: async () => { throw new Error('firestore unavailable'); },
+  }));
+  try {
+    const res = await fetch(`${server.url}/api/billing/summary`, { headers: ADMIN });
+    assert.equal(res.status, 500);
+  } finally {
+    await server.close();
+  }
+});
+
 test('reads scope to the injected org and report isAdmin from the injected role', async () => {
   const server = await listen(createApp());
   try {
