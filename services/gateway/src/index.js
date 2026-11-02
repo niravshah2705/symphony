@@ -6,7 +6,7 @@ const { CONFIG } = require('@ai-fleet/shared-core/config');
 const { sendError } = require('@ai-fleet/shared-core/util');
 const log = require('@ai-fleet/shared-core/logger');
 
-const billingRoutes = require('./routes/billing');
+const { requireBillingCaller, billingTrustedHeaders } = require('./billing-access');
 const eulaRoutes = require('./routes/eula');
 const { createPipelineRouter } = require('./routes/pipeline');
 const { createProxy } = require('./proxy');
@@ -72,7 +72,13 @@ app.use((req, res, next) => {
 // CORS for the cross-origin GCS SPA (no-op when no SPA origins are configured).
 app.use(createCorsMiddleware());
 
-app.use(express.json({ limit: '1mb' }));
+// `verify` keeps the exact bytes express consumed: the billing webhook is
+// proxied to the billing service, which checks Cashfree's HMAC over the body it
+// received, and a re-serialization of the parsed JSON would not match.
+app.use(express.json({
+  limit: '1mb',
+  verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8'); },
+}));
 
 // Public liveness and browser bootstrap. The SPA must learn its non-secret
 // Firebase web config (apiKey/authDomain/projectId) before it can sign in.
@@ -201,16 +207,25 @@ app.use('/api/businesses', requirePermission('planning'), requireOrganizationCon
 app.use('/api/roles', requirePermission('settings', { level: 'write' }), requireOrganizationContext(), plannerProxy);
 app.use('/api/observability', requirePermission('insights'), requireOrganizationContext(), plannerProxy);
 // Cost-monitoring + billing. Forwarded to the dedicated Cloud Run billing
-// service when configured, with user authentication and selected-org context.
-// Webhook route from Cashfree bypasses session auth (HMAC-verified at billing).
+// service, which holds the Cashfree credentials and the wallet ledger. The
+// gateway resolves the caller's billing org + admin flag server-side and passes
+// them as trusted headers (see billing-access.js); the service re-checks admin
+// before any mutation. Cashfree's webhook carries no session bearer — it is
+// HMAC-verified in the service, so it is mounted ahead of the auth gate.
 if (CONFIG.SERVICES.billingUrl) {
   const billingProxy = createProxy(CONFIG.SERVICES.billingUrl, {
     forwardUserAuth: true,
+    forwardRawBody: true,
+    // Cashfree signs its webhook over the raw body with these two headers; the
+    // service holds the secret and verifies them.
+    forwardHeaders: ['x-webhook-signature', 'x-webhook-timestamp'],
+    injectHeaders: billingTrustedHeaders,
   });
   app.post('/api/billing/cashfree/webhook', billingProxy);
-  app.use('/api/billing', requireAuthenticated(), billingProxy);
+  app.use('/api/billing', requireAuthenticated(), requireBillingCaller, billingProxy);
 } else {
-  app.use('/api/billing', requireAuthenticated(), billingRoutes);
+  app.use('/api/billing', requireAuthenticated(), (req, res) =>
+    res.status(501).json({ error: 'Billing service is not configured (BILLING_URL unset).' }));
 }
 // Locale is non-sensitive UI strings — available to public + authenticated.
 // Translation is model-backed, so both locale routes execute in the planner.

@@ -44,6 +44,17 @@ function originOf(baseUrl) {
 }
 
 /**
+ * Normalize a user credential into a scheme-prefixed header value. The org and
+ * settings services read the end-user token with a `Bearer ` prefix and 401 a
+ * bare JWT, while callers hand us both forms (`bearerToken()` strips the scheme,
+ * a raw `authorization` header keeps it).
+ */
+function bearerHeader(value) {
+  const token = String(value || '').trim();
+  return token ? `Bearer ${token.replace(/^Bearer\s+/i, '')}` : '';
+}
+
+/**
  * Make an S2S JSON request to an internal service and return { status, data }.
  * Attaches the same auth as createProxy: the caller's bearer rides in
  * X-Forwarded-Authorization (the target does its OWN Firebase-token
@@ -54,10 +65,12 @@ function originOf(baseUrl) {
  * @param {string} path     absolute path on the target (e.g. '/api/v1/me/deployment')
  * @param {{ method?: string, body?: unknown, userAuth?: string, internalToken?: string,
  *   context?: {organizationId?: string, projectId?: string} }} [opts]
+ *   `opts.userAuth` accepts a bare JWT or a `Bearer `-prefixed value.
  * @returns {Promise<{ status: number, data: unknown }>}
  */
 async function callJson(baseUrl, path, opts = {}) {
-  const { method = 'GET', body, userAuth } = opts;
+  const { method = 'GET', body } = opts;
+  const userAuth = bearerHeader(opts.userAuth);
   const target = `${baseUrl}${path}`;
   const headers = {};
   Object.assign(headers, contextHeaders(opts.context));
@@ -97,4 +110,4 @@ async function callJson(baseUrl, path, opts = {}) {
   return { status: resp.status, data };
 }
 
-module.exports = { callJson, idTokenHeader, originOf };
+module.exports = { callJson, idTokenHeader, originOf, bearerHeader };

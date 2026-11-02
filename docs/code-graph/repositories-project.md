@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 603 nodes
+Community of 658 nodes
 
-- **Size**: 603 nodes
-- **Cohesion**: 0.5558
+- **Size**: 658 nodes
+- **Cohesion**: 0.5471
 - **Dominant Language**: python
 
 ## Members
@@ -65,7 +65,7 @@ Community of 603 nodes
 | revoke_project_invitation | Function | ./services/org/app/api/v1/routes_project_invitations.py | 61-68 |
 | accept_project_invitation | Function | ./services/org/app/api/v1/routes_project_invitations.py | 72-79 |
 
-*... and 553 more members.*
+*... and 608 more members.*
 
 ## Execution Flows
 
@@ -85,36 +85,36 @@ Community of 603 nodes
 
 ### Outgoing
 
-- `get` (245 edge(s))
+- `get` (306 edge(s))
 - `Depends` (165 edge(s))
 - `str` (160 edge(s))
+- `json` (87 edge(s))
+- `post` (60 edge(s))
+- `delete` (53 edge(s))
+- `setattr` (43 edge(s))
 - `uuid4` (40 edge(s))
-- `delete` (37 edge(s))
-- `set` (36 edge(s))
+- `set` (38 edge(s))
 - `raises` (35 edge(s))
-- `setattr` (33 edge(s))
 - `query` (30 edge(s))
 - `track` (29 edge(s))
+- `len` (24 edge(s))
 - `BaseModel` (23 edge(s))
-- `len` (22 edge(s))
 - `append` (19 edge(s))
-- `isinstance` (17 edge(s))
-- `UUID` (15 edge(s))
 
 ### Incoming
 
+- `json` (77 edge(s))
+- `get` (65 edge(s))
+- `post` (54 edge(s))
+- `setattr` (43 edge(s))
 - `raises` (35 edge(s))
-- `setattr` (33 edge(s))
 - `uuid4` (33 edge(s))
 - `./services/org/tests/unit/test_project_collaboration.py` (24 edge(s))
+- `len` (18 edge(s))
+- `delete` (17 edge(s))
+- `patch` (17 edge(s))
 - `./services/org/app/api/v1/routes_me.py` (16 edge(s))
-- `len` (16 edge(s))
 - `./services/org/app/api/v1/routes_auth.py` (13 edge(s))
-- `json` (13 edge(s))
 - `./services/org/tests/unit/test_services.py` (13 edge(s))
 - `./services/org/app/errors.py` (12 edge(s))
 - `./services/org/app/services/invitation_service.py` (12 edge(s))
-- `./services/org/app/api/v1/routes_org.py` (11 edge(s))
-- `./services/org/app/repositories/base.py` (11 edge(s))
-- `./services/org/app/services/auth_service.py` (11 edge(s))
-- `./services/org/app/services/tag_service.py` (10 edge(s))

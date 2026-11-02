@@ -7,7 +7,7 @@
 Community of 234 nodes
 
 - **Size**: 234 nodes
-- **Cohesion**: 0.1758
+- **Cohesion**: 0.1734
 - **Dominant Language**: javascript
 
 ## Members
@@ -79,39 +79,39 @@ Community of 234 nodes
 - **refreshTokens** (criticality: 0.67, depth: 2)
 - **getSampleNetworkPolicy** (criticality: 0.67, depth: 8)
 - **runSandboxSecurityChecks** (criticality: 0.67, depth: 8)
-- *... and 32 more flows.*
+- *... and 33 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (125 edge(s))
+- `equal` (127 edge(s))
 - `Number` (30 edge(s))
-- `filter` (27 edge(s))
+- `filter` (28 edge(s))
 - `isArray` (24 edge(s))
 - `includes` (22 edge(s))
 - `String` (21 edge(s))
+- `toISOString` (21 edge(s))
 - `isFinite` (20 edge(s))
 - `trim` (20 edge(s))
-- `toISOString` (20 edge(s))
 - `set` (19 edge(s))
 - `slice` (18 edge(s))
 - `call` (16 edge(s))
 - `find` (15 edge(s))
 - `map` (14 edge(s))
-- `upsertBillingAccount` (12 edge(s))
+- `deepEqual` (12 edge(s))
 
 ### Incoming
 
 - `./packages/shared-core/src/store.js` (169 edge(s))
-- `equal` (125 edge(s))
+- `equal` (127 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
 - `./packages/shared-core/src/billing/cashfree-client.js` (14 edge(s))
-- `upsertBillingAccount` (12 edge(s))
 - `deepEqual` (12 edge(s))
+- `upsertBillingAccount` (11 edge(s))
 - `./packages/shared-core/src/billing/ledger.js` (10 edge(s))
 - `./packages/shared-core/src/billing/notify.js` (10 edge(s))
 - `./packages/shared-core/src/billing/pricing.js` (10 edge(s))

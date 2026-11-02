@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 199 nodes
+Community of 200 nodes
 
-- **Size**: 199 nodes
-- **Cohesion**: 0.3468
+- **Size**: 200 nodes
+- **Cohesion**: 0.3446
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,37 +65,36 @@ Community of 199 nodes
 | items | Function | ./services/gateway/src/context-validator.js | 8-10 |
 | itemId | Function | ./services/gateway/src/context-validator.js | 12-14 |
 
-*... and 149 more members.*
+*... and 150 more members.*
 
 ## Execution Flows
 
-- **resolveCallerOrg** (criticality: 0.76, depth: 2)
-- **resolveOrgMembership** (criticality: 0.76, depth: 3)
+- **resolveOrgMembership** (criticality: 0.74, depth: 3)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (181 edge(s))
+- `equal` (190 edge(s))
 - `deepEqual` (56 edge(s))
-- `trim` (52 edge(s))
+- `trim` (53 edge(s))
 - `String` (41 edge(s))
 - `json` (29 edge(s))
 - `map` (23 edge(s))
 - `includes` (19 edge(s))
 - `status` (18 edge(s))
 - `push` (18 edge(s))
-- `isArray` (17 edge(s))
+- `isArray` (18 edge(s))
 - `next` (16 edge(s))
+- `toLowerCase` (16 edge(s))
 - `rejects` (16 edge(s))
-- `toLowerCase` (15 edge(s))
 - `throws` (15 edge(s))
-- `freeze` (13 edge(s))
+- `get` (13 edge(s))
 
 ### Incoming
 
-- `equal` (181 edge(s))
-- `./services/gateway/src/index.js` (94 edge(s))
+- `equal` (190 edge(s))
+- `./services/gateway/src/index.js` (95 edge(s))
 - `deepEqual` (56 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (29 edge(s))
@@ -107,5 +106,5 @@ Community of 199 nodes
 - `./services/gateway/src/stream-token.js` (15 edge(s))
 - `ok` (13 edge(s))
 - `./services/gateway/src/stream-token.test.js` (13 edge(s))
-- `./services/gateway/src/routes/billing.js` (12 edge(s))
 - `./services/gateway/src/config-resolver.test.js` (11 edge(s))
+- `./services/gateway/src/request-context.test.js` (11 edge(s))

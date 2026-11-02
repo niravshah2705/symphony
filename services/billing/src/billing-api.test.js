@@ -7,12 +7,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // Isolate the store before anything loads config.
-const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-billing-'));
+const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-api-'));
 process.env.AI_FLEET_DATA_DIR = TMP_DIR;
 
 const store = require('@ai-fleet/shared-core/store');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
-const billingRoute = require('./billing');
+const billingApi = require('./billing-api');
 
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
@@ -24,7 +24,7 @@ test.before(() => {
 });
 
 test('scopedUsageRecords returns only the caller org’s records (cross-tenant isolation)', () => {
-  const a = billingRoute.scopedUsageRecords({ orgId: 'org-A', userId: 'uA', isAdmin: false });
+  const a = billingApi.scopedUsageRecords({ orgId: 'org-A', userId: 'uA', isAdmin: false });
   assert.equal(a.length, 1);
   assert.equal(a[0].orgId, 'org-A');
   // Org A cannot see Org B.
@@ -32,13 +32,13 @@ test('scopedUsageRecords returns only the caller org’s records (cross-tenant i
 });
 
 test('shared account scopes drill-down to the caller’s own user (no cross-personal leak)', () => {
-  const p1 = billingRoute.scopedUsageRecords({ orgId: SHARED_ORG_ID, userId: 'personal-1' });
+  const p1 = billingApi.scopedUsageRecords({ orgId: SHARED_ORG_ID, userId: 'personal-1' });
   assert.equal(p1.length, 1);
   assert.equal(p1[0].userId, 'personal-1');
 });
 
 test('shared account with no user identity exposes nothing granular (safe default)', () => {
-  const anon = billingRoute.scopedUsageRecords({ orgId: SHARED_ORG_ID, userId: null });
+  const anon = billingApi.scopedUsageRecords({ orgId: SHARED_ORG_ID, userId: null });
   assert.equal(anon.length, 0);
 });
 

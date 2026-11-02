@@ -554,9 +554,9 @@ export const api = {
   getAnalytics: () => request('/observability/analytics'),
   getTroubleshooting: () => request('/observability/troubleshooting'),
 
-  // Cost monitoring + billing (services/gateway/src/routes/billing.js). The org
-  // is resolved SERVER-SIDE from the caller's token — the client never sends an
-  // org id. Mutations require org-admin (enforced server-side).
+  // Cost monitoring + billing (proxied to services/billing/src/billing-api.js).
+  // The org is resolved SERVER-SIDE by the gateway from the caller's token — the
+  // client never sends an org id. Mutations require org-admin (re-checked there).
   billing: {
     getSummary: () => request('/billing/summary'),
     getUsage: (groupBy = 'project', period = 'week') =>
