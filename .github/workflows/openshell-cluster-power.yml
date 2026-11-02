@@ -1,0 +1,125 @@
+name: OpenShell cluster power (start/stop)
+
+# Scales the openshell-multitenant GKE node pool between "off" (min 0) and
+# "on" (min 2). Stop keeps the control plane, static IP and Envoy gateway
+# reachable; it only removes node spend. Pending sandbox pods auto-wake
+# capacity because autoscaling stays enabled.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Cluster power action
+        type: choice
+        required: true
+        options: [start, stop]
+  schedule:
+    # 00:00 IST = 18:30 UTC (previous day)
+    - cron: "30 18 * * *"
+      id: nightly-stop
+    # 08:30 IST Mon–Fri = 03:00 UTC Mon–Fri
+    - cron: "0 3 * * 1-5"
+      id: morning-start
+
+concurrency:
+  group: openshell-cluster-power
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  power:
+    # Scheduled runs are opt-in via the OPENSHELL_CLUSTER_AUTOSTOP repo variable.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'schedule' && vars.OPENSHELL_CLUSTER_AUTOSTOP == 'true')
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      CLUSTER: ${{ vars.OPENSHELL_CLUSTER_NAME || 'openshell-multitenant' }}
+      ZONE: ${{ vars.OPENSHELL_CLUSTER_ZONE || 'asia-south1-a' }}
+      NODE_POOL: ${{ vars.OPENSHELL_NODE_POOL || 'openshell-multitenant-node-pool' }}
+      MAX_NODES: ${{ vars.OPENSHELL_MAX_NODES || '8' }}
+      START_MIN_NODES: ${{ vars.OPENSHELL_MIN_NODES || '2' }}
+    steps:
+      - name: Resolve action
+        id: action
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_ACTION: ${{ inputs.action }}
+          SCHEDULE_ID: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            workflow_dispatch) ACTION="$DISPATCH_ACTION" ;;
+            schedule)
+              [ "$SCHEDULE_ID" = "nightly-stop" ] && ACTION="stop" || ACTION="start"
+              ;;
+            *) echo "::error::Unsupported event: $EVENT_NAME"; exit 1 ;;
+          esac
+          # Allow-list: never pass an unvalidated value on.
+          case "$ACTION" in
+            start|stop) echo "action=$ACTION" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Invalid action: $ACTION"; exit 1 ;;
+          esac
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_CONTAINER_SA != '' && secrets.GCP_CONTAINER_SA || secrets.GCP_DEPLOYER_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Scale node pool (${{ steps.action.outputs.action }})
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.action.outputs.action }}" = "stop" ]; then
+            MIN=0
+          else
+            MIN="$START_MIN_NODES"
+          fi
+          gcloud container node-pools update "$NODE_POOL" \
+            --cluster "$CLUSTER" \
+            --location "$ZONE" \
+            --project "$PROJECT_ID" \
+            --enable-autoscaling \
+            --min-nodes="$MIN" \
+            --max-nodes="$MAX_NODES" \
+            --quiet
+
+      - name: Wait for pool to settle
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            STATUS="$(gcloud container node-pools describe "$NODE_POOL" \
+              --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
+              --format 'value(status)')"
+            WANT_MIN="$( [ "${{ steps.action.outputs.action }}" = "stop" ] && echo 0 || echo "$START_MIN_NODES" )"
+            ACTUAL_MIN="$(gcloud container node-pools describe "$NODE_POOL" \
+              --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
+              --format 'value(autoscaling.minNodeCount)')"
+            if [ "$STATUS" = "RUNNING" ] && [ "$ACTUAL_MIN" = "$WANT_MIN" ]; then
+              echo "Pool $NODE_POOL is RUNNING with minNodeCount=$ACTUAL_MIN"
+              exit 0
+            fi
+            echo "status=$STATUS min=$ACTUAL_MIN (want RUNNING/$WANT_MIN); waiting 10s..."
+            sleep 10
+          done
+          echo "::error::Node pool did not settle within 10 minutes"
+          exit 1
+
+      - name: Report cluster state
+        run: |
+          set -euo pipefail
+          gcloud container clusters get-credentials "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID"
+          kubectl get nodes -o wide
+          echo "Current autoscaling:"
+          gcloud container node-pools describe "$NODE_POOL" \
+            --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
+            --format 'value(autoscaling.minNodeCount, autoscaling.maxNodeCount, autoscaling.totalNodes)'
