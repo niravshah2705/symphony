@@ -1,0 +1,221 @@
+name: OpenShell GKE reconcile
+
+# Counterpart to deploy.yml for the other half of the infrastructure. deploy.yml
+# only path-filters deploy/gcp/terraform/** (the scale-to-zero Cloud Run stack),
+# so a change to the OpenShell GKE module used to land with nothing checking it:
+# the module, its adopted state, and the live pool silently drifted apart.
+#
+# On every push to main that touches the module this plans it and writes the
+# diff to the run summary. It never applies on a push — a full apply here also
+# re-converges the helm releases, namespaces, and kubectl manifests of a private
+# cluster, which is a person's judgement call, not a merge's. Run it with
+# `apply=true` to converge.
+#
+# Auth is keyless via Workload Identity Federation as gh-deployer — see
+# docs/GCP_CICD.md and deploy/gcp/bootstrap.sh.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/gcp/terraform-openshell-gke/**'
+      - '.github/workflows/openshell-gke-sync.yml'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply the plan (otherwise plan only)
+        type: boolean
+        default: false
+      refresh:
+        description: Refresh remote objects before planning (needs roles/compute.viewer on gh-deployer)
+        type: boolean
+        default: false
+      allow_destroy:
+        description: Permit a plan that deletes resources (only meaningful with apply)
+        type: boolean
+        default: false
+
+# Shared with openshell-cluster-power: node-pool bounds are the power
+# workflow's to change, and this workflow reads them to pass back, so the two
+# must not interleave.
+concurrency:
+  group: openshell-cluster-power
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  CLUSTER: ${{ vars.OPENSHELL_CLUSTER_NAME || 'openshell-multitenant' }}
+  ZONE: ${{ vars.OPENSHELL_CLUSTER_ZONE || 'asia-south1-a' }}
+  NODE_POOL: ${{ vars.OPENSHELL_NODE_POOL || 'openshell-multitenant-node-pool' }}
+  TF_DIR: deploy/gcp/terraform-openshell-gke
+  TF_STATE_PREFIX: openshell/gke
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Resolve module inputs
+        id: tfvars
+        env:
+          CERT_EMAIL: ${{ vars.OPENSHELL_CERT_EMAIL }}
+        run: |
+          set -euo pipefail
+          # cert_email is a required module variable with no default.
+          if [ -z "$CERT_EMAIL" ]; then
+            echo "::error::Set the ACME email once: gh variable set OPENSHELL_CERT_EMAIL --body \"<email>\""
+            exit 1
+          fi
+          echo "cert_email=$CERT_EMAIL" >> "$GITHUB_OUTPUT"
+
+      - name: Read live autoscaling bounds
+        id: bounds
+        run: |
+          set -euo pipefail
+          POOL_JSON="$(gcloud container node-pools describe "$NODE_POOL" \
+            --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" --format json)"
+          # The power workflow parks min at 0 to stop the cluster and GKE omits
+          # minNodeCount when it is 0. Feeding the live bounds back in is what
+          # keeps a reconcile from silently starting (or capping) the pool.
+          MIN="$(jq -r '.autoscaling.minNodeCount // .initialNodeCount // 0' <<<"$POOL_JSON")"
+          MAX="$(jq -r '.autoscaling.maxNodeCount // .initialNodeCount // 1' <<<"$POOL_JSON")"
+          echo "min=$MIN" >> "$GITHUB_OUTPUT"
+          echo "max=$MAX" >> "$GITHUB_OUTPUT"
+          echo "Live node pool bounds: min=$MIN max=$MAX"
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -euo pipefail
+          BUCKET="${TF_STATE_BUCKET:-${PROJECT_ID}-tfstate}"
+          terraform init -input=false \
+            -backend-config="bucket=$BUCKET" \
+            -backend-config="prefix=$TF_STATE_PREFIX"
+          # An unadopted state would make "reconcile" mean "create a second
+          # cluster next to the live one" — see IMPORT.md.
+          STATE_COUNT="$(terraform state list | wc -l | tr -d ' ')"
+          if [ "$STATE_COUNT" -lt 1 ]; then
+            echo "::error::Remote state at gs://$BUCKET/$TF_STATE_PREFIX is empty. Run the IMPORT.md adoption pass first."
+            exit 1
+          fi
+          echo "Adopted state holds $STATE_COUNT resources"
+
+      - name: Validate configuration
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -euo pipefail
+          terraform validate -no-color
+          if [ -n "$(terraform fmt -check -diff -no-color)" ]; then
+            echo "::error::terraform fmt drifted; run 'terraform fmt' in $TF_DIR."
+            terraform fmt -check -diff -no-color || true
+            exit 1
+          fi
+
+      - name: Plan
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          MIN_NODES: ${{ steps.bounds.outputs.min }}
+          MAX_NODES: ${{ steps.bounds.outputs.max }}
+          CERT_EMAIL: ${{ steps.tfvars.outputs.cert_email }}
+          REFRESH: ${{ inputs.refresh }}
+        run: |
+          set -euo pipefail
+          # Without a refresh the plan compares config against the adopted state
+          # rather than against live GCP. gh-deployer holds container.admin only,
+          # so a full refresh 403s on the Compute objects the state references;
+          # grant it roles/compute.viewer and tick `refresh` for real drift.
+          refresh_args=( -refresh=false )
+          if [ "$REFRESH" = "true" ]; then refresh_args=( -refresh=true ); fi
+          terraform plan "${refresh_args[@]}" -input=false \
+            -var="project_id=$PROJECT_ID" \
+            -var="zone=$ZONE" \
+            -var="cluster_name=$CLUSTER" \
+            -var="node_pool_name=$NODE_POOL" \
+            -var="cert_email=$CERT_EMAIL" \
+            -var="min_nodes=$MIN_NODES" \
+            -var="max_nodes=$MAX_NODES" \
+            -out=reconcile.tfplan
+          terraform show -json reconcile.tfplan > reconcile.json
+          {
+            echo "## Terraform plan — OpenShell GKE"
+            echo ""
+            echo "Refresh: \`${REFRESH}\` — with refresh disabled this compares the config against the adopted state, not against live GCP."
+            echo ""
+            echo '```'
+            terraform show -no-color reconcile.tfplan
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Assess the plan
+        id: plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -euo pipefail
+          # A replacement shows up as a create plus a delete on two addresses, so
+          # these counts overlap by design; the gate below only cares whether any
+          # delete is in plan.
+          ADD="$(jq '[.resource_changes[]? | select(.change.actions | index("create"))] | length' reconcile.json)"
+          CHANGE="$(jq '[.resource_changes[]? | select(.change.actions == ["update"])] | length' reconcile.json)"
+          DESTROY="$(jq '[.resource_changes[]? | select(.change.actions | index("delete"))] | length' reconcile.json)"
+          {
+            echo "add=$ADD"
+            echo "change=$CHANGE"
+            echo "destroy=$DESTROY"
+            echo "changed=$(( ADD + CHANGE + DESTROY ))"
+          } >> "$GITHUB_OUTPUT"
+          echo "Plan: $ADD create, $CHANGE update, $DESTROY delete (diff in the job summary)"
+          # Push runs only plan, so say out loud that the module and the cluster
+          # are still apart — otherwise a merged .tf edit looks shipped when it
+          # is only staged in this summary.
+          if [ "${{ github.event_name }}" = "push" ] && [ "$(( ADD + CHANGE + DESTROY ))" -gt 0 ]; then
+            echo "::warning::$ADD create / $CHANGE update / $DESTROY delete pending. The GKE stack is NOT converged; run openshell-gke-sync.yml with apply=true."
+          fi
+
+      - name: Block a destroying apply
+        if: inputs.apply
+        env:
+          DESTROY_COUNT: ${{ steps.plan.outputs.destroy }}
+          ALLOW_DESTROY: ${{ inputs.allow_destroy }}
+        run: |
+          set -euo pipefail
+          # Deleting anything here tears down cluster primitives. The cluster is
+          # behind deletion_protection, but a node-pool or gateway replacement
+          # shows up the same way and is just as disruptive.
+          if [ "$DESTROY_COUNT" -gt 0 ] && [ "$ALLOW_DESTROY" != "true" ]; then
+            echo "::error::The plan destroys $DESTROY_COUNT resource(s). Refusing to apply; re-run with allow_destroy=true only if that is what you expect."
+            exit 1
+          fi
+
+      - name: Apply
+        if: inputs.apply && steps.plan.outputs.changed != '0'
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -input=false reconcile.tfplan
+
+      - name: Report node pool
+        run: |
+          set -euo pipefail
+          gcloud container node-pools list --cluster "$CLUSTER" \
+            --location "$ZONE" --project "$PROJECT_ID" \
+            --format 'table(name, status, config.machineType, autoscaling.minNodeCount, autoscaling.maxNodeCount)'
