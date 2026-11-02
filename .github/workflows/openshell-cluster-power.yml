@@ -69,7 +69,8 @@ jobs:
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_CONTAINER_SA != '' && secrets.GCP_CONTAINER_SA || secrets.GCP_DEPLOYER_SA }}
+          # gh-deployer carries roles/container.admin; no GCP_CONTAINER_SA override exists.
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -104,6 +105,9 @@ jobs:
             ACTUAL_MIN="$(gcloud container node-pools describe "$NODE_POOL" \
               --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
               --format 'value(autoscaling.minNodeCount)')"
+            # GKE omits minNodeCount from the API response when it is 0, so value()
+            # comes back empty for a stopped pool.
+            ACTUAL_MIN="${ACTUAL_MIN:-0}"
             if [ "$STATUS" = "RUNNING" ] && [ "$ACTUAL_MIN" = "$WANT_MIN" ]; then
               echo "Pool $NODE_POOL is RUNNING with minNodeCount=$ACTUAL_MIN"
               exit 0
