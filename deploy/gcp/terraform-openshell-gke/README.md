@@ -48,14 +48,16 @@ and `roles/compute.viewer`.
 ## Reconcile / resize in CI
 
 `deploy.yml` only path-filters `deploy/gcp/terraform/**`, so this stack has its
-own reconciler: `.github/workflows/openshell-gke-sync.yml`. It plans on every
-push to main that touches this directory (diff lands in the run summary) and
-applies only when dispatched with `apply=true`, refusing to apply a plan that
-deletes anything unless `allow_destroy=true` is also set.
+own reconciler: `.github/workflows/openshell-gke-sync.yml`. It is continuous
+deployment for this module — every push to main that touches it plans and then
+applies, same posture as the Cloud Run stack. The one hard brake is destructive:
+a plan containing any delete refuses to apply unless it is re-run with
+`allow_destroy=true`, so a merge can converge a cluster but cannot take one
+apart.
 
 ```bash
-gh workflow run openshell-gke-sync.yml                      # plan only
-gh workflow run openshell-gke-sync.yml -f apply=true        # converge
+gh workflow run openshell-gke-sync.yml -f plan_only=true    # inspect, do not converge
+gh workflow run openshell-gke-sync.yml                      # converge now
 ```
 
 Resizing the nodes is just changing `machine_type` here (or
