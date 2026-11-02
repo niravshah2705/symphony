@@ -144,7 +144,13 @@ jobs:
           if [ "$MACHINE_TYPE" != "config default (variables.tf)" ]; then
             common_args+=(-var="machine_type=$MACHINE_TYPE")
           fi
+          # -refresh=false because gh-deployer holds container.admin only: even a
+          # targeted plan refreshes every object in the adopted state, and the
+          # Compute reads (subnetworks/routers/addresses/firewalls) 403. The live
+          # bounds are read with gcloud above, so the node pool diff is still
+          # computed against real values. Grant compute.viewer to drop this flag.
           terraform plan "${common_args[@]}" \
+            -refresh=false \
             -target=google_container_node_pool.primary_nodes \
             -out=resize.tfplan
           terraform show -json resize.tfplan > resize.json
