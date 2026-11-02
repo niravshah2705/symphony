@@ -90,7 +90,8 @@ for role in \
   roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin \
   roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser \
   roles/resourcemanager.projectIamAdmin roles/serviceusage.serviceUsageAdmin \
-  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin; do
+  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin \
+  roles/container.admin; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:${DEPLOYER}" --role="$role" --condition=None >/dev/null
 done
