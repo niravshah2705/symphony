@@ -5,3 +5,5 @@ terraform.tfvars
 crash.log
 crash.*.log
 adoption.tfplan
+.chart-cache/
+*.tfplan
