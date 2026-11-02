@@ -15,7 +15,7 @@ deployment); the two stacks do not share state or variables.
    firewall `openshell-allow-http-https`.
 2. **GKE** — zonal private cluster with Dataplane V2, Workload Identity,
    REGULAR release channel; node pool `openshell-multitenant-node-pool`
-   (e2-standard-4, autoscaling 2–8, UBUNTU_CONTAINERD).
+   (e2-standard-2, autoscaling 2–8, UBUNTU_CONTAINERD).
 3. **In-cluster platform** — agent-sandbox controller, Envoy Gateway +
    GatewayClass/EnvoyProxy on the static IP, cert-manager + Let's Encrypt
    issuers, Gateway/HTTPRoute + gRPC traffic policies, OpenShell gateway
@@ -43,6 +43,20 @@ Manual via `gh workflow run openshell-cluster-power.yml -f action=stop`.
 The nightly IST schedule is opt-in via repo variable
 `OPENSHELL_CLUSTER_AUTOSTOP=true` and authenticates as `GCP_DEPLOYER_SA`
 (`gh-deployer`), which `deploy/gcp/bootstrap.sh` grants `roles/container.admin`.
+
+## Resize the nodes
+
+`.github/workflows/openshell-node-resize.yml` changes the pool's machine type
+through this module (never `gcloud node-pools update` alone — that would leave
+the adopted state describing the old size, and the next apply would roll it
+back). It reads the live min/max and passes them back so resizing a parked
+pool does not start it, plans first, and only applies when `apply` is checked:
+
+```bash
+gh variable set OPENSHELL_CERT_EMAIL --body "<acme email>"   # required module variable
+gh workflow run openshell-node-resize.yml -f machine_type=e2-standard-2   # plan only
+gh run watch                                                  # then re-run with -f apply=true
+```
 
 ## Known hardening TODOs
 

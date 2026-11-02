@@ -27,7 +27,7 @@ envoy_gateway_version = "v1.8.1"
 tenants = ["tenant-a", "tenant-b"]
 
 # Node pool
-machine_type = "e2-standard-4"
+machine_type = "e2-standard-2"
 disk_size_gb = 50
 disk_type    = "pd-standard"
 min_nodes    = 2
