@@ -31,7 +31,7 @@ name: OpenShell cluster power (start/stop)
 # would otherwise scale down on.
 #
 # Autoscaling is never disabled, and the resting parked bounds stay min 0 /
-# max 8: openshell-node-resize.yml reads the live pool's bounds and feeds them
+# max 8: openshell-gke-sync.yml reads the live pool's bounds and feeds them
 # back to Terraform, and a pool with autoscaling off reports no bounds at all
 # (this pool's initialNodeCount is null), so it would silently plan the pool
 # down to max_nodes=1.
@@ -282,7 +282,7 @@ jobs:
 
       - name: Park pool bounds
         # Restore min 0 / max 8 after the forced 0/0: a pool left at max 0 can
-        # never wake for an incoming sandbox, and openshell-node-resize.yml reads
+        # never wake for an incoming sandbox, and openshell-gke-sync.yml reads
         # these bounds back into Terraform.
         if: >-
           always() &&

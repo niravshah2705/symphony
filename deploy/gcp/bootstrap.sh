@@ -85,17 +85,22 @@ log "Deployer SA ${DEPLOYER}"
 gcloud iam service-accounts describe "$DEPLOYER" --project "$PROJECT_ID" >/dev/null 2>&1 \
   || gcloud iam service-accounts create gh-deployer --project "$PROJECT_ID" \
        --display-name "GitHub Actions deployer"
-for role in \
-  roles/run.admin roles/cloudscheduler.admin roles/pubsub.admin \
-  roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin \
-  roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser \
-  roles/resourcemanager.projectIamAdmin roles/serviceusage.serviceUsageAdmin \
-  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin \
-  roles/container.admin; do
+# compute.viewer is what lets openshell-gke-sync.yml plan the adopted GKE state
+# against live GCP: without it a full refresh 403s on the subnet, router, NAT,
+# address and firewall objects in that state.
+DEPLOYER_ROLES=(
+  roles/run.admin roles/cloudscheduler.admin roles/pubsub.admin
+  roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin
+  roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser
+  roles/resourcemanager.projectIamAdmin roles/serviceusage.serviceUsageAdmin
+  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin
+  roles/container.admin roles/compute.viewer
+)
+for role in "${DEPLOYER_ROLES[@]}"; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:${DEPLOYER}" --role="$role" --condition=None >/dev/null
 done
-echo "  granted 15 roles"
+echo "  granted ${#DEPLOYER_ROLES[@]} roles"
 
 # --- 4. Workload Identity Federation (bind the repo to the deployer SA) ------
 log "Workload Identity Federation for ${REPO}"

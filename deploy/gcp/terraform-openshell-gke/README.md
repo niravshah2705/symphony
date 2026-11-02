@@ -64,12 +64,14 @@ the `minNodeCount` it had just written. Two consequences to keep in mind:
 - **`stop` needs the system pool in place first.** The workflow's placement
   preflight refuses to drain while any pinned pod still runs on a tenant node,
   because evicting Envoy Gateway or cert-manager off the last node makes the
-  autoscaler buy that node back. Apply this module before the first `stop`.
+  autoscaler buy that node back. Converge this module first
+  (`gh workflow run openshell-gke-sync.yml -f apply=true`) before the first
+  `stop`.
 - **Autoscaling stays enabled, parked at `min 0 / max 8`.** Never
-  `--no-enable-autoscaling --num-nodes=0`: `openshell-node-resize.yml` reads
-  the live pool's bounds and feeds them to Terraform, and a pool with
-  autoscaling off reports none (this pool's `initialNodeCount` is null), so it
-  would plan the pool down to `max_nodes=1`.
+  `--no-enable-autoscaling --num-nodes=0`: `openshell-gke-sync.yml` reads the
+  live pool's bounds and feeds them to Terraform, and a pool with autoscaling
+  off reports none (this pool's `initialNodeCount` is null), so it would plan
+  the pool down to `max_nodes=1`.
 
 Manual run, and the opt-in nightly schedule:
 
@@ -79,26 +81,38 @@ gh variable set OPENSHELL_CLUSTER_AUTOSTOP --body true    # enables the IST sche
 ```
 
 Both workflows authenticate as `GCP_DEPLOYER_SA` (`gh-deployer`), which
-`deploy/gcp/bootstrap.sh` grants `roles/container.admin` — that IAM role is
-what maps the identity to Kubernetes `cluster-admin`, so drain works without
-`ci_rbac.tf`. Set `power_ci_sa_email` to that address if you prefer the
-explicit ClusterRole binding — it must match the `GCP_DEPLOYER_SA` secret
-byte for byte, because the auth webhook presents that email as the Kubernetes
-user name.
+`deploy/gcp/bootstrap.sh` grants `roles/container.admin` and
+`roles/compute.viewer` — the former is what maps the identity to Kubernetes
+`cluster-admin`, so drain works without `ci_rbac.tf`. Set `power_ci_sa_email`
+to that address if you prefer the explicit ClusterRole binding — it must match
+the `GCP_DEPLOYER_SA` secret byte for byte, because the auth webhook presents
+that email as the Kubernetes user name.
 
-## Resize the nodes
+## Reconcile / resize in CI
 
-`.github/workflows/openshell-node-resize.yml` changes the pool's machine type
-through this module (never `gcloud node-pools update` alone — that would leave
-the adopted state describing the old size, and the next apply would roll it
-back). It reads the live min/max and passes them back so resizing a parked
-pool does not start it, plans first, and only applies when `apply` is checked:
+`deploy.yml` only path-filters `deploy/gcp/terraform/**`, so this stack has its
+own reconciler: `.github/workflows/openshell-gke-sync.yml`. It plans on every
+push to main that touches this directory (diff lands in the run summary) and
+applies only when dispatched with `apply=true`, refusing to apply a plan that
+deletes anything unless `allow_destroy=true` is also set.
 
 ```bash
-gh variable set OPENSHELL_CERT_EMAIL --body "<acme email>"   # required module variable
-gh workflow run openshell-node-resize.yml -f machine_type=e2-standard-2   # plan only
-gh run watch                                                  # then re-run with -f apply=true
+gh workflow run openshell-gke-sync.yml                      # plan only
+gh workflow run openshell-gke-sync.yml -f apply=true        # converge
 ```
+
+Resizing the nodes is just changing `machine_type` here (or
+`-var=machine_type=...`) and letting that workflow apply it. Two things the
+workflow handles for you, and that any manual apply must too:
+
+- **Live autoscaling bounds.** It reads the pool's current min/max and passes
+  them back, so a reconcile does not silently start a parked cluster (the power
+  workflow parks min at 0; the module default is 2).
+- **Refresh.** It plans with `-refresh=false`, comparing config against the
+  adopted state, because a full refresh 403s on the Compute objects in that
+  state for a `gh-deployer` that holds only `roles/container.admin`. Grant it
+  `roles/compute.viewer` (`bootstrap.sh` does now) and tick `refresh` to see
+  real live drift instead.
 
 ## Known hardening TODOs
 
