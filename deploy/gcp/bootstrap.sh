@@ -85,9 +85,10 @@ log "Deployer SA ${DEPLOYER}"
 gcloud iam service-accounts describe "$DEPLOYER" --project "$PROJECT_ID" >/dev/null 2>&1 \
   || gcloud iam service-accounts create gh-deployer --project "$PROJECT_ID" \
        --display-name "GitHub Actions deployer"
-# compute.viewer is what lets openshell-gke-sync.yml plan the adopted GKE state
-# against live GCP: without it a full refresh 403s on the subnet, router, NAT,
-# address and firewall objects in that state.
+# compute.viewer is what lets deploy.yml's gke_reconcile job plan the adopted
+# GKE state against live GCP: without it a full refresh 403s on the subnet,
+# router, NAT, address and firewall objects in that state, and an applied
+# node-pool change 403s while it polls the instance group manager.
 DEPLOYER_ROLES=(
   roles/run.admin roles/cloudscheduler.admin roles/pubsub.admin
   roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin

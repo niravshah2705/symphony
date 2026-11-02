@@ -65,13 +65,13 @@ the `minNodeCount` it had just written. Two consequences to keep in mind:
   preflight refuses to drain while any pinned pod still runs on a tenant node,
   because evicting Envoy Gateway or cert-manager off the last node makes the
   autoscaler buy that node back. Converge this module first
-  (`gh workflow run openshell-gke-sync.yml -f apply=true`) before the first
+  (`gh workflow run deploy.yml -f gke_reconcile=true`) before the first
   `stop`.
 - **Autoscaling stays enabled, parked at `min 0 / max 8`.** Never
-  `--no-enable-autoscaling --num-nodes=0`: `openshell-gke-sync.yml` reads the
-  live pool's bounds and feeds them to Terraform, and a pool with autoscaling
-  off reports none (this pool's `initialNodeCount` is null), so it would plan
-  the pool down to `max_nodes=1`.
+  `--no-enable-autoscaling --num-nodes=0`: deploy.yml's `gke_reconcile` job
+  reads the live pool's bounds and feeds them to Terraform, and a pool with
+  autoscaling off reports none (this pool's `initialNodeCount` is null), so it
+  would plan the pool down to `max_nodes=1`.
 
 Manual run, and the opt-in nightly schedule:
 
@@ -90,31 +90,35 @@ that email as the Kubernetes user name.
 
 ## Reconcile / resize in CI
 
-`deploy.yml` only path-filters `deploy/gcp/terraform/**`, so this stack has its
-own reconciler: `.github/workflows/openshell-gke-sync.yml`. It is continuous
-deployment for this module — every push to main that touches it plans and then
-applies, same posture as the Cloud Run stack. The one hard brake is destructive:
-a plan containing any delete refuses to apply unless it is re-run with
-`allow_destroy=true`, so a merge can converge a cluster but cannot take one
-apart.
+The `gke_reconcile` job in `.github/workflows/deploy.yml` is continuous
+deployment for this module: every push to main that touches
+`deploy/gcp/terraform-openshell-gke/**` plans and then applies, same posture as
+the Cloud Run stack it runs beside (own state prefix, no images). The one hard
+brake is destructive — a plan containing any delete refuses to apply unless the
+run is re-dispatched with `gke_allow_destroy=true`, so a merge can converge a
+cluster but cannot take one apart.
 
 ```bash
-gh workflow run openshell-gke-sync.yml -f plan_only=true    # inspect, do not converge
-gh workflow run openshell-gke-sync.yml                      # converge now
+gh workflow run deploy.yml -f gke_reconcile=true -f gke_plan_only=true  # inspect, do not converge
+gh workflow run deploy.yml -f gke_reconcile=true                        # converge now
 ```
 
 Resizing the nodes is just changing `machine_type` here (or
-`-var=machine_type=...`) and letting that workflow apply it. Two things the
-workflow handles for you, and that any manual apply must too:
+`-var=machine_type=...`) and letting that job apply it. Two things the job
+handles for you, and that any manual apply must too:
 
-- **Live autoscaling bounds.** It reads the pool's current min/max and passes
-  them back, so a reconcile does not silently start a parked cluster (the power
-  workflow parks min at 0; the module default is 2).
-- **Refresh.** It plans with `-refresh=false`, comparing config against the
-  adopted state, because a full refresh 403s on the Compute objects in that
-  state for a `gh-deployer` that holds only `roles/container.admin`. Grant it
-  `roles/compute.viewer` (`bootstrap.sh` does now) and tick `refresh` to see
-  real live drift instead.
+- **Live autoscaling bounds.** It reads the tenant pool's current min/max and
+  passes them back, so a reconcile does not silently start a parked cluster
+  (the power workflow parks min at 0; the module default is 2).
+- **Refresh.** It plans the whole module with `-refresh=true`, so a change made
+  outside Terraform shows up as drift instead of quietly staying applied. That
+  works because `gh-deployer` holds `roles/container.admin`, which GKE maps to
+  Kubernetes `cluster-admin` (so the helm releases and manifests in this state
+  are readable), and `roles/compute.viewer`, which `bootstrap.sh` grants —
+  without the latter a refresh 403s on the subnet, router, NAT, address and
+  firewall objects, and an applied node-pool change 403s while it polls the
+  instance group manager. Nothing is `-target`ed: an enumerated target list
+  stops covering the stack the moment the module grows a resource.
 
 ## Known hardening TODOs
 
