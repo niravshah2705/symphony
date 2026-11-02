@@ -26,12 +26,29 @@ envoy_gateway_version = "v1.8.1"
 # Tenants
 tenants = ["tenant-a", "tenant-b"]
 
-# Node pool
+# Tenant node pool — the power workflow parks min_nodes at 0 to stop the
+# cluster and restores it to 2 on start.
 machine_type = "e2-standard-2"
 disk_size_gb = 50
 disk_type    = "pd-standard"
 min_nodes    = 2
 max_nodes    = 8
+
+# System node pool — always on. The agent-sandbox controller, Envoy Gateway,
+# cert-manager and the OpenShell gateway are pinned to it by
+# nodeSelector cloud.google.com/gke-nodepool, so the tenant pool can drain to
+# zero without the autoscaler re-buying a node for a singleton control-plane
+# pod. ~1 CPU / 2.3 GiB of requests is what those add-ons actually need.
+system_node_pool_name = "openshell-system-node-pool"
+system_machine_type   = "e2-standard-2"
+system_min_nodes      = 1
+system_max_nodes      = 3
+
+# Identity the cluster-power workflow drains tenant nodes with. gh-deployer
+# already holds roles/container.admin, which GKE maps to cluster-admin, so the
+# ci_rbac.tf binding is optional — set it if you grant a pool-scoped role
+# instead. Must match the GCP_DEPLOYER_SA secret exactly.
+power_ci_sa_email = "gh-deployer@adlc-9e72f.iam.gserviceaccount.com"
 
 # HARDENING TODO: restrict control-plane access to known CIDRs
 master_authorized_networks_cidr = "0.0.0.0/0"

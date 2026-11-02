@@ -122,6 +122,36 @@ variable "max_nodes" {
   default     = 8
 }
 
+variable "system_node_pool_name" {
+  description = "Always-on node pool hosting the platform add-ons, so the tenant pool can drain to zero"
+  type        = string
+  default     = "openshell-system-node-pool"
+}
+
+variable "system_machine_type" {
+  description = "Machine type for the system node pool"
+  type        = string
+  default     = "e2-standard-2"
+}
+
+variable "system_min_nodes" {
+  description = "Size of the system node pool when the cluster is running; the power workflow never parks it"
+  type        = number
+  default     = 1
+}
+
+variable "system_max_nodes" {
+  description = "Maximum size of the system node pool"
+  type        = number
+  default     = 3
+}
+
+variable "power_ci_sa_email" {
+  description = "Identity the cluster power workflow drains nodes with, bound to the node-drain ClusterRole. Only needed when that identity holds a pool-scoped IAM role instead of roles/container.admin; empty skips the binding."
+  type        = string
+  default     = ""
+}
+
 variable "master_authorized_networks_cidr" {
   description = "HARDENING TODO: tighten to operator/CI egress CIDRs once verified — 0.0.0.0/0 matches the live cluster today"
   type        = string
