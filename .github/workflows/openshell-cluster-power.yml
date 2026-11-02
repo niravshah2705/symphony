@@ -117,9 +117,9 @@ jobs:
       - name: Report cluster state
         run: |
           set -euo pipefail
-          gcloud container clusters get-credentials "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID"
-          kubectl get nodes -o wide
-          echo "Current autoscaling:"
-          gcloud container node-pools describe "$NODE_POOL" \
-            --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
-            --format 'value(autoscaling.minNodeCount, autoscaling.maxNodeCount, autoscaling.totalNodes)'
+          # gcloud only: on GKE 1.30+ `get-credentials` writes a kubectl config that
+          # needs gke-gcloud-auth-plugin plus a ClusterRoleBinding for this SA, and
+          # node counts are all this step is reporting.
+          gcloud container node-pools list --cluster "$CLUSTER" \
+            --location "$ZONE" --project "$PROJECT_ID" \
+            --format 'table(name, status, autoscaling.minNodeCount, autoscaling.maxNodeCount, autoscaling.totalNodes)'
