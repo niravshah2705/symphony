@@ -1,0 +1,38 @@
+# Copy to terraform.tfvars and adjust. Values here match the live
+# openshell-multitenant deployment.
+
+project_id     = "adlc-9e72f"
+region         = "asia-south1"
+zone           = "asia-south1-a"
+cluster_name   = "openshell-multitenant"
+node_pool_name = "openshell-multitenant-node-pool"
+
+# VPC & networking
+vpc_name            = "default"
+subnet_name         = "openshell-subnet"
+subnet_primary_cidr = "10.10.0.0/20"
+pods_cidr           = "10.20.0.0/14"
+services_cidr       = "10.24.0.0/20"
+
+# Domain & certificates
+domain     = "openshell.archagentix.com"
+cert_email = "you@example.com"
+
+# Component versions (match helm list -A on the live cluster)
+openshell_version     = "0.1.5"
+cert_manager_version  = "v1.20.3"
+envoy_gateway_version = "v1.8.1"
+
+# Tenants
+tenants = ["tenant-a", "tenant-b"]
+
+# Node pool
+machine_type = "e2-standard-4"
+disk_size_gb = 50
+disk_type    = "pd-standard"
+min_nodes    = 2
+max_nodes    = 8
+
+# HARDENING TODO: restrict control-plane access to known CIDRs
+master_authorized_networks_cidr = "0.0.0.0/0"
+deletion_protection             = true
