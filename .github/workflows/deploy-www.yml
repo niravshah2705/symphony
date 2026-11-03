@@ -6,8 +6,9 @@ name: Deploy www static site
 # marketing/ tree from public/ (scripts/build-marketing-site.js) and publishes it
 # to its OWN hosting site (adlc-9e72f-marketing, target "www") in the same GCP
 # project. Marketing edits ship without touching the platform deploy and vice
-# versa; the app site keeps serving the same pages under /adlc/ and the old
-# /adlc/** urls on www are 301s declared in firebase.json. See docs/SEO_AEO.md.
+# versa; the app site keeps serving the same pages under /adlc/ and each old
+# /adlc/** url on www is rewritten (200, no redirect hop) onto its promoted file
+# in firebase.json. See docs/SEO_AEO.md.
 #
 # Auth is keyless via Workload Identity Federation — same deployer service
 # account as Deploy to GCP; see docs/GCP_CICD.md.

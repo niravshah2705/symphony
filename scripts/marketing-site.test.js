@@ -2,7 +2,7 @@
 
 // The www.archagentix.com tree is generated, so these tests check the boundary
 // that matters: what the generator writes, and whether firebase.json and
-// deploy-www.yml actually publish that tree with the /adlc/ redirects.
+// deploy-www.yml actually publish that tree and rewrite the legacy /adlc/ urls onto it.
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -99,25 +99,30 @@ test('legal hash routes point at the SPA on the platform origin', () => {
   }
   assert.ok(read('index.html').includes(`${PLATFORM_ORIGIN}/#/privacy`), 'Privacy must resolve to the SPA');
 });
-test('firebase publishes the generated tree as the www root with /adlc/ 301s', () => {
+test('firebase publishes the generated tree as the www root and rewrites every legacy /adlc/ url onto it', () => {
   const firebase = JSON.parse(fs.readFileSync(path.join(ROOT, 'firebase.json'), 'utf8'));
   const app = firebase.hosting.find((site) => site.target === 'app');
   const www = firebase.hosting.find((site) => site.target === 'www');
 
   assert.equal(app.public, 'public', 'the app site keeps serving the source tree');
   assert.equal(www.public, 'marketing', 'www must publish the generated tree');
-  assert.ok(!www.rewrites, 'a SPA catch-all rewrite would mask 404s by serving the landing page');
-  assert.deepEqual(www.redirects, [
-    { source: '/adlc', destination: '/', type: 301 },
-    { source: '/adlc/', destination: '/', type: 301 },
-    // Firebase captures glob segments with ":name" + "*" (":splat" is not a token).
-    { source: '/adlc/:path*', destination: '/:path', type: 301 },
-  ]);
+  assert.ok(!www.redirects, 'a legacy 301 costs a hop and a 5xx window on a mis-provisioned domain');
+  // One rule per legacy url, derived from the source tree: a glob destination would
+  // 404 because Firebase only captures wildcards in redirects, never in rewrites.
+  // A page added under public/adlc/ therefore has to be added here too.
+  assert.deepEqual(www.rewrites, built.rewrites, 'firebase.json must match legacyRewrites()');
+  assert.ok(www.rewrites.every((rule) => rule.source.startsWith('/adlc')), 'www must keep no other rewrite');
+  for (const rule of www.rewrites) {
+    const target = path.join(OUT, ...rule.destination.slice(1).split('/'));
+    assert.ok(fs.existsSync(target), `${rule.source} rewrites to a missing file: ${rule.destination}`);
+  }
 
   const cacheFor = Object.fromEntries(www.headers.map((rule) => [rule.source, rule.headers[0].value]));
   assert.equal(cacheFor['/config.js'], 'no-store', 'the ADLC runtime config must never be cached');
   assert.equal(cacheFor['/sw.js'], 'no-cache');
   assert.equal(cacheFor['/manifest.webmanifest'], 'no-cache');
+  assert.equal(cacheFor['/adlc'], cacheFor['/'], 'legacy urls must serve the landing page uncached');
+  assert.equal(cacheFor['/adlc/**'], cacheFor['/'], 'rewritten pages must not be cached at the old url');
 });
 
 test('deploy-www builds the marketing tree before publishing it', () => {

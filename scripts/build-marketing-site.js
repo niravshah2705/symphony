@@ -8,6 +8,10 @@
 // "/adlc/". The app site keeps those pages under "/adlc/", so public/adlc/ stays
 // the single source in git and this script rewrites the prefix for the www copy.
 //
+// Legacy "/adlc/**" urls are rewritten to the promoted file rather than 301'd, so an
+// old inbound link resolves with 200 and the page's own canonical tag moves search
+// to the new url. firebase.json's www rewrites are exactly legacyRewrites() below.
+//
 //   node scripts/build-marketing-site.js                 # write marketing/
 //   node scripts/build-marketing-site.js --out build/www # alternate output
 //   node scripts/build-marketing-site.js --check         # fail if marketing/ is stale
@@ -65,8 +69,9 @@ function copyFile(srcDir, outDir, rel) {
   fs.writeFileSync(dest, text);
 }
 // public/sitemap.xml documents the app tree, where the ADLC pages sit under /adlc/.
-// On www those paths are 301 sources, not canonical urls, so the generated copy
-// promotes them and drops the /adlc/ entry ("/" is the landing page, already listed).
+// On www those are legacy urls served by a rewrite, never canonical urls, so the
+// generated copy promotes them and drops the /adlc/ entry ("/" is the landing page,
+// already listed).
 function buildSitemap(srcDir) {
   var xml = fs.readFileSync(path.join(srcDir, 'sitemap.xml'), 'utf8');
   var open = xml.slice(0, xml.indexOf('<urlset')) + '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
@@ -99,8 +104,32 @@ function fileForUrl(outDir, loc) {
     ? path.join(outDir, 'index.html')
     : path.join(outDir, pathname.slice(1), 'index.html');
 }
+// One rule per legacy /adlc/** url, derived from the source tree so a new ADLC page
+// gets its own rule. A rewrite (not a redirect) answers the old url with 200 at the
+// promoted content and the page's own canonical tag points search at the new url.
+// Firebase needs a literal destination file - glob captures work in redirects only -
+// so a catch-all rule would 404 every url under /adlc/, and a directory page needs
+// both slash forms because a rewrite never gets the trailing-slash normalisation a
+// real index.html file would.
+function legacyRewrites(promoted) {
+  var rules = [];
+  for (var i = 0; i < promoted.length; i += 1) {
+    var rel = promoted[i];
+    if (rel === 'index.html') {
+      rules.push({ source: '/adlc', destination: '/index.html' });
+      rules.push({ source: '/adlc/', destination: '/index.html' });
+    } else if (rel.slice(-'/index.html'.length) === '/index.html') {
+      var dir = '/adlc/' + rel.slice(0, -'index.html'.length);
+      rules.push({ source: dir.slice(0, -1), destination: '/' + rel });
+      rules.push({ source: dir, destination: '/' + rel });
+    } else {
+      rules.push({ source: '/adlc/' + rel, destination: '/' + rel });
+    }
+  }
+  return rules.sort(function (a, b) { return a.source < b.source ? -1 : 1; });
+}
 // Fail loudly on anything that would ship a broken www release: a leftover /adlc/
-// reference (that path is now a redirect source), a dead www hash route, or a
+// reference (that path is now a rewrite source), a dead www hash route, or a
 // sitemap url whose file is missing from the generated tree.
 function validateTree(outDir, srcDir) {
   var files = walkFiles(outDir);
@@ -108,7 +137,7 @@ function validateTree(outDir, srcDir) {
   for (i = 0; i < files.length; i += 1) {
     var text = fs.readFileSync(path.join(outDir, files[i]), 'utf8');
     if (text.indexOf('/adlc/') !== -1) {
-      throw new Error(files[i] + ' still references /adlc/; www serves that path as a 301');
+      throw new Error(files[i] + ' still references /adlc/; www serves that path from the promoted file');
     }
     if (/\.html$/.test(files[i]) && text.indexOf(CANONICAL_ORIGIN + '/#/') !== -1) {
       throw new Error(files[i] + ' still links a www hash route; the SPA is on the platform origin');
@@ -158,7 +187,11 @@ function buildMarketingSite(options) {
   for (i = 0; i < DISCOVERY_FILES.length; i += 1) copyFile(srcDir, outDir, DISCOVERY_FILES[i]);
   fs.writeFileSync(path.join(outDir, 'sitemap.xml'), buildSitemap(srcDir));
 
-  return { outDir: outDir, files: validateTree(outDir, srcDir) };
+  return {
+    outDir: outDir,
+    files: validateTree(outDir, srcDir),
+    rewrites: legacyRewrites(promoted),
+  };
 }
 // --check rebuilds into a scratch dir and diffs it against marketing/, so a stale
 // tree fails locally without mutating the working copy.
@@ -229,6 +262,7 @@ module.exports = {
   buildSitemap: buildSitemap,
   checkFresh: checkFresh,
   fileForUrl: fileForUrl,
+  legacyRewrites: legacyRewrites,
   parseArgs: parseArgs,
   rewriteText: rewriteText,
   run: run,

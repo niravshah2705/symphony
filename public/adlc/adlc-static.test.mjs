@@ -36,7 +36,13 @@ test('www marketing site serves the promoted tree on its own hosting site', () =
   assert.equal(app.public, 'public');
   assert.equal(www.public, 'marketing');
   assert.deepEqual(app.rewrites, [{ source: '**', destination: '/index.html' }], 'the SPA needs its catch-all');
-  assert.ok(!www.rewrites, 'www is static: a catch-all would serve the landing page for unknown urls');
+  // www answers the legacy /adlc/ urls with a rewrite per promoted page, never a
+  // catch-all (that would serve the landing page for unknown urls) and never a 301.
+  assert.ok(!www.redirects, 'legacy /adlc/ urls must resolve without a redirect hop');
+  assert.ok(www.rewrites.length > 0 && www.rewrites.every((rule) => rule.source.startsWith('/adlc')),
+    'www is static: a catch-all would serve the landing page for unknown urls');
+  assert.deepEqual(www.rewrites.slice(0, 2).map((rule) => rule.source), ['/adlc', '/adlc/'],
+    'both legacy root forms must answer with the landing page');
 });
 
 test('ADLC manifest and service worker stay scoped to /adlc/', () => {

@@ -35,8 +35,9 @@ and rewrites `sitemap.xml` for the new URL scheme), then publishes it to the
 second Hosting site `adlc-9e72f-marketing`
 (`firebase deploy --only hosting:www`). `marketing/` is a gitignored artifact —
 never edit it by hand; change `public/adlc/**` and let the build re-promote it.
-The old `www` URLs under `/adlc/` are 301s declared on that target only, so the
-app site keeps serving `public/adlc/**` unchanged. Run the workflow manually with
+The old `www` URLs under `/adlc/` are rewrite sources on that target only (one
+rule per promoted page in `firebase.json`, never a 301), so the app site keeps
+serving `public/adlc/**` unchanged. Run the workflow manually with
 `gh workflow run deploy-www.yml --repo niravshah2705/symphony --ref main`.
 The two workflows never race: each targets its own `hosting:` target via the
 `firebase.json` targets array. Cutover and verification steps for
