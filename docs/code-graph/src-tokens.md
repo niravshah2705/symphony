@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 245 nodes
+Community of 244 nodes
 
-- **Size**: 245 nodes
-- **Cohesion**: 0.1834
+- **Size**: 244 nodes
+- **Cohesion**: 0.1857
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 245 nodes
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 | getBaseUrl | Function | ./packages/shared-core/src/billing/cashfree-client.js | 6-15 |
 
-*... and 195 more members.*
+*... and 194 more members.*
 
 ## Execution Flows
 
@@ -85,11 +85,11 @@ Community of 245 nodes
 
 ### Outgoing
 
-- `equal` (145 edge(s))
+- `equal` (140 edge(s))
 - `Number` (31 edge(s))
-- `filter` (30 edge(s))
+- `filter` (29 edge(s))
 - `isArray` (25 edge(s))
-- `toISOString` (25 edge(s))
+- `toISOString` (24 edge(s))
 - `includes` (22 edge(s))
 - `String` (21 edge(s))
 - `isFinite` (20 edge(s))
@@ -99,12 +99,12 @@ Community of 245 nodes
 - `find` (16 edge(s))
 - `call` (16 edge(s))
 - `map` (15 edge(s))
-- `now` (13 edge(s))
+- `upsertBillingAccount` (13 edge(s))
 
 ### Incoming
 
 - `./packages/shared-core/src/store.js` (175 edge(s))
-- `equal` (145 edge(s))
+- `equal` (140 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))

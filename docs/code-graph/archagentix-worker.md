@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| initWorker | Function | ./public/archagentix/app.js | 123-158 |
-| sendQuery | Function | ./public/archagentix/app.js | 141-154 |
+| initWorker | Function | ./public/archagentix/app.js | 184-219 |
+| sendQuery | Function | ./public/archagentix/app.js | 202-215 |
 
 ## Execution Flows
 

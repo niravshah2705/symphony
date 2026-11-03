@@ -14,13 +14,13 @@ Community of 7 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| initApp | Function | ./public/archagentix/app.js | 13-24 |
-| formatVal | Function | ./public/archagentix/app.js | 26-30 |
-| renderTable | Function | ./public/archagentix/app.js | 32-53 |
-| setupFilters | Function | ./public/archagentix/app.js | 55-78 |
-| filterHandler | Function | ./public/archagentix/app.js | 60-73 |
-| setupEvaluator | Function | ./public/archagentix/app.js | 80-121 |
-| recalculate | Function | ./public/archagentix/app.js | 87-115 |
+| initApp | Function | ./public/archagentix/app.js | 74-85 |
+| formatVal | Function | ./public/archagentix/app.js | 87-91 |
+| renderTable | Function | ./public/archagentix/app.js | 93-114 |
+| setupFilters | Function | ./public/archagentix/app.js | 116-139 |
+| filterHandler | Function | ./public/archagentix/app.js | 121-134 |
+| setupEvaluator | Function | ./public/archagentix/app.js | 141-182 |
+| recalculate | Function | ./public/archagentix/app.js | 148-176 |
 
 ## Execution Flows
 

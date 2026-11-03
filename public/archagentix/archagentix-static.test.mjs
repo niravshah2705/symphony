@@ -112,4 +112,38 @@ assert.ok(archagentixHeader, 'firebase.json must no-cache /archagentix css and j
 assert.equal(archagentixHeader.headers[0].key, 'Cache-Control');
 assert.equal(archagentixHeader.headers[0].value, 'no-cache');
 
+// 4. Agentic Model Catalog: the static data the #agentic-catalog table renders.
+// catalog.json is the hand-curated source; catalog-scored.json must always be the
+// generator's output for that source, so an edit without `npm run benchmarks:seed`
+// fails here instead of shipping a panel whose scores disagree with its data.
+const { createRequire } = await import('node:module');
+const requireCjs = createRequire(import.meta.url);
+const { buildScoredCatalog } = requireCjs('../../scripts/seed-benchmarks.js');
+
+const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/benchmarks/catalog.json'), 'utf8'));
+assert.ok(Array.isArray(catalog) && catalog.length > 0, 'catalog.json must be a non-empty array');
+for (const row of catalog) {
+  for (const key of ['id', 'name', 'provider', 'model_type', 'benchmarks', 'agentic_features', 'cloud_inference_metrics', 'rank']) {
+    assert.ok(row[key] !== undefined, `catalog row ${row.id} missing ${key}`);
+  }
+}
+
+const scoredPath = path.join(__dirname, '../data/benchmarks/catalog-scored.json');
+const scored = JSON.parse(fs.readFileSync(scoredPath, 'utf8'));
+assert.deepEqual(scored, buildScoredCatalog(catalog), 'catalog-scored.json is stale — run npm run benchmarks:seed');
+assert.deepEqual(scored.map((row) => row.rank), scored.map((row) => row.rank).sort((a, b) => a - b), 'rows must stay rank-ordered');
+for (const row of scored) {
+  assert.equal(typeof row.simple_score, 'number', `${row.id} missing a numeric simple_score`);
+}
+
+assert.ok(htmlContent.includes('id="agentic-catalog"'), 'index.html missing the agentic catalog section');
+assert.ok(htmlContent.includes('href="#agentic-catalog"'), 'nav must link to the agentic catalog section');
+assert.ok(htmlContent.includes('id="catalog-body"'), 'index.html missing the catalog table body');
+assert.match(appSource, /fetch\('\/data\/benchmarks\/catalog-scored\.json'\)/, 'app.js must fetch the scored catalog');
+assert.match(
+  appSource,
+  /initCatalog\(\)\.catch\(/,
+  'a missing catalog file must not take the benchmarks page down',
+);
+
 console.log('✅ All ArchAgentix Static Tests Passed Successfully!');

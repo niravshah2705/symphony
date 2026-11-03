@@ -8,7 +8,68 @@ document.addEventListener('DOMContentLoaded', () => {
   initWorker();
   // A failed session must not take the benchmark tables down with it.
   initQuestionBank().catch(() => {});
+  initCatalog().catch(() => {});
 });
+
+async function initCatalog() {
+  const res = await fetch('/data/benchmarks/catalog-scored.json');
+  if (!res.ok) throw new Error(`Agentic catalog fetch failed: ${res.status}`);
+  renderCatalog(await res.json());
+}
+
+function renderCatalog(rows) {
+  const tbody = document.getElementById('catalog-body');
+  if (!tbody) return;
+  tbody.textContent = '';
+
+  const cell = (value) => {
+    const td = document.createElement('td');
+    td.textContent = value;
+    return td;
+  };
+
+  rows.forEach((m) => {
+    const tr = document.createElement('tr');
+
+    const rank = document.createElement('td');
+    const badge = document.createElement('span');
+    badge.className = 'rank-badge';
+    badge.textContent = m.rank;
+    rank.appendChild(badge);
+
+    // Feature labels are fixed strings; only booleans from the data decide which show.
+    const features = document.createElement('td');
+    for (const [on, label] of [
+      [m.agentic_features?.tool_use, 'Tool Use'],
+      [m.agentic_features?.function_calling, 'Function Calling'],
+      [m.agentic_features?.computer_use, 'Computer Use'],
+      [m.agentic_features?.reasoning_effort_control, 'Reasoning Control'],
+    ]) {
+      if (!on) continue;
+      const tag = document.createElement('span');
+      tag.className = 'score-tag';
+      tag.textContent = label;
+      features.appendChild(tag);
+      features.appendChild(document.createTextNode(' '));
+    }
+
+    const cost = m.best_cloud
+      ? `$${Number(m.best_cloud.prompt_cost_per_1m).toFixed(3)}/1M via ${m.best_cloud.provider}`
+      : 'Direct only';
+
+    tr.append(
+      rank,
+      cell(`${m.name} · ${m.provider}`),
+      cell(m.model_type),
+      cell(`${Number(m.parameters?.context_window_tokens || 0).toLocaleString()} tokens`),
+      cell(Number(m.parameters?.max_output_tokens || 0).toLocaleString()),
+      features,
+      cell(cost),
+      cell(m.simple_score),
+    );
+    tbody.appendChild(tr);
+  });
+}
 
 async function initApp() {
   try {
