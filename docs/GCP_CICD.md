@@ -25,11 +25,18 @@ are conditional on it:
 | docs / anything else | nothing runs |
 
 The marketing site has its **own workflow**: `.github/workflows/deploy-www.yml`
-watches the static-content paths (`public/index.html`, `public/{pricing,about,
+watches the static-content paths (`public/{pricing,about,
 careers,newsroom,contact}/**`, `public/adlc/**`, `public/{sitemap.xml,robots.txt,
-llms.txt,llms-full.txt}`, `firebase.json`, and itself) and publishes the same
-`public/` tree to the second Hosting site `adlc-9e72f-marketing`
-(`firebase deploy --only hosting:www`). Run it manually with
+llms.txt,llms-full.txt}`, `scripts/build-marketing-site.js`, `firebase.json`,
+`.firebaserc`, and itself). It regenerates the ADLC runtime config, **builds the
+`marketing/` tree** (`node scripts/build-marketing-site.js` promotes
+`public/adlc/**` to the site root, copies the company pages and discovery files,
+and rewrites `sitemap.xml` for the new URL scheme), then publishes it to the
+second Hosting site `adlc-9e72f-marketing`
+(`firebase deploy --only hosting:www`). `marketing/` is a gitignored artifact —
+never edit it by hand; change `public/adlc/**` and let the build re-promote it.
+The old `www` URLs under `/adlc/` are 301s declared on that target only, so the
+app site keeps serving `public/adlc/**` unchanged. Run the workflow manually with
 `gh workflow run deploy-www.yml --repo niravshah2705/symphony --ref main`.
 The two workflows never race: each targets its own `hosting:` target via the
 `firebase.json` targets array. Cutover and verification steps for
