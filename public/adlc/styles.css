@@ -347,3 +347,172 @@ pre {
     min-height: 0;
   }
 }
+
+.site-footer {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(140px, 1fr));
+  gap: 28px 32px;
+  padding: 44px 6vw 32px;
+  background: var(--dark);
+  color: #e8ece9;
+}
+
+.site-footer .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 750;
+  letter-spacing: .01em;
+}
+
+.footer-brand p {
+  margin: 14px 0 0;
+  max-width: 34ch;
+  color: #a9b5ae;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.footer-col h3 {
+  margin: 0 0 12px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #8fa09a;
+}
+
+.footer-col a {
+  display: block;
+  padding: 5px 0;
+  font-size: 14px;
+  color: #dfe6e2;
+}
+
+.footer-col a:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.footer-legal p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #8fa09a;
+}
+
+.footer-legal nav a {
+  display: inline-block;
+  margin-right: 16px;
+  font-size: 13px;
+}
+
+.marketing-hero {
+  padding: 72px 6vw 48px;
+  text-align: left;
+}
+
+.marketing-hero h1 {
+  margin: 0 0 12px;
+  font-size: 44px;
+  line-height: 1.1;
+}
+
+.marketing-hero p.lede {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.breadcrumbs {
+  padding: 18px 6vw 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  padding: 8px 6vw 40px;
+}
+
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.plan-card.featured {
+  border-color: var(--green);
+  box-shadow: 0 12px 30px rgba(22, 32, 29, .08);
+}
+
+.plan-card h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.plan-price {
+  font-size: 34px;
+  font-weight: 780;
+}
+
+.plan-price small {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.plan-card ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.plan-card .primary-cta {
+  margin-top: auto;
+  text-align: center;
+}
+
+.faq {
+  padding: 8px 6vw 48px;
+  max-width: 820px;
+}
+
+.faq h2 {
+  font-size: 26px;
+}
+
+.faq dt {
+  margin-top: 18px;
+  font-weight: 700;
+}
+
+.faq dd {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+@media (max-width: 860px) {
+  .site-footer {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .site-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .marketing-hero h1 {
+    font-size: 32px;
+  }
+}

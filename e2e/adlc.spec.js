@@ -20,9 +20,13 @@ test('ADLC landing renders without an auth prompt and links to the workspace', a
   await expect(page.locator('.auth-card')).toHaveCount(0);
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/adlc/manifest.webmanifest');
 
-  await page.locator('[data-try-now]').first().click();
-  await expect(page).toHaveURL(/\/#\/agent$/);
-  await expect(page.locator('.agent-workspace')).toBeVisible();
+  // Try now must send visitors to the hosted platform, not the local SPA hash route.
+  await expect(page.locator('[data-try-now]').first())
+    .toHaveAttribute('href', 'https://platform.archagentix.com/');
+  await expect(page.locator('link[rel="canonical"]'))
+    .toHaveAttribute('href', 'https://www.archagentix.com/adlc/');
+  await expect(page.locator('.site-footer')).toContainText('About Company');
+  await expect(page.locator('.site-footer')).toContainText('Contact Us');
 });
 
 test('ADLC manifest is served as a static resource', async ({ request }) => {

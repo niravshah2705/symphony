@@ -46,4 +46,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://adlc-9e72f.web.app/sitemap.xml
+Sitemap: https://www.archagentix.com/sitemap.xml
