@@ -18,7 +18,7 @@ test('Firebase headers keep ADLC runtime config uncached', () => {
   ]);
 });
 
-test('www marketing site mirrors the app site config on its own hosting site', () => {
+test('www marketing site serves the promoted tree on its own hosting site', () => {
   const firebase = JSON.parse(fs.readFileSync(new URL('../../firebase.json', import.meta.url), 'utf8'));
   const app = firebase.hosting.find((site) => site.target === 'app');
   const www = firebase.hosting.find((site) => site.target === 'www');
@@ -32,9 +32,11 @@ test('www marketing site mirrors the app site config on its own hosting site', (
   // Site id is "-marketing", not "-www": the Hosting API rejects "-www" names.
   assert.deepEqual(bindings.www, ['adlc-9e72f-marketing'], 'must match Terraform local.marketing_site_id');
 
-  assert.equal(www.public, app.public, 'both hosts serve the identical public/ tree');
-  assert.deepEqual(www.rewrites, app.rewrites);
-  assert.deepEqual(www.headers, app.headers);
+  // The platform keeps this /adlc/ copy; www publishes the generated root tree.
+  assert.equal(app.public, 'public');
+  assert.equal(www.public, 'marketing');
+  assert.deepEqual(app.rewrites, [{ source: '**', destination: '/index.html' }], 'the SPA needs its catch-all');
+  assert.ok(!www.rewrites, 'www is static: a catch-all would serve the landing page for unknown urls');
 });
 
 test('ADLC manifest and service worker stay scoped to /adlc/', () => {

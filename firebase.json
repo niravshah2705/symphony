@@ -56,10 +56,12 @@
     },
     {
       "target": "www",
-      "public": "public",
+      "public": "marketing",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-      "rewrites": [
-        { "source": "**", "destination": "/index.html" }
+      "redirects": [
+        { "source": "/adlc", "destination": "/", "type": 301 },
+        { "source": "/adlc/", "destination": "/", "type": 301 },
+        { "source": "/adlc/**", "destination": "/:splat", "type": 301 }
       ],
       "headers": [
         {
@@ -75,31 +77,19 @@
           "headers": [{ "key": "Cache-Control", "value": "no-store" }]
         },
         {
-          "source": "/adlc/config.js",
-          "headers": [{ "key": "Cache-Control", "value": "no-store" }]
-        },
-        {
-          "source": "/adlc/manifest.webmanifest",
+          "source": "/manifest.webmanifest",
           "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
         },
         {
-          "source": "/adlc/sw.js",
+          "source": "/sw.js",
           "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
         },
         {
-          "source": "/adlc/**/*.@(css|js)",
+          "source": "**/*.@(css|js)",
           "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
         },
         {
-          "source": "/js/**",
-          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
-        },
-        {
-          "source": "/vendor/**/*.js",
-          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
-        },
-        {
-          "source": "**/*.@(css|json)",
+          "source": "**/*.@(json)",
           "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
         },
         {

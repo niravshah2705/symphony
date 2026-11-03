@@ -1,10 +1,13 @@
 name: Deploy www static site
 
 # Continuous deployment for the marketing site on www.archagentix.com.
-# The content lives in public/ alongside the app SPA (the www Firebase Hosting
-# site serves the same tree — see docs/SEO_AEO.md), but it publishes to its OWN
-# hosting site (adlc-9e72f-marketing, target "www") in the same GCP project, so
-# marketing edits ship without touching the platform deploy and vice versa.
+# www serves the ADLC content at the DOMAIN ROOT ("/" is the landing page, with
+# "/blog/" and "/brief/" promoted out of "/adlc/"), so this job first builds the
+# marketing/ tree from public/ (scripts/build-marketing-site.js) and publishes it
+# to its OWN hosting site (adlc-9e72f-marketing, target "www") in the same GCP
+# project. Marketing edits ship without touching the platform deploy and vice
+# versa; the app site keeps serving the same pages under /adlc/ and the old
+# /adlc/** urls on www are 301s declared in firebase.json. See docs/SEO_AEO.md.
 #
 # Auth is keyless via Workload Identity Federation — same deployer service
 # account as Deploy to GCP; see docs/GCP_CICD.md.
@@ -12,7 +15,6 @@ on:
   push:
     branches: [main]
     paths:
-      - 'public/index.html'
       - 'public/pricing/**'
       - 'public/about/**'
       - 'public/careers/**'
@@ -23,6 +25,7 @@ on:
       - 'public/robots.txt'
       - 'public/llms.txt'
       - 'public/llms-full.txt'
+      - 'scripts/build-marketing-site.js'
       - '.firebaserc'
       - 'firebase.json'
       - '.github/workflows/deploy-www.yml'
@@ -60,28 +63,23 @@ jobs:
       # marketing tree; public/js/** ships as committed (the obfuscated
       # workspace copy is the one on the app site, deploy.yml).
 
-      - name: Publish www to Firebase Hosting
+      # The ADLC pages read window.__ADLC_CONFIG__ from the root config.js of the
+      # marketing tree; regenerated per release from repo variables, then promoted
+      # by the build step below. The SPA runtime config (public/config.js with the
+      # gateway origin) belongs to the app site, so this job no longer writes it.
+      - name: Generate the ADLC runtime config
         env:
-          REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
-          # Public GA4 web-stream id. Empty keeps analytics disabled.
-          GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ vars.GOOGLE_ANALYTICS_MEASUREMENT_ID }}
           ADLC_TRY_NOW_URL: ${{ vars.ADLC_TRY_NOW_URL || 'https://platform.archagentix.com/' }}
           ADLC_CANONICAL_ORIGIN: ${{ vars.ADLC_CANONICAL_ORIGIN || 'https://www.archagentix.com' }}
         run: |
-          set -euo pipefail
-          PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
-          GATEWAY_URL="https://${{ vars.GATEWAY_SERVICE_NAME || 'gateway' }}-${PROJECT_NUMBER}.${REGION}.run.app"
-          if [[ -n "$GOOGLE_ANALYTICS_MEASUREMENT_ID" && ! "$GOOGLE_ANALYTICS_MEASUREMENT_ID" =~ ^G-[A-Z0-9]+$ ]]; then
-            echo "GOOGLE_ANALYTICS_MEASUREMENT_ID must be empty or a GA4 id such as G-XXXXXXXXXX." >&2
-            exit 1
-          fi
-          # Runtime config the static pages read; identical to the app deploy so
-          # both hosts serve byte-equivalent marketing content.
-          printf '%s\n' \
-            "window.__API_BASE__='$GATEWAY_URL';" \
-            "window.__GA_MEASUREMENT_ID__='$GOOGLE_ANALYTICS_MEASUREMENT_ID';" \
-            "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
-            > public/config.js
           node -e "const fs=require('fs'); const cfg={tryNowUrl:process.env.ADLC_TRY_NOW_URL, canonicalOrigin:process.env.ADLC_CANONICAL_ORIGIN}; fs.writeFileSync('public/adlc/config.js', 'window.__ADLC_CONFIG__ = ' + JSON.stringify(cfg, null, 2) + ';\\n');"
+
+      # marketing/ is a build artifact: it promotes public/adlc/** to the site root,
+      # copies the company pages, and rewrites the sitemap for the new url scheme.
+      - name: Build the marketing tree
+        run: node scripts/build-marketing-site.js
+
+      - name: Publish www to Firebase Hosting
+        run: |
           npx --yes firebase-tools@15 deploy --only hosting:www \
             --project "${{ vars.GCP_PROJECT_ID }}" --non-interactive
