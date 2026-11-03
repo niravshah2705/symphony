@@ -23,7 +23,10 @@
 # Optional env: REGION (asia-south1), AR_REPO (ai-fleet), TF_STATE_PREFIX
 #   (ai-fleet/gcp), IMAGE_TAG (git short SHA), FIRESTORE_LOCATION (nam5),
 #   SPA_ORIGIN (https://storage.googleapis.com), FIREBASE_ALLOWED_DOMAIN (empty =
-#   any verified user), GOOGLE_ANALYTICS_MEASUREMENT_ID (public GA4 G-... id;
+#   any verified user), FIREBASE_CUSTOM_DOMAIN (app-site domains, comma list),
+#   MARKETING_CUSTOM_DOMAIN (www.archagentix.com; the marketing site's domain —
+#   empty = create the www Hosting site without attaching a domain),
+#   GOOGLE_ANALYTICS_MEASUREMENT_ID (public GA4 G-... id;
 #   empty disables analytics), STREAM_TOKEN_SECRET (auto-generated if unset),
 #   IDENTITY_HASH_PEPPER (auto-generated if unset),
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, SKIP_BUILD=1 (reuse existing images).
@@ -45,6 +48,10 @@ FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://storage.googleapis.com}"
 FIREBASE_ALLOWED_DOMAIN="${FIREBASE_ALLOWED_DOMAIN:-}"
 FIREBASE_CUSTOM_DOMAIN="${FIREBASE_CUSTOM_DOMAIN:-}"
+# www.archagentix.com moved from Hostinger FTP to this project's second Firebase
+# Hosting site (<project>-www), managed by Terraform (marketing site + custom
+# domain). Empty detaches the domain (site still created).
+MARKETING_CUSTOM_DOMAIN="${MARKETING_CUSTOM_DOMAIN:-www.archagentix.com}"
 GOOGLE_ONE_TAP_CLIENT_ID="${GOOGLE_ONE_TAP_CLIENT_ID:-}"  # public OAuth Web client id for Google One Tap (optional)
 GOOGLE_ANALYTICS_MEASUREMENT_ID="${GOOGLE_ANALYTICS_MEASUREMENT_ID:-}"
 AUTH_ADMIN_EMAILS="${AUTH_ADMIN_EMAILS:-}"
@@ -127,6 +134,7 @@ TFVARS=(
   -var="ollama_proxy_upstream=${OLLAMA_PROXY_UPSTREAM}"
   -var="lmstudio_proxy_upstream=${LMSTUDIO_PROXY_UPSTREAM}"
   -var="openswe_proxy_upstream=${OPENSWE_PROXY_UPSTREAM}"
+  -var="marketing_custom_domain=${MARKETING_CUSTOM_DOMAIN}"
 )
 if [ -n "$FIREBASE_CUSTOM_DOMAIN" ]; then
   CUSTOM_DOMAIN_JSON="$(echo "$FIREBASE_CUSTOM_DOMAIN" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "") | gsub("^https?://"; "") | gsub("/+$"; "")) | map(select(length > 0))')"
@@ -304,8 +312,19 @@ cat <<EOF
   Gateway API : ${GATEWAY_URL}
   SPA         : https://storage.googleapis.com/${SPA_BUCKET}/index.html
 
+  www.archagentix.com is served from GCP, not Hostinger any more: Firebase
+  Hosting site ${PROJECT_ID}-www (created by Terraform above) and published by
+  the deploy-www.yml workflow — no FTP push.
+
   Next, in the Firebase console:
     - enable the Google sign-in provider (Authentication → Sign-in method), and
     - add the SPA origin (${SPA_ORIGIN}) and the gateway URL (${GATEWAY_URL})
       to Authentication → Settings → Authorized domains.
+
+  Manual steps for the ${MARKETING_CUSTOM_DOMAIN:-www} domain (once, if set):
+    - CNAME ${MARKETING_CUSTOM_DOMAIN:-www} → ${PROJECT_ID}-www.ghs.googlehosted.com
+      at the registrar (remove the old Hostinger A records first);
+    - Firebase console → Hosting → ${PROJECT_ID}-www → wait for ACTIVE + TLS;
+    - gh workflow run deploy-www.yml --repo <owner/repo> --ref main   # first CD publish
+    - full cutover checklist: docs/SEO_AEO.md
 EOF

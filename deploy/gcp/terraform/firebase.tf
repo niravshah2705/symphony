@@ -61,6 +61,37 @@ resource "google_firebase_hosting_custom_domain" "default" {
   depends_on    = [google_firebase_hosting_site.default]
 }
 
+# -----------------------------------------------------------------------------
+# Marketing site for www.archagentix.com — a second Hosting site in THIS
+# project (previously a Hostinger FTP static host; see docs/SEO_AEO.md).
+# The SPA-equivalent public/ tree is published to target "www" by
+# .github/workflows/deploy-www.yml; firebase.json pins site_id "<project>-www".
+# -----------------------------------------------------------------------------
+resource "google_firebase_hosting_site" "marketing" {
+  provider = google-beta
+  project  = var.project_id
+  site_id  = local.marketing_site_id
+
+  depends_on = [google_firebase_project.default]
+}
+
+# Attach www.archagentix.com to the marketing site. wait_dns_verification=false
+# keeps the apply non-blocking while DNS still points at the old host — the
+# domain activates on its own once the cutover records are in (see docs).
+resource "google_firebase_hosting_custom_domain" "marketing" {
+  count = length(local.marketing_domains)
+
+  provider = google-beta
+
+  project       = var.project_id
+  site_id       = google_firebase_hosting_site.marketing.site_id
+  custom_domain = local.marketing_domains[count.index]
+
+  wait_dns_verification = false
+
+  depends_on = [google_firebase_hosting_site.marketing]
+}
+
 # Identity Platform (Firebase Authentication) project config. Manages the
 # authorized domains that sign-in popups are allowed to run on. The list mirrors
 # the live config (incl. legacy GCS origins from before the Firebase-Hosting move).
@@ -74,7 +105,7 @@ resource "google_identity_platform_config" "default" {
     "${var.project_id}.web.app",
     "storage.googleapis.com",
     "${var.spa_bucket_name}.storage.googleapis.com",
-  ], local.custom_domains)
+  ], local.custom_domains, local.marketing_domains)
 
   depends_on = [google_project_service.services]
 }

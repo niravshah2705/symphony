@@ -78,8 +78,12 @@ test('blank or unset bootstrap input removes a stale repo variable and gh failur
 
 test('manual and Cloud Build GCS deploys match Firebase no-store config policy', () => {
   const firebase = JSON.parse(read('firebase.json'));
-  const configRule = firebase.hosting.headers.find(({ source }) => source === '/config.js');
-  assert.deepEqual(configRule?.headers, [{ key: 'Cache-Control', value: 'no-store' }]);
+  const sites = Array.isArray(firebase.hosting) ? firebase.hosting : [firebase.hosting];
+  for (const site of sites) {
+    const configRule = site.headers.find(({ source }) => source === '/config.js');
+    assert.deepEqual(configRule?.headers, [{ key: 'Cache-Control', value: 'no-store' }],
+      `hosting target ${site.target ?? 'default'} must serve config.js no-store`);
+  }
 
   for (const [name, source] of [['manual', sources.manual], ['Cloud Build', sources['Cloud Build']]]) {
     const publish = source.indexOf('gsutil -m rsync');

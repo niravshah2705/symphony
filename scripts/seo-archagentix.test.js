@@ -192,6 +192,42 @@ test('deploy workflow regenerates adlc config with the canonical defaults', () =
   assert.match(workflow, /ADLC_TRY_NOW_URL \|\| 'https:\/\/platform\.archagentix\.com\/'/);
   assert.match(workflow, /ADLC_CANONICAL_ORIGIN \|\| 'https:\/\/www\.archagentix\.com'/);
   assert.match(workflow, /ADLC_TRY_NOW_URL \|\| 'https:\/\/platform\.archagentix\.com\/', canonicalOrigin[\s\S]*ADLC_CANONICAL_ORIGIN \|\| 'https:\/\/www\.archagentix\.com'/);
+  assert.match(workflow, /--only hosting:app/, 'app CD must stay scoped to the app hosting target');
+});
+
+test('www marketing site has its own CD publishing hosting:www', () => {
+  const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deploy-www.yml'), 'utf8');
+  assert.match(workflow, /--only hosting:www/);
+  assert.match(workflow, /branches: \[main\]/);
+  for (const watched of [
+    "'public/pricing/**'", "'public/adlc/**'", "'public/sitemap.xml'",
+    "'public/robots.txt'", "'public/llms.txt'", "'firebase.json'",
+  ]) {
+    assert.ok(workflow.includes(watched), `deploy-www path filter missing ${watched}`);
+  }
+  assert.match(workflow, /workload_identity_provider/, 'must reuse the keyless WIF auth');
+
+  const terraform = fs.readFileSync(path.join(ROOT, 'deploy/gcp/terraform/firebase.tf'), 'utf8');
+  assert.match(terraform, /resource "google_firebase_hosting_site" "marketing"/);
+  assert.match(terraform, /resource "google_firebase_hosting_custom_domain" "marketing"/);
+  assert.match(terraform, /wait_dns_verification\s+= false/);
+  const locals = fs.readFileSync(path.join(ROOT, 'deploy/gcp/terraform/locals.tf'), 'utf8');
+  assert.match(locals, /marketing_site_id = "\$\{var\.project_id\}-www"/);
+});
+
+test('www site moved to GCP: no SPA obfuscation in its CD, scripts wire the domain', () => {
+  const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deploy-www.yml'), 'utf8');
+  assert.ok(!workflow.includes('obfuscate-spa.js'), 'www CD must not obfuscate — static marketing tree only');
+
+  const bootstrap = fs.readFileSync(path.join(ROOT, 'deploy/gcp/bootstrap.sh'), 'utf8');
+  assert.match(bootstrap, /MARKETING_CUSTOM_DOMAIN:-www\.archagentix\.com/, 'bootstrap defaults the www domain');
+  assert.match(bootstrap, /www\.ghs\.googlehosted\.com/, 'bootstrap lists the DNS cutover manual step');
+
+  const deploySh = fs.readFileSync(path.join(ROOT, 'deploy/gcp/deploy.sh'), 'utf8');
+  assert.match(deploySh, /-var="marketing_custom_domain=\$\{MARKETING_CUSTOM_DOMAIN\}"/, 'deploy.sh passes the marketing var');
+
+  const cdApply = fs.readFileSync(path.join(ROOT, '.github/workflows/deploy.yml'), 'utf8');
+  assert.match(cdApply, /-var="marketing_custom_domain=/, 'CD Terraform apply controls the marketing domain');
 });
 
 test('footer mirrors the platform footer and carries the company sections', () => {
