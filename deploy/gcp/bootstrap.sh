@@ -16,7 +16,7 @@
 #   2. Firebase console -> Authentication -> enable the Google sign-in provider
 #      (creates the Google OAuth client; there is no API/Terraform to create it).
 #   3. DNS for the marketing domain — www.archagentix.com is hosted on GCP now
-#      (second Firebase Hosting site <project>-www + deploy-www.yml CD), so the
+#      (second Firebase Hosting site <project>-marketing + deploy-www.yml CD), so the
 #      registrar CNAME must move off Hostinger. See the epilogue and
 #      docs/SEO_AEO.md.
 # Then: push to main (first run: Actions -> Deploy to GCP -> Run workflow with
@@ -49,7 +49,7 @@ FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://${PROJECT_ID}.web.app}"
 FIREBASE_CUSTOM_DOMAIN="${FIREBASE_CUSTOM_DOMAIN:-platform.archagentix.com}"
 # www.archagentix.com now lives on GCP: a second Firebase Hosting site
-# (${PROJECT_ID}-www) managed by Terraform and published by deploy-www.yml
+# (${PROJECT_ID}-marketing) managed by Terraform and published by deploy-www.yml
 # (moved off the old Hostinger FTP push). Empty detaches the domain.
 MARKETING_CUSTOM_DOMAIN="${MARKETING_CUSTOM_DOMAIN:-www.archagentix.com}"
 EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://${PROJECT_ID}.web.app}"
@@ -254,9 +254,9 @@ THREE manual steps remain:
       Google OAuth client must be created via this console toggle.)
   3. Point the MARKETING domain at GCP (www.archagentix.com moved off the old
      Hostinger FTP host onto the second Firebase Hosting site
-     ${PROJECT_ID}-www, created by Terraform on the first apply):
+     ${PROJECT_ID}-marketing, created by Terraform on the first apply):
        - DNS at the registrar: CNAME ${MARKETING_CUSTOM_DOMAIN:-www} ->
-         ${PROJECT_ID}-www.ghs.googlehosted.com (remove the old Hostinger records);
+         ${PROJECT_ID}-marketing.ghs.googlehosted.com (remove the old Hostinger records);
        - wait for the domain to go ACTIVE (TLS is automatic), then publish once:
          gh workflow run deploy-www.yml --repo ${REPO} --ref main
      Full checklist: docs/SEO_AEO.md.

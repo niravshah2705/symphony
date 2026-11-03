@@ -2,7 +2,6 @@
   "hosting": [
     {
       "target": "app",
-      "site": "adlc-9e72f",
       "public": "public",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "rewrites": [
@@ -57,7 +56,6 @@
     },
     {
       "target": "www",
-      "site": "adlc-9e72f-www",
       "public": "public",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "rewrites": [

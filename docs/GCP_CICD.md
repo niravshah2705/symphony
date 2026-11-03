@@ -28,7 +28,7 @@ The marketing site has its **own workflow**: `.github/workflows/deploy-www.yml`
 watches the static-content paths (`public/index.html`, `public/{pricing,about,
 careers,newsroom,contact}/**`, `public/adlc/**`, `public/{sitemap.xml,robots.txt,
 llms.txt,llms-full.txt}`, `firebase.json`, and itself) and publishes the same
-`public/` tree to the second Hosting site `adlc-9e72f-www`
+`public/` tree to the second Hosting site `adlc-9e72f-marketing`
 (`firebase deploy --only hosting:www`). Run it manually with
 `gh workflow run deploy-www.yml --repo niravshah2705/symphony --ref main`.
 The two workflows never race: each targets its own `hosting:` target via the

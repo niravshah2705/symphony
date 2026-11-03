@@ -313,7 +313,7 @@ cat <<EOF
   SPA         : https://storage.googleapis.com/${SPA_BUCKET}/index.html
 
   www.archagentix.com is served from GCP, not Hostinger any more: Firebase
-  Hosting site ${PROJECT_ID}-www (created by Terraform above) and published by
+  Hosting site ${PROJECT_ID}-marketing (created by Terraform above) and published by
   the deploy-www.yml workflow — no FTP push.
 
   Next, in the Firebase console:
@@ -322,9 +322,9 @@ cat <<EOF
       to Authentication → Settings → Authorized domains.
 
   Manual steps for the ${MARKETING_CUSTOM_DOMAIN:-www} domain (once, if set):
-    - CNAME ${MARKETING_CUSTOM_DOMAIN:-www} → ${PROJECT_ID}-www.ghs.googlehosted.com
+    - CNAME ${MARKETING_CUSTOM_DOMAIN:-www} → ${PROJECT_ID}-marketing.ghs.googlehosted.com
       at the registrar (remove the old Hostinger A records first);
-    - Firebase console → Hosting → ${PROJECT_ID}-www → wait for ACTIVE + TLS;
+    - Firebase console → Hosting → ${PROJECT_ID}-marketing → wait for ACTIVE + TLS;
     - gh workflow run deploy-www.yml --repo <owner/repo> --ref main   # first CD publish
     - full cutover checklist: docs/SEO_AEO.md
 EOF

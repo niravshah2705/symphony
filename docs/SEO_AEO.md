@@ -163,8 +163,8 @@ the SPA catch-all rewrite), each with a self-referential canonical on
 
 | Piece | Where |
 |---|---|
-| Hosting site | `adlc-9e72f-www` (default host: `https://adlc-9e72f-www.web.app`) — Terraform-managed by `google_firebase_hosting_site.marketing` in `deploy/gcp/terraform/firebase.tf` |
-| Hosting config | `firebase.json` → `hosting` is now an array: target `app` (site `adlc-9e72f`, the platform) and target `www` (site `adlc-9e72f-www`); **both publish the same `public/` tree**, so every sitemap `<loc>` maps 1:1 to a literal file |
+| Hosting site | `adlc-9e72f-marketing` (default host: `https://adlc-9e72f-marketing.web.app`) — Terraform-managed by `google_firebase_hosting_site.marketing` in `deploy/gcp/terraform/firebase.tf`. The id is `-marketing`, **not** `-www`: the Hosting API rejects site ids ending in `-www` ("Invalid name …") |
+| Hosting config | `firebase.json` → `hosting` is an array of **target-keyed** configs (`app`, `www`) — each entry may carry `site` OR `target`, never both, so the site ids are bound in `.firebaserc` (`firebase target:apply` format); **both targets publish the same `public/` tree**, so every sitemap `<loc>` maps 1:1 to a literal file |
 | Custom domain | `google_firebase_hosting_custom_domain.marketing` attaches `www.archagentix.com` to the marketing site (not the app site); `wait_dns_verification = false` keeps the apply non-blocking pre-cutover. Toggle via `var.marketing_custom_domain` |
 | Continuous deployment | `.github/workflows/deploy-www.yml` — path-filtered to marketing content (`public/pricing/**`, `public/about/**`, `public/careers/**`, `public/newsroom/**`, `public/contact/**`, `public/adlc/**`, `index.html`, `sitemap.xml`, `robots.txt`, `llms*.txt`, `firebase.json`), keyless WIF auth, regenerates `config.js`/`adlc/config.js` then `firebase deploy --only hosting:www`. No SPA obfuscation step: the marketing tree is static content and the obfuscated workspace copy ships from the app site |
 | App CD | `deploy.yml` deploy-spa job now publishes `--only hosting:app` only — marketing edits never roll the platform and vice versa |
@@ -195,13 +195,13 @@ intentional, it consolidates SEO signal on one domain.
      -target=google_firebase_hosting_custom_domain.marketing
    ```
 
-   The site `adlc-9e72f-www` now exists and the domain is registered in
+   The site `adlc-9e72f-marketing` now exists and the domain is registered in
    **pending** state.
 2. **Read the required DNS records** (site-specific): Firebase console →
-   Hosting → `adlc-9e72f-www` → Manage domains, or
+   Hosting → `adlc-9e72f-marketing` → Manage domains, or
    `terraform -chdir=deploy/gcp/terraform output`/`state show` on the domain
    resource — `pendingVerification.siteConstraint` lists them. For a hosted
-   subdomain expect: `CNAME www → adlc-9e72f-www.ghs.googlehosted.com`.
+   subdomain expect: `CNAME www → adlc-9e72f-marketing.ghs.googlehosted.com`.
 3. **Cut DNS at the registrar:** remove the Hostinger A/AAAA records for `www`
    and add the CNAME above. Leave the apex/other records alone. DNS still
    resolves to Hostinger until this flips — the FTP-pushed copy keeps serving.
