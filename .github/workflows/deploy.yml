@@ -284,7 +284,7 @@ jobs:
             "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
             > public/config.js
           node -e "const fs=require('fs'); const cfg={tryNowUrl:process.env.ADLC_TRY_NOW_URL || 'https://platform.archagentix.com/', canonicalOrigin:process.env.ADLC_CANONICAL_ORIGIN || 'https://www.archagentix.com'}; fs.writeFileSync('public/adlc/config.js', 'window.__ADLC_CONFIG__ = ' + JSON.stringify(cfg, null, 2) + ';\\n');"
-          npx --yes firebase-tools@13 deploy --only hosting \
+          npx --yes firebase-tools@13 deploy --only hosting:app \
             --project "${{ vars.GCP_PROJECT_ID }}" --non-interactive
 
   # --------------------------------------------------------------------------
