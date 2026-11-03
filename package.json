@@ -31,6 +31,8 @@
     "docs:agents": "bash scripts/link-agent-docs.sh",
     "graph:build": "bash scripts/build-graphs.sh",
     "registry:build": "node scripts/build-harness-registry.js",
+    "benchmarks:seed": "node scripts/seed-benchmarks.js",
+    "benchmarks:check": "node scripts/seed-benchmarks.js --check",
     "spa:obfuscate": "node scripts/obfuscate-spa.js",
     "hooks:install": "git config core.hooksPath .githooks && echo 'Git hooks enabled (core.hooksPath=.githooks)'"
   },
