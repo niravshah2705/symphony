@@ -20,8 +20,28 @@ are conditional on it:
 | `packages/shared/**` | rebuild planner, coder, tester, and deployer images |
 | root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
 | `deploy/gcp/terraform/**` | rebuild the shared proxy artifact and run `terraform apply` (required for first broker creation) |
-| `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy only (no images, no Terraform) |
+| `deploy/gcp/terraform-openshell-gke/**` | `gke_reconcile` job: plan **and apply** the multi-tenant OpenShell GKE module (own state prefix, no images; any delete in the plan fails the run instead of applying) |
+| `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy of the **app** site only (`firebase deploy --only hosting:app`; no images, no Terraform) |
 | docs / anything else | nothing runs |
+
+The marketing site has its **own workflow**: `.github/workflows/deploy-www.yml`
+watches the static-content paths (`public/{pricing,about,
+careers,newsroom,contact}/**`, `public/adlc/**`, `public/{sitemap.xml,robots.txt,
+llms.txt,llms-full.txt}`, `scripts/build-marketing-site.js`, `firebase.json`,
+`.firebaserc`, and itself). It regenerates the ADLC runtime config, **builds the
+`marketing/` tree** (`node scripts/build-marketing-site.js` promotes
+`public/adlc/**` to the site root, copies the company pages and discovery files,
+and rewrites `sitemap.xml` for the new URL scheme), then publishes it to the
+second Hosting site `adlc-9e72f-marketing`
+(`firebase deploy --only hosting:www`). `marketing/` is a gitignored artifact —
+never edit it by hand; change `public/adlc/**` and let the build re-promote it.
+The old `www` URLs under `/adlc/` are rewrite sources on that target only (one
+rule per promoted page in `firebase.json`, never a 301), so the app site keeps
+serving `public/adlc/**` unchanged. Run the workflow manually with
+`gh workflow run deploy-www.yml --repo niravshah2705/symphony --ref main`.
+The two workflows never race: each targets its own `hosting:` target via the
+`firebase.json` targets array. Cutover and verification steps for
+`www.archagentix.com` live in `docs/SEO_AEO.md`.
 
 How "roll only one service" works: each unchanged service keeps its
 **currently-deployed** image tag (resolved live from Cloud Run) while the
@@ -33,13 +53,24 @@ Need a full rebuild + apply of everything (e.g. after a manual hotfix or to
 re-converge state)? Trigger the workflow manually with **`deploy_all: true`**
 (Actions → Deploy to GCP → Run workflow).
 
+The GKE stack reconciles on its own, without touching images:
+**`gke_reconcile: true`** plans and applies the module, `gke_plan_only: true`
+stops after the plan, and `gke_allow_destroy: true` is the explicit opt-in that
+lets a plan containing a delete through. See
+`deploy/gcp/terraform-openshell-gke/README.md` for what the job reads back from
+the live cluster and why.
+
 ## SPA obfuscation (release-time)
 
 The SPA ships to browsers as raw ES modules, so the `deploy-spa` job
 **obfuscates `public/js/**` before the Firebase Hosting deploy**
 (`node scripts/obfuscate-spa.js --in-place`, backed by `javascript-obfuscator`).
 Cloud Build's `spa-publish` path does the same via its `spa-obfuscate` step
-before the GCS rsync, so both served copies are obfuscated.
+before the GCS rsync, so both served copies are obfuscated. The marketing CD
+(`deploy-www.yml`) deliberately does **not** obfuscate — it publishes the
+static marketing tree as committed (the app-shell copy at the www root
+therefore serves readable `public/js/**`; the primary workspace entry is the
+obfuscated app site).
 
 - It runs **in the ephemeral CI checkout only** — the source in git stays
   readable. Locally, `npm run spa:obfuscate` writes an obfuscated copy to
@@ -124,7 +155,8 @@ for role in \
   roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin \
   roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser \
   roles/resourcemanager.projectIamAdmin roles/serviceusage.serviceUsageAdmin \
-  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin; do
+  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin \
+  roles/container.admin; do
   gcloud projects add-iam-policy-binding "$PROJECT" \
     --member="serviceAccount:${DEPLOYER}" --role="$role" --condition=None >/dev/null
 done

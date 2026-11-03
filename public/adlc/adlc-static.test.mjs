@@ -6,12 +6,43 @@ import test from 'node:test';
 
 test('Firebase headers keep ADLC runtime config uncached', () => {
   const firebase = JSON.parse(fs.readFileSync(new URL('../../firebase.json', import.meta.url), 'utf8'));
-  const headers = firebase.hosting.headers;
+  assert.ok(Array.isArray(firebase.hosting), 'hosting must be a multi-site array');
+  const targets = firebase.hosting.map((site) => site.target);
+  assert.deepEqual(targets, ['app', 'www'], 'app and www hosting targets must stay defined');
+
+  const headers = firebase.hosting.find((site) => site.target === 'app').headers;
   const configRule = headers.find((rule) => rule.source === '/adlc/config.js');
 
   assert.deepEqual(configRule?.headers, [
     { key: 'Cache-Control', value: 'no-store' },
   ]);
+});
+
+test('www marketing site serves the promoted tree on its own hosting site', () => {
+  const firebase = JSON.parse(fs.readFileSync(new URL('../../firebase.json', import.meta.url), 'utf8'));
+  const app = firebase.hosting.find((site) => site.target === 'app');
+  const www = firebase.hosting.find((site) => site.target === 'www');
+
+  // firebase.json configs may carry site OR target, never both (CLI validation).
+  assert.ok(!('site' in app) && !('site' in www), 'targets must be bound in .firebaserc, not site keys');
+
+  const rc = JSON.parse(fs.readFileSync(new URL('../../.firebaserc', import.meta.url), 'utf8'));
+  const bindings = rc.targets[rc.projects.default].hosting;
+  assert.deepEqual(bindings.app, ['adlc-9e72f'], 'app target serves the default (platform) site');
+  // Site id is "-marketing", not "-www": the Hosting API rejects "-www" names.
+  assert.deepEqual(bindings.www, ['adlc-9e72f-marketing'], 'must match Terraform local.marketing_site_id');
+
+  // The platform keeps this /adlc/ copy; www publishes the generated root tree.
+  assert.equal(app.public, 'public');
+  assert.equal(www.public, 'marketing');
+  assert.deepEqual(app.rewrites, [{ source: '**', destination: '/index.html' }], 'the SPA needs its catch-all');
+  // www answers the legacy /adlc/ urls with a rewrite per promoted page, never a
+  // catch-all (that would serve the landing page for unknown urls) and never a 301.
+  assert.ok(!www.redirects, 'legacy /adlc/ urls must resolve without a redirect hop');
+  assert.ok(www.rewrites.length > 0 && www.rewrites.every((rule) => rule.source.startsWith('/adlc')),
+    'www is static: a catch-all would serve the landing page for unknown urls');
+  assert.deepEqual(www.rewrites.slice(0, 2).map((rule) => rule.source), ['/adlc', '/adlc/'],
+    'both legacy root forms must answer with the landing page');
 });
 
 test('ADLC manifest and service worker stay scoped to /adlc/', () => {

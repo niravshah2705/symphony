@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| clampInt | Function | ./services/planner/src/routes/agent.js | 157-161 |
-| sanitizeLabels | Function | ./services/planner/src/routes/agent.js | 177-181 |
-| sanitizeConfig | Function | ./services/planner/src/routes/agent.js | 184-206 |
+| clampInt | Function | ./services/planner/src/routes/agent.js | 167-171 |
+| sanitizeLabels | Function | ./services/planner/src/routes/agent.js | 187-191 |
+| sanitizeConfig | Function | ./services/planner/src/routes/agent.js | 194-216 |
 
 ## Execution Flows
 

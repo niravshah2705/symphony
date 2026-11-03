@@ -2,7 +2,7 @@
   const config = window.__ADLC_CONFIG__ || {};
   const tryNowUrl = typeof config.tryNowUrl === 'string' && config.tryNowUrl.trim()
     ? config.tryNowUrl.trim()
-    : '/#/agent';
+    : 'https://platform.archagentix.com/';
   const canonicalOrigin = typeof config.canonicalOrigin === 'string'
     ? config.canonicalOrigin.replace(/\/+$/, '')
     : '';

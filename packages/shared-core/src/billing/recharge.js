@@ -74,7 +74,7 @@ async function maybeAutoRecharge(orgId, now = Date.now()) {
     lastRechargedAt: new Date(now).toISOString(),
     lastRechargeAmountPaise: amount,
   };
-  store.setBillingAutoRecharge(orgId, updatedCfg);
+  store.upsertBillingAccount(orgId, { autoRecharge: updatedCfg });
 
   log.info(`auto-recharged org ${orgId}: +${amount} paise (balance was ${balancePaise})`);
   return ledger.postEntry(orgId, {

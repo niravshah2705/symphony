@@ -129,4 +129,14 @@ locals {
     trimsuffix(trimprefix(trimprefix(trimspace(d), "https://"), "http://"), "/")
     if length(trimsuffix(trimprefix(trimprefix(trimspace(d), "https://"), "http://"), "/")) > 0
   ])
+
+  # Marketing site (www.archagentix.com) — a SEPARATE Firebase Hosting site in
+  # this project, published by .github/workflows/deploy-www.yml via the hosting
+  # target "www" (firebase.json target -> .firebaserc binds it to this site_id).
+  # "-marketing" not "-www": the Hosting API rejects site ids ending in "-www"
+  # ("invalid name"), and firebase.json may not carry both site and target.
+  # The domain attaches here, not to the app site, so it never enters
+  # local.custom_domains (that list binds domains to the DEFAULT/app site).
+  marketing_site_id = "${var.project_id}-marketing"
+  marketing_domains = var.marketing_custom_domain == "" ? [] : [var.marketing_custom_domain]
 }

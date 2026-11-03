@@ -24,7 +24,10 @@ const { forwardRequestContext } = require('./request-context');
 // the caller's bearer to a service that does its OWN token auth (the org service
 // verifies the Firebase ID token): the user token rides in
 // X-Forwarded-Authorization while Authorization holds the S2S OIDC token that
-// Cloud Run's IAM check requires.
+// Cloud Run's IAM check requires. opts.forwardRawBody sends the original request
+// bytes instead of a re-serialized body, for a target that verifies a signature
+// over them, and opts.forwardHeaders is the allowlist of inbound header names
+// copied through to that target.
 function createProxy(baseUrl, opts = {}) {
   const audience = originOf(baseUrl);
 
@@ -37,7 +40,13 @@ function createProxy(baseUrl, opts = {}) {
     const init = { method: req.method, headers };
 
     const hasBody = req.method !== 'GET' && req.method !== 'HEAD';
-    if (hasBody && req.body && Object.keys(req.body).length > 0) {
+    if (hasBody && opts.forwardRawBody && typeof req.rawBody === 'string') {
+      // Byte-exact forwarding: a signature computed over the request body
+      // (Cashfree's webhook HMAC) only verifies against the bytes the sender
+      // signed, so a re-serialization of the parsed JSON must not be used.
+      init.body = req.rawBody;
+      headers['content-type'] = (req.get && req.get('content-type')) || 'application/json';
+    } else if (hasBody && req.body && Object.keys(req.body).length > 0) {
       init.body = JSON.stringify(req.body);
       headers['content-type'] = 'application/json';
     }
@@ -73,6 +82,17 @@ function createProxy(baseUrl, opts = {}) {
       const injected = opts.injectHeaders(req) || {};
       for (const [key, value] of Object.entries(injected)) {
         if (value !== undefined && value !== null && value !== '') headers[key.toLowerCase()] = String(value);
+      }
+    }
+
+    // Inbound headers copied through verbatim, one allowlist per proxy. A target
+    // that authenticates a caller-provided value (Cashfree signs its webhook with
+    // x-webhook-signature + x-webhook-timestamp) gets exactly those and nothing
+    // else — the proxy still starts from an empty header set.
+    if (Array.isArray(opts.forwardHeaders)) {
+      for (const name of opts.forwardHeaders) {
+        const value = req.get && req.get(name);
+        if (value) headers[String(name).toLowerCase()] = String(value);
       }
     }
 

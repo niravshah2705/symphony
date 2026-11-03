@@ -11,10 +11,14 @@
 # so the very first `git push` deploys cleanly (no chicken-and-egg on secret
 # versions).
 #
-# After this, only TWO things remain manual (both console-only):
+# After this, THREE things remain manual:
 #   1. Link a BILLING account to the project.
 #   2. Firebase console -> Authentication -> enable the Google sign-in provider
 #      (creates the Google OAuth client; there is no API/Terraform to create it).
+#   3. DNS for the marketing domain — www.archagentix.com is hosted on GCP now
+#      (second Firebase Hosting site <project>-marketing + deploy-www.yml CD), so the
+#      registrar CNAME must move off Hostinger. See the epilogue and
+#      docs/SEO_AEO.md.
 # Then: push to main (first run: Actions -> Deploy to GCP -> Run workflow with
 # deploy_all=true so all images build), and CD does the rest.
 #
@@ -25,6 +29,8 @@
 # Optional env: REGION (asia-south1), SPA_BUCKET (<project>-aifleet-spa),
 #   TF_STATE_BUCKET (<project>-tfstate), FIRESTORE_LOCATION (nam5),
 #   SPA_ORIGIN (https://<project>.web.app), FIREBASE_ALLOWED_DOMAIN, FIREBASE_CUSTOM_DOMAIN,
+#   MARKETING_CUSTOM_DOMAIN (www.archagentix.com — the second Hosting site's
+#   domain; the marketing site moved from Hostinger FTP to GCP Firebase Hosting),
 #   GOOGLE_ANALYTICS_MEASUREMENT_ID (public GA4 G-... id; empty disables analytics),
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, STREAM_TOKEN_SECRET (auto-generated if unset),
 #   IDENTITY_HASH_PEPPER (auto-generated if unset),
@@ -42,6 +48,10 @@ TF_STATE_PREFIX="${TF_STATE_PREFIX:-ai-fleet/gcp}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
 SPA_ORIGIN="${SPA_ORIGIN:-https://${PROJECT_ID}.web.app}"
 FIREBASE_CUSTOM_DOMAIN="${FIREBASE_CUSTOM_DOMAIN:-platform.archagentix.com}"
+# www.archagentix.com now lives on GCP: a second Firebase Hosting site
+# (${PROJECT_ID}-marketing) managed by Terraform and published by deploy-www.yml
+# (moved off the old Hostinger FTP push). Empty detaches the domain.
+MARKETING_CUSTOM_DOMAIN="${MARKETING_CUSTOM_DOMAIN:-www.archagentix.com}"
 EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://${PROJECT_ID}.web.app}"
 GOOGLE_ANALYTICS_MEASUREMENT_ID="${GOOGLE_ANALYTICS_MEASUREMENT_ID:-}"
 DEPLOYER="gh-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -85,16 +95,23 @@ log "Deployer SA ${DEPLOYER}"
 gcloud iam service-accounts describe "$DEPLOYER" --project "$PROJECT_ID" >/dev/null 2>&1 \
   || gcloud iam service-accounts create gh-deployer --project "$PROJECT_ID" \
        --display-name "GitHub Actions deployer"
-for role in \
-  roles/run.admin roles/cloudscheduler.admin roles/pubsub.admin \
-  roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin \
-  roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser \
-  roles/resourcemanager.projectIamAdmin roles/serviceusage.serviceUsageAdmin \
-  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin; do
+# compute.viewer is what lets deploy.yml's gke_reconcile job plan the adopted
+# GKE state against live GCP: without it a full refresh 403s on the subnet,
+# router, NAT, address and firewall objects in that state, and an applied
+# node-pool change 403s while it polls the instance group manager.
+DEPLOYER_ROLES=(
+  roles/run.admin roles/cloudscheduler.admin roles/pubsub.admin
+  roles/artifactregistry.admin roles/datastore.owner roles/secretmanager.admin
+  roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.serviceAccountUser
+  roles/resourcemanager.projectIamAdmin roles/serviceusage.serviceUsageAdmin
+  roles/firebase.admin roles/firebasehosting.admin roles/identityplatform.admin
+  roles/container.admin roles/compute.viewer
+)
+for role in "${DEPLOYER_ROLES[@]}"; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:${DEPLOYER}" --role="$role" --condition=None >/dev/null
 done
-echo "  granted 15 roles"
+echo "  granted ${#DEPLOYER_ROLES[@]} roles"
 
 # --- 4. Workload Identity Federation (bind the repo to the deployer SA) ------
 log "Workload Identity Federation for ${REPO}"
@@ -187,13 +204,14 @@ if command -v gh >/dev/null 2>&1; then
   gh variable set EMAIL_PUBLIC_APP_URL --repo "$REPO" --body "$EMAIL_PUBLIC_APP_URL"
   [ -n "${FIREBASE_ALLOWED_DOMAIN:-}" ] && gh variable set FIREBASE_ALLOWED_DOMAIN --repo "$REPO" --body "$FIREBASE_ALLOWED_DOMAIN" || true
   [ -n "${FIREBASE_CUSTOM_DOMAIN:-}" ] && gh variable set FIREBASE_CUSTOM_DOMAIN --repo "$REPO" --body "$FIREBASE_CUSTOM_DOMAIN" || true
+  [ -n "${MARKETING_CUSTOM_DOMAIN:-}" ] && gh variable set MARKETING_CUSTOM_DOMAIN --repo "$REPO" --body "$MARKETING_CUSTOM_DOMAIN" || true
   echo "  set (FIREBASE_API_KEY is NOT needed — Terraform derives it from the web app)"
 else
   log "gh CLI not found — set these repo secrets/variables manually"
   echo "  secret GCP_WIF_PROVIDER = $WIF_PROVIDER"
   echo "  secret GCP_DEPLOYER_SA  = $DEPLOYER"
   echo "  vars: GCP_PROJECT_ID=$PROJECT_ID GCP_REGION=$REGION SPA_BUCKET=$SPA_BUCKET"
-  echo "        TF_STATE_BUCKET=$TF_STATE_BUCKET FIRESTORE_LOCATION=$FIRESTORE_LOCATION SPA_ORIGIN=$SPA_ORIGIN FIREBASE_CUSTOM_DOMAIN=$FIREBASE_CUSTOM_DOMAIN"
+  echo "        TF_STATE_BUCKET=$TF_STATE_BUCKET FIRESTORE_LOCATION=$FIRESTORE_LOCATION SPA_ORIGIN=$SPA_ORIGIN FIREBASE_CUSTOM_DOMAIN=$FIREBASE_CUSTOM_DOMAIN MARKETING_CUSTOM_DOMAIN=$MARKETING_CUSTOM_DOMAIN"
   [ -n "$GOOGLE_ANALYTICS_MEASUREMENT_ID" ] && echo "        GOOGLE_ANALYTICS_MEASUREMENT_ID=$GOOGLE_ANALYTICS_MEASUREMENT_ID"
   echo "        EMAIL_SMTP_AUTH_ENABLED=$EMAIL_SMTP_AUTH_ENABLED EMAIL_PUBLIC_APP_URL=$EMAIL_PUBLIC_APP_URL"
 fi
@@ -227,13 +245,21 @@ cat <<EOF
 ────────────────────────────────────────────────────────────────────────────
 Bootstrap complete for ${PROJECT_ID} (${REGION}).
 
-TWO manual steps remain (console only):
+THREE manual steps remain:
   1. Link a BILLING account:
      https://console.cloud.google.com/billing/linkedaccount?project=${PROJECT_ID}
   2. Firebase -> Authentication -> Sign-in method -> enable Google:
      https://console.firebase.google.com/project/${PROJECT_ID}/authentication/providers
      (Terraform manages the web app, Hosting and authorized domains; only the
       Google OAuth client must be created via this console toggle.)
+  3. Point the MARKETING domain at GCP (www.archagentix.com moved off the old
+     Hostinger FTP host onto the second Firebase Hosting site
+     ${PROJECT_ID}-marketing, created by Terraform on the first apply):
+       - DNS at the registrar: CNAME ${MARKETING_CUSTOM_DOMAIN:-www} ->
+         ${PROJECT_ID}-marketing.ghs.googlehosted.com (remove the old Hostinger records);
+       - wait for the domain to go ACTIVE (TLS is automatic), then publish once:
+         gh workflow run deploy-www.yml --repo ${REPO} --ref main
+     Full checklist: docs/SEO_AEO.md.
 
 Then deploy: push to main. For the FIRST run, trigger it with all images built:
   gh workflow run deploy.yml -f deploy_all=true --repo ${REPO}

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 200 nodes
+Community of 197 nodes
 
-- **Size**: 200 nodes
-- **Cohesion**: 0.3051
+- **Size**: 197 nodes
+- **Cohesion**: 0.3041
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 200 nodes
 | getClaudeChatModelClass | Function | ./packages/shared/src/agent/llm.js | 337-367 |
 | constructor | Function | ./packages/shared/src/agent/llm.js | 342-345 |
 
-*... and 150 more members.*
+*... and 147 more members.*
 
 ## Execution Flows
 
@@ -77,25 +77,25 @@ Community of 200 nodes
 
 ### Outgoing
 
-- `equal` (137 edge(s))
+- `equal` (133 edge(s))
 - `deepEqual` (39 edge(s))
 - `strictEqual` (28 edge(s))
 - `Number` (27 edge(s))
 - `replace` (25 edge(s))
-- `String` (24 edge(s))
+- `String` (23 edge(s))
 - `join` (21 edge(s))
 - `slice` (19 edge(s))
 - `includes` (19 edge(s))
-- `trim` (17 edge(s))
 - `map` (17 edge(s))
 - `isFinite` (17 edge(s))
 - `match` (16 edge(s))
-- `require` (15 edge(s))
+- `trim` (16 edge(s))
+- `require` (14 edge(s))
 - `isArray` (14 edge(s))
 
 ### Incoming
 
-- `equal` (137 edge(s))
+- `equal` (133 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (46 edge(s))
 - `./packages/shared/src/agent/llm.js` (42 edge(s))
@@ -108,5 +108,5 @@ Community of 200 nodes
 - `throws` (13 edge(s))
 - `./packages/shared/src/agent/codex-budget.test.js` (12 edge(s))
 - `./packages/shared/src/agent/lmstudio-budget.test.js` (12 edge(s))
-- `./packages/shared/src/agent/memory-middleware.js` (8 edge(s))
 - `./packages/shared/src/agent/model-routing.test.js` (7 edge(s))
+- `./packages/shared/src/agent/antigravity.test.js` (6 edge(s))

@@ -7,6 +7,9 @@ name: Deploy to GCP
 #   • shared packages changed → rebuild all service images.
 #   • root deps changed → rebuild all service images + republish the SPA.
 #   • deploy/gcp/terraform/** changed → `terraform apply` only (no image rebuild).
+#   • deploy/gcp/terraform-openshell-gke/** changed → the gke-reconcile job plans
+#                                  and applies the multi-tenant OpenShell GKE
+#                                  module (separate state prefix, no images).
 #   • SPA source, config, or release tooling changed → Firebase Hosting deploy.
 #   • docs / anything else → nothing runs.
 #
@@ -18,6 +21,18 @@ on:
     inputs:
       deploy_all:
         description: "Force rebuild + apply everything (ignore path filters)"
+        type: boolean
+        default: false
+      gke_reconcile:
+        description: "Reconcile the OpenShell GKE module (plan + apply)"
+        type: boolean
+        default: false
+      gke_plan_only:
+        description: "GKE only: plan without applying"
+        type: boolean
+        default: false
+      gke_allow_destroy:
+        description: "GKE only: permit a plan that deletes resources"
         type: boolean
         default: false
 
@@ -47,6 +62,7 @@ jobs:
       services: ${{ steps.plan.outputs.services }} # JSON array of {id,image,dockerfile}
       spa: ${{ steps.plan.outputs.spa }}
       run_terraform: ${{ steps.plan.outputs.run_terraform }}
+      run_gke: ${{ steps.plan.outputs.run_gke }}
     steps:
       - uses: actions/checkout@v6
 
@@ -66,8 +82,11 @@ jobs:
             # A release-tooling change must publish the newly transformed SPA;
             # otherwise an obfuscator/default change would wait for an unrelated
             # public/** edit before reaching production.
-            spa:     ['public/**', 'firebase.json', 'scripts/obfuscate-spa.js', 'package.json', 'package-lock.json', '.github/workflows/deploy.yml']
+            spa:     ['public/**', 'firebase.json', '.firebaserc', 'scripts/obfuscate-spa.js', 'package.json', 'package-lock.json', '.github/workflows/deploy.yml']
             infra:    ['deploy/gcp/terraform/**']
+            # Separate stack, separate state prefix — deliberately NOT under
+            # infra's terraform/** glob.
+            gke:      ['deploy/gcp/terraform-openshell-gke/**']
             root:     ['package.json', 'package-lock.json']
             org:      ['services/org/**']
             settings: ['services/settings/**']
@@ -100,6 +119,8 @@ jobs:
           BILLING: ${{ steps.filter.outputs.billing }}
           LAYA: ${{ steps.filter.outputs.laya }}
           CLM: ${{ steps.filter.outputs.clm }}
+          GKE: ${{ steps.filter.outputs.gke }}
+          GKE_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.gke_reconcile }}
         run: |
           set -euo pipefail
           # A shared-code / root-deps change (or a forced run) rebuilds the Node
@@ -147,13 +168,20 @@ jobs:
           # mandatory egress sidecars and stream-token broker have this SHA.
           if [ "$run_tf" = "true" ]; then push proxy proxy deploy/gcp/Dockerfile.proxy . ; fi
 
+          # The OpenShell GKE module is its own stack (own state prefix, no
+          # images). It reconciles when its paths changed, when everything is
+          # forced, or when a dispatch asks for it by name.
+          run_gke=false
+          if [ "$FORCE_ALL" = "true" ] || [ "$GKE" = "true" ] || [ "$GKE_REQUESTED" = "true" ]; then run_gke=true; fi
+
           {
             echo "services=$services"
             echo "spa=$spa"
             echo "run_terraform=$run_tf"
+            echo "run_gke=$run_gke"
           } >> "$GITHUB_OUTPUT"
 
-          echo "Plan → services=$services  spa=$spa  run_terraform=$run_tf"
+          echo "Plan → services=$services  spa=$spa  run_terraform=$run_tf  run_gke=$run_gke"
 
   # --------------------------------------------------------------------------
   # 2a. Build + push ONLY the changed service images (one matrix leg each).
@@ -237,8 +265,8 @@ jobs:
         env:
           # Public GA4 web-stream id. Empty keeps analytics disabled.
           GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ vars.GOOGLE_ANALYTICS_MEASUREMENT_ID }}
-          ADLC_TRY_NOW_URL: ${{ vars.ADLC_TRY_NOW_URL || '/#/agent' }}
-          ADLC_CANONICAL_ORIGIN: ${{ vars.ADLC_CANONICAL_ORIGIN }}
+          ADLC_TRY_NOW_URL: ${{ vars.ADLC_TRY_NOW_URL || 'https://platform.archagentix.com/' }}
+          ADLC_CANONICAL_ORIGIN: ${{ vars.ADLC_CANONICAL_ORIGIN || 'https://www.archagentix.com' }}
         run: |
           set -euo pipefail
           PROJECT_NUMBER="$(gcloud projects describe "${{ vars.GCP_PROJECT_ID }}" --format='value(projectNumber)')"
@@ -255,8 +283,8 @@ jobs:
             "window.__GA_MEASUREMENT_ID__='$GOOGLE_ANALYTICS_MEASUREMENT_ID';" \
             "(()=>{const link=document.createElement('link');link.rel='preconnect';link.href=window.__API_BASE__;link.crossOrigin='anonymous';document.head.appendChild(link);})();" \
             > public/config.js
-          node -e "const fs=require('fs'); const cfg={tryNowUrl:process.env.ADLC_TRY_NOW_URL || '/#/agent', canonicalOrigin:process.env.ADLC_CANONICAL_ORIGIN || ''}; fs.writeFileSync('public/adlc/config.js', 'window.__ADLC_CONFIG__ = ' + JSON.stringify(cfg, null, 2) + ';\\n');"
-          npx --yes firebase-tools@13 deploy --only hosting \
+          node -e "const fs=require('fs'); const cfg={tryNowUrl:process.env.ADLC_TRY_NOW_URL || 'https://platform.archagentix.com/', canonicalOrigin:process.env.ADLC_CANONICAL_ORIGIN || 'https://www.archagentix.com'}; fs.writeFileSync('public/adlc/config.js', 'window.__ADLC_CONFIG__ = ' + JSON.stringify(cfg, null, 2) + ';\\n');"
+          npx --yes firebase-tools@15 deploy --only hosting:app \
             --project "${{ vars.GCP_PROJECT_ID }}" --non-interactive
 
   # --------------------------------------------------------------------------
@@ -463,6 +491,7 @@ jobs:
             -var="api_base_url=${GATEWAY_URL}"
             -var="firebase_allowed_domain=${{ vars.FIREBASE_ALLOWED_DOMAIN }}"
             -var="custom_domain=${CUSTOM_DOMAIN_ARG}"
+            -var="marketing_custom_domain=${{ vars.MARKETING_CUSTOM_DOMAIN || 'www.archagentix.com' }}"
             -var="auth_admin_emails=${{ vars.AUTH_ADMIN_EMAILS }}"
             -var="auth_default_role=${{ vars.AUTH_DEFAULT_ROLE || 'viewer' }}"
             -var="google_one_tap_client_id=${{ vars.GOOGLE_ONE_TAP_CLIENT_ID }}"
@@ -525,3 +554,204 @@ jobs:
       - name: Outputs
         working-directory: ${{ env.TF_DIR }}
         run: terraform output
+
+  # --------------------------------------------------------------------------
+  # 4. OpenShell GKE reconcile. Separate stack, separate state prefix, no
+  #    images — see deploy/gcp/terraform-openshell-gke/README.md.
+  #
+  #    Applies the plan it just published, EXCEPT for anything destructive: a
+  #    plan containing a delete (a node-pool or gateway replacement counts) fails
+  #    the run instead, so a merge can converge the cluster but cannot take it
+  #    apart. gke_plan_only / gke_allow_destroy are the operator's levers.
+  #
+  #    The whole module is planned against live: gh-deployer holds
+  #    roles/container.admin, which GKE maps to Kubernetes cluster-admin, so the
+  #    helm releases and manifests in this state are readable as well as the
+  #    Compute objects (roles/compute.viewer, granted by bootstrap.sh). Nothing
+  #    is -targeted: an enumerated target list silently stops covering the stack
+  #    the moment the module grows a resource, and a reconcile that quietly
+  #    ignores half the module is worse than one that fails.
+  # --------------------------------------------------------------------------
+  gke_reconcile:
+    needs: changes
+    if: needs.changes.outputs.run_gke == 'true'
+    runs-on: ubuntu-24.04
+    name: reconcile openshell gke
+    # Shared with openshell-cluster-power: that workflow owns the node pool's
+    # min/max, and this job reads them to pass them back unchanged.
+    concurrency:
+      group: openshell-cluster-power
+      cancel-in-progress: false
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      CLUSTER: ${{ vars.OPENSHELL_CLUSTER_NAME || 'openshell-multitenant' }}
+      ZONE: ${{ vars.OPENSHELL_CLUSTER_ZONE || 'asia-south1-a' }}
+      NODE_POOL: ${{ vars.OPENSHELL_NODE_POOL || 'openshell-multitenant-node-pool' }}
+      GKE_TF_DIR: deploy/gcp/terraform-openshell-gke
+      GKE_TF_STATE_PREFIX: openshell/gke
+      GKE_TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Resolve mode and inputs
+        id: gke
+        env:
+          PLAN_ONLY: ${{ inputs.gke_plan_only }}
+          CERT_EMAIL: ${{ vars.OPENSHELL_CERT_EMAIL }}
+        run: |
+          set -euo pipefail
+          if [ "$PLAN_ONLY" = "true" ]; then
+            echo "apply=false" >> "$GITHUB_OUTPUT"
+            echo "Mode: plan only"
+          else
+            echo "apply=true" >> "$GITHUB_OUTPUT"
+            echo "Mode: plan + apply"
+          fi
+          # cert_email is a required module variable with no default.
+          if [ -z "$CERT_EMAIL" ]; then
+            echo "::error::Set the ACME email once: gh variable set OPENSHELL_CERT_EMAIL --body \"<email>\""
+            exit 1
+          fi
+          echo "cert_email=$CERT_EMAIL" >> "$GITHUB_OUTPUT"
+
+      - name: Read live autoscaling bounds
+        id: bounds
+        run: |
+          set -euo pipefail
+          POOL_JSON="$(gcloud container node-pools describe "$NODE_POOL" \
+            --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" --format json)"
+          # The power workflow parks min at 0 to stop the cluster and GKE omits
+          # minNodeCount when it is 0. Passing the live bounds back in is what
+          # keeps a reconcile from silently starting (or capping) the pool.
+          MIN="$(jq -r '.autoscaling.minNodeCount // .initialNodeCount // 0' <<<"$POOL_JSON")"
+          MAX="$(jq -r '.autoscaling.maxNodeCount // .initialNodeCount // 1' <<<"$POOL_JSON")"
+          echo "min=$MIN" >> "$GITHUB_OUTPUT"
+          echo "max=$MAX" >> "$GITHUB_OUTPUT"
+          echo "Live node pool bounds: min=$MIN max=$MAX"
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: ${{ env.GKE_TF_DIR }}
+        run: |
+          set -euo pipefail
+          BUCKET="${GKE_TF_STATE_BUCKET:-${PROJECT_ID}-tfstate}"
+          terraform init -input=false \
+            -backend-config="bucket=$BUCKET" \
+            -backend-config="prefix=$GKE_TF_STATE_PREFIX"
+          # An unadopted state would make "reconcile" mean "create a second
+          # cluster next to the live one" — see IMPORT.md.
+          STATE_COUNT="$(terraform state list | wc -l | tr -d ' ')"
+          if [ "$STATE_COUNT" -lt 1 ]; then
+            echo "::error::Remote state at gs://$BUCKET/$GKE_TF_STATE_PREFIX is empty. Run the IMPORT.md adoption pass first."
+            exit 1
+          fi
+          echo "Adopted state holds $STATE_COUNT resources"
+
+      - name: Validate configuration
+        working-directory: ${{ env.GKE_TF_DIR }}
+        run: |
+          set -euo pipefail
+          terraform validate -no-color
+          if [ -n "$(terraform fmt -check -diff -no-color)" ]; then
+            echo "::error::terraform fmt drifted; run 'terraform fmt' in $GKE_TF_DIR."
+            terraform fmt -check -diff -no-color || true
+            exit 1
+          fi
+
+      - name: Plan
+        working-directory: ${{ env.GKE_TF_DIR }}
+        env:
+          MIN_NODES: ${{ steps.bounds.outputs.min }}
+          MAX_NODES: ${{ steps.bounds.outputs.max }}
+          CERT_EMAIL: ${{ steps.gke.outputs.cert_email }}
+          WILL_APPLY: ${{ steps.gke.outputs.apply }}
+        run: |
+          set -euo pipefail
+          if [ "$WILL_APPLY" = "true" ]; then MODE_LABEL="plan + apply"; else MODE_LABEL="plan only"; fi
+          terraform plan -refresh=true -input=false \
+            -var="project_id=$PROJECT_ID" \
+            -var="zone=$ZONE" \
+            -var="cluster_name=$CLUSTER" \
+            -var="node_pool_name=$NODE_POOL" \
+            -var="cert_email=$CERT_EMAIL" \
+            -var="min_nodes=$MIN_NODES" \
+            -var="max_nodes=$MAX_NODES" \
+            -out=gke.tfplan
+          terraform show -json gke.tfplan > gke.json
+          {
+            echo "## Terraform plan — OpenShell GKE"
+            echo ""
+            echo "Mode: **$MODE_LABEL** · scope: the whole module (GKE, network, in-cluster platform), refreshed against live."
+            echo ""
+            echo '```'
+            terraform show -no-color gke.tfplan
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Assess the plan
+        id: plan
+        working-directory: ${{ env.GKE_TF_DIR }}
+        run: |
+          set -euo pipefail
+          # A replacement shows up as a create plus a delete on two addresses, so
+          # these counts overlap by design; the gate below only cares whether any
+          # delete is in plan.
+          ADD="$(jq '[.resource_changes[]? | select(.change.actions | index("create"))] | length' gke.json)"
+          CHANGE="$(jq '[.resource_changes[]? | select(.change.actions == ["update"])] | length' gke.json)"
+          DESTROY="$(jq '[.resource_changes[]? | select(.change.actions | index("delete"))] | length' gke.json)"
+          {
+            echo "add=$ADD"
+            echo "change=$CHANGE"
+            echo "destroy=$DESTROY"
+            echo "changed=$(( ADD + CHANGE + DESTROY ))"
+          } >> "$GITHUB_OUTPUT"
+          echo "Plan: $ADD create, $CHANGE update, $DESTROY delete (diff in the job summary)"
+          # A plan-only run leaves the module and the cluster apart, so say so
+          # loudly — otherwise a merged .tf edit looks shipped when it is only
+          # staged in this summary.
+          if [ "$(( ADD + CHANGE + DESTROY ))" -gt 0 ] && [ "${{ steps.gke.outputs.apply }}" != "true" ]; then
+            echo "::warning::$ADD create / $CHANGE update / $DESTROY delete pending. This was a plan-only run; the GKE stack is NOT converged."
+          fi
+
+      - name: Block a destroying apply
+        if: steps.gke.outputs.apply == 'true'
+        env:
+          DESTROY_COUNT: ${{ steps.plan.outputs.destroy }}
+          ALLOW_DESTROY: ${{ inputs.gke_allow_destroy }}
+        run: |
+          set -euo pipefail
+          # Deleting anything here tears down cluster primitives. The cluster is
+          # behind deletion_protection, but a node-pool or gateway replacement
+          # shows up the same way and is just as disruptive.
+          if [ "$DESTROY_COUNT" -gt 0 ] && [ "$ALLOW_DESTROY" != "true" ]; then
+            echo "::error::The plan destroys $DESTROY_COUNT resource(s). Refusing to apply; re-run Deploy to GCP with gke_reconcile + gke_allow_destroy only if that is what you expect."
+            exit 1
+          fi
+
+      - name: Apply
+        if: steps.gke.outputs.apply == 'true' && steps.plan.outputs.changed != '0'
+        working-directory: ${{ env.GKE_TF_DIR }}
+        # Applies the exact plan published above (no re-solve, no prompt), so
+        # what lands is what the summary showed.
+        run: terraform apply -input=false -auto-approve gke.tfplan
+
+      - name: Report node pool
+        run: |
+          set -euo pipefail
+          gcloud container node-pools list --cluster "$CLUSTER" \
+            --location "$ZONE" --project "$PROJECT_ID" \
+            --format 'table(name, status, config.machineType, autoscaling.minNodeCount, autoscaling.maxNodeCount)'

@@ -6,7 +6,7 @@ ADLC means **Agentic Development Life Cycle**. It is a human-governed approach t
 
 ADLC does not remove human accountability. People define goals and policy, approve consequential actions, review evidence, and own the delivered result. Agents perform bounded work with explicit tools, permissions, runtime limits, and audit trails.
 
-Canonical product URL: https://adlc-9e72f.web.app/
+Canonical product URL: https://www.archagentix.com/
 Website: https://www.archagentix.com
 Reference implementation: AI Fleet / Archagentix (https://www.archagentix.com)
 Source: https://github.com/niravshah2705/symphony
@@ -46,9 +46,9 @@ Do not claim that ADLC guarantees autonomous delivery, replaces human review, su
 
 ## Stable public references
 
-- Product: https://adlc-9e72f.web.app/
+- Product: https://www.archagentix.com/
 - Website: https://www.archagentix.com
-- Concise AI index: https://adlc-9e72f.web.app/llms.txt
+- Concise AI index: https://www.archagentix.com/llms.txt
 - Repository: https://github.com/niravshah2705/symphony
 - Architecture: https://github.com/niravshah2705/symphony/blob/main/docs/ARCHITECTURE_DIAGRAM.md
 - Access model: https://github.com/niravshah2705/symphony/blob/main/docs/ACCESS_MODEL.md

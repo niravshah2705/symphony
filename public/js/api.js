@@ -469,8 +469,31 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/agent/sandbox${query ? `?${query}` : ''}`);
   },
+  listSandboxes: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/agent/sandboxes${query ? `?${query}` : ''}`);
+  },
+  createSandbox: (payload = {}) =>
+    request('/agent/sandboxes', { method: 'POST', body: JSON.stringify(payload) }),
+  updateSandbox: (sandboxName, payload = {}) =>
+    request(`/agent/sandboxes/${encodeURIComponent(sandboxName)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  deleteSandbox: (sandboxName, params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/agent/sandboxes/${encodeURIComponent(sandboxName)}${query ? `?${query}` : ''}`, {
+      method: 'DELETE',
+    });
+  },
   loadProjectSandbox: (payload = {}) =>
     request('/agent/sandbox/load', { method: 'POST', body: JSON.stringify(payload) }),
+  changeSandboxImage: (payload = {}) =>
+    request('/agent/sandbox/image', { method: 'POST', body: JSON.stringify(payload) }),
+  stopSandbox: (payload = {}) =>
+    request('/agent/sandbox/stop', { method: 'POST', body: JSON.stringify(payload) }),
+  startSandbox: (payload = {}) =>
+    request('/agent/sandbox/start', { method: 'POST', body: JSON.stringify(payload) }),
   chatWithSandbox: (payload = {}) =>
     request('/agent/sandbox/chat', { method: 'POST', body: JSON.stringify(payload) }),
   execInSandbox: (payload = {}) =>
@@ -568,9 +591,9 @@ export const api = {
   getAnalytics: () => request('/observability/analytics'),
   getTroubleshooting: () => request('/observability/troubleshooting'),
 
-  // Cost monitoring + billing (services/gateway/src/routes/billing.js). The org
-  // is resolved SERVER-SIDE from the caller's token — the client never sends an
-  // org id. Mutations require org-admin (enforced server-side).
+  // Cost monitoring + billing (proxied to services/billing/src/billing-api.js).
+  // The org is resolved SERVER-SIDE by the gateway from the caller's token — the
+  // client never sends an org id. Mutations require org-admin (re-checked there).
   billing: {
     getSummary: () => request('/billing/summary'),
     getUsage: (groupBy = 'project', period = 'week') =>
