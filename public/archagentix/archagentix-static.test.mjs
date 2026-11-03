@@ -106,7 +106,8 @@ assert.match(
 // Hosting serves /archagentix/*.js with its default long cache unless firebase.json
 // says otherwise, which would pin a stale panel in every already-open tab.
 const firebaseConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '../../firebase.json'), 'utf8'));
-const archagentixHeader = (firebaseConfig.hosting.headers || []).find((entry) => entry.source === '/archagentix/**/*.@(css|js)');
+const appHeaders = firebaseConfig.hosting.find((site) => site.target === 'app').headers;
+const archagentixHeader = appHeaders.find((entry) => entry.source === '/archagentix/**/*.@(css|js)');
 assert.ok(archagentixHeader, 'firebase.json must no-cache /archagentix css and js');
 assert.equal(archagentixHeader.headers[0].key, 'Cache-Control');
 assert.equal(archagentixHeader.headers[0].value, 'no-cache');
