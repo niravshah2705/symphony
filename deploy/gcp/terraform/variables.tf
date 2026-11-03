@@ -982,7 +982,7 @@ variable "custom_domain" {
 
 variable "marketing_custom_domain" {
   type        = string
-  description = "Custom domain attached to the marketing Hosting site (<project>-www), served from .github/workflows/deploy-www.yml. Empty = domain not attached (DNS still points elsewhere, e.g. the legacy Hostinger FTP host)."
+  description = "Custom domain attached to the marketing Hosting site (<project>-marketing), served from .github/workflows/deploy-www.yml. Empty = domain not attached (DNS still points elsewhere, e.g. the legacy Hostinger FTP host)."
   default     = "www.archagentix.com"
 }
 variable "firebase_allowed_domain" {

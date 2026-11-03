@@ -1,0 +1,17 @@
+{
+  "projects": {
+    "default": "adlc-9e72f"
+  },
+  "targets": {
+    "adlc-9e72f": {
+      "hosting": {
+        "app": [
+          "adlc-9e72f"
+        ],
+        "www": [
+          "adlc-9e72f-marketing"
+        ]
+      }
+    }
+  }
+}

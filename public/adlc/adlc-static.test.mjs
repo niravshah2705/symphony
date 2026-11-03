@@ -23,8 +23,15 @@ test('www marketing site mirrors the app site config on its own hosting site', (
   const app = firebase.hosting.find((site) => site.target === 'app');
   const www = firebase.hosting.find((site) => site.target === 'www');
 
-  assert.equal(app.site, 'adlc-9e72f');
-  assert.equal(www.site, 'adlc-9e72f-www', 'must match Terraform local.marketing_site_id');
+  // firebase.json configs may carry site OR target, never both (CLI validation).
+  assert.ok(!('site' in app) && !('site' in www), 'targets must be bound in .firebaserc, not site keys');
+
+  const rc = JSON.parse(fs.readFileSync(new URL('../../.firebaserc', import.meta.url), 'utf8'));
+  const bindings = rc.targets[rc.projects.default].hosting;
+  assert.deepEqual(bindings.app, ['adlc-9e72f'], 'app target serves the default (platform) site');
+  // Site id is "-marketing", not "-www": the Hosting API rejects "-www" names.
+  assert.deepEqual(bindings.www, ['adlc-9e72f-marketing'], 'must match Terraform local.marketing_site_id');
+
   assert.equal(www.public, app.public, 'both hosts serve the identical public/ tree');
   assert.deepEqual(www.rewrites, app.rewrites);
   assert.deepEqual(www.headers, app.headers);
