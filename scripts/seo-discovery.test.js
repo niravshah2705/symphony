@@ -15,7 +15,7 @@ test('SPA publishes complete ADLC search metadata and valid JSON-LD', () => {
   assert.ok(description, 'meta description must be present');
   assert.match(description, /ADLC \(Agentic Development Life Cycle\)/);
   assert.ok(description.length >= 120 && description.length <= 170, `unexpected description length: ${description.length}`);
-  assert.match(html, /<link rel="canonical" href="https:\/\/adlc-9e72f\.web\.app\/" \/>/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/www\.archagentix\.com\/" \/>/);
   assert.match(html, /<link rel="describedby" type="text\/markdown" href="\/llms\.txt" \/>/);
   assert.doesNotMatch(html, /<link rel="alternate"[^>]+href="\/llms\.txt"/);
 
@@ -46,7 +46,7 @@ test('robots policy is valid, AI-crawler explicit, and points to the canonical s
     assert.match(robots, new RegExp(`User-agent: ${agent}\\nAllow: /\\nDisallow: /api/`));
   }
   assert.match(robots, /User-agent: \*\nAllow: \/\nDisallow: \/api\//);
-  assert.match(robots, /Sitemap: https:\/\/adlc-9e72f\.web\.app\/sitemap\.xml/);
+  assert.match(robots, /Sitemap: https:\/\/www\.archagentix\.com\/sitemap\.xml/);
 });
 
 test('sitemap and language-model documents expose one canonical public source', () => {
@@ -54,29 +54,31 @@ test('sitemap and language-model documents expose one canonical public source', 
   const concise = readPublic('llms.txt');
   const full = readPublic('llms-full.txt');
 
-  assert.match(sitemap, /<loc>https:\/\/adlc-9e72f\.web\.app\/<\/loc>/);
+  assert.match(sitemap, /<loc>https:\/\/www\.archagentix\.com\/<\/loc>/);
   assert.doesNotMatch(sitemap, /<loc>[^<]*#/);
+  assert.doesNotMatch(sitemap, /adlc-9e72f/);
   // The SPA is hash-routed, so /#/agent etc. must never appear as their own <url>.
-  // Only the root SPA and real, statically-served ADLC pages (each backed by a
+  // Only the root SPA and real, statically-served pages (each backed by a
   // literal index.html on disk) may be listed.
+  const marketingPages = ['/pricing/', '/about/', '/careers/', '/newsroom/', '/contact/'];
   const adlcPages = [
     '/adlc/', '/adlc/blog/', '/adlc/brief/',
     '/adlc/blog/governance/', '/adlc/blog/isolation/', '/adlc/blog/evidence/',
     '/adlc/blog/lifecycle/', '/adlc/blog/integration/', '/adlc/blog/getting-started/',
   ];
-  for (const page of adlcPages) {
-    const loc = `https://adlc-9e72f.web.app${page}`;
+  for (const page of [...marketingPages, ...adlcPages]) {
+    const loc = `https://www.archagentix.com${page}`;
     assert.match(sitemap, new RegExp(`<loc>${loc.replace(/[/.]/g, '\\$&')}</loc>`), `sitemap missing ${loc}`);
   }
   assert.equal(
     (sitemap.match(/<url>/g) || []).length,
-    adlcPages.length + 1,
+    adlcPages.length + marketingPages.length + 1,
     'hash routes must not masquerade as crawlable URLs',
   );
   for (const content of [concise, full]) {
     assert.match(content, /ADLC/);
     assert.match(content, /Agentic Development Life Cycle/);
-    assert.match(content, /https:\/\/adlc-9e72f\.web\.app\//);
+    assert.match(content, /https:\/\/www\.archagentix\.com\//);
   }
   assert.match(concise, /Full ADLC overview/);
   assert.doesNotMatch(concise, /^## Core facts$/m);
