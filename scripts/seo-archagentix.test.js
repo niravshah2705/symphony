@@ -215,6 +215,21 @@ test('www marketing site has its own CD publishing hosting:www', () => {
   assert.match(locals, /marketing_site_id = "\$\{var\.project_id\}-www"/);
 });
 
+test('www site moved to GCP: no SPA obfuscation in its CD, scripts wire the domain', () => {
+  const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deploy-www.yml'), 'utf8');
+  assert.ok(!workflow.includes('obfuscate-spa.js'), 'www CD must not obfuscate — static marketing tree only');
+
+  const bootstrap = fs.readFileSync(path.join(ROOT, 'deploy/gcp/bootstrap.sh'), 'utf8');
+  assert.match(bootstrap, /MARKETING_CUSTOM_DOMAIN:-www\.archagentix\.com/, 'bootstrap defaults the www domain');
+  assert.match(bootstrap, /www\.ghs\.googlehosted\.com/, 'bootstrap lists the DNS cutover manual step');
+
+  const deploySh = fs.readFileSync(path.join(ROOT, 'deploy/gcp/deploy.sh'), 'utf8');
+  assert.match(deploySh, /-var="marketing_custom_domain=\$\{MARKETING_CUSTOM_DOMAIN\}"/, 'deploy.sh passes the marketing var');
+
+  const cdApply = fs.readFileSync(path.join(ROOT, '.github/workflows/deploy.yml'), 'utf8');
+  assert.match(cdApply, /-var="marketing_custom_domain=/, 'CD Terraform apply controls the marketing domain');
+});
+
 test('footer mirrors the platform footer and carries the company sections', () => {
   const pages = [
     'adlc/index.html', 'adlc/blog/index.html', 'adlc/brief/index.html',

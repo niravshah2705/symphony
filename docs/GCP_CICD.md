@@ -58,7 +58,11 @@ The SPA ships to browsers as raw ES modules, so the `deploy-spa` job
 **obfuscates `public/js/**` before the Firebase Hosting deploy**
 (`node scripts/obfuscate-spa.js --in-place`, backed by `javascript-obfuscator`).
 Cloud Build's `spa-publish` path does the same via its `spa-obfuscate` step
-before the GCS rsync, so both served copies are obfuscated.
+before the GCS rsync, so both served copies are obfuscated. The marketing CD
+(`deploy-www.yml`) deliberately does **not** obfuscate — it publishes the
+static marketing tree as committed (the app-shell copy at the www root
+therefore serves readable `public/js/**`; the primary workspace entry is the
+obfuscated app site).
 
 - It runs **in the ephemeral CI checkout only** — the source in git stays
   readable. Locally, `npm run spa:obfuscate` writes an obfuscated copy to

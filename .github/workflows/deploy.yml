@@ -491,6 +491,7 @@ jobs:
             -var="api_base_url=${GATEWAY_URL}"
             -var="firebase_allowed_domain=${{ vars.FIREBASE_ALLOWED_DOMAIN }}"
             -var="custom_domain=${CUSTOM_DOMAIN_ARG}"
+            -var="marketing_custom_domain=${{ vars.MARKETING_CUSTOM_DOMAIN || 'www.archagentix.com' }}"
             -var="auth_admin_emails=${{ vars.AUTH_ADMIN_EMAILS }}"
             -var="auth_default_role=${{ vars.AUTH_DEFAULT_ROLE || 'viewer' }}"
             -var="google_one_tap_client_id=${{ vars.GOOGLE_ONE_TAP_CLIENT_ID }}"

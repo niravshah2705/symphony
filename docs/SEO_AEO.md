@@ -73,12 +73,12 @@ Additional types: `FAQPage` + `Product`/`Offer` (pricing), `AboutPage` (about),
 
 All commands were run from the repo root on 2026-11-03.
 
-### 1. Automated test suites — 21/21 pass
+### 1. Automated test suites — 24/24 pass
 
 ```text
 $ node --test scripts/seo-archagentix.test.js scripts/seo-discovery.test.js public/adlc/adlc-static.test.mjs
-ℹ tests 21
-ℹ pass 21
+ℹ tests 24
+ℹ pass 24
 ℹ fail 0
 ```
 
@@ -100,7 +100,12 @@ The new suite `scripts/seo-archagentix.test.js` asserts:
 - each new page is self-canonical, has a substantial meta description, robots
   directive, og:title, and exactly one H1;
 - footer on every page contains About Company / Careers / Newsroom / Contact Us,
-  the entity name, and Privacy/Terms — and the platform footer gained the same.
+  the entity name, and Privacy/Terms — and the platform footer gained the same;
+- the GCP hosting wiring is pinned: `firebase.json` targets `app`/`www` with the
+  www site id equal to Terraform's `local.marketing_site_id`, `deploy-www.yml`
+  deploys `--only hosting:www` (keyless WIF, **no** SPA-obfuscation step),
+  `deploy.yml` deploys `--only hosting:app`, and `bootstrap.sh`/`deploy.sh`
+  carry the marketing-domain pass-through plus the DNS-cutover manual steps.
 
 Existing Playwright e2e updated (`e2e/adlc.spec.js`): asserts the Try-now href,
 the `www.archagentix.com/adlc/` canonical applied at runtime by `app.js`, and
@@ -148,17 +153,20 @@ the SPA catch-all rewrite), each with a self-referential canonical on
   block site-wide; the "Ask about ADLC on …" assistant launcher is preserved in
   the platform footer.
 
-## How www.archagentix.com is served — Firebase Hosting, same project
+## How www.archagentix.com is served — GCP Firebase Hosting, same project
 
-`www.archagentix.com` was previously a static site on Hostinger (pushed by FTP).
-It now lives on a **second Firebase Hosting site in this same project**:
+> **The website has moved to GCP.** `www.archagentix.com` was previously a
+> static site on Hostinger (pushed by FTP). It is now served entirely from
+> this GCP project by Firebase Hosting, and every future change ships through
+> the `deploy-www.yml` workflow — the FTP push is retired after the DNS
+> cutover below.
 
 | Piece | Where |
 |---|---|
 | Hosting site | `adlc-9e72f-www` (default host: `https://adlc-9e72f-www.web.app`) — Terraform-managed by `google_firebase_hosting_site.marketing` in `deploy/gcp/terraform/firebase.tf` |
 | Hosting config | `firebase.json` → `hosting` is now an array: target `app` (site `adlc-9e72f`, the platform) and target `www` (site `adlc-9e72f-www`); **both publish the same `public/` tree**, so every sitemap `<loc>` maps 1:1 to a literal file |
 | Custom domain | `google_firebase_hosting_custom_domain.marketing` attaches `www.archagentix.com` to the marketing site (not the app site); `wait_dns_verification = false` keeps the apply non-blocking pre-cutover. Toggle via `var.marketing_custom_domain` |
-| Continuous deployment | `.github/workflows/deploy-www.yml` — path-filtered to marketing content (`public/pricing/**`, `public/about/**`, `public/careers/**`, `public/newsroom/**`, `public/contact/**`, `public/adlc/**`, `index.html`, `sitemap.xml`, `robots.txt`, `llms*.txt`, `firebase.json`), keyless WIF auth, regenerates `config.js`/`adlc/config.js` then `firebase deploy --only hosting:www` |
+| Continuous deployment | `.github/workflows/deploy-www.yml` — path-filtered to marketing content (`public/pricing/**`, `public/about/**`, `public/careers/**`, `public/newsroom/**`, `public/contact/**`, `public/adlc/**`, `index.html`, `sitemap.xml`, `robots.txt`, `llms*.txt`, `firebase.json`), keyless WIF auth, regenerates `config.js`/`adlc/config.js` then `firebase deploy --only hosting:www`. No SPA obfuscation step: the marketing tree is static content and the obfuscated workspace copy ships from the app site |
 | App CD | `deploy.yml` deploy-spa job now publishes `--only hosting:app` only — marketing edits never roll the platform and vice versa |
 | Auth & CORS | Identity Platform `authorized_domains` and the gateway's `FIREBASE_CUSTOM_DOMAIN` allowlist include the marketing domain automatically (`local.marketing_domains`) |
 
@@ -175,12 +183,20 @@ Content mapping (upload root = `public/`, unchanged semantics for the sitemap):
 on both hosts and every copy declares the `www.archagentix.com` canonical —
 intentional, it consolidates SEO signal on one domain.
 
-### One-time cutover from Hostinger
+### One-time cutover from Hostinger — manual steps
 
-1. **Provision:** after the Terraform apply (CD runs it on `deploy/gcp/terraform/**`
-   changes, or manually with the usual `-var` set +
-   `-target=google_firebase_hosting_site.marketing -target=google_firebase_hosting_custom_domain.marketing`),
-   the site `adlc-9e72f-www` exists and the domain is registered in **pending** state.
+1. **Provision the GCP side (one-time).** After merge, run Terraform once for
+   just the marketing resources (or let the normal CD apply do it — it only
+   creates, and `wait_dns_verification = false` keeps it non-blocking):
+
+   ```bash
+   terraform -chdir=deploy/gcp/terraform apply \
+     -target=google_firebase_hosting_site.marketing \
+     -target=google_firebase_hosting_custom_domain.marketing
+   ```
+
+   The site `adlc-9e72f-www` now exists and the domain is registered in
+   **pending** state.
 2. **Read the required DNS records** (site-specific): Firebase console →
    Hosting → `adlc-9e72f-www` → Manage domains, or
    `terraform -chdir=deploy/gcp/terraform output`/`state show` on the domain

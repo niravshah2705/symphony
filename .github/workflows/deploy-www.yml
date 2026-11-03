@@ -55,15 +55,9 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v3
 
-      # Same artifact as the app deploy: the www root can open the workspace,
-      # so obfuscate the client JS the same way (ephemeral checkout only).
-      - name: Obfuscate SPA client JS
-        env:
-          SPA_OBFUSCATION_STRENGTH: ${{ vars.SPA_OBFUSCATION_STRENGTH || 'light' }}
-        run: |
-          set -euo pipefail
-          npm ci --no-audit --no-fund --ignore-scripts
-          node scripts/obfuscate-spa.js --in-place
+      # No SPA obfuscation here on purpose: this publishes the static
+      # marketing tree; public/js/** ships as committed (the obfuscated
+      # workspace copy is the one on the app site, deploy.yml).
 
       - name: Publish www to Firebase Hosting
         env:
