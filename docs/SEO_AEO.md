@@ -148,65 +148,53 @@ the SPA catch-all rewrite), each with a self-referential canonical on
   block site-wide; the "Ask about ADLC on …" assistant launcher is preserved in
   the platform footer.
 
-## How www.archagentix.com is served
+## How www.archagentix.com is served — Firebase Hosting, same project
 
-`www.archagentix.com` is a **static website hosted in a separate GCP account** —
-it is deliberately NOT a Firebase Hosting custom domain of this project (the
-Terraform custom-domain resources stay platform-only). Everything the marketing
-domain needs lives under `public/`, and every sitemap `<loc>` maps 1:1 to a
-path under the static webroot, so publishing is a pure file push (FTP/SFTP):
+`www.archagentix.com` was previously a static site on Hostinger (pushed by FTP).
+It now lives on a **second Firebase Hosting site in this same project**:
 
-| Canonical URL (www.archagentix.com) | File in this repo (upload root = `public/`) |
+| Piece | Where |
 |---|---|
-| `/` | `index.html` (+ SPA assets `js/ vendor/ styles/ config.js styles.css` if the www root serves the app shell) |
-| `/pricing/` | `pricing/index.html` |
-| `/about/` | `about/index.html` |
-| `/careers/` | `careers/index.html` |
-| `/newsroom/` | `newsroom/index.html` |
-| `/contact/` | `contact/index.html` |
-| `/adlc/**` | `adlc/**` (landing, blog, brief, `styles.css`, `app.js`; `config.js` is regenerated per-deploy on Firebase — on www it may be uploaded as-is) |
+| Hosting site | `adlc-9e72f-www` (default host: `https://adlc-9e72f-www.web.app`) — Terraform-managed by `google_firebase_hosting_site.marketing` in `deploy/gcp/terraform/firebase.tf` |
+| Hosting config | `firebase.json` → `hosting` is now an array: target `app` (site `adlc-9e72f`, the platform) and target `www` (site `adlc-9e72f-www`); **both publish the same `public/` tree**, so every sitemap `<loc>` maps 1:1 to a literal file |
+| Custom domain | `google_firebase_hosting_custom_domain.marketing` attaches `www.archagentix.com` to the marketing site (not the app site); `wait_dns_verification = false` keeps the apply non-blocking pre-cutover. Toggle via `var.marketing_custom_domain` |
+| Continuous deployment | `.github/workflows/deploy-www.yml` — path-filtered to marketing content (`public/pricing/**`, `public/about/**`, `public/careers/**`, `public/newsroom/**`, `public/contact/**`, `public/adlc/**`, `index.html`, `sitemap.xml`, `robots.txt`, `llms*.txt`, `firebase.json`), keyless WIF auth, regenerates `config.js`/`adlc/config.js` then `firebase deploy --only hosting:www` |
+| App CD | `deploy.yml` deploy-spa job now publishes `--only hosting:app` only — marketing edits never roll the platform and vice versa |
+| Auth & CORS | Identity Platform `authorized_domains` and the gateway's `FIREBASE_CUSTOM_DOMAIN` allowlist include the marketing domain automatically (`local.marketing_domains`) |
+
+Content mapping (upload root = `public/`, unchanged semantics for the sitemap):
+
+| Canonical URL (www.archagentix.com) | File in this repo |
+|---|---|
+| `/` | `index.html` (workspace shell; `/pricing/` etc. are static) |
+| `/pricing/` `/about/` `/careers/` `/newsroom/` `/contact/` | `<slug>/index.html` |
+| `/adlc/**` | `adlc/**` (landing, blog, brief, `styles.css`, `app.js`, per-deploy `config.js`) |
 | `/sitemap.xml` `/robots.txt` `/llms.txt` `/llms-full.txt` | same-named files in `public/` |
 
-`platform.archagentix.com` (this Firebase site) keeps serving the application;
-the `/adlc/` pages exist on both hosts, and every copy declares the
-`www.archagentix.com` canonical — that is intentional and keeps SEO signal on
-one domain.
+`platform.archagentix.com` keeps serving the application; `/adlc/` pages exist
+on both hosts and every copy declares the `www.archagentix.com` canonical —
+intentional, it consolidates SEO signal on one domain.
 
-### Publish with FTP (or SFTP)
+### One-time cutover from Hostinger
 
-Run from the repo root. `lftp` mirrors `public/` onto the remote webroot;
-`--delete` keeps removals in sync, excludes skip test files that are not web
-content:
-
-```bash
-FTP_HOST=your-static-host.example.com FTP_USER=archagentix-web FTP_PASS='***' \
-FTP_ROOT=/var/www/www.archagentix.com lftp -e "
-  set ftp:ssl-force true;
-  set ssl:verify-certificate no;
-  cd \"$FTP_ROOT\";
-  mirror --reverse --delete \
-    --exclude 'archagentix/archagentix-static.test.mjs' \
-    --exclude 'adlc/adlc-static.test.mjs' \
-    --exclude '**/*.test.mjs' \
-    public;
-  quit;
-" -u "$FTP_USER,$FTP_PASS" "ftp://$FTP_HOST"
-```
-
-If the host accepts SFTP, swap the URL scheme — same command:
-
-```bash
-lftp -e "cd \"$FTP_ROOT\"; mirror --reverse --delete --exclude '**/*.test.mjs' public; quit" \
-  -u "$FTP_USER,$FTP_PASS" "sftp://$FTP_HOST"
-```
-
-Individual-file push with plain `curl` (handy for hot-fixing the sitemap):
-
-```bash
-for f in sitemap.xml robots.txt llms.txt llms-full.txt; do
-  curl -sT "public/$f" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$f"
-done
-```
+1. **Provision:** after the Terraform apply (CD runs it on `deploy/gcp/terraform/**`
+   changes, or manually with the usual `-var` set +
+   `-target=google_firebase_hosting_site.marketing -target=google_firebase_hosting_custom_domain.marketing`),
+   the site `adlc-9e72f-www` exists and the domain is registered in **pending** state.
+2. **Read the required DNS records** (site-specific): Firebase console →
+   Hosting → `adlc-9e72f-www` → Manage domains, or
+   `terraform -chdir=deploy/gcp/terraform output`/`state show` on the domain
+   resource — `pendingVerification.siteConstraint` lists them. For a hosted
+   subdomain expect: `CNAME www → adlc-9e72f-www.ghs.googlehosted.com`.
+3. **Cut DNS at the registrar:** remove the Hostinger A/AAAA records for `www`
+   and add the CNAME above. Leave the apex/other records alone. DNS still
+   resolves to Hostinger until this flips — the FTP-pushed copy keeps serving.
+4. **Verify + certify:** the domain reaches `ACTIVE` and Firebase provisions the
+   TLS cert automatically (minutes to a few hours). Then run the workflow once
+   manually so the first live release comes from CD, not the old FTP tree:
+   `gh workflow run deploy-www.yml --repo niravshah2705/symphony --ref main`
+5. **Decommission:** after verifying (below), stop the Hostinger FTP pushes and
+   let the old static host expire.
 
 ### Post-publish verification
 
@@ -223,11 +211,23 @@ All 15 sitemap URLs must return `200` with their own canonical (the repo test
 `every sitemap URL is backed by a literal crawlable file on disk` guarantees
 this before you push).
 
+### Legacy: direct FTP push to Hostinger (only until the cutover)
+
+`lftp` mirrors `public/` onto the Hostinger webroot; keep using it while DNS
+still points there (test files excluded):
+
+```bash
+FTP_HOST=your-hostinger-host lftp -e "
+  set ftp:ssl-force true; cd /public_html;
+  mirror --reverse --delete --exclude '**/*.test.mjs' public; quit;
+" -u "$FTP_USER,$FTP_PASS" "ftp://$FTP_HOST"
+```
+
 ## Remaining operational steps
 
 - Submit the new sitemap in Google Search Console / Bing WMT for
-  `www.archagentix.com` after the FTP publish.
-- On the Firebase side, request CDN re-invalidation after `firebase deploy`
-  (sitemap.xml/robots.txt are served `no-cache` per `firebase.json` headers).
+  `www.archagentix.com` after the cutover.
+- Request CDN re-invalidation if you change `sitemap.xml`/`robots.txt` outside
+  CD (both are served `no-cache` per `firebase.json` headers anyway).
 - If the old `adlc-9e72f.web.app` host stays reachable, add a 301 →
   `https://www.archagentix.com` (hosting redirects) to pass residual link equity.

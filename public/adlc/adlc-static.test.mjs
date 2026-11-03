@@ -6,12 +6,28 @@ import test from 'node:test';
 
 test('Firebase headers keep ADLC runtime config uncached', () => {
   const firebase = JSON.parse(fs.readFileSync(new URL('../../firebase.json', import.meta.url), 'utf8'));
-  const headers = firebase.hosting.headers;
+  assert.ok(Array.isArray(firebase.hosting), 'hosting must be a multi-site array');
+  const targets = firebase.hosting.map((site) => site.target);
+  assert.deepEqual(targets, ['app', 'www'], 'app and www hosting targets must stay defined');
+
+  const headers = firebase.hosting.find((site) => site.target === 'app').headers;
   const configRule = headers.find((rule) => rule.source === '/adlc/config.js');
 
   assert.deepEqual(configRule?.headers, [
     { key: 'Cache-Control', value: 'no-store' },
   ]);
+});
+
+test('www marketing site mirrors the app site config on its own hosting site', () => {
+  const firebase = JSON.parse(fs.readFileSync(new URL('../../firebase.json', import.meta.url), 'utf8'));
+  const app = firebase.hosting.find((site) => site.target === 'app');
+  const www = firebase.hosting.find((site) => site.target === 'www');
+
+  assert.equal(app.site, 'adlc-9e72f');
+  assert.equal(www.site, 'adlc-9e72f-www', 'must match Terraform local.marketing_site_id');
+  assert.equal(www.public, app.public, 'both hosts serve the identical public/ tree');
+  assert.deepEqual(www.rewrites, app.rewrites);
+  assert.deepEqual(www.headers, app.headers);
 });
 
 test('ADLC manifest and service worker stay scoped to /adlc/', () => {

@@ -21,8 +21,19 @@ are conditional on it:
 | root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
 | `deploy/gcp/terraform/**` | rebuild the shared proxy artifact and run `terraform apply` (required for first broker creation) |
 | `deploy/gcp/terraform-openshell-gke/**` | `gke_reconcile` job: plan **and apply** the multi-tenant OpenShell GKE module (own state prefix, no images; any delete in the plan fails the run instead of applying) |
-| `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy only (no images, no Terraform) |
+| `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy of the **app** site only (`firebase deploy --only hosting:app`; no images, no Terraform) |
 | docs / anything else | nothing runs |
+
+The marketing site has its **own workflow**: `.github/workflows/deploy-www.yml`
+watches the static-content paths (`public/index.html`, `public/{pricing,about,
+careers,newsroom,contact}/**`, `public/adlc/**`, `public/{sitemap.xml,robots.txt,
+llms.txt,llms-full.txt}`, `firebase.json`, and itself) and publishes the same
+`public/` tree to the second Hosting site `adlc-9e72f-www`
+(`firebase deploy --only hosting:www`). Run it manually with
+`gh workflow run deploy-www.yml --repo niravshah2705/symphony --ref main`.
+The two workflows never race: each targets its own `hosting:` target via the
+`firebase.json` targets array. Cutover and verification steps for
+`www.archagentix.com` live in `docs/SEO_AEO.md`.
 
 How "roll only one service" works: each unchanged service keeps its
 **currently-deployed** image tag (resolved live from Cloud Run) while the
