@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 392 nodes
+Community of 388 nodes
 
-- **Size**: 392 nodes
-- **Cohesion**: 0.3139
+- **Size**: 388 nodes
+- **Cohesion**: 0.3159
 - **Dominant Language**: javascript
 
 ## Members
@@ -42,7 +42,6 @@ Community of 392 nodes
 | invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
 | defaultCallJson | Function | ./packages/shared/src/agent/business-pipeline.js | 112-114 |
 | defaultCallText | Function | ./packages/shared/src/agent/business-pipeline.js | 116-118 |
-| schedulerStage | Function | ./packages/shared/src/agent/business-pipeline.js | 515-533 |
 | test:parseVerdict reads a fenced verdict JSON block (completed)@L25 | Test | ./packages/shared/src/agent/coder-flow.test.js | 25-30 |
 | test:parseVerdict reads an insufficient JSON verdict with its reason@L32 | Test | ./packages/shared/src/agent/coder-flow.test.js | 32-36 |
 | test:parseVerdict extracts the merged PR URL when completed@L38 | Test | ./packages/shared/src/agent/coder-flow.test.js | 38-43 |
@@ -64,8 +63,9 @@ Community of 392 nodes
 | test:coder pause recovery waits, reschedules failed probes, and clears after a ready settings change@L530 | Test | ./packages/shared/src/agent/coder-flow.test.js | 530-577 |
 | now | Function | ./packages/shared/src/agent/coder-flow.test.js | 547-547 |
 | test:runtime repository unavailability pauses safely without finishing the Linear issue@L579 | Test | ./packages/shared/src/agent/coder-flow.test.js | 579-640 |
+| test:planned runtime policy denial records a governed error without pausing or finalizing the issue@L642 | Test | ./packages/shared/src/agent/coder-flow.test.js | 642-697 |
 
-*... and 342 more members.*
+*... and 338 more members.*
 
 ## Execution Flows
 
@@ -78,28 +78,28 @@ Community of 392 nodes
 
 ### Outgoing
 
-- `equal` (323 edge(s))
-- `deepEqual` (77 edge(s))
+- `equal` (317 edge(s))
+- `deepEqual` (76 edge(s))
 - `String` (53 edge(s))
 - `strictEqual` (48 edge(s))
 - `Number` (44 edge(s))
 - `warn` (31 edge(s))
 - `Boolean` (30 edge(s))
-- `push` (30 edge(s))
 - `match` (29 edge(s))
 - `replace` (27 edge(s))
+- `push` (27 edge(s))
 - `rejects` (25 edge(s))
-- `toISOString` (25 edge(s))
-- `require` (24 edge(s))
 - `ok` (24 edge(s))
 - `trim` (24 edge(s))
+- `slice` (24 edge(s))
+- `includes` (24 edge(s))
 
 ### Incoming
 
-- `equal` (323 edge(s))
-- `deepEqual` (77 edge(s))
+- `equal` (317 edge(s))
+- `deepEqual` (76 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
-- `./packages/shared/src/agent/scheduler.js` (55 edge(s))
+- `./packages/shared/src/agent/scheduler.js` (53 edge(s))
 - `strictEqual` (48 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
 - `./packages/shared/src/agent/llm.js` (40 edge(s))
@@ -108,6 +108,6 @@ Community of 392 nodes
 - `rejects` (25 edge(s))
 - `match` (24 edge(s))
 - `ok` (24 edge(s))
-- `after` (22 edge(s))
-- `./packages/shared/src/agent/scheduler.test.js` (19 edge(s))
+- `after` (21 edge(s))
+- `./packages/shared/src/agent/scheduler.test.js` (18 edge(s))
 - `./packages/shared/src/agent/availability.js` (17 edge(s))

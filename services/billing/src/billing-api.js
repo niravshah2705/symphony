@@ -348,12 +348,14 @@ router.post('/cashfree/create-mandate', asyncHandler(async (req, res) => {
   const sanitizedOrg = String(caller.orgId).replace(/[^a-zA-Z0-9_-]/g, '_');
   const subscriptionId = `sub_${sanitizedOrg}_${Date.now()}`;
   const returnUrl = req.body && req.body.returnUrl ? String(req.body.returnUrl) : '';
-
+  // Same identity source as create-order: Cashfree rejects a placeholder email,
+  // so fall back to the org's saved billing details before the defaults.
+  const saved = (store.getBillingAccount(caller.orgId) || {}).paymentInfo || {};
   const sub = await cashfreeClient.createOnDemandSubscription({
     subscriptionId,
-    customerName: req.body?.customerName || 'Admin User',
-    customerEmail: req.body?.customerEmail || 'admin@aifleet.local',
-    customerPhone: req.body?.customerPhone || '9999999999',
+    customerName: req.body?.customerName || saved.billingName || 'Organization Admin',
+    customerEmail: req.body?.customerEmail || saved.billingEmail || 'billing@example.com',
+    customerPhone: req.body?.customerPhone || saved.billingPhone || '9999999999',
     planMaxAmountInr: req.body?.maxAmountInr || 100000,
     returnUrl,
   });
@@ -383,8 +385,8 @@ router.post('/cashfree/create-order', asyncHandler(async (req, res) => {
   const sanitizedOrg = String(caller.orgId).replace(/[^a-zA-Z0-9_-]/g, '_');
   const orderId = `order_${sanitizedOrg}_${Date.now()}`;
   const customerId = `cust_${sanitizedOrg}`;
-  const customerName = req.body?.customerName || paymentInfo.billingName || 'Admin User';
-  const customerEmail = req.body?.customerEmail || paymentInfo.billingEmail || 'admin@aifleet.local';
+  const customerName = req.body?.customerName || paymentInfo.billingName || 'Organization Admin';
+  const customerEmail = req.body?.customerEmail || paymentInfo.billingEmail || 'billing@example.com';
   const customerPhone = req.body?.customerPhone || paymentInfo.billingPhone || '9999999999';
   const returnUrl = req.body?.returnUrl || '';
 

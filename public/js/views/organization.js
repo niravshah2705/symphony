@@ -891,10 +891,10 @@ async function renderOrgBilling(section, organization, isAdmin) {
           } else {
             toast('Verifying payment with Cashfree…');
             const verifyRes = await api.billing.verifyCashfreeOrder(orderRes.orderId);
-            if (verifyRes.status === 'PAID') {
+            if (verifyRes.orderStatus === 'PAID') {
               toast(`Payment successful! Reloaded ${inr(val)}.`);
             } else {
-              toast(`Payment status: ${verifyRes.status}`);
+              toast(`Payment status: ${verifyRes.orderStatus}`);
             }
             await reload();
           }

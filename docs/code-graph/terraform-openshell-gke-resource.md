@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 74 nodes
+Community of 81 nodes
 
-- **Size**: 74 nodes
-- **Cohesion**: 0.6300
+- **Size**: 81 nodes
+- **Cohesion**: 0.6432
 - **Dominant Language**: hcl
 
 ## Members
@@ -15,21 +15,24 @@ Community of 74 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | resource.google_container_cluster.primary | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 5-75 |
-| resource.google_container_node_pool.primary_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 81-136 |
+| local.system_node_selector | Function | ./deploy/gcp/terraform-openshell-gke/gke.tf | 90-92 |
+| resource.google_container_node_pool.primary_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 95-150 |
+| resource.google_container_node_pool.system_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 156-213 |
 | data.http.agent_sandbox_manifest | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 6-8 |
 | data.kubectl_file_documents.agent_sandbox_docs | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 10-12 |
-| resource.kubectl_manifest.agent_sandbox | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 14-19 |
-| resource.helm_release.envoy_gateway | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 26-39 |
-| resource.kubectl_manifest.envoy_proxy_config | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 41-61 |
-| resource.kubectl_manifest.gateway_class | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 63-79 |
-| resource.helm_release.cert_manager | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 85-109 |
-| resource.kubectl_manifest.letsencrypt_staging | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 115-137 |
-| resource.kubectl_manifest.letsencrypt_prod | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 139-161 |
-| resource.kubectl_manifest.openshell_ingress_gateway | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 167-199 |
-| resource.kubectl_manifest.openshell_http_route | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 201-225 |
-| resource.kubectl_manifest.openshell_backend_traffic | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 227-245 |
-| resource.kubectl_manifest.openshell_client_traffic | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 247-265 |
-| resource.helm_release.openshell | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 271-331 |
+| local.agent_sandbox_docs | Function | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 18-31 |
+| resource.kubectl_manifest.agent_sandbox | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 34-39 |
+| resource.helm_release.envoy_gateway | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 46-75 |
+| resource.kubectl_manifest.envoy_proxy_config | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 77-101 |
+| resource.kubectl_manifest.gateway_class | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 103-119 |
+| resource.helm_release.cert_manager | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 125-157 |
+| resource.kubectl_manifest.letsencrypt_staging | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 163-185 |
+| resource.kubectl_manifest.letsencrypt_prod | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 187-209 |
+| resource.kubectl_manifest.openshell_ingress_gateway | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 215-247 |
+| resource.kubectl_manifest.openshell_http_route | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 249-273 |
+| resource.kubectl_manifest.openshell_backend_traffic | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 275-293 |
+| resource.kubectl_manifest.openshell_client_traffic | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 295-313 |
+| resource.helm_release.openshell | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 319-384 |
 | provider.google | Function | ./deploy/gcp/terraform-openshell-gke/main.tf | 1-4 |
 | data.google_client_config.default | Class | ./deploy/gcp/terraform-openshell-gke/main.tf | 6-6 |
 | local.cluster_host | Function | ./deploy/gcp/terraform-openshell-gke/main.tf | 12-12 |
@@ -61,11 +64,8 @@ Community of 74 nodes
 | resource.kubernetes_network_policy_v1.tenant_default_deny | Class | ./deploy/gcp/terraform-openshell-gke/tenant_config.tf | 10-22 |
 | resource.kubernetes_network_policy_v1.tenant_allow_dns | Class | ./deploy/gcp/terraform-openshell-gke/tenant_config.tf | 25-57 |
 | resource.kubernetes_resource_quota_v1.tenant_quota | Class | ./deploy/gcp/terraform-openshell-gke/tenant_config.tf | 60-78 |
-| resource.kubernetes_limit_range_v1.tenant_limit_range | Class | ./deploy/gcp/terraform-openshell-gke/tenant_config.tf | 81-104 |
-| resource.kubernetes_role_v1.tenant_admin | Class | ./deploy/gcp/terraform-openshell-gke/tenant_config.tf | 107-120 |
-| resource.kubernetes_role_binding_v1.tenant_admins | Class | ./deploy/gcp/terraform-openshell-gke/tenant_config.tf | 122-141 |
 
-*... and 24 more members.*
+*... and 31 more members.*
 
 ## Execution Flows
 
@@ -75,11 +75,11 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform-openshell-gke/variables.tf` (23 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/helm_components.tf` (14 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/variables.tf` (27 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/helm_components.tf` (15 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/main.tf` (8 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/outputs.tf` (8 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/tenant_config.tf` (8 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/network.tf` (6 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/namespaces.tf` (5 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/gke.tf` (2 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/gke.tf` (4 edge(s))

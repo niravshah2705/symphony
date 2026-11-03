@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 16 nodes
+Community of 18 nodes
 
-- **Size**: 16 nodes
-- **Cohesion**: 0.1371
+- **Size**: 18 nodes
+- **Cohesion**: 0.1385
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,7 +15,7 @@ Community of 16 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | createStoreHydrationMiddleware | Function | ./services/billing/src/app.js | 15-19 |
-| createApp | Function | ./services/billing/src/app.js | 21-76 |
+| createApp | Function | ./services/billing/src/app.js | 21-86 |
 | listen | Function | ./services/billing/src/app.test.js | 14-25 |
 | test:billing service health probes@L27 | Test | ./services/billing/src/app.test.js | 27-36 |
 | test:billing standalone UI dashboard serves HTML@L38 | Test | ./services/billing/src/app.test.js | 38-48 |
@@ -27,7 +27,9 @@ Community of 16 nodes
 | test:billing /pubsub/billing-tick runs sweep@L159 | Test | ./services/billing/src/app.test.js | 159-172 |
 | test:cashfree order flow credits the wallet once and stays idempotent@L174 | Test | ./services/billing/src/app.test.js | 174-207 |
 | test:cashfree mandate creation fails closed when Cashfree is not configured@L209 | Test | ./services/billing/src/app.test.js | 209-228 |
-| test:cashfree webhook rejects a bad signature in production and credits a good one@L230 | Test | ./services/billing/src/app.test.js | 230-285 |
+| test:a Cashfree credential rejection surfaces as a 502 with the reason@L232 | Test | ./services/billing/src/app.test.js | 232-273 |
+| upstream | Function | ./services/billing/src/app.test.js | 241-243 |
+| test:cashfree webhook rejects a bad signature in production and credits a good one@L275 | Test | ./services/billing/src/app.test.js | 275-330 |
 | start | Function | ./services/billing/src/index.js | 7-15 |
 | renderDashboardHtml | Function | ./services/billing/src/ui.js | 3-357 |
 
@@ -39,36 +41,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (25 edge(s))
+- `equal` (27 edge(s))
 - `fetch` (19 edge(s))
-- `json` (15 edge(s))
-- `close` (12 edge(s))
+- `json` (16 edge(s))
+- `close` (13 edge(s))
+- `stringify` (12 edge(s))
 - `Number` (10 edge(s))
-- `stringify` (9 edge(s))
+- `use` (5 edge(s))
 - `get` (5 edge(s))
 - `await` (5 edge(s))
-- `use` (4 edge(s))
+- `match` (4 edge(s))
 - `ok` (4 edge(s))
 - `toFixed` (4 edge(s))
-- `match` (3 edge(s))
+- `resolve` (3 edge(s))
+- `realFetch` (3 edge(s))
 - `getBillingAccount` (3 edge(s))
-- `info` (2 edge(s))
-- `status` (2 edge(s))
 
 ### Incoming
 
-- `equal` (25 edge(s))
+- `equal` (27 edge(s))
 - `fetch` (19 edge(s))
-- `./services/billing/src/app.test.js` (12 edge(s))
-- `close` (11 edge(s))
-- `json` (10 edge(s))
-- `stringify` (8 edge(s))
+- `./services/billing/src/app.test.js` (14 edge(s))
+- `close` (12 edge(s))
+- `json` (11 edge(s))
+- `stringify` (10 edge(s))
 - `await` (5 edge(s))
 - `./services/billing/src/index.js` (4 edge(s))
+- `match` (4 edge(s))
 - `ok` (4 edge(s))
 - `Number` (4 edge(s))
 - `./services/billing/src/app.js` (3 edge(s))
-- `match` (3 edge(s))
+- `realFetch` (3 edge(s))
 - `getBillingAccount` (3 edge(s))
 - `./services/billing/src/app.test.js::test:config update with percentage mode keeps Cashfree mandate fields@L137` (2 edge(s))
-- `deepEqual` (2 edge(s))

@@ -29,6 +29,46 @@ function isConfigured() {
   return Boolean(process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY);
 }
 
+/** The environment the base URL actually points at, for error wording. */
+function currentEnvironment() {
+  return getBaseUrl().includes('sandbox') ? 'sandbox' : 'production';
+}
+
+/** Guard for the calls that have no unconfigured mock path. */
+function requireConfigured(operation) {
+  if (isConfigured()) return;
+  const err = new Error(`Cashfree is not configured (CASHFREE_APP_ID / CASHFREE_SECRET_KEY are missing), cannot ${operation}.`);
+  err.status = 400;
+  err.code = 'cashfree_not_configured';
+  throw err;
+}
+
+/**
+ * Read a Cashfree response. An upstream 4xx is a data- or credential-level
+ * rejection, not a crash, so the thrown error carries the status the API should
+ * answer with and Cashfree's own message: the caller (and the browser toast)
+ * learns *why* it failed instead of seeing an opaque 500. A credential failure
+ * is reported as 502 rather than 401 — this service's own 401 means "your
+ * session is invalid", and reusing it would make the SPA refresh a bearer
+ * token and lock the workspace over what is a server-side key mismatch.
+ */
+async function readResponse(res, operation) {
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) return data;
+
+  const upstreamMessage = data.message || data.reason || 'unknown error';
+  log.error(`Cashfree ${operation} failed`, { status: res.status, code: data.code, data });
+
+  const authFailure = res.status === 401 || res.status === 403;
+  const err = new Error(authFailure
+    ? `Cashfree rejected the API credentials for the ${currentEnvironment()} environment (${upstreamMessage}). `
+      + 'CASHFREE_APP_ID / CASHFREE_SECRET_KEY must be keys issued for that environment.'
+    : `Cashfree ${operation} was rejected (${res.status}): ${upstreamMessage}`);
+  err.status = authFailure ? 502 : (res.status >= 400 && res.status < 500 ? 400 : 502);
+  err.code = authFailure ? 'cashfree_auth_failed' : 'cashfree_request_rejected';
+  throw err;
+}
+
 async function createOnDemandSubscription({
   subscriptionId,
   customerName = 'Admin User',
@@ -37,9 +77,7 @@ async function createOnDemandSubscription({
   planMaxAmountInr = 100000,
   returnUrl = '',
 }) {
-  if (!isConfigured()) {
-    throw new Error('Cashfree API keys (CASHFREE_APP_ID / CASHFREE_SECRET_KEY) are not configured');
-  }
+  requireConfigured('create an on-demand subscription');
 
   const url = `${getBaseUrl()}/subscriptions`;
   const body = {
@@ -67,20 +105,11 @@ async function createOnDemandSubscription({
     body: JSON.stringify(body),
   });
 
-  const responseData = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    log.error('Cashfree createOnDemandSubscription failed', { status: res.status, data: responseData });
-    const msg = responseData.message || responseData.reason || 'Failed to create Cashfree subscription';
-    throw new Error(`Cashfree error (${res.status}): ${msg}`);
-  }
-
-  return responseData;
+  return readResponse(res, 'createOnDemandSubscription');
 }
 
 async function getSubscription(subscriptionId) {
-  if (!isConfigured()) {
-    throw new Error('Cashfree API keys are not configured');
-  }
+  requireConfigured('read a Cashfree subscription');
 
   const url = `${getBaseUrl()}/subscriptions/${encodeURIComponent(subscriptionId)}`;
   const res = await fetch(url, {
@@ -88,20 +117,11 @@ async function getSubscription(subscriptionId) {
     headers: getHeaders(),
   });
 
-  const responseData = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    log.error('Cashfree getSubscription failed', { status: res.status, data: responseData });
-    const msg = responseData.message || 'Failed to get Cashfree subscription details';
-    throw new Error(`Cashfree error (${res.status}): ${msg}`);
-  }
-
-  return responseData;
+  return readResponse(res, 'getSubscription');
 }
 
 async function chargeSubscription({ subscriptionId, paymentId, amountInr }) {
-  if (!isConfigured()) {
-    throw new Error('Cashfree API keys are not configured');
-  }
+  requireConfigured('charge a Cashfree subscription');
 
   const url = `${getBaseUrl()}/subscriptions/pay`;
   const body = {
@@ -117,14 +137,7 @@ async function chargeSubscription({ subscriptionId, paymentId, amountInr }) {
     body: JSON.stringify(body),
   });
 
-  const responseData = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    log.error('Cashfree chargeSubscription failed', { status: res.status, data: responseData });
-    const msg = responseData.message || responseData.reason || 'Failed to charge Cashfree subscription';
-    throw new Error(`Cashfree error (${res.status}): ${msg}`);
-  }
-
-  return responseData;
+  return readResponse(res, 'chargeSubscription');
 }
 
 function verifyWebhookSignature(headers = {}, rawBody = '') {
@@ -193,14 +206,7 @@ async function createOrder({
     body: JSON.stringify(body),
   });
 
-  const responseData = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    log.error('Cashfree createOrder failed', { status: res.status, data: responseData });
-    const msg = responseData.message || responseData.reason || 'Failed to create Cashfree order';
-    throw new Error(`Cashfree error (${res.status}): ${msg}`);
-  }
-
-  return responseData;
+  return readResponse(res, 'createOrder');
 }
 
 async function getOrder(orderId) {
@@ -219,14 +225,7 @@ async function getOrder(orderId) {
     headers: getHeaders(),
   });
 
-  const responseData = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    log.error('Cashfree getOrder failed', { status: res.status, data: responseData });
-    const msg = responseData.message || 'Failed to get Cashfree order details';
-    throw new Error(`Cashfree error (${res.status}): ${msg}`);
-  }
-
-  return responseData;
+  return readResponse(res, 'getOrder');
 }
 
 module.exports = {

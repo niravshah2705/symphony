@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 29 nodes
+Community of 30 nodes
 
-- **Size**: 29 nodes
-- **Cohesion**: 0.1754
+- **Size**: 30 nodes
+- **Cohesion**: 0.1815
 - **Dominant Language**: javascript
 
 ## Members
@@ -43,6 +43,7 @@ Community of 29 nodes
 | test:a rejected file oversize check surfaces a toast and never calls the service@L824 | Test | ./e2e/agent-workspace.spec.js | 824-836 |
 | test:the "Ask about files" affordance stays hidden until an attachment is ready, then answers with citations@L838 | Test | ./e2e/agent-workspace.spec.js | 838-859 |
 | route | Function | ./public/js/omnibox-router.mjs | 56-59 |
+| classifyOmniboxIntent | Function | ./public/js/omnibox-router.mjs | 61-103 |
 
 ## Execution Flows
 
@@ -65,8 +66,8 @@ No execution flows pass through this community.
 - `split` (10 edge(s))
 - `method` (8 edge(s))
 - `push` (8 edge(s))
+- `test` (8 edge(s))
 - `filter` (7 edge(s))
-- `toHaveLength` (7 edge(s))
 
 ### Incoming
 
@@ -79,9 +80,9 @@ No execution flows pass through this community.
 - `toHaveCount` (22 edge(s))
 - `click` (17 edge(s))
 - `toHaveURL` (13 edge(s))
-- `./public/js/omnibox-router.mjs::classifyOmniboxIntent` (9 edge(s))
 - `toHaveLength` (7 edge(s))
 - `split` (6 edge(s))
 - `request` (6 edge(s))
 - `toBeEnabled` (5 edge(s))
 - `setInputFiles` (5 edge(s))
+- `toBe` (5 edge(s))

@@ -227,6 +227,51 @@ test('cashfree mandate creation fails closed when Cashfree is not configured', a
   }
 });
 
+// The live failure this guards: sandbox base URL + production keys → Cashfree 401.
+// It must reach the browser as a stated credential mismatch, not an opaque 500.
+test('a Cashfree credential rejection surfaces as a 502 with the reason', async () => {
+  const prevAppId = process.env.CASHFREE_APP_ID;
+  const prevKey = process.env.CASHFREE_SECRET_KEY;
+  const prevBase = process.env.CASHFREE_BASE_URL;
+  const realFetch = globalThis.fetch;
+  process.env.CASHFREE_APP_ID = 'PROD12345678';
+  process.env.CASHFREE_SECRET_KEY = 'cfsk_ma_prod_abc';
+  process.env.CASHFREE_BASE_URL = 'https://sandbox.cashfree.com';
+  const server = await listen(createApp());
+  const upstream = () => new Response(JSON.stringify({ message: 'authentication Failed', code: 'UNAUTHORIZED' }), {
+    status: 401, headers: { 'content-type': 'application/json' },
+  });
+  try {
+    globalThis.fetch = (url, options) => (String(url).startsWith(server.url)
+      ? realFetch(url, options)
+      : Promise.resolve(upstream()));
+
+    const res = await realFetch(`${server.url}/api/billing/cashfree/create-order`, {
+      method: 'POST',
+      headers: { ...ADMIN, 'content-type': 'application/json' },
+      body: JSON.stringify({ amountInr: 500 }),
+    });
+    assert.equal(res.status, 502);
+    assert.match((await res.json()).error, /credentials for the sandbox environment/);
+
+    const mandate = await realFetch(`${server.url}/api/billing/cashfree/create-mandate`, {
+      method: 'POST',
+      headers: { ...ADMIN, 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(mandate.status, 502);
+  } finally {
+    globalThis.fetch = realFetch;
+    await server.close();
+    for (const [key, value] of Object.entries({
+      CASHFREE_APP_ID: prevAppId, CASHFREE_SECRET_KEY: prevKey, CASHFREE_BASE_URL: prevBase,
+    })) {
+      if (value !== undefined) process.env[key] = value;
+      else delete process.env[key];
+    }
+  }
+});
+
 test('cashfree webhook rejects a bad signature in production and credits a good one', async () => {
   const prevKey = process.env.CASHFREE_SECRET_KEY;
   const prevEnv = process.env.NODE_ENV;

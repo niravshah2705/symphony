@@ -312,10 +312,10 @@ function adminPanel(view, summary) {
         } else {
           toast('Verifying payment…', 'ok');
           const verifyRes = await api.billing.verifyCashfreeOrder(orderRes.orderId);
-          if (verifyRes.status === 'PAID') {
+          if (verifyRes.orderStatus === 'PAID') {
             toast(`Payment successful! Reloaded ₹${value}.`, 'ok');
           } else {
-            toast(`Payment status: ${verifyRes.status}`, 'warn');
+            toast(`Payment status: ${verifyRes.orderStatus}`, 'warn');
           }
           renderCost(view);
         }

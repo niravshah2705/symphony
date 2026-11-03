@@ -3,7 +3,7 @@
 const express = require('express');
 const { CONFIG } = require('@ai-fleet/shared-core/config');
 const log = require('@ai-fleet/shared-core/logger');
-const { asyncHandler } = require('@ai-fleet/shared-core/util');
+const { asyncHandler, sendError } = require('@ai-fleet/shared-core/util');
 const store = require('@ai-fleet/shared-core/store');
 const ledger = require('@ai-fleet/shared-core/billing/ledger');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
@@ -71,6 +71,16 @@ function createApp(options = {}) {
   // callers that use the bare paths.
   app.use('/api/billing', billingApi);
   app.use('/', billingApi);
+
+  // Terminal error handler. Without it Express answers a thrown error with its
+  // own 500 page, so a Cashfree rejection (or a malformed body) reached the
+  // browser as an undiagnosable 500 instead of the status + message the service
+  // attached.
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, req, res, next) => {
+    log.error(`Billing request failed: ${req.method} ${req.path}`, { status: err && err.status, error: err && err.message });
+    sendError(res, err);
+  });
 
   return app;
 }
