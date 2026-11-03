@@ -586,6 +586,51 @@
 .build-flow-actions button:not(.primary) { border: 1px solid var(--border-strong); background: var(--panel); color: var(--text); cursor: pointer; }
 .build-flow-actions button:not(.primary):hover { border-color: var(--accent); color: var(--accent-2); }
 
+/* Global-question coverage rail (right side of the agent chat). Tokens only, so
+   :root[data-theme] flips it with the rest of the rail. */
+.coverage-summary {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center;
+  padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--panel);
+}
+.coverage-score { font-size: 22px; font-weight: 720; letter-spacing: -.02em; color: var(--muted); }
+.coverage-summary-copy strong { display: block; font-size: 10px; font-weight: 660; }
+.coverage-summary-copy p { margin: 3px 0 0; color: var(--muted); font-size: 9px; line-height: 1.45; }
+/* Grey = we did not look; red = we looked and found nothing. Never conflate them. */
+.coverage-not_assessed .coverage-score, .coverage-not_evaluated .coverage-score { color: var(--muted); }
+.coverage-unanswered .coverage-score, .coverage-gap .coverage-score { color: var(--red); }
+.coverage-partial .coverage-score { color: var(--amber); }
+.coverage-covered .coverage-score { color: var(--green); }
+.coverage-not_assessed { border-color: var(--border); background: var(--surface-subtle); }
+.coverage-unanswered, .coverage-gap { border-color: color-mix(in srgb, var(--red) 34%, var(--border)); background: color-mix(in srgb, var(--red-soft) 45%, var(--panel)); }
+.coverage-partial { border-color: color-mix(in srgb, var(--amber) 36%, var(--border)); background: var(--amber-soft); }
+.coverage-covered { border-color: color-mix(in srgb, var(--green) 36%, var(--border)); background: var(--green-soft); }
+.coverage-partial-note { color: var(--amber) !important; }
+.coverage-laya-note { font-style: italic; }
+.coverage-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 12px 2px 4px; }
+.coverage-controls select { min-height: 26px; padding: 3px 6px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--panel); color: var(--text); font-size: 9px; }
+.coverage-filter { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 9px; }
+.coverage-refresh { min-height: 26px; padding: 3px 10px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--panel); color: var(--text); font-size: 9px; cursor: pointer; }
+.coverage-refresh:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-2); }
+.coverage-refresh:disabled { opacity: .55; cursor: default; }
+.coverage-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.coverage-row { padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
+.coverage-row-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; }
+.coverage-badge {
+  min-width: 38px; padding: 2px 5px; border-radius: 8px; background: var(--panel-2); color: var(--muted);
+  font-size: 8px; font-weight: 720; text-align: center; white-space: nowrap;
+}
+.coverage-question { font-size: 9px; line-height: 1.4; }
+.coverage-row-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; color: var(--muted); font-size: 8px; }
+.coverage-unanswered, .coverage-gap { border-color: color-mix(in srgb, var(--red) 30%, var(--border)); }
+.coverage-unanswered .coverage-badge, .coverage-gap .coverage-badge { background: var(--red-soft); color: var(--red); }
+.coverage-partial { border-color: color-mix(in srgb, var(--amber) 32%, var(--border)); }
+.coverage-partial .coverage-badge { background: var(--amber-soft); color: var(--amber); }
+.coverage-covered { border-color: color-mix(in srgb, var(--green) 32%, var(--border)); }
+.coverage-covered .coverage-badge { background: var(--green-soft); color: var(--green); }
+.coverage-evidence { margin-top: 6px; }
+.coverage-evidence summary { color: var(--accent-2); font-size: 8px; cursor: pointer; }
+.coverage-evidence ul { margin: 5px 0 0; padding-left: 14px; color: var(--muted); font-size: 8px; line-height: 1.5; }
+
 /* Keep route breakpoints after the lazily loaded base rules so their cascade
    matches the former single-stylesheet order. */
 @media (max-width: 1180px) {

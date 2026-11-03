@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 401 nodes
+Community of 197 nodes
 
-- **Size**: 401 nodes
-- **Cohesion**: 0.3145
+- **Size**: 197 nodes
+- **Cohesion**: 0.3041
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,57 +20,56 @@ Community of 401 nodes
 | test:createChatModel maps antigravity to a ChatOpenAI targeting the Gemini endpoint@L52 | Test | ./packages/shared/src/agent/antigravity.test.js | 52-58 |
 | test:availability probes the Gemini key against the OpenAI-compatible endpoint@L73 | Test | ./packages/shared/src/agent/antigravity.test.js | 73-86 |
 | test:availability fails fast when the Gemini key is missing@L88 | Test | ./packages/shared/src/agent/antigravity.test.js | 88-94 |
-| statusOf | Function | ./packages/shared/src/agent/availability.js | 43-46 |
-| publicAvailabilityMessage | Function | ./packages/shared/src/agent/availability.js | 48-73 |
-| pauseReasonFor | Function | ./packages/shared/src/agent/availability.js | 75-87 |
-| isRepositoryAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 89-99 |
-| isModelAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 101-118 |
 | selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 120-125 |
 | normalize | Function | ./packages/shared/src/agent/availability.js | 123-123 |
 | probeModelAvailability | Function | ./packages/shared/src/agent/availability.js | 127-223 |
-| probeRepositoryAvailability | Function | ./packages/shared/src/agent/availability.js | 225-280 |
-| response | Function | ./packages/shared/src/agent/availability.test.js | 18-24 |
-| test:pause reasons expose a stable, nontechnical UI contract@L26 | Test | ./packages/shared/src/agent/availability.test.js | 26-42 |
-| test:repository preflight converts provider 403 into a sanitized availability error@L44 | Test | ./packages/shared/src/agent/availability.test.js | 44-67 |
-| test:repository preflight requires write permission before dispatch@L69 | Test | ./packages/shared/src/agent/availability.test.js | 69-77 |
 | test:local model preflight verifies that the selected model is loaded@L79 | Test | ./packages/shared/src/agent/availability.test.js | 79-93 |
-| test:model classifier recognizes hosted authorization and network availability failures@L95 | Test | ./packages/shared/src/agent/availability.test.js | 95-119 |
-| test:repository classifier distinguishes remote outages from local workflow errors@L121 | Test | ./packages/shared/src/agent/availability.test.js | 121-142 |
 | messageText | Function | ./packages/shared/src/agent/business-pipeline.js | 71-77 |
 | parseJsonObject | Function | ./packages/shared/src/agent/business-pipeline.js | 79-85 |
 | realResolveModel | Function | ./packages/shared/src/agent/business-pipeline.js | 89-94 |
 | invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
 | defaultCallJson | Function | ./packages/shared/src/agent/business-pipeline.js | 112-114 |
 | defaultCallText | Function | ./packages/shared/src/agent/business-pipeline.js | 116-118 |
-| test:parseVerdict reads a fenced verdict JSON block (completed)@L25 | Test | ./packages/shared/src/agent/coder-flow.test.js | 25-30 |
-| test:parseVerdict reads an insufficient JSON verdict with its reason@L32 | Test | ./packages/shared/src/agent/coder-flow.test.js | 32-36 |
-| test:parseVerdict extracts the merged PR URL when completed@L38 | Test | ./packages/shared/src/agent/coder-flow.test.js | 38-43 |
-| test:parseVerdict leaves pr null when absent@L45 | Test | ./packages/shared/src/agent/coder-flow.test.js | 45-48 |
-| test:parseVerdict accepts a plain VERDICT: line@L50 | Test | ./packages/shared/src/agent/coder-flow.test.js | 50-54 |
-| test:parseVerdict normalizes case in the status field@L56 | Test | ./packages/shared/src/agent/coder-flow.test.js | 56-59 |
-| test:parseVerdict defaults to insufficient when no verdict is present@L61 | Test | ./packages/shared/src/agent/coder-flow.test.js | 61-65 |
-| test:parseVerdict defaults to insufficient on empty/nullish input@L67 | Test | ./packages/shared/src/agent/coder-flow.test.js | 67-70 |
-| test:Git 403 preflight stops before model resolution, job creation, or issue transition@L96 | Test | ./packages/shared/src/agent/coder-flow.test.js | 96-133 |
-| test:model preflight stops before job creation or issue transition@L135 | Test | ./packages/shared/src/agent/coder-flow.test.js | 135-165 |
-| test:successful readiness is probed again for every later dispatch@L167 | Test | ./packages/shared/src/agent/coder-flow.test.js | 167-188 |
-| test:manual readiness guard establishes the same sanitized global pause@L190 | Test | ./packages/shared/src/agent/coder-flow.test.js | 190-218 |
-| test:manual readiness guard preserves policy denial without creating a model pause@L220 | Test | ./packages/shared/src/agent/coder-flow.test.js | 220-247 |
-| test:runtime policy denial is never classified as a model availability pause@L249 | Test | ./packages/shared/src/agent/coder-flow.test.js | 249-265 |
-| test:selected autonomous policy resolution rejects missing effective policy while local mode stays compatible@L267 | Test | ./packages/shared/src/agent/coder-flow.test.js | 267-292 |
-| test:proxy-vault autonomous polling needs no stored Linear key and uses the sentinel for every Linear read@L294 | Test | ./packages/shared/src/agent/coder-flow.test.js | 294-321 |
-| test:autonomous planned coder threads selected policy and loads only permitted MCP plugins@L323 | Test | ./packages/shared/src/agent/coder-flow.test.js | 323-438 |
-| test:runtime outage helper pauses direct runs on the execution role regardless of legacy size label@L488 | Test | ./packages/shared/src/agent/coder-flow.test.js | 488-528 |
-| test:coder pause recovery waits, reschedules failed probes, and clears after a ready settings change@L530 | Test | ./packages/shared/src/agent/coder-flow.test.js | 530-577 |
-| now | Function | ./packages/shared/src/agent/coder-flow.test.js | 547-547 |
-| test:runtime repository unavailability pauses safely without finishing the Linear issue@L579 | Test | ./packages/shared/src/agent/coder-flow.test.js | 579-640 |
-| test:planned runtime policy denial records a governed error without pausing or finalizing the issue@L642 | Test | ./packages/shared/src/agent/coder-flow.test.js | 642-697 |
+| test:codexMaxTokens reserves the requested output (floored at 256)@L18 | Test | ./packages/shared/src/agent/codex-budget.test.js | 18-22 |
+| test:codexPromptBudget reserves the output cap + margin below the window@L26 | Test | ./packages/shared/src/agent/codex-budget.test.js | 26-29 |
+| test:codexPromptBudget returns 0 (trimming disabled) when no window is known@L31 | Test | ./packages/shared/src/agent/codex-budget.test.js | 31-33 |
+| test:codexPromptBudget never goes negative on a tiny window@L35 | Test | ./packages/shared/src/agent/codex-budget.test.js | 35-37 |
+| test:clampStreamRetries bounds to a non-negative integer and defaults sanely@L41 | Test | ./packages/shared/src/agent/codex-budget.test.js | 41-48 |
+| test:resolveLlm surfaces the single stream-retry knob on every provider descriptor@L52 | Test | ./packages/shared/src/agent/codex-budget.test.js | 52-60 |
+| test:resolveLlm defaults the stream-retry knob to the configured default@L62 | Test | ./packages/shared/src/agent/codex-budget.test.js | 62-65 |
+| codexDescriptor | Function | ./packages/shared/src/agent/codex-budget.test.js | 69-85 |
+| longConvo | Function | ./packages/shared/src/agent/codex-budget.test.js | 87-97 |
+| test:createChatModel wires the Codex prompt budget and stream-retry count onto the model@L99 | Test | ./packages/shared/src/agent/codex-budget.test.js | 99-106 |
+| test:Codex _prepareMessages rewrites system→developer but keeps a fitting history intact@L108 | Test | ./packages/shared/src/agent/codex-budget.test.js | 108-117 |
+| test:Codex _prepareMessages trims the middle when the prompt overflows the window@L119 | Test | ./packages/shared/src/agent/codex-budget.test.js | 119-130 |
+| test:resolveLlm builds a hosted OpenAI-compatible descriptor for huggingface@L21 | Test | ./packages/shared/src/agent/huggingface.test.js | 21-28 |
+| test:resolveLlm strips a trailing /v1 from the configured host before re-appending@L30 | Test | ./packages/shared/src/agent/huggingface.test.js | 30-33 |
+| test:llmReady requires both the token and a model; notReadyReason names Hugging Face@L35 | Test | ./packages/shared/src/agent/huggingface.test.js | 35-40 |
+| test:createChatModel returns a ChatOpenAI targeting the router@L42 | Test | ./packages/shared/src/agent/huggingface.test.js | 42-49 |
+| test:normalizeEvaluation-style signal clamp is not relevant here; readiness probe validates the token@L68 | Test | ./packages/shared/src/agent/huggingface.test.js | 68-83 |
+| test:probe fails fast when the token is missing@L85 | Test | ./packages/shared/src/agent/huggingface.test.js | 85-91 |
+| proxyProjectHeaders | Function | ./packages/shared/src/agent/llm.js | 15-17 |
+| clampStreamRetries | Function | ./packages/shared/src/agent/llm.js | 20-24 |
+| lmstudioJsonKwargs | Function | ./packages/shared/src/agent/llm.js | 75-86 |
+| lmstudioMaxTokens | Function | ./packages/shared/src/agent/llm.js | 95-99 |
+| omlxMaxTokens | Function | ./packages/shared/src/agent/llm.js | 102-106 |
+| codexMaxTokens | Function | ./packages/shared/src/agent/llm.js | 114-117 |
+| codexPromptBudget | Function | ./packages/shared/src/agent/llm.js | 125-130 |
+| lmstudioPromptBudget | Function | ./packages/shared/src/agent/llm.js | 150-155 |
+| omlxPromptBudget | Function | ./packages/shared/src/agent/llm.js | 157-161 |
+| warnContextMismatch | Function | ./packages/shared/src/agent/llm.js | 171-179 |
+| clampContextWindow | Function | ./packages/shared/src/agent/llm.js | 189-194 |
+| fetchLmstudioLoadedContext | Function | ./packages/shared/src/agent/llm.js | 202-222 |
+| getCodexChatModelClass | Function | ./packages/shared/src/agent/llm.js | 238-252 |
+| createCodexChatgptModel | Function | ./packages/shared/src/agent/llm.js | 267-305 |
+| getClaudeChatModelClass | Function | ./packages/shared/src/agent/llm.js | 337-367 |
+| constructor | Function | ./packages/shared/src/agent/llm.js | 342-345 |
 
-*... and 351 more members.*
+*... and 147 more members.*
 
 ## Execution Flows
 
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
-- **resume** (criticality: 0.67, depth: 8)
 - **generatePlan** (criticality: 0.67, depth: 6)
 - **startScheduler** (criticality: 0.66, depth: 6)
 
@@ -78,36 +77,36 @@ Community of 401 nodes
 
 ### Outgoing
 
-- `equal` (334 edge(s))
-- `deepEqual` (76 edge(s))
-- `String` (54 edge(s))
-- `strictEqual` (48 edge(s))
-- `Number` (45 edge(s))
-- `warn` (32 edge(s))
-- `Boolean` (30 edge(s))
-- `match` (29 edge(s))
-- `replace` (27 edge(s))
-- `push` (27 edge(s))
-- `rejects` (25 edge(s))
-- `require` (25 edge(s))
-- `ok` (25 edge(s))
-- `trim` (25 edge(s))
-- `toISOString` (24 edge(s))
+- `equal` (133 edge(s))
+- `deepEqual` (39 edge(s))
+- `strictEqual` (28 edge(s))
+- `Number` (27 edge(s))
+- `replace` (25 edge(s))
+- `String` (23 edge(s))
+- `join` (21 edge(s))
+- `slice` (19 edge(s))
+- `includes` (19 edge(s))
+- `map` (17 edge(s))
+- `isFinite` (17 edge(s))
+- `match` (16 edge(s))
+- `trim` (16 edge(s))
+- `require` (14 edge(s))
+- `isArray` (14 edge(s))
 
 ### Incoming
 
-- `equal` (334 edge(s))
-- `deepEqual` (76 edge(s))
-- `./packages/shared/src/agent/coder-orchestrator.js` (70 edge(s))
-- `./packages/shared/src/agent/scheduler.js` (53 edge(s))
-- `strictEqual` (48 edge(s))
+- `equal` (133 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
+- `./packages/shared/src/agent/local-intelligence.js` (46 edge(s))
 - `./packages/shared/src/agent/llm.js` (42 edge(s))
-- `./packages/shared/src/agent/local-intelligence.js` (38 edge(s))
-- `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
-- `rejects` (25 edge(s))
-- `ok` (25 edge(s))
-- `match` (24 edge(s))
-- `after` (21 edge(s))
-- `./packages/shared/src/agent/scheduler.test.js` (18 edge(s))
-- `./packages/shared/src/agent/availability.js` (17 edge(s))
+- `deepEqual` (39 edge(s))
+- `strictEqual` (28 edge(s))
+- `./packages/shared/src/agent/local-intelligence.test.js` (14 edge(s))
+- `./packages/shared/src/agent/localization.test.js` (14 edge(s))
+- `match` (13 edge(s))
+- `ok` (13 edge(s))
+- `throws` (13 edge(s))
+- `./packages/shared/src/agent/codex-budget.test.js` (12 edge(s))
+- `./packages/shared/src/agent/lmstudio-budget.test.js` (12 edge(s))
+- `./packages/shared/src/agent/model-routing.test.js` (7 edge(s))
+- `./packages/shared/src/agent/antigravity.test.js` (6 edge(s))

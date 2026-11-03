@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 194 nodes
+Community of 213 nodes
 
-- **Size**: 194 nodes
-- **Cohesion**: 0.0678
+- **Size**: 213 nodes
+- **Cohesion**: 0.0615
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,7 +16,7 @@ Community of 194 nodes
 |------|------|------|-------|
 | test:deploy entry points share the blank/valid/invalid GA4 id contract@L35 | Test | ./deploy/gcp/analytics-config.test.js | 35-45 |
 | test:blank or unset bootstrap input removes a stale repo variable and gh failures remain fatal@L59 | Test | ./deploy/gcp/analytics-config.test.js | 59-77 |
-| test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-92 |
+| test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-96 |
 | test:only the publish job can mint cloud credentials@L58 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 58-99 |
 | test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 101-134 |
 | test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L129 | Test | ./deploy/gcp/pipeline-infra.test.js | 129-162 |
@@ -25,9 +25,9 @@ Community of 194 nodes
 | test:pipeline topology enforces dedicated topics and brokered agent egress@L316 | Test | ./deploy/gcp/pipeline-infra.test.js | 316-366 |
 | test:stream-token broker owns the signing secret behind private IAM@L368 | Test | ./deploy/gcp/pipeline-infra.test.js | 368-464 |
 | test:OpenSWE upstream is trusted proxy-only deployment configuration@L473 | Test | ./deploy/gcp/pipeline-infra.test.js | 473-489 |
-| test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-26 |
-| test:ADLC manifest is served as a static resource@L28 | Test | ./e2e/adlc.spec.js | 28-35 |
-| test:existing Agent workspace route still renders directly@L37 | Test | ./e2e/adlc.spec.js | 37-45 |
+| test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-30 |
+| test:ADLC manifest is served as a static resource@L32 | Test | ./e2e/adlc.spec.js | 32-39 |
+| test:existing Agent workspace route still renders directly@L41 | Test | ./e2e/adlc.spec.js | 41-49 |
 | test:Agent jobs restores complete grouped planner and coding history@L99 | Test | ./e2e/agent-jobs.spec.js | 99-166 |
 | test:direct Agent jobs navigation is hidden and gated for a public visitor@L237 | Test | ./e2e/anonymous-agent.spec.js | 237-246 |
 | test:parallel application-auth failures expire an authenticated session once and stop private loading@L342 | Test | ./e2e/anonymous-agent.spec.js | 342-367 |
@@ -65,7 +65,7 @@ Community of 194 nodes
 | test:resolveToken reads ADLC_TOKEN from the environment only@L44 | Test | ./packages/cli/src/client.test.js | 44-51 |
 | test:request sends a bearer Authorization header when a token is set@L53 | Test | ./packages/cli/src/client.test.js | 53-64 |
 
-*... and 144 more members.*
+*... and 163 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 194 nodes
 
 ### Outgoing
 
-- `equal` (275 edge(s))
-- `expect` (173 edge(s))
-- `ok` (145 edge(s))
-- `match` (125 edge(s))
-- `locator` (82 edge(s))
+- `equal` (291 edge(s))
+- `ok` (181 edge(s))
+- `expect` (175 edge(s))
+- `match` (154 edge(s))
+- `locator` (84 edge(s))
+- `includes` (59 edge(s))
 - `route` (58 edge(s))
-- `includes` (47 edge(s))
-- `deepEqual` (47 edge(s))
-- `indexOf` (37 edge(s))
+- `deepEqual` (56 edge(s))
+- `indexOf` (41 edge(s))
+- `map` (36 edge(s))
 - `request` (33 edge(s))
-- `filter` (29 edge(s))
-- `toBeVisible` (29 edge(s))
-- `./e2e/page-loading.spec.js::json` (29 edge(s))
-- `String` (28 edge(s))
-- `doesNotMatch` (27 edge(s))
+- `join` (33 edge(s))
+- `filter` (32 edge(s))
+- `slice` (30 edge(s))
+- `doesNotMatch` (30 edge(s))
 
 ### Incoming
 
-- `equal` (275 edge(s))
-- `expect` (173 edge(s))
-- `ok` (145 edge(s))
-- `match` (125 edge(s))
-- `locator` (82 edge(s))
+- `equal` (291 edge(s))
+- `ok` (181 edge(s))
+- `expect` (175 edge(s))
+- `match` (154 edge(s))
+- `locator` (84 edge(s))
 - `route` (58 edge(s))
-- `deepEqual` (47 edge(s))
-- `includes` (44 edge(s))
-- `indexOf` (36 edge(s))
-- `toBeVisible` (29 edge(s))
+- `includes` (56 edge(s))
+- `deepEqual` (56 edge(s))
+- `indexOf` (40 edge(s))
+- `map` (31 edge(s))
+- `filter` (31 edge(s))
+- `doesNotMatch` (30 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
-- `filter` (28 edge(s))
-- `doesNotMatch` (27 edge(s))
+- `toBeVisible` (28 edge(s))
 - `./services/planner/src/routes/agent.test.js::call` (26 edge(s))
-- `./services/planner/src/routes/agent.test.js::handlerFor` (26 edge(s))

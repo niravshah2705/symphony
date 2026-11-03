@@ -520,6 +520,20 @@ export const api = {
     return request(`/agent/memory${query ? `?${query}` : ''}`);
   },
   deleteMemory: (id) => request(`/agent/memory/${id}`, { method: 'DELETE' }),
+  // The global discovery-question bank (platform defaults + this org's overrides)
+  // and how much of it agent memory can already answer.
+  listGlobalQuestions: () => request('/agent/global-questions'),
+  createGlobalQuestion: (payload = {}) =>
+    request('/agent/global-questions', { method: 'POST', body: JSON.stringify(payload) }),
+  updateGlobalQuestion: (id, patch = {}) =>
+    request(`/agent/global-questions/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  removeGlobalQuestion: (id) =>
+    request(`/agent/global-questions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // Proposals only — nothing is written until the admin saves one.
+  assistGlobalQuestions: (payload = {}) =>
+    request('/agent/global-questions/ai-assist', { method: 'POST', body: JSON.stringify(payload) }),
+  getQuestionCoverage: (payload = {}) =>
+    request('/agent/global-questions/coverage', { method: 'POST', body: JSON.stringify(payload) }),
   // Requirement-readiness preflight — runs before the pipeline; returns a signal + criteria.
   evaluateBusiness: (payload) =>
     request('/agent/business/evaluate', { method: 'POST', body: JSON.stringify(payload) }),

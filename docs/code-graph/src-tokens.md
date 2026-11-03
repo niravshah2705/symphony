@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 236 nodes
+Community of 245 nodes
 
-- **Size**: 236 nodes
-- **Cohesion**: 0.1713
+- **Size**: 245 nodes
+- **Cohesion**: 0.1834
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,11 +65,10 @@ Community of 236 nodes
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 | getBaseUrl | Function | ./packages/shared-core/src/billing/cashfree-client.js | 6-15 |
 
-*... and 186 more members.*
+*... and 195 more members.*
 
 ## Execution Flows
 
-- **processBillingSweep** (criticality: 0.69, depth: 4)
 - **startProjectSandbox** (criticality: 0.69, depth: 9)
 - **changeSandboxImage** (criticality: 0.69, depth: 9)
 - **ensureFreshCodexTokens** (criticality: 0.69, depth: 6)
@@ -79,42 +78,43 @@ Community of 236 nodes
 - **deleteProjectSandbox** (criticality: 0.67, depth: 8)
 - **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
 - **refreshTokens** (criticality: 0.67, depth: 2)
+- **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
 - *... and 33 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (135 edge(s))
-- `Number` (30 edge(s))
-- `filter` (28 edge(s))
-- `isArray` (24 edge(s))
+- `equal` (145 edge(s))
+- `Number` (31 edge(s))
+- `filter` (30 edge(s))
+- `isArray` (25 edge(s))
+- `toISOString` (25 edge(s))
 - `includes` (22 edge(s))
 - `String` (21 edge(s))
-- `toISOString` (21 edge(s))
 - `isFinite` (20 edge(s))
 - `trim` (20 edge(s))
 - `set` (19 edge(s))
 - `slice` (18 edge(s))
+- `find` (16 edge(s))
 - `call` (16 edge(s))
-- `find` (15 edge(s))
-- `map` (14 edge(s))
-- `upsertBillingAccount` (13 edge(s))
+- `map` (15 edge(s))
+- `now` (13 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/store.js` (169 edge(s))
-- `equal` (135 edge(s))
+- `./packages/shared-core/src/store.js` (175 edge(s))
+- `equal` (145 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
 - `./packages/shared-core/src/billing/cashfree-client.js` (14 edge(s))
 - `upsertBillingAccount` (13 edge(s))
+- `ok` (12 edge(s))
 - `deepEqual` (12 edge(s))
 - `./packages/shared-core/src/billing/ledger.js` (10 edge(s))
 - `./packages/shared-core/src/billing/notify.js` (10 edge(s))
 - `./packages/shared-core/src/billing/pricing.js` (10 edge(s))
-- `ok` (9 edge(s))
 - `ensureAccount` (9 edge(s))
 - `postEntry` (9 edge(s))

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 7 nodes
+Community of 8 nodes
 
-- **Size**: 7 nodes
-- **Cohesion**: 0.2597
+- **Size**: 8 nodes
+- **Cohesion**: 0.2364
 - **Dominant Language**: javascript
 
 ## Members
@@ -21,6 +21,7 @@ Community of 7 nodes
 | test:answers preflight with 204 (and does not call next)@L39 | Test | ./services/gateway/src/cors.test.js | 39-47 |
 | test:is a no-op passthrough when no origins are configured (local same-origin)@L49 | Test | ./services/gateway/src/cors.test.js | 49-56 |
 | test:reflects custom domain origin configured in allowlist@L58 | Test | ./services/gateway/src/cors.test.js | 58-66 |
+| test:the ArchAgentix panel on the platform domain can call the bank cross-origin@L86 | Test | ./services/gateway/src/cors.test.js | 86-114 |
 
 ## Execution Flows
 
@@ -30,21 +31,27 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (12 edge(s))
+- `equal` (17 edge(s))
+- `cors` (7 edge(s))
 - `set` (5 edge(s))
-- `cors` (5 edge(s))
-- `match` (2 edge(s))
+- `match` (5 edge(s))
 - `get` (1 edge(s))
 - `has` (1 edge(s))
 - `end` (1 edge(s))
 - `status` (1 edge(s))
 - `next` (1 edge(s))
+- `parseSpaOrigins` (1 edge(s))
+- `toLowerCase` (1 edge(s))
+- `String` (1 edge(s))
 
 ### Incoming
 
-- `equal` (12 edge(s))
-- `./services/gateway/src/cors.test.js` (6 edge(s))
-- `cors` (5 edge(s))
+- `equal` (17 edge(s))
+- `./services/gateway/src/cors.test.js` (7 edge(s))
+- `cors` (7 edge(s))
+- `match` (5 edge(s))
 - `./services/gateway/src/cors.js` (2 edge(s))
-- `match` (2 edge(s))
 - `./services/gateway/src/index.js` (1 edge(s))
+- `parseSpaOrigins` (1 edge(s))
+- `toLowerCase` (1 edge(s))
+- `String` (1 edge(s))

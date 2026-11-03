@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 174 nodes
+Community of 205 nodes
 
-- **Size**: 174 nodes
-- **Cohesion**: 0.3521
+- **Size**: 205 nodes
+- **Cohesion**: 0.3636
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 174 nodes
 | makeReq | Function | ./services/gateway/src/config-resolver.test.js | 9-23 |
 | makeRes | Function | ./services/gateway/src/config-resolver.test.js | 25-34 |
 
-*... and 124 more members.*
+*... and 155 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 174 nodes
 
 ### Outgoing
 
-- `equal` (177 edge(s))
-- `deepEqual` (51 edge(s))
+- `equal` (218 edge(s))
+- `deepEqual` (62 edge(s))
 - `trim` (39 edge(s))
-- `String` (32 edge(s))
-- `json` (26 edge(s))
-- `map` (23 edge(s))
-- `push` (18 edge(s))
+- `String` (34 edge(s))
+- `json` (28 edge(s))
+- `map` (27 edge(s))
+- `next` (20 edge(s))
+- `push` (20 edge(s))
 - `isArray` (18 edge(s))
-- `next` (17 edge(s))
 - `includes` (17 edge(s))
-- `status` (15 edge(s))
-- `toLowerCase` (15 edge(s))
+- `status` (16 edge(s))
+- `toLowerCase` (16 edge(s))
 - `throws` (14 edge(s))
 - `get` (13 edge(s))
 - `freeze` (13 edge(s))
 
 ### Incoming
 
-- `equal` (177 edge(s))
-- `./services/gateway/src/index.js` (86 edge(s))
-- `deepEqual` (51 edge(s))
+- `equal` (218 edge(s))
+- `./services/gateway/src/index.js` (94 edge(s))
+- `deepEqual` (62 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (29 edge(s))
 - `./services/gateway/src/auth.test.js` (26 edge(s))
 - `./services/gateway/src/request-context.js` (20 edge(s))
 - `./services/gateway/src/auth.js` (16 edge(s))
+- `./services/gateway/src/eula.test.js` (15 edge(s))
 - `throws` (14 edge(s))
 - `./services/gateway/src/config-resolver.test.js` (11 edge(s))
+- `push` (11 edge(s))
 - `rejects` (11 edge(s))
 - `./services/gateway/src/request-context.test.js` (11 edge(s))
 - `./services/gateway/src/context-validator.test.js` (10 edge(s))
-- `handler` (9 edge(s))
-- `push` (9 edge(s))

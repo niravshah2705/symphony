@@ -7,7 +7,7 @@
 Community of 20 nodes
 
 - **Size**: 20 nodes
-- **Cohesion**: 0.1250
+- **Cohesion**: 0.1224
 - **Dominant Language**: javascript
 
 ## Members
@@ -61,7 +61,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./public/js/api.js` (182 edge(s))
+- `./public/js/api.js` (188 edge(s))
 - `./public/js/auth-retry.test.mjs` (12 edge(s))
 - `equal` (12 edge(s))
 - `./public/js/auth-retry.mjs` (2 edge(s))

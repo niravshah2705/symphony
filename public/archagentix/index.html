@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ArchAgentix — LLM Benchmarks, Costs, Rate Limits & Evaluator</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="/archagentix/styles.css">
 </head>
 <body>
   <header class="navbar">
@@ -17,6 +17,7 @@
       <a href="#providers">Provider Matrix</a>
       <a href="#evaluator">Interactive Evaluator</a>
       <a href="#slm-chat">AI Assistant</a>
+      <a href="#questions">Question Bank</a>
     </nav>
   </header>
 
@@ -129,8 +130,89 @@
         </div>
       </div>
     </section>
+    <!-- Global Discovery Question Bank (per-organization overrides of the platform defaults) -->
+    <section id="questions" class="questions-section">
+      <div class="section-header">
+        <h2>Global Discovery Questions</h2>
+        <span id="questions-org" class="org-chip" data-state="anonymous">Checking session…</span>
+      </div>
+      <p class="questions-desc">
+        Eighty intake questions about the organisation, the person, and the project. Edits here are
+        saved for this organization only; the platform defaults stay versioned in code and are merged
+        when the bank is read.
+      </p>
+
+      <div id="questions-auth" class="auth-gate" hidden></div>
+
+      <div class="questions-toolbar">
+        <label>Category
+          <select id="questions-filter">
+            <option value="">All categories</option>
+          </select>
+        </label>
+        <label>Origin
+          <select id="questions-origin">
+            <option value="">Any origin</option>
+          </select>
+        </label>
+        <span id="questions-count" class="questions-count"></span>
+        <button type="button" id="questions-reload" class="btn">Reload</button>
+        <button type="button" id="questions-add" class="btn edit-only" hidden>Add question</button>
+        <button type="button" id="questions-ai" class="btn btn-primary edit-only" hidden>Draft with AI</button>
+        <span id="questions-status" class="questions-status" role="status" aria-live="polite"></span>
+      </div>
+
+      <div class="table-wrapper">
+        <table id="questions-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Sub-dimension</th>
+              <th>Question</th>
+              <th>Why it matters</th>
+              <th>Answer type</th>
+              <th>Choices</th>
+              <th>Origin</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="questions-body"></tbody>
+        </table>
+      </div>
+
+      <div id="questions-drawer" class="ai-drawer" hidden>
+        <div class="ai-drawer-head">
+          <h3>Draft questions with the local model</h3>
+          <button type="button" id="ai-close" class="btn">Close</button>
+        </div>
+        <p class="ai-note">
+          Drafts run on your configured local model (Ollama / LM Studio / oMLX) and are a preview:
+          nothing reaches the bank until you press Save on a proposal.
+        </p>
+        <div class="ai-form">
+          <label>Category
+            <select id="ai-category">
+              <option value="organisation">Organisation</option>
+              <option value="person">Person</option>
+              <option value="project_business">Project &amp; business</option>
+            </select>
+          </label>
+          <label>Sub-dimension
+            <input type="text" id="ai-subdimension" maxlength="60" placeholder="e.g. decision_making">
+          </label>
+        </div>
+        <textarea id="ai-instruction" rows="4" maxlength="8000"
+          placeholder="e.g. Draft questions that surface who owns the budget decision and what happens if we miss the launch date. For Import, paste a bulleted list instead."></textarea>
+        <div class="ai-actions">
+          <button type="button" id="ai-suggest" class="btn btn-primary">Suggest questions</button>
+          <button type="button" id="ai-rewrite" class="btn">Rewrite as one question</button>
+          <button type="button" id="ai-import" class="btn">Import pasted list</button>
+        </div>
+        <div id="ai-proposals" class="ai-proposals"></div>
+      </div>
+    </section>
   </main>
 
-  <script src="app.js"></script>
+  <script type="module" src="/archagentix/app.js"></script>
 </body>
 </html>

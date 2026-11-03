@@ -82,3 +82,33 @@ test('parseSpaOrigins handles empty or unset env', () => {
   assert.deepEqual(parseSpaOrigins({}), []);
   assert.deepEqual(parseSpaOrigins(undefined), []);
 });
+
+test('the ArchAgentix panel on the platform domain can call the bank cross-origin', () => {
+  // The panel is served by Firebase Hosting while the cloud gateway serves only
+  // /api, so these are cross-origin by design. `parseSpaOrigins` derives this
+  // origin from FIREBASE_CUSTOM_DOMAIN, which is what makes it work unchanged.
+  const platform = 'https://platform.archagentix.com';
+  const cors = createCorsMiddleware(parseSpaOrigins({ FIREBASE_CUSTOM_DOMAIN: 'platform.archagentix.com' }));
+
+  const preflight = makeRes();
+  let nexted = 0;
+  cors(
+    {
+      method: 'OPTIONS',
+      get: (name) => ({ origin: platform, 'access-control-request-method': 'POST', 'access-control-request-headers': 'authorization,content-type,x-ai-fleet-organization-id' }[String(name).toLowerCase()] || ''),
+    },
+    preflight,
+    () => { nexted += 1; }
+  );
+  assert.equal(nexted, 0, 'preflight is answered here, never proxied');
+  assert.equal(preflight.statusCode, 204);
+  assert.equal(preflight.headers['access-control-allow-origin'], platform);
+  assert.match(preflight.headers['access-control-allow-methods'], /POST/);
+  assert.match(preflight.headers['access-control-allow-methods'], /DELETE/);
+  assert.match(preflight.headers['access-control-allow-headers'], /X-AI-Fleet-Organization-Id/i);
+
+  const post = makeRes();
+  cors({ method: 'POST', get: (name) => (name === 'origin' ? platform : '') }, post, () => { nexted += 1; });
+  assert.equal(nexted, 1, 'the actual request continues to the gate chain');
+  assert.equal(post.headers['access-control-allow-origin'], platform);
+});

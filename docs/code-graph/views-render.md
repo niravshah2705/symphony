@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 741 nodes
+Community of 753 nodes
 
-- **Size**: 741 nodes
-- **Cohesion**: 0.4981
+- **Size**: 753 nodes
+- **Cohesion**: 0.4932
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 741 nodes
 | render | Function | ./public/js/app.js | 821-903 |
 | capitalize | Function | ./public/js/app.js | 905-908 |
 
-*... and 691 more members.*
+*... and 703 more members.*
 
 ## Execution Flows
 
@@ -85,15 +85,15 @@ Community of 741 nodes
 
 ### Outgoing
 
-- `addEventListener` (240 edge(s))
-- `append` (216 edge(s))
-- `map` (164 edge(s))
+- `addEventListener` (242 edge(s))
+- `append` (224 edge(s))
+- `map` (170 edge(s))
 - `String` (120 edge(s))
 - `push` (108 edge(s))
 - `trim` (105 edge(s))
-- `equal` (88 edge(s))
-- `isArray` (80 edge(s))
-- `filter` (79 edge(s))
+- `equal` (93 edge(s))
+- `filter` (82 edge(s))
+- `isArray` (82 edge(s))
 - `Boolean` (73 edge(s))
 - `catch` (66 edge(s))
 - `setAttribute` (61 edge(s))
@@ -104,17 +104,17 @@ Community of 741 nodes
 ### Incoming
 
 - `./public/js/views/settings.js` (131 edge(s))
-- `./public/js/views/agent.js` (109 edge(s))
-- `equal` (88 edge(s))
+- `./public/js/views/agent.js` (117 edge(s))
+- `equal` (93 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/workflow-designer-model.mjs` (56 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
+- `match` (29 edge(s))
 - `./public/js/views/organization.js` (29 edge(s))
 - `./public/js/auth.js` (24 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
 - `./public/js/api.js` (15 edge(s))
-- `./public/js/views/openshell.js` (15 edge(s))

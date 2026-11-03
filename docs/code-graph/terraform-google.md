@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 430 nodes
+Community of 435 nodes
 
-- **Size**: 430 nodes
-- **Cohesion**: 0.7546
+- **Size**: 435 nodes
+- **Cohesion**: 0.7541
 - **Dominant Language**: hcl
 
 ## Members
@@ -65,7 +65,7 @@ Community of 430 nodes
 | resource.google_pubsub_topic_iam_member.email_publishers | Class | ./deploy/gcp/terraform/email_service.tf | 213-222 |
 | resource.google_pubsub_subscription.email_push | Class | ./deploy/gcp/terraform/email_service.tf | 224-257 |
 
-*... and 380 more members.*
+*... and 385 more members.*
 
 ## Execution Flows
 
@@ -75,8 +75,8 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform/variables.tf` (143 edge(s))
-- `./deploy/gcp/terraform/locals.tf` (52 edge(s))
+- `./deploy/gcp/terraform/variables.tf` (144 edge(s))
+- `./deploy/gcp/terraform/locals.tf` (54 edge(s))
 - `./deploy/gcp/terraform/pipeline.tf` (29 edge(s))
 - `./deploy/gcp/terraform/outputs.tf` (27 edge(s))
 - `./deploy/gcp/terraform/iam.tf` (21 edge(s))
@@ -87,6 +87,6 @@ No execution flows pass through this community.
 - `./deploy/gcp/terraform/memory.tf` (10 edge(s))
 - `./deploy/gcp/terraform/billing_service.tf` (9 edge(s))
 - `./deploy/gcp/terraform/org_service.tf` (9 edge(s))
+- `./deploy/gcp/terraform/firebase.tf` (8 edge(s))
 - `./deploy/gcp/terraform/pubsub.tf` (8 edge(s))
-- `./deploy/gcp/terraform/firebase.tf` (6 edge(s))
 - `./deploy/gcp/terraform/identity_service.tf` (6 edge(s))

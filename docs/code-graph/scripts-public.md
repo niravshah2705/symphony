@@ -7,7 +7,7 @@
 Community of 4 nodes
 
 - **Size**: 4 nodes
-- **Cohesion**: 0.1316
+- **Cohesion**: 0.1282
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,8 +16,8 @@ Community of 4 nodes
 |------|------|------|-------|
 | readPublic | Function | ./scripts/seo-discovery.test.js | 9-9 |
 | test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L35 | Test | ./scripts/seo-discovery.test.js | 35-50 |
-| test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-84 |
-| test:persistent ADLC launcher has five named, local-icon assistant links@L86 | Test | ./scripts/seo-discovery.test.js | 86-97 |
+| test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-86 |
+| test:persistent ADLC launcher has five named, local-icon assistant links@L88 | Test | ./scripts/seo-discovery.test.js | 88-99 |
 
 ## Execution Flows
 
@@ -29,7 +29,7 @@ No execution flows pass through this community.
 
 - `match` (15 edge(s))
 - `equal` (4 edge(s))
-- `doesNotMatch` (3 edge(s))
+- `doesNotMatch` (4 edge(s))
 - `map` (2 edge(s))
 - `matchAll` (2 edge(s))
 - `deepEqual` (2 edge(s))
@@ -43,7 +43,7 @@ No execution flows pass through this community.
 - `match` (15 edge(s))
 - `./scripts/seo-discovery.test.js` (4 edge(s))
 - `equal` (4 edge(s))
-- `doesNotMatch` (3 edge(s))
+- `doesNotMatch` (4 edge(s))
 - `map` (2 edge(s))
 - `matchAll` (2 edge(s))
 - `deepEqual` (2 edge(s))
