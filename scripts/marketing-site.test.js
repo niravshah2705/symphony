@@ -110,7 +110,8 @@ test('firebase publishes the generated tree as the www root with /adlc/ 301s', (
   assert.deepEqual(www.redirects, [
     { source: '/adlc', destination: '/', type: 301 },
     { source: '/adlc/', destination: '/', type: 301 },
-    { source: '/adlc/**', destination: '/:splat', type: 301 },
+    // Firebase captures glob segments with ":name" + "*" (":splat" is not a token).
+    { source: '/adlc/:path*', destination: '/:path', type: 301 },
   ]);
 
   const cacheFor = Object.fromEntries(www.headers.map((rule) => [rule.source, rule.headers[0].value]));
