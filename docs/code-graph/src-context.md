@@ -7,7 +7,7 @@
 Community of 205 nodes
 
 - **Size**: 205 nodes
-- **Cohesion**: 0.3636
+- **Cohesion**: 0.3607
 - **Dominant Language**: javascript
 
 ## Members
@@ -75,16 +75,16 @@ Community of 205 nodes
 
 ### Outgoing
 
-- `equal` (218 edge(s))
-- `deepEqual` (62 edge(s))
+- `equal` (224 edge(s))
+- `deepEqual` (63 edge(s))
 - `trim` (39 edge(s))
 - `String` (34 edge(s))
 - `json` (28 edge(s))
 - `map` (27 edge(s))
 - `next` (20 edge(s))
+- `includes` (20 edge(s))
 - `push` (20 edge(s))
 - `isArray` (18 edge(s))
-- `includes` (17 edge(s))
 - `status` (16 edge(s))
 - `toLowerCase` (16 edge(s))
 - `throws` (14 edge(s))
@@ -93,9 +93,9 @@ Community of 205 nodes
 
 ### Incoming
 
-- `equal` (218 edge(s))
+- `equal` (224 edge(s))
 - `./services/gateway/src/index.js` (94 edge(s))
-- `deepEqual` (62 edge(s))
+- `deepEqual` (63 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (29 edge(s))
 - `./services/gateway/src/auth.test.js` (26 edge(s))
@@ -107,4 +107,4 @@ Community of 205 nodes
 - `push` (11 edge(s))
 - `rejects` (11 edge(s))
 - `./services/gateway/src/request-context.test.js` (11 edge(s))
-- `./services/gateway/src/context-validator.test.js` (10 edge(s))
+- `ok` (10 edge(s))

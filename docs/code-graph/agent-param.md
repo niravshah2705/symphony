@@ -7,7 +7,7 @@
 Community of 10 nodes
 
 - **Size**: 10 nodes
-- **Cohesion**: 0.0969
+- **Cohesion**: 0.0955
 - **Dominant Language**: javascript
 
 ## Members
@@ -23,7 +23,7 @@ Community of 10 nodes
 | test_gateway_org_headers_member_role_still_forbidden | Test | ./services/settings/tests/integration/test_authz.py | 42-47 |
 | test_org_admin_approval_is_post_test_and_atomically_replayable | Test | ./services/settings/tests/integration/test_deployment_approval.py | 33-91 |
 | test_approval_scope_and_timing_fail_closed | Test | ./services/settings/tests/integration/test_deployment_approval.py | 94-170 |
-| test_effective_applies_project_layer | Test | ./services/settings/tests/integration/test_settings.py | 233-253 |
+| test_effective_applies_project_layer | Test | ./services/settings/tests/integration/test_settings.py | 237-257 |
 
 ## Execution Flows
 
@@ -51,7 +51,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./packages/shared/src/agent/settings-patch.js` (37 edge(s))
+- `./packages/shared/src/agent/settings-patch.js` (40 edge(s))
 - `json` (9 edge(s))
 - `uuid4` (7 edge(s))
 - `str` (7 edge(s))

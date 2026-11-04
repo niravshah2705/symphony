@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 229 nodes
+Community of 230 nodes
 
-- **Size**: 229 nodes
-- **Cohesion**: 0.3119
+- **Size**: 230 nodes
+- **Cohesion**: 0.3118
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 229 nodes
 | normalizeDesign | Function | ./packages/shared/src/agent/business-pipeline.js | 387-395 |
 | scoreEvaluation | Function | ./packages/shared/src/agent/business-pipeline.js | 399-408 |
 
-*... and 179 more members.*
+*... and 180 more members.*
 
 ## Execution Flows
 
@@ -87,17 +87,17 @@ Community of 229 nodes
 - `match` (20 edge(s))
 - `replace` (19 edge(s))
 - `test` (19 edge(s))
+- `require` (18 edge(s))
 - `includes` (18 edge(s))
 - `join` (18 edge(s))
-- `require` (17 edge(s))
 
 ### Incoming
 
 - `equal` (258 edge(s))
 - `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
 - `ok` (36 edge(s))
+- `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
 - `deepEqual` (24 edge(s))
-- `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/global-questions.js` (21 edge(s))
 - `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))

@@ -15,7 +15,7 @@ Community of 2 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | response | Function | ./packages/shared/src/agent/diagnostics.test.js | 7-13 |
-| test:diagnostics report services, local model, integrations, and SDK readiness without secrets@L54 | Test | ./packages/shared/src/agent/diagnostics.test.js | 54-85 |
+| test:diagnostics report services, local model, integrations, and SDK readiness without secrets@L55 | Test | ./packages/shared/src/agent/diagnostics.test.js | 55-86 |
 
 ## Execution Flows
 

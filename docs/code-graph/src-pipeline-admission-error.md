@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| PipelineAdmissionError | Class | ./services/gateway/src/pipeline-admission.js | 76-84 |
-| constructor | Function | ./services/gateway/src/pipeline-admission.js | 77-83 |
+| PipelineAdmissionError | Class | ./services/gateway/src/pipeline-admission.js | 77-85 |
+| constructor | Function | ./services/gateway/src/pipeline-admission.js | 78-84 |
 
 ## Execution Flows
 

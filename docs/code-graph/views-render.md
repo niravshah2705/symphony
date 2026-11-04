@@ -94,7 +94,7 @@ Community of 751 nodes
 - `equal` (93 edge(s))
 - `filter` (82 edge(s))
 - `isArray` (82 edge(s))
-- `Boolean` (72 edge(s))
+- `Boolean` (73 edge(s))
 - `catch` (66 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (60 edge(s))

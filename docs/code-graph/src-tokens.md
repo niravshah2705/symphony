@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 244 nodes
+Community of 246 nodes
 
-- **Size**: 244 nodes
-- **Cohesion**: 0.1857
+- **Size**: 246 nodes
+- **Cohesion**: 0.1804
 - **Dominant Language**: javascript
 
 ## Members
@@ -23,29 +23,29 @@ Community of 244 nodes
 | postToken | Function | ./packages/shared-core/src/agent/claude-oauth.js | 122-147 |
 | exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 150-160 |
 | refreshTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 163-175 |
-| isLocalInference | Function | ./packages/shared-core/src/agent/model-presets.js | 24-24 |
-| isPurposeRole | Function | ./packages/shared-core/src/agent/model-presets.js | 45-45 |
-| assert | Function | ./packages/shared-core/src/agent/model-presets.js | 64-66 |
-| validateCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 68-196 |
-| getPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 209-211 |
-| presetsForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 213-218 |
-| presetForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 220-225 |
-| presetForModel | Function | ./packages/shared-core/src/agent/model-presets.js | 227-229 |
-| clampInt | Function | ./packages/shared-core/src/agent/model-presets.js | 231-235 |
-| clampNumber | Function | ./packages/shared-core/src/agent/model-presets.js | 237-241 |
-| clampTemperature | Function | ./packages/shared-core/src/agent/model-presets.js | 243-248 |
-| cleanModel | Function | ./packages/shared-core/src/agent/model-presets.js | 250-255 |
-| normalizedModel | Function | ./packages/shared-core/src/agent/model-presets.js | 257-259 |
-| modelMatchesPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 262-274 |
-| normalizeParameters | Function | ./packages/shared-core/src/agent/model-presets.js | 276-336 |
-| settingsPatchForPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 339-424 |
-| settingsPatchForTier | Function | ./packages/shared-core/src/agent/model-presets.js | 433-447 |
-| sanitizeModelId | Function | ./packages/shared-core/src/agent/model-presets.js | 450-452 |
-| effortValuesFromProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 454-460 |
-| runtimePresetForProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 467-533 |
-| neutralLocalPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 540-573 |
-| settingsPatchForReasoning | Function | ./packages/shared-core/src/agent/model-presets.js | 576-587 |
-| customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 590-777 |
+| isLocalInference | Function | ./packages/shared-core/src/agent/model-presets.js | 25-25 |
+| isPurposeRole | Function | ./packages/shared-core/src/agent/model-presets.js | 46-46 |
+| assert | Function | ./packages/shared-core/src/agent/model-presets.js | 65-67 |
+| validateCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 69-197 |
+| getPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 210-212 |
+| presetsForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 214-219 |
+| presetForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 221-226 |
+| presetForModel | Function | ./packages/shared-core/src/agent/model-presets.js | 228-230 |
+| clampInt | Function | ./packages/shared-core/src/agent/model-presets.js | 232-236 |
+| clampNumber | Function | ./packages/shared-core/src/agent/model-presets.js | 238-242 |
+| clampTemperature | Function | ./packages/shared-core/src/agent/model-presets.js | 244-249 |
+| cleanModel | Function | ./packages/shared-core/src/agent/model-presets.js | 251-256 |
+| normalizedModel | Function | ./packages/shared-core/src/agent/model-presets.js | 258-260 |
+| modelMatchesPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 263-275 |
+| normalizeParameters | Function | ./packages/shared-core/src/agent/model-presets.js | 277-337 |
+| settingsPatchForPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 340-434 |
+| settingsPatchForTier | Function | ./packages/shared-core/src/agent/model-presets.js | 443-457 |
+| sanitizeModelId | Function | ./packages/shared-core/src/agent/model-presets.js | 460-462 |
+| effortValuesFromProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 464-470 |
+| runtimePresetForProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 477-543 |
+| neutralLocalPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 550-583 |
+| settingsPatchForReasoning | Function | ./packages/shared-core/src/agent/model-presets.js | 586-597 |
+| customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 600-808 |
 | refreshKey | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 22-24 |
 | coalesce | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 26-32 |
 | ensureFreshCodexTokens | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 39-54 |
@@ -65,7 +65,7 @@ Community of 244 nodes
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 | getBaseUrl | Function | ./packages/shared-core/src/billing/cashfree-client.js | 6-15 |
 
-*... and 194 more members.*
+*... and 196 more members.*
 
 ## Execution Flows
 
@@ -85,36 +85,36 @@ Community of 244 nodes
 
 ### Outgoing
 
-- `equal` (140 edge(s))
+- `equal` (150 edge(s))
+- `filter` (32 edge(s))
 - `Number` (31 edge(s))
-- `filter` (29 edge(s))
 - `isArray` (25 edge(s))
-- `toISOString` (24 edge(s))
+- `toISOString` (25 edge(s))
 - `includes` (22 edge(s))
 - `String` (21 edge(s))
 - `isFinite` (20 edge(s))
 - `trim` (20 edge(s))
 - `set` (19 edge(s))
 - `slice` (18 edge(s))
-- `find` (16 edge(s))
+- `find` (17 edge(s))
 - `call` (16 edge(s))
 - `map` (15 edge(s))
-- `upsertBillingAccount` (13 edge(s))
+- `ok` (14 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/store.js` (175 edge(s))
-- `equal` (140 edge(s))
+- `./packages/shared-core/src/store.js` (177 edge(s))
+- `equal` (150 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
 - `./packages/shared-core/src/billing/cashfree-client.js` (14 edge(s))
+- `ok` (14 edge(s))
 - `upsertBillingAccount` (13 edge(s))
-- `ok` (12 edge(s))
 - `deepEqual` (12 edge(s))
 - `./packages/shared-core/src/billing/ledger.js` (10 edge(s))
 - `./packages/shared-core/src/billing/notify.js` (10 edge(s))
 - `./packages/shared-core/src/billing/pricing.js` (10 edge(s))
+- `filter` (9 edge(s))
 - `ensureAccount` (9 edge(s))
-- `postEntry` (9 edge(s))

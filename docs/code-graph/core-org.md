@@ -7,7 +7,7 @@
 Community of 445 nodes
 
 - **Size**: 445 nodes
-- **Cohesion**: 0.4238
+- **Cohesion**: 0.4235
 - **Dominant Language**: python
 
 ## Members

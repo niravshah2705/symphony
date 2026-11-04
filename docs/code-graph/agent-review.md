@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 159 nodes
+Community of 121 nodes
 
-- **Size**: 159 nodes
-- **Cohesion**: 0.2643
+- **Size**: 121 nodes
+- **Cohesion**: 0.2826
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,40 +16,7 @@ Community of 159 nodes
 |------|------|------|-------|
 | test:recordStackLink persists the link and recovers the blocker identifier@L952 | Test | ./packages/shared/src/agent/coder-flow.test.js | 952-973 |
 | test:recordStackLink is a no-op when the run was not stacked@L975 | Test | ./packages/shared/src/agent/coder-flow.test.js | 975-984 |
-| recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 689-709 |
-| antigravityUsage | Function | ./packages/shared/src/agent/harnesses/antigravity.js | 35-44 |
-| antigravityText | Function | ./packages/shared/src/agent/harnesses/antigravity.js | 47-72 |
-| executeAntigravity | Function | ./packages/shared/src/agent/harnesses/antigravity.js | 170-170 |
-| applyClaudeProxyEnv | Function | ./packages/shared/src/agent/harnesses/claude.js | 36-48 |
-| claudePermissionGuard | Function | ./packages/shared/src/agent/harnesses/claude.js | 51-66 |
-| executeClaude | Function | ./packages/shared/src/agent/harnesses/claude.js | 175-175 |
-| removeEphemeralHome | Function | ./packages/shared/src/agent/harnesses/codex.js | 35-43 |
-| prepareCodexChatgptHome | Function | ./packages/shared/src/agent/harnesses/codex.js | 50-124 |
-| cleanup | Function | ./packages/shared/src/agent/harnesses/codex.js | 108-112 |
-| executeCodex | Function | ./packages/shared/src/agent/harnesses/codex.js | 247-247 |
-| cleanSystemPrompt | Function | ./packages/shared/src/agent/harnesses/contract.js | 94-97 |
-| assertWorkingDirectory | Function | ./packages/shared/src/agent/harnesses/contract.js | 99-111 |
-| optionalPackageError | Function | ./packages/shared/src/agent/harnesses/contract.js | 113-123 |
-| loadSdk | Function | ./packages/shared/src/agent/harnesses/contract.js | 131-139 |
-| finiteNumber | Function | ./packages/shared/src/agent/harnesses/contract.js | 141-145 |
-| normalizeUsage | Function | ./packages/shared/src/agent/harnesses/contract.js | 147-176 |
-| mergeUsage | Function | ./packages/shared/src/agent/harnesses/contract.js | 178-190 |
-| deepAgentUsage | Function | ./packages/shared/src/agent/harnesses/contract.js | 192-198 |
-| deepAgentCost | Function | ./packages/shared/src/agent/harnesses/contract.js | 200-212 |
-| assistantMessagesFromText | Function | ./packages/shared/src/agent/harnesses/contract.js | 214-216 |
-| addCost | Function | ./packages/shared/src/agent/harnesses/contract.js | 233-238 |
-| runAgent | Function | ./packages/shared/src/agent/harnesses/contract.js | 262-267 |
-| wrapExecutionError | Function | ./packages/shared/src/agent/harnesses/contract.js | 486-499 |
-| reasoningEffort | Function | ./packages/shared/src/agent/harnesses/contract.js | 501-504 |
-| plannerWebSearchAllowed | Function | ./packages/shared/src/agent/harnesses/contract.js | 506-508 |
-| safePathIn | Function | ./packages/shared/src/agent/harnesses/contract.js | 510-535 |
-| resolveAndRouteSkills | Function | ./packages/shared/src/agent/harnesses/contract.js | 556-559 |
-| executeDeepAgent | Function | ./packages/shared/src/agent/harnesses/deepagent.js | 167-167 |
-| test:executeDeepAgent returns skillRouterMetrics and skillPaths when candidate skills are provided@L135 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 135-158 |
-| test:executeCodex returns skillRouterMetrics and skillPaths when candidate skills are provided@L160 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 160-192 |
-| test:executeClaude returns skillRouterMetrics and skillPaths when candidate skills are provided@L194 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 194-226 |
-| test:executeAntigravity returns skillRouterMetrics and skillPaths when candidate skills are provided@L228 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 228-262 |
-| wireModelId | Function | ./packages/shared/src/agent/llm.js | 846-849 |
+| recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 691-711 |
 | response | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 15-22 |
 | seedRemote | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 29-50 |
 | git | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 33-33 |
@@ -64,13 +31,44 @@ Community of 159 nodes
 | test:skips a blocker already contained in the default base@L197 | Test | ./packages/shared/src/agent/repository-broker-stack.test.js | 197-212 |
 | isAvailabilityFailure | Function | ./packages/shared/src/agent/repository-broker.js | 76-84 |
 | cleanText | Function | ./packages/shared/src/agent/repository-broker.js | 100-102 |
+| oneLine | Function | ./packages/shared/src/agent/repository-broker.js | 104-106 |
+| redact | Function | ./packages/shared/src/agent/repository-broker.js | 108-118 |
+| isPathInside | Function | ./packages/shared/src/agent/repository-broker.js | 120-123 |
+| assertScopedPath | Function | ./packages/shared/src/agent/repository-broker.js | 125-129 |
+| validateBranch | Function | ./packages/shared/src/agent/repository-broker.js | 154-172 |
+| isPlainObject | Function | ./packages/shared/src/agent/repository-broker.js | 174-178 |
+| deploymentScalar | Function | ./packages/shared/src/agent/repository-broker.js | 180-189 |
+| deploymentSecretField | Function | ./packages/shared/src/agent/repository-broker.js | 191-193 |
+| normalizeDeploymentManifest | Function | ./packages/shared/src/agent/repository-broker.js | 198-273 |
+| validateRepository | Function | ./packages/shared/src/agent/repository-broker.js | 275-336 |
+| errorText | Function | ./packages/shared/src/agent/repository-broker.js | 343-347 |
+| statusFromGithub | Function | ./packages/shared/src/agent/repository-broker.js | 349-388 |
+| normalizeReview | Function | ./packages/shared/src/agent/repository-broker.js | 390-428 |
+| githubSha | Function | ./packages/shared/src/agent/repository-broker.js | 430-436 |
+| receiptIdentifier | Function | ./packages/shared/src/agent/repository-broker.js | 438-445 |
+| receiptReviewUrl | Function | ./packages/shared/src/agent/repository-broker.js | 447-459 |
+| mergeReceiptPayload | Function | ./packages/shared/src/agent/repository-broker.js | 461-488 |
+| mergeReceiptDigest | Function | ./packages/shared/src/agent/repository-broker.js | 490-492 |
+| validateMergeReceipt | Function | ./packages/shared/src/agent/repository-broker.js | 497-520 |
+| repoApiPath | Function | ./packages/shared/src/agent/repository-broker.js | 523-528 |
+| forgeApiRequest | Function | ./packages/shared/src/agent/repository-broker.js | 536-614 |
+| safe | Function | ./packages/shared/src/agent/repository-broker.js | 570-570 |
+| header | Function | ./packages/shared/src/agent/repository-broker.js | 600-602 |
+| findReviewByBranch | Function | ./packages/shared/src/agent/repository-broker.js | 621-644 |
+| request | Function | ./packages/shared/src/agent/repository-broker.js | 623-625 |
+| RepositoryBroker | Class | ./packages/shared/src/agent/repository-broker.js | 663-2279 |
+| constructor | Function | ./packages/shared/src/agent/repository-broker.js | 682-732 |
+| publicInfo | Function | ./packages/shared/src/agent/repository-broker.js | 734-742 |
+| availabilityError | Function | ./packages/shared/src/agent/repository-broker.js | 749-751 |
+| deploymentReceipt | Function | ./packages/shared/src/agent/repository-broker.js | 753-755 |
+| bindArtifactContext | Function | ./packages/shared/src/agent/repository-broker.js | 760-772 |
+| artifactReceipt | Function | ./packages/shared/src/agent/repository-broker.js | 774-776 |
+| pinnedRevision | Function | ./packages/shared/src/agent/repository-broker.js | 778-780 |
 
-*... and 109 more members.*
+*... and 71 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
-- **generatePlan** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
 
@@ -78,36 +76,36 @@ Community of 159 nodes
 
 ### Outgoing
 
-- `equal` (128 edge(s))
-- `join` (94 edge(s))
-- `includes` (58 edge(s))
-- `String` (45 edge(s))
+- `equal` (113 edge(s))
+- `join` (62 edge(s))
+- `includes` (57 edge(s))
 - `endsWith` (39 edge(s))
 - `execFileSync` (34 edge(s))
-- `ok` (25 edge(s))
-- `mkdirSync` (22 edge(s))
-- `writeFileSync` (22 edge(s))
-- `isArray` (19 edge(s))
+- `String` (34 edge(s))
 - `test` (19 edge(s))
-- `tmpdir` (18 edge(s))
-- `trim` (18 edge(s))
 - `parse` (17 edge(s))
-- `mkdtempSync` (16 edge(s))
+- `trim` (17 edge(s))
+- `ok` (16 edge(s))
+- `stringify` (14 edge(s))
+- `rejects` (14 edge(s))
+- `writeFileSync` (13 edge(s))
+- `./packages/shared/src/agent/repository-broker.js::RepositoryBroker.#workspace` (13 edge(s))
+- `mkdirSync` (12 edge(s))
 
 ### Incoming
 
-- `equal` (127 edge(s))
-- `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
-- `join` (56 edge(s))
-- `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (33 edge(s))
-- `ok` (25 edge(s))
+- `equal` (112 edge(s))
+- `./packages/shared/src/agent/repository-broker.js` (83 edge(s))
+- `./packages/shared/src/agent/repository-broker.test.js` (54 edge(s))
+- `join` (34 edge(s))
 - `execFileSync` (24 edge(s))
-- `writeFileSync` (17 edge(s))
+- `ok` (16 edge(s))
 - `rejects` (14 edge(s))
-- `tmpdir` (13 edge(s))
 - `./packages/shared/src/agent/workspace.js` (13 edge(s))
-- `mkdtempSync` (12 edge(s))
-- `mkdirSync` (12 edge(s))
 - `includes` (12 edge(s))
 - `throws` (12 edge(s))
+- `./packages/shared/src/agent/repository-broker-stack.test.js` (10 edge(s))
+- `invoke` (10 edge(s))
+- `match` (9 edge(s))
+- `writeFileSync` (9 edge(s))
+- `strictEqual` (8 edge(s))

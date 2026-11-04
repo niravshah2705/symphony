@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| settingsMatchTier | Function | ./services/planner/src/routes/settings.js | 70-74 |
-| effectiveComplexityTier | Function | ./services/planner/src/routes/settings.js | 77-80 |
-| publicSettings | Function | ./services/planner/src/routes/settings.js | 134-272 |
+| settingsMatchTier | Function | ./services/planner/src/routes/settings.js | 73-77 |
+| effectiveComplexityTier | Function | ./services/planner/src/routes/settings.js | 80-83 |
+| publicSettings | Function | ./services/planner/src/routes/settings.js | 137-282 |
 
 ## Execution Flows
 
