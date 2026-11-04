@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 442 nodes
+Community of 461 nodes
 
-- **Size**: 442 nodes
-- **Cohesion**: 0.7536
+- **Size**: 461 nodes
+- **Cohesion**: 0.7554
 - **Dominant Language**: hcl
 
 ## Members
@@ -17,15 +17,21 @@ Community of 442 nodes
 | local.required_apis | Function | ./deploy/gcp/terraform/apis.tf | 8-26 |
 | resource.google_project_service.services | Class | ./deploy/gcp/terraform/apis.tf | 29-35 |
 | resource.google_artifact_registry_repository.docker | Class | ./deploy/gcp/terraform/artifact_registry.tf | 5-36 |
+| resource.google_cloud_run_v2_job.billing_auto_recharge | Class | ./deploy/gcp/terraform/billing_job.tf | 21-115 |
+| resource.google_cloud_run_v2_job_iam_member.billing_launches_recharge_job | Class | ./deploy/gcp/terraform/billing_job.tf | 121-127 |
+| resource.google_service_account_iam_member.billing_actas_self | Class | ./deploy/gcp/terraform/billing_job.tf | 129-133 |
+| resource.google_cloud_run_v2_service_iam_member.billing_invokes_org | Class | ./deploy/gcp/terraform/billing_job.tf | 139-145 |
+| resource.google_secret_manager_secret_iam_member.billing_internal_token | Class | ./deploy/gcp/terraform/billing_job.tf | 149-155 |
+| resource.google_cloud_scheduler_job.billing_auto_recharge | Class | ./deploy/gcp/terraform/billing_job.tf | 162-195 |
 | resource.google_service_account.billing | Class | ./deploy/gcp/terraform/billing_service.tf | 6-10 |
 | resource.google_project_iam_member.billing_datastore | Class | ./deploy/gcp/terraform/billing_service.tf | 12-16 |
 | resource.google_secret_manager_secret.cashfree_app_id | Class | ./deploy/gcp/terraform/billing_service.tf | 18-28 |
 | resource.google_secret_manager_secret.cashfree_secret_key | Class | ./deploy/gcp/terraform/billing_service.tf | 30-40 |
 | resource.google_secret_manager_secret_iam_member.billing_cashfree_app_id_accessor | Class | ./deploy/gcp/terraform/billing_service.tf | 42-47 |
 | resource.google_secret_manager_secret_iam_member.billing_cashfree_secret_key_accessor | Class | ./deploy/gcp/terraform/billing_service.tf | 49-54 |
-| resource.google_cloud_run_v2_service.billing | Class | ./deploy/gcp/terraform/billing_service.tf | 56-154 |
-| resource.google_cloud_run_v2_service_iam_member.gateway_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 156-162 |
-| resource.google_cloud_run_v2_service_iam_member.push_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 164-170 |
+| resource.google_cloud_run_v2_service.billing | Class | ./deploy/gcp/terraform/billing_service.tf | 56-158 |
+| resource.google_cloud_run_v2_service_iam_member.gateway_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 160-166 |
+| resource.google_cloud_run_v2_service_iam_member.push_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 168-174 |
 | resource.google_service_account.clm_inference | Class | ./deploy/gcp/terraform/clm_inference.tf | 6-10 |
 | resource.google_cloud_run_v2_service.clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 12-71 |
 | resource.google_cloud_run_v2_service_iam_member.planner_invokes_clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 74-80 |
@@ -58,14 +64,8 @@ Community of 442 nodes
 | resource.google_secret_manager_secret.email_smtp_user | Class | ./deploy/gcp/terraform/email_service.tf | 25-33 |
 | resource.google_secret_manager_secret.email_smtp_password | Class | ./deploy/gcp/terraform/email_service.tf | 35-43 |
 | resource.google_secret_manager_secret_iam_member.email_smtp_user_accessor | Class | ./deploy/gcp/terraform/email_service.tf | 62-67 |
-| resource.google_secret_manager_secret_iam_member.email_smtp_password_accessor | Class | ./deploy/gcp/terraform/email_service.tf | 69-74 |
-| resource.google_cloud_run_v2_service.email | Class | ./deploy/gcp/terraform/email_service.tf | 76-191 |
-| resource.google_cloud_run_v2_service_iam_member.push_invokes_email | Class | ./deploy/gcp/terraform/email_service.tf | 195-201 |
-| resource.google_pubsub_topic.email | Class | ./deploy/gcp/terraform/email_service.tf | 203-209 |
-| resource.google_pubsub_topic_iam_member.email_publishers | Class | ./deploy/gcp/terraform/email_service.tf | 213-222 |
-| resource.google_pubsub_subscription.email_push | Class | ./deploy/gcp/terraform/email_service.tf | 224-257 |
 
-*... and 392 more members.*
+*... and 411 more members.*
 
 ## Execution Flows
 
@@ -75,8 +75,8 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform/variables.tf` (145 edge(s))
-- `./deploy/gcp/terraform/locals.tf` (56 edge(s))
+- `./deploy/gcp/terraform/variables.tf` (154 edge(s))
+- `./deploy/gcp/terraform/locals.tf` (57 edge(s))
 - `./deploy/gcp/terraform/pipeline.tf` (29 edge(s))
 - `./deploy/gcp/terraform/outputs.tf` (27 edge(s))
 - `./deploy/gcp/terraform/iam.tf` (21 edge(s))
@@ -89,4 +89,4 @@ No execution flows pass through this community.
 - `./deploy/gcp/terraform/billing_service.tf` (9 edge(s))
 - `./deploy/gcp/terraform/org_service.tf` (9 edge(s))
 - `./deploy/gcp/terraform/pubsub.tf` (8 edge(s))
-- `./deploy/gcp/terraform/identity_service.tf` (6 edge(s))
+- `./deploy/gcp/terraform/billing_job.tf` (6 edge(s))

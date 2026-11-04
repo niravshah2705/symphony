@@ -212,8 +212,8 @@ variable "laya_cpu" {
 
 variable "laya_memory" {
   type        = string
-  description = "Memory allocated to Laya container."
-  default     = "4Gi"
+  description = "Memory allocated to Laya container. 2Gi covers preloading the english + multilingual + typed-decisions checkpoints (322M-421M params each) at LAYA_MAX_LOADED=3; 1Gi OOMs."
+  default     = "2Gi"
 }
 
 variable "laya_min_instances" {
@@ -877,6 +877,41 @@ variable "skills_version" {
 variable "skills_publisher_member" {
   type        = string
   description = "Optional IAM member (e.g. serviceAccount:gh-deployer@PROJECT.iam.gserviceaccount.com) granted objectAdmin on the skills bucket so the CI publish workflow can push new bundles. Empty = no grant (manage the deployer SA's write access out-of-band)."
+  default     = ""
+}
+
+# --- Laya checkpoint registry (GCS bucket, gcsfuse mount) --------------------
+# See laya_models.tf. Mirrors the skills registry: Terraform CREATES and OWNS
+# the bucket, name defaults to the derived "<project_id>-aifleet-laya-models",
+# and the laya-inference service mounts it read-only and PINs a version.
+
+variable "laya_models_enabled" {
+  type        = bool
+  description = "Create the Terraform-managed Laya checkpoint bucket (+ IAM + gcsfuse mount on laya-inference). false removes the bucket and the mount; the laya[serve] image has no vendored weights and then fails closed on model load — only turn off when the laya service is not deployed."
+  default     = true
+}
+
+variable "laya_models_bucket_name" {
+  type        = string
+  description = "OPTIONAL override for the Laya models bucket name. Empty ('') derives a stable default of '<project_id>-aifleet-laya-models' (see locals.tf). Terraform CREATES this bucket. Set only to pin a custom globally-unique name. Ignored when laya_models_enabled = false."
+  default     = ""
+}
+
+variable "laya_models_bucket_force_destroy" {
+  type        = bool
+  description = "Allow `terraform destroy` to delete the Laya models bucket even if it still holds objects (multi-GB weight snapshots; re-publish via the CI workflow)."
+  default     = false
+}
+
+variable "laya_model_version" {
+  type        = string
+  description = "Laya checkpoint bundle version the service PINS (HF_HOME=/models/<version> on the gcsfuse mount). Must match a published `<version>/` prefix created by .github/workflows/publish-laya-models.yml. Bumping the published bundle to a new version does NOT affect a deployment until this is bumped."
+  default     = "v1"
+}
+
+variable "laya_models_publisher_member" {
+  type        = string
+  description = "Optional IAM member (e.g. serviceAccount:gh-deployer@PROJECT.iam.gserviceaccount.com) granted objectAdmin on the Laya models bucket so the CI publish workflow can push new bundles. Empty = no grant (manage the deployer SA's write access out-of-band)."
   default     = ""
 }
 

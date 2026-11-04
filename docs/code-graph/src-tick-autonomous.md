@@ -7,17 +7,17 @@
 Community of 4 nodes
 
 - **Size**: 4 nodes
-- **Cohesion**: 0.2206
+- **Cohesion**: 0.2239
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| shouldRunAutonomousTick | Function | ./services/planner/src/pubsub.js | 59-67 |
-| dispatchPlannerTick | Function | ./services/planner/src/pubsub.js | 69-95 |
-| test:planner autonomous ticks fail closed only on an unpinned shared cloud runtime@L187 | Test | ./services/planner/src/pubsub.test.js | 187-221 |
-| test:planner orchestrator rollout keeps billing sweeps but suppresses autonomous planning@L223 | Test | ./services/planner/src/pubsub.test.js | 223-239 |
+| shouldRunAutonomousTick | Function | ./services/planner/src/pubsub.js | 58-66 |
+| dispatchPlannerTick | Function | ./services/planner/src/pubsub.js | 68-90 |
+| test:planner autonomous ticks fail closed only on an unpinned shared cloud runtime@L187 | Test | ./services/planner/src/pubsub.test.js | 187-224 |
+| test:planner orchestrator rollout suppresses autonomous planning@L226 | Test | ./services/planner/src/pubsub.test.js | 226-239 |
 
 ## Execution Flows
 
@@ -27,25 +27,30 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (9 edge(s))
-- `then` (3 edge(s))
-- `catch` (2 edge(s))
-- `resolve` (2 edge(s))
-- `error` (2 edge(s))
+- `equal` (7 edge(s))
+- `require` (3 edge(s))
+- `then` (2 edge(s))
 - `warn` (2 edge(s))
 - `Boolean` (2 edge(s))
-- `require` (2 edge(s))
 - `setImmediate` (2 edge(s))
 - `deepEqual` (2 edge(s))
-- `processBillingSweepImpl` (1 edge(s))
+- `catch` (1 edge(s))
+- `resolve` (1 edge(s))
 - `processPending` (1 edge(s))
+- `error` (1 edge(s))
+- `doesNotMatch` (1 edge(s))
+- `readFileSync` (1 edge(s))
+- `join` (1 edge(s))
 
 ### Incoming
 
-- `equal` (9 edge(s))
+- `equal` (7 edge(s))
 - `./services/planner/src/pubsub.js` (5 edge(s))
+- `require` (3 edge(s))
 - `./services/planner/src/pubsub.test.js` (2 edge(s))
-- `require` (2 edge(s))
 - `setImmediate` (2 edge(s))
 - `deepEqual` (2 edge(s))
 - `then` (1 edge(s))
+- `doesNotMatch` (1 edge(s))
+- `readFileSync` (1 edge(s))
+- `join` (1 edge(s))

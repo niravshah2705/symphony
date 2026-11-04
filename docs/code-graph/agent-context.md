@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 403 nodes
+Community of 384 nodes
 
-- **Size**: 403 nodes
-- **Cohesion**: 0.3137
+- **Size**: 384 nodes
+- **Cohesion**: 0.3244
 - **Dominant Language**: javascript
 
 ## Members
@@ -42,7 +42,6 @@ Community of 403 nodes
 | invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
 | defaultCallJson | Function | ./packages/shared/src/agent/business-pipeline.js | 112-114 |
 | defaultCallText | Function | ./packages/shared/src/agent/business-pipeline.js | 116-118 |
-| schedulerStage | Function | ./packages/shared/src/agent/business-pipeline.js | 515-533 |
 | test:parseVerdict reads a fenced verdict JSON block (completed)@L25 | Test | ./packages/shared/src/agent/coder-flow.test.js | 25-30 |
 | test:parseVerdict reads an insufficient JSON verdict with its reason@L32 | Test | ./packages/shared/src/agent/coder-flow.test.js | 32-36 |
 | test:parseVerdict extracts the merged PR URL when completed@L38 | Test | ./packages/shared/src/agent/coder-flow.test.js | 38-43 |
@@ -64,50 +63,51 @@ Community of 403 nodes
 | test:coder pause recovery waits, reschedules failed probes, and clears after a ready settings change@L530 | Test | ./packages/shared/src/agent/coder-flow.test.js | 530-577 |
 | now | Function | ./packages/shared/src/agent/coder-flow.test.js | 547-547 |
 | test:runtime repository unavailability pauses safely without finishing the Linear issue@L579 | Test | ./packages/shared/src/agent/coder-flow.test.js | 579-640 |
+| test:planned runtime policy denial records a governed error without pausing or finalizing the issue@L642 | Test | ./packages/shared/src/agent/coder-flow.test.js | 642-697 |
 
-*... and 353 more members.*
+*... and 334 more members.*
 
 ## Execution Flows
 
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
 - **generatePlan** (criticality: 0.67, depth: 6)
-- **startScheduler** (criticality: 0.66, depth: 6)
+- **startScheduler** (criticality: 0.65, depth: 5)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (341 edge(s))
-- `deepEqual` (82 edge(s))
-- `String` (55 edge(s))
+- `equal` (321 edge(s))
+- `deepEqual` (80 edge(s))
+- `String` (49 edge(s))
 - `strictEqual` (48 edge(s))
-- `Number` (44 edge(s))
-- `push` (32 edge(s))
-- `Boolean` (31 edge(s))
-- `warn` (31 edge(s))
-- `match` (30 edge(s))
+- `Number` (36 edge(s))
+- `Boolean` (30 edge(s))
+- `match` (29 edge(s))
 - `replace` (29 edge(s))
-- `map` (27 edge(s))
 - `rejects` (26 edge(s))
-- `trim` (25 edge(s))
-- `toISOString` (25 edge(s))
-- `slice` (25 edge(s))
+- `warn` (26 edge(s))
+- `map` (25 edge(s))
+- `push` (25 edge(s))
+- `ok` (24 edge(s))
+- `includes` (24 edge(s))
+- `slice` (23 edge(s))
 
 ### Incoming
 
-- `equal` (341 edge(s))
-- `deepEqual` (82 edge(s))
+- `equal` (321 edge(s))
+- `deepEqual` (80 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
-- `./packages/shared/src/agent/scheduler.js` (55 edge(s))
+- `./packages/shared/src/agent/scheduler.js` (53 edge(s))
 - `strictEqual` (48 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (46 edge(s))
 - `./packages/shared/src/agent/llm.js` (40 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
 - `rejects` (26 edge(s))
-- `match` (25 edge(s))
+- `match` (24 edge(s))
 - `ok` (24 edge(s))
-- `after` (22 edge(s))
-- `./packages/shared/src/agent/scheduler.test.js` (19 edge(s))
+- `after` (21 edge(s))
+- `./packages/shared/src/agent/scheduler.test.js` (18 edge(s))
 - `./packages/shared/src/agent/availability.js` (17 edge(s))

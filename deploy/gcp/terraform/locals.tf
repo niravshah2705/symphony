@@ -23,6 +23,10 @@ locals {
   # publish workflow (derived the same way) — no repo-var dependency for the name.
   skills_bucket_name = var.skills_bucket_name != "" ? var.skills_bucket_name : "${var.project_id}-aifleet-skills"
 
+  # Laya checkpoint registry (laya_models.tf) — same derived-default-with-
+  # override convention; the publish-laya-models CI workflow derives the same name.
+  laya_models_bucket_name = var.laya_models_bucket_name != "" ? var.laya_models_bucket_name : "${var.project_id}-aifleet-laya-models"
+
   # Chat attachments bucket (gcs_attachments.tf) — same derived-default-with-
   # override convention as the skills bucket above.
   attachments_bucket_name = var.attachments_bucket_name != "" ? var.attachments_bucket_name : "${var.project_id}-aifleet-attachments"
