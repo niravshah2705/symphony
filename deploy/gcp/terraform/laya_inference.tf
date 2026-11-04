@@ -31,7 +31,7 @@ resource "google_cloud_run_v2_service" "laya" {
     }
 
     # Pre-downloaded Hugging Face hub cache (laya_models.tf), mounted read-only
-    # at /models. The service pins a bundle via HF_HOME=/models/<version>.
+    # at /models. The service pins a bundle via HF_HUB_CACHE=/models/<version> (the hub cache dir holding models--<org>--<repo> directly).
     dynamic "volumes" {
       for_each = var.laya_models_enabled ? [1] : []
       content {
@@ -64,7 +64,7 @@ resource "google_cloud_run_v2_service" "laya" {
         value = "1"
       }
       env {
-        name  = "HF_HOME"
+        name  = "HF_HUB_CACHE"
         value = "/models/${var.laya_model_version}"
       }
       env {
@@ -82,6 +82,16 @@ resource "google_cloud_run_v2_service" "laya" {
       env {
         name  = "LAYA_DEVICE"
         value = "cpu"
+      }
+      # Revision-forcing marker: Cloud Run dedupes revisions by template hash, so
+      # an identical-template re-apply REUSES the failed revision (00015-khx)
+      # instead of launching a new pod. Carrying the pinned bundle version in the
+      # template means bumping laya_model_version always creates a fresh revision
+      # that re-reads /models/<version>. laya-serve ignores this var; the real pin
+      # is HF_HUB_CACHE above.
+      env {
+        name  = "LAYA_MODEL_BUNDLE"
+        value = var.laya_model_version
       }
       env {
         name  = "LAYA_THREADS"

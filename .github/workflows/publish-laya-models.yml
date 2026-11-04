@@ -5,7 +5,7 @@ name: Publish Laya Model Bundle
 #   gs://<bucket>/<version>/models--<org>--<repo>/...   (+ laya-models-manifest.json)
 # The laya-inference Cloud Run service (deploy/gcp/Dockerfile.laya-inference runs
 # pip `laya[serve]`) serves FULLY OFFLINE: it mounts this bucket read-only at
-# /models and pins HF_HOME=/models/<version> (deploy/gcp/terraform/
+# /models and pins HF_HUB_CACHE=/models/<version> (deploy/gcp/terraform/
 # laya_models.tf + laya_inference.tf, var.laya_model_version). Publishing a new
 # version never disturbs an older pinned deployment — versions coexist and
 # rollout is a separate `terraform apply` that bumps the pin. Same story as the

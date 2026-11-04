@@ -278,12 +278,15 @@ GCS bundle mounted read-only, mirroring the skills registry above.
   `var.laya_models_publisher_member` grants the CI deployer `objectAdmin`).
   `laya_inference.tf` mounts it read-only at `/models` (gen2 gcsfuse volume) and
   sets `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, and the version pin
-  `HF_HOME=/models/<var.laya_model_version>`. The laya SA gets `objectViewer`.
-- **Sizing** — 2 CPU / 2Gi (`var.laya_cpu`/`var.laya_memory`): all three
+  `HF_HUB_CACHE=/models/<var.laya_model_version>`. The laya SA gets `objectViewer`.
+- **Sizing** — 2 CPU / 4Gi (`var.laya_cpu`/`var.laya_memory`): all three
   checkpoints preload (`LAYA_PRELOAD=1`, `LAYA_MODELS=english,multilingual,
   typed-decisions`, `LAYA_MAX_LOADED=3`) for auto routing; thread caps
-  (`LAYA_THREADS`/`OMP`/`MKL`) follow `var.laya_cpu`. 1Gi OOMs on the 322M+
-  checkpoints.
+  (`LAYA_THREADS`/`OMP`/`MKL`) follow `var.laya_cpu`. The fp16 weights alone are
+  ~2.3GB, so 2Gi OOMs during preload. The pinned `laya_model_version` is also
+  mirrored into a template env (`LAYA_MODEL_BUNDLE`) so version bumps always
+  create a fresh Cloud Run revision — an identical template reuses a failed
+  revision instead of retrying with a populated bucket.
 - **Rollout** — publish a new `vN` prefix (existing pinned deployments are
   untouched), then bump **`laya_model_version`** (Terraform var /
   `gh variable set LAYA_MODEL_VERSION`) and apply. Roll back by pinning the old

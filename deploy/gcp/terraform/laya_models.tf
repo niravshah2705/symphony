@@ -9,7 +9,7 @@
 # bucket (`<version>/models--convaiinnovations--laya/...`, symlink-dereferenced
 # so gcsfuse serves plain files) plus a `laya-models-manifest.json`.
 # The laya-inference Cloud Run service mounts it read-only at /models and pins
-# a version via HF_HOME=/models/<laya_model_version> (see laya_inference.tf),
+# a version via HF_HUB_CACHE=/models/<laya_model_version> (see laya_inference.tf),
 # so publishing a new version never disturbs an older pinned deployment —
 # versions coexist and rollout is a separate `terraform apply` that bumps the
 # pin. Same story as the skills registry (skills.tf).
