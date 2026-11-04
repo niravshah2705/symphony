@@ -30,7 +30,12 @@ service cloud.firestore {
           && d.oneTime is bool
           && d.expiresAt is timestamp
           && d.expiresAt > request.time
-          && d.expiresAt <= request.time.plus('7d')
+          // Ceiling is the 7d preset (604800000 ms). rules Timestamp has no
+          // plus()/duration arithmetic, so bound it in ms — and give it 10 min
+          // of headroom, because expiresAt is built from the creator's own
+          // clock: a slightly fast client would otherwise push an exactly-7d
+          // share past request.time + 7d and have the create refused.
+          && d.expiresAt.toMillis() <= request.time.toMillis() + 604800000 + 600000
           && d.createdAt == request.time
           && (d.ownerUid == null
               || (request.auth != null && d.ownerUid == request.auth.uid));
