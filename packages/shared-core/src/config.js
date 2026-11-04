@@ -402,6 +402,29 @@ const OPENSHELL = Object.freeze({
 });
 
 /**
+ * Agent Substrate — zero-trust Kubernetes runtime (ateapi gRPC control plane +
+ * atenet router/egress). Selected via agentPattern 'substrate'; runs the planner
+ * OCI image as a per-run ephemeral sandboxed actor. Empty url by default so the
+ * pattern is inert until an operator provisions an ate-system and sets
+ * SUBSTRATE_URL / SUBSTRATE_INGRESS_URL.
+ */
+const SUBSTRATE = Object.freeze({
+  url: process.env.SUBSTRATE_URL || '',
+  ingressUrl: process.env.SUBSTRATE_INGRESS_URL || '',
+  atespace: process.env.SUBSTRATE_ATESPACE || '',
+  workerPool: process.env.SUBSTRATE_WORKER_POOL || 'planner-pool',
+  plannerImage: process.env.SUBSTRATE_PLANNER_IMAGE || '',
+  allowedAtespaces: Object.freeze(
+    (process.env.SUBSTRATE_ALLOWED_ATESPACES || 'tenant-a,tenant-b')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  ),
+  timeoutMs: Number(process.env.SUBSTRATE_TIMEOUT_MS || 60000),
+  actorTtlMs: Number(process.env.SUBSTRATE_ACTOR_TTL_MS || 120000),
+});
+
+/**
  * Code-writer deep agent + workflow config (an equivalent of OpenAI Symphony's
  * WORKFLOW.md frontmatter). The agent works a Linear ticket end-to-end in an
  * isolated git workspace, driving it through the ticket state machine while
@@ -865,6 +888,7 @@ const CONFIG = Object.freeze({
   QODER,
   OPENROUTER,
   OPENSHELL,
+  SUBSTRATE,
   CODER,
   MCP,
   TOOLS,
