@@ -236,7 +236,9 @@ test('identity verification is deployed as an internal Firestore-backed gateway 
   assert.match(workflow, /write_tag identity resolve identity identity-verification/);
   assert.match(workflow, /identity_image_tag=\$\{\{ steps\.tags\.outputs\.identity \}\}/);
   assert.match(deploy, /build_push identity-verification Dockerfile\.identity-verification/);
-  assert.match(deploy, /seed_secret identity-hash-pepper "\$IDENTITY_HASH_PEPPER"/);
+  // seed_once (first-write-wins), NOT the converging seed_secret: rotating a pepper
+  // that already hashed identity records would silently invalidate every stored hash.
+  assert.match(deploy, /seed_once identity-hash-pepper "\$IDENTITY_HASH_PEPPER"/);
   assert.match(bootstrap, /seed identity-hash-pepper "\$IDENTITY_HASH_PEPPER"/);
   assert.match(bootstrap, /google_secret_manager_secret\.identity_hash_pepper/);
 });

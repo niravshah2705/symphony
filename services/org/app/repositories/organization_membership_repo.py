@@ -153,7 +153,12 @@ class OrganizationMembershipRepository:
             self.uow.track(organization_members_col(org_id), membership, str(membership.user_id))
         return memberships
 
-    async def count_admins(self, org_id: uuid.UUID) -> int:
+    async def list_active_admins(self, org_id: uuid.UUID) -> list[User]:
+        """Active ORG_ADMIN members, oldest membership first.
+
+        A deactivated user is dropped rather than merely de-counted, so the
+        billing alerts and the admin guardrail never disagree about who counts.
+        """
         rows = await self.uow.query(organization_members_col(org_id))
         rows = [
             row
@@ -161,12 +166,17 @@ class OrganizationMembershipRepository:
             if row.get("status", MembershipStatus.ACTIVE.value) == MembershipStatus.ACTIVE.value
             and row.get("role") == OrgRole.ORG_ADMIN.value
         ]
-        active = 0
+        rows.sort(key=lambda row: row.get("created_at"))
+        admins: list[User] = []
         for row in rows:
             user_doc = await self.uow.get(USERS, str(row.get("user_id", "")))
-            if user_doc is not None and bool(user_doc.get("is_active", True)):
-                active += 1
-        return active
+            if user_doc is None or not bool(user_doc.get("is_active", True)):
+                continue
+            admins.append(User.from_doc(user_doc))
+        return admins
+
+    async def count_admins(self, org_id: uuid.UUID) -> int:
+        return len(await self.list_active_admins(org_id))
 
     async def rebase_legacy_scalar(self, user: User) -> None:
         """Keep scalar fields as a backward-compatible default context only."""

@@ -76,9 +76,11 @@ resource "google_service_account_iam_member" "provisioner_actas" {
 
 # --- Shared internal S2S token (Secret Manager) -------------------------------
 # One shared token guards every token-scoped internal surface:
-#   - the provisioner's org write-back (PATCH /internal/orgs/{id}/deployments), and
+#   - the provisioner's org write-back (PATCH /internal/orgs/{id}/deployments),
 #   - the egress proxy's per-org secret resolve (GET /internal/s2s/orgs/{id}/secrets
-#     on the settings service).
+#     on the settings service), and
+#   - the billing auto-recharge Job's org read (GET /internal/orgs/{id}/billing-context
+#     on the org service).
 # It is therefore NOT gated on provisioning — it exists whenever a value is set,
 # so the proxy↔settings S2S works on the shared stack too. Only the
 # provisioner-sa accessor stays provisioning-gated (that SA exists only then).

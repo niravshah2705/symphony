@@ -13,7 +13,10 @@ these calls carry NO forwarded user token (the provisioner acts on its own):
 
 The org id is a route param here (the provisioner knows which org it just built),
 which is safe because there is no user identity to scope against — the token IS
-the authorization, and the write is confined to the named org's deployments map.
+the authorization. Writes stay confined to the named org's deployments map, and
+the one read here (``billing-context``) returns the org's identity plus its
+administrator *emails*, which PII: it must stay IAM-gated and must never be
+widened to passwords, hashes or membership beyond ORG_ADMIN.
 """
 from __future__ import annotations
 
@@ -26,7 +29,9 @@ from pydantic import BaseModel
 from app.core.config import get_settings
 from app.core.database import Uow, get_session
 from app.core.timeutils import utcnow
+from app.repositories.organization_membership_repo import OrganizationMembershipRepository
 from app.repositories.org_repo import OrgRepository
+from app.schemas.org import BillingAdmin, BillingContextResponse
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -58,3 +63,25 @@ async def write_deployments(
     org.deployments = body.deployments if isinstance(body.deployments, dict) else {}
     org.updated_at = utcnow()
     return {"status": "ok", "org_id": str(org.id)}
+
+
+@router.get("/orgs/{org_id}/billing-context", response_model=BillingContextResponse)
+async def billing_context(
+    org_id: uuid.UUID,
+    _: None = Depends(require_internal_token),
+    session: Uow = Depends(get_session),
+):
+    """Org identity + administrator emails for the auto-recharge job (S2S read)."""
+    org = await OrgRepository(session).get(org_id)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="org not found")
+    admins = await OrganizationMembershipRepository(session).list_active_admins(org_id)
+    return BillingContextResponse(
+        id=org.id,
+        name=org.name,
+        slug=org.slug,
+        deployment_slug=org.deployment_slug,
+        admins=[
+            BillingAdmin(user_id=u.id, email=u.email) for u in admins if u.email.strip()
+        ],
+    )

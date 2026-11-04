@@ -193,23 +193,43 @@ terraform -chdir="$TF_DIR" apply -input=false -auto-approve "${TFVARS[@]}" \
   -target=google_storage_bucket.spa \
   -target=google_storage_bucket_iam_member.spa_public_read
 
-# --- 5. Secret versions (idempotent — only seed when a secret has none) ------
+# --- 5. Secret versions ------------------------------------------------------
+# Two policies, deliberately. A secret whose VALUE came from the environment
+# CONVERGES onto it: an already-stored wrong value (a truncated Cashfree key
+# caused a production 401) must be repairable by re-running this script, and a
+# corrected value is added as a new version that `version = "latest"` refs pick
+# up on the next revision. A secret we GENERATE stays first-write-wins, because
+# converging a freshly generated random would rotate the token on every deploy.
 log "Staging Secret Manager versions"
-has_version() { gcloud secrets versions list "$1" --project "$PROJECT_ID" \
-  --filter='state=ENABLED' --format='value(name)' 2>/dev/null | grep -q .; }
-seed_secret() { # id, value
-  if has_version "$1"; then echo "  $1: already has a version (unchanged)";
-  else printf '%s' "$2" | gcloud secrets versions add "$1" --project "$PROJECT_ID" --data-file=- >/dev/null; echo "  $1: seeded"; fi
+enabled_value() {
+  local v
+  v=$(gcloud secrets versions list "$1" --project "$PROJECT_ID" \
+    --filter='state=ENABLED' --format='value(name)' 2>/dev/null | head -n1)
+  [ -n "$v" ] && gcloud secrets versions access "$v" --secret "$1" --project "$PROJECT_ID" 2>/dev/null || true
+}
+seed_secret() { # id, value — converge onto the provided value
+  local id="$1" val="$2" cur
+  cur="$(enabled_value "$id")"
+  if [ "$val" = "$cur" ]; then echo "  $id: up to date"
+  else printf '%s' "$val" | gcloud secrets versions add "$id" --project "$PROJECT_ID" --data-file=- >/dev/null
+    echo "  $id: seeded (corrected existing version)"; fi
+}
+seed_once() { # id, value — never rotate an existing version
+  if gcloud secrets versions list "$1" --project "$PROJECT_ID" \
+      --filter='state=ENABLED' --format='value(name)' 2>/dev/null | grep -q .
+  then echo "  $1: already has a version (unchanged)"
+  else printf '%s' "$2" | gcloud secrets versions add "$1" --project "$PROJECT_ID" --data-file=- >/dev/null
+    echo "  $1: seeded"; fi
 }
 
 # stream-token-secret: never printed; generated once if absent (do NOT rotate on redeploy).
 STREAM_TOKEN_SECRET="${STREAM_TOKEN_SECRET:-$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || head -c 32 /dev/urandom | base64 | tr -d '\n')}"
-seed_secret stream-token-secret "$STREAM_TOKEN_SECRET"
+seed_once stream-token-secret "$STREAM_TOKEN_SECRET"
 IDENTITY_HASH_PEPPER="${IDENTITY_HASH_PEPPER:-$(openssl rand -base64 48 2>/dev/null | tr -d '\n' || head -c 48 /dev/urandom | base64 | tr -d '\n')}"
-seed_secret identity-hash-pepper "$IDENTITY_HASH_PEPPER"
+seed_once identity-hash-pepper "$IDENTITY_HASH_PEPPER"
 # org-jwt-secret is Terraform-managed (random_password + secret version); no seed here.
-[ -n "${GITHUB_TOKEN:-}" ]      && seed_secret github-token     "$GITHUB_TOKEN"      || true
-[ -n "${LANGSMITH_API_KEY:-}" ] && seed_secret langsmith-api-key "$LANGSMITH_API_KEY" || true
+if [ -n "${GITHUB_TOKEN:-}" ]; then      seed_secret github-token      "$GITHUB_TOKEN"; fi
+if [ -n "${LANGSMITH_API_KEY:-}" ]; then seed_secret langsmith-api-key "$LANGSMITH_API_KEY"; fi
 if [ -n "$EMAIL_SMTP_USER" ]; then seed_secret email-smtp-user "$EMAIL_SMTP_USER"; fi
 if [ -n "$EMAIL_SMTP_PASSWORD" ]; then seed_secret email-smtp-password "$EMAIL_SMTP_PASSWORD"; fi
 

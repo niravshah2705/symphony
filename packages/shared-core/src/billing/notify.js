@@ -19,26 +19,31 @@ const { paiseToInr } = require('./pricing');
 
 function sendBrowser(payload) {
   try {
-    // Route through the canonical typed publisher (agent/workspace-events) so the
-    // notification event shape stays in one place. Lazy-required, fail-open.
-    const events = require('../agent/workspace-events');
-    if (events && typeof events.publishNotification === 'function') {
-      events.publishNotification({
-        channel: 'billing',
-        level: payload.level || 'info',
-        title: payload.title || 'Billing',
-        message: payload.message || '',
-        orgId: payload.orgId || null,
-      });
-      return true;
-    }
+    // The same typed envelope agent/workspace-events.publishNotification emits,
+    // called on the canonical publisher directly so the billing image (which
+    // ships shared-core only, with no agent/ layer) can push to the SPA too.
+    // Lazy-required, fail-open: telemetry must never break a money path.
+    const events = require('../messaging/events');
+    events.publishWorkspace({
+      type: 'notification',
+      channel: 'billing',
+      level: payload.level || 'info',
+      title: payload.title || 'Billing',
+      message: payload.message || '',
+      orgId: payload.orgId || null,
+      ts: new Date().toISOString(),
+    }, { organizationId: payload.orgId || null });
+    return true;
   } catch (err) {
     log.warn(`billing notify (browser) failed: ${err && err.message ? err.message : err}`);
+    return false;
   }
-  return false;
 }
 
 async function sendSlack(payload, webhookUrl = CONFIG.BILLING.slackWebhookUrl) {
+  // A Slack webhook URL is itself a secret. In agent/proxy mode never honor a
+  // persisted or caller-supplied URL; use the sidecar's fixed route, which
+  // resolves the exact vault target and does not accept a path or origin.
   const target = CONFIG.EGRESS_PROXY_URL ? CONFIG.BILLING.slackWebhookUrl : webhookUrl;
   if (!target) return false;
   try {
@@ -48,89 +53,106 @@ async function sendSlack(payload, webhookUrl = CONFIG.BILLING.slackWebhookUrl) {
         'Content-Type': 'application/json',
         ...(CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {}),
       },
-      body: JSON.stringify({
-        text: `*${payload.title}*\n${payload.message}`,
-        attachments: payload.details ? [{ text: JSON.stringify(payload.details, null, 2) }] : undefined,
-      }),
+      body: JSON.stringify({ text: `*${payload.title}* — ${payload.message}` }),
     });
-    return res.ok;
+    return Boolean(res && res.ok);
   } catch (err) {
     log.warn(`billing notify (slack) failed: ${err && err.message ? err.message : err}`);
     return false;
   }
 }
 
-async function sendEmail(payload, to = CONFIG.BILLING.notifyEmail) {
-  if (!to) return false;
-  try {
-    const { publishEmailJob } = require('../messaging/email-publisher');
-    if (typeof publishEmailJob === 'function') {
-      await publishEmailJob({
-        jobId: randomUUID(),
-        to,
-        subject: `[AI Fleet] ${payload.title}`,
-        template: 'billing-alert',
-        vars: {
-          title: payload.title,
-          message: payload.message,
-          balanceInr: payload.details && payload.details.balanceInr,
-          thresholdInr: payload.details && payload.details.thresholdInr,
-        },
-      });
-      return true;
+async function sendEmail(payload, recipients = [], deps = {}) {
+  if (!recipients.length) return false;
+  const publishRequest = deps.publishRequest || require('../messaging/publisher').publishRequest;
+  const topic = deps.topic || CONFIG.GCP.emailTopic;
+  const subject = String(payload.title || 'Billing alert').trim().slice(0, 160);
+  const message = String(payload.message || '').trim().slice(0, 4000);
+  const orgId = /^[A-Za-z0-9._:-]{1,128}$/.test(String(payload.orgId || ''))
+    ? String(payload.orgId)
+    : undefined;
+  let published = 0;
+  for (const recipient of recipients) {
+    const job = {
+      template: 'billing_alert',
+      idempotencyKey: `billing:${randomUUID()}`,
+      to: String(recipient || '').trim(),
+      variables: { subject, message, ...(orgId ? { orgId } : {}) },
+    };
+    try {
+      await publishRequest(topic, job);
+      published += 1;
+    } catch (err) {
+      log.warn(`billing notify (email queue) failed: ${err && err.message ? err.message : err}`);
     }
-  } catch (err) {
-    log.warn(`billing notify (email) failed: ${err && err.message ? err.message : err}`);
   }
-  return false;
-}
-
-async function notify(payload, channels = {}) {
-  const tasks = [];
-  if (channels.browser !== false) tasks.push(Promise.resolve(sendBrowser(payload)));
-  if (channels.slack) tasks.push(sendSlack(payload));
-  if (channels.email) tasks.push(sendEmail(payload));
-  const results = await Promise.allSettled(tasks);
-  return results.some((r) => r.status === 'fulfilled' && r.value === true);
+  return published === recipients.length;
 }
 
 /**
- * Compare current balance against configured thresholds and fire a notification
- * for any threshold crossed since last notified.
+ * Fan a notification out to the channels enabled on the account. Browser is the
+ * always-on baseline; email/slack fire only when enabled. Returns the list of
+ * channels that succeeded.
  */
-async function checkThresholdsAndNotify(orgId, account, state = {}) {
-  const balancePaise = Number(account.balancePaise) || 0;
-  const thresholdsInr = Array.isArray(account.alertThresholdsInr)
-    ? account.alertThresholdsInr
-    : CONFIG.BILLING.defaultThresholdsInr;
+async function notify(account, payload) {
+  const channels = (account && account.notifyChannels) || { browser: true };
+  const sent = [];
+  if (channels.browser !== false && sendBrowser(payload)) sent.push('browser');
+  if (channels.email && (await sendEmail(payload, (account && account.notifyEmails) || []))) sent.push('email');
+  if (channels.slack && (await sendSlack(payload, account && account.slackWebhookUrl))) sent.push('slack');
+  return sent;
+}
 
-  const thresholdsPaise = thresholdsInr.map((inr) => Math.round(Number(inr) * 100)).sort((a, b) => a - b);
-  const lastAlertedPaise = state.lastAlertedPaise ?? Infinity;
+/**
+ * Compare the account balance to its configured alert thresholds and notify on a
+ * fresh DOWNWARD crossing. Dedupes via `lastAlertedThresholdPaise` so each
+ * threshold fires once per crossing and escalation (low → exhausted) still
+ * alerts; a recharge above the highest threshold re-arms it. Mutates the account
+ * (dedupe marker). Returns the threshold alerted on (paise) or null.
+ */
+async function checkThresholdsAndNotify(account, deps = {}) {
+  if (!account) return null;
+  const storeApi = deps.store || require('../store');
+  const balance = Number(account.balancePaise) || 0;
+  const thresholds = (account.alertThresholdsPaise || []).map(Number).filter(Number.isFinite);
+  if (!thresholds.length) return null;
 
-  const crossed = thresholdsPaise.filter((t) => balancePaise <= t && t < lastAlertedPaise);
-  if (!crossed.length) return null;
+  // Re-arm: balance back above the highest threshold clears the dedupe marker.
+  const highest = Math.max(...thresholds);
+  if (balance > highest && account.lastAlertedThresholdPaise !== null && account.lastAlertedThresholdPaise !== undefined) {
+    storeApi.upsertBillingAccount(account.id, { lastAlertedThresholdPaise: null });
+    account.lastAlertedThresholdPaise = null;
+  }
 
-  const lowestCrossed = crossed[0];
+  // The MOST SEVERE (lowest) threshold the balance has crossed.
+  const crossedList = thresholds.filter((t) => balance <= t);
+  if (!crossedList.length) return null;
+  const crossed = Math.min(...crossedList);
+
+  const already = account.lastAlertedThresholdPaise;
+  // Alert only on a fresh crossing or an escalation to a lower threshold.
+  if (already !== null && already !== undefined && crossed >= already) return null;
+
+  const inr = paiseToInr(balance);
+  const exhausted = crossed <= 0;
   const payload = {
-    orgId,
-    level: balancePaise <= 0 ? 'critical' : 'warn',
-    title: balancePaise <= 0 ? 'Billing balance exhausted' : 'Low balance alert',
-    message: `Account balance is ₹${paiseToInr(balancePaise)} (crossed ₹${paiseToInr(lowestCrossed)} threshold).`,
-    details: {
-      orgId,
-      balanceInr: paiseToInr(balancePaise),
-      thresholdInr: paiseToInr(lowestCrossed),
-    },
+    orgId: account.id,
+    level: exhausted ? 'error' : 'warning',
+    title: exhausted ? 'Billing balance exhausted' : 'Billing balance low',
+    message: exhausted
+      ? `Balance is ₹${inr.toFixed(2)}. Runner activity will pause until you add credits.`
+      : `Balance is low: ₹${inr.toFixed(2)}.`,
   };
-
-  await notify(payload, account.notifyChannels || {});
-  return lowestCrossed;
+  await notify(account, payload);
+  storeApi.upsertBillingAccount(account.id, { lastAlertedThresholdPaise: crossed });
+  account.lastAlertedThresholdPaise = crossed;
+  return crossed;
 }
 
 module.exports = {
-  notify,
-  checkThresholdsAndNotify,
   sendBrowser,
   sendSlack,
   sendEmail,
+  notify,
+  checkThresholdsAndNotify,
 };

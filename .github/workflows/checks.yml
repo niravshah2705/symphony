@@ -40,6 +40,7 @@ jobs:
           "services/deployer/src/**/*.test.js"
           "services/email/src/**/*.test.js"
           "services/proxy/src/**/*.test.js"
+          "services/billing/src/**/*.test.js"
           "deploy/gcp/**/*.test.js"
 
   e2e:

@@ -84,8 +84,12 @@ resource "google_cloud_run_v2_service" "billing" {
           BILLING_SERVICE_PORT  = "8080"
           STORE_BACKEND         = "firestore"
           BILLING_SWEEP_ENABLED = "true"
-          CASHFREE_ENV          = var.cashfree_env
-          CASHFREE_BASE_URL     = var.cashfree_base_url
+          # The hourly tick handler launches this Job (packages/shared-core/src/billing/
+          # recharge-trigger.js) rather than charging in-request; must match
+          # google_cloud_run_v2_job.billing_auto_recharge.name.
+          BILLING_JOB_NAME  = var.billing_job_name
+          CASHFREE_ENV      = var.cashfree_env
+          CASHFREE_BASE_URL = var.cashfree_base_url
         })
         content {
           name  = env.key

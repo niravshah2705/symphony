@@ -9,6 +9,8 @@ const ledger = require('@ai-fleet/shared-core/billing/ledger');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
 const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
 const { processBillingSweep } = require('@ai-fleet/shared-core/billing/sweep');
+const rechargeTrigger = require('@ai-fleet/shared-core/billing/recharge-trigger');
+const autoRechargeJob = require('./auto-recharge-job');
 const billingApi = require('./billing-api');
 const { renderDashboardHtml } = require('./ui');
 
@@ -64,6 +66,30 @@ function createApp(options = {}) {
     } catch (err) {
       log.error(`Billing sweep error: ${err && err.message ? err.message : err}`);
       return res.status(500).json({ error: err && err.message ? err.message : 'Sweep error' });
+    }
+  }));
+
+  // Hourly auto-recharge + alert tick. The sweep runs as a one-shot Cloud Run Job
+  // execution rather than inside this request: it reads the org service once per
+  // candidate org and may post several Cashfree charges, which would outlive the
+  // scheduler's ack deadline and could leave the recharge cooldown stamped
+  // half-written if the container were killed mid-pass. See billing_job.tf.
+  // Local (direct mode) has no Job to launch, so the entrypoint runs in-process.
+  app.post('/pubsub/billing-recharge-tick', asyncHandler(async (req, res) => {
+    const trigger = options.rechargeTrigger || rechargeTrigger;
+    const runJob = options.runAutoRechargeJob || autoRechargeJob.main;
+    try {
+      if (trigger.isCloudJobEnabled()) {
+        const { execution } = await trigger.runRechargeJob({ env: options.rechargeJobEnv });
+        log.info(`Billing auto-recharge Job launched via /pubsub/billing-recharge-tick: ${execution}`);
+        return res.status(200).json({ status: 'launched', execution });
+      }
+      const summary = await runJob({ exit: () => {} });
+      log.info(`Billing auto-recharge sweep completed in-process: ${JSON.stringify(summary)}`);
+      return res.status(200).json({ status: 'completed', ...summary });
+    } catch (err) {
+      log.error(`Billing auto-recharge tick error: ${err && err.message ? err.message : err}`);
+      return res.status(500).json({ error: err && err.message ? err.message : 'Recharge tick error' });
     }
   }));
 

@@ -6,7 +6,6 @@ const { publishEvent, normalizeEventContext } = require('@ai-fleet/shared/messag
 const { pushAuth } = require('@ai-fleet/shared/messaging/oidc');
 const log = require('@ai-fleet/shared/logger');
 const scheduler = require('@ai-fleet/shared/agent/scheduler');
-const { processBillingSweep } = require('@ai-fleet/shared/billing/sweep');
 const { CONFIG } = require('@ai-fleet/shared/config');
 const store = require('@ai-fleet/shared/store');
 const {
@@ -67,16 +66,12 @@ function shouldRunAutonomousTick(context, {
 }
 
 function dispatchPlannerTick(context, {
-  processBillingSweepImpl = processBillingSweep,
   processPending = scheduler.processPending,
   logImpl = log,
   messagingMode = CONFIG.MESSAGING_MODE,
   pinnedOrganizationId = CONFIG.BILLING.orgId,
   orchestratorEnabled = CONFIG.PIPELINE.orchestratorEnabled,
 } = {}) {
-  Promise.resolve().then(() => processBillingSweepImpl()).catch((err) => {
-    logImpl.error(`billing sweep (planner tick) failed: ${err && err.message ? err.message : err}`);
-  });
   const autonomous = shouldRunAutonomousTick(context, {
     messagingMode,
     pinnedOrganizationId,
@@ -166,10 +161,9 @@ router.post('/planner', pushAuth(), async (req, res) => {
 
 router.post('/planner-tick', pushAuth(), async (req, res) => {
   const message = decodePushMessage(req.body) || {};
-  // The billing sweep piggybacks on the planner cadence so it runs in cloud
-  // (pubsub) mode without new infra; it self-gates on BILLING_SWEEP_ENABLED and
-  // is idempotent (watermark + in-process guard), so a dedicated billing-tick
-  // firing in the same window is harmless.
+  // Billing aggregation is NOT dispatched here: only the billing service sets
+  // BILLING_SWEEP_ENABLED, and two processes reading the same watermark would post
+  // the same usage debit twice. See services/billing/src/app.js.
   try {
     return await runMessageInWorkspace(message, async (context) => {
       dispatchPlannerTick(context);
@@ -182,21 +176,6 @@ router.post('/planner-tick', pushAuth(), async (req, res) => {
   }
 });
 
-router.post('/billing-tick', pushAuth(), async (req, res) => {
-  const message = decodePushMessage(req.body) || {};
-  try {
-    return await runMessageInWorkspace(message, async () => {
-      Promise.resolve(processBillingSweep()).catch((err) => {
-        log.error(`billing tick failed: ${err && err.message ? err.message : err}`);
-      });
-      return res.status(204).end();
-    });
-  } catch (err) {
-    if (isRejectedWorkspaceMessage(err)) return res.status(204).end();
-    log.error(`billing tick store initialization failed: ${err && err.message ? err.message : err}`);
-    return res.status(503).end();
-  }
-});
 
 module.exports = router;
 module.exports.messageWorkspaceContext = messageWorkspaceContext;

@@ -204,10 +204,8 @@ test('planner autonomous ticks fail closed only on an unpinned shared cloud runt
     messagingMode: 'pubsub', pinnedOrganizationId: 'org-pinned', orchestratorEnabled: true,
   }), false, 'orchestrator rollout disables the legacy planner chain');
 
-  let billingSweeps = 0;
   let autonomousRuns = 0;
   const result = dispatchPlannerTick(empty, {
-    processBillingSweepImpl: () => { billingSweeps += 1; },
     processPending: () => { autonomousRuns += 1; },
     logImpl: { error() {}, warn() {} },
     messagingMode: 'pubsub',
@@ -215,17 +213,20 @@ test('planner autonomous ticks fail closed only on an unpinned shared cloud runt
   });
   return new Promise((resolve) => setImmediate(resolve)).then(() => {
     assert.deepEqual(result, { autonomous: false });
-    assert.equal(billingSweeps, 1, 'global billing sweep remains enabled');
+    // Only the billing service aggregates usage: a second process reading the same
+    // lastAggregatedAt watermark would post the same usage debit twice.
+    assert.doesNotMatch(
+      require('node:fs').readFileSync(require('node:path').join(__dirname, 'pubsub.js'), 'utf8'),
+      /processBillingSweep/,
+      'the planner tick must not dispatch the billing sweep');
     assert.equal(autonomousRuns, 0, 'tenant queue must not run without context');
   });
 });
 
-test('planner orchestrator rollout keeps billing sweeps but suppresses autonomous planning', async () => {
+test('planner orchestrator rollout suppresses autonomous planning', async () => {
   const { dispatchPlannerTick } = require('./pubsub');
-  let billingSweeps = 0;
   let autonomousRuns = 0;
   const result = dispatchPlannerTick({ organizationId: 'org-a', projectId: 'project-a' }, {
-    processBillingSweepImpl: () => { billingSweeps += 1; },
     processPending: () => { autonomousRuns += 1; },
     logImpl: { error() {}, warn() {} },
     messagingMode: 'pubsub',
@@ -234,6 +235,5 @@ test('planner orchestrator rollout keeps billing sweeps but suppresses autonomou
   });
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(result, { autonomous: false });
-  assert.equal(billingSweeps, 1);
   assert.equal(autonomousRuns, 0);
 });
