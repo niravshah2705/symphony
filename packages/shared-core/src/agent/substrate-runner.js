@@ -128,6 +128,17 @@ async function dispatchActorPrompt({
   actorName,
   actorJwt,
   prompt,
+  organizationId,
+  projectId,
+  projectName,
+  llm,
+  guardrailSpec,
+  runtime,
+  agentRuntime,
+  workflowPattern,
+  workflow,
+  stage,
+  settings,
   traceContext = {},
   fetchImpl = globalThis.fetch,
   timeoutMs,
@@ -147,9 +158,27 @@ async function dispatchActorPrompt({
         'ate-target-actor': `${atespace}/${actorName}`,
         authorization: `Bearer ${actorJwt}`,
         ...(traceContext.runId ? { 'x-aifleet-run-id': String(traceContext.runId) } : {}),
-        ...(traceContext.organizationId ? { 'x-aifleet-org-id': String(traceContext.organizationId) } : {}),
+        ...(organizationId ? { 'x-aifleet-org-id': String(organizationId) } : {}),
       },
-      body: JSON.stringify({ prompt }),
+      // The actor has no settings store — everything the in-process
+      // executeAgentRuntime call needs must ride on the request body. No raw
+      // credentials are sent; the actor's outbound calls hit the egress proxy
+      // with the sentinel and the gateway injects.
+      body: JSON.stringify({
+        prompt,
+        organizationId,
+        projectId,
+        projectName,
+        llm,
+        guardrailSpec,
+        runtime,
+        agentRuntime,
+        workflowPattern,
+        workflow,
+        stage,
+        settings,
+        runId: traceContext.runId,
+      }),
       signal: controller.signal,
     });
     const text = await res.text();
@@ -198,7 +227,12 @@ async function verifyActorJwt(token, { audience, trustDomain = 'cluster.local', 
       try {
         const { createPublicKey } = require('node:crypto');
         const pub = createPublicKey({ key: jwk, format: 'jwk' });
-        const verifier = crypto.createVerify((header.alg || 'RS256').replace('RS', 'RSA-').replace('ES', 'ECDSA-'));
+        const alg = String(header.alg || 'RS256');
+        // Node's OpenSSL names differ from JWS: RS256 -> RSA-SHA256.
+        // ES*/PS* are unsupported here and fail closed via signature_check_failed.
+        const rsMatch = /^RS(256|384|512)$/.exec(alg);
+        if (!rsMatch) return { valid: false, claims, reason: `unsupported_alg:${alg}` };
+        const verifier = crypto.createVerify(`RSA-SHA${rsMatch[1]}`);
         verifier.update(`${h}.${p}`);
         const ok = verifier.verify(pub, Buffer.from(sig.replace(/-/g, '+').replace(/_/g, '/'), 'base64'));
         if (!ok) return { valid: false, claims, reason: 'signature_invalid' };
@@ -223,6 +257,12 @@ async function runPlanningOnSubstrate({
   guardrailSpec,
   secrets = {},
   llm,
+  runtime,
+  agentRuntime,
+  workflowPattern,
+  workflow,
+  stage,
+  settings,
   traceContext = {},
   transport,
   applyManifest,
@@ -276,6 +316,17 @@ async function runPlanningOnSubstrate({
       actorName,
       actorJwt,
       prompt,
+      organizationId,
+      projectId,
+      projectName,
+      llm,
+      guardrailSpec,
+      runtime,
+      agentRuntime,
+      workflowPattern,
+      workflow,
+      stage,
+      settings,
       traceContext: { ...traceContext, organizationId },
       fetchImpl,
     });

@@ -35,7 +35,12 @@ Substrate; every other stage falls through to `executeAgentRuntime`.
   (honoring `substrateActorTtlMs`).
 - **Data plane**: the prompt is POSTed to `substrateIngressUrl` with header
   `ate-target-actor: <atespace>/<actor>` + `authorization: Bearer <actorJwt>`;
-  the atenet-router forwards to the planner image's `POST /internal/plan/run`.
+  the atenet-router forwards to the planner image's actor-mode route
+  `POST /internal/plan/run` (`services/planner/src/routes/substrate-actor.js`),
+  which verifies the actor JWT against the ate-idp-server JWKS and runs
+  planning in-process via `executeAgentRuntime`. Mounted only when
+  `SUBSTRATE_ACTOR_MODE=true` + `SUBSTRATE_JWKS_URL` are set, so a normal
+  planner pod 404s on this path.
 
 ## 3. Managed authentication / credential injection
 
@@ -116,14 +121,25 @@ pool exists, then apply the module's stable infra pieces.
 
 - `packages/shared-core/src/agent/substrate.js` — ateapi gRPC client (control plane).
 - `packages/shared-core/src/agent/substrate-runner.js` — credential bridge + per-run
-  actor lifecycle (`runPlanningOnSubstrate`).
+  actor lifecycle (`runPlanningOnSubstrate`) + `verifyActorJwt`.
 - `packages/shared-core/src/agent/grpc-wire.js` — protobuf primitives shared with OpenShell.
 - `packages/shared-core/src/secrets/s2s-resolver.js` — single managed secret source.
 - `packages/shared-core/src/guardrails/{spec,consumers}.js` — unified spec + per-pattern renderers.
 - `packages/shared/src/agent/pattern-router.js` — `dispatchPlanning` branch (substrate|openshell|cloudrun).
 - `services/planner/src/routes/agent.js` — `/agent/substrate/*` and `/agent/guardrail` routes.
+- `services/planner/src/routes/substrate-actor.js` — actor-side `POST /internal/plan/run` (only mounted when `SUBSTRATE_ACTOR_MODE=true`).
+- `services/planner/src/jwks.js` — cached JWKS fetcher used by the actor route.
 - `deploy/gcp/terraform-openshell-gke/substrate.tf` — pool, namespaces, snapshots, ingress.
 - `public/js/views/settings.js` — pattern selector + guardrails panel.
+
+### Actor-mode env vars (set on the substrate ActorTemplate's container)
+
+| Var | Purpose |
+|---|---|
+| `SUBSTRATE_ACTOR_MODE=true` | Mounts the `/internal/plan/run` route; a normal planner pod does not register it. |
+| `SUBSTRATE_JWKS_URL=https://<ate-idp-server>/jwks.json` | Required. Without it the route returns 503 and refuses every request. |
+| `SUBSTRATE_ACTOR_JWT_AUDIENCE` | Defaults to `substrate-router`; must match the `aud` the runner mints. |
+| `SUBSTRATE_TRUST_DOMAIN` | Defaults to `cluster.local`; the SPIFFE trust domain the router forwards under. |
 
 ## 7. CI
 
