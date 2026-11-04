@@ -4,32 +4,35 @@
 
 ## Overview
 
-Community of 16 nodes
+Community of 19 nodes
 
-- **Size**: 16 nodes
-- **Cohesion**: 0.1371
+- **Size**: 19 nodes
+- **Cohesion**: 0.1422
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| createStoreHydrationMiddleware | Function | ./services/billing/src/app.js | 15-19 |
-| createApp | Function | ./services/billing/src/app.js | 21-76 |
-| listen | Function | ./services/billing/src/app.test.js | 14-25 |
-| test:billing service health probes@L27 | Test | ./services/billing/src/app.test.js | 27-36 |
-| test:billing standalone UI dashboard serves HTML@L38 | Test | ./services/billing/src/app.test.js | 38-48 |
-| test:billing routes hydrate the store before reading it; probes do not@L54 | Test | ./services/billing/src/app.test.js | 54-70 |
-| test:a store that will not hydrate fails closed instead of reading stale state@L72 | Test | ./services/billing/src/app.test.js | 72-82 |
-| test:reads scope to the injected org and report isAdmin from the injected role@L84 | Test | ./services/billing/src/app.test.js | 84-97 |
-| test:a client-controlled org header is ignored without the trusted billing header@L99 | Test | ./services/billing/src/app.test.js | 99-111 |
-| test:mutations require the admin role on the trusted header@L113 | Test | ./services/billing/src/app.test.js | 113-135 |
-| test:billing /pubsub/billing-tick runs sweep@L159 | Test | ./services/billing/src/app.test.js | 159-172 |
-| test:cashfree order flow credits the wallet once and stays idempotent@L174 | Test | ./services/billing/src/app.test.js | 174-207 |
-| test:cashfree mandate creation fails closed when Cashfree is not configured@L209 | Test | ./services/billing/src/app.test.js | 209-228 |
-| test:cashfree webhook rejects a bad signature in production and credits a good one@L230 | Test | ./services/billing/src/app.test.js | 230-285 |
+| createStoreHydrationMiddleware | Function | ./services/billing/src/app.js | 17-21 |
+| createApp | Function | ./services/billing/src/app.js | 23-102 |
+| listen | Function | ./services/billing/src/app.test.js | 24-35 |
+| test:billing service health probes@L37 | Test | ./services/billing/src/app.test.js | 37-46 |
+| test:billing standalone UI dashboard serves HTML@L48 | Test | ./services/billing/src/app.test.js | 48-58 |
+| test:billing routes hydrate the store before reading it; probes do not@L64 | Test | ./services/billing/src/app.test.js | 64-80 |
+| test:a store that will not hydrate fails closed instead of reading stale state@L82 | Test | ./services/billing/src/app.test.js | 82-92 |
+| test:reads scope to the injected org and report isAdmin from the injected role@L94 | Test | ./services/billing/src/app.test.js | 94-107 |
+| test:a client-controlled org header is ignored without the trusted billing header@L109 | Test | ./services/billing/src/app.test.js | 109-121 |
+| test:mutations require the admin role on the trusted header@L123 | Test | ./services/billing/src/app.test.js | 123-145 |
+| test:billing /pubsub/billing-tick runs sweep@L169 | Test | ./services/billing/src/app.test.js | 169-182 |
+| test:cashfree order flow credits the wallet once and stays idempotent@L184 | Test | ./services/billing/src/app.test.js | 184-217 |
+| test:cashfree mandate creation fails closed when Cashfree is not configured@L219 | Test | ./services/billing/src/app.test.js | 219-238 |
+| test:cashfree webhook rejects a bad signature in production and credits a good one@L240 | Test | ./services/billing/src/app.test.js | 240-295 |
+| test:billing recharge tick launches the Cloud Run Job instead of sweeping in-request@L301 | Test | ./services/billing/src/app.test.js | 301-325 |
+| test:billing recharge tick runs the sweep in-process when no Job is configured@L327 | Test | ./services/billing/src/app.test.js | 327-349 |
+| test:billing recharge tick reports a launch failure as 500 so the scheduler retries@L351 | Test | ./services/billing/src/app.test.js | 351-365 |
 | start | Function | ./services/billing/src/index.js | 7-15 |
-| renderDashboardHtml | Function | ./services/billing/src/ui.js | 3-357 |
+| renderDashboardHtml | Function | ./services/billing/src/ui.js | 3-358 |
 
 ## Execution Flows
 
@@ -39,36 +42,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (25 edge(s))
-- `fetch` (19 edge(s))
-- `json` (15 edge(s))
-- `close` (12 edge(s))
+- `equal` (32 edge(s))
+- `fetch` (22 edge(s))
+- `json` (21 edge(s))
+- `close` (15 edge(s))
+- `stringify` (10 edge(s))
 - `Number` (10 edge(s))
-- `stringify` (9 edge(s))
 - `get` (5 edge(s))
+- `status` (5 edge(s))
+- `match` (5 edge(s))
 - `await` (5 edge(s))
 - `use` (4 edge(s))
+- `info` (4 edge(s))
 - `ok` (4 edge(s))
 - `toFixed` (4 edge(s))
-- `match` (3 edge(s))
-- `getBillingAccount` (3 edge(s))
-- `info` (2 edge(s))
-- `status` (2 edge(s))
+- `deepEqual` (3 edge(s))
 
 ### Incoming
 
-- `equal` (25 edge(s))
-- `fetch` (19 edge(s))
-- `./services/billing/src/app.test.js` (12 edge(s))
-- `close` (11 edge(s))
-- `json` (10 edge(s))
+- `equal` (32 edge(s))
+- `fetch` (22 edge(s))
+- `./services/billing/src/app.test.js` (15 edge(s))
+- `close` (14 edge(s))
+- `json` (13 edge(s))
 - `stringify` (8 edge(s))
+- `match` (5 edge(s))
 - `await` (5 edge(s))
 - `./services/billing/src/index.js` (4 edge(s))
 - `ok` (4 edge(s))
 - `Number` (4 edge(s))
 - `./services/billing/src/app.js` (3 edge(s))
-- `match` (3 edge(s))
+- `deepEqual` (3 edge(s))
 - `getBillingAccount` (3 edge(s))
-- `./services/billing/src/app.test.js::test:config update with percentage mode keeps Cashfree mandate fields@L137` (2 edge(s))
-- `deepEqual` (2 edge(s))
+- `./services/billing/src/app.test.js::test:config update with percentage mode keeps Cashfree mandate fields@L147` (2 edge(s))

@@ -256,6 +256,45 @@ publish an initial version by running the **Publish Skills Bundle** workflow
 `packages/shared-core/src/agent/skills/**`. No `SKILLS_BUCKET` repo variable is
 required — the workflow derives the name from `GCP_PROJECT_ID`.
 
+## Laya model registry (offline checkpoints, GCS + gcsfuse)
+
+The **laya-inference** service (`deploy/gcp/Dockerfile.laya-inference` = pip
+`laya[serve]`, `laya-serve` on :8000, `POST /v1/systemone`, `GET /health`) serves
+its Hugging Face checkpoints **fully offline**: no weights are baked into the
+image and the container never reaches the Hub. Weights come from a versioned
+GCS bundle mounted read-only, mirroring the skills registry above.
+
+- **CI publish** — `.github/workflows/publish-laya-models.yml` (`workflow_dispatch`,
+  `version` + optional `repos` inputs) runs `hf download` for
+  `convaiinnovations/laya` (english), `laya-multilingual`, and
+  `laya-typed-decisions` into a hub cache, **de-references the cache symlinks**
+  (gcsfuse has none — snapshot paths become real files), records the resolved
+  commit SHAs in `laya-models-manifest.json`, and `gsutil rsync`es everything to
+  `gs://<bucket>/<version>/`. `<bucket>` derives from `GCP_PROJECT_ID`
+  (`<project_id>-aifleet-laya-models`), same as Terraform.
+- **Mount** — `deploy/gcp/terraform/laya_models.tf` **CREATES and owns** the
+  bucket (uniform access, versioning, public-access prevention enforced;
+  `var.laya_models_enabled` toggle, `var.laya_models_bucket_name` override,
+  `var.laya_models_publisher_member` grants the CI deployer `objectAdmin`).
+  `laya_inference.tf` mounts it read-only at `/models` (gen2 gcsfuse volume) and
+  sets `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, and the version pin
+  `HF_HOME=/models/<var.laya_model_version>`. The laya SA gets `objectViewer`.
+- **Sizing** — 2 CPU / 2Gi (`var.laya_cpu`/`var.laya_memory`): all three
+  checkpoints preload (`LAYA_PRELOAD=1`, `LAYA_MODELS=english,multilingual,
+  typed-decisions`, `LAYA_MAX_LOADED=3`) for auto routing; thread caps
+  (`LAYA_THREADS`/`OMP`/`MKL`) follow `var.laya_cpu`. 1Gi OOMs on the 322M+
+  checkpoints.
+- **Rollout** — publish a new `vN` prefix (existing pinned deployments are
+  untouched), then bump **`laya_model_version`** (Terraform var /
+  `gh variable set LAYA_MODEL_VERSION`) and apply. Roll back by pinning the old
+  version again.
+
+**Cut a new model bundle**
+
+1. Run **Publish Laya Model Bundle** (`workflow_dispatch`, e.g. `version = v2`).
+2. Note the commit SHAs in the printed/uploaded `laya-models-manifest.json`.
+3. Bump `laya_model_version` to `v2` and apply. `v1` keeps working until then.
+
 ## Roles & access control (RBAC)
 
 Authorization is **role-based** and enforced **server-side on every `/api` route**

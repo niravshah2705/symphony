@@ -4,34 +4,27 @@
 
 ## Overview
 
-Community of 18 nodes
+Community of 11 nodes
 
-- **Size**: 18 nodes
-- **Cohesion**: 0.1300
+- **Size**: 11 nodes
+- **Cohesion**: 0.1063
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| workspace | Function | ./packages/shared/src/agent/runtimes.test.js | 27-31 |
-| chatgptCodexLlm | Function | ./packages/shared/src/agent/runtimes.test.js | 33-48 |
-| test:Codex SDK ChatGPT backend uses an isolated official auth file and removes it@L258 | Test | ./packages/shared/src/agent/runtimes.test.js | 258-319 |
-| test:runtime/provider mismatches fall back to traced DeepAgent execution@L434 | Test | ./packages/shared/src/agent/runtimes.test.js | 434-460 |
-| test:matching SDK providers still fail closed when authentication is unavailable@L462 | Test | ./packages/shared/src/agent/runtimes.test.js | 462-474 |
-| test:RubricMiddleware re-runs the SAME SDK runtime (Codex) on needs_revision@L501 | Test | ./packages/shared/src/agent/runtimes.test.js | 501-537 |
-| test:Antigravity SDK falls back to models.generateContent when interactions is unavailable@L680 | Test | ./packages/shared/src/agent/runtimes.test.js | 680-712 |
-| test:Antigravity SDK fails closed when the Gemini API key is unavailable@L714 | Test | ./packages/shared/src/agent/runtimes.test.js | 714-726 |
-| test:RubricMiddleware re-runs the SAME SDK runtime (Antigravity) on needs_revision@L728 | Test | ./packages/shared/src/agent/runtimes.test.js | 728-768 |
-| test:Antigravity SDK resolves the key from settings (ctx) and falls back to env/store@L770 | Test | ./packages/shared/src/agent/runtimes.test.js | 770-812 |
-| fakeQoderSdk | Function | ./packages/shared/src/agent/runtimes.test.js | 831-847 |
-| qoderResultMessage | Function | ./packages/shared/src/agent/runtimes.test.js | 849-859 |
-| test:Qoder SDK adapter returns the contract shape over a run-scoped daemon@L861 | Test | ./packages/shared/src/agent/runtimes.test.js | 861-927 |
-| test:Qoder SDK confines tools to the workspace and denies shell while it holds the PAT@L929 | Test | ./packages/shared/src/agent/runtimes.test.js | 929-947 |
-| test:Qoder SDK fails closed without a token or a result message@L949 | Test | ./packages/shared/src/agent/runtimes.test.js | 949-986 |
-| test:Qoder executor rejects a non-Qoder model slot before loading the SDK@L988 | Test | ./packages/shared/src/agent/runtimes.test.js | 988-995 |
-| test:Claude permission guard denies credential-bearing shell and path escapes@L1018 | Test | ./packages/shared/src/agent/runtimes.test.js | 1018-1027 |
-| test:Qoder permission guard denies shell and symlink escapes out of the workspace@L1029 | Test | ./packages/shared/src/agent/runtimes.test.js | 1029-1042 |
+| workspace | Function | ./packages/shared/src/agent/runtimes.test.js | 26-30 |
+| chatgptCodexLlm | Function | ./packages/shared/src/agent/runtimes.test.js | 32-47 |
+| test:Codex SDK ChatGPT backend uses an isolated official auth file and removes it@L254 | Test | ./packages/shared/src/agent/runtimes.test.js | 254-315 |
+| test:runtime/provider mismatches fall back to traced DeepAgent execution@L430 | Test | ./packages/shared/src/agent/runtimes.test.js | 430-456 |
+| test:matching SDK providers still fail closed when authentication is unavailable@L458 | Test | ./packages/shared/src/agent/runtimes.test.js | 458-470 |
+| test:RubricMiddleware re-runs the SAME SDK runtime (Codex) on needs_revision@L497 | Test | ./packages/shared/src/agent/runtimes.test.js | 497-533 |
+| test:Antigravity SDK falls back to models.generateContent when interactions is unavailable@L676 | Test | ./packages/shared/src/agent/runtimes.test.js | 676-708 |
+| test:Antigravity SDK fails closed when the Gemini API key is unavailable@L710 | Test | ./packages/shared/src/agent/runtimes.test.js | 710-722 |
+| test:RubricMiddleware re-runs the SAME SDK runtime (Antigravity) on needs_revision@L724 | Test | ./packages/shared/src/agent/runtimes.test.js | 724-764 |
+| test:Antigravity SDK resolves the key from settings (ctx) and falls back to env/store@L766 | Test | ./packages/shared/src/agent/runtimes.test.js | 766-808 |
+| test:Claude permission guard denies credential-bearing shell and path escapes@L831 | Test | ./packages/shared/src/agent/runtimes.test.js | 831-840 |
 
 ## Execution Flows
 
@@ -41,36 +34,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (80 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (14 edge(s))
-- `join` (12 edge(s))
-- `guard` (12 edge(s))
-- `rejects` (6 edge(s))
-- `match` (5 edge(s))
-- `deepEqual` (4 edge(s))
-- `includes` (4 edge(s))
-- `hasOwn` (3 edge(s))
-- `./packages/shared/src/agent/runtimes.test.js::test:Codex SDK removes isolated ChatGPT auth when execution fails@L321` (2 edge(s))
-- `symlinkSync` (2 edge(s))
+- `equal` (44 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (9 edge(s))
+- `join` (6 edge(s))
+- `guard` (4 edge(s))
+- `match` (3 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js::test:Codex SDK removes isolated ChatGPT auth when execution fails@L317` (2 edge(s))
+- `rejects` (2 edge(s))
+- `hasOwn` (2 edge(s))
 - `existsSync` (2 edge(s))
-- `./packages/shared/src/agent/runtimes.js::qoderPermissionGuard` (2 edge(s))
-- `openGuard` (2 edge(s))
 - `now` (1 edge(s))
+- `symlinkSync` (1 edge(s))
+- `./packages/shared/src/agent/runtimes.js::claudePermissionGuard` (1 edge(s))
+- `deepEqual` (1 edge(s))
+- `includes` (1 edge(s))
+- `stringify` (1 edge(s))
 
 ### Incoming
 
-- `equal` (80 edge(s))
-- `./packages/shared/src/agent/runtimes.test.js` (18 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (14 edge(s))
-- `guard` (12 edge(s))
-- `join` (11 edge(s))
-- `rejects` (6 edge(s))
-- `match` (5 edge(s))
-- `deepEqual` (4 edge(s))
-- `includes` (4 edge(s))
-- `hasOwn` (3 edge(s))
-- `./packages/shared/src/agent/runtimes.test.js::test:Codex SDK removes isolated ChatGPT auth when execution fails@L321` (2 edge(s))
-- `symlinkSync` (2 edge(s))
+- `equal` (44 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js` (11 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (9 edge(s))
+- `join` (5 edge(s))
+- `guard` (4 edge(s))
+- `match` (3 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js::test:Codex SDK removes isolated ChatGPT auth when execution fails@L317` (2 edge(s))
+- `rejects` (2 edge(s))
+- `hasOwn` (2 edge(s))
 - `existsSync` (2 edge(s))
-- `./packages/shared/src/agent/runtimes.js::qoderPermissionGuard` (2 edge(s))
-- `openGuard` (2 edge(s))
+- `symlinkSync` (1 edge(s))
+- `./packages/shared/src/agent/runtimes.js::claudePermissionGuard` (1 edge(s))
+- `deepEqual` (1 edge(s))
+- `includes` (1 edge(s))
+- `stringify` (1 edge(s))

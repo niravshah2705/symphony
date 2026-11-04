@@ -70,7 +70,7 @@ Community of 86 nodes
 ## Execution Flows
 
 - **resume** (criticality: 0.67, depth: 8)
-- **startScheduler** (criticality: 0.66, depth: 6)
+- **startScheduler** (criticality: 0.65, depth: 5)
 
 ## Dependencies
 

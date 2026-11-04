@@ -1,6 +1,8 @@
 # -----------------------------------------------------------------------------
 # Dedicated Laya decision model inference service (Cloud Run v2).
 # Internal-only, IAM-gated System 1 non-autoregressive decision model.
+# Image = pip `laya[serve]` (laya-serve on :8000, POST /v1/systemone, GET /health),
+# served fully offline from the /models gcsfuse mount (laya_models.tf).
 # -----------------------------------------------------------------------------
 
 resource "google_service_account" "laya_inference" {
@@ -28,12 +30,74 @@ resource "google_cloud_run_v2_service" "laya" {
       max_instance_count = var.laya_max_instances
     }
 
+    # Pre-downloaded Hugging Face hub cache (laya_models.tf), mounted read-only
+    # at /models. The service pins a bundle via HF_HOME=/models/<version>.
+    dynamic "volumes" {
+      for_each = var.laya_models_enabled ? [1] : []
+      content {
+        name = "laya-models"
+        gcs {
+          bucket    = google_storage_bucket.laya_models[0].name
+          read_only = true
+        }
+      }
+    }
+
     containers {
       name  = "app"
       image = local.laya_image
 
       ports {
-        container_port = 8080
+        container_port = 8000
+      }
+
+      # Fully-offline serving of the pip `laya[serve]` image: weights come from
+      # the /models GCS mount, never from the Hub. All three checkpoints are
+      # preloaded for auto routing; thread caps match the 2-CPU limit.
+      # NOTE: never add env name = "PORT" here (reserved by Cloud Run).
+      env {
+        name  = "HF_HUB_OFFLINE"
+        value = "1"
+      }
+      env {
+        name  = "TRANSFORMERS_OFFLINE"
+        value = "1"
+      }
+      env {
+        name  = "HF_HOME"
+        value = "/models/${var.laya_model_version}"
+      }
+      env {
+        name  = "LAYA_PRELOAD"
+        value = "1"
+      }
+      env {
+        name  = "LAYA_MODELS"
+        value = "english,multilingual,typed-decisions"
+      }
+      env {
+        name  = "LAYA_MAX_LOADED"
+        value = "3"
+      }
+      env {
+        name  = "LAYA_DEVICE"
+        value = "cpu"
+      }
+      env {
+        name  = "LAYA_THREADS"
+        value = var.laya_cpu
+      }
+      env {
+        name  = "OMP_NUM_THREADS"
+        value = var.laya_cpu
+      }
+      env {
+        name  = "MKL_NUM_THREADS"
+        value = var.laya_cpu
+      }
+      env {
+        name  = "TORCH_NUM_THREADS"
+        value = var.laya_cpu
       }
 
       resources {
@@ -45,20 +109,31 @@ resource "google_cloud_run_v2_service" "laya" {
         startup_cpu_boost = true
       }
 
+      dynamic "volume_mounts" {
+        for_each = var.laya_models_enabled ? [1] : []
+        content {
+          name       = "laya-models"
+          mount_path = "/models"
+        }
+      }
+
+      # GET /health is laya-serve's unauthenticated liveness route. Startup
+      # budget is generous: with LAYA_PRELOAD=1 the three checkpoints are built
+      # on the CPU before the server starts listening.
       startup_probe {
         http_get {
-          path = "/healthz"
-          port = 8080
+          path = "/health"
+          port = 8000
         }
         period_seconds    = 5
         timeout_seconds   = 2
-        failure_threshold = 24
+        failure_threshold = 60
       }
 
       liveness_probe {
         http_get {
-          path = "/healthz"
-          port = 8080
+          path = "/health"
+          port = 8000
         }
         period_seconds    = 30
         timeout_seconds   = 3
@@ -67,7 +142,10 @@ resource "google_cloud_run_v2_service" "laya" {
     }
   }
 
-  depends_on = [google_project_service.services]
+  depends_on = [
+    google_project_service.services,
+    google_storage_bucket.laya_models,
+  ]
 }
 
 # Grant Invoker only to internal caller service accounts (planner, coder, gateway)
