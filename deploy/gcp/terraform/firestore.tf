@@ -103,3 +103,52 @@ resource "google_firestore_index" "attachment_chunks_by_conversation_and_embeddi
 
   depends_on = [google_firestore_database.default]
 }
+
+# Composite index for the Secret Share "My shares" query
+# (secrets/app.mjs listShares): equality on ownerUid + range on expiresAt — the
+# expiresAt filter is mandated by the read rule in firestore.rules. Two
+# where() clauses on different fields are not answerable by single-field
+# indexes, so this index is required or the query fails FAILED_PRECONDITION.
+resource "google_firestore_index" "secret_shares_by_owner_expiry" {
+  project     = var.project_id
+  database    = google_firestore_database.default.name
+  collection  = "secret_shares"
+  query_scope = "COLLECTION"
+
+  fields {
+    field_path = "ownerUid"
+    order      = "ASCENDING"
+  }
+  fields {
+    field_path = "expiresAt"
+    order      = "ASCENDING"
+  }
+
+  timeouts {
+    create = "30m"
+    delete = "30m"
+  }
+
+  lifecycle {
+    ignore_changes = [fields]
+  }
+
+  depends_on = [google_firestore_database.default]
+}
+
+# TTL policy on the share expiry timestamp (firestore.rules enforces the same
+# deadline on reads). An empty ttl_config block declares the policy on the
+# field — the provider computes `state` once the backend activates it, and
+# Google's TTL cleaner then purges docs past `expiresAt` automatically. Rules
+# refuse expired reads even before the cleaner runs.
+resource "google_firestore_field" "secret_shares_expires_at_ttl" {
+  provider   = google-beta
+  project    = var.project_id
+  database   = google_firestore_database.default.name
+  collection = "secret_shares"
+  field      = "expiresAt"
+
+  ttl_config {}
+
+  depends_on = [google_firestore_database.default]
+}

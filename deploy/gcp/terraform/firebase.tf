@@ -92,6 +92,34 @@ resource "google_firebase_hosting_custom_domain" "marketing" {
   depends_on = [google_firebase_hosting_site.marketing]
 }
 
+# -----------------------------------------------------------------------------
+# Secret Share site for secrets.archagentix.com — a third Hosting site in this
+# project (source tree secrets/, target "secrets", published by
+# .github/workflows/deploy-secrets.yml alongside firestore.rules). Fully static;
+# content is client-side encrypted and expires per the rules.
+# -----------------------------------------------------------------------------
+resource "google_firebase_hosting_site" "secrets" {
+  provider = google-beta
+  project  = var.project_id
+  site_id  = local.secrets_site_id
+
+  depends_on = [google_firebase_project.default]
+}
+
+resource "google_firebase_hosting_custom_domain" "secrets" {
+  count = length(local.secrets_domains)
+
+  provider = google-beta
+
+  project       = var.project_id
+  site_id       = google_firebase_hosting_site.secrets.site_id
+  custom_domain = local.secrets_domains[count.index]
+
+  wait_dns_verification = false
+
+  depends_on = [google_firebase_hosting_site.secrets]
+}
+
 # Identity Platform (Firebase Authentication) project config. Manages the
 # authorized domains that sign-in popups are allowed to run on. The list mirrors
 # the live config (incl. legacy GCS origins from before the Firebase-Hosting move).
@@ -105,7 +133,7 @@ resource "google_identity_platform_config" "default" {
     "${var.project_id}.web.app",
     "storage.googleapis.com",
     "${var.spa_bucket_name}.storage.googleapis.com",
-  ], local.custom_domains, local.marketing_domains)
+  ], local.custom_domains, local.marketing_domains, local.secrets_domains)
 
   depends_on = [google_project_service.services]
 }

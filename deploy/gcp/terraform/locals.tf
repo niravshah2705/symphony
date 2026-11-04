@@ -139,4 +139,13 @@ locals {
   # local.custom_domains (that list binds domains to the DEFAULT/app site).
   marketing_site_id = "${var.project_id}-marketing"
   marketing_domains = var.marketing_custom_domain == "" ? [] : [var.marketing_custom_domain]
+
+  # Secret Share site (secrets.archagentix.com) — a third Hosting site in this
+  # project, published by .github/workflows/deploy-secrets.yml via the hosting
+  # target "secrets" (firebase.json target -> .firebaserc binds the site id).
+  # Static zero-knowledge share pages; its domain joins the gateway CORS
+  # allowlist and Identity Platform authorized domains so the optional
+  # "Sign in with ArchAgentix" flow works on that origin.
+  secrets_site_id = "${var.project_id}-secrets"
+  secrets_domains = var.secrets_custom_domain == "" ? [] : [var.secrets_custom_domain]
 }

@@ -42,6 +42,7 @@ jobs:
           "services/proxy/src/**/*.test.js"
           "services/billing/src/**/*.test.js"
           "deploy/gcp/**/*.test.js"
+          "secrets/*.test.mjs"
 
   e2e:
     name: Playwright E2E

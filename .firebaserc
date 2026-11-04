@@ -10,6 +10,9 @@
         ],
         "www": [
           "adlc-9e72f-marketing"
+        ],
+        "secrets": [
+          "adlc-9e72f-secrets"
         ]
       }
     }

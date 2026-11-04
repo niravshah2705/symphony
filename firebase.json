@@ -1,4 +1,7 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "hosting": [
     {
       "target": "app",
@@ -126,6 +129,38 @@
         },
         {
           "source": "**/*.@(txt|xml)",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        }
+      ]
+    },
+    {
+      "target": "secrets",
+      "public": "secrets",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "headers": [
+        {
+          "source": "/",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-store" },
+            { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+            { "key": "X-Content-Type-Options", "value": "nosniff" },
+            { "key": "Referrer-Policy", "value": "no-referrer" }
+          ]
+        },
+        {
+          "source": "/config.js",
+          "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+        },
+        {
+          "source": "/**",
+          "headers": [
+            { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+            { "key": "X-Content-Type-Options", "value": "nosniff" },
+            { "key": "Referrer-Policy", "value": "no-referrer" }
+          ]
+        },
+        {
+          "source": "/**/*.@(css|js|mjs)",
           "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
         }
       ]

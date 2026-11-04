@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 213 nodes
+Community of 214 nodes
 
-- **Size**: 213 nodes
-- **Cohesion**: 0.0615
+- **Size**: 214 nodes
+- **Cohesion**: 0.0614
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 213 nodes
 | test:resolveToken reads ADLC_TOKEN from the environment only@L44 | Test | ./packages/cli/src/client.test.js | 44-51 |
 | test:request sends a bearer Authorization header when a token is set@L53 | Test | ./packages/cli/src/client.test.js | 53-64 |
 
-*... and 163 more members.*
+*... and 164 more members.*
 
 ## Execution Flows
 
@@ -77,8 +77,8 @@ Community of 213 nodes
 
 ### Outgoing
 
-- `equal` (291 edge(s))
-- `ok` (181 edge(s))
+- `equal` (292 edge(s))
+- `ok` (182 edge(s))
 - `expect` (175 edge(s))
 - `match` (154 edge(s))
 - `locator` (84 edge(s))
@@ -95,8 +95,8 @@ Community of 213 nodes
 
 ### Incoming
 
-- `equal` (291 edge(s))
-- `ok` (181 edge(s))
+- `equal` (292 edge(s))
+- `ok` (182 edge(s))
 - `expect` (175 edge(s))
 - `match` (154 edge(s))
 - `locator` (84 edge(s))
