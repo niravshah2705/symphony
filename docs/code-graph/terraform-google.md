@@ -7,7 +7,7 @@
 Community of 461 nodes
 
 - **Size**: 461 nodes
-- **Cohesion**: 0.7554
+- **Cohesion**: 0.7556
 - **Dominant Language**: hcl
 
 ## Members

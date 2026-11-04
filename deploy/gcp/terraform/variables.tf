@@ -212,8 +212,8 @@ variable "laya_cpu" {
 
 variable "laya_memory" {
   type        = string
-  description = "Memory allocated to Laya container. 2Gi covers preloading the english + multilingual + typed-decisions checkpoints (322M-421M params each) at LAYA_MAX_LOADED=3; 1Gi OOMs."
-  default     = "2Gi"
+  description = "Memory allocated to Laya container. The three preloaded fp16 checkpoints total ~2.3GB of weights (english ~0.84GB, multilingual ~0.64GB, typed-decisions ~0.85GB) plus ~0.4GB torch/runtime overhead — 2Gi OOMs during preload, so the floor is 4Gi."
+  default     = "4Gi"
 }
 
 variable "laya_min_instances" {
@@ -905,7 +905,7 @@ variable "laya_models_bucket_force_destroy" {
 
 variable "laya_model_version" {
   type        = string
-  description = "Laya checkpoint bundle version the service PINS (HF_HOME=/models/<version> on the gcsfuse mount). Must match a published `<version>/` prefix created by .github/workflows/publish-laya-models.yml. Bumping the published bundle to a new version does NOT affect a deployment until this is bumped."
+  description = "Laya checkpoint bundle version the service PINS (HF_HUB_CACHE=/models/<version> on the gcsfuse mount). Must match a published `<version>/` prefix created by .github/workflows/publish-laya-models.yml. Bumping the published bundle to a new version does NOT affect a deployment until this is bumped."
   default     = "v1"
 }
 

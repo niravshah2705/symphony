@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 # CPU inference; checkpoints are NOT baked in — the HF hub cache is mounted
 # read-only from GCS (see deploy/gcp/terraform/laya_models.tf + laya_inference.tf).
 # LAYA_PRELOAD builds all served checkpoints before listening; device/thread and
-# offline-HF env (HF_HOME, HF_HUB_OFFLINE) are set in Terraform so they can be
+# offline-HF env (HF_HUB_CACHE, HF_HUB_OFFLINE) are set in Terraform so they can be
 # retuned without a rebuild.
 ENV LAYA_DEVICE=cpu \
     LAYA_PRELOAD=1
