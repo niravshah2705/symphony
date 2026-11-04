@@ -163,3 +163,56 @@ variable "deletion_protection" {
   type        = bool
   default     = true
 }
+
+# ---------------------------------------------------------------------------
+# Agent Substrate (optional second execution substrate; reuses this cluster)
+# ---------------------------------------------------------------------------
+
+variable "substrate_enabled" {
+  description = "Provision the Agent Substrate worker pool, namespaces, snapshot storage and actor ingress. Default false keeps the existing OpenShell-only plan empty. The ate-system control plane is installed by the upstream substrate installer (see docs/SUBSTRATE_INTEGRATION.md), not by this config."
+  type        = bool
+  default     = false
+}
+
+variable "substrate_node_pool_name" {
+  description = "Dedicated node pool for Substrate worker pods (isolated from OpenShell tenants)"
+  type        = string
+  default     = "substrate-worker-pool"
+}
+
+variable "substrate_machine_type" {
+  description = "Machine type for Substrate worker nodes (resume wants headroom memory)"
+  type        = string
+  default     = "e2-standard-4"
+}
+
+variable "substrate_min_nodes" {
+  description = "Minimum Substrate worker nodes when started (parked to 0 by the power workflow when stopped)"
+  type        = number
+  default     = 1
+}
+
+variable "substrate_max_nodes" {
+  description = "Maximum Substrate worker nodes"
+  type        = number
+  default     = 6
+}
+
+variable "substrate_ingress_hostname" {
+  description = "Public hostname fronting the atenet-router actor data plane (substrateIngressUrl). Empty reuses the openshell static IP only."
+  type        = string
+  default     = ""
+}
+
+variable "substrate_snapshot_storage_class" {
+  description = "StorageClass backing atelet actor snapshots (PersistentVolumes)"
+  type        = string
+  default     = "substrate-snapshot-pd"
+}
+
+variable "substrate_credentials_namespace" {
+  description = "Namespace holding the credential-provider Secrets the ate-space may read (raw values never enter the actor)"
+  type        = string
+  default     = "substrate-credentials"
+}
+

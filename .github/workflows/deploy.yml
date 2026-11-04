@@ -642,6 +642,8 @@ jobs:
 
       - name: Read live autoscaling bounds
         id: bounds
+        env:
+          SUBSTRATE_NODE_POOL: ${{ vars.SUBSTRATE_NODE_POOL }}
         run: |
           set -euo pipefail
           POOL_JSON="$(gcloud container node-pools describe "$NODE_POOL" \
@@ -654,6 +656,21 @@ jobs:
           echo "min=$MIN" >> "$GITHUB_OUTPUT"
           echo "max=$MAX" >> "$GITHUB_OUTPUT"
           echo "Live node pool bounds: min=$MIN max=$MAX"
+          # The substrate worker pool is parked the same way by the power
+          # workflow; read its live bounds too so a reconcile cannot spin a
+          # stopped substrate node back up by applying the module default.
+          if [ -n "$SUBSTRATE_NODE_POOL" ]; then
+            if SPOL_JSON="$(gcloud container node-pools describe "$SUBSTRATE_NODE_POOL" \
+              --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" --format json 2>/dev/null)"; then
+              SMIN="$(jq -r '.autoscaling.minNodeCount // .initialNodeCount // 0' <<<"$SPOL_JSON")"
+              SMAX="$(jq -r '.autoscaling.maxNodeCount // .initialNodeCount // 1' <<<"$SPOL_JSON")"
+              echo "smin=$SMIN" >> "$GITHUB_OUTPUT"
+              echo "smax=$SMAX" >> "$GITHUB_OUTPUT"
+              echo "Live substrate pool bounds: min=$SMIN max=$SMAX"
+            else
+              echo "Substrate pool $SUBSTRATE_NODE_POOL not found yet; leaving module defaults in plan."
+            fi
+          fi
 
       - uses: hashicorp/setup-terraform@v4
         with:
@@ -695,9 +712,24 @@ jobs:
           MAX_NODES: ${{ steps.bounds.outputs.max }}
           CERT_EMAIL: ${{ steps.gke.outputs.cert_email }}
           WILL_APPLY: ${{ steps.gke.outputs.apply }}
+          # Agent Substrate is opt-in: unset SUBSTRATE_ENABLED leaves the module
+          # default (false) and the whole substrate.tf block stays out of plan.
+          SUBSTRATE_ENABLED: ${{ vars.SUBSTRATE_ENABLED }}
+          SUBSTRATE_INGRESS_HOSTNAME: ${{ vars.SUBSTRATE_INGRESS_HOSTNAME }}
+          SUBSTRATE_NODE_POOL: ${{ vars.SUBSTRATE_NODE_POOL }}
+          SUBSTRATE_MACHINE_TYPE: ${{ vars.SUBSTRATE_MACHINE_TYPE }}
+          SUBSTRATE_LIVE_MIN: ${{ steps.bounds.outputs.smin }}
+          SUBSTRATE_LIVE_MAX: ${{ steps.bounds.outputs.smax }}
         run: |
           set -euo pipefail
           if [ "$WILL_APPLY" = "true" ]; then MODE_LABEL="plan + apply"; else MODE_LABEL="plan only"; fi
+          substrate_args=()
+          if [ -n "$SUBSTRATE_ENABLED" ]; then substrate_args+=(-var="substrate_enabled=$SUBSTRATE_ENABLED"); fi
+          [ -n "$SUBSTRATE_INGRESS_HOSTNAME" ] && substrate_args+=(-var="substrate_ingress_hostname=$SUBSTRATE_INGRESS_HOSTNAME")
+          [ -n "$SUBSTRATE_NODE_POOL" ]        && substrate_args+=(-var="substrate_node_pool_name=$SUBSTRATE_NODE_POOL")
+          [ -n "$SUBSTRATE_MACHINE_TYPE" ]     && substrate_args+=(-var="substrate_machine_type=$SUBSTRATE_MACHINE_TYPE")
+          [ -n "$SUBSTRATE_LIVE_MIN" ]         && substrate_args+=(-var="substrate_min_nodes=$SUBSTRATE_LIVE_MIN")
+          [ -n "$SUBSTRATE_LIVE_MAX" ]         && substrate_args+=(-var="substrate_max_nodes=$SUBSTRATE_LIVE_MAX")
           terraform plan -refresh=true -input=false \
             -var="project_id=$PROJECT_ID" \
             -var="zone=$ZONE" \
@@ -706,6 +738,7 @@ jobs:
             -var="cert_email=$CERT_EMAIL" \
             -var="min_nodes=$MIN_NODES" \
             -var="max_nodes=$MAX_NODES" \
+            "${substrate_args[@]}" \
             -out=gke.tfplan
           terraform show -json gke.tfplan > gke.json
           {
