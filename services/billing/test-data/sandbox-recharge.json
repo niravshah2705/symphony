@@ -4,7 +4,8 @@
     "Dummy organizations only — no real tenant, no real mandate. Amounts are",
     "integer paise (100 paise = 1 INR). `cashfreeSubscriptionId` values are",
     "placeholders; the job test stubs the Cashfree client, so nothing here is",
-    "ever sent to sandbox.cashfree.com."
+    "ever sent to sandbox.cashfree.com. `monthlyLimitPaise` is the ceiling on",
+    "money-in for the UTC calendar month; 0 or absent means uncapped."
   ],
   "orgs": [
     {
@@ -68,6 +69,28 @@
           "thresholdPaise": 40000,
           "amountPaise": 50000,
           "cashfreeSubscriptionId": null
+        }
+      }
+    },
+    {
+      "label": "amount mode with a monthly limit smaller than the top-up (clamps)",
+      "orgId": "9d4a8e55-607f-4c93-be5f-4b5c6d7e8f9a",
+      "name": "Sandbox Capped Co",
+      "slug": "sandbox-capped-co",
+      "admins": [
+        { "user_id": "6a718293-a4b5-4d26-9f47-a8293a4b5c6d", "email": "admin@capped.sandbox.test" }
+      ],
+      "account": {
+        "initialCreditPaise": 100000,
+        "debitPaise": 88000,
+        "alertThresholdsPaise": [40000, 0],
+        "autoRecharge": {
+          "enabled": true,
+          "mode": "amount",
+          "thresholdPaise": 40000,
+          "amountPaise": 50000,
+          "monthlyLimitPaise": 20000,
+          "cashfreeSubscriptionId": "sub_sandbox_capped_dummy"
         }
       }
     }

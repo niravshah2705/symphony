@@ -166,6 +166,112 @@ test('config update with percentage mode keeps Cashfree mandate fields', async (
   }
 });
 
+// A dedicated org: the month-to-date figure is derived from the ledger, and
+// ORG's entries accumulate across the whole file.
+const CAP = 'org-test-mlimit';
+const CAP_ADMIN = { 'x-ai-fleet-billing-org-id': CAP, 'x-ai-fleet-billing-org-role': 'ORG_ADMIN' };
+
+function putCap(server, autoRecharge) {
+  return fetch(`${server.url}/api/billing/config`, {
+    method: 'PUT',
+    headers: { ...CAP_ADMIN, 'content-type': 'application/json' },
+    body: JSON.stringify({ autoRecharge }),
+  });
+}
+
+function topUp(orgId, type, amountPaise) {
+  return store.addLedgerEntry({ orgId, type, amountPaise, description: 'test top-up', meta: {} });
+}
+
+test('config persists the monthly recharge limit and both reports read month-to-date from the ledger', async () => {
+  const server = await listen(createApp());
+  try {
+    const put = await putCap(server, { enabled: true, mode: 'amount', thresholdInr: 400, amountInr: 500, monthlyLimitInr: 300 });
+    assert.equal(put.status, 200);
+    assert.equal(store.getBillingAccount(CAP).autoRecharge.monthlyLimitPaise, 30000);
+    const echoed = (await put.json()).autoRecharge;
+    assert.equal(echoed.monthlyLimitInr, 300);
+    assert.equal(echoed.rechargedThisMonthInr, 0);
+    assert.equal(echoed.monthlyLimitReached, false);
+
+    // A manual top-up counts toward the cap even though it is never blocked by it.
+    topUp(CAP, 'recharge', 20000);
+    let summary = (await (await fetch(`${server.url}/api/billing/summary`, { headers: CAP_ADMIN })).json()).autoRecharge;
+    assert.equal(summary.rechargedThisMonthInr, 200);
+    assert.equal(summary.monthlyLimitReached, false, '₹100 of room is still ≥ the ₹1 minimum charge');
+
+    topUp(CAP, 'auto_recharge', 9950);
+    summary = (await (await fetch(`${server.url}/api/billing/summary`, { headers: CAP_ADMIN })).json()).autoRecharge;
+    assert.equal(summary.rechargedThisMonthInr, 299.5);
+    assert.equal(summary.monthlyLimitReached, true, 'only 50 paise of headroom is left');
+
+    // The initial grant is not a recharge.
+    topUp(CAP, 'credit', 100000);
+    summary = (await (await fetch(`${server.url}/api/billing/summary`, { headers: CAP_ADMIN })).json()).autoRecharge;
+    assert.equal(summary.rechargedThisMonthInr, 299.5);
+  } finally {
+    await server.close();
+  }
+});
+
+test('monthlyLimitInr: absent preserves the cap, 0 uncaps, an absurd value clamps to the ceiling', async () => {
+  const server = await listen(createApp());
+  const limit = () => store.getBillingAccount(CAP).autoRecharge.monthlyLimitPaise;
+  const base = { enabled: true, mode: 'amount', thresholdInr: 400, amountInr: 500 };
+  try {
+    await putCap(server, { ...base, monthlyLimitInr: 250 });
+    assert.equal(limit(), 25000);
+
+    // A client that predates the field must not silently wipe a configured cap.
+    await putCap(server, base);
+    assert.equal(limit(), 25000);
+    await putCap(server, { ...base, monthlyLimitInr: 'not-a-number' });
+    assert.equal(limit(), 25000);
+
+    await putCap(server, { ...base, monthlyLimitInr: 999999999 });
+    assert.equal(limit(), 100000000 * 12);
+
+    await putCap(server, { ...base, monthlyLimitInr: 0 });
+    assert.equal(limit(), 0, 'explicit 0 means uncapped');
+  } finally {
+    await server.close();
+  }
+});
+
+test('saving config clears the cooldown but not the monthly limit or its month-to-date', async () => {
+  const SAVE = 'org-test-mlimit-save';
+  const SAVE_ADMIN = { 'x-ai-fleet-billing-org-id': SAVE, 'x-ai-fleet-billing-org-role': 'ORG_ADMIN' };
+  const server = await listen(createApp());
+  try {
+    topUp(SAVE, 'auto_recharge', 10000);
+    store.upsertBillingAccount(SAVE, { autoRecharge: { enabled: true, amountPaise: 50000, monthlyLimitPaise: 30000, lastRechargedAt: new Date().toISOString() } });
+
+    await fetch(`${server.url}/api/billing/config`, {
+      method: 'PUT',
+      headers: { ...SAVE_ADMIN, 'content-type': 'application/json' },
+      body: JSON.stringify({ autoRecharge: { enabled: true, mode: 'amount', thresholdInr: 400, amountInr: 500, monthlyLimitInr: 300 } }),
+    });
+
+    const account = store.getBillingAccount(SAVE);
+    assert.equal(account.autoRecharge.lastRechargedAt, null, 'a save still resets the cooldown');
+    assert.equal(account.autoRecharge.monthlyLimitPaise, 30000);
+    const summary = (await (await fetch(`${server.url}/api/billing/summary`, { headers: SAVE_ADMIN })).json()).autoRecharge;
+    assert.equal(summary.rechargedThisMonthInr, 100, 'derived from the append-only ledger, so a save cannot clear it');
+  } finally {
+    await server.close();
+  }
+});
+
+test('billing standalone UI renders the monthly limit field', async () => {
+  const server = await listen(createApp());
+  try {
+    const html = await (await fetch(`${server.url}/`)).text();
+    assert.match(html, /id="monthly-limit"/);
+  } finally {
+    await server.close();
+  }
+});
+
 test('billing /pubsub/billing-tick runs sweep', async () => {
   const server = await listen(createApp());
   try {

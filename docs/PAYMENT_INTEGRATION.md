@@ -185,11 +185,39 @@ timeout, and `max_retries=1`.
 The Job only charges an org after all of these pass, each logged and skipped (never a
 whole-run abort): Cashfree credentials configured, an `cashfreeSubscriptionId` mandate on
 file with `getSubscription` reporting ACTIVE, a positive recharge amount, the cooldown
-elapsed, balance strictly below `getThresholdPaise`. It then reads the org over S2S
+elapsed, balance strictly below `getThresholdPaise`, and the **monthly recharge limit**
+not yet spent. It then reads the org over S2S
 (`GET /api/v1/internal/orgs/{id}/billing-context`, `x-internal-token` + Cloud Run OIDC as
 `billing-sa`) for its ORG_ADMIN email recipients; a 404 (orphan account) or a zero-admin
 org is skipped without charging. Alerts are deduped by the persisted
 `lastAlertedThresholdPaise`.
+
+### Monthly recharge limit (`monthlyLimitPaise`)
+
+`autoRecharge.monthlyLimitPaise` bounds how much may be **credited** to an org in a
+month — 0 (the default, and every org that existed before the field) means uncapped.
+Three things to know before reading it as a spend control:
+
+- The window is a **UTC calendar month**, resetting at 00:00 UTC on the 1st. That is
+  deliberately different from the "Last 30 days" spend figure on the Cost screen, which
+  is a rolling window (`PERIOD_DAYS.month = 30`).
+- **Every money-in top-up counts, but only auto-recharge is blocked by it.** Both ledger
+  types — `auto_recharge` and manual `recharge` (`POST /api/billing/recharge`, the Cashfree
+  order/settlement path, the webhook) — consume the room; the one-time `credit` grant does
+  not. An admin can always top up past the limit by hand: the cap exists to bound what the
+  hourly Job may spend **without a human**, not the org's total spend.
+- A charge that would overshoot is **clamped to the remaining headroom**, not skipped —
+  except when less than ₹1 (`MIN_CHARGE_PAISE = 100`) is left, because Cashfree rejects an
+  order below that. The ledger entry records the *clamped* amount and carries
+  `meta.requestedPaise`, `meta.monthlyLimitPaise` and `meta.capApplied`, and the deterministic
+  `payment_id` includes the amount so one id can never present two different amounts.
+
+Month-to-date is **derived**, never stored: `recharge.rechargedThisMonthPaise` sums the
+append-only ledger, the same way `ledger.balanceFromLedger` derives the balance. So there is
+no month-boundary reset to get wrong, and `PUT /api/billing/config` — which clears
+`lastRechargedAt` and would otherwise re-arm the cooldown — cannot clear the cap. `GET /summary`
+and the `PUT` echo expose `monthlyLimitInr`, `rechargedThisMonthInr` and `monthlyLimitReached`;
+hitting the cap logs a warning and shows on the dashboard, and does not email anyone.
 
 The pinned `google`/`google-beta` providers (~> 6.0) have no
 `push_config.cloud_run_job` field, so a Pub/Sub subscription cannot push to a Job here —

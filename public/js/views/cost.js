@@ -339,6 +339,14 @@ function adminPanel(view, summary) {
   const arThresholdInr = el('input', { type: 'number', step: '1', value: String(ar.thresholdInr ?? 0), placeholder: 'Threshold (INR)' });
   const arThresholdPercent = el('input', { type: 'number', min: '1', max: '100', step: '1', value: String(ar.thresholdPercent ?? 20), placeholder: 'Threshold (%)' });
   const arAmount = el('input', { type: 'number', step: '1', value: String(ar.amountInr ?? 0), placeholder: 'Reload Amount (INR)' });
+  const arMonthlyLimit = el('input', { type: 'number', min: '0', step: '1', value: String(ar.monthlyLimitInr ?? 0), placeholder: '0 = uncapped' });
+
+  // Derived server-side from the ledger, so it survives a settings save.
+  const monthlyLimitInr = Number(ar.monthlyLimitInr) || 0;
+  const monthlyNote = el('p', { class: 'muted' }, monthlyLimitInr > 0
+    ? `Recharged ${inr(ar.rechargedThisMonthInr)} of ${inr(monthlyLimitInr)} this calendar month (UTC)`
+      + (ar.monthlyLimitReached ? ' — limit reached; auto-reload stays paused until the month resets. Manual top-ups still work.' : '')
+    : 'No monthly limit: auto-reload is bounded only by the threshold and the hourly cooldown.');
 
   const amountGroup = el('label', { class: 'field', id: 'ar-amount-field' }, [el('span', {}, 'When balance falls below (INR)'), arThresholdInr]);
   const percentGroup = el('label', { class: 'field', id: 'ar-percent-field' }, [el('span', {}, 'When balance falls below (% of credit)'), arThresholdPercent]);
@@ -372,6 +380,7 @@ function adminPanel(view, summary) {
         thresholdInr: Number(arThresholdInr.value) || 0,
         thresholdPercent: Number(arThresholdPercent.value) || 20,
         amountInr: Number(arAmount.value) || 0,
+        monthlyLimitInr: Number(arMonthlyLimit.value) || 0,
       },
       notifyChannels: { browser: chBrowser.checked, email: chEmail.checked, slack: chSlack.checked },
       gateEnabled: gateEnabled.checked,
@@ -453,7 +462,9 @@ function adminPanel(view, summary) {
         amountGroup,
         percentGroup,
         field('Reload Amount (INR)', arAmount),
+        field('Monthly limit (INR), 0 = uncapped', arMonthlyLimit),
       ]),
+      monthlyNote,
       el('div', { class: 'field-group' }, [
         el('strong', {}, 'Cashfree Payments Mandate (UPI AutoPay, Cards SI, eNACH)'),
         el('div', { class: 'row' }, [

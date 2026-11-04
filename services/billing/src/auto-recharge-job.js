@@ -125,6 +125,12 @@ function rechargeBlockers(orgId, cfg, deps, now = Date.now()) {
   if (gateMs !== null && now - gateMs < recharge.RECHARGE_COOLDOWN_MS) {
     return 'inside the recharge cooldown window';
   }
+  // Only a fully spent monthly limit blocks here; a partially chargeable month
+  // is clamped downstream, in one place — recharge.chargeableAmountPaise.
+  if (!(recharge.chargeableAmountPaise(orgId, cfg, now) > 0)) {
+    const limit = Math.round(Number(cfg.monthlyLimitPaise) || 0);
+    return `monthly recharge limit reached (${recharge.rechargedThisMonthPaise(orgId, now)} of ${limit} paise used)`;
+  }
   return null;
 }
 
@@ -192,15 +198,19 @@ async function runCandidate(orgId, account, opts) {
       counters.skipped += 1;
       deps.log.warn(`auto-recharge ${orgId}: charge skipped — ${mandateIssue}`);
     } else if (dryRun) {
+      // Report what WOULD be charged — the monthly limit can shrink it — so a
+      // dry run actually predicts the real run instead of the configured amount.
+      const chargeable = recharge.chargeableAmountPaise(orgId, cfg, now);
+      const clamped = chargeable < Math.round(Number(cfg.amountPaise) || 0);
       deps.log.info(`auto-recharge DRY RUN ${orgId} (${context.name}): would charge `
-        + `${Number(cfg.amountPaise) / 100} INR (balance ${account.balancePaise} paise), `
-        + `notify ${emails.length} admin(s)`);
+        + `${chargeable / 100} INR${clamped ? ' (clamped to the monthly limit)' : ''} `
+        + `(balance ${account.balancePaise} paise), notify ${emails.length} admin(s)`);
     } else {
       const posted = await deps.rechargeApi.maybeAutoRecharge(orgId, now);
       if (posted && posted.entry) {
         counters.charged += 1;
         deps.log.info(`auto-recharge ${orgId} (${context.name}): charged `
-          + `${Number(cfg.amountPaise) / 100} INR (ledger entry ${posted.entry.id})`);
+          + `${Number(posted.entry.amountPaise) / 100} INR (ledger entry ${posted.entry.id})`);
       }
     }
   }
