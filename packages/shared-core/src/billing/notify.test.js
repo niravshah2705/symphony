@@ -6,7 +6,7 @@ const path = require('node:path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-notify-'));
+const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'core-billing-notify-'));
 process.env.AI_FLEET_DATA_DIR = TMP_DIR;
 process.env.INITIAL_CREDIT_INR = '0';
 
@@ -16,9 +16,9 @@ const { checkThresholdsAndNotify, sendEmail } = require('./notify');
 
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
-function accountWith(balancePaise, thresholds = [10000, 0]) {
-  ledger.ensureAccount('org-n');
-  return store.upsertBillingAccount('org-n', {
+function accountWith(orgId, balancePaise, thresholds = [10000, 0]) {
+  ledger.ensureAccount(orgId);
+  return store.upsertBillingAccount(orgId, {
     balancePaise,
     alertThresholdsPaise: thresholds,
     lastAlertedThresholdPaise: null,
@@ -26,8 +26,19 @@ function accountWith(balancePaise, thresholds = [10000, 0]) {
   });
 }
 
+// Regression: this function used to read account.alertThresholdsInr (an API
+// projection field that is never persisted) and fall back to a CONFIG key that
+// does not exist, so every billing tick threw a TypeError that the sweep
+// swallowed into a warning.
+test('a freshly seeded account alerts without throwing', async () => {
+  const seeded = ledger.ensureAccount('org-n-seeded');
+  assert.deepEqual(seeded.alertThresholdsPaise, [10000, 0]);
+  const account = store.upsertBillingAccount('org-n-seeded', { balancePaise: 5000 });
+  assert.equal(await checkThresholdsAndNotify(account), 10000);
+});
+
 test('alerts on the first downward crossing and dedupes repeats at the same level', async () => {
-  const account = accountWith(5000); // below 10000, above 0
+  const account = accountWith('org-n', 5000); // below 10000, above 0
   const crossed = await checkThresholdsAndNotify(account);
   assert.equal(crossed, 10000);
   assert.equal(store.getBillingAccount('org-n').lastAlertedThresholdPaise, 10000);
@@ -54,7 +65,7 @@ test('re-arms after a recharge above the highest threshold', async () => {
 });
 
 test('no thresholds configured → never alerts', async () => {
-  const account = accountWith(-9999, []);
+  const account = accountWith('org-n-bare', -9999, []);
   assert.equal(await checkThresholdsAndNotify(account), null);
 });
 

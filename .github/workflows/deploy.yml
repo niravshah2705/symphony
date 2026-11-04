@@ -429,9 +429,15 @@ jobs:
       # deploy/gcp/terraform/secrets.tf). Only deploy.sh/bootstrap.sh seeded
       # them until now, so a newly-added mandatory secret (e.g.
       # identity-hash-pepper) had no version the first time this workflow's
-      # plain `terraform apply` touched it. Ensure both container secrets
-      # exist, then seed any with no ENABLED version — idempotent, mirrors
-      # deploy.sh's has_version/seed_secret helpers (deploy/gcp/deploy.sh).
+      # plain `terraform apply` touched it. Ensure each container secret exists,
+      # then CONVERGE its ENABLED value onto the environment's.
+      #
+      # Converging, not first-write-wins: a secret already holding a wrong value
+      # (a truncated Cashfree key caused a production 401) must be repairable by
+      # re-running the pipeline. A corrected value is added as a NEW version and
+      # `version = "latest"` (billing_service.tf) picks it up on the next
+      # revision. Random generation is allowed only for OUR OWN secrets —
+      # generating a third-party credential yields a permanently invalid one.
       - name: Stage mandatory secret versions
         working-directory: ${{ env.TF_DIR }}
         env:
@@ -449,21 +455,30 @@ jobs:
             -target=google_secret_manager_secret.cashfree_app_id \
             -target=google_secret_manager_secret.cashfree_secret_key
 
-          has_version() { gcloud secrets versions list "$1" --project "$PROJECT_ID" \
-            --filter='state=ENABLED' --format='value(name)' 2>/dev/null | grep -q .; }
-          seed_secret() { # id [optional_value]
-            local id="$1" val="${2:-}"
-            if has_version "$id"; then echo "  $id: already has a version (unchanged)";
-            elif [ -n "$val" ]; then
+          enabled_value() {
+            local v
+            v=$(gcloud secrets versions list "$1" --project "$PROJECT_ID" \
+              --filter='state=ENABLED' --format='value(name)' 2>/dev/null | head -n1)
+            [ -n "$v" ] && gcloud secrets versions access "$v" --secret "$1" --project "$PROJECT_ID" 2>/dev/null || true
+          }
+          seed_secret() { # id [optional_value] [allow_random]
+            local id="$1" val="${2:-}" rand="${3:-}" cur
+            cur="$(enabled_value "$id")"
+            if [ -n "$val" ] && [ "$val" != "$cur" ]; then
               printf '%s' "$val" | gcloud secrets versions add "$id" --project "$PROJECT_ID" --data-file=- >/dev/null
-              echo "  $id: seeded from environment"
-            else
+              echo "  $id: seeded from environment (corrected existing version)"
+            elif [ -z "$cur" ] && [ -n "$rand" ]; then
               openssl rand -base64 48 | tr -d '\n' | gcloud secrets versions add "$id" --project "$PROJECT_ID" --data-file=- >/dev/null
               echo "  $id: seeded (random fallback)"
+            elif [ -z "$cur" ]; then
+              echo "  $id: MISSING and no value provided — refusing to generate one" >&2
+              exit 1
+            else
+              echo "  $id: up to date"
             fi
           }
-          seed_secret stream-token-secret
-          seed_secret identity-hash-pepper
+          seed_secret stream-token-secret "" allow-random
+          seed_secret identity-hash-pepper "" allow-random
           seed_secret cashfree-app-id "${CASHFREE_APP_ID:-}"
           seed_secret cashfree-secret-key "${CASHFREE_SECRET_KEY:-}"
 
@@ -512,6 +527,7 @@ jobs:
             -var="email_smtp_auth_enabled=${{ vars.EMAIL_SMTP_AUTH_ENABLED || 'false' }}"
             -var="email_from=${{ vars.EMAIL_FROM }}"
             -var="email_public_app_url=${{ vars.EMAIL_PUBLIC_APP_URL }}"
+            -var="cashfree_env=${{ vars.CASHFREE_ENV || 'sandbox' }}"
             -var="cashfree_base_url=${{ vars.CASHFREE_BASE_URL || 'https://sandbox.cashfree.com' }}"
           )
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")

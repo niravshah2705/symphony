@@ -728,13 +728,39 @@ variable "coder_schedule" {
 
 variable "billing_schedule" {
   type        = string
-  description = "Billing usage-aggregation sweep tick — POSTs to /pubsub/billing-tick."
+  description = "Billing usage-aggregation sweep tick — POSTs to /pubsub/billing-tick. Aggregation/watermark/prune only; money moved to the hourly billing_recharge_schedule Job."
   default     = "*/5 * * * *"
+}
+
+variable "billing_recharge_schedule" {
+  type        = string
+  description = "Auto-recharge + alert tick — publishes to the billing auto-recharge Job. Hourly to match CONFIG.BILLING.rechargeIntervalMin (60)."
+  default     = "0 * * * *"
 }
 
 variable "scheduler_time_zone" {
   type    = string
   default = "Etc/UTC"
+}
+
+# --- Billing auto-recharge Job knobs -------------------------------------------
+
+variable "billing_job_name" {
+  type        = string
+  description = "Cloud Run Job that evaluates every auto-recharge opt-in org and fires its Cashfree charge once per tick. Must match google_pubsub_subscription.push_config.cloud_run_job.service."
+  default     = "billing-auto-recharge"
+}
+
+variable "billing_job_task_timeout" {
+  type        = string
+  description = "Max wall-clock for one auto-recharge Job task — it walks every candidate org serially, validating before each charge. Cloud Run Job task timeout maxes at 24h."
+  default     = "600s"
+}
+
+variable "billing_job_dry_run" {
+  type        = bool
+  description = "Run the auto-recharge Job's selection and validation but charge nothing. The pre-flight switch for a first deploy; flip to false once the summary looks right."
+  default     = false
 }
 
 # --- Coder worker Job knobs ---------------------------------------------------

@@ -21,6 +21,33 @@ class OrgResponse(BaseModel):
     updated_at: datetime
 
 
+class BillingAdmin(BaseModel):
+    """An active ORG_ADMIN, the only audience for billing alerts.
+
+    ``email`` stays a plain ``str`` rather than ``EmailStr``: a malformed or
+    legacy address must not turn a read-only billing lookup into a 500.
+    """
+
+    user_id: uuid.UUID
+    email: str
+
+
+class BillingContextResponse(BaseModel):
+    """What the billing job needs to charge and notify one org.
+
+    ``admins`` is empty for an org whose administrators are all deactivated: the
+    caller must then skip it rather than notify nobody silently.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    slug: str
+    deployment_slug: str
+    admins: list[BillingAdmin] = []
+
+
 class OrgUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)

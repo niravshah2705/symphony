@@ -14,8 +14,11 @@ This document describes how to configure environment variables and secrets for t
 | `CASHFREE_ENV` | No | Cashfree target environment | `sandbox` (default) or `production` |
 | `BILLING_SERVICE_PORT` | No | Local HTTP listen port for billing service | `4050` (in container: `8080`) |
 | `BILLING_URL` | No | Base URL for billing service S2S calls | `http://localhost:4050` |
-| `BILLING_SWEEP_ENABLED` | No | Enables hourly usage sweep & auto-recharge | `true` |
-| `BILLING_RECHARGE_INTERVAL_MIN` | No | Schedule interval in minutes for auto-recharge | `60` |
+| `BILLING_SWEEP_ENABLED` | No | Enables the usage-aggregation sweep (charges moved to the recharge Job) | `true` |
+| `BILLING_RECHARGE_INTERVAL_MIN` | No | Cooldown between one org's recharge attempts; also the Job's cadence | `60` |
+| `BILLING_JOB_NAME` | No | Cloud Run Job the hourly tick launches (`auto-recharge-job.js`) | `billing-auto-recharge` |
+| `BILLING_JOB_DRY_RUN` | No | `true` = select + validate + log, charge nothing | `false` |
+| `ORG_URL` | No | Org service base URL — the Job reads `/internal/orgs/{id}/billing-context` | `https://org-<…>.run.app` |
 | `BILLING_NOTIFY_EMAIL` | No | Email address for low-balance notifications | `billing-alerts@example.com` |
 | `BILLING_SLACK_WEBHOOK_URL` | **Yes** | Incoming webhook URL for Slack alerts | `https://hooks.slack.com/services/...` |
 | `INTERNAL_API_TOKEN` | **Yes** | Shared internal S2S token for local dev | Random 32-byte string |
@@ -153,8 +156,48 @@ The dedicated billing microservice exposes two ways to control auto-renew thresh
 
 1. **Standalone Basic UI (`GET /` or `GET /ui`)**:
    - Access directly on the billing Cloud Run service (e.g. `http://localhost:4050` or `https://billing-<suffix>.run.app`).
-   - Offers real-time service health, store backend status, Cashfree environment indicator, and an interactive form to toggle Auto-Renew, switch between Fixed Amount (₹) and Percentage (%) modes, set trigger thresholds, and trigger manual hourly sweeps.
+   - Offers real-time service health, store backend status, Cashfree environment indicator, and an interactive form to toggle Auto-Renew, switch between Fixed Amount (₹) and Percentage (%) modes, set trigger thresholds, and launch the auto-recharge sweep ("Run Auto-Recharge Sweep Now" → `POST /pubsub/billing-recharge-tick`).
 
 2. **Main Application SPA (`/#cost`)**:
    - Integrated into the Symphony web dashboard (`public/js/views/cost.js`).
    - Communicates with `/api/billing` via the gateway reverse proxy with user authentication and organization context.
+
+---
+
+## 4b. Auto-Recharge & Alerts — the hourly Cloud Run Job
+
+Money moves in a one-shot Cloud Run **Job**, not in the 5-minute tick:
+
+| Cadence | Endpoint | Work |
+|---|---|---|
+| `*/5 * * * *` (`billing-tick` scheduler) | `POST /pubsub/billing-tick` on billing | usage aggregation, watermark, retention prune — **no charges** |
+| `0 * * * *` (`billing-auto-recharge-tick` scheduler) | `POST /pubsub/billing-recharge-tick` on billing | launches one execution of the `billing-auto-recharge` Job |
+| Job execution | `services/billing/src/auto-recharge-job.js` | select → validate → charge → alert |
+
+Why the split: the aggregation tick used to loop **every** account and post an ON-DEMAND
+`/subscriptions/pay` charge each time, while the success check read a field
+(`/pay` returns `payment_status`, not `status`) that never matched. Every org below its
+threshold was therefore re-charged every tick, the cooldown never armed, and the same
+tick was also wired into the planner cadence. A Job gives the sweep its own hourly
+cadence (`BILLING_RECHARGE_INTERVAL_MIN=60` is the matching per-org cooldown), its own
+timeout, and `max_retries=1`.
+
+The Job only charges an org after all of these pass, each logged and skipped (never a
+whole-run abort): Cashfree credentials configured, an `cashfreeSubscriptionId` mandate on
+file with `getSubscription` reporting ACTIVE, a positive recharge amount, the cooldown
+elapsed, balance strictly below `getThresholdPaise`. It then reads the org over S2S
+(`GET /api/v1/internal/orgs/{id}/billing-context`, `x-internal-token` + Cloud Run OIDC as
+`billing-sa`) for its ORG_ADMIN email recipients; a 404 (orphan account) or a zero-admin
+org is skipped without charging. Alerts are deduped by the persisted
+`lastAlertedThresholdPaise`.
+
+The pinned `google`/`google-beta` providers (~> 6.0) have no
+`push_config.cloud_run_job` field, so a Pub/Sub subscription cannot push to a Job here —
+hence the two-hop trigger (scheduler → billing service → Admin API `runJob`), the same
+shape coder-control uses to launch the coder-worker Job (`run.developer` + `actAs`).
+
+Pre-flight a first deploy with `billing_job_dry_run = true` (env `BILLING_JOB_DRY_RUN`):
+selection, validation and org reads all run, nothing is charged. One JSON summary line
+per execution: `{"checked":N,"charged":N,"alerted":N,"skipped":N,"dryRun":bool}`.
+The Job exits non-zero only when **every** candidate errored, so one bad org never burns
+the retry.

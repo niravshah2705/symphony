@@ -4,6 +4,16 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const http = require('node:http');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+// Isolate the file store BEFORE the store is required: without this the suite
+// writes real JSON into the repo's ./data directory.
+const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-app-test-'));
+process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
+
 const store = require('@ai-fleet/shared-core/store');
 const { createApp } = require('./app');
 
@@ -281,5 +291,75 @@ test('cashfree webhook rejects a bad signature in production and credits a good 
     await server.close();
     if (prevKey !== undefined) process.env.CASHFREE_SECRET_KEY = prevKey; else delete process.env.CASHFREE_SECRET_KEY;
     if (prevEnv !== undefined) process.env.NODE_ENV = prevEnv; else delete process.env.NODE_ENV;
+  }
+});
+
+// --- hourly auto-recharge tick ------------------------------------------------
+// The route is the only thing between a scheduler tick and real money, so its two
+// branches are pinned: in the cloud it must LAUNCH the one-shot Job and do nothing
+// else; locally (no Job to launch) it must run the entrypoint in-process.
+test('billing recharge tick launches the Cloud Run Job instead of sweeping in-request', async () => {
+  const launched = [];
+  let ranInProcess = 0;
+  const server = await listen(createApp({
+    rechargeTrigger: {
+      isCloudJobEnabled: () => true,
+      runRechargeJob: async (params) => {
+        launched.push(params);
+        return { execution: 'projects/p/locations/r/jobs/billing-auto-recharge/executions/e', job: 'jobs/billing-auto-recharge' };
+      },
+    },
+    runAutoRechargeJob: async () => { ranInProcess += 1; return {}; },
+  }));
+  try {
+    const res = await fetch(`${server.url}/pubsub/billing-recharge-tick`, { method: 'POST' });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, 'launched');
+    assert.match(body.execution, /executions\/e$/);
+    assert.equal(ranInProcess, 0, 'the cloud path must never charge inside the service');
+    assert.equal(launched.length, 1);
+  } finally {
+    await server.close();
+  }
+});
+
+test('billing recharge tick runs the sweep in-process when no Job is configured', async () => {
+  let jobOptions = null;
+  const server = await listen(createApp({
+    rechargeTrigger: { isCloudJobEnabled: () => false, runRechargeJob: async () => { throw new Error('must not launch'); } },
+    runAutoRechargeJob: async (opts) => {
+      jobOptions = opts;
+      return { checked: 2, charged: 1, alerted: 1, skipped: 0, dryRun: false };
+    },
+  }));
+  try {
+    const res = await fetch(`${server.url}/pubsub/billing-recharge-tick`, { method: 'POST' });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), {
+      status: 'completed', checked: 2, charged: 1, alerted: 1, skipped: 0, dryRun: false,
+    });
+    // The entrypoint exits the process on a fully-failed sweep, so a request handler
+    // must hand it a no-op: one bad org cannot kill the serving container.
+    assert.equal(typeof jobOptions.exit, 'function');
+    jobOptions.exit(1);
+  } finally {
+    await server.close();
+  }
+});
+
+test('billing recharge tick reports a launch failure as 500 so the scheduler retries', async () => {
+  const server = await listen(createApp({
+    rechargeTrigger: {
+      isCloudJobEnabled: () => true,
+      runRechargeJob: async () => { throw new Error('run.jobs.run denied'); },
+    },
+  }));
+  try {
+    const res = await fetch(`${server.url}/pubsub/billing-recharge-tick`, { method: 'POST' });
+    assert.equal(res.status, 500);
+    assert.match((await res.json()).error, /run\.jobs\.run denied/);
+  } finally {
+    await server.close();
   }
 });

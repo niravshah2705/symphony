@@ -7,6 +7,21 @@ const cashfreeClient = require('./cashfree-client');
 
 const RECHARGE_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour between automatic recharges
 
+// /subscriptions/pay answers with `payment_status`; these mean the money moved.
+const SUCCESS_PAYMENT_STATUSES = new Set(['SUCCESS', 'PAID', 'COMPLETED']);
+
+/**
+ * Timestamp gating a repeat charge: the later of the last successful recharge
+ * and the last *attempted* one. Without the attempt half, a charge that fails
+ * at Cashfree is retried on every tick forever.
+ */
+function lastChargeGateMs(cfg) {
+  const stamps = [cfg.lastRechargedAt, cfg.lastAttemptedAt]
+    .map((value) => Date.parse(value || ''))
+    .filter(Number.isFinite);
+  return stamps.length ? Math.max(...stamps) : null;
+}
+
 /**
  * Calculates effective threshold in paise based on autoRecharge configuration.
  * @param {object} account
@@ -42,29 +57,40 @@ async function maybeAutoRecharge(orgId, now = Date.now()) {
   if (amount <= 0) return null;
 
   // Idempotency: respect a cooldown between automatic recharges.
-  if (cfg.lastRechargedAt) {
-    const last = Date.parse(cfg.lastRechargedAt);
-    if (Number.isFinite(last) && now - last < RECHARGE_COOLDOWN_MS) return null;
-  }
+  const gateMs = lastChargeGateMs(cfg);
+  if (gateMs !== null && now - gateMs < RECHARGE_COOLDOWN_MS) return null;
 
   // Real Cashfree Payment Charge
+  let chargePaymentId = null;
+  let chargeRef = null;
   if (cashfreeClient.isConfigured() && cfg.cashfreeSubscriptionId) {
+    // Stable within one cooldown window so a retried run cannot mint a second
+    // charge for the same top-up — `now` would be unique per invocation.
+    chargePaymentId = `pay_${orgId}_${Math.floor(now / RECHARGE_COOLDOWN_MS)}`;
+    const amountInr = amount / 100;
     try {
-      const paymentId = `pay_${orgId}_${now}`;
-      const amountInr = amount / 100;
-
       const chargeRes = await cashfreeClient.chargeSubscription({
         subscriptionId: cfg.cashfreeSubscriptionId,
-        paymentId,
+        paymentId: chargePaymentId,
         amountInr,
       });
 
-      if (!chargeRes || chargeRes.status !== 'SUCCESS') {
-        log.error(`Auto-recharge charge failed with status: ${chargeRes ? chargeRes.status : 'UNKNOWN'}`);
+      const paymentStatus = String(
+        (chargeRes && (chargeRes.payment_status ?? chargeRes.status)) || '',
+      ).toUpperCase();
+      if (!SUCCESS_PAYMENT_STATUSES.has(paymentStatus)) {
+        log.error(`Auto-recharge charge did not settle (payment_status: ${paymentStatus || 'UNKNOWN'})`);
+        store.upsertBillingAccount(orgId, {
+          autoRecharge: { ...cfg, lastAttemptedAt: new Date(now).toISOString() },
+        });
         return null;
       }
+      chargeRef = { cfPaymentId: (chargeRes && chargeRes.cf_payment_id) || null, paymentStatus };
     } catch (err) {
       log.error(`Cashfree recurring charge exception: ${err && err.message ? err.message : err}`);
+      store.upsertBillingAccount(orgId, {
+        autoRecharge: { ...cfg, lastAttemptedAt: new Date(now).toISOString() },
+      });
       return null;
     }
   }
@@ -88,6 +114,12 @@ async function maybeAutoRecharge(orgId, now = Date.now()) {
       thresholdPaise,
       balanceBeforePaise: balancePaise,
       cashfreeSubscriptionId: cfg.cashfreeSubscriptionId || null,
+      cashfreePaymentId: chargePaymentId,
+      cfPaymentId: chargeRef ? chargeRef.cfPaymentId : null,
+      paymentStatus: chargeRef ? chargeRef.paymentStatus : null,
+      // No Cashfree call happened (keys unset or no mandate on file): the wallet
+      // was topped up locally, and reporting must not read that as money in.
+      simulated: chargePaymentId === null,
     },
   });
 }
@@ -95,4 +127,6 @@ async function maybeAutoRecharge(orgId, now = Date.now()) {
 module.exports = {
   maybeAutoRecharge,
   getEffectiveThresholdPaise,
+  lastChargeGateMs,
+  RECHARGE_COOLDOWN_MS,
 };

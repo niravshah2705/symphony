@@ -268,7 +268,7 @@ function renderDashboardHtml(data = {}) {
 
         <div class="actions">
           <button type="submit" class="btn">Save Configuration</button>
-          <button type="button" id="trigger-sweep-btn" class="btn secondary">Run Hourly Sweep Now</button>
+          <button type="button" id="trigger-sweep-btn" class="btn secondary">Run Auto-Recharge Sweep Now</button>
         </div>
       </form>
     </div>
@@ -334,13 +334,14 @@ function renderDashboardHtml(data = {}) {
     sweepBtn.addEventListener('click', async () => {
       sweepBtn.disabled = true;
       try {
-        const res = await fetch('/pubsub/billing-tick', {
+        const res = await fetch('/pubsub/billing-recharge-tick', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({})
         });
         if (res.ok) {
-          showToast('Hourly sweep executed successfully!');
+          const body = await res.json().catch(() => ({}));
+          showToast(body.status === 'launched' ? 'Auto-recharge Job execution launched.' : 'Auto-recharge sweep executed.');
           setTimeout(() => location.reload(), 1000);
         } else {
           showToast('Sweep returned status: ' + res.status, false);

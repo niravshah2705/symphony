@@ -3,6 +3,20 @@
 const log = require('../logger');
 
 /**
+ * Firestore rejects ids wrapped in double underscores ("Resource id ... is
+ * invalid because it is reserved"), which the shared billing org (`__shared__`)
+ * is. Reads take the id from the document BODY (`doc.data()`), so only the
+ * write key needs rewriting; the body is untouched and the mapping stays
+ * reversible (`--x--` <-> `__x__`).
+ */
+function encodeDocId(id) {
+  const text = String(id);
+  return text.length >= 4 && text.startsWith('__') && text.endsWith('__')
+    ? `--${text.slice(2, -2)}--`
+    : text;
+}
+
+/**
  * Firestore store backend for Cloud Run (`STORE_BACKEND=firestore`).
  *
  * Cloud Run instances are ephemeral and may run in parallel, so the single
@@ -91,11 +105,11 @@ function create({
     for (const [id, item] of nextById) {
       const prev = prevById.get(id);
       if (!prev || JSON.stringify(prev) !== JSON.stringify(item)) {
-        batch.set(col.doc(id), item);
+        batch.set(col.doc(encodeDocId(id)), item);
       }
     }
     for (const id of prevById.keys()) {
-      if (!nextById.has(id)) batch.delete(col.doc(id));
+      if (!nextById.has(id)) batch.delete(col.doc(encodeDocId(id)));
     }
   }
 
@@ -172,4 +186,4 @@ function create({
   return { read, write, init };
 }
 
-module.exports = { create };
+module.exports = { create, encodeDocId };
