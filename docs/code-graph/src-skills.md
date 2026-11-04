@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| assertSafeSkillsVersion | Function | ./packages/shared-core/src/config.js | 699-705 |
-| resolveSkillsSrc | Function | ./packages/shared-core/src/config.js | 714-719 |
+| assertSafeSkillsVersion | Function | ./packages/shared-core/src/config.js | 725-731 |
+| resolveSkillsSrc | Function | ./packages/shared-core/src/config.js | 740-745 |
 
 ## Execution Flows
 

@@ -4,26 +4,35 @@
 
 ## Overview
 
-Community of 10 nodes
+Community of 19 nodes
 
-- **Size**: 10 nodes
-- **Cohesion**: 0.2029
+- **Size**: 19 nodes
+- **Cohesion**: 0.2761
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| getDb | Function | ./packages/shared-core/src/store/firestore-backend.js | 51-62 |
-| assemble | Function | ./packages/shared-core/src/store/firestore-backend.js | 64-68 |
-| rebuildMirror | Function | ./packages/shared-core/src/store/firestore-backend.js | 70-72 |
-| pickMain | Function | ./packages/shared-core/src/store/firestore-backend.js | 74-78 |
-| background | Function | ./packages/shared-core/src/store/firestore-backend.js | 80-84 |
-| persistCollection | Function | ./packages/shared-core/src/store/firestore-backend.js | 87-100 |
-| write | Function | ./packages/shared-core/src/store/firestore-backend.js | 106-122 |
-| loadCollection | Function | ./packages/shared-core/src/store/firestore-backend.js | 124-127 |
-| subscribe | Function | ./packages/shared-core/src/store/firestore-backend.js | 129-148 |
-| init | Function | ./packages/shared-core/src/store/firestore-backend.js | 150-170 |
+| encodeDocId | Function | ./packages/shared-core/src/store/firestore-backend.js | 12-17 |
+| create | Function | ./packages/shared-core/src/store/firestore-backend.js | 47-187 |
+| getDb | Function | ./packages/shared-core/src/store/firestore-backend.js | 65-76 |
+| assemble | Function | ./packages/shared-core/src/store/firestore-backend.js | 78-82 |
+| rebuildMirror | Function | ./packages/shared-core/src/store/firestore-backend.js | 84-86 |
+| pickMain | Function | ./packages/shared-core/src/store/firestore-backend.js | 88-92 |
+| background | Function | ./packages/shared-core/src/store/firestore-backend.js | 94-98 |
+| persistCollection | Function | ./packages/shared-core/src/store/firestore-backend.js | 101-114 |
+| write | Function | ./packages/shared-core/src/store/firestore-backend.js | 120-136 |
+| loadCollection | Function | ./packages/shared-core/src/store/firestore-backend.js | 138-141 |
+| subscribe | Function | ./packages/shared-core/src/store/firestore-backend.js | 143-162 |
+| init | Function | ./packages/shared-core/src/store/firestore-backend.js | 164-184 |
+| fakeFirestore | Function | ./packages/shared-core/src/store/firestore-backend.test.js | 10-32 |
+| docRef | Function | ./packages/shared-core/src/store/firestore-backend.test.js | 11-17 |
+| collRef | Function | ./packages/shared-core/src/store/firestore-backend.test.js | 18-23 |
+| backend | Function | ./packages/shared-core/src/store/firestore-backend.test.js | 34-42 |
+| test:encodeDocId rewrites only ids wrapped in double underscores@L44 | Test | ./packages/shared-core/src/store/firestore-backend.test.js | 44-48 |
+| test:a reserved org id is written under an acceptable document key@L50 | Test | ./packages/shared-core/src/store/firestore-backend.test.js | 50-66 |
+| test:removing an account deletes the rewritten key, not the raw one@L68 | Test | ./packages/shared-core/src/store/firestore-backend.test.js | 68-79 |
 
 ## Execution Flows
 
@@ -33,22 +42,30 @@ No execution flows pass through this community.
 
 ### Outgoing
 
+- `map` (5 edge(s))
+- `equal` (5 edge(s))
 - `collection` (4 edge(s))
 - `data` (4 edge(s))
-- `map` (4 edge(s))
 - `error` (3 edge(s))
+- `String` (3 edge(s))
 - `doc` (3 edge(s))
 - `get` (3 edge(s))
 - `isArray` (3 edge(s))
 - `set` (3 edge(s))
+- `seed` (2 edge(s))
 - `batch` (2 edge(s))
 - `commit` (2 edge(s))
-- `String` (2 edge(s))
 - `onSnapshot` (2 edge(s))
-- `normalize` (1 edge(s))
-- `catch` (1 edge(s))
-- `resolve` (1 edge(s))
+- `push` (2 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/store/firestore-backend.js` (10 edge(s))
+- `./packages/shared-core/src/store/firestore-backend.js` (14 edge(s))
+- `./packages/shared-core/src/store/firestore-backend.test.js` (7 edge(s))
+- `equal` (5 edge(s))
+- `filter` (1 edge(s))
+- `includes` (1 edge(s))
+- `deepEqual` (1 edge(s))
+- `map` (1 edge(s))
+- `find` (1 edge(s))
+- `ok` (1 edge(s))

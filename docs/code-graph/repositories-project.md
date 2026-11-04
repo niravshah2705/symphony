@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 601 nodes
+Community of 609 nodes
 
-- **Size**: 601 nodes
-- **Cohesion**: 0.5603
+- **Size**: 609 nodes
+- **Cohesion**: 0.5560
 - **Dominant Language**: python
 
 ## Members
@@ -23,8 +23,9 @@ Community of 601 nodes
 | verify_email | Function | ./services/org/app/api/v1/routes_auth.py | 68-73 |
 | me | Function | ./services/org/app/api/v1/routes_auth.py | 77-78 |
 | readiness | Function | ./services/org/app/api/v1/routes_health.py | 19-22 |
-| require_internal_token | Function | ./services/org/app/api/v1/routes_internal.py | 40-44 |
-| write_deployments | Function | ./services/org/app/api/v1/routes_internal.py | 48-60 |
+| require_internal_token | Function | ./services/org/app/api/v1/routes_internal.py | 45-49 |
+| write_deployments | Function | ./services/org/app/api/v1/routes_internal.py | 53-65 |
+| billing_context | Function | ./services/org/app/api/v1/routes_internal.py | 69-87 |
 | create_invitation | Function | ./services/org/app/api/v1/routes_invitations.py | 26-31 |
 | list_invitations | Function | ./services/org/app/api/v1/routes_invitations.py | 35-39 |
 | resend_invitation | Function | ./services/org/app/api/v1/routes_invitations.py | 43-48 |
@@ -63,9 +64,8 @@ Community of 601 nodes
 | create_project_invitation | Function | ./services/org/app/api/v1/routes_project_invitations.py | 41-49 |
 | list_project_invitations | Function | ./services/org/app/api/v1/routes_project_invitations.py | 53-57 |
 | revoke_project_invitation | Function | ./services/org/app/api/v1/routes_project_invitations.py | 61-68 |
-| accept_project_invitation | Function | ./services/org/app/api/v1/routes_project_invitations.py | 72-79 |
 
-*... and 551 more members.*
+*... and 559 more members.*
 
 ## Execution Flows
 
@@ -79,37 +79,38 @@ Community of 601 nodes
 - **detach_task_tag** (criticality: 0.71, depth: 6)
 - **login** (criticality: 0.71, depth: 8)
 - **get_current_user** (criticality: 0.71, depth: 3)
-- *... and 65 more flows.*
+- *... and 66 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (244 edge(s))
-- `Depends` (165 edge(s))
+- `get` (249 edge(s))
+- `Depends` (167 edge(s))
 - `str` (160 edge(s))
-- `uuid4` (40 edge(s))
+- `uuid4` (43 edge(s))
+- `setattr` (37 edge(s))
 - `set` (36 edge(s))
 - `delete` (36 edge(s))
 - `raises` (35 edge(s))
-- `setattr` (33 edge(s))
 - `query` (30 edge(s))
 - `track` (29 edge(s))
-- `BaseModel` (23 edge(s))
-- `len` (22 edge(s))
-- `append` (19 edge(s))
+- `BaseModel` (25 edge(s))
+- `len` (23 edge(s))
+- `append` (20 edge(s))
 - `isinstance` (17 edge(s))
 - `UUID` (15 edge(s))
 
 ### Incoming
 
+- `setattr` (37 edge(s))
+- `uuid4` (36 edge(s))
 - `raises` (35 edge(s))
-- `setattr` (33 edge(s))
-- `uuid4` (33 edge(s))
 - `./services/org/tests/unit/test_project_collaboration.py` (24 edge(s))
 - `./services/org/app/api/v1/routes_me.py` (16 edge(s))
 - `len` (16 edge(s))
 - `./services/org/app/api/v1/routes_auth.py` (13 edge(s))
+- `get` (13 edge(s))
 - `./services/org/tests/unit/test_services.py` (13 edge(s))
 - `./services/org/app/errors.py` (12 edge(s))
 - `./services/org/app/services/invitation_service.py` (12 edge(s))
@@ -117,4 +118,3 @@ Community of 601 nodes
 - `./services/org/app/repositories/base.py` (11 edge(s))
 - `./services/org/app/services/auth_service.py` (11 edge(s))
 - `./services/org/app/services/tag_service.py` (10 edge(s))
-- `./services/org/tests/unit/test_models.py` (10 edge(s))

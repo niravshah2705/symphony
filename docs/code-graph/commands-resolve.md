@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 214 nodes
+Community of 216 nodes
 
-- **Size**: 214 nodes
-- **Cohesion**: 0.0614
+- **Size**: 216 nodes
+- **Cohesion**: 0.0608
 - **Dominant Language**: javascript
 
 ## Members
@@ -22,9 +22,9 @@ Community of 214 nodes
 | test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L129 | Test | ./deploy/gcp/pipeline-infra.test.js | 129-162 |
 | test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L164 | Test | ./deploy/gcp/pipeline-infra.test.js | 164-178 |
 | test:deploy workflow does not query disabled optional Cloud Run services@L180 | Test | ./deploy/gcp/pipeline-infra.test.js | 180-211 |
-| test:pipeline topology enforces dedicated topics and brokered agent egress@L316 | Test | ./deploy/gcp/pipeline-infra.test.js | 316-366 |
-| test:stream-token broker owns the signing secret behind private IAM@L368 | Test | ./deploy/gcp/pipeline-infra.test.js | 368-464 |
-| test:OpenSWE upstream is trusted proxy-only deployment configuration@L473 | Test | ./deploy/gcp/pipeline-infra.test.js | 473-489 |
+| test:pipeline topology enforces dedicated topics and brokered agent egress@L318 | Test | ./deploy/gcp/pipeline-infra.test.js | 318-368 |
+| test:stream-token broker owns the signing secret behind private IAM@L370 | Test | ./deploy/gcp/pipeline-infra.test.js | 370-466 |
+| test:OpenSWE upstream is trusted proxy-only deployment configuration@L475 | Test | ./deploy/gcp/pipeline-infra.test.js | 475-491 |
 | test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-30 |
 | test:ADLC manifest is served as a static resource@L32 | Test | ./e2e/adlc.spec.js | 32-39 |
 | test:existing Agent workspace route still renders directly@L41 | Test | ./e2e/adlc.spec.js | 41-49 |
@@ -65,7 +65,7 @@ Community of 214 nodes
 | test:resolveToken reads ADLC_TOKEN from the environment only@L44 | Test | ./packages/cli/src/client.test.js | 44-51 |
 | test:request sends a bearer Authorization header when a token is set@L53 | Test | ./packages/cli/src/client.test.js | 53-64 |
 
-*... and 164 more members.*
+*... and 166 more members.*
 
 ## Execution Flows
 
@@ -77,8 +77,8 @@ Community of 214 nodes
 
 ### Outgoing
 
-- `equal` (292 edge(s))
-- `ok` (182 edge(s))
+- `equal` (302 edge(s))
+- `ok` (184 edge(s))
 - `expect` (175 edge(s))
 - `match` (154 edge(s))
 - `locator` (84 edge(s))
@@ -95,8 +95,8 @@ Community of 214 nodes
 
 ### Incoming
 
-- `equal` (292 edge(s))
-- `ok` (182 edge(s))
+- `equal` (302 edge(s))
+- `ok` (184 edge(s))
 - `expect` (175 edge(s))
 - `match` (154 edge(s))
 - `locator` (84 edge(s))
