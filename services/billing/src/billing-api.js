@@ -9,6 +9,7 @@ const ledger = require('@ai-fleet/shared-core/billing/ledger');
 const { paiseToInr } = require('@ai-fleet/shared-core/billing/pricing');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
 const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
+const recharge = require('@ai-fleet/shared-core/billing/recharge');
 
 /**
  * Cost-monitoring + billing API. Billing state lives in the shared JS store;
@@ -32,6 +33,9 @@ const router = express.Router();
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PERIOD_DAYS = Object.freeze({ day: 1, week: 7, month: 30 });
 const MAX_RECHARGE_PAISE = 100000000; // ₹1,000,000 sanity cap on a single top-up
+// Twelve max-size top-ups: the ceiling for a monthly limit, so an absurd value
+// typed into the form cannot arm the Job to spend without bound.
+const MAX_MONTHLY_RECHARGE_PAISE = MAX_RECHARGE_PAISE * 12;
 const MAX_LEDGER_PAGE = 200;
 
 const BILLING_ORG_HEADER = 'x-ai-fleet-billing-org-id';
@@ -79,6 +83,25 @@ function sumWindow(records, days, now) {
   return { runs: scoped.length, tokens, costInr: paiseToInr(costPaise) };
 }
 
+/**
+ * The org's position against its monthly recharge limit. NOTE the two different
+ * "months" on this page: `spend.month` above is a rolling 30-day window, while
+ * the limit below is a UTC calendar month (it resets at 00:00 UTC on the 1st),
+ * because it bounds what the hourly Job may spend per billing month.
+ * Both manual and automatic top-ups count toward it; manual ones are never
+ * blocked by it — the limit exists to bound money the org did not ask for.
+ */
+function monthlyRechargeState(orgId, cfg, now = Date.now()) {
+  const limitPaise = Math.round(Number(cfg && cfg.monthlyLimitPaise) || 0);
+  const usedPaise = recharge.rechargedThisMonthPaise(orgId, now);
+  return {
+    monthlyLimitInr: paiseToInr(limitPaise),
+    rechargedThisMonthInr: paiseToInr(usedPaise),
+    monthlyLimitReached: limitPaise > 0
+      && limitPaise - usedPaise < recharge.MIN_CHARGE_PAISE,
+  };
+}
+
 function requireAdmin(caller, res) {
   if (caller.isAdmin) return true;
   res.status(403).json({ error: 'Organization admin permission is required.', code: 'access_denied' });
@@ -119,27 +142,31 @@ router.get('/summary', asyncHandler(async (req, res) => {
       address: null,
       updatedAt: null,
     },
-    autoRecharge: account && account.autoRecharge
-      ? {
-          enabled: Boolean(account.autoRecharge.enabled),
-          mode: account.autoRecharge.mode || 'amount',
-          thresholdInr: paiseToInr(account.autoRecharge.thresholdPaise),
-          thresholdPercent: account.autoRecharge.thresholdPercent || 20,
-          amountInr: paiseToInr(account.autoRecharge.amountPaise),
-          cashfreeSubscriptionId: account.autoRecharge.cashfreeSubscriptionId || null,
-          paymentMethodType: account.autoRecharge.paymentMethodType || null,
-          cashfreeConfigured: cashfreeClient.isConfigured(),
-        }
-      : {
-          enabled: false,
-          mode: 'amount',
-          thresholdInr: 0,
-          thresholdPercent: 20,
-          amountInr: 0,
-          cashfreeSubscriptionId: null,
-          paymentMethodType: null,
-          cashfreeConfigured: cashfreeClient.isConfigured(),
-        },
+    autoRecharge: {
+      ...(account && account.autoRecharge
+        ? {
+            enabled: Boolean(account.autoRecharge.enabled),
+            mode: account.autoRecharge.mode || 'amount',
+            thresholdInr: paiseToInr(account.autoRecharge.thresholdPaise),
+            thresholdPercent: account.autoRecharge.thresholdPercent || 20,
+            amountInr: paiseToInr(account.autoRecharge.amountPaise),
+            cashfreeSubscriptionId: account.autoRecharge.cashfreeSubscriptionId || null,
+            paymentMethodType: account.autoRecharge.paymentMethodType || null,
+          }
+        : {
+            enabled: false,
+            mode: 'amount',
+            thresholdInr: 0,
+            thresholdPercent: 20,
+            amountInr: 0,
+            cashfreeSubscriptionId: null,
+            paymentMethodType: null,
+          }),
+      cashfreeConfigured: cashfreeClient.isConfigured(),
+      // Month-to-date position against the monthly limit: read-only, derived
+      // from the ledger, so it cannot be reset by saving the config.
+      ...monthlyRechargeState(caller.orgId, account && account.autoRecharge, now),
+    },
     notifyChannels: (account && account.notifyChannels) || { browser: true, email: false, slack: false },
     gateEnabled: account ? account.gateEnabled !== false : true,
     sweepEnabled: CONFIG.BILLING.sweepEnabled,
@@ -270,6 +297,13 @@ router.put('/config', asyncHandler(async (req, res) => {
     const thresholdPaise = inrToPaise(ar.thresholdInr);
     const amountPaise = inrToPaise(ar.amountInr);
     const thresholdPercent = Number.isFinite(Number(ar.thresholdPercent)) ? Math.max(1, Math.min(100, Number(ar.thresholdPercent))) : 20;
+    const requestedLimitPaise = inrToPaise(ar.monthlyLimitInr);
+    // An absent/unparseable monthlyLimitInr means "not editing the limit", so a
+    // client that predates the field cannot silently wipe a configured cap.
+    // An explicit 0 means uncapped.
+    const monthlyLimitPaise = Number.isFinite(requestedLimitPaise)
+      ? Math.min(Math.max(requestedLimitPaise, 0), MAX_MONTHLY_RECHARGE_PAISE)
+      : Math.round(Number(existingAr.monthlyLimitPaise) || 0);
 
     patch.autoRecharge = {
       ...existingAr,
@@ -278,6 +312,7 @@ router.put('/config', asyncHandler(async (req, res) => {
       thresholdPaise: Number.isFinite(thresholdPaise) ? thresholdPaise : 0,
       thresholdPercent,
       amountPaise: Number.isFinite(amountPaise) && amountPaise > 0 ? Math.min(amountPaise, MAX_RECHARGE_PAISE) : 0,
+      monthlyLimitPaise,
       lastRechargedAt: null,
     };
   }
@@ -329,6 +364,7 @@ router.put('/config', asyncHandler(async (req, res) => {
       amountInr: paiseToInr(account.autoRecharge && account.autoRecharge.amountPaise),
       cashfreeSubscriptionId: account.autoRecharge && account.autoRecharge.cashfreeSubscriptionId || null,
       paymentMethodType: account.autoRecharge && account.autoRecharge.paymentMethodType || null,
+      ...monthlyRechargeState(caller.orgId, account.autoRecharge, Date.now()),
     },
     notifyChannels: account.notifyChannels,
     notifyEmails: account.notifyEmails || [],

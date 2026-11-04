@@ -20,6 +20,7 @@ const DEFAULT_AUTO_RECHARGE = Object.freeze({
   thresholdPaise: 0, // recharge when balance drops below this (in paise)
   thresholdPercent: 20, // recharge when balance drops below this % of initial credit
   amountPaise: 50000, // top up 500 INR (50000 paise)
+  monthlyLimitPaise: 0, // ceiling on money-in per UTC calendar month; 0 = uncapped
   lastRechargedAt: null,
   lastAttemptedAt: null,
   cashfreeSubscriptionId: null,

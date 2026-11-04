@@ -295,6 +295,14 @@ document ID.
 Sources: [store schema and partition](../packages/shared-core/src/store.js) and
 [Firestore backend](../packages/shared-core/src/store/firestore-backend.js).
 
+`autoRecharge` is `{ enabled, mode: amount | percentage, thresholdPaise,
+thresholdPercent, amountPaise, monthlyLimitPaise, lastRechargedAt,
+lastAttemptedAt, lastRechargeAmountPaise, cashfreeSubscriptionId,
+paymentMethodType }`. `monthlyLimitPaise` caps money credited per **UTC
+calendar month** (0 = uncapped) and is never stored as a counter: the
+month-to-date figure is summed from `ledgerEntries` whose `type` is `recharge`
+or `auto_recharge`, so a config write cannot reset it.
+
 ## Event relay
 
 Path:

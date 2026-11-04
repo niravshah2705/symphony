@@ -1034,6 +1034,14 @@ async function renderOrgBilling(section, organization, isAdmin) {
     const thresholdAmountInput = el('input', { type: 'number', min: '0', step: '10', value: String(ar.thresholdInr ?? 0) });
     const thresholdPercentInput = el('input', { type: 'number', min: '1', max: '100', step: '1', value: String(ar.thresholdPercent ?? 20) });
     const reloadAmountInput = el('input', { type: 'number', min: '100', step: '100', value: String(ar.amountInr ?? 500) });
+    const monthlyLimitInput = el('input', { type: 'number', min: '0', step: '100', value: String(ar.monthlyLimitInr ?? 0) });
+
+    // Derived server-side from the ledger: manual top-ups count toward this too.
+    const monthlyLimitInr = Number(ar.monthlyLimitInr) || 0;
+    const monthlyNote = el('span', { class: 'muted' }, monthlyLimitInr > 0
+      ? `Recharged ₹${ar.rechargedThisMonthInr ?? 0} of ₹${monthlyLimitInr} this calendar month (UTC)`
+        + (ar.monthlyLimitReached ? ' — limit reached; auto-reload stays paused until the month resets.' : '')
+      : 'No monthly limit set (0 = uncapped).');
 
     const amountField = el('label', { class: 'org-inline-field', id: 'org-ar-amount-field' }, [
       el('span', { class: 'muted' }, 'Threshold Amount (INR)'),
@@ -1075,8 +1083,13 @@ async function renderOrgBilling(section, organization, isAdmin) {
           el('span', { class: 'muted' }, 'Reload Amount (INR)'),
           reloadAmountInput,
         ]),
+        el('label', { class: 'org-inline-field' }, [
+          el('span', { class: 'muted' }, 'Monthly Limit (INR), 0 = uncapped'),
+          monthlyLimitInput,
+        ]),
         saveConfigBtn,
       ]),
+      monthlyNote,
     ]);
 
     configForm.addEventListener('submit', async (e) => {
@@ -1090,6 +1103,7 @@ async function renderOrgBilling(section, organization, isAdmin) {
             thresholdInr: Number(thresholdAmountInput.value) || 0,
             thresholdPercent: Number(thresholdPercentInput.value) || 20,
             amountInr: Number(reloadAmountInput.value) || 0,
+            monthlyLimitInr: Number(monthlyLimitInput.value) || 0,
           },
         });
         toast('Organization billing settings saved.');

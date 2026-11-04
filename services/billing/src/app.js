@@ -8,6 +8,7 @@ const store = require('@ai-fleet/shared-core/store');
 const ledger = require('@ai-fleet/shared-core/billing/ledger');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
 const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
+const recharge = require('@ai-fleet/shared-core/billing/recharge');
 const { processBillingSweep } = require('@ai-fleet/shared-core/billing/sweep');
 const rechargeTrigger = require('@ai-fleet/shared-core/billing/recharge-trigger');
 const autoRechargeJob = require('./auto-recharge-job');
@@ -52,6 +53,7 @@ function createApp(options = {}) {
       account,
       cashfreeConfigured: cashfreeClient.isConfigured(),
       environment: process.env.CASHFREE_ENV || 'sandbox',
+      rechargedThisMonthPaise: recharge.rechargedThisMonthPaise(orgId),
     });
     res.set('Content-Type', 'text/html').send(html);
   });

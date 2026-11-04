@@ -13,7 +13,9 @@ process.env.INITIAL_CREDIT_INR = '0';
 const store = require('../store');
 const ledger = require('./ledger');
 const cashfreeClient = require('./cashfree-client');
-const { maybeAutoRecharge, lastChargeGateMs } = require('./recharge');
+const {
+  maybeAutoRecharge, lastChargeGateMs, monthKey, rechargedThisMonthPaise, chargeableAmountPaise,
+} = require('./recharge');
 
 const COOLDOWN_MS = 60 * 60 * 1000;
 
@@ -160,5 +162,135 @@ test('the payment id is stable inside one cooldown window', async () => {
   });
   assert.equal(calls.length, 2);
   assert.equal(calls[0].paymentId, calls[1].paymentId, 'same window, same id');
-  assert.equal(calls[0].paymentId, `pay_org-rc-payid_${Math.floor(windowStart / COOLDOWN_MS)}`);
+  assert.equal(calls[0].paymentId, `pay_org-rc-payid_${Math.floor(windowStart / COOLDOWN_MS)}_50000`);
+});
+
+// --- the monthly limit -------------------------------------------------------
+// The hourly Job can top an org up ~720x a month; the only brake besides the
+// threshold is a monthly ceiling. It is a UTC CALENDAR month (not the rolling
+// 30-day window the spend charts use), it counts every money-in top-up including
+// manual ones, and it clamps a charge to the room left instead of wasting it.
+// The month-to-date figure is derived from the ledger — never a stored counter —
+// so no config save or reset can clear it.
+
+/** Midnight of the current UTC month, safely inside it. */
+function midMonth(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 15)).toISOString();
+}
+
+function prevMonth(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15)).toISOString();
+}
+
+/**
+ * An org with a positive balance under its threshold and the given top-ups already
+ * in the ledger. `thisMonth`/`lastMonth` are arrays of paise.
+ */
+function withMonthlyLimit(orgId, { amountPaise, monthlyLimitPaise = 0, thisMonth = [], lastMonth = [], creditType = 'recharge' }) {
+  ledger.ensureAccount(orgId);
+  for (const amount of thisMonth) {
+    store.addLedgerEntry({ orgId, type: creditType, amountPaise: amount, description: 'prior top-up', createdAt: midMonth() });
+  }
+  for (const amount of lastMonth) {
+    store.addLedgerEntry({ orgId, type: 'auto_recharge', amountPaise: amount, description: 'last month', createdAt: prevMonth() });
+  }
+  const account = ledger.refreshBalance(orgId);
+  store.upsertBillingAccount(orgId, {
+    autoRecharge: {
+      enabled: true,
+      mode: 'amount',
+      // Strictly above the current balance so the threshold gate passes.
+      thresholdPaise: (Number(account.balancePaise) || 0) + 1,
+      amountPaise,
+      monthlyLimitPaise,
+      lastRechargedAt: null,
+      lastAttemptedAt: null,
+    },
+  });
+  return store.getBillingAccount(orgId);
+}
+
+test('monthKey normalizes an offset timestamp into its UTC month', () => {
+  assert.equal(monthKey('2026-11-15T10:00:00.000Z'), '2026-11');
+  assert.equal(monthKey(Date.UTC(2026, 10, 15)), '2026-11');
+  // 00:00 IST on the 1st is still the previous month in UTC.
+  assert.equal(monthKey('2026-11-01T00:00:00+05:30'), '2026-10');
+  assert.equal(monthKey('not a date'), null);
+});
+
+test('a manual recharge in the same month counts toward the limit and clamps the charge', async () => {
+  withMonthlyLimit('org-cap-clamp', { amountPaise: 50000, monthlyLimitPaise: 60000, thisMonth: [40000] });
+  assert.equal(rechargedThisMonthPaise('org-cap-clamp'), 40000);
+  assert.equal(chargeableAmountPaise('org-cap-clamp', { amountPaise: 50000, monthlyLimitPaise: 60000 }), 20000);
+
+  const result = await maybeAutoRecharge('org-cap-clamp');
+
+  assert.ok(result, 'the remaining room is still charged');
+  assert.equal(result.entry.amountPaise, 20000, 'clamped to the headroom');
+  assert.equal(result.entry.meta.requestedPaise, 50000);
+  assert.equal(result.entry.meta.monthlyLimitPaise, 60000);
+  assert.equal(result.entry.meta.capApplied, true);
+  const account = store.getBillingAccount('org-cap-clamp');
+  assert.equal(account.autoRecharge.lastRechargeAmountPaise, 20000, 'the stamp records what was charged');
+});
+
+test('an initial credit never consumes monthly room', async () => {
+  withMonthlyLimit('org-cap-credit', { amountPaise: 50000, monthlyLimitPaise: 60000, thisMonth: [40000], creditType: 'credit' });
+
+  const result = await maybeAutoRecharge('org-cap-credit');
+
+  assert.ok(result);
+  assert.equal(result.entry.amountPaise, 50000, 'the full configured amount, not the headroom');
+  assert.equal(result.entry.meta.capApplied, false);
+});
+
+test('last month’s top-ups are not counted', async () => {
+  withMonthlyLimit('org-cap-rollover', {
+    amountPaise: 50000,
+    monthlyLimitPaise: 60000,
+    lastMonth: [60000],
+  });
+  assert.equal(rechargedThisMonthPaise('org-cap-rollover'), 0, 'the window reset with the calendar month');
+
+  const result = await maybeAutoRecharge('org-cap-rollover');
+
+  assert.ok(result, 'a new month restores the full room');
+  assert.equal(result.entry.amountPaise, 50000);
+});
+
+test('a limit with less than ₹1 of room left is not charged', async () => {
+  withMonthlyLimit('org-cap-spent', { amountPaise: 50000, monthlyLimitPaise: 50000, thisMonth: [49950] });
+  const before = store.getBillingAccount('org-cap-spent').balancePaise;
+
+  assert.equal(await maybeAutoRecharge('org-cap-spent'), null, 'a sub-₹1 top-up is not worth a charge');
+  assert.equal(rechargedThisMonthPaise('org-cap-spent'), 49950);
+  assert.equal(store.getBillingAccount('org-cap-spent').balancePaise, before, 'nothing was credited');
+});
+
+test('an exhausted limit blocks the charge, an unset limit never does', async () => {
+  withMonthlyLimit('org-cap-exact', { amountPaise: 50000, monthlyLimitPaise: 50000, thisMonth: [50000] });
+  assert.equal(chargeableAmountPaise('org-cap-exact', { amountPaise: 50000, monthlyLimitPaise: 50000 }), 0);
+  assert.equal(await maybeAutoRecharge('org-cap-exact'), null);
+
+  withMonthlyLimit('org-cap-open', { amountPaise: 50000, monthlyLimitPaise: 0, thisMonth: [500000] });
+  assert.equal(chargeableAmountPaise('org-cap-open', { amountPaise: 50000, monthlyLimitPaise: 0 }), 50000);
+  assert.ok(await maybeAutoRecharge('org-cap-open'), 'uncapped orgs behave exactly as before');
+});
+
+test('a clamped charge is replay-safe: same window, same amount, same id', async () => {
+  withMonthlyLimit('org-cap-payid', { amountPaise: 50000, monthlyLimitPaise: 60000, thisMonth: [40000] });
+  const cfg = store.getBillingAccount('org-cap-payid').autoRecharge;
+  const now = Math.floor(Date.now() / COOLDOWN_MS) * COOLDOWN_MS + 1000;
+
+  const calls = await withChargeStub('org-cap-payid', () => ({ payment_status: 'FAILED' }), async (acc) => {
+    store.upsertBillingAccount('org-cap-payid', { autoRecharge: { ...cfg, cashfreeSubscriptionId: 'sub_test_1' } });
+    await maybeAutoRecharge('org-cap-payid', now);
+    const after = store.getBillingAccount('org-cap-payid').autoRecharge;
+    store.upsertBillingAccount('org-cap-payid', { autoRecharge: { ...after, lastAttemptedAt: null } });
+    await maybeAutoRecharge('org-cap-payid', now + 1000);
+    return acc;
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].amountInr, 200, 'the clamped amount is what goes to Cashfree');
+  assert.equal(calls[0].paymentId, calls[1].paymentId, 'a retry of the same top-up replays, not re-mints');
 });

@@ -134,7 +134,7 @@ async function withCashfree(options, run) {
  * instead of suite-order-dependent. The account objects come from the real
  * store, so nothing about the charge/ledger path is mocked.
  */
-function runJob({ specs = [], env = {}, deps = {}, initStoreImpl } = {}) {
+function runJob({ specs = [], env = {}, deps = {}, initStoreImpl, logs = null } = {}) {
   const exitCodes = [];
   const noAlert = { checkThresholdsAndNotify: async () => null };
   const storeApi = specs.length ? {
@@ -147,10 +147,24 @@ function runJob({ specs = [], env = {}, deps = {}, initStoreImpl } = {}) {
     argv: [],
     initStoreImpl: initStoreImpl || (async () => {}),
     now: Date.now(),
-    logImpl: { info() {}, warn() {}, error() {} },
+    logImpl: logs || { info() {}, warn() {}, error() {} },
     exit: (code) => exitCodes.push(code),
     deps: { storeApi, notifyApi: noAlert, ...deps },
   }).then((summary) => ({ summary, exitCodes }));
+}
+
+/** A log sink that records what the job said, for gate-reason assertions. */
+function captureLogs() {
+  const lines = { info: [], warn: [], error: [] };
+  return {
+    lines,
+    text: (level) => lines[level].join('\n'),
+    logImpl: {
+      info: (msg) => lines.info.push(String(msg)),
+      warn: (msg) => lines.warn.push(String(msg)),
+      error: (msg) => lines.error.push(String(msg)),
+    },
+  };
 }
 
 /** The usual deps for a charged run: real recharge/notify, stubbed org service. */
@@ -253,6 +267,69 @@ test('an org that declined auto-recharge is never charged', async () => {
     assert.equal(summary.charged, 0);
     assert.equal(charges.length, 0);
     assert.equal(store.listLedgerEntries({ orgId: spec.orgId }).some((e) => e.type === 'auto_recharge'), false);
+  });
+});
+
+// --- the monthly limit -----------------------------------------------------------
+// The hourly Job can top an org up ~720x a month. A monthly ceiling bounds that;
+// these tests pin that the ceiling clamps rather than wastes a charge, and that
+// a spent ceiling says so out loud.
+
+test('a monthly limit clamps the charge to the room left instead of skipping it', async () => {
+  const spec = freshSpec(3);
+  seedOrg(spec);
+  const org = orgContextStub([spec]);
+
+  await withCashfree({}, async ({ charges }) => {
+    const { summary } = await runJob({ specs: [spec], deps: transportDeps(org) });
+
+    assert.equal(summary.charged, 1, 'the remaining room is still used');
+    assert.equal(charges[0].amountInr, 200, '₹200 of the configured ₹500 top-up');
+    const entry = store.listLedgerEntries({ orgId: spec.orgId }).find((e) => e.type === 'auto_recharge');
+    assert.equal(entry.amountPaise, 20000, 'the ledger records what was charged');
+    assert.equal(entry.meta.requestedPaise, 50000);
+    assert.equal(entry.meta.monthlyLimitPaise, 20000);
+    assert.equal(entry.meta.capApplied, true);
+    assert.equal(store.getBillingAccount(spec.orgId).balancePaise, 32000);
+  });
+});
+
+test('an exhausted monthly limit is reported as the skip reason', async () => {
+  const spec = freshSpec(3);
+  seedOrg(spec);
+  // A manual top-up this month spends the whole ceiling: it counts toward the
+  // limit, but is never itself blocked.
+  ledger.postEntry(spec.orgId, { type: 'recharge', amountPaise: 20000, description: 'manual top-up' });
+  const org = orgContextStub([spec]);
+  const logs = captureLogs();
+
+  await withCashfree({}, async ({ charges }) => {
+    const { summary } = await runJob({ specs: [spec], deps: transportDeps(org), logs: logs.logImpl });
+
+    assert.equal(charges.length, 0, 'nothing is charged past the ceiling');
+    assert.equal(summary.charged, 0);
+    assert.equal(summary.skipped, 1);
+    assert.match(logs.text('warn'), /monthly recharge limit reached \(20000 of 20000 paise used\)/);
+  });
+});
+
+test('a dry run reports the amount it would actually charge', async () => {
+  const spec = freshSpec(3);
+  seedOrg(spec);
+  const org = orgContextStub([spec]);
+  const logs = captureLogs();
+
+  await withCashfree({}, async ({ charges }) => {
+    const { summary } = await runJob({
+      specs: [spec],
+      env: { BILLING_JOB_DRY_RUN: 'true' },
+      deps: transportDeps(org),
+      logs: logs.logImpl,
+    });
+
+    assert.equal(charges.length, 0);
+    assert.equal(summary.charged, 0);
+    assert.match(logs.text('info'), /would charge 200 INR \(clamped to the monthly limit\)/);
   });
 });
 

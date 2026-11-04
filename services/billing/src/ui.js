@@ -6,6 +6,7 @@ function renderDashboardHtml(data = {}) {
     summary = {},
     cashfreeConfigured = false,
     environment = 'sandbox',
+    rechargedThisMonthPaise = 0,
   } = data;
 
   const balanceInr = (Number(account.balancePaise || 0) / 100).toFixed(2);
@@ -16,6 +17,14 @@ function renderDashboardHtml(data = {}) {
   const thresholdInr = ((Number(autoRecharge.thresholdPaise) || 0) / 100).toFixed(2);
   const thresholdPercent = Number(autoRecharge.thresholdPercent) || 20;
   const rechargeAmountInr = ((Number(autoRecharge.amountPaise) || 0) / 100).toFixed(2);
+  const monthlyLimitPaise = Number(autoRecharge.monthlyLimitPaise) || 0;
+  const monthlyLimitInr = (monthlyLimitPaise / 100).toFixed(2);
+  // Month-to-date is derived from the ledger, so saving the config cannot reset it.
+  const usedInr = (Number(rechargedThisMonthPaise || 0) / 100).toFixed(2);
+  const limitNote = monthlyLimitPaise > 0
+    ? `₹${usedInr} recharged of ₹${monthlyLimitInr} this calendar month (UTC)`
+      + (monthlyLimitPaise - Number(rechargedThisMonthPaise || 0) < 100 ? ' — limit reached; auto-reload stays paused until the month resets.' : '')
+    : 'No monthly limit: auto-reload is bounded only by the threshold and the hourly cooldown.';
   const subscriptionId = autoRecharge.cashfreeSubscriptionId || '';
   const paymentInfo = account.paymentInfo || {};
   const billingName = paymentInfo.billingName || 'Not configured';
@@ -266,6 +275,12 @@ function renderDashboardHtml(data = {}) {
           <input type="number" id="recharge-amount" value="${rechargeAmountInr}" min="100" step="100">
         </div>
 
+        <div class="form-group">
+          <label for="monthly-limit">Monthly Limit (₹, 0 = uncapped)</label>
+          <input type="number" id="monthly-limit" value="${monthlyLimitInr}" min="0" step="100">
+          <span style="font-size: 0.75rem; color: var(--text-muted);">${limitNote} Manual top-ups count toward it but are never blocked.</span>
+        </div>
+
         <div class="actions">
           <button type="submit" class="btn">Save Configuration</button>
           <button type="button" id="trigger-sweep-btn" class="btn secondary">Run Auto-Recharge Sweep Now</button>
@@ -304,6 +319,7 @@ function renderDashboardHtml(data = {}) {
       const thresholdInr = Number(document.getElementById('threshold-amount').value) || 0;
       const thresholdPercent = Number(document.getElementById('threshold-percent').value) || 20;
       const amountInr = Number(document.getElementById('recharge-amount').value) || 0;
+      const monthlyLimitInr = Number(document.getElementById('monthly-limit').value) || 0;
 
       try {
         const res = await fetch('/api/billing/config', {
@@ -316,6 +332,7 @@ function renderDashboardHtml(data = {}) {
               thresholdInr,
               thresholdPercent,
               amountInr,
+              monthlyLimitInr,
             }
           })
         });
