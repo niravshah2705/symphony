@@ -127,17 +127,20 @@ resource "google_cloud_run_v2_service" "laya" {
         }
       }
 
-      # GET /health is laya-serve's unauthenticated liveness route. Startup
-      # budget is generous: with LAYA_PRELOAD=1 the three checkpoints are built
-      # on the CPU before the server starts listening.
+      # GET /health is laya-serve's unauthenticated liveness route. With
+      # LAYA_PRELOAD=1 the three checkpoints are built on the CPU before the
+      # server listens, and the weights stream over gcsfuse. Measured on the
+      # live service (laya-inference-00016): the first checkpoint warned ~3min
+      # after boot, so the full preload needs ~10min — well past Cloud Run's
+      # 5min default. Budget = 15s x 80 = 20min.
       startup_probe {
         http_get {
           path = "/health"
           port = 8000
         }
-        period_seconds    = 5
-        timeout_seconds   = 2
-        failure_threshold = 60
+        period_seconds    = 15
+        timeout_seconds   = 5
+        failure_threshold = 80
       }
 
       liveness_probe {
