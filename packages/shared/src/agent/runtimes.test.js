@@ -19,6 +19,7 @@ const {
   applyWorkflowPattern,
   executeAgentRuntime,
   claudePermissionGuard,
+  qoderPermissionGuard,
   extractUsedResources,
   usedResourceMetadata,
 } = require('./runtimes');
@@ -47,7 +48,10 @@ function chatgptCodexLlm() {
 }
 
 test('runtime and workflow registries use stable canonical ids and aliases', () => {
-  assert.deepEqual(runtimeCatalog().map((item) => item.id), ['deepagent', 'codex-sdk', 'claude-agent-sdk', 'antigravity-sdk']);
+  assert.deepEqual(
+    runtimeCatalog().map((item) => item.id),
+    ['deepagent', 'codex-sdk', 'claude-agent-sdk', 'antigravity-sdk', 'qoder-sdk']
+  );
   assert.deepEqual(workflowPatternCatalog().map((item) => item.id), [
     'sequential',
     'parallel',
@@ -807,6 +811,189 @@ test('Antigravity SDK resolves the key from settings (ctx) and falls back to env
   assert.equal(seen.apiKey, 'env-fallback-key');
 });
 
+test('Qoder harness gates on the Qoder provider and never on brokered coding', () => {
+  assert.equal(
+    effectiveAgentRuntime('qoder-sdk', { provider: 'qoder' }, { strict: true, workflow: 'planning' }),
+    'qoder-sdk'
+  );
+  assert.equal(
+    effectiveAgentRuntime('qoder-sdk', { provider: 'claude' }, { strict: true, workflow: 'planning' }),
+    'deepagent'
+  );
+  // Coding runs under the egress sidecar by default and the sidecar cannot broker
+  // qodercli, so a brokered coding run falls back instead of holding the PAT.
+  assert.equal(
+    effectiveAgentRuntime('qoder-sdk', { provider: 'qoder' }, { strict: true, workflow: 'coding' }),
+    'deepagent'
+  );
+});
+
+function fakeQoderSdk(seen, messages) {
+  return {
+    accessToken: (token) => ({ type: 'accessToken', accessToken: token }),
+    startDaemon: async (options) => {
+      seen.daemonOptions = options;
+      const daemon = { stop: async () => { seen.daemonStopped = true; } };
+      return daemon;
+    },
+    query: ({ prompt, options }) => {
+      seen.prompt = prompt;
+      seen.queryOptions = options;
+      return (async function* stream() {
+        for (const message of messages) yield message;
+      })();
+    },
+  };
+}
+
+function qoderResultMessage(overrides = {}) {
+  return {
+    type: 'result',
+    subtype: 'success',
+    result: 'Qoder finished',
+    session_id: 'qoder-session-1',
+    total_cost_usd: 0.25,
+    usage: { input_tokens: 40, output_tokens: 8, total_tokens: 48 },
+    ...overrides,
+  };
+}
+
+test('Qoder SDK adapter returns the contract shape over a run-scoped daemon', async (t) => {
+  const root = workspace(t);
+  const seen = {};
+  const events = [];
+  const execution = await executeAgentRuntime({
+    runtime: 'qoder-sdk',
+    workflowPattern: 'supervisor',
+    prompt: 'Plan the change',
+    rootDir: root,
+    backendKind: 'filesystem',
+    maxTurns: 9,
+    systemPrompt: 'Trusted planning rules',
+    env: { PATH: '/usr/bin', HOME: '/home/another-tenant', QODER_PERSONAL_ACCESS_TOKEN: 'parent-secret' },
+    onEvent: (message) => events.push(message),
+    llm: {
+      provider: 'qoder',
+      model: 'performance',
+      accessToken: 'pat-123',
+      cliPath: '/tools/qodercli',
+    },
+    loaders: {
+      'qoder-sdk': async () => fakeQoderSdk(seen, [
+        { type: 'assistant', message: { content: [{ type: 'text', text: 'working' }] } },
+        qoderResultMessage(),
+      ]),
+    },
+    trace: false,
+  });
+
+  // The PAT is installed on a daemon started for THIS run, so a concurrent run
+  // cannot inherit it through the process-wide default daemon.
+  assert.deepEqual(seen.daemonOptions.auth, { type: 'accessToken', accessToken: 'pat-123' });
+  assert.equal(seen.daemonOptions.pathToQoderCLIExecutable, '/tools/qodercli');
+  assert.equal(seen.daemonStopped, true);
+  assert.equal(typeof seen.queryOptions.daemon.stop, 'function');
+  assert.equal(Object.hasOwn(seen.queryOptions, 'auth'), false);
+
+  // The subprocess gets the workspace-scoped home, never the inherited one, and
+  // the raw credential is not smuggled through the environment.
+  assert.equal(seen.queryOptions.env.QODER_PERSONAL_ACCESS_TOKEN, undefined);
+  assert.notEqual(seen.queryOptions.env.HOME, '/home/another-tenant');
+  assert.equal(seen.daemonOptions.env, seen.queryOptions.env);
+
+  assert.match(seen.prompt, /Plan the change/);
+  assert.match(seen.prompt, /<workflow_pattern id="supervisor">/);
+  assert.equal(seen.queryOptions.model, 'performance');
+  assert.equal(seen.queryOptions.maxTurns, 9);
+  assert.equal(seen.queryOptions.systemPrompt, 'Trusted planning rules');
+  assert.equal(seen.queryOptions.permissionMode, 'default');
+  assert.deepEqual(seen.queryOptions.settingSources, []);
+  assert.equal(seen.queryOptions.strictMcpConfig, true);
+  assert.equal(seen.queryOptions.persistSession, false);
+  assert.equal(seen.queryOptions.tools.includes('Agent'), true);
+  assert.equal(seen.queryOptions.tools.includes('Write'), false);
+  assert.deepEqual(events.map((message) => message.type), ['assistant', 'result']);
+
+  assert.equal(execution.runtime, 'qoder-sdk');
+  assert.equal(execution.provider, 'qoder');
+  assert.equal(execution.model, 'performance');
+  assert.equal(execution.finalText, 'Qoder finished');
+  assert.equal(execution.sessionId, 'qoder-session-1');
+  assert.equal(execution.costUsd, 0.25);
+  assert.equal(execution.usage.inputTokens, 40);
+  assert.equal(execution.usage.outputTokens, 8);
+  assert.equal(execution.usage.totalTokens, 48);
+  assert.equal(execution.messages.length, 2);
+});
+
+test('Qoder SDK confines tools to the workspace and denies shell while it holds the PAT', async (t) => {
+  const root = workspace(t);
+  const seen = {};
+  await executeAgentRuntime({
+    runtime: 'qoder-sdk',
+    prompt: 'task',
+    rootDir: root,
+    llm: { provider: 'qoder', model: 'auto', accessToken: 'pat-123' },
+    loaders: { 'qoder-sdk': async () => fakeQoderSdk(seen, [qoderResultMessage()]) },
+    trace: false,
+  });
+
+  const guard = seen.queryOptions.canUseTool;
+  assert.equal((await guard('Bash', { command: 'env' })).behavior, 'deny');
+  assert.equal((await guard('Write', { file_path: path.join(root, 'src/app.js') })).behavior, 'allow');
+  assert.equal((await guard('Write', { file_path: path.join(root, '..', 'escape') })).behavior, 'deny');
+  assert.equal((await guard('Grep', { pattern: 'TODO' })).behavior, 'allow');
+  assert.equal(seen.queryOptions.tools.includes('Edit'), true);
+});
+
+test('Qoder SDK fails closed without a token or a result message', async (t) => {
+  const root = workspace(t);
+  const seen = {};
+  const base = {
+    runtime: 'qoder-sdk',
+    prompt: 'task',
+    rootDir: root,
+    loaders: { 'qoder-sdk': async () => fakeQoderSdk(seen, [qoderResultMessage()]) },
+    trace: false,
+  };
+
+  await assert.rejects(
+    () => executeAgentRuntime({ ...base, llm: { provider: 'qoder', accessToken: '' } }),
+    (error) => error.code === 'runtime_auth_unavailable' && error.status === 401
+  );
+  await assert.rejects(
+    () => executeAgentRuntime({
+      ...base,
+      llm: { provider: 'qoder', accessToken: 'pat-123' },
+      loaders: { 'qoder-sdk': async () => fakeQoderSdk(seen, [{ type: 'assistant' }]) },
+    }),
+    (error) => error.code === 'runtime_incomplete' && error.status === 502
+  );
+  await assert.rejects(
+    () => executeAgentRuntime({
+      ...base,
+      llm: { provider: 'qoder', accessToken: 'pat-123' },
+      loaders: {
+        'qoder-sdk': async () => fakeQoderSdk(seen, [
+          qoderResultMessage({ subtype: 'error_during_execution', is_error: true }),
+        ]),
+      },
+    }),
+    (error) => error.code === 'runtime_execution_failed' && error.status === 502
+  );
+  // A run that never reached query() still has to release the daemon it started.
+  assert.equal(seen.daemonStopped, true);
+});
+
+test('Qoder executor rejects a non-Qoder model slot before loading the SDK', async (t) => {
+  const { executeQoder } = require('./harnesses/qoder');
+  const root = workspace(t);
+  await assert.rejects(
+    () => executeQoder({ llm: { provider: 'claude', accessToken: 'pat' }, rootDir: root }, 'task'),
+    (error) => error.code === 'runtime_provider_mismatch' && error.status === 400
+  );
+});
+
 test('effectiveAgentRuntime rejects a policy-excluded harness (enforcement)', () => {
   // codex is the provider so codex-sdk normally survives; an explicit policy
   // exclusion is a hard boundary rather than permission to pick another
@@ -837,6 +1024,21 @@ test('Claude permission guard denies credential-bearing shell and path escapes',
   assert.equal((await guard('Read', { file_path: path.join(root, 'README.md') })).behavior, 'allow');
   assert.equal((await guard('Read', { file_path: path.join(root, '..', 'secret') })).behavior, 'deny');
   assert.equal((await guard('Read', { file_path: path.join(root, 'outside-link', 'secret') })).behavior, 'deny');
+});
+
+test('Qoder permission guard denies shell and symlink escapes out of the workspace', async (t) => {
+  const root = workspace(t);
+  const outside = workspace(t);
+  fs.symlinkSync(outside, path.join(root, 'outside-link'), 'dir');
+  const guard = qoderPermissionGuard(root, true);
+  assert.equal((await guard('Bash', { command: 'env' })).behavior, 'deny');
+  assert.equal((await guard('Read', { file_path: path.join(root, 'README.md') })).behavior, 'allow');
+  assert.equal((await guard('Read', { file_path: path.join(root, '..', 'secret') })).behavior, 'deny');
+  assert.equal((await guard('Read', { file_path: path.join(root, 'outside-link', 'secret') })).behavior, 'deny');
+  // Without a credential in the environment, shell is allowed but paths are not.
+  const openGuard = qoderPermissionGuard(root, false);
+  assert.equal((await openGuard('Bash', { command: 'ls' })).behavior, 'allow');
+  assert.equal((await openGuard('Edit', { file_path: outside })).behavior, 'deny');
 });
 
 // ---------------------------------------------------------------------------

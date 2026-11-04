@@ -13,6 +13,7 @@ const PROVIDER_DEPLOYMENT = Object.freeze({
   codex: 'hosted',
   claude: 'hosted',
   antigravity: 'hosted',
+  qoder: 'hosted',
 });
 const ROLE_DEPLOYMENT = Object.freeze({ byom: 'byom', global: 'hosted' });
 
@@ -412,6 +413,15 @@ function settingsPatchForPreset(preset, overrides = {}) {
       antigravityReasoningAdapter: params.reasoningAdapter,
     };
   }
+  if (preset.provider === 'qoder') {
+    // Harness-only provider: qodercli owns sampling + reasoning, so the preset
+    // carries the model tier and the context/output budget the harness reports.
+    return {
+      qoderModel: params.model,
+      qoderContextWindow: params.contextWindow,
+      qoderMaxTokens: params.maxOutputTokens,
+    };
+  }
   return {
     claudeModel: params.model,
     claudeContextWindow: params.contextWindow,
@@ -735,6 +745,27 @@ function customPresetForSettings(provider, settings) {
         temperature: adapter === 'none' ? settings.antigravityTemperature ?? 0.7 : null,
         topP: null, topK: null, repeatPenalty: null,
         reasoning: { effort: defaultEffort, parameter: adapter === 'openai' ? 'reasoning.effort' : null },
+        jsonMode: null, contextMode: null,
+      },
+    };
+  }
+  if (provider === 'qoder') {
+    // Harness-only provider: qodercli owns sampling + reasoning, so the custom
+    // shape reports no adapter, no temperature control, and just the model tier.
+    return {
+      id: 'custom', provider, deployment: 'hosted', model: settings.qoderModel || 'auto',
+      limits: { contextWindow: 200000, maxOutputTokens: 32768 },
+      requestLimits: { maxOutputContextFraction: null },
+      capabilities: {
+        temperature: false, contextWindowConfigurable: false, reasoningAdapter: 'none',
+        reasoningEfforts: ['none'],
+      },
+      parameters: {
+        contextWindow: settings.qoderContextWindow || 32768,
+        maxOutputTokens: settings.qoderMaxTokens || 8192,
+        temperature: null,
+        topP: null, topK: null, repeatPenalty: null,
+        reasoning: { effort: 'none', parameter: null },
         jsonMode: null, contextMode: null,
       },
     };

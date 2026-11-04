@@ -941,6 +941,74 @@
         "jsonMode": null,
         "contextMode": null
       }
+    },
+    {
+      "id": "qoder-auto",
+      "cost": { "inputPer1M": null, "outputPer1M": null, "currency": "USD", "unit": "per_1m_tokens", "source": "Qoder account credits (no per-token rate published)", "asOf": "2026-11-02" },
+      "label": "Qoder Auto (Qoder Agent SDK)",
+      "deployment": "hosted",
+      "provider": "qoder",
+      "model": "auto",
+      "sourceUrl": "https://docs.qoder.com/cli",
+      "modelPatterns": ["auto"],
+      "recommended": true,
+      "description": "Qoder's server-selected model tier. The Qoder harness drives a local qodercli daemon, which picks the catalog model for the scene and reports the tier it used back on the run result.",
+      "requirements": "Create a Personal Access Token at qoder.com/account/integrations and paste it in Settings (or set QODER_PERSONAL_ACCESS_TOKEN). Usage is billed to your Qoder account credits.",
+      "limits": { "contextWindow": 200000, "maxOutputTokens": 32768 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 32768,
+        "maxOutputTokens": 8192,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "none", "parameter": null },
+        "jsonMode": null,
+        "contextMode": null
+      }
+    },
+    {
+      "id": "qoder-performance",
+      "cost": { "inputPer1M": null, "outputPer1M": null, "currency": "USD", "unit": "per_1m_tokens", "source": "Qoder account credits (no per-token rate published)", "asOf": "2026-11-02" },
+      "label": "Qoder Performance (Qoder Agent SDK)",
+      "deployment": "hosted",
+      "provider": "qoder",
+      "model": "performance",
+      "sourceUrl": "https://docs.qoder.com/cli",
+      "modelPatterns": ["performance"],
+      "recommended": false,
+      "description": "Qoder's higher-capability tier for complex planning and multi-file coding work, reached through the @qoder-ai/qoder-agent-sdk harness.",
+      "requirements": "Create a Personal Access Token at qoder.com/account/integrations and paste it in Settings (or set QODER_PERSONAL_ACCESS_TOKEN). Usage is billed to your Qoder account credits.",
+      "limits": { "contextWindow": 200000, "maxOutputTokens": 32768 },
+      "requestLimits": { "maxOutputContextFraction": null },
+      "capabilities": {
+        "toolCalling": true,
+        "structuredOutput": true,
+        "temperature": false,
+        "contextWindowConfigurable": false,
+        "reasoningAdapter": "none",
+        "reasoningEfforts": ["none"]
+      },
+      "parameters": {
+        "contextWindow": 32768,
+        "maxOutputTokens": 8192,
+        "temperature": null,
+        "topP": null,
+        "topK": null,
+        "repeatPenalty": null,
+        "reasoning": { "effort": "none", "parameter": null },
+        "jsonMode": null,
+        "contextMode": null
+      }
     }
   ]
 }

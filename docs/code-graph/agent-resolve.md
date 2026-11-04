@@ -7,15 +7,15 @@
 Community of 2 nodes
 
 - **Size**: 2 nodes
-- **Cohesion**: 0.4000
+- **Cohesion**: 0.1333
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| resolveEffectiveValues | Function | ./packages/shared/src/agent/settings-policy.js | 143-155 |
-| test:resolveEffectiveValues resolves user over project over org@L148 | Test | ./packages/shared/src/agent/settings-policy.test.js | 148-156 |
+| resolveProxied | Function | ./packages/shared/src/agent/qoder.test.js | 23-41 |
+| test:the Qoder harness fails closed when the egress sidecar is armed@L75 | Test | ./packages/shared/src/agent/qoder.test.js | 75-81 |
 
 ## Execution Flows
 
@@ -25,11 +25,16 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `deepEqual` (4 edge(s))
-- `map` (1 edge(s))
+- `equal` (2 edge(s))
+- `stringify` (1 edge(s))
+- `parse` (1 edge(s))
+- `trim` (1 edge(s))
+- `execFileSync` (1 edge(s))
+- `resolve` (1 edge(s))
+- `match` (1 edge(s))
 
 ### Incoming
 
-- `deepEqual` (4 edge(s))
-- `./packages/shared/src/agent/settings-policy.js` (2 edge(s))
-- `./packages/shared/src/agent/settings-policy.test.js` (1 edge(s))
+- `./packages/shared/src/agent/qoder.test.js` (2 edge(s))
+- `equal` (2 edge(s))
+- `match` (1 edge(s))

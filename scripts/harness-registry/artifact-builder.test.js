@@ -23,6 +23,7 @@ const {
   installClaude,
   installNpmCli,
   installDeepseek,
+  installQoder,
   readResolvedSource,
   relativizeContainedAbsoluteSymlinks,
   runEccProfile,
@@ -494,6 +495,84 @@ test('DeepSeek stages ECC skills through the pinned first-party dsh contract', (
   }
 });
 
+test('Qoder stages validated ECC skills into the qodercli home without an ECC adapter', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-qoder-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const sourceRoot = path.join(root, 'source');
+  const homeRoot = path.join(root, 'home');
+  fs.mkdirSync(homeRoot);
+  writeFile(path.join(sourceRoot, 'skills', 'plan-review-source', 'SKILL.md'), [
+    '---',
+    'name: plan-review',
+    'description: Review a plan before coding.',
+    '---',
+    '# Plan review',
+    '',
+  ].join('\n'));
+  writeFile(path.join(sourceRoot, 'skills', 'plan-review-source', 'references', 'checklist.md'), '# Checklist\n');
+  writeFile(path.join(sourceRoot, 'skills', 'plan-review-source', '.credentials.yaml'), 'api_key: never-copy\n');
+
+  const result = installQoder({
+    sourceRoot,
+    homeRoot,
+    toolsRoot: path.join(root, 'tools'),
+    env: { CI: 'true' },
+  });
+
+  assert.deepEqual(result, { stagedSkills: ['plan-review'] });
+  assert.ok(fs.existsSync(path.join(homeRoot, '.qoder', 'skills', 'plan-review', 'SKILL.md')));
+  assert.ok(fs.existsSync(path.join(homeRoot, '.qoder', 'skills', 'plan-review', 'references', 'checklist.md')));
+  assert.equal(fs.existsSync(path.join(homeRoot, '.qoder', 'skills', 'plan-review', '.credentials.yaml')), false);
+  assert.equal(fs.existsSync(path.join(homeRoot, '.dsh')), false);
+});
+
+test('Qoder staging reports the Qoder label when the skill tree is invalid', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-qoder-invalid-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const sourceRoot = path.join(root, 'source');
+  const homeRoot = path.join(root, 'home');
+  fs.mkdirSync(homeRoot);
+  writeFile(path.join(sourceRoot, 'skills', 'plan-review', 'SKILL.md'), [
+    '---',
+    'name: Plan Review',
+    'description: Review a plan before coding.',
+    '---',
+    '',
+  ].join('\n'));
+
+  assert.throws(
+    () => installQoder({ sourceRoot, homeRoot, toolsRoot: path.join(root, 'tools'), env: {} }),
+    (error) => (
+      /Qoder skill plan-review needs a kebab-case name/i.test(error.message)
+      && !/deepseek/i.test(error.message)
+    )
+  );
+});
+
+test('Qoder staging refuses a symlinked home before writing outside the artifact', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-qoder-symlink-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const sourceRoot = path.join(root, 'source');
+  const homeRoot = path.join(root, 'home');
+  const outside = path.join(root, 'outside');
+  writeFile(path.join(sourceRoot, 'skills', 'safe-skill', 'SKILL.md'), [
+    '---',
+    'name: safe-skill',
+    'description: A safe test skill.',
+    '---',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(homeRoot);
+  fs.mkdirSync(outside);
+  fs.symlinkSync(outside, path.join(homeRoot, '.qoder'), 'dir');
+
+  assert.throws(
+    () => installQoder({ sourceRoot, homeRoot, toolsRoot: path.join(root, 'tools'), env: {} }),
+    /Qoder home must be a real directory/i
+  );
+  assert.equal(fs.existsSync(path.join(outside, 'skills', 'safe-skill', 'SKILL.md')), false);
+});
+
 test('DeepSeek skill staging rejects malformed and duplicate Agent Skills metadata', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-deepseek-invalid-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -558,7 +637,7 @@ test('DeepSeek staging rejects a destination symlink before writing outside the 
   assert.equal(fs.existsSync(path.join(outside, 'skills', 'safe-skill', 'SKILL.md')), false);
 });
 
-test('assembles and verifies exactly the eight catalog harness artifacts', (t) => {
+test('assembles and verifies exactly the catalog harness artifacts', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-assemble-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const { inputsDir } = createInputs(root);

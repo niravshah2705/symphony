@@ -7,7 +7,7 @@
 Community of 18 nodes
 
 - **Size**: 18 nodes
-- **Cohesion**: 0.0551
+- **Cohesion**: 0.0550
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,11 +26,11 @@ Community of 18 nodes
 | readBoundedLog | Function | ./packages/shared-core/src/agent/diagnostics.js | 94-109 |
 | summarizeLogTail | Function | ./packages/shared-core/src/agent/diagnostics.js | 111-132 |
 | integrationChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 134-178 |
-| sdkChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 180-231 |
-| serviceChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 233-249 |
-| localModelCheck | Function | ./packages/shared-core/src/agent/diagnostics.js | 251-286 |
-| reportStatus | Function | ./packages/shared-core/src/agent/diagnostics.js | 288-292 |
-| runDiagnostics | Function | ./packages/shared-core/src/agent/diagnostics.js | 295-318 |
+| sdkChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 180-239 |
+| serviceChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 241-257 |
+| localModelCheck | Function | ./packages/shared-core/src/agent/diagnostics.js | 259-294 |
+| reportStatus | Function | ./packages/shared-core/src/agent/diagnostics.js | 296-300 |
+| runDiagnostics | Function | ./packages/shared-core/src/agent/diagnostics.js | 303-326 |
 | test_project_admin_can_do_everything_project_scoped | Test | ./services/org/tests/unit/test_policy.py | 46-48 |
 
 ## Execution Flows
@@ -44,7 +44,7 @@ No execution flows pass through this community.
 - `expect` (46 edge(s))
 - `getByRole` (12 edge(s))
 - `evaluate` (10 edge(s))
-- `Boolean` (9 edge(s))
+- `Boolean` (10 edge(s))
 - `toBeVisible` (8 edge(s))
 - `toBe` (8 edge(s))
 - `press` (8 edge(s))

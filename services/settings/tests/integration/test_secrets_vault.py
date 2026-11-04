@@ -301,6 +301,7 @@ async def test_selection_persists_in_masked_view(client):
         "jiraApiToken",
         "asanaAccessToken",
         "omlxApiKey",
+        "qoderAccessToken",
         "slackWebhookUrl",
     ],
 )

@@ -17,8 +17,8 @@ Community of 213 nodes
 | test:deploy entry points share the blank/valid/invalid GA4 id contract@L35 | Test | ./deploy/gcp/analytics-config.test.js | 35-45 |
 | test:blank or unset bootstrap input removes a stale repo variable and gh failures remain fatal@L59 | Test | ./deploy/gcp/analytics-config.test.js | 59-77 |
 | test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-96 |
-| test:only the publish job can mint cloud credentials@L58 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 58-99 |
-| test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 101-134 |
+| test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
+| test:matrix provisions only the harness-specific runtimes and publishes registry index last@L103 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 103-136 |
 | test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L129 | Test | ./deploy/gcp/pipeline-infra.test.js | 129-162 |
 | test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L164 | Test | ./deploy/gcp/pipeline-infra.test.js | 164-178 |
 | test:deploy workflow does not query disabled optional Cloud Run services@L180 | Test | ./deploy/gcp/pipeline-infra.test.js | 180-211 |

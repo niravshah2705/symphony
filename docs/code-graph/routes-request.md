@@ -22,7 +22,7 @@ Community of 9 nodes
 | recordForRequest | Function | ./services/planner/src/routes/agent.js | 118-120 |
 | stampRequestContext | Function | ./services/planner/src/routes/agent.js | 122-129 |
 | conversationForRequest | Function | ./services/planner/src/routes/agent.js | 135-140 |
-| resolveProjectSecrets | Function | ./services/planner/src/routes/agent.js | 392-500 |
+| resolveProjectSecrets | Function | ./services/planner/src/routes/agent.js | 393-501 |
 
 ## Execution Flows
 

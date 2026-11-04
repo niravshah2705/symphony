@@ -35,6 +35,7 @@ const LEGACY_PLAINTEXT_SECRET_FIELDS = Object.freeze([
   'linearApiKey', 'githubToken', 'gitlabToken', 'jiraApiToken',
   'asanaAccessToken', 'omlxApiKey', 'huggingfaceApiKey',
   'antigravityApiKey', 'geminiApiKey', 'langsmithApiKey', 'slackWebhookUrl',
+  'qoderAccessToken',
 ]);
 
 // Settings keys backing each LLM role. Provider-class slots ('byom'/'global')
@@ -49,9 +50,11 @@ const ROLE_KEYS = Object.freeze({
   deployment: { provider: 'deploymentLlmProvider', preset: 'deploymentLlmPresetId' },
 });
 // BYoM ("Bring Your Own Model") providers: the local-inference runtimes plus the
-// Hugging Face hosted router. Codex/Claude/Antigravity are the managed hosted providers.
+// Hugging Face hosted router. Codex/Claude/Antigravity/Qoder are the managed
+// hosted providers. Qoder is harness-only: qodercli owns inference, so a role
+// set to it only works with the Qoder Agent SDK runtime.
 const BYOM_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'huggingface']);
-const HOSTED_PROVIDERS = Object.freeze(['codex', 'claude', 'antigravity']);
+const HOSTED_PROVIDERS = Object.freeze(['codex', 'claude', 'antigravity', 'qoder']);
 
 // Every purpose role now has a live pipeline consumer, so the persisted
 // estimate must use the same four-role basis shown in the browser.
@@ -252,6 +255,13 @@ function publicSettings() {
     antigravityReasoningAdapter: s.antigravityReasoningAdapter || 'none',
     hasAntigravityApiKey: false,
     maskedAntigravityApiKey: '',
+    // Qoder — the model tier is config; the personal access token is a secret and
+    // is exposed only as has/masked fields (it lives in the vault, never here).
+    qoderModel: s.qoderModel,
+    qoderContextWindow: s.qoderContextWindow,
+    qoderMaxTokens: s.qoderMaxTokens,
+    hasQoderAccessToken: false,
+    maskedQoderAccessToken: '',
     hasGithubToken: false,
     maskedGithubToken: '',
     hasOpenrouterApiKey: Boolean(s.openrouterApiKey),

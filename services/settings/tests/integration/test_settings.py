@@ -18,6 +18,9 @@ async def test_universe_lists_all_domains(client):
     domains = resp.json()["domains"]
     assert set(domains) == {"harness", "tools", "skills", "plugins", "hooks", "models"}
     assert "deepagent" in domains["harness"]
+    # The Qoder harness is policy-selectable, and its model tiers are policy items.
+    assert "qoder-sdk" in domains["harness"]
+    assert "qoder-auto" in domains["models"]
     assert "docker" in domains["tools"]
     assert "billing" in domains["tools"]
     assert "linear" in domains["skills"]
@@ -26,6 +29,7 @@ async def test_universe_lists_all_domains(client):
     catalog = resp.json()["harnesses"]
     assert resp.json()["schemaVersion"] == 1
     assert next(item for item in catalog if item["id"] == "deepagent")["availability"] == "available"
+    assert next(item for item in catalog if item["id"] == "qoder-sdk")["requiresProvider"] == "qoder"
     # Experimental adapters are discoverable but cannot be selected by policy.
     assert next(item for item in catalog if item["id"] == "opencode")["availability"] == "experimental"
     assert "opencode" not in domains["harness"]

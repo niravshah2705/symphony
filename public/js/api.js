@@ -401,6 +401,9 @@ export const api = {
     // Antigravity (Gemini) has no live model-discovery endpoint here; the catalog
     // presets and the manual model field cover selection.
     if (provider === 'antigravity') return Promise.resolve({ models: [], reachable: true, source: 'catalog' });
+    // Qoder inference runs inside qodercli (model tiers, not a listable endpoint);
+    // the catalog presets and the manual model field cover selection.
+    if (provider === 'qoder') return Promise.resolve({ models: [], reachable: true, source: 'catalog' });
     return Promise.reject(new Error(`Unsupported LLM provider: ${provider}`));
   },
 

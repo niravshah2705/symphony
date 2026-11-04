@@ -16,7 +16,7 @@ Community of 3 nodes
 |------|------|------|-------|
 | workflowText | Function | ./deploy/gcp/harness-registry-workflow.test.js | 10-12 |
 | jobBlock | Function | ./deploy/gcp/harness-registry-workflow.test.js | 14-21 |
-| test:harness registry workflow has isolated resolve, eight-leg build, assemble, and publish jobs@L23 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 23-56 |
+| test:harness registry workflow has isolated resolve, nine-leg build, assemble, and publish jobs@L23 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 23-57 |
 
 ## Execution Flows
 
@@ -27,8 +27,8 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `match` (13 edge(s))
-- `./deploy/gcp/harness-registry-workflow.test.js::test:only the publish job can mint cloud credentials@L58` (5 edge(s))
-- `./deploy/gcp/harness-registry-workflow.test.js::test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101` (3 edge(s))
+- `./deploy/gcp/harness-registry-workflow.test.js::test:only the publish job can mint cloud credentials@L59` (5 edge(s))
+- `./deploy/gcp/harness-registry-workflow.test.js::test:matrix provisions only the harness-specific runtimes and publishes registry index last@L103` (3 edge(s))
 - `slice` (2 edge(s))
 - `indexOf` (1 edge(s))
 - `notEqual` (1 edge(s))
@@ -42,9 +42,9 @@ No execution flows pass through this community.
 ### Incoming
 
 - `match` (13 edge(s))
-- `./deploy/gcp/harness-registry-workflow.test.js::test:only the publish job can mint cloud credentials@L58` (5 edge(s))
+- `./deploy/gcp/harness-registry-workflow.test.js::test:only the publish job can mint cloud credentials@L59` (5 edge(s))
 - `./deploy/gcp/harness-registry-workflow.test.js` (3 edge(s))
-- `./deploy/gcp/harness-registry-workflow.test.js::test:matrix provisions only the harness-specific runtimes and publishes registry index last@L101` (3 edge(s))
+- `./deploy/gcp/harness-registry-workflow.test.js::test:matrix provisions only the harness-specific runtimes and publishes registry index last@L103` (3 edge(s))
 - `map` (1 edge(s))
 - `matchAll` (1 edge(s))
 - `deepEqual` (1 edge(s))

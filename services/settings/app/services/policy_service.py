@@ -327,6 +327,9 @@ _PROVIDER_SECRETS = {
     "claude": ("anthropicApiKey",),
     "antigravity": ("geminiApiKey",),
     "huggingface": ("huggingfaceApiKey",),
+    # Harness-only provider: the personal access token belongs to the org's own
+    # Qoder account (customer-owned; the platform holds no managed Qoder key).
+    "qoder": ("qoderAccessToken",),
 }
 _KNOWN_MODEL_PROVIDERS = {
     "ollama",

@@ -130,6 +130,8 @@ MODELS: tuple[str, ...] = (
     "huggingface-qwen2-5-72b",
     "antigravity-gemini-2-5-flash",
     "antigravity-gemini-2-5-pro",
+    "qoder-auto",
+    "qoder-performance",
 )
 
 

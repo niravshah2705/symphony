@@ -17,7 +17,7 @@
 const { normalizeAgentRuntime, normalizeWorkflowPattern } = require('./runtimes');
 const { COMPLEXITY_TIER_IDS } = require('./model-presets');
 
-const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity']);
+const ALL_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'codex', 'claude', 'huggingface', 'antigravity', 'qoder']);
 // The complexity slider stores one of the catalog tiers, or 'custom' when the
 // roles were set individually and match no tier.
 const COMPLEXITY_TIER_VALUES = Object.freeze([...COMPLEXITY_TIER_IDS, 'custom']);
@@ -26,7 +26,7 @@ const COMPLEXITY_TIER_VALUES = Object.freeze([...COMPLEXITY_TIER_IDS, 'custom'])
 const BYOM_PROVIDERS = Object.freeze(['ollama', 'lmstudio', 'omlx', 'huggingface']);
 const PLANNING_PROVIDERS = Object.freeze(['linear', 'jira', 'asana']);
 const REPOSITORY_PROVIDERS = Object.freeze(['github', 'gitlab']);
-const RUNTIME_IDS = Object.freeze(['deepagent', 'codex-sdk', 'claude-agent-sdk', 'antigravity-sdk']);
+const RUNTIME_IDS = Object.freeze(['deepagent', 'codex-sdk', 'claude-agent-sdk', 'antigravity-sdk', 'qoder-sdk']);
 const WORKFLOW_PATTERN_IDS = Object.freeze(['sequential', 'parallel', 'evaluator', 'supervisor']);
 const CONTEXT_MODES = Object.freeze(['summarize', 'trim', 'none']);
 // Upper bound on the LLM stream retry count; matches the clamp in agent/llm.js.
@@ -169,6 +169,12 @@ const ALLOWED = Object.freeze({
   // Optional Antigravity preview managed-agent id (non-secret config; the API key
   // stays out of the allow-list and keeps its dedicated endpoint).
   antigravityAgentId: str(200),
+  // Qoder (harness-only hosted provider). qodercli owns sampling + reasoning, so
+  // only the model tier and the reported context/output budget are editable; the
+  // Personal Access Token keeps its dedicated, masked endpoint.
+  qoderModel: str(200),
+  qoderContextWindow: num(0, 100_000_000),
+  qoderMaxTokens: num(0, 100_000_000),
 
   // LangSmith (non-secret only; the API key keeps its dedicated endpoint)
   langsmithProject: str(200),
@@ -249,7 +255,7 @@ function describeEditableSettings() {
     EDITABLE_KEYS.join(', '),
     '',
     'Enum values:',
-    `- agentRuntime (harness): ${RUNTIME_IDS.join(' | ')} (deepagent=DeepAgent, codex-sdk=Codex, claude-agent-sdk=ClaudeCode, antigravity-sdk=Antigravity)`,
+    `- agentRuntime (harness): ${RUNTIME_IDS.join(' | ')} (deepagent=DeepAgent, codex-sdk=Codex, claude-agent-sdk=ClaudeCode, antigravity-sdk=Antigravity, qoder-sdk=Qoder)`,
     `- workflowPattern: ${WORKFLOW_PATTERN_IDS.join(' | ')}`,
     `- llmProvider / thinkingLlmProvider / executionLlmProvider / testingLlmProvider / deploymentLlmProvider: ${ALL_PROVIDERS.join(' | ')}`,
     `- byomProvider: ${BYOM_PROVIDERS.join(' | ')}`,

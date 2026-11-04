@@ -20,7 +20,7 @@ function jobBlock(source, name) {
   return next === -1 ? rest : rest.slice(0, next);
 }
 
-test('harness registry workflow has isolated resolve, eight-leg build, assemble, and publish jobs', () => {
+test('harness registry workflow has isolated resolve, nine-leg build, assemble, and publish jobs', () => {
   const source = workflowText();
   const resolve = jobBlock(source, 'resolve');
   const build = jobBlock(source, 'build');
@@ -45,14 +45,15 @@ test('harness registry workflow has isolated resolve, eight-leg build, assemble,
     'codex-sdk',
     'claude-agent-sdk',
     'antigravity-sdk',
+    'qoder-sdk',
     'opencode',
     'pi',
     'oh-my-pi',
     'deepseek',
   ]);
-  assert.equal(harnesses.length, 8);
+  assert.equal(harnesses.length, 9);
   assert.match(build, /- harness: deepseek\n\s+python: false\n\s+bun: false/);
-  assert.match(assemble, /\(\.harnesses \| length == 8\)/);
+  assert.match(assemble, /\(\.harnesses \| length == 9\)/);
 });
 
 test('only the publish job can mint cloud credentials', () => {
@@ -84,13 +85,14 @@ test('only the publish job can mint cloud credentials', () => {
     'codex-sdk',
     'claude-agent-sdk',
     'antigravity-sdk',
+    'qoder-sdk',
     'opencode',
     'pi',
     'oh-my-pi',
     'deepseek',
   ]);
-  assert.equal(allowlistedHarnesses.length, 8);
-  assert.match(validateBlock, /\(\.harnesses \| length == 8\)/);
+  assert.equal(allowlistedHarnesses.length, 9);
+  assert.match(validateBlock, /\(\.harnesses \| length == 9\)/);
   assert.match(validateBlock, /sha256sum "\$ARCHIVE"/);
   assert.match(validateBlock, /test "\$INDEX_SHA" = "\$DESCRIPTOR_SHA"/);
   assert.match(validateBlock, /test "\$INDEX_SHA" = "\$ACTUAL_SHA"/);
