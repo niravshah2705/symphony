@@ -22,6 +22,7 @@
     "start:billing": "npm start -w @ai-fleet/billing",
     "adlc": "node --env-file-if-exists=.env packages/cli/bin/adlc.js",
     "test": "node --test",
+    "test:secrets": "node --test \"secrets/*.test.mjs\"",
     "test:e2e": "playwright test",
     "test:e2e:debug": "PWDEBUG=1 playwright test --project=chrome",
     "e2e:qa:audit": "node e2e-live/scripts/audit.js",

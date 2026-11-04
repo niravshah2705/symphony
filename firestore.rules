@@ -1,0 +1,52 @@
+rules_version = '2';
+
+// Firestore security rules for the secrets.archagentix.com static app.
+//
+// Only the `secret_shares` collection is reachable from browsers, and only
+// with these guarantees:
+//   - writes carry opaque AES-256-GCM ciphertext (≤ 1 KB plaintext ⇒ ≤ 1400
+//     base64url chars), never a plaintext or key;
+//   - reads are refused once the share's own `expiresAt` has passed — the
+//     expiry the creator picked (1h/24h/48h/7d) is enforced HERE, not just in
+//     the page's JavaScript;
+//   - no updates; delete is open (that is the burn-after-read path).
+//
+// Everything else stays denied, matching the project's current no-rules
+// state. Server services use the Admin SDK, which bypasses rules entirely, so
+// deploying this file changes nothing for the platform backend.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function shareShapeValid() {
+      let d = request.resource.data;
+      let shares = ['ciphertext', 'iv', 'kdf', 'keyCheck', 'salt', 'oneTime',
+                    'expiresAt', 'createdAt', 'ownerUid'];
+      return d.keys().hasOnly(shares)
+          && d.ciphertext is string && d.ciphertext.size() <= 1400
+          && d.keyCheck is string && d.keyCheck.size() <= 64
+          && d.iv is string && d.iv.size() == 16
+          && (d.kdf == 'raw' || d.kdf == 'pbkdf2')
+          && (d.salt == null || (d.salt is string && d.salt.size() <= 32))
+          && d.oneTime is bool
+          && d.expiresAt is timestamp
+          && d.expiresAt > request.time
+          && d.expiresAt <= request.time.plus('7d')
+          && d.createdAt == request.time
+          && (d.ownerUid == null
+              || (request.auth != null && d.ownerUid == request.auth.uid));
+    }
+
+    match /secret_shares/{shareId} {
+      allow create: if shareShapeValid();
+      // List queries must also carry where('expiresAt','>',now) so this rule
+      // is satisfiable at query time — the app's "My shares" does exactly that.
+      allow read: if request.time < resource.data.expiresAt;
+      allow update: if false;
+      allow delete: if true;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

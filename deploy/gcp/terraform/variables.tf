@@ -985,6 +985,12 @@ variable "marketing_custom_domain" {
   description = "Custom domain attached to the marketing Hosting site (<project>-marketing), served from .github/workflows/deploy-www.yml. Empty = domain not attached (DNS still points elsewhere, e.g. the legacy Hostinger FTP host)."
   default     = "www.archagentix.com"
 }
+
+variable "secrets_custom_domain" {
+  type        = string
+  description = "Custom domain attached to the Secret Share Hosting site (<project>-secrets), served from .github/workflows/deploy-secrets.yml. Empty = domain not attached."
+  default     = "secrets.archagentix.com"
+}
 variable "firebase_allowed_domain" {
   type        = string
   description = "Optional: restrict app login to this email domain; empty = any verified user (Google OR Microsoft)."
