@@ -100,9 +100,11 @@ gh variable set OPENSHELL_CLUSTER_AUTOSTOP --body true    # enables the IST sche
 Both workflows authenticate as `GCP_DEPLOYER_SA` (`gh-deployer`), which
 `deploy/gcp/bootstrap.sh` grants `roles/container.admin`,
 `roles/compute.viewer` and the project's `substrateStaticIpAdmin` custom role
-(`compute.addresses.*` — viewer can read the static IPs the module owns but
-cannot create them, and a missing grant 403s the substrate apply). The former is
-what maps the identity to Kubernetes `cluster-admin`, so drain works without
+(`compute.addresses.create` and `setLabels` among others — viewer can read the
+static IPs the module owns but cannot create one, and a missing grant 403s the
+substrate apply mid-resource, because the address is labelled in a second call
+once it exists). `container.admin` is what maps the identity to Kubernetes
+`cluster-admin`, so drain works without
 `ci_rbac.tf`. Set `power_ci_sa_email`
 to that address if you prefer the explicit ClusterRole binding — it must match
 the `GCP_DEPLOYER_SA` secret byte for byte, because the auth webhook presents

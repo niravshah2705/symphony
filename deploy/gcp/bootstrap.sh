@@ -120,13 +120,23 @@ echo "  granted ${#DEPLOYER_ROLES[@]} roles"
 # and the substrate apply 403s on exactly that. Grant only addresses, not
 # compute.networkAdmin — that would also hand CI this project's firewalls,
 # subnetworks and NAT configuration.
-if ! gcloud iam roles describe substrateStaticIpAdmin --project "$PROJECT_ID" >/dev/null 2>&1; then
+#
+# setLabels is not optional: google_compute_address writes the resource's labels
+# in a second call after the address exists, so a role that has only `create`
+# succeeds on the first verb and 403s on the next one, leaving the address
+# half-made. Re-apply the list on an existing role so a project bootstrapped
+# before that grant landed converges instead of keeping the stale set.
+STATIC_IP_PERMS="compute.addresses.create,compute.addresses.delete,compute.addresses.update,compute.addresses.get,compute.addresses.list,compute.addresses.setLabels"
+if gcloud iam roles describe substrateStaticIpAdmin --project "$PROJECT_ID" >/dev/null 2>&1; then
+  gcloud iam roles update substrateStaticIpAdmin --project "$PROJECT_ID" --quiet \
+    --permissions "$STATIC_IP_PERMS" >/dev/null
+else
   log "Custom role projects/${PROJECT_ID}/roles/substrateStaticIpAdmin"
   gcloud iam roles create substrateStaticIpAdmin --project "$PROJECT_ID" --quiet \
     --title "Static IP provisioner" \
-    --description "Create/update/delete the regional static addresses the OpenShell and Substrate Envoy gateways publish on." \
+    --description "Create/update/delete and label the regional static addresses the OpenShell and Substrate Envoy gateways publish on." \
     --stage GA \
-    --permissions "compute.addresses.create,compute.addresses.delete,compute.addresses.update,compute.addresses.get,compute.addresses.list" >/dev/null
+    --permissions "$STATIC_IP_PERMS" >/dev/null
 fi
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:${DEPLOYER}" \

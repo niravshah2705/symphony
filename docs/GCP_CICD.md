@@ -164,10 +164,12 @@ done
 # Terraform owns the regional static addresses the Envoy fronts publish on, and
 # compute.viewer cannot create one. Narrower than roles/compute.networkAdmin,
 # which would also give CI the project's firewalls, subnets and NAT.
+# setLabels matters as much as create: google_compute_address labels the address
+# in a separate call after it exists, so a role without it 403s mid-apply.
 gcloud iam roles create substrateStaticIpAdmin --project "$PROJECT" --quiet \
   --title "Static IP provisioner" --stage GA \
-  --description "Create/update/delete the static addresses the OpenShell and Substrate gateways use." \
-  --permissions "compute.addresses.create,compute.addresses.delete,compute.addresses.update,compute.addresses.get,compute.addresses.list"
+  --description "Create/update/delete and label the static addresses the OpenShell and Substrate gateways use." \
+  --permissions "compute.addresses.create,compute.addresses.delete,compute.addresses.update,compute.addresses.get,compute.addresses.list,compute.addresses.setLabels"
 gcloud projects add-iam-policy-binding "$PROJECT" \
   --member="serviceAccount:${DEPLOYER}" \
   --role="projects/${PROJECT}/roles/substrateStaticIpAdmin" --condition=None >/dev/null

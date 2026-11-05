@@ -160,9 +160,49 @@ gh variable set SUBSTRATE_CONTROL_PLANE_PUBLIC  --body "true"   # only if you ac
 ```
 
 Apply, read the IP back from the `substrate_ingress_ip` output (the
-`substrate_ingress_dns` output prints the record for you), create the **A record**
-at the DNS zone, and let cert-manager finish issuing before saving the Settings card
-— an HTTPS listener without a ready `Certificate` just hangs `kubectl_manifest.substrate_ingress_gateway`.
+`substrate_ingress_dns` output prints the record for you) and create the **A
+record**. `archagentix.com` is not served by Cloud DNS in this project — its
+nameservers are `ns1/ns2.bmctech.in` — so the record is an operator step, and with
+no record there is nothing to reach the front and nothing to validate.
+
+#### The certificate is the chicken, the front is the egg
+
+A `Gateway` whose **only** listener references a Secret that does not exist yet is
+not built at all: Envoy Gateway logs `failed to process TLS SecretRef for gateway`,
+the `Gateway` reports `Programmed=False reason=AddressNotAssigned`, and there is no
+Envoy Deployment, Service or load balancer — so HTTP-01, which connects to port 80
+of that front, can never reach it. That is the state the front builds itself into,
+and a port-80 listener is what gets out of it: Envoy Gateway will happily build a
+data plane for the listeners that are valid, so `substrate-ingress` comes up on 80,
+solves the challenge, and 443 joins the Service once
+`substrate-server-external-tls` exists. Verified on the live cluster: the listener
+alone took the Gateway from `Programmed=False` to an Envoy Deployment plus a
+LoadBalancer Service on `substrate-ip` with `PORT(S) = 80`, while the `https`
+listener still reported `ResolvedRefs=False InvalidCertificateRef`.
+
+Two manifests carry that through:
+
+- **A port-80 `http` listener** on `substrate-ingress`. `substrate-http-redirect`
+  sends everything else on it to `https://…:443` with a 301, and the actor and
+  control-plane routes pin `sectionName: https`, so no actor traffic ever
+  terminates in plaintext. The redirect cannot swallow the challenge: Envoy Gateway
+  orders routes by match precedence (`internal/gatewayapi/sort.go` — Exact > Regex >
+  PathPrefix, and a `/` prefix is scored as zero characters), and the solver path is
+  an Exact match.
+- **`local.acme_solver_parent_refs`** (substrate.tf, consumed by both
+  `ClusterIssuer`s) lists both fronts. cert-manager's `gatewayHTTPRoute` solver
+  creates one HTTPRoute carrying every `parentRefs` entry, and an unprogrammed
+  parent still Accepts it, so the challenge answers on whichever front the A record
+  resolves to — including an operator who points the hostname at the shared
+  OpenShell front instead of `substrate-ip`. The issuer used to be pinned to
+  `openshell-ingress` alone, which silently made every substrate challenge depend
+  on that one front.
+
+So the sequence is one step, not a dance: apply → create the **A record for
+`substrate_ingress_ip`** → cert-manager issues and the `https` listener lights up.
+Watch it with `kubectl -n ate-system get gateway substrate-ingress -o wide`
+(`PROGRAMMED=True` + an address) and `kubectl -n ate-system get certificate`; the
+Service gains `443` in the same minute the Secret lands.
 
 Because every one of those manifests lives in `ate-system` and the apply runs
 **before** the installer, `substrate.tf` creates that namespace itself whenever a
@@ -204,7 +244,7 @@ the clone is pinned to the same revision the images carry.
 
 | Mode | What it does | Mutates? |
 |---|---|---|
-| `preflight` | Reports every prerequisite PASS/FAIL (worker pool, snapshot bucket **and its region**, transfer GSA, `ate-system`, existing `ate.dev` CRDs, Envoy Gateway + cert-manager CRDs, the substrate `Gateway`, and whether the release images actually exist at the pinned tag) and prints the exact `ate-setup` command install mode will run | No |
+| `preflight` | Reports every prerequisite PASS/FAIL (worker pool, snapshot bucket **and its region**, transfer GSA, `ate-system`, existing `ate.dev` CRDs, Envoy Gateway + cert-manager CRDs, whether the substrate front is `Programmed` and on which address, whether the CI identity may create **and label** `substrate-ip`, and whether the release images actually exist at the pinned tag) and prints the exact `ate-setup` command install mode will run | No |
 | `install` | After the same report: provisions the GCS snapshot bucket + IAM through substrate-gke's `setup-gcp`, clones substrate at the pinned tag, and runs `deploy ate-system` | Yes (creates `ate-system`) |
 
 Before the first install, three rows read FAIL by design — the snapshot bucket,
@@ -223,6 +263,15 @@ surfaces after the checkout and Go build, tens of minutes in.
 does not exist, or the Envoy Gateway CRDs are missing — installing a control plane
 onto a cluster that cannot run actors produces a namespace of CrashLooping pods and
 no error worth reading later.
+
+The static-IP row is a `testIamPermissions` call, not a role-name guess: in this job the
+caller *is* `GCP_DEPLOYER_SA`, so it tests the identity that will run the apply. Ask about
+`compute.addresses.setLabels` as well as `create`, because `google_compute_address` labels
+the address in a second call once it exists — a role with only `create` gets past the first
+verb and 403s on the second, leaving the address half-made. Both live in the
+`substrateStaticIpAdmin` custom role that `deploy/gcp/bootstrap.sh` creates and keeps
+current; `roles/compute.viewer`, which the deployer has always had, can read the addresses
+but cannot make one.
 
 **Registration comes from the default branch.** GitHub will not dispatch a
 `workflow_dispatch` workflow whose file is absent from `main`, so the branch that
@@ -388,12 +437,18 @@ curl -s -X POST $GW/api/agent/substrate/run -H 'content-type: application/json' 
 Unprovisioned pieces on the shared deployment today, each of which the run call surfaces
 as an error rather than a silent no-op:
 
-- `SUBSTRATE_ENABLED` / `SUBSTRATE_NODE_POOL` repo variables are unset, so `substrate.tf`
-  stays out of plan: no worker pool, namespaces, snapshot class or ingress.
-- `SUBSTRATE_INGRESS_HOSTNAME` is unset too, so nothing serves
-  `substrate.archagentix.com` yet — no `substrate-ip`, no `Gateway`, no
-  `substrate-proxy-config` EnvoyProxy and no control-plane route (§5.1). Until that
-  apply plus the DNS record land, the two URL fields have nowhere public to point.
+- `SUBSTRATE_ENABLED=true` and `SUBSTRATE_NODE_POOL=substrate-worker-pool` are set, and
+  the pool exists (tainted, never labelled) — so `substrate.tf` is in plan.
+- The front is applied but **not yet serving** `substrate.archagentix.com`:
+  `substrate-ip` is allocated (34.14.137.62), `substrate-ingress` is Programmed and its
+  Envoy LoadBalancer is up on port 80, but `substrate-server-external-tls` has never been
+  issued so the `https` listener is still invalid — and there is no DNS record for the
+  hostname at all (§5.1). Until the record lands, HTTP-01 cannot complete and the two URL
+  fields have nowhere public to point.
+- The pool is tainted but carries no `ate.dev/worker-pool` **label**, so the installer's
+  `workerSelector` matches nothing until the nodes are labelled (§5.1 field table).
+- `SUBSTRATE_VERSION` is unset, so every preflight/install run resolves the tag from
+  "latest release" and warns; pin it once the cluster is live (§5.2).
 - The `ate-system` control plane is never installed by Terraform; it lands when the
   **Substrate control plane (preflight / install)** workflow runs with `mode=install`
   (§5 step 3, §5.2).

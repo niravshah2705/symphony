@@ -7,7 +7,7 @@
 Community of 99 nodes
 
 - **Size**: 99 nodes
-- **Cohesion**: 0.3395
+- **Cohesion**: 0.3391
 - **Dominant Language**: javascript
 
 ## Members
@@ -69,7 +69,7 @@ Community of 99 nodes
 
 ## Execution Flows
 
-- **createMemoryMiddleware** (criticality: 0.65, depth: 5)
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 
 ## Dependencies
 

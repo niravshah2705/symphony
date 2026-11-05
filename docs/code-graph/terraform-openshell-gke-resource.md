@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 115 nodes
+Community of 118 nodes
 
-- **Size**: 115 nodes
-- **Cohesion**: 0.6406
+- **Size**: 118 nodes
+- **Cohesion**: 0.6456
 - **Dominant Language**: hcl
 
 ## Members
@@ -26,13 +26,13 @@ Community of 115 nodes
 | resource.kubectl_manifest.envoy_proxy_config | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 77-101 |
 | resource.kubectl_manifest.gateway_class | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 103-119 |
 | resource.helm_release.cert_manager | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 125-157 |
-| resource.kubectl_manifest.letsencrypt_staging | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 163-185 |
-| resource.kubectl_manifest.letsencrypt_prod | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 187-209 |
-| resource.kubectl_manifest.openshell_ingress_gateway | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 215-247 |
-| resource.kubectl_manifest.openshell_http_route | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 249-273 |
-| resource.kubectl_manifest.openshell_backend_traffic | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 275-293 |
-| resource.kubectl_manifest.openshell_client_traffic | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 295-313 |
-| resource.helm_release.openshell | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 319-384 |
+| resource.kubectl_manifest.letsencrypt_staging | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 168-188 |
+| resource.kubectl_manifest.letsencrypt_prod | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 190-210 |
+| resource.kubectl_manifest.openshell_ingress_gateway | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 216-248 |
+| resource.kubectl_manifest.openshell_http_route | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 250-274 |
+| resource.kubectl_manifest.openshell_backend_traffic | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 276-294 |
+| resource.kubectl_manifest.openshell_client_traffic | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 296-314 |
+| resource.helm_release.openshell | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 320-385 |
 | provider.google | Function | ./deploy/gcp/terraform-openshell-gke/main.tf | 1-4 |
 | data.google_client_config.default | Class | ./deploy/gcp/terraform-openshell-gke/main.tf | 6-6 |
 | local.cluster_host | Function | ./deploy/gcp/terraform-openshell-gke/main.tf | 12-12 |
@@ -65,7 +65,7 @@ Community of 115 nodes
 | output.substrate_worker_pool | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 50-53 |
 | output.substrate_credentials_namespace | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 55-58 |
 
-*... and 65 more members.*
+*... and 68 more members.*
 
 ## Execution Flows
 
@@ -76,7 +76,7 @@ No execution flows pass through this community.
 ### Incoming
 
 - `./deploy/gcp/terraform-openshell-gke/variables.tf` (35 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/substrate.tf` (17 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/substrate.tf` (20 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/outputs.tf` (16 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/helm_components.tf` (15 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/main.tf` (8 edge(s))
