@@ -267,6 +267,24 @@ jobs:
             echo "every image $VERSION needs is in $IMAGE_REPO"
           '
 
+          # The apply 403s on `compute.addresses.create` when the CI identity was
+          # provisioned before that grant existed (compute.viewer reads the static
+          # IPs but cannot make one). testIamPermissions asks about the caller, and
+          # in this job the caller IS the deployer SA — so this tests the real
+          # thing instead of guessing from the role list.
+          check "static IP permission" bash -c '
+            token="$(gcloud auth print-access-token 2>/dev/null)" \
+              || { echo "no access token for the CI identity"; exit 1; }
+            got="$(curl -fsS -X POST -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+              -d "{\"permissions\":[\"compute.addresses.create\"]}" \
+              "https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT_ID}:testIamPermissions")" \
+              || { echo "testIamPermissions call failed"; exit 1; }
+            case "$got" in
+              *compute.addresses.create*) echo "the CI identity may create substrate-ip" ;;
+              *) echo "compute.addresses.create is missing for the CI identity — gke_reconcile will 403 on substrate-ip (deploy/gcp/bootstrap.sh grants the substrateStaticIpAdmin custom role)"; exit 1 ;;
+            esac
+          '
+
           {
             echo ""
             echo "_Advisory run: FAIL rows are recorded, not fatal. \`install\` mode re-tests the blocking ones and refuses on them._"

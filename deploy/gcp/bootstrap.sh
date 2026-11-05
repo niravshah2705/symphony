@@ -115,6 +115,24 @@ for role in "${DEPLOYER_ROLES[@]}"; do
 done
 echo "  granted ${#DEPLOYER_ROLES[@]} roles"
 
+# The two Envoy fronts publish on regional static addresses Terraform owns
+# (openshell-ip, substrate-ip). compute.viewer reads them but cannot create one,
+# and the substrate apply 403s on exactly that. Grant only addresses, not
+# compute.networkAdmin — that would also hand CI this project's firewalls,
+# subnetworks and NAT configuration.
+if ! gcloud iam roles describe substrateStaticIpAdmin --project "$PROJECT_ID" >/dev/null 2>&1; then
+  log "Custom role projects/${PROJECT_ID}/roles/substrateStaticIpAdmin"
+  gcloud iam roles create substrateStaticIpAdmin --project "$PROJECT_ID" --quiet \
+    --title "Static IP provisioner" \
+    --description "Create/update/delete the regional static addresses the OpenShell and Substrate Envoy gateways publish on." \
+    --stage GA \
+    --permissions "compute.addresses.create,compute.addresses.delete,compute.addresses.update,compute.addresses.get,compute.addresses.list" >/dev/null
+fi
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${DEPLOYER}" \
+  --role="projects/${PROJECT_ID}/roles/substrateStaticIpAdmin" --condition=None >/dev/null
+echo "  granted the static-IP custom role"
+
 # --- 4. Workload Identity Federation (bind the repo to the deployer SA) ------
 log "Workload Identity Federation for ${REPO}"
 gcloud iam workload-identity-pools describe github \

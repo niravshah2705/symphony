@@ -160,6 +160,17 @@ for role in \
   gcloud projects add-iam-policy-binding "$PROJECT" \
     --member="serviceAccount:${DEPLOYER}" --role="$role" --condition=None >/dev/null
 done
+
+# Terraform owns the regional static addresses the Envoy fronts publish on, and
+# compute.viewer cannot create one. Narrower than roles/compute.networkAdmin,
+# which would also give CI the project's firewalls, subnets and NAT.
+gcloud iam roles create substrateStaticIpAdmin --project "$PROJECT" --quiet \
+  --title "Static IP provisioner" --stage GA \
+  --description "Create/update/delete the static addresses the OpenShell and Substrate gateways use." \
+  --permissions "compute.addresses.create,compute.addresses.delete,compute.addresses.update,compute.addresses.get,compute.addresses.list"
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="serviceAccount:${DEPLOYER}" \
+  --role="projects/${PROJECT}/roles/substrateStaticIpAdmin" --condition=None >/dev/null
 ```
 
 ## 2. Workload Identity Federation (bind the SA to this repo)
