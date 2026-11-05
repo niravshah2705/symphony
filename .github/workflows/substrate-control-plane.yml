@@ -129,6 +129,11 @@ jobs:
           spiffe_ids="${SUBSTRATE_INGRESS_SPIFFE_IDS:-spiffe://cluster.local/ns/ate-system/sa/atenet-client}"
           rollout_timeout="${SUBSTRATE_ROLLOUT_TIMEOUT:-10m}"
 
+          # setup-gcp's --region defaults to us-west1 and it *refuses* an existing
+          # bucket whose location differs, so pass the cluster's own region: a zone
+          # ends in a single letter (asia-south1-a), a region does not.
+          if [[ "$ZONE" =~ ^(.+)-[a-z]$ ]]; then region="${BASH_REMATCH[1]}"; else region="$ZONE"; fi
+
           # GCS names cap at 63 and the microVM asset bucket is <name>-assets.
           if [ "${#bucket}" -gt 56 ]; then
             fail "SUBSTRATE_SNAPSHOT_BUCKET '$bucket' is ${#bucket} characters; the -assets suffix needs 7 of them."
@@ -137,6 +142,7 @@ jobs:
           {
             echo "version=$version"
             echo "bucket=$bucket"
+            echo "region=$region"
             echo "sandbox_classes=$sandbox_classes"
             echo "credential_provider=$credential_provider"
             echo "spiffe_ids=$spiffe_ids"
@@ -151,6 +157,7 @@ jobs:
             echo "| revision (checkout + image tag) | \`$version\` |"
             echo "| image repo | \`$SUBSTRATE_IMAGE_REPO\` |"
             echo "| snapshot bucket | \`$bucket\` |"
+            echo "| bucket location | \`$region\` (= the cluster's) |"
             echo "| sandbox classes | \`$sandbox_classes\` |"
             echo "| credential provider | \`$credential_provider\` |"
             echo "| ingress SPIFFE allowlist | \`$spiffe_ids\` |"
@@ -161,6 +168,10 @@ jobs:
       - name: Preflight report
         env:
           BUCKET: ${{ steps.cfg.outputs.bucket }}
+          BUCKET_REGION: ${{ steps.cfg.outputs.region }}
+          VERSION: ${{ steps.cfg.outputs.version }}
+          SANDBOX_CLASSES: ${{ steps.cfg.outputs.sandbox_classes }}
+          IMAGE_REPO: ${{ env.SUBSTRATE_IMAGE_REPO }}
         run: |
           set -uo pipefail
           # Advisory in both modes: this step never fails the job, because the
@@ -185,9 +196,23 @@ jobs:
           }
 
           check "SUBSTRATE_ENABLED" bash -c 'if [ "${SUBSTRATE_ENABLED:-}" != "true" ]; then echo "repo variable is ${SUBSTRATE_ENABLED:-unset}; the substrate.tf infra is not in plan"; exit 1; fi'
-          check "worker node pool" gcloud container node-pools describe "$SUBSTRATE_NODE_POOL" \
-            --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" --format 'value(status)'
-          check "snapshot bucket" gcloud storage buckets describe "gs://$BUCKET" --project "$PROJECT_ID"
+          check "worker node pool" bash -c '
+            [ -n "${SUBSTRATE_NODE_POOL:-}" ] \
+              || { echo "SUBSTRATE_NODE_POOL is unset — substrate.tf has no pool to create"; exit 1; }
+            gcloud container node-pools describe "$SUBSTRATE_NODE_POOL" \
+              --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" --format "value(status)"
+          '
+          # Location matters: setup-gcp create bucket errors on an existing bucket
+          # in another region, so a wrong-location bucket is an install failure.
+          check "snapshot bucket" bash -c '
+            loc="$(gcloud storage buckets describe "gs://$BUCKET" --project "$PROJECT_ID" --format "value(location)" 2>/dev/null)" \
+              || { echo "gs://$BUCKET not created yet — install mode creates it in $BUCKET_REGION"; exit 1; }
+            if [ "$loc" != "$BUCKET_REGION" ]; then
+              echo "gs://$BUCKET exists in $loc, but install would need $BUCKET_REGION (the cluster region)"
+              exit 1
+            fi
+            echo "gs://$BUCKET in $loc"
+          '
           check "snapshot transfer GSA" gcloud iam service-accounts describe "ate-snapshot-transfer@${PROJECT_ID}.iam.gserviceaccount.com"
           check "ate-system namespace" kubectl get namespace ate-system
           # Informational either way: absent means a fresh install, present means
@@ -197,6 +222,34 @@ jobs:
           check "Envoy Gateway CRDs" kubectl get crd gateways.gateway.networking.k8s.io -o 'jsonpath={.metadata.name}'
           check "cert-manager CRDs" kubectl get crd certificates.cert-manager.io -o 'jsonpath={.metadata.name}'
           check "substrate ingress Gateway" kubectl -n ate-system get gateway substrate-ingress -o 'jsonpath={.metadata.name}'
+
+          # ate-setup resolves every image tag to a digest before it deploys
+          # anything, so a repo or tag without the full set fails the install —
+          # minutes in, after the checkout and the Go build. Names mirror
+          # images.ReleaseComponents; the worker image follows the sandbox class.
+          check "release images present" bash -c '
+            host="${IMAGE_REPO%%/*}"
+            path="${IMAGE_REPO#*/}"
+            images="ateapi atelet atecontroller atenet ate-idp-server podcertcontroller envoy-dataplane objectstore-plugin kubernetes-secrets"
+            case ",$SANDBOX_CLASSES," in
+              *",microvm,"*) images="$images ateworker-microvm" ;;
+              *) images="$images ateworker-gvisor" ;;
+            esac
+            if [ "$host" != "ghcr.io" ]; then
+              echo "$IMAGE_REPO is not ghcr.io; confirm by hand it carries: $images"
+              exit 0
+            fi
+            missing=""
+            for img in $images; do
+              token="$(curl -fsS "https://ghcr.io/token?scope=repository:$path/$img:pull" | jq -r .token)" || { missing="$missing $img(token)"; continue; }
+              code="$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" \
+                -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json" \
+                "https://ghcr.io/v2/$path/$img/manifests/$VERSION")"
+              [ "$code" = "200" ] || missing="$missing $img($code)"
+            done
+            if [ -n "$missing" ]; then echo "absent from $IMAGE_REPO at $VERSION:$missing"; exit 1; fi
+            echo "every image $VERSION needs is in $IMAGE_REPO"
+          '
 
       - name: Refuse to install over unmet prerequisites
         if: inputs.mode == 'install'
@@ -279,18 +332,21 @@ jobs:
         if: inputs.mode == 'install'
         env:
           BUCKET: ${{ steps.cfg.outputs.bucket }}
+          REGION: ${{ steps.cfg.outputs.region }}
         run: |
           set -euo pipefail
           # setup-gcp is a separate Go module and is idempotent by design; it is
           # the only thing that creates the bucket and grants ate-setup demands on
-          # GKE. --gke-nodes=false because substrate.tf owns the node pool and its
-          # service account, so minting a second node SA here would configure a
-          # pool nothing runs on. --atelet-snapshot-access=false because from
-          # Substrate v0.6.0 every snapshot transfer runs on a per-actor token, so
-          # atelet no longer needs objectAdmin on the bucket.
-          go -C substrate-gke/tools/setup-gcp run . create bucket --name="$BUCKET"
+          # GKE. --region because the tool defaults to us-west1 and refuses an
+          # existing bucket elsewhere. --gke-nodes=false because substrate.tf owns
+          # the node pool and its service account, so minting a second node SA here
+          # would configure a pool nothing runs on. --atelet-snapshot-access=false
+          # because from Substrate v0.6.0 every snapshot transfer runs on a
+          # per-actor token, so atelet no longer needs objectAdmin on the bucket.
+          # PROJECT_ID comes from the job env, which is what --project-id reads.
+          go -C substrate-gke/tools/setup-gcp run . create bucket --name="$BUCKET" --region="$REGION"
           go -C substrate-gke/tools/setup-gcp run . create iam \
-            --bucket="$BUCKET" --gke-nodes=false --atelet-snapshot-access=false
+            --bucket="$BUCKET" --region="$REGION" --gke-nodes=false --atelet-snapshot-access=false
 
       - name: Install ate-system
         if: inputs.mode == 'install'

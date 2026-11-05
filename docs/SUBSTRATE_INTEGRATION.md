@@ -110,7 +110,9 @@ pool exists, then apply the module's stable infra pieces.
    installer from a workstation with a substrate checkout" step; the only thing
    a workstation is still needed for is reading the upstream GKE guide, since
    GKE-specific setup (PD/Filestore CSI already on, snapshot class) comes from
-   this module.
+   this module. Run preflight first and read the table — it names the missing
+   prerequisite, and a `workflow_dispatch` workflow only becomes dispatchable
+   once it is on the default branch (§5.2).
    ```bash
    gh workflow run "Substrate control plane (preflight / install)" -f mode=preflight
    gh workflow run "Substrate control plane (preflight / install)" -f mode=install
@@ -195,13 +197,28 @@ the clone is pinned to the same revision the images carry.
 
 | Mode | What it does | Mutates? |
 |---|---|---|
-| `preflight` | Reports every prerequisite PASS/FAIL (worker pool, snapshot bucket, transfer GSA, Envoy Gateway + cert-manager CRDs, existing `ate.dev` CRDs, the substrate `Gateway`) and prints the exact `ate-setup` command install mode will run | No |
+| `preflight` | Reports every prerequisite PASS/FAIL (worker pool, snapshot bucket **and its region**, transfer GSA, `ate-system`, existing `ate.dev` CRDs, Envoy Gateway + cert-manager CRDs, the substrate `Gateway`, and whether the release images actually exist at the pinned tag) and prints the exact `ate-setup` command install mode will run | No |
 | `install` | After the same report: provisions the GCS snapshot bucket + IAM through substrate-gke's `setup-gcp`, clones substrate at the pinned tag, and runs `deploy ate-system` | Yes (creates `ate-system`) |
+
+Before the first install, three rows read FAIL by design — the snapshot bucket,
+the transfer GSA and `ate-system` itself are things `install` mode creates. The
+rows that matter are the pool and the CRDs: `install` refuses on those.
+
+The image row is not a formality: `deploy ate-system` resolves every tag it is
+about to use to a digest before deploying anything, and one missing image (the
+installer needs all of them under one tag, `envoy-dataplane` included) otherwise
+surfaces after the checkout and Go build, tens of minutes in.
 
 `install` refuses to proceed if `SUBSTRATE_ENABLED` is not `true`, the worker pool
 does not exist, or the Envoy Gateway CRDs are missing — installing a control plane
 onto a cluster that cannot run actors produces a namespace of CrashLooping pods and
 no error worth reading later.
+
+**This workflow can only be dispatched once it exists on the default branch** —
+GitHub registers `workflow_dispatch` workflows from `main`, so a PR that adds it
+cannot test-drive it from its own branch. Run the preflight logic locally instead
+(`bash -n` each step, then the read-only checks against the cluster context), and
+dispatch it for real after the merge.
 
 Repo variables it reads (all optional; defaults shown):
 
@@ -209,7 +226,7 @@ Repo variables it reads (all optional; defaults shown):
 |---|---|---|
 | `SUBSTRATE_VERSION` | latest upstream release | Pins checkout **and** image tag together. Unset prints a warning each run — pin it once the cluster is live |
 | `SUBSTRATE_IMAGE_REPO` | `ghcr.io/agent-substrate/substrate` | Release images; a mirror works if it holds every image the install needs |
-| `SUBSTRATE_SNAPSHOT_BUCKET` | `ate-snapshots-<project>` | ate-setup refuses to deploy ate-api-server on GKE without a bucket, and it will not create one — the workflow runs `setup-gcp create bucket` for you |
+| `SUBSTRATE_SNAPSHOT_BUCKET` | `ate-snapshots-<project>` | ate-setup refuses to deploy ate-api-server on GKE without a bucket, and it will not create one — the workflow runs `setup-gcp create bucket` for you, in the **cluster's** region (`setup-gcp`'s own `--region` default is us-west1, and it rejects an existing bucket elsewhere) |
 | `SUBSTRATE_SANDBOX_CLASSES` | `gvisor` | `gvisor,microvm` additionally stages guest assets into `<bucket>-assets` |
 | `SUBSTRATE_CREDENTIAL_PROVIDER` | `{"name":"k8s.io"}` | The zero-trust path: the bundled Secrets provider plus a NetworkPolicy admitting only the egress gateway |
 | `SUBSTRATE_INGRESS_SPIFFE_IDS` | `spiffe://cluster.local/ns/ate-system/sa/atenet-client` | Unset means **no** client may reach actors through the router |
