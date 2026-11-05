@@ -185,12 +185,20 @@ jobs:
             echo "|---|---|---|"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          check() { # check <label> <command...>
+          check() { # check <label> <command...> — records a row, never fails the step
             local label="$1"; shift
-            local out rc state detail
-            out="$("$@" 2>&1)"; rc=$?
-            if [ "$rc" -eq 0 ]; then state="PASS"; else state="FAIL"; fi
-            detail="$(printf '%s' "${out:-—}" | head -1 | tr '|' '/')"
+            local out state detail
+            # `if` is load-bearing: Actions runs a bare `run:` as
+            # `bash -eo pipefail`, so a plain `out="$(false)"` assignment aborts
+            # the whole step at the first FAIL — preflight would report itself
+            # broken instead of reporting the prerequisite that is missing.
+            if out="$("$@" 2>&1)"; then state="PASS"; else state="FAIL"; fi
+            # First line only, pipes escaped. Parameter expansion rather than
+            # `head -1 | tr`: a pipeline dying of SIGPIPE under pipefail trips
+            # the same errexit this function exists to avoid.
+            detail="${out%%$'\n'*}"
+            detail="${detail:-—}"
+            detail="${detail//|//}"
             echo "| $state | $label | $detail |" >> "$GITHUB_STEP_SUMMARY"
             printf '%s  %s: %s\n' "$state" "$label" "$detail"
           }
@@ -250,6 +258,12 @@ jobs:
             if [ -n "$missing" ]; then echo "absent from $IMAGE_REPO at $VERSION:$missing"; exit 1; fi
             echo "every image $VERSION needs is in $IMAGE_REPO"
           '
+
+          {
+            echo ""
+            echo "_Advisory run: FAIL rows are recorded, not fatal. \`install\` mode re-tests the blocking ones and refuses on them._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
 
       - name: Refuse to install over unmet prerequisites
         if: inputs.mode == 'install'
@@ -369,7 +383,9 @@ jobs:
             echo "### Installed control plane"
             echo ""
             echo '```'
-            kubectl -n ate-system get deploy,sts,svc 2>&1
+            # || true so a half-installed control plane still produces the report
+            # — that is the case an operator most needs to read.
+            kubectl -n ate-system get deploy,sts,svc 2>&1 || true
             echo
             kubectl get crd 2>&1 | grep ate.dev || echo "(no ate.dev CRDs — the install did not land)"
             echo '```'

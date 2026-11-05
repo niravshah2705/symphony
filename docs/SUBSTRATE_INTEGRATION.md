@@ -202,7 +202,10 @@ the clone is pinned to the same revision the images carry.
 
 Before the first install, three rows read FAIL by design — the snapshot bucket,
 the transfer GSA and `ate-system` itself are things `install` mode creates. The
-rows that matter are the pool and the CRDs: `install` refuses on those.
+rows that matter are the pool and the CRDs: `install` refuses on those. Preflight
+always exits 0 and records every row: Actions runs a bare `run:` as `bash -eo
+pipefail`, so a failing check inside a command substitution would otherwise abort
+the step at the first FAIL — an advisory report that dies is worse than no report.
 
 The image row is not a formality: `deploy ate-system` resolves every tag it is
 about to use to a digest before deploying anything, and one missing image (the
@@ -214,11 +217,12 @@ does not exist, or the Envoy Gateway CRDs are missing — installing a control p
 onto a cluster that cannot run actors produces a namespace of CrashLooping pods and
 no error worth reading later.
 
-**This workflow can only be dispatched once it exists on the default branch** —
-GitHub registers `workflow_dispatch` workflows from `main`, so a PR that adds it
-cannot test-drive it from its own branch. Run the preflight logic locally instead
-(`bash -n` each step, then the read-only checks against the cluster context), and
-dispatch it for real after the merge.
+**Registration comes from the default branch.** GitHub will not dispatch a
+`workflow_dispatch` workflow whose file is absent from `main`, so the branch that
+*introduces* it cannot test-drive it: validate such a change by running its read-only
+steps against a local cluster context, then dispatch for real after the merge. Once the
+file is on `main`, `--ref <branch>` does run that branch's copy — which is how later
+edits to this workflow get validated before merging them.
 
 Repo variables it reads (all optional; defaults shown):
 
