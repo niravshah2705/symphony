@@ -199,9 +199,34 @@ variable "substrate_max_nodes" {
 }
 
 variable "substrate_ingress_hostname" {
-  description = "Public hostname fronting the atenet-router actor data plane (substrateIngressUrl). Empty reuses the openshell static IP only."
+  description = "Public hostname fronting the atenet-router actor data plane (substrateIngressUrl). Empty provisions no ingress; a hostname gets its own Envoy data plane bound to the substrate-ip static address."
   type        = string
   default     = ""
+}
+
+variable "substrate_ateapi_service" {
+  description = "Name of the ateapi Control-plane Service created by `ate-setup deploy ate-system`, used as the control-plane route backend."
+  type        = string
+  default     = "ateapi"
+}
+
+variable "substrate_ateapi_port" {
+  description = "Port of the ateapi Control-plane Service, used as the control-plane route backend port."
+  type        = number
+  default     = 8443
+}
+
+variable "substrate_control_plane_public" {
+  description = <<EOT
+    Also route the ateapi gRPC control plane over substrate_ingress_hostname
+    (path prefix /substrate.ateapi.v1.Control), so substrateUrl can be the same
+    public host as substrateIngressUrl. Default false: the control plane creates
+    and deletes actors and mints actor JWTs, and this config adds no caller
+    authentication in front of it. Leave false until the planner reaches ateapi
+    over VPC egress or an authN policy is attached to that route.
+EOT
+  type        = bool
+  default     = false
 }
 
 variable "substrate_snapshot_storage_class" {

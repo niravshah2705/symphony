@@ -58,13 +58,23 @@ output "substrate_credentials_namespace" {
 }
 
 output "substrate_ingress_ip" {
-  description = "Static IP for the actor data-plane ingress (substrateIngressUrl)"
+  description = "Static IP of the Substrate Envoy data plane; the A record target for substrate_ingress_hostname"
   value       = var.substrate_enabled && var.substrate_ingress_hostname != "" ? google_compute_address.substrate_ip[0].address : null
+}
+
+output "substrate_ingress_dns" {
+  description = "DNS record to create so the ingress hostname serves the Envoy data plane"
+  value       = var.substrate_enabled && var.substrate_ingress_hostname != "" ? "A record: ${var.substrate_ingress_hostname} -> ${google_compute_address.substrate_ip[0].address}" : null
 }
 
 output "substrate_ingress_url" {
   description = "Backend substrateIngressUrl value (atenet-router front)"
   value       = var.substrate_enabled && var.substrate_ingress_hostname != "" ? "https://${var.substrate_ingress_hostname}" : null
+}
+
+output "substrate_control_plane_url" {
+  description = "Backend substrateUrl value when the ateapi route is published on the same host; null means reach ateapi over VPC egress instead"
+  value       = var.substrate_enabled && var.substrate_ingress_hostname != "" && var.substrate_control_plane_public ? "https://${var.substrate_ingress_hostname}" : null
 }
 
 output "substrate_snapshot_storage_class" {
