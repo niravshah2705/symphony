@@ -32,7 +32,7 @@ async function run({ client, args }) {
   } else {
     out.kv('assumed role', roleName(agent.assumedRole));
     out.kv('LLM configured', agent.llmConfigured ? `yes (${agent.llmProvider || '?'} / ${agent.activeModel || '—'})` : 'no');
-    out.kv('tracing', agent.tracingEnabled ? `on (${agent.langsmithProject || '—'})` : 'off');
+    out.kv('tracing', agent.tracingEnabled ? `on (${agent.langfuseProject || agent.langfuseEnvironment || '—'})` : 'off');
     out.kv('enrich labels', (agent.enrichLabels || []).join(', '));
     out.kv('interval (min)', agent.intervalMinutes);
     out.kv('schedule enabled', agent.scheduleEnabled);

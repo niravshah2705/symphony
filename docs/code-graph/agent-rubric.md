@@ -4,17 +4,17 @@
 
 ## Overview
 
-Community of 39 nodes
+Community of 64 nodes
 
-- **Size**: 39 nodes
-- **Cohesion**: 0.2931
+- **Size**: 64 nodes
+- **Cohesion**: 0.1786
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| applyRubricMiddleware | Function | ./packages/shared/src/agent/harnesses/contract.js | 254-291 |
+| applyRubricMiddleware | Function | ./packages/shared/src/agent/harnesses/contract.js | 253-290 |
 | RubricError | Class | ./packages/shared/src/agent/rubric-middleware.js | 69-75 |
 | constructor | Function | ./packages/shared/src/agent/rubric-middleware.js | 70-74 |
 | clean | Function | ./packages/shared/src/agent/rubric-middleware.js | 79-81 |
@@ -52,7 +52,20 @@ Community of 39 nodes
 | test:createRubricMiddleware exposes the upstream name and binds a rubric@L231 | Test | ./packages/shared/src/agent/rubric-middleware.test.js | 231-243 |
 | test:createRubricMiddleware throws immediately on a bad bound rubric@L245 | Test | ./packages/shared/src/agent/rubric-middleware.test.js | 245-247 |
 | test:failedReview lists the rubric names and never throws@L249 | Test | ./packages/shared/src/agent/rubric-middleware.test.js | 249-255 |
-| test:a prebuilt rubricMiddleware instance is honored@L553 | Test | ./packages/shared/src/agent/runtimes.test.js | 553-569 |
+| workspace | Function | ./packages/shared/src/agent/runtimes.test.js | 27-31 |
+| chatgptCodexLlm | Function | ./packages/shared/src/agent/runtimes.test.js | 33-48 |
+| test:Codex SDK API backend uses a constrained thread and reports token usage@L153 | Test | ./packages/shared/src/agent/runtimes.test.js | 153-256 |
+| describe@L244 | Test | ./packages/shared/src/agent/runtimes.test.js | 244-244 |
+| test:Codex SDK ChatGPT backend uses an isolated official auth file and removes it@L258 | Test | ./packages/shared/src/agent/runtimes.test.js | 258-319 |
+| test:Claude Agent SDK adapter streams a result with cost and isolated settings@L348 | Test | ./packages/shared/src/agent/runtimes.test.js | 348-408 |
+| describe@L403 | Test | ./packages/shared/src/agent/runtimes.test.js | 403-403 |
+| test:runtime/provider mismatches fall back to traced DeepAgent execution@L433 | Test | ./packages/shared/src/agent/runtimes.test.js | 433-457 |
+| test:matching SDK providers still fail closed when authentication is unavailable@L459 | Test | ./packages/shared/src/agent/runtimes.test.js | 459-471 |
+| test:RubricMiddleware grades a DeepAgent run and surfaces its verdict on the trace@L473 | Test | ./packages/shared/src/agent/runtimes.test.js | 473-499 |
+| describe@L494 | Test | ./packages/shared/src/agent/runtimes.test.js | 494-494 |
+| test:RubricMiddleware re-runs the SAME SDK runtime (Codex) on needs_revision@L501 | Test | ./packages/shared/src/agent/runtimes.test.js | 501-537 |
+
+*... and 14 more members.*
 
 ## Execution Flows
 
@@ -62,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (38 edge(s))
-- `match` (13 edge(s))
-- `map` (11 edge(s))
-- `deepEqual` (8 edge(s))
-- `push` (5 edge(s))
+- `equal` (183 edge(s))
+- `match` (22 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
+- `deepEqual` (17 edge(s))
+- `join` (15 edge(s))
+- `includes` (15 edge(s))
+- `map` (12 edge(s))
+- `guard` (12 edge(s))
+- `ok` (9 edge(s))
+- `push` (6 edge(s))
+- `rejects` (5 edge(s))
+- `hasOwn` (5 edge(s))
 - `String` (4 edge(s))
 - `isArray` (4 edge(s))
 - `throws` (4 edge(s))
-- `join` (3 edge(s))
-- `filter` (3 edge(s))
-- `freeze` (3 edge(s))
-- `require` (2 edge(s))
-- `slice` (2 edge(s))
-- `trim` (2 edge(s))
-- `replace` (2 edge(s))
 
 ### Incoming
 
-- `equal` (38 edge(s))
+- `equal` (183 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
+- `match` (22 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js` (22 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
-- `match` (13 edge(s))
-- `deepEqual` (8 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
+- `deepEqual` (17 edge(s))
+- `includes` (15 edge(s))
+- `guard` (12 edge(s))
+- `join` (11 edge(s))
+- `ok` (9 edge(s))
+- `rejects` (5 edge(s))
+- `hasOwn` (5 edge(s))
+- `map` (4 edge(s))
 - `throws` (4 edge(s))
-- `map` (3 edge(s))
-- `push` (3 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (2 edge(s))
-- `./packages/shared/src/agent/harnesses/dispatch.js::execute` (1 edge(s))
-- `doesNotMatch` (1 edge(s))
-- `./packages/shared/src/agent/runtimes.test.js` (1 edge(s))
-- `require` (1 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (1 edge(s))
-- `at` (1 edge(s))

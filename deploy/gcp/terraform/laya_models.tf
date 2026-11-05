@@ -1,25 +1,25 @@
 # -----------------------------------------------------------------------------
-# Laya checkpoint registry (GCS bucket + read-only gcsfuse mount).
+# Laya checkpoint registry (GCS bucket — publish/backup target).
 # -----------------------------------------------------------------------------
 # The pip `laya[serve]` inference image (deploy/gcp/Dockerfile.laya-inference)
-# serves fully OFFLINE: it never downloads weights at runtime. The Hugging Face
-# hub cache for the served checkpoints (convaiinnovations/laya,
-# laya-multilingual, laya-typed-decisions) is pre-downloaded by
-# .github/workflows/publish-laya-models.yml into VERSIONED prefixes of this
-# bucket (`<version>/models--convaiinnovations--laya/...`, symlink-dereferenced
-# so gcsfuse serves plain files) plus a `laya-models-manifest.json`.
-# The laya-inference Cloud Run service mounts it read-only at /models and pins
-# a version via HF_HOME=/models/<laya_model_version> (see laya_inference.tf),
-# so publishing a new version never disturbs an older pinned deployment —
-# versions coexist and rollout is a separate `terraform apply` that bumps the
-# pin. Same story as the skills registry (skills.tf).
+# serves fully OFFLINE and now BAKES the weights into the image itself:
+# gcsfuse streaming made each CPU checkpoint build ~3.5min and preloading
+# blocks the port bind, so the service never passed its startup probe
+# (revisions 00015-00018). The service no longer mounts this bucket.
+#
+# This bucket REMAINS managed here as the versioned publish target of
+# .github/workflows/publish-laya-models.yml (`<version>/models--…` prefixes +
+# laya-models-manifest.json) — an out-of-image record of exactly which
+# checkpoint revisions ship per bundle, useful for audit and as a fallback if
+# the mount path is ever reintroduced. Same layout as the skills registry
+# (skills.tf), minus the runtime mount.
 #
 # Terraform CREATES and OWNS this bucket — it is NOT assumed to pre-exist. The
 # name defaults to a stable derived value (local.laya_models_bucket_name =
 # "<project_id>-aifleet-laya-models"; override with var.laya_models_bucket_name).
-# var.laya_models_enabled=false removes the bucket AND the mount; the service
-# then fails closed on the first model load (there is no vendored fallback for
-# laya[serve]) — only flip it off when the laya service is not deployed.
+# var.laya_models_enabled=false removes the bucket (destroying a non-empty
+# bucket needs laya_models_bucket_force_destroy=true); the service does NOT
+# depend on it at runtime any more.
 
 resource "google_storage_bucket" "laya_models" {
   count    = var.laya_models_enabled ? 1 : 0
@@ -48,7 +48,8 @@ resource "google_storage_bucket" "laya_models" {
 }
 
 # --- Read-only access for the laya inference service account ------------------
-# Required for the gen2 GCS volume mount AND for object reads through it.
+# Historic: needed for the gen2 GCS volume mount. The service no longer mounts
+# the bucket, so this is a convenience grant for debugging bundle contents.
 resource "google_storage_bucket_iam_member" "laya_models_read" {
   count  = var.laya_models_enabled ? 1 : 0
   bucket = google_storage_bucket.laya_models[0].name

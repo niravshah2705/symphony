@@ -23,7 +23,7 @@ test('buildAnnotations stamps all three business fields into metadata and tags',
     project: 'OTA',
     'task-id': 'ENG-123',
     session: 'run-abc',
-    session_id: 'run-abc', // LangSmith Threads grouping key mirrors session
+    session_id: 'run-abc', // session grouping key mirrors session
   });
   assert.deepStrictEqual(tags, ['project:OTA', 'task:ENG-123', 'session:run-abc']);
 });

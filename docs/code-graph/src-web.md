@@ -7,15 +7,15 @@
 Community of 2 nodes
 
 - **Size**: 2 nodes
-- **Cohesion**: 0.2000
+- **Cohesion**: 0.2222
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| webStreamFromString | Function | ./services/proxy/src/server.test.js | 9-16 |
-| fetchImpl | Function | ./services/proxy/src/server.test.js | 39-58 |
+| webStreamFromString | Function | ./services/proxy/src/server.test.js | 10-17 |
+| fetchImpl | Function | ./services/proxy/src/server.test.js | 98-117 |
 
 ## Execution Flows
 
@@ -25,9 +25,9 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `includes` (1 edge(s))
-- `String` (1 edge(s))
+- `includes` (2 edge(s))
+- `String` (2 edge(s))
 
 ### Incoming
 
-- `./services/proxy/src/server.test.js` (2 edge(s))
+- `./services/proxy/src/server.test.js` (3 edge(s))

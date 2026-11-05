@@ -37,7 +37,7 @@ const { CONFIG, normalizeLlmGatewayMode } = require('../config');
  *
  * Jobs are processed on a configurable cadence (5/10/15 min, "to avoid fast
  * processing"), with configurable per-tick parallelism and a hard cap on
- * projects per tick. Ticks never overlap. The Linear/LLM/LangSmith keys are
+ * projects per tick. Ticks never overlap. The Linear/LLM/Langfuse keys are
  * read fresh from the store on every tick (no long-lived credential cache).
  */
 
@@ -581,10 +581,9 @@ async function processPending(context, options = {}) {
       return { skipped: 'paused', reason: reason.message, pauseReason: reason };
     }
     const keys = {
-      langsmithApiKey: settings.langsmithApiKey,
-      langsmithProject: settings.langsmithProject,
-      langsmithEndpoint: settings.langsmithEndpoint,
-      langsmithTracing: settings.langsmithTracing,
+      langfusePublicKey: settings.langfusePublicKey,
+      langfuseSecretKey: settings.langfuseSecretKey,
+      langfuseTracing: settings.langfuseTracing,
       agentRuntime: settings.agentRuntime,
       workflowPattern: settings.workflowPattern,
     };

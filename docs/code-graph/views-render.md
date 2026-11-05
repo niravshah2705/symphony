@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 753 nodes
+Community of 757 nodes
 
-- **Size**: 753 nodes
-- **Cohesion**: 0.4932
+- **Size**: 757 nodes
+- **Cohesion**: 0.4943
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,7 +26,6 @@ Community of 753 nodes
 | setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
 | contextId | Function | ./public/js/api.js | 20-23 |
 | setRequestContext | Function | ./public/js/api.js | 26-31 |
-| getApiBase | Function | ./public/js/api.js | 98-101 |
 | setApiBase | Function | ./public/js/api.js | 112-115 |
 | uploadToSignedUrl | Function | ./public/js/api.js | 123-140 |
 | openStream | Function | ./public/js/api.js | 253-332 |
@@ -64,8 +63,9 @@ Community of 753 nodes
 | renderAccessDenied | Function | ./public/js/app.js | 807-819 |
 | render | Function | ./public/js/app.js | 821-903 |
 | capitalize | Function | ./public/js/app.js | 905-908 |
+| start | Function | ./public/js/app.js | 912-920 |
 
-*... and 703 more members.*
+*... and 707 more members.*
 
 ## Execution Flows
 
@@ -85,25 +85,25 @@ Community of 753 nodes
 
 ### Outgoing
 
-- `addEventListener` (242 edge(s))
-- `append` (224 edge(s))
-- `map` (170 edge(s))
+- `addEventListener` (247 edge(s))
+- `append` (228 edge(s))
+- `map` (172 edge(s))
 - `String` (120 edge(s))
 - `push` (108 edge(s))
-- `trim` (105 edge(s))
+- `trim` (108 edge(s))
 - `equal` (93 edge(s))
-- `filter` (82 edge(s))
+- `filter` (83 edge(s))
 - `isArray` (82 edge(s))
-- `Boolean` (74 edge(s))
+- `Boolean` (73 edge(s))
 - `catch` (66 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (60 edge(s))
 - `querySelector` (53 edge(s))
-- `slice` (49 edge(s))
+- `Number` (49 edge(s))
 
 ### Incoming
 
-- `./public/js/views/settings.js` (131 edge(s))
+- `./public/js/views/settings.js` (137 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
 - `equal` (93 edge(s))
 - `./public/js/app.js` (86 edge(s))
@@ -117,4 +117,4 @@ Community of 753 nodes
 - `./public/js/auth.js` (24 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
-- `./public/js/api.js` (15 edge(s))
+- `./public/js/views/openshell.js` (15 edge(s))

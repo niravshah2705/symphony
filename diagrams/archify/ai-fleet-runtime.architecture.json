@@ -335,7 +335,7 @@
       "title": "External Dependencies",
       "items": [
         "LLM providers include OpenAI/Codex, Anthropic/Claude, Gemini, Hugging Face, local Ollama/LM Studio/OMLX, and optional LangSmith LLM Gateway.",
-        "Planning and repository integrations include Linear, Jira, Asana, GitHub, GitLab, and LangSmith tracing.",
+        "Planning and repository integrations include Linear, Jira, Asana, GitHub, GitLab, and Langfuse tracing.",
         "Cloud runtime depends on Firestore state/checkpoints and authenticated Pub/Sub messaging."
       ]
     }

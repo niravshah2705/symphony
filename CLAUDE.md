@@ -170,9 +170,16 @@ outbound call.
   settings service holds managed keys, the vault holds customer keys. The runtime
   provisioner clones ALL containers, so a sidecar on the shared service propagates
   to per-tenant stacks (`packages/shared/src/provisioning/containers.js`).
-- **SDK runtimes + LangSmith:** once `EGRESS_PROXY_URL` is present, deep-agent,
-  native SDK runtimes (codex-sdk / claude-agent-sdk / antigravity), and LangSmith
-  tracing are all proxied. There is no deployed direct-egress opt-out.
+- **SDK runtimes + Langfuse:** once `EGRESS_PROXY_URL` is present, deep-agent,
+  native SDK runtimes (codex-sdk / claude-agent-sdk / antigravity), and the
+  Langfuse OTLP trace sink (`/langfuse` route, `basic-pair` auth from
+  `langfusePublicKey` + `langfuseSecretKey`) are all proxied. There is no
+  deployed direct-egress opt-out. Langfuse replaced LangSmith as the trace sink:
+  nothing writes LangSmith traces any more, and Analytics reads
+  `GET /api/public/v2/observations` (the legacy `/api/public/traces|observations|metrics`
+  endpoints return `410` for this organization). Never put the pair in
+  `OTEL_EXPORTER_OTLP_HEADERS` — a model-run `env` would print it; the span
+  processor holds it in-process only.
 - **Gateway stream tokens:** deployed gateways receive only the HTTPS
   `STREAM_TOKEN_SERVICE_URL`. A standalone, IAM-gated Cloud Run broker runs
   under its own service account, is the only workload allowed to read

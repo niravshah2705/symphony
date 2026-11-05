@@ -9,13 +9,25 @@ RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch \
  && pip install --no-cache-dir "laya[serve]"
 
-# CPU inference; checkpoints are NOT baked in — the HF hub cache is mounted
-# read-only from GCS (see deploy/gcp/terraform/laya_models.tf + laya_inference.tf).
-# LAYA_PRELOAD builds all served checkpoints before listening; device/thread and
-# offline-HF env (HF_HOME, HF_HUB_OFFLINE) are set in Terraform so they can be
-# retuned without a rebuild.
+# Bake the three served checkpoints into a HF hub-style cache at build time.
+# Runtime then reads them from the container's own disk: safetensors random
+# reads over gcsfuse took ~3.5min per CPU checkpoint build and preloading
+# blocks the port bind, which failed every startup-probe window on Cloud Run
+# (revisions 00015-00018). Rebuild = re-release: the image digest pins the
+# weights, and laya-serve never touches the Hub (HF_HUB_OFFLINE).
+RUN pip install --no-cache-dir -U "huggingface_hub[cli]" \
+ && hf download convaiinnovations/laya --cache-dir /opt/laya-cache \
+ && hf download convaiinnovations/laya-multilingual --cache-dir /opt/laya-cache \
+ && hf download convaiinnovations/laya-typed-decisions --cache-dir /opt/laya-cache
+
+# CPU inference; LAYA_PRELOAD builds all served checkpoints before listening.
+# Device/thread caps are set in Terraform so they can be retuned per CPU size
+# without a rebuild.
 ENV LAYA_DEVICE=cpu \
-    LAYA_PRELOAD=1
+    LAYA_PRELOAD=1 \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    HF_HUB_CACHE=/opt/laya-cache
 
 EXPOSE 8000
 CMD ["laya-serve"]

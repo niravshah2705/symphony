@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| AgentError | Class | ./packages/shared/src/agent/plan.js | 31-38 |
-| constructor | Function | ./packages/shared/src/agent/plan.js | 32-37 |
+| AgentError | Class | ./packages/shared/src/agent/plan.js | 29-36 |
+| constructor | Function | ./packages/shared/src/agent/plan.js | 30-35 |
 
 ## Execution Flows
 

@@ -35,7 +35,7 @@ const LEGACY_PLAINTEXT_SECRET_FIELDS = Object.freeze([
   'linearApiKey', 'githubToken', 'gitlabToken', 'jiraApiToken',
   'asanaAccessToken', 'omlxApiKey', 'huggingfaceApiKey',
   'antigravityApiKey', 'geminiApiKey', 'langsmithApiKey', 'slackWebhookUrl',
-  'qoderAccessToken',
+  'qoderAccessToken', 'langfusePublicKey', 'langfuseSecretKey',
 ]);
 
 // Settings keys backing each LLM role. Provider-class slots ('byom'/'global')
@@ -269,11 +269,12 @@ function publicSettings() {
     openshellUrl: s.openshellUrl || CONFIG.OPENSHELL?.url || 'https://openshell.archagentix.com',
     hasGitlabToken: false,
     maskedGitlabToken: '',
-    hasLangsmithKey: false,
-    maskedLangsmithKey: '',
-    langsmithProject: s.langsmithProject,
-    langsmithEndpoint: s.langsmithEndpoint,
-    langsmithTracing: Boolean(s.langsmithTracing),
+    // Langfuse is the trace sink. The key pair is vault scope (never derived from
+    // a legacy store field, never echoed), and the project + base URL are
+    // deployment config, so only the org-level on/off switch is a browser pref.
+    hasLangfuseKey: false,
+    maskedLangfuseKey: '',
+    langfuseTracing: Boolean(s.langfuseTracing),
     agentRuntime: normalizeAgentRuntime(s.agentRuntime),
     workflowPattern: normalizeWorkflowPattern(s.workflowPattern),
     // Retry count applied to every provider's LLM stream on a transient error.
@@ -780,22 +781,19 @@ router.put('/runtime', (req, res) => {
   res.json(publicSettings());
 });
 
-// PUT /api/settings/langsmith — save LangSmith tracing configuration.
-router.put('/langsmith', (req, res) => {
+// PUT /api/settings/langfuse — save the Langfuse tracing switch.
+router.put('/langfuse', (req, res) => {
   const b = req.body || {};
-  if (Object.prototype.hasOwnProperty.call(b, 'langsmithApiKey')) {
+  if (Object.prototype.hasOwnProperty.call(b, 'langfuseSecretKey') || Object.prototype.hasOwnProperty.call(b, 'langfusePublicKey')) {
     return res.status(400).json({
-      error: 'langsmithApiKey is no longer accepted here. Store it in the organization or project vault.',
+      error: 'langfuseSecretKey/langfusePublicKey are no longer accepted here. Store them in the organization or project vault.',
     });
   }
   const patch = {};
-  if (b.langsmithProject !== undefined && String(b.langsmithProject).trim()) {
-    patch.langsmithProject = String(b.langsmithProject).trim();
+  if (b.langfuseTracing !== undefined) patch.langfuseTracing = Boolean(b.langfuseTracing);
+  if (!Object.keys(patch).length) {
+    return res.status(400).json({ error: 'langfuseTracing is required.' });
   }
-  if (b.langsmithEndpoint !== undefined && String(b.langsmithEndpoint).trim()) {
-    patch.langsmithEndpoint = String(b.langsmithEndpoint).trim();
-  }
-  if (b.langsmithTracing !== undefined) patch.langsmithTracing = Boolean(b.langsmithTracing);
   patchSettings(patch);
   res.json(publicSettings());
 });

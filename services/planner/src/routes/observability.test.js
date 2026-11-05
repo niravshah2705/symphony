@@ -99,7 +99,7 @@ test('observability mapper surfaces resource usage, preferring used over configu
 
 test('observability mapper distinguishes missing configuration from provider outage', () => {
   const missing = toAnalyticsPayload({
-    availability: 'unavailable', reason: 'api-key-missing', message: 'Configure it.', window: {}, summary: null, traces: [],
+    availability: 'unavailable', reason: 'keys-missing', message: 'Configure it.', window: {}, summary: null, traces: [],
   });
   const outage = toAnalyticsPayload({
     availability: 'unavailable', reason: 'provider-unavailable', message: 'Try again.', window: {}, summary: null, traces: [],

@@ -55,10 +55,9 @@ function toIssue(node) {
 function buildKeys(s, linearApiKey = getApiKey()) {
   return {
     linearApiKey,
-    langsmithApiKey: s.langsmithApiKey,
-    langsmithTracing: s.langsmithTracing,
-    langsmithProject: s.langsmithProject,
-    langsmithEndpoint: s.langsmithEndpoint,
+    langfusePublicKey: s.langfusePublicKey,
+    langfuseSecretKey: s.langfuseSecretKey,
+    langfuseTracing: s.langfuseTracing,
     agentRuntime: s.agentRuntime,
     workflowPattern: s.workflowPattern,
   };

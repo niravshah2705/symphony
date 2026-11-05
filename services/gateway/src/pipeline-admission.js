@@ -53,6 +53,7 @@ const STAGE_MODEL_ROLES = Object.freeze({
 const POLICY_DOMAINS = Object.freeze(['harness', 'tools', 'skills', 'plugins', 'hooks', 'models']);
 const LOCAL_PREF_KEYS = Object.freeze([
   'agentRuntime', 'planHarness', 'codeHarness', 'testHarness', 'deployHarness', 'llmProvider',
+  'agentPattern',
 ]);
 const PROVIDER_CREDENTIAL_KINDS = Object.freeze({
   codex: new Set(['codexTokenBundle', 'openaiApiKey']),

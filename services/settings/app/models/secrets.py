@@ -47,7 +47,8 @@ SECRET_KEYS: tuple[str, ...] = (
     "anthropicApiKey",
     "openaiApiKey",
     "huggingfaceApiKey",
-    "langsmithApiKey",
+    "langsmithApiKey",  # legacy trace key: no longer written; kept so the dormant
+    # `/langsmith` egress route resolves without destroying a managed secret.
     "openrouterApiKey",
     "digilockerClientId",
     "digilockerClientSecret",
@@ -58,28 +59,45 @@ SECRET_KEYS: tuple[str, ...] = (
     # JSON-encoded OpenAI/Codex OAuth token bundle. Provisioned only through the
     # direct org-admin operator surface; never accepted by the browser gateway.
     "codexTokenBundle",
-    # LangSmith LLM Gateway WORKSPACE key (distinct from langsmithApiKey, the
-    # tracing key). Managed-only: it bills the platform's LangSmith workspace,
-    # so it is resolved like any managed key but never writable by a browser.
+    # LangSmith LLM Gateway WORKSPACE key. This is ROUTING, not tracing (Langfuse
+    # is the trace sink), and it is unrelated to the dormant langsmithApiKey
+    # above. Managed-only: it bills the platform's LangSmith workspace, so it is
+    # resolved like any managed key but never writable by a browser.
     "langsmithGatewayApiKey",
     # Self-hosted LiteLLM proxy credential for the `litellm` gateway mode. An
     # operator writes it into each org's vault; there is no seeder, because
     # /key/generate mints a NEW token per call and nothing here can receive one
     # back. See CUSTOMER_ONLY_SECRET_KEYS below and docs/LLM_GATEWAY.md.
     "litellmApiKey",
+    # Langfuse Cloud tracing pair. The sidecar builds `Basic base64(pk:sk)` for the
+    # /langfuse route, so the public key is a stored key too (not a constant).
+    # Platform-managed only, like the LLM gateway key: one shared project receives
+    # every organization's traces, so a browser must not repoint that sink.
+    "langfusePublicKey",
+    "langfuseSecretKey",
 )
 
 # Browser-facing org-admin secret CRUD is intentionally narrower than the
 # storage/resolver allowlist. OAuth bundles must pass the typed, direct
 # operator-only import flow; accepting their opaque JSON through generic secret
 # CRUD would bypass token validation and that separate IAM boundary. The LLM
-# gateway workspace key is platform-billing material and stays operator-only. The
-# LiteLLM credential is operator-written too: a browser-writable value would let
-# an org point the platform's LiteLLM-routed traffic at an arbitrary gateway.
+# gateway workspace key is platform-billing material and stays operator-only.
+# The Langfuse pair is operator-only for the same reason: it is the platform's
+# shared trace sink, and a writable key would let a tenant redirect its
+# observations into a project the platform does not control. The LiteLLM
+# credential is operator-written too: a browser-writable value would let an org
+# point the platform's LiteLLM-routed traffic at an arbitrary gateway.
 BROWSER_WRITABLE_SECRET_KEYS: tuple[str, ...] = tuple(
     key
     for key in SECRET_KEYS
-    if key not in ("codexTokenBundle", "langsmithGatewayApiKey", "litellmApiKey")
+    if key
+    not in (
+        "codexTokenBundle",
+        "langsmithGatewayApiKey",
+        "langfusePublicKey",
+        "langfuseSecretKey",
+        "litellmApiKey",
+    )
 )
 
 # Who owns each provider's key. "managed" => platform key (settings-mounted);

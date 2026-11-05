@@ -274,6 +274,15 @@ async function buildInjection(route, opts = {}) {
       if (!accessToken) throw new FailClosed('Codex access token is unavailable');
       return { authorization: `Bearer ${accessToken}` };
     }
+    case 'basic-pair': {
+      // Langfuse: Basic base64(publicKey:secretKey). Both halves are stored keys,
+      // and both are required — an ingest endpoint must never be dialed
+      // half-authenticated, so neither side is allowed to be missing.
+      const resolved = await resolvedSecrets();
+      const username = resolveStaticKey(route.usernameKey, resolved);
+      const password = resolveStaticKey(route.secretKey, resolved);
+      return { authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}` };
+    }
     case 'git': {
       const key = resolveStaticKey(route.secretKey, await resolvedSecrets());
       const username = safeCredential(route.username, 'git credential username');

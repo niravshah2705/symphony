@@ -195,10 +195,9 @@ test('Codex SDK API backend uses a constrained thread and reports token usage', 
     },
     loaders: { 'codex-sdk': async () => ({ Codex: FakeCodex }) },
     invokeConfig: { metadata: { issueId: 'ABC-1' }, tags: ['coder'] },
-    getCurrentRunTree: () => seen.run,
-    traceFactory: (fn, config) => {
-      seen.trace = config;
-      return fn;
+    traceRun: (traceOptions, run) => {
+      seen.trace = traceOptions;
+      return run();
     },
   });
 
@@ -233,10 +232,8 @@ test('Codex SDK API backend uses a constrained thread and reports token usage', 
   assert.equal(seen.trace.metadata.agent_runtime, 'codex-sdk');
   assert.equal(seen.trace.metadata.model_provider, 'codex');
   assert.equal(seen.trace.metadata.model_name, 'gpt-5-codex');
-  assert.equal(seen.trace.metadata.ls_provider, 'openai');
-  assert.equal(seen.trace.metadata.ls_model_name, 'gpt-5-codex');
-  assert.equal(seen.trace.run_type, 'llm');
   assert.equal(seen.trace.metadata.issueId, 'ABC-1');
+  assert.equal(seen.trace.model, 'gpt-5-codex');
   // Harness + model surface both as trace metadata and as flat tags.
   assert.equal(seen.trace.metadata.harness, 'codex');
   assert.ok(seen.trace.tags.includes('harness:codex'));
@@ -244,15 +241,18 @@ test('Codex SDK API backend uses a constrained thread and reports token usage', 
   assert.ok(seen.trace.tags.includes('runtime:codex-sdk'));
   assert.ok(seen.trace.tags.includes('pattern:parallel'));
   assert.ok(seen.trace.tags.includes('coder')); // caller-supplied tag preserved
-  assert.equal(seen.run.metadata.usage_input_tokens, 20);
-  assert.equal(seen.run.metadata.usage_output_tokens, 8);
-  assert.deepEqual(seen.run.metadata.usage_metadata, {
+  const detail = seen.trace.describe(execution);
+  assert.equal(detail.metadata.usage_input_tokens, 20);
+  assert.equal(detail.metadata.usage_output_tokens, 8);
+  assert.deepEqual(detail.metadata.usage_metadata, {
     input_tokens: 20,
     output_tokens: 8,
     total_tokens: 28,
   });
-  assert.equal(seen.run.metadata.cost_available, false);
-  assert.equal(Object.hasOwn(seen.run.metadata, 'cost_usd'), false);
+  assert.deepEqual(detail.usageDetails, { input: 20, output: 8, total: 28, cache_read_input_tokens: 3, reasoning: 2 });
+  assert.equal(detail.metadata.cost_available, false);
+  assert.equal(Object.hasOwn(detail.metadata, 'cost_usd'), false);
+  assert.equal(Object.hasOwn(detail, 'costDetails'), false);
 });
 
 test('Codex SDK ChatGPT backend uses an isolated official auth file and removes it', async (t) => {
@@ -379,10 +379,9 @@ test('Claude Agent SDK adapter streams a result with cost and isolated settings'
     maxTurns: 9,
     llm: { provider: 'claude', model: 'claude-sonnet-4-6', accessToken: 'oauth-secret' },
     loaders: { 'claude-agent-sdk': async () => ({ query: fakeQuery }) },
-    getCurrentRunTree: () => seen.run,
-    traceFactory: (fn, config) => {
-      seen.trace = config;
-      return fn;
+    traceRun: (traceOptions, run) => {
+      seen.trace = traceOptions;
+      return run();
     },
   });
 
@@ -398,14 +397,14 @@ test('Claude Agent SDK adapter streams a result with cost and isolated settings'
   assert.equal(execution.costUsd, 0.0125);
   assert.equal(execution.usage.totalTokens, 42);
   assert.equal(seen.trace.metadata.workflow_pattern, 'supervisor');
-  assert.equal(seen.trace.metadata.ls_provider, 'anthropic');
   assert.equal(seen.trace.metadata.harness, 'claudecode');
   assert.ok(seen.trace.tags.includes('harness:claudecode'));
   assert.ok(seen.trace.tags.includes('model:claude-sonnet-4-6'));
-  assert.equal(seen.trace.run_type, 'llm');
-  assert.equal(seen.run.metadata.cost_usd, 0.0125);
-  assert.equal(seen.run.metadata.usage_total_tokens, 42);
-  assert.equal(seen.run.metadata.usage_metadata.total_cost, 0.0125);
+  const detail = seen.trace.describe(execution);
+  assert.equal(detail.metadata.cost_usd, 0.0125);
+  assert.deepEqual(detail.costDetails, { total: 0.0125 });
+  assert.equal(detail.metadata.usage_total_tokens, 42);
+  assert.equal(detail.metadata.usage_metadata.total_cost, 0.0125);
 });
 
 test('Claude Agent SDK proxy env carries only a validated project context header', () => {
@@ -442,10 +441,9 @@ test('runtime/provider mismatches fall back to traced DeepAgent execution', asyn
     deepAgentInvoke: async () => ({ messages: [{ role: 'assistant', content: 'local done' }] }),
     lastText: (result) => result.messages.at(-1).content,
     loaders: { 'codex-sdk': async () => { seen.sdkLoads += 1; return {}; } },
-    getCurrentRunTree: () => seen.run,
-    traceFactory: (fn, config) => {
-      seen.trace = config;
-      return fn;
+    traceRun: (traceOptions, run) => {
+      seen.trace = traceOptions;
+      return run();
     },
   });
 
@@ -455,7 +453,6 @@ test('runtime/provider mismatches fall back to traced DeepAgent execution', asyn
   assert.equal(seen.trace.metadata.agent_runtime, 'deepagent');
   assert.equal(seen.trace.metadata.requested_agent_runtime, 'codex-sdk');
   assert.equal(seen.trace.metadata.runtime_fallback_reason, 'provider_mismatch');
-  assert.equal(seen.trace.run_type, 'chain');
   assert.match(seen.trace.name, /deepagent/);
 });
 
@@ -474,7 +471,7 @@ test('matching SDK providers still fail closed when authentication is unavailabl
 });
 
 test('RubricMiddleware grades a DeepAgent run and surfaces its verdict on the trace', async (t) => {
-  const seen = { run: { metadata: {} } };
+  const seen = {};
   const execution = await executeAgentRuntime({
     runtime: 'deepagent',
     prompt: 'Ship the feature',
@@ -483,8 +480,10 @@ test('RubricMiddleware grades a DeepAgent run and surfaces its verdict on the tr
     lastText: (result) => result.messages.at(-1).content,
     rubric: '- feature works\n- PR opened',
     rubricOptions: { deps: { callJson: async () => ({ json: { criteria: [{ name: 'feature works', passed: true }, { name: 'PR opened', passed: true }] } }) } },
-    getCurrentRunTree: () => seen.run,
-    traceFactory: (fn) => fn,
+    traceRun: (traceOptions, run) => {
+      seen.trace = traceOptions;
+      return run();
+    },
   });
 
   assert.equal(execution.finalText, 'Opened PR #7.');
@@ -492,10 +491,11 @@ test('RubricMiddleware grades a DeepAgent run and surfaces its verdict on the tr
   assert.equal(execution.review.satisfied, true);
   assert.equal(execution.review.iterations, 1);
   // Verdict is copied into trace metadata for analytics.
-  assert.equal(seen.run.metadata.rubric_reviewed, true);
-  assert.equal(seen.run.metadata.rubric_result, 'satisfied');
-  assert.equal(seen.run.metadata.rubric_satisfied, true);
-  assert.equal(seen.run.metadata.rubric_iterations, 1);
+  const metadata = seen.trace.describe(execution).metadata;
+  assert.equal(metadata.rubric_reviewed, true);
+  assert.equal(metadata.rubric_result, 'satisfied');
+  assert.equal(metadata.rubric_satisfied, true);
+  assert.equal(metadata.rubric_iterations, 1);
 });
 
 test('RubricMiddleware re-runs the SAME SDK runtime (Codex) on needs_revision', async (t) => {
@@ -603,7 +603,7 @@ test('Antigravity harness gates on a matching provider and the coding workflow',
 
 test('Antigravity SDK adapter returns the contract shape via the interactions API', async (t) => {
   const root = workspace(t);
-  const seen = { run: { metadata: {} } };
+  const seen = {};
   class FakeGoogleGenAI {
     constructor(options) {
       seen.client = options;
@@ -642,10 +642,9 @@ test('Antigravity SDK adapter returns the contract shape via the interactions AP
       agentId: 'antigravity-preview-agent',
     },
     loaders: { 'antigravity-sdk': async () => ({ GoogleGenAI: FakeGoogleGenAI }) },
-    getCurrentRunTree: () => seen.run,
-    traceFactory: (fn, config) => {
-      seen.trace = config;
-      return fn;
+    traceRun: (traceOptions, run) => {
+      seen.trace = traceOptions;
+      return run();
     },
   });
 
@@ -670,11 +669,11 @@ test('Antigravity SDK adapter returns the contract shape via the interactions AP
 
   assert.equal(seen.trace.metadata.agent_runtime, 'antigravity-sdk');
   assert.equal(seen.trace.metadata.harness, 'antigravity');
-  assert.equal(seen.trace.metadata.ls_provider, 'google');
-  assert.equal(seen.trace.run_type, 'llm');
+  assert.equal(seen.trace.metadata.model_provider, 'antigravity');
+  assert.equal(seen.trace.metadata.model_name, 'gemini-2.5-flash');
   assert.ok(seen.trace.tags.includes('harness:antigravity'));
   assert.ok(seen.trace.tags.includes('runtime:antigravity-sdk'));
-  assert.equal(seen.run.metadata.usage_total_tokens, 25);
+  assert.equal(seen.trace.describe(execution).metadata.usage_total_tokens, 25);
 });
 
 test('Antigravity SDK falls back to models.generateContent when interactions is unavailable', async (t) => {

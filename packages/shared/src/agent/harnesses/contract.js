@@ -12,7 +12,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { getCurrentRunTree } = require('langsmith/traceable');
 const { PATTERNS, patternId } = require('../workflow-patterns');
 const { cleanList } = require('../trace-annotations');
 
@@ -465,24 +464,6 @@ function traceMetadata(resultOrError) {
   };
 }
 
-function langSmithProvider(llm) {
-  const provider = llm && llm.provider;
-  if (provider === 'codex') return 'openai';
-  if (provider === 'claude') return 'anthropic';
-  if (provider === 'antigravity') return 'google';
-  if (provider === 'lmstudio' || provider === 'omlx' || provider === 'huggingface') return 'openai';
-  return provider || 'unknown';
-}
-
-function annotateTrace(resultOrError, currentRun = getCurrentRunTree) {
-  try {
-    const current = currentRun();
-    current.metadata = { ...(current.metadata || {}), ...traceMetadata(resultOrError) };
-  } catch (_) {
-    // No active LangSmith context (tracing disabled) is a normal deployment.
-  }
-}
-
 function wrapExecutionError(label, error) {
   if (error instanceof AgentRuntimeError) return error;
   const message = error && error.message ? String(error.message).replace(/\s+/g, ' ').slice(0, 500) : 'Unknown SDK error.';
@@ -581,8 +562,6 @@ module.exports = {
   extractUsedResources,
   usedResourceMetadata,
   traceMetadata,
-  langSmithProvider,
-  annotateTrace,
   wrapExecutionError,
   reasoningEffort,
   plannerWebSearchAllowed,

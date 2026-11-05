@@ -25,16 +25,16 @@ test('sanitizeSettingsPatch accepts valid keys and coerces values', () => {
   const { patch, applied } = sanitizeSettingsPatch({
     agentRuntime: 'codex-sdk',
     workflowPattern: 'supervisor',
-    langsmithTracing: false,
+    langfuseTracing: false,
     llmProvider: 'ollama',
     ollamaTemperature: 5, // clamped to 2
-    langsmithEndpoint: 'https://api.smith.langchain.com/', // trailing slash trimmed
+    openshellUrl: 'https://openshell.example.com/', // trailing slash trimmed
   });
   assert.equal(patch.agentRuntime, 'codex-sdk');
   assert.equal(patch.workflowPattern, 'supervisor');
-  assert.equal(patch.langsmithTracing, false);
+  assert.equal(patch.langfuseTracing, false);
   assert.equal(patch.ollamaTemperature, 2);
-  assert.equal(patch.langsmithEndpoint, 'https://api.smith.langchain.com');
+  assert.equal(patch.openshellUrl, 'https://openshell.example.com');
   assert.ok(applied.includes('agentRuntime'));
 });
 
@@ -56,11 +56,12 @@ test('sanitizeSettingsPatch ignores unknown, derived, and secret keys', () => {
     planningConfigured: true,
     linearApiKey: 'lin_live_secret',
     langsmithApiKey: 'lsv2_secret',
+    langfuseSecretKey: 'sk-lf-secret',
     githubToken: 'ghp_secret',
     totallyUnknown: 1,
   });
   assert.deepEqual(patch, {});
-  for (const key of ['hasKey', 'linearApiKey', 'langsmithApiKey', 'githubToken', 'totallyUnknown']) {
+  for (const key of ['hasKey', 'linearApiKey', 'langsmithApiKey', 'langfuseSecretKey', 'githubToken', 'totallyUnknown']) {
     assert.ok(ignored.includes(key), `${key} should be ignored`);
   }
 });
@@ -71,6 +72,8 @@ test('EDITABLE_KEYS never exposes secret material', () => {
     'githubToken',
     'gitlabToken',
     'langsmithApiKey',
+    'langfusePublicKey',
+    'langfuseSecretKey',
     'jiraApiToken',
     'asanaAccessToken',
     'omlxApiKey',
@@ -85,25 +88,25 @@ test('EDITABLE_KEYS never exposes secret material', () => {
 test('snapshotEditable keeps only editable keys', () => {
   const snapshot = snapshotEditable({
     agentRuntime: 'deepagent',
-    langsmithProject: 'demo',
+    langfuseTracing: true,
     linearApiKey: 'secret',
     unknownKey: 'x',
   });
-  assert.deepEqual(snapshot, { agentRuntime: 'deepagent', langsmithProject: 'demo' });
+  assert.deepEqual(snapshot, { agentRuntime: 'deepagent', langfuseTracing: true });
 });
 
 test('describeEditableSettings lists keys and harness enum mapping', () => {
   const text = describeEditableSettings();
   assert.match(text, /agentRuntime/);
   assert.match(text, /claude-agent-sdk=ClaudeCode/);
-  assert.match(text, /langsmithTracing: true \| false/);
+  assert.match(text, /langfuseTracing: true \| false/);
 });
 
 test('applySettingsPatch persists valid keys to the store and skips empty patches', () => {
-  const outcome = applySettingsPatch({ agentRuntime: 'codex-sdk', langsmithTracing: false, hasKey: true });
-  assert.deepEqual(outcome.applied.sort(), ['agentRuntime', 'langsmithTracing']);
+  const outcome = applySettingsPatch({ agentRuntime: 'codex-sdk', langfuseTracing: false, hasKey: true });
+  assert.deepEqual(outcome.applied.sort(), ['agentRuntime', 'langfuseTracing']);
   assert.equal(getSettings().agentRuntime, 'codex-sdk');
-  assert.equal(getSettings().langsmithTracing, false);
+  assert.equal(getSettings().langfuseTracing, false);
 
   // A patch with no valid keys writes nothing and does not throw.
   const noop = applySettingsPatch({ linearApiKey: 'x', unknownKey: 1 });

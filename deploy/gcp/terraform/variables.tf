@@ -212,8 +212,17 @@ variable "laya_cpu" {
 
 variable "laya_memory" {
   type        = string
-  description = "Memory allocated to Laya container. 2Gi covers preloading the english + multilingual + typed-decisions checkpoints (322M-421M params each) at LAYA_MAX_LOADED=3; 1Gi OOMs."
-  default     = "2Gi"
+  description = <<-EOT
+    Memory allocated to Laya container. The three preloaded checkpoints are
+    ~2.3GB of fp16 weights on disk (english ~0.84GB, multilingual ~0.64GB,
+    typed-decisions ~0.85GB), but CPU inference materializes them as float32 —
+    ~4.7GB resident — plus ~0.4GB torch/runtime overhead and a transient copy
+    of each checkpoint while it is built. 4Gi was OOM-killed during preload of
+    the SECOND checkpoint on revisions 00016-00018: each instance logged exactly
+    one `Agent(repo)` build, then exited silently ~5min later with no traceback,
+    so the port never bound and the startup probe timed out. Floor is 8Gi.
+  EOT
+  default     = "8Gi"
 }
 
 variable "laya_min_instances" {
@@ -405,7 +414,7 @@ variable "openswe_proxy_upstream" {
 
 variable "managed_provider_secrets" {
   type        = map(string)
-  description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Hosted LLMs require the matching GEMINI_API_KEY, HUGGINGFACE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY entry. Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
+  description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Hosted LLMs require the matching GEMINI_API_KEY, HUGGINGFACE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY entry. Agent traces go to Langfuse Cloud, which requires LANGFUSE_PUBLIC_KEY => langfuse-public-key and LANGFUSE_SECRET_KEY => langfuse-secret-key; the egress proxy reassembles the Basic pair from these, so no agent container ever holds them. Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
   default     = { GITHUB_TOKEN = "github-token" }
 }
 
@@ -796,10 +805,32 @@ variable "coder_repo_url" {
 
 # --- Secrets ------------------------------------------------------------------
 
+variable "langfuse_environment" {
+  type        = string
+  description = "Langfuse `environment` partition for traces written by this deployment (dev/staging/prod). Non-secret; org and project are trace tags, so one managed project holds every tenant."
+  default     = "prod"
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9._-]{0,39}$", var.langfuse_environment))
+    error_message = "langfuse_environment must be a lowercase slug of at most 40 characters ([a-z0-9._-])."
+  }
+}
+
+variable "langfuse_base_url" {
+  type        = string
+  description = "Optional Langfuse origin override for data residency or a self-hosted instance (e.g. https://us.cloud.langfuse.com). Empty keeps the https://cloud.langfuse.com default. Not a secret — the key pair never appears here."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.langfuse_base_url) == "" || can(regex("^https://[^/?#@[:space:]]+$", trimspace(var.langfuse_base_url)))
+    error_message = "langfuse_base_url must be empty or a path-free HTTPS origin without credentials, query, or fragment."
+  }
+}
+
 variable "extra_secret_ids" {
   type        = list(string)
-  description = "Additional Secret Manager secret IDs to create (provider OAuth, LangSmith, GitHub token, managed LLM keys, etc.). Versions are added out-of-band and mounted only on the settings service through managed_provider_secrets; agent identities receive no accessor role."
-  default     = ["github-token", "langsmith-api-key", "gemini-api-key", "huggingface-api-key", "anthropic-api-key", "openai-api-key"]
+  description = "Additional Secret Manager secret IDs to create (provider OAuth, Langfuse tracing keys, GitHub token, managed LLM keys, etc.). Versions are added out-of-band and mounted only on the settings service through managed_provider_secrets; agent identities receive no accessor role."
+  default     = ["github-token", "langsmith-api-key", "langfuse-public-key", "langfuse-secret-key", "gemini-api-key", "huggingface-api-key", "anthropic-api-key", "openai-api-key"]
 }
 
 # --- SPA (GCS bucket) ---------------------------------------------------------
@@ -880,14 +911,15 @@ variable "skills_publisher_member" {
   default     = ""
 }
 
-# --- Laya checkpoint registry (GCS bucket, gcsfuse mount) --------------------
+# --- Laya checkpoint registry (GCS bucket, publish/audit target) -------------
 # See laya_models.tf. Mirrors the skills registry: Terraform CREATES and OWNS
-# the bucket, name defaults to the derived "<project_id>-aifleet-laya-models",
-# and the laya-inference service mounts it read-only and PINs a version.
+# the bucket and the name defaults to the derived
+# "<project_id>-aifleet-laya-models". The runtime does NOT mount it — the
+# checkpoints ship inside the image (Dockerfile.laya-inference).
 
 variable "laya_models_enabled" {
   type        = bool
-  description = "Create the Terraform-managed Laya checkpoint bucket (+ IAM + gcsfuse mount on laya-inference). false removes the bucket and the mount; the laya[serve] image has no vendored weights and then fails closed on model load — only turn off when the laya service is not deployed."
+  description = "Create the Terraform-managed Laya checkpoint bucket (+ IAM), used by .github/workflows/publish-laya-models.yml as the versioned publish/audit target. false removes the bucket only — laya-inference no longer mounts it, so this does not affect serving."
   default     = true
 }
 
@@ -905,7 +937,7 @@ variable "laya_models_bucket_force_destroy" {
 
 variable "laya_model_version" {
   type        = string
-  description = "Laya checkpoint bundle version the service PINS (HF_HOME=/models/<version> on the gcsfuse mount). Must match a published `<version>/` prefix created by .github/workflows/publish-laya-models.yml. Bumping the published bundle to a new version does NOT affect a deployment until this is bumped."
+  description = "Laya checkpoint bundle version published to the GCS bucket by .github/workflows/publish-laya-models.yml. The RUNTIME no longer reads this: checkpoints ship inside the image (Dockerfile.laya-inference bakes HF_HUB_CACHE=/opt/laya-cache and the image digest pins the weights). Kept so the bucket stays versioned as the publish/backup target."
   default     = "v1"
 }
 

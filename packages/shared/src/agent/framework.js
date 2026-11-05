@@ -8,6 +8,7 @@ const { execFileSync } = require('child_process');
 const { resolveSkillsSrc } = require('../config');
 const toolRegistry = require('./tools');
 const { executeAgentRuntime, normalizeAgentRuntime, effectiveAgentRuntime } = require('./runtimes');
+const { dispatchPlanning } = require('./pattern-router');
 const deepAgentHarness = require('./harnesses/deepagent');
 const { applyPolicyToWorkflow, skillNameFromPath } = require('./settings-policy');
 const { withResources } = require('./trace-annotations');
@@ -316,7 +317,7 @@ async function runWorkflow({
       resolvedTools = tools;
       resolvedSkills = builtSkills;
       deepAgentInvoke = (prompt, tracedConfig) => {
-        // The runtime wrapper owns the LangSmith root run id. Passing the same
+        // The runtime wrapper owns the Langfuse root trace id. Passing the same
         // id into the nested LangGraph invocation would create a duplicate run.
         const childConfig = { ...tracedConfig };
         delete childConfig.runId;
@@ -334,11 +335,15 @@ async function runWorkflow({
         resolvedSkills,
       })
     );
-    return executeAgentRuntime({
+    return dispatchPlanning({
       runtime: requestedRuntime,
       workflowPattern,
       prompt: userMessage,
       workflow: effectiveWorkflow.name,
+      stage: effectiveWorkflow.stage || ctx.stage,
+      organizationId: ctx.organizationId,
+      projectId: ctx.projectId,
+      projectName: ctx.projectName,
       llm,
       rootDir,
       backendKind: effectiveWorkflow.backend,

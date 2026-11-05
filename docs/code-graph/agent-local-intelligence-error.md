@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| LocalIntelligenceError | Class | ./packages/shared/src/agent/local-intelligence.js | 33-39 |
-| constructor | Function | ./packages/shared/src/agent/local-intelligence.js | 34-38 |
+| LocalIntelligenceError | Class | ./packages/shared/src/agent/local-intelligence.js | 32-38 |
+| constructor | Function | ./packages/shared/src/agent/local-intelligence.js | 33-37 |
 
 ## Execution Flows
 

@@ -32,7 +32,9 @@
 #   MARKETING_CUSTOM_DOMAIN (www.archagentix.com — the second Hosting site's
 #   domain; the marketing site moved from Hostinger FTP to GCP Firebase Hosting),
 #   GOOGLE_ANALYTICS_MEASUREMENT_ID (public GA4 G-... id; empty disables analytics),
-#   GITHUB_TOKEN, LANGSMITH_API_KEY, STREAM_TOKEN_SECRET (auto-generated if unset),
+#   GITHUB_TOKEN, LANGSMITH_API_KEY, LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY
+#   (managed trace-ingest pair; mount on var.managed_provider_secrets),
+#   STREAM_TOKEN_SECRET (auto-generated if unset),
 #   IDENTITY_HASH_PEPPER (auto-generated if unset),
 #   EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_SMTP_HOST, EMAIL_SMTP_PORT,
 #   EMAIL_SMTP_SECURE, EMAIL_SMTP_REQUIRE_TLS, EMAIL_FROM, EMAIL_PUBLIC_APP_URL.
@@ -156,6 +158,8 @@ seed identity-hash-pepper "$IDENTITY_HASH_PEPPER"
 # org-jwt-secret is Terraform-managed (random_password + version) — no seed here.
 ensure_secret github-token;     [ -n "${GITHUB_TOKEN:-}" ]      && seed github-token     "$GITHUB_TOKEN"      || true
 ensure_secret langsmith-api-key;[ -n "${LANGSMITH_API_KEY:-}" ] && seed langsmith-api-key "$LANGSMITH_API_KEY" || true
+ensure_secret langfuse-public-key;[ -n "${LANGFUSE_PUBLIC_KEY:-}" ] && seed langfuse-public-key "$LANGFUSE_PUBLIC_KEY" || true
+ensure_secret langfuse-secret-key;[ -n "${LANGFUSE_SECRET_KEY:-}" ] && seed langfuse-secret-key "$LANGFUSE_SECRET_KEY" || true
 ensure_secret email-smtp-user
 ensure_secret email-smtp-password
 if [ -n "${EMAIL_SMTP_USER:-}" ]; then seed email-smtp-user "$EMAIL_SMTP_USER"; fi
@@ -231,6 +235,8 @@ if command -v terraform >/dev/null 2>&1; then
   tfimport 'google_secret_manager_secret.identity_hash_pepper' "projects/${PROJECT_ID}/secrets/identity-hash-pepper"
   tfimport 'google_secret_manager_secret.extra["github-token"]'     "projects/${PROJECT_ID}/secrets/github-token"
   tfimport 'google_secret_manager_secret.extra["langsmith-api-key"]' "projects/${PROJECT_ID}/secrets/langsmith-api-key"
+  tfimport 'google_secret_manager_secret.extra["langfuse-public-key"]' "projects/${PROJECT_ID}/secrets/langfuse-public-key"
+  tfimport 'google_secret_manager_secret.extra["langfuse-secret-key"]' "projects/${PROJECT_ID}/secrets/langfuse-secret-key"
   tfimport 'google_secret_manager_secret.email_smtp_user' "projects/${PROJECT_ID}/secrets/email-smtp-user"
   tfimport 'google_secret_manager_secret.email_smtp_password' "projects/${PROJECT_ID}/secrets/email-smtp-password"
 else

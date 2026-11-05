@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * Business "annotations" for LangSmith runs.
+ * Business "annotations" for traced agent runs.
  *
  * Every traced run (planner + coder) is stamped with three business tags so
- * traces are filterable and groupable in LangSmith:
+ * traces are filterable and groupable in the trace sink (Langfuse):
  *   - project  : human-readable business/project name
  *   - task-id  : the tracker task (Linear issue) identifier, e.g. "ENG-123"
  *   - session  : the top-level run id (unique per run). Also emitted as
- *                `session_id`, the metadata key LangSmith's Threads view groups on.
+ *                `session_id` so a session stays groupable from metadata alone.
  *
  * Each value is attached BOTH as structured `metadata` (filterable + thread key)
  * and as a flat `tag` (`project:…`, `task:…`, `session:…`) for the runs list.
@@ -45,7 +45,7 @@ function buildAnnotations(business = {}) {
   const session = clean(business.session);
   if (session) {
     metadata.session = session;
-    metadata.session_id = session; // LangSmith Threads grouping key
+    metadata.session_id = session; // session grouping key mirrors session
     tags.push(`session:${session}`);
   }
 
@@ -77,7 +77,7 @@ function withAnnotations(config = {}, business = {}) {
 // set of skills, tools, and plugins a run uses. Values are lists of NAMES only
 // (never tool args, results, prompts, or secrets). Each category becomes a
 // metadata array (+ `<key>_count`) and flat tags `skill:<n>` / `tool:<n>` /
-// `plugin:<n>` so runs are filterable and groupable in LangSmith.
+// `plugin:<n>` so runs are filterable and groupable in the trace sink.
 // ---------------------------------------------------------------------------
 
 /** Default caps so trace metadata can never grow unbounded. */

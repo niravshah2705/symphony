@@ -818,6 +818,7 @@ module.exports = {
   MODEL_ROLE_META,
   COMPLEXITY_TIERS,
   COMPLEXITY_TIER_IDS,
+  isLocalInference,
   isPurposeRole,
   validateCatalog,
   getPreset,

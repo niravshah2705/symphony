@@ -146,11 +146,10 @@ test('throwing executor factories run inside tracing and normalized error handli
       workflow: 'planning',
       prompt: 'run',
       llm: { provider: 'fixture', model: 'model' },
-      getCurrentRunTree: () => ({ metadata: {} }),
-      traceFactory(fn) {
+      traceRun(_traceOptions, run) {
         traceStarted = true;
         assert.equal(factoryCalls, 0, 'factory must not run before trace construction');
-        return fn;
+        return run();
       },
     }, { dependency: true }),
     (error) => error.code === 'runtime_execution_failed'

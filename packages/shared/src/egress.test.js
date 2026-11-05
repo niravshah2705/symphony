@@ -9,6 +9,7 @@ const {
   LLM_GATEWAY_ORG_HEADER,
   egressUrl,
   llmGatewayUpstream,
+  langfuseUpstream,
   matchRoute,
   normalizeProxyBase,
   projectEgressHeaders,
@@ -164,3 +165,24 @@ test('LLM_GATEWAY_ORG_HEADER names the per-org policy header', () => {
   assert.equal(LLM_GATEWAY_ORG_HEADER, 'x-fleet-org-id');
 });
 
+test('langfuse route: OTLP and REST paths keep their full remainder', () => {
+  const otel = matchRoute('/langfuse/api/public/otel/v1/traces');
+  assert.equal(otel.route, EGRESS_ROUTES.langfuse);
+  assert.equal(otel.rest, '/api/public/otel/v1/traces');
+  assert.equal(matchRoute('/langfuse/api/public/traces?page=1').rest, '/api/public/traces?page=1');
+  // The upstream stays a bare origin, otherwise the SDK-appended /api/public doubles.
+  assert.ok(!EGRESS_ROUTES.langfuse.upstream.includes('/api/'));
+});
+
+test('langfuse route: basic-pair collects BOTH stored halves into EGRESS_SECRET_KEYS', () => {
+  assert.equal(EGRESS_ROUTES.langfuse.auth, 'basic-pair');
+  assert.equal(EGRESS_ROUTES.langfuse.usernameKey, 'langfusePublicKey');
+  assert.equal(EGRESS_ROUTES.langfuse.secretKey, 'langfuseSecretKey');
+  assert.ok(EGRESS_SECRET_KEYS.includes('langfusePublicKey'));
+  assert.ok(EGRESS_SECRET_KEYS.includes('langfuseSecretKey'));
+});
+
+test('langfuseUpstream: EU cloud default, LANGFUSE_BASE_URL selects another region', () => {
+  assert.equal(langfuseUpstream({}), 'https://cloud.langfuse.com');
+  assert.equal(langfuseUpstream({ LANGFUSE_BASE_URL: 'https://us.cloud.langfuse.com/' }), 'https://us.cloud.langfuse.com');
+});

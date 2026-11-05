@@ -66,6 +66,10 @@ MANAGED_ENV = {
     "digilockerClientSecret": "DIGILOCKER_CLIENT_SECRET",
     # LangSmith LLM Gateway workspace key (managed-only; see models/secrets.py).
     "langsmithGatewayApiKey": "LANGSMITH_GATEWAY_API_KEY",
+    # Langfuse Cloud tracing pair (managed-only). Both halves are read from the
+    # settings env so the egress sidecar can assemble the Basic credential.
+    "langfusePublicKey": "LANGFUSE_PUBLIC_KEY",
+    "langfuseSecretKey": "LANGFUSE_SECRET_KEY",
     # OAuth bundles have no environment fallback. Platform operators may still
     # import a managed bundle through the same encrypted vault if desired.
     "codexTokenBundle": "",

@@ -5,12 +5,35 @@ const assert = require('node:assert/strict');
 const {
   MAX_WINDOW_HOURS,
   MAX_TRACE_LIMIT,
-  LANGSMITH_TIMEOUT_MS,
+  LANGFUSE_TIMEOUT_SECONDS,
   normalizeOptions,
   normalizeRun,
   aggregateRuns,
   loadAnalytics,
 } = require('./analytics');
+
+const ORIGIN = 'https://cloud.langfuse.com';
+const PROJECT_BASE = `${ORIGIN}/project/cm1projectid0000abcdef`;
+const TRACE_ID = '51c10bb1c398533cdef3921662fb0870';
+
+/** A reconstructed run: dispatch root fields plus the summed child usage. */
+function run(overrides = {}) {
+  return {
+    traceId: TRACE_ID,
+    name: 'agent-runtime:deepagent',
+    traceName: 'coding',
+    level: 'DEFAULT',
+    startTime: '2026-11-04T10:00:00.000Z',
+    endTime: '2026-11-04T10:00:02.000Z',
+    sessionId: 'session-1',
+    userId: 'user-1',
+    tags: ['runtime:deepagent', 'harness:deepagent', 'model:gpt-5', 'org:org-a', 'project:proj-a'],
+    metadata: { agent_runtime: 'deepagent', harness: 'deepagent', model_name: 'gpt-5', project: 'Storefront', 'task-id': 'ENG-7' },
+    usage: { input: 100, output: 25, total: 125 },
+    cost: { input: 0.01, output: 0.02, total: 0.03 },
+    ...overrides,
+  };
+}
 
 test('analytics query options are bounded', () => {
   const now = new Date('2026-07-16T12:00:00.000Z');
@@ -20,37 +43,20 @@ test('analytics query options are bounded', () => {
   assert.equal(options.startTime.toISOString(), '2026-06-16T12:00:00.000Z');
 });
 
-test('root runs aggregate cost, tokens, latency, errors, runtime, model, and change identity', () => {
+test('runs aggregate cost, tokens, latency, errors, runtime, model, and change identity', () => {
   const result = aggregateRuns([
-    {
-      id: 'run-1',
-      trace_id: 'trace-1',
-      app_path: '/o/workspace/projects/p/project/r/run-1',
-      name: 'Implement checkout',
-      run_type: 'chain',
-      status: 'success',
-      start_time: '2026-07-16T10:00:00.000Z',
-      end_time: '2026-07-16T10:00:02.000Z',
-      prompt_tokens: 100,
-      completion_tokens: 25,
-      total_tokens: 125,
-      prompt_cost: '0.01',
-      completion_cost: 0.02,
-      total_cost: 0.03,
-      extra: {
-        metadata: { project: 'Storefront', 'task-id': 'ENG-7', runtime: 'codex-sdk', ls_model_name: 'gpt-5' },
-      },
-    },
-    {
-      id: 'run-2',
-      name: 'Review checkout',
-      run_type: 'chain',
-      status: 'error',
-      error: 'private provider error must not be copied',
-      start_time: '2026-07-16T09:00:00.000Z',
-      end_time: '2026-07-16T09:00:04.000Z',
-    },
-  ], { hostUrl: 'https://smith.langchain.com' });
+    run(),
+    run({
+      traceId: 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
+      name: 'agent-runtime:codex-sdk',
+      level: 'ERROR',
+      statusMessage: 'provider rejected the request',
+      startTime: '2026-11-04T09:00:00.000Z',
+      endTime: '2026-11-04T09:00:04.000Z',
+      usage: undefined,
+      cost: undefined,
+    }),
+  ], { traceBase: PROJECT_BASE });
 
   assert.equal(result.summary.traceCount, 2);
   assert.equal(result.summary.errorCount, 1);
@@ -60,156 +66,83 @@ test('root runs aggregate cost, tokens, latency, errors, runtime, model, and cha
   assert.equal(result.summary.outputTokens, 25);
   assert.equal(result.summary.totalTokens, 125);
   assert.equal(result.summary.averageLatencyMs, 3000);
-  assert.equal(result.traces[0].change.label, 'ENG-7 · Implement checkout');
-  assert.equal(result.traces[0].runtime, 'codex-sdk');
+  assert.equal(result.traces[0].change.label, 'ENG-7 · agent-runtime:deepagent');
+  assert.equal(result.traces[0].change.project, 'Storefront');
+  assert.equal(result.traces[0].change.sessionId, 'session-1');
+  assert.equal(result.traces[0].runtime, 'deepagent');
   assert.equal(result.traces[0].model, 'gpt-5');
-  assert.match(result.traces[0].traceUrl, /^https:\/\/smith\.langchain\.com\//);
-  assert.equal(JSON.stringify(result).includes('private provider error'), false);
+  assert.equal(result.traces[0].status, 'success');
+  assert.equal(result.traces[1].status, 'error');
+  assert.match(result.traces[0].traceUrl, new RegExp(`^${ORIGIN}/`));
+  // A provider error message stays out of the browser payload.
+  assert.equal(JSON.stringify(result).includes('provider rejected the request'), false);
   assert.deepEqual(result.summary.costCoverage, { reported: 1, total: 2 });
 });
 
-test('missing cost and token telemetry stays null instead of becoming zero', () => {
-  const result = aggregateRuns([{ id: 'run-1', name: 'No usage fields' }]);
+test('missing usage and cost stay null instead of becoming zero', () => {
+  const result = aggregateRuns([run({ usage: undefined, cost: undefined, metadata: {} })]);
   assert.equal(result.summary.totalCostUsd, null);
   assert.equal(result.summary.totalTokens, null);
   assert.equal(result.traces[0].cost.totalUsd, null);
+  assert.equal(result.traces[0].cost.source, 'unavailable');
   assert.equal(result.traces[0].tokens.total, null);
 });
 
-test('trace links stay on the trusted LangSmith origin', () => {
-  const result = aggregateRuns([
-    { id: 'valid', app_path: '/o/workspace/projects/p/project/r/valid' },
-    { id: 'protocol-relative', app_path: '//evil.example/steal' },
-    { id: 'backslash-relative', app_path: '/\\evil.example/steal' },
-  ], { hostUrl: 'https://user:password@smith.langchain.com' });
-
-  assert.equal(result.traces.find((trace) => trace.id === 'valid').traceUrl,
-    'https://smith.langchain.com/o/workspace/projects/p/project/r/valid');
-  assert.equal(result.traces.find((trace) => trace.id === 'protocol-relative').traceUrl, null);
-  assert.equal(result.traces.find((trace) => trace.id === 'backslash-relative').traceUrl, null);
+test('part-reported usage falls back to the sum of its parts', () => {
+  const trace = normalizeRun(run({ usage: { input: 40, output: 10 }, cost: { input: 0.4, output: 0.1 } }));
+  assert.equal(trace.tokens.total, 50);
+  assert.equal(trace.tokens.source, 'reported-parts');
+  assert.equal(trace.cost.totalUsd, 0.5);
+  assert.equal(trace.cost.source, 'reported-parts');
+});
+test('trace links stay on the configured Langfuse origin and require a hex trace id', () => {
+  assert.equal(
+    normalizeRun(run(), { traceBase: PROJECT_BASE }).traceUrl,
+    `${PROJECT_BASE}/traces/${TRACE_ID}`
+  );
+  // A non-hex id cannot walk out of the traces route.
+  assert.equal(normalizeRun(run({ traceId: '../../evil' }), { traceBase: PROJECT_BASE }).traceUrl, null);
+  // A base on another origin is rejected even when the id is well formed.
+  assert.equal(normalizeRun(run(), { traceBase: 'https://evil.example/project/p' }).traceUrl, null);
+  assert.equal(normalizeRun(run(), { traceBase: 'https://user:pw@cloud.langfuse.com/project/p' }).traceUrl,
+    `${ORIGIN}/project/p/traces/${TRACE_ID}`);
+  assert.equal(normalizeRun(run(), {}).traceUrl, null);
 });
 
-test('SDK trace metadata supplies usage and cost when LangSmith run totals are absent', () => {
-  const result = aggregateRuns([{
-    id: 'sdk-run',
-    name: 'agent-runtime:claude-agent-sdk',
-    extra: {
-      metadata: {
-        agent_runtime: 'claude-agent-sdk',
-        model_name: 'claude-opus-4-8',
-        usage_input_tokens: 300,
-        usage_output_tokens: 70,
-        usage_total_tokens: 370,
-        cost_usd: 0.19,
-      },
+test('root metadata supplies runtime, model and resource lists', () => {
+  const trace = normalizeRun(run({
+    metadata: {
+      agent_runtime: 'claude-agent-sdk',
+      model_name: 'claude-opus-4-8',
+      skills: ['commit', 'push'],
+      tools: 'web_search, web_search ,docker_build',
+      plugins: ['linear'],
+      tools_used: ['docker_build'],
+      skills_used: ['commit'],
     },
-  }]);
-  const trace = result.traces[0];
+  }));
   assert.equal(trace.runtime, 'claude-agent-sdk');
   assert.equal(trace.model, 'claude-opus-4-8');
-  assert.deepEqual(trace.tokens, { total: 370, prompt: 300, completion: 70, source: 'trace-metadata' });
-  assert.equal(trace.cost.totalUsd, 0.19);
-  assert.equal(trace.cost.source, 'trace-metadata');
-  assert.equal(result.summary.totalCostUsd, 0.19);
-});
-
-test('LangSmith query uses a bounded root-run window and limit', async () => {
-  let query;
-  const client = {
-    getHostUrl: () => 'https://smith.langchain.com',
-    async *listRuns(input) {
-      query = input;
-      yield { id: 'a', name: 'A' };
-      yield { id: 'b', name: 'B' };
-    },
-  };
-  const result = await loadAnalytics(
-    { langsmithTracing: true, langsmithApiKey: 'secret', langsmithProject: 'project' },
-    { hours: 12, limit: 1, now: new Date('2026-07-16T12:00:00.000Z') },
-    { client }
-  );
-  assert.equal(query.isRoot, true);
-  assert.equal(query.limit, 1);
-  assert.equal(query.startTime.toISOString(), '2026-07-16T00:00:00.000Z');
-  assert.equal(result.traces.length, 1);
-  assert.equal(JSON.stringify(result).includes('secret'), false);
-});
-
-test('LangSmith client construction has a bounded request timeout and retry count', async () => {
-  let configuration;
-  class StubClient {
-    constructor(value) { configuration = value; }
-    async *listRuns() {}
-  }
-  await loadAnalytics(
-    { langsmithTracing: true, langsmithApiKey: 'secret', langsmithProject: 'project' },
-    { now: '2026-07-16T12:00:00.000Z' },
-    { Client: StubClient }
-  );
-  assert.equal(configuration.timeout_ms, LANGSMITH_TIMEOUT_MS);
-  assert.deepEqual(configuration.callerOptions, { maxRetries: 1 });
-});
-
-test('analytics degrades honestly when tracing or LangSmith is unavailable', async () => {
-  const disabled = await loadAnalytics({ langsmithTracing: false }, { now: '2026-07-16T12:00:00.000Z' });
-  assert.equal(disabled.availability, 'unavailable');
-  assert.equal(disabled.reason, 'tracing-disabled');
-
-  const failed = await loadAnalytics(
-    { langsmithTracing: true, langsmithApiKey: 'do-not-leak', langsmithProject: 'project' },
-    { now: '2026-07-16T12:00:00.000Z' },
-    { client: { listRuns() { throw new Error('upstream returned do-not-leak'); } } }
-  );
-  assert.equal(failed.reason, 'provider-unavailable');
-  assert.equal(JSON.stringify(failed).includes('do-not-leak'), false);
-});
-
-// ---------------------------------------------------------------------------
-// Resource metadata (skills / tools / plugins) — read side
-// ---------------------------------------------------------------------------
-
-test('normalizeRun reads resource metadata from array values', () => {
-  const trace = normalizeRun({
-    id: 'run-1',
-    name: 'Ship feature',
-    extra: {
-      metadata: {
-        skills: ['commit', 'push'],
-        tools: ['docker_build', 'linear_graphql'],
-        plugins: ['linear'],
-        tools_used: ['docker_build'],
-        skills_used: ['commit'],
-        plugins_used: ['linear'],
-      },
-    },
-  });
   assert.deepEqual(trace.resources, {
     skills: ['commit', 'push'],
-    tools: ['docker_build', 'linear_graphql'],
+    tools: ['web_search', 'docker_build'],
     plugins: ['linear'],
     skillsUsed: ['commit'],
     toolsUsed: ['docker_build'],
-    pluginsUsed: ['linear'],
+    pluginsUsed: [],
   });
-});
-
-test('normalizeRun tolerates comma-separated resource metadata and de-dupes', () => {
-  const trace = normalizeRun({
-    id: 'run-2',
-    extra: { metadata: { tools: 'web_search, web_search ,docker_build' } },
-  });
-  assert.deepEqual(trace.resources.tools, ['web_search', 'docker_build']);
-  assert.deepEqual(trace.resources.skills, []);
-  assert.deepEqual(trace.resources.toolsUsed, []);
+  // Names the table derives from tags when metadata is absent.
+  const tagged = normalizeRun(run({ metadata: {}, tags: ['runtime:qoder-sdk', 'model:qwen-max'] }));
+  assert.equal(tagged.runtime, 'qoder-sdk');
+  assert.equal(tagged.model, 'qwen-max');
 });
 
 test('aggregateRuns rolls up top resource usage, preferring used over configured', () => {
   const result = aggregateRuns([
-    { id: 'r1', extra: { metadata: { tools: ['a', 'b'], tools_used: ['a'] } } },
-    { id: 'r2', extra: { metadata: { tools: ['a', 'c'], tools_used: ['a', 'c'] } } },
-    { id: 'r3', extra: { metadata: { tools: ['b'] } } }, // no used → falls back to configured
+    run({ metadata: { tools: ['a', 'b'], tools_used: ['a'] } }),
+    run({ metadata: { tools: ['a', 'c'], tools_used: ['a', 'c'] } }),
+    run({ metadata: { tools: ['b'] } }),
   ]);
-  // a: r1(used)+r2(used)=2 ; c: r2(used)=1 ; b: r3(configured)=1
   assert.deepEqual(result.summary.resourceUsage.tools, [
     { name: 'a', count: 2 },
     { name: 'b', count: 1 },
@@ -217,4 +150,185 @@ test('aggregateRuns rolls up top resource usage, preferring used over configured
   ]);
   assert.deepEqual(result.summary.resourceUsage.skills, []);
   assert.deepEqual(result.summary.resourceUsage.plugins, []);
+});
+const SETTINGS = { langfusePublicKey: 'pk-lf-public', langfuseSecretKey: 'sk-lf-secret', langfuseTracing: true };
+
+function rootRow(traceId, name) {
+  return {
+    traceId,
+    name,
+    level: 'DEFAULT',
+    startTime: '2026-11-04T10:00:00.000Z',
+    endTime: '2026-11-04T10:00:01.000Z',
+    sessionId: 'session-1',
+    tags: [`org:org-a`],
+    metadata: { agent_runtime: 'deepagent', model_name: 'gpt-5' },
+  };
+}
+
+function childRow(traceId) {
+  return {
+    traceId,
+    type: 'GENERATION',
+    usageDetails: { input: 10, output: 4, total: 14 },
+    inputCost: 0.02,
+    outputCost: 0.01,
+    totalCost: 0.03,
+  };
+}
+
+/**
+ * Call order is deterministic — root pages, then usage pages, then the project
+ * lookup — so pages are served straight off a queue.
+ */
+function stubClient(pages, project = { data: [{ id: 'cm1projectid0000abcdef' }] }) {
+  const queue = [...pages];
+  const requests = [];
+  return {
+    requests,
+    api: {
+      observations: {
+        async getMany(request, options) {
+          requests.push({ request, options });
+          const next = queue.shift();
+          return typeof next === 'function' ? next(request) : { data: [], meta: {}, ...(next || {}) };
+        },
+      },
+      projects: {
+        async get() {
+          if (project instanceof Error) throw project;
+          return project;
+        },
+      },
+    },
+  };
+}
+
+test('the v2 read is scoped to the environment, the org tag, and logical roots', async () => {
+  const client = stubClient([
+    { data: [rootRow(TRACE_ID, 'agent-runtime:deepagent')] },
+    { data: [childRow(TRACE_ID)] },
+  ]);
+  const result = await loadAnalytics(SETTINGS, { hours: 24, limit: 10, orgId: 'org-a', now: '2026-11-04T12:00:00.000Z' }, { client });
+
+  assert.equal(result.availability, 'available');
+  assert.equal(result.source, 'langfuse');
+  assert.equal(client.requests.length, 2);
+  const [roots, usage] = client.requests;
+  assert.equal(roots.request.isRootObservation, true);
+  assert.equal(roots.request.environment, 'dev');
+  assert.equal(roots.request.toStartTime, '2026-11-04T12:00:00.000Z');
+  assert.match(roots.request.fields, /metadata/);
+  assert.ok(!roots.request.fields.includes('io'), 'prompt text is never fetched');
+  assert.match(roots.request.expandMetadata, /tools_used/);
+  assert.deepEqual(JSON.parse(roots.request.filter), [
+    { column: 'tags', type: 'arrayOptions', operator: 'all of', value: ['org:org-a'] },
+  ]);
+  assert.equal(usage.request.isRootObservation, false);
+  const usageFilter = JSON.parse(usage.request.filter);
+  assert.deepEqual(usageFilter[1], { column: 'traceId', type: 'stringOptions', operator: 'any of', value: [TRACE_ID] });
+  for (const entry of client.requests) {
+    assert.equal(entry.options.timeoutInSeconds, LANGFUSE_TIMEOUT_SECONDS);
+    assert.equal(entry.options.maxRetries, 0);
+  }
+  assert.equal(result.summary.traceCount, 1);
+  assert.equal(result.summary.totalCostUsd, 0.03);
+  assert.equal(result.summary.totalTokens, 14);
+  assert.equal(result.traces[0].traceUrl, `${ORIGIN}/project/cm1projectid0000abcdef/traces/${TRACE_ID}`);
+});
+
+test('paging follows the cursor, honours the trace limit, and survives an empty page', async () => {
+  const pages = [
+    { data: [rootRow('a'.repeat(32), 'first')], meta: { cursor: 'page-2' } },
+    { data: [], meta: { cursor: 'page-3' } },
+    { data: [rootRow('b'.repeat(32), 'second'), rootRow('c'.repeat(32), 'third')], meta: {} },
+  ];
+  const client = {
+    requests: [],
+    api: {
+      observations: {
+        async getMany(request) {
+          const isUsage = request.fields === 'core,basic,usage';
+          if (isUsage) return { data: [], meta: {} };
+          const page = pages.shift() || { data: [], meta: {} };
+          client.requests.push(request);
+          return page;
+        },
+      },
+      projects: { async get() { return { data: [{ id: 'cm1projectid0000abcdef' }] }; } },
+    },
+  };
+  const result = await loadAnalytics(SETTINGS, { limit: 3, orgId: 'org-a' }, { client });
+  // Three root pages (the middle one empty) and no fourth: the limit cut it short.
+  assert.equal(client.requests.length, 3);
+  assert.equal(result.summary.traceCount, 3);
+});
+test('usage is summed only for the traces the table shows', async () => {
+  const client = stubClient([
+    { data: [rootRow('a'.repeat(32), 'first'), rootRow('b'.repeat(32), 'second')] },
+    { data: [
+      childRow('a'.repeat(32)),
+      childRow('a'.repeat(32)),
+      childRow('b'.repeat(32)),
+      childRow('ff'.repeat(16)), // another trace in the same window
+    ] },
+  ]);
+  const result = await loadAnalytics(SETTINGS, { limit: 2, orgId: 'org-a' }, { client });
+  assert.equal(result.summary.traceCount, 2);
+  assert.equal(result.summary.totalCostUsd, 0.09);
+  assert.equal(result.summary.totalTokens, 42);
+});
+
+test('an unusable project lookup drops the deep link but keeps the table', async () => {
+  const client = stubClient(
+    [{ data: [rootRow(TRACE_ID, 'agent-runtime:deepagent')] }],
+    new Error('do-not-leak workspace details')
+  );
+  const result = await loadAnalytics(SETTINGS, { orgId: 'org-a' }, { client });
+  assert.equal(result.availability, 'available');
+  assert.equal(result.project, null);
+  assert.equal(result.traces[0].traceUrl, null);
+  assert.equal(JSON.stringify(result).includes('do-not-leak'), false);
+});
+
+test('the client is built from settings against the sidecar-aware base URL', async () => {
+  let configuration;
+  class StubClient {
+    constructor(value) { configuration = value; }
+    api = {
+      observations: { async getMany() { return { data: [], meta: {} }; } },
+      projects: { async get() { throw new Error('unused'); } },
+    };
+  }
+  const result = await loadAnalytics(SETTINGS, {}, { Client: StubClient });
+  assert.equal(configuration.publicKey, 'pk-lf-public');
+  assert.equal(configuration.secretKey, 'sk-lf-secret');
+  assert.ok(configuration.baseUrl.includes('langfuse'), 'the configured Langfuse origin is used');
+  assert.equal(result.availability, 'available');
+  assert.equal(result.summary.traceCount, 0);
+  assert.match(result.message, /No agent runs/);
+});
+
+test('analytics degrades honestly when tracing or the keys are unavailable', async () => {
+  const disabled = await loadAnalytics({ ...SETTINGS, langfuseTracing: false }, { orgId: 'org-a' });
+  assert.equal(disabled.availability, 'unavailable');
+  assert.equal(disabled.reason, 'tracing-disabled');
+
+  const missing = await loadAnalytics({ langfusePublicKey: '', langfuseSecretKey: '' }, { orgId: 'org-a' });
+  assert.equal(missing.reason, 'keys-missing');
+  assert.equal(missing.summary, null);
+
+  const failed = await loadAnalytics(SETTINGS, { orgId: 'org-a' }, {
+    client: { api: { observations: { async getMany() { throw new Error('upstream said sk-lf-secret'); } }, projects: { async get() { return { data: [] }; } } } },
+  });
+  assert.equal(failed.reason, 'provider-unavailable');
+  assert.equal(JSON.stringify(failed).includes('sk-lf-secret'), false);
+});
+
+test('an empty window reports zero runs rather than an error', async () => {
+  const result = await loadAnalytics(SETTINGS, { orgId: 'org-a' }, { client: stubClient([]) });
+  assert.equal(result.availability, 'available');
+  assert.equal(result.summary.traceCount, 0);
+  assert.equal(result.summary.errorRate, 0);
+  assert.equal(result.summary.totalCostUsd, null);
 });

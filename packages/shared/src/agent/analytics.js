@@ -1,13 +1,57 @@
 'use strict';
 
-const { Client } = require('langsmith');
+/**
+ * Agent analytics read path: Langfuse Cloud.
+ *
+ * Langfuse's legacy trace/observation endpoints are already retired for an
+ * organization created after the v3 cutoff — they answer 410
+ * LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION — so every read here targets
+ * `/api/public/v2/observations`, which returns *observations*, not traces. A run
+ * is rebuilt from its logical root (the dispatch span, which carries the name,
+ * tags, session, user and metadata) plus the token usage and cost summed across
+ * that trace's non-root observations. Langfuse books usage on the generation and
+ * never on the root, so reading roots alone would report every run as free;
+ * excluding roots from the sum is also what stops a trace-level rollup from being
+ * counted twice against the generation it summarizes.
+ *
+ * Under EGRESS_PROXY_URL the planner has no direct egress either, so the client
+ * points at the sidecar's `/langfuse` prefix with the sentinel pair and the
+ * sidecar injects the vault-resolved `Basic base64(publicKey:secretKey)`. Only in
+ * the trusted local profile are the real keys read from settings.
+ */
+
+const { LangfuseClient } = require('@langfuse/client');
+
+const { CONFIG } = require('../config');
+const { SENTINEL_TOKEN } = require('../egress');
 
 const HOUR_MS = 60 * 60 * 1000;
 const DEFAULT_WINDOW_HOURS = 24 * 7;
 const MAX_WINDOW_HOURS = 24 * 30;
 const DEFAULT_TRACE_LIMIT = 100;
 const MAX_TRACE_LIMIT = 250;
-const LANGSMITH_TIMEOUT_MS = 8000;
+const LANGFUSE_TIMEOUT_SECONDS = 8;
+// Rows per upstream page and a hard page bound: one Analytics request must not
+// turn into an unbounded number of calls against a wide window.
+const PAGE_ROWS = 500;
+const MAX_PAGES = 8;
+// Trace ids are filtered in chunks, so the query string stays well inside what a
+// proxy accepts while each chunk still costs exactly one request.
+const TRACE_ID_CHUNK = 100;
+// `core` + `basic` arrive by default; every other group is opt-in and simply
+// absent when not requested. `io` is deliberately never requested — the table
+// shows identities and numbers, never prompt or result text.
+const ROOT_FIELDS = 'core,basic,metadata,model,usage,trace_context';
+const CHILD_FIELDS = 'core,basic,usage';
+// Metadata values over 200 characters are truncated unless named here, and a
+// truncated array would silently corrupt the resource rollups.
+const EXPAND_METADATA = [
+  'skills', 'tools', 'plugins',
+  'skills_used', 'tools_used', 'plugins_used',
+].join(',');
+
+const RESOURCE_MAX_ITEMS = 100;
+const TOP_RESOURCE_LIMIT = 10;
 
 function boundedInteger(value, minimum, maximum, fallback) {
   const number = Number(value);
@@ -26,17 +70,6 @@ function cleanText(value, maximum = 120) {
   return String(value).replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maximum);
 }
 
-function metadataFor(run) {
-  const extra = run && run.extra && typeof run.extra === 'object' ? run.extra : {};
-  return extra.metadata && typeof extra.metadata === 'object' ? extra.metadata : {};
-}
-
-function invocationFor(run) {
-  const extra = run && run.extra && typeof run.extra === 'object' ? run.extra : {};
-  const invocation = extra.invocation_params || extra.invocationParams;
-  return invocation && typeof invocation === 'object' ? invocation : {};
-}
-
 function firstText(values, maximum = 120) {
   for (const value of values) {
     const text = cleanText(value, maximum);
@@ -45,8 +78,18 @@ function firstText(values, maximum = 120) {
   return null;
 }
 
-const RESOURCE_MAX_ITEMS = 100;
-const TOP_RESOURCE_LIMIT = 10;
+function metadataFor(trace) {
+  return trace && trace.metadata && typeof trace.metadata === 'object' ? trace.metadata : {};
+}
+
+function tagValue(trace, prefix) {
+  const tags = Array.isArray(trace && trace.tags) ? trace.tags : [];
+  for (const tag of tags) {
+    const text = cleanText(tag, 200);
+    if (text.startsWith(prefix) && text.length > prefix.length) return text.slice(prefix.length);
+  }
+  return null;
+}
 
 /**
  * Read a resource metadata field (skills/tools/plugins), tolerant of both the
@@ -81,30 +124,22 @@ function topResources(traces, usedKey, configuredKey, limit = TOP_RESOURCE_LIMIT
     .map(([name, count]) => ({ name, count }));
 }
 
-function runtimeAndModel(run) {
-  const metadata = metadataFor(run);
-  const invocation = invocationFor(run);
-  const extra = run && run.extra && typeof run.extra === 'object' ? run.extra : {};
+function runtimeAndModel(trace) {
+  const metadata = metadataFor(trace);
   return {
     runtime: firstText([
-      metadata.runtime,
-      metadata.sdk,
-      metadata.framework,
       metadata.agent_runtime,
-      extra.runtime && extra.runtime.library,
-      run && run.run_type,
+      metadata.harness,
+      tagValue(trace, 'runtime:'),
+      tagValue(trace, 'harness:'),
     ], 80),
     model: firstText([
-      metadata.ls_model_name,
+      trace && trace.model,
       metadata.model_name,
-      metadata.model,
-      invocation.model,
-      invocation.model_name,
-      extra.model,
+      tagValue(trace, 'model:'),
     ], 120),
   };
 }
-
 function metricFromParts(total, first, second) {
   const explicit = finiteMetric(total);
   if (explicit !== null) return { value: explicit, source: 'reported-total' };
@@ -114,60 +149,69 @@ function metricFromParts(total, first, second) {
   return { value: (left || 0) + (right || 0), source: 'reported-parts' };
 }
 
-function latencyMs(run) {
-  const start = Date.parse(run && run.start_time);
-  const end = Date.parse(run && run.end_time);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
-  return end - start;
+function latencyMs(trace) {
+  const start = Date.parse(trace && trace.startTime);
+  const end = Date.parse(trace && trace.endTime);
+  if (Number.isFinite(start) && Number.isFinite(end) && end >= start) return end - start;
+  // A root still open when the window was cut has no end time; the API's own
+  // latency (seconds) is reported only for completed observations.
+  const reported = finiteMetric(trace && trace.latency);
+  return reported === null ? null : Math.round(reported * 1000);
 }
 
-function isErrorRun(run) {
-  if (run && run.error) return true;
-  return /^(error|failed|failure)$/i.test(cleanText(run && run.status, 30));
+function isErrorTrace(trace) {
+  return cleanText(trace && trace.level, 20).toUpperCase() === 'ERROR';
 }
 
-function safeTraceUrl(run, hostUrl) {
-  const tracePath = cleanText(run && run.app_path, 1000);
-  // LangSmith supplies an application-relative path. Reject protocol-relative
-  // and backslash variants before URL parsing so a trace cannot become an
-  // off-site link in the Analytics UI.
-  if (!tracePath || !/^\/(?![\/\\])/.test(tracePath) || tracePath.includes('\\')) return null;
+function isoTime(value) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+/**
+ * Deep link into the Langfuse project that owns the key. The trace id is the
+ * OpenTelemetry trace id, so it is pattern-checked rather than trusted, and the
+ * result is re-parsed so a misconfigured base URL can never smuggle credentials
+ * or an off-site origin into the Analytics table.
+ */
+function safeTraceUrl(traceId, base) {
+  const id = cleanText(traceId, 120);
+  const link = cleanText(base, 2000);
+  if (!/^[0-9a-f]{16,64}$/i.test(id) || !link) return null;
   try {
-    const base = new URL(hostUrl || 'https://smith.langchain.com');
-    if (base.protocol !== 'http:' && base.protocol !== 'https:') return null;
-    base.username = '';
-    base.password = '';
-    const url = new URL(tracePath, base);
-    if (url.origin !== base.origin) return null;
-    url.username = '';
-    url.password = '';
-    return url.toString();
+    const origin = new URL(CONFIG.LANGFUSE.origin);
+    const target = new URL(`${link}/traces/${id}`);
+    if (target.origin !== origin.origin) return null;
+    target.username = '';
+    target.password = '';
+    return target.toString();
   } catch (_) {
     return null;
   }
 }
 
-function normalizeRun(run, options = {}) {
-  run = run && typeof run === 'object' ? run : {};
-  const metadata = metadataFor(run);
-  const promptTokens = finiteMetric(run.prompt_tokens) ?? finiteMetric(metadata.usage_input_tokens);
-  const completionTokens = finiteMetric(run.completion_tokens) ?? finiteMetric(metadata.usage_output_tokens);
-  const reportedTokens = finiteMetric(run.total_tokens) ?? finiteMetric(metadata.usage_total_tokens);
-  const promptCost = finiteMetric(run.prompt_cost);
-  const completionCost = finiteMetric(run.completion_cost);
-  let cost = metricFromParts(run.total_cost, promptCost, completionCost);
-  if (cost.value === null && finiteMetric(metadata.cost_usd) !== null) {
-    cost = { value: finiteMetric(metadata.cost_usd), source: 'trace-metadata' };
-  }
-  let tokens = metricFromParts(reportedTokens, promptTokens, completionTokens);
-  if (tokens.value !== null && finiteMetric(run.total_tokens) === null && finiteMetric(metadata.usage_total_tokens) !== null) {
-    tokens = { value: tokens.value, source: 'trace-metadata' };
-  }
-  const runtime = runtimeAndModel(run);
+/**
+ * Shape one reconstructed run for the Analytics table. `trace.usage` and
+ * `trace.cost` are the sums over the trace's child observations, joined in by the
+ * loader; every other field comes from the logical root.
+ */
+function normalizeRun(trace, options = {}) {
+  trace = trace && typeof trace === 'object' ? trace : {};
+  const metadata = metadataFor(trace);
+  const usage = trace.usage && typeof trace.usage === 'object' ? trace.usage : {};
+  const cost = trace.cost && typeof trace.cost === 'object' ? trace.cost : {};
+  const promptTokens = finiteMetric(usage.input);
+  const completionTokens = finiteMetric(usage.output);
+  const tokens = metricFromParts(usage.total, promptTokens, completionTokens);
+  const promptCost = finiteMetric(cost.input);
+  const completionCost = finiteMetric(cost.output);
+  const total = metricFromParts(cost.total, promptCost, completionCost);
+  const runtime = runtimeAndModel(trace);
   const project = firstText([metadata.project, metadata.business], 100);
   const taskId = firstText([metadata['task-id'], metadata.task_id, metadata.taskId], 80);
-  const sessionId = firstText([metadata.session, metadata.session_id, run.session_id], 120);
-  const name = cleanText(run.name, 160) || 'Agent change';
+  const sessionId = firstText([metadata.session, metadata.session_id, trace.sessionId], 120);
+  const name = cleanText(trace.name || trace.traceName, 160) || 'Agent change';
+  const failed = isErrorTrace(trace);
   const resources = {
     skills: resourceNames(metadata.skills),
     tools: resourceNames(metadata.tools),
@@ -178,8 +222,8 @@ function normalizeRun(run, options = {}) {
   };
 
   return {
-    id: cleanText(run.id || run.trace_id, 120) || null,
-    traceId: cleanText(run.trace_id || run.id, 120) || null,
+    id: cleanText(trace.traceId, 120) || null,
+    traceId: cleanText(trace.traceId, 120) || null,
     name,
     change: {
       label: [taskId, name].filter(Boolean).join(' · '),
@@ -188,14 +232,16 @@ function normalizeRun(run, options = {}) {
       sessionId,
     },
     resources,
-    startedAt: Number.isFinite(Date.parse(run.start_time)) ? new Date(run.start_time).toISOString() : null,
-    finishedAt: Number.isFinite(Date.parse(run.end_time)) ? new Date(run.end_time).toISOString() : null,
-    latencyMs: latencyMs(run),
-    status: cleanText(run.status, 30) || (isErrorRun(run) ? 'error' : 'unknown'),
-    hasError: isErrorRun(run),
+    startedAt: isoTime(trace.startTime),
+    finishedAt: isoTime(trace.endTime),
+    latencyMs: latencyMs(trace),
+    // Langfuse records a severity, not a workflow status: a trace whose root is
+    // not ERROR completed (dispatch.js raises the root to ERROR on failure).
+    status: failed ? 'error' : 'success',
+    hasError: failed,
     runtime: runtime.runtime,
     model: runtime.model,
-    traceUrl: safeTraceUrl(run, options.hostUrl),
+    traceUrl: safeTraceUrl(trace.traceId, options.traceBase),
     tokens: {
       total: tokens.value,
       prompt: promptTokens,
@@ -203,14 +249,13 @@ function normalizeRun(run, options = {}) {
       source: tokens.source,
     },
     cost: {
-      totalUsd: cost.value,
+      totalUsd: total.value,
       promptUsd: promptCost,
       completionUsd: completionCost,
-      source: cost.source,
+      source: total.source,
     },
   };
 }
-
 function sumAvailable(items, selector) {
   let total = 0;
   let coverage = 0;
@@ -265,11 +310,10 @@ function aggregateRuns(runs, options = {}) {
     traces,
   };
 }
-
 function unavailable(reason, options, message) {
   return {
     availability: 'unavailable',
-    source: 'langsmith',
+    source: 'langfuse',
     reason,
     message,
     window: {
@@ -288,62 +332,190 @@ function normalizeOptions(input = {}) {
   const now = Number.isFinite(nowValue.getTime()) ? nowValue : new Date();
   const hours = boundedInteger(input.hours, 1, MAX_WINDOW_HOURS, DEFAULT_WINDOW_HOURS);
   const limit = boundedInteger(input.limit, 1, MAX_TRACE_LIMIT, DEFAULT_TRACE_LIMIT);
-  return { now, hours, limit, startTime: new Date(now.getTime() - hours * HOUR_MS) };
+  return {
+    now,
+    hours,
+    limit,
+    orgId: cleanText(input.orgId, 120),
+    startTime: new Date(now.getTime() - hours * HOUR_MS),
+  };
+}
+
+// One attempt, bounded: a stalled Langfuse must not stack retries behind a
+// browser request that already has its own timeout.
+function requestOptions() {
+  return { timeoutInSeconds: LANGFUSE_TIMEOUT_SECONDS, maxRetries: 0 };
 }
 
 /**
- * Query a bounded window of root traces. Provider failures are deliberately
- * returned as an unavailable state: analytics must not take down the gateway or
- * expose an upstream response (which can contain workspace details).
+ * Walk cursor-paged v2 responses. A page can arrive empty while still carrying a
+ * cursor, so only an absent cursor ends the walk; `shouldStop` lets the caller cut
+ * the walk once it has enough rows and MAX_PAGES bounds the worst case.
+ */
+async function pagedObservations(client, request, shouldStop) {
+  const rows = [];
+  let cursor = null;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const response = await client.api.observations.getMany(
+      { ...request, ...(cursor ? { cursor } : {}), limit: PAGE_ROWS },
+      requestOptions()
+    );
+    for (const row of response && Array.isArray(response.data) ? response.data : []) rows.push(row || {});
+    cursor = response && response.meta && response.meta.cursor ? String(response.meta.cursor) : null;
+    if (!cursor || (shouldStop && shouldStop(rows))) break;
+  }
+  return rows;
+}
+
+function scopeFilters(orgId) {
+  return orgId
+    ? [{ column: 'tags', type: 'arrayOptions', operator: 'all of', value: [`org:${orgId}`] }]
+    : [];
+}
+
+function windowRequest(options, orgId, fields) {
+  return {
+    fromStartTime: options.startTime.toISOString(),
+    toStartTime: options.now.toISOString(),
+    // environment partitions dev / staging / prod, so a dev window never
+    // contributes to the production cost table.
+    environment: CONFIG.LANGFUSE.environment,
+    fields,
+    expandMetadata: EXPAND_METADATA,
+    ...(orgId ? { filter: JSON.stringify(scopeFilters(orgId)) } : {}),
+  };
+}
+/** One row per run: the logical root observation, newest first, de-duplicated. */
+async function fetchRoots(client, options, orgId) {
+  const rows = await pagedObservations(
+    client,
+    { ...windowRequest(options, orgId, ROOT_FIELDS), isRootObservation: true },
+    (collected) => collected.length >= options.limit
+  );
+  const seen = new Set();
+  const roots = [];
+  for (const row of rows) {
+    const traceId = cleanText(row.traceId, 120);
+    if (!traceId || seen.has(traceId)) continue;
+    seen.add(traceId);
+    roots.push(row);
+    if (roots.length >= options.limit) break;
+  }
+  return roots;
+}
+
+function addTo(target, key, value) {
+  const number = finiteMetric(value);
+  if (number !== null) target[key] = (target[key] || 0) + number;
+}
+
+/**
+ * Sum usage and cost across each trace's child observations. Roots are excluded
+ * (Langfuse books usage on generations, and a trace-level rollup would otherwise
+ * be double counted), and the trace ids are filtered in chunks so only runs the
+ * table actually shows contribute.
+ */
+async function fetchUsage(client, options, orgId, traceIds) {
+  const usage = new Map();
+  for (let index = 0; index < traceIds.length; index += TRACE_ID_CHUNK) {
+    const chunk = traceIds.slice(index, index + TRACE_ID_CHUNK);
+    const rows = await pagedObservations(client, {
+      ...windowRequest(options, orgId, CHILD_FIELDS),
+      isRootObservation: false,
+      filter: JSON.stringify(scopeFilters(orgId).concat([
+        { column: 'traceId', type: 'stringOptions', operator: 'any of', value: chunk },
+      ])),
+    });
+    for (const row of rows) {
+      const traceId = cleanText(row.traceId, 120);
+      if (!traceId || !chunk.includes(traceId)) continue;
+      let acc = usage.get(traceId);
+      if (!acc) {
+        acc = { usage: {}, cost: {} };
+        usage.set(traceId, acc);
+      }
+      const details = row.usageDetails && typeof row.usageDetails === 'object' ? row.usageDetails : {};
+      addTo(acc.usage, 'input', details.input);
+      addTo(acc.usage, 'output', details.output);
+      addTo(acc.usage, 'total', details.total);
+      addTo(acc.cost, 'input', row.inputCost);
+      addTo(acc.cost, 'output', row.outputCost);
+      addTo(acc.cost, 'total', row.totalCost);
+    }
+  }
+  return usage;
+}
+
+/**
+ * `GET /api/public/projects` returns exactly the project the key belongs to, and a
+ * trace deep link needs that id. An optional LANGFUSE_PROJECT_ID skips the call.
+ */
+async function resolveTraceBase(client) {
+  const origin = CONFIG.LANGFUSE.origin;
+  const configured = cleanText(CONFIG.LANGFUSE.projectId, 64);
+  if (configured) return /^[0-9a-z_-]{6,64}$/i.test(configured) ? `${origin}/project/${configured}` : null;
+  try {
+    const response = await client.api.projects.get(requestOptions());
+    const list = response && Array.isArray(response.data) ? response.data : [];
+    const projectId = cleanText(list[0] && list[0].id, 64);
+    return /^[0-9a-z_-]{6,64}$/i.test(projectId) ? `${origin}/project/${projectId}` : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function analyticsClient(settings, dependencies) {
+  if (dependencies.client) return dependencies.client;
+  const proxied = Boolean(CONFIG.EGRESS_PROXY_URL);
+  return new (dependencies.Client || LangfuseClient)({
+    publicKey: cleanText(settings.langfusePublicKey, 512) || (proxied ? SENTINEL_TOKEN : ''),
+    secretKey: cleanText(settings.langfuseSecretKey, 512) || (proxied ? SENTINEL_TOKEN : ''),
+    baseUrl: CONFIG.LANGFUSE.url,
+  });
+}
+/**
+ * Query a bounded window of runs. Provider failures are deliberately returned as
+ * an unavailable state: analytics must not take down the gateway or echo an
+ * upstream response body (which can carry workspace details) into the browser.
  */
 async function loadAnalytics(settings = {}, input = {}, dependencies = {}) {
   const options = normalizeOptions(input);
-  if (!settings.langsmithTracing) {
-    return unavailable('tracing-disabled', options, 'Enable LangSmith tracing to collect change costs and analytics.');
+  if (settings.langfuseTracing === false || settings.langfuseTracing === 'false') {
+    return unavailable('tracing-disabled', options, 'Enable Langfuse tracing to collect change costs and analytics.');
   }
-  if (!cleanText(settings.langsmithApiKey, 4096)) {
-    return unavailable('api-key-missing', options, 'Add a LangSmith API key to load traced change costs.');
+  const publicKey = cleanText(settings.langfusePublicKey, 512);
+  const secretKey = cleanText(settings.langfuseSecretKey, 512);
+  const proxied = Boolean(CONFIG.EGRESS_PROXY_URL);
+  if (!publicKey || (!proxied && !secretKey)) {
+    return unavailable('keys-missing', options, 'Add the Langfuse API key pair to load traced change costs.');
   }
-  const projectName = cleanText(settings.langsmithProject, 160);
-  if (!projectName) {
-    return unavailable('project-missing', options, 'Choose a LangSmith project to load analytics.');
+  // One platform-managed Langfuse project serves every organization, so tenancy is
+  // read-side as well as write-side: the org tag dispatch.js stamps on each trace
+  // scopes the query. A caller-supplied org wins; a dedicated per-tenant stack
+  // falls back to the org it bills to; and a signed-in deployment with neither must
+  // not show one tenant the traces of another.
+  const requestedOrg = cleanText(options.orgId, 120);
+  const orgId = requestedOrg || cleanText(CONFIG.BILLING && CONFIG.BILLING.orgId, 120);
+  if (!orgId && CONFIG.AUTH && CONFIG.AUTH.enabled) {
+    return unavailable('org-missing', options, 'Analytics cannot scope a shared Langfuse project without an organization id.');
   }
 
   try {
-    const client = dependencies.client || new (dependencies.Client || Client)({
-      apiKey: settings.langsmithApiKey,
-      apiUrl: settings.langsmithEndpoint || undefined,
-      timeout_ms: LANGSMITH_TIMEOUT_MS,
-      callerOptions: { maxRetries: 1 },
-    });
-    const runs = [];
-    const iterable = client.listRuns({
-      projectName,
-      startTime: options.startTime,
-      isRoot: true,
-      limit: options.limit,
-      select: [
-        'id', 'trace_id', 'session_id', 'app_path', 'name', 'run_type', 'start_time', 'end_time', 'status', 'error', 'extra',
-        'prompt_tokens', 'completion_tokens', 'total_tokens', 'prompt_cost', 'completion_cost', 'total_cost',
-      ],
-    });
-    for await (const run of iterable) {
-      runs.push(run || {});
-      if (runs.length >= options.limit) break;
-    }
-    let hostUrl = null;
-    try {
-      hostUrl = typeof client.getHostUrl === 'function' ? client.getHostUrl() : null;
-    } catch (_) {
-      hostUrl = null;
-    }
-    const aggregate = aggregateRuns(runs, { hostUrl });
+    const client = analyticsClient(settings, dependencies);
+    const roots = await fetchRoots(client, options, orgId);
+    const usage = await fetchUsage(client, options, orgId, roots.map((row) => cleanText(row.traceId, 120)));
+    const traceBase = await resolveTraceBase(client);
+    const runs = roots.map((row) => ({
+      ...row,
+      ...(usage.get(cleanText(row.traceId, 120)) || {}),
+    }));
+    const aggregate = aggregateRuns(runs, { traceBase });
     return {
       availability: 'available',
-      source: 'langsmith',
+      source: 'langfuse',
       reason: null,
-      message: runs.length ? null : 'No root traces were found in this time window.',
-      project: projectName,
+      message: runs.length ? null : 'No agent runs were recorded in this time window.',
+      project: traceBase ? cleanText(traceBase.split('/').pop(), 64) : null,
       window: {
         startAt: options.startTime.toISOString(),
         endAt: options.now.toISOString(),
@@ -356,7 +528,7 @@ async function loadAnalytics(settings = {}, input = {}, dependencies = {}) {
     return unavailable(
       'provider-unavailable',
       options,
-      'LangSmith analytics could not be reached. Check the tracing key, endpoint, project, and network access.'
+      'Langfuse analytics could not be reached. Check the tracing keys, environment, project, and network access.'
     );
   }
 }
@@ -366,7 +538,7 @@ module.exports = {
   MAX_WINDOW_HOURS,
   DEFAULT_TRACE_LIMIT,
   MAX_TRACE_LIMIT,
-  LANGSMITH_TIMEOUT_MS,
+  LANGFUSE_TIMEOUT_SECONDS,
   normalizeOptions,
   normalizeRun,
   aggregateRuns,

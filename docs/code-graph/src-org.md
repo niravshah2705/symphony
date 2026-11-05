@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 137 nodes
+Community of 142 nodes
 
-- **Size**: 137 nodes
-- **Cohesion**: 0.2983
+- **Size**: 142 nodes
+- **Cohesion**: 0.2952
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,6 +18,7 @@ Community of 137 nodes
 | proxyOrgId | Function | ./services/proxy/src/credentials.js | 40-44 |
 | resolveSecrets | Function | ./services/proxy/src/credentials.js | 46-69 |
 | resolveEgressConfig | Function | ./services/proxy/src/credentials.js | 71-93 |
+| clearCache | Function | ./services/proxy/src/credentials.js | 95-98 |
 | safeCredential | Function | ./services/proxy/src/credentials.js | 100-106 |
 | resolveStaticKey | Function | ./services/proxy/src/credentials.js | 109-120 |
 | normalizeTrustedUpstream | Function | ./services/proxy/src/credentials.js | 122-139 |
@@ -25,9 +26,9 @@ Community of 137 nodes
 | normalizeJiraConfig | Function | ./services/proxy/src/credentials.js | 145-173 |
 | normalizeSlackWebhook | Function | ./services/proxy/src/credentials.js | 175-196 |
 | resolveUpstream | Function | ./services/proxy/src/credentials.js | 198-225 |
-| buildInjection | Function | ./services/proxy/src/credentials.js | 227-320 |
+| buildInjection | Function | ./services/proxy/src/credentials.js | 227-329 |
 | resolvedSecrets | Function | ./services/proxy/src/credentials.js | 229-231 |
-| resolveRoute | Function | ./services/proxy/src/credentials.js | 322-326 |
+| resolveRoute | Function | ./services/proxy/src/credentials.js | 331-335 |
 | parseCapabilities | Function | ./services/proxy/src/index.js | 30-35 |
 | pathname | Function | ./services/proxy/src/index.js | 37-43 |
 | sendJson | Function | ./services/proxy/src/index.js | 45-48 |
@@ -62,10 +63,9 @@ Community of 137 nodes
 | test:buildInjection: customer static key uses the vault plaintext@L122 | Test | ./services/proxy/src/proxy.test.js | 122-128 |
 | test:buildInjection: customer-selected but missing key FAILS CLOSED@L130 | Test | ./services/proxy/src/proxy.test.js | 130-138 |
 | test:buildInjection: git route builds x-access-token Basic auth@L140 | Test | ./services/proxy/src/proxy.test.js | 140-146 |
-| test:GitLab REST and smart-HTTP routes use provider-specific injection@L148 | Test | ./services/proxy/src/proxy.test.js | 148-156 |
-| test:Asana route injects a required vault bearer@L158 | Test | ./services/proxy/src/proxy.test.js | 158-163 |
+| test:buildInjection: langfuse basic-pair injects Basic base64(publicKey:secretKey)@L148 | Test | ./services/proxy/src/proxy.test.js | 148-159 |
 
-*... and 87 more members.*
+*... and 92 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 137 nodes
 
 ### Outgoing
 
-- `equal` (120 edge(s))
-- `deepEqual` (32 edge(s))
+- `equal` (126 edge(s))
+- `deepEqual` (34 edge(s))
 - `String` (26 edge(s))
 - `trim` (21 edge(s))
-- `rejects` (17 edge(s))
+- `rejects` (19 edge(s))
+- `fetch` (13 edge(s))
+- `toString` (12 edge(s))
+- `from` (12 edge(s))
 - `end` (12 edge(s))
 - `stringify` (12 edge(s))
-- `fetch` (12 edge(s))
 - `resolve` (10 edge(s))
 - `toLowerCase` (9 edge(s))
+- `close` (9 edge(s))
 - `json` (9 edge(s))
-- `toString` (8 edge(s))
-- `from` (8 edge(s))
 - `writeHead` (8 edge(s))
-- `close` (8 edge(s))
 
 ### Incoming
 
-- `equal` (120 edge(s))
-- `./services/proxy/src/proxy.test.js` (37 edge(s))
-- `deepEqual` (32 edge(s))
-- `./services/proxy/src/credentials.js` (26 edge(s))
-- `rejects` (17 edge(s))
+- `equal` (126 edge(s))
+- `./services/proxy/src/proxy.test.js` (40 edge(s))
+- `deepEqual` (34 edge(s))
+- `./services/proxy/src/credentials.js` (28 edge(s))
+- `rejects` (19 edge(s))
 - `./services/proxy/src/secrets-client.js` (13 edge(s))
+- `fetch` (12 edge(s))
 - `./services/proxy/src/stream-token-server.test.js` (12 edge(s))
-- `fetch` (11 edge(s))
 - `./services/proxy/src/proxy.js` (11 edge(s))
 - `./services/proxy/src/stream-token-rpc.js` (10 edge(s))
 - `./services/proxy/src/stream-token-rpc.test.js` (10 edge(s))
-- `close` (8 edge(s))
+- `close` (9 edge(s))
 - `json` (8 edge(s))
 - `./services/proxy/src/index.js` (7 edge(s))
 - `./services/proxy/src/stream-token.test.js` (7 edge(s))

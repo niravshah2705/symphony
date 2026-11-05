@@ -2,7 +2,7 @@
 
 const path = require('path');
 const { ROLES } = require('./authz');
-const { egressUrl, llmGatewayUpstream, normalizeProxyBase } = require('./egress');
+const { egressUrl, llmGatewayUpstream, langfuseUpstream, normalizeProxyBase } = require('./egress');
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -21,9 +21,10 @@ const proxied = (prefix, explicit, fallback) =>
   egressUrl({ proxyBase: EGRESS_PROXY_URL, prefix, explicit, fallback });
 
 /**
- * Native SDK runtimes and LangSmith must follow the same isolation boundary as
- * the deep-agent runtime. Keep the legacy exported flag for callers, but derive
- * it solely from proxy mode so an opt-out cannot silently restore direct egress.
+ * Native SDK runtimes and the Langfuse trace sink must follow the same isolation
+ * boundary as the deep-agent runtime. Keep the legacy exported flag for callers,
+ * but derive it solely from proxy mode so an opt-out cannot silently restore
+ * direct egress.
  */
 const EGRESS_PROXY_INCLUDE_SDK = Boolean(EGRESS_PROXY_URL);
 
@@ -109,6 +110,29 @@ function normalizeLlmGatewayMode(value) {
   const mode = typeof value === 'string' ? value.trim().toLowerCase() : '';
   return Object.prototype.hasOwnProperty.call(LLM_GATEWAY_MODES, mode) ? mode : '';
 }
+
+/**
+ * Langfuse Cloud tracing sink. In egress-proxy mode the SDK posts OTLP to the
+ * sidecar's /langfuse prefix carrying only the sentinel credential pair — the
+ * sidecar assembles the real `Basic base64(pk:sk)` from the vault, so no Langfuse
+ * secret exists in an agent container. Outside proxy mode (trusted local
+ * development) the base URL is used directly with the store-overlay keys.
+ * `environment` is the Langfuse partition for the deployment stage, so dev traffic
+ * never lands in the prod trace list.
+ */
+const LANGFUSE = Object.freeze({
+  url: proxied('/langfuse', null, langfuseUpstream(process.env)),
+  // Direct (unproxied) origin, kept for the trace URLs handed to the browser.
+  origin: langfuseUpstream(process.env),
+  environment: String(process.env.LANGFUSE_ENVIRONMENT || 'dev').trim() || 'dev',
+  // OTel resource service name: the dimension that separates planner / coder /
+  // worker populations in Langfuse. Without it every trace reports as
+  // `unknown_service:node`.
+  serviceName: String(process.env.LANGFUSE_SERVICE_NAME || 'ai-fleet-agent').trim() || 'ai-fleet-agent',
+  // Optional deep-link shortcut. Unset is normal: the project id is resolved once
+  // from GET /api/public/projects, which returns exactly the key's own project.
+  projectId: String(process.env.LANGFUSE_PROJECT_ID || '').trim(),
+});
 
 // Application login modes: 'disabled' (local single-user workflow — open) and
 // 'firebase' (Google SSO via Firebase Authentication).
@@ -462,6 +486,29 @@ const OPENSHELL = Object.freeze({
   allowedWorkspaces: Object.freeze(['tenant-a', 'tenant-b']),
   defaultImage: process.env.OPENSHELL_DEFAULT_IMAGE || 'ubuntu:24.04',
   token: process.env.OPENSHELL_TOKEN || process.env.OPENSHELL_API_KEY || '',
+});
+
+/**
+ * Agent Substrate — zero-trust Kubernetes runtime (ateapi gRPC control plane +
+ * atenet router/egress). Selected via agentPattern 'substrate'; runs the planner
+ * OCI image as a per-run ephemeral sandboxed actor. Empty url by default so the
+ * pattern is inert until an operator provisions an ate-system and sets
+ * SUBSTRATE_URL / SUBSTRATE_INGRESS_URL.
+ */
+const SUBSTRATE = Object.freeze({
+  url: process.env.SUBSTRATE_URL || '',
+  ingressUrl: process.env.SUBSTRATE_INGRESS_URL || '',
+  atespace: process.env.SUBSTRATE_ATESPACE || '',
+  workerPool: process.env.SUBSTRATE_WORKER_POOL || 'planner-pool',
+  plannerImage: process.env.SUBSTRATE_PLANNER_IMAGE || '',
+  allowedAtespaces: Object.freeze(
+    (process.env.SUBSTRATE_ALLOWED_ATESPACES || 'tenant-a,tenant-b')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  ),
+  timeoutMs: Number(process.env.SUBSTRATE_TIMEOUT_MS || 60000),
+  actorTtlMs: Number(process.env.SUBSTRATE_ACTOR_TTL_MS || 120000),
 });
 
 /**
@@ -863,7 +910,8 @@ const CONFIG = Object.freeze({
   // Egress proxy switch + the two REST/git origins the broker targets. In proxy
   // mode these point at the sidecar prefixes so no raw token lives in the agent.
   EGRESS_PROXY_URL,
-  // Also route the native SDK runtimes + LangSmith tracing through the proxy.
+  // Also route the native SDK runtimes + the Langfuse OTLP trace sink through the
+  // proxy. The agent never holds the real key pair because of this flag.
   EGRESS_PROXY_INCLUDE_SDK,
   // Per-request LangSmith LLM Gateway feature flag (availability gate + bases).
   LLM_GATEWAY,
@@ -872,6 +920,8 @@ const CONFIG = Object.freeze({
   // The llm-gateway selector's mode table, shared by every hop that validates
   // or threads the per-request flag.
   LLM_GATEWAY_MODES,
+  // Langfuse Cloud trace sink (sidecar-prefixed OTLP origin + stage partition).
+  LANGFUSE,
   LINEAR_API_URL: proxied('/linear', process.env.LINEAR_API_URL, 'https://api.linear.app/graphql'),
   GITHUB_API_ORIGIN: proxied('/github-api', process.env.GITHUB_API_ORIGIN, 'https://api.github.com'),
   GIT_HTTPS_ORIGIN: proxied('/git/github', process.env.GIT_HTTPS_ORIGIN, 'https://github.com'),
@@ -942,6 +992,7 @@ const CONFIG = Object.freeze({
   QODER,
   OPENROUTER,
   OPENSHELL,
+  SUBSTRATE,
   CODER,
   MCP,
   TOOLS,

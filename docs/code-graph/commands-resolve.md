@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 223 nodes
+Community of 225 nodes
 
-- **Size**: 223 nodes
-- **Cohesion**: 0.0595
+- **Size**: 225 nodes
+- **Cohesion**: 0.0607
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 223 nodes
 | createClient | Function | ./packages/cli/src/client.js | 42-110 |
 | headers | Function | ./packages/cli/src/client.js | 51-55 |
 
-*... and 173 more members.*
+*... and 175 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 223 nodes
 
 ### Outgoing
 
-- `equal` (313 edge(s))
-- `ok` (193 edge(s))
+- `equal` (258 edge(s))
+- `ok` (194 edge(s))
 - `expect` (175 edge(s))
-- `match` (167 edge(s))
+- `match` (163 edge(s))
 - `locator` (84 edge(s))
-- `includes` (62 edge(s))
 - `route` (58 edge(s))
-- `deepEqual` (56 edge(s))
+- `deepEqual` (53 edge(s))
+- `includes` (52 edge(s))
 - `indexOf` (41 edge(s))
 - `map` (38 edge(s))
+- `filter` (33 edge(s))
 - `request` (33 edge(s))
 - `join` (33 edge(s))
-- `doesNotMatch` (32 edge(s))
-- `filter` (32 edge(s))
+- `doesNotMatch` (31 edge(s))
 - `slice` (30 edge(s))
 
 ### Incoming
 
-- `equal` (313 edge(s))
-- `ok` (193 edge(s))
+- `equal` (258 edge(s))
+- `ok` (194 edge(s))
 - `expect` (175 edge(s))
-- `match` (167 edge(s))
+- `match` (163 edge(s))
 - `locator` (84 edge(s))
-- `includes` (59 edge(s))
 - `route` (58 edge(s))
-- `deepEqual` (56 edge(s))
+- `deepEqual` (53 edge(s))
+- `includes` (49 edge(s))
 - `indexOf` (40 edge(s))
 - `map` (33 edge(s))
-- `doesNotMatch` (32 edge(s))
-- `filter` (31 edge(s))
+- `filter` (32 edge(s))
+- `doesNotMatch` (31 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
 - `toBeVisible` (28 edge(s))
 - `./services/planner/src/routes/agent.test.js::call` (26 edge(s))

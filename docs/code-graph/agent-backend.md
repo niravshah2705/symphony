@@ -14,7 +14,7 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| buildBackend | Function | ./packages/shared/src/agent/framework.js | 184-186 |
+| buildBackend | Function | ./packages/shared/src/agent/framework.js | 185-187 |
 | test:LocalShellBackend receives only the sanitized allowlisted environment@L157 | Test | ./packages/shared/src/agent/framework.test.js | 157-177 |
 
 ## Execution Flows

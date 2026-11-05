@@ -100,8 +100,11 @@ function applyOperationalPrefs(keys, prefs, step = () => {}) {
     step(`Workflow pattern "${source.workflowPattern}" applied from organization settings.`);
     next.workflowPattern = source.workflowPattern;
   }
-  if (source.langsmithTracing === 'true' || source.langsmithTracing === 'false') {
-    next.langsmithTracing = source.langsmithTracing === 'true';
+  if (source.langfuseTracing === 'true' || source.langfuseTracing === 'false') {
+    next.langfuseTracing = source.langfuseTracing === 'true';
+  }
+  if (source.langfuseTracing === 'true' || source.langfuseTracing === 'false') {
+    next.langfuseTracing = source.langfuseTracing === 'true';
   }
   return next;
 }

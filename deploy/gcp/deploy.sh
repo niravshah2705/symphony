@@ -30,6 +30,10 @@
 #   empty disables analytics), STREAM_TOKEN_SECRET (auto-generated if unset),
 #   IDENTITY_HASH_PEPPER (auto-generated if unset),
 #   GITHUB_TOKEN, LANGSMITH_API_KEY, SKIP_BUILD=1 (reuse existing images).
+#   Agent tracing: LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY (the managed pair the
+#   egress sidecar injects; also mount them on managed_provider_secrets),
+#   LANGFUSE_BASE_URL (data-region/self-hosted override; empty = cloud.langfuse.com),
+#   LANGFUSE_ENVIRONMENT (trace partition; default prod).
 #   Email delivery: EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, EMAIL_SMTP_SECURE,
 #   EMAIL_SMTP_REQUIRE_TLS, EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_FROM,
 #   EMAIL_PUBLIC_APP_URL. Its default is the GCS SPA entry point published here;
@@ -71,7 +75,16 @@ OMLX_PROXY_UPSTREAM="${OMLX_PROXY_UPSTREAM:-}"
 OLLAMA_PROXY_UPSTREAM="${OLLAMA_PROXY_UPSTREAM:-}"
 LMSTUDIO_PROXY_UPSTREAM="${LMSTUDIO_PROXY_UPSTREAM:-}"
 OPENSWE_PROXY_UPSTREAM="${OPENSWE_PROXY_UPSTREAM:-}"
+# Agent tracing partition + optional origin (both non-secret; the key pair is
+# mounted on the settings service only). Empty base URL keeps cloud.langfuse.com.
+LANGFUSE_ENVIRONMENT="${LANGFUSE_ENVIRONMENT:-prod}"
+LANGFUSE_BASE_URL="${LANGFUSE_BASE_URL:-}"
 INTERNAL_API_TOKEN="${INTERNAL_API_TOKEN:-}"
+
+if [[ -n "$LANGFUSE_BASE_URL" && ! "$LANGFUSE_BASE_URL" =~ ^https://[^/]+$ ]]; then
+  echo "ERROR: LANGFUSE_BASE_URL must be empty or a path-free HTTPS origin such as https://us.cloud.langfuse.com." >&2
+  exit 1
+fi
 
 if [[ -n "$GOOGLE_ANALYTICS_MEASUREMENT_ID" && ! "$GOOGLE_ANALYTICS_MEASUREMENT_ID" =~ ^G-[A-Z0-9]+$ ]]; then
   echo "ERROR: GOOGLE_ANALYTICS_MEASUREMENT_ID must be empty or a GA4 id such as G-XXXXXXXXXX." >&2
@@ -134,6 +147,8 @@ TFVARS=(
   -var="ollama_proxy_upstream=${OLLAMA_PROXY_UPSTREAM}"
   -var="lmstudio_proxy_upstream=${LMSTUDIO_PROXY_UPSTREAM}"
   -var="openswe_proxy_upstream=${OPENSWE_PROXY_UPSTREAM}"
+  -var="langfuse_environment=${LANGFUSE_ENVIRONMENT}"
+  -var="langfuse_base_url=${LANGFUSE_BASE_URL}"
   -var="marketing_custom_domain=${MARKETING_CUSTOM_DOMAIN}"
 )
 if [ -n "$FIREBASE_CUSTOM_DOMAIN" ]; then
@@ -230,6 +245,8 @@ seed_once identity-hash-pepper "$IDENTITY_HASH_PEPPER"
 # org-jwt-secret is Terraform-managed (random_password + secret version); no seed here.
 if [ -n "${GITHUB_TOKEN:-}" ]; then      seed_secret github-token      "$GITHUB_TOKEN"; fi
 if [ -n "${LANGSMITH_API_KEY:-}" ]; then seed_secret langsmith-api-key "$LANGSMITH_API_KEY"; fi
+if [ -n "${LANGFUSE_PUBLIC_KEY:-}" ]; then seed_secret langfuse-public-key "$LANGFUSE_PUBLIC_KEY"; fi
+if [ -n "${LANGFUSE_SECRET_KEY:-}" ]; then seed_secret langfuse-secret-key "$LANGFUSE_SECRET_KEY"; fi
 if [ -n "$EMAIL_SMTP_USER" ]; then seed_secret email-smtp-user "$EMAIL_SMTP_USER"; fi
 if [ -n "$EMAIL_SMTP_PASSWORD" ]; then seed_secret email-smtp-password "$EMAIL_SMTP_PASSWORD"; fi
 
@@ -237,6 +254,14 @@ enabled_version() {
   gcloud secrets versions list "$1" --project "$PROJECT_ID" \
     --filter='state=ENABLED' --limit=1 --format='value(name)'
 }
+# Agent traces need BOTH halves mounted on the settings service (managed_provider_secrets);
+# the sidecar rebuilds the Basic pair from them. A missing half only costs observability —
+# export is fail-open by design — so this warns instead of blocking the deploy.
+if [ -z "$(enabled_version langfuse-public-key)" ] || [ -z "$(enabled_version langfuse-secret-key)" ]; then
+  echo "  ! langfuse-public-key / langfuse-secret-key have no enabled version:" >&2
+  echo "    agent runs will deploy without traces. Set LANGFUSE_PUBLIC_KEY +" >&2
+  echo "    LANGFUSE_SECRET_KEY and add both to var.managed_provider_secrets." >&2
+fi
 EMAIL_SMTP_USER_VERSION="$(enabled_version email-smtp-user)"
 EMAIL_SMTP_PASSWORD_VERSION="$(enabled_version email-smtp-password)"
 EMAIL_SMTP_AUTH_ENABLED=false

@@ -111,10 +111,9 @@ function codingKeys(agent, linearApiKey) {
   const settings = agent.settings || {};
   return {
     linearApiKey,
-    langsmithApiKey: settings.langsmithApiKey,
-    langsmithTracing: settings.langsmithTracing,
-    langsmithProject: settings.langsmithProject,
-    langsmithEndpoint: settings.langsmithEndpoint,
+    langfusePublicKey: settings.langfusePublicKey,
+    langfuseSecretKey: settings.langfuseSecretKey,
+    langfuseTracing: settings.langfuseTracing,
     agentRuntime: agent.harness,
     workflowPattern: agent.workflowPattern,
     requestHarnesses: { code: agent.harness },

@@ -67,7 +67,7 @@ test('legacy planner credential routes and integration fields fail explicitly wi
   const cases = [
     ['put', '/', { linearApiKey: 'lin_new' }],
     ['put', '/github', { githubToken: 'gh_new' }],
-    ['put', '/langsmith', { langsmithApiKey: 'ls_new' }],
+    ['put', '/langfuse', { langfuseSecretKey: 'lf_new' }],
     ['put', '/integrations', { gitlabToken: 'gl_new' }],
     ['put', '/integrations', { jiraBaseUrl: 'https://acme.atlassian.net' }],
     ['put', '/json', { settings: { llmStreamRetries: 2, linearApiKey: 'lin_new' } }],

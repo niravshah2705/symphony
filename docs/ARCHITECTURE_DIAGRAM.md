@@ -81,7 +81,7 @@ flowchart LR
   Workspace -->|credential-helper sentinel| EgressProxy
   EgressProxy -->|clone, push, API| GitHub["GitHub<br/>repository, branches, pull requests"]
 
-  AgentRuntime -->|traces and run metadata| Observability["LangSmith tracing<br/>trace links in Agent tab"]
+  AgentRuntime -->|traces and run metadata| Observability["Langfuse tracing<br/>trace links in Agent tab"]
   Shared --> Logs["data/app.log<br/>shared logger, one file"]
 ```
 
@@ -96,7 +96,7 @@ sequenceDiagram
   participant Agent as DeepAgent framework
   participant LLM as Routed LLM - local or hosted
   participant GitHub as GitHub
-  participant Obs as LangSmith
+  participant Obs as Langfuse
 
   User->>UI: Select scope; configure vault, connectors, presets, tracing
   UI->>API: Save masked scope settings and start planner/coder
@@ -125,4 +125,4 @@ sequenceDiagram
   procedures for planning, Linear updates, commits, pushes, pulls, and landing PRs.
 - **Linear and GitHub integrations** are available through built-in tools and
   optional MCP tool groups when enabled.
-- **Tracing** uses LangSmith settings and emits trace links from agent jobs.
+- **Tracing** uses Langfuse settings and emits trace links from agent jobs.

@@ -2,7 +2,8 @@
 # Dedicated Laya decision model inference service (Cloud Run v2).
 # Internal-only, IAM-gated System 1 non-autoregressive decision model.
 # Image = pip `laya[serve]` (laya-serve on :8000, POST /v1/systemone, GET /health),
-# served fully offline from the /models gcsfuse mount (laya_models.tf).
+# served fully offline from the HF checkpoint cache BAKED INTO THE IMAGE
+# (deploy/gcp/Dockerfile.laya-inference). No gcsfuse mount at runtime.
 # -----------------------------------------------------------------------------
 
 resource "google_service_account" "laya_inference" {
@@ -19,6 +20,14 @@ resource "google_cloud_run_v2_service" "laya" {
   labels              = merge(local.common_labels, { component = "laya-inference" })
   deletion_protection = false
 
+  # The revision readiness wait mirrors the startup probe budget (20m) plus pod
+  # retry cycles; the provider default of 20m gave up on a rollout that Cloud
+  # Run was still working on (deploy run 41874521806).
+  timeouts {
+    create = "45m"
+    update = "45m"
+  }
+
   template {
     service_account                  = google_service_account.laya_inference.email
     timeout                          = "60s"
@@ -30,18 +39,10 @@ resource "google_cloud_run_v2_service" "laya" {
       max_instance_count = var.laya_max_instances
     }
 
-    # Pre-downloaded Hugging Face hub cache (laya_models.tf), mounted read-only
-    # at /models. The service pins a bundle via HF_HOME=/models/<version>.
-    dynamic "volumes" {
-      for_each = var.laya_models_enabled ? [1] : []
-      content {
-        name = "laya-models"
-        gcs {
-          bucket    = google_storage_bucket.laya_models[0].name
-          read_only = true
-        }
-      }
-    }
+    # HF_HUB_CACHE points at the hub cache baked into the image
+    # (Dockerfile.laya-inference), so weights are read from the container's own
+    # disk. laya_models.tf keeps the GCS bucket as the workflow publish/backup
+    # target only — nothing is mounted at runtime.
 
     containers {
       name  = "app"
@@ -51,9 +52,14 @@ resource "google_cloud_run_v2_service" "laya" {
         container_port = 8000
       }
 
-      # Fully-offline serving of the pip `laya[serve]` image: weights come from
-      # the /models GCS mount, never from the Hub. All three checkpoints are
-      # preloaded for auto routing; thread caps match the 2-CPU limit.
+      # Fully-offline serving of the pip `laya[serve]` image: the three
+      # checkpoints are baked into the image's HF cache at build time (see
+      # Dockerfile.laya-inference) — no gcsfuse at runtime. The first
+      # deployments streamed weights over a GCS volume and never finished
+      # preloading inside the startup window (revisions 00015-00018: each CPU
+      # build over FUSE took ~3.5min and the port only binds AFTER preload,
+      # because laya-serve preloads synchronously). Weights on the container's
+      # own disk remove that I/O path entirely. Thread caps match the CPU limit.
       # NOTE: never add env name = "PORT" here (reserved by Cloud Run).
       env {
         name  = "HF_HUB_OFFLINE"
@@ -64,8 +70,8 @@ resource "google_cloud_run_v2_service" "laya" {
         value = "1"
       }
       env {
-        name  = "HF_HOME"
-        value = "/models/${var.laya_model_version}"
+        name  = "HF_HUB_CACHE"
+        value = "/opt/laya-cache"
       }
       env {
         name  = "LAYA_PRELOAD"
@@ -83,6 +89,9 @@ resource "google_cloud_run_v2_service" "laya" {
         name  = "LAYA_DEVICE"
         value = "cpu"
       }
+      # The image digest IS the weights pin now (checkpoints baked at build),
+      # so every weight change rebuilds → new template → fresh revision; no
+      # bundle-version marker needed.
       env {
         name  = "LAYA_THREADS"
         value = var.laya_cpu
@@ -102,6 +111,9 @@ resource "google_cloud_run_v2_service" "laya" {
 
       resources {
         limits = {
+          # var.laya_memory must cover all three checkpoints resident as float32
+          # (~4.7GB) + runtime overhead: preload is synchronous, so an OOM here
+          # kills the instance before the port ever binds (see variables.tf).
           cpu    = var.laya_cpu
           memory = var.laya_memory
         }
@@ -109,25 +121,20 @@ resource "google_cloud_run_v2_service" "laya" {
         startup_cpu_boost = true
       }
 
-      dynamic "volume_mounts" {
-        for_each = var.laya_models_enabled ? [1] : []
-        content {
-          name       = "laya-models"
-          mount_path = "/models"
-        }
-      }
+      # No volume_mounts: weights are baked into the image.
 
-      # GET /health is laya-serve's unauthenticated liveness route. Startup
-      # budget is generous: with LAYA_PRELOAD=1 the three checkpoints are built
-      # on the CPU before the server starts listening.
+      # GET /health is laya-serve's unauthenticated liveness route. Preload
+      # still runs BEFORE the port binds (synchronous in laya-serve), but reads
+      # now come from the container image instead of gcsfuse; budget = 15s x 80
+      # = 20min leaves headroom for three CPU checkpoint builds.
       startup_probe {
         http_get {
           path = "/health"
           port = 8000
         }
-        period_seconds    = 5
-        timeout_seconds   = 2
-        failure_threshold = 60
+        period_seconds    = 15
+        timeout_seconds   = 5
+        failure_threshold = 80
       }
 
       liveness_probe {
@@ -144,7 +151,6 @@ resource "google_cloud_run_v2_service" "laya" {
 
   depends_on = [
     google_project_service.services,
-    google_storage_bucket.laya_models,
   ]
 }
 
