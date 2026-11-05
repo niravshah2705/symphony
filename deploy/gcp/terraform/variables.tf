@@ -905,7 +905,7 @@ variable "laya_models_bucket_force_destroy" {
 
 variable "laya_model_version" {
   type        = string
-  description = "Laya checkpoint bundle version the service PINS (HF_HUB_CACHE=/models/<version> on the gcsfuse mount). Must match a published `<version>/` prefix created by .github/workflows/publish-laya-models.yml. Bumping the published bundle to a new version does NOT affect a deployment until this is bumped."
+  description = "Laya checkpoint bundle version published to the GCS bucket by .github/workflows/publish-laya-models.yml. The RUNTIME no longer reads this: checkpoints ship inside the image (Dockerfile.laya-inference bakes HF_HUB_CACHE=/opt/laya-cache and the image digest pins the weights). Kept so the bucket stays versioned as the publish/backup target."
   default     = "v1"
 }
 

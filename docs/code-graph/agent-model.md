@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 455 nodes
+Community of 462 nodes
 
-- **Size**: 455 nodes
-- **Cohesion**: 0.3272
+- **Size**: 462 nodes
+- **Cohesion**: 0.3263
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,39 +65,40 @@ Community of 455 nodes
 | realResolveModel | Function | ./packages/shared/src/agent/business-pipeline.js | 89-94 |
 | invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
 
-*... and 405 more members.*
+*... and 412 more members.*
 
 ## Execution Flows
 
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
 - **generatePlan** (criticality: 0.67, depth: 6)
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **startScheduler** (criticality: 0.65, depth: 5)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (403 edge(s))
-- `deepEqual` (78 edge(s))
-- `String` (58 edge(s))
+- `equal` (409 edge(s))
+- `deepEqual` (80 edge(s))
+- `String` (60 edge(s))
 - `strictEqual` (48 edge(s))
 - `push` (44 edge(s))
 - `Number` (42 edge(s))
 - `replace` (37 edge(s))
+- `ok` (34 edge(s))
 - `match` (33 edge(s))
-- `ok` (33 edge(s))
-- `map` (32 edge(s))
-- `slice` (31 edge(s))
+- `slice` (33 edge(s))
+- `map` (33 edge(s))
+- `join` (29 edge(s))
 - `Boolean` (28 edge(s))
-- `join` (28 edge(s))
 - `require` (26 edge(s))
-- `isFinite` (25 edge(s))
+- `trim` (26 edge(s))
 
 ### Incoming
 
-- `equal` (403 edge(s))
-- `deepEqual` (78 edge(s))
+- `equal` (409 edge(s))
+- `deepEqual` (80 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (55 edge(s))
 - `strictEqual` (48 edge(s))
@@ -105,9 +106,9 @@ Community of 455 nodes
 - `./packages/shared/src/agent/business-pipeline.js` (46 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (46 edge(s))
 - `./packages/shared/src/agent/llm.js` (40 edge(s))
-- `ok` (33 edge(s))
+- `ok` (34 edge(s))
 - `match` (28 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
 - `rejects` (22 edge(s))
 - `after` (22 edge(s))
-- `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
+- `throws` (21 edge(s))
