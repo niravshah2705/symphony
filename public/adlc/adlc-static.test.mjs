@@ -8,7 +8,7 @@ test('Firebase headers keep ADLC runtime config uncached', () => {
   const firebase = JSON.parse(fs.readFileSync(new URL('../../firebase.json', import.meta.url), 'utf8'));
   assert.ok(Array.isArray(firebase.hosting), 'hosting must be a multi-site array');
   const targets = firebase.hosting.map((site) => site.target);
-  assert.deepEqual(targets, ['app', 'www'], 'app and www hosting targets must stay defined');
+  assert.deepEqual(targets, ['app', 'www', 'secrets'], 'app, www and secrets hosting targets must stay defined');
 
   const headers = firebase.hosting.find((site) => site.target === 'app').headers;
   const configRule = headers.find((rule) => rule.source === '/adlc/config.js');
