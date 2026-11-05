@@ -16,7 +16,7 @@ Community of 121 nodes
 |------|------|------|-------|
 | test:recordStackLink persists the link and recovers the blocker identifier@L952 | Test | ./packages/shared/src/agent/coder-flow.test.js | 952-973 |
 | test:recordStackLink is a no-op when the run was not stacked@L975 | Test | ./packages/shared/src/agent/coder-flow.test.js | 975-984 |
-| recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 691-711 |
+| recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 690-710 |
 | response | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 15-22 |
 | seedRemote | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 29-50 |
 | git | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 33-33 |

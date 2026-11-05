@@ -7,14 +7,14 @@
 Community of 286 nodes
 
 - **Size**: 286 nodes
-- **Cohesion**: 0.2742
+- **Cohesion**: 0.2743
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
+| test:optional image resolver uses a SHA placeholder only while disabled@L246 | Test | ./deploy/gcp/pipeline-infra.test.js | 246-292 |
 | memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
 | memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
 | resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |

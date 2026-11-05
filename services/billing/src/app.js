@@ -98,6 +98,30 @@ function createApp(options = {}) {
   app.use('/api/billing', billingApi);
   app.use('/', billingApi);
 
+  // Central JSON error handler. Without it every asyncHandler rejection falls to
+  // Express's default handler, which answers with an HTML 500: the gateway copies
+  // the upstream status through verbatim and the SPA's JSON parse then degrades to
+  // "Request failed (500)", so a provider rejection such as Cashfree's 401
+  // authentication_failed reaches the browser as an unattributable Internal Server
+  // Error. Handlers carry the HTTP status + code they want surfaced in err.
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, req, res, next) => {
+    const status = Number(err && err.status) || 500;
+    if (status >= 500) {
+      log.error(`billing request failed: ${err && err.message ? err.message : err}`, {
+        code: err && err.code ? err.code : null,
+        providerStatus: err && err.providerStatus ? err.providerStatus : null,
+        providerCode: err && err.providerCode ? err.providerCode : null,
+        path: req.path,
+      });
+    }
+    if (res.headersSent) return next(err);
+    return res.status(status).json({
+      error: err && err.message ? err.message : 'Server error.',
+      ...(err && err.code ? { code: err.code } : {}),
+    });
+  });
+
   return app;
 }
 
