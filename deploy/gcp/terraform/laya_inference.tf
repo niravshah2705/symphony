@@ -19,6 +19,14 @@ resource "google_cloud_run_v2_service" "laya" {
   labels              = merge(local.common_labels, { component = "laya-inference" })
   deletion_protection = false
 
+  # The revision readiness wait mirrors the startup probe budget (20m) plus pod
+  # retry cycles; the provider default of 20m gave up on a rollout that Cloud
+  # Run was still working on (deploy run 41874521806).
+  timeouts {
+    create = "45m"
+    update = "45m"
+  }
+
   template {
     service_account                  = google_service_account.laya_inference.email
     timeout                          = "60s"
