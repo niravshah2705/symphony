@@ -1,6 +1,12 @@
-# OpenShell GKE — Terraform
+# OpenShell + Substrate GKE — Terraform
 
-Infrastructure-as-code for the multi-tenant NVIDIA OpenShell gateway on GKE.
+Infrastructure-as-code for the multi-tenant NVIDIA OpenShell gateway on GKE,
+and (optionally) a second execution substrate — [Agent
+Substrate](https://github.com/agent-substrate/substrate) — that reuses the same
+cluster. Substrate is **off by default** (`substrate_enabled = false`), so an
+OpenShell-only deploy sees a byte-for-byte identical plan. See
+[`../../../docs/SUBSTRATE_INTEGRATION.md`](../../../docs/SUBSTRATE_INTEGRATION.md)
+for how the two patterns coexist and what this module does *not* install.
 Ported from the imperative installers in the OpenShell repo (`setup_openshell_gke.py`,
 `deploy.sh`) and its draft Terraform (`OpenShell/deploy/terraform/gke`), then
 corrected against the **live** cluster `openshell-multitenant`.
@@ -33,6 +39,17 @@ deployment); the two stacks do not share state or variables.
    ClusterRole that can cordon, drain and delete pods, for operators who grant
    a pool-scoped IAM role instead of `roles/container.admin`. Set
    `power_ci_sa_email` to that identity or the binding is skipped.
+5. **Agent Substrate (optional, `substrate.tf`)** — a dedicated
+   `substrate-worker-pool` (tainted `substrate.ate.dev/workers`, gVisor runs
+   on the stock UBUNTU_CONTAINERD image), the `substrate-credentials` and
+   `substrate-snapshots` namespaces, a PD `StorageClass` + `VolumeSnapshotClass`
+   for atelet suspend/resume snapshots, a scoped Role/RoleBinding letting the
+   atenet-egress service account read Secrets **only** in
+   `substrate-credentials`, and (when `substrate_ingress_hostname` is set) a
+   cert-manager Certificate + Envoy Gateway + HTTPRoute fronting the
+   atenet-router actor data plane. The `ate-system` control plane itself
+   (`ateapi`, `atelet`, `atecontroller`, `ate-idp-server`, `atenet-*`, CRDs) is
+   installed by the upstream substrate installer, **not** here.
 
 ## Usage
 

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 248 nodes
+Community of 244 nodes
 
-- **Size**: 248 nodes
-- **Cohesion**: 0.2384
+- **Size**: 244 nodes
+- **Cohesion**: 0.2386
 - **Dominant Language**: javascript
 
 ## Members
@@ -30,23 +30,23 @@ Community of 248 nodes
 | runCoder | Function | ./packages/shared/src/agent/coder.js | 347-354 |
 | runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 362-469 |
 | runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 472-490 |
-| installSkills | Function | ./packages/shared/src/agent/framework.js | 52-86 |
-| validateSkillName | Function | ./packages/shared/src/agent/framework.js | 88-100 |
-| trackedSkillPaths | Function | ./packages/shared/src/agent/framework.js | 102-113 |
-| claimSkillsDirectory | Function | ./packages/shared/src/agent/framework.js | 115-145 |
-| assertContained | Function | ./packages/shared/src/agent/framework.js | 147-152 |
-| assertNoSymlinks | Function | ./packages/shared/src/agent/framework.js | 154-164 |
-| lstatOrNull | Function | ./packages/shared/src/agent/framework.js | 166-173 |
-| isDir | Function | ./packages/shared/src/agent/framework.js | 175-181 |
-| loadWorkflow | Function | ./packages/shared/src/agent/framework.js | 189-195 |
-| prepareScratch | Function | ./packages/shared/src/agent/framework.js | 202-208 |
-| cleanup | Function | ./packages/shared/src/agent/framework.js | 206-206 |
-| buildAgent | Function | ./packages/shared/src/agent/framework.js | 211-213 |
-| configuredResourceNames | Function | ./packages/shared/src/agent/framework.js | 223-232 |
-| runWorkflow | Function | ./packages/shared/src/agent/framework.js | 240-367 |
-| contentToText | Function | ./packages/shared/src/agent/framework.js | 370-374 |
-| messageText | Function | ./packages/shared/src/agent/framework.js | 383-389 |
-| lastText | Function | ./packages/shared/src/agent/framework.js | 391-394 |
+| installSkills | Function | ./packages/shared/src/agent/framework.js | 53-87 |
+| validateSkillName | Function | ./packages/shared/src/agent/framework.js | 89-101 |
+| trackedSkillPaths | Function | ./packages/shared/src/agent/framework.js | 103-114 |
+| claimSkillsDirectory | Function | ./packages/shared/src/agent/framework.js | 116-146 |
+| assertContained | Function | ./packages/shared/src/agent/framework.js | 148-153 |
+| assertNoSymlinks | Function | ./packages/shared/src/agent/framework.js | 155-165 |
+| lstatOrNull | Function | ./packages/shared/src/agent/framework.js | 167-174 |
+| isDir | Function | ./packages/shared/src/agent/framework.js | 176-182 |
+| loadWorkflow | Function | ./packages/shared/src/agent/framework.js | 190-196 |
+| prepareScratch | Function | ./packages/shared/src/agent/framework.js | 203-209 |
+| cleanup | Function | ./packages/shared/src/agent/framework.js | 207-207 |
+| buildAgent | Function | ./packages/shared/src/agent/framework.js | 212-214 |
+| configuredResourceNames | Function | ./packages/shared/src/agent/framework.js | 224-233 |
+| runWorkflow | Function | ./packages/shared/src/agent/framework.js | 241-372 |
+| contentToText | Function | ./packages/shared/src/agent/framework.js | 375-379 |
+| messageText | Function | ./packages/shared/src/agent/framework.js | 388-394 |
+| lastText | Function | ./packages/shared/src/agent/framework.js | 396-399 |
 | withSkillsEnv | Function | ./packages/shared/src/agent/framework.test.js | 26-38 |
 | test:installSkills refuses a symbolic-link destination without writing outside the root@L40 | Test | ./packages/shared/src/agent/framework.test.js | 40-56 |
 | test:installSkills refuses tracked project-owned .agent-skills files@L58 | Test | ./packages/shared/src/agent/framework.test.js | 58-73 |
@@ -65,14 +65,14 @@ Community of 248 nodes
 | test:honors alias priority: prefers `path` over lower-priority keys@L32 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 32-35 |
 | test:leaves a correct call untouched (same reference, no rewrite)@L37 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 37-40 |
 
-*... and 198 more members.*
+*... and 194 more members.*
 
 ## Execution Flows
 
 - **resume** (criticality: 0.67, depth: 8)
-- **generatePlan** (criticality: 0.67, depth: 6)
 - **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
+- **generatePlan** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
 - **startScheduler** (criticality: 0.65, depth: 5)
@@ -82,25 +82,25 @@ Community of 248 nodes
 
 ### Outgoing
 
-- `equal` (138 edge(s))
+- `equal` (148 edge(s))
 - `join` (87 edge(s))
 - `deepEqual` (47 edge(s))
 - `strictEqual` (42 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `isArray` (36 edge(s))
-- `String` (33 edge(s))
+- `String` (35 edge(s))
+- `isArray` (31 edge(s))
+- `require` (30 edge(s))
 - `step` (30 edge(s))
+- `trim` (28 edge(s))
 - `map` (28 edge(s))
-- `require` (26 edge(s))
-- `trim` (24 edge(s))
-- `slice` (24 edge(s))
-- `Boolean` (21 edge(s))
-- `filter` (21 edge(s))
+- `slice` (23 edge(s))
+- `filter` (20 edge(s))
 - `after` (19 edge(s))
+- `Boolean` (18 edge(s))
 
 ### Incoming
 
-- `equal` (138 edge(s))
+- `equal` (148 edge(s))
 - `join` (48 edge(s))
 - `deepEqual` (47 edge(s))
 - `strictEqual` (42 edge(s))

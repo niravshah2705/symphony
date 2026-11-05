@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 228 nodes
+Community of 285 nodes
 
-- **Size**: 228 nodes
-- **Cohesion**: 0.2423
+- **Size**: 285 nodes
+- **Cohesion**: 0.2619
 - **Dominant Language**: javascript
 
 ## Members
@@ -27,6 +27,8 @@ Community of 228 nodes
 | prepareCodexChatgptHome | Function | ./packages/shared/src/agent/harnesses/codex.js | 50-124 |
 | cleanup | Function | ./packages/shared/src/agent/harnesses/codex.js | 108-112 |
 | executeCodex | Function | ./packages/shared/src/agent/harnesses/codex.js | 247-247 |
+| normalizeWorkflowPattern | Function | ./packages/shared/src/agent/harnesses/contract.js | 62-74 |
+| applyWorkflowPattern | Function | ./packages/shared/src/agent/harnesses/contract.js | 80-91 |
 | cleanSystemPrompt | Function | ./packages/shared/src/agent/harnesses/contract.js | 93-96 |
 | assertWorkingDirectory | Function | ./packages/shared/src/agent/harnesses/contract.js | 98-110 |
 | optionalPackageError | Function | ./packages/shared/src/agent/harnesses/contract.js | 112-122 |
@@ -37,40 +39,39 @@ Community of 228 nodes
 | deepAgentUsage | Function | ./packages/shared/src/agent/harnesses/contract.js | 191-197 |
 | deepAgentCost | Function | ./packages/shared/src/agent/harnesses/contract.js | 199-211 |
 | assistantMessagesFromText | Function | ./packages/shared/src/agent/harnesses/contract.js | 213-215 |
+| publicExecution | Function | ./packages/shared/src/agent/harnesses/contract.js | 217-230 |
 | addCost | Function | ./packages/shared/src/agent/harnesses/contract.js | 232-237 |
 | applyRubricMiddleware | Function | ./packages/shared/src/agent/harnesses/contract.js | 253-290 |
 | runAgent | Function | ./packages/shared/src/agent/harnesses/contract.js | 261-266 |
+| reviewMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 292-304 |
+| mcpServerFromToolName | Function | ./packages/shared/src/agent/harnesses/contract.js | 322-327 |
+| toolCallsFromMessage | Function | ./packages/shared/src/agent/harnesses/contract.js | 336-360 |
+| skillFromReadCall | Function | ./packages/shared/src/agent/harnesses/contract.js | 363-369 |
+| extractUsedResources | Function | ./packages/shared/src/agent/harnesses/contract.js | 375-394 |
+| usedResourceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 397-413 |
+| skillRouterTraceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 416-436 |
+| traceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 438-465 |
 | wrapExecutionError | Function | ./packages/shared/src/agent/harnesses/contract.js | 467-480 |
 | reasoningEffort | Function | ./packages/shared/src/agent/harnesses/contract.js | 482-485 |
 | plannerWebSearchAllowed | Function | ./packages/shared/src/agent/harnesses/contract.js | 487-489 |
 | safePathIn | Function | ./packages/shared/src/agent/harnesses/contract.js | 491-516 |
+| meterRun | Function | ./packages/shared/src/agent/harnesses/contract.js | 525-532 |
 | resolveAndRouteSkills | Function | ./packages/shared/src/agent/harnesses/contract.js | 537-540 |
 | executeDeepAgent | Function | ./packages/shared/src/agent/harnesses/deepagent.js | 167-167 |
-| test:executeDeepAgent returns skillRouterMetrics and skillPaths when candidate skills are provided@L135 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 135-158 |
-| test:executeCodex returns skillRouterMetrics and skillPaths when candidate skills are provided@L160 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 160-192 |
-| test:executeClaude returns skillRouterMetrics and skillPaths when candidate skills are provided@L194 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 194-226 |
-| test:executeAntigravity returns skillRouterMetrics and skillPaths when candidate skills are provided@L228 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 228-262 |
-| qoderPermissionGuard | Function | ./packages/shared/src/agent/harnesses/qoder.js | 40-55 |
-| startRunDaemon | Function | ./packages/shared/src/agent/harnesses/qoder.js | 62-70 |
-| stopRunDaemon | Function | ./packages/shared/src/agent/harnesses/qoder.js | 72-79 |
-| executeQoder | Function | ./packages/shared/src/agent/harnesses/qoder.js | 193-193 |
-| wireModelId | Function | ./packages/shared/src/agent/llm.js | 855-858 |
-| response | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 15-22 |
-| seedRemote | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 29-50 |
-| git | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 33-33 |
-| localGitImpl | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 54-64 |
-| makeFetch | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 68-105 |
-| test@L72 | Test | ./packages/shared/src/agent/repository-broker-stack.test.js | 72-72 |
-| test@L84 | Test | ./packages/shared/src/agent/repository-broker-stack.test.js | 84-84 |
-| makeBroker | Function | ./packages/shared/src/agent/repository-broker-stack.test.js | 115-134 |
-| test:stacks a dependent task on the latest unmerged blocker and its PR targets that branch@L136 | Test | ./packages/shared/src/agent/repository-broker-stack.test.js | 136-161 |
+| createRuntimeDispatcher | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 25-190 |
+| execute | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 77-128 |
+| runOnce | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 89-89 |
+| traceDetail | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 198-210 |
+| usageDetails | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 212-229 |
+| fakeRegistry | Function | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 10-22 |
 
-*... and 178 more members.*
+*... and 235 more members.*
 
 ## Execution Flows
 
-- **generatePlan** (criticality: 0.67, depth: 6)
 - **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
+- **generatePlan** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
 - **proposeSettings** (criticality: 0.58, depth: 4)
@@ -79,36 +80,36 @@ Community of 228 nodes
 
 ### Outgoing
 
-- `equal` (311 edge(s))
-- `join` (109 edge(s))
-- `includes` (73 edge(s))
-- `String` (51 edge(s))
+- `equal` (340 edge(s))
+- `join` (124 edge(s))
+- `includes` (84 edge(s))
+- `String` (63 edge(s))
 - `endsWith` (39 edge(s))
-- `ok` (34 edge(s))
+- `ok` (38 edge(s))
+- `deepEqual` (35 edge(s))
 - `execFileSync` (34 edge(s))
-- `match` (32 edge(s))
-- `deepEqual` (27 edge(s))
-- `isArray` (23 edge(s))
-- `mkdirSync` (22 edge(s))
-- `writeFileSync` (22 edge(s))
-- `push` (21 edge(s))
-- `map` (20 edge(s))
-- `trim` (20 edge(s))
+- `match` (33 edge(s))
+- `isArray` (32 edge(s))
+- `push` (27 edge(s))
+- `mkdirSync` (26 edge(s))
+- `writeFileSync` (26 edge(s))
+- `trim` (25 edge(s))
+- `map` (23 edge(s))
 
 ### Incoming
 
-- `equal` (310 edge(s))
+- `equal` (339 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
-- `join` (67 edge(s))
+- `join` (77 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (55 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (35 edge(s))
-- `ok` (34 edge(s))
+- `ok` (38 edge(s))
+- `deepEqual` (33 edge(s))
 - `match` (31 edge(s))
 - `includes` (27 edge(s))
-- `deepEqual` (25 edge(s))
+- `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
 - `execFileSync` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/runtimes.test.js` (24 edge(s))
-- `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
-- `rejects` (20 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
+- `rejects` (22 edge(s))
+- `throws` (22 edge(s))

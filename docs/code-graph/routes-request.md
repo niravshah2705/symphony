@@ -4,25 +4,26 @@
 
 ## Overview
 
-Community of 9 nodes
+Community of 10 nodes
 
-- **Size**: 9 nodes
-- **Cohesion**: 0.0811
+- **Size**: 10 nodes
+- **Cohesion**: 0.0952
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| requestWorkspaceContext | Function | ./services/planner/src/routes/agent.js | 88-97 |
-| getHeader | Function | ./services/planner/src/routes/agent.js | 89-92 |
-| jobsForContext | Function | ./services/planner/src/routes/agent.js | 99-105 |
-| jobsForRequest | Function | ./services/planner/src/routes/agent.js | 107-109 |
-| recordsForRequest | Function | ./services/planner/src/routes/agent.js | 111-116 |
-| recordForRequest | Function | ./services/planner/src/routes/agent.js | 118-120 |
-| stampRequestContext | Function | ./services/planner/src/routes/agent.js | 122-129 |
-| conversationForRequest | Function | ./services/planner/src/routes/agent.js | 135-140 |
-| resolveProjectSecrets | Function | ./services/planner/src/routes/agent.js | 393-501 |
+| requestWorkspaceContext | Function | ./services/planner/src/routes/agent.js | 93-102 |
+| getHeader | Function | ./services/planner/src/routes/agent.js | 94-97 |
+| jobsForContext | Function | ./services/planner/src/routes/agent.js | 104-110 |
+| jobsForRequest | Function | ./services/planner/src/routes/agent.js | 112-114 |
+| recordsForRequest | Function | ./services/planner/src/routes/agent.js | 116-121 |
+| recordForRequest | Function | ./services/planner/src/routes/agent.js | 123-125 |
+| stampRequestContext | Function | ./services/planner/src/routes/agent.js | 127-134 |
+| conversationForRequest | Function | ./services/planner/src/routes/agent.js | 140-145 |
+| resolveProjectSecrets | Function | ./services/planner/src/routes/agent.js | 398-481 |
+| substrateContext | Function | ./services/planner/src/routes/agent.js | 1806-1816 |
 
 ## Execution Flows
 
@@ -32,22 +33,18 @@ Community of 9 nodes
 
 ### Outgoing
 
-- `trim` (15 edge(s))
-- `String` (5 edge(s))
+- `trim` (13 edge(s))
 - `matchesEventContext` (3 edge(s))
 - `filter` (2 edge(s))
-- `encodeURIComponent` (2 edge(s))
+- `getSettings` (2 edge(s))
 - `getConversation` (1 edge(s))
 - `get` (1 edge(s))
 - `listJobs` (1 edge(s))
 - `find` (1 edge(s))
 - `normalizeEventContext` (1 edge(s))
-- `getSettings` (1 edge(s))
 - `resolveOpenShellWorkspace` (1 edge(s))
-- `fetch` (1 edge(s))
-- `replace` (1 edge(s))
-- `timeout` (1 edge(s))
+- `resolveMissingSecrets` (1 edge(s))
 
 ### Incoming
 
-- `./services/planner/src/routes/agent.js` (64 edge(s))
+- `./services/planner/src/routes/agent.js` (68 edge(s))
