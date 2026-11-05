@@ -230,7 +230,21 @@ jobs:
             'if kubectl get crd -o name 2>/dev/null | grep -q ate.dev; then echo "ate.dev CRDs present — this deploy rolls the running control plane"; else echo "no ate.dev CRDs — fresh install"; fi'
           check "Envoy Gateway CRDs" kubectl get crd gateways.gateway.networking.k8s.io -o 'jsonpath={.metadata.name}'
           check "cert-manager CRDs" kubectl get crd certificates.cert-manager.io -o 'jsonpath={.metadata.name}'
-          check "substrate ingress Gateway" kubectl -n ate-system get gateway substrate-ingress -o 'jsonpath={.metadata.name}'
+          # Exists is not serving: with only the HTTPS listener, the unissued
+          # certificate Secret leaves the Gateway unprogrammed and Envoy builds no
+          # data plane at all, so nothing answers on port 80 and HTTP-01 can never
+          # complete. See docs §5.1.
+          check "substrate front serving" bash -c '
+            line="$(kubectl -n ate-system get gateway substrate-ingress \
+              -o jsonpath="{.status.conditions[?(@.type==\"Programmed\")].status} {.status.addresses[0].value}" 2>/dev/null)" \
+              || { echo "no substrate-ingress Gateway yet — set SUBSTRATE_INGRESS_HOSTNAME and run gke_reconcile"; exit 1; }
+            if [ "${line%% *}" = "True" ]; then
+              echo "Programmed at ${line#True }"
+              exit 0
+            fi
+            echo "not Programmed (${line:-no status yet}) — no Envoy data plane, so port 80 answers nothing and HTTP-01 cannot complete"
+            exit 1
+          '
           # Distinguishes "no hostname asked for" from "asked for and the apply
           # failed", which the Gateway row alone cannot tell apart.
           check "hostname front requested" bash -c '
@@ -267,22 +281,34 @@ jobs:
             echo "every image $VERSION needs is in $IMAGE_REPO"
           '
 
-          # The apply 403s on `compute.addresses.create` when the CI identity was
-          # provisioned before that grant existed (compute.viewer reads the static
+          # The apply 403s when the CI identity was provisioned before the
+          # substrateStaticIpAdmin grant existed (compute.viewer reads the static
           # IPs but cannot make one). testIamPermissions asks about the caller, and
           # in this job the caller IS the deployer SA — so this tests the real
-          # thing instead of guessing from the role list.
+          # thing instead of guessing from the role list. setLabels is asked about
+          # alongside create because google_compute_address labels the address in a
+          # second call once it exists: create alone builds substrate-ip halfway and
+          # then 403s, which is the harder failure to read.
           check "static IP permission" bash -c '
             token="$(gcloud auth print-access-token 2>/dev/null)" \
               || { echo "no access token for the CI identity"; exit 1; }
+            perms="compute.addresses.create compute.addresses.setLabels"
             got="$(curl -fsS -X POST -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
-              -d "{\"permissions\":[\"compute.addresses.create\"]}" \
+              -d "{\"permissions\":[\"compute.addresses.create\",\"compute.addresses.setLabels\"]}" \
               "https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT_ID}:testIamPermissions")" \
               || { echo "testIamPermissions call failed"; exit 1; }
-            case "$got" in
-              *compute.addresses.create*) echo "the CI identity may create substrate-ip" ;;
-              *) echo "compute.addresses.create is missing for the CI identity — gke_reconcile will 403 on substrate-ip (deploy/gcp/bootstrap.sh grants the substrateStaticIpAdmin custom role)"; exit 1 ;;
-            esac
+            missing=""
+            for p in $perms; do
+              case "$got" in
+                *"$p"*) ;;
+                *) missing="${missing} ${p##*.}" ;;
+              esac
+            done
+            if [ -n "$missing" ]; then
+              echo "the CI identity is missing:${missing} — gke_reconcile will 403 on substrate-ip (deploy/gcp/bootstrap.sh grants the substrateStaticIpAdmin custom role)"
+              exit 1
+            fi
+            echo "the CI identity may create and label substrate-ip"
           '
 
           {

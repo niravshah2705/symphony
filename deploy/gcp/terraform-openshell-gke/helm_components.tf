@@ -158,6 +158,11 @@ resource "helm_release" "cert_manager" {
 
 # ---------------------------------------------------------------------------
 # Let's Encrypt ClusterIssuers
+#
+# The solver parentRefs come from local.acme_solver_parent_refs (substrate.tf)
+# rather than being spelled out here: once the Substrate front is enabled its
+# Gateway must present challenges too, because HTTP-01 connects to whichever
+# front the hostname's A record points at.
 # ---------------------------------------------------------------------------
 
 resource "kubectl_manifest" "letsencrypt_staging" {
@@ -176,9 +181,7 @@ spec:
       - http01:
           gatewayHTTPRoute:
             parentRefs:
-              - name: openshell-ingress
-                namespace: openshell
-                kind: Gateway
+              ${indent(14, yamlencode(local.acme_solver_parent_refs))}
 YAML
 
   depends_on = [helm_release.cert_manager]
@@ -200,9 +203,7 @@ spec:
       - http01:
           gatewayHTTPRoute:
             parentRefs:
-              - name: openshell-ingress
-                namespace: openshell
-                kind: Gateway
+              ${indent(14, yamlencode(local.acme_solver_parent_refs))}
 YAML
 
   depends_on = [helm_release.cert_manager]

@@ -30,6 +30,18 @@
 
 locals {
   substrate_enabled = var.substrate_enabled
+  # The public front exists only with a hostname to serve.
+  substrate_front_enabled = local.substrate_enabled && var.substrate_ingress_hostname != ""
+  # cert-manager presents HTTP-01 by creating one HTTPRoute carrying every one of
+  # these parentRefs, so the challenge answers on whichever front the hostname's
+  # A record resolves to — an unprogrammed parent still Accepts the route. Listing
+  # only openshell-ingress (what this did before) ties a substrate challenge to the
+  # OpenShell front by accident; listing both means an operator who points
+  # substrate.archagentix.com at either IP gets an issued certificate.
+  acme_solver_parent_refs = concat(
+    [{ name = "openshell-ingress", namespace = "openshell", kind = "Gateway" }],
+    local.substrate_front_enabled ? [{ name = "substrate-ingress", namespace = "ate-system", kind = "Gateway" }] : [],
+  )
   # Worker pods carry a toleration for this taint so the scheduler places only
   # Substrate actors here, never generic tenant workloads.
   substrate_taint = {
@@ -225,7 +237,7 @@ resource "kubernetes_role_binding_v1" "substrate_credential_reader" {
 # for, the installer stays the sole owner. Its own `kubectl apply` of the
 # namespace merges into this one rather than failing.
 resource "kubernetes_namespace_v1" "substrate_system" {
-  count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
+  count = local.substrate_front_enabled ? 1 : 0
 
   metadata {
     name = "ate-system"
@@ -235,7 +247,7 @@ resource "kubernetes_namespace_v1" "substrate_system" {
 }
 
 resource "google_compute_address" "substrate_ip" {
-  count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
+  count = local.substrate_front_enabled ? 1 : 0
 
   name    = "substrate-ip"
   project = var.project_id
@@ -245,7 +257,7 @@ resource "google_compute_address" "substrate_ip" {
 }
 
 resource "kubectl_manifest" "substrate_certificate" {
-  count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
+  count = local.substrate_front_enabled ? 1 : 0
 
   yaml_body = <<-YAML
     apiVersion: cert-manager.io/v1
@@ -270,7 +282,7 @@ resource "kubectl_manifest" "substrate_certificate" {
 }
 
 resource "kubectl_manifest" "substrate_envoy_proxy" {
-  count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
+  count = local.substrate_front_enabled ? 1 : 0
 
   # The GatewayClass-level EnvoyProxy pins the OPENSELL static IP, so every
   # Gateway on class `eg` would claim that address. This per-Gateway override
@@ -306,7 +318,7 @@ resource "kubectl_manifest" "substrate_envoy_proxy" {
 }
 
 resource "kubectl_manifest" "substrate_ingress_gateway" {
-  count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
+  count = local.substrate_front_enabled ? 1 : 0
 
   yaml_body = <<-YAML
     apiVersion: gateway.networking.k8s.io/v1
@@ -332,6 +344,19 @@ resource "kubectl_manifest" "substrate_ingress_gateway" {
           allowedRoutes:
             namespaces:
               from: Same
+        # The front has to have at least one listener Envoy Gateway can build.
+        # With only the HTTPS listener, the missing certificate Secret means no
+        # data plane at all (Programmed=False, reason=AddressNotAssigned) and
+        # HTTP-01 — which connects to port 80 of whatever the A record resolves
+        # to — can never reach it. This listener answers the challenge, and 443
+        # joins the Service the moment the certificate is issued.
+        # substrate_http_redirect below keeps it from being a cleartext path.
+        - name: http
+          port: 80
+          protocol: HTTP
+          allowedRoutes:
+            namespaces:
+              from: Same
   YAML
 
   depends_on = [
@@ -341,8 +366,47 @@ resource "kubectl_manifest" "substrate_ingress_gateway" {
   ]
 }
 
+resource "kubectl_manifest" "substrate_http_redirect" {
+  count = local.substrate_front_enabled ? 1 : 0
+
+  # sectionName pins this to the port-80 listener; the actor and control-plane
+  # routes below attach to every listener they match, so without it actor
+  # traffic would terminate in plaintext. It cannot shadow the ACME challenge:
+  # Envoy Gateway sorts routes by match precedence (Exact > Regex > PathPrefix,
+  # and a "/" prefix counts as the least specific of all), so cert-manager's
+  # exact-path solver route always wins on this listener.
+  yaml_body = <<-YAML
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: substrate-http-redirect
+      namespace: ate-system
+    spec:
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: substrate-ingress
+          sectionName: http
+      hostnames:
+        - "${var.substrate_ingress_hostname}"
+      rules:
+        - matches:
+            - path:
+                type: PathPrefix
+                value: /
+          filters:
+            - type: RequestRedirect
+              requestRedirect:
+                scheme: https
+                port: 443
+                statusCode: 301
+  YAML
+
+  depends_on = [kubectl_manifest.substrate_ingress_gateway]
+}
+
 resource "kubectl_manifest" "substrate_actor_route" {
-  count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
+  count = local.substrate_front_enabled ? 1 : 0
 
   # atenet-router forwards to the target actor via the `ate-target-actor`
   # header the backend sets; the router service/port come from the installer.
@@ -356,6 +420,11 @@ resource "kubectl_manifest" "substrate_actor_route" {
       parentRefs:
         - name: substrate-ingress
           namespace: ate-system
+          # https only. Attaching to the port-80 listener too would tie with the
+          # redirect route on match precedence (both are a "/" PathPrefix, which
+          # Envoy Gateway scores as zero characters), leaving it to insertion
+          # order whether this traffic answers in plaintext.
+          sectionName: https
       hostnames:
         - "${var.substrate_ingress_hostname}"
       rules:
@@ -379,7 +448,7 @@ resource "kubectl_manifest" "substrate_actor_route" {
 # ---------------------------------------------------------------------------
 
 resource "kubectl_manifest" "substrate_actor_route_traffic" {
-  count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
+  count = local.substrate_front_enabled ? 1 : 0
 
   yaml_body = <<-YAML
     apiVersion: gateway.envoyproxy.io/v1alpha1
@@ -408,7 +477,7 @@ resource "kubectl_manifest" "substrate_actor_route_traffic" {
 # ---------------------------------------------------------------------------
 
 resource "kubectl_manifest" "substrate_control_plane_route" {
-  count = local.substrate_enabled && var.substrate_ingress_hostname != "" && var.substrate_control_plane_public ? 1 : 0
+  count = local.substrate_front_enabled && var.substrate_control_plane_public ? 1 : 0
 
   yaml_body = <<-YAML
     apiVersion: gateway.networking.k8s.io/v1
@@ -420,6 +489,11 @@ resource "kubectl_manifest" "substrate_control_plane_route" {
       parentRefs:
         - name: substrate-ingress
           namespace: ate-system
+          # https only. Attaching to the port-80 listener too would tie with the
+          # redirect route on match precedence (both are a "/" PathPrefix, which
+          # Envoy Gateway scores as zero characters), leaving it to insertion
+          # order whether this traffic answers in plaintext.
+          sectionName: https
       hostnames:
         - "${var.substrate_ingress_hostname}"
       rules:
@@ -437,7 +511,7 @@ resource "kubectl_manifest" "substrate_control_plane_route" {
 }
 
 resource "kubectl_manifest" "substrate_control_plane_traffic" {
-  count = local.substrate_enabled && var.substrate_ingress_hostname != "" && var.substrate_control_plane_public ? 1 : 0
+  count = local.substrate_front_enabled && var.substrate_control_plane_public ? 1 : 0
 
   yaml_body = <<-YAML
     apiVersion: gateway.envoyproxy.io/v1alpha1

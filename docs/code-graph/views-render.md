@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 756 nodes
+Community of 778 nodes
 
-- **Size**: 756 nodes
-- **Cohesion**: 0.4946
+- **Size**: 778 nodes
+- **Cohesion**: 0.4824
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,8 +26,15 @@ Community of 756 nodes
 | setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
 | contextId | Function | ./public/js/api.js | 20-23 |
 | setRequestContext | Function | ./public/js/api.js | 26-31 |
+| llmGatewayFlag | Function | ./public/js/api.js | 50-57 |
+| refreshAccessToken | Function | ./public/js/api.js | 72-75 |
+| readJson | Function | ./public/js/api.js | 77-83 |
+| errorCode | Function | ./public/js/api.js | 87-90 |
+| getApiBase | Function | ./public/js/api.js | 98-101 |
 | setApiBase | Function | ./public/js/api.js | 112-115 |
 | uploadToSignedUrl | Function | ./public/js/api.js | 123-140 |
+| notifyAuthenticationRequired | Function | ./public/js/api.js | 142-146 |
+| request | Function | ./public/js/api.js | 148-226 |
 | openStream | Function | ./public/js/api.js | 253-332 |
 | mintFailureCanRetry | Function | ./public/js/api.js | 260-264 |
 | scheduleReconnect | Function | ./public/js/api.js | 266-279 |
@@ -57,15 +64,8 @@ Community of 756 nodes
 | beginMicrosoftSignIn | Function | ./public/js/app.js | 509-517 |
 | authProviderButtons | Function | ./public/js/app.js | 524-542 |
 | beginSignOut | Function | ./public/js/app.js | 544-552 |
-| renderAuthControl | Function | ./public/js/app.js | 554-717 |
-| renderAuthenticationGate | Function | ./public/js/app.js | 719-778 |
-| renderSignInRequired | Function | ./public/js/app.js | 783-805 |
-| renderAccessDenied | Function | ./public/js/app.js | 807-819 |
-| render | Function | ./public/js/app.js | 821-903 |
-| capitalize | Function | ./public/js/app.js | 905-908 |
-| start | Function | ./public/js/app.js | 912-920 |
 
-*... and 706 more members.*
+*... and 728 more members.*
 
 ## Execution Flows
 
@@ -88,24 +88,25 @@ Community of 756 nodes
 - `addEventListener` (247 edge(s))
 - `append` (228 edge(s))
 - `map` (172 edge(s))
-- `String` (120 edge(s))
+- `String` (121 edge(s))
+- `trim` (109 edge(s))
 - `push` (108 edge(s))
-- `trim` (108 edge(s))
-- `equal` (93 edge(s))
+- `equal` (105 edge(s))
 - `filter` (83 edge(s))
 - `isArray` (82 edge(s))
-- `Boolean` (72 edge(s))
+- `Boolean` (75 edge(s))
 - `catch` (66 edge(s))
+- `has` (61 edge(s))
 - `setAttribute` (61 edge(s))
-- `has` (60 edge(s))
 - `querySelector` (53 edge(s))
 - `Number` (49 edge(s))
 
 ### Incoming
 
+- `./public/js/api.js` (209 edge(s))
 - `./public/js/views/settings.js` (137 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
-- `equal` (93 edge(s))
+- `equal` (105 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/workflow-designer-model.mjs` (56 edge(s))
@@ -114,7 +115,6 @@ Community of 756 nodes
 - `./public/js/i18n.js` (34 edge(s))
 - `match` (29 edge(s))
 - `./public/js/views/organization.js` (29 edge(s))
-- `./public/js/auth.js` (23 edge(s))
+- `./public/js/auth.js` (24 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
-- `./public/js/views/openshell.js` (15 edge(s))
