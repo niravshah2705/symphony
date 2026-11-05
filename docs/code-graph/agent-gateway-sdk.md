@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 4 nodes
+Community of 5 nodes
 
-- **Size**: 4 nodes
-- **Cohesion**: 0.1395
+- **Size**: 5 nodes
+- **Cohesion**: 0.1429
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,8 +16,9 @@ Community of 4 nodes
 |------|------|------|-------|
 | workspace | Function | ./packages/shared/src/agent/harness-llmgw.test.js | 15-19 |
 | test:claude-agent-sdk gateway run uses ANTHROPIC_AUTH_TOKEN + gateway base + wire model@L21 | Test | ./packages/shared/src/agent/harness-llmgw.test.js | 21-52 |
-| test:claude-agent-sdk non-gateway run keeps the OAuth env and bare model@L54 | Test | ./packages/shared/src/agent/harness-llmgw.test.js | 54-77 |
-| test:codex-sdk gateway run targets the gateway base with the openai/ wire model@L79 | Test | ./packages/shared/src/agent/harness-llmgw.test.js | 79-112 |
+| test:claude-agent-sdk litellm-gateway run uses Bearer virtual key + /litellm base + BARE model@L54 | Test | ./packages/shared/src/agent/harness-llmgw.test.js | 54-87 |
+| test:claude-agent-sdk non-gateway run keeps the OAuth env and bare model@L89 | Test | ./packages/shared/src/agent/harness-llmgw.test.js | 89-112 |
+| test:codex-sdk gateway run targets the gateway base with the openai/ wire model@L114 | Test | ./packages/shared/src/agent/harness-llmgw.test.js | 114-147 |
 
 ## Execution Flows
 
@@ -27,8 +28,8 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (11 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (3 edge(s))
+- `equal` (15 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (4 edge(s))
 - `mkdtempSync` (1 edge(s))
 - `join` (1 edge(s))
 - `tmpdir` (1 edge(s))
@@ -37,6 +38,6 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (11 edge(s))
-- `./packages/shared/src/agent/harness-llmgw.test.js` (4 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (3 edge(s))
+- `equal` (15 edge(s))
+- `./packages/shared/src/agent/harness-llmgw.test.js` (5 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (4 edge(s))

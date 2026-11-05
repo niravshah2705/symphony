@@ -7,14 +7,14 @@
 Community of 6 nodes
 
 - **Size**: 6 nodes
-- **Cohesion**: 0.1268
+- **Cohesion**: 0.1250
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| main | Function | ./services/coder/src/job.js | 17-54 |
+| main | Function | ./services/coder/src/job.js | 18-55 |
 | pause | Function | ./services/coder/src/job.test.js | 8-8 |
 | test:coder workers bind their job context across init and execution concurrently@L10 | Test | ./services/coder/src/job.test.js | 10-55 |
 | run | Function | ./services/coder/src/job.test.js | 14-31 |
@@ -40,10 +40,10 @@ No execution flows pass through this community.
 - `localeCompare` (2 edge(s))
 - `map` (2 edge(s))
 - `trim` (1 edge(s))
+- `normalizeLlmGatewayMode` (1 edge(s))
 - `runWithWorkspaceContext` (1 edge(s))
 - `initStoreImpl` (1 edge(s))
 - `runTicketImpl` (1 edge(s))
-- `setImmediate` (1 edge(s))
 
 ### Incoming
 

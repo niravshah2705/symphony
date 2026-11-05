@@ -152,4 +152,23 @@ locals {
   # "Sign in with ArchAgentix" flow works on that origin.
   secrets_site_id = "${var.project_id}-secrets"
   secrets_domains = var.secrets_custom_domain == "" ? [] : [var.secrets_custom_domain]
+
+  # --- Self-hosted LiteLLM gateway (litellm.tf) -------------------------------
+  # All three images are built by CI from deploy/gcp/Dockerfile.litellm-{app,db,redis},
+  # which pin their upstreams BY DIGEST — Cloud Run can only pull from Artifact
+  # Registry, so a docker.litellm.ai / docker.io reference is undeployable here.
+  # Tags follow the fleet convention (per-service override, else var.image_tag),
+  # so a LiteLLM-only deploy rolls only LiteLLM and leaves every other service a
+  # no-op. Upstream version identity lives in the Dockerfiles, not these tags.
+  litellm_tag         = var.litellm_image_tag != "" ? var.litellm_image_tag : var.image_tag
+  litellm_db_tag      = var.litellm_db_image_tag != "" ? var.litellm_db_image_tag : var.image_tag
+  litellm_redis_tag   = var.litellm_redis_image_tag != "" ? var.litellm_redis_image_tag : var.image_tag
+  litellm_image       = "${local.image_base}/litellm:${local.litellm_tag}"
+  litellm_db_image    = "${local.image_base}/litellm-db:${local.litellm_db_tag}"
+  litellm_redis_image = "${local.image_base}/litellm-redis:${local.litellm_redis_tag}"
+  # Deterministic run.app URL (same trick as clm_url) so this value can be published
+  # into local.proxy_plain_env without a self-reference cycle on the service's own .uri.
+  litellm_url = var.litellm_enabled ? (
+    var.litellm_base_url != "" ? var.litellm_base_url : "https://${var.litellm_service_name}-${local.run_url_suffix}"
+  ) : ""
 }

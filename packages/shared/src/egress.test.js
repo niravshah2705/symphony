@@ -127,6 +127,40 @@ test('llmGateway route uses the dedicated gateway secret, not the tracing key', 
   assert.ok(EGRESS_SECRET_KEYS.includes('langsmithGatewayApiKey'));
 });
 
+test('litellm route: one /litellm prefix covers the Anthropic, chat and responses surfaces', () => {
+  assert.equal(matchRoute('/litellm/v1/messages').route, EGRESS_ROUTES.litellm);
+  assert.equal(matchRoute('/litellm/v1/messages').rest, '/v1/messages');
+  assert.equal(matchRoute('/litellm/v1/chat/completions').rest, '/v1/chat/completions');
+  assert.equal(matchRoute('/litellm/v1/responses').rest, '/v1/responses');
+  assert.equal(matchRoute('/litellm/health/liveliness').rest, '/health/liveliness');
+  assert.equal(matchRoute('/litellm').rest, '/');
+  // NOT a bug to be fixed here, but a consequence the credential choice must carry:
+  // the route guards which HOST traffic may reach, not which PATH. So a coder
+  // container can also reach LiteLLM's admin RPCs with whatever key is injected.
+  // That is why litellmApiKey must be a scoped virtual key and never the master key
+  // — see docs/LLM_GATEWAY.md and the header of deploy/gcp/terraform/litellm.tf.
+  assert.equal(matchRoute('/litellm/key/generate').rest, '/key/generate');
+  assert.equal(matchRoute('/litellm/global/spend/logs').rest, '/global/spend/logs');
+});
+
+test('litellm route: trusted-env target, per-org bearer key, never anonymous', () => {
+  // `target` (not `upstream`) is what keeps the multi-segment passthrough inside
+  // normalizeTrustedUpstream — a static upstream would be returned unvalidated.
+  assert.equal(EGRESS_ROUTES.litellm.target, 'litellm');
+  assert.equal(EGRESS_ROUTES.litellm.upstream, undefined);
+  assert.equal(EGRESS_ROUTES.litellm.auth, 'apiKey');
+  assert.equal(EGRESS_ROUTES.litellm.scheme, 'bearer');
+  assert.equal(EGRESS_ROUTES.litellm.secretKey, 'litellmApiKey');
+  assert.equal(EGRESS_ROUTES.litellm.optionalCredential, undefined);
+  assert.ok(EGRESS_SECRET_KEYS.includes('litellmApiKey'));
+});
+
+test('litellm does not shadow the shorter /linear prefixes', () => {
+  assert.equal(matchRoute('/linear').route, EGRESS_ROUTES.linear);
+  assert.equal(matchRoute('/linear-mcp').route, EGRESS_ROUTES.linearMcp);
+});
+
 test('LLM_GATEWAY_ORG_HEADER names the per-org policy header', () => {
   assert.equal(LLM_GATEWAY_ORG_HEADER, 'x-fleet-org-id');
 });
+

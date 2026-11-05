@@ -1,8 +1,8 @@
 'use strict';
 
-// Native SDK harness wiring for LangSmith-gateway descriptors (llm.gateway ===
-// 'langsmith'): Bearer credential env, gateway base URL, provider-prefixed wire
-// model — while llm.model stays bare in traces and results.
+// Native SDK harness wiring for gateway descriptors (llm.gateway set — langsmith
+// or litellm): Bearer credential env, gateway base URL, provider-prefixed wire
+// model for langsmith only — while llm.model stays bare in traces and results.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -49,6 +49,41 @@ test('claude-agent-sdk gateway run uses ANTHROPIC_AUTH_TOKEN + gateway base + wi
   assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, undefined);
   assert.equal(env.ANTHROPIC_BASE_URL, 'https://gateway.smith.langchain.com');
   assert.equal(seen.request.options.model, 'anthropic/claude-sonnet-4-6');
+});
+
+test('claude-agent-sdk litellm-gateway run uses Bearer virtual key + /litellm base + BARE model', async (t) => {
+  const root = workspace(t);
+  const seen = {};
+  const fakeQuery = (request) => {
+    seen.request = request;
+    return (async function* messages() {
+      yield { type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: 's1' };
+    })();
+  };
+
+  await executeAgentRuntime({
+    runtime: 'claude-agent-sdk',
+    prompt: 'Implement the change',
+    rootDir: root,
+    backendKind: 'shell',
+    llm: {
+      provider: 'claude',
+      gateway: 'litellm',
+      model: 'claude-sonnet-4-6',
+      accessToken: 'egress-proxy-sentinel',
+      baseUrl: 'http://127.0.0.1:4030/litellm',
+    },
+    loaders: { 'claude-agent-sdk': async () => ({ query: fakeQuery }) },
+  });
+
+  const env = seen.request.options.env;
+  // Any gateway descriptor takes the Bearer path, never Claude Code OAuth.
+  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'egress-proxy-sentinel');
+  assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+  assert.equal(env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:4030/litellm');
+  // The model id stays BARE — LiteLLM matches model_name verbatim, so a
+  // `anthropic/…` prefix would 400 the run.
+  assert.equal(seen.request.options.model, 'claude-sonnet-4-6');
 });
 
 test('claude-agent-sdk non-gateway run keeps the OAuth env and bare model', async (t) => {

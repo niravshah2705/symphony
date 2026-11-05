@@ -242,6 +242,75 @@ test('Ollama, LM Studio, and OpenSWE targets come only from trusted proxy enviro
   );
 });
 
+test('LiteLLM upstream comes only from trusted proxy env and its key is required', async () => {
+  // /litellm/** is a multi-segment passthrough that fans out to the public
+  // internet from the gateway, so its real origin must stay operator-selected
+  // (no-open-relay invariant) and the per-org virtual key must fail closed.
+  assert.deepEqual(
+    await credentials.resolveRoute(EGRESS_ROUTES.litellm, {
+      env: { LITELLM_PROXY_UPSTREAM: 'https://ai-fleet-litellm.internal/', PROXY_ORG_ID: 'org-42' },
+      resolved: { secrets: { litellmApiKey: { source: 'customer', value: 'sk-lit-org42' } } },
+    }),
+    { upstream: 'https://ai-fleet-litellm.internal', headers: { authorization: 'Bearer sk-lit-org42' } },
+  );
+  for (const bad of [
+    '',
+    'file:///tmp/lit.sock',
+    'https://user:pass@litellm.internal',
+    'https://litellm.internal?target=https://evil.test',
+  ]) {
+    await assert.rejects(
+      () => credentials.resolveRoute(EGRESS_ROUTES.litellm, {
+        env: { LITELLM_PROXY_UPSTREAM: bad },
+        resolved: { secrets: { litellmApiKey: { source: 'customer', value: 'sk-x' } } },
+      }),
+      (error) => error instanceof credentials.FailClosed,
+      bad,
+    );
+  }
+});
+
+test('buildInjection: litellm injects the org virtual key and stamps no org header', async () => {
+  // Per-org attribution at LiteLLM lives in the key alias, not a header, so the
+  // sidecar never writes x-fleet-org-id here (and never trusts an inbound one).
+  const headers = await credentials.buildInjection(EGRESS_ROUTES.litellm, {
+    resolved: { secrets: { litellmApiKey: { source: 'customer', value: 'sk-lit-org42' } } },
+    env: { PROXY_ORG_ID: 'org-42' },
+  });
+  assert.deepEqual(headers, { authorization: 'Bearer sk-lit-org42' });
+});
+
+test('buildInjection: litellm fails closed on a missing or env-mounted key', async () => {
+  await assert.rejects(
+    () => credentials.buildInjection(EGRESS_ROUTES.litellm, { resolved: { secrets: {} }, env: {} }),
+    (err) => err.name === 'FailClosed' && err.status === 502,
+  );
+  await assert.rejects(
+    () => credentials.buildInjection(EGRESS_ROUTES.litellm, {
+      resolved: null,
+      env: { LITELLM_API_KEY: 'sk_env' },
+    }),
+    (err) => err.name === 'FailClosed' && err.status === 502,
+  );
+});
+
+test('buildForwardHeaders strips a forged org header and the sentinel on a litellm call', () => {
+  const out = buildForwardHeaders(
+    {
+      authorization: 'Bearer egress-proxy-sentinel',
+      'x-fleet-org-id': 'org-victim',
+      'x-ai-fleet-project-id': '22222222-2222-2222-2222-222222222222',
+      'content-type': 'application/json',
+    },
+    'https://litellm.internal/v1/messages',
+    { authorization: 'Bearer sk-lit-org42' },
+  );
+  assert.equal(out['x-fleet-org-id'], undefined);
+  assert.equal(out['x-ai-fleet-project-id'], undefined);
+  assert.equal(out.authorization, 'Bearer sk-lit-org42');
+  assert.equal(out['content-type'], 'application/json');
+});
+
 test('fixed anonymous routes resolve without consulting credential sources', async () => {
   for (const [route, upstream] of [
     [EGRESS_ROUTES.duckDuckGoHtml, 'https://html.duckduckgo.com'],

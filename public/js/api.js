@@ -36,17 +36,21 @@ export function getRequestContext() {
 
 /**
  * Per-request LLM gateway opt-in (feature flag). Stored in localStorage —
- * `localStorage.setItem('aiFleetLlmGateway', 'langsmith')` — and read per
+ * `localStorage.setItem('aiFleetLlmGateway', 'litellm')` — and read per
  * request so toggling applies immediately. The gateway honors the resulting
- * X-AI-Fleet-Llm-Gateway header only on deployments with the LLM gateway
+ * X-AI-Fleet-Llm-Gateway header only on deployments with THAT gateway
  * configured; everywhere else requests follow the standard route.
+ * Must stay a subset of shared-core's CONFIG.LLM_GATEWAY_MODES (the browser
+ * bundle cannot import it, so this list is deliberately duplicated — an unknown
+ * value is dropped at ingestion anyway, never forwarded).
  */
 const LLM_GATEWAY_STORAGE_KEY = 'aiFleetLlmGateway';
+const LLM_GATEWAY_MODES = ['langsmith', 'litellm'];
 
 function llmGatewayFlag() {
   try {
     const value = (window.localStorage.getItem(LLM_GATEWAY_STORAGE_KEY) || '').trim().toLowerCase();
-    return value === 'langsmith' ? 'langsmith' : '';
+    return LLM_GATEWAY_MODES.includes(value) ? value : '';
   } catch (_) {
     return ''; /* storage unavailable (private mode) — flag off */
   }

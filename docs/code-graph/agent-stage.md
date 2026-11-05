@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 163 nodes
+Community of 164 nodes
 
-- **Size**: 163 nodes
-- **Cohesion**: 0.3062
+- **Size**: 164 nodes
+- **Cohesion**: 0.3076
 - **Dominant Language**: javascript
 
 ## Members
@@ -55,17 +55,17 @@ Community of 163 nodes
 | command | Function | ./packages/shared/src/agent/pipeline-stage-runtime-llmgw.test.js | 13-45 |
 | dependencies | Function | ./packages/shared/src/agent/pipeline-stage-runtime-llmgw.test.js | 47-55 |
 | test:durable stage resolve merges the admitted llm-gateway flag into settings@L57 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-llmgw.test.js | 57-68 |
-| test:durable stage resolve leaves settings untouched without the flag@L70 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-llmgw.test.js | 70-78 |
-| test:durable stage resolve ignores unknown llm-gateway selectors@L80 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-llmgw.test.js | 80-88 |
-| stageConfiguration | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 29-33 |
-| priorResult | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 35-40 |
-| immutableArtifact | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 42-50 |
-| artifactFromResult | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 52-67 |
-| sameArtifact | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 69-71 |
-| preflightDecisionDigest | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 73-79 |
-| evidencePayload | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 81-98 |
+| test:durable stage resolve merges a litellm flag into settings the same way@L70 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-llmgw.test.js | 70-79 |
+| test:durable stage resolve leaves settings untouched without the flag@L81 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-llmgw.test.js | 81-89 |
+| test:durable stage resolve ignores unknown llm-gateway selectors@L91 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-llmgw.test.js | 91-99 |
+| stageConfiguration | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 30-34 |
+| priorResult | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 36-41 |
+| immutableArtifact | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 43-51 |
+| artifactFromResult | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 53-68 |
+| sameArtifact | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 70-72 |
+| preflightDecisionDigest | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 74-80 |
 
-*... and 113 more members.*
+*... and 114 more members.*
 
 ## Execution Flows
 
@@ -75,7 +75,7 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (100 edge(s))
+- `equal` (102 edge(s))
 - `String` (40 edge(s))
 - `join` (33 edge(s))
 - `deepEqual` (28 edge(s))
@@ -93,7 +93,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (100 edge(s))
+- `equal` (102 edge(s))
 - `./packages/shared/src/agent/pipeline-stage-runtime.js` (46 edge(s))
 - `./packages/shared/src/agent/tools/environments.js` (35 edge(s))
 - `deepEqual` (28 edge(s))

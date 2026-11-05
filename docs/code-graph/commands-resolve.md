@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 216 nodes
+Community of 223 nodes
 
-- **Size**: 216 nodes
-- **Cohesion**: 0.0608
+- **Size**: 223 nodes
+- **Cohesion**: 0.0595
 - **Dominant Language**: javascript
 
 ## Members
@@ -19,12 +19,18 @@ Community of 216 nodes
 | test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-96 |
 | test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
 | test:matrix provisions only the harness-specific runtimes and publishes registry index last@L103 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 103-136 |
-| test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L129 | Test | ./deploy/gcp/pipeline-infra.test.js | 129-162 |
-| test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L164 | Test | ./deploy/gcp/pipeline-infra.test.js | 164-178 |
-| test:deploy workflow does not query disabled optional Cloud Run services@L180 | Test | ./deploy/gcp/pipeline-infra.test.js | 180-211 |
-| test:pipeline topology enforces dedicated topics and brokered agent egress@L318 | Test | ./deploy/gcp/pipeline-infra.test.js | 318-368 |
-| test:stream-token broker owns the signing secret behind private IAM@L370 | Test | ./deploy/gcp/pipeline-infra.test.js | 370-466 |
-| test:OpenSWE upstream is trusted proxy-only deployment configuration@L475 | Test | ./deploy/gcp/pipeline-infra.test.js | 475-491 |
+| test:config.yaml carries no secret values and no DB/master-key wiring@L61 | Test | ./deploy/gcp/litellm-config.test.js | 61-72 |
+| test:PoC privacy default: message bodies are redacted, agent timeouts stay long@L74 | Test | ./deploy/gcp/litellm-config.test.js | 74-82 |
+| test:every LiteLLM base image is pinned by digest@L148 | Test | ./deploy/gcp/litellm-config.test.js | 148-166 |
+| test:the app overlay puts config.yaml where Terraform points CONFIG_FILE_PATH@L168 | Test | ./deploy/gcp/litellm-config.test.js | 168-182 |
+| test:CI builds and rolls all three LiteLLM images as one unit@L184 | Test | ./deploy/gcp/litellm-config.test.js | 184-215 |
+| test:litellm image tags follow the fleet per-service fallback@L217 | Test | ./deploy/gcp/litellm-config.test.js | 217-246 |
+| test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L132 | Test | ./deploy/gcp/pipeline-infra.test.js | 132-165 |
+| test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L167 | Test | ./deploy/gcp/pipeline-infra.test.js | 167-181 |
+| test:deploy workflow does not query disabled optional Cloud Run services@L183 | Test | ./deploy/gcp/pipeline-infra.test.js | 183-214 |
+| test:pipeline topology enforces dedicated topics and brokered agent egress@L321 | Test | ./deploy/gcp/pipeline-infra.test.js | 321-371 |
+| test:stream-token broker owns the signing secret behind private IAM@L373 | Test | ./deploy/gcp/pipeline-infra.test.js | 373-469 |
+| test:OpenSWE upstream is trusted proxy-only deployment configuration@L478 | Test | ./deploy/gcp/pipeline-infra.test.js | 478-494 |
 | test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-30 |
 | test:ADLC manifest is served as a static resource@L32 | Test | ./e2e/adlc.spec.js | 32-39 |
 | test:existing Agent workspace route still renders directly@L41 | Test | ./e2e/adlc.spec.js | 41-49 |
@@ -58,14 +64,8 @@ Community of 216 nodes
 | resolveToken | Function | ./packages/cli/src/client.js | 34-37 |
 | createClient | Function | ./packages/cli/src/client.js | 42-110 |
 | headers | Function | ./packages/cli/src/client.js | 51-55 |
-| request | Function | ./packages/cli/src/client.js | 61-107 |
-| withEnv | Function | ./packages/cli/src/client.test.js | 22-32 |
-| test:resolveBaseUrl prefers the --api flag and strips trailing slashes@L34 | Test | ./packages/cli/src/client.test.js | 34-36 |
-| test:resolveBaseUrl falls back to $ADLC_API_URL@L38 | Test | ./packages/cli/src/client.test.js | 38-42 |
-| test:resolveToken reads ADLC_TOKEN from the environment only@L44 | Test | ./packages/cli/src/client.test.js | 44-51 |
-| test:request sends a bearer Authorization header when a token is set@L53 | Test | ./packages/cli/src/client.test.js | 53-64 |
 
-*... and 166 more members.*
+*... and 173 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 216 nodes
 
 ### Outgoing
 
-- `equal` (302 edge(s))
-- `ok` (184 edge(s))
+- `equal` (313 edge(s))
+- `ok` (193 edge(s))
 - `expect` (175 edge(s))
-- `match` (154 edge(s))
+- `match` (167 edge(s))
+- `locator` (84 edge(s))
+- `includes` (62 edge(s))
+- `route` (58 edge(s))
+- `deepEqual` (56 edge(s))
+- `indexOf` (41 edge(s))
+- `map` (38 edge(s))
+- `request` (33 edge(s))
+- `join` (33 edge(s))
+- `doesNotMatch` (32 edge(s))
+- `filter` (32 edge(s))
+- `slice` (30 edge(s))
+
+### Incoming
+
+- `equal` (313 edge(s))
+- `ok` (193 edge(s))
+- `expect` (175 edge(s))
+- `match` (167 edge(s))
 - `locator` (84 edge(s))
 - `includes` (59 edge(s))
 - `route` (58 edge(s))
 - `deepEqual` (56 edge(s))
-- `indexOf` (41 edge(s))
-- `map` (36 edge(s))
-- `request` (33 edge(s))
-- `join` (33 edge(s))
-- `filter` (32 edge(s))
-- `slice` (30 edge(s))
-- `doesNotMatch` (30 edge(s))
-
-### Incoming
-
-- `equal` (302 edge(s))
-- `ok` (184 edge(s))
-- `expect` (175 edge(s))
-- `match` (154 edge(s))
-- `locator` (84 edge(s))
-- `route` (58 edge(s))
-- `includes` (56 edge(s))
-- `deepEqual` (56 edge(s))
 - `indexOf` (40 edge(s))
-- `map` (31 edge(s))
+- `map` (33 edge(s))
+- `doesNotMatch` (32 edge(s))
 - `filter` (31 edge(s))
-- `doesNotMatch` (30 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
 - `toBeVisible` (28 edge(s))
 - `./services/planner/src/routes/agent.test.js::call` (26 edge(s))

@@ -6,7 +6,7 @@ const { publishEvent, normalizeEventContext } = require('@ai-fleet/shared/messag
 const { pushAuth } = require('@ai-fleet/shared/messaging/oidc');
 const log = require('@ai-fleet/shared/logger');
 const scheduler = require('@ai-fleet/shared/agent/scheduler');
-const { CONFIG } = require('@ai-fleet/shared/config');
+const { CONFIG, normalizeLlmGatewayMode } = require('@ai-fleet/shared/config');
 const store = require('@ai-fleet/shared/store');
 const {
   normalizeWorkspaceContext,
@@ -124,8 +124,8 @@ router.post('/planner', pushAuth(), async (req, res) => {
           assumedRole: message.assumedRole || null,
           orgId: orgId || null,
           nativeProjectId: nativeProjectId || null,
-          // Re-allowlist at the trust boundary; only the known selector survives.
-          llmGateway: message.llmGateway === 'langsmith' ? 'langsmith' : null,
+          // Re-allowlist at the trust boundary; only a known selector survives.
+          llmGateway: normalizeLlmGatewayMode(message.llmGateway) || null,
         });
         stream(
           conversationId,

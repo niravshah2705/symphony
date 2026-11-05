@@ -42,11 +42,14 @@ test('all Cloud Run services use the gen2 execution environment', () => {
     ['stream_token_service.tf', ['stream_token_broker']],
     ['laya_inference.tf', ['laya']],
     ['clm_inference.tf', ['clm']],
+    // Three containers, one service: LiteLLM + its Postgres/Redis sidecars share a
+    // network namespace and must scale as a unit (see litellm.tf's header).
+    ['litellm.tf', ['litellm']],
   ]);
   const expectedInventory = [...servicesByFile]
     .flatMap(([file, services]) => services.map((service) => [file, service]))
     .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
-  assert.equal(expectedInventory.length, 15);
+  assert.equal(expectedInventory.length, 16);
 
   const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
   const actualInventory = fs.readdirSync(terraformDir)

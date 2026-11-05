@@ -7,7 +7,8 @@ const PROJECT_HEADER = 'x-ai-fleet-project-id';
 // above it is not identity — just an allowlisted selector — so it is parsed
 // directly from the header on both the validated and raw context branches.
 const LLM_GATEWAY_HEADER = 'x-ai-fleet-llm-gateway';
-const LLM_GATEWAY_MODES = new Set(['langsmith']);
+// Allowlist lives in shared-core (CONFIG.LLM_GATEWAY_MODES) so a mode accepted
+// here cannot be silently dropped by a downstream hop that re-spells the names.
 // Per-request opt-in (browser header, e.g. via the ModHeader extension) for the
 // global notifications workspace stream — see public/js/notifications.js. Off
 // by default: an open SSE stream keeps the gateway's Cloud Run instance
@@ -36,8 +37,7 @@ function header(req, name) {
 
 /** Normalize the llm-gateway selector; anything off the allowlist is dropped. */
 function cleanLlmGateway(value) {
-  const mode = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  return LLM_GATEWAY_MODES.has(mode) ? mode : '';
+  return require('@ai-fleet/shared-core/config').normalizeLlmGatewayMode(value);
 }
 
 /** True when the request opted into the notifications stream via any non-blank header value. */
@@ -51,12 +51,17 @@ function deprecatedUiRequested(req) {
 }
 
 /**
- * Availability gate for the per-request llm-gateway flag: a deployment without
- * the gateway configured drops the header at ingestion, so no task record ever
- * carries a dead flag. Lazy require keeps this module import-light for tests.
+ * Availability gate for the per-request llm-gateway flag: a deployment with
+ * NEITHER gateway configured drops the header at ingestion, so no task record
+ * ever carries a dead flag. This is a coarse "at least one mode is provisioned"
+ * gate — the mode itself is allowlisted by cleanLlmGateway and re-checked
+ * per-mode in resolveLlm, so an enabled-langsmith-but-not-litellm deployment
+ * leaves a litellm-flagged run on the direct path rather than a broken one.
+ * Lazy require keeps this module import-light for tests.
  */
 function llmGatewayAvailable() {
-  return require('@ai-fleet/shared-core/config').CONFIG.LLM_GATEWAY.enabled;
+  const modes = Object.values(require('@ai-fleet/shared-core/config').CONFIG.LLM_GATEWAY_MODES);
+  return modes.some((entry) => entry.block.enabled);
 }
 
 function requestContext(req, { llmGatewayEnabled = llmGatewayAvailable() } = {}) {

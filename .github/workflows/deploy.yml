@@ -95,6 +95,12 @@ jobs:
             billing:  ['services/billing/**', 'deploy/gcp/Dockerfile.billing']
             laya:     ['deploy/gcp/Dockerfile.laya-inference', 'deploy/gcp/terraform/laya_inference.tf', 'deploy/gcp/terraform/laya_models.tf']
             clm:      ['services/clm-inference/**',  'deploy/gcp/Dockerfile.clm-inference']
+            # LiteLLM gateway: the app image is a digest-pinned upstream overlay,
+            # so a config or entrypoint change must republish it. deploy/litellm/**
+            # covers config.yaml + entrypoint-db.sh; terraform/litellm.tf moves with
+            # them because the container/volume shape and the secret mounts are the
+            # other half of the same contract.
+            litellm:  ['deploy/litellm/**', 'deploy/gcp/Dockerfile.litellm-app', 'deploy/gcp/Dockerfile.litellm-db', 'deploy/gcp/Dockerfile.litellm-redis', 'deploy/gcp/terraform/litellm.tf']
 
       - id: plan
         env:
@@ -119,6 +125,7 @@ jobs:
           BILLING: ${{ steps.filter.outputs.billing }}
           LAYA: ${{ steps.filter.outputs.laya }}
           CLM: ${{ steps.filter.outputs.clm }}
+          LITELLM: ${{ steps.filter.outputs.litellm }}
           GKE: ${{ steps.filter.outputs.gke }}
           GKE_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.gke_reconcile }}
         run: |
@@ -145,6 +152,17 @@ jobs:
           # Dedicated inference microservices (Python apps).
           if [ "$FORCE_ALL" = "true" ] || [ "$all" = "true" ] || [ "$LAYA" = "true" ] || [ "$INFRA" = "true" ]; then push laya laya-inference deploy/gcp/Dockerfile.laya-inference . ; fi
           if [ "$FORCE_ALL" = "true" ] || [ "$all" = "true" ] || [ "$CLM"  = "true" ] || [ "$INFRA" = "true" ]; then push clm clm-inference deploy/gcp/Dockerfile.clm-inference . ; fi
+          # LiteLLM gateway images. These three always move together: they share
+          # one tag (the SHA that built them) and terraform rolls all three from
+          # that single value, so the app/Postgres/Redis trio on one ephemeral
+          # instance can never be reassembled from three different runs.
+          # `$all` (a shared-code or root-dependency change) deliberately does NOT
+          # rebuild them — none of these images contains fleet JS.
+          if [ "$FORCE_ALL" = "true" ] || [ "$LITELLM" = "true" ] || [ "$INFRA" = "true" ]; then
+            push litellm litellm deploy/gcp/Dockerfile.litellm-app .
+            push litellm-db litellm-db deploy/gcp/Dockerfile.litellm-db .
+            push litellm-redis litellm-redis deploy/gcp/Dockerfile.litellm-redis .
+          fi
           # The provisioner is a Node service (rebuilds on shared/root/force too).
           # Its image is built even while provisioning is disabled so enabling is a
           # one-var flip; terraform only creates the service when provisioning_enabled.
@@ -321,6 +339,7 @@ jobs:
           SERVICES: ${{ needs.changes.outputs.services }}
           PIPELINE_ENABLED: ${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}
           PROVISIONING_ENABLED: ${{ vars.PROVISIONING_ENABLED || 'false' }}
+          LITELLM_ENABLED: ${{ vars.LITELLM_ENABLED || 'false' }}
         run: |
           set -euo pipefail
           PROJECT="${{ vars.GCP_PROJECT_ID }}"
@@ -397,6 +416,12 @@ jobs:
             write_tag billing resolve billing billing
             write_tag laya resolve laya laya-inference
             write_tag clm resolve clm clm-inference
+            # ONE tag for all three LiteLLM images. The plan step always builds them
+            # as a unit, and litellm.tf mounts them on a single ephemeral instance, so
+            # app/Postgres/Redis must never come from three different runs. When the
+            # service was not rebuilt this run, live_tag reads containers[0] (the
+            # postgres sidecar) — correct precisely because all three tags are equal.
+            write_tag litellm resolve_optional litellm ai-fleet-litellm "$LITELLM_ENABLED"
           } >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
@@ -517,6 +542,11 @@ jobs:
             -var="provisioning_enabled=${{ vars.PROVISIONING_ENABLED || 'false' }}"
             -var="pipeline_orchestrator_enabled=${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}"
             -var="pipeline_deployment_enabled=${{ vars.PIPELINE_DEPLOYMENT_ENABLED || 'false' }}"
+            # Off by default: the gateway (3 containers + 4 secrets) only exists when
+            # the repo variable says so. This is the infra knob only — admitting the
+            # browser's `litellm` flag is the separate out-of-band
+            # LITELLM_GATEWAY_ENABLED on the agent services, as for LangSmith.
+            -var="litellm_enabled=${{ vars.LITELLM_ENABLED || 'false' }}"
             -var="settings_operator_invoker=${{ vars.SETTINGS_OPERATOR_INVOKER }}"
             -var="omlx_proxy_upstream=${{ vars.OMLX_PROXY_UPSTREAM }}"
             -var="ollama_proxy_upstream=${{ vars.OLLAMA_PROXY_UPSTREAM }}"
@@ -547,6 +577,12 @@ jobs:
           [ -n "${{ steps.tags.outputs.billing }}" ] && apply_args+=(-var="billing_image_tag=${{ steps.tags.outputs.billing }}") || true
           [ -n "${{ steps.tags.outputs.laya }}" ] && apply_args+=(-var="laya_image_tag=${{ steps.tags.outputs.laya }}") || true
           [ -n "${{ steps.tags.outputs.clm }}" ] && apply_args+=(-var="clm_image_tag=${{ steps.tags.outputs.clm }}") || true
+          # One resolved tag drives all three LiteLLM containers (see the tags step).
+          [ -n "${{ steps.tags.outputs.litellm }}" ] && apply_args+=(
+            -var="litellm_image_tag=${{ steps.tags.outputs.litellm }}"
+            -var="litellm_db_image_tag=${{ steps.tags.outputs.litellm }}"
+            -var="litellm_redis_image_tag=${{ steps.tags.outputs.litellm }}"
+          ) || true
 
           # Idempotently import pre-existing Firestore composite indexes if missing from state
           chunks_idx_addr="google_firestore_index.attachment_chunks_by_conversation_and_embedding"

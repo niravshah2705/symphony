@@ -179,23 +179,40 @@ outbound call.
   `STREAM_TOKEN_SECRET`, and exposes only mint/verify RPCs. Local development
   uses the same broker entrypoint over loopback; `STREAM_TOKEN_PROXY_URL`
   remains a temporary rollback compatibility input only.
-- **LangSmith LLM Gateway (per-request feature flag):** a browser request carrying
-  `X-AI-Fleet-Llm-Gateway: langsmith` routes THAT run's LLM calls through the
-  LangSmith LLM Gateway (`/llmgw` route → `gateway.smith.langchain.com`, Bearer
-  workspace key `langsmithGatewayApiKey`, per-org spend/rate caps keyed on the
-  proxy-stamped `x-fleet-org-id` header). Server gate: `LLM_GATEWAY_ENABLED=true`
-  (else the header is dropped at ingestion). The flag threads on the org/project
-  context channel: `request-context.js` → Pub/Sub message field / `PipelineStart.
-  request.llmGateway` → coder job env `LLM_GATEWAY_FLAG` → merged into the
-  `settings` passed to `resolveLlm`, which emits a `gateway: 'langsmith'`
-  descriptor (`wireModelId()` prefixes `provider/model` ON THE WIRE only —
+- **LLM Gateway (per-request feature flag, LangSmith or self-hosted LiteLLM):**
+  a browser request carrying
+  `X-AI-Fleet-Llm-Gateway: langsmith|litellm` routes THAT run's LLM calls through
+  the named gateway. `langsmith` → `/llmgw` route → `gateway.smith.langchain.com`
+  (Bearer workspace key `langsmithGatewayApiKey`, per-org spend/rate caps keyed on
+  the proxy-stamped `x-fleet-org-id` header). `litellm` → `/litellm` route → the
+  self-hosted LiteLLM proxy (`LITELLM_PROXY_UPSTREAM` on the sidecar,
+  `LITELLM_URL` on direct/local runs; Bearer `litellmApiKey`, an operator-minted
+  model-scoped virtual key in that org's vault — NEVER the gateway master key,
+  because `/litellm` forwards any sub-path and a coder-reachable admin key defeats
+  the egress boundary; the ephemeral Postgres also means a redeploy invalidates it,
+  so flagged runs fail closed until it is re-minted. `docs/LLM_GATEWAY.md` gives the
+  off-ramp.) Server gates: `LLM_GATEWAY_ENABLED=true` and
+  `LITELLM_GATEWAY_ENABLED=true` respectively (else the header is dropped at
+  ingestion). The flag threads on the org/project context channel:
+  `request-context.js` → Pub/Sub message field / `PipelineStart.request.llmGateway`
+  → coder job env `LLM_GATEWAY_FLAG` → merged into the `settings` passed to
+  `resolveLlm`, which emits a `gateway: '<mode>'` descriptor (`wireModelId()`
+  prefixes `provider/model` ON THE WIRE only, and only for langsmith — LiteLLM
+  matches `model_name` verbatim, so its entries must equal the BARE model id;
   `llm.model` stays bare for policy + snapshots; the flag changes ROUTING only,
   never model selection). Unflagged traffic is byte-identical to before. Scope:
   deepagent / claude-agent-sdk / codex-sdk (`api` shape — no ChatGPT backend
-  surface at the gateway); antigravity + local providers stay direct. See
-  `docs/LLM_GATEWAY.md` for LangSmith-side setup. Keep the FOUR maps aligned
-  when adding provider keys: settings `MANAGED_ENV`, proxy `MANAGED_ENV`,
-  store `SECRET_ENV`, vault `SECRET_KEYS`.
+  surface at either gateway); antigravity + local providers stay direct. See
+  `docs/LLM_GATEWAY.md` for setup. The mode list itself lives in ONE place,
+  `CONFIG.LLM_GATEWAY_MODES` in `packages/shared-core/src/config.js` — every hop
+  that validates or threads the flag uses `normalizeLlmGatewayMode()` /
+  `llmGatewayMode()` from there instead of re-spelling `=== 'langsmith'`, which is
+  how a second mode previously got silently dropped mid-pipe. Keep the THREE
+  secret maps aligned when adding provider keys: settings `MANAGED_ENV`
+  (platform-managed only), store `SECRET_ENV` (local/non-proxied overlay, a
+  superset), vault `SECRET_KEYS` + `CUSTOMER_ONLY_SECRET_KEYS`. The proxy has no
+  `MANAGED_ENV` any more — it forbids provider-key env fallback and resolves both
+  managed and customer keys through the settings service.
 
 ## Commands
 

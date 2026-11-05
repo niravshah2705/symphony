@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| FakeCodex | Class | ./packages/shared/src/agent/harness-llmgw.test.js | 82-88 |
-| constructor | Function | ./packages/shared/src/agent/harness-llmgw.test.js | 83-83 |
-| startThread | Function | ./packages/shared/src/agent/harness-llmgw.test.js | 84-87 |
+| FakeCodex | Class | ./packages/shared/src/agent/harness-llmgw.test.js | 117-123 |
+| constructor | Function | ./packages/shared/src/agent/harness-llmgw.test.js | 118-118 |
+| startThread | Function | ./packages/shared/src/agent/harness-llmgw.test.js | 119-122 |
 
 ## Execution Flows
 

@@ -1,0 +1,24 @@
+# -----------------------------------------------------------------------------
+# LiteLLM proxy image = upstream release, pinned by digest, + fleet config.yaml.
+# -----------------------------------------------------------------------------
+# We must not fork LiteLLM's app, so this is a thin overlay: the only thing it
+# adds is deploy/litellm/config.yaml at the path var.litellm_config_path expects.
+# Cloud Run cannot pull from docker.litellm.ai or docker.io at all (Artifact
+# Registry only), so this build is also what makes the third-party image
+# deployable — CI tags the result ${GITHUB_SHA} in var.artifact_repo.
+#
+# Why the config is baked rather than mounted: the file is model ids plus
+# os.environ/ REFERENCES and is asserted secret-free by
+# deploy/gcp/litellm-config.test.js, so it belongs in a build artifact. The
+# key MATERIAL stays in Secret Manager as `secret_key_ref` env (litellm.tf).
+#
+# Digest resolved from LITELLM_RELEASE_TAG=v1.108.0 on 2026-11-05 (index
+# carries linux/amd64, which is what Cloud Run and this CI runner need).
+# Re-pin deliberately: the Admin UI and /key/* RPC shapes move between releases.
+ARG LITELLM_BASE_IMAGE=docker.litellm.ai/berriai/litellm@sha256:c560d317136880ea92d62334d4367ab10955b1af189dd3ea24f6551290b1d6c1
+FROM ${LITELLM_BASE_IMAGE}
+
+# Upstream WORKDIR is /app and its entrypoint is `exec litellm "$@"`, which
+# reads CONFIG_FILE_PATH (litellm/proxy/proxy_cli.py) when no --config is given.
+COPY deploy/litellm/config.yaml /app/config.yaml
+ENV CONFIG_FILE_PATH=/app/config.yaml

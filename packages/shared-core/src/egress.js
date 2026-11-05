@@ -94,6 +94,15 @@ const EGRESS_ROUTES = Object.freeze({
   // never browser/settings-selected targets while proxy mode is active.
   ollama: Object.freeze({ prefix: '/ollama', target: 'ollama', auth: 'none' }),
   lmstudio: Object.freeze({ prefix: '/lmstudio', target: 'lmstudio', auth: 'none' }),
+  // LiteLLM proxy (self-hosted LLM gateway + request tracing). A `target` route
+  // rather than a static `upstream` so its origin is trusted deployment config
+  // read through normalizeTrustedUpstream on the proxy (same idiom as ollama /
+  // lmstudio / openswe) — that validation is what keeps this from becoming an
+  // SSRF pivot, since LiteLLM itself fans out to the internet. The bearer key is
+  // a per-org LiteLLM virtual key: `apiKey` resolves it from the org's vault via
+  // fetchOrgSecrets(PROXY_ORG_ID) and fails closed when absent, so spend on the
+  // gateway attributes to the tenant that caused it.
+  litellm: Object.freeze({ prefix: '/litellm', target: 'litellm', auth: 'apiKey', scheme: 'bearer', secretKey: 'litellmApiKey' }),
   // OpenSWE is a separate LangGraph server. Its real origin is trusted
   // sidecar-only deployment config; the coder sees only this fixed route.
   openSwe: Object.freeze({ prefix: '/openswe', target: 'openswe', auth: 'none' }),
