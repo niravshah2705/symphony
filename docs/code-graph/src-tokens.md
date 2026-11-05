@@ -71,14 +71,14 @@ Community of 300 nodes
 
 - **startProjectSandbox** (criticality: 0.74, depth: 9)
 - **changeSandboxImage** (criticality: 0.74, depth: 9)
-- **chatWithProjectSandbox** (criticality: 0.73, depth: 8)
 - **stopProjectSandbox** (criticality: 0.73, depth: 8)
 - **deleteProjectSandbox** (criticality: 0.73, depth: 8)
-- **listSandboxes** (criticality: 0.71, depth: 8)
+- **chatWithProjectSandbox** (criticality: 0.73, depth: 8)
 - **execInteractiveSandboxCommand** (criticality: 0.71, depth: 8)
 - **autocompleteSandboxInput** (criticality: 0.71, depth: 8)
-- **runSandboxSecurityChecks** (criticality: 0.71, depth: 8)
-- **ensureFreshCodexTokens** (criticality: 0.69, depth: 6)
+- **listSandboxes** (criticality: 0.71, depth: 8)
+- **listActors** (criticality: 0.71, depth: 8)
+- **runPlanningOnSubstrate** (criticality: 0.71, depth: 8)
 - *... and 29 more flows.*
 
 ## Dependencies
