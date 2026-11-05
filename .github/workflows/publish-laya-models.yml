@@ -3,13 +3,11 @@ name: Publish Laya Model Bundle
 # Pre-download the Laya checkpoints (Hugging Face hub cache) and publish them to
 # the Laya models GCS bucket as a VERSIONED bundle:
 #   gs://<bucket>/<version>/models--<org>--<repo>/...   (+ laya-models-manifest.json)
-# The laya-inference Cloud Run service (deploy/gcp/Dockerfile.laya-inference runs
-# pip `laya[serve]`) serves FULLY OFFLINE: it mounts this bucket read-only at
-# /models and pins HF_HUB_CACHE=/models/<version> (deploy/gcp/terraform/
-# laya_models.tf + laya_inference.tf, var.laya_model_version). Publishing a new
-# version never disturbs an older pinned deployment — versions coexist and
-# rollout is a separate `terraform apply` that bumps the pin. Same story as the
-# skills registry (publish-skills.yml).
+# NOTE: the laya-inference service now BAKES its weights into the image
+# (deploy/gcp/Dockerfile.laya-inference runs hf download at build time; the
+# image digest is the pin). This workflow is kept as the out-of-image RECORD of
+# which checkpoint revisions each bundle version holds (audit + backup), not as
+# the runtime source. Same layout as the skills registry (publish-skills.yml).
 #
 # Snapshot entries are DE-REFERENCED (cp -L) before upload: the hub cache stores
 # them as symlinks into blobs/, and gcsfuse has no symlinks — with the file
@@ -29,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Bundle version directory to publish (e.g. v1, v2). Must match a `laya_model_version` you intend to pin in Terraform."
+        description: "Bundle version directory to publish (e.g. v1, v2). Record-only: the runtime bakes weights into the image, so nothing pins this at deploy time."
         type: string
         required: true
         default: v1
