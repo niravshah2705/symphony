@@ -48,7 +48,8 @@ resource "google_storage_bucket" "laya_models" {
 }
 
 # --- Read-only access for the laya inference service account ------------------
-# Required for the gen2 GCS volume mount AND for object reads through it.
+# Historic: needed for the gen2 GCS volume mount. The service no longer mounts
+# the bucket, so this is a convenience grant for debugging bundle contents.
 resource "google_storage_bucket_iam_member" "laya_models_read" {
   count  = var.laya_models_enabled ? 1 : 0
   bucket = google_storage_bucket.laya_models[0].name

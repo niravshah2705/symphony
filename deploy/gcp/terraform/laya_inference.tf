@@ -39,11 +39,10 @@ resource "google_cloud_run_v2_service" "laya" {
       max_instance_count = var.laya_max_instances
     }
 
-    # Pre-downloaded Hugging Face hub cache (laya_models.tf), mounted read-only
-    # at /models. The service pins a bundle via HF_HUB_CACHE=/models/<version> (the hub cache dir holding models--<org>--<repo> directly).
-    # No GCS volume mounted: the HF cache ships inside the image
-    # (Dockerfile.laya-inference), avoiding the gcsfuse read path entirely.
-    # laya_models.tf keeps the bucket as the workflow publish/backup target.
+    # HF_HUB_CACHE points at the hub cache baked into the image
+    # (Dockerfile.laya-inference), so weights are read from the container's own
+    # disk. laya_models.tf keeps the GCS bucket as the workflow publish/backup
+    # target only — nothing is mounted at runtime.
 
     containers {
       name  = "app"
@@ -112,6 +111,9 @@ resource "google_cloud_run_v2_service" "laya" {
 
       resources {
         limits = {
+          # var.laya_memory must cover all three checkpoints resident as float32
+          # (~4.7GB) + runtime overhead: preload is synchronous, so an OOM here
+          # kills the instance before the port ever binds (see variables.tf).
           cpu    = var.laya_cpu
           memory = var.laya_memory
         }
