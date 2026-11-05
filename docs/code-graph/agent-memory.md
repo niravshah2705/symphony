@@ -4,17 +4,17 @@
 
 ## Overview
 
-Community of 225 nodes
+Community of 183 nodes
 
-- **Size**: 225 nodes
-- **Cohesion**: 0.3131
+- **Size**: 183 nodes
+- **Cohesion**: 0.3159
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:optional image resolver uses a SHA placeholder only while disabled@L246 | Test | ./deploy/gcp/pipeline-infra.test.js | 246-292 |
+| test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
 | memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
 | memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
 | resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |
@@ -65,7 +65,7 @@ Community of 225 nodes
 | test:scoreQuestion discounts off-scope recall and prose-only answers to choice questions@L138 | Test | ./packages/shared/src/agent/global-questions.test.js | 138-151 |
 | test:scoreCoverage excludes rows that were never looked at from the denominator instead of counting them as zero@L153 | Test | ./packages/shared/src/agent/global-questions.test.js | 153-170 |
 
-*... and 175 more members.*
+*... and 133 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 225 nodes
 
 ### Outgoing
 
-- `equal` (229 edge(s))
-- `map` (43 edge(s))
-- `String` (40 edge(s))
-- `isArray` (35 edge(s))
-- `deepEqual` (35 edge(s))
-- `join` (30 edge(s))
-- `match` (29 edge(s))
+- `equal` (191 edge(s))
+- `String` (35 edge(s))
+- `map` (32 edge(s))
+- `isArray` (31 edge(s))
+- `join` (27 edge(s))
 - `ok` (27 edge(s))
-- `filter` (26 edge(s))
+- `deepEqual` (27 edge(s))
 - `includes` (26 edge(s))
-- `slice` (24 edge(s))
-- `throws` (23 edge(s))
-- `trim` (18 edge(s))
-- `require` (18 edge(s))
-- `push` (12 edge(s))
+- `filter` (23 edge(s))
+- `slice` (21 edge(s))
+- `throws` (19 edge(s))
+- `trim` (16 edge(s))
+- `match` (16 edge(s))
+- `require` (16 edge(s))
+- `Number` (11 edge(s))
 
 ### Incoming
 
-- `equal` (229 edge(s))
-- `deepEqual` (35 edge(s))
+- `equal` (191 edge(s))
 - `ok` (27 edge(s))
-- `match` (26 edge(s))
+- `deepEqual` (27 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
-- `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
-- `throws` (23 edge(s))
 - `./packages/shared/src/agent/global-questions.js` (21 edge(s))
-- `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
+- `throws` (19 edge(s))
 - `./packages/shared/src/agent/coverage-service.test.js` (16 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (14 edge(s))
 - `./packages/shared/src/agent/memory.js` (14 edge(s))
+- `match` (13 edge(s))
 - `./packages/shared/src/agent/coverage-service.js` (13 edge(s))
+- `join` (13 edge(s))
+- `./packages/shared/src/agent/memory-middleware.test.js` (12 edge(s))
+- `./packages/shared/src/agent/global-questions.test.js` (11 edge(s))

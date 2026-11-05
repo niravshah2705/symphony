@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 382 nodes
+Community of 383 nodes
 
-- **Size**: 382 nodes
+- **Size**: 383 nodes
 - **Cohesion**: 0.3248
 - **Dominant Language**: javascript
 
@@ -65,7 +65,7 @@ Community of 382 nodes
 | test:runtime repository unavailability pauses safely without finishing the Linear issue@L579 | Test | ./packages/shared/src/agent/coder-flow.test.js | 579-640 |
 | test:planned runtime policy denial records a governed error without pausing or finalizing the issue@L642 | Test | ./packages/shared/src/agent/coder-flow.test.js | 642-697 |
 
-*... and 332 more members.*
+*... and 333 more members.*
 
 ## Execution Flows
 

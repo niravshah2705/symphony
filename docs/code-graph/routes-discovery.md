@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| discoveryProfileFrom | Function | ./services/planner/src/routes/settings.js | 337-340 |
-| selectionPreset | Function | ./services/planner/src/routes/settings.js | 343-373 |
+| discoveryProfileFrom | Function | ./services/planner/src/routes/settings.js | 354-357 |
+| selectionPreset | Function | ./services/planner/src/routes/settings.js | 360-390 |
 
 ## Execution Flows
 

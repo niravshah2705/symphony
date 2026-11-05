@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| normalizeHost | Function | ./services/planner/src/routes/settings.js | 291-301 |
-| normalizeOmlxHost | Function | ./services/planner/src/routes/settings.js | 304-307 |
+| normalizeHost | Function | ./services/planner/src/routes/settings.js | 308-318 |
+| normalizeOmlxHost | Function | ./services/planner/src/routes/settings.js | 321-324 |
 
 ## Execution Flows
 

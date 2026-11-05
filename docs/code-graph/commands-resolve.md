@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 225 nodes
+Community of 226 nodes
 
-- **Size**: 225 nodes
-- **Cohesion**: 0.0607
+- **Size**: 226 nodes
+- **Cohesion**: 0.0606
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 225 nodes
 | createClient | Function | ./packages/cli/src/client.js | 42-110 |
 | headers | Function | ./packages/cli/src/client.js | 51-55 |
 
-*... and 175 more members.*
+*... and 176 more members.*
 
 ## Execution Flows
 
@@ -77,8 +77,8 @@ Community of 225 nodes
 
 ### Outgoing
 
-- `equal` (258 edge(s))
-- `ok` (194 edge(s))
+- `equal` (261 edge(s))
+- `ok` (195 edge(s))
 - `expect` (175 edge(s))
 - `match` (163 edge(s))
 - `locator` (84 edge(s))
@@ -95,8 +95,8 @@ Community of 225 nodes
 
 ### Incoming
 
-- `equal` (258 edge(s))
-- `ok` (194 edge(s))
+- `equal` (261 edge(s))
+- `ok` (195 edge(s))
 - `expect` (175 edge(s))
 - `match` (163 edge(s))
 - `locator` (84 edge(s))

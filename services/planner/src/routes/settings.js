@@ -38,6 +38,11 @@ const LEGACY_PLAINTEXT_SECRET_FIELDS = Object.freeze([
   'qoderAccessToken', 'langfusePublicKey', 'langfuseSecretKey',
 ]);
 
+// Execution substrates the Settings UI offers. Kept in sync with
+// pattern-router's dispatch branch and the POST /api/agent/substrate/pattern
+// validation in routes/agent.js.
+const AGENT_PATTERNS = Object.freeze(['cloudrun', 'openshell', 'substrate']);
+
 // Settings keys backing each LLM role. Provider-class slots ('byom'/'global')
 // stay deployment-pinned; task roles (thinking/execution/testing/deployment)
 // are provider-flexible and reuse whichever provider block they name.
@@ -267,6 +272,18 @@ function publicSettings() {
     hasOpenrouterApiKey: Boolean(s.openrouterApiKey),
     maskedOpenrouterApiKey: s.openrouterApiKey ? '••••••••' : '',
     openshellUrl: s.openshellUrl || CONFIG.OPENSHELL?.url || 'https://openshell.archagentix.com',
+    // Execution substrate (agentPattern) + Agent Substrate wiring. Endpoints,
+    // tenant names and a digest-pinned image are config, not credentials, and the
+    // Settings UI cannot mark the active substrate tile without them.
+    agentPattern: oneOf(s.agentPattern, AGENT_PATTERNS, 'cloudrun'),
+    substrateUrl: s.substrateUrl || CONFIG.SUBSTRATE?.url || '',
+    substrateIngressUrl: s.substrateIngressUrl || CONFIG.SUBSTRATE?.ingressUrl || '',
+    substrateAtespace: s.substrateAtespace || CONFIG.SUBSTRATE?.atespace || '',
+    substrateWorkerPool: s.substrateWorkerPool || CONFIG.SUBSTRATE?.workerPool || '',
+    substrateActorTemplate: s.substrateActorTemplate || 'planner',
+    substratePlannerImage: s.substratePlannerImage || CONFIG.SUBSTRATE?.plannerImage || '',
+    substrateTimeoutMs: Number.isFinite(Number(s.substrateTimeoutMs)) ? Number(s.substrateTimeoutMs) : CONFIG.SUBSTRATE?.timeoutMs,
+    substrateActorTtlMs: Number.isFinite(Number(s.substrateActorTtlMs)) ? Number(s.substrateActorTtlMs) : CONFIG.SUBSTRATE?.actorTtlMs,
     hasGitlabToken: false,
     maskedGitlabToken: '',
     // Langfuse is the trace sink. The key pair is vault scope (never derived from
