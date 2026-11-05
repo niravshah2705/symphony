@@ -23,6 +23,7 @@ const globalQuestionsRoutes = require('./routes/global-questions');
 const pubsubRoutes = require('./pubsub');
 const { createPlannerPipelineRouter } = require('./pipeline-stage');
 const { createStoreContextMiddleware } = require('./store-context');
+const { createSubstrateActorRouter, shouldMount: shouldMountSubstrateActor } = require('./routes/substrate-actor');
 
 /**
  * Planner agent service — the isolated software-design planner. It owns the
@@ -42,6 +43,14 @@ app.use(
   express.json({ limit: MAX_STAGE_COMMAND_PUSH_BODY_BYTES }),
 );
 app.use(createPlannerPipelineRouter());
+// Substrate actor mode: mounted only when this planner process is running as
+// an actor (SUBSTRATE_ACTOR_MODE=true + SUBSTRATE_JWKS_URL set). The route
+// owns its own Bearer-JWT check and JSON parser, and it intentionally bypasses
+// the gateway `authenticateGateway` middleware because inside the actor there
+// is no gateway — the atenet-router already forwarded by `ate-target-actor`.
+if (shouldMountSubstrateActor()) {
+  app.use(createSubstrateActorRouter());
+}
 app.use(express.json({ limit: '1mb' }));
 app.use('/pubsub', pubsubRoutes);
 

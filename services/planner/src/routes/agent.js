@@ -28,6 +28,7 @@ const { getProjectsWithLabels, getAllProjectLabels } = require('@ai-fleet/shared
 const { asyncHandler } = require('@ai-fleet/shared/util');
 const { CONFIG } = require('@ai-fleet/shared/config');
 const { SENTINEL_TOKEN, projectEgressHeaders } = require('@ai-fleet/shared/egress');
+const { resolveMissingSecrets } = require('@ai-fleet/shared/secrets/s2s-resolver');
 const { currentWorkspaceContext } = require('@ai-fleet/shared/store/workspace-context');
 const scheduler = require('@ai-fleet/shared/agent/scheduler');
 const { llmReady, providerForRole } = require('@ai-fleet/shared/agent/llm');
@@ -67,6 +68,10 @@ const {
   DEFAULT_IMAGE,
   SUPPORTED_SANDBOX_IMAGES,
 } = require('@ai-fleet/shared/agent/openshell');
+const substrate = require('@ai-fleet/shared/agent/substrate');
+const substrateRunner = require('@ai-fleet/shared/agent/substrate-runner');
+const guardrailSpec = require('@ai-fleet/shared/guardrails/spec');
+const guardrailConsumers = require('@ai-fleet/shared/guardrails/consumers');
 const { getOrgFundStatus } = require('@ai-fleet/shared/billing/gate');
 
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -448,43 +453,18 @@ async function resolveProjectSecrets(req, { projectId, organizationId: explicitO
     CONFIG.OPENSHELL?.url ||
     'https://openshell.archagentix.com';
 
-  // If S2S settings service is configured and tokens are not yet resolved, query S2S resolver
-  const settingsBase = CONFIG.SERVICES && CONFIG.SERVICES.settingsUrl;
-  if (settingsBase && (!githubToken || !openrouterApiKey)) {
-    const orgId = context.organizationId || process.env.PROXY_ORG_ID || process.env.FLEET_ORG_ID || '';
-    const effectiveProjectId = projectId || context.projectId || '';
-    const orgInternalToken = String(process.env.ORG_INTERNAL_API_TOKEN || '').trim();
-    const internalToken = String(process.env.INTERNAL_API_TOKEN || '').trim();
-    try {
-      let path = null;
-      let headers = {};
-      if (orgId && orgInternalToken) {
-        const qs = effectiveProjectId ? `?project_id=${encodeURIComponent(effectiveProjectId)}` : '';
-        path = `/api/v1/internal/s2s/orgs/${encodeURIComponent(orgId)}/secrets${qs}`;
-        headers = { 'x-org-internal-token': orgInternalToken };
-      } else if (internalToken) {
-        path = '/api/v1/internal/s2s/managed-secrets';
-        headers = { 'x-internal-token': internalToken };
+  // If tokens are not yet resolved, fill them from the single managed-secret
+  // source (settings-service S2S vault). Shared with the Agent Substrate pattern.
+  if (!githubToken || !openrouterApiKey) {
+    const resolved = await resolveMissingSecrets(
+      { githubToken, openrouterApiKey },
+      {
+        organizationId: context.organizationId || process.env.PROXY_ORG_ID || process.env.FLEET_ORG_ID || '',
+        projectId: projectId || context.projectId || '',
       }
-      if (path) {
-        const resp = await fetch(`${String(settingsBase).replace(/\/$/, '')}${path}`, {
-          headers,
-          signal: AbortSignal.timeout(4000),
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          const secrets = (data && data.secrets) || {};
-          if (!githubToken && secrets.githubToken && secrets.githubToken.value) {
-            githubToken = String(secrets.githubToken.value).trim();
-          }
-          if (!openrouterApiKey && secrets.openrouterApiKey && secrets.openrouterApiKey.value) {
-            openrouterApiKey = String(secrets.openrouterApiKey.value).trim();
-          }
-        }
-      }
-    } catch (_) {
-      // Best-effort S2S secret lookup; fall back to local store settings
-    }
+    );
+    githubToken = resolved.githubToken;
+    openrouterApiKey = resolved.openrouterApiKey;
   }
 
   return {
@@ -1821,6 +1801,191 @@ router.delete(
     }
     if (!removeConversation(id)) return res.status(404).json({ error: 'Conversation not found.' });
     res.json({ ok: true });
+  })
+);
+
+// ── Agent Substrate (execution substrate = 'substrate') ───────────────────────
+
+function substrateContext(req) {
+  const context = requestWorkspaceContext(req);
+  const settings = getSettings();
+  const organizationId =
+    (typeof req.query.organizationId === 'string' && req.query.organizationId.trim()) ||
+    (req.body && req.body.organizationId) || context.organizationId || 'default';
+  const projectId =
+    (typeof req.query.projectId === 'string' && req.query.projectId.trim()) ||
+    (req.body && req.body.projectId) || context.projectId || 'default';
+  return { settings, organizationId, projectId, context };
+}
+
+// GET /api/agent/substrate/status — Control-plane health + atespace + live actors.
+router.get(
+  '/substrate/status',
+  asyncHandler(async (req, res) => {
+    const { settings, organizationId, projectId } = substrateContext(req);
+    const atespace = substrate.resolveSubstrateAtespace({
+      atespace: typeof req.query.atespace === 'string' ? req.query.atespace : settings.substrateAtespace,
+      organizationId,
+      projectId,
+    });
+    const url = settings.substrateUrl || CONFIG.SUBSTRATE?.url || '';
+    const [status, actors] = await Promise.all([
+      substrate.getControlPlaneStatus({ url, atespace }),
+      url && status_ok(status)
+        ? substrate.listActors({ url, atespace }).catch(() => [])
+        : Promise.resolve([]),
+    ]);
+    res.json({
+      agentPattern: settings.agentPattern || 'cloudrun',
+      atespace,
+      workerPool: substrate.resolveSubstrateWorkerPool(settings.substrateWorkerPool),
+      ingressUrl: substrate.resolveSubstrateIngressUrl(settings.substrateIngressUrl),
+      configured: Boolean(url),
+      status,
+      actors: actors.map((a) => ({
+        name: a.metadata?.name,
+        state: a.status?.state,
+        workerPod: a.status?.workerPod,
+        nodeName: a.status?.nodeName,
+      })),
+    });
+  })
+);
+
+function status_ok(status) {
+  return status && status.connected;
+}
+
+// POST /api/agent/substrate/run — run the planning prompt on a per-run ephemeral actor.
+router.post(
+  '/substrate/run',
+  asyncHandler(async (req, res) => {
+    const { settings, organizationId, projectId } = substrateContext(req);
+    const prompt = String((req.body && req.body.prompt) || '').trim();
+    if (!prompt) return res.status(400).json({ error: 'prompt is required.' });
+    if (!(settings.agentPattern === 'substrate' || settings.substrateUrl)) {
+      return res.status(409).json({ error: 'Substrate is not the active agent pattern and is not configured.' });
+    }
+    // Managed credentials resolved server-side (vault/KMS single source); never returned.
+    const creds = await resolveMissingSecrets(
+      { githubToken: settings.githubToken, openrouterApiKey: settings.openrouterApiKey },
+      { organizationId, projectId }
+    );
+    const result = await substrateRunner.runPlanningOnSubstrate({
+      organizationId,
+      projectId,
+      projectName: (req.body && req.body.projectName) || projectId,
+      prompt,
+      guardrailSpec: guardrailSpec.normalizeGuardrailSpec(settings.guardrailSpec),
+      secrets: creds,
+      llm: req.body && req.body.llm,
+      traceContext: { runId: req.body && req.body.runId },
+    });
+    res.json({
+      ok: true,
+      finalText: result.finalText,
+      model: result.model,
+      substrate: {
+        atespace: result.substrate?.atespace,
+        actorName: result.substrate?.actorName,
+        credentialSync: result.substrate?.credentialSync?.state,
+      },
+    });
+  })
+);
+
+// PUT /api/agent/substrate/secrets/sync — push managed creds to the credential-provider.
+router.put(
+  '/substrate/secrets/sync',
+  asyncHandler(async (req, res) => {
+    const { settings, organizationId } = substrateContext(req);
+    const creds = await resolveMissingSecrets(
+      { githubToken: settings.githubToken, openrouterApiKey: settings.openrouterApiKey },
+      { organizationId, projectId: (req.body && req.body.projectId) || 'default' }
+    );
+    const atespace = substrate.resolveSubstrateAtespace({ atespace: settings.substrateAtespace, organizationId });
+    // No applyManifest seam is wired in a Cloud Run planner (no in-cluster k8s client);
+    // we report the intended credential-provider state (fingerprint-only) so the UI can
+    // show what WOULD be injected. The actor still never receives raw values.
+    const sync = await substrateRunner.syncSubstrateSecrets({
+      organizationId,
+      atespace,
+      secrets: creds,
+      guardrailSpec: guardrailSpec.normalizeGuardrailSpec(settings.guardrailSpec),
+    }).catch((err) => ({ pending: true, reason: err?.message || String(err), state: substrateRunner.fingerprintOnly(creds) }));
+    res.json({ ok: true, atespace, sync });
+  })
+);
+
+// POST /api/agent/substrate/pattern — select the execution substrate + config.
+// Persisted to the JS store the substrate code actually reads (not the Python
+// settings service), so the pattern, substrate URL/atespace/pool/image and the
+// actor budget all take effect for the planner immediately.
+router.post(
+  '/substrate/pattern',
+  asyncHandler(async (req, res) => {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const pattern = String(body.agentPattern || '').trim().toLowerCase();
+    if (!['cloudrun', 'openshell', 'substrate'].includes(pattern)) {
+      return res.status(400).json({ error: 'agentPattern must be cloudrun, openshell, or substrate.' });
+    }
+    const patch = { agentPattern: pattern };
+    for (const key of ['substrateUrl', 'substrateIngressUrl', 'substrateAtespace', 'substrateActorTemplate', 'substrateWorkerPool', 'substratePlannerImage']) {
+      if (typeof body[key] === 'string') patch[key] = body[key].trim();
+    }
+    for (const key of ['substrateTimeoutMs', 'substrateActorTtlMs']) {
+      if (Number.isFinite(Number(body[key]))) patch[key] = Number(body[key]);
+    }
+    // Pin-by-digest is mandatory for ActorTemplate; reject a floating tag early.
+    if (patch.substratePlannerImage && !patch.substratePlannerImage.includes('@sha256:')) {
+      return res.status(400).json({ error: 'substratePlannerImage must be digest-pinned (name@sha256:...).' });
+    }
+    patchSettings(patch);
+    const settings = getSettings();
+    res.json({
+      ok: true,
+      agentPattern: settings.agentPattern,
+      substrate: {
+        url: settings.substrateUrl,
+        ingressUrl: settings.substrateIngressUrl,
+        atespace: settings.substrateAtespace,
+        workerPool: settings.substrateWorkerPool,
+        actorTemplate: settings.substrateActorTemplate,
+        plannerImage: settings.substratePlannerImage,
+        timeoutMs: settings.substrateTimeoutMs,
+        actorTtlMs: settings.substrateActorTtlMs,
+      },
+    });
+  })
+);
+
+// GET /api/agent/guardrail — the unified spec + per-pattern render preview.
+router.get(
+  '/guardrail',
+  asyncHandler(async (req, res) => {
+    const settings = getSettings();
+    const spec = guardrailSpec.normalizeGuardrailSpec(settings.guardrailSpec);
+    res.json({
+      agentPattern: settings.agentPattern || 'cloudrun',
+      spec,
+      preview: {
+        atenetEgress: guardrailConsumers.buildAtenetEgressPolicy(spec),
+        namespacePolicy: guardrailConsumers.buildNamespaceNetworkPolicy(spec, { namespace: 'tenant-a' }),
+        credentialProvider: guardrailConsumers.buildCredentialProviderPolicy(spec),
+      },
+    });
+  })
+);
+
+// POST /api/agent/guardrail — validate + persist the shared guardrail spec.
+router.post(
+  '/guardrail',
+  asyncHandler(async (req, res) => {
+    const spec = guardrailSpec.normalizeGuardrailSpec(req.body && req.body.spec ? req.body.spec : req.body);
+    const { ok, errors } = guardrailSpec.validateGuardrailSpec(spec);
+    if (!ok) return res.status(400).json({ error: 'Invalid guardrail spec.', errors });
+    patchSettings({ guardrailSpec: spec });
+    res.json({ ok: true, spec });
   })
 );
 

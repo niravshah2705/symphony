@@ -12,6 +12,8 @@
     "./store": "./src/store.js",
     "./store/*": "./src/store/*.js",
     "./messaging/*": "./src/messaging/*.js",
+    "./secrets/*": "./src/secrets/*.js",
+    "./guardrails/*": "./src/guardrails/*.js",
     "./linear": "./src/linear.js",
     "./logger": "./src/logger.js",
     "./util": "./src/util.js",

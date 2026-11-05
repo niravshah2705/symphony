@@ -509,6 +509,20 @@ export const api = {
     request('/agent/sandbox/policy', { method: 'POST', body: JSON.stringify(payload) }),
   runSandboxSecurityCheck: (payload = {}) =>
     request('/agent/sandbox/security-check', { method: 'POST', body: JSON.stringify(payload) }),
+  // Agent Substrate (execution substrate) + unified guardrails.
+  saveAgentPattern: (payload = {}) =>
+    request('/agent/substrate/pattern', { method: 'POST', body: JSON.stringify(payload) }),
+  getSubstrateStatus: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/agent/substrate/status${query ? `?${query}` : ''}`);
+  },
+  runSubstrateActor: (payload = {}) =>
+    request('/agent/substrate/run', { method: 'POST', body: JSON.stringify(payload) }),
+  syncSubstrateSecrets: (payload = {}) =>
+    request('/agent/substrate/secrets/sync', { method: 'PUT', body: JSON.stringify(payload) }),
+  getGuardrail: () => request('/agent/guardrail'),
+  saveGuardrail: (spec) =>
+    request('/agent/guardrail', { method: 'POST', body: JSON.stringify({ spec }) }),
   saveSandboxOrgConfig: (payload = {}) =>
     request('/agent/sandbox/org-config', { method: 'PUT', body: JSON.stringify(payload) }),
   searchAgentKnowledge: (payload) =>

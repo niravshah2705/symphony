@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 81 nodes
+Community of 106 nodes
 
-- **Size**: 81 nodes
-- **Cohesion**: 0.6432
+- **Size**: 106 nodes
+- **Cohesion**: 0.6443
 - **Dominant Language**: hcl
 
 ## Members
@@ -45,7 +45,8 @@ Community of 81 nodes
 | resource.kubernetes_namespace_v1.openshell_credentials | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 13-19 |
 | resource.kubernetes_namespace_v1.cert_manager | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 21-27 |
 | resource.kubernetes_namespace_v1.envoy_gateway_system | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 29-35 |
-| resource.kubernetes_namespace_v1.tenants | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 41-55 |
+| resource.kubernetes_namespace_v1.tenants | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 41-59 |
+| resource.kubernetes_namespace_v1.substrate_credentials | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 68-81 |
 | resource.google_project_service.required_apis | Class | ./deploy/gcp/terraform-openshell-gke/network.tf | 5-18 |
 | resource.google_compute_subnetwork.openshell_subnet | Class | ./deploy/gcp/terraform-openshell-gke/network.tf | 24-43 |
 | resource.google_compute_router.router | Class | ./deploy/gcp/terraform-openshell-gke/network.tf | 49-56 |
@@ -60,12 +61,11 @@ Community of 81 nodes
 | output.tenant_namespaces | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 26-29 |
 | output.get_credentials_command | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 31-34 |
 | output.dns_setup_instructions | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 36-39 |
-| local.admin_domain | Function | ./deploy/gcp/terraform-openshell-gke/tenant_config.tf | 6-6 |
-| resource.kubernetes_network_policy_v1.tenant_default_deny | Class | ./deploy/gcp/terraform-openshell-gke/tenant_config.tf | 10-22 |
-| resource.kubernetes_network_policy_v1.tenant_allow_dns | Class | ./deploy/gcp/terraform-openshell-gke/tenant_config.tf | 25-57 |
-| resource.kubernetes_resource_quota_v1.tenant_quota | Class | ./deploy/gcp/terraform-openshell-gke/tenant_config.tf | 60-78 |
+| output.substrate_enabled | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 45-48 |
+| output.substrate_worker_pool | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 50-53 |
+| output.substrate_credentials_namespace | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 55-58 |
 
-*... and 31 more members.*
+*... and 56 more members.*
 
 ## Execution Flows
 
@@ -75,11 +75,12 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform-openshell-gke/variables.tf` (27 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/variables.tf` (34 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/helm_components.tf` (15 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/outputs.tf` (13 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/substrate.tf` (12 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/main.tf` (8 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/outputs.tf` (8 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/tenant_config.tf` (8 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/namespaces.tf` (6 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/network.tf` (6 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/namespaces.tf` (5 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/gke.tf` (4 edge(s))

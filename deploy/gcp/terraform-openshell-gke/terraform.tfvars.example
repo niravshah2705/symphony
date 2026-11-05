@@ -53,3 +53,23 @@ power_ci_sa_email = "gh-deployer@adlc-9e72f.iam.gserviceaccount.com"
 # HARDENING TODO: restrict control-plane access to known CIDRs
 master_authorized_networks_cidr = "0.0.0.0/0"
 deletion_protection             = true
+
+# ---------------------------------------------------------------------------
+# Agent Substrate (optional). Leave substrate_enabled = false to keep the
+# OpenShell-only plan unchanged. The ate-system control plane is installed by
+# the upstream substrate installer (go run ./cmd/ate-setup deploy ate-system),
+# NOT by this config — see docs/SUBSTRATE_INTEGRATION.md. This module only adds
+# the dedicated worker pool, credential/snapshot namespaces, PD snapshot storage
+# and the public actor ingress that the installer's atenet-router needs.
+# ---------------------------------------------------------------------------
+substrate_enabled                 = false
+substrate_node_pool_name          = "substrate-worker-pool"
+substrate_machine_type            = "e2-standard-4"
+substrate_min_nodes               = 1
+substrate_max_nodes               = 6
+substrate_snapshot_storage_class  = "substrate-snapshot-pd"
+substrate_credentials_namespace   = "substrate-credentials"
+# Public hostname fronting the actor data plane (substrateIngressUrl). When set
+# (and substrate_enabled) a cert-manager Certificate + Envoy Gateway + HTTPRoute
+# are created pointing at atenet-router; leave empty to skip the ingress.
+substrate_ingress_hostname        = ""

@@ -662,6 +662,7 @@ function modelsRuntimeSection(ctx, llm, scopeState) {
       llm,
     ]),
     runtimeTiles(ctx, scopeState),
+    patternSection(ctx, scopeState),
   ]);
 }
 
@@ -912,6 +913,182 @@ function runtimeTiles(ctx, scopeState) {
     render();
   }).catch(() => {});
   return card;
+}
+
+/* ===================== Execution substrate (agent pattern) + guardrails ===================== */
+
+const AGENT_PATTERNS = [
+  { id: 'cloudrun', label: 'Cloud Run (in-process)', meta: 'Agent runs in the planner container (default).' },
+  { id: 'openshell', label: 'NVIDIA OpenShell', meta: 'gVisor-style K8s sandbox via the OpenShell gateway.' },
+  { id: 'substrate', label: 'Agent Substrate', meta: 'Zero-trust K8s runtime; per-run ephemeral actor, managed egress.' },
+];
+
+function patternSection(ctx, scopeState) {
+  const editable = canEditPolicyScope(scopeState.identity, scopeState.scope);
+  const card = el('div', { class: 'sx-card sx-card-pad' });
+  const text = (value, placeholder, type = 'text') =>
+    el('input', { class: 'input', type, value: value == null ? '' : String(value), placeholder });
+
+  const render = () => {
+    clear(card);
+    const active = ctx.settings.agentPattern || 'cloudrun';
+    const tiles = el('div', { class: 'sx-tiles', dataset: { lockKey: 'agentPattern' } });
+    for (const p of AGENT_PATTERNS) {
+      const selected = p.id === active;
+      const tile = el('button', { type: 'button', class: `sx-tile block${selected ? ' active' : ''}`, disabled: !editable || undefined }, [
+        el('span', { class: 'sx-tile-name' }, p.label),
+        el('span', { class: 'sx-tile-meta' }, p.meta),
+      ]);
+      tile.addEventListener('click', async () => {
+        if (!editable) return;
+        [...tiles.querySelectorAll('button')].forEach((b) => { b.disabled = true; });
+        try {
+          const res = await api.saveAgentPattern({
+            agentPattern: p.id,
+            substrateUrl: ctx.settings.substrateUrl,
+            substrateIngressUrl: ctx.settings.substrateIngressUrl,
+            substrateAtespace: ctx.settings.substrateAtespace,
+            substrateWorkerPool: ctx.settings.substrateWorkerPool,
+            substratePlannerImage: ctx.settings.substratePlannerImage,
+            substrateTimeoutMs: ctx.settings.substrateTimeoutMs,
+            substrateActorTtlMs: ctx.settings.substrateActorTtlMs,
+          });
+          Object.assign(ctx.settings, res && res.settings ? res.settings : { agentPattern: p.id });
+          ctx.settings.agentPattern = p.id;
+          toast(`Execution substrate set to ${p.label}.`, 'ok');
+        } catch (err) { toast(err.message, 'err'); }
+        render();
+      });
+      tiles.append(tile);
+    }
+    card.append(
+      el('div', { class: 'sx-card-head' }, [
+        el('div', {}, [
+          el('div', { class: 'sx-card-title' }, 'Execution substrate'),
+          el('div', { class: 'sx-card-sub' }, 'Where the planning agent process runs. Orthogonal to the SDK harness and workflow pattern above.'),
+        ]),
+      ]),
+      tiles,
+    );
+    if (active === 'substrate') card.append(substrateConfigCard(ctx, scopeState, text));
+    card.append(guardrailsCard(ctx, scopeState, text));
+  };
+  render();
+  return card;
+}
+
+function substrateConfigCard(ctx, scopeState, text) {
+  const editable = canEditPolicyScope(scopeState.identity, scopeState.scope);
+  const s = ctx.settings;
+  const url = text(s.substrateUrl, 'https://ateapi.internal:8443');
+  const ingress = text(s.substrateIngressUrl, 'https://router.internal');
+  const atespace = text(s.substrateAtespace, 'tenant-a');
+  const pool = text(s.substrateWorkerPool, 'planner-pool');
+  const template = text(s.substrateActorTemplate, 'planner');
+  const image = text(s.substratePlannerImage, 'ghcr.io/org/planner@sha256:...');
+  const timeout = text(s.substrateTimeoutMs, '60000', 'number');
+  const ttl = text(s.substrateActorTtlMs, '120000', 'number');
+  const statusLine = el('div', { class: 'muted', style: 'font-size:12px;margin-top:8px' }, 'Status not loaded.');
+
+  const saveBtn = el('button', { type: 'button', class: 'btn btn-primary', disabled: !editable || undefined }, 'Save substrate config');
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    try {
+      const res = await api.saveAgentPattern({
+        agentPattern: 'substrate',
+        substrateUrl: url.value.trim(),
+        substrateIngressUrl: ingress.value.trim(),
+        substrateAtespace: atespace.value.trim(),
+        substrateWorkerPool: pool.value.trim(),
+        substrateActorTemplate: template.value.trim(),
+        substratePlannerImage: image.value.trim(),
+        substrateTimeoutMs: Number(timeout.value) || undefined,
+        substrateActorTtlMs: Number(ttl.value) || undefined,
+      });
+      Object.assign(ctx.settings, (res && res.substrate) ? { ...res.settings, ...res.substrate } : {});
+      toast('Substrate configuration saved.', 'ok');
+    } catch (err) { toast(err.message, 'err'); }
+    saveBtn.disabled = !editable;
+  });
+
+  const statusBtn = el('button', { type: 'button', class: 'btn' }, 'Check control plane');
+  statusBtn.addEventListener('click', async () => {
+    statusBtn.disabled = true;
+    statusLine.textContent = 'Checking…';
+    try {
+      const st = await api.getSubstrateStatus({});
+      statusLine.textContent = st && st.status && st.status.connected
+        ? `Control plane SERVING · atespace ${st.atespace} · ${st.actors.length} actor(s).`
+        : `Control plane ${st && st.status ? st.status.status : 'unknown'}${st && st.status && st.status.error ? ` (${st.status.error})` : ''}.`;
+    } catch (err) { statusLine.textContent = `Error: ${err.message}`; }
+    statusBtn.disabled = false;
+  });
+
+  return el('div', { class: 'sx-card sx-card-pad', style: 'margin-top:14px;border:1px solid rgba(255,255,255,0.08)' }, [
+    el('div', { class: 'sx-card-title' }, 'Substrate configuration'),
+    el('div', { class: 'sx-card-sub', style: 'margin-bottom:10px' }, 'Planner image must be digest-pinned. Raw secrets never enter the actor — the egress gateway injects them from the managed vault.'),
+    el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px' }, [
+      field('Control plane URL (ateapi)', url),
+      field('Ingress URL (atenet router)', ingress),
+      field('Atespace (tenant scope)', atespace),
+      field('Worker pool', pool),
+      field('Actor template', template),
+      field('Planner image (digest-pinned)', image),
+      field('Run timeout (ms)', timeout),
+      field('Actor TTL / cleanup (ms)', ttl),
+    ]),
+    el('div', { style: 'display:flex;gap:8px;margin-top:12px' }, [saveBtn, statusBtn]),
+    statusLine,
+  ]);
+}
+
+function guardrailsCard(ctx, scopeState, text) {
+  void text;
+  const editable = canEditPolicyScope(scopeState.identity, scopeState.scope);
+  const area = el('textarea', { class: 'input', rows: '12', style: 'font-family:ui-monospace,monospace;font-size:12px;width:100%' }, '');
+  const preview = el('pre', { class: 'muted', style: 'font-size:11px;white-space:pre-wrap;margin-top:8px' }, 'Preview loads from the server.');
+
+  const saveBtn = el('button', { type: 'button', class: 'btn btn-primary', disabled: !editable || undefined }, 'Save guardrails');
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    try {
+      const parsed = JSON.parse(area.value || '{}');
+      const res = await api.saveGuardrail(parsed);
+      area.value = JSON.stringify(res.spec, null, 2);
+      ctx.settings.guardrailSpec = res.spec;
+      await refreshPreview();
+      toast('Guardrails saved for all substrates.', 'ok');
+    } catch (err) { toast(err.message ? `Guardrails rejected: ${err.message}` : 'Invalid JSON.', 'err'); }
+    saveBtn.disabled = !editable;
+  });
+
+  const refreshPreview = async () => {
+    try {
+      const data = await api.getGuardrail();
+      if (!area.value.trim() || !area.dataset.touched) {
+        area.value = JSON.stringify(data.spec, null, 2);
+        ctx.settings.guardrailSpec = data.spec;
+      }
+      const rules = (data.preview.atenetEgress.rules || [])
+        .map((r) => `${r.https ? 'https' : 'http'}: ${(r.https && r.https.hostnames || r.http && r.http.hostnames || []).join(', ')}`)
+        .filter(Boolean);
+      preview.textContent = [
+        `deny-by-default · egress allow: ${rules.length ? rules.join(' | ') : '(none)'}`,
+        `credential scopes: ${data.preview.credentialProvider.allowedSecrets.map((s) => s.secretName).join(', ') || '(none)'}`,
+        `namespace policy blocks: ${(data.preview.atenetEgress.denyCidrs || []).join(', ')}`,
+      ].join('\n');
+    } catch (err) { preview.textContent = `Preview failed: ${err.message}`; }
+  };
+  area.addEventListener('input', () => { area.dataset.touched = '1'; });
+  void refreshPreview();
+
+  return el('div', { class: 'sx-card sx-card-pad', style: 'margin-top:14px;border:1px solid rgba(255,255,255,0.08)' }, [
+    el('div', { class: 'sx-card-title' }, 'Security guardrails (shared)'),
+    el('div', { class: 'sx-card-sub', style: 'margin-bottom:10px' }, 'One spec rendered for both OpenShell and Substrate: egress allow-list, metadata-SSRF deny, credential scopes, runtime class. Metadata CIDR 169.254.169.254/32 is always denied.'),
+    area,
+    el('div', { style: 'display:flex;gap:8px;margin-top:10px' }, [saveBtn]),
+    preview,
+  ]);
 }
 
 /* ===================== Redesign: connections ===================== */

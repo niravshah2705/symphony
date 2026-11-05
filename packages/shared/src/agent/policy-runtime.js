@@ -103,6 +103,9 @@ function applyOperationalPrefs(keys, prefs, step = () => {}) {
   if (source.langfuseTracing === 'true' || source.langfuseTracing === 'false') {
     next.langfuseTracing = source.langfuseTracing === 'true';
   }
+  if (source.langfuseTracing === 'true' || source.langfuseTracing === 'false') {
+    next.langfuseTracing = source.langfuseTracing === 'true';
+  }
   return next;
 }
 

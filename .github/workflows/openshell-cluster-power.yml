@@ -75,6 +75,11 @@ jobs:
       SYSTEM_NODE_POOL: ${{ vars.OPENSHELL_SYSTEM_NODE_POOL || 'openshell-system-node-pool' }}
       MAX_NODES: ${{ vars.OPENSHELL_MAX_NODES || '8' }}
       START_MIN_NODES: ${{ vars.OPENSHELL_MIN_NODES || '2' }}
+      # Agent Substrate worker pool is parked/woken in lockstep only when the
+      # operator set SUBSTRATE_NODE_POOL; empty leaves these steps skipped.
+      SUBSTRATE_NODE_POOL: ${{ vars.SUBSTRATE_NODE_POOL }}
+      SUBSTRATE_MAX_NODES: ${{ vars.SUBSTRATE_MAX_NODES || '6' }}
+      SUBSTRATE_START_MIN_NODES: ${{ vars.SUBSTRATE_MIN_NODES || '1' }}
       DRAIN_TIMEOUT: 300s
       SETTLE_TIMEOUT: 900
     steps:
@@ -237,6 +242,30 @@ jobs:
             --max-nodes="$MAX" \
             --quiet
 
+      - name: Scale substrate pool (${{ steps.action.outputs.action }})
+        id: scaled_substrate
+        # Only runs when the operator opted into a substrate pool; mirrors the
+        # tenant pool's park-to-0 on stop / restore-on-start, so a stopped
+        # cluster does not keep substrate worker nodes billed.
+        if: env.SUBSTRATE_NODE_POOL != ''
+        env:
+          ACTION: ${{ steps.action.outputs.action }}
+        run: |
+          set -euo pipefail
+          if [ "$ACTION" = "stop" ]; then
+            SMIN=0; SMAX=0
+          else
+            SMIN="$SUBSTRATE_START_MIN_NODES"; SMAX="$SUBSTRATE_MAX_NODES"
+          fi
+          gcloud container node-pools update "$SUBSTRATE_NODE_POOL" \
+            --cluster "$CLUSTER" \
+            --location "$ZONE" \
+            --project "$PROJECT_ID" \
+            --enable-autoscaling \
+            --min-nodes="$SMIN" \
+            --max-nodes="$SMAX" \
+            --quiet
+
       - name: Wait for node count
         run: |
           set -uo pipefail
@@ -297,6 +326,23 @@ jobs:
             --enable-autoscaling \
             --min-nodes=0 \
             --max-nodes="$MAX_NODES" \
+            --quiet
+
+      - name: Park substrate pool bounds
+        if: >-
+          always() &&
+          env.SUBSTRATE_NODE_POOL != '' &&
+          steps.action.outputs.action == 'stop' &&
+          steps.scaled_substrate.outcome == 'success'
+        run: |
+          set -euo pipefail
+          gcloud container node-pools update "$SUBSTRATE_NODE_POOL" \
+            --cluster "$CLUSTER" \
+            --location "$ZONE" \
+            --project "$PROJECT_ID" \
+            --enable-autoscaling \
+            --min-nodes=0 \
+            --max-nodes="$SUBSTRATE_MAX_NODES" \
             --quiet
 
       - name: Report cluster state

@@ -212,8 +212,17 @@ variable "laya_cpu" {
 
 variable "laya_memory" {
   type        = string
-  description = "Memory allocated to Laya container. The three preloaded fp16 checkpoints total ~2.3GB of weights (english ~0.84GB, multilingual ~0.64GB, typed-decisions ~0.85GB) plus ~0.4GB torch/runtime overhead — 2Gi OOMs during preload, so the floor is 4Gi."
-  default     = "4Gi"
+  description = <<-EOT
+    Memory allocated to Laya container. The three preloaded checkpoints are
+    ~2.3GB of fp16 weights on disk (english ~0.84GB, multilingual ~0.64GB,
+    typed-decisions ~0.85GB), but CPU inference materializes them as float32 —
+    ~4.7GB resident — plus ~0.4GB torch/runtime overhead and a transient copy
+    of each checkpoint while it is built. 4Gi was OOM-killed during preload of
+    the SECOND checkpoint on revisions 00016-00018: each instance logged exactly
+    one `Agent(repo)` build, then exited silently ~5min later with no traceback,
+    so the port never bound and the startup probe timed out. Floor is 8Gi.
+  EOT
+  default     = "8Gi"
 }
 
 variable "laya_min_instances" {
@@ -902,14 +911,15 @@ variable "skills_publisher_member" {
   default     = ""
 }
 
-# --- Laya checkpoint registry (GCS bucket, gcsfuse mount) --------------------
+# --- Laya checkpoint registry (GCS bucket, publish/audit target) -------------
 # See laya_models.tf. Mirrors the skills registry: Terraform CREATES and OWNS
-# the bucket, name defaults to the derived "<project_id>-aifleet-laya-models",
-# and the laya-inference service mounts it read-only and PINs a version.
+# the bucket and the name defaults to the derived
+# "<project_id>-aifleet-laya-models". The runtime does NOT mount it — the
+# checkpoints ship inside the image (Dockerfile.laya-inference).
 
 variable "laya_models_enabled" {
   type        = bool
-  description = "Create the Terraform-managed Laya checkpoint bucket (+ IAM + gcsfuse mount on laya-inference). false removes the bucket and the mount; the laya[serve] image has no vendored weights and then fails closed on model load — only turn off when the laya service is not deployed."
+  description = "Create the Terraform-managed Laya checkpoint bucket (+ IAM), used by .github/workflows/publish-laya-models.yml as the versioned publish/audit target. false removes the bucket only — laya-inference no longer mounts it, so this does not affect serving."
   default     = true
 }
 
@@ -927,7 +937,7 @@ variable "laya_models_bucket_force_destroy" {
 
 variable "laya_model_version" {
   type        = string
-  description = "Laya checkpoint bundle version the service PINS (HF_HUB_CACHE=/models/<version> on the gcsfuse mount). Must match a published `<version>/` prefix created by .github/workflows/publish-laya-models.yml. Bumping the published bundle to a new version does NOT affect a deployment until this is bumped."
+  description = "Laya checkpoint bundle version published to the GCS bucket by .github/workflows/publish-laya-models.yml. The RUNTIME no longer reads this: checkpoints ship inside the image (Dockerfile.laya-inference bakes HF_HUB_CACHE=/opt/laya-cache and the image digest pins the weights). Kept so the bucket stays versioned as the publish/backup target."
   default     = "v1"
 }
 
