@@ -164,6 +164,13 @@ Apply, read the IP back from the `substrate_ingress_ip` output (the
 at the DNS zone, and let cert-manager finish issuing before saving the Settings card
 — an HTTPS listener without a ready `Certificate` just hangs `kubectl_manifest.substrate_ingress_gateway`.
 
+Because every one of those manifests lives in `ate-system` and the apply runs
+**before** the installer, `substrate.tf` creates that namespace itself whenever a
+hostname is requested (`kubernetes_namespace_v1.substrate_system`). Without it the
+apply dies on `namespaces "ate-system" not found` and there is no front at all; with
+it, the installer's own `kubectl apply` of the namespace merges into Terraform's.
+Leave `SUBSTRATE_INGRESS_HOSTNAME` unset and the installer stays the sole owner.
+
 | Settings field | Value for `substrate.archagentix.com` |
 |---|---|
 | `substrateUrl` | `https://substrate.archagentix.com` with `SUBSTRATE_CONTROL_PLANE_PUBLIC=true` (gRPC rides the `/substrate.ateapi.v1.Control` prefix); otherwise the in-cluster `ateapi.ate-system.svc:8443`, reachable only from inside the VPC |

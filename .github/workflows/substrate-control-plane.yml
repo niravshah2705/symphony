@@ -172,6 +172,7 @@ jobs:
           VERSION: ${{ steps.cfg.outputs.version }}
           SANDBOX_CLASSES: ${{ steps.cfg.outputs.sandbox_classes }}
           IMAGE_REPO: ${{ env.SUBSTRATE_IMAGE_REPO }}
+          INGRESS_HOSTNAME: ${{ vars.SUBSTRATE_INGRESS_HOSTNAME }}
         run: |
           set -uo pipefail
           # Advisory in both modes: this step never fails the job, because the
@@ -230,6 +231,13 @@ jobs:
           check "Envoy Gateway CRDs" kubectl get crd gateways.gateway.networking.k8s.io -o 'jsonpath={.metadata.name}'
           check "cert-manager CRDs" kubectl get crd certificates.cert-manager.io -o 'jsonpath={.metadata.name}'
           check "substrate ingress Gateway" kubectl -n ate-system get gateway substrate-ingress -o 'jsonpath={.metadata.name}'
+          # Distinguishes "no hostname asked for" from "asked for and the apply
+          # failed", which the Gateway row alone cannot tell apart.
+          check "hostname front requested" bash -c '
+            [ -n "${INGRESS_HOSTNAME:-}" ] \
+              || { echo "SUBSTRATE_INGRESS_HOSTNAME unset — no static IP, Certificate or Gateway in plan"; exit 1; }
+            echo "$INGRESS_HOSTNAME — IP, Certificate, EnvoyProxy and Gateway land with gke_reconcile"
+          '
 
           # ate-setup resolves every image tag to a digest before it deploys
           # anything, so a repo or tag without the full set fails the install —

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 114 nodes
+Community of 115 nodes
 
-- **Size**: 114 nodes
-- **Cohesion**: 0.6392
+- **Size**: 115 nodes
+- **Cohesion**: 0.6406
 - **Dominant Language**: hcl
 
 ## Members
@@ -65,7 +65,7 @@ Community of 114 nodes
 | output.substrate_worker_pool | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 50-53 |
 | output.substrate_credentials_namespace | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 55-58 |
 
-*... and 64 more members.*
+*... and 65 more members.*
 
 ## Execution Flows
 
@@ -76,8 +76,8 @@ No execution flows pass through this community.
 ### Incoming
 
 - `./deploy/gcp/terraform-openshell-gke/variables.tf` (35 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/substrate.tf` (17 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/outputs.tf` (16 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/substrate.tf` (16 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/helm_components.tf` (15 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/main.tf` (8 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/tenant_config.tf` (8 edge(s))
