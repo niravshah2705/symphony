@@ -164,7 +164,7 @@ values: { geminiApiKey?: string }                 # write-only secret value
 prefs: {
   complexityTier?|llmProvider?|agentRuntime?|planHarness?|codeHarness?|
   testHarness?|deployHarness?|workflowPattern?|planningProvider?|
-  langsmithTracing?: string
+  langfuseTracing?: string
 }
 locks: (preference-key | domain-name)[]
 created_at: Timestamp

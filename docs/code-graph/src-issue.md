@@ -15,17 +15,17 @@ Community of 24 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | toIssue | Function | ./services/coder/src/run-ticket.js | 43-53 |
-| buildKeys | Function | ./services/coder/src/run-ticket.js | 55-68 |
-| httpError | Function | ./services/coder/src/run-ticket.js | 70-75 |
-| loadIssue | Function | ./services/coder/src/run-ticket.js | 77-82 |
-| eventContext | Function | ./services/coder/src/run-ticket.js | 84-86 |
-| hasEffectivePolicy | Function | ./services/coder/src/run-ticket.js | 88-95 |
-| makeStep | Function | ./services/coder/src/run-ticket.js | 98-103 |
-| runTicketInProcess | Function | ./services/coder/src/run-ticket.js | 110-249 |
-| run | Function | ./services/coder/src/run-ticket.js | 202-214 |
-| onError | Function | ./services/coder/src/run-ticket.js | 215-236 |
-| onDone | Function | ./services/coder/src/run-ticket.js | 237-241 |
-| runTicket | Function | ./services/coder/src/run-ticket.js | 256-285 |
+| buildKeys | Function | ./services/coder/src/run-ticket.js | 55-64 |
+| httpError | Function | ./services/coder/src/run-ticket.js | 66-71 |
+| loadIssue | Function | ./services/coder/src/run-ticket.js | 73-78 |
+| eventContext | Function | ./services/coder/src/run-ticket.js | 80-82 |
+| hasEffectivePolicy | Function | ./services/coder/src/run-ticket.js | 84-91 |
+| makeStep | Function | ./services/coder/src/run-ticket.js | 94-99 |
+| runTicketInProcess | Function | ./services/coder/src/run-ticket.js | 106-245 |
+| run | Function | ./services/coder/src/run-ticket.js | 198-210 |
+| onError | Function | ./services/coder/src/run-ticket.js | 211-232 |
+| onDone | Function | ./services/coder/src/run-ticket.js | 233-237 |
+| runTicket | Function | ./services/coder/src/run-ticket.js | 252-281 |
 | baseDependencies | Function | ./services/coder/src/run-ticket.test.js | 21-36 |
 | test:in-process coder resolves selected scope before model preflight and enforces policy + prefs@L38 | Test | ./services/coder/src/run-ticket.test.js | 38-113 |
 | test:proxy-vault coder needs no stored Linear key and passes only the sentinel to Linear callers@L115 | Test | ./services/coder/src/run-ticket.test.js | 115-157 |

@@ -4,19 +4,20 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 4 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.6667
+- **Size**: 4 nodes
+- **Cohesion**: 0.7500
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| StubClient | Class | ./packages/shared/src/agent/analytics.test.js | 140-143 |
-| constructor | Function | ./packages/shared/src/agent/analytics.test.js | 141-141 |
-| listRuns | Function | ./packages/shared/src/agent/analytics.test.js | 142-142 |
+| StubClient | Class | ./packages/shared/src/agent/analytics.test.js | 296-302 |
+| constructor | Function | ./packages/shared/src/agent/analytics.test.js | 297-297 |
+| getMany | Function | ./packages/shared/src/agent/analytics.test.js | 299-299 |
+| get | Function | ./packages/shared/src/agent/analytics.test.js | 300-300 |
 
 ## Execution Flows
 

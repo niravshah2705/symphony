@@ -29,7 +29,7 @@ Source: https://github.com/niravshah2705/symphony
 - GitHub or GitLab repository hosting and Linear, Jira, or Asana planning configuration, with server-side credential handling and scoped brokers.
 - Local or hosted model choices, including Ollama, LM Studio, OMLX, OpenAI, Anthropic, and Gemini-compatible configuration where supported.
 - Human approval gates, organization and project policy, role-based access, secret scanning, and egress proxy isolation for agent runtimes.
-- LangSmith-backed operational tracing plus analytics for available cost, token, latency, and failure signals.
+- Langfuse-backed operational tracing plus analytics for available cost, token, latency, and failure signals.
 
 ## Security and data boundaries
 

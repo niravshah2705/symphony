@@ -62,7 +62,6 @@ PREF_KEYS: tuple[str, ...] = (
     "deployHarness",
     "workflowPattern",
     "planningProvider",
-    "langsmithTracing",
     "langfuseTracing",
 )
 

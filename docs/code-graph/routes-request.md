@@ -22,8 +22,8 @@ Community of 10 nodes
 | recordForRequest | Function | ./services/planner/src/routes/agent.js | 123-125 |
 | stampRequestContext | Function | ./services/planner/src/routes/agent.js | 127-134 |
 | conversationForRequest | Function | ./services/planner/src/routes/agent.js | 140-145 |
-| resolveProjectSecrets | Function | ./services/planner/src/routes/agent.js | 398-481 |
-| substrateContext | Function | ./services/planner/src/routes/agent.js | 1806-1816 |
+| resolveProjectSecrets | Function | ./services/planner/src/routes/agent.js | 401-484 |
+| substrateContext | Function | ./services/planner/src/routes/agent.js | 1809-1819 |
 
 ## Execution Flows
 

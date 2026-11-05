@@ -25,8 +25,8 @@ function baseDependencies(overrides = {}) {
       linearApiKey: 'linear-key',
       agentRuntime: 'deepagent',
       workflowPattern: 'sequential',
-      langsmithTracing: true,
-      langsmithApiKey: 'trace-key',
+      langfuseTracing: true,
+      langfuseSecretKey: 'trace-key',
     }),
     loadIssue: async () => ({ ...loadedIssue }),
     billingStatus: () => ({ blocked: false }),
@@ -62,7 +62,7 @@ test('in-process coder resolves selected scope before model preflight and enforc
           prefs: {
             agentRuntime: 'claude-agent-sdk',
             workflowPattern: 'supervisor',
-            langsmithTracing: 'false',
+            langfuseTracing: 'false',
           },
         };
       },
@@ -96,7 +96,7 @@ test('in-process coder resolves selected scope before model preflight and enforc
   assert.equal(coderArgs.issue.nativeProjectId, 'native-project-1');
   assert.equal(coderArgs.keys.agentRuntime, 'claude-agent-sdk');
   assert.equal(coderArgs.keys.workflowPattern, 'supervisor');
-  assert.equal(coderArgs.keys.langsmithTracing, false);
+  assert.equal(coderArgs.keys.langfuseTracing, false);
   assert.equal(coderArgs.apiKey, 'linear-key');
   assert.equal(coderArgs.keys.linearApiKey, 'linear-key');
   assert.deepEqual(coderArgs.settings, {

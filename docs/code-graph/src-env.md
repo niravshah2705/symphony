@@ -14,9 +14,9 @@ Community of 10 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| boundedEnv | Function | ./packages/shared-core/src/config.js | 77-81 |
-| boolEnv | Function | ./packages/shared-core/src/config.js | 85-91 |
-| buildFirebaseAuthConfig | Function | ./packages/shared-core/src/config.js | 106-176 |
+| boundedEnv | Function | ./packages/shared-core/src/config.js | 78-82 |
+| boolEnv | Function | ./packages/shared-core/src/config.js | 86-92 |
+| buildFirebaseAuthConfig | Function | ./packages/shared-core/src/config.js | 107-177 |
 | test:buildFirebaseAuthConfig: disabled by default (local, open)@L52 | Test | ./services/gateway/src/auth.test.js | 52-54 |
 | test:buildFirebaseAuthConfig: firebase mode derives issuer/audience/authDomain@L56 | Test | ./services/gateway/src/auth.test.js | 56-62 |
 | test:buildFirebaseAuthConfig: fails closed on missing project/api key and in production@L64 | Test | ./services/gateway/src/auth.test.js | 64-69 |

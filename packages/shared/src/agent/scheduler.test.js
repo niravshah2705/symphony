@@ -437,12 +437,12 @@ test('runJob overlays org operational prefs (runtime/workflow/tracing) onto the 
   let seenKeys = null;
   await scheduler._test.runJob(
     job,
-    { apiKey: 'k', keys: { agentRuntime: 'deepagent', workflowPattern: 'sequential', langsmithTracing: true }, llm: { provider: 'codex', model: 'm' }, config: { createIssues: true } },
+    { apiKey: 'k', keys: { agentRuntime: 'deepagent', workflowPattern: 'sequential', langfuseTracing: true }, llm: { provider: 'codex', model: 'm' }, config: { createIssues: true } },
     {
       store: fakeStore,
       getSettings: () => ({ llmProvider: 'codex' }),
       linear: { getMilestonesWithIssueCounts: async () => ({ project: { id: 'p1' }, milestones: [] }) },
-      resolvePolicy: async () => ({ effectivePolicy: null, prefs: { agentRuntime: 'codex-sdk', workflowPattern: 'parallel', langsmithTracing: 'false' } }),
+      resolvePolicy: async () => ({ effectivePolicy: null, prefs: { agentRuntime: 'codex-sdk', workflowPattern: 'parallel', langfuseTracing: 'false' } }),
       generatePlan: async (args) => { seenKeys = args.keys; return { viable: true, plan: {}, traceUrl: null, traced: false, runId: 'r' }; },
       applyPlan: async () => ({ milestonesCreated: 1, issuesCreated: 1, dependenciesCreated: 0, warnings: [] }),
       applyAiplanned: async () => {},
@@ -450,7 +450,7 @@ test('runJob overlays org operational prefs (runtime/workflow/tracing) onto the 
   );
   assert.equal(seenKeys.agentRuntime, 'codex-sdk');    // overridden by org pref
   assert.equal(seenKeys.workflowPattern, 'parallel');  // overridden by org pref
-  assert.equal(seenKeys.langsmithTracing, false);      // "false" string coerced to boolean
+  assert.equal(seenKeys.langfuseTracing, false);      // "false" string coerced to boolean
 });
 
 test('runJob leaves keys unchanged when there are no operational prefs (no regression)', async () => {
@@ -459,7 +459,7 @@ test('runJob leaves keys unchanged when there are no operational prefs (no regre
   let seenKeys = null;
   await scheduler._test.runJob(
     job,
-    { apiKey: 'k', keys: { agentRuntime: 'deepagent', workflowPattern: 'sequential', langsmithTracing: true }, llm: { provider: 'codex', model: 'm' }, config: { createIssues: true } },
+    { apiKey: 'k', keys: { agentRuntime: 'deepagent', workflowPattern: 'sequential', langfuseTracing: true }, llm: { provider: 'codex', model: 'm' }, config: { createIssues: true } },
     {
       store: fakeStore,
       getSettings: () => ({ llmProvider: 'codex' }),
@@ -472,7 +472,7 @@ test('runJob leaves keys unchanged when there are no operational prefs (no regre
   );
   assert.equal(seenKeys.agentRuntime, 'deepagent');
   assert.equal(seenKeys.workflowPattern, 'sequential');
-  assert.equal(seenKeys.langsmithTracing, true);
+  assert.equal(seenKeys.langfuseTracing, true);
 });
 
 test('getStatus counts only jobs in the selected native workspace', (t) => {

@@ -51,7 +51,7 @@ export async function renderAnalytics(view) {
     data = await api.getAnalytics();
   } catch (err) {
     clear(view).append(
-      el('div', { class: 'page-head' }, [el('div', {}, [el('h1', {}, 'Analytics'), el('p', { class: 'muted' }, 'LangSmith trace cost and performance.')])]),
+      el('div', { class: 'page-head' }, [el('div', {}, [el('h1', {}, 'Analytics'), el('p', { class: 'muted' }, 'Langfuse trace cost and performance.')])]),
       el('div', { class: 'empty operational-empty' }, [
         el('h2', {}, 'Analytics are not available yet'),
         el('p', { class: 'muted' }, err.message || 'The trace service could not be reached.'),
@@ -72,7 +72,7 @@ export async function renderAnalytics(view) {
     el('div', { class: 'page-head operational-head' }, [
       el('div', {}, [
         el('h1', {}, 'Analytics'),
-        el('p', { class: 'muted' }, 'Cost and performance for each change, calculated from LangSmith traces.'),
+        el('p', { class: 'muted' }, 'Cost and performance for each change, calculated from Langfuse traces.'),
       ]),
       refresh,
     ]),
@@ -80,13 +80,13 @@ export async function renderAnalytics(view) {
 
   if (data.configured === false) {
     content.push(el('div', { class: 'notice operational-notice' }, [
-      el('strong', {}, 'Connect LangSmith to see cost'),
+      el('strong', {}, 'Connect Langfuse to see cost'),
       el('span', {}, ' Add an API key and enable tracing in Settings. Existing local activity is not uploaded retroactively.'),
       el('a', { href: '#/settings' }, ' Open Settings'),
     ]));
   } else if (data.availability === 'unavailable') {
     content.push(el('div', { class: 'notice operational-notice operational-notice-warn' }, [
-      el('strong', {}, 'LangSmith analytics could not be reached'),
+      el('strong', {}, 'Langfuse analytics could not be reached'),
       el('span', {}, ` ${data.message || 'Cost and trace telemetry is temporarily unavailable.'}`),
       el('a', { href: '#/troubleshooting' }, ' Troubleshoot'),
     ]));
@@ -112,7 +112,7 @@ export async function renderAnalytics(view) {
     ]),
     el('section', { class: 'operational-panel' }, [
       el('div', { class: 'panel-heading' }, [
-        el('div', {}, [el('h2', {}, 'Cost by change'), el('p', { class: 'muted' }, 'The latest bounded trace window; model pricing must exist in LangSmith for automatic cost.')]),
+        el('div', {}, [el('h2', {}, 'Cost by change'), el('p', { class: 'muted' }, 'The latest bounded trace window; model pricing must exist in Langfuse for automatic cost.')]),
         data.window?.label ? el('span', { class: 'status-pill neutral' }, data.window.label) : null,
       ]),
       changes.length ? changesTable(changes) : el('div', { class: 'empty compact-empty' }, [
@@ -122,8 +122,8 @@ export async function renderAnalytics(view) {
             ? 'Trace telemetry is unavailable'
             : 'No traced changes yet'),
         el('p', { class: 'muted' }, data.availability === 'unavailable'
-          ? data.message || 'Check the LangSmith connection and try again.'
-          : 'Run an agent workflow, then refresh this page after LangSmith receives the trace.'),
+          ? data.message || 'Check the Langfuse connection and try again.'
+          : 'Run an agent workflow, then refresh this page after Langfuse receives the trace.'),
       ]),
     ])
   );

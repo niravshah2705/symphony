@@ -146,7 +146,7 @@ function integrationChecks(settings) {
     settings.repositoryUrl && (repositoryProvider === 'gitlab' ? settings.gitlabToken : settings.githubToken)
   );
   const tracingConfigured = Boolean(
-    settings.langsmithTracing && settings.langsmithApiKey && settings.langsmithProject
+    settings.langfuseTracing && settings.langfusePublicKey && settings.langfuseSecretKey
   );
 
   return [
@@ -167,11 +167,11 @@ function integrationChecks(settings) {
       { provider: repositoryProvider, credentialVerified: false }
     ),
     check(
-      'langsmith-integration',
+      'langfuse-integration',
       'Tracing and cost',
       tracingConfigured ? 'healthy' : 'attention',
-      tracingConfigured ? 'LangSmith tracing is configured.' : 'LangSmith tracing is not ready.',
-      tracingConfigured ? 'Use Analytics to verify incoming traces.' : 'Enable tracing and add a project and API key in Settings.',
+      tracingConfigured ? 'Langfuse tracing is configured.' : 'Langfuse tracing is not ready.',
+      tracingConfigured ? 'Use Analytics to verify incoming traces.' : 'Enable tracing and add the Langfuse key pair to the vault.',
       { credentialVerified: false }
     ),
   ];

@@ -317,7 +317,7 @@ async function runWorkflow({
       resolvedTools = tools;
       resolvedSkills = builtSkills;
       deepAgentInvoke = (prompt, tracedConfig) => {
-        // The runtime wrapper owns the LangSmith root run id. Passing the same
+        // The runtime wrapper owns the Langfuse root trace id. Passing the same
         // id into the nested LangGraph invocation would create a duplicate run.
         const childConfig = { ...tracedConfig };
         delete childConfig.runId;

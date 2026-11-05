@@ -56,7 +56,7 @@ const BRAND_ICON_PATHS = Object.freeze({
   linear: '<path d="M3.2 13.8 10.2 20.8A9 9 0 0 1 3.2 13.8ZM3.6 9.9 14.1 20.4A9 9 0 0 1 11.6 21L3 12.4A9 9 0 0 1 3.6 9.9ZM5.7 6 18 18.3A9 9 0 0 1 16 20L4 8A9 9 0 0 1 5.7 6ZM9.3 3.6A9 9 0 0 1 20.4 14.7Z"/>',
   jira: '<path d="M12 2 3.5 10.8h4.2L12 6.3l4.3 4.5h4.2L12 2Zm0 20 8.5-8.8h-4.2L12 17.7l-4.3-4.5H3.5L12 22Z"/>',
   // Observability
-  langsmith: '<circle cx="6" cy="7" r="2.2"/><circle cx="18" cy="9" r="2.2"/><circle cx="9.5" cy="18" r="2.2"/><path d="M7.6 8.2 16 8.9M8 9.3l1.2 6.6M16.2 10.8l-5.4 5.6" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+  langfuse: '<circle cx="6" cy="7" r="2.2"/><circle cx="18" cy="9" r="2.2"/><circle cx="9.5" cy="18" r="2.2"/><path d="M7.6 8.2 16 8.9M8 9.3l1.2 6.6M16.2 10.8l-5.4 5.6" stroke="currentColor" stroke-width="1.6" fill="none"/>',
 });
 
 export const iconNames = Object.freeze(Object.keys(ICON_PATHS));

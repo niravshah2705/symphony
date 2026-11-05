@@ -98,7 +98,8 @@ required for normal use. Secrets are validated and stored **server-side** in
 
 1. **API Keys & Connection** → paste your **Linear personal API key**. It is
    validated against Linear on save; the header shows connection status.
-   (Optional: add a **LangSmith** key + host to trace agent runs.)
+   Tracing needs no key here — the Langfuse pair is provisioned by the platform;
+   switch it on in the same section.)
 2. **Task Models** → assign a model to each task role ("models as tasks"):
    **Thinking** (planner), **Execution** (coder), **Testing** (tester), and
    **Deployment** (deployer). Each role picks any provider — local (Ollama / LM Studio / OMLX) or

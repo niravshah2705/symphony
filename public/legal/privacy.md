@@ -126,7 +126,7 @@ by a user or deployment operator. Those services may include:
   provider selected for a task;
 - project trackers such as Linear, Jira, or Asana;
 - source-code hosts such as GitHub or GitLab;
-- LangSmith for optional tracing and operational analytics;
+- Langfuse for optional tracing and operational analytics;
 - Google Analytics for optional website telemetry; and
 - search or other tools explicitly enabled for an agent workflow.
 

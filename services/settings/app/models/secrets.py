@@ -47,7 +47,8 @@ SECRET_KEYS: tuple[str, ...] = (
     "anthropicApiKey",
     "openaiApiKey",
     "huggingfaceApiKey",
-    "langsmithApiKey",
+    "langsmithApiKey",  # legacy trace key: no longer written; kept so the dormant
+    # `/langsmith` egress route resolves without destroying a managed secret.
     "openrouterApiKey",
     "digilockerClientId",
     "digilockerClientSecret",
@@ -58,9 +59,10 @@ SECRET_KEYS: tuple[str, ...] = (
     # JSON-encoded OpenAI/Codex OAuth token bundle. Provisioned only through the
     # direct org-admin operator surface; never accepted by the browser gateway.
     "codexTokenBundle",
-    # LangSmith LLM Gateway WORKSPACE key (distinct from langsmithApiKey, the
-    # tracing key). Managed-only: it bills the platform's LangSmith workspace,
-    # so it is resolved like any managed key but never writable by a browser.
+    # LangSmith LLM Gateway WORKSPACE key. This is ROUTING, not tracing (Langfuse
+    # is the trace sink), and it is unrelated to the dormant langsmithApiKey
+    # above. Managed-only: it bills the platform's LangSmith workspace, so it is
+    # resolved like any managed key but never writable by a browser.
     "langsmithGatewayApiKey",
     # Langfuse Cloud tracing pair. The sidecar builds `Basic base64(pk:sk)` for the
     # /langfuse route, so the public key is a stored key too (not a constant).

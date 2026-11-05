@@ -225,7 +225,7 @@ function overlayVaultState(settings, secrets = {}, connectors = {}, readiness = 
   settings.hasHuggingfaceApiKey = isSet('huggingfaceApiKey');
   settings.hasAntigravityApiKey = isSet('geminiApiKey');
   settings.hasQoderAccessToken = isSet('qoderAccessToken');
-  settings.hasLangsmithKey = isSet('langsmithApiKey');
+  settings.hasLangfuseKey = isSet('langfuseSecretKey');
   settings.jiraBaseUrl = connectors.jira_origin || '';
   settings.jiraEmail = connectors.jira_email || '';
   settings.asanaWorkspaceId = connectors.asana_workspace_id || '';
@@ -427,7 +427,7 @@ const LOCKABLE_PREFS = Object.freeze([
   ['deployHarness', 'Deployment harness'],
   ['workflowPattern', 'Workflow'],
   ['planningProvider', 'Issue tracker'],
-  ['langsmithTracing', 'Tracing'],
+  ['langfuseTracing', 'Tracing'],
   ['models', 'Model catalog'],
 ]);
 
@@ -882,13 +882,13 @@ function runtimeTiles(ctx, scopeState) {
       } catch (err) { toast(err.message, 'err'); }
     });
     const tracing = el('select', { style: 'width:100%' }, [
-      ['on', 'LangSmith (on)'], ['off', 'Off'],
-    ].map(([v, l]) => el('option', { value: v, ...((ctx.settings.langsmithTracing ? 'on' : 'off') === v ? { selected: 'selected' } : {}) }, l)));
+      ['on', 'Langfuse (on)'], ['off', 'Off'],
+    ].map(([v, l]) => el('option', { value: v, ...((ctx.settings.langfuseTracing ? 'on' : 'off') === v ? { selected: 'selected' } : {}) }, l)));
     tracing.addEventListener('change', async () => {
       try {
-        await api.saveLangsmith({ langsmithTracing: tracing.value === 'on' });
-        ctx.settings.langsmithTracing = tracing.value === 'on';
-        setScopePrefs(scopeState, { langsmithTracing: tracing.value === 'on' ? 'true' : 'false' });
+        await api.saveLangfuse({ langfuseTracing: tracing.value === 'on' });
+        ctx.settings.langfuseTracing = tracing.value === 'on';
+        setScopePrefs(scopeState, { langfuseTracing: tracing.value === 'on' ? 'true' : 'false' });
         toast('Tracing preference saved.', 'ok');
       } catch (err) { toast(err.message, 'err'); }
     });
@@ -903,7 +903,7 @@ function runtimeTiles(ctx, scopeState) {
       stageGrid,
       el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px' }, [
         el('div', { dataset: { lockKey: 'workflowPattern' } }, [field('Workflow pattern', workflow)]),
-        el('div', { dataset: { lockKey: 'langsmithTracing' } }, [field('Tracing', tracing)]),
+        el('div', { dataset: { lockKey: 'langfuseTracing' } }, [field('Tracing', tracing)]),
       ]),
     );
   };
@@ -1133,7 +1133,7 @@ function connectionsSection(ctx, scopeState) {
   const services = [
     { name: trackerName, meta: 'Issue tracker · live project views', ok: planningReady, status: planningReady ? 'Connected' : 'Needs credentials' },
     { name: 'Repository', meta: settings.repositoryProvider === 'gitlab' ? 'GitLab · branches and merge requests' : 'GitHub · branches and pull requests', ok: repoReady, status: repoReady ? 'Connected' : 'Credentials missing' },
-    { name: 'LangSmith', meta: 'Tracing and evaluation', ok: Boolean(settings.hasLangsmithKey), status: settings.hasLangsmithKey ? 'Connected' : 'Not configured' },
+    { name: 'Langfuse', meta: 'Tracing and cost analytics', ok: Boolean(settings.hasLangfuseKey), status: settings.hasLangfuseKey ? 'Connected' : 'Not configured' },
   ];
   const servicesCard = el('div', { class: 'sx-card' }, services.map((s) => el('div', { class: 'sx-svc' }, [
     el('div', { style: 'min-width:0' }, [
@@ -1404,7 +1404,6 @@ const VAULT_SECRETS = [
   { key: 'geminiApiKey', label: 'Gemini API key', hint: 'Used by the Gemini / Antigravity provider.' },
   { key: 'huggingfaceApiKey', label: 'Hugging Face token', hint: 'Used by the Hugging Face (BYoM) provider.' },
   { key: 'qoderAccessToken', label: 'Qoder personal access token', hint: 'Customer-only. Used by the Qoder Agent SDK harness, which needs direct egress (the sidecar cannot broker qodercli).' },
-  { key: 'langsmithApiKey', label: 'LangSmith API key', hint: 'Used for brokered tracing and evaluation.' },
   { key: 'digilockerClientId', label: 'DigiLocker client ID', hint: 'Customer-only. Used by identity verification after DigiLocker/API Setu onboarding.' },
   { key: 'digilockerClientSecret', label: 'DigiLocker client secret', hint: 'Customer-only. Used only server-side by the identity verification service.' },
 ];
@@ -1693,7 +1692,7 @@ function jsonSection({ view, doc }) {
 function settingsCommandCard({ view }) {
   const input = el('textarea', {
     rows: '2',
-    placeholder: 'e.g. Set the harness to codex and turn off LangSmith tracing',
+    placeholder: 'e.g. Set the harness to codex and turn off Langfuse tracing',
     style: 'width:100%;box-sizing:border-box',
   });
   const run = el('button', { class: 'primary', type: 'button' }, 'Apply with local model');
@@ -1775,10 +1774,7 @@ function keysSection(ctx, scopeState) {
   const status = el('div', { class: 'muted', style: 'font-size:13px;margin-top:6px' });
 
   const linearInput = pwd(settings.hasKey ? 'Configured — paste to replace' : 'lin_api_…');
-  const langsmithInput = pwd(settings.hasLangsmithKey ? 'Configured — paste to replace' : 'lsv2_…');
-  const hostInput = el('input', { value: settings.langsmithEndpoint || '', placeholder: 'https://api.smith.langchain.com' });
-  const projectInput = el('input', { value: settings.langsmithProject || '', placeholder: 'linear-manager' });
-  const tracingInput = el('input', { type: 'checkbox', style: 'width:auto', ...(settings.langsmithTracing ? { checked: 'checked' } : {}) });
+  const tracingInput = el('input', { type: 'checkbox', style: 'width:auto', ...(settings.langfuseTracing ? { checked: 'checked' } : {}) });
 
   const saveBtn = el('button', { class: 'primary' }, 'Save keys');
   saveBtn.addEventListener('click', async () => {
@@ -1791,27 +1787,17 @@ function keysSection(ctx, scopeState) {
         values.linearApiKey = linearInput.value.trim();
         selection.linearApiKey = 'customer';
       }
-      if (langsmithInput.value.trim()) {
-        values.langsmithApiKey = langsmithInput.value.trim();
-        selection.langsmithApiKey = 'customer';
-      }
       if (Object.keys(values).length) {
         if (!vault) throw new Error('Choose an organization or project scope you can administer.');
         const saved = await vault.set(values, selection);
         const entries = (saved && saved.secrets) || {};
         settings.hasKey = Boolean(entries.linearApiKey && entries.linearApiKey.set);
-        settings.hasLangsmithKey = Boolean(entries.langsmithApiKey && entries.langsmithApiKey.set);
         linearInput.value = '';
-        langsmithInput.value = '';
         linearInput.placeholder = settings.hasKey ? 'Configured — paste to replace' : 'lin_api_…';
-        langsmithInput.placeholder = settings.hasLangsmithKey ? 'Configured — paste to replace' : 'lsv2_…';
       }
-      const lsPayload = {
-        langsmithProject: projectInput.value.trim() || 'linear-manager',
-        langsmithEndpoint: hostInput.value.trim() || 'https://api.smith.langchain.com',
-        langsmithTracing: tracingInput.checked,
-      };
-      await api.saveLangsmith(lsPayload);
+      // The Langfuse key pair is operator-provisioned managed material and the
+      // project + base URL are deployment config, so only the switch is saved here.
+      await api.saveLangfuse({ langfuseTracing: tracingInput.checked });
 
       status.textContent = 'Keys saved.';
       status.style.color = 'var(--green)';
@@ -1850,19 +1836,19 @@ function keysSection(ctx, scopeState) {
       : 'Choose an organization or project scope you can administer to edit credentials.';
   }
 
-  return section('API Keys & Connection', 'Linear · LangSmith', true, [
+  return section('API Keys & Connection', 'Linear · Langfuse', true, [
     el('div', { class: 'subhead' }, 'Linear'),
     field('Linear API Key', linearInput, [
       'Personal key from ',
       el('a', { href: 'https://linear.app/settings/api', target: '_blank', style: 'color:var(--accent-2)' }, 'linear.app/settings/api'),
       '.',
     ]),
-    el('div', { class: 'subhead subhead-icon' }, [brandIcon('langsmith', { label: 'LangSmith' }), el('span', {}, 'Tracing')]),
+    el('div', { class: 'subhead subhead-icon' }, [brandIcon('langfuse', { label: 'Langfuse' }), el('span', {}, 'Tracing')]),
     el('label', { class: 'row', style: 'gap:8px;cursor:pointer;margin:4px 0 6px' }, [tracingInput, el('span', {}, 'Enable tracing')]),
-    el('p', { class: 'muted', style: 'margin:0 0 12px;font-size:12px' }, 'When on, agent runs are traced and stored in LangSmith for debugging and evaluation.'),
-    field('LangSmith API Key', langsmithInput),
-    field('Host / Endpoint', hostInput),
-    field('Project', projectInput),
+    el('p', { class: 'muted', style: 'margin:0 0 12px;font-size:12px' }, 'When on, every agent run is traced to Langfuse for cost, token, latency, and failure analytics.'),
+    el('p', { class: 'muted', style: 'margin:0 0 12px;font-size:12px' }, settings.hasLangfuseKey
+      ? 'Langfuse keys are provisioned by the platform and held in the vault — nothing to paste here.'
+      : 'Langfuse keys are not configured for this scope, so traces and analytics stay unavailable until the platform provisions them.'),
     el('div', { class: 'row' }, [saveBtn, settings.hasKey && vault ? removeLinear : null]),
     status,
     el('p', { class: 'muted', style: 'font-size:12px' }, 'Credentials are KMS-encrypted in the selected organization/project vault and never returned to the browser.'),

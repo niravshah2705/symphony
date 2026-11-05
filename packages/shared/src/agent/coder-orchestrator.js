@@ -309,10 +309,6 @@ async function fetchPlannedTasks(apiKey) {
 function buildKeys(settings, linearApiKey = store.getApiKey()) {
   return {
     linearApiKey,
-    langsmithApiKey: settings.langsmithApiKey,
-    langsmithTracing: settings.langsmithTracing,
-    langsmithProject: settings.langsmithProject,
-    langsmithEndpoint: settings.langsmithEndpoint,
     langfusePublicKey: settings.langfusePublicKey,
     langfuseSecretKey: settings.langfuseSecretKey,
     langfuseTracing: settings.langfuseTracing,

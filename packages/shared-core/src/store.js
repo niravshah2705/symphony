@@ -268,32 +268,16 @@ const DEFAULT_STORE = Object.freeze({
     openshellDefaultImage: 'ubuntu:24.04',
     openshellSandboxes: [],
     openshellNetworkPolicy: '',
-    // Agent Substrate — a selectable execution substrate (agentPattern 'substrate') that
-    // runs the planner OCI image as a per-run ephemeral sandboxed actor. Defaults keep
-    // existing installs unchanged (agentPattern stays 'cloudrun'); substrateUrl is empty
-    // until an operator provisions an ate-system control plane.
-    substrateUrl: CONFIG.SUBSTRATE.url,
-    substrateIngressUrl: CONFIG.SUBSTRATE.ingressUrl || '',
-    substrateAtespace: CONFIG.SUBSTRATE.atespace || '',
-    substrateActorTemplate: '',
-    substrateWorkerPool: CONFIG.SUBSTRATE.workerPool || '',
-    substratePlannerImage: CONFIG.SUBSTRATE.plannerImage || '',
-    substrateTimeoutMs: CONFIG.SUBSTRATE.timeoutMs || 60000,
-    substrateActorTtlMs: CONFIG.SUBSTRATE.actorTtlMs || 120000,
-    substrateSandboxes: [],
-    // Unified security guardrail spec consumed by BOTH the OpenShell and Substrate
-    // patterns; empty object = the guardrail.v1 default (deny-by-default).
-    guardrailSpec: {},
     imageRegistryUrl: 'ghcr.io',
     imageRegistryUsername: '',
     imageRegistryPassword: '',
-    langsmithApiKey: '', // LangSmith tracing key
-    langsmithProject: 'linear-manager',
-    langsmithEndpoint: 'https://api.smith.langchain.com',
-    langsmithTracing: true,
-    // Langfuse Cloud tracing (replaces LangSmith as the trace sink). Keys are
-    // resolved like every other provider — managed vault on the settings service,
-    // sentinel in a proxied agent. The base URL is deployment config, not a pref.
+    // Dormant since Langfuse became the trace sink: the `/langsmith` egress route
+    // still resolves it, so the vault key is retained rather than destroyed. No
+    // setting reads it and nothing writes LangSmith traces any more.
+    langsmithApiKey: '',
+    // Langfuse Cloud tracing. Keys are resolved like every other provider —
+    // managed vault on the settings service, sentinel in a proxied agent. The
+    // base URL and project are deployment config (CONFIG.LANGFUSE), not prefs.
     langfusePublicKey: '',
     langfuseSecretKey: '',
     langfuseTracing: true,
@@ -301,10 +285,6 @@ const DEFAULT_STORE = Object.freeze({
     // Existing installations inherit these values through the store merge.
     agentRuntime: 'deepagent',
     workflowPattern: 'sequential',
-    // Execution substrate where the agent process runs/is isolated:
-    // 'cloudrun' (in-process, default) | 'openshell' | 'substrate'. Orthogonal to
-    // agentRuntime (which SDK) and workflowPattern (orchestration shape).
-    agentPattern: 'cloudrun',
     // How many times to retry an LLM stream on a transient/in-stream error
     // (a stream `error` event, a 5xx/429, or a dropped connection) — these
     // surface after a 200 so the provider SDK's own retries never cover them.
@@ -720,7 +700,7 @@ function getSettings() {
   return { ...readStore().settings, ...secretOverlay() };
 }
 
-/** Merge a partial settings patch (used for LLM / LangSmith keys). */
+/** Merge a partial settings patch (used for LLM / Langfuse keys). */
 function patchSettings(patch) {
   const current = readStore();
   return writeStore({ ...current, settings: { ...current.settings, ...patch } });
