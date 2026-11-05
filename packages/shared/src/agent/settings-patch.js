@@ -181,6 +181,10 @@ const ALLOWED = Object.freeze({
   langsmithEndpoint: httpUrl(),
   langsmithTracing: bool(),
 
+  // Langfuse (non-secret toggle only; the key pair is operator-provisioned
+  // managed material and never writable through the browser surface)
+  langfuseTracing: bool(),
+
   // NVIDIA OpenShell gateway URL (non-secret; defaults to https://openshell.archagentix.com)
   openshellUrl: httpUrl(),
 

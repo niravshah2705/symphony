@@ -582,6 +582,9 @@ async function processPending(context, options = {}) {
       langsmithProject: settings.langsmithProject,
       langsmithEndpoint: settings.langsmithEndpoint,
       langsmithTracing: settings.langsmithTracing,
+      langfusePublicKey: settings.langfusePublicKey,
+      langfuseSecretKey: settings.langfuseSecretKey,
+      langfuseTracing: settings.langfuseTracing,
       agentRuntime: settings.agentRuntime,
       workflowPattern: settings.workflowPattern,
     };

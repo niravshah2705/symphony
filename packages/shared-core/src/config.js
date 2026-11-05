@@ -2,7 +2,7 @@
 
 const path = require('path');
 const { ROLES } = require('./authz');
-const { egressUrl, llmGatewayUpstream, normalizeProxyBase } = require('./egress');
+const { egressUrl, llmGatewayUpstream, langfuseUpstream, normalizeProxyBase } = require('./egress');
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -45,6 +45,29 @@ const LLM_GATEWAY = Object.freeze({
   // appends /chat/completions | /responses).
   claudeBaseUrl: proxied('/llmgw', null, LLM_GATEWAY_UPSTREAM),
   openaiBaseUrl: proxied('/llmgw/v1', null, `${LLM_GATEWAY_UPSTREAM}/v1`),
+});
+
+/**
+ * Langfuse Cloud tracing sink. In egress-proxy mode the SDK posts OTLP to the
+ * sidecar's /langfuse prefix carrying only the sentinel credential pair — the
+ * sidecar assembles the real `Basic base64(pk:sk)` from the vault, so no Langfuse
+ * secret exists in an agent container. Outside proxy mode (trusted local
+ * development) the base URL is used directly with the store-overlay keys.
+ * `environment` is the Langfuse partition for the deployment stage, so dev traffic
+ * never lands in the prod trace list.
+ */
+const LANGFUSE = Object.freeze({
+  url: proxied('/langfuse', null, langfuseUpstream(process.env)),
+  // Direct (unproxied) origin, kept for the trace URLs handed to the browser.
+  origin: langfuseUpstream(process.env),
+  environment: String(process.env.LANGFUSE_ENVIRONMENT || 'dev').trim() || 'dev',
+  // OTel resource service name: the dimension that separates planner / coder /
+  // worker populations in Langfuse. Without it every trace reports as
+  // `unknown_service:node`.
+  serviceName: String(process.env.LANGFUSE_SERVICE_NAME || 'ai-fleet-agent').trim() || 'ai-fleet-agent',
+  // Optional deep-link shortcut. Unset is normal: the project id is resolved once
+  // from GET /api/public/projects, which returns exactly the key's own project.
+  projectId: String(process.env.LANGFUSE_PROJECT_ID || '').trim(),
 });
 
 // Application login modes: 'disabled' (local single-user workflow — open) and
@@ -795,6 +818,8 @@ const CONFIG = Object.freeze({
   EGRESS_PROXY_INCLUDE_SDK,
   // Per-request LangSmith LLM Gateway feature flag (availability gate + bases).
   LLM_GATEWAY,
+  // Langfuse Cloud trace sink (sidecar-prefixed OTLP origin + stage partition).
+  LANGFUSE,
   LINEAR_API_URL: proxied('/linear', process.env.LINEAR_API_URL, 'https://api.linear.app/graphql'),
   GITHUB_API_ORIGIN: proxied('/github-api', process.env.GITHUB_API_ORIGIN, 'https://api.github.com'),
   GIT_HTTPS_ORIGIN: proxied('/git/github', process.env.GIT_HTTPS_ORIGIN, 'https://github.com'),

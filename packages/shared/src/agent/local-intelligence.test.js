@@ -108,18 +108,17 @@ test('modelMessageText supports local reasoning-model response shapes', () => {
   );
 });
 
-test('local model invocation runs in an explicit tracing-disabled context', async () => {
-  const { getCurrentRunTree } = require('langsmith/traceable');
+test('local model invocation runs in an explicit untraced context', async () => {
+  const langfuse = require('./langfuse');
   const observed = await invokeWithTimeout(
-    {
-      invoke: async () => ({
-        tracingEnabled: getCurrentRunTree().tracingEnabled,
-      }),
-    },
+    { invoke: async () => ({ untraced: langfuse.isUntraced() }) },
     [],
     {}
   );
-  assert.deepEqual(observed, { tracingEnabled: false });
+  // The untraced region is what keeps a surrounding hosted run's trace from
+  // carrying this prompt or output to a third-party sink.
+  assert.deepEqual(observed, { untraced: true });
+  assert.equal(langfuse.isUntraced(), false); // the region ends with the invoke
 });
 
 test('normalizeSettingsProposal keeps only primitive-valued keys', () => {

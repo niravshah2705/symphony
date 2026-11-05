@@ -1,21 +1,21 @@
 'use strict';
 
 /**
- * Execute one workflow with a normalized result contract and one LangSmith root
- * span. Executor construction happens inside that span and its error boundary,
- * so a throwing factory is observed exactly like a throwing SDK invocation.
+ * Execute one workflow with a normalized result contract and one Langfuse root
+ * observation. Executor construction happens inside that observation and its
+ * error boundary, so a throwing factory is observed exactly like a throwing SDK
+ * invocation.
  */
 
-const { traceable, getCurrentRunTree } = require('langsmith/traceable');
 const registry = require('./registry');
+const langfuse = require('../langfuse');
 const {
   AgentRuntimeError,
   normalizeWorkflowPattern,
   applyWorkflowPattern,
   publicExecution,
   applyRubricMiddleware,
-  annotateTrace,
-  langSmithProvider,
+  traceMetadata,
   meterRun,
   wrapExecutionError,
   resolveAndRouteSkills,
@@ -106,7 +106,6 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
         const reviewed = reviewEnabled
           ? await applyRubricMiddleware(options, value, runPrompt, runOnce)
           : value;
-        annotateTrace(reviewed, options.getCurrentRunTree || getCurrentRunTree);
         meterRun(options, reviewed);
         // Stop / SessionEnd equivalent: compress + persist. Awaited because Cloud
         // Run has no reliable post-response background window; fully fail-open.
@@ -123,7 +122,6 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
         if (routingMetrics && wrapped && !wrapped.skillRouterMetrics) {
           wrapped.skillRouterMetrics = routingMetrics;
         }
-        annotateTrace(wrapped, options.getCurrentRunTree || getCurrentRunTree);
         meterRun(options, wrapped);
         throw wrapped;
       }
@@ -133,7 +131,8 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
     const invokeConfig = options.invokeConfig || {};
     const harness = runtimeRegistry.harnessLabel(runtime);
     const modelName = (options.llm && options.llm.model) || '';
-    const traceMetadataBase = {
+    const attribution = options.attribution || {};
+    const metadata = {
       ...(invokeConfig.metadata || {}),
       agent_runtime: runtime,
       harness,
@@ -145,32 +144,88 @@ function createRuntimeDispatcher(runtimeRegistry = registry) {
         : {}),
       model_provider: (options.llm && options.llm.provider) || 'unknown',
       model_name: modelName || 'unknown',
-      ls_provider: langSmithProvider(options.llm),
-      ls_model_name: modelName || 'unknown',
       workflow_pattern: workflowPattern,
       workflow_name: options.workflow || 'agent',
     };
-    const traceFactory = options.traceFactory || traceable;
-    const traced = traceFactory(execute, {
-      name: String(invokeConfig.runName || `agent-runtime:${runtime}`).slice(0, 120),
-      run_type: runtime === 'deepagent' ? 'chain' : 'llm',
-      id: invokeConfig.runId,
-      tags: [
-        ...new Set([
-          ...(invokeConfig.tags || []),
-          ...(options.tags || []),
-          `runtime:${runtime}`,
-          `harness:${harness}`,
-          `pattern:${workflowPattern}`,
-          ...(modelName ? [`model:${modelName}`] : []),
-        ]),
-      ],
-      metadata: traceMetadataBase,
-      processInputs: () => ({ prompt: String(prompt).slice(0, 20_000) }),
-      processOutputs: (result) => publicExecution(result),
-    });
-    return traced();
+    const tags = [
+      ...new Set([
+        ...(invokeConfig.tags || []),
+        ...(options.tags || []),
+        `runtime:${runtime}`,
+        `harness:${harness}`,
+        `pattern:${workflowPattern}`,
+        ...(modelName ? [`model:${modelName}`] : []),
+        // One shared Langfuse project: tenancy is a dimension, not a partition.
+        ...(attribution.orgId ? [`org:${attribution.orgId}`] : []),
+        ...(attribution.projectId ? [`project:${attribution.projectId}`] : []),
+      ]),
+    ];
+    let traceId = null;
+    const traceRun = options.traceRun || langfuse.traceAgentRun;
+    const result = await traceRun(
+      {
+        name: String(invokeConfig.runName || `agent-runtime:${runtime}`).slice(0, 200),
+        traceName: options.workflow || `agent-runtime:${runtime}`,
+        input: String(prompt).slice(0, 20_000),
+        metadata,
+        tags,
+        userId: attribution.userId || null,
+        // The caller-supplied run session groups every observation of one planner
+        // or coder job; the harness's own conversation id rides in the output.
+        sessionId: invokeConfig.metadata && invokeConfig.metadata.session_id
+          ? invokeConfig.metadata.session_id
+          : attribution.taskId || null,
+        model: modelName,
+        llm: options.llm,
+        describe: traceDetail,
+        onTraceId: (id) => {
+          traceId = id;
+        },
+      },
+      execute
+    );
+    if (traceId && result && typeof result === 'object') result.traceId = traceId;
+    return result;
   };
+}
+
+/**
+ * Map a normalized execution (or a wrapped failure) onto Langfuse trace fields:
+ * the public view of the result as output, the contract's usage/cost metadata for
+ * search, and structured usage/cost on the generation child for Langfuse's own
+ * cost accounting.
+ */
+function traceDetail(value) {
+  const failed = value instanceof Error;
+  const usage = value && value.usage;
+  return {
+    ...(!failed ? { output: publicExecution(value) } : {}),
+    metadata: traceMetadata(value),
+    ...(usage ? { usageDetails: usageDetails(usage) } : {}),
+    ...(() => {
+      const cost = value && value.costUsd;
+      return Number.isFinite(cost) && cost >= 0 ? { costDetails: { total: cost } } : {};
+    })(),
+  };
+}
+
+function usageDetails(usage) {
+  const map = [
+    ['input', 'inputTokens'],
+    ['output', 'outputTokens'],
+    ['total', 'totalTokens'],
+    ['cache_read_input_tokens', 'cachedInputTokens'],
+    ['cache_creation_input_tokens', 'cacheCreationInputTokens'],
+    ['reasoning', 'reasoningOutputTokens'],
+  ];
+  const details = {};
+  for (const [key, field] of map) {
+    // normalizeUsage reports a dimension as a finite number or null — null must
+    // stay absent, or Langfuse books unreported dimensions as zero usage.
+    const value = usage[field];
+    if (Number.isFinite(value)) details[key] = value;
+  }
+  return details;
 }
 
 const executeAgentRuntime = createRuntimeDispatcher(registry);

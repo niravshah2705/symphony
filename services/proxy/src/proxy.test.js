@@ -145,6 +145,41 @@ test('buildInjection: git route builds x-access-token Basic auth', async () => {
   assert.equal(headers.authorization, expected);
 });
 
+test('buildInjection: langfuse basic-pair injects Basic base64(publicKey:secretKey)', async () => {
+  const headers = await credentials.buildInjection(EGRESS_ROUTES.langfuse, {
+    resolved: {
+      secrets: {
+        langfusePublicKey: { source: 'managed', value: 'pk-lf-managed' },
+        langfuseSecretKey: { source: 'managed', value: 'sk-lf-managed' },
+      },
+    },
+  });
+  const expected = 'Basic ' + Buffer.from('pk-lf-managed:sk-lf-managed').toString('base64');
+  assert.deepEqual(headers, { authorization: expected });
+});
+
+test('buildInjection: langfuse fails closed when either half of the pair is missing', async () => {
+  await assert.rejects(
+    credentials.buildInjection(EGRESS_ROUTES.langfuse, {
+      resolved: { secrets: { langfusePublicKey: { source: 'managed', value: 'pk-lf-managed' } } },
+    }),
+    /langfuseSecretKey/,
+  );
+  await assert.rejects(
+    credentials.buildInjection(EGRESS_ROUTES.langfuse, {
+      resolved: { secrets: { langfuseSecretKey: { source: 'managed', value: 'sk-lf-managed' } } },
+    }),
+    /langfusePublicKey/,
+  );
+});
+
+test('buildUpstreamUrl: langfuse keeps the SDK-appended OTLP path on the bare origin', () => {
+  assert.equal(
+    buildUpstreamUrl(EGRESS_ROUTES.langfuse, '/api/public/otel/v1/traces'),
+    'https://cloud.langfuse.com/api/public/otel/v1/traces'
+  );
+});
+
 test('GitLab REST and smart-HTTP routes use provider-specific injection', async () => {
   const resolved = { secrets: { gitlabToken: { source: 'customer', value: 'glpat_c' } } };
   assert.deepEqual(

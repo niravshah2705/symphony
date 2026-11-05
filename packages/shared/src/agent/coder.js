@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const { CONFIG } = require('../config');
 const store = require('../store');
-const { configureTracing } = require('./plan');
+const langfuse = require('./langfuse');
 const { prepareWorkspace, preparePlannedWorkspace } = require('./workspace');
 const framework = require('./framework');
 const tools = require('./tools');
@@ -287,7 +287,7 @@ async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep, settings =
   if (!isCoderLlmUsable(llm)) throw new CoderError('Configure the agent model in Settings → LLM.', 400);
   if (!apiKey) throw new CoderError('A Linear API key is required for the code-writer agent.', 400);
 
-  const traced = configureTracing(keys);
+  const traced = langfuse.configureLangfuse(keys);
   const runId = crypto.randomUUID();
 
   step(`Preparing workspace for ${issue.identifier || issue.id}…`);
@@ -378,7 +378,7 @@ async function runPlannedCoderLocal({
   if (!isCoderLlmUsable(llm)) throw new CoderError('Configure the agent model in Settings → LLM.', 400);
   if (!apiKey) throw new CoderError('A Linear API key is required for the code-writer agent.', 400);
 
-  const traced = configureTracing(keys);
+  const traced = langfuse.configureLangfuse(keys);
   const runId = crypto.randomUUID();
 
   // Resolve the repo for THIS project (set at project creation), else the global

@@ -275,6 +275,12 @@ const DEFAULT_STORE = Object.freeze({
     langsmithProject: 'linear-manager',
     langsmithEndpoint: 'https://api.smith.langchain.com',
     langsmithTracing: true,
+    // Langfuse Cloud tracing (replaces LangSmith as the trace sink). Keys are
+    // resolved like every other provider — managed vault on the settings service,
+    // sentinel in a proxied agent. The base URL is deployment config, not a pref.
+    langfusePublicKey: '',
+    langfuseSecretKey: '',
+    langfuseTracing: true,
     // Provider-neutral execution engine and bounded orchestration pattern.
     // Existing installations inherit these values through the store merge.
     agentRuntime: 'deepagent',
@@ -641,6 +647,11 @@ const SECRET_ENV = Object.freeze({
   githubToken: 'GITHUB_TOKEN',
   gitlabToken: 'GITLAB_TOKEN',
   langsmithApiKey: 'LANGSMITH_API_KEY',
+  // Langfuse Cloud tracing pair. BOTH are stored keys because the sidecar builds
+  // `Basic base64(publicKey:secretKey)` from them (egress route `/langfuse`).
+  // Only used by the unproxied local profile; a proxied agent sends the sentinel.
+  langfusePublicKey: 'LANGFUSE_PUBLIC_KEY',
+  langfuseSecretKey: 'LANGFUSE_SECRET_KEY',
   // LangSmith LLM Gateway workspace key (managed-only, distinct from the tracing
   // key above) — the non-proxied gateway service + local dev read it here.
   langsmithGatewayApiKey: 'LANGSMITH_GATEWAY_API_KEY',
