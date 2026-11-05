@@ -30,7 +30,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-knowledge-search-error | 2 | [agent-knowledge-search-error.md](agent-knowledge-search-error.md) |
 | agent-local-intelligence-error | 2 | [agent-local-intelligence-error.md](agent-local-intelligence-error.md) |
 | agent-metric | 31 | [agent-metric.md](agent-metric.md) |
-| agent-model | 455 | [agent-model.md](agent-model.md) |
+| agent-model | 476 | [agent-model.md](agent-model.md) |
 | agent-models | 41 | [agent-models.md](agent-models.md) |
 | agent-normalize | 19 | [agent-normalize.md](agent-normalize.md) |
 | agent-organization-context-mismatch | 2 | [agent-organization-context-mismatch.md](agent-organization-context-mismatch.md) |
@@ -38,7 +38,6 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-parse | 2 | [agent-parse.md](agent-parse.md) |
 | agent-path | 3 | [agent-path.md](agent-path.md) |
 | agent-pattern | 6 | [agent-pattern.md](agent-pattern.md) |
-| agent-policy | 21 | [agent-policy.md](agent-policy.md) |
 | agent-policy-denied-error | 2 | [agent-policy-denied-error.md](agent-policy-denied-error.md) |
 | agent-policy-unavailable-error | 2 | [agent-policy-unavailable-error.md](agent-policy-unavailable-error.md) |
 | agent-query | 11 | [agent-query.md](agent-query.md) |
@@ -65,7 +64,6 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-verify | 5 | [agent-verify.md](agent-verify.md) |
 | agent-within | 2 | [agent-within.md](agent-within.md) |
 | app-embed | 8 | [app-embed.md](app-embed.md) |
-| app-engine | 7 | [app-engine.md](app-engine.md) |
 | app-error | 5 | [app-error.md](app-error.md) |
 | app-error-envelope | 4 | [app-error-envelope.md](app-error-envelope.md) |
 | archagentix-catalog | 3 | [archagentix-catalog.md](archagentix-catalog.md) |
@@ -85,6 +83,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | e2e-json | 5 | [e2e-json.md](e2e-json.md) |
 | e2e-org | 12 | [e2e-org.md](e2e-org.md) |
 | e2e-source | 8 | [e2e-source.md](e2e-source.md) |
+| e2e-substrate | 9 | [e2e-substrate.md](e2e-substrate.md) |
 | e2e-test:agent | 9 | [e2e-test-agent.md](e2e-test-agent.md) |
 | e2e-workflow | 11 | [e2e-workflow.md](e2e-workflow.md) |
 | fixtures-collection | 3 | [fixtures-collection.md](fixtures-collection.md) |
@@ -102,6 +101,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | harnesses-fake-google | 3 | [harnesses-fake-google.md](harnesses-fake-google.md) |
 | harnesses-memory | 293 | [harnesses-memory.md](harnesses-memory.md) |
 | hooks-touch | 7 | [hooks-touch.md](hooks-touch.md) |
+| integration-org | 58 | [integration-org.md](integration-org.md) |
 | js-analytics | 46 | [js-analytics.md](js-analytics.md) |
 | js-fake | 4 | [js-fake.md](js-fake.md) |
 | js-fake-text-node | 2 | [js-fake-text-node.md](js-fake-text-node.md) |
@@ -125,7 +125,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | provisioning-provision | 13 | [provisioning-provision.md](provisioning-provision.md) |
 | provisioning-test:gcp | 6 | [provisioning-test-gcp.md](provisioning-test-gcp.md) |
 | registry-validate | 2 | [registry-validate.md](registry-validate.md) |
-| repositories-project | 667 | [repositories-project.md](repositories-project.md) |
+| repositories-project | 609 | [repositories-project.md](repositories-project.md) |
 | routes-analytics | 6 | [routes-analytics.md](routes-analytics.md) |
 | routes-backend | 2 | [routes-backend.md](routes-backend.md) |
 | routes-bounded | 3 | [routes-bounded.md](routes-bounded.md) |
@@ -237,7 +237,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | store-workspace-context-error | 2 | [store-workspace-context-error.md](store-workspace-context-error.md) |
 | store-workspace-organization | 2 | [store-workspace-organization.md](store-workspace-organization.md) |
 | support-parse | 107 | [support-parse.md](support-parse.md) |
-| terraform-google | 452 | [terraform-google.md](terraform-google.md) |
+| terraform-google | 460 | [terraform-google.md](terraform-google.md) |
 | terraform-openshell-gke-resource | 106 | [terraform-openshell-gke-resource.md](terraform-openshell-gke-resource.md) |
 | terraform-openshell-gke-resource-kubectl-manifest | 2 | [terraform-openshell-gke-resource-kubectl-manifest.md](terraform-openshell-gke-resource-kubectl-manifest.md) |
 | terraform-openshell-gke-substrate | 2 | [terraform-openshell-gke-substrate.md](terraform-openshell-gke-substrate.md) |

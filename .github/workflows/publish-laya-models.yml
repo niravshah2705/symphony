@@ -1,0 +1,190 @@
+name: Publish Laya Model Bundle
+
+# Pre-download the Laya checkpoints (Hugging Face hub cache) and publish them to
+# the Laya models GCS bucket as a VERSIONED bundle:
+#   gs://<bucket>/<version>/models--<org>--<repo>/...   (+ laya-models-manifest.json)
+# NOTE: the laya-inference service now BAKES its weights into the image
+# (deploy/gcp/Dockerfile.laya-inference runs hf download at build time; the
+# image digest is the pin). This workflow is kept as the out-of-image RECORD of
+# which checkpoint revisions each bundle version holds (audit + backup), not as
+# the runtime source. Same layout as the skills registry (publish-skills.yml).
+#
+# Snapshot entries are DE-REFERENCED (cp -L) before upload: the hub cache stores
+# them as symlinks into blobs/, and gcsfuse has no symlinks — with the file
+# CONTENT sitting at the snapshot path, offline loading resolves read-only with
+# no link creation. Cost: each checkpoint is stored ~2x (blobs + snapshots),
+# fine for a multi-GB internal registry with object versioning.
+#
+# Terraform CREATES the bucket ("<GCP_PROJECT_ID>-aifleet-laya-models", derived
+# the same way here and in laya_models.tf/locals.tf; LAYA_MODELS_BUCKET is an
+# OPTIONAL override). Auth is keyless via Workload Identity Federation (same
+# provider/SA as deploy.yml). The deployer SA also needs objectAdmin on the
+# bucket — granted by var.laya_models_publisher_member.
+# SECURITY: no untrusted github.event.* value is interpolated into any `run:`
+# script body — the workflow_dispatch inputs are passed via `env:` and
+# validated before use as GCS prefixes / repo ids.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Bundle version directory to publish (e.g. v1, v2). Record-only: the runtime bakes weights into the image, so nothing pins this at deploy time."
+        type: string
+        required: true
+        default: v1
+      repos:
+        description: "Comma-separated HF repo ids to include in the bundle."
+        type: string
+        required: false
+        default: convaiinnovations/laya,convaiinnovations/laya-multilingual,convaiinnovations/laya-typed-decisions
+
+# Never let two publishes race the same bucket prefix.
+concurrency:
+  group: laya-models-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for Workload Identity Federation
+
+env:
+  HF_CACHE_DIR: ${{ github.workspace }}/hf-cache
+  FLAT_CACHE_DIR: ${{ github.workspace }}/hf-cache-flat
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Hugging Face CLI
+        run: python -m pip install --upgrade pip "huggingface_hub[cli]"
+
+      - name: Resolve + validate version and repo list
+        id: ver
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_REPOS: ${{ inputs.repos }}
+        run: |
+          set -euo pipefail
+          VERSION="$INPUT_VERSION"
+          # Must be a single safe path segment before it becomes a GCS prefix
+          # (defends against a crafted input).
+          case "$VERSION" in
+            "" | "." | ".." | */* | *[!A-Za-z0-9._-]*)
+              echo "Refusing invalid models version: '$VERSION'" >&2
+              exit 1
+              ;;
+          esac
+          # Each repo id must be exactly "<org>/<repo>" of safe segments, since
+          # these become directory names under the hub cache.
+          IFS=',' read -ra REPOS <<< "$INPUT_REPOS"
+          for r in "${REPOS[@]}"; do
+            if [[ ! "$r" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+              echo "Refusing invalid HF repo id: '$r'" >&2
+              exit 1
+            fi
+          done
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "repos=$INPUT_REPOS" >> "$GITHUB_OUTPUT"
+          echo "Resolved models version: $VERSION"
+
+      - name: Download checkpoints into hub cache
+        env:
+          REPOS: ${{ steps.ver.outputs.repos }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HF_CACHE_DIR"
+          IFS=',' read -ra REPOS_ARR <<< "$REPOS"
+          for r in "${REPOS_ARR[@]}"; do
+            echo "Downloading $r (default revision) into $HF_CACHE_DIR"
+            hf download "$r" --cache-dir "$HF_CACHE_DIR"
+          done
+
+      - name: De-reference symlinks (gcsfuse has none)
+        run: |
+          set -euo pipefail
+          mkdir -p "$FLAT_CACHE_DIR"
+          cp -rL "$HF_CACHE_DIR"/. "$FLAT_CACHE_DIR"/
+          # Refuse to ship a cache that still contains symlinks anywhere.
+          if [ -n "$(find "$FLAT_CACHE_DIR" -type l -print -quit)" ]; then
+            echo "Symlinks survived de-referencing; refusing to publish." >&2
+            exit 1
+          fi
+
+      - name: Write bundle manifest
+        id: manifest
+        env:
+          REPOS: ${{ steps.ver.outputs.repos }}
+        run: |
+          set -euo pipefail
+          MANIFEST="$FLAT_CACHE_DIR/laya-models-manifest.json"
+          echo '{"checkpoints":[' > "$MANIFEST"
+          first=1
+          IFS=',' read -ra REPOS_ARR <<< "$REPOS"
+          for r in "${REPOS_ARR[@]}"; do
+            org="${r%%/*}"; name="${r#*/}"
+            slug="models--${org}--${name}"
+            sha=""
+            if [ -f "$FLAT_CACHE_DIR/$slug/refs/main" ]; then
+              sha="$(cat "$FLAT_CACHE_DIR/$slug/refs/main")"
+            elif [ -d "$FLAT_CACHE_DIR/$slug/snapshots" ]; then
+              sha="$(ls "$FLAT_CACHE_DIR/$slug/snapshots" | head -1)"
+            fi
+            [ -n "$sha" ] || { echo "Could not resolve commit SHA for $r" >&2; exit 1; }
+            echo "Pinned $r at $sha"
+            if [ "$first" = "1" ]; then first=0; else printf ',' >> "$MANIFEST"; fi
+            printf '{"repo":"%s","revision":"%s"}' "$r" "$sha" >> "$MANIFEST"
+          done
+          echo ']}' >> "$MANIFEST"
+          jq . "$MANIFEST"
+
+      - name: Publish versioned bundle to GCS
+        env:
+          # Both are repo VARS (trusted config), never untrusted github.event.* —
+          # read via env only. GCP_PROJECT_ID derives the Terraform-created bucket
+          # name ("<project_id>-aifleet-laya-models", same as locals.tf);
+          # LAYA_MODELS_BUCKET is an OPTIONAL override (matches
+          # var.laya_models_bucket_name).
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          LAYA_MODELS_BUCKET_OVERRIDE: ${{ vars.LAYA_MODELS_BUCKET }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          BUCKET="${LAYA_MODELS_BUCKET_OVERRIDE:-}"
+          if [ -z "$BUCKET" ]; then
+            if [ -z "${GCP_PROJECT_ID:-}" ]; then
+              echo "GCP_PROJECT_ID repo variable is not set — cannot derive the Laya models bucket name." >&2
+              echo "Set it with: gh variable set GCP_PROJECT_ID --body <project-id>" >&2
+              exit 1
+            fi
+            BUCKET="${GCP_PROJECT_ID}-aifleet-laya-models"
+          fi
+          echo "Target Laya models bucket: $BUCKET"
+
+          DEST="gs://${BUCKET}/${VERSION}"
+          echo "Publishing $FLAT_CACHE_DIR -> $DEST"
+
+          # rsync mirrors the cache INTO this version's prefix only. -d prunes
+          # objects removed from source WITHIN this <version>/ prefix; other
+          # version prefixes live elsewhere and are never touched, so pinned
+          # older versions keep working (multi-version coexistence).
+          gsutil -m rsync -r -d "$FLAT_CACHE_DIR" "$DEST"
+
+          # Keep the manifest at the version root and as a top-level pointer to
+          # the newest published bundle (for humans / tooling), mirroring the
+          # skills-manifest handling in publish-skills.yml.
+          gsutil cp "$FLAT_CACHE_DIR/laya-models-manifest.json" "${DEST}/laya-models-manifest.json"
+          gsutil cp "$FLAT_CACHE_DIR/laya-models-manifest.json" "gs://${BUCKET}/laya-models-manifest.json"
+
+          echo "Published Laya model bundle to $DEST"
+          gsutil ls "$DEST" | head -20

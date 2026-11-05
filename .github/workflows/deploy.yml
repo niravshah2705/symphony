@@ -93,7 +93,7 @@ jobs:
             email:    ['services/email/**', 'deploy/gcp/Dockerfile.email']
             identity: ['services/identity-verification/**', 'deploy/gcp/Dockerfile.identity-verification']
             billing:  ['services/billing/**', 'deploy/gcp/Dockerfile.billing']
-            laya:     ['services/laya-inference/**', 'deploy/gcp/Dockerfile.laya-inference']
+            laya:     ['deploy/gcp/Dockerfile.laya-inference', 'deploy/gcp/terraform/laya_inference.tf', 'deploy/gcp/terraform/laya_models.tf']
             clm:      ['services/clm-inference/**',  'deploy/gcp/Dockerfile.clm-inference']
 
       - id: plan
@@ -512,6 +512,8 @@ jobs:
             -var="google_one_tap_client_id=${{ vars.GOOGLE_ONE_TAP_CLIENT_ID }}"
             -var="skills_bucket_name=${{ vars.SKILLS_BUCKET }}"
             -var="skills_version=${{ vars.SKILLS_VERSION || 'v1' }}"
+            -var="laya_models_bucket_name=${{ vars.LAYA_MODELS_BUCKET }}"
+            -var="laya_model_version=${{ vars.LAYA_MODEL_VERSION || 'v1' }}"
             -var="provisioning_enabled=${{ vars.PROVISIONING_ENABLED || 'false' }}"
             -var="pipeline_orchestrator_enabled=${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}"
             -var="pipeline_deployment_enabled=${{ vars.PIPELINE_DEPLOYMENT_ENABLED || 'false' }}"

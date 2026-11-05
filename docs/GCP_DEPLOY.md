@@ -256,6 +256,51 @@ publish an initial version by running the **Publish Skills Bundle** workflow
 `packages/shared-core/src/agent/skills/**`. No `SKILLS_BUCKET` repo variable is
 required — the workflow derives the name from `GCP_PROJECT_ID`.
 
+## Laya model registry (offline checkpoints, baked into the image)
+
+The **laya-inference** service (`deploy/gcp/Dockerfile.laya-inference` = pip
+`laya[serve]`, `laya-serve` on :8000, `POST /v1/systemone`, `GET /health`) serves
+its Hugging Face checkpoints **fully offline**: the three checkpoints are
+downloaded **at image build time** into `/opt/laya-cache` and the container never
+reaches the Hub. A gcsfuse-mounted bundle was tried first and abandoned:
+`safetensors` reads over FUSE made each CPU checkpoint build ~3.5 min, and
+`laya-serve` preloads *before* binding the port, so no revision ever passed its
+startup probe (revisions 00015-00018). The image digest is now the weights pin.
+
+- **Image bake** — `Dockerfile.laya-inference` runs `hf download` for
+  `convaiinnovations/laya` (english), `laya-multilingual`, and
+  `laya-typed-decisions` into `/opt/laya-cache`, then sets `HF_HUB_OFFLINE=1`,
+  `TRANSFORMERS_OFFLINE=1`, `HF_HUB_CACHE=/opt/laya-cache`. Terraform keeps
+  `LAYA_DEVICE`/thread caps overridable without a rebuild.
+- **GCS bundle (audit/backup only)** — `.github/workflows/publish-laya-models.yml`
+  still publishes versioned `<version>/models--…` prefixes +
+  `laya-models-manifest.json` (resolved commit SHAs) to the bucket Terraform owns
+  (`laya_models.tf`, `<project_id>-aifleet-laya-models`), recording exactly which
+  checkpoint revisions correspond to each bundle version. The service no longer
+  mounts it.
+- **Sizing** — 2 CPU / 8Gi (`var.laya_cpu`/`var.laya_memory`): all three
+  checkpoints preload (`LAYA_PRELOAD=1`, `LAYA_MODELS=english,multilingual,
+  typed-decisions`, `LAYA_MAX_LOADED=3`) for auto routing; thread caps
+  (`LAYA_THREADS`/`OMP`/`MKL`) follow `var.laya_cpu`. The fp16 weights are
+  ~2.3GB on disk but CPU inference materializes them as float32 (~4.7GB
+  resident) plus ~0.4GB torch overhead, so **8Gi is the floor**: at 4Gi every
+  instance was OOM-killed while building the *second* checkpoint (revisions
+  00016-00018 each logged one `Agent(repo)` build, then exited silently ~5 min
+  in with no traceback — preload is synchronous, so the port never bound and
+  the startup probe timed out). The startup probe keeps a 20-min budget
+  (15s × 80) and Terraform a 45-min operation wait so a slow build never aborts
+  the rollout.
+- **Rollout** — change the checkpoint set/revision in the Dockerfile, bump the
+  version, and deploy; the rebuilt image (new digest) produces a fresh Cloud Run
+  revision automatically. The GCS `laya_model_version` pin no longer drives
+  runtime behavior.
+
+**Cut a new model bundle (record only)**
+
+1. Run **Publish Laya Model Bundle** (`workflow_dispatch`, e.g. `version = v2`).
+2. Note the commit SHAs in the printed/uploaded `laya-models-manifest.json` and
+   match them to the `hf download` revisions in the Dockerfile build log.
+
 ## Roles & access control (RBAC)
 
 Authorization is **role-based** and enforced **server-side on every `/api` route**
