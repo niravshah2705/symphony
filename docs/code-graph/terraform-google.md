@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 461 nodes
+Community of 463 nodes
 
-- **Size**: 461 nodes
-- **Cohesion**: 0.7556
+- **Size**: 463 nodes
+- **Cohesion**: 0.7550
 - **Dominant Language**: hcl
 
 ## Members
@@ -65,7 +65,7 @@ Community of 461 nodes
 | resource.google_secret_manager_secret.email_smtp_password | Class | ./deploy/gcp/terraform/email_service.tf | 35-43 |
 | resource.google_secret_manager_secret_iam_member.email_smtp_user_accessor | Class | ./deploy/gcp/terraform/email_service.tf | 62-67 |
 
-*... and 411 more members.*
+*... and 413 more members.*
 
 ## Execution Flows
 
@@ -75,7 +75,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform/variables.tf` (154 edge(s))
+- `./deploy/gcp/terraform/variables.tf` (156 edge(s))
 - `./deploy/gcp/terraform/locals.tf` (57 edge(s))
 - `./deploy/gcp/terraform/pipeline.tf` (29 edge(s))
 - `./deploy/gcp/terraform/outputs.tf` (27 edge(s))

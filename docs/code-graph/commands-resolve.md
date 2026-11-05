@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 216 nodes
+Community of 218 nodes
 
-- **Size**: 216 nodes
-- **Cohesion**: 0.0608
+- **Size**: 218 nodes
+- **Cohesion**: 0.0621
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 216 nodes
 | test:resolveToken reads ADLC_TOKEN from the environment only@L44 | Test | ./packages/cli/src/client.test.js | 44-51 |
 | test:request sends a bearer Authorization header when a token is set@L53 | Test | ./packages/cli/src/client.test.js | 53-64 |
 
-*... and 166 more members.*
+*... and 168 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 216 nodes
 
 ### Outgoing
 
-- `equal` (302 edge(s))
-- `ok` (184 edge(s))
+- `equal` (247 edge(s))
+- `ok` (185 edge(s))
 - `expect` (175 edge(s))
-- `match` (154 edge(s))
+- `match` (150 edge(s))
 - `locator` (84 edge(s))
-- `includes` (59 edge(s))
 - `route` (58 edge(s))
-- `deepEqual` (56 edge(s))
+- `deepEqual` (53 edge(s))
+- `includes` (49 edge(s))
 - `indexOf` (41 edge(s))
 - `map` (36 edge(s))
+- `filter` (33 edge(s))
 - `request` (33 edge(s))
 - `join` (33 edge(s))
-- `filter` (32 edge(s))
 - `slice` (30 edge(s))
-- `doesNotMatch` (30 edge(s))
+- `doesNotMatch` (29 edge(s))
 
 ### Incoming
 
-- `equal` (302 edge(s))
-- `ok` (184 edge(s))
+- `equal` (247 edge(s))
+- `ok` (185 edge(s))
 - `expect` (175 edge(s))
-- `match` (154 edge(s))
+- `match` (150 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
-- `includes` (56 edge(s))
-- `deepEqual` (56 edge(s))
+- `deepEqual` (53 edge(s))
+- `includes` (46 edge(s))
 - `indexOf` (40 edge(s))
+- `filter` (32 edge(s))
 - `map` (31 edge(s))
-- `filter` (31 edge(s))
-- `doesNotMatch` (30 edge(s))
+- `doesNotMatch` (29 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
 - `toBeVisible` (28 edge(s))
 - `./services/planner/src/routes/agent.test.js::call` (26 edge(s))

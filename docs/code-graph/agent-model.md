@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 455 nodes
+Community of 453 nodes
 
-- **Size**: 455 nodes
-- **Cohesion**: 0.3272
+- **Size**: 453 nodes
+- **Cohesion**: 0.3277
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,21 +65,22 @@ Community of 455 nodes
 | realResolveModel | Function | ./packages/shared/src/agent/business-pipeline.js | 89-94 |
 | invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
 
-*... and 405 more members.*
+*... and 403 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
 - **generatePlan** (criticality: 0.67, depth: 6)
+- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
 - **startScheduler** (criticality: 0.65, depth: 5)
+- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
 - `equal` (403 edge(s))
-- `deepEqual` (78 edge(s))
+- `deepEqual` (77 edge(s))
 - `String` (58 edge(s))
 - `strictEqual` (48 edge(s))
 - `push` (44 edge(s))
@@ -91,19 +92,19 @@ Community of 455 nodes
 - `slice` (31 edge(s))
 - `Boolean` (28 edge(s))
 - `join` (28 edge(s))
-- `require` (26 edge(s))
+- `require` (25 edge(s))
 - `isFinite` (25 edge(s))
 
 ### Incoming
 
 - `equal` (403 edge(s))
-- `deepEqual` (78 edge(s))
+- `deepEqual` (77 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (55 edge(s))
 - `strictEqual` (48 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
 - `./packages/shared/src/agent/business-pipeline.js` (46 edge(s))
-- `./packages/shared/src/agent/local-intelligence.js` (46 edge(s))
+- `./packages/shared/src/agent/local-intelligence.js` (44 edge(s))
 - `./packages/shared/src/agent/llm.js` (40 edge(s))
 - `ok` (33 edge(s))
 - `match` (28 edge(s))
