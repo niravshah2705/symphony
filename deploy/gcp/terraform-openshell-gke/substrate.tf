@@ -21,10 +21,11 @@
 # The ate-system CONTROL PLANE itself (ateapi/atelet/atecontroller/
 # ate-idp-server/atenet-router/atenet-egress/podcertcontroller + the ate.dev
 # CRDs + the gVisor SandboxConfig) is installed by the UPSTREAM substrate
-# installer — `go run ./cmd/ate-setup deploy ate-system` (or the
-# ai-on-gke/substrate-gke setup) — because those images are built dynamically
-# with `ko` and are not static manifests we can vendor faithfully. See
-# docs/SUBSTRATE_INTEGRATION.md. Our backend then talks to it over gRPC only.
+# installer, run from CI by .github/workflows/substrate-control-plane.yml —
+# because the manifests only exist inside the installer's own checkout (its
+# images are ko-built, so we pass --image-repo/--image-tag to use the published
+# release images instead of building any). Terraform never renders them. See
+# docs/SUBSTRATE_INTEGRATION.md §5.2. Our backend then talks to it over gRPC only.
 # ---------------------------------------------------------------------------
 
 locals {

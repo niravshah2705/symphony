@@ -105,15 +105,16 @@ pool exists, then apply the module's stable infra pieces.
    gh variable set SUBSTRATE_INGRESS_HOSTNAME --body "substrate.<your-domain>"   # optional, see §5.1
    ```
 2. Run **Deploy to GCP** with `gke_reconcile` (see §7 for the first-apply note).
-3. Install the control plane onto the cluster (run from a workstation with
-   kubectl context + a checkout of the substrate repo):
+3. Install the control plane with the **Substrate control plane
+   (preflight / install)** workflow — see §5.2. It replaces the old "run the
+   installer from a workstation with a substrate checkout" step; the only thing
+   a workstation is still needed for is reading the upstream GKE guide, since
+   GKE-specific setup (PD/Filestore CSI already on, snapshot class) comes from
+   this module.
    ```bash
-   go run ./cmd/ate-setup deploy ate-system \
-     --credential-provider='{"name":"k8s.io"}' \
-     --ingress-allowed-spiffe-ids=spiffe://cluster.local/ns/ate-system/sa/atenet-client
+   gh workflow run "Substrate control plane (preflight / install)" -f mode=preflight
+   gh workflow run "Substrate control plane (preflight / install)" -f mode=install
    ```
-   GKE-specific setup (PD/Filestore CSI already on, snapshot class) is provided by
-   this module; see the upstream GKE guide.
 4. In **Settings → Models & runtime → Execution substrate** (bottom card of that
    section), pick the `substrate` pattern, set `substrateUrl` (ateapi gRPC
    endpoint) and `substrateIngressUrl`, and edit the shared guardrails. The card
@@ -176,7 +177,52 @@ The node label is a one-off, but note `gcloud container node-pools update --node
 rolls the pool's nodes, so do it while the pool is parked (the power workflow scales it
 to zero overnight).
 
+### 5.2 Installing `ate-system` from CI
+
+`.github/workflows/substrate-control-plane.yml` runs the upstream installer, so
+no workstation needs a substrate checkout or a Go toolchain.
+
+It is a separate workflow, on purpose: dispatching **Deploy to GCP** on a branch
+runs that workflow's path filters, and a branch touching `services/planner/**` or
+`public/**` would rebuild and redeploy those Cloud Run services **from the
+unmerged branch**. A control-plane preflight must never be able to ship app code.
+
+The installer's images are ko-built from its own checkout, which is why Terraform
+cannot vendor them — but `--image-repo` + `--image-tag` make it install the
+published release images instead of building any, so the runner needs no ko, no
+Docker and no registry push. The **manifests still come from the checkout**, so
+the clone is pinned to the same revision the images carry.
+
+| Mode | What it does | Mutates? |
+|---|---|---|
+| `preflight` | Reports every prerequisite PASS/FAIL (worker pool, snapshot bucket, transfer GSA, Envoy Gateway + cert-manager CRDs, existing `ate.dev` CRDs, the substrate `Gateway`) and prints the exact `ate-setup` command install mode will run | No |
+| `install` | After the same report: provisions the GCS snapshot bucket + IAM through substrate-gke's `setup-gcp`, clones substrate at the pinned tag, and runs `deploy ate-system` | Yes (creates `ate-system`) |
+
+`install` refuses to proceed if `SUBSTRATE_ENABLED` is not `true`, the worker pool
+does not exist, or the Envoy Gateway CRDs are missing — installing a control plane
+onto a cluster that cannot run actors produces a namespace of CrashLooping pods and
+no error worth reading later.
+
+Repo variables it reads (all optional; defaults shown):
+
+| Variable | Default | Why |
+|---|---|---|
+| `SUBSTRATE_VERSION` | latest upstream release | Pins checkout **and** image tag together. Unset prints a warning each run — pin it once the cluster is live |
+| `SUBSTRATE_IMAGE_REPO` | `ghcr.io/agent-substrate/substrate` | Release images; a mirror works if it holds every image the install needs |
+| `SUBSTRATE_SNAPSHOT_BUCKET` | `ate-snapshots-<project>` | ate-setup refuses to deploy ate-api-server on GKE without a bucket, and it will not create one — the workflow runs `setup-gcp create bucket` for you |
+| `SUBSTRATE_SANDBOX_CLASSES` | `gvisor` | `gvisor,microvm` additionally stages guest assets into `<bucket>-assets` |
+| `SUBSTRATE_CREDENTIAL_PROVIDER` | `{"name":"k8s.io"}` | The zero-trust path: the bundled Secrets provider plus a NetworkPolicy admitting only the egress gateway |
+| `SUBSTRATE_INGRESS_SPIFFE_IDS` | `spiffe://cluster.local/ns/ate-system/sa/atenet-client` | Unset means **no** client may reach actors through the router |
+| `SUBSTRATE_POSTGRES_STORAGE_CLASS` | unset (cluster default) | Set `dynamic-rwo` if the bundled postgres PVC will not attach to your node machine type |
+| `SUBSTRATE_ROLLOUT_TIMEOUT` | `10m` | Cold-start image pulls on a just-created pool are slow; the installer default is 60s |
+| `SUBSTRATE_REPO_URL` / `SUBSTRATE_GKE_REPO_URL` | upstream GitHub URLs | Only change these to mirror or to pin a fork |
+
+The snapshot transfer service account is fixed to substrate-gke's default name,
+`ate-snapshot-transfer`; if you override `SNAPSHOT_TRANSFER_GSA_NAME` there, the
+preflight's GSA row and the installer flag will disagree.
+
 ## 6. Key files
+
 
 - `packages/shared-core/src/agent/substrate.js` — ateapi gRPC client (control plane).
 - `packages/shared-core/src/agent/substrate-runner.js` — credential bridge + per-run
@@ -208,6 +254,12 @@ The hostname front (§5.1) is likewise opt-in through `SUBSTRATE_INGRESS_HOSTNAM
 `SUBSTRATE_ATEAPI_SERVICE`, `SUBSTRATE_ATEAPI_PORT` and
 `SUBSTRATE_CONTROL_PLANE_PUBLIC` — the last has no default in the workflow, so the
 public control-plane route never appears unless asked for.
+`.github/workflows/substrate-control-plane.yml` is the other substrate workflow:
+it is `workflow_dispatch`-only and touches no Cloud Run service and no Terraform
+state, so it can be run from a branch without deploying anything (§5.2). It shares
+`concurrency.group: openshell-cluster-power` with the power workflow so an install
+never races a scale-to-zero.
+
 It **reads the live substrate node-pool bounds back** and feeds them as
 `substrate_min/max_nodes`, so a reconcile cannot silently start a pool the power
 workflow parked. `openshell-cluster-power.yml` parks/wakes the substrate pool in
@@ -314,7 +366,9 @@ as an error rather than a silent no-op:
   `substrate.archagentix.com` yet — no `substrate-ip`, no `Gateway`, no
   `substrate-proxy-config` EnvoyProxy and no control-plane route (§5.1). Until that
   apply plus the DNS record land, the two URL fields have nowhere public to point.
-- The `ate-system` control plane is ko-built and never installed by Terraform (§5 step 3).
+- The `ate-system` control plane is never installed by Terraform; it lands when the
+  **Substrate control plane (preflight / install)** workflow runs with `mode=install`
+  (§5 step 3, §5.2).
 - Neither Cloud Run service carries `SUBSTRATE_URL` / `SUBSTRATE_INGRESS_URL`, so
   `configured: false` until the Settings store supplies them.
 - `POST /api/agent/substrate/run` passes no `applyManifest` seam, and
