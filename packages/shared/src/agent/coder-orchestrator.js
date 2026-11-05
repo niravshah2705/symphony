@@ -313,6 +313,9 @@ function buildKeys(settings, linearApiKey = store.getApiKey()) {
     langsmithTracing: settings.langsmithTracing,
     langsmithProject: settings.langsmithProject,
     langsmithEndpoint: settings.langsmithEndpoint,
+    langfusePublicKey: settings.langfusePublicKey,
+    langfuseSecretKey: settings.langfuseSecretKey,
+    langfuseTracing: settings.langfuseTracing,
     agentRuntime: settings.agentRuntime,
     workflowPattern: settings.workflowPattern,
   };

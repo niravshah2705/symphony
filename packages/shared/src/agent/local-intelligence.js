@@ -1,8 +1,7 @@
 'use strict';
 
 const { createChatModel, resolveLlm, providerForRole } = require('./llm');
-const { RunTree } = require('langsmith');
-const { withRunTree } = require('langsmith/traceable');
+const langfuse = require('./langfuse');
 
 /**
  * Small, local-only intelligence tasks used by interactive UI flows.
@@ -289,17 +288,12 @@ async function invokeWithTimeout(model, messages, config) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LIMITS.modelTimeoutMs);
   try {
-    // plan.js can enable LangSmith globally for normal agent runs. These two
-    // privacy-sensitive features promise local inference, so place the invoke
-    // in an explicit tracing-disabled async context instead of mutating global
-    // environment variables (which would be racy across concurrent requests).
-    const privateRun = new RunTree({
-      name: 'local-private-inference',
-      run_type: 'llm',
-      inputs: {},
-      tracingEnabled: false,
-    });
-    return await withRunTree(privateRun, () =>
+    // These features promise on-machine inference, so the invoke runs in an
+    // explicit untraced async region rather than mutating process environment
+    // (racy across concurrent requests) or trusting the provider name alone: a
+    // hosted run can wrap a local-model call, and its trace must not carry this
+    // prompt or output to a third-party sink.
+    return await langfuse.runUntraced(() =>
       model.invoke(messages, { ...config, signal: controller.signal })
     );
   } finally {

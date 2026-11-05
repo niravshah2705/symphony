@@ -44,6 +44,12 @@ broker to loopback by default.
   fails closed (never forward unauthenticated to a billing gateway), and the
   injection stamps `x-fleet-org-id: <PROXY_ORG_ID>` so per-org spend/rate
   policies in LangSmith can key on the tenant (omitted on the shared stack).
+  The `basic-pair` auth family (route `/langfuse` → Langfuse Cloud) authenticates
+  `Basic base64(<usernameKey>:<secretKey>)` where BOTH halves are stored vault
+  keys (`langfusePublicKey` / `langfuseSecretKey`) — unlike `git`/`jira`, whose
+  username is a constant or org config. Missing either half fails closed; the
+  public key is intentionally non-secret, the secret half is always the sentinel
+  in the agent container.
 - `src/secrets-client.js` — S2S call to the settings vault resolver
   (`/internal/s2s/orgs/{orgId}/secrets`, org-bound internal token + Cloud Run
   OIDC; shared managed resolution uses the shared internal token).

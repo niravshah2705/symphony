@@ -414,7 +414,7 @@ variable "openswe_proxy_upstream" {
 
 variable "managed_provider_secrets" {
   type        = map(string)
-  description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Hosted LLMs require the matching GEMINI_API_KEY, HUGGINGFACE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY entry. Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
+  description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Hosted LLMs require the matching GEMINI_API_KEY, HUGGINGFACE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY entry. Agent traces go to Langfuse Cloud, which requires LANGFUSE_PUBLIC_KEY => langfuse-public-key and LANGFUSE_SECRET_KEY => langfuse-secret-key; the egress proxy reassembles the Basic pair from these, so no agent container ever holds them. Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
   default     = { GITHUB_TOKEN = "github-token" }
 }
 
@@ -805,10 +805,32 @@ variable "coder_repo_url" {
 
 # --- Secrets ------------------------------------------------------------------
 
+variable "langfuse_environment" {
+  type        = string
+  description = "Langfuse `environment` partition for traces written by this deployment (dev/staging/prod). Non-secret; org and project are trace tags, so one managed project holds every tenant."
+  default     = "prod"
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9._-]{0,39}$", var.langfuse_environment))
+    error_message = "langfuse_environment must be a lowercase slug of at most 40 characters ([a-z0-9._-])."
+  }
+}
+
+variable "langfuse_base_url" {
+  type        = string
+  description = "Optional Langfuse origin override for data residency or a self-hosted instance (e.g. https://us.cloud.langfuse.com). Empty keeps the https://cloud.langfuse.com default. Not a secret — the key pair never appears here."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.langfuse_base_url) == "" || can(regex("^https://[^/?#@[:space:]]+$", trimspace(var.langfuse_base_url)))
+    error_message = "langfuse_base_url must be empty or a path-free HTTPS origin without credentials, query, or fragment."
+  }
+}
+
 variable "extra_secret_ids" {
   type        = list(string)
-  description = "Additional Secret Manager secret IDs to create (provider OAuth, LangSmith, GitHub token, managed LLM keys, etc.). Versions are added out-of-band and mounted only on the settings service through managed_provider_secrets; agent identities receive no accessor role."
-  default     = ["github-token", "langsmith-api-key", "gemini-api-key", "huggingface-api-key", "anthropic-api-key", "openai-api-key"]
+  description = "Additional Secret Manager secret IDs to create (provider OAuth, Langfuse tracing keys, GitHub token, managed LLM keys, etc.). Versions are added out-of-band and mounted only on the settings service through managed_provider_secrets; agent identities receive no accessor role."
+  default     = ["github-token", "langsmith-api-key", "langfuse-public-key", "langfuse-secret-key", "gemini-api-key", "huggingface-api-key", "anthropic-api-key", "openai-api-key"]
 }
 
 # --- SPA (GCS bucket) ---------------------------------------------------------

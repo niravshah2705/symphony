@@ -1,14 +1,12 @@
 'use strict';
 
 const crypto = require('crypto');
-const { CONFIG } = require('../config');
-const { SENTINEL_TOKEN } = require('../egress');
-const log = require('../logger');
 const { PlanSchema, ViabilitySchema, ResumeSchema, normalizePlan } = require('./schema');
 const { webSearch, webSearchMany, formatResults } = require('./search');
 const { createChatModel } = require('./llm');
 const { withAnnotations } = require('./trace-annotations');
 const framework = require('./framework');
+const langfuse = require('./langfuse');
 const { AgentRuntimeError } = require('./runtimes');
 const { isPolicyDeniedError, resolveHarnessForStage } = require('./policy-runtime');
 
@@ -25,7 +23,7 @@ const { isPolicyDeniedError, resolveHarnessForStage } = require('./policy-runtim
  *   3. Framework draft (skills-driven software design).
  *   4. Structured extraction → schema validation → deterministic apply (server
  *      disposes; the LLM never writes to Linear directly).
- * Each call is LangSmith-traced.
+ * Dispatched runs are traced to Langfuse at the single harness chokepoint.
  */
 
 class AgentError extends Error {
@@ -42,35 +40,6 @@ class AgentError extends Error {
  * through to the direct structured-model call with a different execution path. */
 function isMandatoryPlanningWorkflowError(error) {
   return isPolicyDeniedError(error) || error instanceof AgentRuntimeError;
-}
-
-function configureTracing(keys) {
-  // When EGRESS_PROXY_INCLUDE_SDK is on, LangSmith is reached through the proxy
-  // (which injects the real key), so the agent needs no key of its own — a
-  // sentinel + the proxy endpoint suffice. Otherwise tracing needs a real key.
-  const proxyLangsmith = Boolean(CONFIG.EGRESS_PROXY_INCLUDE_SDK);
-  const on = Boolean(keys.langsmithTracing && (keys.langsmithApiKey || proxyLangsmith));
-  const flag = on ? 'true' : 'false';
-  process.env.LANGSMITH_TRACING = flag;
-  process.env.LANGCHAIN_TRACING_V2 = flag;
-  if (on) {
-    const key = proxyLangsmith ? SENTINEL_TOKEN : keys.langsmithApiKey || '';
-    const endpoint = proxyLangsmith
-      ? `${CONFIG.EGRESS_PROXY_URL}/langsmith`
-      : keys.langsmithEndpoint || 'https://api.smith.langchain.com';
-    process.env.LANGSMITH_API_KEY = key;
-    process.env.LANGCHAIN_API_KEY = key;
-    process.env.LANGSMITH_PROJECT = keys.langsmithProject || 'linear-manager';
-    process.env.LANGCHAIN_PROJECT = keys.langsmithProject || 'linear-manager';
-    process.env.LANGSMITH_ENDPOINT = endpoint;
-    process.env.LANGCHAIN_ENDPOINT = endpoint;
-    if (CONFIG.LLM_GATEWAY.enabled) {
-      // The LangSmith gateway auto-traces every routed call; a flagged run with
-      // agent-side tracing to the SAME workspace records duplicate LLM spans.
-      log.warn('LLM gateway is enabled alongside LangSmith tracing — gateway-routed runs will double-trace unless they use separate projects/workspaces.');
-    }
-  }
-  return on;
 }
 
 function projectContextBlock(project) {
@@ -227,9 +196,9 @@ function isLlmUsable(llm) {
 
 /**
  * One constrained JSON call to the active provider; returns the parsed object
- * (throws on bad JSON). `opts.runId` sets the LangSmith run id; `opts.business`
- * ({ project, taskId, session }) stamps the standard project/task-id/session
- * annotation onto the trace.
+ * (throws on bad JSON). `opts.runId` and `opts.business` ({ project, taskId,
+ * session }) stamp the standard identifiers onto the invoke config; this direct
+ * call is not traced — a Langfuse trace is created per dispatched harness run.
  */
 async function jsonCall(llm, prompt, runName, { runId, business } = {}) {
   const model = createChatModel(llm, { json: true });
@@ -305,7 +274,7 @@ async function generateIssuesForMilestones({ project, milestones, config, llm, k
   if (!isLlmUsable(llm)) {
     throw new AgentError('Configure the deep-agent LLM in Settings → LLM.', 400);
   }
-  const traced = configureTracing(keys);
+  const traced = langfuse.configureLangfuse(keys);
   const runId = crypto.randomUUID();
 
   step(`Reviewing ${milestones.length} existing milestone(s); researching tasks in parallel…`);
@@ -348,8 +317,9 @@ async function generateIssuesForMilestones({ project, milestones, config, llm, k
   const issueCount = genMilestones.reduce((n, m) => n + m.issues.length, 0);
   step(`Generated ${issueCount} task(s) for ${genMilestones.length} milestone(s).`);
 
-  const traceUrl = traced ? await resolveTraceUrl(runId, keys).catch(() => null) : null;
-  return { milestones: genMilestones, traceUrl, traced };
+  // This path is one structured model call, not a dispatched run, so Stage A has
+  // no Langfuse trace to link. The trace id only exists for harness runs.
+  return { milestones: genMilestones, traceUrl: null, traced };
 }
 
 /**
@@ -373,7 +343,7 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep, s
     throw new AgentError('Configure the deep-agent LLM in Settings → LLM.', 400);
   }
 
-  const traced = configureTracing(keys);
+  const traced = langfuse.configureLangfuse(keys);
   step(`Tracing ${traced ? 'enabled' : 'disabled'}; provider ${llm.provider}, model ${llm.model}${llm.host ? ` @ ${llm.host}` : ''}`);
 
   const today = todayIso();
@@ -387,7 +357,11 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep, s
     },
     { project: project.name, session: runId }
   );
-  const finishTrace = async () => (traced ? resolveTraceUrl(runId, keys).catch(() => null) : null);
+  // The Langfuse trace id only exists once the planning workflow has been
+  // dispatched; it is captured from that run's result below. traceUrlFor never
+  // rejects — a project-lookup failure degrades to the project list link.
+  let draftTraceId = null;
+  const finishTrace = async () => (draftTraceId ? langfuse.traceUrlFor(draftTraceId) : null);
 
   // ---- Step 1: feasibility (web research + verdict) ----
   step('Assessing software feasibility (web research)…');
@@ -442,7 +416,7 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep, s
       requestSelection: keys.requestHarnesses && keys.requestHarnesses.plan,
       prefs: keys,
     });
-    const { finalText } = await framework.runWorkflow({
+    const { finalText, traceId } = await framework.runWorkflow({
       workflow,
       llm,
       userMessage: buildDraftPrompt({ project, today, config }),
@@ -459,6 +433,7 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep, s
       },
     });
     draft = finalText;
+    draftTraceId = traceId || null;
     step(`Planning workflow draft ready (${draft.length} chars).`);
   } catch (err) {
     if (isMandatoryPlanningWorkflowError(err)) throw err;
@@ -499,24 +474,9 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep, s
   return { viable: true, plan, traceUrl: await finishTrace(), runId, traced };
 }
 
-async function resolveTraceUrl(runId, keys) {
-  const { Client } = require('langsmith');
-  const proxied = Boolean(CONFIG.EGRESS_PROXY_URL);
-  const client = new Client({
-    apiKey: proxied ? SENTINEL_TOKEN : keys.langsmithApiKey,
-    apiUrl: proxied ? `${CONFIG.EGRESS_PROXY_URL}/langsmith` : keys.langsmithEndpoint,
-  });
-  try {
-    return await client.getRunUrl({ runId });
-  } catch (_) {
-    return await client.getProjectUrl({ projectName: keys.langsmithProject || 'linear-manager' });
-  }
-}
-
 module.exports = {
   AgentError,
   generatePlan,
   generateIssuesForMilestones,
-  configureTracing,
   isMandatoryPlanningWorkflowError,
 };

@@ -79,7 +79,7 @@ Community of 300 nodes
 - **listSandboxes** (criticality: 0.71, depth: 8)
 - **listActors** (criticality: 0.71, depth: 8)
 - **runPlanningOnSubstrate** (criticality: 0.71, depth: 8)
-- *... and 29 more flows.*
+- *... and 28 more flows.*
 
 ## Dependencies
 

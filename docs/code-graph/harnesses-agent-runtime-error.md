@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| AgentRuntimeError | Class | ./packages/shared/src/agent/harnesses/contract.js | 53-61 |
-| constructor | Function | ./packages/shared/src/agent/harnesses/contract.js | 54-60 |
+| AgentRuntimeError | Class | ./packages/shared/src/agent/harnesses/contract.js | 52-60 |
+| constructor | Function | ./packages/shared/src/agent/harnesses/contract.js | 53-59 |
 
 ## Execution Flows
 

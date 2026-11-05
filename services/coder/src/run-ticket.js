@@ -59,6 +59,9 @@ function buildKeys(s, linearApiKey = getApiKey()) {
     langsmithTracing: s.langsmithTracing,
     langsmithProject: s.langsmithProject,
     langsmithEndpoint: s.langsmithEndpoint,
+    langfusePublicKey: s.langfusePublicKey,
+    langfuseSecretKey: s.langfuseSecretKey,
+    langfuseTracing: s.langfuseTracing,
     agentRuntime: s.agentRuntime,
     workflowPattern: s.workflowPattern,
   };

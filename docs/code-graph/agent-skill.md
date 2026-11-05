@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 217 nodes
+Community of 244 nodes
 
-- **Size**: 217 nodes
-- **Cohesion**: 0.2297
+- **Size**: 244 nodes
+- **Cohesion**: 0.2386
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,7 +18,7 @@ Community of 217 nodes
 | test:coder results report the broker branch after an automatic retry rotation@L77 | Test | ./packages/shared/src/agent/coder-flow.test.js | 77-81 |
 | test:planned coder results export the broker-authoritative artifact receipt@L83 | Test | ./packages/shared/src/agent/coder-flow.test.js | 83-94 |
 | test:proxied coding isolates DeepAgent shell and developer-tool contexts@L440 | Test | ./packages/shared/src/agent/coder-flow.test.js | 440-486 |
-| resolveRole | Function | ./packages/shared/src/agent/coder-orchestrator.js | 363-372 |
+| resolveRole | Function | ./packages/shared/src/agent/coder-orchestrator.js | 366-375 |
 | buildTicketPrompt | Function | ./packages/shared/src/agent/coder.js | 42-76 |
 | isCoderLlmUsable | Function | ./packages/shared/src/agent/coder.js | 79-84 |
 | assertOpenSweRepositoryProvider | Function | ./packages/shared/src/agent/coder.js | 86-93 |
@@ -65,52 +65,53 @@ Community of 217 nodes
 | test:honors alias priority: prefers `path` over lower-priority keys@L32 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 32-35 |
 | test:leaves a correct call untouched (same reference, no rewrite)@L37 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 37-40 |
 
-*... and 167 more members.*
+*... and 194 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
-- **generatePlan** (criticality: 0.67, depth: 6)
+- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
+- **generatePlan** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
 - **startScheduler** (criticality: 0.65, depth: 5)
+- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (113 edge(s))
+- `equal` (148 edge(s))
 - `join` (87 edge(s))
+- `deepEqual` (47 edge(s))
 - `strictEqual` (42 edge(s))
-- `deepEqual` (39 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `String` (34 edge(s))
+- `String` (35 edge(s))
+- `isArray` (31 edge(s))
+- `require` (30 edge(s))
 - `step` (30 edge(s))
-- `isArray` (29 edge(s))
-- `trim` (27 edge(s))
-- `map` (27 edge(s))
-- `require` (24 edge(s))
-- `slice` (22 edge(s))
+- `trim` (28 edge(s))
+- `map` (28 edge(s))
+- `slice` (23 edge(s))
+- `filter` (20 edge(s))
 - `after` (19 edge(s))
-- `filter` (19 edge(s))
 - `Boolean` (18 edge(s))
 
 ### Incoming
 
-- `equal` (113 edge(s))
+- `equal` (148 edge(s))
 - `join` (48 edge(s))
+- `deepEqual` (47 edge(s))
 - `strictEqual` (42 edge(s))
-- `deepEqual` (39 edge(s))
 - `deepStrictEqual` (37 edge(s))
 - `./packages/shared/src/agent/framework.js` (26 edge(s))
 - `./packages/shared/src/agent/settings-policy.js` (24 edge(s))
 - `./packages/shared/src/agent/coder.js` (22 edge(s))
-- `./packages/shared/src/agent/plan.js` (20 edge(s))
+- `./packages/shared/src/agent/langfuse.js` (22 edge(s))
 - `after` (19 edge(s))
+- `./packages/shared/src/agent/plan.js` (17 edge(s))
 - `./packages/shared/src/agent/trace-annotations.test.js` (16 edge(s))
 - `mkdtempSync` (15 edge(s))
 - `tmpdir` (15 edge(s))
 - `rmSync` (15 edge(s))
-- `throws` (12 edge(s))

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 385 nodes
+Community of 382 nodes
 
-- **Size**: 385 nodes
-- **Cohesion**: 0.3170
+- **Size**: 382 nodes
+- **Cohesion**: 0.3249
 - **Dominant Language**: javascript
 
 ## Members
@@ -21,14 +21,14 @@ Community of 385 nodes
 | test:availability probes the Gemini key against the OpenAI-compatible endpoint@L73 | Test | ./packages/shared/src/agent/antigravity.test.js | 73-86 |
 | test:availability fails fast when the Gemini key is missing@L88 | Test | ./packages/shared/src/agent/antigravity.test.js | 88-94 |
 | statusOf | Function | ./packages/shared/src/agent/availability.js | 43-46 |
-| publicAvailabilityMessage | Function | ./packages/shared/src/agent/availability.js | 48-73 |
-| pauseReasonFor | Function | ./packages/shared/src/agent/availability.js | 75-87 |
-| isRepositoryAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 89-99 |
-| isModelAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 101-118 |
-| selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 120-125 |
-| normalize | Function | ./packages/shared/src/agent/availability.js | 123-123 |
-| probeModelAvailability | Function | ./packages/shared/src/agent/availability.js | 127-223 |
-| probeRepositoryAvailability | Function | ./packages/shared/src/agent/availability.js | 225-280 |
+| publicAvailabilityMessage | Function | ./packages/shared/src/agent/availability.js | 48-75 |
+| pauseReasonFor | Function | ./packages/shared/src/agent/availability.js | 77-89 |
+| isRepositoryAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 91-101 |
+| isModelAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 103-120 |
+| selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 122-127 |
+| normalize | Function | ./packages/shared/src/agent/availability.js | 125-125 |
+| probeModelAvailability | Function | ./packages/shared/src/agent/availability.js | 129-236 |
+| probeRepositoryAvailability | Function | ./packages/shared/src/agent/availability.js | 238-293 |
 | response | Function | ./packages/shared/src/agent/availability.test.js | 18-24 |
 | test:pause reasons expose a stable, nontechnical UI contract@L26 | Test | ./packages/shared/src/agent/availability.test.js | 26-42 |
 | test:repository preflight converts provider 403 into a sanitized availability error@L44 | Test | ./packages/shared/src/agent/availability.test.js | 44-67 |
@@ -65,47 +65,48 @@ Community of 385 nodes
 | test:runtime repository unavailability pauses safely without finishing the Linear issue@L579 | Test | ./packages/shared/src/agent/coder-flow.test.js | 579-640 |
 | test:planned runtime policy denial records a governed error without pausing or finalizing the issue@L642 | Test | ./packages/shared/src/agent/coder-flow.test.js | 642-697 |
 
-*... and 335 more members.*
+*... and 332 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
-- **generatePlan** (criticality: 0.66, depth: 4)
-- **startScheduler** (criticality: 0.66, depth: 6)
+- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
+- **generatePlan** (criticality: 0.67, depth: 6)
+- **startScheduler** (criticality: 0.65, depth: 5)
+- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (317 edge(s))
-- `deepEqual` (76 edge(s))
-- `String` (52 edge(s))
+- `equal` (321 edge(s))
+- `deepEqual` (79 edge(s))
+- `String` (49 edge(s))
 - `strictEqual` (48 edge(s))
-- `Number` (44 edge(s))
-- `warn` (31 edge(s))
+- `Number` (36 edge(s))
 - `Boolean` (30 edge(s))
 - `match` (29 edge(s))
-- `push` (27 edge(s))
-- `replace` (26 edge(s))
-- `rejects` (25 edge(s))
+- `replace` (29 edge(s))
+- `rejects` (26 edge(s))
+- `warn` (26 edge(s))
+- `map` (25 edge(s))
+- `push` (25 edge(s))
 - `ok` (24 edge(s))
-- `trim` (24 edge(s))
 - `includes` (24 edge(s))
-- `toISOString` (23 edge(s))
+- `slice` (23 edge(s))
 
 ### Incoming
 
-- `equal` (317 edge(s))
-- `deepEqual` (76 edge(s))
+- `equal` (321 edge(s))
+- `deepEqual` (79 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (53 edge(s))
 - `strictEqual` (48 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
+- `./packages/shared/src/agent/local-intelligence.js` (44 edge(s))
 - `./packages/shared/src/agent/llm.js` (40 edge(s))
-- `./packages/shared/src/agent/local-intelligence.js` (38 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
-- `rejects` (25 edge(s))
+- `rejects` (26 edge(s))
 - `match` (24 edge(s))
 - `ok` (24 edge(s))
 - `after` (21 edge(s))

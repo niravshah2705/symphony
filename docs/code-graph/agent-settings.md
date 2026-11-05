@@ -14,8 +14,8 @@ Community of 6 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| sanitizeSettingsPatch | Function | ./packages/shared/src/agent/settings-patch.js | 203-224 |
-| applySettingsPatch | Function | ./packages/shared/src/agent/settings-patch.js | 231-239 |
+| sanitizeSettingsPatch | Function | ./packages/shared/src/agent/settings-patch.js | 207-228 |
+| applySettingsPatch | Function | ./packages/shared/src/agent/settings-patch.js | 235-243 |
 | test:sanitizeSettingsPatch accepts valid keys and coerces values@L24 | Test | ./packages/shared/src/agent/settings-patch.test.js | 24-39 |
 | test:sanitizeSettingsPatch rejects invalid enum/provider values with reasons@L41 | Test | ./packages/shared/src/agent/settings-patch.test.js | 41-50 |
 | test:sanitizeSettingsPatch ignores unknown, derived, and secret keys@L52 | Test | ./packages/shared/src/agent/settings-patch.test.js | 52-66 |

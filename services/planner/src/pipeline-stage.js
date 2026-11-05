@@ -54,6 +54,11 @@ function planningKeys(agent) {
     langsmithTracing: settings.langsmithTracing,
     langsmithProject: settings.langsmithProject,
     langsmithEndpoint: settings.langsmithEndpoint,
+    // Langfuse is the trace sink now; the secret half is only ever non-empty in the
+    // unproxied local profile (store.js returns an empty overlay under EGRESS_PROXY_URL).
+    langfusePublicKey: settings.langfusePublicKey,
+    langfuseSecretKey: settings.langfuseSecretKey,
+    langfuseTracing: settings.langfuseTracing,
     agentRuntime: agent.harness,
     workflowPattern: agent.workflowPattern,
     requestHarnesses: { plan: agent.harness },

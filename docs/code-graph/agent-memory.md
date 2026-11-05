@@ -4,107 +4,107 @@
 
 ## Overview
 
-Community of 175 nodes
+Community of 229 nodes
 
-- **Size**: 175 nodes
-- **Cohesion**: 0.3286
+- **Size**: 229 nodes
+- **Cohesion**: 0.3119
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| normalizeWorkflowPattern | Function | ./packages/shared/src/agent/harnesses/contract.js | 63-75 |
-| applyWorkflowPattern | Function | ./packages/shared/src/agent/harnesses/contract.js | 81-92 |
-| publicExecution | Function | ./packages/shared/src/agent/harnesses/contract.js | 218-231 |
-| applyRubricMiddleware | Function | ./packages/shared/src/agent/harnesses/contract.js | 254-291 |
-| langSmithProvider | Function | ./packages/shared/src/agent/harnesses/contract.js | 468-475 |
-| annotateTrace | Function | ./packages/shared/src/agent/harnesses/contract.js | 477-484 |
-| meterRun | Function | ./packages/shared/src/agent/harnesses/contract.js | 544-551 |
-| createRuntimeDispatcher | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 25-174 |
-| execute | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 77-130 |
-| runOnce | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 89-89 |
-| fakeRegistry | Function | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 10-22 |
-| withStubbedMiddleware | Function | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 24-32 |
-| test:memory ON — dispatch injects into the prompt and captures the finished run@L34 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 34-48 |
-| test:memory OFF — dispatch is byte-identical (no injection, no capture)@L50 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 50-63 |
-| test:a throwing inject can never fail the run — the original prompt is used@L65 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 65-77 |
-| fakeRegistry | Function | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 16-34 |
-| failingRegistry | Function | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 36-47 |
-| test:dispatcher routes candidate skills and stamps skillRouterMetrics and skillPaths on success@L49 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 49-77 |
-| test:dispatcher preserves pre-routed skillRouterMetrics and does not overwrite@L79 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 79-101 |
-| test:dispatcher attaches skillRouterMetrics to wrapped error on harness execution failure@L103 | Test | ./packages/shared/src/agent/harnesses/dispatch.skill-router.test.js | 103-133 |
-| schemaError | Function | ./packages/shared/src/agent/harnesses/registry.js | 39-43 |
-| requiredString | Function | ./packages/shared/src/agent/harnesses/registry.js | 45-57 |
-| enumList | Function | ./packages/shared/src/agent/harnesses/registry.js | 59-75 |
-| validateDefinition | Function | ./packages/shared/src/agent/harnesses/registry.js | 78-137 |
-| builtinDefinition | Function | ./packages/shared/src/agent/harnesses/registry.js | 144-151 |
-| createHarnessRegistry | Function | ./packages/shared/src/agent/harnesses/registry.js | 153-305 |
-| register | Function | ./packages/shared/src/agent/harnesses/registry.js | 158-172 |
-| get | Function | ./packages/shared/src/agent/harnesses/registry.js | 174-176 |
-| has | Function | ./packages/shared/src/agent/harnesses/registry.js | 178-180 |
-| list | Function | ./packages/shared/src/agent/harnesses/registry.js | 182-184 |
-| ids | Function | ./packages/shared/src/agent/harnesses/registry.js | 186-188 |
-| runtimeCatalog | Function | ./packages/shared/src/agent/harnesses/registry.js | 191-193 |
-| seal | Function | ./packages/shared/src/agent/harnesses/registry.js | 195-198 |
-| isSealed | Function | ./packages/shared/src/agent/harnesses/registry.js | 200-202 |
-| harnessLabel | Function | ./packages/shared/src/agent/harnesses/registry.js | 205-208 |
-| normalizeAgentRuntime | Function | ./packages/shared/src/agent/harnesses/registry.js | 210-221 |
-| resolveStage | Function | ./packages/shared/src/agent/harnesses/registry.js | 223-239 |
-| stageNeedsBroker | Function | ./packages/shared/src/agent/harnesses/registry.js | 241-245 |
-| resolveAgentRuntime | Function | ./packages/shared/src/agent/harnesses/registry.js | 248-284 |
-| effectiveAgentRuntime | Function | ./packages/shared/src/agent/harnesses/registry.js | 286-288 |
-| definition | Function | ./packages/shared/src/agent/harnesses/registry.test.js | 10-25 |
-| test:HarnessDefinition validation rejects incomplete and malformed metadata@L27 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 27-57 |
-| test:registration clones and freezes complete definitions and rejects duplicates@L59 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 59-81 |
-| test:sealed registries remain readable and reject every later registration@L83 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 83-93 |
-| test:dispatcher passes explicit construction dependencies to createExecutor@L95 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 95-128 |
-| test:throwing executor factories run inside tracing and normalized error handling@L130 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 130-161 |
-| test@L157 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 157-157 |
-| test:stage and broker constraints replace the blanket coding fallback@L163 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 163-222 |
-| test:built-in bootstrap seals one registry shared by compatibility views@L224 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 224-260 |
-| clean | Function | ./packages/shared/src/agent/memory-middleware.js | 59-61 |
+| test:optional image resolver uses a SHA placeholder only while disabled@L246 | Test | ./deploy/gcp/pipeline-infra.test.js | 246-292 |
+| resolveDeps | Function | ./packages/shared/src/agent/approval-gate.js | 32-48 |
+| bp | Function | ./packages/shared/src/agent/approval-gate.js | 34-34 |
+| defaultResolveBusiness | Function | ./packages/shared/src/agent/approval-gate.js | 50-64 |
+| computeDeadline | Function | ./packages/shared/src/agent/approval-gate.js | 67-71 |
+| createGate | Function | ./packages/shared/src/agent/approval-gate.js | 77-98 |
+| proceedGate | Function | ./packages/shared/src/agent/approval-gate.js | 107-166 |
+| approveGate | Function | ./packages/shared/src/agent/approval-gate.js | 169-175 |
+| reevaluateGate | Function | ./packages/shared/src/agent/approval-gate.js | 182-221 |
+| sweepExpiredGates | Function | ./packages/shared/src/agent/approval-gate.js | 229-254 |
+| makeStore | Function | ./packages/shared/src/agent/approval-gate.test.js | 9-33 |
+| getApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 21-21 |
+| updateApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 22-27 |
+| makeDeps | Function | ./packages/shared/src/agent/approval-gate.test.js | 36-50 |
+| test:createGate sets deadline = createdAt + waitMinutes exactly and starts awaiting@L52 | Test | ./packages/shared/src/agent/approval-gate.test.js | 52-58 |
+| test:sweepExpiredGates auto-approves a past-deadline gate once and documents the decision@L60 | Test | ./packages/shared/src/agent/approval-gate.test.js | 60-76 |
+| test:sweepExpiredGates leaves a gate whose deadline is still in the future@L78 | Test | ./packages/shared/src/agent/approval-gate.test.js | 78-85 |
+| test:proceedGate is idempotent — prepareBusiness runs once across repeated calls@L87 | Test | ./packages/shared/src/agent/approval-gate.test.js | 87-97 |
+| test:approveGate proceeds a human decision; a non-awaiting or missing gate throws GateError@L99 | Test | ./packages/shared/src/agent/approval-gate.test.js | 99-108 |
+| test:sweepExpiredGates recovers gates decided but not yet proceeded (crash between)@L110 | Test | ./packages/shared/src/agent/approval-gate.test.js | 110-121 |
+| test:reevaluateGate supersedes the old gate; green returns no gate, amber creates a fresh one with attempts+1@L123 | Test | ./packages/shared/src/agent/approval-gate.test.js | 123-146 |
+| test:gate lifecycle preserves native context and publishes only to that workspace@L148 | Test | ./packages/shared/src/agent/approval-gate.test.js | 148-169 |
+| test:default business resolution selects only the gate workspace when ids collide@L171 | Test | ./packages/shared/src/agent/approval-gate.test.js | 171-192 |
+| clean | Function | ./packages/shared/src/agent/business-pipeline.js | 62-64 |
+| fenced | Function | ./packages/shared/src/agent/business-pipeline.js | 67-69 |
+| buildDeps | Function | ./packages/shared/src/agent/business-pipeline.js | 120-131 |
+| evaluationSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 141-155 |
+| fraudSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 157-165 |
+| revenueModelSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 167-173 |
+| revenueSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 175-181 |
+| segmentsSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 183-190 |
+| architectureNodes | Function | ./packages/shared/src/agent/business-pipeline.js | 192-201 |
+| designSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 203-210 |
+| designHtmlSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 212-222 |
+| escapeHtml | Function | ./packages/shared/src/agent/business-pipeline.js | 224-227 |
+| sanitizeDesignHtml | Function | ./packages/shared/src/agent/business-pipeline.js | 237-248 |
+| evaluatePrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 258-266 |
+| fraudPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 268-274 |
+| revenuePrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 276-282 |
+| breakdownPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 284-290 |
+| designPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 292-298 |
+| clampScore | Function | ./packages/shared/src/agent/business-pipeline.js | 302-304 |
+| signalFromScore | Function | ./packages/shared/src/agent/business-pipeline.js | 306-310 |
+| normalizeCriteria | Function | ./packages/shared/src/agent/business-pipeline.js | 312-321 |
+| normalizeEvaluation | Function | ./packages/shared/src/agent/business-pipeline.js | 323-348 |
+| normalizeFraud | Function | ./packages/shared/src/agent/business-pipeline.js | 350-364 |
+| metricsFor | Function | ./packages/shared/src/agent/business-pipeline.js | 366-373 |
+| normalizeSegments | Function | ./packages/shared/src/agent/business-pipeline.js | 375-385 |
+| normalizeDesign | Function | ./packages/shared/src/agent/business-pipeline.js | 387-395 |
+| scoreEvaluation | Function | ./packages/shared/src/agent/business-pipeline.js | 399-408 |
 
-*... and 125 more members.*
+*... and 179 more members.*
 
 ## Execution Flows
 
-- **createMemoryMiddleware** (criticality: 0.65, depth: 5)
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (144 edge(s))
-- `String` (32 edge(s))
-- `deepEqual` (29 edge(s))
-- `match` (28 edge(s))
-- `join` (26 edge(s))
-- `isArray` (24 edge(s))
-- `map` (22 edge(s))
+- `equal` (258 edge(s))
+- `String` (42 edge(s))
+- `ok` (36 edge(s))
+- `map` (36 edge(s))
+- `isArray` (31 edge(s))
+- `slice` (26 edge(s))
+- `filter` (26 edge(s))
+- `deepEqual` (24 edge(s))
+- `push` (23 edge(s))
+- `match` (20 edge(s))
+- `replace` (19 edge(s))
+- `test` (19 edge(s))
 - `includes` (18 edge(s))
-- `ok` (17 edge(s))
-- `slice` (15 edge(s))
-- `trim` (14 edge(s))
-- `throws` (14 edge(s))
-- `require` (12 edge(s))
-- `freeze` (12 edge(s))
-- `filter` (12 edge(s))
+- `join` (18 edge(s))
+- `require` (17 edge(s))
 
 ### Incoming
 
-- `equal` (144 edge(s))
-- `deepEqual` (29 edge(s))
-- `match` (25 edge(s))
-- `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
+- `equal` (258 edge(s))
+- `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
+- `ok` (36 edge(s))
+- `deepEqual` (24 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))
-- `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
-- `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
+- `./packages/shared/src/agent/global-questions.js` (21 edge(s))
+- `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
-- `ok` (17 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (14 edge(s))
-- `throws` (14 edge(s))
+- `match` (17 edge(s))
+- `./packages/shared/src/agent/coverage-service.test.js` (16 edge(s))
+- `./packages/shared/src/agent/approval-gate.js` (15 edge(s))
+- `throws` (15 edge(s))
 - `./packages/shared/src/agent/memory.js` (14 edge(s))
-- `join` (13 edge(s))
-- `./packages/shared/src/agent/memory-middleware.test.js` (12 edge(s))
-- `./packages/shared/src/agent/memory-store/postgres-backend.test.js` (11 edge(s))
+- `./packages/shared/src/agent/approval-gate.test.js` (13 edge(s))
+- `./packages/shared/src/agent/coverage-service.js` (13 edge(s))

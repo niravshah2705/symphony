@@ -28,6 +28,9 @@
  *   'codex-chatgpt'  → Codex OAuth bearer (+ chatgpt-account-id), refreshed by proxy
  *   'codex-api'      → Codex OAuth bearer against the metered API
  *   'git'            → git smart-HTTP basic (x-access-token:<PAT>)
+ *   'basic-pair'     → HTTP basic of TWO vault-resolved halves (<usernameKey>:<secretKey>).
+ *                      Langfuse authenticates as Basic base64(pk-lf-…:sk-lf-…), so the
+ *                      username is itself a stored key rather than a constant.
  *   'llm-gateway'    → LangSmith LLM Gateway bearer + per-org policy header;
  *                      FAILS CLOSED on a missing key (billing gateway — never
  *                      forward unauthenticated)
@@ -47,12 +50,21 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const LLM_GATEWAY_ORG_HEADER = 'x-fleet-org-id';
 
 /**
- * LangSmith LLM Gateway upstream base. The one env-read exception in this module
- * (config.js requires this file, so the override cannot live there): the hosted
- * gateway by default, or the BYOC/self-hosted data plane via LANGSMITH_GATEWAY_URL.
+ * LangSmith LLM Gateway upstream base. The hosted gateway by default, or the
+ * BYOC/self-hosted data plane via LANGSMITH_GATEWAY_URL.
  */
 function llmGatewayUpstream(env = process.env) {
   return normalizeProxyBase(env.LANGSMITH_GATEWAY_URL) || 'https://gateway.smith.langchain.com';
+}
+
+/**
+ * Langfuse upstream base. The EU cloud project by default; LANGFUSE_BASE_URL selects
+ * another data region (us/jp/hipaa.cloud.langfuse.com) or a self-hosted instance.
+ * These two routes are the module's env-read exceptions (config.js requires this file,
+ * so an override cannot live there). The base URL is not a secret — only the key pair is.
+ */
+function langfuseUpstream(env = process.env) {
+  return normalizeProxyBase(env.LANGFUSE_BASE_URL) || 'https://cloud.langfuse.com';
 }
 
 // Order matters only for readability; matching is longest-prefix (see matchRoute).
@@ -81,6 +93,10 @@ const EGRESS_ROUTES = Object.freeze({
   // and cannot append a path/query that would select another target.
   slackWebhook: Object.freeze({ prefix: '/slack-webhook', target: 'slack-webhook', auth: 'url-secret', secretKey: 'slackWebhookUrl', exact: true }),
   langsmith: Object.freeze({ prefix: '/langsmith', upstream: 'https://api.smith.langchain.com', auth: 'apiKey', scheme: 'x-api-key', secretKey: 'langsmithApiKey' }),
+  // Agent-side tracing exports OTLP to `${baseUrl}/api/public/otel/v1/traces`, so the
+  // upstream stays a bare origin: the SDK appends the whole API path itself and
+  // buildUpstreamUrl forwards the remainder verbatim.
+  langfuse: Object.freeze({ prefix: '/langfuse', upstream: langfuseUpstream(), auth: 'basic-pair', usernameKey: 'langfusePublicKey', secretKey: 'langfuseSecretKey' }),
   // One feature-flagged prefix serves the OpenAI, Anthropic, and Responses API
   // surfaces. Its workspace key is deliberately separate from the tracing key.
   llmGateway: Object.freeze({ prefix: '/llmgw', upstream: llmGatewayUpstream(), auth: 'llm-gateway', secretKey: 'langsmithGatewayApiKey' }),
@@ -101,9 +117,17 @@ const EGRESS_ROUTES = Object.freeze({
   openshell: Object.freeze({ prefix: '/openshell', upstream: 'https://openshell.archagentix.com', auth: 'none' }),
 });
 
-/** All vault secret keys any static-key route can request (dedup, stable order). */
+/**
+ * All vault secret keys any static-key route can request (dedup, stable order).
+ * A `basic-pair` route authenticates with TWO stored keys, so its `usernameKey`
+ * is collected alongside `secretKey`.
+ */
 const EGRESS_SECRET_KEYS = Object.freeze([
-  ...new Set(Object.values(EGRESS_ROUTES).map((r) => r.secretKey).filter(Boolean)),
+  ...new Set(
+    Object.values(EGRESS_ROUTES)
+      .flatMap((r) => [r.secretKey, r.usernameKey])
+      .filter(Boolean),
+  ),
 ]);
 
 /** Normalize a proxy base: strip a single trailing slash. */
@@ -165,5 +189,6 @@ module.exports = {
   projectEgressHeaders,
   egressUrl,
   llmGatewayUpstream,
+  langfuseUpstream,
   matchRoute,
 };

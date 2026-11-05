@@ -63,6 +63,7 @@ PREF_KEYS: tuple[str, ...] = (
     "workflowPattern",
     "planningProvider",
     "langsmithTracing",
+    "langfuseTracing",
 )
 
 # Keys that can be LOCKED at a scope so scopes below can't change them: the

@@ -7,15 +7,15 @@
 Community of 2 nodes
 
 - **Size**: 2 nodes
-- **Cohesion**: 0.0667
+- **Cohesion**: 0.0588
 - **Dominant Language**: bash
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| enabled_value | Function | ./deploy/gcp/deploy.sh | 204-209 |
-| seed_secret | Function | ./deploy/gcp/deploy.sh | 210-216 |
+| enabled_value | Function | ./deploy/gcp/deploy.sh | 219-224 |
+| seed_secret | Function | ./deploy/gcp/deploy.sh | 225-231 |
 
 ## Execution Flows
 
@@ -33,4 +33,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/deploy.sh` (6 edge(s))
+- `./deploy/gcp/deploy.sh` (8 edge(s))

@@ -100,7 +100,7 @@ locals {
   pubsub_agent = "serviceAccount:service-${local.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 
   # Env shared by every service/job (packages/shared/src/config.js cloud profile).
-  common_env = {
+  common_env = merge({
     NODE_ENV                      = "production"
     STORE_BACKEND                 = "firestore"
     MESSAGING_MODE                = "pubsub"
@@ -124,7 +124,17 @@ locals {
     AUTH_MODE           = "firebase"
     FIREBASE_PROJECT_ID = var.project_id
     FIREBASE_API_KEY    = data.google_firebase_web_app_config.default.api_key
-  }
+    # Langfuse Cloud tracing (packages/shared/src/agent/langfuse.js). Both values
+    # are PUBLIC config — the ingest key pair is resolved by the egress sidecar, so
+    # no agent container receives it. `environment` partitions dev/staging/prod
+    # traffic inside the one managed project; the base URL only changes data region
+    # (or a self-hosted instance) and stays at the code default when unset.
+    LANGFUSE_ENVIRONMENT = var.langfuse_environment
+    },
+    # Optional data-region / self-hosted override, set only when configured so the
+    # code default (https://cloud.langfuse.com) applies otherwise.
+    trimspace(var.langfuse_base_url) != "" ? { LANGFUSE_BASE_URL = trimspace(var.langfuse_base_url) } : {},
+  )
 
   # Normalized custom domains: bare hostnames (e.g. "platform.archagentix.com") without scheme or trailing slash.
   # This guarantees compatibility with Firebase Hosting custom domain IDs and Identity Platform authorized domains.

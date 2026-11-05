@@ -62,6 +62,12 @@ SECRET_KEYS: tuple[str, ...] = (
     # tracing key). Managed-only: it bills the platform's LangSmith workspace,
     # so it is resolved like any managed key but never writable by a browser.
     "langsmithGatewayApiKey",
+    # Langfuse Cloud tracing pair. The sidecar builds `Basic base64(pk:sk)` for the
+    # /langfuse route, so the public key is a stored key too (not a constant).
+    # Platform-managed only, like the LLM gateway key: one shared project receives
+    # every organization's traces, so a browser must not repoint that sink.
+    "langfusePublicKey",
+    "langfuseSecretKey",
 )
 
 # Browser-facing org-admin secret CRUD is intentionally narrower than the
@@ -69,8 +75,19 @@ SECRET_KEYS: tuple[str, ...] = (
 # operator-only import flow; accepting their opaque JSON through generic secret
 # CRUD would bypass token validation and that separate IAM boundary. The LLM
 # gateway workspace key is platform-billing material and stays operator-only.
+# The Langfuse pair is operator-only for the same reason: it is the platform's
+# shared trace sink, and a writable key would let a tenant redirect its
+# observations into a project the platform does not control.
 BROWSER_WRITABLE_SECRET_KEYS: tuple[str, ...] = tuple(
-    key for key in SECRET_KEYS if key not in ("codexTokenBundle", "langsmithGatewayApiKey")
+    key
+    for key in SECRET_KEYS
+    if key
+    not in (
+        "codexTokenBundle",
+        "langsmithGatewayApiKey",
+        "langfusePublicKey",
+        "langfuseSecretKey",
+    )
 )
 
 # Who owns each provider's key. "managed" => platform key (settings-mounted);
