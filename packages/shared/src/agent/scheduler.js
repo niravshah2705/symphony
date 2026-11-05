@@ -30,7 +30,7 @@ const {
   pinnedWorkspaceOrganizationId,
 } = require('../store/workspace-context');
 
-const { CONFIG } = require('../config');
+const { CONFIG, normalizeLlmGatewayMode } = require('../config');
 
 /**
  * Enrichment job queue + scheduler.
@@ -195,6 +195,9 @@ function emitWorkspaceState(job = null, context) {
 
 /** Queue a project for enrichment, skipping duplicates already in flight. */
 function enqueue({ projectId, projectName, assumedRole, orgId = null, nativeProjectId = null, llmGateway = null }) {
+  // Allowlist the per-request gateway selector once here; only a known mode is
+  // persisted on the job record (see CONFIG.LLM_GATEWAY_MODES in shared-core).
+  const gatewayMode = normalizeLlmGatewayMode(llmGateway);
   const activeContext = schedulerContext();
   const requestedContext = normalizeWorkspaceContext({
     organizationId: orgId || activeContext.organizationId,
@@ -251,7 +254,7 @@ function enqueue({ projectId, projectName, assumedRole, orgId = null, nativeProj
     ...(selectedProjectId ? { nativeProjectId: selectedProjectId } : {}),
     // Per-request LLM gateway feature flag, persisted so the async tick that
     // eventually runs this job re-resolves the model through the gateway.
-    ...(llmGateway === 'langsmith' ? { llmGateway: 'langsmith' } : {}),
+    ...(gatewayMode ? { llmGateway: gatewayMode } : {}),
     status: 'pending',
     assumedRole: assumedRole ? { id: assumedRole.id, name: assumedRole.name } : null,
     createdAt: new Date().toISOString(),
@@ -610,8 +613,9 @@ async function processPending(context, options = {}) {
           // A job flagged at enqueue time routes its model through the LLM
           // gateway: re-resolve with the flag merged into settings (resolveLlm
           // reads only settings). Unflagged jobs reuse the tick's probed llm.
-          const jobLlm = job.llmGateway === 'langsmith'
-            ? await resolveLlm({ ...settings, llmGateway: 'langsmith' }, 'thinking')
+          const jobGateway = normalizeLlmGatewayMode(job.llmGateway);
+          const jobLlm = jobGateway
+            ? await resolveLlm({ ...settings, llmGateway: jobGateway }, 'thinking')
             : llm;
           return runJob(job, { apiKey, keys, llm: jobLlm, config });
         },

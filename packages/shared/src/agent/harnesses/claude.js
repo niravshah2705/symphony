@@ -87,18 +87,21 @@ async function executeClaude(options, prompt) {
   const cwd = assertWorkingDirectory(options.rootDir);
   const env = buildSafeAgentEnv(options.env || process.env, cwd);
   const credential = String(options.llm.accessToken || '');
-  const viaLlmGateway = options.llm.gateway === 'langsmith';
+  // Any gateway descriptor (LangSmith or LiteLLM) authenticates with a plain
+  // Bearer credential and supplies its own base URL — never Claude OAuth.
+  const viaLlmGateway = Boolean(options.llm.gateway);
   if (credential) {
-    // A LangSmith-gateway run authenticates with a plain Bearer credential
-    // (ANTHROPIC_AUTH_TOKEN — the workspace key, or the sentinel in proxy
-    // mode); the subscription path keeps the Claude Code OAuth env.
+    // A gateway run authenticates with ANTHROPIC_AUTH_TOKEN (the gateway key,
+    // or the sentinel in proxy mode); the subscription path keeps the Claude
+    // Code OAuth env.
     if (viaLlmGateway) env.ANTHROPIC_AUTH_TOKEN = credential;
     else env.CLAUDE_CODE_OAUTH_TOKEN = credential;
   }
   env.CLAUDE_AGENT_SDK_CLIENT_APP = 'tech-symphony/1.0';
   // Proxy mode also replaces any caller-supplied custom-header bundle with the
-  // validated project context. A gateway descriptor then selects /llmgw (or the
-  // direct LangSmith base); an ordinary descriptor keeps the /anthropic base.
+  // validated project context. A gateway descriptor then selects its own
+  // prefix (/llmgw or /litellm, or the direct gateway base); an ordinary
+  // descriptor keeps the /anthropic base.
   applyClaudeProxyEnv(env);
   if (viaLlmGateway) {
     env.ANTHROPIC_BASE_URL = options.llm.baseUrl || CONFIG.CLAUDE.baseUrl;

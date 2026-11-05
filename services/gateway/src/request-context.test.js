@@ -51,6 +51,12 @@ test('llm-gateway flag: honored only when the deployment has the gateway enabled
   assert.equal(requestContext(request, { llmGatewayEnabled: true }).llmGateway, 'langsmith');
 });
 
+test('llm-gateway flag: litellm is on the same allowlist as langsmith', () => {
+  const request = req({ 'x-ai-fleet-llm-gateway': ' LiteLLM ' });
+  assert.equal(requestContext(request).llmGateway, '');
+  assert.equal(requestContext(request, { llmGatewayEnabled: true }).llmGateway, 'litellm');
+});
+
 test('llm-gateway flag: unknown selector values are ignored even when enabled', () => {
   const request = req({ 'x-ai-fleet-llm-gateway': 'other-router' });
   assert.equal(requestContext(request, { llmGatewayEnabled: true }).llmGateway, '');

@@ -1,0 +1,28 @@
+# -----------------------------------------------------------------------------
+# Postgres sidecar for the LiteLLM gateway (Cloud Run multi-container).
+# -----------------------------------------------------------------------------
+# Exists only to bake the boot entrypoint into a stock Postgres image: the
+# LiteLLM app container is a third-party mirrored image we must not fork.
+#
+# Deliberately does NOT install `litellm[proxy]` just to run `--migrate` here —
+# that would pull torch-class weight into a database container. LiteLLM applies
+# its own migrations at startup when DATABASE_URL is set, so schema creation
+# stays in the app container and entrypoint-db.sh's migrate step is a guarded
+# no-op unless someone adds the CLI later.
+#
+# Pinned by digest (resolved 2026-11-05, multi-arch index with linux/amd64) the
+# same way every other base image here is, and mirrored into Artifact Registry
+# by CI because Cloud Run cannot pull from docker.io.
+ARG POSTGRES_BASE_IMAGE=docker.io/library/postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
+FROM ${POSTGRES_BASE_IMAGE}
+
+# emptyDir mount target for PGDATA. The volume is created by Cloud Run
+# (deploy/gcp/terraform/litellm.tf), not here; this is only the mount point.
+RUN mkdir -p /var/lib/postgresql/data && chown -R postgres:postgres /var/lib/postgresql/data
+
+COPY deploy/litellm/entrypoint-db.sh /usr/local/bin/entrypoint-db.sh
+RUN chmod +x /usr/local/bin/entrypoint-db.sh
+
+# The official image's own entrypoint is still needed (initdb + postmaster
+# startup); ours wraps it and then waits on it.
+ENTRYPOINT ["/usr/local/bin/entrypoint-db.sh"]

@@ -10,6 +10,7 @@
  */
 
 const { initStore } = require('@ai-fleet/shared/store');
+const { normalizeLlmGatewayMode } = require('@ai-fleet/shared/config');
 const log = require('@ai-fleet/shared/logger');
 const { runTicketInProcess } = require('./run-ticket');
 const { runWithWorkspaceContext } = require('@ai-fleet/shared/store/workspace-context');
@@ -28,7 +29,7 @@ async function main({
     ? String(env.AI_FLEET_PROJECT_CONTEXT)
     : null;
   // Per-request LLM gateway flag threaded from the enqueue request; allowlisted.
-  const llmGateway = env.LLM_GATEWAY_FLAG === 'langsmith' ? 'langsmith' : null;
+  const llmGateway = normalizeLlmGatewayMode(env.LLM_GATEWAY_FLAG) || null;
   if (!issueId) {
     logImpl.error('coder-worker: ISSUE_ID env is required');
     exit(2);

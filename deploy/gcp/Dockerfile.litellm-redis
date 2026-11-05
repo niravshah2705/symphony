@@ -1,0 +1,16 @@
+# -----------------------------------------------------------------------------
+# Mirror of the upstream Redis used for LiteLLM router state (litellm.tf).
+# -----------------------------------------------------------------------------
+# A `FROM` with no instructions is not an accident. Cloud Run only pulls from
+# Artifact Registry, and this workflow's single image-publishing path is
+# `docker build -f <dockerfile>` (see .github/workflows/deploy.yml), so a
+# one-line Dockerfile IS the mirror step: it moves a digest-pinned upstream into
+# var.artifact_repo tagged ${GITHUB_SHA} without inventing a parallel
+# pull/tag/push job that nothing else in this repo uses.
+#
+# Zero behaviour is added: Cloud Run passes `redis-server` + its own args and
+# health-checks :6379 over TCP, so the stock image is exactly what is wanted.
+#
+# Digest resolved 2026-11-05 (multi-arch index, linux/amd64 present).
+ARG REDIS_BASE_IMAGE=docker.io/library/redis:7-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
+FROM ${REDIS_BASE_IMAGE}

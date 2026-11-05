@@ -4,22 +4,28 @@
 
 ## Overview
 
-Community of 6 nodes
+Community of 12 nodes
 
-- **Size**: 6 nodes
-- **Cohesion**: 0.1351
+- **Size**: 12 nodes
+- **Cohesion**: 0.1618
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| resolveWith | Function | ./packages/shared/src/agent/llm-gateway.test.js | 11-18 |
-| test:flagged + proxied: descriptors route via the sidecar /llmgw prefix with the sentinel@L51 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 51-77 |
-| test:flag without LLM_GATEWAY_ENABLED is inert — descriptors identical to unflagged@L79 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 79-87 |
-| test:flagged + non-proxied: descriptors hit the gateway directly with the workspace key@L89 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 89-95 |
-| test:flagged + non-proxied without a workspace key fails with 401 (no OAuth fallback)@L97 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 97-102 |
-| test:LANGSMITH_GATEWAY_URL retargets the direct gateway base (BYOC)@L104 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 104-112 |
+| resolveWith | Function | ./packages/shared/src/agent/llm-gateway.test.js | 11-26 |
+| test:flagged + proxied: descriptors route via the sidecar /llmgw prefix with the sentinel@L62 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 62-88 |
+| test:flag without LLM_GATEWAY_ENABLED is inert — descriptors identical to unflagged@L90 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 90-98 |
+| test:flagged + non-proxied: descriptors hit the gateway directly with the workspace key@L100 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 100-106 |
+| test:flagged + non-proxied without a workspace key fails with 401 (no OAuth fallback)@L108 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 108-113 |
+| test:LANGSMITH_GATEWAY_URL retargets the direct gateway base (BYOC)@L115 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 115-123 |
+| test:litellm: flagged + proxied routes via the sidecar /litellm prefix with the sentinel@L125 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 125-149 |
+| test:litellm: langsmith gate on + litellm gate off leaves a litellm flag inert@L151 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 151-160 |
+| test:litellm: gate on with no reachable upstream is inert, not an empty base URL@L162 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 162-169 |
+| test:litellm: non-proxied direct run uses LITELLM_URL and the org virtual key@L171 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 171-181 |
+| test:litellm: non-proxied without a minted virtual key fails 401 (never OAuth)@L183 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 183-191 |
+| test:an unknown gateway selector is inert even with both gates on@L193 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 193-202 |
 
 ## Execution Flows
 
@@ -29,19 +35,19 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (23 edge(s))
-- `deepEqual` (2 edge(s))
+- `equal` (39 edge(s))
+- `deepEqual` (7 edge(s))
+- `match` (2 edge(s))
 - `execFileSync` (1 edge(s))
 - `resolve` (1 edge(s))
 - `parse` (1 edge(s))
 - `trim` (1 edge(s))
-- `./packages/shared/src/agent/llm-gateway.test.js::test:wire id and anthropic-beta header stay untouched for non-gateway descriptors@L114` (1 edge(s))
-- `match` (1 edge(s))
+- `./packages/shared/src/agent/llm-gateway.test.js::test:wire id and anthropic-beta header stay untouched for non-gateway descriptors@L204` (1 edge(s))
 
 ### Incoming
 
-- `equal` (23 edge(s))
-- `./packages/shared/src/agent/llm-gateway.test.js` (6 edge(s))
-- `deepEqual` (2 edge(s))
-- `./packages/shared/src/agent/llm-gateway.test.js::test:wire id and anthropic-beta header stay untouched for non-gateway descriptors@L114` (1 edge(s))
-- `match` (1 edge(s))
+- `equal` (39 edge(s))
+- `./packages/shared/src/agent/llm-gateway.test.js` (12 edge(s))
+- `deepEqual` (7 edge(s))
+- `match` (2 edge(s))
+- `./packages/shared/src/agent/llm-gateway.test.js::test:wire id and anthropic-beta header stay untouched for non-gateway descriptors@L204` (1 edge(s))

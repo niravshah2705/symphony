@@ -7,7 +7,7 @@ const { pushAuth } = require('@ai-fleet/shared/messaging/oidc');
 const log = require('@ai-fleet/shared/logger');
 const orchestrator = require('@ai-fleet/shared/agent/coder-orchestrator');
 const { runTicket } = require('./run-ticket');
-const { CONFIG } = require('@ai-fleet/shared/config');
+const { CONFIG, normalizeLlmGatewayMode } = require('@ai-fleet/shared/config');
 const store = require('@ai-fleet/shared/store');
 const {
   normalizeWorkspaceContext,
@@ -110,8 +110,8 @@ router.post('/coder', pushAuth(), async (req, res) => {
         conversationId,
         orgId: orgId || null,
         nativeProjectId: nativeProjectId || null,
-        // Re-allowlist at the trust boundary; only the known selector survives.
-        llmGateway: message.llmGateway === 'langsmith' ? 'langsmith' : null,
+        // Re-allowlist at the trust boundary; only a known selector survives.
+        llmGateway: normalizeLlmGatewayMode(message.llmGateway) || null,
       })).catch((err) => {
         const detail = err && err.message ? err.message : String(err);
         log.error(`coder pubsub dispatch failed: ${detail}`);

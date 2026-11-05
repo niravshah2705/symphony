@@ -67,6 +67,17 @@ test('durable stage resolve merges the admitted llm-gateway flag into settings',
   assert.equal(agent.llm.model, 'qwen2.5-coder:7b');
 });
 
+test('durable stage resolve merges a litellm flag into settings the same way', async () => {
+  const seen = [];
+  const agent = await resolveStageAgent(
+    command({ request: { llmGateway: 'litellm' } }),
+    { role: 'execution', workflowStage: 'coding' },
+    dependencies(seen),
+  );
+  assert.equal(seen[0].llmGateway, 'litellm');
+  assert.equal(agent.llm.model, 'qwen2.5-coder:7b');
+});
+
 test('durable stage resolve leaves settings untouched without the flag', async () => {
   const seen = [];
   await resolveStageAgent(

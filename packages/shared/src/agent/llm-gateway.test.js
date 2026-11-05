@@ -11,7 +11,15 @@ const { execFileSync } = require('node:child_process');
 function resolveWith(env) {
   const out = execFileSync(process.execPath, ['-e', DUMP], {
     cwd: path.resolve(__dirname, '..', '..'),
-    env: { ...process.env, EGRESS_PROXY_URL: '', LLM_GATEWAY_ENABLED: '', LANGSMITH_GATEWAY_URL: '', ...env },
+    env: {
+      ...process.env,
+      EGRESS_PROXY_URL: '',
+      LLM_GATEWAY_ENABLED: '',
+      LANGSMITH_GATEWAY_URL: '',
+      LITELLM_GATEWAY_ENABLED: '',
+      LITELLM_URL: '',
+      ...env,
+    },
     encoding: 'utf8',
   });
   return JSON.parse(out.trim());
@@ -25,8 +33,11 @@ const capture = (promise) => promise.catch((e) => ({ error: e.message, status: e
     claudeModel: 'claude-sonnet-4-6',
     codexModel: 'gpt-5-codex',
     ...(process.env.TEST_GW_KEY ? { langsmithGatewayApiKey: process.env.TEST_GW_KEY } : {}),
+    ...(process.env.TEST_LIT_KEY ? { litellmApiKey: process.env.TEST_LIT_KEY } : {}),
   };
-  const flagged = { ...base, llmGateway: 'langsmith' };
+  // One DUMP drives every gateway mode; TEST_GW_MODE picks which flag value the
+  // run carries (default langsmith, so the langsmith assertions are unchanged).
+  const flagged = { ...base, llmGateway: process.env.TEST_GW_MODE || 'langsmith' };
   const out = {
     claudeFlagged: await capture(resolveLlm({ ...flagged, llmProvider: 'claude' })),
     codexFlagged: await capture(resolveLlm({ ...flagged, llmProvider: 'codex' })),
@@ -109,6 +120,85 @@ test('LANGSMITH_GATEWAY_URL retargets the direct gateway base (BYOC)', () => {
   });
   assert.equal(out.claudeFlagged.baseUrl, 'https://dataplane.example/gateway');
   assert.equal(out.codexFlagged.baseUrl, 'https://dataplane.example/gateway/v1');
+});
+
+test('litellm: flagged + proxied routes via the sidecar /litellm prefix with the sentinel', () => {
+  const out = resolveWith({
+    TEST_GW_MODE: 'litellm',
+    LITELLM_GATEWAY_ENABLED: 'true',
+    EGRESS_PROXY_URL: 'http://127.0.0.1:4030',
+    TEST_RESOLVE_UNFLAGGED: 'true',
+  });
+  assert.equal(out.claudeFlagged.gateway, 'litellm');
+  assert.equal(out.claudeFlagged.baseUrl, 'http://127.0.0.1:4030/litellm');
+  assert.equal(out.claudeFlagged.accessToken, 'egress-proxy-sentinel');
+  assert.equal(out.claudeFlagged.model, 'claude-sonnet-4-6');
+  assert.equal(out.codexFlagged.gateway, 'litellm');
+  assert.equal(out.codexFlagged.backend, 'api');
+  assert.equal(out.codexFlagged.baseUrl, 'http://127.0.0.1:4030/litellm/v1');
+  // THE model-id contract: LiteLLM matches model_name verbatim, so a prefixed
+  // wire id would 400 every opted-in run. Bare for litellm, prefixed for langsmith.
+  assert.equal(out.wire.claude, 'claude-sonnet-4-6');
+  assert.equal(out.wire.codex, 'gpt-5-codex');
+  // A litellm descriptor is a gateway descriptor: no Claude OAuth beta header.
+  assert.deepEqual(out.headers.flagged, {});
+  // Routing only — model selection equals the unflagged path.
+  assert.equal(out.codexFlagged.model, out.codexUnflagged.model);
+  assert.equal(out.claudeUnflagged.gateway, undefined);
+  assert.equal(out.claudeUnflagged.baseUrl, 'http://127.0.0.1:4030/anthropic');
+});
+
+test('litellm: langsmith gate on + litellm gate off leaves a litellm flag inert', () => {
+  const out = resolveWith({
+    TEST_GW_MODE: 'litellm',
+    LLM_GATEWAY_ENABLED: 'true',
+    EGRESS_PROXY_URL: 'http://127.0.0.1:4030',
+    TEST_RESOLVE_UNFLAGGED: 'true',
+  });
+  assert.deepEqual(out.claudeFlagged, out.claudeUnflagged);
+  assert.deepEqual(out.codexFlagged, out.codexUnflagged);
+});
+
+test('litellm: gate on with no reachable upstream is inert, not an empty base URL', () => {
+  const out = resolveWith({
+    TEST_GW_MODE: 'litellm',
+    LITELLM_GATEWAY_ENABLED: 'true',
+    TEST_RESOLVE_UNFLAGGED: 'true',
+  });
+  assert.deepEqual(out.claudeFlagged, out.claudeUnflagged);
+});
+
+test('litellm: non-proxied direct run uses LITELLM_URL and the org virtual key', () => {
+  const out = resolveWith({
+    TEST_GW_MODE: 'litellm',
+    LITELLM_GATEWAY_ENABLED: 'true',
+    LITELLM_URL: 'http://localhost:4000/',
+    TEST_LIT_KEY: 'sk-lit-org42',
+  });
+  assert.equal(out.claudeFlagged.baseUrl, 'http://localhost:4000');
+  assert.equal(out.claudeFlagged.accessToken, 'sk-lit-org42');
+  assert.equal(out.codexFlagged.baseUrl, 'http://localhost:4000/v1');
+});
+
+test('litellm: non-proxied without a minted virtual key fails 401 (never OAuth)', () => {
+  const out = resolveWith({
+    TEST_GW_MODE: 'litellm',
+    LITELLM_GATEWAY_ENABLED: 'true',
+    LITELLM_URL: 'http://localhost:4000',
+  });
+  assert.equal(out.claudeFlagged.status, 401);
+  assert.match(out.claudeFlagged.error, /virtual key/);
+});
+
+test('an unknown gateway selector is inert even with both gates on', () => {
+  const out = resolveWith({
+    TEST_GW_MODE: 'other-router',
+    LLM_GATEWAY_ENABLED: 'true',
+    LITELLM_GATEWAY_ENABLED: 'true',
+    EGRESS_PROXY_URL: 'http://127.0.0.1:4030',
+    TEST_RESOLVE_UNFLAGGED: 'true',
+  });
+  assert.deepEqual(out.claudeFlagged, out.claudeUnflagged);
 });
 
 test('wire id and anthropic-beta header stay untouched for non-gateway descriptors', () => {

@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { CONFIG } = require('../config');
+const { CONFIG, llmGatewayMode } = require('../config');
 const logger = require('../logger');
 const oauth = require('./oauth');
 const { SENTINEL_TOKEN, projectEgressHeaders } = require('../egress');
@@ -378,11 +378,13 @@ function getClaudeChatModelClass() {
  */
 /**
  * Extra Anthropic client headers per descriptor: the OAuth beta header on the
- * direct/subscription path; NONE for a LangSmith-gateway descriptor (Bearer
- * workspace key auth — the oauth beta header would be rejected).
+ * direct/subscription path; NONE for ANY gateway descriptor (LangSmith and
+ * LiteLLM both authenticate with a Bearer gateway key, never Claude OAuth —
+ * `oauth-2025-04-20` would be rejected upstream). Gate on `gateway` being set
+ * rather than a specific mode so a new gateway can't silently re-add it.
  */
 function claudeClientHeaders(llm) {
-  if (llm && llm.gateway === 'langsmith') return {};
+  if (llm && llm.gateway) return {};
   return { 'anthropic-beta': CONFIG.CLAUDE.betaHeader };
 }
 
@@ -821,24 +823,28 @@ function providerForRole(settings, role) {
 }
 
 /**
- * Per-request LangSmith LLM gateway opt-in: on only when the deployment has the
- * gateway configured AND this run's settings carry the threaded browser flag.
+ * Per-request LLM gateway opt-in, resolved by the shared mode table
+ * (CONFIG.LLM_GATEWAY_MODES in shared-core) — a mode is honoured only when the
+ * deployment has THAT gateway provisioned, so an unknown or unconfigured value
+ * falls back to direct provider egress. `entry.block` carries the base URLs,
+ * `entry.secretKey` the vault key holding the gateway credential.
  */
-function useLlmGateway(settings) {
-  return CONFIG.LLM_GATEWAY.enabled && settings.llmGateway === 'langsmith';
+function gatewayEntry(gateway) {
+  return CONFIG.LLM_GATEWAY_MODES[gateway];
 }
 
 /**
  * Credential a gateway-routed descriptor sends: the sentinel in egress-proxy
- * mode (the sidecar injects the real workspace key), otherwise the managed
- * workspace key from the store env overlay. Never falls back to provider
+ * mode (the sidecar injects the real gateway key), otherwise the managed
+ * gateway key from the store env overlay. Never falls back to provider
  * OAuth — a subscription token is meaningless at the gateway.
  */
-function llmGatewayCredential(settings) {
+function gatewayCredential(settings, gateway) {
   if (CONFIG.EGRESS_PROXY_URL) return SENTINEL_TOKEN;
-  const key = String(settings.langsmithGatewayApiKey || '').trim();
+  const entry = gatewayEntry(gateway);
+  const key = String(settings[entry.secretKey] || '').trim();
   if (!key) {
-    const err = new Error('The LLM gateway is enabled for this request but no workspace key is configured.');
+    const err = new Error(`This request opts into the ${gateway} LLM gateway, but no ${entry.keyLabel} is configured.`);
     err.status = 401;
     throw err;
   }
@@ -847,10 +853,15 @@ function llmGatewayCredential(settings) {
 
 /**
  * Wire-format model id. The LangSmith gateway routes by `provider/model`, so a
- * gateway descriptor prefixes the provider ON THE WIRE only — `llm.model` stays
+ * LangSmith descriptor prefixes the provider ON THE WIRE only — `llm.model` stays
  * bare for policy enforcement (enforceLlmModel) and admission snapshots.
  * Derived at use time (not stored at resolve time) so a policy model swap can
  * never leave a stale prefixed name behind.
+ *
+ * LiteLLM deliberately keeps the BARE name: its `model_list` entries are matched
+ * by `model_name` verbatim, so a `provider/model` prefix is rejected (403) on
+ * every opted-in run. LiteLLM's config must therefore declare `model_name` equal to
+ * the bare provider model id that `enforceLlmModel` can produce.
  */
 function wireModelId(llm) {
   if (!llm || llm.gateway !== 'langsmith') return llm && llm.model;
@@ -868,16 +879,17 @@ async function resolveLlm(settings, role = 'global') {
   // Transient/in-stream retry count is a single knob applied to every provider.
   const streamRetries = clampStreamRetries(settings.llmStreamRetries);
   if (provider === 'claude') {
-    // Flagged run: route through the LangSmith gateway's Anthropic surface. The
+    // Flagged run: route through the opted-in gateway's Anthropic surface. The
     // flag changes ROUTING only — model selection is identical to the direct
     // path, so policy enforcement and admission snapshots are unaffected.
-    if (useLlmGateway(settings)) {
+    const gateway = llmGatewayMode(settings.llmGateway);
+    if (gateway) {
       return {
         provider: 'claude',
-        gateway: 'langsmith',
+        gateway,
         model: settings.claudeModel || CONFIG.CLAUDE.defaultModel,
-        baseUrl: CONFIG.LLM_GATEWAY.claudeBaseUrl,
-        accessToken: llmGatewayCredential(settings),
+        baseUrl: gatewayEntry(gateway).block.claudeBaseUrl,
+        accessToken: gatewayCredential(settings, gateway),
         numTokens: settings.claudeMaxTokens || 65536,
         temperature: settings.claudeTemperature ?? null,
         reasoningEffort: settings.claudeReasoningEffort ?? null,
@@ -905,23 +917,24 @@ async function resolveLlm(settings, role = 'global') {
     };
   }
   if (provider === 'codex') {
-    // Flagged run: route through the LangSmith gateway. The gateway has no
+    // Flagged run: route through the opted-in gateway. Neither gateway exposes a
     // chatgpt.com backend surface, so the descriptor is always the `api` shape
     // (codex-sdk /responses, deep-agent /chat/completions) — but the MODEL is
     // whatever the unflagged path would pick: the flag never changes model
-    // selection, only routing. No OAuth: the credential is the workspace key
+    // selection, only routing. No OAuth: the credential is the gateway key
     // (or the sentinel in proxy mode). Note a ChatGPT-subscription-only model
-    // must be metered-API-available to work through the gateway.
-    if (useLlmGateway(settings)) {
+    // must be metered-API-available to work through a gateway.
+    const gateway = llmGatewayMode(settings.llmGateway);
+    if (gateway) {
       const model = settings.codexModel
         || (CONFIG.OAUTH.backend === 'chatgpt' ? CONFIG.OAUTH.chatgptModel : CONFIG.OAUTH.defaultModel);
       return {
         provider: 'codex',
         backend: 'api',
-        gateway: 'langsmith',
+        gateway,
         model,
-        baseUrl: CONFIG.LLM_GATEWAY.openaiBaseUrl,
-        accessToken: llmGatewayCredential(settings),
+        baseUrl: gatewayEntry(gateway).block.openaiBaseUrl,
+        accessToken: gatewayCredential(settings, gateway),
         authTokens: null,
         numTokens: settings.codexMaxTokens || 65536,
         contextWindow: Number(settings.codexContextWindow) || 0,

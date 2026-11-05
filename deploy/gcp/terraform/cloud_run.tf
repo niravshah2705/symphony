@@ -109,6 +109,16 @@ locals {
     trimspace(var.openswe_proxy_upstream) != "" ? {
       OPENSWE_PROXY_UPSTREAM = trimspace(var.openswe_proxy_upstream)
     } : {},
+    # Self-hosted LiteLLM gateway (litellm.tf). The real origin lives ONLY here on
+    # the sidecar — an agent container must not learn it, because model-generated
+    # code in the coder could otherwise drive an arbitrary target through the
+    # /litellm passthrough. Empty while var.litellm_enabled is false, so the route
+    # fails closed instead of relaying. Operators additionally set
+    # LITELLM_GATEWAY_ENABLED on the agent services to admit the browser flag,
+    # exactly as LLM_GATEWAY_ENABLED is supplied out-of-band today.
+    trimspace(local.litellm_url) != "" ? {
+      LITELLM_PROXY_UPSTREAM = local.litellm_url
+    } : {},
   )
 
   planner_env = merge(

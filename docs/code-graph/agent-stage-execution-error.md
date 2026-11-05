@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| StageExecutionError | Class | ./packages/shared/src/agent/pipeline-stage-runtime.js | 20-27 |
-| constructor | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 21-26 |
+| StageExecutionError | Class | ./packages/shared/src/agent/pipeline-stage-runtime.js | 21-28 |
+| constructor | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 22-27 |
 
 ## Execution Flows
 

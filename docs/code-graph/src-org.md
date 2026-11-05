@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 138 nodes
+Community of 142 nodes
 
-- **Size**: 138 nodes
-- **Cohesion**: 0.2937
+- **Size**: 142 nodes
+- **Cohesion**: 0.2952
 - **Dominant Language**: javascript
 
 ## Members
@@ -25,10 +25,10 @@ Community of 138 nodes
 | normalizeOmlxUpstream | Function | ./services/proxy/src/credentials.js | 141-143 |
 | normalizeJiraConfig | Function | ./services/proxy/src/credentials.js | 145-173 |
 | normalizeSlackWebhook | Function | ./services/proxy/src/credentials.js | 175-196 |
-| resolveUpstream | Function | ./services/proxy/src/credentials.js | 198-224 |
-| buildInjection | Function | ./services/proxy/src/credentials.js | 226-328 |
-| resolvedSecrets | Function | ./services/proxy/src/credentials.js | 228-230 |
-| resolveRoute | Function | ./services/proxy/src/credentials.js | 330-334 |
+| resolveUpstream | Function | ./services/proxy/src/credentials.js | 198-225 |
+| buildInjection | Function | ./services/proxy/src/credentials.js | 227-329 |
+| resolvedSecrets | Function | ./services/proxy/src/credentials.js | 229-231 |
+| resolveRoute | Function | ./services/proxy/src/credentials.js | 331-335 |
 | parseCapabilities | Function | ./services/proxy/src/index.js | 30-35 |
 | pathname | Function | ./services/proxy/src/index.js | 37-43 |
 | sendJson | Function | ./services/proxy/src/index.js | 45-48 |
@@ -65,7 +65,7 @@ Community of 138 nodes
 | test:buildInjection: git route builds x-access-token Basic auth@L140 | Test | ./services/proxy/src/proxy.test.js | 140-146 |
 | test:buildInjection: langfuse basic-pair injects Basic base64(publicKey:secretKey)@L148 | Test | ./services/proxy/src/proxy.test.js | 148-159 |
 
-*... and 88 more members.*
+*... and 92 more members.*
 
 ## Execution Flows
 
@@ -75,11 +75,11 @@ Community of 138 nodes
 
 ### Outgoing
 
-- `equal` (122 edge(s))
-- `deepEqual` (32 edge(s))
+- `equal` (126 edge(s))
+- `deepEqual` (34 edge(s))
 - `String` (26 edge(s))
 - `trim` (21 edge(s))
-- `rejects` (16 edge(s))
+- `rejects` (19 edge(s))
 - `fetch` (13 edge(s))
 - `toString` (12 edge(s))
 - `from` (12 edge(s))
@@ -93,11 +93,11 @@ Community of 138 nodes
 
 ### Incoming
 
-- `equal` (122 edge(s))
-- `./services/proxy/src/proxy.test.js` (36 edge(s))
-- `deepEqual` (32 edge(s))
+- `equal` (126 edge(s))
+- `./services/proxy/src/proxy.test.js` (40 edge(s))
+- `deepEqual` (34 edge(s))
 - `./services/proxy/src/credentials.js` (28 edge(s))
-- `rejects` (16 edge(s))
+- `rejects` (19 edge(s))
 - `./services/proxy/src/secrets-client.js` (13 edge(s))
 - `fetch` (12 edge(s))
 - `./services/proxy/src/stream-token-server.test.js` (12 edge(s))

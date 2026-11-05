@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 756 nodes
+Community of 757 nodes
 
-- **Size**: 756 nodes
-- **Cohesion**: 0.4946
+- **Size**: 757 nodes
+- **Cohesion**: 0.4943
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,13 +26,13 @@ Community of 756 nodes
 | setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
 | contextId | Function | ./public/js/api.js | 20-23 |
 | setRequestContext | Function | ./public/js/api.js | 26-31 |
-| setApiBase | Function | ./public/js/api.js | 108-111 |
-| uploadToSignedUrl | Function | ./public/js/api.js | 119-136 |
-| openStream | Function | ./public/js/api.js | 249-328 |
-| mintFailureCanRetry | Function | ./public/js/api.js | 256-260 |
-| scheduleReconnect | Function | ./public/js/api.js | 262-275 |
-| connect | Function | ./public/js/api.js | 277-310 |
-| close | Function | ./public/js/api.js | 322-326 |
+| setApiBase | Function | ./public/js/api.js | 112-115 |
+| uploadToSignedUrl | Function | ./public/js/api.js | 123-140 |
+| openStream | Function | ./public/js/api.js | 253-332 |
+| mintFailureCanRetry | Function | ./public/js/api.js | 260-264 |
+| scheduleReconnect | Function | ./public/js/api.js | 266-279 |
+| connect | Function | ./public/js/api.js | 281-314 |
+| close | Function | ./public/js/api.js | 326-330 |
 | ensureStylesheet | Function | ./public/js/app.js | 46-68 |
 | load | Function | ./public/js/app.js | 75-87 |
 | currentRoute | Function | ./public/js/app.js | 141-148 |
@@ -65,7 +65,7 @@ Community of 756 nodes
 | capitalize | Function | ./public/js/app.js | 905-908 |
 | start | Function | ./public/js/app.js | 912-920 |
 
-*... and 706 more members.*
+*... and 707 more members.*
 
 ## Execution Flows
 
@@ -94,7 +94,7 @@ Community of 756 nodes
 - `equal` (93 edge(s))
 - `filter` (83 edge(s))
 - `isArray` (82 edge(s))
-- `Boolean` (72 edge(s))
+- `Boolean` (73 edge(s))
 - `catch` (66 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (60 edge(s))
@@ -114,7 +114,7 @@ Community of 756 nodes
 - `./public/js/i18n.js` (34 edge(s))
 - `match` (29 edge(s))
 - `./public/js/views/organization.js` (29 edge(s))
-- `./public/js/auth.js` (23 edge(s))
+- `./public/js/auth.js` (24 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
 - `./public/js/views/openshell.js` (15 edge(s))

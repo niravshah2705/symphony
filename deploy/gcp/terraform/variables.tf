@@ -1122,3 +1122,176 @@ variable "environment" {
   description = "Deployment environment label (e.g. prod, staging) — added to every resource for billing breakdown by environment."
   default     = "prod"
 }
+
+# --- Self-hosted LiteLLM gateway (litellm.tf) --------------------------------
+# A PoC: per-request opt-in gateway with request tracing, running Postgres and
+# Redis as sidecars on emptyDir so no Cloud SQL instance is stood up. Everything
+# here is gated OFF by default.
+
+variable "litellm_enabled" {
+  type        = bool
+  description = "Create the LiteLLM gateway service + its secrets/IAM. OFF means the `litellm` value of the per-request X-AI-Fleet-Llm-Gateway flag is inert server-side (CONFIG.LITELLM.enabled stays false) and no gateway infra exists."
+  default     = false
+}
+
+variable "litellm_service_name" {
+  type        = string
+  description = "Cloud Run service name for the LiteLLM proxy. Also prefixes its generated Secret Manager ids."
+  default     = "ai-fleet-litellm"
+}
+
+# The three LiteLLM images are published by CI from deploy/gcp/Dockerfile.litellm-{app,db,redis},
+# each of which pins its upstream BY DIGEST, so the version identity lives in the
+# Dockerfile and these tags behave like every other service: empty falls back to
+# var.image_tag (the commit SHA CI just pushed). Re-pin a Dockerfile to upgrade.
+
+variable "litellm_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the LiteLLM app overlay (deploy/gcp/Dockerfile.litellm-app). Empty → var.image_tag."
+  default     = ""
+}
+
+variable "litellm_db_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the postgres sidecar (deploy/gcp/Dockerfile.litellm-db). Empty → var.image_tag. LiteLLM itself runs the schema migrations from the app container."
+  default     = ""
+}
+
+variable "litellm_redis_image_tag" {
+  type        = string
+  description = "Per-service image tag override for the redis sidecar mirror (deploy/gcp/Dockerfile.litellm-redis). Empty → var.image_tag."
+  default     = ""
+}
+
+variable "litellm_base_url" {
+  type        = string
+  description = "Override for the gateway's own URL, published to the agent sidecars as LITELLM_PROXY_UPSTREAM. Empty uses Cloud Run's deterministic run.app URL."
+  default     = ""
+}
+
+variable "litellm_ingress" {
+  type        = string
+  description = "Cloud Run v2 ingress for the gateway. INTERNAL_ONLY is the safe default: a public LiteLLM would be a master-key-only endpoint anyone could spend against."
+  default     = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+
+  validation {
+    condition     = contains(["INGRESS_TRAFFIC_ALL", "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER", "INGRESS_TRAFFIC_INTERNAL_ONLY"], var.litellm_ingress)
+    error_message = "litellm_ingress must be a valid Cloud Run v2 ingress value."
+  }
+}
+
+variable "litellm_container_concurrency" {
+  type        = string
+  description = "Max concurrent requests per LiteLLM instance. >1 requires resources.cpu_idle = false on the app container (enforced in litellm.tf). Streaming agent turns also share the instance with Postgres and Redis."
+  default     = "80"
+
+  validation {
+    condition     = can(tonumber(var.litellm_container_concurrency)) && tonumber(var.litellm_container_concurrency) >= 1
+    error_message = "litellm_container_concurrency must be a number >= 1."
+  }
+}
+
+variable "litellm_min_instances" {
+  type        = string
+  description = "Minimum instances. Kept at 1 for the PoC because every cold start re-initialises an EMPTY database and re-runs LiteLLM's migrations; scale-to-zero would make each first request after an idle window pay that init. max_instance_count is pinned to 1 structurally, not from this variable."
+  default     = "1"
+}
+
+variable "litellm_cpu" {
+  type        = string
+  description = "CPU limit for the LiteLLM app container. Must be >= 1 when container_concurrency > 1."
+  default     = "1"
+}
+
+variable "litellm_memory" {
+  type        = string
+  description = "Memory for the LiteLLM app container. LiteLLM + uvicorn workers + (with medium=memory) Postgres buffers all draw from this one envelope — raise before chasing OOMs."
+  default     = "2Gi"
+}
+
+variable "litellm_db_cpu" {
+  type        = string
+  description = "CPU limit for the Postgres sidecar."
+  default     = "1"
+}
+
+variable "litellm_db_memory" {
+  type        = string
+  description = "Memory limit for the Postgres sidecar."
+  default     = "512Mi"
+}
+
+variable "litellm_redis_cpu" {
+  type        = string
+  description = "CPU limit for the Redis sidecar."
+  default     = "1"
+}
+
+variable "litellm_redis_memory" {
+  type        = string
+  description = "Memory limit for the Redis sidecar."
+  default     = "256Mi"
+}
+
+variable "litellm_redis_maxmemory" {
+  type        = string
+  description = "Redis maxmemory (bytes) passed on the command line; must sit below litellm_redis_memory so Redis evicts before the container is OOM-killed."
+  default     = "200000000"
+}
+
+variable "litellm_pg_volume_medium" {
+  type        = string
+  description = "emptyDir medium for PGDATA. \"memory\" is free but counts against the instance RAM limit; switch to \"disk\" under memory pressure (ephemeral either way)."
+  default     = "memory"
+
+  validation {
+    condition     = contains(["memory", "disk"], var.litellm_pg_volume_medium)
+    error_message = "litellm_pg_volume_medium must be \"memory\" or \"disk\"."
+  }
+}
+
+variable "litellm_pg_volume_size" {
+  type        = string
+  description = "emptyDir size limit for PGDATA. Postgres writes spend-log rows into it for the life of the instance."
+  default     = "1Gi"
+}
+
+variable "litellm_redis_volume_size" {
+  type        = string
+  description = "emptyDir size limit for the Redis data mount. AOF is disabled, so this only ever holds Redis's transient dump target."
+  default     = "256Mi"
+}
+
+variable "litellm_database_name" {
+  type        = string
+  description = "Postgres database name LiteLLM stores keys, spend logs, and trace rows in."
+  default     = "litellm"
+}
+
+variable "litellm_master_key_secret_id" {
+  type        = string
+  description = "Secret Manager id holding LiteLLM's master key (Admin UI password + privileged /key/* RPC auth). Created with prevent_destroy; its VALUE is seeded out-of-band."
+  default     = "litellm-master-key"
+}
+
+variable "litellm_salt_key_secret_id" {
+  type        = string
+  description = "Secret Manager id holding LiteLLM's salt key (encrypts DB-stored credentials). Created with prevent_destroy; its VALUE is seeded out-of-band. Rotating it orphans every provider key stored in the DB, which is why config.yaml keeps provider keys in os.environ/."
+  default     = "litellm-salt-key"
+}
+
+variable "litellm_provider_secrets" {
+  type        = map(string)
+  description = "ENV_NAME => Secret Manager id for the provider keys the gateway pays with (e.g. ANTHROPIC_API_KEY = \"anthropic-api-key\"). Unlike the agent containers, the gateway legitimately holds these; they reuse the ids already managed for var.managed_provider_secrets so there is one key to rotate."
+  default = {
+    ANTHROPIC_API_KEY = "anthropic-api-key"
+    OPENAI_API_KEY    = "openai-api-key"
+  }
+}
+
+
+variable "litellm_config_path" {
+  type        = string
+  description = "Path to LiteLLM's config.yaml inside the app image (built from deploy/litellm/config.yaml). Override to point at a GCS-hosted config without a rebuild."
+  default     = "/app/config.yaml"
+}

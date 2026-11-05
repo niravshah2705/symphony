@@ -665,6 +665,11 @@ const SECRET_ENV = Object.freeze({
   // the other providers it cannot be swapped by the egress sidecar — the Qoder
   // harness fails closed in proxy mode instead of reading this.
   qoderAccessToken: 'QODER_PERSONAL_ACCESS_TOKEN',
+  // Self-hosted LiteLLM proxy virtual key. Customer-only in the vault (the
+  // gateway mints one per org), so this overlay exists for local/dev runs
+  // without the sidecar; in proxy mode secretOverlay() returns {} and the
+  // sidecar injects the org's minted key.
+  litellmApiKey: 'LITELLM_API_KEY',
   // Managed LLM API keys (alternative to OAuth), matching the vault's managed set.
   anthropicApiKey: 'ANTHROPIC_API_KEY',
   openaiApiKey: 'OPENAI_API_KEY',

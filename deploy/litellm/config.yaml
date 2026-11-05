@@ -1,0 +1,105 @@
+# -----------------------------------------------------------------------------
+# LiteLLM proxy config for the AI Fleet platform gateway (PoC).
+# -----------------------------------------------------------------------------
+# Mirrored/baked into the gateway image (see .github/workflows/deploy.yml and
+# deploy/gcp/Dockerfile.litellm-app). Retarget with CONFIG_FILE_PATH without a
+# rebuild.
+#
+# THE MODEL-NAME CONTRACT — read this before adding an entry.
+# A `litellm` descriptor keeps the BARE model id on the wire (wireModelId() in
+# packages/shared/src/agent/llm.js prefixes `provider/model` only for langsmith),
+# and LiteLLM matches an inbound `model` against `model_name` verbatim. So every
+# `model_name` here MUST equal a model id `enforceLlmModel` can hand to the
+# harness — i.e. the `model` field of every claude/codex preset in
+# packages/shared/src/agent/model-presets.js. A missing entry is not a fallback:
+# the opted-in run is rejected (403 key_model_access_denied — verified against a
+# virtual key restricted to `models`). deploy/gcp/litellm-config.test.js asserts
+# coverage of that catalog, so drift fails CI rather than a customer's agent run.
+
+model_list:
+  # --- Anthropic surface (claude-agent-sdk / deepagent → /v1/messages) --------
+  - model_name: claude-opus-4-8
+    litellm_params:
+      model: anthropic/claude-opus-4-8
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: anthropic/claude-sonnet-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: claude-haiku-4-5-20251001
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: claude-fable-5
+    litellm_params:
+      model: anthropic/claude-fable-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # --- OpenAI surface (codex-sdk → /v1/responses, deepagent → /chat/completions)
+  - model_name: gpt-5.6-sol
+    litellm_params:
+      model: openai/gpt-5.6-sol
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gpt-5.6-terra
+    litellm_params:
+      model: openai/gpt-5.6-terra
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gpt-5.6-luna
+    litellm_params:
+      model: openai/gpt-5.6-luna
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gpt-5.5
+    litellm_params:
+      model: openai/gpt-5.5
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gpt-5.4
+    litellm_params:
+      model: openai/gpt-5.4
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gpt-5.4-mini
+    litellm_params:
+      model: openai/gpt-5.4-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+litellm_settings:
+  # Tracing sinks. Postgres is the primary view (Admin UI /ui + /global/spend/logs).
+  # OTel stays OPTIONAL and off by default: this repo has zero OpenTelemetry
+  # producers today, so LiteLLM's honored `traceparent` has no parent span to join
+  # yet. Turn it on by appending `- otel` and setting OTEL_EXPORTER=otlp_http,
+  # OTEL_ENDPOINT, OTEL_HEADERS.
+  callbacks: []
+
+  # PoC default. Prompts in this system contain model-generated code and
+  # customer secrets, and services/proxy/CLAUDE.md invariant 4 ("never log
+  # secrets") argues for keeping bodies out of the trace DB. Token counts, cost,
+  # latency, model and key alias all still land in the spend log — only the
+  # prompt/completion text is dropped. Flip to false to capture bodies, or set
+  # the per-request `x-litellm-enable-message-redaction: true` header instead.
+  turn_off_message_logging: true
+
+  # Agent turns stream for minutes. Do NOT inherit the 10s value that appears in
+  # upstream doc snippets — that would time out every real deep-agent request.
+  request_timeout: 600
+  num_retries: 2
+  # Claude and OpenAI accept different optional params; drop rather than 400 on
+  # a mismatch (e.g. `reasoning_effort` sent to an Anthropic model).
+  drop_params: true
+  # Keys/models come from this file + Postgres, never from a per-process cache
+  # that would go stale when the sidecar restarts.
+  set_verbose: false
+
+router_settings:
+  # Loopback to the Redis sidecar in this same Cloud Run instance. Redis holds
+  # router cooldown/co-checkout state shared across LiteLLM's uvicorn WORKERS —
+  # still needed even though max_instance_count is 1, because one instance runs
+  # many workers.
+  redis_host: 127.0.0.1
+  redis_port: 6379
+
+# `master_key` and `database_url` are deliberately absent: both come from the
+# LITELLM_MASTER_KEY / DATABASE_URL / LITELLM_SALT_KEY env vars set via
+# secret_key_ref in deploy/gcp/terraform/litellm.tf, so no secret value ever lands
+# in this file or in git. `store_model_in_db` stays False for the same reason —
+# models are defined HERE and rebuilt on every deploy, so seeding them into an
+# emptyDir database would only mean losing them on each restart for no gain.
+general_settings: {}

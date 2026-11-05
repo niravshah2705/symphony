@@ -49,6 +49,69 @@ const LLM_GATEWAY = Object.freeze({
 });
 
 /**
+ * LiteLLM proxy — self-hosted LLM gateway with request tracing. Same shape as
+ * LLM_GATEWAY above: a PER-REQUEST feature flag, not a deployment mode. `enabled`
+ * is only the server-side availability gate, and it additionally requires a route
+ * that can actually be reached — in proxy mode the agent needs nothing beyond the
+ * sidecar prefix (the proxy holds LITELLM_PROXY_UPSTREAM), while direct/local mode
+ * needs LITELLM_URL. Without that guard an operator flipping the gate on before
+ * deploying LiteLLM would send opted-in runs to an empty base URL.
+ * Base-URL selection happens per run in resolveLlm — never here — so unflagged
+ * traffic keeps today's provider base URLs byte-for-byte.
+ */
+const LITELLM_UPSTREAM = normalizeProxyBase(process.env.LITELLM_URL);
+const LITELLM = Object.freeze({
+  enabled: String(process.env.LITELLM_GATEWAY_ENABLED || '').trim().toLowerCase() === 'true'
+    && Boolean(LITELLM_UPSTREAM || EGRESS_PROXY_URL),
+  url: LITELLM_UPSTREAM,
+  claudeBaseUrl: proxied('/litellm', LITELLM_UPSTREAM, ''),
+  openaiBaseUrl: proxied('/litellm/v1', LITELLM_UPSTREAM ? `${LITELLM_UPSTREAM}/v1` : '', ''),
+});
+
+/**
+ * The per-request `X-AI-Fleet-Llm-Gateway` selector's mode table — ONE source of
+ * truth for every hop that validates or threads the flag (gateway ingestion,
+ * planner/coder Pub/Sub, the run scheduler, `pipeline-stage-runtime`, and
+ * `resolveLlm`). Each hop historically re-spelled `=== 'langsmith'`, so a second
+ * mode added at one layer would be silently dropped at the next and the run
+ * would take the direct path while the UI still showed it as gateway-routed.
+ *
+ * `secretKey` / `keyLabel` are what `resolveLlm` needs for a NON-proxied run:
+ * in egress-proxy mode the agent sends the sentinel and the sidecar injects the
+ * real gateway key, so no vault value reaches this layer at all.
+ */
+const LLM_GATEWAY_MODES = Object.freeze({
+  langsmith: Object.freeze({ block: LLM_GATEWAY, secretKey: 'langsmithGatewayApiKey', keyLabel: 'workspace key' }),
+  litellm: Object.freeze({ block: LITELLM, secretKey: 'litellmApiKey', keyLabel: 'virtual key' }),
+});
+
+/**
+ * Normalize a threaded selector to a mode whose gateway is actually provisioned,
+ * else ''. Unknown/unconfigured values degrade to the direct provider path, which
+ * is byte-identical to an unflagged run.
+ */
+function llmGatewayMode(value) {
+  const mode = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  const entry = Object.prototype.hasOwnProperty.call(LLM_GATEWAY_MODES, mode)
+    ? LLM_GATEWAY_MODES[mode]
+    : null;
+  return entry && entry.block.enabled ? mode : '';
+}
+
+/**
+ * Allowlist-only normalization: lowercase a threaded selector and keep it only
+ * if it names a known mode. Every hop that stores or forwards the flag uses
+ * THIS, not llmGatewayMode — mid-pipeline services must not re-decide
+ * availability from their own env (the gateway already dropped the header when
+ * no gateway was provisioned); they only guard against an unknown value
+ * reaching a task record or a job env var.
+ */
+function normalizeLlmGatewayMode(value) {
+  const mode = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return Object.prototype.hasOwnProperty.call(LLM_GATEWAY_MODES, mode) ? mode : '';
+}
+
+/**
  * Langfuse Cloud tracing sink. In egress-proxy mode the SDK posts OTLP to the
  * sidecar's /langfuse prefix carrying only the sentinel credential pair — the
  * sidecar assembles the real `Basic base64(pk:sk)` from the vault, so no Langfuse
@@ -589,6 +652,10 @@ const ORG_SERVICE_PORT = Number(process.env.ORG_SERVICE_PORT) || 8000;
 // Settings-policy service (Python/FastAPI, Firestore). Local default 8100 so it
 // does not clash with the org service's 8000 when both run on one host.
 const SETTINGS_SERVICE_PORT = Number(process.env.SETTINGS_SERVICE_PORT) || 8100;
+// Self-hosted LiteLLM proxy. The upstream image listens on 4000 and keeps that port
+// in Cloud Run, where the container owns the instance — but 4000 is already the
+// gateway's local port, so a single-host dev profile uses 4090.
+const LITELLM_SERVICE_PORT = Number(process.env.LITELLM_SERVICE_PORT) || 4090;
 const SERVICES = Object.freeze({
   gatewayPort: PORT,
   plannerPort: PLANNER_PORT,
@@ -620,6 +687,11 @@ const SERVICES = Object.freeze({
   settingsUrl: process.env.SETTINGS_URL || (process.env.NODE_ENV === 'production' ? '' : `http://localhost:${SETTINGS_SERVICE_PORT}`),
   layaUrl: process.env.LAYA_INFERENCE_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8088'),
   clmUrl: process.env.CLM_INFERENCE_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8089'),
+  // Self-hosted LiteLLM proxy (LLM gateway + request tracing). Empty when unset in
+  // production so an unconfigured deployment simply cannot satisfy the litellm flag
+  // rather than silently sending LLM traffic to localhost.
+  litellmPort: LITELLM_SERVICE_PORT,
+  litellmUrl: process.env.LITELLM_URL || (process.env.NODE_ENV === 'production' ? '' : `http://localhost:${LITELLM_SERVICE_PORT}`),
   skillRouter: Object.freeze({
     backend: process.env.SKILL_ROUTER_BACKEND || 'laya',
     timeoutMs: Math.max(10, Number(process.env.SKILL_ROUTER_TIMEOUT_MS) || 150),
@@ -843,6 +915,11 @@ const CONFIG = Object.freeze({
   EGRESS_PROXY_INCLUDE_SDK,
   // Per-request LangSmith LLM Gateway feature flag (availability gate + bases).
   LLM_GATEWAY,
+  // Per-request self-hosted LiteLLM proxy feature flag (same shape as above).
+  LITELLM,
+  // The llm-gateway selector's mode table, shared by every hop that validates
+  // or threads the per-request flag.
+  LLM_GATEWAY_MODES,
   // Langfuse Cloud trace sink (sidecar-prefixed OTLP origin + stage partition).
   LANGFUSE,
   LINEAR_API_URL: proxied('/linear', process.env.LINEAR_API_URL, 'https://api.linear.app/graphql'),
@@ -940,6 +1017,8 @@ function namespaceCollection(base) {
 
 module.exports = {
   CONFIG,
+  llmGatewayMode,
+  normalizeLlmGatewayMode,
   buildFirebaseAuthConfig,
   resolveSkillsSrc,
   namespaceCollection,

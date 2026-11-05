@@ -6,6 +6,7 @@ const framework = require('./framework');
 const testingWorkflow = require('./workflows/testing.workflow');
 const deploymentWorkflow = require('./workflows/deployment.workflow');
 const { resolveLlm } = require('./llm');
+const { normalizeLlmGatewayMode } = require('../config');
 const { registry: harnessRegistry } = require('./harnesses');
 const { preparePlannedWorkspace, sanitizeBranch } = require('./workspace');
 const { redactSecrets, runCommand, sanitizedToolEnv } = require('./tools/exec');
@@ -405,7 +406,7 @@ async function resolveStageAgent(command, { role, workflowStage }, dependencies 
   // command's request bag. It changes ROUTING only — never provider or model —
   // so the live-vs-snapshot cross-checks below stay valid for flagged runs.
   const admittedRequest = (command && command.input && command.input.request) || {};
-  const llmGateway = admittedRequest.llmGateway === 'langsmith' ? 'langsmith' : '';
+  const llmGateway = normalizeLlmGatewayMode(admittedRequest.llmGateway);
   const resolvedLlm = await resolveModel(llmGateway ? { ...settings, llmGateway } : settings, role);
   const configuration = stageConfiguration(command);
   if (

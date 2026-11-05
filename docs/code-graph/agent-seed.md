@@ -7,7 +7,7 @@
 Community of 99 nodes
 
 - **Size**: 99 nodes
-- **Cohesion**: 0.3395
+- **Cohesion**: 0.3391
 - **Dominant Language**: javascript
 
 ## Members

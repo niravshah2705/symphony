@@ -64,6 +64,11 @@ SECRET_KEYS: tuple[str, ...] = (
     # above. Managed-only: it bills the platform's LangSmith workspace, so it is
     # resolved like any managed key but never writable by a browser.
     "langsmithGatewayApiKey",
+    # Self-hosted LiteLLM proxy credential for the `litellm` gateway mode. An
+    # operator writes it into each org's vault; there is no seeder, because
+    # /key/generate mints a NEW token per call and nothing here can receive one
+    # back. See CUSTOMER_ONLY_SECRET_KEYS below and docs/LLM_GATEWAY.md.
+    "litellmApiKey",
     # Langfuse Cloud tracing pair. The sidecar builds `Basic base64(pk:sk)` for the
     # /langfuse route, so the public key is a stored key too (not a constant).
     # Platform-managed only, like the LLM gateway key: one shared project receives
@@ -79,7 +84,9 @@ SECRET_KEYS: tuple[str, ...] = (
 # gateway workspace key is platform-billing material and stays operator-only.
 # The Langfuse pair is operator-only for the same reason: it is the platform's
 # shared trace sink, and a writable key would let a tenant redirect its
-# observations into a project the platform does not control.
+# observations into a project the platform does not control. The LiteLLM
+# credential is operator-written too: a browser-writable value would let an org
+# point the platform's LiteLLM-routed traffic at an arbitrary gateway.
 BROWSER_WRITABLE_SECRET_KEYS: tuple[str, ...] = tuple(
     key
     for key in SECRET_KEYS
@@ -89,6 +96,7 @@ BROWSER_WRITABLE_SECRET_KEYS: tuple[str, ...] = tuple(
         "langsmithGatewayApiKey",
         "langfusePublicKey",
         "langfuseSecretKey",
+        "litellmApiKey",
     )
 )
 
@@ -114,6 +122,17 @@ CUSTOMER_ONLY_SECRET_KEYS: frozenset[str] = frozenset(
         # A Qoder token is the organization's own account credential; the platform
         # holds no shared Qoder account to manage.
         "qoderAccessToken",
+        # The LiteLLM credential is per-organization by ADDRESS, not by economics:
+        # there is no platform-shared LiteLLM account to manage, and resolving one
+        # would bill every tenant's traffic against a single virtual key.
+        # Customer-only, so the resolver reads this org's vault with no selection
+        # record required, and resolve_managed_secrets() (the shared stack) omits
+        # it entirely. The value is an operator-minted, model-scoped virtual key —
+        # never the gateway master key, because the /litellm route forwards any
+        # sub-path and a coder-reachable admin key is the exact failure the egress
+        # sidecar exists to prevent. docs/LLM_GATEWAY.md covers the ephemeral-DB
+        # consequence (re-mint after a redeploy; runs fail closed until then).
+        "litellmApiKey",
     }
 )
 
