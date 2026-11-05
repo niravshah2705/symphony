@@ -980,8 +980,8 @@ function patternSection(ctx, scopeState) {
 function substrateConfigCard(ctx, scopeState, text) {
   const editable = canEditPolicyScope(scopeState.identity, scopeState.scope);
   const s = ctx.settings;
-  const url = text(s.substrateUrl, 'https://ateapi.internal:8443');
-  const ingress = text(s.substrateIngressUrl, 'https://router.internal');
+  const url = text(s.substrateUrl, 'https://substrate.<domain> (ateapi path-prefixed)');
+  const ingress = text(s.substrateIngressUrl, 'https://substrate.<domain>');
   const atespace = text(s.substrateAtespace, 'tenant-a');
   const pool = text(s.substrateWorkerPool, 'planner-pool');
   const template = text(s.substrateActorTemplate, 'planner');

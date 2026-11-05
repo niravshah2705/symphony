@@ -1,0 +1,392 @@
+name: Substrate control plane (preflight / install)
+
+# Installs the Agent Substrate control plane (the `ate-system` namespace:
+# ateapi, ate-controller, atelet, atenet-router/egress, ate-idp-server,
+# podcertificate-controller, the ate.dev CRDs and the gVisor SandboxConfig) onto
+# the OpenShell GKE cluster, and reports whether that is even possible yet.
+#
+# Why this is a workflow and not Terraform: those images are ko-built from the
+# substrate checkout, so there are no static manifests to vendor faithfully —
+# apply would either recreate them wrong or fight the installer over ownership.
+# It CAN run on a runner, because `--image-repo` + `--image-tag` tell ate-setup
+# to install the published release images instead of building anything: the job
+# needs no ko, no Docker and no registry push. The manifests still come from the
+# checkout, which is why the checkout and the image tag must name the same
+# revision (docs/SUBSTRATE_INTEGRATION.md §5 step 3).
+#
+# Why its own workflow instead of another Deploy to GCP job: dispatching
+# deploy.yml runs its path filters, and a branch that touches services/planner/**
+# or public/** rebuilds and redeploys those Cloud Run services from that branch.
+# A control-plane preflight must never be able to ship unmerged code, so nothing
+# here can deploy the app.
+#
+# Two modes:
+#   preflight  read-only. Every prerequisite reported as PASS/FAIL and the exact
+#              install command printed. Safe to fire at any time; it is the
+#              first thing to run after a gke_reconcile.
+#   install    additionally provisions the GCS snapshot bucket + IAM that
+#              ate-setup refuses to run without on GKE, then deploys ate-system.
+#
+# Install is not destructive of anything already running: `deploy ate-system` is
+# re-runnable and rolls the control plane's pods forward. Tearing it down
+# (`delete ate-system`) is deliberately not automated here — it takes actor
+# state with it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: What to do
+        type: choice
+        required: true
+        default: preflight
+        options:
+          - preflight
+          - install
+      version:
+        description: "Substrate revision (tag). Empty = SUBSTRATE_VERSION var, else the latest upstream release"
+        type: string
+        default: ""
+
+# Serialised with the cluster's other writers: gke_reconcile applies the same
+# module's substrate.tf, and the power workflow parks the worker pool to zero
+# overnight. Installing a control plane into a pool mid-drain races it.
+concurrency:
+  group: openshell-cluster-power
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation for the deployer SA
+
+jobs:
+  substrate_control_plane:
+    name: ${{ inputs.mode == 'install' && 'install ate-system' || 'preflight only' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      CLUSTER: ${{ vars.OPENSHELL_CLUSTER_NAME || 'openshell-multitenant' }}
+      ZONE: ${{ vars.OPENSHELL_CLUSTER_ZONE || 'asia-south1-a' }}
+      SUBSTRATE_REPO_URL: ${{ vars.SUBSTRATE_REPO_URL || 'https://github.com/agent-substrate/substrate' }}
+      SUBSTRATE_GKE_REPO_URL: ${{ vars.SUBSTRATE_GKE_REPO_URL || 'https://github.com/ai-on-gke/substrate-gke' }}
+      SUBSTRATE_IMAGE_REPO: ${{ vars.SUBSTRATE_IMAGE_REPO || 'ghcr.io/agent-substrate/substrate' }}
+      SUBSTRATE_VERSION_INPUT: ${{ inputs.version }}
+      SUBSTRATE_VERSION: ${{ vars.SUBSTRATE_VERSION }}
+      SUBSTRATE_SNAPSHOT_BUCKET: ${{ vars.SUBSTRATE_SNAPSHOT_BUCKET }}
+      SUBSTRATE_SANDBOX_CLASSES: ${{ vars.SUBSTRATE_SANDBOX_CLASSES }}
+      SUBSTRATE_CREDENTIAL_PROVIDER: ${{ vars.SUBSTRATE_CREDENTIAL_PROVIDER }}
+      SUBSTRATE_INGRESS_SPIFFE_IDS: ${{ vars.SUBSTRATE_INGRESS_SPIFFE_IDS }}
+      SUBSTRATE_POSTGRES_STORAGE_CLASS: ${{ vars.SUBSTRATE_POSTGRES_STORAGE_CLASS }}
+      SUBSTRATE_ROLLOUT_TIMEOUT: ${{ vars.SUBSTRATE_ROLLOUT_TIMEOUT }}
+      SUBSTRATE_ENABLED: ${{ vars.SUBSTRATE_ENABLED }}
+      SUBSTRATE_NODE_POOL: ${{ vars.SUBSTRATE_NODE_POOL }}
+      SUBSTRATE_ATEAPI_SERVICE: ${{ vars.SUBSTRATE_ATEAPI_SERVICE }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Set up kubectl
+        run: |
+          set -euo pipefail
+          # GKE 1.30+ kubeconfigs authenticate by shelling out to this plugin;
+          # without it every kubectl call dies with "gke-gcloud-auth-plugin: not
+          # found" and the whole job reads as a cluster outage.
+          gcloud components install kubectl gke-gcloud-auth-plugin --quiet
+          gcloud container clusters get-credentials "$CLUSTER" --zone "$ZONE" --project "$PROJECT_ID"
+          kubectl get nodes >/dev/null
+
+      - name: Resolve install settings
+        id: cfg
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          version="${SUBSTRATE_VERSION_INPUT:-${SUBSTRATE_VERSION:-}}"
+          if [ -z "$version" ]; then
+            # No pin: take the latest upstream release, and say so loudly — a
+            # control plane that quietly tracks main is not reproducible.
+            version="$(curl -fsSL https://api.github.com/repos/agent-substrate/substrate/releases/latest \
+              | jq -r .tag_name)" || fail "Could not resolve the latest Substrate release; set SUBSTRATE_VERSION."
+            echo "::warning::No SUBSTRATE_VERSION set — installing the latest release ($version). Pin it if this cluster should not drift."
+          fi
+          case "$version" in
+            v[0-9]*) ;;
+            *) fail "Refusing a version that is not a release tag: '$version' (the checkout and the image tag must match)." ;;
+          esac
+
+          bucket="${SUBSTRATE_SNAPSHOT_BUCKET:-ate-snapshots-${PROJECT_ID//-}}"
+          sandbox_classes="${SUBSTRATE_SANDBOX_CLASSES:-gvisor}"
+          credential_provider="${SUBSTRATE_CREDENTIAL_PROVIDER:-{\"name\":\"k8s.io\"}}"
+          spiffe_ids="${SUBSTRATE_INGRESS_SPIFFE_IDS:-spiffe://cluster.local/ns/ate-system/sa/atenet-client}"
+          rollout_timeout="${SUBSTRATE_ROLLOUT_TIMEOUT:-10m}"
+
+          # setup-gcp's --region defaults to us-west1 and it *refuses* an existing
+          # bucket whose location differs, so pass the cluster's own region: a zone
+          # ends in a single letter (asia-south1-a), a region does not.
+          if [[ "$ZONE" =~ ^(.+)-[a-z]$ ]]; then region="${BASH_REMATCH[1]}"; else region="$ZONE"; fi
+
+          # GCS names cap at 63 and the microVM asset bucket is <name>-assets.
+          if [ "${#bucket}" -gt 56 ]; then
+            fail "SUBSTRATE_SNAPSHOT_BUCKET '$bucket' is ${#bucket} characters; the -assets suffix needs 7 of them."
+          fi
+
+          {
+            echo "version=$version"
+            echo "bucket=$bucket"
+            echo "region=$region"
+            echo "sandbox_classes=$sandbox_classes"
+            echo "credential_provider=$credential_provider"
+            echo "spiffe_ids=$spiffe_ids"
+            echo "rollout_timeout=$rollout_timeout"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Substrate install settings"
+            echo ""
+            echo "| Setting | Value |"
+            echo "|---|---|"
+            echo "| revision (checkout + image tag) | \`$version\` |"
+            echo "| image repo | \`$SUBSTRATE_IMAGE_REPO\` |"
+            echo "| snapshot bucket | \`$bucket\` |"
+            echo "| bucket location | \`$region\` (= the cluster's) |"
+            echo "| sandbox classes | \`$sandbox_classes\` |"
+            echo "| credential provider | \`$credential_provider\` |"
+            echo "| ingress SPIFFE allowlist | \`$spiffe_ids\` |"
+            echo "| rollout timeout | \`$rollout_timeout\` |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preflight report
+        env:
+          BUCKET: ${{ steps.cfg.outputs.bucket }}
+          BUCKET_REGION: ${{ steps.cfg.outputs.region }}
+          VERSION: ${{ steps.cfg.outputs.version }}
+          SANDBOX_CLASSES: ${{ steps.cfg.outputs.sandbox_classes }}
+          IMAGE_REPO: ${{ env.SUBSTRATE_IMAGE_REPO }}
+        run: |
+          set -uo pipefail
+          # Advisory in both modes: this step never fails the job, because the
+          # point of preflight is to see every gate at once instead of tripping
+          # over them one run at a time. Install mode re-tests the blocking ones
+          # in the next step and refuses to continue.
+          {
+            echo "### Prerequisites"
+            echo ""
+            echo "| Result | Check | Detail |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          check() { # check <label> <command...>
+            local label="$1"; shift
+            local out rc state detail
+            out="$("$@" 2>&1)"; rc=$?
+            if [ "$rc" -eq 0 ]; then state="PASS"; else state="FAIL"; fi
+            detail="$(printf '%s' "${out:-—}" | head -1 | tr '|' '/')"
+            echo "| $state | $label | $detail |" >> "$GITHUB_STEP_SUMMARY"
+            printf '%s  %s: %s\n' "$state" "$label" "$detail"
+          }
+
+          check "SUBSTRATE_ENABLED" bash -c 'if [ "${SUBSTRATE_ENABLED:-}" != "true" ]; then echo "repo variable is ${SUBSTRATE_ENABLED:-unset}; the substrate.tf infra is not in plan"; exit 1; fi'
+          check "worker node pool" bash -c '
+            [ -n "${SUBSTRATE_NODE_POOL:-}" ] \
+              || { echo "SUBSTRATE_NODE_POOL is unset — substrate.tf has no pool to create"; exit 1; }
+            gcloud container node-pools describe "$SUBSTRATE_NODE_POOL" \
+              --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" --format "value(status)"
+          '
+          # Location matters: setup-gcp create bucket errors on an existing bucket
+          # in another region, so a wrong-location bucket is an install failure.
+          check "snapshot bucket" bash -c '
+            loc="$(gcloud storage buckets describe "gs://$BUCKET" --project "$PROJECT_ID" --format "value(location)" 2>/dev/null)" \
+              || { echo "gs://$BUCKET not created yet — install mode creates it in $BUCKET_REGION"; exit 1; }
+            if [ "$loc" != "$BUCKET_REGION" ]; then
+              echo "gs://$BUCKET exists in $loc, but install would need $BUCKET_REGION (the cluster region)"
+              exit 1
+            fi
+            echo "gs://$BUCKET in $loc"
+          '
+          check "snapshot transfer GSA" gcloud iam service-accounts describe "ate-snapshot-transfer@${PROJECT_ID}.iam.gserviceaccount.com"
+          check "ate-system namespace" kubectl get namespace ate-system
+          # Informational either way: absent means a fresh install, present means
+          # this deploy rolls a control plane that is already serving.
+          check "existing control plane" bash -c \
+            'if kubectl get crd -o name 2>/dev/null | grep -q ate.dev; then echo "ate.dev CRDs present — this deploy rolls the running control plane"; else echo "no ate.dev CRDs — fresh install"; fi'
+          check "Envoy Gateway CRDs" kubectl get crd gateways.gateway.networking.k8s.io -o 'jsonpath={.metadata.name}'
+          check "cert-manager CRDs" kubectl get crd certificates.cert-manager.io -o 'jsonpath={.metadata.name}'
+          check "substrate ingress Gateway" kubectl -n ate-system get gateway substrate-ingress -o 'jsonpath={.metadata.name}'
+
+          # ate-setup resolves every image tag to a digest before it deploys
+          # anything, so a repo or tag without the full set fails the install —
+          # minutes in, after the checkout and the Go build. Names mirror
+          # images.ReleaseComponents; the worker image follows the sandbox class.
+          check "release images present" bash -c '
+            host="${IMAGE_REPO%%/*}"
+            path="${IMAGE_REPO#*/}"
+            images="ateapi atelet atecontroller atenet ate-idp-server podcertcontroller envoy-dataplane objectstore-plugin kubernetes-secrets"
+            case ",$SANDBOX_CLASSES," in
+              *",microvm,"*) images="$images ateworker-microvm" ;;
+              *) images="$images ateworker-gvisor" ;;
+            esac
+            if [ "$host" != "ghcr.io" ]; then
+              echo "$IMAGE_REPO is not ghcr.io; confirm by hand it carries: $images"
+              exit 0
+            fi
+            missing=""
+            for img in $images; do
+              token="$(curl -fsS "https://ghcr.io/token?scope=repository:$path/$img:pull" | jq -r .token)" || { missing="$missing $img(token)"; continue; }
+              code="$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" \
+                -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json" \
+                "https://ghcr.io/v2/$path/$img/manifests/$VERSION")"
+              [ "$code" = "200" ] || missing="$missing $img($code)"
+            done
+            if [ -n "$missing" ]; then echo "absent from $IMAGE_REPO at $VERSION:$missing"; exit 1; fi
+            echo "every image $VERSION needs is in $IMAGE_REPO"
+          '
+
+      - name: Refuse to install over unmet prerequisites
+        if: inputs.mode == 'install'
+        run: |
+          set -uo pipefail
+          BLOCK=()
+          [ "${SUBSTRATE_ENABLED:-}" = "true" ] || BLOCK+=("SUBSTRATE_ENABLED is not true — the worker pool, namespaces, snapshot class and ingress all come from substrate.tf; run Deploy to GCP with gke_reconcile first")
+          [ -n "$SUBSTRATE_NODE_POOL" ] || BLOCK+=("SUBSTRATE_NODE_POOL is unset — the installer needs to know which pool runs actors")
+          gcloud container node-pools describe "$SUBSTRATE_NODE_POOL" --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" >/dev/null 2>&1 \
+            || BLOCK+=("node pool '$SUBSTRATE_NODE_POOL' does not exist in $CLUSTER")
+          kubectl get crd gateways.gateway.networking.k8s.io >/dev/null 2>&1 \
+            || BLOCK+=("Envoy Gateway CRDs are missing — the substrate ingress front cannot serve anything")
+          if [ "${#BLOCK[@]}" -gt 0 ]; then
+            for b in "${BLOCK[@]}"; do echo "::error::$b"; done
+            echo "::error::Refusing to install ate-system over ${#BLOCK[@]} unmet prerequisite(s); see the Prerequisites table in the job summary."
+            exit 1
+          fi
+
+      - name: Resolve the install arguments
+        id: args
+        env:
+          VERSION: ${{ steps.cfg.outputs.version }}
+          BUCKET: ${{ steps.cfg.outputs.bucket }}
+          SANDBOX_CLASSES: ${{ steps.cfg.outputs.sandbox_classes }}
+          CREDENTIAL_PROVIDER: ${{ steps.cfg.outputs.credential_provider }}
+          SPIFFE_IDS: ${{ steps.cfg.outputs.spiffe_ids }}
+          ROLLOUT_TIMEOUT: ${{ steps.cfg.outputs.rollout_timeout }}
+          PG_SC: ${{ env.SUBSTRATE_POSTGRES_STORAGE_CLASS }}
+        run: |
+          set -euo pipefail
+          args=(--no-dev-env deploy ate-system
+            --image-repo="$SUBSTRATE_IMAGE_REPO" --image-tag="$VERSION"
+            --credential-provider="$CREDENTIAL_PROVIDER"
+            --ingress-allowed-spiffe-ids="$SPIFFE_IDS"
+            --gcp-project-id="$PROJECT_ID" --gcp-cluster-name="$CLUSTER" --gcp-cluster-location="$ZONE"
+            --storage-bucket-name="$BUCKET" --snapshot-location="gs://$BUCKET/"
+            --snapshot-transfer-gsa-name=ate-snapshot-transfer
+            --sandbox-classes="$SANDBOX_CLASSES"
+            --rollout-timeout="$ROLLOUT_TIMEOUT")
+          # The cluster default StorageClass will not necessarily attach for the
+          # bundled postgres StatefulSet (C4/N4 pools need dynamic-rwo); unset
+          # keeps the cluster default.
+          [ -n "$PG_SC" ] && args+=(--ateapi-postgres-storage-class="$PG_SC")
+          # NUL-delimited: a flag value may contain spaces, and a space-delimited
+          # round trip through a file would silently split it into two arguments.
+          printf '%s\0' "${args[@]}" > /tmp/substrate-install-args
+          {
+            echo "### Install command"
+            echo ""
+            echo '```'
+            echo "go run ./cmd/ate-setup ${args[*]}"
+            echo '```'
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop here in preflight mode
+        if: inputs.mode != 'install'
+        run: |
+          echo "Preflight only — nothing was provisioned or installed. Re-run with mode=install to apply the command in the job summary."
+
+      - name: Fetch the installer checkouts
+        if: inputs.mode == 'install'
+        env:
+          VERSION: ${{ steps.cfg.outputs.version }}
+          SUBSTRATE_URL: ${{ env.SUBSTRATE_REPO_URL }}
+          SUBSTRATE_GKE_URL: ${{ env.SUBSTRATE_GKE_REPO_URL }}
+        run: |
+          set -euo pipefail
+          # Both before setup-go, which reads substrate/go.mod for the toolchain.
+          git clone --depth 1 --branch "$VERSION" "$SUBSTRATE_URL" substrate
+          git clone --depth 1 "$SUBSTRATE_GKE_URL" substrate-gke
+
+      - uses: actions/setup-go@v7
+        if: inputs.mode == 'install'
+        with:
+          go-version-file: substrate/go.mod
+          cache: false
+
+      - name: Provision the snapshot bucket and IAM
+        if: inputs.mode == 'install'
+        env:
+          BUCKET: ${{ steps.cfg.outputs.bucket }}
+          REGION: ${{ steps.cfg.outputs.region }}
+        run: |
+          set -euo pipefail
+          # setup-gcp is a separate Go module and is idempotent by design; it is
+          # the only thing that creates the bucket and grants ate-setup demands on
+          # GKE. --region because the tool defaults to us-west1 and refuses an
+          # existing bucket elsewhere. --gke-nodes=false because substrate.tf owns
+          # the node pool and its service account, so minting a second node SA here
+          # would configure a pool nothing runs on. --atelet-snapshot-access=false
+          # because from Substrate v0.6.0 every snapshot transfer runs on a
+          # per-actor token, so atelet no longer needs objectAdmin on the bucket.
+          # PROJECT_ID comes from the job env, which is what --project-id reads.
+          go -C substrate-gke/tools/setup-gcp run . create bucket --name="$BUCKET" --region="$REGION"
+          go -C substrate-gke/tools/setup-gcp run . create iam \
+            --bucket="$BUCKET" --region="$REGION" --gke-nodes=false --atelet-snapshot-access=false
+
+      - name: Install ate-system
+        if: inputs.mode == 'install'
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS= read -r -d '' a; do args+=("$a"); done < /tmp/substrate-install-args
+          # Run from the checkout: the installer reads its manifests from there,
+          # which is why the checkout and --image-tag must name the same revision.
+          ( cd substrate && go run ./cmd/ate-setup "${args[@]}" )
+
+      - name: Report what landed
+        if: inputs.mode == 'install'
+        env:
+          ATEAPI_SERVICE: ${{ env.SUBSTRATE_ATEAPI_SERVICE }}
+        run: |
+          set -uo pipefail
+          {
+            echo "### Installed control plane"
+            echo ""
+            echo '```'
+            kubectl -n ate-system get deploy,sts,svc 2>&1
+            echo
+            kubectl get crd 2>&1 | grep ate.dev || echo "(no ate.dev CRDs — the install did not land)"
+            echo '```'
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # substrate.tf routes the public control-plane path to
+          # var.substrate_ateapi_service (default `ateapi`). That name is an
+          # assumption about what the installer creates, so read it off the
+          # cluster: a wrong guess fails as a silent 503 through the ingress
+          # rather than as a plan error.
+          SERVICES="$(kubectl -n ate-system get svc -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.ports[0].port}{"\n"}{end}' 2>/dev/null || true)"
+          ATEAPI_LINE="$(printf '%s\n' "$SERVICES" | grep -E '^(ateapi|ate-api-server|ateapi-server)( |$)' | head -1 || true)"
+          if [ -z "$ATEAPI_LINE" ]; then
+            echo "::warning::No ateapi-looking Service in ate-system. Services seen: $(tr '\n' ' ' <<<"$SERVICES")"
+            echo "⚠️ Could not confirm the ateapi Service name — set \`SUBSTRATE_ATEAPI_SERVICE\` to whichever of the above serves the Control gRPC API."
+          else
+            echo "✅ ateapi Service: \`$ATEAPI_LINE\` — must match \`var.substrate_ateapi_service\` (currently \`${ATEAPI_SERVICE:-ateapi}\`) and the Settings \`substrateUrl\`."
+          fi
+          echo "Next: fill Settings → Models & runtime → Execution substrate (docs/SUBSTRATE_INTEGRATION.md §5.1), then \`curl -s \$GW/api/agent/substrate/status | jq .substrate\` and expect \`connected: true\`." >> "$GITHUB_STEP_SUMMARY"

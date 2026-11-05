@@ -11,15 +11,21 @@
 #     substrate-credentials namespace; the egress gateway reads them, the actor
 #     never does),
 #   * a public actor data-plane ingress (Gateway + HTTPRoute) fronting
-#     atenet-router, reusing the same Envoy Gateway + cert-manager stack.
+#     atenet-router, reusing the same Envoy Gateway + cert-manager stack, on its
+#     OWN Envoy data plane bound to the substrate-ip static address (the
+#     GatewayClass-level EnvoyProxy pins the openshell IP, so a substrate
+#     Gateway left on the shared infra would claim the wrong address),
+#   * optionally, the ateapi control plane on that same hostname behind a
+#     path-prefix match (var.substrate_control_plane_public, off by default).
 #
 # The ate-system CONTROL PLANE itself (ateapi/atelet/atecontroller/
 # ate-idp-server/atenet-router/atenet-egress/podcertcontroller + the ate.dev
 # CRDs + the gVisor SandboxConfig) is installed by the UPSTREAM substrate
-# installer — `go run ./cmd/ate-setup deploy ate-system` (or the
-# ai-on-gke/substrate-gke setup) — because those images are built dynamically
-# with `ko` and are not static manifests we can vendor faithfully. See
-# docs/SUBSTRATE_INTEGRATION.md. Our backend then talks to it over gRPC only.
+# installer, run from CI by .github/workflows/substrate-control-plane.yml —
+# because the manifests only exist inside the installer's own checkout (its
+# images are ko-built, so we pass --image-repo/--image-tag to use the published
+# release images instead of building any). Terraform never renders them. See
+# docs/SUBSTRATE_INTEGRATION.md §5.2. Our backend then talks to it over gRPC only.
 # ---------------------------------------------------------------------------
 
 locals {
@@ -244,6 +250,41 @@ resource "kubectl_manifest" "substrate_certificate" {
   depends_on = [helm_release.cert_manager]
 }
 
+resource "kubectl_manifest" "substrate_envoy_proxy" {
+  count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
+
+  # The GatewayClass-level EnvoyProxy pins the OPENSELL static IP, so every
+  # Gateway on class `eg` would claim that address. This per-Gateway override
+  # gives the substrate its own Envoy data plane on substrate-ip and lives in
+  # ate-system so parametersRef needs no cross-namespace ReferenceGrant.
+  yaml_body = <<-YAML
+    apiVersion: gateway.envoyproxy.io/v1alpha1
+    kind: EnvoyProxy
+    metadata:
+      name: substrate-proxy-config
+      namespace: ate-system
+    spec:
+      provider:
+        type: Kubernetes
+        kubernetes:
+          envoyDeployment:
+            pod:
+              nodeSelector:
+                "cloud.google.com/gke-nodepool": "${var.system_node_pool_name}"
+          envoyService:
+            type: LoadBalancer
+            loadBalancerIP: "${google_compute_address.substrate_ip[0].address}"
+            externalTrafficPolicy: Local
+            annotations:
+              networking.gke.io/load-balancer-ip-addresses: "${google_compute_address.substrate_ip[0].address}"
+  YAML
+
+  depends_on = [
+    helm_release.envoy_gateway,
+    google_compute_address.substrate_ip,
+  ]
+}
+
 resource "kubectl_manifest" "substrate_ingress_gateway" {
   count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
 
@@ -255,6 +296,11 @@ resource "kubectl_manifest" "substrate_ingress_gateway" {
       namespace: ate-system
     spec:
       gatewayClassName: eg
+      infrastructure:
+        parametersRef:
+          group: gateway.envoyproxy.io
+          kind: EnvoyProxy
+          name: substrate-proxy-config
       listeners:
         - name: https
           port: 443
@@ -271,6 +317,7 @@ resource "kubectl_manifest" "substrate_ingress_gateway" {
   depends_on = [
     kubectl_manifest.gateway_class,
     kubectl_manifest.substrate_certificate,
+    kubectl_manifest.substrate_envoy_proxy,
   ]
 }
 
@@ -302,4 +349,91 @@ resource "kubectl_manifest" "substrate_actor_route" {
   YAML
 
   depends_on = [kubectl_manifest.substrate_ingress_gateway]
+}
+
+# ---------------------------------------------------------------------------
+# Long-lived request overrides. Envoy's default request timeout would abort a
+# streaming planning run (the actor data plane holds one POST open for the whole
+# run) and a control-plane gRPC stream; the client-side SUBSTRATE_TIMEOUT_MS is
+# the real bound. Same override openshell-backend-traffic applies.
+# ---------------------------------------------------------------------------
+
+resource "kubectl_manifest" "substrate_actor_route_traffic" {
+  count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
+
+  yaml_body = <<-YAML
+    apiVersion: gateway.envoyproxy.io/v1alpha1
+    kind: BackendTrafficPolicy
+    metadata:
+      name: substrate-actors-traffic
+      namespace: ate-system
+    spec:
+      targetRefs:
+        - group: gateway.networking.k8s.io
+          kind: HTTPRoute
+          name: substrate-actors
+      timeout:
+        http:
+          requestTimeout: 0s
+  YAML
+
+  depends_on = [kubectl_manifest.substrate_actor_route]
+}
+
+# ---------------------------------------------------------------------------
+# Control-plane ingress (substrateUrl): serve the ateapi gRPC service on the
+# SAME hostname, matched by its service-path prefix so it outranks the actor
+# route's "/" catch-all. Opt-in, because this adds no caller authentication and
+# ateapi creates/deletes actors and mints actor JWTs.
+# ---------------------------------------------------------------------------
+
+resource "kubectl_manifest" "substrate_control_plane_route" {
+  count = local.substrate_enabled && var.substrate_ingress_hostname != "" && var.substrate_control_plane_public ? 1 : 0
+
+  yaml_body = <<-YAML
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: substrate-control-plane
+      namespace: ate-system
+    spec:
+      parentRefs:
+        - name: substrate-ingress
+          namespace: ate-system
+      hostnames:
+        - "${var.substrate_ingress_hostname}"
+      rules:
+        - matches:
+            - path:
+                type: PathPrefix
+                # SERVICE_PATH in packages/shared-core/src/agent/substrate.js
+                value: /substrate.ateapi.v1.Control
+          backendRefs:
+            - name: ${var.substrate_ateapi_service}
+              port: ${var.substrate_ateapi_port}
+  YAML
+
+  depends_on = [kubectl_manifest.substrate_ingress_gateway]
+}
+
+resource "kubectl_manifest" "substrate_control_plane_traffic" {
+  count = local.substrate_enabled && var.substrate_ingress_hostname != "" && var.substrate_control_plane_public ? 1 : 0
+
+  yaml_body = <<-YAML
+    apiVersion: gateway.envoyproxy.io/v1alpha1
+    kind: BackendTrafficPolicy
+    metadata:
+      name: substrate-control-plane-traffic
+      namespace: ate-system
+    spec:
+      targetRefs:
+        - group: gateway.networking.k8s.io
+          kind: HTTPRoute
+          name: substrate-control-plane
+      timeout:
+        http:
+          requestTimeout: 0s
+  YAML
+
+  depends_on = [kubectl_manifest.substrate_control_plane_route]
 }

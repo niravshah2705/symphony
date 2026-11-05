@@ -1829,12 +1829,12 @@ router.get(
       projectId,
     });
     const url = settings.substrateUrl || CONFIG.SUBSTRATE?.url || '';
-    const [status, actors] = await Promise.all([
-      substrate.getControlPlaneStatus({ url, atespace }),
-      url && status_ok(status)
-        ? substrate.listActors({ url, atespace }).catch(() => [])
-        : Promise.resolve([]),
-    ]);
+    // Sequential: the actor list is only fetched once the control plane answers,
+    // so it cannot share a Promise.all with the status call it depends on.
+    const status = await substrate.getControlPlaneStatus({ url, atespace });
+    const actors = url && status && status.connected
+      ? await substrate.listActors({ url, atespace }).catch(() => [])
+      : [];
     res.json({
       agentPattern: settings.agentPattern || 'cloudrun',
       atespace,
@@ -1851,10 +1851,6 @@ router.get(
     });
   })
 );
-
-function status_ok(status) {
-  return status && status.connected;
-}
 
 // POST /api/agent/substrate/run — run the planning prompt on a per-run ephemeral actor.
 router.post(

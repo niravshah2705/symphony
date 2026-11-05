@@ -756,6 +756,9 @@ jobs:
           SUBSTRATE_INGRESS_HOSTNAME: ${{ vars.SUBSTRATE_INGRESS_HOSTNAME }}
           SUBSTRATE_NODE_POOL: ${{ vars.SUBSTRATE_NODE_POOL }}
           SUBSTRATE_MACHINE_TYPE: ${{ vars.SUBSTRATE_MACHINE_TYPE }}
+          SUBSTRATE_ATEAPI_SERVICE: ${{ vars.SUBSTRATE_ATEAPI_SERVICE }}
+          SUBSTRATE_ATEAPI_PORT: ${{ vars.SUBSTRATE_ATEAPI_PORT }}
+          SUBSTRATE_CONTROL_PLANE_PUBLIC: ${{ vars.SUBSTRATE_CONTROL_PLANE_PUBLIC }}
           SUBSTRATE_LIVE_MIN: ${{ steps.bounds.outputs.smin }}
           SUBSTRATE_LIVE_MAX: ${{ steps.bounds.outputs.smax }}
         run: |
@@ -766,6 +769,9 @@ jobs:
           [ -n "$SUBSTRATE_INGRESS_HOSTNAME" ] && substrate_args+=(-var="substrate_ingress_hostname=$SUBSTRATE_INGRESS_HOSTNAME")
           [ -n "$SUBSTRATE_NODE_POOL" ]        && substrate_args+=(-var="substrate_node_pool_name=$SUBSTRATE_NODE_POOL")
           [ -n "$SUBSTRATE_MACHINE_TYPE" ]     && substrate_args+=(-var="substrate_machine_type=$SUBSTRATE_MACHINE_TYPE")
+          [ -n "$SUBSTRATE_ATEAPI_SERVICE" ]   && substrate_args+=(-var="substrate_ateapi_service=$SUBSTRATE_ATEAPI_SERVICE")
+          [ -n "$SUBSTRATE_ATEAPI_PORT" ]      && substrate_args+=(-var="substrate_ateapi_port=$SUBSTRATE_ATEAPI_PORT")
+          [ -n "$SUBSTRATE_CONTROL_PLANE_PUBLIC" ] && substrate_args+=(-var="substrate_control_plane_public=$SUBSTRATE_CONTROL_PLANE_PUBLIC")
           [ -n "$SUBSTRATE_LIVE_MIN" ]         && substrate_args+=(-var="substrate_min_nodes=$SUBSTRATE_LIVE_MIN")
           [ -n "$SUBSTRATE_LIVE_MAX" ]         && substrate_args+=(-var="substrate_max_nodes=$SUBSTRATE_LIVE_MAX")
           terraform plan -refresh=true -input=false \

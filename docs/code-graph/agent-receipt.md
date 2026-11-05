@@ -75,7 +75,7 @@ Community of 334 nodes
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
-- **startScheduler** (criticality: 0.65, depth: 5)
+- **startScheduler** (criticality: 0.66, depth: 6)
 
 ## Dependencies
 
