@@ -102,7 +102,7 @@ flowchart TB
     Linear["Linear GraphQL"]
     LLM["Local: Ollama / LM Studio / OMLX\nHosted: OpenAI Codex / Claude"]
     Repo["GitHub / GitLab\nrepository broker"]
-    Logs["data/app.log / Cloud logs\nLangSmith traces"]
+    Logs["data/app.log / Cloud logs\nLangfuse traces"]
   end
 
   API <--> Store

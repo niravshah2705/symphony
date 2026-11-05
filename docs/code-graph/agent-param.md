@@ -7,7 +7,7 @@
 Community of 10 nodes
 
 - **Size**: 10 nodes
-- **Cohesion**: 0.0955
+- **Cohesion**: 0.0964
 - **Dominant Language**: javascript
 
 ## Members
@@ -51,7 +51,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./packages/shared/src/agent/settings-patch.js` (40 edge(s))
+- `./packages/shared/src/agent/settings-patch.js` (38 edge(s))
 - `json` (9 edge(s))
 - `uuid4` (7 edge(s))
 - `str` (7 edge(s))

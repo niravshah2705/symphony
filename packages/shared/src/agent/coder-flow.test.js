@@ -332,7 +332,7 @@ test('autonomous planned coder threads selected policy and loads only permitted 
       linearApiKey: 'linear-key',
       agentRuntime: 'deepagent',
       workflowPattern: 'sequential',
-      langsmithTracing: true,
+      langfuseTracing: true,
     },
     context,
     {
@@ -340,7 +340,7 @@ test('autonomous planned coder threads selected policy and loads only permitted 
         policyCalls.push([orgId, projectId]);
         return {
           effectivePolicy,
-          prefs: { workflowPattern: 'parallel', langsmithTracing: 'false' },
+          prefs: { workflowPattern: 'parallel', langfuseTracing: 'false' },
         };
       },
       resolveLlm: async () => ({ provider: 'ollama', host: 'http://localhost:11434', model: 'coder' }),
@@ -349,7 +349,7 @@ test('autonomous planned coder threads selected policy and loads only permitted 
   const llm = await governed.resolveRole('execution');
   assert.deepEqual(policyCalls, [['org-autonomous-mcp', 'native-autonomous-mcp']]);
   assert.equal(governed.keys.workflowPattern, 'parallel');
-  assert.equal(governed.keys.langsmithTracing, false);
+  assert.equal(governed.keys.langfuseTracing, false);
 
   const mcp = require('./mcp');
   const originalLoadMcpTools = mcp.loadMcpTools;

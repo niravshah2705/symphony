@@ -21,9 +21,10 @@ const proxied = (prefix, explicit, fallback) =>
   egressUrl({ proxyBase: EGRESS_PROXY_URL, prefix, explicit, fallback });
 
 /**
- * Native SDK runtimes and LangSmith must follow the same isolation boundary as
- * the deep-agent runtime. Keep the legacy exported flag for callers, but derive
- * it solely from proxy mode so an opt-out cannot silently restore direct egress.
+ * Native SDK runtimes and the Langfuse trace sink must follow the same isolation
+ * boundary as the deep-agent runtime. Keep the legacy exported flag for callers,
+ * but derive it solely from proxy mode so an opt-out cannot silently restore
+ * direct egress.
  */
 const EGRESS_PROXY_INCLUDE_SDK = Boolean(EGRESS_PROXY_URL);
 
@@ -814,7 +815,8 @@ const CONFIG = Object.freeze({
   // Egress proxy switch + the two REST/git origins the broker targets. In proxy
   // mode these point at the sidecar prefixes so no raw token lives in the agent.
   EGRESS_PROXY_URL,
-  // Also route the native SDK runtimes + LangSmith tracing through the proxy.
+  // Also route the native SDK runtimes + the Langfuse OTLP trace sink through the
+  // proxy. The agent never holds the real key pair because of this flag.
   EGRESS_PROXY_INCLUDE_SDK,
   // Per-request LangSmith LLM Gateway feature flag (availability gate + bases).
   LLM_GATEWAY,

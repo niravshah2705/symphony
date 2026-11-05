@@ -9,8 +9,10 @@ const { catalog, validateWorkflowPattern } = require('@ai-fleet/shared/agent/wor
 
 const router = express.Router();
 
+// A reason that means "the operator has not wired this up yet" (as opposed to a
+// transient provider failure) — the browser shows the onboarding card for these.
 function analyticsConfigured(result) {
-  return !['tracing-disabled', 'api-key-missing', 'project-missing'].includes(result.reason);
+  return !['tracing-disabled', 'keys-missing', 'org-missing'].includes(result.reason);
 }
 
 // Prefer the actually-used names; fall back to the configured/available set.
@@ -67,9 +69,13 @@ function toAnalyticsPayload(result) {
 
 // Router is mounted by the planner and reverse-proxied at /api/observability.
 router.get('/analytics', asyncHandler(async (req, res) => {
+  // One Langfuse project is shared by every tenant, so the read is scoped to the
+  // requesting organization. bindStoreContext put the gateway-forwarded context
+  // on req.fleetContext; without it analytics falls back to the pinned org.
   const result = await loadAnalytics(getSettings(), {
     hours: req.query && req.query.hours,
     limit: req.query && req.query.limit,
+    orgId: (req.fleetContext && req.fleetContext.organizationId) || '',
   });
   res.json(toAnalyticsPayload(result));
 }));

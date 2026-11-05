@@ -39,7 +39,7 @@ by local (Ollama / LM Studio / OMLX) or hosted (Codex / Claude) models.
 <sub>Diagram source: <a href="diagrams/how-it-works.excalidraw"><code>diagrams/how-it-works.excalidraw</code></a> (editable in <a href="https://excalidraw.com">Excalidraw</a>).</sub>
 
 The **planner** enriches labelled projects on a schedule; the **coder**'s board monitor
-polls active tickets and drives each to a PR. Everything is traced end-to-end (LangSmith)
+polls active tickets and drives each to a PR. Everything is traced end-to-end (Langfuse)
 and every LLM write is schema-validated before it touches Linear.
 
 ## Quick start
@@ -67,8 +67,8 @@ key** (create one at <https://linear.app/settings/api>). See [Run](#run) for opt
 - **Local trace analysis** — paste logs or a structured agent trace and get a concise explanation, evidence, bottlenecks, and next actions from the configured Ollama, LM Studio, or OMLX model.
 - **Tool integrations** — choose **GitHub or GitLab** as the repository host and save a default repository/token; choose **Linear, Jira, or Asana** as the planning connector in Settings. A server-side repository broker owns authenticated clone/fetch/push and PR/MR/check/merge calls through the providers' official APIs. Existing live project/board automation remains Linear-backed while the additional planning credentials provide the configuration surface for connector routing.
 - **Multilingual workspace** — the gateway uses coarse IP location plus the browser's BCP 47 language preferences to suggest at most five useful languages. English and Gujarati remain available. Menu text has immediate built-in English/Gujarati/Hindi copy; the configured local Ollama, LM Studio, or OMLX model translates the rest of the UI, including internal status text and visible attributes, without sending it to a hosted provider.
-- **Runtime and workflow controls** — choose DeepAgent, the official Codex SDK, or the Claude Agent SDK, plus sequential, fan-out, evaluator, or supervisor guidance for new compatible runs. Every effective runtime receives a LangSmith root trace when tracing is enabled.
-- **Operations** — Analytics shows per-change trace cost, tokens, latency, and failures from LangSmith without treating missing telemetry as zero. Troubleshooting performs secret-free readiness checks for services, local inference, integrations, SDK packages, and tracing. The desktop navigation collapses to an accessible icon rail.
+- **Runtime and workflow controls** — choose DeepAgent, the official Codex SDK, or the Claude Agent SDK, plus sequential, fan-out, evaluator, or supervisor guidance for new compatible runs. Every effective runtime receives a Langfuse root trace when tracing is enabled.
+- **Operations** — Analytics shows per-change trace cost, tokens, latency, and failures from Langfuse without treating missing telemetry as zero. Troubleshooting performs secret-free readiness checks for services, local inference, integrations, SDK packages, and tracing. The desktop navigation collapses to an accessible icon rail.
 
 ## Demo
 
@@ -128,7 +128,7 @@ The top-bar language picker intentionally shows a small suggestion set rather th
 - **Codex SDK** runs official server-side Codex threads in the prepared workspace. The admin-imported org token bundle is staged in a per-run private home and removed after the run; model-initiated shells do not inherit the credential.
 - **Claude Agent SDK** runs the official Claude loop with persistent sessions disabled. Its built-in Bash tool is withheld when OAuth is present so the credential cannot leak into model-initiated commands.
 - **Workflow patterns** are bounded orchestration guidance applied to one runtime session. Capable SDKs may delegate independent investigation, but the setting does not promise concurrent workers, automatic evaluator retries, or brokered handoffs.
-- **LangSmith tracing** wraps each effective runtime at the root and records provider/model/runtime/pattern plus available token usage. Claude-reported cost is attached directly; otherwise LangSmith can calculate cost when it has matching model pricing. Unknown cost remains unavailable (`—`), never synthetic `$0.00`.
+- **Langfuse tracing** wraps each effective runtime at the root and records provider/model/runtime/pattern plus available token usage. Claude-reported cost is attached directly; otherwise the usage reported on the generation observation carries tokens and cost. Unknown cost remains unavailable (`—`), never synthetic `$0.00`.
 
 ## Durable fixed pipeline
 
@@ -201,13 +201,13 @@ its proxy identity to resolve or rotate another organization's credentials.
 ## Agent tab (project enrichment)
 
 - **Auto Enrichment** — open projects (no lead) carrying any selected label are **picked up automatically** on the schedule. The Agent tab shows a read-only preview of what the next run will process and a **Run now** button; there is no manual project list. Assume a role in **Settings** first (the section is disabled and server-enforced until then). For each project the deep agent:
-  - generates a validated plan (description + milestones + dates + issues + dependencies) under **LangSmith tracing**;
+  - generates a validated plan (description + milestones + dates + issues + dependencies) under **Langfuse tracing**;
   - the server deterministically applies it to Linear using your **existing Linear token**: assign lead, update description, create milestones (start date preserved in the milestone note, target date = stop date), create issues per milestone, and create `blocks` dependencies.
 - **Agent jobs page** — live planner/enrichment and coding status (pending → running → done/error), per-job **Trace** and task links, expandable activity, and guarded per-job/finished cleanup.
 
 ### How the deep agent works (business-owner planner)
 
-The agent plans **as a business owner**, not a software PM — it does **not** produce a software development lifecycle. It is built on `deepagents` (LangGraph), provider-specific LangChain clients for Ollama, LM Studio, OMLX, OpenAI, and Anthropic, plus keyless **web search** (DuckDuckGo); tracing uses the `langsmith` SDK. Steps, all traced and recorded on the job:
+The agent plans **as a business owner**, not a software PM — it does **not** produce a software development lifecycle. It is built on `deepagents` (LangGraph), provider-specific LangChain clients for Ollama, LM Studio, OMLX, OpenAI, and Anthropic, plus keyless **web search** (DuckDuckGo); tracing uses the Langfuse JS SDK (OTLP). Steps, all traced and recorded on the job:
 
 1. **Viability gate** — web-researches the domain and decides whether the project is a business product that can be delivered as a software-driven solution. **If not viable**, it appends a note to the project description and switches the project's label to **`aifail`** (removing the enrich label, so it isn't retried) — no milestones are created.
 2. **Business plan** — if viable, it web-researches each phase and drafts business milestones in order:
@@ -300,7 +300,7 @@ Use the default local backend for brokered GitHub/GitLab operation.
 
 - **Role assumption is enforced server-side** — enrich endpoints return `403` without an assumed role; the assumed member id is validated against the real workspace member list.
 - **EULA acceptance gates "actual work"** — the omnibox answers read-only RAG questions freely, but scheduling enrichment (`/api/agent/enqueue`), preparing a business (`/api/agent/business/prepare`), and creating an implementation task (`POST /api/issues`) return `403 EULA_REQUIRED` until the caller accepts the [EULA](./EULA.md). Acceptance is recorded per user (keyed by verified identity) and per organisation; **members of an organisation are considered already accepted**. Decisions (including rejections) persist in the shared store and the version is tracked, so a user is asked exactly once per EULA version. The API is the trust boundary — the gate is enforced server-side, not only in the SPA.
-- **Secrets stay on the server** — Linear/LangSmith keys, the optional **OMLX API key**, and **Codex/Claude OAuth tokens** live only in `data/store.json`, are masked in API responses, and are never sent to the browser. Ollama needs no key.
+- **Secrets stay on the server** — Linear/Langfuse keys, the optional **OMLX API key**, and **Codex/Claude OAuth tokens** live only in `data/store.json`, are masked in API responses, and are never sent to the browser. Ollama needs no key.
 - **Repository credentials are brokered** — stored GitHub/GitLab tokens never enter the code agent's `LocalShellBackend` environment, prompt, tool arguments, origin URL, or `.git/config`. Authenticated Git executes from a broker-private bare staging repository with a fixed host/repository/branch/refspec; PR/MR creation, check/review reads, and SHA-checked squash merge use the official GitHub/GitLab HTTP APIs. Provider redirects, arbitrary URLs/refspecs, force pushes, and broad GitHub MCP access are denied.
 - **Local shell trust boundary** — `LocalShellBackend` is a host shell rooted by convention, not an OS security sandbox. It runs with the coder service user's filesystem permissions and can read other paths that user can access (including the plaintext local store if it discovers its path). Environment sanitization and the repository broker prevent routine credential injection, but do not contain adversarial shell code. Run the coder only for trusted repositories/tickets in this local deployment; stronger isolation requires a separate container/VM or OS identity with a narrowly mounted workspace and an external secret broker.
 - **Codex credentials** — browser OAuth/login and sign-out routes are tombstoned. The operator CLI sends a bounded token bundle directly to the IAM-gated settings service, which requires an authenticated org-admin principal and encrypts the bundle in the organization vault. Refresh rotation uses compare-and-swap so a stale worker cannot overwrite newer tokens. Browser-settable model overrides remain allowlisted and model-family checked.
@@ -485,11 +485,11 @@ npm run test:e2e:debug         # headed Playwright inspector
    administrator provisions the token bundle with the IAM-authenticated `adlc admin codex import`
    command; for Claude, use **Sign in with Claude** and paste back the `code#state`.
    Recommended parameters are applied automatically; customization is optional.
-   optionally add the LangSmith key +
-   host in **API Keys**; in **Assume Role** pick a member (it appears in the
+   optionally switch **Langfuse tracing** on in **API Keys** (the key pair is
+   provisioned by the platform, not pasted here); in **Assume Role** pick a member (it appears in the
    toolbar); in **Deep Agent** choose **enrich labels** and cadence (5/10/15 min).
    Then the **Agent** tab enriches matching open projects automatically (or click
-   **Run now**). Watch jobs and open their LangSmith **Trace**.
+   **Run now**). Watch jobs and open their Langfuse **Trace**.
 
 ## Logs & traces
 
@@ -543,13 +543,13 @@ rather than stuck in "running".
 | GET/POST/PUT/DELETE | `/api/businesses[...]` | Manage businesses ↔ project mapping |
 | PUT | `/api/settings/llm` | Save Ollama config (host, model, num_ctx, num_predict) |
 | PUT | `/api/settings/lmstudio` | Save legacy/custom LM Studio config |
-| PUT | `/api/settings/langsmith` | Save non-secret LangSmith tracing configuration; its key is managed through the scope vault |
+| PUT | `/api/settings/langfuse` | Toggle Langfuse tracing for this scope; the key pair is operator-provisioned and the project + base URL are deployment config |
 | GET/POST | `/api/settings/codex[...]` | Codex provider status and model selection. Browser login/callback/pending/sign-out endpoints return `410`; org admins provision/delete bundles through the IAM-gated settings operator API via `adlc admin codex`. |
 | GET/POST/DELETE | `/api/settings/claude[...]` | Claude provider status / model / sign-out (`/login`, `/exchange`, `/test` for OAuth) |
 | PUT | `/api/settings/runtime` | Select the agent SDK and workflow guidance pattern |
 | GET | `/api/locale/suggestions` | Return at most five BCP 47 language suggestions from browser/coarse location signals |
 | POST | `/api/locale/translate` | Translate bounded UI strings with the configured local model |
-| GET | `/api/observability/analytics` | Bounded LangSmith cost/token/latency/error summary and per-change rows |
+| GET | `/api/observability/analytics` | Bounded Langfuse cost/token/latency/error summary and per-change rows |
 | GET | `/api/observability/troubleshooting` | Secret-free service, local-model, integration, SDK, and tracing checks |
 | GET | `/api/observability/workflows` | Supported workflow-guidance catalog |
 | POST | `/api/observability/workflows/validate` | Validate a bounded declarative workflow definition |

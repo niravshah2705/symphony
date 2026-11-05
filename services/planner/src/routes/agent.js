@@ -360,8 +360,11 @@ router.get('/status', (req, res) => {
     antigravityModel: settings.antigravityModel,
     codexModel: settings.codexModel || CONFIG.OAUTH.defaultModel,
     codexConnected: Boolean(codexTokens && (codexTokens.accessToken || codexTokens.refreshToken)),
-    tracingEnabled: Boolean(settings.langsmithApiKey && settings.langsmithTracing),
-    langsmithProject: settings.langsmithProject,
+    // Tracing is on when the org switch is on and the pair is resolvable — in
+    // proxied deployments the agent holds the sentinel, so only the switch counts.
+    tracingEnabled: Boolean(settings.langfuseTracing && (CONFIG.EGRESS_PROXY_URL || settings.langfusePublicKey)),
+    langfuseProject: CONFIG.LANGFUSE.projectId,
+    langfuseEnvironment: CONFIG.LANGFUSE.environment,
     enrichLabels: config.enrichLabels,
     intervalMinutes: config.intervalMinutes,
   });

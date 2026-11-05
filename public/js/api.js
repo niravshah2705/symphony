@@ -364,7 +364,7 @@ export const api = {
     request(`/businesses/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteBusiness: (id) => request(`/businesses/${id}`, { method: 'DELETE' }),
 
-  // Local/hosted LLM and LangSmith settings
+  // Local/hosted LLM and Langfuse tracing settings
   getLlmPresets: () => request('/settings/llm-presets'),
   applyLlmPreset: (payload) =>
     request('/settings/llm-preset', { method: 'PUT', body: JSON.stringify(payload) }),
@@ -375,8 +375,8 @@ export const api = {
     request('/settings/complexity', { method: 'PUT', body: JSON.stringify({ tier }) }),
   saveLlm: (payload) => request('/settings/llm', { method: 'PUT', body: JSON.stringify(payload) }),
   saveLmstudio: (payload) => request('/settings/lmstudio', { method: 'PUT', body: JSON.stringify(payload) }),
-  saveLangsmith: (payload) =>
-    request('/settings/langsmith', { method: 'PUT', body: JSON.stringify(payload) }),
+  saveLangfuse: (payload) =>
+    request('/settings/langfuse', { method: 'PUT', body: JSON.stringify(payload) }),
   saveIntegrations: (payload) =>
     request('/settings/integrations', { method: 'PUT', body: JSON.stringify(payload) }),
   saveAgentRuntime: (payload) =>
@@ -590,7 +590,7 @@ export const api = {
   translateUi: (payload) =>
     request('/locale/translate', { method: 'POST', body: JSON.stringify(payload) }),
 
-  // Operational views backed by bounded LangSmith and local health queries.
+  // Operational views backed by bounded Langfuse and local health queries.
   getAnalytics: () => request('/observability/analytics'),
   getTroubleshooting: () => request('/observability/troubleshooting'),
 

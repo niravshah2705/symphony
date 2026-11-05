@@ -59,7 +59,7 @@ export async function renderTroubleshooting(view) {
     el('section', { class: 'operational-panel troubleshooting-help' }, [
       el('h2', {}, 'Useful next steps'),
       el('div', { class: 'help-links' }, [
-        el('a', { href: '#/settings' }, [el('strong', {}, 'Settings'), el('span', { class: 'muted' }, 'Models, SDK runtime, integrations, and LangSmith')]),
+        el('a', { href: '#/settings' }, [el('strong', {}, 'Settings'), el('span', { class: 'muted' }, 'Models, SDK runtime, integrations, and Langfuse')]),
         el('a', { href: '#/analytics' }, [el('strong', {}, 'Analytics'), el('span', { class: 'muted' }, 'Inspect cost, latency, token use, and errors')]),
       ]),
     ])

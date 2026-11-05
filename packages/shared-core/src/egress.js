@@ -92,6 +92,9 @@ const EGRESS_ROUTES = Object.freeze({
   // A Slack webhook URL is itself a credential. The caller gets one fixed path
   // and cannot append a path/query that would select another target.
   slackWebhook: Object.freeze({ prefix: '/slack-webhook', target: 'slack-webhook', auth: 'url-secret', secretKey: 'slackWebhookUrl', exact: true }),
+  // Dormant since Langfuse became the trace sink: no agent posts here any more,
+  // but the route and its vault key stay so a deployed stack does not have to
+  // destroy a managed secret to drop it.
   langsmith: Object.freeze({ prefix: '/langsmith', upstream: 'https://api.smith.langchain.com', auth: 'apiKey', scheme: 'x-api-key', secretKey: 'langsmithApiKey' }),
   // Agent-side tracing exports OTLP to `${baseUrl}/api/public/otel/v1/traces`, so the
   // upstream stays a bare origin: the SDK appends the whole API path itself and

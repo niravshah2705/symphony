@@ -20,9 +20,9 @@ const configuredSettings = {
   repositoryProvider: 'gitlab',
   repositoryUrl: 'group/project',
   gitlabToken: 'gitlab-secret',
-  langsmithTracing: true,
-  langsmithApiKey: 'langsmith-secret',
-  langsmithProject: 'project',
+  langfuseTracing: true,
+  langfusePublicKey: 'pk-lf-public',
+  langfuseSecretKey: 'langfuse-secret',
   byomProvider: 'ollama',
   ollamaHost: 'http://127.0.0.1:11434',
   ollamaModel: 'local-model',
@@ -75,11 +75,11 @@ test('diagnostics report services, local model, integrations, and SDK readiness 
   const ids = new Set(report.checks.map((item) => item.id));
   for (const id of [
     'planner-service', 'coder-service', 'local-model', 'planning-integration', 'repository-integration',
-    'service-log', 'langsmith-integration', 'deepagents-sdk', 'codex-sdk', 'claude-sdk', 'qoder-sdk',
+    'service-log', 'langfuse-integration', 'deepagents-sdk', 'codex-sdk', 'claude-sdk', 'qoder-sdk',
   ]) assert.equal(ids.has(id), true, id);
 
   const serialized = JSON.stringify(report);
-  for (const secret of ['jira-secret', 'gitlab-secret', 'langsmith-secret', 'codex-secret', 'claude-secret', 'qoder-secret']) {
+  for (const secret of ['jira-secret', 'gitlab-secret', 'langfuse-secret', 'codex-secret', 'claude-secret', 'qoder-secret']) {
     assert.equal(serialized.includes(secret), false);
   }
   assert.equal(serialized.includes('planner.internal'), false);

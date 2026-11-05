@@ -14,9 +14,9 @@ Community of 6 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| analyticsConfigured | Function | ./services/planner/src/routes/observability.js | 12-14 |
-| preferUsed | Function | ./services/planner/src/routes/observability.js | 17-22 |
-| toAnalyticsPayload | Function | ./services/planner/src/routes/observability.js | 24-66 |
+| analyticsConfigured | Function | ./services/planner/src/routes/observability.js | 14-16 |
+| preferUsed | Function | ./services/planner/src/routes/observability.js | 19-24 |
+| toAnalyticsPayload | Function | ./services/planner/src/routes/observability.js | 26-68 |
 | test:planner observability analytics mapper exposes the stable UI contract@L7 | Test | ./services/planner/src/routes/observability.test.js | 7-66 |
 | test:observability mapper surfaces resource usage, preferring used over configured@L68 | Test | ./services/planner/src/routes/observability.test.js | 68-98 |
 | test:observability mapper distinguishes missing configuration from provider outage@L100 | Test | ./services/planner/src/routes/observability.test.js | 100-110 |

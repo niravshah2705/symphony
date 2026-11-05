@@ -125,7 +125,11 @@ only by the egress sidecar; it is never mounted on gateway or agent containers.
 
 Optional env: `REGION`, `AR_REPO`, `IMAGE_TAG`, `FIRESTORE_LOCATION`, `SPA_ORIGIN`,
 `FIREBASE_ALLOWED_DOMAIN` (empty = any verified user), `GITHUB_TOKEN`,
-`LANGSMITH_API_KEY`, `GOOGLE_ANALYTICS_MEASUREMENT_ID` (a public GA4 `G-...`
+`LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` (the agent trace sink pair — seed
+both, then add them to `var.managed_provider_secrets` so the settings service can
+resolve them; the egress sidecar, never an agent, holds the real values),
+`LANGSMITH_API_KEY` (legacy; the dormant `/langsmith` route only — nothing traces
+to LangSmith any more), `GOOGLE_ANALYTICS_MEASUREMENT_ID` (a public GA4 `G-...`
 web-stream id; empty = disabled), `SKIP_BUILD=1` (reuse pushed images), plus
 `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`,
 `EMAIL_SMTP_PASSWORD`, and `EMAIL_FROM` for transactional email. The script

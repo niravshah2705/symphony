@@ -271,13 +271,13 @@ const DEFAULT_STORE = Object.freeze({
     imageRegistryUrl: 'ghcr.io',
     imageRegistryUsername: '',
     imageRegistryPassword: '',
-    langsmithApiKey: '', // LangSmith tracing key
-    langsmithProject: 'linear-manager',
-    langsmithEndpoint: 'https://api.smith.langchain.com',
-    langsmithTracing: true,
-    // Langfuse Cloud tracing (replaces LangSmith as the trace sink). Keys are
-    // resolved like every other provider — managed vault on the settings service,
-    // sentinel in a proxied agent. The base URL is deployment config, not a pref.
+    // Dormant since Langfuse became the trace sink: the `/langsmith` egress route
+    // still resolves it, so the vault key is retained rather than destroyed. No
+    // setting reads it and nothing writes LangSmith traces any more.
+    langsmithApiKey: '',
+    // Langfuse Cloud tracing. Keys are resolved like every other provider —
+    // managed vault on the settings service, sentinel in a proxied agent. The
+    // base URL and project are deployment config (CONFIG.LANGFUSE), not prefs.
     langfusePublicKey: '',
     langfuseSecretKey: '',
     langfuseTracing: true,
@@ -700,7 +700,7 @@ function getSettings() {
   return { ...readStore().settings, ...secretOverlay() };
 }
 
-/** Merge a partial settings patch (used for LLM / LangSmith keys). */
+/** Merge a partial settings patch (used for LLM / Langfuse keys). */
 function patchSettings(patch) {
   const current = readStore();
   return writeStore({ ...current, settings: { ...current.settings, ...patch } });

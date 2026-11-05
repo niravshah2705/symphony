@@ -125,7 +125,7 @@ test('normalizeSettingsProposal keeps only primitive-valued keys', () => {
   const out = normalizeSettingsProposal({
     patch: {
       agentRuntime: 'codex-sdk',
-      langsmithTracing: false,
+      langfuseTracing: false,
       ollamaTemperature: 0.2,
       nested: { x: 1 }, // dropped
       list: [1, 2], // dropped
@@ -134,7 +134,7 @@ test('normalizeSettingsProposal keeps only primitive-valued keys', () => {
   });
   assert.deepEqual(out.patch, {
     agentRuntime: 'codex-sdk',
-    langsmithTracing: false,
+    langfuseTracing: false,
     ollamaTemperature: 0.2,
   });
   assert.equal(out.notes, 'set harness to codex');

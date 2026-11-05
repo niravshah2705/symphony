@@ -14,7 +14,7 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| parseSpaOrigins | Function | ./packages/shared-core/src/config.js | 641-652 |
+| parseSpaOrigins | Function | ./packages/shared-core/src/config.js | 642-653 |
 | test:parseSpaOrigins combines SPA_ORIGIN and FIREBASE_CUSTOM_DOMAIN with normalization@L68 | Test | ./services/gateway/src/cors.test.js | 68-79 |
 | test:parseSpaOrigins handles empty or unset env@L81 | Test | ./services/gateway/src/cors.test.js | 81-84 |
 

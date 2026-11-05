@@ -176,13 +176,9 @@ const ALLOWED = Object.freeze({
   qoderContextWindow: num(0, 100_000_000),
   qoderMaxTokens: num(0, 100_000_000),
 
-  // LangSmith (non-secret only; the API key keeps its dedicated endpoint)
-  langsmithProject: str(200),
-  langsmithEndpoint: httpUrl(),
-  langsmithTracing: bool(),
-
   // Langfuse (non-secret toggle only; the key pair is operator-provisioned
-  // managed material and never writable through the browser surface)
+  // managed material and never writable through the browser surface, and the
+  // project + origin are deployment config, not per-tenant settings)
   langfuseTracing: bool(),
 
   // NVIDIA OpenShell gateway URL (non-secret; defaults to https://openshell.archagentix.com)
@@ -267,7 +263,7 @@ function describeEditableSettings() {
     `- repositoryProvider: ${REPOSITORY_PROVIDERS.join(' | ')}`,
     `- lmstudioContextMode / omlxContextMode / codexContextMode: ${CONTEXT_MODES.join(' | ')}`,
     `- complexityTier: ${COMPLEXITY_TIER_VALUES.join(' | ')}`,
-    '- langsmithTracing: true | false',
+    '- langfuseTracing: true | false',
     '',
     'Numbers: temperature 0-2, topP 0-1; context windows and token limits are integers.',
     `- llmStreamRetries (all providers): integer 0-${MAX_LLM_STREAM_RETRIES} (retries on a transient/in-stream LLM error).`,

@@ -35,19 +35,19 @@ test('enforceLlmModel rejects unknown/custom models whenever models are governed
 });
 
 test('applyOperationalPrefs overlays runtime, workflow pattern, and tracing without mutating defaults', () => {
-  const defaults = { agentRuntime: 'deepagent', workflowPattern: 'sequential', langsmithTracing: true };
+  const defaults = { agentRuntime: 'deepagent', workflowPattern: 'sequential', langfuseTracing: true };
   const messages = [];
   const result = applyOperationalPrefs(defaults, {
     agentRuntime: 'codex-sdk',
     workflowPattern: 'supervisor',
-    langsmithTracing: 'false',
+    langfuseTracing: 'false',
   }, (message) => messages.push(message));
 
   assert.deepEqual(result, {
-    agentRuntime: 'codex-sdk', workflowPattern: 'supervisor', langsmithTracing: false,
+    agentRuntime: 'codex-sdk', workflowPattern: 'supervisor', langfuseTracing: false,
   });
   assert.deepEqual(defaults, {
-    agentRuntime: 'deepagent', workflowPattern: 'sequential', langsmithTracing: true,
+    agentRuntime: 'deepagent', workflowPattern: 'sequential', langfuseTracing: true,
   });
   assert.equal(messages.length, 2);
 });
