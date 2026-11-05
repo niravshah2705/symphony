@@ -4,7 +4,7 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 248
+**Total communities**: 247
 
 ## Communities
 
@@ -17,6 +17,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-business-pipeline-error | 2 | [agent-business-pipeline-error.md](agent-business-pipeline-error.md) |
 | agent-checks | 18 | [agent-checks.md](agent-checks.md) |
 | agent-coder-error | 2 | [agent-coder-error.md](agent-coder-error.md) |
+| agent-context | 382 | [agent-context.md](agent-context.md) |
 | agent-derive | 2 | [agent-derive.md](agent-derive.md) |
 | agent-encode | 152 | [agent-encode.md](agent-encode.md) |
 | agent-failing | 3 | [agent-failing.md](agent-failing.md) |
@@ -29,16 +30,14 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-id | 3 | [agent-id.md](agent-id.md) |
 | agent-knowledge-search-error | 2 | [agent-knowledge-search-error.md](agent-knowledge-search-error.md) |
 | agent-local-intelligence-error | 2 | [agent-local-intelligence-error.md](agent-local-intelligence-error.md) |
-| agent-memory | 183 | [agent-memory.md](agent-memory.md) |
-| agent-model | 453 | [agent-model.md](agent-model.md) |
 | agent-models | 41 | [agent-models.md](agent-models.md) |
-| agent-normalize | 19 | [agent-normalize.md](agent-normalize.md) |
+| agent-normalize | 286 | [agent-normalize.md](agent-normalize.md) |
+| agent-normalize-attachment | 19 | [agent-normalize-attachment.md](agent-normalize-attachment.md) |
 | agent-organization-context-mismatch | 2 | [agent-organization-context-mismatch.md](agent-organization-context-mismatch.md) |
 | agent-param | 10 | [agent-param.md](agent-param.md) |
 | agent-parse | 2 | [agent-parse.md](agent-parse.md) |
 | agent-path | 3 | [agent-path.md](agent-path.md) |
 | agent-pattern | 6 | [agent-pattern.md](agent-pattern.md) |
-| agent-policy | 21 | [agent-policy.md](agent-policy.md) |
 | agent-policy-denied-error | 2 | [agent-policy-denied-error.md](agent-policy-denied-error.md) |
 | agent-policy-unavailable-error | 2 | [agent-policy-unavailable-error.md](agent-policy-unavailable-error.md) |
 | agent-query | 11 | [agent-query.md](agent-query.md) |
@@ -47,10 +46,10 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-resolve | 2 | [agent-resolve.md](agent-resolve.md) |
 | agent-resolve-effective | 2 | [agent-resolve-effective.md](agent-resolve-effective.md) |
 | agent-response | 2 | [agent-response.md](agent-response.md) |
-| agent-rubric | 64 | [agent-rubric.md](agent-rubric.md) |
+| agent-review | 228 | [agent-review.md](agent-review.md) |
 | agent-scope | 21 | [agent-scope.md](agent-scope.md) |
 | agent-settings | 6 | [agent-settings.md](agent-settings.md) |
-| agent-skill | 419 | [agent-skill.md](agent-skill.md) |
+| agent-skill | 244 | [agent-skill.md](agent-skill.md) |
 | agent-stage | 164 | [agent-stage.md](agent-stage.md) |
 | agent-stage-execution-error | 2 | [agent-stage-execution-error.md](agent-stage-execution-error.md) |
 | agent-stage-execution-store-error | 2 | [agent-stage-execution-store-error.md](agent-stage-execution-store-error.md) |
@@ -244,7 +243,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | store-workspace-organization | 2 | [store-workspace-organization.md](store-workspace-organization.md) |
 | support-parse | 107 | [support-parse.md](support-parse.md) |
 | terraform-google | 507 | [terraform-google.md](terraform-google.md) |
-| terraform-openshell-gke-resource | 114 | [terraform-openshell-gke-resource.md](terraform-openshell-gke-resource.md) |
+| terraform-openshell-gke-resource | 115 | [terraform-openshell-gke-resource.md](terraform-openshell-gke-resource.md) |
 | terraform-openshell-gke-resource-kubectl-manifest | 2 | [terraform-openshell-gke-resource-kubectl-manifest.md](terraform-openshell-gke-resource-kubectl-manifest.md) |
 | test-encode | 7 | [test-encode.md](test-encode.md) |
 | tools-arg | 2 | [tools-arg.md](tools-arg.md) |

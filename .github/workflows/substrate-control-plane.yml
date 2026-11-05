@@ -172,6 +172,7 @@ jobs:
           VERSION: ${{ steps.cfg.outputs.version }}
           SANDBOX_CLASSES: ${{ steps.cfg.outputs.sandbox_classes }}
           IMAGE_REPO: ${{ env.SUBSTRATE_IMAGE_REPO }}
+          INGRESS_HOSTNAME: ${{ vars.SUBSTRATE_INGRESS_HOSTNAME }}
         run: |
           set -uo pipefail
           # Advisory in both modes: this step never fails the job, because the
@@ -185,12 +186,20 @@ jobs:
             echo "|---|---|---|"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          check() { # check <label> <command...>
+          check() { # check <label> <command...> — records a row, never fails the step
             local label="$1"; shift
-            local out rc state detail
-            out="$("$@" 2>&1)"; rc=$?
-            if [ "$rc" -eq 0 ]; then state="PASS"; else state="FAIL"; fi
-            detail="$(printf '%s' "${out:-—}" | head -1 | tr '|' '/')"
+            local out state detail
+            # `if` is load-bearing: Actions runs a bare `run:` as
+            # `bash -eo pipefail`, so a plain `out="$(false)"` assignment aborts
+            # the whole step at the first FAIL — preflight would report itself
+            # broken instead of reporting the prerequisite that is missing.
+            if out="$("$@" 2>&1)"; then state="PASS"; else state="FAIL"; fi
+            # First line only, pipes escaped. Parameter expansion rather than
+            # `head -1 | tr`: a pipeline dying of SIGPIPE under pipefail trips
+            # the same errexit this function exists to avoid.
+            detail="${out%%$'\n'*}"
+            detail="${detail:-—}"
+            detail="${detail//|//}"
             echo "| $state | $label | $detail |" >> "$GITHUB_STEP_SUMMARY"
             printf '%s  %s: %s\n' "$state" "$label" "$detail"
           }
@@ -222,6 +231,13 @@ jobs:
           check "Envoy Gateway CRDs" kubectl get crd gateways.gateway.networking.k8s.io -o 'jsonpath={.metadata.name}'
           check "cert-manager CRDs" kubectl get crd certificates.cert-manager.io -o 'jsonpath={.metadata.name}'
           check "substrate ingress Gateway" kubectl -n ate-system get gateway substrate-ingress -o 'jsonpath={.metadata.name}'
+          # Distinguishes "no hostname asked for" from "asked for and the apply
+          # failed", which the Gateway row alone cannot tell apart.
+          check "hostname front requested" bash -c '
+            [ -n "${INGRESS_HOSTNAME:-}" ] \
+              || { echo "SUBSTRATE_INGRESS_HOSTNAME unset — no static IP, Certificate or Gateway in plan"; exit 1; }
+            echo "$INGRESS_HOSTNAME — IP, Certificate, EnvoyProxy and Gateway land with gke_reconcile"
+          '
 
           # ate-setup resolves every image tag to a digest before it deploys
           # anything, so a repo or tag without the full set fails the install —
@@ -250,6 +266,30 @@ jobs:
             if [ -n "$missing" ]; then echo "absent from $IMAGE_REPO at $VERSION:$missing"; exit 1; fi
             echo "every image $VERSION needs is in $IMAGE_REPO"
           '
+
+          # The apply 403s on `compute.addresses.create` when the CI identity was
+          # provisioned before that grant existed (compute.viewer reads the static
+          # IPs but cannot make one). testIamPermissions asks about the caller, and
+          # in this job the caller IS the deployer SA — so this tests the real
+          # thing instead of guessing from the role list.
+          check "static IP permission" bash -c '
+            token="$(gcloud auth print-access-token 2>/dev/null)" \
+              || { echo "no access token for the CI identity"; exit 1; }
+            got="$(curl -fsS -X POST -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+              -d "{\"permissions\":[\"compute.addresses.create\"]}" \
+              "https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT_ID}:testIamPermissions")" \
+              || { echo "testIamPermissions call failed"; exit 1; }
+            case "$got" in
+              *compute.addresses.create*) echo "the CI identity may create substrate-ip" ;;
+              *) echo "compute.addresses.create is missing for the CI identity — gke_reconcile will 403 on substrate-ip (deploy/gcp/bootstrap.sh grants the substrateStaticIpAdmin custom role)"; exit 1 ;;
+            esac
+          '
+
+          {
+            echo ""
+            echo "_Advisory run: FAIL rows are recorded, not fatal. \`install\` mode re-tests the blocking ones and refuses on them._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
 
       - name: Refuse to install over unmet prerequisites
         if: inputs.mode == 'install'
@@ -369,7 +409,9 @@ jobs:
             echo "### Installed control plane"
             echo ""
             echo '```'
-            kubectl -n ate-system get deploy,sts,svc 2>&1
+            # || true so a half-installed control plane still produces the report
+            # — that is the case an operator most needs to read.
+            kubectl -n ate-system get deploy,sts,svc 2>&1 || true
             echo
             kubectl get crd 2>&1 | grep ate.dev || echo "(no ate.dev CRDs — the install did not land)"
             echo '```'

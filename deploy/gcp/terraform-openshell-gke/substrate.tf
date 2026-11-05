@@ -218,6 +218,22 @@ resource "kubernetes_role_binding_v1" "substrate_credential_reader" {
 # Skipped entirely when substrate_ingress_hostname is empty.
 # ---------------------------------------------------------------------------
 
+# The ingress below lives in ate-system, and Terraform runs BEFORE the installer
+# that normally creates that namespace (§5 step 2 vs step 3) — the apply then
+# dies with `namespaces "ate-system" not found` and no ingress at all. So claim
+# it here, gated on the same condition as its contents: with no hostname asked
+# for, the installer stays the sole owner. Its own `kubectl apply` of the
+# namespace merges into this one rather than failing.
+resource "kubernetes_namespace_v1" "substrate_system" {
+  count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
+
+  metadata {
+    name = "ate-system"
+  }
+
+  depends_on = [google_container_node_pool.primary_nodes]
+}
+
 resource "google_compute_address" "substrate_ip" {
   count = local.substrate_enabled && var.substrate_ingress_hostname != "" ? 1 : 0
 
@@ -247,7 +263,10 @@ resource "kubectl_manifest" "substrate_certificate" {
         - "${var.substrate_ingress_hostname}"
   YAML
 
-  depends_on = [helm_release.cert_manager]
+  depends_on = [
+    helm_release.cert_manager,
+    kubernetes_namespace_v1.substrate_system,
+  ]
 }
 
 resource "kubectl_manifest" "substrate_envoy_proxy" {
@@ -282,6 +301,7 @@ resource "kubectl_manifest" "substrate_envoy_proxy" {
   depends_on = [
     helm_release.envoy_gateway,
     google_compute_address.substrate_ip,
+    kubernetes_namespace_v1.substrate_system,
   ]
 }
 
