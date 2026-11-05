@@ -165,10 +165,16 @@ at the DNS zone, and let cert-manager finish issuing before saving the Settings 
 |---|---|
 | `substrateUrl` | `https://substrate.archagentix.com` with `SUBSTRATE_CONTROL_PLANE_PUBLIC=true` (gRPC rides the `/substrate.ateapi.v1.Control` prefix); otherwise the in-cluster `ateapi.ate-system.svc:8443`, reachable only from inside the VPC |
 | `substrateIngressUrl` | `https://substrate.archagentix.com` |
-| `substrateAtespace` | leave blank to derive it per organization, or pin one shared space. `GET /api/agent/substrate/status` echoes the resolved value; the runner creates it over ateapi (`CreateAtespace`/`GetAtespace`) if missing |
-| `substrateWorkerPool` | `substrate-worker-pool` (= `SUBSTRATE_NODE_POOL`) |
+| `substrateAtespace` | **must be one of `SUBSTRATE_ALLOWED_ATESPACES`** (default `tenant-a,tenant-b`) — anything else is silently dropped by `resolveSubstrateAtespace` and it falls back to the org-derived space (`tenant-a` by default). Leave blank to derive per organization; `GET /api/agent/substrate/status` echoes what was resolved and the runner creates it over ateapi (`CreateAtespace`/`GetAtespace`) if missing |
+| `substrateWorkerPool` | the value of the `ate.dev/worker-pool` **node label** the `workerSelector` matches — not automatically the GKE pool name. This config taints the pool but does not label it, so either label the nodes (`gcloud container node-pools update substrate-worker-pool … --node-labels ate.dev/worker-pool=substrate-worker-pool`) or set the field to whatever label the upstream installer applied. Blank falls back to `planner-pool` |
 | `substrateActorTemplate` | `planner` |
 | `substratePlannerImage` | the planner image **pinned by digest** (`name@sha256:…`) — `upsertActorTemplate` throws on a tag, so use the digest the stack is on |
+| `substrateTimeoutMs` | per-call gRPC deadline; `60000` is the default. Keep it under the Cloud Run / ingress budget of the calling service |
+| `substrateActorTtlMs` | how long the per-run actor survives before the power path suspends/reaps it; `120000` default. Below the actor's resume cost is wasted |
+
+The node label is a one-off, but note `gcloud container node-pools update --node-labels`
+rolls the pool's nodes, so do it while the pool is parked (the power workflow scales it
+to zero overnight).
 
 ## 6. Key files
 
