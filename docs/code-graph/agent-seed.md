@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 99 nodes
+Community of 92 nodes
 
-- **Size**: 99 nodes
-- **Cohesion**: 0.3391
+- **Size**: 92 nodes
+- **Cohesion**: 0.3448
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,46 +65,46 @@ Community of 99 nodes
 | scoreEvaluation | Function | ./packages/shared/src/agent/business-pipeline.js | 399-408 |
 | evaluateRequirement | Function | ./packages/shared/src/agent/business-pipeline.js | 418-440 |
 
-*... and 49 more members.*
+*... and 42 more members.*
 
 ## Execution Flows
 
-- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
+No execution flows pass through this community.
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (102 edge(s))
+- `equal` (96 edge(s))
 - `push` (19 edge(s))
-- `String` (17 edge(s))
-- `test` (16 edge(s))
-- `ok` (14 edge(s))
+- `String` (15 edge(s))
+- `test` (15 edge(s))
+- `ok` (13 edge(s))
 - `replace` (12 edge(s))
-- `slice` (10 edge(s))
 - `toISOString` (8 edge(s))
 - `now` (8 edge(s))
-- `map` (8 edge(s))
-- `deepEqual` (7 edge(s))
-- `join` (7 edge(s))
+- `slice` (8 edge(s))
+- `map` (7 edge(s))
 - `require` (6 edge(s))
 - `Number` (6 edge(s))
-- `trim` (6 edge(s))
+- `join` (6 edge(s))
+- `isFinite` (5 edge(s))
+- `trim` (5 edge(s))
 
 ### Incoming
 
-- `equal` (102 edge(s))
+- `equal` (96 edge(s))
 - `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
 - `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
 - `./packages/shared/src/agent/approval-gate.js` (15 edge(s))
-- `ok` (14 edge(s))
 - `./packages/shared/src/agent/approval-gate.test.js` (13 edge(s))
-- `deepEqual` (7 edge(s))
+- `ok` (13 edge(s))
 - `./packages/shared/src/agent/workspace-router.js` (7 edge(s))
-- `throws` (6 edge(s))
+- `deepEqual` (5 edge(s))
 - `./packages/shared/src/agent/workspace-router.test.js` (5 edge(s))
 - `now` (4 edge(s))
 - `every` (4 edge(s))
 - `match` (4 edge(s))
 - `doesNotMatch` (4 edge(s))
-- `./packages/shared/src/agent/memory.js` (4 edge(s))
+- `rejects` (3 edge(s))
+- `push` (3 edge(s))

@@ -4,107 +4,107 @@
 
 ## Overview
 
-Community of 178 nodes
+Community of 225 nodes
 
-- **Size**: 178 nodes
-- **Cohesion**: 0.3372
+- **Size**: 225 nodes
+- **Cohesion**: 0.3131
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| normalizeWorkflowPattern | Function | ./packages/shared/src/agent/harnesses/contract.js | 63-75 |
-| applyWorkflowPattern | Function | ./packages/shared/src/agent/harnesses/contract.js | 81-92 |
-| publicExecution | Function | ./packages/shared/src/agent/harnesses/contract.js | 218-231 |
-| applyRubricMiddleware | Function | ./packages/shared/src/agent/harnesses/contract.js | 254-291 |
-| reviewMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 293-305 |
-| mcpServerFromToolName | Function | ./packages/shared/src/agent/harnesses/contract.js | 323-328 |
-| toolCallsFromMessage | Function | ./packages/shared/src/agent/harnesses/contract.js | 337-361 |
-| skillFromReadCall | Function | ./packages/shared/src/agent/harnesses/contract.js | 364-370 |
-| extractUsedResources | Function | ./packages/shared/src/agent/harnesses/contract.js | 376-395 |
-| usedResourceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 398-414 |
-| skillRouterTraceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 417-437 |
-| traceMetadata | Function | ./packages/shared/src/agent/harnesses/contract.js | 439-466 |
-| langSmithProvider | Function | ./packages/shared/src/agent/harnesses/contract.js | 468-475 |
-| annotateTrace | Function | ./packages/shared/src/agent/harnesses/contract.js | 477-484 |
-| meterRun | Function | ./packages/shared/src/agent/harnesses/contract.js | 544-551 |
-| createRuntimeDispatcher | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 24-150 |
-| execute | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 59-106 |
-| runOnce | Function | ./packages/shared/src/agent/harnesses/dispatch.js | 71-71 |
-| fakeRegistry | Function | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 10-22 |
-| withStubbedMiddleware | Function | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 24-32 |
-| test:memory ON — dispatch injects into the prompt and captures the finished run@L34 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 34-48 |
-| test:memory OFF — dispatch is byte-identical (no injection, no capture)@L50 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 50-63 |
-| test:a throwing inject can never fail the run — the original prompt is used@L65 | Test | ./packages/shared/src/agent/harnesses/dispatch.memory.test.js | 65-77 |
-| schemaError | Function | ./packages/shared/src/agent/harnesses/registry.js | 39-43 |
-| requiredString | Function | ./packages/shared/src/agent/harnesses/registry.js | 45-57 |
-| enumList | Function | ./packages/shared/src/agent/harnesses/registry.js | 59-75 |
-| validateDefinition | Function | ./packages/shared/src/agent/harnesses/registry.js | 78-137 |
-| builtinDefinition | Function | ./packages/shared/src/agent/harnesses/registry.js | 144-151 |
-| createHarnessRegistry | Function | ./packages/shared/src/agent/harnesses/registry.js | 153-305 |
-| register | Function | ./packages/shared/src/agent/harnesses/registry.js | 158-172 |
-| get | Function | ./packages/shared/src/agent/harnesses/registry.js | 174-176 |
-| has | Function | ./packages/shared/src/agent/harnesses/registry.js | 178-180 |
-| list | Function | ./packages/shared/src/agent/harnesses/registry.js | 182-184 |
-| ids | Function | ./packages/shared/src/agent/harnesses/registry.js | 186-188 |
-| runtimeCatalog | Function | ./packages/shared/src/agent/harnesses/registry.js | 191-193 |
-| seal | Function | ./packages/shared/src/agent/harnesses/registry.js | 195-198 |
-| isSealed | Function | ./packages/shared/src/agent/harnesses/registry.js | 200-202 |
-| harnessLabel | Function | ./packages/shared/src/agent/harnesses/registry.js | 205-208 |
-| normalizeAgentRuntime | Function | ./packages/shared/src/agent/harnesses/registry.js | 210-221 |
-| resolveStage | Function | ./packages/shared/src/agent/harnesses/registry.js | 223-239 |
-| stageNeedsBroker | Function | ./packages/shared/src/agent/harnesses/registry.js | 241-245 |
-| resolveAgentRuntime | Function | ./packages/shared/src/agent/harnesses/registry.js | 248-284 |
-| effectiveAgentRuntime | Function | ./packages/shared/src/agent/harnesses/registry.js | 286-288 |
-| definition | Function | ./packages/shared/src/agent/harnesses/registry.test.js | 10-25 |
-| test:HarnessDefinition validation rejects incomplete and malformed metadata@L27 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 27-57 |
-| test:registration clones and freezes complete definitions and rejects duplicates@L59 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 59-81 |
-| test:sealed registries remain readable and reject every later registration@L83 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 83-93 |
-| test:dispatcher passes explicit construction dependencies to createExecutor@L95 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 95-128 |
-| test:throwing executor factories run inside tracing and normalized error handling@L130 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 130-161 |
-| test@L157 | Test | ./packages/shared/src/agent/harnesses/registry.test.js | 157-157 |
+| test:optional image resolver uses a SHA placeholder only while disabled@L246 | Test | ./deploy/gcp/pipeline-infra.test.js | 246-292 |
+| memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
+| memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
+| resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |
+| embedQuestions | Function | ./packages/shared/src/agent/coverage-service.js | 83-96 |
+| rankScopesWithLaya | Function | ./packages/shared/src/agent/coverage-service.js | 103-144 |
+| candidates | Function | ./packages/shared/src/agent/coverage-service.js | 116-116 |
+| mapWithConcurrency | Function | ./packages/shared/src/agent/coverage-service.js | 146-159 |
+| cacheKey | Function | ./packages/shared/src/agent/coverage-service.js | 161-166 |
+| computeCoverage | Function | ./packages/shared/src/agent/coverage-service.js | 178-301 |
+| invalidateCoverageCache | Function | ./packages/shared/src/agent/coverage-service.js | 309-323 |
+| makeStore | Function | ./packages/shared/src/agent/coverage-service.test.js | 37-51 |
+| baseDeps | Function | ./packages/shared/src/agent/coverage-service.test.js | 53-55 |
+| beforeEach@L57 | Test | ./packages/shared/src/agent/coverage-service.test.js | 57-57 |
+| test:with memory disabled nothing is assessed and no recall is attempted@L59 | Test | ./packages/shared/src/agent/coverage-service.test.js | 59-76 |
+| test:one store load serves the whole bank — questions never re-read the pool@L78 | Test | ./packages/shared/src/agent/coverage-service.test.js | 78-97 |
+| test:an unreadable store reads as unconfigured, not as 0% coverage@L99 | Test | ./packages/shared/src/agent/coverage-service.test.js | 99-108 |
+| test:a genuinely empty memory is real 0% coverage, distinct from not_assessed@L110 | Test | ./packages/shared/src/agent/coverage-service.test.js | 110-120 |
+| test:embeddings are one batched call, and an embedder failure degrades to lexical@L122 | Test | ./packages/shared/src/agent/coverage-service.test.js | 122-148 |
+| test:laya is reported as not_configured when no URL is deployed, and cannot change a score@L150 | Test | ./packages/shared/src/agent/coverage-service.test.js | 150-178 |
+| test:an unreachable laya fails open without failing the coverage request@L180 | Test | ./packages/shared/src/agent/coverage-service.test.js | 180-194 |
+| test:laya reorders matched scopes without inventing ones@L196 | Test | ./packages/shared/src/agent/coverage-service.test.js | 196-214 |
+| test:reports are cached per org and bank, bypassed by refresh and by invalidation@L216 | Test | ./packages/shared/src/agent/coverage-service.test.js | 216-227 |
+| test:inactive questions are dropped and an oversized bank is capped@L229 | Test | ./packages/shared/src/agent/coverage-service.test.js | 229-240 |
+| test:questionIds narrows a pass so one category refresh never scans the whole bank@L242 | Test | ./packages/shared/src/agent/coverage-service.test.js | 242-253 |
+| test:a bank edit clears only the editing organisation\'s cached report@L255 | Test | ./packages/shared/src/agent/coverage-service.test.js | 255-266 |
+| test:a run that outlives its budget returns 200-shaped partial results, not fake gaps@L268 | Test | ./packages/shared/src/agent/coverage-service.test.js | 268-295 |
+| QuestionError | Class | ./packages/shared/src/agent/global-questions.js | 55-61 |
+| constructor | Function | ./packages/shared/src/agent/global-questions.js | 56-60 |
+| trim | Function | ./packages/shared/src/agent/global-questions.js | 63-67 |
+| isValidId | Function | ./packages/shared/src/agent/global-questions.js | 69-71 |
+| mergeBank | Function | ./packages/shared/src/agent/global-questions.js | 90-122 |
+| normalizeQuestion | Function | ./packages/shared/src/agent/global-questions.js | 125-172 |
+| validateQuestionPatch | Function | ./packages/shared/src/agent/global-questions.js | 179-218 |
+| clamp | Function | ./packages/shared/src/agent/global-questions.js | 230-232 |
+| normalizeText | Function | ./packages/shared/src/agent/global-questions.js | 234-236 |
+| scoreQuestion | Function | ./packages/shared/src/agent/global-questions.js | 248-282 |
+| statusForScore | Function | ./packages/shared/src/agent/global-questions.js | 284-289 |
+| scoreCoverage | Function | ./packages/shared/src/agent/global-questions.js | 299-321 |
+| notAssessedResults | Function | ./packages/shared/src/agent/global-questions.js | 327-341 |
+| randomId | Function | ./packages/shared/src/agent/global-questions.js | 343-348 |
+| test:mergeBank keeps untouched defaults as origin=default and layers overrides@L56 | Test | ./packages/shared/src/agent/global-questions.test.js | 56-66 |
+| test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
+| test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
+| test:normalizeQuestion rejects malformed input rather than storing it@L83 | Test | ./packages/shared/src/agent/global-questions.test.js | 83-92 |
+| test:normalizeQuestion coerces unknown answer types to free_text and clamps order@L94 | Test | ./packages/shared/src/agent/global-questions.test.js | 94-98 |
+| test:validateQuestionPatch allows a cross-field edit but not an inconsistent one@L100 | Test | ./packages/shared/src/agent/global-questions.test.js | 100-108 |
+| test:scoreQuestion: zero hits is 0/unanswered and no best score can be papered over@L117 | Test | ./packages/shared/src/agent/global-questions.test.js | 117-136 |
+| test:scoreQuestion discounts off-scope recall and prose-only answers to choice questions@L138 | Test | ./packages/shared/src/agent/global-questions.test.js | 138-151 |
+| test:scoreCoverage excludes rows that were never looked at from the denominator instead of counting them as zero@L153 | Test | ./packages/shared/src/agent/global-questions.test.js | 153-170 |
 
-*... and 128 more members.*
+*... and 175 more members.*
 
 ## Execution Flows
 
-- **createMemoryMiddleware** (criticality: 0.65, depth: 5)
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (139 edge(s))
-- `String` (35 edge(s))
+- `equal` (229 edge(s))
+- `map` (43 edge(s))
+- `String` (40 edge(s))
+- `isArray` (35 edge(s))
+- `deepEqual` (35 edge(s))
+- `join` (30 edge(s))
 - `match` (29 edge(s))
-- `isArray` (28 edge(s))
-- `deepEqual` (28 edge(s))
-- `map` (22 edge(s))
-- `includes` (19 edge(s))
-- `join` (16 edge(s))
-- `slice` (15 edge(s))
-- `ok` (14 edge(s))
-- `trim` (14 edge(s))
-- `throws` (14 edge(s))
-- `filter` (13 edge(s))
-- `require` (12 edge(s))
+- `ok` (27 edge(s))
+- `filter` (26 edge(s))
+- `includes` (26 edge(s))
+- `slice` (24 edge(s))
+- `throws` (23 edge(s))
+- `trim` (18 edge(s))
+- `require` (18 edge(s))
 - `push` (12 edge(s))
 
 ### Incoming
 
-- `equal` (139 edge(s))
-- `deepEqual` (28 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (26 edge(s))
-- `match` (25 edge(s))
+- `equal` (229 edge(s))
+- `deepEqual` (35 edge(s))
+- `ok` (27 edge(s))
+- `match` (26 edge(s))
+- `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
-- `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
+- `throws` (23 edge(s))
+- `./packages/shared/src/agent/global-questions.js` (21 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
-- `ok` (14 edge(s))
-- `throws` (14 edge(s))
+- `./packages/shared/src/agent/coverage-service.test.js` (16 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (14 edge(s))
 - `./packages/shared/src/agent/memory.js` (14 edge(s))
-- `./packages/shared/src/agent/memory-middleware.test.js` (12 edge(s))
-- `./packages/shared/src/agent/memory-store/postgres-backend.test.js` (11 edge(s))
-- `./packages/shared/src/agent/memory-store/index.js` (9 edge(s))
+- `./packages/shared/src/agent/coverage-service.js` (13 edge(s))

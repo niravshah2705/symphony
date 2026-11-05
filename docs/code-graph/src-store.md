@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 19 nodes
+Community of 20 nodes
 
-- **Size**: 19 nodes
-- **Cohesion**: 0.1422
+- **Size**: 20 nodes
+- **Cohesion**: 0.1388
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,7 +15,7 @@ Community of 19 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | createStoreHydrationMiddleware | Function | ./services/billing/src/app.js | 17-21 |
-| createApp | Function | ./services/billing/src/app.js | 23-102 |
+| createApp | Function | ./services/billing/src/app.js | 23-126 |
 | listen | Function | ./services/billing/src/app.test.js | 24-35 |
 | test:billing service health probes@L37 | Test | ./services/billing/src/app.test.js | 37-46 |
 | test:billing standalone UI dashboard serves HTML@L48 | Test | ./services/billing/src/app.test.js | 48-58 |
@@ -31,6 +31,7 @@ Community of 19 nodes
 | test:billing recharge tick launches the Cloud Run Job instead of sweeping in-request@L301 | Test | ./services/billing/src/app.test.js | 301-325 |
 | test:billing recharge tick runs the sweep in-process when no Job is configured@L327 | Test | ./services/billing/src/app.test.js | 327-349 |
 | test:billing recharge tick reports a launch failure as 500 so the scheduler retries@L351 | Test | ./services/billing/src/app.test.js | 351-365 |
+| test:a Cashfree credential rejection surfaces as a typed 502, not an opaque 500@L367 | Test | ./services/billing/src/app.test.js | 367-409 |
 | start | Function | ./services/billing/src/index.js | 7-15 |
 | renderDashboardHtml | Function | ./services/billing/src/ui.js | 3-358 |
 
@@ -42,31 +43,31 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (32 edge(s))
-- `fetch` (22 edge(s))
-- `json` (21 edge(s))
-- `close` (15 edge(s))
-- `stringify` (10 edge(s))
-- `Number` (10 edge(s))
-- `get` (5 edge(s))
-- `status` (5 edge(s))
-- `match` (5 edge(s))
+- `equal` (34 edge(s))
+- `json` (23 edge(s))
+- `fetch` (23 edge(s))
+- `close` (16 edge(s))
+- `stringify` (12 edge(s))
+- `Number` (11 edge(s))
+- `match` (7 edge(s))
+- `get` (6 edge(s))
+- `status` (6 edge(s))
+- `use` (5 edge(s))
 - `await` (5 edge(s))
-- `use` (4 edge(s))
 - `info` (4 edge(s))
 - `ok` (4 edge(s))
 - `toFixed` (4 edge(s))
-- `deepEqual` (3 edge(s))
+- `error` (3 edge(s))
 
 ### Incoming
 
-- `equal` (32 edge(s))
-- `fetch` (22 edge(s))
-- `./services/billing/src/app.test.js` (15 edge(s))
-- `close` (14 edge(s))
-- `json` (13 edge(s))
-- `stringify` (8 edge(s))
-- `match` (5 edge(s))
+- `equal` (34 edge(s))
+- `fetch` (23 edge(s))
+- `./services/billing/src/app.test.js` (16 edge(s))
+- `close` (15 edge(s))
+- `json` (14 edge(s))
+- `stringify` (10 edge(s))
+- `match` (7 edge(s))
 - `await` (5 edge(s))
 - `./services/billing/src/index.js` (4 edge(s))
 - `ok` (4 edge(s))

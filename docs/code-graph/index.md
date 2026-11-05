@@ -4,7 +4,7 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 246
+**Total communities**: 247
 
 ## Communities
 
@@ -31,8 +31,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-knowledge-search-error | 2 | [agent-knowledge-search-error.md](agent-knowledge-search-error.md) |
 | agent-local-intelligence-error | 2 | [agent-local-intelligence-error.md](agent-local-intelligence-error.md) |
 | agent-models | 41 | [agent-models.md](agent-models.md) |
-| agent-normalize | 275 | [agent-normalize.md](agent-normalize.md) |
-| agent-normalize-attachment | 19 | [agent-normalize-attachment.md](agent-normalize-attachment.md) |
+| agent-normalize | 19 | [agent-normalize.md](agent-normalize.md) |
 | agent-organization-context-mismatch | 2 | [agent-organization-context-mismatch.md](agent-organization-context-mismatch.md) |
 | agent-param | 10 | [agent-param.md](agent-param.md) |
 | agent-parse | 2 | [agent-parse.md](agent-parse.md) |
@@ -46,10 +45,11 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-resolve | 2 | [agent-resolve.md](agent-resolve.md) |
 | agent-resolve-effective | 2 | [agent-resolve-effective.md](agent-resolve-effective.md) |
 | agent-response | 2 | [agent-response.md](agent-response.md) |
-| agent-rubric | 64 | [agent-rubric.md](agent-rubric.md) |
+| agent-review | 121 | [agent-review.md](agent-review.md) |
 | agent-scope | 21 | [agent-scope.md](agent-scope.md) |
+| agent-seed | 92 | [agent-seed.md](agent-seed.md) |
 | agent-settings | 6 | [agent-settings.md](agent-settings.md) |
-| agent-skill | 419 | [agent-skill.md](agent-skill.md) |
+| agent-skill | 244 | [agent-skill.md](agent-skill.md) |
 | agent-stage | 164 | [agent-stage.md](agent-stage.md) |
 | agent-stage-execution-error | 2 | [agent-stage-execution-error.md](agent-stage-execution-error.md) |
 | agent-stage-execution-store-error | 2 | [agent-stage-execution-store-error.md](agent-stage-execution-store-error.md) |
@@ -101,6 +101,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | harnesses-agent-runtime-error | 2 | [harnesses-agent-runtime-error.md](harnesses-agent-runtime-error.md) |
 | harnesses-fake | 3 | [harnesses-fake.md](harnesses-fake.md) |
 | harnesses-fake-google | 3 | [harnesses-fake-google.md](harnesses-fake-google.md) |
+| harnesses-memory | 301 | [harnesses-memory.md](harnesses-memory.md) |
 | hooks-touch | 7 | [hooks-touch.md](hooks-touch.md) |
 | integration-org | 58 | [integration-org.md](integration-org.md) |
 | js-analytics | 46 | [js-analytics.md](js-analytics.md) |
@@ -184,7 +185,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-context-trusted | 7 | [src-context-trusted.md](src-context-trusted.md) |
 | src-cors | 8 | [src-cors.md](src-cors.md) |
 | src-docs | 18 | [src-docs.md](src-docs.md) |
-| src-ensure | 2 | [src-ensure.md](src-ensure.md) |
+| src-ensure | 4 | [src-ensure.md](src-ensure.md) |
 | src-env | 10 | [src-env.md](src-env.md) |
 | src-fail-closed | 2 | [src-fail-closed.md](src-fail-closed.md) |
 | src-fake | 2 | [src-fake.md](src-fake.md) |
@@ -224,12 +225,12 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-stage | 106 | [src-stage.md](src-stage.md) |
 | src-state | 6 | [src-state.md](src-state.md) |
 | src-status | 5 | [src-status.md](src-status.md) |
-| src-store | 19 | [src-store.md](src-store.md) |
+| src-store | 20 | [src-store.md](src-store.md) |
 | src-stream | 41 | [src-stream.md](src-stream.md) |
 | src-stream-token-unavailable-error | 2 | [src-stream-token-unavailable-error.md](src-stream-token-unavailable-error.md) |
 | src-tick | 4 | [src-tick.md](src-tick.md) |
 | src-tick-autonomous | 4 | [src-tick-autonomous.md](src-tick-autonomous.md) |
-| src-tokens | 300 | [src-tokens.md](src-tokens.md) |
+| src-tokens | 303 | [src-tokens.md](src-tokens.md) |
 | src-trust | 5 | [src-trust.md](src-trust.md) |
 | src-trusted | 2 | [src-trusted.md](src-trusted.md) |
 | src-upstream | 5 | [src-upstream.md](src-upstream.md) |

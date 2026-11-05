@@ -363,3 +363,47 @@ test('billing recharge tick reports a launch failure as 500 so the scheduler ret
     await server.close();
   }
 });
+
+test('a Cashfree credential rejection surfaces as a typed 502, not an opaque 500', async () => {
+  // Regression: with no error handler the express default returned an HTML 500,
+  // so Cashfree's 401 authentication_failed reached the browser as an
+  // unattributable Internal Server Error.
+  const prevAppId = process.env.CASHFREE_APP_ID;
+  const prevKey = process.env.CASHFREE_SECRET_KEY;
+  const realFetch = global.fetch;
+  process.env.CASHFREE_APP_ID = 'TEST_probe_app_id';
+  process.env.CASHFREE_SECRET_KEY = 'cfsk_probe_wrong_key';
+  global.fetch = async (url, init) => {
+    if (String(url).includes('cashfree.com')) {
+      return {
+        ok: false,
+        status: 401,
+        json: async () => ({
+          message: 'authentication Failed',
+          code: 'request_failed',
+          type: 'authentication_error',
+        }),
+      };
+    }
+    return realFetch(url, init);
+  };
+  const server = await listen(createApp());
+  try {
+    const res = await fetch(`${server.url}/api/billing/cashfree/create-order`, {
+      method: 'POST',
+      headers: { ...ADMIN, 'content-type': 'application/json' },
+      body: JSON.stringify({ amountInr: 500 }),
+    });
+    assert.equal(res.status, 502);
+    assert.match(res.headers.get('content-type'), /application\/json/);
+    const body = await res.json();
+    assert.equal(body.code, 'cashfree_authentication_failed');
+    assert.match(body.error, /rejected the configured API credentials/);
+    assert.doesNotMatch(JSON.stringify(body), /cfsk_probe_wrong_key|TEST_probe_app_id/, 'never echoes the key');
+  } finally {
+    global.fetch = realFetch;
+    await server.close();
+    if (prevAppId !== undefined) process.env.CASHFREE_APP_ID = prevAppId; else delete process.env.CASHFREE_APP_ID;
+    if (prevKey !== undefined) process.env.CASHFREE_SECRET_KEY = prevKey; else delete process.env.CASHFREE_SECRET_KEY;
+  }
+});

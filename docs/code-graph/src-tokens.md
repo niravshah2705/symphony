@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 300 nodes
+Community of 303 nodes
 
-- **Size**: 300 nodes
-- **Cohesion**: 0.1886
+- **Size**: 303 nodes
+- **Cohesion**: 0.1918
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 300 nodes
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 | getBaseUrl | Function | ./packages/shared-core/src/billing/cashfree-client.js | 6-15 |
 
-*... and 250 more members.*
+*... and 253 more members.*
 
 ## Execution Flows
 
@@ -94,7 +94,7 @@ Community of 300 nodes
 - `slice` (24 edge(s))
 - `trim` (24 edge(s))
 - `isArray` (24 edge(s))
-- `includes` (22 edge(s))
+- `includes` (23 edge(s))
 - `ok` (22 edge(s))
 - `set` (20 edge(s))
 - `push` (20 edge(s))
@@ -110,10 +110,10 @@ Community of 300 nodes
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
 - `ok` (22 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
+- `./packages/shared-core/src/billing/cashfree-client.js` (17 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
 - `push` (16 edge(s))
-- `./packages/shared-core/src/billing/cashfree-client.js` (14 edge(s))
 - `./packages/shared-core/src/billing/recharge.test.js` (11 edge(s))
 - `filter` (11 edge(s))
 - `getBillingAccount` (11 edge(s))

@@ -29,6 +29,50 @@ function isConfigured() {
   return Boolean(process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY);
 }
 
+/**
+ * A non-2xx from Cashfree is three different failures, and only one of them is
+ * the caller's: a 401/403 means *this deployment's* App ID / Secret Key pair is
+ * wrong (or rotated against the other half), which the browser can neither see
+ * nor fix and which a generic 500 hides completely. Tag each outcome with the
+ * status + code the service's error handler should emit, keeping the provider's
+ * own status for log correlation.
+ */
+function providerError(action, status, data = {}) {
+  const detail = data.message || data.reason || data.code || 'no detail from Cashfree';
+  const err = new Error(`Cashfree ${action} failed (${status}): ${detail}`);
+  err.providerStatus = status;
+  err.providerCode = data.code || null;
+  if (status === 401 || status === 403) {
+    err.status = 502;
+    err.code = 'cashfree_authentication_failed';
+    err.message = `Cashfree rejected the configured API credentials (${status}). `
+      + `Verify CASHFREE_APP_ID and CASHFREE_SECRET_KEY are the active pair for the `
+      + `${environmentLabel()} environment.`;
+  } else if (status >= 500) {
+    err.status = 502;
+    err.code = 'cashfree_unavailable';
+  } else {
+    err.status = 400;
+    err.code = 'cashfree_request_rejected';
+  }
+  return err;
+}
+
+function environmentLabel() {
+  const base = getBaseUrl();
+  return base.includes('sandbox.cashfree.com') ? 'sandbox' : 'production';
+}
+
+/** Log the fields that identify the rejection without echoing a request payload. */
+function logProviderFailure(action, status, data = {}) {
+  log.error(`Cashfree ${action} failed`, {
+    status,
+    code: data.code || null,
+    type: data.type || null,
+    message: data.message || data.reason || null,
+  });
+}
+
 async function createOnDemandSubscription({
   subscriptionId,
   customerName = 'Admin User',
@@ -69,9 +113,8 @@ async function createOnDemandSubscription({
 
   const responseData = await res.json().catch(() => ({}));
   if (!res.ok) {
-    log.error('Cashfree createOnDemandSubscription failed', { status: res.status, data: responseData });
-    const msg = responseData.message || responseData.reason || 'Failed to create Cashfree subscription';
-    throw new Error(`Cashfree error (${res.status}): ${msg}`);
+    logProviderFailure('createOnDemandSubscription', res.status, responseData);
+    throw providerError('createOnDemandSubscription', res.status, responseData);
   }
 
   return responseData;
@@ -90,9 +133,8 @@ async function getSubscription(subscriptionId) {
 
   const responseData = await res.json().catch(() => ({}));
   if (!res.ok) {
-    log.error('Cashfree getSubscription failed', { status: res.status, data: responseData });
-    const msg = responseData.message || 'Failed to get Cashfree subscription details';
-    throw new Error(`Cashfree error (${res.status}): ${msg}`);
+    logProviderFailure('getSubscription', res.status, responseData);
+    throw providerError('getSubscription', res.status, responseData);
   }
 
   return responseData;
@@ -119,9 +161,8 @@ async function chargeSubscription({ subscriptionId, paymentId, amountInr }) {
 
   const responseData = await res.json().catch(() => ({}));
   if (!res.ok) {
-    log.error('Cashfree chargeSubscription failed', { status: res.status, data: responseData });
-    const msg = responseData.message || responseData.reason || 'Failed to charge Cashfree subscription';
-    throw new Error(`Cashfree error (${res.status}): ${msg}`);
+    logProviderFailure('chargeSubscription', res.status, responseData);
+    throw providerError('chargeSubscription', res.status, responseData);
   }
 
   return responseData;
@@ -195,9 +236,8 @@ async function createOrder({
 
   const responseData = await res.json().catch(() => ({}));
   if (!res.ok) {
-    log.error('Cashfree createOrder failed', { status: res.status, data: responseData });
-    const msg = responseData.message || responseData.reason || 'Failed to create Cashfree order';
-    throw new Error(`Cashfree error (${res.status}): ${msg}`);
+    logProviderFailure('createOrder', res.status, responseData);
+    throw providerError('createOrder', res.status, responseData);
   }
 
   return responseData;
@@ -221,9 +261,8 @@ async function getOrder(orderId) {
 
   const responseData = await res.json().catch(() => ({}));
   if (!res.ok) {
-    log.error('Cashfree getOrder failed', { status: res.status, data: responseData });
-    const msg = responseData.message || 'Failed to get Cashfree order details';
-    throw new Error(`Cashfree error (${res.status}): ${msg}`);
+    logProviderFailure('getOrder', res.status, responseData);
+    throw providerError('getOrder', res.status, responseData);
   }
 
   return responseData;
