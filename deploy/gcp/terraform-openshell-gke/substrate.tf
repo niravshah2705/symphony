@@ -6,6 +6,9 @@
 # OpenShell-only cluster plans EMPTY and stays byte-for-byte unchanged):
 #   * a dedicated, tainted worker node pool (isolates Substrate actors from
 #     OpenShell tenant nodes),
+#   * the WorkerPool CR the control plane synthesises worker pods from — the
+#     nodes above are useless without it, and its toleration must be the taint
+#     above by construction,
 #   * snapshot StorageClass + VolumeSnapshotClass for atelet actor snapshots,
 #   * the credential-provider read grant (raw Secrets live only in the
 #     substrate-credentials namespace; the egress gateway reads them, the actor
@@ -16,7 +19,9 @@
 #     GatewayClass-level EnvoyProxy pins the openshell IP, so a substrate
 #     Gateway left on the shared infra would claim the wrong address),
 #   * optionally, the ateapi control plane on that same hostname behind a
-#     path-prefix match (var.substrate_control_plane_public, off by default).
+#     path-prefix match (var.substrate_control_plane_public, off by default),
+#     plus the single Role+RoleBinding that lets the CI rotation job mint the
+#     bearer token that control plane requires.
 #
 # The ate-system CONTROL PLANE itself (ateapi/atelet/atecontroller/
 # ate-idp-server/atenet-router/atenet-egress/podcertcontroller + the ate.dev
@@ -44,10 +49,47 @@ locals {
   )
   # Worker pods carry a toleration for this taint so the scheduler places only
   # Substrate actors here, never generic tenant workloads.
+  #
+  # WHY this exact key, and not something of our own: atelet is installer-owned
+  # and tolerates only ate.dev/sandboxClass; a bespoke taint key strands the
+  # pool with no per-node sandbox agent. Observed live on
+  # openshell-multitenant:
+  #
+  #   kubectl -n ate-system get ds atelet \
+  #     -o jsonpath='{.spec.template.spec.tolerations}'
+  #   -> [{ate.dev/sandboxClass   Exists NoSchedule},
+  #       {cloud.google.com/compute-class Exists NoSchedule}]
+  #
+  # atelet is the per-node agent that actually boots a gVisor sandbox, so a node
+  # it cannot join is a node on which no actor can ever run — nothing in this
+  # repo or in the cluster tolerated the previous
+  # `substrate.ate.dev/workers=true:NO_SCHEDULE`, so every node the pool scaled
+  # up would have come up without a sandbox agent on it. The value is the
+  # sandbox class (var.substrate_sandbox_class), because that is what the
+  # WorkerPool and the atenet data plane key on; the three must be one string.
+  #
+  # Two more things a reader cannot get from the code:
+  #   * Effect spelling differs per layer on purpose. The node-pool API spells
+  #     it NO_SCHEDULE, a Kubernetes toleration spells the same taint
+  #     NoSchedule; getting either one wrong silently unschedules everything
+  #     instead of erroring.
+  #   * This block is ForceNew under google provider 6.50 (node_config is
+  #     ForceNew), so changing it REPLACES the node pool. That is only safe
+  #     while the pool holds no actors — confirm with
+  #     `kubectl get nodes -l cloud.google.com/gke-nodepool=<pool>` and the
+  #     workerpools.ate.dev ready count before applying.
   substrate_taint = {
-    key    = "substrate.ate.dev/workers"
-    value  = "true"
+    key    = "ate.dev/sandboxClass"
+    value  = var.substrate_sandbox_class
     effect = "NO_SCHEDULE"
+  }
+  # The matching toleration, rendered into the WorkerPool below. Derived from
+  # the taint rather than restated, so the two cannot drift apart.
+  substrate_taint_toleration = {
+    key      = local.substrate_taint.key
+    operator = "Equal"
+    value    = local.substrate_taint.value
+    effect   = "NoSchedule"
   }
 }
 
@@ -105,6 +147,9 @@ resource "google_container_node_pool" "substrate_nodes" {
       enable_secure_boot          = false
     }
 
+    # See local.substrate_taint for why this key/value and why the effect is
+    # spelled NO_SCHEDULE here but NoSchedule in the WorkerPool toleration.
+    # Editing this block replaces the pool (node_config is ForceNew).
     taint {
       key    = local.substrate_taint.key
       value  = local.substrate_taint.value
@@ -118,6 +163,91 @@ resource "google_container_node_pool" "substrate_nodes" {
   }
 
   depends_on = [google_container_cluster.primary]
+}
+
+# ---------------------------------------------------------------------------
+# The WorkerPool the pool above is only half of.
+#
+# A tainted node is not something an actor can run on; the unit the control
+# plane schedules onto is a worker pod, synthesised from a
+# workerpools.ate.dev object. Terraform rendered the nodes and never the pool
+# that claims them, so `workerSelector: {"ate.dev/worker-pool": <name>}` (the
+# label the backend sends, packages/shared-core/src/agent/substrate.js) had no
+# object to resolve to — that key addresses the WorkerPool CR, whose name the
+# controller stamps onto the worker pods it creates from it, and NOT a node
+# label. Zero instances of the CRD existed live, which is why a run never got
+# a sandbox.
+#
+# Shape confirmed against the live CRD rather than guessed:
+#   kubectl get crd workerpools.ate.dev \
+#     -o jsonpath='{.spec.group}.{.spec.versions[0].name}'   -> ate.dev/v1
+#   kubectl get crd workerpools.ate.dev -o jsonpath='{.spec.scope}'  -> Namespaced
+#   spec.required                = [replicas, sandboxClasses, workerImage]
+#   spec.sandboxClasses[].name   enum [gvisor, microvm], maxItems 1
+#   spec.sandboxClasses[].configRef -> a CLUSTER-scoped SandboxConfig
+#   spec.template.properties     = annotations, labels, nodeAffinity,
+#                                  nodeSelector, priorityClassName, resources,
+#                                  serviceAccountName, tolerations
+#   metadata.name CEL rule       = length(self) <= 63 (worker pods use it as a
+#                                  label value)
+#
+# Deliberately NOT set: spec.template.labels. The `ate.dev/` domain there is
+# reserved for the controller (CRD CEL: `!key.startsWith('ate.dev/')`), so a
+# hand-written `ate.dev/worker-pool` label is rejected outright — that stamp
+# belongs to the controller, not to us.
+# ---------------------------------------------------------------------------
+
+resource "kubectl_manifest" "substrate_worker_pool" {
+  count = local.substrate_enabled ? 1 : 0
+
+  # Heredoc rather than yamlencode: every interpolation here is a single-line
+  # scalar. The yamlencode rule in this file (substrate_ateapi_ca) exists for
+  # the multi-line PEM specifically — a block scalar assembled by string
+  # interpolation breaks on the first indent change upstream, and nothing in
+  # this body changes indent.
+  yaml_body = <<-YAML
+    apiVersion: ate.dev/v1
+    kind: WorkerPool
+    metadata:
+      name: ${var.substrate_worker_pool_name}
+      namespace: ate-system
+    spec:
+      # Warm workers, not a ceiling: a sandbox claims one of these, it does not
+      # create one (see var.substrate_worker_pool_replicas).
+      replicas: ${var.substrate_worker_pool_replicas}
+      # Required by the CRD — the control plane keeps no server-side default
+      # for it, so this cannot be left out.
+      workerImage: "${var.substrate_worker_image}"
+      sandboxClasses:
+        - name: ${var.substrate_sandbox_class}
+          configRef:
+            name: ${var.substrate_sandbox_config_name}
+      template:
+        nodeSelector:
+          # GKE writes this label on every node of the pool, so node selection
+          # needs no custom node label — and therefore no node_config.labels,
+          # which would be a second ForceNew on the pool for nothing.
+          "cloud.google.com/gke-nodepool": "${var.substrate_node_pool_name}"
+        tolerations:
+          # Exactly the taint the pool is born with, so these pods are the only
+          # thing the scheduler places there — and so atelet, which tolerates
+          # the same key with Exists, is on the node to boot the sandbox.
+          - key: "${local.substrate_taint_toleration.key}"
+            operator: "${local.substrate_taint_toleration.operator}"
+            value: "${local.substrate_taint_toleration.value}"
+            effect: "${local.substrate_taint_toleration.effect}"
+  YAML
+
+  # The namespace is Terraform-owned under the same condition this CR is (see
+  # kubernetes_namespace_v1.substrate_system). The CRD itself arrives with the
+  # upstream installer run, which docs/SUBSTRATE_INTEGRATION.md §5 places AFTER
+  # this apply — so a first-time apply fails with `could not find the requested
+  # resource, Kind "WorkerPool"` and converges on the next apply. Same
+  # chicken-and-egg the §5.3 ingress block documents for ate-system.
+  depends_on = [
+    google_container_node_pool.substrate_nodes,
+    kubernetes_namespace_v1.substrate_system,
+  ]
 }
 
 # ---------------------------------------------------------------------------
@@ -230,14 +360,19 @@ resource "kubernetes_role_binding_v1" "substrate_credential_reader" {
 # Skipped entirely when substrate_ingress_hostname is empty.
 # ---------------------------------------------------------------------------
 
-# The ingress below lives in ate-system, and Terraform runs BEFORE the installer
-# that normally creates that namespace (§5 step 2 vs step 3) — the apply then
-# dies with `namespaces "ate-system" not found` and no ingress at all. So claim
-# it here, gated on the same condition as its contents: with no hostname asked
-# for, the installer stays the sole owner. Its own `kubectl apply` of the
-# namespace merges into this one rather than failing.
+# The ingress and the WorkerPool below live in ate-system, and Terraform runs
+# BEFORE the installer that normally creates that namespace (§5 step 2 vs step
+# 3) — the apply then dies with `namespaces "ate-system" not found` and renders
+# nothing. So claim it here, gated on the same condition as its contents:
+# substrate enabled, because the WorkerPool is Terraform-owned with or without
+# a public hostname (an actor still has to land somewhere). Before the WorkerPool
+# existed, nothing in ate-system was Terraform-owned unless a hostname had been
+# asked for, and the installer stayed the sole owner otherwise — that is no
+# longer true, and the gate has to follow the objects or it silently 404s them.
+# The installer's own `kubectl apply` of the namespace merges into this one
+# rather than failing.
 resource "kubernetes_namespace_v1" "substrate_system" {
-  count = local.substrate_front_enabled ? 1 : 0
+  count = local.substrate_enabled ? 1 : 0
 
   metadata {
     name = "ate-system"
@@ -643,4 +778,90 @@ resource "kubectl_manifest" "substrate_front_ateapi_policy" {
   YAML
 
   depends_on = [kubectl_manifest.substrate_ingress_gateway]
+}
+
+# ---------------------------------------------------------------------------
+# Minting the control-plane bearer token, narrowly.
+#
+# docs/SUBSTRATE_INTEGRATION.md §5.3 item 4: the public control plane admits one
+# credential, a projected SA token for `system:serviceaccount:ate-system:
+# ate-client` (audience `api.ate-system.svc`), and a Cloud Run workload cannot
+# mint one for itself. So a scheduled CI job mints it with
+#   kubectl -n ate-system create token ate-client \
+#     --audience=api.ate-system.svc --duration=43200s
+# and publishes it to Secret Manager (deploy/gcp/terraform/substrate_token.tf
+# holds the container and its two IAM grants; the workflow is
+# .github/workflows/substrate-token-rotate.yml). Terraform writes none of the
+# VALUE — only the permission to create it.
+#
+# `kubectl create token` is NOT a `serviceaccounts` call: it hits the
+# `serviceaccounts/token` SUBRESOURCE with verb `create`. Granting `get` on
+# `serviceaccounts`, or `create` on `serviceaccounts`, both leave the command at
+# a 403 that reads like a missing role rather than a missing subresource.
+#
+# Do not lean on roles/container.admin for this. GKE's RBAC model does not
+# promise that an IAM role implies a Kubernetes RBAC rule, and the day the
+# project swaps container.admin for a narrower pool role the rotation job would
+# break in CI rather than at apply. One verb's worth of permission is cheaper
+# than that outage, and it is the same argument ci_rbac.tf already makes for the
+# power workflow.
+#
+# Gated with the control-plane route it serves, so a deployment that publishes
+# no public control plane never renders cluster RBAC into ate-system at all.
+# ---------------------------------------------------------------------------
+
+locals {
+  # The condition every §5.3 control-plane object already spells inline. Named
+  # once here because the two RBAC objects below need it too.
+  substrate_control_plane_public_enabled = local.substrate_front_enabled && var.substrate_control_plane_public
+
+  # The Kubernetes user the rotation job arrives as. See
+  # var.substrate_token_creator_user for why a Workload-Identity-Federated GCP
+  # service account is a `User` subject and not a `ServiceAccount` one.
+  substrate_token_creator_user = var.substrate_token_creator_user != "" ? var.substrate_token_creator_user : "gh-deployer@${var.project_id}.iam.gserviceaccount.com"
+}
+
+resource "kubectl_manifest" "substrate_ate_client_token_role" {
+  count = local.substrate_control_plane_public_enabled ? 1 : 0
+
+  # The single mint the job may strike: `create` on the token subresource,
+  # pinned to ate-client by resourceNames. Without resourceNames this would let
+  # the job mint tokens for every service account in ate-system, including the
+  # installer's own privileged ones.
+  yaml_body = <<-YAML
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: substrate-ate-client-token-minter
+      namespace: ate-system
+    rules:
+      - apiGroups: [""]
+        resources: ["serviceaccounts/token"]
+        resourceNames: ["ate-client"]
+        verbs: ["create"]
+  YAML
+
+  depends_on = [kubernetes_namespace_v1.substrate_system]
+}
+
+resource "kubectl_manifest" "substrate_ate_client_token_role_binding" {
+  count = local.substrate_control_plane_public_enabled ? 1 : 0
+
+  yaml_body = <<-YAML
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: substrate-ate-client-token-minter
+      namespace: ate-system
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: substrate-ate-client-token-minter
+    subjects:
+      - apiGroup: rbac.authorization.k8s.io
+        kind: User
+        name: ${local.substrate_token_creator_user}
+  YAML
+
+  depends_on = [kubectl_manifest.substrate_ate_client_token_role]
 }
