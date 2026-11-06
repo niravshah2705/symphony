@@ -123,7 +123,7 @@ variable "max_nodes" {
 }
 
 variable "system_node_pool_name" {
-  description = "Always-on node pool hosting the platform add-ons, so the tenant pool can drain to zero"
+  description = "Node pool hosting the platform add-ons, so the tenant pool can drain to zero; the power workflow parks it last"
   type        = string
   default     = "openshell-system-node-pool"
 }
@@ -135,7 +135,7 @@ variable "system_machine_type" {
 }
 
 variable "system_min_nodes" {
-  description = "Size of the system node pool when the cluster is running; the power workflow never parks it"
+  description = "Size of the system node pool when the cluster is started; the power workflow parks it to 0 on stop and deploy.yml feeds the live bounds back, so this is the fresh-stack default"
   type        = number
   default     = 1
 }

@@ -23,9 +23,9 @@ deployment); the two stacks do not share state or variables.
    REGULAR release channel, and two node pools:
    - `openshell-multitenant-node-pool` (e2-standard-2, autoscaling 2–8,
      UBUNTU_CONTAINERD) — sandbox capacity, the part `stop` takes to zero.
-   - `openshell-system-node-pool` (e2-standard-2, autoscaling 1–3) — always on,
-     sized to the ~1 CPU / 2.3 GiB of requests the platform add-ons actually
-     need.
+   - `openshell-system-node-pool` (e2-standard-2, autoscaling 1–3) — holds the
+     platform add-ons, sized to the ~1 CPU / 2.3 GiB of requests they actually
+     need. The power workflow drains and parks it last.
 3. **In-cluster platform** — agent-sandbox controller, Envoy Gateway +
    GatewayClass/EnvoyProxy on the static IP, cert-manager + Let's Encrypt
    issuers, Gateway/HTTPRoute + gRPC traffic policies, OpenShell gateway
@@ -64,13 +64,18 @@ it adopts the live resources into remote state so the plan stays empty.
 
 ## Start / stop
 
-`.github/workflows/openshell-cluster-power.yml` owns the tenant pool's node
-count. `stop` cordons and drains every node in the tenant pool, forces the pool to
-`--min-nodes=0 --max-nodes=0` so the instances go immediately, waits until no
-Ready node is left in the pool, then parks the bounds at `min 0 / max 8` so a
-future sandbox can still wake capacity. `start` restores `min 2 / max 8` and
-waits for that many Ready nodes. The control plane, static IP and Envoy
-listener stay up in both states; the system pool keeps the gateway reachable.
+`.github/workflows/openshell-cluster-power.yml` owns every node pool's node
+count. `stop` walks the pools in order — tenant, then substrate (when configured),
+then system — and for each one forces `--min-nodes=0 --max-nodes=0` *before*
+cordoning and draining its nodes, then waits until no Ready node is left in that
+pool. Once all pools are empty it parks the bounds at `min 0 / max 8` (tenant),
+`min 0 / max 6` (substrate) and `min 0 / max 3` (system) so the next `start`, or an
+incoming sandbox, can raise them. `start` does the reverse order — system pool
+first so the add-ons have somewhere to land — and waits for the running minimum in
+each pool before declaring the cluster up. The control plane and the static IP
+survive both states; the Envoy gateway and cert-manager do not, because they ran on
+the system pool. **While the cluster is stopped the public hostname serves nothing
+and no TLS renewal is attempted** — that node spend is in scope too now.
 
 Setting `--min-nodes=0` alone used to be the whole stop, and it did nothing:
 the autoscaler refuses to evict a bare Pod (the OpenShell runtime creates them
@@ -78,17 +83,20 @@ without a controller) and treats the platform add-ons on the same node as
 unmovable, so the pool sat at 4 nodes while the run reported success against
 the `minNodeCount` it had just written. Two consequences to keep in mind:
 
-- **`stop` needs the system pool in place first.** The workflow's placement
-  preflight refuses to drain while any pinned pod still runs on a tenant node,
-  because evicting Envoy Gateway or cert-manager off the last node makes the
-  autoscaler buy that node back. Converge this module first
-  (`gh workflow run deploy.yml -f gke_reconcile=true`) before the first
-  `stop`.
-- **Autoscaling stays enabled, parked at `min 0 / max 8`.** Never
+- **The add-ons must be off the tenant pool before the tenant pool drains.** The
+  workflow's placement preflight refuses to drain while any pinned pod still runs
+  on a non-system node, because evicting Envoy Gateway or cert-manager from a
+  tenant node makes the autoscaler buy that node back. Converge this module first
+  (`gh workflow run deploy.yml -f gke_reconcile=true`) before the first `stop`.
+  The add-ons' own PodDisruptionBudgets cannot block the last drain: every pool is
+  already at `max 0`, so there is nowhere to evict them to, and the workflow falls
+  back to `kubectl drain --disable-eviction`.
+- **Autoscaling stays enabled, parked at `min 0 / max N`.** Never
   `--no-enable-autoscaling --num-nodes=0`: deploy.yml's `gke_reconcile` job
-  reads the live pool's bounds and feeds them to Terraform, and a pool with
+  reads every pool's live bounds and feeds them to Terraform, and a pool with
   autoscaling off reports none (this pool's `initialNodeCount` is null), so it
-  would plan the pool down to `max_nodes=1`.
+  would plan the pool down to `max_nodes=1` — or, for the system pool, back up to
+  `system_min_nodes = 1` and silently wake a node on a stopped cluster.
 
 Manual run, and the opt-in nightly schedule:
 

@@ -1,8 +1,11 @@
 name: OpenShell cluster power (start/stop)
 
-# Turns the openshell-multitenant tenant node pool off (zero nodes) and on
-# again. The control plane, static IP and the Envoy gateway listener stay
-# reachable either way; only node spend is in scope.
+# Turns every node pool in the cluster off (zero nodes) and on again: the
+# openshell-multitenant tenant pool, the optional substrate worker pool, and the
+# system pool the platform add-ons live on. The control plane and the static IP
+# survive either way. The Envoy gateway pods have no node to run on while the
+# system pool is parked, so the hosted site and cert-manager's renewals are down
+# for the stop window — that spend is in scope now that the add-ons carry load.
 #
 # Why this workflow drains instead of only setting min-nodes=0:
 #
@@ -15,13 +18,16 @@ name: OpenShell cluster power (start/stop)
 #      the singleton platform add-ons sharing that node are reported as
 #      unmovable (no.scale.down.node.pod.kube.system.unmovable). Draining
 #      removes both blockers, and --force is what lets the bare sandbox Pods go.
-#   3. Draining only sticks because the platform add-ons have their own
-#      always-on pool. Evict Envoy Gateway, cert-manager, the agent-sandbox
-#      controller or the OpenShell gateway off a tenant node and the autoscaler
-#      buys that node straight back, so the stop churns forever. deploy/gcp/
-#      terraform-openshell-gke pins them to node pool
-#      openshell-system-node-pool; the placement preflight below
-#      refuses to drain while any of them still sits on a tenant node.
+#   3. The add-ons are still moved off the tenant pool first, into their own
+#      system pool (deploy/gcp/terraform-openshell-gke pins them to node pool
+#      openshell-system-node-pool): evict Envoy Gateway, cert-manager, the
+#      agent-sandbox controller or the OpenShell gateway while it sits on a
+#      tenant node and the autoscaler buys that node straight back, so the stop
+#      churns forever. The placement preflight below refuses to drain while any
+#      of them still sits on a tenant node. The system pool is therefore drained
+#      last, and every pool's ceiling goes to 0 *before* its nodes are drained:
+#      the add-ons are Deployment-backed, so an eviction that lands while max is
+#      still >0 just re-buys the node it freed.
 #
 # Zero is forced with --max-nodes=0 rather than by resizing the managed instance
 # group directly: GKE's node-pool controller owns MIG size and reconciles a
@@ -31,10 +37,11 @@ name: OpenShell cluster power (start/stop)
 # would otherwise scale down on.
 #
 # Autoscaling is never disabled, and the resting parked bounds stay min 0 /
-# max 8: deploy.yml's gke_reconcile job reads the live pool's bounds and feeds
-# them back to Terraform, and a pool with autoscaling off reports no bounds at
-# all (this pool's initialNodeCount is null), so it would silently plan the
-# pool down to max_nodes=1.
+# max 8 (tenant) and min 0 / max 3 (system): deploy.yml's gke_reconcile job
+# reads the live pools' bounds and feeds them back to Terraform, and a pool with
+# autoscaling off reports no bounds at all (this pool's initialNodeCount is
+# null), so it would silently plan the pool down to max_nodes=1 — or, for the
+# system pool, back up to the module's system_min_nodes=1.
 
 on:
   workflow_dispatch:
@@ -75,6 +82,8 @@ jobs:
       SYSTEM_NODE_POOL: ${{ vars.OPENSHELL_SYSTEM_NODE_POOL || 'openshell-system-node-pool' }}
       MAX_NODES: ${{ vars.OPENSHELL_MAX_NODES || '8' }}
       START_MIN_NODES: ${{ vars.OPENSHELL_MIN_NODES || '2' }}
+      SYSTEM_MAX_NODES: ${{ vars.OPENSHELL_SYSTEM_MAX_NODES || '3' }}
+      SYSTEM_START_MIN_NODES: ${{ vars.OPENSHELL_SYSTEM_MIN_NODES || '1' }}
       # Agent Substrate worker pool is parked/woken in lockstep only when the
       # operator set SUBSTRATE_NODE_POOL; empty leaves these steps skipped.
       SUBSTRATE_NODE_POOL: ${{ vars.SUBSTRATE_NODE_POOL }}
@@ -162,23 +171,24 @@ jobs:
           SYS_NODES="$(kubectl get nodes -l "cloud.google.com/gke-nodepool=$SYSTEM_NODE_POOL" \
             -o json | jq -c '[.items[].metadata.name]')"
           if [ "$(jq 'length' <<<"$SYS_NODES")" -lt 1 ]; then
-            echo "::error::Node pool $SYSTEM_NODE_POOL has no nodes, so the platform add-ons have nowhere to be drained onto."
-            echo "Apply deploy/gcp/terraform-openshell-gke first (google_container_node_pool.system_nodes)."
-            exit 1
+            # Normal for a second stop: this pool is parked by the stop path too,
+            # so the add-ons are already down and come back with `start`.
+            echo "::notice::Node pool $SYSTEM_NODE_POOL has no nodes; its add-ons are already stopped."
           fi
           # The namespaces holding the pods pinned to the system pool. Any of them
-          # Running on a tenant node means the pinning has not taken effect, and
-          # evicting them would have the autoscaler re-buy that node.
+          # Running somewhere other than a system node means the pinning has not
+          # taken effect, and evicting them would have the autoscaler re-buy that
+          # node before the stop can finish.
           STRAY="$(kubectl get pods -A -o json | jq -r --argjson sys "$SYS_NODES" '
             [.items[]
              | select(.metadata.namespace
                       | IN("agent-sandbox-system", "cert-manager", "envoy-gateway-system", "openshell"))
              | select((.status.phase // "") == "Running")
              | select(.spec.nodeName != null)
-             | select(.spec.nodeName | IN($sys[]) | not)
+             | select(.spec.nodeName as $n | ($sys | index($n)) | not)
              | "  \(.metadata.namespace)/\(.metadata.name) on \(.spec.nodeName)"] | .[]')"
           if [ -n "$STRAY" ]; then
-            echo "::error::Platform pods are still on tenant nodes; refusing to drain them."
+            echo "::error::Platform pods are still on non-system nodes; refusing to drain them."
             echo "$STRAY"
             echo "Fix: terraform apply so the Helm releases and the EnvoyProxy carry"
             echo "nodeSelector cloud.google.com/gke-nodepool, wait for those pods to land on the"
@@ -187,169 +197,241 @@ jobs:
           fi
           echo "Platform pods all run on: $(jq -r 'join(", ")' <<<"$SYS_NODES")"
 
-      - name: Drain tenant nodes
-        id: drained
+      - name: Select pools in scope
+        id: pools
+        run: |
+          set -euo pipefail
+          # One row per pool, in stop order: capacity first, the pool holding the
+          # platform add-ons last (see the header). role|pool|min|max.
+          pool_spec="tenant|$NODE_POOL|$START_MIN_NODES|$MAX_NODES"
+          if [ -n "$SUBSTRATE_NODE_POOL" ]; then
+            pool_spec+=$'\n'"substrate|$SUBSTRATE_NODE_POOL|$SUBSTRATE_START_MIN_NODES|$SUBSTRATE_MAX_NODES"
+          fi
+          pool_spec+=$'\n'"system|$SYSTEM_NODE_POOL|$SYSTEM_START_MIN_NODES|$SYSTEM_MAX_NODES"
+          { echo 'pool_spec<<EOF'; printf '%s\n' "$pool_spec"; echo 'EOF'; } >> "$GITHUB_ENV"
+
+          # Shared by the stop/start steps below; RUNNER_TEMP lives for the job.
+          cat >"$RUNNER_TEMP/pools.sh" <<'LIB'
+          pool_rows() {
+            # Echoes the pool_spec rows; the callers loop over them in an array so
+            # that gcloud/kubectl inside the loop cannot swallow its stdin.
+            printf '%s\n' "$pool_spec"
+          }
+
+          ready_nodes() { # $1=pool -> prints the Ready node count, or fails
+            local json
+            # A failed kubectl call is not a node count of zero. Only a list the API
+            # server actually served may end a wait loop, or the whole stop would go
+            # green on an expired token — the failure mode this step replaces.
+            if ! json="$(kubectl get nodes -l "cloud.google.com/gke-nodepool=$1" -o json 2>&1)"; then
+              echo "node list not served yet: $json" >&2
+              return 1
+            fi
+            # Only Ready nodes count: a node being deleted lingers as NotReady, and
+            # one being created stays NotReady until kubelet registers.
+            jq -r '[.items[]
+                   | select(any(.status.conditions[]?; .type == "Ready" and .status == "True"))]
+                   | length' <<<"$json"
+          }
+
+          wait_for_nodes() { # $1=pool $2=goal $3=le|ge $4=timeout-seconds
+            local deadline=$((SECONDS + $4)) count status
+            while :; do
+              if count="$(ready_nodes "$1")"; then
+                status="$(gcloud container node-pools describe "$1" \
+                  --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
+                  --format 'value(status)' 2>/dev/null || echo UNKNOWN)"
+                echo "pool=$1 ($status) ready_nodes=$count (want $3 $2)"
+                if [ "$3" = le ] && [ "$count" -le "$2" ]; then return 0; fi
+                if [ "$3" = ge ] && [ "$count" -ge "$2" ]; then return 0; fi
+              fi
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "::error::Pool $1 did not reach $3 $2 Ready node(s) in $4s."
+                kubectl get nodes -o wide --no-headers || true
+                return 1
+              fi
+              sleep 15
+            done
+          }
+
+          set_bounds() { # $1=pool $2=min $3=max
+            gcloud container node-pools update "$1" \
+              --cluster "$CLUSTER" \
+              --location "$ZONE" \
+              --project "$PROJECT_ID" \
+              --enable-autoscaling \
+              --min-nodes="$2" \
+              --max-nodes="$3" \
+              --quiet
+          }
+
+          drain_pool() { # $1=pool
+            local nodes=() n
+            mapfile -t nodes < <(kubectl get nodes -l "cloud.google.com/gke-nodepool=$1" \
+              -o json | jq -r '.items[].metadata.name')
+            echo "Draining ${#nodes[@]} node(s) from $1: ${nodes[*]:-none}"
+            # ${nodes[@]+...}: an empty array is a legal ${#nodes[@]}=0 but trips
+            # set -u on bash < 4.4, and a pool that is already parked is the
+            # common case for a scheduled stop.
+            for n in ${nodes[@]+"${nodes[@]}"}; do
+              echo "::group::drain $n"
+              # --force: sandbox Pods are bare (no controller) and the drain refuses
+              # them otherwise. --ignore-daemonsets: the per-node GKE agents (anetd,
+              # fluent-bit, node-local-dns, ...) are recreated wherever a node exists
+              # and do not block scale-down.
+              if ! kubectl drain "$n" --ignore-daemonsets --delete-emptydir-data --force \
+                --grace-period=30 --timeout="$DRAIN_TIMEOUT"; then
+                # The add-ons carry PodDisruptionBudgets and, with every pool already
+                # at max 0, nothing they evict to can be placed — so the eviction API
+                # refuses by design here. --disable-eviction deletes them outright,
+                # which is only correct because the whole pool is going away.
+                echo "Drain of $n refused; retrying with --disable-eviction"
+                kubectl drain "$n" --ignore-daemonsets --delete-emptydir-data --force \
+                  --disable-eviction --grace-period=30 --timeout="$DRAIN_TIMEOUT" || return 1
+              fi
+              echo "::endgroup::"
+            done
+          }
+          LIB
+          echo "Pools in scope:"
+          printf '%s\n' "$pool_spec" | sed 's/^/  /'
+
+      - name: Stop — drain and park every pool at zero
+        id: stopped
         if: steps.action.outputs.action == 'stop'
         run: |
           set -euo pipefail
-          mapfile -t NODES < <(kubectl get nodes -l "cloud.google.com/gke-nodepool=$NODE_POOL" \
-            -o json | jq -r '.items[].metadata.name')
-          echo "Draining ${#NODES[@]} tenant node(s): ${NODES[*]:-none}"
-          for n in "${NODES[@]}"; do
-            echo "::group::drain $n"
-            # --force: sandbox Pods are bare (no controller) and the drain refuses
-            # them otherwise. --ignore-daemonsets: the per-node GKE agents (anetd,
-            # fluent-bit, node-local-dns, ...) are recreated wherever a node exists
-            # and do not block scale-down.
-            kubectl drain "$n" --ignore-daemonsets --delete-emptydir-data --force \
-              --grace-period=30 --timeout="$DRAIN_TIMEOUT"
+          source "$RUNNER_TEMP/pools.sh"
+          rows=()
+          mapfile -t rows < <(pool_rows)
+          : >"$RUNNER_TEMP/pools_touched"
+          for row in "${rows[@]}"; do
+            IFS='|' read -r role pool _ _ <<<"$row"
+            [ -n "$pool" ] || continue
+            echo "$pool" >>"$RUNNER_TEMP/pools_touched"
+            echo "::group::stop $role ($pool)"
+            # 0/0 is the explicit "target size 0", and the ceiling has to be down
+            # before the eviction: a controller-backed add-on pod rescheduled while
+            # max is still >0 makes the autoscaler re-buy the node just freed.
+            set_bounds "$pool" 0 0
+            drain_pool "$pool"
+            wait_for_nodes "$pool" 0 le "$SETTLE_TIMEOUT"
             echo "::endgroup::"
           done
 
-      - name: Uncordon tenant nodes on failure
+      - name: Recover on failure
         if: >-
           failure() &&
           steps.action.outputs.action == 'stop' &&
-          steps.drained.outcome == 'failure'
+          steps.pools.outcome == 'success'
         run: |
           set -uo pipefail
-          # A failed drain leaves its node unschedulable, and with min>0 the
-          # autoscaler then provisions a replacement instead of reusing it.
-          kubectl get nodes -l "cloud.google.com/gke-nodepool=$NODE_POOL" \
-            -o json | jq -r '.items[].metadata.name' | while read -r n; do
-              [ -n "$n" ] && kubectl uncordon "$n" || true
-            done
-
-      - name: Scale pool (${{ steps.action.outputs.action }})
-        id: scaled
-        env:
-          ACTION: ${{ steps.action.outputs.action }}
-        run: |
-          set -euo pipefail
-          if [ "$ACTION" = "stop" ]; then
-            # 0/0 is the explicit "target size 0"; the pool is parked back at
-            # 0/8 once the nodes are gone.
-            MIN=0; MAX=0
-          else
-            MIN="$START_MIN_NODES"; MAX="$MAX_NODES"
-          fi
-          gcloud container node-pools update "$NODE_POOL" \
-            --cluster "$CLUSTER" \
-            --location "$ZONE" \
-            --project "$PROJECT_ID" \
-            --enable-autoscaling \
-            --min-nodes="$MIN" \
-            --max-nodes="$MAX" \
-            --quiet
-
-      - name: Scale substrate pool (${{ steps.action.outputs.action }})
-        id: scaled_substrate
-        # Only runs when the operator opted into a substrate pool; mirrors the
-        # tenant pool's park-to-0 on stop / restore-on-start, so a stopped
-        # cluster does not keep substrate worker nodes billed.
-        if: env.SUBSTRATE_NODE_POOL != ''
-        env:
-          ACTION: ${{ steps.action.outputs.action }}
-        run: |
-          set -euo pipefail
-          if [ "$ACTION" = "stop" ]; then
-            SMIN=0; SMAX=0
-          else
-            SMIN="$SUBSTRATE_START_MIN_NODES"; SMAX="$SUBSTRATE_MAX_NODES"
-          fi
-          gcloud container node-pools update "$SUBSTRATE_NODE_POOL" \
-            --cluster "$CLUSTER" \
-            --location "$ZONE" \
-            --project "$PROJECT_ID" \
-            --enable-autoscaling \
-            --min-nodes="$SMIN" \
-            --max-nodes="$SMAX" \
-            --quiet
-
-      - name: Wait for node count
-        run: |
-          set -uo pipefail
-          if [ "${{ steps.action.outputs.action }}" = "stop" ]; then
-            GOAL=0; MODE=le
-          else
-            GOAL="$START_MIN_NODES"; MODE=ge
-          fi
-          DEADLINE=$((SECONDS + SETTLE_TIMEOUT))
-          while :; do
-            # A failed kubectl call is not a node count of zero. Only a list the API
-            # server actually served may end this loop, or the whole stop would go
-            # green on an expired token — the failure mode this step replaces.
-            if ! NODES_JSON="$(kubectl get nodes -l "cloud.google.com/gke-nodepool=$NODE_POOL" \
-              -o json 2>&1)"; then
-              echo "node list not served yet: $NODES_JSON"
-            else
-              POOL_STATUS="$(gcloud container node-pools describe "$NODE_POOL" \
-                --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
-                --format 'value(status)' 2>/dev/null || echo UNKNOWN)"
-              # Only Ready nodes count: a node being deleted lingers as NotReady, and
-              # one being created stays NotReady until kubelet registers.
-              COUNT="$(jq -r '
-                [.items[] | select(any(.status.conditions[]?; .type == "Ready" and .status == "True"))]
-                | length' <<<"$NODES_JSON")"
-              echo "pool=$POOL_STATUS ready_tenant_nodes=$COUNT (want $MODE $GOAL)"
-              if [ "$MODE" = le ] && [ "$COUNT" -le "$GOAL" ]; then
-                echo "Tenant pool is at $COUNT node(s): stopped."
-                break
-              fi
-              if [ "$MODE" = ge ] && [ "$COUNT" -ge "$GOAL" ]; then
-                echo "Tenant pool has $COUNT node(s): started."
-                break
-              fi
+          source "$RUNNER_TEMP/pools.sh"
+          # A half-finished stop is otherwise left worse than before it ran: the
+          # drain cordons its node, and the 0/0 ceiling written before the drain
+          # means the autoscaler can neither reuse it nor replace it. Uncordon and
+          # restore the running bounds so the cluster self-heals to started; the
+          # operator can re-run stop once the blocker is fixed. Only pools this run
+          # actually wrote bounds on are touched — a stop that fails at a preflight
+          # must leave an already-parked cluster parked.
+          rows=()
+          mapfile -t rows < <(pool_rows)
+          for row in "${rows[@]}"; do
+            IFS='|' read -r role pool min max <<<"$row"
+            [ -n "$pool" ] || continue
+            if ! [ -f "$RUNNER_TEMP/pools_touched" ] ||
+              ! grep -qxF "$pool" "$RUNNER_TEMP/pools_touched"; then
+              continue
             fi
-            if [ "$SECONDS" -ge "$DEADLINE" ]; then
-              echo "::error::Tenant pool did not reach $MODE $GOAL Ready node(s) in ${SETTLE_TIMEOUT}s."
-              kubectl get nodes -o wide --no-headers || true
-              exit 1
-            fi
-            sleep 15
+            kubectl get nodes -l "cloud.google.com/gke-nodepool=$pool" \
+              -o json | jq -r '.items[].metadata.name' | while read -r n; do
+                [ -n "$n" ] && kubectl uncordon "$n" || true
+              done
+            echo "Restoring $role pool $pool to min $min / max $max"
+            set_bounds "$pool" "$min" "$max" || true
           done
 
       - name: Park pool bounds
-        # Restore min 0 / max 8 after the forced 0/0: a pool left at max 0 can
-        # never wake for an incoming sandbox, and deploy.yml's gke_reconcile job
-        # reads these bounds back into Terraform.
+        # Restore the resting bounds after the forced 0/0: a pool left at max 0 can
+        # never wake for an incoming sandbox or add-on, and deploy.yml's
+        # gke_reconcile job reads these bounds back into Terraform.
         if: >-
           always() &&
           steps.action.outputs.action == 'stop' &&
-          steps.scaled.outcome == 'success'
+          steps.stopped.outcome == 'success'
         run: |
           set -euo pipefail
-          gcloud container node-pools update "$NODE_POOL" \
-            --cluster "$CLUSTER" \
-            --location "$ZONE" \
-            --project "$PROJECT_ID" \
-            --enable-autoscaling \
-            --min-nodes=0 \
-            --max-nodes="$MAX_NODES" \
-            --quiet
+          source "$RUNNER_TEMP/pools.sh"
+          rows=()
+          mapfile -t rows < <(pool_rows)
+          for row in "${rows[@]}"; do
+            IFS='|' read -r role pool min max <<<"$row"
+            [ -n "$pool" ] || continue
+            echo "Parking $role pool $pool at min 0 / max $max"
+            set_bounds "$pool" 0 "$max"
+          done
 
-      - name: Park substrate pool bounds
-        if: >-
-          always() &&
-          env.SUBSTRATE_NODE_POOL != '' &&
-          steps.action.outputs.action == 'stop' &&
-          steps.scaled_substrate.outcome == 'success'
+      - name: Start — bring every pool back up
+        id: started
+        if: steps.action.outputs.action == 'start'
         run: |
           set -euo pipefail
-          gcloud container node-pools update "$SUBSTRATE_NODE_POOL" \
-            --cluster "$CLUSTER" \
-            --location "$ZONE" \
-            --project "$PROJECT_ID" \
-            --enable-autoscaling \
-            --min-nodes=0 \
-            --max-nodes="$SUBSTRATE_MAX_NODES" \
-            --quiet
+          source "$RUNNER_TEMP/pools.sh"
+          rows=()
+          mapfile -t rows < <(pool_rows)
+          # Reverse of stop order: the system pool first, so the add-ons have a node
+          # to schedule onto before sandbox capacity appears (and before the next
+          # stop's placement preflight expects them pinned there).
+          for ((i = ${#rows[@]} - 1; i >= 0; i--)); do
+            IFS='|' read -r role pool min max <<<"${rows[$i]}"
+            [ -n "$pool" ] || continue
+            echo "::group::start $role ($pool)"
+            set_bounds "$pool" "$min" "$max"
+            wait_for_nodes "$pool" "$min" ge "$SETTLE_TIMEOUT"
+            echo "::endgroup::"
+          done
+
+      - name: Wait for platform add-ons
+        # The add-ons were evicted with everything else, so a start is not done
+        # until they are back: the public hostname serves nothing before Envoy does.
+        if: steps.action.outputs.action == 'start'
+        env:
+          ADDON_TIMEOUT: 300
+        run: |
+          set -uo pipefail
+          NAMESPACES=(envoy-gateway-system cert-manager agent-sandbox-system openshell)
+          if [ -n "$SUBSTRATE_NODE_POOL" ]; then NAMESPACES+=(ate-system); fi
+          RC=0
+          for ns in "${NAMESPACES[@]}"; do
+            # Only deployments that ask for pods: a scaled-to-zero deployment never
+            # reaches Available, and waiting on it would turn a good start red.
+            deps="$(kubectl -n "$ns" get deploy -o json 2>/dev/null | jq -r '
+              [.items[] | select((.spec.replicas // 0) > 0) | .metadata.name] | .[]')"
+            if [ -z "$deps" ]; then
+              echo "$ns: no deployment to wait for"
+              continue
+            fi
+            # shellcheck disable=SC2086 # one name per line, no spaces expected
+            if kubectl -n "$ns" wait --for=condition=Available deployment $deps \
+              --timeout="${ADDON_TIMEOUT}s"; then
+              echo "$ns: all deployments Available"
+            else
+              echo "::error::$ns did not come back within ${ADDON_TIMEOUT}s"
+              kubectl -n "$ns" get pods -o wide || true
+              RC=1
+            fi
+          done
+          exit "$RC"
 
       - name: Report cluster state
+        # Runs after a failure too: which pool is stuck at what size is the whole
+        # diagnosis of a half-finished stop.
+        if: always() && steps.action.outcome == 'success'
         env:
           ACTION: ${{ steps.action.outputs.action }}
         run: |
           set -uo pipefail
+          : "${pool_spec:=}" # unset when the Select step never ran; the loop below no-ops
           gcloud container node-pools list --cluster "$CLUSTER" \
             --location "$ZONE" --project "$PROJECT_ID" \
             --format 'table(name, status, autoscaling.minNodeCount, autoscaling.maxNodeCount, autoscaling.totalNodes, config.machineType)'
@@ -359,7 +441,14 @@ jobs:
           {
             echo "### OpenShell cluster ${ACTION}"
             echo
-            echo "- tenant pool \`$NODE_POOL\`: $(kubectl get nodes -l "cloud.google.com/gke-nodepool=$NODE_POOL" -o json 2>/dev/null | jq '.items | length') node(s)"
-            echo "- system pool \`$SYSTEM_NODE_POOL\`: $(kubectl get nodes -l "cloud.google.com/gke-nodepool=$SYSTEM_NODE_POOL" -o json 2>/dev/null | jq '.items | length') node(s)"
+            while IFS='|' read -r role pool _ _; do
+              [ -n "$pool" ] || continue
+              echo "- $role pool \`$pool\`: $(kubectl get nodes -l "cloud.google.com/gke-nodepool=$pool" -o json 2>/dev/null | jq '.items | length') node(s)"
+            done <<<"$pool_spec"
+            if [ "$ACTION" = stop ]; then
+              echo
+              echo "All pools including \`$SYSTEM_NODE_POOL\` are at zero: the Envoy gateway has no"
+              echo "backing pods, so the public hostname (and cert-manager renewals) stay down until start."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
