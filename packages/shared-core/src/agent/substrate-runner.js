@@ -270,6 +270,7 @@ async function runPlanningOnSubstrate({
   workflow,
   stage,
   settings,
+  providerSource = null,
   traceContext = {},
   transport,
   applyManifest,
@@ -344,13 +345,14 @@ async function runPlanningOnSubstrate({
     // actor's ephemeral local store and vanish with it — a run that consumed
     // real tokens and reported nothing. This pod owns the tenant store and the
     // org context, so it is the one authoritative writer.
-    recordUsage({
+    const usageRecord = recordUsage({
       orgId: organizationId || null,
       projectId: projectId || null,
       projectName: projectName || null,
       runId: traceContext.runId || null,
       traceId: result.traceId || null,
       source: 'substrate-plan',
+      providerSource,
     }, { usage: result.usage, costUsd: result.costUsd }, llm || {});
 
     return {
@@ -360,6 +362,7 @@ async function runPlanningOnSubstrate({
       usage: result.usage || null,
       costUsd: result.costUsd ?? null,
       traceId: result.traceId || null,
+      billingSource: usageRecord && usageRecord.billingSource || null,
       traced: { substrate: { atespace, actorName, credentialSync: credSync.state, egress: true } },
       substrate: { atespace, actorName, credentialSync: credSync },
     };

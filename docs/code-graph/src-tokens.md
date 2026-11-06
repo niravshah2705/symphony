@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 303 nodes
+Community of 310 nodes
 
-- **Size**: 303 nodes
-- **Cohesion**: 0.1917
+- **Size**: 310 nodes
+- **Cohesion**: 0.1909
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 303 nodes
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 | getBaseUrl | Function | ./packages/shared-core/src/billing/cashfree-client.js | 6-15 |
 
-*... and 253 more members.*
+*... and 260 more members.*
 
 ## Execution Flows
 
@@ -85,36 +85,36 @@ Community of 303 nodes
 
 ### Outgoing
 
-- `equal` (216 edge(s))
-- `filter` (36 edge(s))
-- `toISOString` (35 edge(s))
-- `Number` (32 edge(s))
-- `String` (29 edge(s))
+- `equal` (229 edge(s))
+- `filter` (39 edge(s))
+- `toISOString` (38 edge(s))
+- `Number` (33 edge(s))
+- `String` (33 edge(s))
+- `slice` (25 edge(s))
+- `trim` (25 edge(s))
 - `deepEqual` (25 edge(s))
-- `slice` (24 edge(s))
-- `trim` (24 edge(s))
 - `isArray` (24 edge(s))
 - `includes` (23 edge(s))
-- `ok` (22 edge(s))
-- `set` (20 edge(s))
+- `ok` (23 edge(s))
+- `set` (21 edge(s))
 - `push` (20 edge(s))
+- `now` (19 edge(s))
 - `isFinite` (19 edge(s))
-- `now` (18 edge(s))
 
 ### Incoming
 
-- `equal` (216 edge(s))
-- `./packages/shared-core/src/store.js` (177 edge(s))
+- `equal` (229 edge(s))
+- `./packages/shared-core/src/store.js` (181 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `deepEqual` (25 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
-- `ok` (22 edge(s))
+- `ok` (23 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
 - `./packages/shared-core/src/billing/cashfree-client.js` (17 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
 - `push` (16 edge(s))
+- `toISOString` (12 edge(s))
+- `filter` (12 edge(s))
 - `./packages/shared-core/src/billing/recharge.test.js` (11 edge(s))
-- `filter` (11 edge(s))
 - `getBillingAccount` (11 edge(s))
-- `./packages/shared-core/src/billing/ledger.js` (10 edge(s))

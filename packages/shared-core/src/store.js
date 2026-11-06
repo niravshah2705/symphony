@@ -1039,7 +1039,14 @@ function removeGlobalQuestion(id) {
 // per-run events feeding the cost page's per-project / per-user / per-task
 // drill-down; they are pruned after a retention window (the ledger persists).
 // See packages/shared/src/billing/* for the logic that uses these primitives.
-
+//
+// The BYOK `notionalCostPaise` deliberately has NO ledger copy — a run on the
+// org's own key spends no platform money, so there is nothing to post. That makes
+// these pruned records the only history of value consumed under a customer key,
+// which is why every BYOK surface must disclose the retention window rather than
+// present a cumulative total. The cap stays bounded on purpose: the whole store is
+// one document, so raising it trades a write-limit failure for history that nothing
+// reconciles against.
 const MAX_USAGE_RECORDS = 20000;
 
 /** The sweep watermark ({ lastAggregatedAt }). */
@@ -1065,11 +1072,15 @@ function addUsageRecord(record) {
   return entry;
 }
 
-/** All usage records, newest first — optionally filtered by orgId. */
+/** All usage records, newest first — optionally filtered by orgId + billingSource. */
 function listUsageRecords(filter = {}) {
-  const { orgId } = filter || {};
-  const records = readLegacyStore().usageRecords;
-  return orgId ? records.filter((r) => r.orgId === orgId) : records;
+  const { orgId, billingSource } = filter || {};
+  let records = readLegacyStore().usageRecords;
+  if (orgId) records = records.filter((r) => r.orgId === orgId);
+  // A record predates the field when it was written before BYOK metering, and
+  // those runs could only ever have used a platform key.
+  if (billingSource) records = records.filter((r) => (r.billingSource || 'managed') === billingSource);
+  return records;
 }
 
 /** Remove usage records created strictly before `beforeIso`. Returns count removed. */
@@ -1080,6 +1091,31 @@ function pruneUsageRecords(beforeIso) {
   const removed = current.usageRecords.length - usageRecords.length;
   if (removed) writeLegacyStore({ ...current, usageRecords });
   return removed;
+}
+
+/** How many granular usage records the store holds, across every org. The cap is
+ * global, so this is what a caller compares against USAGE_RECORD_CAP. */
+function usageRecordCount() {
+  return readLegacyStore().usageRecords.length;
+}
+
+/**
+ * Merge a `patch` into one usage record by id. Exists for the one-off billing-source
+ * backfill; the fields it may rewrite are labels, never money — a caller that wants
+ * to change `costPaise` has to post a ledger correction instead, because the sweep
+ * already debited from the original number.
+ */
+function updateUsageRecord(id, patch = {}) {
+  if (!id) throw new Error('updateUsageRecord requires an id');
+  const current = readLegacyStore();
+  let touched = false;
+  const usageRecords = current.usageRecords.map((r) => {
+    if (r.id !== id) return r;
+    touched = true;
+    return { ...r, ...patch, id: r.id, costPaise: r.costPaise, createdAt: r.createdAt };
+  });
+  if (touched) writeLegacyStore({ ...current, usageRecords });
+  return touched ? usageRecords.find((r) => r.id === id) : null;
 }
 
 /** Append a ledger entry (newest first) with a generated id + createdAt. */
@@ -1395,6 +1431,9 @@ module.exports = {
   addUsageRecord,
   listUsageRecords,
   pruneUsageRecords,
+  updateUsageRecord,
+  usageRecordCount,
+  USAGE_RECORD_CAP: MAX_USAGE_RECORDS,
   addLedgerEntry,
   listLedgerEntries,
   getBillingAccount,

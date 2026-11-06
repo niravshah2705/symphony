@@ -76,7 +76,55 @@ function sumWindow(records, days, now) {
   const scoped = records.filter((r) => String(r.createdAt || '') >= cutoff);
   const costPaise = scoped.reduce((s, r) => s + (Number(r.costPaise) || 0), 0);
   const tokens = scoped.reduce((s, r) => s + ((r.usage && Number(r.usage.totalTokens)) || 0), 0);
-  return { runs: scoped.length, tokens, costInr: paiseToInr(costPaise) };
+  // Money the platform routed but never paid. Reported next to the charge, not
+  // inside it: an org that brought its own key must see the value it consumed and
+  // a zero that it can verify against its own provider invoice.
+  const notionalPaise = scoped.reduce((s, r) => s + (Number(r.notionalCostPaise) || 0), 0);
+  return {
+    runs: scoped.length,
+    tokens,
+    costInr: paiseToInr(costPaise),
+    notionalInr: paiseToInr(notionalPaise),
+  };
+}
+
+/**
+ * The same window split by which key paid the provider. A record with no
+ * `billingSource` predates BYOK metering, and only a platform key was reachable
+ * then, so it belongs with `managed`.
+ */
+/** One empty spend bucket; both series start at zero rather than at absent. */
+function newSourceBucket() {
+  return { runs: 0, tokens: 0, costPaise: 0, notionalPaise: 0 };
+}
+
+function bySourceWindow(records, days, now) {
+  const cutoff = new Date(now - days * DAY_MS).toISOString();
+  const scoped = records.filter((r) => String(r.createdAt || '') >= cutoff);
+  // Both series always present, even at zero: the visible zero is the BYOK value
+  // proposition, and a missing key would render as "no data" instead.
+  const sources = { managed: newSourceBucket(), customer: newSourceBucket() };
+  for (const r of scoped) {
+    const source = r.billingSource || 'managed';
+    const acc = sources[source] || { runs: 0, tokens: 0, costPaise: 0, notionalPaise: 0 };
+    acc.runs += 1;
+    acc.tokens += (r.usage && Number(r.usage.totalTokens)) || 0;
+    acc.costPaise += Number(r.costPaise) || 0;
+    acc.notionalPaise += Number(r.notionalCostPaise) || 0;
+    sources[source] = acc;
+  }
+  return {
+    retentionDays: CONFIG.BILLING.usageRetentionDays,
+    // The notional figure exists ONLY in these pruned records — a customer run
+    // posts no ledger entry, because no platform money was spent. So the window is
+    // the real history boundary and the UI must say so rather than imply a total.
+    historyTruncated: store.usageRecordCount() >= store.USAGE_RECORD_CAP,
+    sources: Object.fromEntries(Object.entries(sources).map(([key, acc]) => [key, {
+      ...acc,
+      costInr: paiseToInr(acc.costPaise),
+      notionalInr: paiseToInr(acc.notionalPaise),
+    }])),
+  };
 }
 
 function requireAdmin(caller, res) {
@@ -109,6 +157,14 @@ router.get('/summary', asyncHandler(async (req, res) => {
       day: sumWindow(records, PERIOD_DAYS.day, now),
       week: sumWindow(records, PERIOD_DAYS.week, now),
       month: sumWindow(records, PERIOD_DAYS.month, now),
+    },
+    // The same windows split by which key paid the provider. One combined number
+    // would hide the whole point: what the platform charged versus what the org's
+    // own key already covered.
+    bySource: {
+      day: bySourceWindow(records, PERIOD_DAYS.day, now),
+      week: bySourceWindow(records, PERIOD_DAYS.week, now),
+      month: bySourceWindow(records, PERIOD_DAYS.month, now),
     },
     alertThresholdsInr: (account && account.alertThresholdsPaise ? account.alertThresholdsPaise : []).map(paiseToInr),
     paymentInfo: (account && account.paymentInfo) || {
@@ -149,7 +205,7 @@ router.get('/summary', asyncHandler(async (req, res) => {
 // GET /api/billing/usage?groupBy=project|user|day&period=day|week|month
 router.get('/usage', asyncHandler(async (req, res) => {
   const caller = resolveCallerOrg(req);
-  const groupBy = ['project', 'user', 'task', 'day'].includes(req.query.groupBy) ? req.query.groupBy : 'project';
+  const groupBy = ['project', 'user', 'task', 'day', 'billingSource'].includes(req.query.groupBy) ? req.query.groupBy : 'project';
   const period = PERIOD_DAYS[req.query.period] ? req.query.period : 'week';
   const cutoff = new Date(Date.now() - PERIOD_DAYS[period] * DAY_MS).toISOString();
   const records = scopedUsageRecords(caller).filter((r) => String(r.createdAt || '') >= cutoff);
@@ -167,19 +223,32 @@ router.get('/usage', asyncHandler(async (req, res) => {
     } else if (groupBy === 'task') {
       key = r.taskId || r.taskIdentifier || 'unknown';
       label = r.taskIdentifier || r.taskId || 'Unattributed';
+    } else if (groupBy === 'billingSource') {
+      key = r.billingSource || 'managed';
+      label = key === 'customer' ? 'Your key (not charged)' : 'Managed spend';
     } else {
       key = String(r.createdAt || '').slice(0, 10) || 'unknown';
       label = key;
     }
-    const g = groups.get(key) || { key, label, runs: 0, tokens: 0, costPaise: 0 };
+    const g = groups.get(key) || {
+      key, label, runs: 0, tokens: 0, costPaise: 0, notionalPaise: 0,
+    };
     g.runs += 1;
     g.tokens += (r.usage && Number(r.usage.totalTokens)) || 0;
     g.costPaise += Number(r.costPaise) || 0;
+    g.notionalPaise += Number(r.notionalCostPaise) || 0;
     groups.set(key, g);
   }
   const rows = [...groups.values()]
-    .map((g) => ({ key: g.key, label: g.label, runs: g.runs, tokens: g.tokens, costInr: paiseToInr(g.costPaise) }))
-    .sort((a, b) => b.costInr - a.costInr);
+    .sort((a, b) => (b.costPaise + b.notionalPaise) - (a.costPaise + a.notionalPaise))
+    .map((g) => ({
+      key: g.key,
+      label: g.label,
+      runs: g.runs,
+      tokens: g.tokens,
+      costInr: paiseToInr(g.costPaise),
+      notionalInr: paiseToInr(g.notionalPaise),
+    }));
   res.json({
     orgId: caller.orgId,
     groupBy,
@@ -189,6 +258,7 @@ router.get('/usage', asyncHandler(async (req, res) => {
       runs: rows.reduce((s, r) => s + r.runs, 0),
       tokens: rows.reduce((s, r) => s + r.tokens, 0),
       costInr: paiseToInr(records.reduce((s, r) => s + (Number(r.costPaise) || 0), 0)),
+      notionalInr: paiseToInr(records.reduce((s, r) => s + (Number(r.notionalCostPaise) || 0), 0)),
     },
   });
 }));
@@ -209,6 +279,11 @@ router.get('/usage/task/:taskId', asyncHandler(async (req, res) => {
       source: r.source,
       tokens: (r.usage && Number(r.usage.totalTokens)) || 0,
       costInr: paiseToInr(r.costPaise),
+      // Each row explains its own zero, so a per-run dispute needs no join.
+      billingSource: r.billingSource || 'managed',
+      notionalInr: paiseToInr(r.notionalCostPaise),
+      traceId: r.traceId || null,
+      runId: r.runId || null,
     }));
   res.json({ orgId: caller.orgId, taskId, records });
 }));
@@ -573,3 +648,4 @@ router.post('/cashfree/webhook', asyncHandler(async (req, res) => {
 module.exports = router;
 module.exports.resolveCallerOrg = resolveCallerOrg;
 module.exports.scopedUsageRecords = scopedUsageRecords;
+module.exports.bySourceWindow = bySourceWindow;

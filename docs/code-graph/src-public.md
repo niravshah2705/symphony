@@ -23,9 +23,9 @@ Community of 22 nodes
 | publicHttpsUrl | Function | ./services/planner/src/pipeline-stage.js | 81-91 |
 | publicWorkItems | Function | ./services/planner/src/pipeline-stage.js | 93-119 |
 | stageFailure | Function | ./services/planner/src/pipeline-stage.js | 121-127 |
-| executePlanningStage | Function | ./services/planner/src/pipeline-stage.js | 132-265 |
-| inCommandWorkspace | Function | ./services/planner/src/pipeline-stage.js | 267-275 |
-| createPlannerPipelineRouter | Function | ./services/planner/src/pipeline-stage.js | 277-297 |
+| executePlanningStage | Function | ./services/planner/src/pipeline-stage.js | 132-266 |
+| inCommandWorkspace | Function | ./services/planner/src/pipeline-stage.js | 268-276 |
+| createPlannerPipelineRouter | Function | ./services/planner/src/pipeline-stage.js | 278-298 |
 | command | Function | ./services/planner/src/pipeline-stage.test.js | 19-51 |
 | routeStack | Function | ./services/planner/src/pipeline-stage.test.js | 53-56 |
 | responseRecorder | Function | ./services/planner/src/pipeline-stage.test.js | 58-66 |
