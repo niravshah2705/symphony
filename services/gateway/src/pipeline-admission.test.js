@@ -287,6 +287,7 @@ test('the SDK-free billing gate uses authoritative tenant scope and blocks befor
 });
 
 test('admission forwards user auth and authoritative scope, then dispatches only a normalized secret-free snapshot', async () => {
+  const TP = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
   const context = { organizationId: 'org-tenant', projectId: 'project-tenant' };
   const calls = [];
   const value = createPipelineAdmission({
@@ -338,13 +339,19 @@ test('admission forwards user auth and authoritative scope, then dispatches only
       repository: { provider: 'github', owner: 'acme', name: 'fleet' },
       workItem: { id: 'ENG-42' },
     },
-  }, { fleetContext: context }));
+  }, {
+    fleetContext: context,
+    headers: {
+      authorization: 'Bearer user-token',
+      traceparent: TP,
+    },
+  }));
 
   const settingsCall = calls[0];
   assert.equal(settingsCall.baseUrl, 'http://settings.internal');
   assert.equal(settingsCall.path, SETTINGS_PREFLIGHT_PATH);
   assert.equal(settingsCall.options.userAuth, 'Bearer user-token');
-  assert.deepEqual(settingsCall.options.context, { ...context, llmGateway: '' });
+  assert.deepEqual(settingsCall.options.context, { ...context, llmGateway: '', traceparent: TP });
   assert.deepEqual(settingsCall.options.body, {
     project_id: context.projectId,
     stages: ['plan', 'code'],
@@ -356,7 +363,7 @@ test('admission forwards user auth and authoritative scope, then dispatches only
   const dispatch = calls[1];
   assert.equal(dispatch.baseUrl, 'http://orchestrator.internal');
   assert.equal(dispatch.path, ORCHESTRATOR_RUNS_PATH);
-  assert.deepEqual(dispatch.options.context, { ...context, llmGateway: '' });
+  assert.deepEqual(dispatch.options.context, { ...context, llmGateway: '', traceparent: TP });
   const start = dispatch.options.body;
   assert.equal(start.organizationId, context.organizationId);
   assert.equal(start.projectId, context.projectId);
@@ -364,6 +371,10 @@ test('admission forwards user auth and authoritative scope, then dispatches only
   assert.equal(start.metadata.initiatingUserId, 'user-1');
   assert.equal(start.metadata.conversationId, 'conversation-tenant');
   assert.equal(start.request.conversationId, 'conversation-tenant');
+  // The traceparent rides in the durable request bag, not only a header: a push
+  // retry re-delivers this message long after the HTTP request is gone, and a
+  // retried stage that cannot name its trace is unattributable.
+  assert.equal(start.request.traceparent, TP);
   assert.equal(start.request.policy.decisionId, 'decision-123');
   assert.equal(start.request.policy.stages[0].providerReady, true);
   assert.equal(start.request.policy.stages[0].providerSource, 'managed');
@@ -759,6 +770,7 @@ test('rollout-off compatibility routes retain legacy planner/coder publishing', 
         orgId: 'org-1',
         nativeProjectId: 'project-1',
         llmGateway: null,
+        traceparent: null,
       },
     },
     {
@@ -769,6 +781,7 @@ test('rollout-off compatibility routes retain legacy planner/coder publishing', 
         orgId: 'org-1',
         nativeProjectId: 'project-1',
         llmGateway: null,
+        traceparent: null,
       },
     },
   ]);

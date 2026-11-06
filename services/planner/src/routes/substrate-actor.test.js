@@ -151,6 +151,109 @@ test('substrate-actor: runs planning in-process and returns the result shape', a
   } finally { server.close(); }
 });
 
+test('substrate-actor: binds the caller trace so actor logs and spans join the run', async () => {
+  // The actor is a separate process created by a template that sets no env, so
+  // the inbound traceparent is the ONLY thing that connects its log lines and
+  // spans to the run the user asked for.
+  const TP = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+  const log = require('@ai-fleet/shared/logger');
+  let seen = null;
+  const router = createSubstrateActorRouter({
+    verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/ate/sa/a1' } }),
+    runner: async () => { seen = log.currentContext(); return { finalText: 'ok', messages: [] }; },
+    jwks: async () => ({ keys: [] }),
+  });
+  const { server, url } = await startApp(router);
+  try {
+    const res = await fetch(`${url}/internal/plan/run`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer a.b.c', 'content-type': 'application/json', traceparent: TP },
+      body: JSON.stringify({ prompt: 'plan', organizationId: 'org-1', projectId: 'proj-1', runId: 'run-7' }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal(seen.traceId, '4bf92f3577b34da6a3ce929d0e0e4736');
+    assert.equal(seen.organizationId, 'org-1');
+    assert.equal(seen.projectId, 'proj-1');
+    assert.equal(seen.runId, 'run-7');
+  } finally { server.close(); }
+});
+
+test('substrate-actor: an unusable traceparent is dropped, not carried into the logs', async () => {
+  const log = require('@ai-fleet/shared/logger');
+  let seen = null;
+  const router = createSubstrateActorRouter({
+    verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/ate/sa/a1' } }),
+    runner: async () => { seen = log.currentContext(); return { finalText: 'ok', messages: [] }; },
+    jwks: async () => ({ keys: [] }),
+  });
+  const { server, url } = await startApp(router);
+  try {
+    const res = await fetch(`${url}/internal/plan/run`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer a.b.c', 'content-type': 'application/json', traceparent: 'not-a-traceparent' },
+      body: JSON.stringify({ prompt: 'plan', organizationId: 'org-1' }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal(seen.traceId, undefined);
+    assert.equal(seen.organizationId, 'org-1');
+  } finally { server.close(); }
+});
+
+test('substrate-actor: reports usage to the caller and never meters locally', async () => {
+  // The ActorTemplate creates this container with no env, so it has no tenant
+  // store: an in-actor recordUsage would write a phantom row that dies with the
+  // actor. We must hand the numbers back and pass NO attribution (attribution is
+  // what triggers metering in harnesses/contract.js).
+  let seen = null;
+  const router = createSubstrateActorRouter({
+    verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/ate/sa/a1' } }),
+    runner: async (opts) => {
+      seen = opts;
+      return {
+        finalText: 'P',
+        messages: [],
+        usage: { inputTokens: 120, outputTokens: 340, totalTokens: 460 },
+        costUsd: 0.0042,
+        traceId: 'trace-abc',
+      };
+    },
+    jwks: async () => ({ keys: [] }),
+  });
+  const { server, url } = await startApp(router);
+  try {
+    const res = await fetch(`${url}/internal/plan/run`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer a.b.c', 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'plan', organizationId: 'org-1', runId: 'run-1', llm: { model: 'm', provider: 'p' } }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.deepEqual(body.usage, { inputTokens: 120, outputTokens: 340, totalTokens: 460 });
+    assert.equal(body.costUsd, 0.0042);
+    assert.equal(body.traceId, 'trace-abc');
+    assert.equal(seen.attribution, undefined, 'the actor must not be given billing attribution');
+  } finally { server.close(); }
+});
+
+test('substrate-actor: a run without usage reports null rather than fabricating a row', async () => {  const router = createSubstrateActorRouter({
+    verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/ate/sa/a1' } }),
+    runner: async () => ({ finalText: 'P', messages: [] }),
+    jwks: async () => ({ keys: [] }),
+  });
+  const { server, url } = await startApp(router);
+  try {
+    const res = await fetch(`${url}/internal/plan/run`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer a.b.c', 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'plan' }),
+    });
+    const body = await res.json();
+    assert.equal(body.usage, null);
+    assert.equal(body.costUsd, null);
+    assert.equal(body.traceId, null);
+  } finally { server.close(); }
+});
+
 test('substrate-actor: real verifyActorJwt accepts a well-signed RS256 token', async () => {
   const { privateKey, jwk } = makeKeypair();
   const now = Math.floor(Date.now() / 1000);

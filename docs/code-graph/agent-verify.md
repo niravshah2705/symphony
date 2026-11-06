@@ -4,21 +4,18 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 2 nodes
 
-- **Size**: 5 nodes
-- **Cohesion**: 0.2239
+- **Size**: 2 nodes
+- **Cohesion**: 0.0370
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| verifyActorJwt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 204-245 |
-| decodeSeg | Function | ./packages/shared-core/src/agent/substrate-runner.js | 209-209 |
-| test:verifyActorJwt rejects malformed / expired / wrong trust domain@L57 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 57-66 |
-| b64u | Function | ./packages/shared-core/src/agent/substrate-runner.test.js | 69-69 |
-| test:verifyActorJwt passes structural checks (no jwks seam) for a well-formed SPIFFE JWT@L68 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 68-73 |
+| verifyActorJwt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 211-252 |
+| decodeSeg | Function | ./packages/shared-core/src/agent/substrate-runner.js | 216-216 |
 
 ## Execution Flows
 
@@ -28,26 +25,22 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `from` (4 edge(s))
-- `equal` (4 edge(s))
-- `toString` (3 edge(s))
-- `floor` (3 edge(s))
-- `now` (3 edge(s))
+- `from` (2 edge(s))
 - `replace` (2 edge(s))
 - `split` (2 edge(s))
 - `String` (2 edge(s))
-- `stringify` (2 edge(s))
 - `parse` (1 edge(s))
+- `toString` (1 edge(s))
+- `floor` (1 edge(s))
+- `now` (1 edge(s))
 - `isArray` (1 edge(s))
 - `includes` (1 edge(s))
 - `startsWith` (1 edge(s))
 - `getJwks` (1 edge(s))
 - `find` (1 edge(s))
+- `require` (1 edge(s))
+- `createPublicKey` (1 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/agent/substrate-runner.test.js` (4 edge(s))
-- `equal` (4 edge(s))
 - `./packages/shared-core/src/agent/substrate-runner.js` (3 edge(s))
-- `floor` (2 edge(s))
-- `now` (2 edge(s))

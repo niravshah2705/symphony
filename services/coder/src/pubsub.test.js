@@ -58,14 +58,14 @@ test('coder Pub/Sub binds concurrent decoded contexts for the full async dispatc
     {
       input: {
         issueId: 'issue-a', conversationId: 'conversation-a',
-        orgId: 'org-a', nativeProjectId: 'project-a', llmGateway: null,
+        orgId: 'org-a', nativeProjectId: 'project-a', llmGateway: null, traceparent: null,
       },
       context: { organizationId: 'org-a', projectId: 'project-a' },
     },
     {
       input: {
         issueId: 'issue-b', conversationId: 'conversation-b',
-        orgId: 'org-b', nativeProjectId: 'project-b', llmGateway: null,
+        orgId: 'org-b', nativeProjectId: 'project-b', llmGateway: null, traceparent: null,
       },
       context: { organizationId: 'org-b', projectId: 'project-b' },
     },

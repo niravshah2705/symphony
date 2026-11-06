@@ -30,6 +30,7 @@
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { CONFIG } = require('../config');
 const { SENTINEL_TOKEN } = require('../egress');
+const { TRACEPARENT_HEADER, cleanTraceparent } = require('@ai-fleet/shared-core/traceparent');
 const log = require('../logger');
 const { isLocalInference } = require('./model-presets');
 
@@ -126,12 +127,54 @@ function bootstrap({ publicKey, secretKey, exporter }) {
     secretKey,
     on: true,
     flushTimeoutMs: FLUSH_TIMEOUT_MS,
-    sdk: { propagateAttributes, startActiveObservation, getActiveTraceId },
+    sdk: {
+      propagateAttributes,
+      startActiveObservation,
+      getActiveTraceId,
+      // The OTel propagation API is how a run crosses a process boundary: it
+      // writes and reads the W3C `traceparent` header for the active span.
+      propagation: api.propagation,
+      context: api.context,
+    },
   };
 }
 
 function langfuseEnabled() {
   return Boolean(runtime && runtime.on);
+}
+
+/**
+ * The W3C `traceparent` for the span this operation is currently inside, or null.
+ *
+ * This is what lets one run be read as one trace after it leaves the process:
+ * the value goes on the outbound header of a substrate actor dispatch, a Pub/Sub
+ * message, or a coder job env, and the far side continues the same trace instead
+ * of starting an unrelated one. Null whenever tracing is not bootstrapped — an
+ * id that no span was ever recorded against would render as a broken trace, so
+ * we would rather forward nothing.
+ */
+function currentTraceparent() {
+  if (!runtime || !runtime.sdk.context) return null;
+  const carrier = {};
+  try {
+    runtime.sdk.propagation.inject(runtime.sdk.context.active(), carrier);
+  } catch (_) {
+    return null;
+  }
+  return cleanTraceparent(carrier.traceparent) || null;
+}
+
+/**
+ * Continue a trace that arrived from another process: the remote span becomes
+ * the parent of anything traced inside `execute`. A pass-through when tracing is
+ * off or the header is unusable — a run is never failed by its telemetry.
+ */
+function runWithRemoteTraceparent(traceparent, execute) {
+  const clean = cleanTraceparent(traceparent);
+  if (!clean || !runtime || !runtime.sdk.context) return execute();
+  const context = runtime.sdk.context;
+  const remote = runtime.sdk.propagation.extract(context.active(), { [TRACEPARENT_HEADER]: clean });
+  return context.with(remote, execute);
 }
 
 /**
@@ -330,6 +373,8 @@ module.exports = {
   runUntraced,
   isUntraced,
   traceAgentRun,
+  currentTraceparent,
+  runWithRemoteTraceparent,
   flushLangfuse,
   traceUrlFor,
   FLUSH_TIMEOUT_MS,
