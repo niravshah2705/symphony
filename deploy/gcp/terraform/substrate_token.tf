@@ -47,15 +47,22 @@ resource "google_secret_manager_secret_iam_member" "settings_substrate_ateapi_to
   member    = "serviceAccount:${google_service_account.settings.email}"
 }
 
-# Writer: the CI identity the rotator runs as. VersionAdd ONLY — the job may
-# append a version and must never read back what it wrote, otherwise the one
-# identity that can mint a cluster token could also harvest every version it
-# ever published. The member is spelled from var.project_id instead of read
-# through a data source because `gh-deployer` is created by
+# Writer: the CI identity the rotator runs as, publish-and-probe. roles/
+# secretmanager.secretVersionAdd sounds exactly right and is rejected outright —
+# the extra fine-grained version roles are grantable only on a *version*, which
+# the publisher cannot address before the version exists ("Role
+# roles/secretmanager.secretVersionAdd is not supported for this resource").
+# secretVersionManager is the smallest role Secret Manager accepts here, and it
+# is honest about what the job does: the rotator reads the version back to send
+# a real gRPC frame through the public route, so it needs versions.access as
+# well as versions.add. That is why this grant lives on no service account —
+# settings-sa gets secretAccessor only, and nothing but the workflow holds the
+# ability to append a version. The member is spelled from var.project_id instead
+# of read through a data source because `gh-deployer` is created by
 # deploy/gcp/bootstrap.sh step 3, outside this state.
 resource "google_secret_manager_secret_iam_member" "substrate_ateapi_token_writer" {
   project   = var.project_id
   secret_id = google_secret_manager_secret.substrate_ateapi_token.secret_id
-  role      = "roles/secretmanager.secretVersionAdd"
+  role      = "roles/secretmanager.secretVersionManager"
   member    = "serviceAccount:gh-deployer@${var.project_id}.iam.gserviceaccount.com"
 }
