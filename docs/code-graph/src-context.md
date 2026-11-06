@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 249 nodes
+Community of 232 nodes
 
-- **Size**: 249 nodes
-- **Cohesion**: 0.3571
+- **Size**: 232 nodes
+- **Cohesion**: 0.3532
 - **Dominant Language**: javascript
 
 ## Members
@@ -61,11 +61,11 @@ Community of 249 nodes
 | test:a rejected or absent credential fails closed, never as admin@L78 | Test | ./services/gateway/src/billing-access.test.js | 78-88 |
 | test:requireBillingCaller attaches the caller and always continues@L90 | Test | ./services/gateway/src/billing-access.test.js | 90-102 |
 | test:no headers are injected for an unresolved caller@L104 | Test | ./services/gateway/src/billing-access.test.js | 104-106 |
-| createConfigResolver | Function | ./services/gateway/src/config-resolver.js | 21-63 |
-| makeReq | Function | ./services/gateway/src/config-resolver.test.js | 9-23 |
-| makeRes | Function | ./services/gateway/src/config-resolver.test.js | 25-34 |
+| failedPredicates | Function | ./services/gateway/src/capability-view.js | 73-78 |
+| harnessesFace | Function | ./services/gateway/src/capability-view.js | 85-112 |
+| budgetFace | Function | ./services/gateway/src/capability-view.js | 114-140 |
 
-*... and 199 more members.*
+*... and 182 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 249 nodes
 
 ### Outgoing
 
-- `equal` (264 edge(s))
-- `deepEqual` (73 edge(s))
-- `trim` (52 edge(s))
-- `String` (45 edge(s))
-- `json` (31 edge(s))
-- `map` (27 edge(s))
-- `includes` (22 edge(s))
+- `equal` (270 edge(s))
+- `deepEqual` (77 edge(s))
+- `trim` (38 edge(s))
+- `String` (35 edge(s))
+- `map` (34 edge(s))
+- `json` (29 edge(s))
+- `includes` (26 edge(s))
+- `push` (22 edge(s))
 - `next` (20 edge(s))
-- `push` (20 edge(s))
-- `status` (19 edge(s))
-- `isArray` (18 edge(s))
+- `isArray` (20 edge(s))
+- `handler` (18 edge(s))
+- `status` (16 edge(s))
 - `toLowerCase` (16 edge(s))
-- `rejects` (16 edge(s))
-- `stringify` (15 edge(s))
-- `ok` (15 edge(s))
+- `throws` (14 edge(s))
+- `get` (13 edge(s))
 
 ### Incoming
 
-- `equal` (264 edge(s))
-- `./services/gateway/src/index.js` (105 edge(s))
-- `deepEqual` (73 edge(s))
+- `equal` (270 edge(s))
+- `./services/gateway/src/index.js` (99 edge(s))
+- `deepEqual` (77 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (29 edge(s))
 - `./services/gateway/src/auth.test.js` (26 edge(s))
 - `./services/gateway/src/request-context.js` (20 edge(s))
+- `handler` (17 edge(s))
 - `./services/gateway/src/auth.js` (16 edge(s))
-- `rejects` (16 edge(s))
-- `ok` (15 edge(s))
-- `throws` (15 edge(s))
+- `./services/gateway/src/capability-view.test.js` (15 edge(s))
 - `./services/gateway/src/eula.test.js` (15 edge(s))
-- `./services/gateway/src/stream-token.js` (15 edge(s))
+- `throws` (14 edge(s))
 - `./services/gateway/src/request-context.test.js` (14 edge(s))
-- `./services/gateway/src/stream-token.test.js` (13 edge(s))
+- `./services/gateway/src/capability-view.js` (13 edge(s))
+- `includes` (12 edge(s))
