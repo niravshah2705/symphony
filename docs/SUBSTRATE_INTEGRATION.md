@@ -335,7 +335,7 @@ Repo variables it reads (all optional; defaults shown):
 
 | Variable | Default | Why |
 |---|---|---|
-| `SUBSTRATE_VERSION` | latest upstream release | Pins checkout **and** image tag together. Unset prints a warning each run — pin it once the cluster is live |
+| `SUBSTRATE_VERSION` | latest upstream release | Pins checkout **and** image tag together. Unset prints a warning each run — **set to `v1.0.0`**, the tag the live `ateapi` runs |
 | `SUBSTRATE_IMAGE_REPO` | `ghcr.io/agent-substrate/substrate` | Release images; a mirror works if it holds every image the install needs |
 | `SUBSTRATE_SNAPSHOT_BUCKET` | `ate-snapshots-<project>` | ate-setup refuses to deploy ate-api-server on GKE without a bucket, and it will not create one — the workflow runs `setup-gcp create bucket` for you, in the **cluster's** region (`setup-gcp`'s own `--region` default is us-west1, and it rejects an existing bucket elsewhere) |
 | `SUBSTRATE_SANDBOX_CLASSES` | `gvisor` | `gvisor,microvm` additionally stages guest assets into `<bucket>-assets` |
@@ -939,9 +939,10 @@ as an error rather than a silent no-op:
   an *actor* scheduled onto that worker, which is the run call below.
   `substrateWorkerPool` may stay blank now — the client's fallback is
   `substrate-worker-pool`, the name Terraform renders (§5.5).
-- `SUBSTRATE_VERSION` is unset, so this install resolved the tag from "latest release"
-  and printed a warning (`v1.0.0`); pin it so the checkout and the images stop
-  drifting (§5.2).
+- **Pinned: `SUBSTRATE_VERSION = v1.0.0`** (repo variable), which is what
+  `ate-api-server` actually runs (`ghcr.io/agent-substrate/substrate/ateapi:v1.0.0@sha256:2f1ee44…`).
+  Before the pin every install resolved "latest release" and printed the warning; the
+  checkout and the images now move only when the variable does (§5.2).
 - The `ate-system` control plane is never installed by Terraform; it lands when the
   **Substrate control plane (preflight / install)** workflow runs with `mode=install`
   (§5 step 3, §5.2).

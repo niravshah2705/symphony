@@ -14,10 +14,10 @@ Community of 130 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| resource.google_container_cluster.primary | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 5-95 |
-| local.system_node_selector | Function | ./deploy/gcp/terraform-openshell-gke/gke.tf | 110-112 |
-| resource.google_container_node_pool.primary_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 115-170 |
-| resource.google_container_node_pool.system_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 176-233 |
+| resource.google_container_cluster.primary | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 5-100 |
+| local.system_node_selector | Function | ./deploy/gcp/terraform-openshell-gke/gke.tf | 115-117 |
+| resource.google_container_node_pool.primary_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 120-175 |
+| resource.google_container_node_pool.system_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 181-238 |
 | data.http.agent_sandbox_manifest | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 6-8 |
 | data.kubectl_file_documents.agent_sandbox_docs | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 10-12 |
 | local.agent_sandbox_docs | Function | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 18-31 |

@@ -56,18 +56,23 @@ resource "google_container_cluster" "primary" {
     }
   }
 
-  # GKE turns Managed Prometheus on by default for a Dataplane V2 cluster, so
-  # leaving this block out is what bought the collection — not an intentional
-  # choice. Nothing in this repo scrapes or reads those metrics, and the
-  # collection bills per monitored pod plus samples ingested. Deleting this
-  # block re-enables it; use `gmp-system`/`gke-managed-cim` pods on the node as
-  # the tell that it is back on.
+  # Managed Prometheus stays ON. Turning it off was attempted and the apply
+  # refused: this cluster's monitoringConfig carries per-package GMP metrics
+  # (CADVISOR, DAEMONSET, DCGM, DEPLOYMENT, HPA, JOBSET, KUBELET, POD,
+  # STATEFULSET, STORAGE) and the API rejects a request that disables the
+  # collector while those packages are still enabled — "Metric packages …
+  # require managed Prometheus. Please enable GMP with metrics packages at the
+  # same time". The two changes have to land in one update, so an opt-off means
+  # `enabled = false` *plus* a metrics_config block disabling each of those
+  # packages, not this block alone. Left as a single-field flip it broke every
+  # subsequent gke_reconcile, substrate changes included, while the live cluster
+  # kept collecting — cost cut: none, outage delivered: the deploy pipeline.
   #
-  # Cloud Monitoring's own system metrics (enable_components) and Cloud Logging
-  # are untouched — those are the cheapest way to still see node health.
+  # Cloud Monitoring's own system metrics (componentConfig) and Cloud Logging
+  # ride along as they already did.
   monitoring_config {
     managed_prometheus {
-      enabled = false
+      enabled = true
     }
 
     advanced_datapath_observability_config {
