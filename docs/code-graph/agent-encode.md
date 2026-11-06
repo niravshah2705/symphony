@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 155 nodes
+Community of 157 nodes
 
-- **Size**: 155 nodes
-- **Cohesion**: 0.3680
+- **Size**: 157 nodes
+- **Cohesion**: 0.3693
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 155 nodes
 | execInSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 1023-1094 |
 | buildOpencodeCliScript | Function | ./packages/shared-core/src/agent/openshell.js | 1096-1155 |
 
-*... and 105 more members.*
+*... and 107 more members.*
 
 ## Execution Flows
 
@@ -86,9 +86,9 @@ Community of 155 nodes
 ### Outgoing
 
 - `String` (134 edge(s))
+- `equal` (58 edge(s))
 - `concat` (57 edge(s))
-- `equal` (54 edge(s))
-- `push` (50 edge(s))
+- `push` (52 edge(s))
 - `trim` (46 edge(s))
 - `alloc` (36 edge(s))
 - `map` (36 edge(s))
@@ -105,16 +105,16 @@ Community of 155 nodes
 
 - `./packages/shared-core/src/agent/substrate.js` (71 edge(s))
 - `./packages/shared-core/src/agent/openshell.js` (65 edge(s))
-- `equal` (54 edge(s))
+- `equal` (58 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.js` (36 edge(s))
 - `./packages/shared-core/src/store.js` (13 edge(s))
 - `deepEqual` (11 edge(s))
 - `./packages/shared-core/src/agent/substrate-runner.js` (11 edge(s))
 - `./packages/shared-core/src/agent/substrate.test.js` (10 edge(s))
 - `./packages/shared-core/src/guardrails/consumers.js` (10 edge(s))
+- `./packages/shared-core/src/agent/substrate-runner.test.js` (9 edge(s))
 - `./packages/shared-core/src/guardrails/spec.js` (8 edge(s))
-- `./packages/shared-core/src/agent/substrate-runner.test.js` (7 edge(s))
+- `push` (6 edge(s))
 - `./packages/shared-core/src/guardrails/spec.test.js` (6 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.test.js` (5 edge(s))
 - `./packages/shared-core/src/agent/registry-auth.js` (4 edge(s))
-- `push` (4 edge(s))

@@ -93,3 +93,28 @@ test('the sweep never auto-recharges, however low the balance is', async () => {
   assert.equal(entries.filter((e) => e.type === 'auto_recharge').length, 0, 'no charge from the tick');
   assert.equal(store.getBillingAccount(orgId).autoRecharge.lastRechargedAt, null);
 });
+
+// The whole bring-your-own-key promise, in one assertion: real tokens, a real
+// price, and nothing debited. The sweep adds to `costPaise` only, so a customer
+// run contributing 0 is what keeps the org's balance away from money the platform
+// never spent — and the notional figure it does carry stays out of the ledger.
+test('a customer-key run posts no debit and leaves the balance untouched', async () => {
+  const orgId = 'org-core-sweep-byok';
+  ledger.ensureAccount(orgId);
+  const before = store.getBillingAccount(orgId).balancePaise;
+  const rec = recordUsage({ orgId, source: 'coder', providerSource: 'customer' },
+    { usage: { inputTokens: 100000, outputTokens: 20000, totalTokens: 120000 }, costUsd: 0.10 },
+    { provider: 'claude' });
+  assert.equal(rec.costPaise, 0);
+  assert.equal(rec.notionalCostPaise, 1000, '0.10 USD × 100 INR/USD × 100 paise');
+
+  // Widen the window to everything: this org owns exactly the one record above, so
+  // any debit line for it would have to come from that run.
+  store.setBillingState({ lastAggregatedAt: '' });
+  const now = new Date(Date.parse(rec.createdAt) + 1000).toISOString();
+  await processBillingSweep({ now, nowMs: Date.parse(now) });
+
+  const entries = store.listLedgerEntries({ orgId });
+  assert.equal(entries.filter((e) => e.type === 'usage').length, 0, 'a run on the org key posts no debit');
+  assert.equal(store.getBillingAccount(orgId).balancePaise, before);
+});

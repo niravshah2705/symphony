@@ -73,6 +73,11 @@ async function dispatchPlanning(options = {}, deps = {}) {
       agentRuntime: options.agentRuntime || (options.settings && options.settings.agentRuntime),
       workflowPattern: options.workflowPattern || (options.settings && options.settings.workflowPattern),
       settings: options.settings,
+      // Which key pays: a stage run threads the admitted decision on attribution,
+      // the legacy planner on its settings blob. Absent means a platform key.
+      providerSource: (options.attribution && options.attribution.providerSource)
+        || (options.settings && options.settings.providerSource)
+        || null,
       workflow: options.workflow,
       stage: options.stage,
       traceContext: {
