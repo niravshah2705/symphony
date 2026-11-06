@@ -173,6 +173,7 @@ jobs:
           SANDBOX_CLASSES: ${{ steps.cfg.outputs.sandbox_classes }}
           IMAGE_REPO: ${{ env.SUBSTRATE_IMAGE_REPO }}
           INGRESS_HOSTNAME: ${{ vars.SUBSTRATE_INGRESS_HOSTNAME }}
+          CONTROL_PLANE_PUBLIC: ${{ vars.SUBSTRATE_CONTROL_PLANE_PUBLIC }}
         run: |
           set -uo pipefail
           # Advisory in both modes: this step never fails the job, because the
@@ -276,6 +277,24 @@ jobs:
             [ -n "${INGRESS_HOSTNAME:-}" ] \
               || { echo "SUBSTRATE_INGRESS_HOSTNAME unset — no static IP, Certificate or Gateway in plan"; exit 1; }
             echo "$INGRESS_HOSTNAME — IP, Certificate, EnvoyProxy and Gateway land with gke_reconcile"
+          '
+          # The public control-plane route sends traffic to an Envoy Gateway
+          # `Backend`, and EG only reconciles that kind when the Helm value
+          # extensionApis.enableBackend is on. The ConfigMap holding it is
+          # Helm-managed and outside this repo's Terraform, so a disabled API
+          # does not fail the apply: substrate-ateapi is simply never written, and
+          # the GRPCRoute hangs with no status at all. Ask before creating it.
+          check "EG Backend API enabled" bash -c '
+            [ "${CONTROL_PLANE_PUBLIC:-}" = "true" ] \
+              || { echo "SUBSTRATE_CONTROL_PLANE_PUBLIC is ${CONTROL_PLANE_PUBLIC:-unset} — no control-plane Backend in plan"; exit 0; }
+            y="$(kubectl -n envoy-gateway-system get cm envoy-gateway-config -o "jsonpath={.data.envoy-gateway\.yaml}" 2>/dev/null)" \
+              || { echo "no envoy-gateway-config — Envoy Gateway is not installed in envoy-gateway-system"; exit 1; }
+            if printf "%s" "$y" | grep -q "enableBackend: true"; then
+              echo "extensionApis.enableBackend: true"
+              exit 0
+            fi
+            echo "extensionApis.enableBackend is off, so the substrate-ateapi Backend is never reconciled (the route reports \`Backend is disabled in Envoy Gateway configuration\`). Re-run the Envoy Gateway Helm upgrade with extensionApis.enableBackend=true over the release in envoy-gateway-system, then kubectl -n envoy-gateway-system rollout restart deploy/envoy-gateway."
+            exit 1
           '
 
           # ate-setup resolves every image tag to a digest before it deploys
@@ -514,6 +533,10 @@ jobs:
             echo "⚠️ Could not confirm the Control gRPC Service name — set \`SUBSTRATE_ATEAPI_SERVICE\` to whichever of the above serves it."
           else
             echo "✅ Control-plane Service: \`$ATEAPI_LINE\` — \`var.substrate_ateapi_service\` is \`${ATEAPI_SERVICE:-api}\` (repo var unset means the module default), and Settings \`substrateUrl\` must name the same address." >> "$GITHUB_STEP_SUMMARY"
-            echo "   The route reaching that Service is not the same as it carrying traffic: §5.3 lists the TLS-to-backend and caller-identity requirements that still block \`substrateUrl\`." >> "$GITHUB_STEP_SUMMARY"
+            # The route is now proven to carry gRPC end to end (§5.3): the TLS
+            # re-encryption, ALPN h2 and CA trust are set in substrate.tf and a
+            # call through the hostname returns grpc-status 0 with a bearer token
+            # and 16 without one. What is left is where that token comes from.
+            echo "   The public route now reaches it (\`Backend\` + \`GRPCRoute\` in substrate.tf); the open item is the caller's bearer token — \`api\` only accepts projected service-account tokens minted for \`audience=api.ate-system.svc\`, which a Cloud Run service cannot self-mint (§5.3)." >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "Next: docs/SUBSTRATE_INTEGRATION.md §5.3 before filling Settings → Models & runtime → Execution substrate, then \`curl -s \$GW/api/agent/substrate/status | jq .substrate\` and expect \`connected: true\`." >> "$GITHUB_STEP_SUMMARY"

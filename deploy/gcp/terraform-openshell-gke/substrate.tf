@@ -470,18 +470,92 @@ resource "kubectl_manifest" "substrate_actor_route_traffic" {
 }
 
 # ---------------------------------------------------------------------------
-# Control-plane ingress (substrateUrl): serve the ateapi gRPC service on the
-# SAME hostname, matched by its service-path prefix so it outranks the actor
-# route's "/" catch-all. Opt-in, because this adds no caller authentication and
-# ateapi creates/deletes actors and mints actor JWTs.
+# Control-plane ingress (substrateUrl): serve the Control gRPC service on the
+# SAME hostname. Opt-in, because the control plane creates/deletes actors and
+# mints actor JWTs. docs/SUBSTRATE_INTEGRATION.md §5.3 records the one thing still
+# missing on the caller side: a bearer token this cluster mints.
+#
+# Four pieces, each one the answer to a failure the previous shape produced:
+#   * a ConfigMap holding the CA that signs the api server's serving certificate.
+#     podcertificate-controller mints it into the `service-dns-ca-pool` Secret in
+#     its own namespace (self-signed, one-year validity), and Gateway API offers no
+#     skip-verify, so the front cannot check the leaf without this copy. It refreshes
+#     on every apply — a CA rotation between applies leaves the copy stale, which is
+#     why §5.3 wants an apply after any podcertificate-controller upgrade.
+#   * an Envoy Gateway `Backend` carrying SNI + ALPN h2 + that CA. A Gateway API
+#     BackendTLSPolicy cannot express ALPN, and Envoy Gateway's `Backend` API is off
+#     unless the cluster's `envoy-gateway-config` sets
+#     `extensionApis.enableBackend: true`. This module does not install Envoy
+#     Gateway, so it cannot set that; the substrate workflow's preflight reports it.
+#   * a GRPCRoute, not an HTTPRoute. The Service port is *named* `grpc`, which Envoy
+#     Gateway does not map to HTTP/2, so an HTTPRoute upstreams HTTP/1.1 at a grpc-go
+#     server and every stream dies. Envoy Gateway supports both kinds.
+#   * a NetworkPolicy. The installer's `ate-api-server` policy admits port 443 only
+#     from four ate-system workloads and namespaces labelled `ate.dev/api-access=true`,
+#     so the front's proxy pods were dropped without a log line. NetworkPolicy is a
+#     union of allows, so this grants the front's proxies and nothing else.
 # ---------------------------------------------------------------------------
+
+data "kubernetes_secret" "substrate_ateapi_ca" {
+  count = local.substrate_front_enabled && var.substrate_control_plane_public ? 1 : 0
+
+  metadata {
+    name      = "service-dns-ca-pool"
+    namespace = "podcertificate-controller-system"
+  }
+}
+
+resource "kubectl_manifest" "substrate_ateapi_ca" {
+  count = local.substrate_front_enabled && var.substrate_control_plane_public ? 1 : 0
+
+  # yamlencode rather than a heredoc: the PEM is multi-line, and a block scalar
+  # built by string interpolation breaks on the first indent change upstream.
+  yaml_body = yamlencode({
+    apiVersion = "v1"
+    kind       = "ConfigMap"
+    metadata = {
+      name      = "substrate-ateapi-ca"
+      namespace = "ate-system"
+    }
+    data = {
+      "ca.crt" = trimspace(data.kubernetes_secret.substrate_ateapi_ca[0].data["tls.crt"])
+    }
+  })
+}
+
+resource "kubectl_manifest" "substrate_ateapi_backend" {
+  count = local.substrate_front_enabled && var.substrate_control_plane_public ? 1 : 0
+
+  yaml_body = <<-YAML
+    apiVersion: gateway.envoyproxy.io/v1alpha1
+    kind: Backend
+    metadata:
+      name: substrate-ateapi
+      namespace: ate-system
+    spec:
+      tls:
+        sni: ${var.substrate_ateapi_service}.ate-system.svc
+        alpnProtocols:
+          - h2
+        caCertificateRefs:
+          - group: ""
+            kind: ConfigMap
+            name: substrate-ateapi-ca
+      endpoints:
+        - fqdn:
+            hostname: ${var.substrate_ateapi_service}.ate-system.svc.cluster.local
+            port: ${var.substrate_ateapi_port}
+  YAML
+
+  depends_on = [kubectl_manifest.substrate_ateapi_ca]
+}
 
 resource "kubectl_manifest" "substrate_control_plane_route" {
   count = local.substrate_front_enabled && var.substrate_control_plane_public ? 1 : 0
 
   yaml_body = <<-YAML
     apiVersion: gateway.networking.k8s.io/v1
-    kind: HTTPRoute
+    kind: GRPCRoute
     metadata:
       name: substrate-control-plane
       namespace: ate-system
@@ -490,24 +564,28 @@ resource "kubectl_manifest" "substrate_control_plane_route" {
         - name: substrate-ingress
           namespace: ate-system
           # https only. Attaching to the port-80 listener too would tie with the
-          # redirect route on match precedence (both are a "/" PathPrefix, which
-          # Envoy Gateway scores as zero characters), leaving it to insertion
-          # order whether this traffic answers in plaintext.
+          # redirect route on match precedence, leaving it to insertion order whether
+          # control-plane gRPC — which creates and deletes actors — answers in
+          # plaintext.
           sectionName: https
       hostnames:
         - "${var.substrate_ingress_hostname}"
       rules:
         - matches:
-            - path:
-                type: PathPrefix
-                # SERVICE_PATH in packages/shared-core/src/agent/substrate.js
-                value: /substrate.ateapi.v1.Control
+            - method:
+                # The service half of SERVICE_PATH in
+                # packages/shared-core/src/agent/substrate.js, without the leading
+                # slash GRPCRoute matches on.
+                type: Exact
+                service: substrate.ateapi.v1.Control
           backendRefs:
-            - name: ${var.substrate_ateapi_service}
-              port: ${var.substrate_ateapi_port}
+            - group: gateway.envoyproxy.io
+              kind: Backend
+              name: substrate-ateapi
+              weight: 1
   YAML
 
-  depends_on = [kubectl_manifest.substrate_ingress_gateway]
+  depends_on = [kubectl_manifest.substrate_ateapi_backend]
 }
 
 resource "kubectl_manifest" "substrate_control_plane_traffic" {
@@ -522,7 +600,7 @@ resource "kubectl_manifest" "substrate_control_plane_traffic" {
     spec:
       targetRefs:
         - group: gateway.networking.k8s.io
-          kind: HTTPRoute
+          kind: GRPCRoute
           name: substrate-control-plane
       timeout:
         http:
@@ -530,4 +608,39 @@ resource "kubectl_manifest" "substrate_control_plane_traffic" {
   YAML
 
   depends_on = [kubectl_manifest.substrate_control_plane_route]
+}
+
+resource "kubectl_manifest" "substrate_front_ateapi_policy" {
+  count = local.substrate_front_enabled && var.substrate_control_plane_public ? 1 : 0
+
+  # Which proxy pods serve this front is Envoy Gateway's business, and it labels
+  # them with the owning Gateway — so the grant follows the front instead of
+  # opening envoy-gateway-system as a whole (that namespace also holds the
+  # OpenShell front's proxies, which have no reason to reach the control plane).
+  yaml_body = <<-YAML
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: substrate-front-to-ateapi
+      namespace: ate-system
+    spec:
+      podSelector:
+        matchLabels:
+          app: ate-api-server
+      policyTypes:
+        - Ingress
+      ingress:
+        - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: envoy-gateway-system
+              podSelector:
+                matchLabels:
+                  gateway.envoyproxy.io/owning-gateway-name: substrate-ingress
+          ports:
+            - port: ${var.substrate_ateapi_port}
+              protocol: TCP
+  YAML
+
+  depends_on = [kubectl_manifest.substrate_ingress_gateway]
 }
