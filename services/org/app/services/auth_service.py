@@ -24,10 +24,10 @@ from app.core.security import (
 )
 from app.core.timeutils import ensure_aware, utcnow
 from app.errors import ConflictError, UnauthorizedError, ValidationAppError
-from app.models.enums import AuthProvider, OrgRole
+from app.models.enums import AuthProvider, EnvironmentTrigger, OrgRole
 from app.models.organization import Organization
 from app.models.organization_membership import OrganizationMembership
-from app.services import onboarding_service, provisioning_service
+from app.services import environment_service, onboarding_service, provisioning_service
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.repositories.base import REFRESH_TOKENS, USERS
@@ -89,7 +89,7 @@ async def issue_email_verification(session: Uow, user: User) -> str:
     return raw
 
 
-async def register(session: Uow, data: RegisterRequest) -> TokenResponse:
+async def register(session: Uow, data: RegisterRequest, *, background) -> TokenResponse:
     org_repo = OrgRepository(session)
     user_repo = UserRepository(session)
     email = normalize_email(data.email)
@@ -126,10 +126,12 @@ async def register(session: Uow, data: RegisterRequest) -> TokenResponse:
     # The raw verification token is intentionally never logged. A production
     # mail adapter can receive it through an injected delivery boundary.
     logger.info("Email verification requested for user_id=%s", user.id)
+    # Last, so the run's document is committed alongside the org it describes.
+    await environment_service.init_for_user(background, session, user, trigger=EnvironmentTrigger.REGISTER)
     return await _issue_tokens(session, user)
 
 
-async def login(session: Uow, data: LoginRequest) -> TokenResponse:
+async def login(session: Uow, data: LoginRequest, *, background) -> TokenResponse:
     user = await UserRepository(session).get_global_by_email(normalize_email(data.email))
     # Identical failure for every case — no user/tenant/status enumeration.
     if user is None or not user.is_active or not verify_password(data.password, user.password_hash):
@@ -137,6 +139,10 @@ async def login(session: Uow, data: LoginRequest) -> TokenResponse:
     memberships = await OrganizationMembershipRepository(session).list_for_user(user.id, legacy_user=user)
     if not memberships:
         await onboarding_service.ensure_default_organization_and_project(session, user)
+    # Sign-in doubles as the environment check: an org that is missing a project,
+    # an atespace binding or a dedicated stack gets one without the caller having
+    # to ask. Queued, never awaited — the token response must not wait on infra.
+    await environment_service.init_for_user(background, session, user, trigger=EnvironmentTrigger.LOGIN)
     return await _issue_tokens(session, user)
 
 

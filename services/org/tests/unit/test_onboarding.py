@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import BackgroundTasks
 
 from app.models.enums import OrgRole, ProjectRole
 from app.models.organization import Organization
@@ -29,7 +30,7 @@ async def test_explicit_create_gives_orgless_user_default_admin_membership(db_se
     await UserRepository(db_session).add(user)
 
     org = await create_organization_for_user(
-        db_session, user, CreateOrgRequest(name="Explicit")
+        db_session, user, CreateOrgRequest(name="Explicit"), background=BackgroundTasks()
     )
     await db_session.commit()
 
@@ -51,7 +52,7 @@ async def test_explicit_create_adds_org_without_changing_existing_default(db_ses
     )
 
     secondary = await create_organization_for_user(
-        db_session, user, CreateOrgRequest(name="Secondary")
+        db_session, user, CreateOrgRequest(name="Secondary"), background=BackgroundTasks()
     )
     await db_session.commit()
 

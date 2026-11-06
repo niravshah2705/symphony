@@ -86,6 +86,13 @@ class Settings(BaseSettings):
     # as X-Internal-Token. Unset => the write-back is refused (fail closed).
     internal_api_token: str = ""
 
+    # --- Login-triggered environment initialization (OFF by default) ---
+    # When true, signing in opens a durable `environment_runs` document for the
+    # caller's org and walks its steps in the background (bind the org's Substrate
+    # atespace, ensure the dedicated stack, request the in-cluster actor space).
+    # OFF means a login touches no infrastructure — the shared stack needs none.
+    environment_init_enabled: bool = False
+
     # Rate limiting
     auth_rate_limit: str = "10/minute"
 

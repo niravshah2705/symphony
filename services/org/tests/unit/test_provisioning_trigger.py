@@ -29,7 +29,7 @@ async def test_noop_when_provisioning_disabled(db_session, monkeypatch):
     async def _fake(*args):
         calls.append(args)
 
-    monkeypatch.setattr(provisioning_service, "_publish_provision_request", _fake)
+    monkeypatch.setattr(provisioning_service, "publish_provisioning_request", _fake)
     uow, org = await _make_org()
     await provisioning_service.trigger_provisioning(uow, org)
 
@@ -47,7 +47,7 @@ async def test_marks_provisioning_and_publishes_once(db_session, monkeypatch):
     async def _fake(project_id, topic, message):
         calls.append((project_id, topic, message))
 
-    monkeypatch.setattr(provisioning_service, "_publish_provision_request", _fake)
+    monkeypatch.setattr(provisioning_service, "publish_provisioning_request", _fake)
     uow, org = await _make_org()
     await provisioning_service.trigger_provisioning(uow, org)
 
@@ -72,7 +72,7 @@ async def test_teardown_noop_when_disabled(db_session, monkeypatch):
     async def _fake(*args):
         calls.append(args)
 
-    monkeypatch.setattr(provisioning_service, "_publish_provision_request", _fake)
+    monkeypatch.setattr(provisioning_service, "publish_provisioning_request", _fake)
     org = Organization(name="Acme", slug="s1", deployments={"status": "provisioned"})
     await provisioning_service.trigger_teardown(org)
     assert calls == []
@@ -86,7 +86,7 @@ async def test_teardown_skips_shared_org(db_session, monkeypatch):
     async def _fake(*args):
         calls.append(args)
 
-    monkeypatch.setattr(provisioning_service, "_publish_provision_request", _fake)
+    monkeypatch.setattr(provisioning_service, "publish_provisioning_request", _fake)
     # An org that only ran on the shared stack has nothing dedicated to tear down.
     org = Organization(name="Acme", slug="s1", deployments={})
     await provisioning_service.trigger_teardown(org)
@@ -102,7 +102,7 @@ async def test_teardown_publishes_for_provisioned_org(db_session, monkeypatch):
     async def _fake(project_id, topic, message):
         calls.append(message)
 
-    monkeypatch.setattr(provisioning_service, "_publish_provision_request", _fake)
+    monkeypatch.setattr(provisioning_service, "publish_provisioning_request", _fake)
     org = Organization(name="Acme", slug="s1", deployments={"status": "provisioned"})
     await provisioning_service.trigger_teardown(org)
     assert len(calls) == 1
