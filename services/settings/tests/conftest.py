@@ -21,6 +21,7 @@ os.environ.setdefault(
 # No GCP_PROJECT_ID -> get_db() returns the in-memory fake.
 os.environ.pop("GCP_PROJECT_ID", None)
 
+import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from asgi_lifespan import LifespanManager  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
@@ -47,3 +48,15 @@ async def db_session() -> Uow:
     set_db(InMemoryDb())
     yield new_uow()
     set_db(None)
+
+
+@pytest.fixture(autouse=True)
+def _reset_dynamic_managed_cache():
+    """The dynamic (Secret Manager) managed memo is a process-global short-TTL
+    cache. Reset it around every test so one test's cached token — or its
+    monkeypatched fetch — never leaks into another's assertions."""
+    from app.services import secrets_service
+
+    secrets_service.clear_dynamic_managed_cache()
+    yield
+    secrets_service.clear_dynamic_managed_cache()

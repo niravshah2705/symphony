@@ -16,9 +16,9 @@ Community of 5 nodes
 |------|------|------|-------|
 | verifyActorJwt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 204-245 |
 | decodeSeg | Function | ./packages/shared-core/src/agent/substrate-runner.js | 209-209 |
-| test:verifyActorJwt rejects malformed / expired / wrong trust domain@L57 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 57-66 |
-| b64u | Function | ./packages/shared-core/src/agent/substrate-runner.test.js | 69-69 |
-| test:verifyActorJwt passes structural checks (no jwks seam) for a well-formed SPIFFE JWT@L68 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 68-73 |
+| test:verifyActorJwt rejects malformed / expired / wrong trust domain@L58 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 58-67 |
+| b64u | Function | ./packages/shared-core/src/agent/substrate-runner.test.js | 70-70 |
+| test:verifyActorJwt passes structural checks (no jwks seam) for a well-formed SPIFFE JWT@L69 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 69-74 |
 
 ## Execution Flows
 

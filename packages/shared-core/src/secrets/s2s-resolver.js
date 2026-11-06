@@ -16,7 +16,9 @@
  * their local store / env values.
  */
 
-const CONFIG = require('../config');
+// `config` exports { CONFIG, …helpers }; requiring the module itself would leave
+// CONFIG.SERVICES undefined and silently short-circuit every lookup below.
+const { CONFIG } = require('../config');
 
 function buildRequest({ organizationId, projectId, orgInternalToken, internalToken }) {
   if (organizationId && orgInternalToken) {

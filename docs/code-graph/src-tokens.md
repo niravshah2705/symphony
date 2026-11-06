@@ -74,12 +74,12 @@ Community of 303 nodes
 - **stopProjectSandbox** (criticality: 0.73, depth: 8)
 - **deleteProjectSandbox** (criticality: 0.73, depth: 8)
 - **chatWithProjectSandbox** (criticality: 0.73, depth: 8)
+- **getActorTemplate** (criticality: 0.71, depth: 8)
 - **execInteractiveSandboxCommand** (criticality: 0.71, depth: 8)
 - **autocompleteSandboxInput** (criticality: 0.71, depth: 8)
 - **listSandboxes** (criticality: 0.71, depth: 8)
-- **listActors** (criticality: 0.71, depth: 8)
-- **runPlanningOnSubstrate** (criticality: 0.71, depth: 8)
-- *... and 28 more flows.*
+- **runSandboxSecurityChecks** (criticality: 0.70, depth: 8)
+- *... and 27 more flows.*
 
 ## Dependencies
 

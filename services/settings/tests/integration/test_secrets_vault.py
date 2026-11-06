@@ -13,6 +13,7 @@ import uuid
 import pytest
 
 from app.api.v1.routes_internal import derive_org_internal_token
+from app.core import secret_manager
 from app.models.enums import OrgRole
 from tests.helpers import auth, make_user
 
@@ -21,6 +22,7 @@ pytestmark = pytest.mark.asyncio
 INTERNAL_TOKEN = "test-internal-token-0123456789"
 GH = "ghp_exampleGitHubTokenValue0123456789abcd"
 ANTHROPIC = "sk-ant-exampleAnthropicKeyValue0123456789"
+SUBSTRATE_TOKEN = "eyJhbGciOiJSUzI1NiJ9.substrate-rotating-control-plane.sig"
 
 
 def _s2s(org_id, token=INTERNAL_TOKEN):
@@ -427,3 +429,83 @@ async def test_project_linear_secret_overrides_org_and_clear_restores_fallback(c
     assert cleared.status_code == 200
     restored = await client.get(url, headers=headers)
     assert restored.json()["secrets"]["linearApiKey"]["value"] == "lin_org"
+
+
+async def test_substrate_token_resolves_on_managed_secrets_endpoint(client, monkeypatch):
+    # The shared-stack resolve returns the dynamically-fetched platform token on
+    # the same managed path as every other platform key.
+    async def access_latest(secret_id, **_kw):
+        return SUBSTRATE_TOKEN
+
+    monkeypatch.setattr(secret_manager, "access_latest", access_latest)
+    resp = await client.get(
+        "/api/v1/internal/s2s/managed-secrets",
+        headers={"X-Internal-Token": INTERNAL_TOKEN},
+    )
+    assert resp.status_code == 200
+    entry = resp.json()["secrets"]["substrateApiToken"]
+    assert entry == {"source": "managed", "value": SUBSTRATE_TOKEN, "error": None}
+
+
+async def test_substrate_token_resolves_on_per_org_endpoint(client, monkeypatch):
+    async def access_latest(secret_id, **_kw):
+        return SUBSTRATE_TOKEN
+
+    monkeypatch.setattr(secret_manager, "access_latest", access_latest)
+    org = uuid.uuid4()
+    _u, token = await make_user(
+        email="substrate@a.com", org_id=org, org_role=OrgRole.ORG_ADMIN
+    )
+    url, headers = _s2s(org)
+    entry = (await client.get(url, headers=headers)).json()["secrets"]["substrateApiToken"]
+    assert entry["source"] == "managed"
+    assert entry["value"] == SUBSTRATE_TOKEN
+
+
+async def test_substrate_token_fetch_failure_is_absent_not_error(client, monkeypatch):
+    async def boom(secret_id, **_kw):
+        raise secret_manager.SecretManagerError("secret version access failed")
+
+    monkeypatch.setattr(secret_manager, "access_latest", boom)
+    resp = await client.get(
+        "/api/v1/internal/s2s/managed-secrets",
+        headers={"X-Internal-Token": INTERNAL_TOKEN},
+    )
+    assert resp.status_code == 200  # a missing platform secret never 500s the resolve
+    entry = resp.json()["secrets"]["substrateApiToken"]
+    assert entry["source"] == "managed"
+    assert entry["value"] is None
+
+
+async def test_substrate_token_is_never_browser_writable(client):
+    # Platform credential: rejected on both generic value write and selection.
+    org = uuid.uuid4()
+    _u, token = await make_user(
+        email="substrate-admin@a.com", org_id=org, org_role=OrgRole.ORG_ADMIN
+    )
+    write = await client.put(
+        "/api/v1/settings/org/secrets",
+        headers=auth(token),
+        json={"values": {"substrateApiToken": "attacker-controlled"}},
+    )
+    select = await client.put(
+        "/api/v1/settings/org/secrets/selection",
+        headers=auth(token),
+        json={"selection": {"substrateApiToken": "customer"}},
+    )
+    assert write.status_code == 422
+    assert select.status_code == 422
+
+
+async def test_substrate_token_masked_view_never_leaks_value(client, monkeypatch):
+    async def access_latest(secret_id, **_kw):
+        return SUBSTRATE_TOKEN
+
+    monkeypatch.setattr(secret_manager, "access_latest", access_latest)
+    org = uuid.uuid4()
+    _u, token = await make_user(
+        email="substrate-mask@a.com", org_id=org, org_role=OrgRole.ORG_ADMIN
+    )
+    got = await client.get("/api/v1/settings/org/secrets", headers=auth(token))
+    assert SUBSTRATE_TOKEN not in got.text
+

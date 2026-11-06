@@ -14,11 +14,15 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import uuid
+from typing import Any
 
 from app.authz.guards import ProjectContext
 from app.authz.principal import Principal
+from app.core import secret_manager
 from app.core.database import Uow
+from app.core.logging import get_logger
 from app.core.timeutils import utcnow
 from app.crypto.vault import get_vault
 from app.models.secrets import (
@@ -73,11 +77,93 @@ MANAGED_ENV = {
     # OAuth bundles have no environment fallback. Platform operators may still
     # import a managed bundle through the same encrypted vault if desired.
     "codexTokenBundle": "",
+    # The Substrate control-plane (ateapi) gRPC credential. It is a rotating
+    # projected service-account token, so it has NO environment fallback (empty
+    # env name) — it is resolved dynamically from Secret Manager on demand. See
+    # _DYNAMIC_SECRET_IDS below for why an env mount would be wrong here.
+    "substrateApiToken": "",
 }
+
+_logger = get_logger(__name__)
+
+# Managed keys whose value is read from a DYNAMIC, request-time source rather
+# than the process env, mapped to the Secret Manager secret id backing them.
+# The Substrate ateapi token is a Kubernetes projected service-account token that
+# rotates ~hourly and expires; Cloud Run injects env vars only at container
+# start, so mounting it as env would keep serving an EXPIRED token for days
+# across a no-op restart. Reading `versions/latest` on demand is the only way to
+# track the rotation.
+_DYNAMIC_SECRET_IDS = {"substrateApiToken": "substrate-ateapi-token"}
+
+# In-process short-TTL memo per dynamic key ({at, value, loaded}). Mirrors the
+# egress proxy's PROXY_SECRETS_TTL_MS cache (services/proxy/src/credentials.js):
+# one record per scope reused until it ages out, so a hot resolve path does not
+# hit Secret Manager on every call. A failed or cold fetch stores ``value=None``
+# (key resolves absent → callers fail closed) rather than pinning a stale token.
+_DYNAMIC_MANAGED: dict[str, dict[str, Any]] = {
+    key: {"at": 0.0, "value": None, "loaded": False} for key in _DYNAMIC_SECRET_IDS
+}
+
+# 300s keeps a served token far inside its ~hourly lifetime and lets a transient
+# Secret Manager outage self-heal quickly; overridable for tuning.
+_DEFAULT_DYNAMIC_TTL_SECONDS = 300.0
+
+
+def _dynamic_ttl_seconds() -> float:
+    """TTL for the dynamic managed cache (env-driven, like the JS proxy's
+    PROXY_SECRETS_TTL_MS). Non-numeric / non-positive falls back to the default."""
+    try:
+        ttl = float(os.environ.get("SUBSTRATE_ATEAPI_TOKEN_TTL_SECONDS", ""))
+    except ValueError:
+        return _DEFAULT_DYNAMIC_TTL_SECONDS
+    return ttl if ttl > 0 else _DEFAULT_DYNAMIC_TTL_SECONDS
+
+
+def clear_dynamic_managed_cache() -> None:
+    """Drop every memoised dynamic value (tests; forces a refetch on next resolve)."""
+    for entry in _DYNAMIC_MANAGED.values():
+        entry.update({"at": 0.0, "value": None, "loaded": False})
+
+
+async def _prefetch_dynamic_managed(now: float | None = None) -> None:
+    """Refresh every dynamic managed source whose cache has aged out.
+
+    Safe to call before any resolve. Within the TTL the cached value is reused
+    and Secret Manager is not contacted. A fetch failure is swallowed into an
+    absent value (never a 500) so the caller fails closed on that one key while
+    the rest of the resolution still returns.
+    """
+    if not _DYNAMIC_MANAGED:
+        return
+    if now is None:
+        now = time.monotonic()
+    ttl = _dynamic_ttl_seconds()
+    for key, entry in _DYNAMIC_MANAGED.items():
+        if entry["loaded"] and (now - entry["at"]) < ttl:
+            continue
+        try:
+            value = await secret_manager.access_latest(_DYNAMIC_SECRET_IDS[key])
+        except Exception:
+            # Log the miss only — never the credential (the exception is built
+            # without the secret value; key names are not secret).
+            _logger.warning("dynamic managed secret %s could not be resolved", key)
+            entry.update({"at": now, "value": None, "loaded": True})
+            continue
+        entry.update({"at": now, "value": value or None, "loaded": True})
 
 
 def _managed_value(key: str) -> str | None:
-    """The platform-managed value for a key, from the settings service env."""
+    """The platform-managed value for a key.
+
+    Most keys come from the settings service env (a Secret Manager mount frozen
+    at container start). Dynamic keys (``_DYNAMIC_SECRET_IDS``) instead read the
+    request-time cache, so a rotating credential is never served stale. A cold or
+    failed dynamic fetch yields ``None`` — absent, never an error.
+    """
+    entry = _DYNAMIC_MANAGED.get(key)
+    if entry is not None:
+        value = entry["value"]
+        return value or None
     env_name = MANAGED_ENV.get(key)
     value = os.environ.get(env_name, "") if env_name else ""
     return value or None
@@ -329,6 +415,7 @@ async def resolve_secrets_for_org(
     A ``DecryptError`` propagates (→ 500) so a decryption failure never
     degrades into a wrong/empty credential.
     """
+    await _prefetch_dynamic_managed()
     org_vault, project_vault = await _load_resolution_vaults(
         session, org_id, project_id
     )
@@ -364,6 +451,7 @@ async def resolve_managed_secrets() -> InternalOrgSecretsResponse:
     shared stack, where there is no per-org vault). Every key is `managed`, valued
     from the settings service env — same response shape as the per-org resolve so
     the proxy uses one code path."""
+    await _prefetch_dynamic_managed()
     resolved = {}
     for key in SECRET_KEYS:
         if key in CUSTOMER_ONLY_SECRET_KEYS:

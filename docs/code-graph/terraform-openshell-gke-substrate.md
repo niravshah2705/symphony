@@ -14,11 +14,11 @@ Community of 5 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| data.kubernetes_secret.substrate_ateapi_ca | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 499-506 |
-| resource.kubectl_manifest.substrate_ateapi_ca | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 508-524 |
-| resource.kubectl_manifest.substrate_ateapi_backend | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 526-551 |
-| resource.kubectl_manifest.substrate_control_plane_route | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 553-589 |
-| resource.kubectl_manifest.substrate_control_plane_traffic | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 591-611 |
+| data.kubernetes_secret.substrate_ateapi_ca | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 634-641 |
+| resource.kubectl_manifest.substrate_ateapi_ca | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 643-659 |
+| resource.kubectl_manifest.substrate_ateapi_backend | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 661-686 |
+| resource.kubectl_manifest.substrate_control_plane_route | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 688-724 |
+| resource.kubectl_manifest.substrate_control_plane_traffic | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 726-746 |
 
 ## Execution Flows
 

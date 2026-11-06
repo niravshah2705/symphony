@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 152 nodes
+Community of 165 nodes
 
-- **Size**: 152 nodes
-- **Cohesion**: 0.3649
+- **Size**: 165 nodes
+- **Cohesion**: 0.3637
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 152 nodes
 | getLocalSandboxWorkdir | Function | ./packages/shared-core/src/agent/openshell.js | 994-1002 |
 | runLocalSandboxShell | Function | ./packages/shared-core/src/agent/openshell.js | 1004-1038 |
 
-*... and 102 more members.*
+*... and 115 more members.*
 
 ## Execution Flows
 
@@ -74,47 +74,47 @@ Community of 152 nodes
 - **stopProjectSandbox** (criticality: 0.73, depth: 8)
 - **deleteProjectSandbox** (criticality: 0.73, depth: 8)
 - **chatWithProjectSandbox** (criticality: 0.73, depth: 8)
+- **getActorTemplate** (criticality: 0.71, depth: 8)
 - **execInteractiveSandboxCommand** (criticality: 0.71, depth: 8)
 - **autocompleteSandboxInput** (criticality: 0.71, depth: 8)
 - **listSandboxes** (criticality: 0.71, depth: 8)
-- **listActors** (criticality: 0.71, depth: 8)
-- **runPlanningOnSubstrate** (criticality: 0.71, depth: 8)
-- *... and 6 more flows.*
+- **runSandboxSecurityChecks** (criticality: 0.70, depth: 8)
+- *... and 4 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `String` (133 edge(s))
-- `concat` (57 edge(s))
-- `push` (48 edge(s))
-- `trim` (46 edge(s))
-- `equal` (40 edge(s))
-- `alloc` (36 edge(s))
-- `map` (36 edge(s))
-- `includes` (28 edge(s))
+- `String` (137 edge(s))
+- `concat` (58 edge(s))
+- `push` (51 edge(s))
+- `equal` (51 edge(s))
+- `trim` (49 edge(s))
+- `alloc` (41 edge(s))
+- `map` (40 edge(s))
+- `includes` (29 edge(s))
 - `replace` (24 edge(s))
 - `join` (22 edge(s))
 - `get` (21 edge(s))
-- `stringify` (20 edge(s))
+- `stringify` (21 edge(s))
 - `isBuffer` (16 edge(s))
 - `from` (14 edge(s))
 - `toString` (14 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/agent/substrate.js` (71 edge(s))
+- `./packages/shared-core/src/agent/substrate.js` (76 edge(s))
 - `./packages/shared-core/src/agent/openshell.js` (67 edge(s))
-- `equal` (40 edge(s))
+- `equal` (51 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.js` (36 edge(s))
+- `./packages/shared-core/src/agent/substrate.test.js` (18 edge(s))
+- `deepEqual` (14 edge(s))
 - `./packages/shared-core/src/store.js` (13 edge(s))
 - `./packages/shared-core/src/agent/substrate-runner.js` (11 edge(s))
-- `deepEqual` (10 edge(s))
-- `./packages/shared-core/src/agent/substrate.test.js` (10 edge(s))
 - `./packages/shared-core/src/guardrails/consumers.js` (10 edge(s))
+- `./packages/shared-core/src/agent/substrate-runner.test.js` (9 edge(s))
 - `includes` (9 edge(s))
 - `./packages/shared-core/src/guardrails/spec.js` (8 edge(s))
 - `./packages/shared-core/src/guardrails/spec.test.js` (6 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.test.js` (5 edge(s))
 - `ok` (5 edge(s))
-- `./packages/shared-core/src/agent/substrate-runner.test.js` (4 edge(s))
