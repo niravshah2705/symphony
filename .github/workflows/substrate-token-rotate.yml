@@ -159,7 +159,7 @@ jobs:
           version="$(gcloud secrets versions add "$SECRET_ID" \
             --data-file="$token_file" --project "$PROJECT_ID" \
             --format 'value(name)')" \
-            || { echo "::error::could not publish a version of '$SECRET_ID' — the CI identity needs roles/secretmanager.secretVersionAdd on it"; exit 1; }
+            || { echo "::error::could not publish a version of '$SECRET_ID' — the CI identity needs roles/secretmanager.secretVersionManager on it"; exit 1; }
 
           # A token that is good for `audience` but rejected by `api` means the
           # audience drifted from the Service name, so print the pair that has to

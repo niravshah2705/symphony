@@ -359,7 +359,8 @@ plane, and that path **carries gRPC today**: with a bearer token the call return
 `grpc-status: 0`, without one `grpc-status: 16 / missing bearer token` — i.e. the
 failure comes from the control plane's authn, not from Envoy. Four things had to be
 true, each verified against the live install; 1–3 are encoded in `substrate.tf` and
-the fourth in `substrate_token.tf` plus the rotator workflow (§5.4).
+the fourth in `substrate_token.tf` (root stack, applied by `deploy.yml`'s `terraform`
+job) plus the rotator workflow (§5.4).
 
 1. **The right Service.** The installer's control-plane Service is `api`, headless,
    ports `grpc=443` and `exchange=8445`. The module used to point at `ateapi:8443`, a
@@ -449,11 +450,12 @@ the fourth in `substrate_token.tf` plus the rotator workflow (§5.4).
    landed on the default branch (§5.4, §7); a 12-hour bearer lives in Secret Manager for
    those twelve hours; and the writer is the CI deployer identity, so a compromised runner
    could mint and publish a token of its own. The blast radius is bounded by design —
-   append-only write access on one secret (it can publish but not read back what it or its
-   predecessors wrote), a mint grant scoped to `ate-client` alone rather than any service
-   account in `ate-system`, a capability that expires in 12 hours and is only ever what
-   `ate-client` is authorized for, and a timestamped version history for every publication
-   (§9).
+   write access to one secret and nothing else (the role also lets it read that secret's
+   versions, because the rotator reads one back to probe the route, so the bound is the
+   scope rather than a read ban), a mint grant scoped to `ate-client` alone rather than any
+   service account in `ate-system`, a capability that expires in 12 hours and is only ever
+   what `ate-client` is authorized for, and a timestamped version history for every
+   publication (§9).
 
 `SUBSTRATE_CONTROL_PLANE_PUBLIC` stays `false` in the module and is set `true` via repo
 variable here; flipping it back off destroys the route, `Backend`, CA ConfigMap and
@@ -495,12 +497,19 @@ or skipped with no signal to the branch that edited the file. The operational co
 is rotating anything and the only way to fill the secret is to dispatch it by hand once it
 lands; `credentialConfigured: false` on an unmerged branch is expected, not a bug.
 
-**Storage and grants** (`deploy/gcp/terraform/substrate_token.tf`, applied by
-`gke_reconcile`): the secret `substrate-ateapi-token` plus exactly two bindings —
-`roles/secretmanager.secretVersionAdd` for `gh-deployer@…` (append-only: the one identity
-that can mint a cluster token cannot read back what it wrote) and
+**Storage and grants** (`deploy/gcp/terraform/substrate_token.tf`, in the root stack, so
+applied by `deploy.yml`'s `terraform` job rather than `gke_reconcile`): the secret
+`substrate-ateapi-token` plus exactly two bindings —
+`roles/secretmanager.secretVersionManager` for `gh-deployer@…` and
 `roles/secretmanager.secretAccessor` for `settings-sa@…`, scoped to this secret so holding
-it grants no visibility into the provider keys the same service account mounts. Minting is
+it grants no visibility into the provider keys the same service account mounts. The
+writer role is `secretVersionManager`, not the tempting
+`roles/secretmanager.secretVersionAdd`: the extra fine-grained version roles bind only to
+a *version*, which a publisher cannot address before the version exists, and the apply
+said so (`Role roles/secretmanager.secretVersionAdd is not supported for this resource`).
+`secretVersionManager` also covers `versions.access`, which the rotator genuinely uses —
+it reads back what it published to send a probe frame — so the grant is the smallest one
+that matches the job rather than an aspiration to keep the minter from reading. Minting is
 *not* left to `roles/container.admin` implying cluster-admin: a `Role`/`RoleBinding` in
 `ate-system` grants `serviceaccounts/token` `create` on `resourceNames: [ate-client]` to
 the deployer identity. Nothing here writes a value — Terraform makes the container, the
@@ -692,8 +701,10 @@ trigger therefore cannot observe it firing at all — it can only dispatch its o
 Treat a green branch dispatch as proof the steps work and nothing more; verify the
 schedule by confirming, after merge, that a run appeared unasked.
 
-`gke_reconcile` also converges `deploy/gcp/terraform/substrate_token.tf`, which creates
-the secret and both bindings but **never a value**: the first apply leaves
+`deploy/gcp/terraform/substrate_token.tf` lives in the **root** stack, so it is the
+`deploy.yml` `terraform` job that converges it — not `gke_reconcile`, whose state prefix
+covers only `terraform-openshell-gke/`. It creates the secret and both bindings but
+**never a value**: the first apply leaves
 `substrate-ateapi-token` with zero versions and `credentialConfigured: false` persists
 until the rotator publishes the first one. Deliberate — Terraform holding no copy of a
 cluster-privileged bearer keeps it out of state.
@@ -796,9 +807,9 @@ with a routine converge.
 - **A 12-hour cluster-privileged bearer lives in Secret Manager** for those twelve hours
   (`substrate-ateapi-token`, `versions/latest`). That is the price of the workaround above,
   bounded deliberately: the lifetime is short even though GKE would mint a week (§5.4),
-  the writer is append-only so the identity that can mint cannot harvest what was
-  published, the mint grant is scoped to `ate-client` alone, and only `settings-sa` can
-  read it. It is still a credential that creates and deletes actors in a store with an
+  the writer grant is on this one secret and no other, the mint grant is scoped to
+  `ate-client` alone, and only `settings-sa` can read it outside CI. It is still a
+  credential that creates and deletes actors in a store with an
   audit trail rather than in nobody's hands, so retiring the rotator means retiring the
   secret, not just the cron.
 - **Known bug, deliberately unfixed: `packages/shared-core/src/agent/openshell.js:9`
@@ -878,9 +889,10 @@ as an error rather than a silent no-op:
 - `SUBSTRATE_ENABLED=true` and `SUBSTRATE_NODE_POOL=substrate-worker-pool` are set, and
   the pool exists — so `substrate.tf` is in plan. Its taint is now
   `ate.dev/sandboxClass=<class>`, which atelet tolerates; the previous
-  `substrate.ate.dev/workers=true:NO_SCHEDULE` was tolerated by nothing (§5.5). In code
-  that is settled; on the cluster it is not, because `node_config` is ForceNew and the
-  pool still has to be replaced.
+  `substrate.ate.dev/workers=true:NO_SCHEDULE` was tolerated by nothing (§5.5). The
+  replacement has been applied: the live pool carries the sandboxClass taint and one
+  e2-standard-4 node, and that node costs money whenever the pool is up —
+  `substrate_worker_pool_replicas = 0` is the way to park it (§5.5).
 - The front **is** serving `substrate.archagentix.com`: the `A` record points at
   `substrate-ip` (34.14.137.62), `substrate-server-tls` is `Ready=True` with a real
   Let's Encrypt certificate, `http://` answers `301` to `https://`, and the `https`
@@ -909,21 +921,24 @@ as an error rather than a silent no-op:
   rotator mints it CI-side and settings resolves it per run (§5.4). What stands between
   that and `credentialConfigured: true` is sequencing, not design: the rotator's schedule
   exists only once its file is on the default branch, so until merge only a hand dispatch
-  fills the secret; `substrate-ateapi-token` has zero versions until `gke_reconcile` has
-  created it **and** the rotator has published into it, since Terraform writes no value;
+  fills the secret; `substrate-ateapi-token` has zero versions until the root `terraform`
+  job has created it **and** the rotator has published into it, since Terraform writes no
+  value;
   and the app is not yet deployed from this change, so the live planner still lacks
   `resolveSubstrateApiToken`, the destructured `CONFIG` that makes managed resolution
   happen at all (§9), and the stricter `configured`.
-- **No `WorkerPool` object exists on the cluster yet, and that — not a missing node
-  label — is what prevents placement.** `workerpools.ate.dev` has **zero instances** in
-  `ate-system`, `substrate-worker-pool` sits at zero nodes, and `atelet`/`atenet-egress`
-  run on tenant-pool nodes. Labelling nodes with `ate.dev/worker-pool` was addressing the
-  wrong object (§5.5). The object is now Terraform-owned, so what remains is converging
-  it — which needs the installer to have created the CRD first, and a second apply when
-  it has not. Then: land the replaced pool, scale to one node, confirm atelet is on it.
+- **No `WorkerPool` object existed on the cluster, and that — not a missing node
+  label — is what prevented placement.** `workerpools.ate.dev` had **zero instances** in
+  `ate-system`, `substrate-worker-pool` sat at zero nodes, and `atelet`/`atenet-egress`
+  ran on tenant-pool nodes. Labelling nodes with `ate.dev/worker-pool` was addressing the
+  wrong object (§5.5). The object is now Terraform-owned and **converged**: the apply from
+  this branch created `workerpools.ate.dev/substrate-worker-pool`, the controller resolved
+  `gvisor-default` (`RESOLVED=True`), the cluster autoscaler took the pool 0→1, `atelet`
+  landed on the new node, and the synthesised worker pod reached `Running` with the pool at
+  `READY 1/1`. So placement is proven at the pool level; what has not yet been observed is
+  an *actor* scheduled onto that worker, which is the run call below.
   `substrateWorkerPool` may stay blank now — the client's fallback is
-  `substrate-worker-pool`, the name Terraform renders (§5.5). With those true an actor
-  can be placed — the last step before a first successful `POST /api/agent/substrate/run`.
+  `substrate-worker-pool`, the name Terraform renders (§5.5).
 - `SUBSTRATE_VERSION` is unset, so this install resolved the tag from "latest release"
   and printed a warning (`v1.0.0`); pin it so the checkout and the images stop
   drifting (§5.2).
