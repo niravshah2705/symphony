@@ -631,7 +631,7 @@ jobs:
     if: needs.changes.outputs.run_gke == 'true'
     runs-on: ubuntu-24.04
     name: reconcile openshell gke
-    # Shared with openshell-cluster-power: that workflow owns the node pool's
+    # Shared with openshell-cluster-power: that workflow owns the node pools'
     # min/max, and this job reads them to pass them back unchanged.
     concurrency:
       group: openshell-cluster-power
@@ -641,6 +641,7 @@ jobs:
       CLUSTER: ${{ vars.OPENSHELL_CLUSTER_NAME || 'openshell-multitenant' }}
       ZONE: ${{ vars.OPENSHELL_CLUSTER_ZONE || 'asia-south1-a' }}
       NODE_POOL: ${{ vars.OPENSHELL_NODE_POOL || 'openshell-multitenant-node-pool' }}
+      SYSTEM_NODE_POOL: ${{ vars.OPENSHELL_SYSTEM_NODE_POOL || 'openshell-system-node-pool' }}
       GKE_TF_DIR: deploy/gcp/terraform-openshell-gke
       GKE_TF_STATE_PREFIX: openshell/gke
       GKE_TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
@@ -709,6 +710,19 @@ jobs:
               echo "Substrate pool $SUBSTRATE_NODE_POOL not found yet; leaving module defaults in plan."
             fi
           fi
+          # The power workflow parks the system pool too, so read it back the same
+          # way: applying the module's system_min_nodes = 1 would hand the add-ons
+          # a node right after a stop and undo the whole point of parking it.
+          if YPOL_JSON="$(gcloud container node-pools describe "$SYSTEM_NODE_POOL" \
+            --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" --format json 2>/dev/null)"; then
+            YMIN="$(jq -r '.autoscaling.minNodeCount // .initialNodeCount // 0' <<<"$YPOL_JSON")"
+            YMAX="$(jq -r '.autoscaling.maxNodeCount // .initialNodeCount // 1' <<<"$YPOL_JSON")"
+            echo "sysmin=$YMIN" >> "$GITHUB_OUTPUT"
+            echo "sysmax=$YMAX" >> "$GITHUB_OUTPUT"
+            echo "Live system pool bounds: min=$YMIN max=$YMAX"
+          else
+            echo "System pool $SYSTEM_NODE_POOL not found yet; leaving module defaults in plan."
+          fi
 
       - uses: hashicorp/setup-terraform@v4
         with:
@@ -748,6 +762,8 @@ jobs:
         env:
           MIN_NODES: ${{ steps.bounds.outputs.min }}
           MAX_NODES: ${{ steps.bounds.outputs.max }}
+          SYS_MIN_NODES: ${{ steps.bounds.outputs.sysmin }}
+          SYS_MAX_NODES: ${{ steps.bounds.outputs.sysmax }}
           CERT_EMAIL: ${{ steps.gke.outputs.cert_email }}
           WILL_APPLY: ${{ steps.gke.outputs.apply }}
           # Agent Substrate is opt-in: unset SUBSTRATE_ENABLED leaves the module
@@ -774,6 +790,11 @@ jobs:
           [ -n "$SUBSTRATE_CONTROL_PLANE_PUBLIC" ] && substrate_args+=(-var="substrate_control_plane_public=$SUBSTRATE_CONTROL_PLANE_PUBLIC")
           [ -n "$SUBSTRATE_LIVE_MIN" ]         && substrate_args+=(-var="substrate_min_nodes=$SUBSTRATE_LIVE_MIN")
           [ -n "$SUBSTRATE_LIVE_MAX" ]         && substrate_args+=(-var="substrate_max_nodes=$SUBSTRATE_LIVE_MAX")
+          # Empty when the pool does not exist yet (fresh stack): the module
+          # default describes it, so keep the default in the plan.
+          system_args=()
+          [ -n "$SYS_MIN_NODES" ] && system_args+=(-var="system_min_nodes=$SYS_MIN_NODES")
+          [ -n "$SYS_MAX_NODES" ] && system_args+=(-var="system_max_nodes=$SYS_MAX_NODES")
           terraform plan -refresh=true -input=false \
             -var="project_id=$PROJECT_ID" \
             -var="zone=$ZONE" \
@@ -782,6 +803,7 @@ jobs:
             -var="cert_email=$CERT_EMAIL" \
             -var="min_nodes=$MIN_NODES" \
             -var="max_nodes=$MAX_NODES" \
+            "${system_args[@]}" \
             "${substrate_args[@]}" \
             -out=gke.tfplan
           terraform show -json gke.tfplan > gke.json

@@ -119,7 +119,7 @@ resource "google_container_node_pool" "primary_nodes" {
   cluster  = google_container_cluster.primary.name
 
   # node_count must stay unset while autoscaling is enabled; the start/stop
-  # workflow parks this pool at 0 and leaves the system pool running.
+  # workflow parks this pool at 0 first, then the system pool.
   autoscaling {
     min_node_count  = var.min_nodes
     max_node_count  = var.max_nodes
@@ -170,7 +170,7 @@ resource "google_container_node_pool" "primary_nodes" {
 }
 
 # ---------------------------------------------------------------------------
-# System pool — always on, never parked by the power workflow
+# System pool — the platform add-ons; drained last and parked by the power workflow
 # ---------------------------------------------------------------------------
 
 resource "google_container_node_pool" "system_nodes" {
@@ -179,8 +179,11 @@ resource "google_container_node_pool" "system_nodes" {
   location = var.zone
   cluster  = google_container_cluster.primary.name
 
-  # Never parked: min 1 keeps the pinned add-ons somewhere to run when the
-  # tenant pool is at zero, which is what makes `stop` finish.
+  # min 1 is the *running* size: it keeps the pinned add-ons on their own pool
+  # while the tenant pool drains, which is what lets `stop` finish at all. The
+  # power workflow parks this pool at 0 after the tenant pools are gone (the
+  # gateway and cert-manager are down for the stopped window), and deploy.yml's
+  # gke_reconcile reads the live bounds back so an apply cannot re-buy a node.
   autoscaling {
     min_node_count  = var.system_min_nodes
     max_node_count  = var.system_max_nodes

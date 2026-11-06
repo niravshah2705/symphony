@@ -339,8 +339,9 @@ never races a scale-to-zero.
 
 It **reads the live substrate node-pool bounds back** and feeds them as
 `substrate_min/max_nodes`, so a reconcile cannot silently start a pool the power
-workflow parked. `openshell-cluster-power.yml` parks/wakes the substrate pool in
-lockstep when `SUBSTRATE_NODE_POOL` is set.
+workflow parked (the same read-back now covers `openshell-system-node-pool`, which
+`openshell-cluster-power.yml` also parks last). That workflow parks/wakes the
+substrate pool in lockstep when `SUBSTRATE_NODE_POOL` is set.
 
 The **first apply with `substrate_enabled = true` shows the new resources as
 `create`** (pool, namespaces, snapshot class, ingress) — this is expected and does
