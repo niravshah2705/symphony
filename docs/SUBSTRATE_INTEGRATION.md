@@ -385,8 +385,11 @@ true, each verified against the live install; 1–3 are encoded in `substrate.tf
    grpc-go drops the stream (`reset reason: connection timeout`, then
    `connection termination` once connectivity was allowed). The route is a `GRPCRoute`
    with a `method.service` exact match on `substrate.ateapi.v1.Control`, which forces h2
-   end to end — that is a replace (create plus delete) in the apply, and the
-   `BackendTrafficPolicy` that disables the request timeout retargets it accordingly.
+   end to end — and the `BackendTrafficPolicy` that disables the request timeout
+   retargets it accordingly. If an `HTTPRoute` for this address is already in Terraform
+   state, the kind change is a replace (create plus delete) and the apply needs
+   `gke_allow_destroy`; on this cluster the flag had never been applied, so the converge
+   planned 4 create + 1 update + 0 delete.
    The installer's `ate-api-server` NetworkPolicy admits 443 only from the control-plane
    pods, so `substrate-front-to-ateapi` adds the front's Envoy proxy pods
    (`gateway.envoyproxy.io/owning-gateway-name=substrate-ingress` in
@@ -611,8 +614,9 @@ as an error rather than a silent no-op:
   GKE-projected service-account token, which a Cloud Run service cannot do for itself.
   The four objects behind this (`cm/substrate-ateapi-ca`, `backend/substrate-ateapi`,
   `grpcroute/substrate-control-plane`, `networkpolicy/substrate-front-to-ateapi`) were
-  created by hand while the path was being found, so the first `gke_reconcile` from this
-  branch converges them — and the `HTTPRoute` it used to write has to be replaced.
+  created by hand while the path was being found; `gke_reconcile` from this branch has
+  since adopted them (4 create + 1 update, no deletes) and a follow-up plan reports
+  **No changes**, with `ListActors` still answering `0` / `16` as above.
 - The worker pool has **no nodes and no `ate.dev/worker-pool` label**: `substrate-worker-pool`
   sits at zero instances while `atelet`/`atenet-egress` run on tenant-pool nodes, and
   the installer's `workerSelector` matches nothing until the nodes are labelled (§5.1
