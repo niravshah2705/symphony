@@ -56,6 +56,26 @@ resource "google_container_cluster" "primary" {
     }
   }
 
+  # GKE turns Managed Prometheus on by default for a Dataplane V2 cluster, so
+  # leaving this block out is what bought the collection — not an intentional
+  # choice. Nothing in this repo scrapes or reads those metrics, and the
+  # collection bills per monitored pod plus samples ingested. Deleting this
+  # block re-enables it; use `gmp-system`/`gke-managed-cim` pods on the node as
+  # the tell that it is back on.
+  #
+  # Cloud Monitoring's own system metrics (enable_components) and Cloud Logging
+  # are untouched — those are the cheapest way to still see node health.
+  monitoring_config {
+    managed_prometheus {
+      enabled = false
+    }
+
+    advanced_datapath_observability_config {
+      enable_metrics = false
+      enable_relay   = false
+    }
+  }
+
   # The dedicated node pool below is authoritative.
   remove_default_node_pool = true
   initial_node_count       = 1
