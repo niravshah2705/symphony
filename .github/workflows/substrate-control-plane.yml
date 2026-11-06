@@ -205,6 +205,31 @@ jobs:
           }
 
           check "SUBSTRATE_ENABLED" bash -c 'if [ "${SUBSTRATE_ENABLED:-}" != "true" ]; then echo "repo variable is ${SUBSTRATE_ENABLED:-unset}; the substrate.tf infra is not in plan"; exit 1; fi'
+          # The install's own failure for a too-old control plane is a 10-minute
+          # wait on the ClusterTrustBundle, reported as a context deadline plus a
+          # podcertificate-controller CrashLoopBackOff — and the cluster is
+          # left with CRDs and pool secrets but no data plane. Ask the discovery
+          # document what the controller will discover, in the first second.
+          check "certificates APIs served" bash -c '
+            res="$(kubectl api-resources --api-group=certificates.k8s.io -o name --no-headers 2>/dev/null)" \
+              || { echo "cannot read the API server discovery document"; exit 1; }
+            missing=""
+            for kind in clustertrustbundles podcertificaterequests; do
+              case "$res" in
+                *"$kind.certificates.k8s.io"*) ;;
+                *) missing="$missing $kind" ;;
+              esac
+            done
+            if [ -n "$missing" ]; then
+              ver="$(gcloud container clusters describe "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
+                --format "value(currentMasterVersion)" 2>/dev/null)"
+              chan="$(gcloud container clusters describe "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
+                --format "value(releaseChannel.channel)" 2>/dev/null)"
+              echo "no${missing} on the ${ver:-unknown} API server (channel ${chan:-none}). GKE serves them from 1.37: pick a ${chan:-REGULAR}-channel 1.37.x from gcloud container get-server-config --zone $ZONE and run gcloud container clusters upgrade $CLUSTER --location $ZONE --project $PROJECT_ID --master --cluster-version <that> --quiet, then re-run this."
+              exit 1
+            fi
+            echo "clustertrustbundles + podcertificaterequests are served"
+          '
           check "worker node pool" bash -c '
             [ -n "${SUBSTRATE_NODE_POOL:-}" ] \
               || { echo "SUBSTRATE_NODE_POOL is unset — substrate.tf has no pool to create"; exit 1; }
@@ -393,6 +418,39 @@ jobs:
         with:
           go-version-file: substrate/go.mod
           cache: false
+
+      # Upstream's bundled postgres is sized for a production cluster and this one
+      # cannot hold it: `storage: 500Gi` is exactly the project's regional
+      # SSD_TOTAL_GB quota (limit 500, ~4 already used), so CreateVolume returns
+      # QUOTA_EXCEEDED forever, and `cpu: "2"` is above every e2-standard-2 node's
+      # 1930m allocatable, so no untainted node here can ever host it. ate-setup
+      # has no flag for either number — only --ateapi-postgres-storage-class — and
+      # the values live in an immutable StatefulSet volumeClaimTemplate, so the
+      # only durable place to change them is the pinned checkout, before the
+      # installer renders it. Override the sizes with SUBSTRATE_POSTGRES_STORAGE /
+      # SUBSTRATE_POSTGRES_CPU_REQUEST if this cluster ever gets bigger nodes or a
+      # raised quota.
+      - name: Right-size the bundled postgres volume
+        if: inputs.mode == 'install'
+        env:
+          POSTGRES_STORAGE: ${{ vars.SUBSTRATE_POSTGRES_STORAGE }}
+          POSTGRES_CPU_REQUEST: ${{ vars.SUBSTRATE_POSTGRES_CPU_REQUEST }}
+        run: |
+          set -euo pipefail
+          f=substrate/manifests/ate-install/postgres/postgres.yaml
+          storage="${POSTGRES_STORAGE:-50Gi}"
+          cpu="${POSTGRES_CPU_REQUEST:-500m}"
+          sed -i "s|^\( *\)storage: 500Gi|\1storage: $storage|" "$f"
+          sed -i "s|^\( *\)cpu: \"2\"|\1cpu: \"$cpu\"|" "$f"
+          # Fail loudly rather than silently installing the upstream numbers again
+          # if a release moves these lines out from under the sed.
+          grep -q "storage: $storage" "$f" || { echo "::error::postgres manifest no longer has the storage line to patch; check $f upstream."; exit 1; }
+          grep -q "cpu: \"$cpu\"" "$f" || { echo "::error::postgres manifest no longer has the cpu request to patch; check $f upstream."; exit 1; }
+          {
+            echo "### Postgres sized for this cluster"
+            echo ""
+            echo "storage \`500Gi\` upstream -> \`$storage\` (SSD_TOTAL_GB quota), cpu request \`\"2\"\` upstream -> \`$cpu\` (node allocatable)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Provision the snapshot bucket and IAM
         if: inputs.mode == 'install'

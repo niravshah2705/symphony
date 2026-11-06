@@ -104,7 +104,13 @@ pool exists, then apply the module's stable infra pieces.
    gh variable set SUBSTRATE_NODE_POOL        --body "substrate-worker-pool"
    gh variable set SUBSTRATE_INGRESS_HOSTNAME --body "substrate.<your-domain>"   # optional, see §5.1
    ```
-2. Run **Deploy to GCP** with `gke_reconcile` (see §7 for the first-apply note).
+2. Run **Deploy to GCP** with `gke_reconcile` (see §7 for the first-apply note). That
+   creates the worker pool, namespaces, snapshot class and ingress. It does **not**
+   touch the control-plane version: Substrate needs GKE 1.37+ (§5.2), and if the
+   cluster is older you upgrade the master directly rather than through the module:
+   `gcloud container clusters upgrade <cluster> --location <zone> --project <project> --master --cluster-version <1.37.x from the cluster's own channel> --quiet`.
+   It is a real control-plane upgrade and the node pools roll behind it, so park the
+   tenant pool first.
 3. Install the control plane with the **Substrate control plane
    (preflight / install)** workflow — see §5.2. It replaces the old "run the
    installer from a workstation with a substrate checkout" step; the only thing
@@ -244,8 +250,45 @@ the clone is pinned to the same revision the images carry.
 
 | Mode | What it does | Mutates? |
 |---|---|---|
-| `preflight` | Reports every prerequisite PASS/FAIL (worker pool, snapshot bucket **and its region**, transfer GSA, `ate-system`, existing `ate.dev` CRDs, Envoy Gateway + cert-manager CRDs, whether the substrate front is `Programmed` and on which address, whether the CI identity may create **and label** `substrate-ip`, and whether the release images actually exist at the pinned tag) and prints the exact `ate-setup` command install mode will run | No |
+| `preflight` | Reports every prerequisite PASS/FAIL (worker pool, whether the API server serves the `certificates.k8s.io` types the podcertificate controller needs, snapshot bucket **and its region**, transfer GSA, `ate-system`, existing `ate.dev` CRDs, Envoy Gateway + cert-manager CRDs, whether the substrate front is `Programmed` and on which address, whether the CI identity may create **and label** `substrate-ip`, and whether the release images actually exist at the pinned tag) and prints the exact `ate-setup` command install mode will run | No |
 | `install` | After the same report: provisions the GCS snapshot bucket + IAM through substrate-gke's `setup-gcp`, clones substrate at the pinned tag, and runs `deploy ate-system` | Yes (creates `ate-system`) |
+
+The control-plane version is a hard prerequisite, not a preference: Substrate's
+`podcertificate-controller` discovers `certificates.k8s.io` **ClusterTrustBundle**
+and **PodCertificateRequest**, and GKE does not serve either before 1.37. On 1.36 the
+installer gets as far as its CRDs and pool secrets, then fails ~10 minutes later on
+`waiting for ClusterTrustBundle podidentity.podcert.ate.dev:identity:primary-bundle:
+context deadline exceeded (last discovery error: neither v1 nor v1beta1
+ClusterTrustBundle is served)`, with the controller in CrashLoopBackOff on `Error
+discovering PodCertificateRequest API`. The `certificates APIs served` preflight row
+asks the discovery document directly, so it says this in one second instead.
+
+Upgrade the control plane directly: `gcloud container clusters upgrade <cluster>
+--location <zone> --project <project> --master --cluster-version <1.37.x> --quiet`.
+Pick a build the cluster's own release channel offers (`gcloud container
+get-server-config --zone <zone>`; `REGULAR` offered `1.37.1-gke.1552000` when this was
+written — a cross-channel version is rejected, an in-channel manual minor bump is
+allowed). The module deliberately does not pin the version: a `min_master_version`
+floor records it in Terraform, but a floor the channel has already rolled past is dead
+config, and raising a master is a one-time action per cluster rather than a state to
+converge on every apply. `--quiet` is not a style choice — gcloud asks for
+confirmation, a non-interactive shell refuses the prompt, and piping the output
+anywhere hides that failure behind the pipe's exit code. The control plane upgrades in
+place, then GKE rolls the node pools to match, so park the tenant pool before it.
+
+The bundled postgres does not fit this stack either, and neither mismatch is visible
+from the pod. Upstream `postgres.yaml` asks for a 500 Gi `standard-rwo` volume and a
+2 CPU request. `pd-balanced` counts against the `SSD_TOTAL_GB` quota, which is 500 in
+this project, so the PVC sits Pending on `QUOTA_EXCEEDED ... 'SSD_TOTAL_GB' ...
+Limit: 500.0` — and the scheduler's stale `FailedScheduling` events blame node
+capacity, so read the *PVC's* events before believing them. The 2 CPU request is
+larger than an `e2-standard-2` pool node's 1930m allocatable, so even a provisioned
+volume would leave the pod unschedulable. `SUBSTRATE_POSTGRES_STORAGE` (default
+`50Gi`) and `SUBSTRATE_POSTGRES_CPU_REQUEST` (default `500m`) patch the pinned
+checkout before the installer runs: `--ateapi-postgres-storage-class` is the only
+size-adjacent knob upstream offers, and `spec.volumeClaimTemplates` is immutable, so a
+live `sts/postgres` has to be deleted for a new number to take effect rather than
+patched.
 
 Before the first install, three rows read FAIL by design — the snapshot bucket,
 the transfer GSA and `ate-system` itself are things `install` mode creates. The
@@ -291,6 +334,8 @@ Repo variables it reads (all optional; defaults shown):
 | `SUBSTRATE_CREDENTIAL_PROVIDER` | `{"name":"k8s.io"}` | The zero-trust path: the bundled Secrets provider plus a NetworkPolicy admitting only the egress gateway |
 | `SUBSTRATE_INGRESS_SPIFFE_IDS` | `spiffe://cluster.local/ns/ate-system/sa/atenet-client` | Unset means **no** client may reach actors through the router |
 | `SUBSTRATE_POSTGRES_STORAGE_CLASS` | unset (cluster default) | Set `dynamic-rwo` if the bundled postgres PVC will not attach to your node machine type |
+| `SUBSTRATE_POSTGRES_STORAGE` | `50Gi` | Size of the bundled postgres volume; the upstream 500 Gi does not fit a 500 GB `SSD_TOTAL_GB` quota (§5.2) |
+| `SUBSTRATE_POSTGRES_CPU_REQUEST` | `500m` | The upstream `"2"` request exceeds an `e2-standard-2` node's 1930m allocatable (§5.2) |
 | `SUBSTRATE_ROLLOUT_TIMEOUT` | `10m` | Cold-start image pulls on a just-created pool are slow; the installer default is 60s |
 | `SUBSTRATE_REPO_URL` / `SUBSTRATE_GKE_REPO_URL` | upstream GitHub URLs | Only change these to mirror or to pin a fork |
 
@@ -439,12 +484,20 @@ as an error rather than a silent no-op:
 
 - `SUBSTRATE_ENABLED=true` and `SUBSTRATE_NODE_POOL=substrate-worker-pool` are set, and
   the pool exists (tainted, never labelled) — so `substrate.tf` is in plan.
-- The front is applied but **not yet serving** `substrate.archagentix.com`:
-  `substrate-ip` is allocated (34.14.137.62), `substrate-ingress` is Programmed and its
-  Envoy LoadBalancer is up on port 80, but `substrate-server-external-tls` has never been
-  issued so the `https` listener is still invalid — and there is no DNS record for the
-  hostname at all (§5.1). Until the record lands, HTTP-01 cannot complete and the two URL
-  fields have nowhere public to point.
+- The front **is** serving `substrate.archagentix.com`: the `A` record points at
+  `substrate-ip` (34.14.137.62), `substrate-server-tls` is `Ready=True` with a real
+  Let's Encrypt certificate, `http://` answers `301` to `https://`, and the `https`
+  listener is Programmed. HTTPS still returns `500`, and that is the expected shape —
+  the route's backends (`atenet-router`, `ateapi`) do not exist until the control plane
+  is installed (§5.1).
+- **The GKE 1.37 prerequisite is met** — the master is on `1.37.1-gke.1552000`
+  (`REGULAR`) and `kubectl api-resources --api-group=certificates.k8s.io` lists both
+  `clustertrustbundles` and `podcertificaterequests`, so the failure that killed the
+  earlier `mode=install` run (§5.2) is gone. The remaining blocker is the bundled
+  postgres: upstream wants 500 Gi of `pd-balanced` against a 500 GB `SSD_TOTAL_GB`
+  quota and 2 CPU on nodes with 1930m allocatable, so `postgres-0` stays Pending. The
+  install now right-sizes both (§5.2); a half-installed `sts/postgres` from the older
+  runs has to be deleted for the new template to take effect.
 - The pool is tainted but carries no `ate.dev/worker-pool` **label**, so the installer's
   `workerSelector` matches nothing until the nodes are labelled (§5.1 field table).
 - `SUBSTRATE_VERSION` is unset, so every preflight/install run resolves the tag from
