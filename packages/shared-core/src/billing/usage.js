@@ -34,8 +34,27 @@ function pickUsage(usage) {
 }
 
 /**
+ * Which key paid the provider for this run. `'customer'` must be ASSERTED by the
+ * caller — it arrives as `providerSource`, threaded from the settings preflight
+ * that actually made the managed-vs-customer decision — and anything else records
+ * as `'managed'`. Defaulting the unknown case to `'managed'` is the conservative
+ * direction: an unlabelled bring-your-own-key run over-charges the organization and
+ * the spend reconciliation finds the delta, whereas defaulting to `'customer'` would
+ * hand every run an unmetered free pass.
+ *
+ * The field is named `providerSource`, not `credentialSource`: the pipeline
+ * contract's secret-shape guard rejects any key that reads as a credential, and a
+ * billing label is not one.
+ */
+function resolveBillingSource(attribution = {}) {
+  return String(attribution.providerSource || '').trim().toLowerCase() === 'customer'
+    ? 'customer'
+    : 'managed';
+}
+
+/**
  * Persist one granular usage record for a completed (or errored) agent run.
- * @param {object} attribution { orgId?, projectId?, projectName?, userId?, userEmail?, taskId?, taskIdentifier?, source?, runId?, traceId?, gatewayMode? }
+ * @param {object} attribution { orgId?, projectId?, projectName?, userId?, userEmail?, taskId?, taskIdentifier?, source?, runId?, traceId?, gatewayMode?, providerSource? }
  * @param {object} result      the runtime result { usage, costUsd }
  * @param {object} [llm]        { provider, model } for cost estimation + labels
  * @returns {object|null} the stored record, or null when skipped / on error
@@ -46,8 +65,15 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
     // Skip empty runs (no tokens) to avoid noise in the ledger/drill-down.
     if (!usage.totalTokens && !usage.inputTokens && !usage.outputTokens) return null;
     const costUsd = pricing.costUsdFromResult(result, llm);
-    const costPaise = pricing.usdToPaise(costUsd);
+    const grossPaise = pricing.usdToPaise(costUsd);
     const orgId = resolveOrgId(attribution);
+    const billingSource = resolveBillingSource(attribution);
+    // `costPaise` is the ONLY field the billing sweep turns into a debit, so a
+    // run on the org's own key posts zero: the platform never spent that money
+    // and cannot bill it. The same amount is kept as `notionalCostPaise` so the
+    // org still sees the value it consumed. Exactly one of the two is ever
+    // non-zero, and `costPaise + notionalCostPaise` is the gross.
+    const isCustomerKey = billingSource === 'customer';
     return store.addUsageRecord({
       orgId,
       projectId: attribution.projectId || null,
@@ -63,11 +89,15 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
       runId: attribution.runId || null,
       traceId: attribution.traceId || null,
       gatewayMode: attribution.gatewayMode || null,
+      // Which key paid the provider, and the two money fields that follow from
+      // it (see the comment above): a customer run is recorded, never charged.
+      billingSource,
       provider: (llm && llm.provider) || 'unknown',
       model: (llm && llm.model) || 'unknown',
       usage,
       costUsd,
-      costPaise,
+      costPaise: isCustomerKey ? 0 : grossPaise,
+      notionalCostPaise: isCustomerKey ? grossPaise : 0,
     });
   } catch (err) {
     log.warn(`recordUsage failed: ${err && err.message ? err.message : err}`);
@@ -77,5 +107,6 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
 
 module.exports = {
   pickUsage,
+  resolveBillingSource,
   recordUsage,
 };

@@ -42,6 +42,33 @@ test('shared account with no user identity exposes nothing granular (safe defaul
   assert.equal(anon.length, 0);
 });
 
+// The two BYOK series must add up to the gross and never double count: managed
+// spend is what the balance paid, customer notional is what the org's own key paid.
+test('the spend split reports charged and notional as two separate series', () => {
+  const orgId = 'org-split';
+  const now = Date.now();
+  const createdAt = new Date(now).toISOString();
+  store.addUsageRecord({ orgId, createdAt, usage: { totalTokens: 100 }, costPaise: 900, notionalCostPaise: 0, billingSource: 'managed' });
+  store.addUsageRecord({ orgId, createdAt, usage: { totalTokens: 50 }, costPaise: 0, notionalCostPaise: 400, billingSource: 'customer' });
+  store.addUsageRecord({ orgId, createdAt, usage: { totalTokens: 10 }, costPaise: 60, notionalCostPaise: 0 });
+
+  const window = billingApi.bySourceWindow(store.listUsageRecords({ orgId }), 30, now);
+  assert.equal(window.sources.managed.costInr, 9.6, 'the unlabelled legacy run counts as managed spend');
+  assert.equal(window.sources.managed.notionalInr, 0);
+  assert.equal(window.sources.customer.costInr, 0, 'a run on the org key draws nothing from the balance');
+  assert.equal(window.sources.customer.notionalInr, 4);
+  assert.equal(window.sources.customer.runs, 1);
+  assert.ok(window.retentionDays > 0, 'the caller is told how far back this reaches');
+});
+
+test('both series exist even for an org that has never used its own key', () => {
+  const window = billingApi.bySourceWindow(
+    store.listUsageRecords({ orgId: 'org-A' }), 30, Date.now(),
+  );
+  assert.deepEqual(Object.keys(window.sources).sort(), ['customer', 'managed']);
+  assert.equal(window.sources.customer.runs, 0);
+});
+
 test('autoRecharge configuration preserves cashfree fields and calculates threshold', () => {
   store.upsertBillingAccount('org-test-ar', {
     autoRecharge: {

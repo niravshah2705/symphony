@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 164 nodes
+Community of 170 nodes
 
-- **Size**: 164 nodes
-- **Cohesion**: 0.3076
+- **Size**: 170 nodes
+- **Cohesion**: 0.3107
 - **Dominant Language**: javascript
 
 ## Members
@@ -58,14 +58,14 @@ Community of 164 nodes
 | test:durable stage resolve merges a litellm flag into settings the same way@L70 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-llmgw.test.js | 70-79 |
 | test:durable stage resolve leaves settings untouched without the flag@L81 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-llmgw.test.js | 81-89 |
 | test:durable stage resolve ignores unknown llm-gateway selectors@L91 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-llmgw.test.js | 91-99 |
-| stageConfiguration | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 30-34 |
-| priorResult | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 36-41 |
-| immutableArtifact | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 43-51 |
-| artifactFromResult | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 53-68 |
-| sameArtifact | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 70-72 |
-| preflightDecisionDigest | Function | ./packages/shared/src/agent/pipeline-stage-runtime.js | 74-80 |
+| command | Function | ./packages/shared/src/agent/pipeline-stage-runtime-provider-source.test.js | 17-49 |
+| dependencies | Function | ./packages/shared/src/agent/pipeline-stage-runtime-provider-source.test.js | 51-56 |
+| resolve | Function | ./packages/shared/src/agent/pipeline-stage-runtime-provider-source.test.js | 58-60 |
+| test:a stage admitted on the organization key reports itself as customer@L62 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-provider-source.test.js | 62-64 |
+| test:a stage admitted on a platform key reports no source at all@L66 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-provider-source.test.js | 66-68 |
+| test:a stage snapshot without the decision reports no source@L73 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-provider-source.test.js | 73-75 |
 
-*... and 114 more members.*
+*... and 120 more members.*
 
 ## Execution Flows
 
@@ -75,7 +75,7 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (102 edge(s))
+- `equal` (105 edge(s))
 - `String` (40 edge(s))
 - `join` (33 edge(s))
 - `deepEqual` (28 edge(s))
@@ -93,7 +93,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (102 edge(s))
+- `equal` (105 edge(s))
 - `./packages/shared/src/agent/pipeline-stage-runtime.js` (46 edge(s))
 - `./packages/shared/src/agent/tools/environments.js` (35 edge(s))
 - `deepEqual` (28 edge(s))

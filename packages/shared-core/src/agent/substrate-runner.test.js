@@ -71,7 +71,7 @@ test('a substrate run meters exactly one usage record for the dispatching org', 
       fetchImpl,
       recordUsage: (attribution, runResult, llm) => {
         calls.push({ attribution, runResult, llm });
-        return { id: 'use_1', ...attribution };
+        return { id: 'use_1', billingSource: 'managed', ...attribution };
       },
     });
     assert.equal(calls.length, 1, 'exactly one usage record per run — never two, never zero');
@@ -89,8 +89,53 @@ test('a substrate run meters exactly one usage record for the dispatching org', 
     assert.deepEqual(result.usage, { inputTokens: 100, outputTokens: 200, totalTokens: 300 });
     assert.equal(result.costUsd, 0.0031);
     assert.equal(result.traceId, 'trace-xyz');
+    assert.equal(result.billingSource, 'managed');
     assert.equal(record.suspended, true);
     assert.equal(record.deleted, true);
+  } finally {
+    restore();
+  }
+});
+
+// A substrate run on the organization's own key must reach the metering call with
+// that decision attached. This proves only the hand-off — what the writer does with
+// it is usage.test.js's job.
+test('the runner hands the admitted credential decision to metering', async () => {
+  const { fetchImpl, restore } = stubSubstrate({
+    actorResponse: { finalText: 'PLAN', messages: [], usage: { totalTokens: 300 }, costUsd: 0.0031 },
+  });
+  const calls = [];
+  try {
+    const result = await runner.runPlanningOnSubstrate({
+      ...BASE,
+      providerSource: 'customer',
+      fetchImpl,
+      recordUsage: (attribution) => {
+        calls.push(attribution);
+        return { id: 'use_2', billingSource: attribution.providerSource === 'customer' ? 'customer' : 'managed' };
+      },
+    });
+    assert.equal(calls[0].providerSource, 'customer');
+    assert.equal(result.billingSource, 'customer');
+  } finally {
+    restore();
+  }
+});
+
+test('a run with no admitted decision reaches metering with none either', async () => {
+  const { fetchImpl, restore } = stubSubstrate({
+    actorResponse: { finalText: 'PLAN', messages: [], usage: { totalTokens: 300 } },
+  });
+  const calls = [];
+  try {
+    await runner.runPlanningOnSubstrate({
+      ...BASE,
+      fetchImpl,
+      recordUsage: (attribution) => { calls.push(attribution); return null; },
+    });
+    // Null, not 'managed': the writer owns the conservative default, so the
+    // runner must not invent a decision the preflight never made.
+    assert.equal(calls[0].providerSource, null);
   } finally {
     restore();
   }
