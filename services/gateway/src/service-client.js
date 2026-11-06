@@ -64,15 +64,19 @@ function bearerHeader(value) {
  * @param {string} baseUrl  target service base URL (e.g. CONFIG.SERVICES.orgUrl)
  * @param {string} path     absolute path on the target (e.g. '/api/v1/me/deployment')
  * @param {{ method?: string, body?: unknown, userAuth?: string, internalToken?: string,
- *   context?: {organizationId?: string, projectId?: string} }} [opts]
+ *   context?: {organizationId?: string, projectId?: string}, headers?: object }} [opts]
  *   `opts.userAuth` accepts a bare JWT or a `Bearer `-prefixed value.
+ *   `opts.headers` are extra headers the CALLER HAS ALREADY RESOLVED SERVER-SIDE
+ *   (e.g. the trusted `x-ai-fleet-billing-*` identity from billing-access) — never
+ *   values copied off the browser request, which is what those headers exist to
+ *   prevent. They merge before auth, so they cannot overwrite an identity header.
  * @returns {Promise<{ status: number, data: unknown }>}
  */
 async function callJson(baseUrl, path, opts = {}) {
   const { method = 'GET', body } = opts;
   const userAuth = bearerHeader(opts.userAuth);
   const target = `${baseUrl}${path}`;
-  const headers = {};
+  const headers = { ...(opts.headers || {}) };
   Object.assign(headers, contextHeaders(opts.context));
   const init = { method, headers };
 
