@@ -81,4 +81,17 @@ function urls(slug, { projectNumber, region }) {
   };
 }
 
-module.exports = { assertSlug, names, urls, SLUG_RE };
+/**
+ * The Substrate atespace (and its GKE namespace) owned by one tenant.
+ *
+ * One function on purpose: the provisioner that creates the namespace and the
+ * planner that dispatches into it must compute the same name, or a tenant's runs
+ * land in a namespace it does not own. Derives from the validated slug, so the
+ * name is unguessable-by-shape and carries no org-identifying text.
+ */
+function atespace(slug) {
+  assertSlug(slug);
+  return `tenant-${slug}`;
+}
+
+module.exports = { assertSlug, names, urls, atespace, SLUG_RE };

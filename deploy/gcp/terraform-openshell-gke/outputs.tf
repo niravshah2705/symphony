@@ -24,8 +24,8 @@ output "node_pool_name" {
 }
 
 output "tenant_namespaces" {
-  description = "Configured tenant namespaces"
-  value       = var.tenants
+  description = "Atespace -> organization-id, as provisioned by this root"
+  value       = local.tenants
 }
 
 output "get_credentials_command" {

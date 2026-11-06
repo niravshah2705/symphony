@@ -23,8 +23,14 @@ openshell_version     = "0.1.5"
 cert_manager_version  = "v1.20.3"
 envoy_gateway_version = "v1.8.1"
 
-# Tenants
-tenants = ["tenant-a", "tenant-b"]
+# Tenants: organization-id -> Substrate atespace. Leave empty for a cluster whose
+# tenants are bound at runtime by the environment-init job; list an organization
+# here only when this root should provision its namespace + isolation up front.
+# The planner reads the same table from SUBSTRATE_ATESPACE_BY_ORG, so a tenant
+# provisioned here and bound there is the same fact, stated once per side.
+tenant_bindings = {
+  # "0f0c1f2e-3a4b-4c5d-9e8f-0a1b2c3d4e5f" = "tenant-acme"
+}
 
 # Tenant node pool — the power workflow parks min_nodes at 0 to stop the
 # cluster and restores it to 2 on start.

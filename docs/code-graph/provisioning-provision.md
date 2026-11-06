@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 13 nodes
+Community of 14 nodes
 
-- **Size**: 13 nodes
-- **Cohesion**: 0.3254
+- **Size**: 14 nodes
+- **Cohesion**: 0.3359
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,10 +20,11 @@ Community of 13 nodes
 | assertSlug | Function | ./packages/shared-core/src/provisioning/naming.js | 23-28 |
 | names | Function | ./packages/shared-core/src/provisioning/naming.js | 31-64 |
 | urls | Function | ./packages/shared-core/src/provisioning/naming.js | 67-82 |
+| atespace | Function | ./packages/shared-core/src/provisioning/naming.js | 92-95 |
 | deriveOrgInternalToken | Function | ./packages/shared-core/src/provisioning/plan.js | 8-16 |
 | labelValue | Function | ./packages/shared-core/src/provisioning/plan.js | 19-21 |
-| buildPlan | Function | ./packages/shared-core/src/provisioning/plan.js | 57-462 |
-| withComponent | Function | ./packages/shared-core/src/provisioning/plan.js | 103-103 |
+| buildPlan | Function | ./packages/shared-core/src/provisioning/plan.js | 61-478 |
+| withComponent | Function | ./packages/shared-core/src/provisioning/plan.js | 107-107 |
 | nowIso | Function | ./packages/shared-core/src/provisioning/provisioner.js | 26-29 |
 | provision | Function | ./packages/shared-core/src/provisioning/provisioner.js | 37-90 |
 | teardown | Function | ./packages/shared-core/src/provisioning/provisioner.js | 96-130 |
@@ -55,6 +56,6 @@ Community of 13 nodes
 ### Incoming
 
 - `./packages/shared-core/src/provisioning/index.js` (12 edge(s))
-- `./packages/shared-core/src/provisioning/naming.js` (6 edge(s))
+- `./packages/shared-core/src/provisioning/naming.js` (8 edge(s))
 - `./packages/shared-core/src/provisioning/plan.js` (6 edge(s))
 - `./packages/shared-core/src/provisioning/provisioner.js` (5 edge(s))

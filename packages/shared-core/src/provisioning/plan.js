@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { names, urls } = require('./naming');
+const { names, urls, atespace } = require('./naming');
 
 const ORG_S2S_TOKEN_CONTEXT = 'ai-fleet-org-s2s-v1\0';
 
@@ -50,6 +50,10 @@ function labelValue(value) {
  * @param {string} [cfg.customDomain]      Custom domain(s) for Firebase Hosting / tenant gateway CORS
  * @param {string} cfg.firebaseProjectId
  * @param {string} cfg.firebaseApiKey
+ * @param {string} [cfg.substrateUrl]      ateapi control-plane URL for this tenant's substrate
+ * @param {string} [cfg.substrateIngressUrl] public actor ingress (router) URL
+ * @param {string} [cfg.substrateWorkerPool] worker pool this tenant's actors land on
+ * @param {string} [cfg.substratePlannerImage] actor image
  * @param {string} cfg.deadLetterTopic     shared dead-letter topic id
  * @param {string} cfg.emailTopic          shared transactional email topic id
  * @param {object} cfg.serviceAccounts     { gateway, planner, coder, pubsubPush } emails
@@ -127,6 +131,18 @@ function buildPlan(slug, cfg) {
       PIPELINE_STAGE_STORE_BACKEND: 'firestore',
     } : {}),
     ...(cfg.orgId ? { FLEET_ORG_ID: cfg.orgId } : {}),
+    // Substrate tenancy, pinned per tenant rather than inferred per call. The
+    // atespace is a namespace boundary, so this tenant gets exactly one nameable
+    // space and it is derived from the slug the resources are named after — the
+    // same helper the GKE tenant step uses to create the namespace. A caller that
+    // asks for another tenant's space is then ignored, not honored.
+    // URLs are omitted when unset so a stack without a substrate stays inert.
+    SUBSTRATE_ATESPACE: atespace(slug),
+    SUBSTRATE_ALLOWED_ATESPACES: atespace(slug),
+    ...(cfg.substrateUrl ? { SUBSTRATE_URL: cfg.substrateUrl } : {}),
+    ...(cfg.substrateIngressUrl ? { SUBSTRATE_INGRESS_URL: cfg.substrateIngressUrl } : {}),
+    ...(cfg.substrateWorkerPool ? { SUBSTRATE_WORKER_POOL: cfg.substrateWorkerPool } : {}),
+    ...(cfg.substratePlannerImage ? { SUBSTRATE_PLANNER_IMAGE: cfg.substratePlannerImage } : {}),
   };
 
   // Credential-bearing workloads always use their co-located egress proxy.
