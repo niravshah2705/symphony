@@ -205,15 +205,21 @@ variable "substrate_ingress_hostname" {
 }
 
 variable "substrate_ateapi_service" {
-  description = "Name of the ateapi Control-plane Service created by `ate-setup deploy ate-system`, used as the control-plane route backend."
+  description = <<EOT
+    Name of the Control-plane Service created by `ate-setup deploy ate-system`, used as
+    the control-plane route backend. `api`, not `ateapi`: that is what the installer
+    actually creates (headless, ports grpc=443 and exchange=8445) — see
+    docs/SUBSTRATE_INTEGRATION.md §5.3 for why the route still does not carry traffic
+    against it.
+  EOT
   type        = string
-  default     = "ateapi"
+  default     = "api"
 }
 
 variable "substrate_ateapi_port" {
-  description = "Port of the ateapi Control-plane Service, used as the control-plane route backend port."
+  description = "Port of the Control-plane Service, used as the control-plane route backend port. 443 is the gRPC listener; the Service has no plaintext port."
   type        = number
-  default     = 8443
+  default     = 443
 }
 
 variable "substrate_control_plane_public" {

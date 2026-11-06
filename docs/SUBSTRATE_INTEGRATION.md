@@ -143,20 +143,22 @@ Two things make the hostname usable rather than decorative:
   `EnvoyProxy substrate-proxy-config` (in `ate-system`, so `parametersRef` needs no
   ReferenceGrant) bound to `substrate-ip`, and points
   `spec.infrastructure.parametersRef` at it.
-- **A control-plane route.** The planner reaches ateapi over gRPC, and ateapi only
-  listens in-cluster. Set `SUBSTRATE_CONTROL_PLANE_PUBLIC=true` to also publish a
+- **A control-plane route.** The planner reaches the control plane over gRPC, and it
+  only listens in-cluster. Set `SUBSTRATE_CONTROL_PLANE_PUBLIC=true` to also publish a
   path-prefixed route for `/substrate.ateapi.v1.Control` →
-  `${SUBSTRATE_ATEAPI_SERVICE}:${SUBSTRATE_ATEAPI_PORT}` (defaults `ateapi:8443`) on
-  the same hostname. **This is the only way `substrateUrl` can be a public URL, and
-  it is off by default**: ateapi creates/deletes actors and mints actor JWTs, and
-  this config adds **no caller authentication** in front of it. Prefer a private
-  path (VPC connector / IAP / service mesh) for anything but a smoke test.
+  `${SUBSTRATE_ATEAPI_SERVICE}:${SUBSTRATE_ATEAPI_PORT}` (defaults `api:443`, the
+  Service the installer actually creates) on the same hostname. **This is the only way
+  `substrateUrl` can be a public URL, and it is off by default**: the control plane
+  creates/deletes actors and mints actor JWTs, and this config adds **no caller
+  authentication** in front of it. Prefer a private path (VPC connector / IAP / service
+  mesh) for anything but a smoke test. Even with the flag on, the route does not yet
+  carry traffic — §5.3 records the three things between it and a working call.
 
 The route matches on path prefix because that is exactly what the client puts on the
 wire — `substrate.js` sends `:path = /substrate.ateapi.v1.Control/<Method>` over HTTP/2,
 and `http2.connect()` upgrades to TLS for an `https://` `substrateUrl`. So the plain
-hostname (no `:8443`) is the correct value; Envoy terminates TLS and forwards the
-`/substrate.ateapi.v1.Control/*` prefix to ateapi's gRPC port.
+hostname (no `:8443`) is the correct value; Envoy terminates the client's TLS and has to
+re-encrypt to the backend, which is the part that is not configured yet (§5.3).
 
 Then:
 
@@ -219,7 +221,7 @@ Leave `SUBSTRATE_INGRESS_HOSTNAME` unset and the installer stays the sole owner.
 
 | Settings field | Value for `substrate.archagentix.com` |
 |---|---|
-| `substrateUrl` | `https://substrate.archagentix.com` with `SUBSTRATE_CONTROL_PLANE_PUBLIC=true` (gRPC rides the `/substrate.ateapi.v1.Control` prefix); otherwise the in-cluster `ateapi.ate-system.svc:8443`, reachable only from inside the VPC |
+| `substrateUrl` | The address the installer actually creates is `https://api.ate-system.svc:443` (TLS-only; `api` is a headless Service with ports `grpc=443`, `exchange=8445`) and it is reachable only from inside the cluster. The public form `https://substrate.archagentix.com` needs `SUBSTRATE_CONTROL_PLANE_PUBLIC=true` **and** the three fixes in §5.3, so neither value works from Cloud Run today |
 | `substrateIngressUrl` | `https://substrate.archagentix.com` |
 | `substrateAtespace` | **must be one of `SUBSTRATE_ALLOWED_ATESPACES`** (default `tenant-a,tenant-b`) — anything else is silently dropped by `resolveSubstrateAtespace` and it falls back to the org-derived space (`tenant-a` by default). Leave blank to derive per organization; `GET /api/agent/substrate/status` echoes what was resolved and the runner creates it over ateapi (`CreateAtespace`/`GetAtespace`) if missing |
 | `substrateWorkerPool` | the value of the `ate.dev/worker-pool` **node label** the `workerSelector` matches — not automatically the GKE pool name. This config taints the pool but does not label it, so either label the nodes (`gcloud container node-pools update substrate-worker-pool … --node-labels ate.dev/worker-pool=substrate-worker-pool`) or set the field to whatever label the upstream installer applied. Blank falls back to `planner-pool` |
@@ -342,6 +344,62 @@ Repo variables it reads (all optional; defaults shown):
 The snapshot transfer service account is fixed to substrate-gke's default name,
 `ate-snapshot-transfer`; if you override `SNAPSHOT_TRANSFER_GSA_NAME` there, the
 preflight's GSA row and the installer flag will disagree.
+
+### 5.3 Why the public control-plane route does not carry traffic yet
+
+`SUBSTRATE_CONTROL_PLANE_PUBLIC=true` renders the route, and the route is `Accepted` —
+but a call to `https://<hostname>/substrate.ateapi.v1.Control/<Method>` returns a gRPC
+`UNAVAILABLE` from Envoy, not from the control plane. Three independent things sit
+between the rendered route and a working call, each verified against the live install:
+
+1. **Backend name and port.** The installer's control-plane Service is `api`, headless,
+   ports `grpc=443` and `exchange=8445`. The module's route pointed at `ateapi:8443`, a
+   name that has never existed here, so Envoy reported
+   `ResolvedRefs=False (BackendNotFound)` and had no cluster to build. The defaults are
+   now `api`/`443`; override with `SUBSTRATE_ATEAPI_SERVICE` / `SUBSTRATE_ATEAPI_PORT`
+   only if a future release renames it again. Confirm with
+   `kubectl -n ate-system get svc api -o jsonpath='{.spec.ports}'`.
+2. **The hop to the backend must be TLS, and Envoy will not guess it.** `api:443` only
+   speaks TLS (`--grpc-server-cred-bundle=/run/servicedns.podcert.ate.dev/credential-bundle.pem`),
+   with leaf certs whose SAN is `api.ate-system.svc`, signed by the
+   `servicedns.podcert.ate.dev/identity` CA (the
+   `ClusterTrustBundle` `servicedns.podcert.ate.dev:identity:primary-bundle`, whose
+   content also sits in the `service-dns-ca-pool` TLS Secret in
+   `podcertificate-controller-system`). Two probes answered `415` over TLS and nothing
+   in cleartext, so the transport is confirmed; what is missing is the *verification
+   material*. Gateway API `BackendTLSPolicy` (v1, bundle v1.5.1) accepts only
+   `caCertificateRefs` / `wellKnownCACertificates` — there is no `skipVerify` — and
+   Envoy Gateway's own `Backend` resource, which does have `tls.insecureSkipVerify`, is
+   refused with `Backend is disabled in Envoy Gateway configuration` unless the
+   cluster-wide `envoy-gateway-config` is changed. So the choice is: project that CA
+   into a ConfigMap under key `ca.crt` and reference it (the CA is self-signed with a
+   one-year validity, so whatever copies it has to run again before rotation), or
+   enable the `Backend` API in the shared Envoy Gateway config — which also affects the
+   OpenShell front — and accept an unverified encrypted hop.
+3. **HTTP/2 upstream, and an identity the control plane accepts.** `api`'s port is
+   *named* `grpc`, which is not an appProtocol Envoy Gateway maps to HTTP/2, so the
+   upstream defaults to HTTP/1.1 and a grpc-go server drops the stream — once
+   connectivity was allowed, the failure text changed from
+   `reset reason: connection timeout` to `connection termination`. A `GRPCRoute` instead
+   of the `HTTPRoute` forces h2 end-to-end (the OpenShell front already serves a
+   `GRPCRoute` through the same `eg` class), at the cost of a replace — create plus
+   delete — in the Terraform apply. And the control plane authenticates its callers:
+   every accepted request in its log carries
+   `"principal":{"ID":"spiffe://cluster.local/ns/ate-system/sa/…","Kind":"mtls"}`, while
+   `ate-api-authentication` declares one `jwtProviders` entry — issuer
+   `https://container.googleapis.com/v1/projects/<project>/locations/<zone>/clusters/<cluster>`,
+   audience `api.ate-system.svc` — alongside
+   `--authz-bootstrap-owners=system:serviceaccount:ate-system:ate-client`. A public
+   front therefore has to present either a client certificate signed by the pod-identity
+   CA (Envoy would need one issued for a pod that is not enrolled in
+   `podcertificate-controller`) or a GKE-minted Kubernetes ServiceAccount JWT — neither
+   of which a Cloud Run service holds today.
+
+Until 2 and 3 are settled, treat `substrateUrl` as in-cluster-only and leave
+`SUBSTRATE_CONTROL_PLANE_PUBLIC=false`. Turning it off is a Terraform destroy of the
+route and its `BackendTrafficPolicy`, so it needs `gke_reconcile` **and**
+`gke_allow_destroy`; the destroy gate in `deploy.yml` is doing its job there, not
+failing.
 
 ## 6. Key files
 
@@ -487,21 +545,30 @@ as an error rather than a silent no-op:
 - The front **is** serving `substrate.archagentix.com`: the `A` record points at
   `substrate-ip` (34.14.137.62), `substrate-server-tls` is `Ready=True` with a real
   Let's Encrypt certificate, `http://` answers `301` to `https://`, and the `https`
-  listener is Programmed. HTTPS still returns `500`, and that is the expected shape —
-  the route's backends (`atenet-router`, `ateapi`) do not exist until the control plane
-  is installed (§5.1).
-- **The GKE 1.37 prerequisite is met** — the master is on `1.37.1-gke.1552000`
-  (`REGULAR`) and `kubectl api-resources --api-group=certificates.k8s.io` lists both
-  `clustertrustbundles` and `podcertificaterequests`, so the failure that killed the
-  earlier `mode=install` run (§5.2) is gone. The remaining blocker is the bundled
-  postgres: upstream wants 500 Gi of `pd-balanced` against a 500 GB `SSD_TOTAL_GB`
-  quota and 2 CPU on nodes with 1930m allocatable, so `postgres-0` stays Pending. The
-  install now right-sizes both (§5.2); a half-installed `sts/postgres` from the older
-  runs has to be deleted for the new template to take effect.
-- The pool is tainted but carries no `ate.dev/worker-pool` **label**, so the installer's
-  `workerSelector` matches nothing until the nodes are labelled (§5.1 field table).
-- `SUBSTRATE_VERSION` is unset, so every preflight/install run resolves the tag from
-  "latest release" and warns; pin it once the cluster is live (§5.2).
+  listener is Programmed with two routes attached. `https://…/` answers `503` because
+  it resolves to `atenet-router:8444`, the actor CONNECT-tunnel port — a plain `GET /`
+  has no upstream to talk to, which is the front working as designed rather than a
+  broken page.
+- **The control plane is installed.** `mode=install` from PR #253 landed
+  `ate-api-server` (×2), `ate-controller`, `ate-idp-server` (×2), `atelet`,
+  `atenet-router`, `atenet-egress`, `k8s-credential-provider` and `postgres-0`, all
+  `Running`, and `data-postgres-0` bound at the right-sized 50 Gi. Both blockers that
+  killed the earlier runs are gone: the master is on `1.37.1-gke.1552000` (`REGULAR`)
+  with `clustertrustbundles` + `podcertificaterequests` served, and the postgres volume
+  and CPU request no longer exceed the `SSD_TOTAL_GB` quota and the node's allocatable
+  (§5.2).
+- **`substrateUrl` still has no working value.** The published control-plane route
+  pointed at a Service that has never existed here (`ateapi:8443`; the real one is
+  `api:443`), and fixing the name exposes two more requirements — TLS re-encryption to
+  the backend and an identity the control plane admits. §5.3 records all three with the
+  evidence, so nobody re-derives them.
+- The worker pool has **no nodes and no `ate.dev/worker-pool` label**: `substrate-worker-pool`
+  sits at zero instances while `atelet`/`atenet-egress` run on tenant-pool nodes, and
+  the installer's `workerSelector` matches nothing until the nodes are labelled (§5.1
+  field table). No actor can be placed until both are true.
+- `SUBSTRATE_VERSION` is unset, so this install resolved the tag from "latest release"
+  and printed a warning (`v1.0.0`); pin it so the checkout and the images stop
+  drifting (§5.2).
 - The `ate-system` control plane is never installed by Terraform; it lands when the
   **Substrate control plane (preflight / install)** workflow runs with `mode=install`
   (§5 step 3, §5.2).

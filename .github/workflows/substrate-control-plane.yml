@@ -503,16 +503,17 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           # substrate.tf routes the public control-plane path to
-          # var.substrate_ateapi_service (default `ateapi`). That name is an
-          # assumption about what the installer creates, so read it off the
-          # cluster: a wrong guess fails as a silent 503 through the ingress
-          # rather than as a plan error.
-          SERVICES="$(kubectl -n ate-system get svc -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.ports[0].port}{"\n"}{end}' 2>/dev/null || true)"
-          ATEAPI_LINE="$(printf '%s\n' "$SERVICES" | grep -E '^(ateapi|ate-api-server|ateapi-server)( |$)' | head -1 || true)"
+          # var.substrate_ateapi_service. That name used to be a guess (`ateapi`), and
+          # the installer's actual Service is `api` with ports grpc=443/exchange=8445 —
+          # a wrong guess fails as a 503 through the ingress, not as a plan error, so
+          # read it off the cluster and print what the route must be set to.
+          SERVICES="$(kubectl -n ate-system get svc -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .spec.ports[*]}{.name}={.port}{" "}{end}{"\n"}{end}' 2>/dev/null || true)"
+          ATEAPI_LINE="$(printf '%s\n' "$SERVICES" | grep -E '^(api|ateapi|ate-api-server)( |$)' | head -1 || true)"
           if [ -z "$ATEAPI_LINE" ]; then
-            echo "::warning::No ateapi-looking Service in ate-system. Services seen: $(tr '\n' ' ' <<<"$SERVICES")"
-            echo "⚠️ Could not confirm the ateapi Service name — set \`SUBSTRATE_ATEAPI_SERVICE\` to whichever of the above serves the Control gRPC API."
+            echo "::warning::No control-plane Service in ate-system. Services seen: $(tr '\n' ' ' <<<"$SERVICES")"
+            echo "⚠️ Could not confirm the Control gRPC Service name — set \`SUBSTRATE_ATEAPI_SERVICE\` to whichever of the above serves it."
           else
-            echo "✅ ateapi Service: \`$ATEAPI_LINE\` — must match \`var.substrate_ateapi_service\` (currently \`${ATEAPI_SERVICE:-ateapi}\`) and the Settings \`substrateUrl\`."
+            echo "✅ Control-plane Service: \`$ATEAPI_LINE\` — \`var.substrate_ateapi_service\` is \`${ATEAPI_SERVICE:-api}\` (repo var unset means the module default), and Settings \`substrateUrl\` must name the same address." >> "$GITHUB_STEP_SUMMARY"
+            echo "   The route reaching that Service is not the same as it carrying traffic: §5.3 lists the TLS-to-backend and caller-identity requirements that still block \`substrateUrl\`." >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo "Next: fill Settings → Models & runtime → Execution substrate (docs/SUBSTRATE_INTEGRATION.md §5.1), then \`curl -s \$GW/api/agent/substrate/status | jq .substrate\` and expect \`connected: true\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "Next: docs/SUBSTRATE_INTEGRATION.md §5.3 before filling Settings → Models & runtime → Execution substrate, then \`curl -s \$GW/api/agent/substrate/status | jq .substrate\` and expect \`connected: true\`." >> "$GITHUB_STEP_SUMMARY"
