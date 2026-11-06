@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 318 nodes
+Community of 310 nodes
 
-- **Size**: 318 nodes
-- **Cohesion**: 0.1917
+- **Size**: 310 nodes
+- **Cohesion**: 0.1906
 - **Dominant Language**: javascript
 
 ## Members
@@ -63,9 +63,9 @@ Community of 318 nodes
 | generateVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 17-19 |
 | challengeFromVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 22-24 |
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
-| batchOf | Function | ./packages/shared-core/src/attachments/embed.js | 15-19 |
+| getBaseUrl | Function | ./packages/shared-core/src/billing/cashfree-client.js | 6-15 |
 
-*... and 268 more members.*
+*... and 260 more members.*
 
 ## Execution Flows
 
@@ -79,34 +79,34 @@ Community of 318 nodes
 - **listSandboxes** (criticality: 0.71, depth: 8)
 - **listActors** (criticality: 0.71, depth: 8)
 - **runSandboxSecurityChecks** (criticality: 0.70, depth: 8)
-- *... and 28 more flows.*
+- *... and 24 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (241 edge(s))
+- `equal` (229 edge(s))
 - `filter` (39 edge(s))
 - `toISOString` (38 edge(s))
 - `Number` (33 edge(s))
 - `String` (33 edge(s))
-- `slice` (27 edge(s))
-- `deepEqual` (26 edge(s))
+- `slice` (25 edge(s))
 - `trim` (25 edge(s))
+- `deepEqual` (25 edge(s))
 - `isArray` (24 edge(s))
 - `includes` (23 edge(s))
 - `ok` (23 edge(s))
-- `push` (22 edge(s))
 - `set` (21 edge(s))
-- `map` (20 edge(s))
+- `push` (20 edge(s))
 - `now` (19 edge(s))
+- `isFinite` (19 edge(s))
 
 ### Incoming
 
-- `equal` (241 edge(s))
+- `equal` (229 edge(s))
 - `./packages/shared-core/src/store.js` (181 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
-- `deepEqual` (26 edge(s))
+- `deepEqual` (25 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
 - `ok` (23 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))

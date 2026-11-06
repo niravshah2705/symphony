@@ -40,7 +40,7 @@ async def trigger_provisioning(session: Uow, org: Organization) -> None:
         "updated_at": utcnow().isoformat(),
     }
     org.updated_at = utcnow()
-    await _publish_provision_request(
+    await publish_provisioning_request(
         settings.gcp_project_id,
         settings.provisioning_topic,
         {"org_id": str(org.id), "slug": org.deployment_slug, "action": "provision"},
@@ -61,14 +61,14 @@ async def trigger_teardown(org: Organization) -> None:
     deployments = org.deployments if isinstance(org.deployments, dict) else {}
     if deployments.get("status") not in {"provisioning", "provisioned", "failed"}:
         return
-    await _publish_provision_request(
+    await publish_provisioning_request(
         settings.gcp_project_id,
         settings.provisioning_topic,
         {"org_id": str(org.id), "slug": org.deployment_slug, "action": "teardown"},
     )
 
 
-async def _publish_provision_request(project_id: str, topic: str, message: dict) -> None:
+async def publish_provisioning_request(project_id: str, topic: str, message: dict) -> None:
     """Publish a provision request to Pub/Sub. Overridable in tests.
 
     Lazily imports the SDK so the dependency is only needed when provisioning is

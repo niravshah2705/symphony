@@ -47,6 +47,9 @@ function buildCfg(projectNumber) {
     pipelineOrchestratorEnabled: enabled('PIPELINE_ORCHESTRATOR_ENABLED', false),
     pipelineDeploymentEnabled: enabled('PIPELINE_DEPLOYMENT_ENABLED', false),
     orgS2sSigningKey: process.env.ORG_S2S_SIGNING_KEY || '',
+    // Empty means "this deployment has no Substrate control plane", which the
+    // atespace step reports as SKIPPED instead of pretending it created one.
+    substrateUrl: (CONFIG.SUBSTRATE && CONFIG.SUBSTRATE.url) || '',
     serviceAccounts: {
       gateway: process.env.GATEWAY_SA || '',
       planner: process.env.PLANNER_SA || '',
@@ -97,19 +100,31 @@ async function s2sAuthHeader(audience) {
   return headers.Authorization || headers.authorization || '';
 }
 
-async function writeBack(orgId, deployments) {
+// S2S PATCH to the org service's internal surface, with the same two headers.
+async function patchInternal(path, body, what) {
   const base = CONFIG.SERVICES.orgUrl;
-  if (!base) throw new Error('ORG_URL unset — cannot write back deployments');
+  if (!base) throw new Error(`ORG_URL unset — cannot ${what}`);
   const origin = (() => { try { return new URL(base).origin; } catch (_) { return base; } })();
   const headers = { 'content-type': 'application/json', 'x-internal-token': INTERNAL_API_TOKEN };
   const auth = await s2sAuthHeader(origin);
   if (auth) headers.authorization = auth;
-  const res = await fetch(`${base}/api/v1/internal/orgs/${orgId}/deployments`, {
-    method: 'PATCH',
-    headers,
-    body: JSON.stringify({ deployments }),
-  });
-  if (!res.ok) throw new Error(`deployment write-back failed (${res.status})`);
+  const res = await fetch(`${base}${path}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`${what} failed (${res.status})`);
+}
+
+async function writeBack(orgId, deployments) {
+  await patchInternal(`/api/v1/internal/orgs/${orgId}/deployments`, { deployments }, 'deployment write-back');
+}
+
+// Settles one environment-initialization step the init job handed to us. The org
+// service reconciles the run from it, so the only thing carried here is the
+// outcome — never a credential or a provider response body.
+async function writeStepStatus(orgId, runId, stepKey, { status, detail = null } = {}) {
+  await patchInternal(
+    `/api/v1/internal/orgs/${orgId}/environment_runs/${runId}/steps/${encodeURIComponent(stepKey)}`,
+    { status, detail },
+    'environment step write-back',
+  );
 }
 
 function createApp(cfg) {
@@ -121,13 +136,18 @@ function createApp(cfg) {
   // Pub/Sub push: provision/teardown a tenant. OIDC-verified (pushAuth).
   app.post('/pubsub/tenant-provision', pushAuth(), (req, res) => {
     const message = decodePushMessage(req.body);
-    if (!PROVISIONING_ENABLED) {
+    // An atespace is an in-cluster namespace, not a Cloud Run resource, so a
+    // deployment that has substrate but no per-tenant stack still has to answer
+    // it — otherwise the step sits RUNNING with nobody coming to settle it.
+    if (!PROVISIONING_ENABLED && (message || {}).action !== 'substrate-atespace') {
       log.info('provisioner: PROVISIONING_ENABLED is off — acking request as no-op.');
       return res.status(204).end(); // ack; do nothing
     }
     // Long-running (minutes): ack immediately, work in the background. Retries on
     // failure come from Pub/Sub redelivery; status=failed is written meanwhile.
-    Promise.resolve(handleMessage(message, { provisionTenant, teardownTenant, writeBack, cfg, log }))
+    Promise.resolve(handleMessage(message, {
+      provisionTenant, teardownTenant, writeBack, writeStepStatus, cfg, log,
+    }))
       .catch((err) => log.error(`provisioner dispatch error: ${err && err.message ? err.message : err}`));
     return res.status(204).end();
   });
@@ -149,4 +169,4 @@ if (require.main === module) {
   start().catch((err) => { log.error(`provisioner failed to start: ${err && err.message ? err.message : err}`); process.exit(1); });
 }
 
-module.exports = { createApp, buildCfg, writeBack };
+module.exports = { createApp, buildCfg, writeBack, writeStepStatus };

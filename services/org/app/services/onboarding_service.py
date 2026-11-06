@@ -11,7 +11,7 @@ import uuid
 
 from app.core.database import Uow
 from app.core.timeutils import utcnow
-from app.models.enums import MembershipStatus, OrgRole, ProjectRole
+from app.models.enums import EnvironmentTrigger, MembershipStatus, OrgRole, ProjectRole
 from app.models.organization import Organization
 from app.models.organization_membership import OrganizationMembership
 from app.models.project import Project
@@ -24,7 +24,7 @@ from app.repositories.organization_membership_repo import OrganizationMembership
 from app.repositories.project_repo import ProjectRepository
 from app.repositories.tag_repo import TagRepository
 from app.schemas.me import CreateOrgRequest
-from app.services import provisioning_service
+from app.services import environment_service, provisioning_service
 from app.services.common import allocate_org_slug
 
 DEFAULT_ORG_NAME = "default"
@@ -128,7 +128,7 @@ async def ensure_default_organization_and_project(
 
 
 async def create_organization_for_user(
-    session: Uow, user: User, data: CreateOrgRequest
+    session: Uow, user: User, data: CreateOrgRequest, *, background
 ) -> Organization:
     org = Organization(
         name=data.name,
@@ -147,4 +147,10 @@ async def create_organization_for_user(
 
     # Explicit org creation → provision a dedicated stack (no-op unless enabled).
     await provisioning_service.trigger_provisioning(session, org)
+    # ...and initialize the rest of the environment. An IdP user never goes
+    # through the password login that would otherwise trigger this, so creating
+    # the org has to be the trigger.
+    await environment_service.init_for_user(
+        background, session, user, trigger=EnvironmentTrigger.ORG_CREATE
+    )
     return org
