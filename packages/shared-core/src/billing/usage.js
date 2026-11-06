@@ -7,7 +7,10 @@ const { resolveOrgId } = require('./org-context');
 
 /**
  * First-party usage metering — the ONLY place an agent run's token/cost usage is
- * persisted. Called from executeAgentRuntime (agent/runtimes.js) after each run.
+ * persisted. Two call sites, and which one applies depends on where the run
+ * executed: in-process harnesses call it from harnesses/contract.js meterRun,
+ * and a Substrate actor run is metered by the dispatching planner pod (see
+ * agent/substrate-runner.js) because the actor itself has no tenant store.
  *
  * The runtime already NORMALIZES usage (agent/runtimes normalizeUsage) before we
  * see it, so this module only picks the persisted subset and computes cost. It
@@ -32,7 +35,7 @@ function pickUsage(usage) {
 
 /**
  * Persist one granular usage record for a completed (or errored) agent run.
- * @param {object} attribution { orgId?, projectId?, projectName?, userId?, userEmail?, taskId?, taskIdentifier?, source? }
+ * @param {object} attribution { orgId?, projectId?, projectName?, userId?, userEmail?, taskId?, taskIdentifier?, source?, runId?, traceId?, gatewayMode? }
  * @param {object} result      the runtime result { usage, costUsd }
  * @param {object} [llm]        { provider, model } for cost estimation + labels
  * @returns {object|null} the stored record, or null when skipped / on error
@@ -54,6 +57,12 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
       taskId: attribution.taskId || null,
       taskIdentifier: attribution.taskIdentifier || null,
       source: attribution.source || 'run',
+      // Correlation handles: the trace id links this row to Langfuse + the
+      // service logs, and runId links it to the job that made it. Both are
+      // best-effort — a run recorded without them is still billable.
+      runId: attribution.runId || null,
+      traceId: attribution.traceId || null,
+      gatewayMode: attribution.gatewayMode || null,
       provider: (llm && llm.provider) || 'unknown',
       model: (llm && llm.model) || 'unknown',
       usage,

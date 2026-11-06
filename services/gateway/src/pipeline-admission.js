@@ -827,6 +827,11 @@ function createPipelineAdmission({
           // Per-request LLM gateway feature flag (already availability-gated
           // and allowlisted at ingestion by requestContext).
           llmGateway: context.llmGateway || null,
+          // The W3C traceparent, validated at ingestion. It rides here rather
+          // than only in a header because this message is what survives a push
+          // retry: a header is gone once the HTTP request ends, so a retried
+          // stage would otherwise start an unrelated trace.
+          traceparent: context.traceparent || null,
           policy: decision,
           stageConfiguration: stageConfigurationFromDecision(decision, stages, selections, baseRequest),
         },

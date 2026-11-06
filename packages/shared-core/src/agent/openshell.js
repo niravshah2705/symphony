@@ -53,6 +53,10 @@ const {
   unframeGrpcMessages,
 } = require('./grpc-wire');
 
+// Image-registry credential material lives in ./registry-auth so the Substrate
+// runner can use it without depending on this module (which is being retired).
+const { normalizeRegistryHost, buildDockerConfigJson } = require('./registry-auth');
+
 // ── gRPC HTTP/2 Transport ───────────────────────────────────────────────────
 
 function resolveOpenShellUrl(explicitUrl) {
@@ -479,27 +483,6 @@ async function upsertProfile(profileSpec, workspace, options = {}) {
   if (workspace) updateParts.push(pbMessage(4, encodeWorkspaceScope(workspace)));
   updateParts.push(pbString(5, crypto.randomUUID()));
   await grpcCall('UpdateProviderProfiles', Buffer.concat(updateParts), options);
-}
-
-function normalizeRegistryHost(registryUrl) {
-  const raw = String(registryUrl || 'ghcr.io').trim();
-  if (!raw) return 'ghcr.io';
-  return raw.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-}
-
-function buildDockerConfigJson({ registryUrl, username, password } = {}) {
-  if (!username || !password) return '';
-  const host = normalizeRegistryHost(registryUrl);
-  const auth = Buffer.from(`${username}:${password}`, 'utf8').toString('base64');
-  return JSON.stringify({
-    auths: {
-      [host]: {
-        username: String(username),
-        password: String(password),
-        auth,
-      },
-    },
-  });
 }
 
 function buildOrgImagePullSecretManifest({

@@ -31,6 +31,7 @@ const {
 } = require('../store/workspace-context');
 
 const { CONFIG, normalizeLlmGatewayMode } = require('../config');
+const { cleanTraceparent } = require('../traceparent');
 
 /**
  * Enrichment job queue + scheduler.
@@ -194,10 +195,11 @@ function emitWorkspaceState(job = null, context) {
 }
 
 /** Queue a project for enrichment, skipping duplicates already in flight. */
-function enqueue({ projectId, projectName, assumedRole, orgId = null, nativeProjectId = null, llmGateway = null }) {
+function enqueue({ projectId, projectName, assumedRole, orgId = null, nativeProjectId = null, llmGateway = null, traceparent = null }) {
   // Allowlist the per-request gateway selector once here; only a known mode is
   // persisted on the job record (see CONFIG.LLM_GATEWAY_MODES in shared-core).
   const gatewayMode = normalizeLlmGatewayMode(llmGateway);
+  const trace = cleanTraceparent(traceparent);
   const activeContext = schedulerContext();
   const requestedContext = normalizeWorkspaceContext({
     organizationId: orgId || activeContext.organizationId,
@@ -255,6 +257,10 @@ function enqueue({ projectId, projectName, assumedRole, orgId = null, nativeProj
     // Per-request LLM gateway feature flag, persisted so the async tick that
     // eventually runs this job re-resolves the model through the gateway.
     ...(gatewayMode ? { llmGateway: gatewayMode } : {}),
+    // Persisted for the same reason: the tick that runs this job is a different
+    // request from the one that asked for it, and only this value ties the two
+    // back together in the logs and in the usage record.
+    ...(trace ? { traceparent: trace } : {}),
     status: 'pending',
     assumedRole: assumedRole ? { id: assumedRole.id, name: assumedRole.name } : null,
     createdAt: new Date().toISOString(),
@@ -472,7 +478,15 @@ function jobsForContext(jobs, context) {
 
 function runJobInWorkspace(job, fallbackContext, task) {
   const selected = contextForJob(job, fallbackContext);
-  return runWithWorkspaceContext(selected, () => task(selected));
+  // One tick drains many tenants' jobs in one process, so the correlation
+  // handles are bound per job rather than per tick — otherwise every line in the
+  // log looks like the same run.
+  return log.runWithContext({
+    organizationId: selected.organizationId,
+    projectId: selected.projectId,
+    jobId: job && job.id,
+    traceparent: cleanTraceparent(job && job.traceparent),
+  }, () => runWithWorkspaceContext(selected, () => task(selected)));
 }
 
 async function discover({ apiKey, assumedRole, config, context }, dependencies = {}) {
