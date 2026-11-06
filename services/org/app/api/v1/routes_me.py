@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
 from app.api.deps import page_params
 from app.auth.dependencies import get_current_user, get_principal
@@ -26,14 +26,16 @@ from app.authz.principal import Principal
 from app.core.config import get_settings
 from app.core.database import Uow, get_session
 from app.models.user import User
-from app.repositories.org_repo import OrgRepository
 from app.schemas.common import Page, PageParams
 from app.schemas.me import (
     CreateOrgRequest,
+    EnvironmentRetryRequest,
     LinkedIdentityResponse,
     LinkIdentityRequest,
     MeContextResponse,
     MeDeploymentResponse,
+    MeEnvironmentResponse,
+    MeEnvironmentStepResponse,
     MeResponse,
     PendingInvitationResponse,
     PersonaUpdate,
@@ -43,6 +45,7 @@ from app.schemas.org import OrgResponse
 from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.services import (
     context_service,
+    environment_service,
     me_service,
     onboarding_service,
     personal_project_service,
@@ -123,41 +126,78 @@ async def get_my_deployment(
 ):
     """Resolve which front-facing gateway the caller's workspace should use.
 
-    Server-authoritative: the org is derived from the authenticated principal
-    resolved from Firestore — never from a path/query/body org id — so a
-    caller can only ever learn their selected accessible org's deployment
-    (cross-tenant isolation, CLAUDE.md invariant #1). An org-less user remains
-    org-less and receives the shared gateway. Only ``gateway_url`` is
-    browser-facing; planner/coder/org/settings URLs are never returned.
+    The org comes from the authenticated principal, never from a request-supplied
+    id — see `me_service.resolve_deployment` for the isolation reasoning.
     """
-    shared_url = get_settings().shared_gateway_url
+    return await me_service.resolve_deployment(session, principal)
+
+
+@router.get("/environment", response_model=MeEnvironmentResponse)
+async def get_my_environment(
+    principal: Principal = Depends(get_principal),
+    session: Uow = Depends(get_session),
+):
+    """The caller's deployment plus how far its environment initialization got.
+
+    `deployment` is embedded (not re-derived) because the SPA already polls it:
+    one implementation, so the two readings of the same fact cannot disagree.
+    The org is the principal's own, so a caller can never observe another
+    tenant's run — and an org-less caller sees the shared deployment with no run.
+    """
+    deployment = await me_service.resolve_deployment(session, principal)
+    response = MeEnvironmentResponse(
+        deployment=deployment,
+        initialized=get_settings().environment_init_enabled,
+    )
     if principal.org_id is None:
-        return MeDeploymentResponse(status="shared", gateway_url=shared_url, org_id=None)
+        return response
+    run = await environment_service.latest_run(session, principal.org_id)
+    if run is None:
+        return response
+    return MeEnvironmentResponse(
+        deployment=deployment,
+        initialized=response.initialized,
+        run_id=run.id,
+        status=run.status.value,
+        desired_revision=run.desired_revision,
+        attempted_revision=run.attempted_revision,
+        trigger=run.trigger.value,
+        steps=[MeEnvironmentStepResponse(**record) for record in run.steps],
+    )
 
-    org = await OrgRepository(session).get(principal.org_id)
-    if org is None:
-        # Defensive: an org_id with no org doc → treat as shared.
-        return MeDeploymentResponse(status="shared", gateway_url=shared_url, org_id=principal.org_id)
 
-    deployments = org.deployments if isinstance(org.deployments, dict) else {}
-    raw_status = str(deployments.get("status") or "shared")
-    gateway = deployments.get("gateway") if isinstance(deployments.get("gateway"), dict) else {}
-    tenant_url = str(gateway.get("url") or "")
+@router.post("/environment/retry", response_model=MeEnvironmentResponse)
+async def retry_my_environment(
+    body: EnvironmentRetryRequest,
+    principal: Principal = Depends(get_principal),
+    session: Uow = Depends(get_session),
+):
+    """Re-run one initialization step, or every unfinished one when `step` is
+    omitted. Synchronous on purpose: the caller clicked it, so they get the
+    outcome rather than a second poll target.
 
-    if raw_status == "provisioned" and tenant_url:
-        resolved_status, gateway_url = "provisioned", tenant_url
-    elif raw_status == "provisioning":
-        # A dedicated stack is coming up; the SPA keeps using — and polls — the
-        # shared gateway until it flips to provisioned.
-        resolved_status, gateway_url = "provisioning", shared_url
-    else:
-        resolved_status, gateway_url = "shared", shared_url
-
-    return MeDeploymentResponse(
-        status=resolved_status,
-        gateway_url=gateway_url,
-        org_id=org.id,
-        org_name=org.name,
+    404 when there is no run to retry — an org-less caller, or initialization
+    switched off for this deployment. Not a 200 with an empty body: a retry that
+    silently retried nothing would read as a fix.
+    """
+    if principal.org_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no environment run to retry")
+    try:
+        run = await environment_service.retry(session, principal.org_id, body.step)
+    except KeyError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no environment run to retry")
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no environment run to retry")
+    deployment = await me_service.resolve_deployment(session, principal)
+    return MeEnvironmentResponse(
+        deployment=deployment,
+        initialized=True,
+        run_id=run.id,
+        status=run.status.value,
+        desired_revision=run.desired_revision,
+        attempted_revision=run.attempted_revision,
+        trigger=run.trigger.value,
+        steps=[MeEnvironmentStepResponse(**record) for record in run.steps],
     )
 
 
@@ -165,10 +205,13 @@ async def get_my_deployment(
 @router.post("/organizations", response_model=OrgResponse, status_code=status.HTTP_201_CREATED)
 async def create_my_organization(
     body: CreateOrgRequest,
+    background: BackgroundTasks,
     user: User = Depends(get_current_user),
     session: Uow = Depends(get_session),
 ):
-    return await onboarding_service.create_organization_for_user(session, user, body)
+    return await onboarding_service.create_organization_for_user(
+        session, user, body, background=background
+    )
 
 
 @router.get("/projects", response_model=Page[PersonalProjectResponse])
