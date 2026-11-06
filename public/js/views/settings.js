@@ -983,7 +983,9 @@ function substrateConfigCard(ctx, scopeState, text) {
   const url = text(s.substrateUrl, 'https://substrate.<domain> (ateapi path-prefixed)');
   const ingress = text(s.substrateIngressUrl, 'https://substrate.<domain>');
   const atespace = text(s.substrateAtespace, 'tenant-a');
-  const pool = text(s.substrateWorkerPool, 'planner-pool');
+  // Matches resolveSubstrateWorkerPool()'s fallback (the WorkerPool CR name
+  // Terraform renders), so the card shows what the server will actually send.
+  const pool = text(s.substrateWorkerPool, 'substrate-worker-pool');
   const template = text(s.substrateActorTemplate, 'planner');
   const image = text(s.substratePlannerImage, 'ghcr.io/org/planner@sha256:...');
   const timeout = text(s.substrateTimeoutMs, '60000', 'number');

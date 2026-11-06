@@ -115,3 +115,84 @@ test('grpcCall throws when substrate is unconfigured', async () => {
     /not configured/,
   );
 });
+
+// ── ateapi credential (managed secret `substrateApiToken`) ───────────────────
+
+test('resolveSubstrateApiToken takes the S2S managed key, explicit wins, blank when absent', async () => {
+  const calls = [];
+  const fetchSecrets = async (opts) => {
+    calls.push(opts);
+    return { substrateApiToken: '  sa-projected-token  ', githubToken: 'gh' };
+  };
+  assert.equal(await s.resolveSubstrateApiToken({ organizationId: 'acme', projectId: 'p1', fetchSecrets }), 'sa-projected-token');
+  assert.equal(calls[0].organizationId, 'acme');
+  // An already-resolved value (the route's secrets map) short-circuits the fetch.
+  assert.equal(await s.resolveSubstrateApiToken({ token: 'explicit', fetchSecrets }), 'explicit');
+  assert.equal(calls.length, 1);
+  // Nothing published yet → '' (the wire layer reports it), never a throw.
+  assert.equal(await s.resolveSubstrateApiToken({ organizationId: 'acme', fetchSecrets: async () => ({}) }), '');
+  // A resolver outage degrades to '' too rather than failing the whole run early.
+  assert.equal(await s.resolveSubstrateApiToken({ organizationId: 'acme', fetchSecrets: async () => { throw new Error('settings down'); } }), '');
+});
+
+test('a resolved token reaches the gRPC authorization header', async () => {
+  const seen = [];
+  const transport = (method, payload, opts) => {
+    seen.push({ method, authorization: opts.authorization });
+    return Promise.resolve({ status: 0, message: '', headers: {}, trailers: {}, frames: [], firstFrame: Buffer.alloc(0) });
+  };
+  const token = await s.resolveSubstrateApiToken({
+    organizationId: 'acme',
+    fetchSecrets: async () => ({ substrateApiToken: 'sa-projected-token' }),
+  });
+  await s.listActors({ url: 'https://substrate.test', atespace: 'tenant-a', token, transport });
+  assert.equal(seen[0].authorization, 'Bearer sa-projected-token');
+  // A raw `Bearer …` value is not double-prefixed.
+  await s.listActors({ url: 'https://substrate.test', atespace: 'tenant-a', token: 'Bearer sa-2', transport });
+  assert.equal(seen[1].authorization, 'Bearer sa-2');
+});
+
+test('grpcCall fails closed naming substrateApiToken instead of sending an unauthenticated call', async () => {
+  const saved = process.env.SUBSTRATE_TOKEN;
+  delete process.env.SUBSTRATE_TOKEN;
+  try {
+    await assert.rejects(
+      () => s.grpcCall('ListActors', Buffer.alloc(0), { url: 'https://substrate.test', organizationId: 'acme' }),
+      /substrateApiToken/,
+    );
+  } finally {
+    if (saved !== undefined) process.env.SUBSTRATE_TOKEN = saved;
+  }
+});
+
+test('the legacy SUBSTRATE_TOKEN env fallback still authenticates local dev', async () => {
+  const saved = process.env.SUBSTRATE_TOKEN;
+  process.env.SUBSTRATE_TOKEN = 'local-dev-token';
+  try {
+    const seen = [];
+    const transport = (method, payload, opts) => {
+      seen.push(opts.authorization);
+      return Promise.resolve({ status: 0, message: '', headers: {}, trailers: {}, frames: [], firstFrame: Buffer.alloc(0) });
+    };
+    await s.listActors({ url: 'https://substrate.test', atespace: 'tenant-a', transport });
+    assert.deepEqual(seen, ['Bearer local-dev-token']);
+  } finally {
+    if (saved === undefined) delete process.env.SUBSTRATE_TOKEN;
+    else process.env.SUBSTRATE_TOKEN = saved;
+  }
+});
+
+test('a rejected credential is reported as such, not as a bare gRPC 16', async () => {
+  const transport = () => Promise.resolve({
+    status: 16,
+    message: 'missing bearer token',
+    headers: {},
+    trailers: {},
+    frames: [],
+    firstFrame: Buffer.alloc(0),
+  });
+  await assert.rejects(
+    () => s.listActors({ url: 'https://substrate.test', atespace: 'tenant-a', token: 'stale', transport }),
+    /substrateApiToken/,
+  );
+});

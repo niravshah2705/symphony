@@ -676,6 +676,13 @@ const SECRET_ENV = Object.freeze({
   openrouterApiKey: 'OPENROUTER_API_KEY',
   digilockerClientId: 'DIGILOCKER_CLIENT_ID',
   digilockerClientSecret: 'DIGILOCKER_CLIENT_SECRET',
+  // Substrate ateapi control-plane bearer (projected `ate-client` service-account
+  // token, mirrored from Secret Manager `substrate-ateapi-token`). A deployed
+  // planner never reads it here — the egress proxy is set, so secretOverlay()
+  // returns {} and resolveSubstrateApiToken() takes the S2S managed path per run.
+  // This entry is the non-proxied gateway + local-dev managed source only, and it
+  // keeps the map aligned with the settings service MANAGED_ENV / vault SECRET_KEYS.
+  substrateApiToken: 'SUBSTRATE_API_TOKEN',
 });
 
 function secretOverlay() {

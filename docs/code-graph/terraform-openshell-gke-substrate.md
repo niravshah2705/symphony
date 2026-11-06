@@ -4,18 +4,21 @@
 
 ## Overview
 
-Community of 2 nodes
+Community of 5 nodes
 
-- **Size**: 2 nodes
-- **Cohesion**: 0.3333
+- **Size**: 5 nodes
+- **Cohesion**: 0.4444
 - **Dominant Language**: hcl
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| output.substrate_ingress_url | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 65-68 |
-| var.substrate_ingress_hostname | Function | ./deploy/gcp/terraform-openshell-gke/variables.tf | 201-205 |
+| data.kubernetes_secret.substrate_ateapi_ca | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 634-641 |
+| resource.kubectl_manifest.substrate_ateapi_ca | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 643-659 |
+| resource.kubectl_manifest.substrate_ateapi_backend | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 661-686 |
+| resource.kubectl_manifest.substrate_control_plane_route | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 688-724 |
+| resource.kubectl_manifest.substrate_control_plane_traffic | Class | ./deploy/gcp/terraform-openshell-gke/substrate.tf | 726-746 |
 
 ## Execution Flows
 
@@ -25,5 +28,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform-openshell-gke/outputs.tf` (1 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/variables.tf` (1 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/substrate.tf` (5 edge(s))

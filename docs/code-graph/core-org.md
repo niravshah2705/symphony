@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 445 nodes
+Community of 464 nodes
 
-- **Size**: 445 nodes
-- **Cohesion**: 0.4235
+- **Size**: 464 nodes
+- **Cohesion**: 0.4238
 - **Dominant Language**: python
 
 ## Members
@@ -65,50 +65,50 @@ Community of 445 nodes
 | _audience | Function | ./services/settings/app/auth/org_context.py | 141-143 |
 | _cloud_run_token | Function | ./services/settings/app/auth/org_context.py | 146-153 |
 
-*... and 395 more members.*
+*... and 414 more members.*
 
 ## Execution Flows
 
 - **put_org_secrets_selection** (criticality: 0.96, depth: 6)
 - **put_project_secrets_selection** (criticality: 0.96, depth: 6)
-- **get_org_connectors_readiness** (criticality: 0.93, depth: 8)
 - **get_org_secrets** (criticality: 0.93, depth: 6)
 - **get_project_secrets** (criticality: 0.93, depth: 6)
-- **resolve_org_secrets** (criticality: 0.92, depth: 7)
+- **get_org_connectors_readiness** (criticality: 0.93, depth: 8)
 - **put_org_secrets** (criticality: 0.92, depth: 6)
 - **put_project_secrets** (criticality: 0.92, depth: 6)
+- **resolve_org_secrets** (criticality: 0.92, depth: 7)
 - **import_codex_tokens** (criticality: 0.88, depth: 5)
-- **rotate_org_codex_tokens** (criticality: 0.87, depth: 5)
-- *... and 27 more flows.*
+- **resolve_managed_secrets** (criticality: 0.88, depth: 5)
+- *... and 28 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (198 edge(s))
+- `get` (204 edge(s))
 - `str` (78 edge(s))
-- `uuid4` (74 edge(s))
-- `put` (69 edge(s))
-- `json` (66 edge(s))
+- `uuid4` (77 edge(s))
+- `put` (71 edge(s))
+- `json` (68 edge(s))
 - `Depends` (61 edge(s))
 - `set` (27 edge(s))
 - `BaseModel` (21 edge(s))
+- `items` (17 edge(s))
 - `append` (17 edge(s))
-- `items` (16 edge(s))
 - `list` (15 edge(s))
 - `bool` (13 edge(s))
+- `strip` (11 edge(s))
 - `ValueError` (11 edge(s))
 - `dict` (11 edge(s))
-- `strip` (10 edge(s))
 
 ### Incoming
 
-- `uuid4` (71 edge(s))
-- `put` (69 edge(s))
-- `json` (65 edge(s))
-- `get` (58 edge(s))
-- `./services/settings/app/services/secrets_service.py` (26 edge(s))
-- `./services/settings/tests/integration/test_secrets_vault.py` (19 edge(s))
+- `uuid4` (74 edge(s))
+- `put` (71 edge(s))
+- `json` (66 edge(s))
+- `get` (60 edge(s))
+- `./services/settings/app/services/secrets_service.py` (28 edge(s))
+- `./services/settings/tests/integration/test_secrets_vault.py` (23 edge(s))
 - `./services/settings/app/api/v1/routes_internal.py` (17 edge(s))
 - `./services/settings/app/services/policy_service.py` (17 edge(s))
 - `./services/settings/tests/unit/test_resolver.py` (17 edge(s))
@@ -117,4 +117,4 @@ Community of 445 nodes
 - `./services/settings/app/errors.py` (12 edge(s))
 - `./services/settings/tests/integration/test_settings.py` (12 edge(s))
 - `./services/settings/app/domain/resolver.py` (11 edge(s))
-- `./services/settings/tests/integration/test_authz.py` (10 edge(s))
+- `setattr` (11 edge(s))

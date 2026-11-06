@@ -4,20 +4,20 @@
 
 ## Overview
 
-Community of 118 nodes
+Community of 130 nodes
 
-- **Size**: 118 nodes
-- **Cohesion**: 0.6456
+- **Size**: 130 nodes
+- **Cohesion**: 0.6409
 - **Dominant Language**: hcl
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| resource.google_container_cluster.primary | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 5-95 |
-| local.system_node_selector | Function | ./deploy/gcp/terraform-openshell-gke/gke.tf | 110-112 |
-| resource.google_container_node_pool.primary_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 115-170 |
-| resource.google_container_node_pool.system_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 176-233 |
+| resource.google_container_cluster.primary | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 5-100 |
+| local.system_node_selector | Function | ./deploy/gcp/terraform-openshell-gke/gke.tf | 115-117 |
+| resource.google_container_node_pool.primary_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 120-175 |
+| resource.google_container_node_pool.system_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 181-238 |
 | data.http.agent_sandbox_manifest | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 6-8 |
 | data.kubectl_file_documents.agent_sandbox_docs | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 10-12 |
 | local.agent_sandbox_docs | Function | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 18-31 |
@@ -63,9 +63,9 @@ Community of 118 nodes
 | output.dns_setup_instructions | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 36-39 |
 | output.substrate_enabled | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 45-48 |
 | output.substrate_worker_pool | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 50-53 |
-| output.substrate_credentials_namespace | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 55-58 |
+| output.substrate_worker_pool_cr_name | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 59-62 |
 
-*... and 68 more members.*
+*... and 80 more members.*
 
 ## Execution Flows
 
@@ -75,9 +75,9 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform-openshell-gke/variables.tf` (35 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/substrate.tf` (20 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/outputs.tf` (16 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/variables.tf` (39 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/substrate.tf` (25 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/outputs.tf` (19 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/helm_components.tf` (15 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/main.tf` (8 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/tenant_config.tf` (8 edge(s))

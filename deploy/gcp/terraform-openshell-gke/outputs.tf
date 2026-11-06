@@ -52,6 +52,25 @@ output "substrate_worker_pool" {
   value       = var.substrate_enabled ? google_container_node_pool.substrate_nodes[0].name : null
 }
 
+# Distinct from the node pool above on purpose: substrateWorkerPool in Settings
+# is the WorkerPool CR this renders, and the backend's workerSelector addresses
+# that object by name — not the GKE pool. Setting it to a node label value is
+# the mistake this split exists to make impossible to confuse.
+output "substrate_worker_pool_cr_name" {
+  description = "Name of the ate.dev WorkerPool the control plane schedules actors onto; the exact value Settings' substrateWorkerPool must hold"
+  value       = var.substrate_enabled ? var.substrate_worker_pool_name : null
+}
+
+output "substrate_worker_image" {
+  description = "Worker container image the WorkerPool runs; must exist at the release tag the control-plane installer pinned"
+  value       = var.substrate_enabled ? var.substrate_worker_image : null
+}
+
+output "substrate_token_creator_user" {
+  description = "Kubernetes user the substrate-token-rotate workflow must be authorised as; null when the public control plane (and so the mint) is not provisioned"
+  value       = local.substrate_control_plane_public_enabled ? local.substrate_token_creator_user : null
+}
+
 output "substrate_credentials_namespace" {
   description = "Namespace the credential-provider Secrets live in"
   value       = var.substrate_enabled ? kubernetes_namespace_v1.substrate_credentials[0].metadata[0].name : null

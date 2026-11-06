@@ -198,6 +198,101 @@ variable "substrate_max_nodes" {
   default     = 6
 }
 
+variable "substrate_sandbox_class" {
+  description = <<EOT
+    Sandbox runtime family the worker pool runs. This is NOT cosmetic: it is the
+    VALUE of the ate.dev/sandboxClass taint on the worker nodes, which is the key
+    the installer's atelet DaemonSet tolerates, and the class the WorkerPool
+    CRD's spec.sandboxClasses[].name must carry (enum gvisor|microvm). All three
+    are one string, so they are expressed once.
+EOT
+  type        = string
+  default     = "gvisor"
+
+  validation {
+    condition     = contains(["gvisor", "microvm"], var.substrate_sandbox_class)
+    error_message = "substrate_sandbox_class must be gvisor or microvm (workerpools.ate.dev enum)."
+  }
+}
+
+variable "substrate_worker_pool_name" {
+  description = <<EOT
+    Name of the Substrate WorkerPool custom resource in ate-system. This is the
+    string Settings' substrateWorkerPool must equal: the backend sends
+    workerSelector {"ate.dev/worker-pool": <this>} (packages/shared-core/src/
+    agent/substrate.js), and that label addresses the WorkerPool OBJECT — the
+    controller stamps it onto the worker pods it synthesises — not a node label.
+    Named the same as the GKE pool by default so the two cannot drift by
+    accident, but they are separate concepts.
+EOT
+  type        = string
+  default     = "substrate-worker-pool"
+
+  validation {
+    # The CRD enforces this with CEL because worker pods use the name as a
+    # label value: a 64-character name is rejected by the API server at apply
+    # time, which is a much worse error than a plan-time one.
+    condition     = length(var.substrate_worker_pool_name) <= 63
+    error_message = "substrate_worker_pool_name must be at most 63 characters (workerpools.ate.dev reserves metadata.name as a worker-pod label value)."
+  }
+}
+
+variable "substrate_worker_pool_replicas" {
+  description = <<EOT
+    spec.replicas of the WorkerPool: the number of WARM worker pods kept
+    running. This is what an actor lands on when a sandbox is created — an
+    actor does not queue for a worker, it claims one — so 0 means every run
+    waits (or fails) until a worker is up, and N means N actors run
+    concurrently on this pool before anything is missing.
+EOT
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.substrate_worker_pool_replicas >= 0
+    error_message = "substrate_worker_pool_replicas cannot be negative (workerpools.ate.dev spec.replicas has minimum 0)."
+  }
+}
+
+variable "substrate_sandbox_config_name" {
+  description = <<EOT
+    Name of the cluster-scoped SandboxConfig (sandboxconfigs.ate.dev) the
+    WorkerPool's sandbox class resolves to. Verified live on
+    openshell-multitenant: `gvisor-default`, class gvisor, annotated
+    sandboxconfig.ate.dev/is-class-default=true, created by the v1.0.0
+    installer. The field may legitimately be omitted and the controller would
+    pick the class default — it is set explicitly so a second, non-default
+    SandboxConfig cannot be resolved silently underneath us.
+EOT
+  type        = string
+  default     = "gvisor-default"
+}
+
+variable "substrate_worker_image" {
+  description = <<EOT
+    Worker container image for the WorkerPool (spec.workerImage). REQUIRED by
+    the CRD schema (workerpools.ate.dev spec.required = [replicas,
+    sandboxClasses, workerImage]) — there is no server-side default, so this
+    cannot be left blank. Image name follows the sandbox class, per the
+    installer's own release-image preflight
+    (.github/workflows/substrate-control-plane.yml:303-310:
+    "the worker image follows the sandbox class" — ateworker-gvisor /
+    ateworker-microvm), and the repository + tag follow the convention every
+    other ate-system component was observed using live
+    (ghcr.io/agent-substrate/substrate/<component>:<release tag>).
+    Bump in lockstep with the installer version: ate-setup resolves every tag
+    to a digest at install time, so an image here that the pinned release does
+    not publish fails the apply.
+EOT
+  type        = string
+  default     = "ghcr.io/agent-substrate/substrate/ateworker-gvisor:v1.0.0"
+
+  validation {
+    condition     = trimspace(var.substrate_worker_image) != ""
+    error_message = "substrate_worker_image cannot be empty: workerpools.ate.dev requires spec.workerImage."
+  }
+}
+
 variable "substrate_ingress_hostname" {
   description = "Public hostname fronting the atenet-router actor data plane (substrateIngressUrl). Empty provisions no ingress; a hostname gets its own Envoy data plane bound to the substrate-ip static address."
   type        = string
@@ -205,15 +300,21 @@ variable "substrate_ingress_hostname" {
 }
 
 variable "substrate_ateapi_service" {
-  description = "Name of the ateapi Control-plane Service created by `ate-setup deploy ate-system`, used as the control-plane route backend."
+  description = <<EOT
+    Name of the Control-plane Service created by `ate-setup deploy ate-system`, used as
+    the control-plane route backend. `api`, not `ateapi`: that is what the installer
+    actually creates (headless, ports grpc=443 and exchange=8445) — see
+    docs/SUBSTRATE_INTEGRATION.md §5.3 for why the route still does not carry traffic
+    against it.
+  EOT
   type        = string
-  default     = "ateapi"
+  default     = "api"
 }
 
 variable "substrate_ateapi_port" {
-  description = "Port of the ateapi Control-plane Service, used as the control-plane route backend port."
+  description = "Port of the Control-plane Service, used as the control-plane route backend port. 443 is the gRPC listener; the Service has no plaintext port."
   type        = number
-  default     = 8443
+  default     = 443
 }
 
 variable "substrate_control_plane_public" {
@@ -239,5 +340,29 @@ variable "substrate_credentials_namespace" {
   description = "Namespace holding the credential-provider Secrets the ate-space may read (raw values never enter the actor)"
   type        = string
   default     = "substrate-credentials"
+}
+
+variable "substrate_token_creator_user" {
+  description = <<EOT
+    Kubernetes USER name allowed to mint the ate-client service-account token
+    the substrate-token-rotate workflow runs `kubectl create token ate-client`
+    as. Empty derives the deployer identity the workflows authenticate as,
+    gh-deployer@<project>.iam.gserviceaccount.com — spelled from var.project_id
+    for the same reason deploy/gcp/terraform/substrate_token.tf:50-57 does:
+    that service account is created by bootstrap.sh, outside this state, so it
+    cannot be read through a data source.
+
+    The subject is a User, not a ServiceAccount, and this is the easy half of
+    this file to get wrong. A GCP service account that reaches GKE through
+    Workload Identity Federation is presented by the auth webhook with the SA
+    email as its Kubernetes USERNAME — see the same statement in ci_rbac.tf:9-12
+    — so a `kind: ServiceAccount` subject (which only ever names a
+    Kubernetes-native SA in that namespace) binds nothing and the token call
+    fails as a 403 on the `serviceaccounts/token` SUBRESOURCE, which is easy to
+    misread as "the Role is missing a verb" rather than "the subject never
+    matched".
+EOT
+  type        = string
+  default     = ""
 }
 

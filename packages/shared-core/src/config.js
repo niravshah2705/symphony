@@ -499,7 +499,13 @@ const SUBSTRATE = Object.freeze({
   url: process.env.SUBSTRATE_URL || '',
   ingressUrl: process.env.SUBSTRATE_INGRESS_URL || '',
   atespace: process.env.SUBSTRATE_ATESPACE || '',
-  workerPool: process.env.SUBSTRATE_WORKER_POOL || 'planner-pool',
+  // Must name a workerpools.ate.dev object, not a node label: the backend sends
+  // workerSelector {"ate.dev/worker-pool": <this>}. This default mirrors
+  // var.substrate_worker_pool_name in
+  // deploy/gcp/terraform-openshell-gke/substrate.tf, so a deployment that never
+  // fills the Settings field resolves to the WorkerPool Terraform renders rather
+  // than to a name nothing creates.
+  workerPool: process.env.SUBSTRATE_WORKER_POOL || 'substrate-worker-pool',
   plannerImage: process.env.SUBSTRATE_PLANNER_IMAGE || '',
   allowedAtespaces: Object.freeze(
     (process.env.SUBSTRATE_ALLOWED_ATESPACES || 'tenant-a,tenant-b')

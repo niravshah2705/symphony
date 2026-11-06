@@ -14,9 +14,9 @@ Community of 6 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| buildRequest | Function | ./packages/shared-core/src/secrets/s2s-resolver.js | 21-36 |
-| fetchS2sSecrets | Function | ./packages/shared-core/src/secrets/s2s-resolver.js | 42-69 |
-| resolveMissingSecrets | Function | ./packages/shared-core/src/secrets/s2s-resolver.js | 75-84 |
+| buildRequest | Function | ./packages/shared-core/src/secrets/s2s-resolver.js | 23-38 |
+| fetchS2sSecrets | Function | ./packages/shared-core/src/secrets/s2s-resolver.js | 44-71 |
+| resolveMissingSecrets | Function | ./packages/shared-core/src/secrets/s2s-resolver.js | 77-86 |
 | test:per-org path is chosen when org id + org internal token are present@L7 | Test | ./packages/shared-core/src/secrets/s2s-resolver.test.js | 7-16 |
 | test:shared managed path is used when only the internal token is present@L18 | Test | ./packages/shared-core/src/secrets/s2s-resolver.test.js | 18-22 |
 | test:no request when neither credential is available (fails closed)@L24 | Test | ./packages/shared-core/src/secrets/s2s-resolver.test.js | 24-26 |

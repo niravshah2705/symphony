@@ -1829,18 +1829,30 @@ router.get(
       projectId,
     });
     const url = settings.substrateUrl || CONFIG.SUBSTRATE?.url || '';
+    // Resolved per request: the ateapi bearer is a projected service-account
+    // token that rotates hourly, so a stale one must not outlive this call.
+    const token = await substrate.resolveSubstrateApiToken({
+      token: settings.substrateApiToken,
+      organizationId,
+      projectId,
+    });
     // Sequential: the actor list is only fetched once the control plane answers,
     // so it cannot share a Promise.all with the status call it depends on.
-    const status = await substrate.getControlPlaneStatus({ url, atespace });
-    const actors = url && status && status.connected
-      ? await substrate.listActors({ url, atespace }).catch(() => [])
+    const status = await substrate.getControlPlaneStatus({ url, atespace, token });
+    const actors = url && token && status && status.connected
+      ? await substrate.listActors({ url, atespace, token }).catch(() => [])
       : [];
     res.json({
       agentPattern: settings.agentPattern || 'cloudrun',
       atespace,
       workerPool: substrate.resolveSubstrateWorkerPool(settings.substrateWorkerPool),
       ingressUrl: substrate.resolveSubstrateIngressUrl(settings.substrateIngressUrl),
-      configured: Boolean(url),
+      // `configured` now means "reachable AND authenticatable": a control plane
+      // that answers 16 UNAUTHENTICATED is not usable, so the credential is part
+      // of what configured asserts. `credentialConfigured` names which half is
+      // missing (the managed secret substrateApiToken) so the UI can say so.
+      configured: Boolean(url) && Boolean(token),
+      credentialConfigured: Boolean(token),
       status,
       actors: actors.map((a) => ({
         name: a.metadata?.name,
@@ -1863,8 +1875,14 @@ router.post(
       return res.status(409).json({ error: 'Substrate is not the active agent pattern and is not configured.' });
     }
     // Managed credentials resolved server-side (vault/KMS single source); never returned.
+    // `substrateApiToken` rides the same S2S fetch: it authenticates our control-plane
+    // RPCs (not the actor), so it is passed to the runner and kept out of the manifest sync.
     const creds = await resolveMissingSecrets(
-      { githubToken: settings.githubToken, openrouterApiKey: settings.openrouterApiKey },
+      {
+        githubToken: settings.githubToken,
+        openrouterApiKey: settings.openrouterApiKey,
+        substrateApiToken: settings.substrateApiToken,
+      },
       { organizationId, projectId }
     );
     const result = await substrateRunner.runPlanningOnSubstrate({
@@ -1874,6 +1892,7 @@ router.post(
       prompt,
       guardrailSpec: guardrailSpec.normalizeGuardrailSpec(settings.guardrailSpec),
       secrets: creds,
+      substrateApiToken: creds.substrateApiToken || '',
       llm: req.body && req.body.llm,
       traceContext: { runId: req.body && req.body.runId },
     });

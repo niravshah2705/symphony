@@ -1,0 +1,246 @@
+name: Substrate control-plane token (rotate)
+
+# Mints the credential the Substrate control plane (ateapi) accepts and publishes it
+# so the application can resolve it, then proves the published version still works.
+#
+# Why this job exists at all: `api` in `ate-system` authenticates with exactly one
+# JWT provider — issuer `https://container.googleapis.com/v1/projects/<project>/
+# locations/<zone>/clusters/<cluster>`, audience `api.ate-system.svc` — so the only
+# bearer it will accept is a Kubernetes *projected service-account token* for
+# `ate-client`. Projected tokens are minted by the cluster's API server, and the
+# gateway/planner run on Cloud Run, which cannot reach that API as itself. Something
+# with cluster access has to mint on their behalf, and something has to hand the
+# result over before it expires. That is this workflow plus Secret Manager.
+#
+# Why the writer is CI and not an in-cluster CronJob: the store the application can
+# actually read is GCP Secret Manager (a pod-written Kubernetes Secret is unreadable
+# from Cloud Run), and reaching Secret Manager from a pod needs Workload Identity,
+# which this cluster does not have enabled. CI already holds both halves — Workload
+# Identity Federation to the deployer SA for GCP, and `gcloud container
+# clusters get-credentials` for the cluster — so the minter needs no new cluster
+# identity, only the narrow `serviceaccounts/token` grant Terraform renders for it
+# (`substrate_ate_client_token_role` in
+# `deploy/gcp/terraform-openshell-gke/substrate.tf`, rather than leaning on
+# `roles/container.admin` implying cluster-admin).
+#
+# Lifetime and cadence: the token is minted for 12 hours and republished every 6.
+# GKE accepts far longer here (a 7-day `--duration` was accepted when this was
+# probed); the short lifetime is deliberate, because this bearer creates and deletes
+# actors and mints actor JWTs. Two intervals of slack exist because a scheduled
+# workflow's start time is not guaranteed and one failed run must not be an outage.
+#
+# Scheduled runs use the DEFAULT BRANCH copy of this file (GitHub behaviour), so
+# until this workflow is merged the cron line does nothing; run it by hand from a
+# branch with workflow_dispatch.
+
+on:
+  schedule:
+    # Half the minted lifetime, so a single missed or failed run is survivable.
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: "Token lifetime (kubectl --duration). Empty = SUBSTRATE_TOKEN_DURATION var, else 43200s"
+        type: string
+        default: ""
+      skip_probe:
+        description: "Publish without calling the control plane through the public front"
+        type: boolean
+        default: false
+
+# Its own group: this writes no cluster object and no Terraform state, so it must
+# not queue behind the pool power cycle, and a slow scheduled run must not cancel a
+# rotation that is keeping the credential alive.
+concurrency:
+  group: substrate-token-rotate
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation for the deployer SA
+
+jobs:
+  rotate:
+    name: mint, publish and verify the ateapi credential
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      CLUSTER: ${{ vars.OPENSHELL_CLUSTER_NAME || 'openshell-multitenant' }}
+      ZONE: ${{ vars.OPENSHELL_CLUSTER_ZONE || 'asia-south1-a' }}
+      SECRET_ID: ${{ vars.SUBSTRATE_TOKEN_SECRET || 'substrate-ateapi-token' }}
+      SA_NAME: ${{ vars.SUBSTRATE_TOKEN_SERVICE_ACCOUNT || 'ate-client' }}
+      AUDIENCE: ${{ vars.SUBSTRATE_ATEAPI_AUDIENCE || 'api.ate-system.svc' }}
+      DURATION_INPUT: ${{ inputs.duration }}
+      DURATION: ${{ vars.SUBSTRATE_TOKEN_DURATION }}
+      INGRESS_HOSTNAME: ${{ vars.SUBSTRATE_INGRESS_HOSTNAME }}
+      # The ateapi Service name doubles as the token audience upstream, and the
+      # module's default is what the installer actually creates.
+      ATEAPI_SERVICE: ${{ vars.SUBSTRATE_ATEAPI_SERVICE || 'api' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Set up kubectl
+        run: |
+          set -euo pipefail
+          # Without the plugin every kubectl call dies with "gke-gcloud-auth-plugin:
+          # not found", which in this job would read as "cannot rotate the
+          # credential" rather than a runner with no plugin.
+          gcloud components install kubectl gke-gcloud-auth-plugin --quiet
+          gcloud container clusters get-credentials "$CLUSTER" --zone "$ZONE" --project "$PROJECT_ID"
+          kubectl get nodes >/dev/null
+
+      - name: Check the store exists
+        run: |
+          set -euo pipefail
+          # Say which apply creates it instead of failing later as an opaque 404
+          # from `secrets versions add`: the secret is Terraform-managed
+          # (deploy/gcp/terraform/substrate_token.tf), and a rotation that lands
+          # before that apply has nothing to publish into.
+          if ! gcloud secrets describe "$SECRET_ID" --project "$PROJECT_ID" >/dev/null 2>&1; then
+            echo "::error::Secret Manager secret '$SECRET_ID' does not exist. Run Deploy to GCP's terraform job (it is declared in deploy/gcp/terraform/substrate_token.tf); the settings service is granted secretAccessor on it there."
+            exit 1
+          fi
+          if ! kubectl -n ate-system get serviceaccount "$SA_NAME" >/dev/null 2>&1; then
+            echo "::error::No serviceaccount '$SA_NAME' in ate-system — the Substrate control plane is not installed. Run the 'Substrate control plane (preflight / install)' workflow with mode=install."
+            exit 1
+          fi
+
+      - name: Mint and publish
+        id: mint
+        run: |
+          set -euo pipefail
+          duration="${DURATION_INPUT:-${DURATION:-43200s}}"
+          # An operator-typed string becomes a kubectl argv, so it is matched
+          # rather than sanitised: `--duration` takes <int>[smh] and anything else
+          # is either a typo or an injected flag.
+          case "$duration" in
+            [0-9]*[smh]) ;;
+            *) echo "::error::invalid duration '$duration' — expected e.g. 3600s, 12h, 43200s"; exit 1 ;;
+          esac
+
+          umask 077
+          token_file="$(mktemp)"
+          trap 'rm -f "$token_file"' EXIT
+
+          # The token exists only in $token_file: kubectl's stdout is redirected
+          # there, nothing cats it, and the JWT is longer than the 256 characters
+          # `::add-mask::` can register, so masking is not the control here —
+          # never printing it is.
+          kubectl -n ate-system create token "$SA_NAME" \
+            --audience="$AUDIENCE" --duration="$duration" > "$token_file"
+
+          # iss/aud/exp/sub are the four claims ateapi actually checks, and they
+          # are not the credential. A wrong audience is worth seeing in this log:
+          # it would otherwise surface an hour later as a bare gRPC 16 through the
+          # ingress, which reads as a cluster problem rather than a mint problem.
+          # base64url, unpadded — `base64 -d` rejects both, so decode with the
+          # alphabet and the padding handled in one place rather than piping a
+          # bad guess into jq and calling the token undecodable. One line because
+          # every line of this step is indented in the YAML block, and python
+          # reads a uniformly indented script as an IndentationError.
+          claims="$(python3 -c 'import sys,json,base64;p=sys.argv[1];d=json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4)));print(json.dumps({k:d.get(k) for k in ("iss","aud","sub","exp")},separators=(",",":")))' "$(cut -d. -f2 "$token_file")")" \
+            || { echo "::error::the minted token is not a decodable JWT"; exit 1; }
+          exp="$(jq -r .exp <<<"$claims")"
+          now="$(date +%s)"
+          lifetime=$(( exp - now ))
+          lifetime_hours=$(( lifetime / 3600 ))
+          if [ "$lifetime" -lt 43200 ]; then
+            echo "::warning::this credential expires in $(( lifetime / 60 )) minutes — less than two rotation intervals (6 h cron), so one late or failed run becomes an outage"
+          fi
+
+          version="$(gcloud secrets versions add "$SECRET_ID" \
+            --data-file="$token_file" --project "$PROJECT_ID" \
+            --format 'value(name)')" \
+            || { echo "::error::could not publish a version of '$SECRET_ID' — the CI identity needs roles/secretmanager.secretVersionManager on it"; exit 1; }
+
+          # A token that is good for `audience` but rejected by `api` means the
+          # audience drifted from the Service name, so print the pair that has to
+          # agree rather than leaving it to the probe.
+          {
+            echo "### Substrate credential rotation"
+            echo ""
+            echo "- secret: \`$SECRET_ID\` version \`${version##*/}\`"
+            echo "- minted for: \`$SA_NAME\`, audience \`$AUDIENCE\` (must equal \`var.substrate_ateapi_service\`, default \`api\`), requested \`$duration\`, actual ${lifetime_hours} h"
+            echo "- claims: \`$claims\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the published credential through the public front
+        if: ${{ !inputs.skip_probe }}
+        run: |
+          set -euo pipefail
+          if [ -z "${INGRESS_HOSTNAME:-}" ]; then
+            echo "::notice::SUBSTRATE_INGRESS_HOSTNAME is unset, so there is no public front to probe; the credential is published but unprobed."
+            exit 0
+          fi
+
+          umask 077
+          token_file="$(mktemp)"
+          curl_config="$(mktemp)"
+          frame="$(mktemp)"
+          trap 'rm -f "$token_file" "$curl_config" "$frame"' EXIT
+
+          # Read back the version we just published, so the probe tests what the
+          # application will actually receive and not what kubectl handed us in
+          # the previous step.
+          gcloud secrets versions access "latest" --secret "$SECRET_ID" \
+            --project "$PROJECT_ID" > "$token_file"
+
+          # An empty gRPC message is a valid ListActors request; five NUL bytes are
+          # the 5-byte frame header (compressed=false, length=0) with nothing in
+          # the body. Written to a file because a shell that truncates '\0...' at
+          # the first NUL sends an empty body, and grpc-go then answers code 2
+          # rather than the 0 or 16 this probe is about.
+          printf '\000\000\000\000\000' > "$frame"
+
+          # curl's --config keeps the bearer out of the process command line,
+          # where `ps` would show it; the header value never reaches stdout.
+          {
+            printf 'header = "content-type: application/grpc"\n'
+            printf 'header = "te: trailers"\n'
+            printf 'header = "authorization: Bearer %s"\n' "$(cat "$token_file")"
+          } > "$curl_config"
+
+          # `|| true` on the pipeline, not on curl: a front that answers nothing
+          # (no route, no Backend TLS, blocked by the NetworkPolicy) is exactly
+          # the case the `*)` branch below explains, so it must reach it instead
+          # of aborting the step on curl's exit code.
+          status="$(curl -s --http2 -X POST --config "$curl_config" \
+            --data-binary "@$frame" \
+            "https://${INGRESS_HOSTNAME}/substrate.ateapi.v1.Control/ListActors" \
+            -D - -o /dev/null | tr -d '\r' | awk -F': ' '/^grpc-status/{print $2}' || true)"
+          status="${status:-none}"
+
+          case "$status" in
+            0)
+              echo "✅ the published credential is accepted: grpc-status 0 from ateapi through the front."
+              ;;
+            16)
+              echo "::error::ateapi rejected the published credential (grpc-status 16). Either the audience drifted from '${AUDIENCE}' or the token's issuer is not the cluster api 'api.ate-system.svc' trusts — compare the claims row above with the jwtProviders entry in ConfigMap ate-api-authentication."
+              ;;
+            *)
+              echo "::error::no gRPC status from the front (got '${status}'). The route, the Backend TLS hop, or the NetworkPolicy is failing before the credential is examined — see docs/SUBSTRATE_INTEGRATION.md §5.3."
+              ;;
+          esac
+          echo "- probe: \`ListActors\` through \`https://${INGRESS_HOSTNAME}\` → \`grpc-status: $status\`" >> "$GITHUB_STEP_SUMMARY"
+          [ "$status" = "0" ]
+
+      - name: Report the state the application will see
+        run: |
+          set -uo pipefail
+          # The last thing an operator wants to know is whether the reader half is
+          # actually allowed to read what was just published.
+          {
+            echo ""
+            echo "- reader: \`settings-sa@${PROJECT_ID}.iam.gserviceaccount.com\` needs \`roles/secretmanager.secretAccessor\` on '$SECRET_ID' (bound in deploy/gcp/terraform/substrate_token.tf), because the settings service resolves \`substrateApiToken\` from \`versions/latest\` per request."
+            echo "- the application will pick this up on its next control-plane call; the settings service caches the value for at most \`SUBSTRATE_ATEAPI_TOKEN_TTL_SECONDS\` (default 300)."
+          } >> "$GITHUB_STEP_SUMMARY"

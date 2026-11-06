@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 262 nodes
+Community of 453 nodes
 
-- **Size**: 262 nodes
-- **Cohesion**: 0.3196
+- **Size**: 453 nodes
+- **Cohesion**: 0.3275
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,93 +20,95 @@ Community of 262 nodes
 | test:createChatModel maps antigravity to a ChatOpenAI targeting the Gemini endpoint@L52 | Test | ./packages/shared/src/agent/antigravity.test.js | 52-58 |
 | test:availability probes the Gemini key against the OpenAI-compatible endpoint@L73 | Test | ./packages/shared/src/agent/antigravity.test.js | 73-86 |
 | test:availability fails fast when the Gemini key is missing@L88 | Test | ./packages/shared/src/agent/antigravity.test.js | 88-94 |
+| resolveDeps | Function | ./packages/shared/src/agent/approval-gate.js | 32-48 |
+| bp | Function | ./packages/shared/src/agent/approval-gate.js | 34-34 |
+| defaultResolveBusiness | Function | ./packages/shared/src/agent/approval-gate.js | 50-64 |
+| computeDeadline | Function | ./packages/shared/src/agent/approval-gate.js | 67-71 |
+| createGate | Function | ./packages/shared/src/agent/approval-gate.js | 77-98 |
+| proceedGate | Function | ./packages/shared/src/agent/approval-gate.js | 107-166 |
+| approveGate | Function | ./packages/shared/src/agent/approval-gate.js | 169-175 |
+| reevaluateGate | Function | ./packages/shared/src/agent/approval-gate.js | 182-221 |
+| sweepExpiredGates | Function | ./packages/shared/src/agent/approval-gate.js | 229-254 |
+| makeStore | Function | ./packages/shared/src/agent/approval-gate.test.js | 9-33 |
+| getApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 21-21 |
+| updateApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 22-27 |
+| makeDeps | Function | ./packages/shared/src/agent/approval-gate.test.js | 36-50 |
+| test:createGate sets deadline = createdAt + waitMinutes exactly and starts awaiting@L52 | Test | ./packages/shared/src/agent/approval-gate.test.js | 52-58 |
+| test:sweepExpiredGates auto-approves a past-deadline gate once and documents the decision@L60 | Test | ./packages/shared/src/agent/approval-gate.test.js | 60-76 |
+| test:sweepExpiredGates leaves a gate whose deadline is still in the future@L78 | Test | ./packages/shared/src/agent/approval-gate.test.js | 78-85 |
+| test:proceedGate is idempotent — prepareBusiness runs once across repeated calls@L87 | Test | ./packages/shared/src/agent/approval-gate.test.js | 87-97 |
+| test:approveGate proceeds a human decision; a non-awaiting or missing gate throws GateError@L99 | Test | ./packages/shared/src/agent/approval-gate.test.js | 99-108 |
+| test:sweepExpiredGates recovers gates decided but not yet proceeded (crash between)@L110 | Test | ./packages/shared/src/agent/approval-gate.test.js | 110-121 |
+| test:reevaluateGate supersedes the old gate; green returns no gate, amber creates a fresh one with attempts+1@L123 | Test | ./packages/shared/src/agent/approval-gate.test.js | 123-146 |
+| test:gate lifecycle preserves native context and publishes only to that workspace@L148 | Test | ./packages/shared/src/agent/approval-gate.test.js | 148-169 |
+| test:default business resolution selects only the gate workspace when ids collide@L171 | Test | ./packages/shared/src/agent/approval-gate.test.js | 171-192 |
 | statusOf | Function | ./packages/shared/src/agent/availability.js | 43-46 |
+| publicAvailabilityMessage | Function | ./packages/shared/src/agent/availability.js | 48-75 |
+| pauseReasonFor | Function | ./packages/shared/src/agent/availability.js | 77-89 |
+| isRepositoryAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 91-101 |
+| isModelAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 103-120 |
 | selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 122-127 |
 | normalize | Function | ./packages/shared/src/agent/availability.js | 125-125 |
 | probeModelAvailability | Function | ./packages/shared/src/agent/availability.js | 129-236 |
 | probeRepositoryAvailability | Function | ./packages/shared/src/agent/availability.js | 238-293 |
 | response | Function | ./packages/shared/src/agent/availability.test.js | 18-24 |
+| test:pause reasons expose a stable, nontechnical UI contract@L26 | Test | ./packages/shared/src/agent/availability.test.js | 26-42 |
 | test:repository preflight converts provider 403 into a sanitized availability error@L44 | Test | ./packages/shared/src/agent/availability.test.js | 44-67 |
 | test:repository preflight requires write permission before dispatch@L69 | Test | ./packages/shared/src/agent/availability.test.js | 69-77 |
 | test:local model preflight verifies that the selected model is loaded@L79 | Test | ./packages/shared/src/agent/availability.test.js | 79-93 |
+| test:model classifier recognizes hosted authorization and network availability failures@L95 | Test | ./packages/shared/src/agent/availability.test.js | 95-119 |
+| test:repository classifier distinguishes remote outages from local workflow errors@L121 | Test | ./packages/shared/src/agent/availability.test.js | 121-142 |
+| clean | Function | ./packages/shared/src/agent/business-pipeline.js | 62-64 |
+| fenced | Function | ./packages/shared/src/agent/business-pipeline.js | 67-69 |
 | messageText | Function | ./packages/shared/src/agent/business-pipeline.js | 71-77 |
 | parseJsonObject | Function | ./packages/shared/src/agent/business-pipeline.js | 79-85 |
 | realResolveModel | Function | ./packages/shared/src/agent/business-pipeline.js | 89-94 |
 | invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
-| defaultCallJson | Function | ./packages/shared/src/agent/business-pipeline.js | 112-114 |
-| defaultCallText | Function | ./packages/shared/src/agent/business-pipeline.js | 116-118 |
-| test:codexMaxTokens reserves the requested output (floored at 256)@L18 | Test | ./packages/shared/src/agent/codex-budget.test.js | 18-22 |
-| test:codexPromptBudget reserves the output cap + margin below the window@L26 | Test | ./packages/shared/src/agent/codex-budget.test.js | 26-29 |
-| test:codexPromptBudget returns 0 (trimming disabled) when no window is known@L31 | Test | ./packages/shared/src/agent/codex-budget.test.js | 31-33 |
-| test:codexPromptBudget never goes negative on a tiny window@L35 | Test | ./packages/shared/src/agent/codex-budget.test.js | 35-37 |
-| test:clampStreamRetries bounds to a non-negative integer and defaults sanely@L41 | Test | ./packages/shared/src/agent/codex-budget.test.js | 41-48 |
-| test:resolveLlm surfaces the single stream-retry knob on every provider descriptor@L52 | Test | ./packages/shared/src/agent/codex-budget.test.js | 52-60 |
-| test:resolveLlm defaults the stream-retry knob to the configured default@L62 | Test | ./packages/shared/src/agent/codex-budget.test.js | 62-65 |
-| codexDescriptor | Function | ./packages/shared/src/agent/codex-budget.test.js | 69-85 |
-| longConvo | Function | ./packages/shared/src/agent/codex-budget.test.js | 87-97 |
-| test:createChatModel wires the Codex prompt budget and stream-retry count onto the model@L99 | Test | ./packages/shared/src/agent/codex-budget.test.js | 99-106 |
-| test:Codex _prepareMessages rewrites system→developer but keeps a fitting history intact@L108 | Test | ./packages/shared/src/agent/codex-budget.test.js | 108-117 |
-| test:Codex _prepareMessages trims the middle when the prompt overflows the window@L119 | Test | ./packages/shared/src/agent/codex-budget.test.js | 119-130 |
-| test:resolveLlm builds a hosted OpenAI-compatible descriptor for huggingface@L21 | Test | ./packages/shared/src/agent/huggingface.test.js | 21-28 |
-| test:resolveLlm strips a trailing /v1 from the configured host before re-appending@L30 | Test | ./packages/shared/src/agent/huggingface.test.js | 30-33 |
-| test:llmReady requires both the token and a model; notReadyReason names Hugging Face@L35 | Test | ./packages/shared/src/agent/huggingface.test.js | 35-40 |
-| test:createChatModel returns a ChatOpenAI targeting the router@L42 | Test | ./packages/shared/src/agent/huggingface.test.js | 42-49 |
-| test:normalizeEvaluation-style signal clamp is not relevant here; readiness probe validates the token@L68 | Test | ./packages/shared/src/agent/huggingface.test.js | 68-83 |
-| test:probe fails fast when the token is missing@L85 | Test | ./packages/shared/src/agent/huggingface.test.js | 85-91 |
-| statusOf | Function | ./packages/shared/src/agent/llm-retry.js | 37-40 |
-| codeOf | Function | ./packages/shared/src/agent/llm-retry.js | 42-45 |
-| isRetryableStreamError | Function | ./packages/shared/src/agent/llm-retry.js | 52-62 |
-| runWithRetry | Function | ./packages/shared/src/agent/llm-retry.js | 70-83 |
-| test:an OpenAI in-stream error (APIError with no status) is retryable@L10 | Test | ./packages/shared/src/agent/llm-retry.test.js | 10-16 |
-| test:transient HTTP statuses (429, 500, 503, 529) are retryable@L18 | Test | ./packages/shared/src/agent/llm-retry.test.js | 18-22 |
-| test:deterministic client errors (400, 401, 404) are NOT retryable@L24 | Test | ./packages/shared/src/agent/llm-retry.test.js | 24-31 |
-| test:dropped-connection error codes are retryable@L33 | Test | ./packages/shared/src/agent/llm-retry.test.js | 33-36 |
-| test:an ordinary error with no signal is not retryable@L38 | Test | ./packages/shared/src/agent/llm-retry.test.js | 38-41 |
-| apiStreamError | Function | ./packages/shared/src/agent/llm-retry.test.js | 45-49 |
-| test:runWithRetry returns the first success without retrying@L51 | Test | ./packages/shared/src/agent/llm-retry.test.js | 51-56 |
 
-*... and 212 more members.*
+*... and 403 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
+- **resume** (criticality: 0.67, depth: 8)
+- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
 - **generatePlan** (criticality: 0.67, depth: 6)
 - **startScheduler** (criticality: 0.65, depth: 5)
+- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (163 edge(s))
-- `deepEqual` (41 edge(s))
-- `strictEqual` (37 edge(s))
-- `Number` (34 edge(s))
-- `join` (26 edge(s))
-- `replace` (25 edge(s))
-- `String` (25 edge(s))
-- `slice` (23 edge(s))
-- `includes` (22 edge(s))
-- `map` (21 edge(s))
-- `ok` (20 edge(s))
-- `isFinite` (20 edge(s))
-- `push` (20 edge(s))
-- `isArray` (19 edge(s))
-- `max` (18 edge(s))
+- `equal` (403 edge(s))
+- `deepEqual` (77 edge(s))
+- `String` (58 edge(s))
+- `strictEqual` (48 edge(s))
+- `push` (44 edge(s))
+- `Number` (42 edge(s))
+- `replace` (37 edge(s))
+- `match` (33 edge(s))
+- `ok` (33 edge(s))
+- `map` (32 edge(s))
+- `slice` (31 edge(s))
+- `Boolean` (28 edge(s))
+- `join` (28 edge(s))
+- `require` (25 edge(s))
+- `isFinite` (25 edge(s))
 
 ### Incoming
 
-- `equal` (163 edge(s))
+- `equal` (403 edge(s))
+- `deepEqual` (77 edge(s))
+- `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
+- `./packages/shared/src/agent/scheduler.js` (55 edge(s))
+- `strictEqual` (48 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
-- `./packages/shared/src/agent/llm.js` (47 edge(s))
-- `./packages/shared/src/agent/local-intelligence.js` (46 edge(s))
-- `deepEqual` (41 edge(s))
-- `strictEqual` (37 edge(s))
-- `./packages/shared/src/agent/lmstudio-context.js` (23 edge(s))
-- `ok` (20 edge(s))
-- `match` (14 edge(s))
-- `./packages/shared/src/agent/local-intelligence.test.js` (14 edge(s))
-- `throws` (14 edge(s))
-- `./packages/shared/src/agent/localization.test.js` (14 edge(s))
-- `./packages/shared/src/agent/llm-retry.test.js` (13 edge(s))
-- `./packages/shared/src/agent/codex-budget.test.js` (12 edge(s))
-- `./packages/shared/src/agent/lmstudio-budget.test.js` (12 edge(s))
+- `./packages/shared/src/agent/business-pipeline.js` (46 edge(s))
+- `./packages/shared/src/agent/local-intelligence.js` (44 edge(s))
+- `./packages/shared/src/agent/llm.js` (40 edge(s))
+- `ok` (33 edge(s))
+- `match` (28 edge(s))
+- `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
+- `rejects` (22 edge(s))
+- `after` (22 edge(s))
+- `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
