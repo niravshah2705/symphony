@@ -130,8 +130,7 @@ jobs:
 
           umask 077
           token_file="$(mktemp)"
-          claims_file="$(mktemp)"
-          trap 'rm -f "$token_file" "$claims_file"' EXIT
+          trap 'rm -f "$token_file"' EXIT
 
           # The token exists only in $token_file: kubectl's stdout is redirected
           # there, nothing cats it, and the JWT is longer than the 256 characters
@@ -144,10 +143,13 @@ jobs:
           # are not the credential. A wrong audience is worth seeing in this log:
           # it would otherwise surface an hour later as a bare gRPC 16 through the
           # ingress, which reads as a cluster problem rather than a mint problem.
-          cut -d. -f2 "$token_file" | base64 -d 2>/dev/null | jq -c \
-            '{iss: .iss, aud: .aud, sub: .sub, exp: .exp}' > "$claims_file" \
+          # base64url, unpadded — `base64 -d` rejects both, so decode with the
+          # alphabet and the padding handled in one place rather than piping a
+          # bad guess into jq and calling the token undecodable. One line because
+          # every line of this step is indented in the YAML block, and python
+          # reads a uniformly indented script as an IndentationError.
+          claims="$(python3 -c 'import sys,json,base64;p=sys.argv[1];d=json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4)));print(json.dumps({k:d.get(k) for k in ("iss","aud","sub","exp")},separators=(",",":")))' "$(cut -d. -f2 "$token_file")")" \
             || { echo "::error::the minted token is not a decodable JWT"; exit 1; }
-          claims="$(cat "$claims_file")"
           exp="$(jq -r .exp <<<"$claims")"
           now="$(date +%s)"
           lifetime=$(( exp - now ))
