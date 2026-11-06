@@ -15,10 +15,10 @@ Community of 5 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | fakeClients | Function | ./packages/shared/src/provisioning/provisioning.test.js | 31-49 |
-| test:provision is idempotent — already-existing resources do not fail@L479 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 479-486 |
-| test:pipeline provision clones all three shared pipeline services and writes back their URLs@L488 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 488-513 |
-| test:invalid slug is rejected before any client call@L515 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 515-520 |
-| test:teardown deletes every per-tenant resource@L524 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 524-534 |
+| test:provision is idempotent — already-existing resources do not fail@L509 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 509-516 |
+| test:pipeline provision clones all three shared pipeline services and writes back their URLs@L518 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 518-543 |
+| test:invalid slug is rejected before any client call@L545 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 545-550 |
+| test:teardown deletes every per-tenant resource@L554 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 554-564 |
 
 ## Execution Flows
 
@@ -32,7 +32,7 @@ No execution flows pass through this community.
 - `push` (12 edge(s))
 - `filter` (5 edge(s))
 - `./packages/shared/src/provisioning/provisioner.js::provision` (4 edge(s))
-- `./packages/shared/src/provisioning/provisioning.test.js::test:provision reuses live images and creates the full stack, returning the deployments map@L449` (1 edge(s))
+- `./packages/shared/src/provisioning/provisioning.test.js::test:provision reuses live images and creates the full stack, returning the deployments map@L479` (1 edge(s))
 - `rejects` (1 edge(s))
 - `deepEqual` (1 edge(s))
 - `sort` (1 edge(s))
@@ -46,7 +46,7 @@ No execution flows pass through this community.
 - `./packages/shared/src/provisioning/provisioning.test.js` (5 edge(s))
 - `filter` (5 edge(s))
 - `./packages/shared/src/provisioning/provisioner.js::provision` (4 edge(s))
-- `./packages/shared/src/provisioning/provisioning.test.js::test:provision reuses live images and creates the full stack, returning the deployments map@L449` (1 edge(s))
+- `./packages/shared/src/provisioning/provisioning.test.js::test:provision reuses live images and creates the full stack, returning the deployments map@L479` (1 edge(s))
 - `rejects` (1 edge(s))
 - `deepEqual` (1 edge(s))
 - `sort` (1 edge(s))

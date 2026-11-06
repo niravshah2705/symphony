@@ -21,10 +21,23 @@ function fakeTransport(responder) {
   };
 }
 
-test('resolveSubstrateAtespace maps org/project to an allowed atespace', () => {
-  assert.equal(s.resolveSubstrateAtespace({ atespace: 'tenant-b' }), 'tenant-b');
-  assert.equal(s.resolveSubstrateAtespace({ atespace: 'nope' }), 'tenant-a');
-  assert.equal(s.resolveSubstrateAtespace({ organizationId: 'acme-tenant-b' }), 'tenant-b');
+// A deployment that declared no tenancy at all keeps the single historical space.
+// The interesting cases — a binding table, a pinned per-tenant atespace, and an
+// unbound org refusing — need env, so they live in substrate-atespace.test.js.
+test('resolveSubstrateAtespace ignores a name the operator never declared', () => {
+  assert.equal(s.resolveSubstrateAtespace({ atespace: 'tenant-b' }), 'tenant-a');
+  assert.equal(s.resolveSubstrateAtespace({ organizationId: 'acme-tenant-b' }), 'tenant-a');
+});
+
+// The retired rule: an org id whose text happened to end in `-b` was routed into
+// tenant-b's namespace, sharing its actors, worker pool and egress policy with an
+// organization that never provisioned there.
+test('the shape of an organization id no longer selects a namespace', () => {
+  for (const organizationId of ['acme-tenant-b', 'x-b', 'B', 'tenant-b']) {
+    assert.equal(s.resolveSubstrateAtespace({ organizationId }), 'tenant-a', organizationId);
+  }
+  // A project id never owned a namespace either.
+  assert.equal(s.resolveSubstrateAtespace({ organizationId: 'org-a', projectId: 'proj-tenant-b' }), 'tenant-a');
 });
 
 test('normalizeActorName is DNS-safe and deterministic', () => {

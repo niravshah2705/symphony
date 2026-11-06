@@ -7,7 +7,7 @@
 Community of 609 nodes
 
 - **Size**: 609 nodes
-- **Cohesion**: 0.5560
+- **Cohesion**: 0.5559
 - **Dominant Language**: python
 
 ## Members
@@ -85,7 +85,7 @@ Community of 609 nodes
 
 ### Outgoing
 
-- `get` (249 edge(s))
+- `get` (250 edge(s))
 - `Depends` (167 edge(s))
 - `str` (160 edge(s))
 - `uuid4` (43 edge(s))

@@ -155,6 +155,23 @@ function boolEnv(env, name, fallback = false) {
 }
 
 /**
+ * Parse an `orgId=atespace,orgId=atespace` routing table. Pairs with a malformed
+ * name are dropped rather than guessed at: an atespace is a namespace boundary, so
+ * a half-parsed entry is a cross-tenant placement, not a formatting nit.
+ */
+function parseOrgAtespaces(value) {
+  const out = {};
+  for (const pair of String(value || '').split(',')) {
+    const [rawOrg, rawSpace] = pair.split('=');
+    const org = String(rawOrg || '').trim();
+    const space = String(rawSpace || '').trim().toLowerCase();
+    if (!org || !space || !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])$|^[a-z0-9]$/.test(space)) continue;
+    out[org] = space;
+  }
+  return out;
+}
+
+/**
  * Application login config.
  *
  * Off ('disabled') for the local single-user workflow. In the cloud ('firebase')
@@ -501,12 +518,18 @@ const SUBSTRATE = Object.freeze({
   atespace: process.env.SUBSTRATE_ATESPACE || '',
   workerPool: process.env.SUBSTRATE_WORKER_POOL || 'planner-pool',
   plannerImage: process.env.SUBSTRATE_PLANNER_IMAGE || '',
+  // Names a caller may ask for. Empty by default: allowing two spaces is an
+  // operator decision, and a permissive default is what let an unrelated org id
+  // be routed into someone else's namespace.
   allowedAtespaces: Object.freeze(
-    (process.env.SUBSTRATE_ALLOWED_ATESPACES || 'tenant-a,tenant-b')
+    (process.env.SUBSTRATE_ALLOWED_ATESPACES || '')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
   ),
+  // orgId=atespace pairs, for a shared deployment fronting several tenants. A
+  // per-tenant stack does not need this — it pins SUBSTRATE_ATESPACE instead.
+  atespaceByOrg: Object.freeze(parseOrgAtespaces(process.env.SUBSTRATE_ATESPACE_BY_ORG || '')),
   timeoutMs: Number(process.env.SUBSTRATE_TIMEOUT_MS || 60000),
   actorTtlMs: Number(process.env.SUBSTRATE_ACTOR_TTL_MS || 120000),
 });
@@ -1023,4 +1046,5 @@ module.exports = {
   resolveSkillsSrc,
   namespaceCollection,
   parseSpaOrigins,
+  parseOrgAtespaces,
 };
