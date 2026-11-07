@@ -15,15 +15,35 @@
 # provisioner-sa needs serviceAccountUser on the runtime SAs it deploys as.
 
 locals {
-  provisioning_on   = var.provisioning_enabled
+  provisioning_on = var.provisioning_enabled
+  # What has to EXIST for a tenant-provisioning or environment-init event to be
+  # answered at all: the SA, the service, its topic + push subscription, and the
+  # secrets it mounts. Environment init publishes its `substrate.atespace` step on
+  # this same topic, and the handler answers that action even when the container
+  # has PROVISIONING_ENABLED unset (services/provisioner/src/handler.js:44), so a
+  # deployment that only wants actors to land in their own namespace still needs
+  # the receiver — otherwise every login leaves that step RUNNING forever, waiting
+  # on a message that has nowhere to go. The receiver is deliberately a smaller
+  # ask than the provisioner's roles: see the split below and var.provisioner_enabled.
+  tenant_jobs_on = anytrue([
+    var.provisioning_enabled,
+    var.provisioner_enabled,
+    var.environment_init_enabled,
+  ])
   provisioner_tag   = coalesce(var.provisioner_image_tag, var.image_tag, "latest")
   provisioner_image = "${local.image_base}/${var.provisioner_service_name}:${local.provisioner_tag}"
   provisioner_url   = "https://${var.provisioner_service_name}-${local.run_url_suffix}"
 }
 
 # --- Provisioner service account + privileged roles ---------------------------
+# The account exists for either flag (its topic and service do), but the
+# project-level roles below are granted ONLY under provisioning_enabled. That
+# split is the point: environment init asks for a namespace on a cluster it
+# already has, while standing up a whole per-tenant Cloud Run stack needs
+# run.admin + pubsub.admin + cloudscheduler.admin + act-as on the runtime
+# identities. A deployment that switched on init must not acquire those.
 resource "google_service_account" "provisioner" {
-  count        = local.provisioning_on ? 1 : 0
+  count        = local.tenant_jobs_on ? 1 : 0
   project      = var.project_id
   account_id   = "provisioner-sa"
   display_name = "AI Fleet provisioner (per-tenant Cloud Run lifecycle)"
@@ -102,7 +122,7 @@ resource "google_secret_manager_secret_version" "internal_api_token" {
 }
 
 resource "google_secret_manager_secret_iam_member" "provisioner_internal_token" {
-  count     = local.provisioning_on && var.internal_api_token != "" ? 1 : 0
+  count     = local.tenant_jobs_on && var.internal_api_token != "" ? 1 : 0
   project   = var.project_id
   secret_id = google_secret_manager_secret.internal_api_token[0].secret_id
   role      = "roles/secretmanager.secretAccessor"
@@ -110,7 +130,7 @@ resource "google_secret_manager_secret_iam_member" "provisioner_internal_token" 
 }
 
 resource "google_secret_manager_secret_iam_member" "provisioner_org_s2s_signing_key" {
-  count     = local.provisioning_on ? 1 : 0
+  count     = local.tenant_jobs_on ? 1 : 0
   project   = var.project_id
   secret_id = google_secret_manager_secret.org_s2s_signing_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
@@ -119,15 +139,31 @@ resource "google_secret_manager_secret_iam_member" "provisioner_org_s2s_signing_
 
 # --- tenant-provision topic + push subscription -------------------------------
 resource "google_pubsub_topic" "tenant_provision" {
-  count      = local.provisioning_on ? 1 : 0
+  count      = local.tenant_jobs_on ? 1 : 0
   project    = var.project_id
   name       = var.provisioning_topic
   labels     = merge(local.common_labels, { component = "provisioner" })
   depends_on = [google_project_service.services]
 }
 
+# The org service is the publisher on this topic: a tenant-provisioning trigger
+# and every environment-init `substrate.atespace` step go out from there using the
+# org SA's own ADC (services/org/app/services/provisioning_service.py
+# publish_provisioning_request). There was no grant here, so the publish was a
+# Permission denied at run time with nothing in the plan to explain it — and the
+# symptom was an init step parked in RUNNING, which reads as slowness. Scoped to
+# this one topic rather than project-wide: the org SA authenticates users and owns
+# no other publishing path.
+resource "google_pubsub_topic_iam_member" "org_publish_tenant_provision" {
+  count   = local.tenant_jobs_on ? 1 : 0
+  project = var.project_id
+  topic   = google_pubsub_topic.tenant_provision[0].name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.org.email}"
+}
+
 resource "google_cloud_run_v2_service_iam_member" "push_invokes_provisioner" {
-  count    = local.provisioning_on ? 1 : 0
+  count    = local.tenant_jobs_on ? 1 : 0
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_service.provisioner[0].name
@@ -136,7 +172,7 @@ resource "google_cloud_run_v2_service_iam_member" "push_invokes_provisioner" {
 }
 
 resource "google_pubsub_subscription" "tenant_provision_push" {
-  count   = local.provisioning_on ? 1 : 0
+  count   = local.tenant_jobs_on ? 1 : 0
   project = var.project_id
   name    = "${var.provisioning_topic}-push"
   topic   = google_pubsub_topic.tenant_provision[0].id
@@ -171,7 +207,7 @@ resource "google_pubsub_subscription" "tenant_provision_push" {
 
 # --- Provisioner Cloud Run service (internal) ---------------------------------
 resource "google_cloud_run_v2_service" "provisioner" {
-  count               = local.provisioning_on ? 1 : 0
+  count               = local.tenant_jobs_on ? 1 : 0
   project             = var.project_id
   name                = var.provisioner_service_name
   location            = var.region
@@ -195,7 +231,13 @@ resource "google_cloud_run_v2_service" "provisioner" {
         for_each = merge(
           local.common_env,
           {
-            PROVISIONING_ENABLED     = "true"
+            # The container's own switch, not the infra's: with
+            # environment_init_enabled on and provisioning_enabled off this
+            # service exists to answer `substrate-atespace` and nothing else,
+            # which is exactly the branch services/provisioner/src/index.js:142
+            # takes. Hardcoding "true" here would silently grant tenant-stack
+            # creation to an init-only deployment.
+            PROVISIONING_ENABLED     = tostring(var.provisioning_enabled)
             MESSAGING_MODE           = "pubsub"
             GCP_PROJECT_ID           = var.project_id
             GCP_REGION               = var.region
@@ -228,6 +270,11 @@ resource "google_cloud_run_v2_service" "provisioner" {
             TESTER_SA       = google_service_account.tester[0].email
             DEPLOYER_SA     = google_service_account.deployer[0].email
           } : {},
+          # The atespace step is a call to the substrate control plane, so this is
+          # the workload that most needs SUBSTRATE_URL — without it the handler
+          # answers every step SKIPPED ("no substrate control plane configured")
+          # and the org's init run sits at RUNNING-then-skipped forever.
+          local.substrate_control_env,
         )
         content {
           name  = env.key

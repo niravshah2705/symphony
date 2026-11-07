@@ -108,6 +108,7 @@ resource "google_secret_manager_secret_iam_member" "stream_token_broker" {
 # planner + coder-control are INTERNAL and IAM-gated. Their ONLY invokers are:
 #   - gateway-sa   (the gateway reverse-proxies read endpoints to them)
 #   - pubsub-push-sa (Pub/Sub push + Cloud Scheduler ticks)
+#   - substrate_actor_member, and only when an operator names it (see below)
 # There is intentionally NO allUsers binding on these services.
 
 resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_planner" {
@@ -116,6 +117,32 @@ resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_planner" {
   name     = google_cloud_run_v2_service.planner.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.gateway.email}"
+}
+
+# The substrate actor's own dispatch path: an actor calls
+# POST /internal/plan/run on the planner with its workload identity, and Cloud Run
+# answers 403 before the route's JWT verification ever runs unless this binding
+# exists. Naming an invoker is therefore part of OPENING the endpoint, not an
+# optional extra — which is why substrate.tf gates the SUBSTRATE_ACTOR_MODE env on
+# the same variable. `allUsers` / `allAuthenticatedUsers` are not accepted here:
+# the endpoint takes a prompt on behalf of an organization.
+resource "google_cloud_run_v2_service_iam_member" "substrate_actor_invokes_planner" {
+  count    = trimspace(var.substrate_actor_member) != "" ? 1 : 0
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.planner.name
+  role     = "roles/run.invoker"
+  member   = var.substrate_actor_member
+
+  lifecycle {
+    precondition {
+      condition = (
+        can(regex("^serviceAccount:[^@ ]+@[^ ]+\\.iam\\.gserviceaccount\\.com$", var.substrate_actor_member))
+        || can(regex("^principal://iam\\.googleapis\\.com/[^ ]+$", var.substrate_actor_member))
+      )
+      error_message = "substrate_actor_member must be a serviceAccount:<email> or a principal://<workload-identity-pool>/ns/<namespace>/sa/<name> — not allUsers, and not allAuthenticatedUsers."
+    }
+  }
 }
 
 resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_coder" {
