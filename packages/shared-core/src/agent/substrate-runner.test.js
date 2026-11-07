@@ -13,6 +13,14 @@ const runner = require('./substrate-runner');
  */
 function stubSubstrate({ actorResponse, record = {} } = {}) {
   const originals = {};
+  record.calls = [];
+  // Every name that sends something to the control plane. The two resolve*
+  // names are absent because they only read config, and the ordering assertion
+  // below asks "did this run touch a cluster it should not have".
+  const CLUSTER_WRITES = new Set([
+    'ensureAtespace', 'upsertActorTemplate', 'createEphemeralActor', 'createActorEgressPolicy',
+    'getActorStatus', 'resumeActor', 'suspendActor', 'deleteActor', 'mintActorJwt', 'grpcCall',
+  ]);
   const fakes = {
     resolveSubstrateAtespace: () => 'tenant-a',
     resolveSubstrateIngressUrl: () => 'https://substrate.example.com',
@@ -29,7 +37,9 @@ function stubSubstrate({ actorResponse, record = {} } = {}) {
   };
   for (const [name, fn] of Object.entries(fakes)) {
     originals[name] = substrate[name];
-    substrate[name] = fn;
+    substrate[name] = CLUSTER_WRITES.has(name)
+      ? async (...args) => { record.calls.push(name); return fn(...args); }
+      : fn;
   }
   const fetchImpl = async (url, init) => {
     record.dispatch = { url, init };
@@ -211,6 +221,66 @@ test('the actor is still torn down when dispatch fails', async () => {
     );
     assert.equal(record.suspended, true, 'a failed run must not leave an idle actor billing nodes');
     assert.equal(record.deleted, true);
+  } finally {
+    restore();
+  }
+});
+
+// The credential-provider Secrets are k8s objects, and Secret CRUD is not an
+// ateapi RPC — so writing them needs an injected `applyManifest`, which no
+// deployed workload has (the GKE API server is private). What the run does about
+// that is the contract, and both wrong answers were live: silently skipping the
+// grant left the actor with an unexplained missing token, and throwing AFTER
+// ensureAtespace + ActorTemplate landed left a half-provisioned tenant for a run
+// that never started.
+test('a granted scope with no applier refuses before any cluster write', async () => {
+  const { fetchImpl, restore, record } = stubSubstrate({ actorResponse: { finalText: 'P', messages: [] } });
+  try {
+    await assert.rejects(
+      () => runner.runPlanningOnSubstrate({
+        ...BASE,
+        // The default spec grants github/openrouter/image-registry, so a GitHub
+        // token in settings is a grant the caller cannot honor.
+        secrets: { githubToken: 'ghp_secretvalue', openrouterApiKey: 'sk-or-secret' },
+        fetchImpl,
+        recordUsage: () => null,
+      }),
+      /no applyManifest seam is wired/,
+    );
+    assert.deepEqual(record.calls, [], 'the refusal must precede every atespace/ActorTemplate/actor write');
+    assert.equal(record.suspended, undefined, 'nothing was created, so there is nothing to tear down');
+    assert.equal(record.deleted, undefined);
+  } finally {
+    restore();
+  }
+});
+
+test('a scope the spec never grants is withheld by name, not an error', async () => {
+  const { fetchImpl, restore, record } = stubSubstrate({ actorResponse: { finalText: 'P', messages: [] } });
+  try {
+    const result = await runner.runPlanningOnSubstrate({
+      ...BASE,
+      guardrailSpec: { credentials: { scopes: ['image-registry'] } },
+      secrets: {
+        githubToken: 'ghp_secretvalue',
+        imageRegistryPassword: 'ghcr-secret',
+        imageRegistryUsername: 'bot',
+      },
+      applyManifest: async () => {},
+      fetchImpl,
+      recordUsage: () => null,
+    });
+    assert.deepEqual(result.substrate.credentialSync.withheld, ['github'],
+      'github is present in settings and absent from spec.credentials.scopes');
+    assert.equal(result.substrate.credentialSync.scopes.github, false);
+    assert.deepEqual(result.substrate.credentialSync.syncedSecrets, ['image-registry-creds'],
+      'only the granted scope is written — fail-closed means the scopes the spec grants');
+
+    // Withheld is a policy answer that has to reach the operator, and the
+    // raw token must never ride along with it.
+    const rendered = JSON.stringify(result);
+    assert.ok(!rendered.includes('ghp_secretvalue'), 'the runner response carried a raw GitHub token');
+    assert.ok(!rendered.includes('ghcr-secret'), 'the runner response carried a raw registry password');
   } finally {
     restore();
   }

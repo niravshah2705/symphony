@@ -7,7 +7,7 @@
 Community of 12 nodes
 
 - **Size**: 12 nodes
-- **Cohesion**: 0.2388
+- **Cohesion**: 0.2222
 - **Dominant Language**: javascript
 
 ## Members
@@ -38,6 +38,7 @@ No execution flows pass through this community.
 - `equal` (9 edge(s))
 - `join` (8 edge(s))
 - `match` (7 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the worker pool carries the label the actor selector matches@L569` (5 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:environment_init reaches the org service under the name its settings class reads@L303` (4 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:atespace names Terraform accepts are names the app will not silently drop@L527` (4 edge(s))
 - `matchAll` (2 edge(s))
@@ -49,7 +50,6 @@ No execution flows pass through this community.
 - `map` (1 edge(s))
 - `existsSync` (1 edge(s))
 - `readFileSync` (1 edge(s))
-- `filter` (1 edge(s))
 
 ### Incoming
 
@@ -57,6 +57,7 @@ No execution flows pass through this community.
 - `equal` (9 edge(s))
 - `match` (7 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:atespace names Terraform accepts are names the app will not silently drop@L527` (5 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the worker pool carries the label the actor selector matches@L569` (5 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:the actor callback opens only with an identity allowed to call it@L239` (4 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:environment_init reaches the org service under the name its settings class reads@L303` (4 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:Terraform emits only SUBSTRATE_* names that shipped code reads@L177` (2 edge(s))

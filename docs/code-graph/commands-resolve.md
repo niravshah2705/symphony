@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 242 nodes
+Community of 243 nodes
 
-- **Size**: 242 nodes
-- **Cohesion**: 0.0558
+- **Size**: 243 nodes
+- **Cohesion**: 0.0555
 - **Dominant Language**: javascript
 
 ## Members
@@ -49,6 +49,7 @@ Community of 242 nodes
 | test:the actor callback renders as four names or none, never a half-pair@L427 | Test | ./deploy/gcp/substrate-env.test.js | 427-445 |
 | test:the plan-facing outputs and the operator doc name the gates that exist@L489 | Test | ./deploy/gcp/substrate-env.test.js | 489-525 |
 | test:atespace names Terraform accepts are names the app will not silently drop@L527 | Test | ./deploy/gcp/substrate-env.test.js | 527-567 |
+| test:the worker pool carries the label the actor selector matches@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-604 |
 | test:no CI file names OpenShell any more@L49 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 49-57 |
 | test:every writer of the cluster serialises on the same concurrency group@L59 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 59-70 |
 | test:the reconcile job runs the root that exists, under the documented prefix@L113 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 113-124 |
@@ -63,9 +64,8 @@ Community of 242 nodes
 | test:settings renders task-model controls without a view error@L39 | Test | ./e2e/page-loading.spec.js | 39-59 |
 | test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
 | test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
-| test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148 | Test | ./e2e/page-loading.spec.js | 148-182 |
 
-*... and 192 more members.*
+*... and 193 more members.*
 
 ## Execution Flows
 
@@ -77,9 +77,9 @@ Community of 242 nodes
 
 ### Outgoing
 
-- `equal` (263 edge(s))
-- `ok` (228 edge(s))
-- `match` (219 edge(s))
+- `equal` (264 edge(s))
+- `ok` (230 edge(s))
+- `match` (223 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
@@ -95,9 +95,9 @@ Community of 242 nodes
 
 ### Incoming
 
-- `equal` (263 edge(s))
-- `ok` (228 edge(s))
-- `match` (219 edge(s))
+- `equal` (264 edge(s))
+- `ok` (230 edge(s))
+- `match` (223 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))

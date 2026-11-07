@@ -74,6 +74,11 @@ deletion_protection             = true
 # ---------------------------------------------------------------------------
 substrate_enabled               = true
 substrate_node_pool_name        = "substrate-worker-pool"
+# The label actors actually schedule onto: substrate_worker_pool_label is what
+# workerSelector matches, and it must equal SUBSTRATE_WORKER_POOL on the Cloud
+# Run side (both default to planner-pool). The taint keeps other workloads off
+# the pool; only this label gets actors onto it.
+substrate_worker_pool_label     = "planner-pool"
 substrate_machine_type          = "e2-standard-4"
 substrate_min_nodes             = 1
 substrate_max_nodes             = 6

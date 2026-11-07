@@ -237,7 +237,7 @@ Leave `SUBSTRATE_INGRESS_HOSTNAME` unset and the installer stays the sole owner.
 | `substrateUrl` | `https://substrate.archagentix.com` with `SUBSTRATE_CONTROL_PLANE_PUBLIC=true` (gRPC rides the `/substrate.ateapi.v1.Control` prefix); otherwise the in-cluster `ateapi.ate-system.svc:8443`, reachable only from inside the VPC |
 | `substrateIngressUrl` | `https://substrate.archagentix.com` |
 | `substrateAtespace` | **must be a space this deployment has already declared** — i.e. listed in `SUBSTRATE_ALLOWED_ATESPACES`, pinned as `SUBSTRATE_ATESPACE`, or a value in `SUBSTRATE_ATESPACE_BY_ORG`. Anything else is dropped by `resolveSubstrateAtespace`, which then resolves from the binding table by organization id. Nothing is derived from the *text* of an org id any more, and once a deployment declares more than one space an organization that is not bound **throws** instead of landing in `tenant-a`. A per-tenant stack does not need this field: the provisioner pins `SUBSTRATE_ATESPACE` from the deployment slug. `GET /api/agent/substrate/status` echoes what was resolved; the runner creates the atespace over ateapi (`CreateAtespace`/`GetAtespace`) if missing |
-| `substrateWorkerPool` | the value of the `ate.dev/worker-pool` **node label** the `workerSelector` matches — not automatically the GKE pool name. This config taints the pool but does not label it, so either label the nodes (`gcloud container node-pools update substrate-worker-pool … --node-labels ate.dev/worker-pool=substrate-worker-pool`) or set the field to whatever label the upstream installer applied. Blank falls back to `planner-pool` |
+| `substrateWorkerPool` | the value of the `ate.dev/worker-pool` **node label** the `workerSelector` matches — not automatically the GKE pool name. `substrate.tf` labels the worker pool with `var.substrate_worker_pool_label` (default `planner-pool`), which is also `DEFAULT_WORKER_POOL` in `packages/shared-core/src/agent/substrate.js` and `substrate_worker_pool` in `deploy/gcp/terraform/variables.tf`: the three defaults are one value, and changing only one of them schedules nothing. Blank falls back to `planner-pool` |
 | `substrateActorTemplate` | `planner` |
 | `substratePlannerImage` | the planner image **pinned by digest** (`name@sha256:…`) — `upsertActorTemplate` throws on a tag, so use the digest the stack is on |
 | `substrateTimeoutMs` | per-call gRPC deadline; `60000` is the default. Keep it under the Cloud Run / ingress budget of the calling service |
@@ -460,15 +460,14 @@ Unprovisioned pieces on the shared deployment today, each of which the run call 
 as an error rather than a silent no-op:
 
 - `SUBSTRATE_ENABLED=true` and `SUBSTRATE_NODE_POOL=substrate-worker-pool` are set, and
-  the pool exists (tainted, never labelled) — so `substrate.tf` is in plan.
+  the pool exists (tainted, and labelled `ate.dev/worker-pool=planner-pool` by
+  `substrate.tf` since the label is what the selector matches) — so `substrate.tf` is in plan.
 - The front is applied but **not yet serving** `substrate.archagentix.com`:
   `substrate-ip` is allocated (34.14.137.62), `substrate-ingress` is Programmed and its
   Envoy LoadBalancer is up on port 80, but `substrate-server-external-tls` has never been
   issued so the `https` listener is still invalid — and there is no DNS record for the
   hostname at all (§5.1). Until the record lands, HTTP-01 cannot complete and the two URL
   fields have nowhere public to point.
-- The pool is tainted but carries no `ate.dev/worker-pool` **label**, so the installer's
-  `workerSelector` matches nothing until the nodes are labelled (§5.1 field table).
 - `SUBSTRATE_VERSION` is unset, so every preflight/install run resolves the tag from
   "latest release" and warns; pin it once the cluster is live (§5.2).
 - The `ate-system` control plane is never installed by Terraform; it lands when the
@@ -476,8 +475,11 @@ as an error rather than a silent no-op:
   (§5 step 3, §5.2).
 - Neither Cloud Run service carries `SUBSTRATE_URL` / `SUBSTRATE_INGRESS_URL`, so
   `configured: false` until the Settings store supplies them.
-- `POST /api/agent/substrate/run` passes no `applyManifest` seam, and
-  `syncSubstrateSecrets` fails closed when a credential resolves without one (Secret CRUD
-  is not an ateapi RPC). Until a cluster-side applier exists, apply the
-  `substrate-credentials` Secret and the `atenet-egress` read grant out of band, or smoke
-  against an organization whose vault resolves nothing.
+- `POST /api/agent/substrate/run` passes no `applyManifest` seam, so a credential the
+  guardrail spec **grants** cannot be written (Secret CRUD is not an ateapi RPC, and no
+  Cloud Run workload in this stack has a k8s client). The run refuses before it creates
+  an atespace or an actor, and names the scopes it needed. A credential the spec does not
+  grant is not an error: it is withheld and reported as `substrate.credentialWithheld`.
+  Until a cluster-side applier exists, apply the `substrate-credentials` Secret and the
+  `atenet-egress` read grant out of band (`substrate.tf` owns the read grant in
+  Terraform), or smoke against an organization whose vault resolves nothing.

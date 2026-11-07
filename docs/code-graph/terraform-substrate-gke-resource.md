@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 139 nodes
+Community of 140 nodes
 
-- **Size**: 139 nodes
-- **Cohesion**: 0.6659
+- **Size**: 140 nodes
+- **Cohesion**: 0.6651
 - **Dominant Language**: hcl
 
 ## Members
@@ -65,7 +65,7 @@ Community of 139 nodes
 | resource.google_compute_firewall.allow_http_https | Class | ./deploy/gcp/terraform-substrate-gke/network.tf | 73-89 |
 | output.cluster_name | Function | ./deploy/gcp/terraform-substrate-gke/outputs.tf | 1-4 |
 
-*... and 89 more members.*
+*... and 90 more members.*
 
 ## Execution Flows
 
@@ -75,7 +75,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform-substrate-gke/variables.tf` (44 edge(s))
+- `./deploy/gcp/terraform-substrate-gke/variables.tf` (45 edge(s))
 - `./deploy/gcp/terraform-substrate-gke/agentgateway.tf` (22 edge(s))
 - `./deploy/gcp/terraform-substrate-gke/substrate.tf` (20 edge(s))
 - `./deploy/gcp/terraform-substrate-gke/outputs.tf` (19 edge(s))

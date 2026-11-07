@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| verifyActorJwt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 211-252 |
-| decodeSeg | Function | ./packages/shared-core/src/agent/substrate-runner.js | 216-216 |
+| verifyActorJwt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 238-279 |
+| decodeSeg | Function | ./packages/shared-core/src/agent/substrate-runner.js | 243-243 |
 
 ## Execution Flows
 

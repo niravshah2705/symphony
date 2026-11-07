@@ -106,6 +106,18 @@ resource "google_container_node_pool" "substrate_nodes" {
     # installs runsc (gVisor) itself on these nodes.
     image_type = "UBUNTU_CONTAINERD"
 
+    # The taint keeps other workloads OFF this pool; the label is what pulls
+    # actors ONTO it. The backend sends `workerSelector: { ate.dev/worker-pool:
+    # <substrateWorkerPool> }`, and a selector matches node labels only — a
+    # tainted but unlabelled pool schedules nothing, so every actor would sit
+    # Pending with a pod that names no reason a human would guess. The value has
+    # to equal what the planner resolves (DEFAULT_WORKER_POOL in
+    # packages/shared-core/src/agent/substrate.js, and substrate_worker_pool in
+    # ../terraform/variables.tf — both `planner-pool`).
+    labels = {
+      "ate.dev/worker-pool" = var.substrate_worker_pool_label
+    }
+
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform",
     ]

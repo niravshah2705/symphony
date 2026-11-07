@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 254 nodes
+Community of 255 nodes
 
-- **Size**: 254 nodes
+- **Size**: 255 nodes
 - **Cohesion**: 0.2411
 - **Dominant Language**: javascript
 
@@ -65,7 +65,7 @@ Community of 254 nodes
 | test:honors alias priority: prefers `path` over lower-priority keys@L32 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 32-35 |
 | test:leaves a correct call untouched (same reference, no rewrite)@L37 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 37-40 |
 
-*... and 204 more members.*
+*... and 205 more members.*
 
 ## Execution Flows
 
@@ -89,11 +89,11 @@ Community of 254 nodes
 - `String` (38 edge(s))
 - `deepStrictEqual` (37 edge(s))
 - `isArray` (35 edge(s))
-- `require` (31 edge(s))
+- `require` (32 edge(s))
 - `step` (30 edge(s))
 - `trim` (28 edge(s))
 - `map` (28 edge(s))
-- `slice` (23 edge(s))
+- `slice` (24 edge(s))
 - `filter` (21 edge(s))
 - `after` (19 edge(s))
 - `Boolean` (18 edge(s))
