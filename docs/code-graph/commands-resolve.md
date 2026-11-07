@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 235 nodes
+Community of 244 nodes
 
-- **Size**: 235 nodes
-- **Cohesion**: 0.0584
+- **Size**: 244 nodes
+- **Cohesion**: 0.0559
 - **Dominant Language**: javascript
 
 ## Members
@@ -39,6 +39,15 @@ Community of 235 nodes
 | test:pipeline topology enforces dedicated topics and brokered agent egress@L321 | Test | ./deploy/gcp/pipeline-infra.test.js | 321-371 |
 | test:stream-token broker owns the signing secret behind private IAM@L373 | Test | ./deploy/gcp/pipeline-infra.test.js | 373-469 |
 | test:OpenSWE upstream is trusted proxy-only deployment configuration@L478 | Test | ./deploy/gcp/pipeline-infra.test.js | 478-494 |
+| test:Terraform emits only SUBSTRATE_* names that shipped code reads@L177 | Test | ./deploy/gcp/substrate-env.test.js | 177-184 |
+| test:substrate env reaches the dispatchers and never the worker@L213 | Test | ./deploy/gcp/substrate-env.test.js | 213-237 |
+| test:the actor callback opens only with an identity allowed to call it@L239 | Test | ./deploy/gcp/substrate-env.test.js | 239-301 |
+| test:environment_init reaches the org service under the name its settings class reads@L303 | Test | ./deploy/gcp/substrate-env.test.js | 303-324 |
+| test:an init run has a topic and an answer, without buying run.admin@L326 | Test | ./deploy/gcp/substrate-env.test.js | 326-387 |
+| test:the rendered substrate map is the shape the JS side parses@L389 | Test | ./deploy/gcp/substrate-env.test.js | 389-425 |
+| test:the actor callback renders as four names or none, never a half-pair@L427 | Test | ./deploy/gcp/substrate-env.test.js | 427-445 |
+| test:the plan-facing outputs and the operator doc name the gates that exist@L489 | Test | ./deploy/gcp/substrate-env.test.js | 489-525 |
+| test:atespace names Terraform accepts are names the app will not silently drop@L527 | Test | ./deploy/gcp/substrate-env.test.js | 527-567 |
 | test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-30 |
 | test:ADLC manifest is served as a static resource@L32 | Test | ./e2e/adlc.spec.js | 32-39 |
 | test:existing Agent workspace route still renders directly@L41 | Test | ./e2e/adlc.spec.js | 41-49 |
@@ -55,17 +64,8 @@ Community of 235 nodes
 | test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660 | Test | ./e2e/page-loading.spec.js | 660-709 |
 | test:one stable footer survives view replacement across every application and legal route@L196 | Test | ./e2e/persistent-footer.spec.js | 196-243 |
 | test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
-| test:SEO and AI discovery resources bypass the SPA fallback@L212 | Test | ./e2e/route-loading.spec.js | 212-228 |
-| test:an authenticated user without an organization is routed to organization onboarding@L389 | Test | ./e2e/workflow-designer.spec.js | 389-401 |
-| topUsage | Function | ./packages/cli/bin/adlc.js | 23-45 |
-| main | Function | ./packages/cli/bin/adlc.js | 47-72 |
-| parseArgs | Function | ./packages/cli/src/args.js | 13-46 |
-| test:parses positionals@L8 | Test | ./packages/cli/src/args.test.js | 8-12 |
-| test:parses --flag value@L14 | Test | ./packages/cli/src/args.test.js | 14-17 |
-| test:parses --flag=value@L19 | Test | ./packages/cli/src/args.test.js | 19-22 |
-| test:treats a bare --flag at end of argv as boolean true@L24 | Test | ./packages/cli/src/args.test.js | 24-27 |
 
-*... and 185 more members.*
+*... and 194 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 235 nodes
 
 ### Outgoing
 
-- `equal` (272 edge(s))
-- `ok` (210 edge(s))
-- `match` (180 edge(s))
+- `equal` (285 edge(s))
+- `ok` (229 edge(s))
+- `match` (209 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
+- `deepEqual` (56 edge(s))
 - `includes` (53 edge(s))
-- `deepEqual` (53 edge(s))
 - `indexOf` (46 edge(s))
-- `map` (39 edge(s))
-- `filter` (36 edge(s))
+- `map` (41 edge(s))
+- `doesNotMatch` (39 edge(s))
+- `filter` (37 edge(s))
 - `slice` (35 edge(s))
-- `doesNotMatch` (34 edge(s))
 - `request` (33 edge(s))
 - `join` (33 edge(s))
 
 ### Incoming
 
-- `equal` (272 edge(s))
-- `ok` (210 edge(s))
-- `match` (180 edge(s))
+- `equal` (285 edge(s))
+- `ok` (229 edge(s))
+- `match` (209 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
-- `deepEqual` (53 edge(s))
+- `deepEqual` (56 edge(s))
 - `includes` (50 edge(s))
 - `indexOf` (45 edge(s))
-- `filter` (35 edge(s))
-- `doesNotMatch` (34 edge(s))
-- `map` (34 edge(s))
+- `doesNotMatch` (39 edge(s))
+- `map` (36 edge(s))
+- `filter` (36 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
 - `slice` (28 edge(s))
 - `toBeVisible` (28 edge(s))

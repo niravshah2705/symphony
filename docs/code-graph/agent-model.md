@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 477 nodes
+Community of 474 nodes
 
-- **Size**: 477 nodes
-- **Cohesion**: 0.3288
+- **Size**: 474 nodes
+- **Cohesion**: 0.3293
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 477 nodes
 | realResolveModel | Function | ./packages/shared/src/agent/business-pipeline.js | 89-94 |
 | invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
 
-*... and 427 more members.*
+*... and 424 more members.*
 
 ## Execution Flows
 
@@ -81,19 +81,19 @@ Community of 477 nodes
 
 - `equal` (417 edge(s))
 - `deepEqual` (84 edge(s))
-- `String` (65 edge(s))
+- `String` (64 edge(s))
 - `strictEqual` (48 edge(s))
 - `push` (44 edge(s))
 - `Number` (42 edge(s))
 - `replace` (41 edge(s))
 - `ok` (37 edge(s))
-- `map` (34 edge(s))
 - `match` (33 edge(s))
+- `map` (32 edge(s))
 - `slice` (31 edge(s))
 - `Boolean` (31 edge(s))
 - `rejects` (29 edge(s))
-- `trim` (28 edge(s))
 - `join` (28 edge(s))
+- `trim` (27 edge(s))
 
 ### Incoming
 

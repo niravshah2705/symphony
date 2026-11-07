@@ -346,6 +346,115 @@ permission domains (`packages/shared/src/authz.js`):
 - Secrets live in **Secret Manager**, never in images or committed files
   (`data/` stays gitignored).
 
+## Substrate agent pattern and environment init (`substrate.tf`)
+
+`substrate.tf` declares no resources. It turns `substrate_*` variables into the
+env maps the services read, and decides which workloads receive them.
+
+Everything is empty by default, and while `substrate_url` is blank **no
+`SUBSTRATE_*` variable is emitted at all**. That is the state the code already
+calls "not configured" (`DEFAULT_SUBSTRATE_URL = ''` in
+`packages/shared-core/src/agent/substrate.js`): the pattern stays inert instead
+of half-wired, and a run that asks for it refuses before admission rather than
+mid-stream. Emitting the other keys anyway would be worse than emitting none — a
+deployment that can resolve an atespace but cannot dial anything fails after the
+run has been accepted.
+
+```hcl
+substrate_url             = "substrate-control.example.com:443" # the switch
+substrate_ingress_url     = "https://actors.example.com"        # actor front door
+substrate_atespace        = "tenant-t3f9a1b2c4d5"               # this deployment's space
+substrate_atespace_by_org = { "01934-…" = "tenant-t3f9a1b2c4d5" } # shared stack: org → space
+substrate_allowed_atespaces = ["tenant-t3f9a1b2c4d5"]           # names a request may select
+substrate_actor_mode      = true                                # + substrate_jwks_url
+substrate_actor_member    = "serviceAccount:substrate-actor@….iam.gserviceaccount.com"
+environment_init_enabled  = true                                # org service
+```
+
+Where the address goes, and where it never goes:
+
+| Workload | Gets | Why |
+|---|---|---|
+| planner | control plane **+ actor callback pair** | it routes a run to an actor and is the only service with the endpoint that verifies an actor's JWT |
+| coder-control | control plane | a substrate-coded run is dispatched from here too (`packages/shared/src/agent/framework.js` → `pattern-router.js`) |
+| provisioner | control plane | `substrate.atespace` is a call to the control plane; without a URL the step answers SKIPPED forever |
+| coder-**worker** | nothing | this container executes model-generated code. Teaching it the control-plane address hands a workload the API that creates, assigns and deletes actors in **other tenants'** atespaces |
+
+`SUBSTRATE_TOKEN` (a bearer for the control plane, honoured at
+`agent/substrate.js:244`) is deliberately unwired: a credential in these maps
+would be printed by an agent `env` and reach coder-control. If the control plane
+ever requires one it comes in through Secret Manager as a secret env.
+
+**Environment init needs the provisioner, not the provisioning roles.**
+`environment_init_enabled = true` publishes `substrate.atespace` on the
+`provisioning_topic`, and the provisioner answers that action even with its own
+`PROVISIONING_ENABLED=false` (`services/provisioner/src/handler.js:44`). So what
+must *exist* is the SA, the service, the topic and the push subscription, and
+what must *not* exist is the privilege:
+
+```text
+local.tenant_jobs_on = anytrue([provisioning_enabled, provisioner_enabled, environment_init_enabled])
+local.provisioning_on = provisioning_enabled           # run.admin, pubsub.admin,
+                                                       # cloudscheduler.admin, act-as
+```
+
+`run.admin` / `pubsub.admin` / `cloudscheduler.admin` / `serviceAccountUser` stay
+behind `provisioning_enabled`: switching on "initialize my environment at login"
+must not quietly acquire the ability to stand up tenant stacks. `provisioner_enabled`
+is the third way — the receiver on its own, with no init flag and no project roles —
+for a deployment that only wants actors to land in their own namespace. The
+container's own switch forwards the variable (`PROVISIONING_ENABLED =
+tostring(var.provisioning_enabled)`), so the service existing never means the
+provisioner is permitted to provision. With provisioning off, `deploy.stack`
+records itself COMPLETED with the org's status unchanged — a documented no-op, not
+a failure.
+
+**The actor callback is two halves of one decision.** `substrate_actor_mode =
+true` plus `substrate_jwks_url` mounts the planner's actor endpoint
+(`services/planner/src/routes/substrate-actor.js:118`), but Cloud Run answers 403
+before that router runs unless the calling identity holds `roles/run.invoker` on
+the planner. `substrate_actor_member` names that identity and drives **both** —
+`substrate.tf` emits the four `SUBSTRATE_ACTOR_*` names only when it is non-empty,
+and `iam.tf` creates the binding from the same variable, with a precondition that
+accepts a `serviceAccount:` email or a `principal://` workload identity and
+refuses `allUsers` / `allAuthenticatedUsers`. Setting the env without the member
+is a dead endpoint; an "anyone" member would be a public prompt endpoint on
+behalf of any org, which is why neither half is reachable alone.
+
+Two gaps that wiring these flags exposed:
+
+- The org service had **no publisher grant** on the provisioning topic. A publish
+  on its own ADC was a `Permission denied` that no plan mentioned, and it showed
+  up as an init step parked in `RUNNING` — which reads as slowness.
+- The provisioner container had `PROVISIONING_ENABLED = "true"` hardcoded, so an
+  init-only deployment would have been able to create tenant stacks simply by
+  existing.
+
+Read the plan once with these on. `terraform output substrate` lists the
+rendered env names plus `actor_endpoint` / `actor_invoker` — `actor_endpoint:
+false` while `substrate_actor_mode = true` means one of the four gate conditions
+failed, and `actor_invoker: ""` names which. `terraform output environment_init`
+distinguishes `receiver_exists` / `org_can_publish` from `stack_roles_granted`;
+the first two true and the third false is what an init-only deployment is
+supposed to look like. You can also assert the split from the plan directly:
+
+```bash
+terraform plan -var=environment_init_enabled=true | grep 'roles/run.admin'   # must be empty
+```
+
+The CI contract is
+[`deploy/gcp/substrate-env.test.js`](../deploy/gcp/substrate-env.test.js). It
+checks name agreement, placement, the gate shapes **and the rendered env maps** —
+the last group runs `terraform console`, so it needs a root that has been
+`init`'ed **against its real backend**: `-backend=false` is not enough, because
+`console` refuses to start with an uninitialized backend and this root's backend
+is the GCS state bucket. Those renders therefore skip with the reason on a CI
+runner that has no credentials, and run on any operator machine that has. Don't
+"fix" that by adding `hashicorp/setup-terraform` to the Checks workflow —
+installing the binary is the easy half; the missing piece is the backend.
+What the structural assertions cannot see is a future local that quietly unions
+existence with privilege, and that is what the `grep` above checks.
+
 ## Observability and alerting (`observability.tf`)
 
 OFF by default. `observability_enabled = true` creates one GCS log bucket

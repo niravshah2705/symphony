@@ -202,6 +202,34 @@ outbound call.
   resolved credential, a request body or a full query string in that record — the
   unmatched path is attacker-selected, which is why `prefix` is sanitised and
   truncated rather than echoed.
+- **Substrate env is a capability, not a URL:** `deploy/gcp/terraform/substrate.tf`
+  renders the `SUBSTRATE_*` map and decides who receives it — planner (control
+  plane + the actor-callback pair), coder-control and provisioner (control plane
+  only). The shared-stack coder **worker** gets none of it, and the reason is the
+  difference between the two deployment shapes: a per-tenant stack can hand its
+  worker the control-plane address because `SUBSTRATE_ALLOWED_ATESPACES` pins it
+  to one nameable space and its in-cluster Role reaches only that namespace,
+  whereas the shared stack's identity spans tenants — there the address turns
+  model-generated code into a caller that can create, assign and delete actors in
+  someone else's atespace. `SUBSTRATE_TOKEN` stays out of the plaintext maps for
+  the same reason provider keys do: an agent `env` would print it. Two gates keep
+  a capability switch from buying more than the operator asked for. Existence is
+  `local.tenant_jobs_on = anytrue([provisioning_enabled, provisioner_enabled,
+  environment_init_enabled])` — the topic, subscription and provisioner service —
+  while `run.admin` / `pubsub.admin` / `cloudscheduler.admin` /
+  `serviceAccountUser` stay behind `local.provisioning_on`, so "initialize my
+  environment at login" never acquires the ability to stand up tenant stacks;
+  `PROVISIONING_ENABLED` in the container forwards the variable rather than
+  asserting its own existence. And the actor callback opens only when
+  `substrate_actor_member` names a `serviceAccount:` or `principal://` identity:
+  `substrate.tf` gates the four `SUBSTRATE_ACTOR_*` names on it and `iam.tf`
+  creates the matching `run.invoker` binding on the planner from the same
+  variable, because an env without the binding is a refused call and a binding
+  without the env is an open prompt endpoint. `deploy/gcp/substrate-env.test.js`
+  holds both halves — the env names Terraform emits versus the ones
+  `process.env` reads (a mismatch in either direction is silent: an unread key is
+  invisible in a plan, an unwired key just leaves the deployment running the
+  pattern it always ran), plus the rendered shape of each gate.
 - **SDK runtimes + Langfuse:** once `EGRESS_PROXY_URL` is present, deep-agent,
   native SDK runtimes (codex-sdk / claude-agent-sdk / antigravity), and the
   Langfuse OTLP trace sink (`/langfuse` route, `basic-pair` auth from
