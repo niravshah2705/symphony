@@ -739,6 +739,10 @@ router.post(
         atespace: result.substrate?.atespace,
         actorName: result.substrate?.actorName,
         credentialSync: result.substrate?.credentialSync?.state,
+        // Scopes the guardrail spec does not grant: a configured GitHub token
+        // that the actor cannot read is a policy answer, not a bug, and the UI
+        // has to say which one it is looking at.
+        credentialWithheld: result.substrate?.credentialSync?.withheld || [],
       },
     });
   })
@@ -754,9 +758,11 @@ router.put(
       { organizationId, projectId: (req.body && req.body.projectId) || 'default' }
     );
     const atespace = substrate.resolveSubstrateAtespace({ atespace: settings.substrateAtespace, organizationId });
-    // No applyManifest seam is wired in a Cloud Run planner (no in-cluster k8s client);
-    // we report the intended credential-provider state (fingerprint-only) so the UI can
-    // show what WOULD be injected. The actor still never receives raw values.
+    // No applyManifest seam is wired in a Cloud Run planner (no in-cluster k8s
+    // client). So this resolves the intended credential-provider state and either
+    // reports it fingerprint-only (nothing in scope) or throws naming the granted
+    // scope it could not apply. Both are surfaced: what it must never do is skip a
+    // grant and look applied. The actor still never receives raw values.
     const sync = await substrateRunner.syncSubstrateSecrets({
       organizationId,
       atespace,

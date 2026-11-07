@@ -181,6 +181,17 @@ variable "substrate_node_pool_name" {
   default     = "substrate-worker-pool"
 }
 
+variable "substrate_worker_pool_label" {
+  description = "Value of the ate.dev/worker-pool node label the actor workerSelector matches. Not the pool name: it must equal what the planner sends as substrateWorkerPool / SUBSTRATE_WORKER_POOL, and a pool that does not carry it schedules no actors."
+  type        = string
+  default     = "planner-pool"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.substrate_worker_pool_label))
+    error_message = "substrate_worker_pool_label must be a lowercase DNS-label-like name."
+  }
+}
+
 variable "substrate_machine_type" {
   description = "Machine type for Substrate worker nodes (resume wants headroom memory)"
   type        = string
