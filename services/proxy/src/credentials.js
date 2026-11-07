@@ -201,13 +201,14 @@ async function resolveUpstream(route, opts = {}) {
     const env = opts.env || process.env;
     return normalizeOmlxUpstream(env.OMLX_PROXY_UPSTREAM);
   }
-  if (route.target === 'ollama' || route.target === 'lmstudio' || route.target === 'openswe' || route.target === 'litellm') {
+  if (route.target === 'ollama' || route.target === 'lmstudio' || route.target === 'openswe' || route.target === 'litellm' || route.target === 'agentgateway') {
     const env = opts.env || process.env;
     const name = {
       ollama: 'OLLAMA_PROXY_UPSTREAM',
       lmstudio: 'LMSTUDIO_PROXY_UPSTREAM',
       openswe: 'OPENSWE_PROXY_UPSTREAM',
       litellm: 'LITELLM_PROXY_UPSTREAM',
+      agentgateway: 'AGENTGATEWAY_PROXY_UPSTREAM',
     }[route.target];
     return normalizeTrustedUpstream(env[name], name);
   }

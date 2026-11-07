@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { EGRESS_ROUTES } = require('@ai-fleet/shared-core/egress');
+const { EGRESS_ROUTES, matchRoute } = require('@ai-fleet/shared-core/egress');
 const {
   buildUpstreamUrl,
   buildForwardHeaders,
@@ -327,6 +327,51 @@ test('buildInjection: litellm fails closed on a missing or env-mounted key', asy
     }),
     (err) => err.name === 'FailClosed' && err.status === 502,
   );
+});
+
+test('agentgateway resolves its origin only from trusted env, and is dark without it', async () => {
+  // One prefix fronts LLM, MCP and A2A, and the gateway fans out to the internet
+  // holding a real provider key — so the origin must stay operator-selected and
+  // the per-org virtual key must fail closed.
+  assert.deepEqual(
+    await credentials.resolveRoute(EGRESS_ROUTES.agentgateway, {
+      env: { AGENTGATEWAY_PROXY_UPSTREAM: 'https://agentgw.cluster.local/', PROXY_ORG_ID: 'org-42' },
+      resolved: { secrets: { fleetGatewayApiKey: { source: 'customer', value: 'agw-org42' } } },
+    }),
+    { upstream: 'https://agentgw.cluster.local', headers: { authorization: 'Bearer agw-org42' } },
+  );
+  // There is deliberately no enable flag to flip: an unset origin IS the dark
+  // state. A second knob (AGENTGATEWAY_ENABLED) could only disagree with this one.
+  await assert.rejects(
+    () => credentials.resolveRoute(EGRESS_ROUTES.agentgateway, {
+      env: { PROXY_ORG_ID: 'org-42' },
+      resolved: { secrets: { fleetGatewayApiKey: { source: 'customer', value: 'agw-x' } } },
+    }),
+    (err) => err.name === 'FailClosed' && err.status === 502,
+  );
+  await assert.rejects(
+    () => credentials.resolveRoute(EGRESS_ROUTES.agentgateway, {
+      env: { AGENTGATEWAY_PROXY_UPSTREAM: 'https://agentgw.cluster.local@evil.test/' },
+      resolved: { secrets: { fleetGatewayApiKey: { source: 'customer', value: 'agw-x' } } },
+    }),
+    (error) => error instanceof credentials.FailClosed,
+  );
+  await assert.rejects(
+    () => credentials.buildInjection(EGRESS_ROUTES.agentgateway, { resolved: { secrets: {} }, env: {} }),
+    (err) => err.name === 'FailClosed' && err.status === 502,
+  );
+});
+
+test('agentgateway: one prefix routes LLM, MCP and A2A as sub-paths', () => {
+  for (const [path, rest] of [
+    ['/agentgw/v1/messages', '/v1/messages'],
+    ['/agentgw/mcp', '/mcp'],
+    ['/agentgw/a2a/agent-card.json', '/a2a/agent-card.json'],
+  ]) {
+    const matched = matchRoute(path);
+    assert.equal(matched.route, EGRESS_ROUTES.agentgateway, path);
+    assert.equal(matched.rest, rest);
+  }
 });
 
 test('buildForwardHeaders strips a forged org header and the sentinel on a litellm call', () => {
