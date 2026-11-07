@@ -45,3 +45,13 @@ test('estimateCostUsd falls back to a conservative default for unknown providers
   // default table: input 3 / output 15 per 1M.
   assert.equal(pricing.estimateCostUsd({ inputTokens: 1_000_000, outputTokens: 0 }, 'mystery'), 3);
 });
+
+test('priceMatchOf names how the number was obtained', () => {
+  const { priceMatchOf } = require('./pricing');
+  assert.equal(priceMatchOf('claude', 0.02), 'Reported', 'a billed run never consults the table');
+  assert.equal(priceMatchOf('Claude', null), 'Exact', 'case does not matter: the lookup lowercases');
+  assert.equal(priceMatchOf('ollama', 0), 'Exact', 'modeled at zero is still modeled');
+  assert.equal(priceMatchOf('brand-new-runtime', 0), 'Default', 'the fallback blend is a guess');
+  assert.equal(priceMatchOf('', undefined), 'Default', 'an unknown provider is the same finding');
+  assert.equal(priceMatchOf(undefined, undefined), 'Default');
+});

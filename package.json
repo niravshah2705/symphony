@@ -34,6 +34,9 @@
     "registry:build": "node scripts/build-harness-registry.js",
     "benchmarks:seed": "node scripts/seed-benchmarks.js",
     "benchmarks:check": "node scripts/seed-benchmarks.js --check",
+    "observability:inputs": "node scripts/gen-observability-inputs.js",
+    "observability:inputs:check": "node scripts/gen-observability-inputs.js --check",
+    "billing:reconcile": "node --env-file-if-exists=.env services/billing/src/reconcile-gateway-spend.js",
     "spa:obfuscate": "node scripts/obfuscate-spa.js",
     "hooks:install": "git config core.hooksPath .githooks && echo 'Git hooks enabled (core.hooksPath=.githooks)'"
   },

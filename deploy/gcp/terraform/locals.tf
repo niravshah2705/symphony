@@ -116,6 +116,13 @@ locals {
     PIPELINE_ORCHESTRATOR_ENABLED = tostring(var.pipeline_orchestrator_enabled)
     PIPELINE_DEPLOYMENT_ENABLED   = tostring(var.pipeline_deployment_enabled)
     AI_FLEET_DATA_DIR             = "/tmp"
+    # One JSON object per stdout line (packages/shared-core/src/logger.js). This is
+    # NOT cosmetic and not optional: Cloud Logging only builds `jsonPayload` from a
+    # line it can parse as JSON, so every log-based metric filter in
+    # observability.tf — and therefore every egress / cost / balance alert — is
+    # permanently, silently zero on a text-formatted deployment. Local dev keeps
+    # the human-readable default by leaving the variable unset.
+    LOG_FORMAT = "json"
     # The shared config (packages/shared/src/config.js) requires AUTH_MODE=firebase
     # when NODE_ENV=production and validates the Firebase web config at load. Only
     # the gateway actually enforces app-auth, but planner/coder/worker import the

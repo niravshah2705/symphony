@@ -61,7 +61,8 @@ function contextFields(meta) {
   const bound = LOG_CONTEXT.getStore() || {};
   const source = { ...bound, ...(meta && typeof meta === 'object' ? meta : {}) };
   const traceparent = cleanTraceparent(source.traceparent);
-  const traceId = isTraceId(source.traceId) ? String(source.traceId).toLowerCase() : traceIdOf(traceparent);  return {
+  const traceId = isTraceId(source.traceId) ? String(source.traceId).toLowerCase() : traceIdOf(traceparent);
+  return {
     organizationId: source.organizationId || source.orgId || '',
     projectId: source.projectId || '',
     runId: source.runId || '',

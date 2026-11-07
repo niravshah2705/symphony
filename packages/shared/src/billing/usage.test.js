@@ -103,3 +103,53 @@ test('usage records filter by billing source, and legacy rows read as managed', 
   assert.equal(managed.length, 2, 'the labelled run and the unlabelled legacy row are both managed spend');
   assert.equal(customer.length + managed.length, 3);
 });
+
+// Price-match visibility: an estimate built from the fallback rate is a guess, and
+// a guess that only exists inside `rateFor` is unalertable. The record carries the
+// label and the warn line is what a log metric counts.
+test('the price match is recorded, and an unmodeled provider says so out loud', () => {
+  const logger = require('../logger');
+  const realWarn = logger.warn;
+  const warnings = [];
+  logger.warn = (message, meta) => warnings.push({ message, meta });
+  try {
+    const modeled = recordUsage(
+      { orgId: 'org-price-match', source: 'coder' },
+      { usage: { inputTokens: 1000, outputTokens: 1000, totalTokens: 2000 } },
+      { provider: 'claude', model: 'c-1' },
+    );
+    assert.equal(modeled.priceMatch, 'Exact', 'a provider in the catalog, priced from it');
+    assert.equal(warnings.length, 0, 'an exact catalog price is not an incident');
+
+    const billed = recordUsage(
+      { orgId: 'org-price-match', source: 'coder' },
+      { usage: { totalTokens: 2000 }, costUsd: 0.02 },
+      { provider: 'brand-new-runtime', model: 'm-1' },
+    );
+    assert.equal(billed.priceMatch, 'Reported', 'the SDK billed it, so no table was consulted');
+    assert.equal(warnings.length, 0);
+
+    const guessed = recordUsage(
+      { orgId: 'org-price-match', source: 'coder' },
+      { usage: { inputTokens: 1000, outputTokens: 1000, totalTokens: 2000 } },
+      { provider: 'brand-new-runtime', model: 'm-1' },
+    );
+    assert.equal(guessed.priceMatch, 'Default', 'priced by fallback: plausible, wrong, and now labeled');
+    assert.equal(guessed.costPaise, 180, 'the fallback blend (3/15 USD per MTok) on 1k+1k tokens at USD_TO_INR=100');
+    assert.equal(warnings.length, 1, 'one loud line per guessed record, which is what the alert counts');
+    assert.equal(warnings[0].meta.priceMatch, 'Default');
+    assert.match(warnings[0].message, /unmodeled provider/);
+  } finally {
+    logger.warn = realWarn;
+  }
+});
+
+test('a zero-cost local run is modeled, not missing', () => {
+  const rec = recordUsage(
+    { orgId: 'org-price-match-local', source: 'coder' },
+    { usage: { inputTokens: 1000, outputTokens: 1000, totalTokens: 2000 } },
+    { provider: 'ollama', model: 'qwen' },
+  );
+  assert.equal(rec.priceMatch, 'Exact', 'ollama is in the table at 0/0 — modeled on purpose');
+  assert.equal(rec.costPaise, 0);
+});

@@ -100,6 +100,46 @@ function requestProjectId(headers) {
 }
 
 /**
+ * One structured decision record per request. The sidecar is the only component
+ * that sees every egress attempt, and "which organization could not get a
+ * credential" is unanswerable from a prose error line — `cred_unavailable` and
+ * `no_route` are fail-closed and open-relay-probing signals respectively, so
+ * both need to be countable, not grep-able.
+ *
+ * Never in here: injected header values, the sentinel, resolved credentials,
+ * request bodies (prompts carry customer secrets), or a full URL/query string —
+ * some providers accept a key in the query, hence `upstreamHost` and a
+ * sanitized first segment instead of `req.url`.
+ */
+const DECISION_SEVERITY = Object.freeze({
+  forwarded: 'info',
+  no_route: 'warn',
+  bad_context: 'warn',
+  cred_unavailable: 'error',
+  redirect_rejected: 'error',
+  upstream_error: 'error',
+});
+
+function statusClass(status) {
+  if (!status) return 'none';
+  return `${Math.floor(Number(status) / 100)}xx`;
+}
+
+/** The unmatched path is attacker-selected, so it may not be echoed verbatim. */
+function probeSegment(url) {
+  const first = String(url || '').replace(/^\/+/, '').split(/[/?#]/)[0] || '';
+  return first.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 32);
+}
+
+function upstreamHost(url) {
+  try {
+    return new URL(url).host;
+  } catch (_) {
+    return '';
+  }
+}
+
+/**
  * Create the request handler. Dependencies are injectable for tests.
  * @param {object} [opts]
  * @param {Function} [opts.fetchImpl] fetch implementation
@@ -111,11 +151,41 @@ function createProxyHandler(opts = {}) {
   const oauthManager = opts.oauthManager || require('./oauth-manager');
   const log = opts.logger || require('@ai-fleet/shared-core/logger');
   const routeResolver = opts.routeResolver || credentials;
+  // Pinned at boot: a misconfigured sidecar (PROXY_ORG_ID ≠ FLEET_ORG_ID) must not
+  // turn the log path itself into a request failure.
+  let proxyOrgId = '';
+  try {
+    proxyOrgId = (routeResolver.configuredProxyOrgId || credentials.configuredProxyOrgId)(opts.env || process.env) || '';
+  } catch (_) {
+    proxyOrgId = '';
+  }
 
   return async function handle(req, res) {
+    const startedAt = Date.now();
+    let decided = false;
     const matched = matchRoute(req.url);
+    const prefix = matched ? matched.route.prefix : `unmatched:${probeSegment(req.url)}`;
+    const decide = (decision, extra = {}) => {
+      if (decided) return;
+      decided = true;
+      const record = {
+        prefix,
+        upstreamHost: extra.upstreamHost || '',
+        orgId: proxyOrgId,
+        decision,
+        statusClass: statusClass(extra.status),
+        // Time to response headers, not stream completion: an agent turn streams
+        // for minutes and must not read as a multi-minute gateway incident.
+        latencyMs: Date.now() - startedAt,
+        method: String(req.method || '').toUpperCase(),
+      };
+      if (extra.error) record.error = extra.error;
+      log[DECISION_SEVERITY[decision]](`egress ${decision}`, record);
+    };
+
     if (!matched) {
       // No known upstream → reject (no open relay / SSRF via a caller-chosen host).
+      decide('no_route', { status: 404 });
       sendJson(res, 404, { error: 'no egress route for path' });
       return;
     }
@@ -125,6 +195,7 @@ function createProxyHandler(opts = {}) {
     try {
       projectId = requestProjectId(req.headers);
     } catch (_) {
+      decide('bad_context', { status: 400 });
       sendJson(res, 400, { error: 'invalid project egress context' });
       return;
     }
@@ -142,7 +213,7 @@ function createProxyHandler(opts = {}) {
       resolvedUpstream = resolved.upstream;
     } catch (err) {
       // Fail closed: a missing/unresolvable credential must not go out unauthenticated.
-      log.error(`egress credential unavailable for ${route.prefix}: ${err.message}`);
+      decide('cred_unavailable', { status: err.status || 502, error: err.message });
       sendJson(res, err.status || 502, { error: 'egress credential unavailable' });
       return;
     }
@@ -163,14 +234,15 @@ function createProxyHandler(opts = {}) {
       // would let an SDK follow it outside this proxy and bypass credential
       // isolation. The proxy also must not follow it itself.
       if (upstream.status >= 300 && upstream.status < 400) {
-        log.error(`egress upstream redirect rejected for ${route.prefix}`);
         if (upstream.body && typeof upstream.body.cancel === 'function') {
           await upstream.body.cancel().catch(() => {});
         }
+        decide('redirect_rejected', { status: 502, upstreamHost: upstreamHost(upstreamUrl) });
         res.writeHead(502);
         res.end();
         return;
       }
+      decide('forwarded', { status: upstream.status, upstreamHost: upstreamHost(upstreamUrl) });
       res.writeHead(upstream.status, filterResponseHeaders(upstream.headers));
       if (upstream.body) {
         Readable.fromWeb(upstream.body).pipe(res);
@@ -178,7 +250,7 @@ function createProxyHandler(opts = {}) {
         res.end();
       }
     } catch (err) {
-      log.error(`egress upstream error for ${route.prefix}: ${err.message}`);
+      decide('upstream_error', { status: 502, upstreamHost: upstreamHost(upstreamUrl), error: err.message });
       if (!res.headersSent) sendJson(res, 502, { error: 'upstream unreachable' });
       else res.end();
     }
@@ -190,6 +262,8 @@ module.exports = {
   buildForwardHeaders,
   filterResponseHeaders,
   createProxyHandler,
+  statusClass,
+  probeSegment,
   DROP_REQUEST_HEADERS,
   DROP_RESPONSE_HEADERS,
   requestProjectId,
