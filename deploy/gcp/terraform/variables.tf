@@ -433,7 +433,13 @@ variable "managed_provider_secrets" {
 
 variable "provisioning_enabled" {
   type        = bool
-  description = "Create the provisioner service + its topic/subscription/IAM. OFF keeps every org on the shared stack (no per-tenant infra)."
+  description = "Grant the provisioner the per-tenant-stack roles (run.admin / pubsub.admin / cloudscheduler.admin / act-as on the runtime SAs) and create its service + topic/subscription/IAM. OFF keeps every org on the shared stack (no per-tenant infra)."
+  default     = false
+}
+
+variable "provisioner_enabled" {
+  type        = bool
+  description = "Create the provisioner service, its topic and its push subscription WITHOUT the project-wide tenant-stack roles. This is the receiver for `substrate-atespace` requests on a deployment that runs actors but never stands up a per-tenant Cloud Run stack. provisioning_enabled implies it; it never implies provisioning_enabled."
   default     = false
 }
 
@@ -1349,4 +1355,141 @@ variable "observability_no_route_alert_count" {
     condition     = var.observability_no_route_alert_count >= 1
     error_message = "observability_no_route_alert_count must be at least 1."
   }
+}
+
+# -----------------------------------------------------------------------------
+# Substrate agent pattern — where the actor control plane is, and who may use it
+# -----------------------------------------------------------------------------
+# The control plane itself is a different root (deploy/gcp/terraform-openshell-gke
+# today, terraform-substrate-gke after the rename). This root's whole job for the
+# pattern is to tell its services which address to dial and which namespaces they
+# are allowed to touch. substrate.tf emits NONE of these as env while
+# substrate_url is blank, which is the state the code already calls "not
+# configured" (DEFAULT_SUBSTRATE_URL = '' in
+# packages/shared-core/src/agent/substrate.js): the pattern stays inert rather
+# than half-wired, and a request that asks for it fails up front instead of
+# mid-run. An empty by default is also what keeps a shared-stack deployment from
+# accidentally naming a namespace it does not own.
+
+variable "substrate_url" {
+  type        = string
+  description = "gRPC address of the substrate control plane (CreateActor / AssignActor / ListActors). Empty leaves the substrate agent pattern unconfigured."
+  default     = ""
+}
+
+variable "substrate_ingress_url" {
+  type        = string
+  description = "Public front door an actor session is reached through (the substrate ingress host). Empty means the deployment derives it from substrate_url; the two differ because the control plane is cluster-internal while actors are addressed from outside."
+  default     = ""
+}
+
+variable "substrate_atespace" {
+  type        = string
+  description = "The atespace this deployment pins. A per-tenant stack sets its own; a shared stack normally leaves this empty and uses substrate_atespace_by_org instead, because one deployment that defaults every org into one space is a tenant sharing another tenant's namespace."
+  default     = ""
+
+  validation {
+    condition     = var.substrate_atespace == "" || can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.substrate_atespace))
+    error_message = "substrate_atespace must be a lowercase DNS-label-like name (letters, digits, interior hyphens)."
+  }
+}
+
+variable "substrate_allowed_atespaces" {
+  type        = list(string)
+  description = "Atespaces a caller may SELECT. Deliberately empty by default: resolveSubstrateAtespace honors a request-supplied name only when it appears here, so the fail-open behaviour (any name a request guesses) is the thing being switched on, not off."
+  default     = []
+
+  validation {
+    condition     = alltrue([for name in var.substrate_allowed_atespaces : can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", name))])
+    error_message = "Every substrate_allowed_atespaces entry must be a lowercase DNS-label-like name."
+  }
+}
+
+variable "substrate_atespace_by_org" {
+  type        = map(string)
+  description = "The org→atespace binding table for a deployment fronting several tenants, rendered as `org=space,...`. Keys are organization ids as the product stores them; the init run (org.atespace.bind, then the provisioner) owns writing the real thing, so this is the shared-stack bootstrap, not the source of truth."
+  default     = {}
+
+  validation {
+    condition = alltrue([
+      for org, space in var.substrate_atespace_by_org :
+      length(trim(org, " ")) > 0 && can(regex("^[^,=]+$", org)) && can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", space))
+    ])
+    error_message = "substrate_atespace_by_org needs a non-empty org key with no comma or equals sign, and a lowercase DNS-label-like atespace per entry. The binding reaches the container as one `org=space,...` string, so a separator inside a key splits the pair; parseOrgAtespaces drops anything malformed instead of failing, and a dropped binding is a run that refuses at runtime with no trace of the typo."
+  }
+}
+
+variable "substrate_worker_pool" {
+  type        = string
+  description = "Worker pool name an actor run is scheduled onto (the `ate.dev/worker-pool` node-selector label). Pools are created by the substrate root; this only has to agree with their label."
+  default     = "planner-pool"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.substrate_worker_pool))
+    error_message = "substrate_worker_pool must be a lowercase DNS-label-like name; resolveSubstrateWorkerPool rewrites anything else into a guess."
+  }
+}
+
+variable "substrate_planner_image" {
+  type        = string
+  description = "Container image an actor workspace is created from. Empty falls back to the per-run image a caller names, which the planner takes from org settings. It is NOT the Cloud Run planner image: an actor needs the agent toolchain in the image, while the Cloud Run service only serves HTTP."
+  default     = ""
+}
+
+variable "substrate_timeout_ms" {
+  type        = number
+  description = "Deadline for one substrate control-plane call, in milliseconds. A worker start is the slow path: it can pull an image."
+  default     = 60000
+
+  validation {
+    condition     = var.substrate_timeout_ms >= 1000 && var.substrate_timeout_ms <= 900000
+    error_message = "substrate_timeout_ms must be between 1000 and 900000 (15 minutes)."
+  }
+}
+
+variable "substrate_actor_ttl_ms" {
+  type        = number
+  description = "How long an idle actor is kept warm before it is considered gone, in milliseconds. Raising it costs idle gVisor sandboxes; lowering it makes a slow run look like a dead one."
+  default     = 120000
+
+  validation {
+    condition     = var.substrate_actor_ttl_ms >= 1000
+    error_message = "substrate_actor_ttl_ms must be at least 1000."
+  }
+}
+
+variable "substrate_jwks_url" {
+  type        = string
+  description = "JWKS the planner uses to verify a substrate actor's own JWT at POST /internal/substrate/actor. Empty disables that endpoint (it stays closed unless BOTH substrate_actor_mode and this are set) — which is the safe half-state, since the endpoint accepts a prompt on behalf of an org."
+  default     = ""
+}
+
+variable "substrate_actor_mode" {
+  type        = bool
+  description = "Accept actor-originated dispatches on the planner. Paired with substrate_jwks_url: the endpoint refuses to open for a deployment that cannot verify the token it would be trusting."
+  default     = false
+}
+
+variable "substrate_actor_member" {
+  type        = string
+  description = "The IAM member a substrate actor invokes the planner as — a Google service account email, or the Workload Identity Federation principal of the cluster identity the actors run under (the same identity SUBSTRATE_TRUST_DOMAIN describes). It is the receiving half of substrate_actor_mode: empty creates no invoker binding, so the router is mounted but nobody can reach it. You cannot open /internal/plan/run without naming WHO may call it."
+  default     = ""
+}
+
+variable "substrate_actor_jwt_audience" {
+  type        = string
+  description = "audience a substrate actor JWT must carry to be accepted by the planner's /internal/plan/run. It is whatever the control plane stamps, not a value invented here; the default matches substrate-runner's own default."
+  default     = "substrate-router"
+}
+
+variable "substrate_trust_domain" {
+  type        = string
+  description = "SPIFFE trust domain an actor identity is issued under (the prefix of its JWT sub). The substrate root names it; a mismatch fails verification closed."
+  default     = "cluster.local"
+}
+
+variable "environment_init_enabled" {
+  type        = bool
+  description = "Sign-in opens a durable environment-init run for the caller's org and walks its steps in the background (bind the org's atespace, ask the cluster for it, ensure the dedicated stack). OFF keeps a login free of infrastructure side effects. It is a separate switch from provisioning_enabled because the atespace step is useful on a substrate deployment that is not standing up a whole per-tenant stack — see substrate.tf for why the topic + provisioner must then exist anyway."
+  default     = false
 }

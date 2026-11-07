@@ -165,3 +165,32 @@ output "observability_alert_policies" {
   description = "Display names of the alerting policies actually created. Empty with a non-empty observability_metrics list means var.observability_notification_channels is empty — the signals are collected but nothing will tell anyone."
   value       = sort([for policy in google_monitoring_alert_policy.observability : policy.display_name])
 }
+
+output "substrate" {
+  description = "What this root told its services about the substrate control plane. configured=false means no SUBSTRATE_* env was emitted at all and the pattern is inert, which is the default; the routing keys are reported so an operator can see which organizations a shared deployment will actually place, and a binding that resolves elsewhere shows up here instead of only as a mid-run refusal. actor_endpoint=false while substrate_actor_mode=true means one of the four gate conditions failed, and actor_invoker shows whether anyone was named who is allowed to call at all."
+  value = {
+    configured        = local.substrate_enabled
+    url               = var.substrate_url
+    ingress_url       = var.substrate_ingress_url
+    atespace          = var.substrate_atespace
+    allowed_atespaces = var.substrate_allowed_atespaces
+    atespace_by_org   = var.substrate_atespace_by_org
+    worker_pool       = var.substrate_worker_pool
+    actor_endpoint    = length(local.substrate_actor_env) > 0
+    actor_invoker     = var.substrate_actor_member
+    env_keys          = sort(keys(local.substrate_env))
+    services          = local.substrate_enabled ? ["planner", "coder-control", "provisioner"] : []
+  }
+}
+
+output "environment_init" {
+  description = "The login-triggered environment-initialization switch as the org service will see it, plus the split that makes it safe to turn on: the receiver (topic, push subscription, provisioner service) exists for init, provisioner_enabled or provisioning_enabled, while the project-wide tenant-stack roles exist only for provisioning_enabled. receiver_exists and stack_roles_granted differ by design; equal means someone switched on more than they meant to."
+  value = {
+    enabled             = var.environment_init_enabled
+    provisioning_topic  = var.provisioning_topic
+    receiver_exists     = local.tenant_jobs_on
+    org_can_publish     = local.tenant_jobs_on
+    stack_roles_granted = local.provisioning_on
+    steps               = ["org.seed", "org.atespace.bind", "substrate.atespace", "deploy.stack"]
+  }
+}
