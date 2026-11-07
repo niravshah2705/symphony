@@ -501,5 +501,4 @@ resource "kubectl_manifest" "agentgateway_policy" {
 # allowlist, so if the listener above were flipped to `Same` and a route
 # attached, the first thing that happens is a 403 for a body with no model in
 # it. Who would publish an agent card, and why actor-local A2A stays out of
-# scope, is Stage I's paragraph in docs/SUBSTRATE_INTEGRATION.md — not a
-# resource here.
+# scope, is section 12 of docs/SUBSTRATE_INTEGRATION.md — not a resource here.

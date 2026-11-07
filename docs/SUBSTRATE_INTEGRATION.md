@@ -483,3 +483,30 @@ as an error rather than a silent no-op:
   Until a cluster-side applier exists, apply the `substrate-credentials` Secret and the
   `atenet-egress` read grant out of band (`substrate.tf` owns the read grant in
   Terraform), or smoke against an organization whose vault resolves nothing.
+
+## 12. A2A: the seam exists, nothing is behind it
+
+`agentgateway.tf` puts an `a2a` listener on 8081 that admits no routes, no backends and no
+agent cards, and the placeholder deliberately stops there instead of shipping a discoverable
+surface. An agent card is a *discovery* document — a stable, cacheable URL a peer resolves
+before it decides to call you — so the only party in this stack with anything to advertise is
+**the planner**: it is the one workload that already answers the two questions a peer would
+ask. It can say who is calling, because `verifyActorJwt`
+(`packages/shared-core/src/agent/substrate-runner.js`) resolves a bearer to a SPIFFE identity
+and rejects anything outside the cluster trust domain, and it can say what a run cost, because
+the dispatcher meters `usage`/`costUsd`/`traceId` for the org that admitted it. A card would
+therefore point at the planner's run contract behind the gateway front, authenticated by a
+per-org virtual key — not at an actor. **Actor-local A2A is out of scope for a reason that is
+structural, not editorial**: an actor is an ephemeral gVisor container that
+`runPlanningOnSubstrate` suspends and deletes in the same request's `finally`, so its address
+under the atenet-router (`<atespace>/<actor>`, decided by the `ate-target-actor` header) is
+reachable only for the seconds one run lasts. A card naming it would be a URL that 404s minutes
+later and that an external party caches anyway — and cross-tenant, it is worse than stale,
+because a resolver that outlives the run is pointing at a slot the next run's actor fills. The
+third reason is the cheapest to miss: there is no second party. planner↔coder is Pub/Sub plus
+Firestore stage commands, and putting a gateway-fronted A2A hop in the middle of that adds a
+credential boundary and a trace span without adding a counterpart to talk to. Turning the seam
+on is therefore a decision with three prerequisites — a card publisher, a cacheable address
+that survives its own discovery, and a peer — none of which exists yet. Until then the
+deny-by-absence listener is the honest end state, and flipping its
+`allowedRoutes.namespaces.from` is the reviewable signal that someone finally has all three.
