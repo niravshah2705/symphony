@@ -4,16 +4,19 @@
 
 ## Overview
 
-Community of 226 nodes
+Community of 229 nodes
 
-- **Size**: 226 nodes
-- **Cohesion**: 0.0606
+- **Size**: 229 nodes
+- **Cohesion**: 0.0598
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:agentgateway has a vault key and the platform never holds one@L78 | Test | ./deploy/gcp/agentgateway-config.test.js | 78-96 |
+| test:the Terraform guard never admits an origin the sidecar will refuse@L98 | Test | ./deploy/gcp/agentgateway-config.test.js | 98-139 |
+| test:the gateway origin is sidecar-only@L141 | Test | ./deploy/gcp/agentgateway-config.test.js | 141-161 |
 | test:deploy entry points share the blank/valid/invalid GA4 id contract@L35 | Test | ./deploy/gcp/analytics-config.test.js | 35-45 |
 | test:blank or unset bootstrap input removes a stale repo variable and gh failures remain fatal@L59 | Test | ./deploy/gcp/analytics-config.test.js | 59-77 |
 | test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-96 |
@@ -61,11 +64,8 @@ Community of 226 nodes
 | test:everything after a lone -- is positional@L41 | Test | ./packages/cli/src/args.test.js | 41-45 |
 | test:empty argv yields empty result@L47 | Test | ./packages/cli/src/args.test.js | 47-50 |
 | resolveBaseUrl | Function | ./packages/cli/src/client.js | 20-26 |
-| resolveToken | Function | ./packages/cli/src/client.js | 34-37 |
-| createClient | Function | ./packages/cli/src/client.js | 42-110 |
-| headers | Function | ./packages/cli/src/client.js | 51-55 |
 
-*... and 176 more members.*
+*... and 179 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 226 nodes
 
 ### Outgoing
 
-- `equal` (261 edge(s))
-- `ok` (195 edge(s))
+- `equal` (262 edge(s))
+- `ok` (202 edge(s))
 - `expect` (175 edge(s))
-- `match` (163 edge(s))
+- `match` (168 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
+- `includes` (53 edge(s))
 - `deepEqual` (53 edge(s))
-- `includes` (52 edge(s))
-- `indexOf` (41 edge(s))
+- `indexOf` (46 edge(s))
 - `map` (38 edge(s))
+- `slice` (34 edge(s))
+- `doesNotMatch` (33 edge(s))
 - `filter` (33 edge(s))
 - `request` (33 edge(s))
 - `join` (33 edge(s))
-- `doesNotMatch` (31 edge(s))
-- `slice` (30 edge(s))
 
 ### Incoming
 
-- `equal` (261 edge(s))
-- `ok` (195 edge(s))
+- `equal` (262 edge(s))
+- `ok` (202 edge(s))
 - `expect` (175 edge(s))
-- `match` (163 edge(s))
+- `match` (168 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
 - `deepEqual` (53 edge(s))
-- `includes` (49 edge(s))
-- `indexOf` (40 edge(s))
+- `includes` (50 edge(s))
+- `indexOf` (45 edge(s))
+- `doesNotMatch` (33 edge(s))
 - `map` (33 edge(s))
 - `filter` (32 edge(s))
-- `doesNotMatch` (31 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
 - `toBeVisible` (28 edge(s))
-- `./services/planner/src/routes/agent.test.js::call` (26 edge(s))
+- `slice` (27 edge(s))

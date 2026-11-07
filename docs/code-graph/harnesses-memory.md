@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 301 nodes
+Community of 300 nodes
 
-- **Size**: 301 nodes
-- **Cohesion**: 0.2635
+- **Size**: 300 nodes
+- **Cohesion**: 0.2632
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,16 +65,13 @@ Community of 301 nodes
 | test:scoreQuestion discounts off-scope recall and prose-only answers to choice questions@L138 | Test | ./packages/shared/src/agent/global-questions.test.js | 138-151 |
 | test:scoreCoverage excludes rows that were never looked at from the denominator instead of counting them as zero@L153 | Test | ./packages/shared/src/agent/global-questions.test.js | 153-170 |
 
-*... and 251 more members.*
+*... and 250 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
-- **generatePlan** (criticality: 0.67, depth: 6)
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
-- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 

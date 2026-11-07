@@ -170,6 +170,26 @@ outbound call.
   settings service holds managed keys, the vault holds customer keys. The runtime
   provisioner clones ALL containers, so a sidecar on the shared service propagates
   to per-tenant stacks (`packages/shared/src/provisioning/containers.js`).
+- **Two egress boundaries** ([`GLOSSARY.md`](./GLOSSARY.md) is canonical): the
+  **egress proxy** sidecar above, and **actor egress** — the substrate's own
+  gateway, which reads per-org Secrets from the `substrate-credentials` namespace
+  and substitutes outside the gVisor sandbox (`syncSubstrateSecrets` in
+  `packages/shared-core/src/agent/substrate-runner.js`, RBAC in
+  `deploy/gcp/terraform-openshell-gke/substrate.tf`). Both exist; neither is a
+  copy of the other, and neither may be treated as the other's fallback. After the
+  agentgateway seam (`/agentgw` in `packages/shared-core/src/egress.js`) the split
+  is: the sidecar resolves the org's *gateway virtual key* only, and the provider
+  key itself moves behind the model gateway.
+
+  | Workload | Holds |
+  |---|---|
+  | agent / actor / coder container | the sentinel only — unchanged |
+  | egress proxy sidecar | the org's agentgateway (or LiteLLM) virtual key; provider keys it injects today |
+  | agentgateway | the provider key (managed: LiteLLM master; customer: per-org Secret) |
+  | actor egress (atenet-egress) | registry-pull + clone creds; its `openrouter-api-key` retires once actor LLM egress is fronted by the gateway |
+
+  Never write a *fifth* place for a key: a credential that lives in both
+  `substrate-credentials` and the vault has two rotation paths and one audit gap.
 - **SDK runtimes + Langfuse:** once `EGRESS_PROXY_URL` is present, deep-agent,
   native SDK runtimes (codex-sdk / claude-agent-sdk / antigravity), and the
   Langfuse OTLP trace sink (`/langfuse` route, `basic-pair` auth from
