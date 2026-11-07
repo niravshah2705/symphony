@@ -1,0 +1,155 @@
+# Copy to terraform.tfvars and adjust. This root is greenfield: the values
+# below are the module defaults, not a transcription of a running cluster.
+
+project_id     = "example-project"
+region         = "asia-south1"
+zone           = "asia-south1-a"
+cluster_name   = "substrate-multitenant"
+node_pool_name = "substrate-node-pool"
+
+# VPC & networking
+vpc_name            = "default"
+subnet_name         = "substrate-subnet"
+subnet_primary_cidr = "10.10.0.0/20"
+pods_cidr           = "10.20.0.0/14"
+services_cidr       = "10.24.0.0/20"
+
+# Let's Encrypt registration contact. The ACME issuer needs it; the hostnames to
+# issue for come from substrate_ingress_hostname below.
+cert_email = "you@example.com"
+
+# Component versions — pinned, because an unpinned chart version turns a
+# reconcile into an upgrade nobody reviewed.
+cert_manager_version  = "v1.20.3"
+envoy_gateway_version = "v1.8.1"
+
+# Tenants: organization-id -> Substrate atespace. Leave empty for a cluster whose
+# tenants are bound at runtime by the environment-init job; list an organization
+# here only when this root should provision its namespace + isolation up front.
+# The planner reads the same table from SUBSTRATE_ATESPACE_BY_ORG, so a tenant
+# provisioned here and bound there is the same fact, stated once per side.
+tenant_bindings = {
+  # "0f0c1f2e-3a4b-4c5d-9e8f-0a1b2c3d4e5f" = "tenant-acme"
+}
+
+# Tenant node pool — the power workflow parks min_nodes at 0 to stop the
+# cluster and restores it on start.
+machine_type = "e2-standard-2"
+disk_size_gb = 50
+disk_type    = "pd-standard"
+min_nodes    = 2
+max_nodes    = 8
+
+# System node pool — the add-ons' home. Envoy Gateway, cert-manager and every
+# front's Envoy data plane are pinned to it by
+# nodeSelector cloud.google.com/gke-nodepool, so the tenant pool can drain to
+# zero without the autoscaler re-buying a node for a singleton control-plane
+# pod. ~1 CPU / 2.3 GiB of requests is what those add-ons actually need.
+# The power workflow parks this pool too, last; the variable is only the
+# fresh-stack default, and deploy.yml feeds the live bounds back.
+system_node_pool_name = "substrate-system-node-pool"
+system_machine_type   = "e2-standard-2"
+system_min_nodes      = 1
+system_max_nodes      = 3
+
+# Identity the cluster-power workflow drains tenant nodes with. gh-deployer
+# already holds roles/container.admin, which GKE maps to cluster-admin, so the
+# ci_rbac.tf binding is optional — set it if you grant a pool-scoped role
+# instead. Must match the GCP_DEPLOYER_SA secret exactly.
+power_ci_sa_email = "gh-deployer@example-project.iam.gserviceaccount.com"
+
+# HARDENING TODO: restrict control-plane access to known CIDRs
+master_authorized_networks_cidr = "0.0.0.0/0"
+deletion_protection             = true
+
+# ---------------------------------------------------------------------------
+# Agent Substrate. With OpenShell retired there is no other execution
+# substrate, so substrate_enabled = false means the cluster runs no agents at
+# all — it is a bare platform stack. The ate-system control plane is installed
+# by the upstream substrate installer, run from CI by
+# .github/workflows/substrate-control-plane.yml, NOT by this config — see
+# docs/SUBSTRATE_INTEGRATION.md. This module only adds the dedicated worker
+# pool, credential/snapshot namespaces, PD snapshot storage and the public
+# actor ingress that the installer's atenet-router needs.
+# ---------------------------------------------------------------------------
+substrate_enabled               = true
+substrate_node_pool_name        = "substrate-worker-pool"
+substrate_machine_type          = "e2-standard-4"
+substrate_min_nodes             = 1
+substrate_max_nodes             = 6
+substrate_snapshot_storage_class = "substrate-snapshot-pd"
+substrate_credentials_namespace  = "substrate-credentials"
+
+# Public hostname fronting the actor data plane (substrateIngressUrl). Empty
+# skips the whole front; a hostname creates the static address, its own Envoy
+# data plane, a cert-manager Certificate and the HTTPRoutes. Terraform prints
+# substrate_ingress_dns — create that A record or the certificate never issues.
+substrate_ingress_hostname = ""
+
+# The ateapi gRPC control plane on that SAME hostname (path prefix
+# /substrate.ateapi.v1.Control). Off by default and stays off until the route
+# has caller authentication in front of it: ateapi creates and deletes actors
+# and mints actor JWTs.
+substrate_control_plane_public = false
+substrate_ateapi_service       = "ateapi"
+substrate_ateapi_port          = 8443
+
+# ---------------------------------------------------------------------------
+# agentgateway — the in-cluster L7 front for LLM traffic and the /a2a seam.
+# Off by default: Stage F ships the sidecar route dark, and this half stays off
+# until a gateway address a Cloud Run sidecar can actually reach is proven
+# (docs/LLM_GATEWAY.md's bidirectional-path caveat). Enabling it is a plan that
+# renders two helm releases, one Gateway, and no live credentials.
+# See agentgateway.tf for what each knob is for and what this root refuses to
+# do with any of them.
+# ---------------------------------------------------------------------------
+agentgateway_enabled = false
+
+# Both charts ship as a pair and the CRDs chart is not version-independent of
+# the control plane; changing one without the other is an unsupported upgrade.
+agentgateway_version = "v1.7.0"
+
+# Bare hostname of the LiteLLM deployment the gateway forwards to (its run.app
+# host, or a private DNS name). NOT a URL: no scheme, no path, no port. The
+# gate is `https://<this>:<port>`, so a value carrying a path silently 502s on
+# the first token request instead of failing at plan time.
+agentgateway_llm_upstream_host = "litellm-ai-fleet.a.run.app"
+agentgateway_llm_upstream_port = 443
+agentgateway_llm_upstream_tls  = true
+
+# NAME of the Kubernetes Secret holding LiteLLM's model-scoped virtual key —
+# never the key itself, and never the LiteLLM master key. `gw.virtualkey` in
+# the environment-init job writes that Secret; Terraform must never see it.
+agentgateway_provider_key_secret = "agentgateway-litellm-key"
+
+# The model allowlist, and it must equal deploy/litellm/config.yaml's
+# `model_name` values verbatim: agentgateway matches the inbound `model` the
+# same way LiteLLM does, so a model missing here 403s mid-run and a model here
+# that LiteLLM does not serve 502s. deploy/gcp/agentgateway-config.test.js
+# enforces that equality in CI. Leave empty to render a deny-everything rule.
+agentgateway_models = [
+  "claude-opus-4-8",
+  "claude-sonnet-5",
+  "claude-haiku-4-5-20251001",
+  "claude-fable-5",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "gpt-5.5",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+]
+
+# org_id -> "sha256:<hex>" of that organization's gateway virtual key. Hashes
+# only. The raw key exists once, in the org's encrypted vault, and is handed to
+# the egress sidecar at run time; `gw.virtualkey` mints it and writes it here
+# through the same API that writes the vault. An empty map is the dark state.
+agentgateway_virtual_keys = {
+  # "0f0c1f2e-3a4b-4c5d-9e8f-0a1b2c3d4e5f" = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+}
+
+# Public front. Empty keeps the data plane ClusterIP, which is the honest
+# answer while no external caller has a proven path to it. Set a hostname to
+# get the static address, its Certificate, and `agentgateway_ingress_dns` —
+# Terraform prints the A record to create; TLS will not issue before it exists.
+agentgateway_ingress_hostname = ""

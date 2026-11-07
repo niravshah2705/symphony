@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 244 nodes
+Community of 245 nodes
 
-- **Size**: 244 nodes
-- **Cohesion**: 0.0559
+- **Size**: 245 nodes
+- **Cohesion**: 0.0557
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,6 +17,7 @@ Community of 244 nodes
 | test:agentgateway has a vault key and the platform never holds one@L78 | Test | ./deploy/gcp/agentgateway-config.test.js | 78-96 |
 | test:the Terraform guard never admits an origin the sidecar will refuse@L98 | Test | ./deploy/gcp/agentgateway-config.test.js | 98-139 |
 | test:the gateway origin is sidecar-only@L141 | Test | ./deploy/gcp/agentgateway-config.test.js | 141-161 |
+| test:the gateway allowlist equals the LiteLLM catalog it fronts@L181 | Test | ./deploy/gcp/agentgateway-config.test.js | 181-196 |
 | test:deploy entry points share the blank/valid/invalid GA4 id contract@L35 | Test | ./deploy/gcp/analytics-config.test.js | 35-45 |
 | test:blank or unset bootstrap input removes a stale repo variable and gh failures remain fatal@L59 | Test | ./deploy/gcp/analytics-config.test.js | 59-77 |
 | test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-96 |
@@ -63,9 +64,8 @@ Community of 244 nodes
 | test:Settings Policy uses the active native project and selected-context roles@L553 | Test | ./e2e/page-loading.spec.js | 553-615 |
 | test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660 | Test | ./e2e/page-loading.spec.js | 660-709 |
 | test:one stable footer survives view replacement across every application and legal route@L196 | Test | ./e2e/persistent-footer.spec.js | 196-243 |
-| test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
 
-*... and 194 more members.*
+*... and 195 more members.*
 
 ## Execution Flows
 
@@ -78,35 +78,35 @@ Community of 244 nodes
 ### Outgoing
 
 - `equal` (285 edge(s))
-- `ok` (229 edge(s))
-- `match` (209 edge(s))
+- `ok` (230 edge(s))
+- `match` (211 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
-- `deepEqual` (56 edge(s))
+- `deepEqual` (57 edge(s))
 - `includes` (53 edge(s))
-- `indexOf` (46 edge(s))
-- `map` (41 edge(s))
+- `indexOf` (47 edge(s))
+- `map` (42 edge(s))
 - `doesNotMatch` (39 edge(s))
 - `filter` (37 edge(s))
-- `slice` (35 edge(s))
+- `slice` (36 edge(s))
 - `request` (33 edge(s))
 - `join` (33 edge(s))
 
 ### Incoming
 
 - `equal` (285 edge(s))
-- `ok` (229 edge(s))
-- `match` (209 edge(s))
+- `ok` (230 edge(s))
+- `match` (211 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
-- `deepEqual` (56 edge(s))
+- `deepEqual` (57 edge(s))
 - `includes` (50 edge(s))
-- `indexOf` (45 edge(s))
+- `indexOf` (46 edge(s))
 - `doesNotMatch` (39 edge(s))
-- `map` (36 edge(s))
+- `map` (37 edge(s))
 - `filter` (36 edge(s))
+- `slice` (29 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
-- `slice` (28 edge(s))
 - `toBeVisible` (28 edge(s))

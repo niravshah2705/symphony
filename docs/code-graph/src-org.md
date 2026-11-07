@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 156 nodes
+Community of 157 nodes
 
-- **Size**: 156 nodes
-- **Cohesion**: 0.2976
+- **Size**: 157 nodes
+- **Cohesion**: 0.2960
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,6 +17,7 @@ Community of 156 nodes
 | runtimeAccepts | Function | ./deploy/gcp/agentgateway-config.test.js | 107-114 |
 | test@L122 | Test | ./deploy/gcp/agentgateway-config.test.js | 122-122 |
 | test@L137 | Test | ./deploy/gcp/agentgateway-config.test.js | 137-137 |
+| test:the substrate root can hand the sidecar an origin it will accept@L245 | Test | ./deploy/gcp/agentgateway-config.test.js | 245-260 |
 | configuredProxyOrgId | Function | ./services/proxy/src/credentials.js | 17-24 |
 | proxyOrgId | Function | ./services/proxy/src/credentials.js | 40-44 |
 | resolveSecrets | Function | ./services/proxy/src/credentials.js | 46-69 |
@@ -63,9 +64,8 @@ Community of 156 nodes
 | test:buildForwardHeaders strips inbound auth and retargets Host@L27 | Test | ./services/proxy/src/proxy.test.js | 27-62 |
 | test:buildForwardHeaders cannot smuggle an OAuth beta header into API-key auth@L64 | Test | ./services/proxy/src/proxy.test.js | 64-72 |
 | test:filterResponseHeaders drops body-frame + hop-by-hop but keeps content-type@L74 | Test | ./services/proxy/src/proxy.test.js | 74-89 |
-| test:resolveStaticKey: managed value from the settings payload (one path)@L93 | Test | ./services/proxy/src/proxy.test.js | 93-99 |
 
-*... and 106 more members.*
+*... and 107 more members.*
 
 ## Execution Flows
 
@@ -89,7 +89,7 @@ Community of 156 nodes
 - `toLowerCase` (9 edge(s))
 - `close` (9 edge(s))
 - `json` (9 edge(s))
-- `now` (8 edge(s))
+- `match` (8 edge(s))
 
 ### Incoming
 
@@ -105,6 +105,6 @@ Community of 156 nodes
 - `./services/proxy/src/stream-token-rpc.js` (10 edge(s))
 - `./services/proxy/src/stream-token-rpc.test.js` (10 edge(s))
 - `close` (9 edge(s))
+- `match` (8 edge(s))
 - `stringify` (8 edge(s))
 - `json` (8 edge(s))
-- `./services/proxy/src/index.js` (7 edge(s))
