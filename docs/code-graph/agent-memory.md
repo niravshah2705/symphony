@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 247 nodes
+Community of 297 nodes
 
-- **Size**: 247 nodes
-- **Cohesion**: 0.2733
+- **Size**: 297 nodes
+- **Cohesion**: 0.2642
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,46 +65,51 @@ Community of 247 nodes
 | test:scoreQuestion discounts off-scope recall and prose-only answers to choice questions@L138 | Test | ./packages/shared/src/agent/global-questions.test.js | 138-151 |
 | test:scoreCoverage excludes rows that were never looked at from the denominator instead of counting them as zero@L153 | Test | ./packages/shared/src/agent/global-questions.test.js | 153-170 |
 
-*... and 197 more members.*
+*... and 247 more members.*
 
 ## Execution Flows
 
+- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
+- **generatePlan** (criticality: 0.67, depth: 6)
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
+- **runCoder** (criticality: 0.67, depth: 7)
+- **runPlannedCoder** (criticality: 0.66, depth: 7)
+- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (374 edge(s))
-- `map` (44 edge(s))
+- `equal` (389 edge(s))
+- `join` (74 edge(s))
+- `String` (53 edge(s))
+- `map` (46 edge(s))
+- `isArray` (46 edge(s))
+- `ok` (45 edge(s))
 - `deepEqual` (44 edge(s))
-- `join` (42 edge(s))
-- `includes` (41 edge(s))
-- `String` (39 edge(s))
+- `includes` (42 edge(s))
 - `match` (38 edge(s))
-- `ok` (36 edge(s))
-- `isArray` (35 edge(s))
+- `slice` (26 edge(s))
 - `filter` (26 edge(s))
-- `slice` (23 edge(s))
 - `throws` (23 edge(s))
+- `require` (22 edge(s))
+- `trim` (19 edge(s))
 - `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
-- `trim` (18 edge(s))
-- `require` (18 edge(s))
 
 ### Incoming
 
-- `equal` (374 edge(s))
+- `equal` (389 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (50 edge(s))
+- `join` (46 edge(s))
+- `ok` (45 edge(s))
 - `deepEqual` (44 edge(s))
-- `ok` (36 edge(s))
 - `match` (35 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
-- `join` (24 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js` (24 edge(s))
 - `throws` (23 edge(s))
-- `./packages/shared/src/agent/runtimes.test.js` (22 edge(s))
 - `./packages/shared/src/agent/global-questions.js` (21 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
 - `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
-- `includes` (18 edge(s))

@@ -1306,3 +1306,47 @@ variable "litellm_config_path" {
   description = "Path to LiteLLM's config.yaml inside the app image (built from deploy/litellm/config.yaml). Override to point at a GCS-hosted config without a rebuild."
   default     = "/app/config.yaml"
 }
+
+# -----------------------------------------------------------------------------
+# Observability (observability.tf) — off by default; every resource is gated.
+# -----------------------------------------------------------------------------
+
+variable "observability_enabled" {
+  type        = bool
+  description = "Create the log bucket, per-service sinks, log-based metrics and alerting policies. OFF means nothing in observability.tf exists and the Logging/Monitoring APIs stay disabled; ON costs money (user-defined log-based metrics bill as Monitoring custom metrics, the GCS sink bills storage plus writes)."
+  default     = false
+}
+
+variable "observability_log_services" {
+  type        = list(string)
+  description = "Cloud Run service names whose revision logs are exported to the log bucket. Empty (the default) uses the *_service_name variables, so a renamed service follows its sink without a second edit; a non-empty list is an explicit override — which then DOES have to be edited when a service is renamed."
+  default     = []
+}
+
+variable "observability_log_retention_days" {
+  type        = number
+  description = "Days a log object lives in the export bucket before the lifecycle rule deletes it. This is the durable copy of the money events, so shortening it below a billing cycle makes a disputed debit unanswerable; lengthening it is pure storage cost."
+  default     = 400
+
+  validation {
+    condition     = var.observability_log_retention_days >= 30 && var.observability_log_retention_days <= 3650
+    error_message = "observability_log_retention_days must be between 30 and 3650 days."
+  }
+}
+
+variable "observability_notification_channels" {
+  type        = list(string)
+  description = "Cloud Monitoring notification channel resource names (projects/<p>/notificationChannels/<id>) the alert policies address. The provider cannot create channels — email/SMS channels are deprecated upstream, so make a Pub/Sub topic channel by hand and let a subscriber fan out. Empty creates NO alert policy at all, because a policy with no channel reports success while promising nothing."
+  default     = []
+}
+
+variable "observability_no_route_alert_count" {
+  type        = number
+  description = "How many unmatched-prefix egress requests in the alert window constitute probing worth waking someone for. One 404 is a mis-set base URL; a burst is somebody testing whether the sidecar forwards anywhere. Route prefixes are never logged verbatim, so the count is all this signal can carry."
+  default     = 25
+
+  validation {
+    condition     = var.observability_no_route_alert_count >= 1
+    error_message = "observability_no_route_alert_count must be at least 1."
+  }
+}

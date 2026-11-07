@@ -17,15 +17,15 @@ Community of 26 nodes
 | ensureDir | Function | ./packages/shared-core/src/logger.js | 23-25 |
 | formatMeta | Function | ./packages/shared-core/src/logger.js | 33-43 |
 | secretsAsMask | Function | ./packages/shared-core/src/logger.js | 48-52 |
-| contextFields | Function | ./packages/shared-core/src/logger.js | 60-70 |
-| withTraceLink | Function | ./packages/shared-core/src/logger.js | 73-78 |
-| jsonLine | Function | ./packages/shared-core/src/logger.js | 80-96 |
-| textLine | Function | ./packages/shared-core/src/logger.js | 98-105 |
-| write | Function | ./packages/shared-core/src/logger.js | 107-122 |
-| isTraceId | Function | ./packages/shared-core/src/logger.js | 126-126 |
-| cleanBound | Function | ./packages/shared-core/src/logger.js | 129-142 |
-| withContext | Function | ./packages/shared-core/src/logger.js | 149-155 |
-| runWithContext | Function | ./packages/shared-core/src/logger.js | 162-165 |
+| contextFields | Function | ./packages/shared-core/src/logger.js | 60-71 |
+| withTraceLink | Function | ./packages/shared-core/src/logger.js | 74-79 |
+| jsonLine | Function | ./packages/shared-core/src/logger.js | 81-97 |
+| textLine | Function | ./packages/shared-core/src/logger.js | 99-106 |
+| write | Function | ./packages/shared-core/src/logger.js | 108-123 |
+| isTraceId | Function | ./packages/shared-core/src/logger.js | 127-127 |
+| cleanBound | Function | ./packages/shared-core/src/logger.js | 130-143 |
+| withContext | Function | ./packages/shared-core/src/logger.js | 150-156 |
+| runWithContext | Function | ./packages/shared-core/src/logger.js | 163-166 |
 | capture | Function | ./packages/shared-core/src/logger.test.js | 12-19 |
 | test:logger: text output stays a human-readable line when nothing is bound@L21 | Test | ./packages/shared-core/src/logger.test.js | 21-25 |
 | test:logger: withContext labels the line with the run it belongs to@L27 | Test | ./packages/shared-core/src/logger.test.js | 27-35 |

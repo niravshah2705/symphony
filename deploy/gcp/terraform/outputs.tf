@@ -145,3 +145,23 @@ output "artifact_registry_repo" {
   description = "Artifact Registry Docker repo path (images are pushed here as <repo>/<service>:<tag>)."
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}"
 }
+
+output "observability_log_bucket" {
+  description = "GCS bucket holding the durable export of the fleet's structured logs, including every balance-threshold crossing (null when observability_enabled = false). Retired after var.observability_log_retention_days."
+  value       = one(google_storage_bucket.observability_logs[*].name)
+}
+
+output "observability_log_sink_writer" {
+  description = "The identity every observability sink writes the bucket as, and the member holding storage.objectCreator on it. Google-managed, so it is reported rather than created here."
+  value       = local.observability_enabled ? local.observability_log_writer : null
+}
+
+output "observability_metrics" {
+  description = "Log-based metric names created in this project (logging.googleapis.com/user/<name>). Empty when observability is off, or when the balance thresholds arrived as an empty list. The keys are what the alert policies and any dashboard must reference."
+  value       = sort(keys(google_logging_metric.observability))
+}
+
+output "observability_alert_policies" {
+  description = "Display names of the alerting policies actually created. Empty with a non-empty observability_metrics list means var.observability_notification_channels is empty — the signals are collected but nothing will tell anyone."
+  value       = sort([for policy in google_monitoring_alert_policy.observability : policy.display_name])
+}

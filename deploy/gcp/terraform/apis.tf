@@ -33,3 +33,21 @@ resource "google_project_service" "services" {
   service            = each.value
   disable_on_destroy = false
 }
+
+# Observability APIs, gated with the module (observability.tf). Enabling an API
+# is a project-wide side effect that outlives a `terraform destroy` here, so it
+# does not happen unless the operator asked for observability.
+locals {
+  observability_apis = var.observability_enabled ? [
+    "logging.googleapis.com",
+    "monitoring.googleapis.com",
+  ] : []
+}
+
+resource "google_project_service" "observability_apis" {
+  for_each = toset(local.observability_apis)
+
+  project            = var.project_id
+  service            = each.value
+  disable_on_destroy = false
+}

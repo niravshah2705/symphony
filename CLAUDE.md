@@ -190,6 +190,18 @@ outbound call.
 
   Never write a *fifth* place for a key: a credential that lives in both
   `substrate-credentials` and the vault has two rotation paths and one audit gap.
+- **Egress decision records:** the sidecar writes exactly one structured decision
+  per request — `{prefix, upstreamHost, orgId, decision, statusClass, latencyMs,
+  method}` in `services/proxy/src/proxy.js` — and that line is what the
+  `fleet_egress_cred_unavailable` / `fleet_egress_no_route` metrics count
+  (`deploy/gcp/observability.tf`, gated on `LOG_FORMAT=json` in `local.common_env`).
+  `DECISION_SEVERITY` in the sidecar, the filters in the Terraform and
+  `deploy/gcp/observability-config.test.js` are therefore ONE contract: a decision
+  added in code with no metric is unmonitored, and a metric naming a decision the
+  code never records alerts on nothing. Never put a header value, the sentinel, a
+  resolved credential, a request body or a full query string in that record — the
+  unmatched path is attacker-selected, which is why `prefix` is sanitised and
+  truncated rather than echoed.
 - **SDK runtimes + Langfuse:** once `EGRESS_PROXY_URL` is present, deep-agent,
   native SDK runtimes (codex-sdk / claude-agent-sdk / antigravity), and the
   Langfuse OTLP trace sink (`/langfuse` route, `basic-pair` auth from

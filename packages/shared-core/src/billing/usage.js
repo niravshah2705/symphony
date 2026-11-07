@@ -68,6 +68,18 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
     const grossPaise = pricing.usdToPaise(costUsd);
     const orgId = resolveOrgId(attribution);
     const billingSource = resolveBillingSource(attribution);
+    const priceMatch = pricing.priceMatchOf(llm && llm.provider, result && result.costUsd);
+    // Loud, because a silently-guessed rate is a billing error that reads as a
+    // number. The record still posts — an estimate beats an unmetered run — but
+    // the alert on this line is how a new provider gets added to the catalog.
+    if (priceMatch === 'Default' && grossPaise > 0) {
+      log.warn(`cost estimate priced an unmodeled provider from the fallback rate: ${llm.provider}`, {
+        priceMatch,
+        provider: (llm && llm.provider) || 'unknown',
+        model: (llm && llm.model) || 'unknown',
+        runId: attribution.runId || null,
+      });
+    }
     // `costPaise` is the ONLY field the billing sweep turns into a debit, so a
     // run on the org's own key posts zero: the platform never spent that money
     // and cannot bill it. The same amount is kept as `notionalCostPaise` so the
@@ -96,6 +108,8 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
       model: (llm && llm.model) || 'unknown',
       usage,
       costUsd,
+      // 'Reported' | 'Exact' | 'Default' — how much to trust the two fields below.
+      priceMatch,
       costPaise: isCustomerKey ? 0 : grossPaise,
       notionalCostPaise: isCustomerKey ? grossPaise : 0,
     });
