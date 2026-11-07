@@ -4,108 +4,78 @@
 
 ## Overview
 
-Community of 83 nodes
+Community of 24 nodes
 
-- **Size**: 83 nodes
-- **Cohesion**: 0.3492
+- **Size**: 24 nodes
+- **Cohesion**: 0.2075
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| resolveTaskLabelId | Function | ./packages/shared/src/agent/apply.js | 13-21 |
-| withCriteria | Function | ./packages/shared/src/agent/apply.js | 24-28 |
-| modelLabelForSize | Function | ./packages/shared/src/agent/apply.js | 31-33 |
-| makeLabelResolver | Function | ./packages/shared/src/agent/apply.js | 40-55 |
-| makeModelLabelResolver | Function | ./packages/shared/src/agent/apply.js | 63-83 |
-| issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
-| applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-222 |
-| applyIssuesForMilestones | Function | ./packages/shared/src/agent/apply.js | 229-290 |
-| applyAidone | Function | ./packages/shared/src/agent/apply.js | 293-302 |
-| applyAiplanned | Function | ./packages/shared/src/agent/apply.js | 309-318 |
-| applyAifail | Function | ./packages/shared/src/agent/apply.js | 325-346 |
-| startIssue | Function | ./packages/shared/src/agent/apply.js | 355-370 |
-| finishIssue | Function | ./packages/shared/src/agent/apply.js | 378-410 |
-| safeAt | Function | ./packages/shared/src/agent/apply.js | 412-414 |
-| errMsg | Function | ./packages/shared/src/agent/apply.js | 416-418 |
-| test:pickStateByType prefers the state whose name matches@L909 | Test | ./packages/shared/src/agent/coder-flow.test.js | 909-911 |
-| test:pickStateByType falls back to the lowest-position state of the type@L913 | Test | ./packages/shared/src/agent/coder-flow.test.js | 913-916 |
-| test:pickStateByType resolves the completed (Done) state@L918 | Test | ./packages/shared/src/agent/coder-flow.test.js | 918-920 |
-| test:pickStateByType returns null when no state of the type exists@L922 | Test | ./packages/shared/src/agent/coder-flow.test.js | 922-924 |
-| test:dependencyLinks returns all blockers latest-first, including already-Done ones@L940 | Test | ./packages/shared/src/agent/coder-flow.test.js | 940-950 |
-| isDoneState | Function | ./packages/shared/src/agent/coder-orchestrator.js | 232-235 |
-| blockers | Function | ./packages/shared/src/agent/coder-orchestrator.js | 251-256 |
-| dependencyLinks | Function | ./packages/shared/src/agent/coder-orchestrator.js | 265-271 |
-| fetchPlannedProjects | Function | ./packages/shared/src/agent/coder-orchestrator.js | 273-276 |
-| fetchPlannedTasks | Function | ./packages/shared/src/agent/coder-orchestrator.js | 279-307 |
-| test:normalizeTshirtSize: trims/uppercases valid sizes and defaults unknown to M@L89 | Test | ./packages/shared/src/agent/model-routing.test.js | 89-95 |
-| cleanId | Function | ./packages/shared/src/agent/pipeline-labels.js | 19-22 |
-| linearProjectId | Function | ./packages/shared/src/agent/pipeline-labels.js | 27-36 |
-| lower | Function | ./packages/shared/src/agent/pipeline-labels.js | 38-40 |
-| projectStageResult | Function | ./packages/shared/src/agent/pipeline-labels.js | 47-80 |
-| command | Function | ./packages/shared/src/agent/pipeline-labels.test.js | 7-14 |
-| dependencies | Function | ./packages/shared/src/agent/pipeline-labels.test.js | 16-27 |
-| test:tester success swaps only aidone and preserves unrelated labels@L34 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 34-46 |
-| test:deployer failure projects aideployfail from aitested@L48 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 48-52 |
-| test:cancelled stages do not masquerade as terminal failures in Linear@L54 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 54-59 |
-| test:a missing expected source label is a no-op because labels are not pipeline authority@L61 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 61-66 |
-| test:native StageCommand project scope is never mistaken for a Linear project id@L68 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 68-75 |
-| normalizeTshirtSize | Function | ./packages/shared/src/agent/schema.js | 20-23 |
-| linearGraphqlTool | Function | ./packages/shared/src/agent/tools.js | 43-72 |
-| linearRequest | Function | ./packages/shared/src/linear.js | 25-66 |
-| getViewer | Function | ./packages/shared/src/linear.js | 312-315 |
-| getTeams | Function | ./packages/shared/src/linear.js | 317-320 |
-| getProjects | Function | ./packages/shared/src/linear.js | 322-325 |
-| getProjectMilestones | Function | ./packages/shared/src/linear.js | 327-333 |
-| getProjectIssues | Function | ./packages/shared/src/linear.js | 335-342 |
-| updateIssueState | Function | ./packages/shared/src/linear.js | 344-353 |
-| updateIssue | Function | ./packages/shared/src/linear.js | 356-362 |
-| getTeamStates | Function | ./packages/shared/src/linear.js | 365-369 |
-| getIssueDetail | Function | ./packages/shared/src/linear.js | 372-376 |
-| pickStateByType | Function | ./packages/shared/src/linear.js | 383-392 |
-
-*... and 33 more members.*
+| toIssue | Function | ./services/coder/src/run-ticket.js | 43-53 |
+| buildKeys | Function | ./services/coder/src/run-ticket.js | 55-64 |
+| httpError | Function | ./services/coder/src/run-ticket.js | 66-71 |
+| loadIssue | Function | ./services/coder/src/run-ticket.js | 73-78 |
+| eventContext | Function | ./services/coder/src/run-ticket.js | 80-82 |
+| hasEffectivePolicy | Function | ./services/coder/src/run-ticket.js | 84-91 |
+| makeStep | Function | ./services/coder/src/run-ticket.js | 94-99 |
+| runTicketInProcess | Function | ./services/coder/src/run-ticket.js | 106-245 |
+| run | Function | ./services/coder/src/run-ticket.js | 198-210 |
+| onError | Function | ./services/coder/src/run-ticket.js | 211-232 |
+| onDone | Function | ./services/coder/src/run-ticket.js | 233-237 |
+| runTicket | Function | ./services/coder/src/run-ticket.js | 252-285 |
+| baseDependencies | Function | ./services/coder/src/run-ticket.test.js | 21-36 |
+| test:in-process coder resolves selected scope before model preflight and enforces policy + prefs@L38 | Test | ./services/coder/src/run-ticket.test.js | 38-113 |
+| test:proxy-vault coder needs no stored Linear key and passes only the sentinel to Linear callers@L115 | Test | ./services/coder/src/run-ticket.test.js | 115-157 |
+| test:llm-gateway flag rides the settings object into resolveLlm and the run bag@L159 | Test | ./services/coder/src/run-ticket.test.js | 159-181 |
+| test:cloud job launch threads the llm-gateway flag as LLM_GATEWAY_FLAG env@L183 | Test | ./services/coder/src/run-ticket.test.js | 183-206 |
+| test:legacy empty-context coder remains allow-all when policy resolution is unavailable@L208 | Test | ./services/coder/src/run-ticket.test.js | 208-228 |
+| test:selected-organization coder fails closed when policy resolution is unavailable@L230 | Test | ./services/coder/src/run-ticket.test.js | 230-246 |
+| test@L243 | Test | ./services/coder/src/run-ticket.test.js | 243-243 |
+| test:selected-organization coder fails closed when resolver returns no effective policy@L248 | Test | ./services/coder/src/run-ticket.test.js | 248-269 |
+| test:policy denial remains a typed 403 instead of becoming a model pause@L271 | Test | ./services/coder/src/run-ticket.test.js | 271-295 |
+| test:runtime policy denial remains typed and does not create a model pause@L297 | Test | ./services/coder/src/run-ticket.test.js | 297-328 |
+| test:cloud coder job receives selected context and emits on the same scoped channel@L330 | Test | ./services/coder/src/run-ticket.test.js | 330-357 |
 
 ## Execution Flows
 
-- **resume** (criticality: 0.67, depth: 8)
-- **startScheduler** (criticality: 0.65, depth: 5)
+No execution flows pass through this community.
 
 ## Dependencies
 
 ### Outgoing
 
-- `step` (34 edge(s))
-- `strictEqual` (20 edge(s))
-- `push` (18 edge(s))
-- `String` (16 edge(s))
-- `map` (11 edge(s))
-- `trim` (9 edge(s))
-- `filter` (9 edge(s))
-- `toLowerCase` (8 edge(s))
-- `has` (8 edge(s))
-- `get` (7 edge(s))
-- `deepEqual` (7 edge(s))
-- `set` (6 edge(s))
-- `log` (6 edge(s))
-- `sort` (5 edge(s))
-- `find` (4 edge(s))
+- `equal` (28 edge(s))
+- `deepEqual` (8 edge(s))
+- `push` (7 edge(s))
+- `publish` (6 edge(s))
+- `toISOString` (6 edge(s))
+- `resolveRole` (6 edge(s))
+- `rejects` (4 edge(s))
+- `String` (3 edge(s))
+- `isPolicyUnavailableError` (3 edge(s))
+- `getApiKey` (2 edge(s))
+- `info` (2 edge(s))
+- `isPolicyDeniedError` (2 edge(s))
+- `warn` (2 edge(s))
+- `resolvePolicyOrganization` (2 edge(s))
+- `getSettingsImpl` (2 edge(s))
 
 ### Incoming
 
-- `./packages/shared/src/linear.js` (68 edge(s))
-- `./packages/shared/src/agent/apply.js` (22 edge(s))
-- `strictEqual` (20 edge(s))
-- `./packages/shared/src/agent/coder-orchestrator.js` (8 edge(s))
-- `./packages/shared/src/agent/pipeline-labels.test.js` (7 edge(s))
-- `deepEqual` (7 edge(s))
-- `./packages/shared/src/agent/pipeline-labels.js` (6 edge(s))
-- `./packages/shared/src/agent/coder-flow.test.js` (5 edge(s))
-- `./packages/shared/src/linear.test.js` (5 edge(s))
-- `./packages/shared/src/agent/tools.js` (3 edge(s))
-- `./scripts/reset-aifail.js` (3 edge(s))
-- `equal` (2 edge(s))
-- `./packages/shared/src/agent/schema.js` (2 edge(s))
-- `./packages/shared/src/agent/coder-orchestrator.js::pollOnce` (1 edge(s))
-- `deepStrictEqual` (1 edge(s))
+- `equal` (28 edge(s))
+- `./services/coder/src/run-ticket.js` (18 edge(s))
+- `./services/coder/src/run-ticket.test.js` (11 edge(s))
+- `deepEqual` (8 edge(s))
+- `push` (7 edge(s))
+- `resolveRole` (6 edge(s))
+- `rejects` (4 edge(s))
+- `clearPause` (2 edge(s))
+- `status` (2 edge(s))
+- `./services/coder/src/pubsub.js` (1 edge(s))
+- `./services/coder/src/routes/coder.js` (1 edge(s))
+- `onStep` (1 edge(s))
+- `ok` (1 edge(s))
+- `after` (1 edge(s))

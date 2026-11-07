@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 508 nodes
+Community of 534 nodes
 
-- **Size**: 508 nodes
-- **Cohesion**: 0.7494
+- **Size**: 534 nodes
+- **Cohesion**: 0.7466
 - **Dominant Language**: hcl
 
 ## Members
@@ -16,6 +16,8 @@ Community of 508 nodes
 |------|------|------|-------|
 | local.required_apis | Function | ./deploy/gcp/terraform/apis.tf | 8-26 |
 | resource.google_project_service.services | Class | ./deploy/gcp/terraform/apis.tf | 29-35 |
+| local.observability_apis | Function | ./deploy/gcp/terraform/apis.tf | 41-44 |
+| resource.google_project_service.observability_apis | Class | ./deploy/gcp/terraform/apis.tf | 47-53 |
 | resource.google_artifact_registry_repository.docker | Class | ./deploy/gcp/terraform/artifact_registry.tf | 5-36 |
 | resource.google_cloud_run_v2_job.billing_auto_recharge | Class | ./deploy/gcp/terraform/billing_job.tf | 21-115 |
 | resource.google_cloud_run_v2_job_iam_member.billing_launches_recharge_job | Class | ./deploy/gcp/terraform/billing_job.tf | 121-127 |
@@ -62,10 +64,8 @@ Community of 508 nodes
 | resource.google_service_account.email | Class | ./deploy/gcp/terraform/email_service.tf | 11-15 |
 | resource.google_project_iam_member.email_datastore | Class | ./deploy/gcp/terraform/email_service.tf | 19-23 |
 | resource.google_secret_manager_secret.email_smtp_user | Class | ./deploy/gcp/terraform/email_service.tf | 25-33 |
-| resource.google_secret_manager_secret.email_smtp_password | Class | ./deploy/gcp/terraform/email_service.tf | 35-43 |
-| resource.google_secret_manager_secret_iam_member.email_smtp_user_accessor | Class | ./deploy/gcp/terraform/email_service.tf | 62-67 |
 
-*... and 458 more members.*
+*... and 484 more members.*
 
 ## Execution Flows
 
@@ -75,18 +75,18 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform/variables.tf` (180 edge(s))
+- `./deploy/gcp/terraform/variables.tf` (185 edge(s))
 - `./deploy/gcp/terraform/locals.tf` (64 edge(s))
+- `./deploy/gcp/terraform/outputs.tf` (31 edge(s))
 - `./deploy/gcp/terraform/pipeline.tf` (29 edge(s))
-- `./deploy/gcp/terraform/outputs.tf` (27 edge(s))
 - `./deploy/gcp/terraform/iam.tf` (21 edge(s))
 - `./deploy/gcp/terraform/cloud_run.tf` (20 edge(s))
 - `./deploy/gcp/terraform/settings_service.tf` (19 edge(s))
 - `./deploy/gcp/terraform/provisioner.tf` (17 edge(s))
+- `./deploy/gcp/terraform/observability.tf` (15 edge(s))
 - `./deploy/gcp/terraform/email_service.tf` (14 edge(s))
 - `./deploy/gcp/terraform/litellm.tf` (14 edge(s))
 - `./deploy/gcp/terraform/firebase.tf` (10 edge(s))
 - `./deploy/gcp/terraform/memory.tf` (10 edge(s))
 - `./deploy/gcp/terraform/billing_service.tf` (9 edge(s))
 - `./deploy/gcp/terraform/org_service.tf` (9 edge(s))
-- `./deploy/gcp/terraform/pubsub.tf` (8 edge(s))

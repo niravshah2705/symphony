@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 229 nodes
+Community of 235 nodes
 
-- **Size**: 229 nodes
-- **Cohesion**: 0.0598
+- **Size**: 235 nodes
+- **Cohesion**: 0.0584
 - **Dominant Language**: javascript
 
 ## Members
@@ -28,6 +28,11 @@ Community of 229 nodes
 | test:the app overlay puts config.yaml where Terraform points CONFIG_FILE_PATH@L168 | Test | ./deploy/gcp/litellm-config.test.js | 168-182 |
 | test:CI builds and rolls all three LiteLLM images as one unit@L184 | Test | ./deploy/gcp/litellm-config.test.js | 184-215 |
 | test:litellm image tags follow the fleet per-service fallback@L217 | Test | ./deploy/gcp/litellm-config.test.js | 217-246 |
+| test:every alertable egress decision is a decision the sidecar can record@L46 | Test | ./deploy/gcp/observability-config.test.js | 46-61 |
+| test:the sidecar severity table only names levels the logger exposes@L63 | Test | ./deploy/gcp/observability-config.test.js | 63-70 |
+| test:each metric filter names a field the emitting code actually writes@L95 | Test | ./deploy/gcp/observability-config.test.js | 95-118 |
+| test:observability is dark by default, and every resource is gated@L120 | Test | ./deploy/gcp/observability-config.test.js | 120-142 |
+| test:sinks name services and jobs this root actually declares@L144 | Test | ./deploy/gcp/observability-config.test.js | 144-154 |
 | test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L132 | Test | ./deploy/gcp/pipeline-infra.test.js | 132-165 |
 | test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L167 | Test | ./deploy/gcp/pipeline-infra.test.js | 167-181 |
 | test:deploy workflow does not query disabled optional Cloud Run services@L183 | Test | ./deploy/gcp/pipeline-infra.test.js | 183-214 |
@@ -59,13 +64,8 @@ Community of 229 nodes
 | test:parses --flag value@L14 | Test | ./packages/cli/src/args.test.js | 14-17 |
 | test:parses --flag=value@L19 | Test | ./packages/cli/src/args.test.js | 19-22 |
 | test:treats a bare --flag at end of argv as boolean true@L24 | Test | ./packages/cli/src/args.test.js | 24-27 |
-| test:treats --flag followed by another --flag as boolean true@L29 | Test | ./packages/cli/src/args.test.js | 29-33 |
-| test:mixes positionals and flags in any order@L35 | Test | ./packages/cli/src/args.test.js | 35-39 |
-| test:everything after a lone -- is positional@L41 | Test | ./packages/cli/src/args.test.js | 41-45 |
-| test:empty argv yields empty result@L47 | Test | ./packages/cli/src/args.test.js | 47-50 |
-| resolveBaseUrl | Function | ./packages/cli/src/client.js | 20-26 |
 
-*... and 179 more members.*
+*... and 185 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 229 nodes
 
 ### Outgoing
 
-- `equal` (262 edge(s))
-- `ok` (202 edge(s))
+- `equal` (272 edge(s))
+- `ok` (210 edge(s))
+- `match` (180 edge(s))
 - `expect` (175 edge(s))
-- `match` (168 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
 - `includes` (53 edge(s))
 - `deepEqual` (53 edge(s))
 - `indexOf` (46 edge(s))
-- `map` (38 edge(s))
-- `slice` (34 edge(s))
-- `doesNotMatch` (33 edge(s))
-- `filter` (33 edge(s))
+- `map` (39 edge(s))
+- `filter` (36 edge(s))
+- `slice` (35 edge(s))
+- `doesNotMatch` (34 edge(s))
 - `request` (33 edge(s))
 - `join` (33 edge(s))
 
 ### Incoming
 
-- `equal` (262 edge(s))
-- `ok` (202 edge(s))
+- `equal` (272 edge(s))
+- `ok` (210 edge(s))
+- `match` (180 edge(s))
 - `expect` (175 edge(s))
-- `match` (168 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
 - `deepEqual` (53 edge(s))
 - `includes` (50 edge(s))
 - `indexOf` (45 edge(s))
-- `doesNotMatch` (33 edge(s))
-- `map` (33 edge(s))
-- `filter` (32 edge(s))
+- `filter` (35 edge(s))
+- `doesNotMatch` (34 edge(s))
+- `map` (34 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
+- `slice` (28 edge(s))
 - `toBeVisible` (28 edge(s))
-- `slice` (27 edge(s))

@@ -346,6 +346,58 @@ permission domains (`packages/shared/src/authz.js`):
 - Secrets live in **Secret Manager**, never in images or committed files
   (`data/` stays gitignored).
 
+## Observability and alerting (`observability.tf`)
+
+OFF by default. `observability_enabled = true` creates one GCS log bucket
+(`<project_id>-aifleet-logs`, objects retired after
+`observability_log_retention_days`), a per-service log sink (plus one per Cloud
+Run **Job** — a job logs under `cloud_run_job`, so a revision-only filter misses
+the hourly money run), four log-based metrics and an alert policy per metric.
+
+| Signal | Log line it counts | Why it pages |
+|---|---|---|
+| `fleet_egress_cred_unavailable` | `egress cred_unavailable` (sidecar) | the egress boundary refused to inject a credential — fail-closed, so a run either died or fell back to a key nobody meant it to have |
+| `fleet_egress_no_route` | `egress no_route` (sidecar) | unmatched prefix. One is a mis-set base URL; a burst is somebody testing whether the sidecar relays |
+| `fleet_cost_price_fallback` | `cost estimate priced an unmodeled provider…` | a usage row was priced by guess (`priceMatch=Default`); add the provider to `billing/pricing.js` |
+| `fleet_balance_under_<paise>` | `billing balance crossed an alert threshold` | an org's ledger crossed a threshold; the in-product notice already fired, this is the operator-side copy |
+
+Two prerequisites, both silent if wrong:
+
+- **`LOG_FORMAT=json`** is set in `local.common_env`, and it is load-bearing.
+  Cloud Logging builds `jsonPayload` only from a line that parses as JSON, so on
+  text logs every filter above exists, reads zero, and alerts on nothing.
+  `deploy/gcp/observability-config.test.js` asserts the deployment env and every
+  filter against the code that emits the line.
+- **`observability_notification_channels`** must list at least one channel
+  resource name, or no policy is created. The provider cannot make channels and
+  email/SMS channels are deprecated upstream, so create a **Pub/Sub topic**
+  channel by hand and let a subscriber fan out. Metrics are still collected with
+  an empty list; nothing will tell anyone.
+
+The balance thresholds are **not written in HCL**: `alert_thresholds.json` is
+generated from `DEFAULT_ALERT_THRESHOLDS_PAISE` in
+`packages/shared-core/src/billing/ledger.js` and read by `observability.tf` with
+`jsondecode(file(...))`. Do not "tidy" it into a `*.auto.tfvars.json` — that root
+gitignores `*.tfvars*` because those files hold real secrets, so a generated
+input there would never reach CI and a fresh clone would silently build no
+balance alerts:
+
+```bash
+npm run observability:inputs        # regenerate after changing the ledger constant
+npm run observability:inputs:check  # CI gate
+```
+
+Not here, on purpose: GKE Managed Prometheus (disabled in the GKE root because
+nothing in this repo scrapes it — log-based metrics answer these four questions),
+per-route/per-org metric labels (the `no_route` prefix is attacker-selected, so
+labelling it hands anyone on the internet a cardinality-billing lever), a latency
+histogram (bucket boundaries for a 404 and a five-minute agent stream in one
+histogram would be a guess that renders as a chart), and the Python services
+(`org`, `settings` don't use `logger.js`, so they emit no `jsonPayload.meta.*`).
+
+Cost, since both halves are billed: user-defined log-based metrics count as Cloud
+Monitoring custom metrics, and the sink bills GCS storage plus write requests.
+
 ## Verify a deploy
 
 - `curl https://<gateway>/healthz` → `{"status":"ok"}`.

@@ -9,6 +9,8 @@ const {
   filterResponseHeaders,
   requestProjectId,
   createProxyHandler,
+  statusClass,
+  probeSegment,
 } = require('./proxy');
 const credentials = require('./credentials');
 
@@ -615,4 +617,125 @@ test('buildInjection: llm-gateway never falls back to a proxy-mounted env key', 
     }),
     (err) => err.name === 'FailClosed' && err.status === 502
   );
+});
+
+// --- egress decision records (observability + the two security signals) ------
+
+/** Handler wired to a capturing logger; returns the records it wrote. */
+function recordingHandler({ resolver, fetchImpl, env } = {}) {
+  const records = [];
+  const note = (severity) => (message, meta) => records.push({ severity, message, meta });
+  const handler = createProxyHandler({
+    routeResolver: resolver || {
+      resolveRoute: async () => ({ upstream: 'https://api.linear.app/graphql', headers: { authorization: 'real-key' } }),
+    },
+    fetchImpl: fetchImpl || (async () => ({ status: 200, headers: new Map(), body: null })),
+    logger: { info: note('info'), warn: note('warn'), error: note('error') },
+    env: env || {},
+  });
+  const res = { headersSent: false, writeHead() { this.headersSent = true; }, end() {} };
+  return { handler, records, res };
+}
+
+test('a forwarded request writes exactly one decision record, and never a secret', async () => {
+  const { handler, records, res } = recordingHandler();
+  await handler({
+    url: '/linear?x=1',
+    method: 'GET',
+    headers: { authorization: 'egress-proxy-sentinel', 'x-ai-fleet-project-id': '' },
+  }, res);
+
+  assert.equal(records.length, 1, 'one record per request — two would double-count every egress call');
+  const { severity, message, meta } = records[0];
+  assert.equal(severity, 'info');
+  assert.equal(message, 'egress forwarded');
+  assert.equal(meta.prefix, '/linear');
+  assert.equal(meta.decision, 'forwarded');
+  assert.equal(meta.upstreamHost, 'api.linear.app');
+  assert.equal(meta.statusClass, '2xx');
+  assert.equal(meta.method, 'GET');
+  assert.ok(Number.isInteger(meta.latencyMs) && meta.latencyMs >= 0);
+
+  // The metric line is the one place a proxy could leak: no injected value, no
+  // sentinel, no header name, no query string.
+  const line = JSON.stringify(records);
+  assert.doesNotMatch(line, /real-key|egress-proxy-sentinel|authorization|x=1/);
+});
+
+test('cred_unavailable is counted at error severity with the pinned org', async () => {
+  const FailClosed = credentials.FailClosed;
+  const { handler, records, res } = recordingHandler({
+    env: { PROXY_ORG_ID: 'org-42' },
+    resolver: {
+      resolveRoute: async () => { throw new FailClosed('no secret in vault for linearApiKey'); },
+    },
+  });
+  await handler({ url: '/linear', method: 'POST', headers: {} }, res);
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].severity, 'error', 'a page-able fail-closed signal');
+  assert.equal(records[0].meta.decision, 'cred_unavailable');
+  assert.equal(records[0].meta.statusClass, '5xx');
+  assert.equal(records[0].meta.orgId, 'org-42');
+  assert.equal(records[0].meta.upstreamHost, '', 'nothing was resolved, so nothing is claimed');
+});
+
+test('an unmatched path is counted as a probe, with the raw path dropped', async () => {
+  const { handler, records, res } = recordingHandler();
+  await handler({
+    url: '/relay?target=https://evil.example/&apiKey=sk-live1234567890',
+    method: 'GET',
+    headers: {},
+  }, res);
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].severity, 'warn', 'open-relay probing is a signal, not an error page');
+  assert.equal(records[0].meta.decision, 'no_route');
+  assert.equal(records[0].meta.statusClass, '4xx');
+  assert.equal(records[0].meta.prefix, 'unmatched:relay');
+  assert.doesNotMatch(JSON.stringify(records[0]), /sk-live1234567890|evil\.example|\.\.\//);
+});
+
+test('a bad project context, a rejected redirect and an unreachable upstream each count once', async () => {
+  const badContext = recordingHandler();
+  await badContext.handler({
+    url: '/linear', method: 'GET', headers: { 'x-ai-fleet-project-id': 'not-a-uuid' },
+  }, badContext.res);
+  assert.equal(badContext.records[0].meta.decision, 'bad_context');
+  assert.equal(badContext.records[0].severity, 'warn');
+
+  const redirect = recordingHandler({
+    fetchImpl: async () => ({
+      status: 301,
+      headers: new Map([['location', 'https://attacker.example/collect']]),
+      body: { cancel: async () => {} },
+    }),
+  });
+  await redirect.handler({ url: '/linear', method: 'GET', headers: {} }, redirect.res);
+  assert.equal(redirect.records.length, 1, 'the record is written before the response, so a 502 is never silent');
+  assert.equal(redirect.records[0].meta.decision, 'redirect_rejected');
+  assert.doesNotMatch(JSON.stringify(redirect.records), /attacker\.example|collect/);
+
+  const unreachable = recordingHandler({ fetchImpl: async () => { throw new Error('connect ECONNREFUSED'); } });
+  await unreachable.handler({ url: '/linear', method: 'GET', headers: {} }, unreachable.res);
+  assert.equal(unreachable.records[0].meta.decision, 'upstream_error');
+  assert.equal(unreachable.records[0].meta.statusClass, '5xx');
+});
+
+test('decision helpers stay total on hostile input', () => {
+  assert.equal(statusClass(200), '2xx');
+  assert.equal(statusClass(502), '5xx');
+  assert.equal(statusClass(undefined), 'none');
+  assert.equal(statusClass('nonsense'), 'NaNxx');
+  assert.equal(probeSegment('/../../admin'), '..');
+  // Only the first segment is ever echoed, so a traversal probe reads as '..' and
+  // never as a path; percent-encoding collapses to underscores.
+  assert.equal(probeSegment('/%2e%2e/admin'), '_2e_2e');
+  assert.equal(probeSegment('/admin/x'), 'admin');
+  // Log injection: a newline in the probe path must not become a second line.
+  assert.equal(probeSegment('/\ninjection\t'), '_injection_');
+  assert.doesNotMatch(JSON.stringify(probeSegment('/a\nb')), /\n/);
+  assert.equal(probeSegment('/' + 'a'.repeat(200)).length, 32);
+  assert.equal(probeSegment('/a'.repeat(200)), 'a', 'only the first segment is ever echoed');
+  assert.equal(probeSegment(''), '');
 });

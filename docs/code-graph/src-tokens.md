@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 310 nodes
+Community of 312 nodes
 
-- **Size**: 310 nodes
-- **Cohesion**: 0.1906
+- **Size**: 312 nodes
+- **Cohesion**: 0.1923
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 310 nodes
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 | getBaseUrl | Function | ./packages/shared-core/src/billing/cashfree-client.js | 6-15 |
 
-*... and 260 more members.*
+*... and 262 more members.*
 
 ## Execution Flows
 
@@ -85,36 +85,36 @@ Community of 310 nodes
 
 ### Outgoing
 
-- `equal` (229 edge(s))
-- `filter` (39 edge(s))
-- `toISOString` (38 edge(s))
-- `Number` (33 edge(s))
-- `String` (33 edge(s))
+- `equal` (235 edge(s))
+- `filter` (40 edge(s))
+- `String` (37 edge(s))
+- `toISOString` (37 edge(s))
+- `Number` (34 edge(s))
+- `deepEqual` (27 edge(s))
 - `slice` (25 edge(s))
 - `trim` (25 edge(s))
-- `deepEqual` (25 edge(s))
 - `isArray` (24 edge(s))
 - `includes` (23 edge(s))
 - `ok` (23 edge(s))
+- `push` (22 edge(s))
 - `set` (21 edge(s))
-- `push` (20 edge(s))
-- `now` (19 edge(s))
 - `isFinite` (19 edge(s))
+- `map` (19 edge(s))
 
 ### Incoming
 
-- `equal` (229 edge(s))
+- `equal` (235 edge(s))
 - `./packages/shared-core/src/store.js` (181 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
-- `deepEqual` (25 edge(s))
+- `deepEqual` (27 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
 - `ok` (23 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
+- `push` (18 edge(s))
 - `./packages/shared-core/src/billing/cashfree-client.js` (17 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
-- `push` (16 edge(s))
-- `toISOString` (12 edge(s))
-- `filter` (12 edge(s))
+- `filter` (13 edge(s))
+- `./packages/shared-core/src/billing/pricing.js` (12 edge(s))
+- `require` (11 edge(s))
 - `./packages/shared-core/src/billing/recharge.test.js` (11 edge(s))
-- `getBillingAccount` (11 edge(s))
