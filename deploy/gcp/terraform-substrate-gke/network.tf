@@ -21,7 +21,7 @@ resource "google_project_service" "required_apis" {
 # Subnet with secondary ranges for Pods / Services
 # ---------------------------------------------------------------------------
 
-resource "google_compute_subnetwork" "openshell_subnet" {
+resource "google_compute_subnetwork" "subnet" {
   name                     = var.subnet_name
   project                  = var.project_id
   region                   = var.region
@@ -47,7 +47,7 @@ resource "google_compute_subnetwork" "openshell_subnet" {
 # ---------------------------------------------------------------------------
 
 resource "google_compute_router" "router" {
-  name    = "openshell-router"
+  name    = "substrate-router"
   project = var.project_id
   region  = var.region
   network = var.vpc_name
@@ -56,7 +56,7 @@ resource "google_compute_router" "router" {
 }
 
 resource "google_compute_router_nat" "nat" {
-  name                               = "openshell-nat"
+  name                               = "substrate-nat"
   project                            = var.project_id
   router                             = google_compute_router.router.name
   region                             = var.region
@@ -67,25 +67,11 @@ resource "google_compute_router_nat" "nat" {
 }
 
 # ---------------------------------------------------------------------------
-# Static external IP for the Envoy Gateway load balancer
-# ---------------------------------------------------------------------------
-
-resource "google_compute_address" "openshell_ip" {
-  name    = "openshell-ip"
-  project = var.project_id
-  region  = var.region
-
-  depends_on = [google_project_service.required_apis]
-}
-
-# ---------------------------------------------------------------------------
 # Firewall: HTTP/HTTPS + NodePorts into the VPC
-# (deploy.sh's obsolete openshell-allow-8080 rule is NOT reproduced — it does
-# not exist on the live cluster; Envoy terminates 443 and NodePort traffic.)
 # ---------------------------------------------------------------------------
 
 resource "google_compute_firewall" "allow_http_https" {
-  name    = "openshell-allow-http-https"
+  name    = "substrate-allow-http-https"
   project = var.project_id
   network = var.vpc_name
 

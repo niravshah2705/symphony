@@ -261,3 +261,42 @@ on the sidecar is a 404 from `matchRoute` (no open relay).
 re-initialises, LiteLLM re-applies its schema, and a subsequent request still
 authenticates. This is the only test that exercises the ephemeral path that a
 recycled instance will hit in production for reasons nobody chose.
+
+## Optional front: agentgateway, in the substrate cluster
+
+`litellm` mode can take one more hop in front of LiteLLM instead of replacing it:
+
+```text
+browser ──(X-AI-Fleet-Llm-Gateway: litellm)──▶ sidecar /agentgw ──▶ agentgateway ──▶ LiteLLM ──▶ provider
+```
+
+The flag and the mode table do not change — there is no third mode, because the
+header is a per-request choice and the gateway is a per-deployment physical
+target. `services/proxy/src/credentials.js` resolves
+`AGENTGATEWAY_PROXY_UPSTREAM` through the same SSRF guard as every other
+trusted origin, and `deploy/gcp/agentgateway-config.test.js` keeps the Terraform
+validation and that guard the same rule.
+
+**Both halves have to be asked for, and neither is on:**
+
+| Half | Where | Knob |
+|---|---|---|
+| Render the gateway | `deploy/gcp/terraform-substrate-gke` | `agentgateway_enabled`, plus `agentgateway_llm_upstream_host`, `agentgateway_models`, `agentgateway_virtual_keys` (hashes only) |
+| Route to it | `deploy/gcp/terraform` (Cloud Run) | `agentgateway_proxy_upstream`, sidecar env only — never an agent container |
+
+An origin set on one side and not the other is the failure mode to watch for:
+the route 502s closed (sidecar has no target) or the gateway serves traffic no
+client can reach (origin empty). `terraform output agentgateway_url` is the
+value the Cloud Run root wants, and it prints `null` while
+`agentgateway_ingress_hostname` is empty — because a ClusterIP address is not
+routable from Cloud Run. Until an authenticated bidirectional path between the
+two is proven, the honest state is dark, which is why
+`deploy/gcp/terraform-substrate-gke/agentgateway.tf` ships enabled=false.
+
+What the front deliberately does not do: enforce a token budget (a `local`
+rate limit counts per proxy replica, which is a hint, not enforcement),
+authenticate actors (a bearer key inside an actor container is the invariant
+this repo exists to protect), or route per-tenant traffic to per-tenant
+upstream keys (route selection cannot read the virtual identity, so that
+isolation stays in LiteLLM's per-org virtual keys). Its `/a2a` listener admits
+no HTTPRoute from any namespace — see the same file.

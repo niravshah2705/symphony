@@ -1,20 +1,25 @@
 # ---------------------------------------------------------------------------
-# Agent Substrate — a second, selectable execution substrate that REUSES this
-# same "openshell-multitenant" GKE cluster (per the approved plan).
+# Agent Substrate — the execution substrate this root exists for. Everything
+# here lands in the SAME cluster as the platform add-ons (the approved plan's
+# "reuses this cluster" decision), separated by node pool, taint and namespace
+# rather than by machine.
 #
-# Scope of THIS file (all gated behind var.substrate_enabled so the existing
-# OpenShell-only cluster plans EMPTY and stays byte-for-byte unchanged):
-#   * a dedicated, tainted worker node pool (isolates Substrate actors from
-#     OpenShell tenant nodes),
+# Scope of THIS file (all gated behind var.substrate_enabled, which now means
+# "the cluster can run agents at all" — with OpenShell retired there is no other
+# substrate to fall back to):
+#   * a dedicated, tainted worker node pool (isolates Substrate actors from the
+#     tenant pool),
 #   * snapshot StorageClass + VolumeSnapshotClass for atelet actor snapshots,
 #   * the credential-provider read grant (raw Secrets live only in the
 #     substrate-credentials namespace; the egress gateway reads them, the actor
 #     never does),
 #   * a public actor data-plane ingress (Gateway + HTTPRoute) fronting
 #     atenet-router, reusing the same Envoy Gateway + cert-manager stack, on its
-#     OWN Envoy data plane bound to the substrate-ip static address (the
-#     GatewayClass-level EnvoyProxy pins the openshell IP, so a substrate
-#     Gateway left on the shared infra would claim the wrong address),
+#     OWN Envoy data plane bound to the substrate-ip static address. The
+#     per-Gateway infra override is the rule now, not an exception: the
+#     GatewayClass carries no EnvoyProxy, so a Gateway that forgets its own
+#     parametersRef gets a default ephemeral-IP Service instead of silently
+#     claiming another plane's address (see gateway_class in helm_components.tf).
 #   * optionally, the ateapi control plane on that same hostname behind a
 #     path-prefix match (var.substrate_control_plane_public, off by default).
 #
@@ -34,13 +39,26 @@ locals {
   substrate_front_enabled = local.substrate_enabled && var.substrate_ingress_hostname != ""
   # cert-manager presents HTTP-01 by creating one HTTPRoute carrying every one of
   # these parentRefs, so the challenge answers on whichever front the hostname's
-  # A record resolves to — an unprogrammed parent still Accepts the route. Listing
-  # only openshell-ingress (what this did before) ties a substrate challenge to the
-  # OpenShell front by accident; listing both means an operator who points
-  # substrate.archagentix.com at either IP gets an issued certificate.
+  # A record resolves to — an unprogrammed parent still Accepts the route.
+  #
+  # It is a list, not an inlined parentRef, because each public front this root
+  # builds must append itself: substrate-ingress for the actor plane,
+  # agentgateway for the LLM plane (see agentgateway.tf). An issuer that names
+  # only some of the Gateways ties a challenge to the wrong front by accident,
+  # and the failure is silent — the Certificate just never becomes Ready, and
+  # the only symptom is a hostname that keeps serving the old expiry.
+  #
+  # With no front enabled the list is empty and that is correct: nothing here
+  # requests a certificate, so the solver has no challenge to place. Do not
+  # "help" by leaving a stale Gateway in the list; an HTTPRoute attached to a
+  # parent that does not exist is rejected, and cert-manager retries forever.
   acme_solver_parent_refs = concat(
-    [{ name = "openshell-ingress", namespace = "openshell", kind = "Gateway" }],
-    local.substrate_front_enabled ? [{ name = "substrate-ingress", namespace = "ate-system", kind = "Gateway" }] : [],
+    local.substrate_front_enabled ? [
+      { name = "substrate-ingress", namespace = "ate-system", kind = "Gateway" },
+    ] : [],
+    local.agentgateway_front ? [
+      { name = var.agentgateway_gateway_name, namespace = var.agentgateway_namespace, kind = "Gateway" },
+    ] : [],
   )
   # Worker pods carry a toleration for this taint so the scheduler places only
   # Substrate actors here, never generic tenant workloads.
@@ -284,10 +302,11 @@ resource "kubectl_manifest" "substrate_certificate" {
 resource "kubectl_manifest" "substrate_envoy_proxy" {
   count = local.substrate_front_enabled ? 1 : 0
 
-  # The GatewayClass-level EnvoyProxy pins the OPENSELL static IP, so every
-  # Gateway on class `eg` would claim that address. This per-Gateway override
-  # gives the substrate its own Envoy data plane on substrate-ip and lives in
-  # ate-system so parametersRef needs no cross-namespace ReferenceGrant.
+  # Per-Gateway infra override, bound to the substrate static IP. The GatewayClass
+  # carries no EnvoyProxy any more, so this is what pins the front to its own
+  # address; without it Envoy Gateway would create a default LoadBalancer Service
+  # with an ephemeral IP and the substrate_ingress_ip output would be a lie.
+  # Lives in ate-system so parametersRef needs no cross-namespace ReferenceGrant.
   yaml_body = <<-YAML
     apiVersion: gateway.envoyproxy.io/v1alpha1
     kind: EnvoyProxy
@@ -444,7 +463,11 @@ resource "kubectl_manifest" "substrate_actor_route" {
 # Long-lived request overrides. Envoy's default request timeout would abort a
 # streaming planning run (the actor data plane holds one POST open for the whole
 # run) and a control-plane gRPC stream; the client-side SUBSTRATE_TIMEOUT_MS is
-# the real bound. Same override openshell-backend-traffic applies.
+# the real bound. `0s` disables the timeout, so the client owns the deadline.
+# Any front added later needs the same treatment on its streaming routes —
+# agentgateway spells it `traffic.timeouts.request: 0s` on the policy plus
+# `backend.http.requestTimeout` on the backend, and a run that dies at 30s in
+# the middle of a stream is this exact omission.
 # ---------------------------------------------------------------------------
 
 resource "kubectl_manifest" "substrate_actor_route_traffic" {

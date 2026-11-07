@@ -8,16 +8,6 @@ output "cluster_endpoint" {
   value       = google_container_cluster.primary.endpoint
 }
 
-output "static_external_ip" {
-  description = "Reserved static IP used by the Envoy Gateway load balancer"
-  value       = google_compute_address.openshell_ip.address
-}
-
-output "openshell_url" {
-  description = "Public HTTPS URL of the OpenShell gateway"
-  value       = "https://${var.domain}"
-}
-
 output "node_pool_name" {
   description = "Node pool scaled by the start/stop workflow"
   value       = google_container_node_pool.primary_nodes.name
@@ -31,11 +21,6 @@ output "tenant_namespaces" {
 output "get_credentials_command" {
   description = "Configure kubectl for this cluster"
   value       = "gcloud container clusters get-credentials ${google_container_cluster.primary.name} --zone ${var.zone} --project ${var.project_id}"
-}
-
-output "dns_setup_instructions" {
-  description = "DNS requirement for the gateway domain"
-  value       = "A record: ${var.domain} -> ${google_compute_address.openshell_ip.address}"
 }
 
 # ---------------------------------------------------------------------------
@@ -82,3 +67,49 @@ output "substrate_snapshot_storage_class" {
   value       = var.substrate_enabled ? kubernetes_storage_class_v1.substrate_snapshots[0].metadata[0].name : null
 }
 
+
+# ---------------------------------------------------------------------------
+# agentgateway outputs (empty unless agentgateway_enabled)
+#
+# Two addresses, for two different callers, and the difference is the whole
+# point: `agentgateway_url` is what the Cloud Run egress sidecar can put in
+# AGENTGATEWAY_PROXY_UPSTREAM (only when a public front exists — a ClusterIP
+# origin is unroutable from Cloud Run, so the null here is the reason Stage F
+# ships dark), while agentgateway_cluster_origin is for a caller already inside
+# the VPC (an actor, a job). Picking the wrong one is a 502 that reads like a
+# gateway bug.
+# ---------------------------------------------------------------------------
+
+output "agentgateway_enabled" {
+  description = "Whether the agentgateway control plane was provisioned"
+  value       = var.agentgateway_enabled
+}
+
+output "agentgateway_url" {
+  description = "Origin for deploy/gcp/terraform's agentgateway_proxy_upstream; null means no public front, so the /agentgw route must stay dark"
+  value       = local.agentgateway_front ? "https://${var.agentgateway_ingress_hostname}" : null
+}
+
+output "agentgateway_cluster_origin" {
+  description = "In-cluster origin of the gateway data plane (Service is named after the Gateway); for VPC-resident callers only"
+  value       = var.agentgateway_enabled ? "http://${var.agentgateway_gateway_name}.${var.agentgateway_namespace}.svc.cluster.local:${local.agentgateway_llm_listener.port}" : null
+}
+
+output "agentgateway_ingress_ip" {
+  description = "Static IP of the agentgateway data plane; the A record target for agentgateway_ingress_hostname"
+  value       = local.agentgateway_front ? google_compute_address.agentgateway_ip[0].address : null
+}
+
+output "agentgateway_ingress_dns" {
+  description = "DNS record to create so the gateway hostname serves its own data plane (the Certificate will not issue until it resolves)"
+  value = local.agentgateway_front ? (
+    "A record: ${var.agentgateway_ingress_hostname} -> ${google_compute_address.agentgateway_ip[0].address}"
+  ) : null
+}
+
+output "agentgateway_a2a_status" {
+  description = "What the /a2a listener enforces; a reminder that the seam is deliberately closed until there is a second party"
+  value = var.agentgateway_enabled ? (
+    "deny-all: no backends, no agent cards; a valid org key 403s and a missing key 401s"
+  ) : null
+}
