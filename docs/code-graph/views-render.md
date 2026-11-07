@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 740 nodes
+Community of 739 nodes
 
-- **Size**: 740 nodes
-- **Cohesion**: 0.4914
+- **Size**: 739 nodes
+- **Cohesion**: 0.4915
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 740 nodes
 | capitalize | Function | ./public/js/app.js | 899-902 |
 | start | Function | ./public/js/app.js | 906-914 |
 
-*... and 690 more members.*
+*... and 689 more members.*
 
 ## Execution Flows
 
