@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { state, setCurrentProject, setProjectSandbox } from '../state.js';
+import { state, setCurrentProject } from '../state.js';
 import { el, clear, esc, toast, loading } from '../dom.js';
 
 export async function renderBoard(view) {
@@ -18,9 +18,6 @@ export async function renderBoard(view) {
     : projects[0].id;
   const activeProj = projects.find((p) => p.id === selectedId) || projects[0];
   setCurrentProject(selectedId, activeProj?.name || '');
-  void api.loadProjectSandbox({ projectId: selectedId, projectName: activeProj?.name || selectedId })
-    .then((res) => { if (res?.sandbox) setProjectSandbox(selectedId, res.sandbox); })
-    .catch(() => {});
 
   const selector = el(
     'select',
@@ -44,14 +41,6 @@ export async function renderBoard(view) {
     selectedId = selector.value;
     const chosen = projects.find((p) => p.id === selectedId);
     setCurrentProject(selectedId, chosen?.name || '');
-    void api.loadProjectSandbox({ projectId: selectedId, projectName: chosen?.name || selectedId })
-      .then((res) => {
-        if (res?.sandbox) {
-          setProjectSandbox(selectedId, res.sandbox);
-          toast(`NVIDIA OpenShell sandbox ${res.sandbox.name} ready.`, 'ok');
-        }
-      })
-      .catch(() => {});
     loadBoard();
   });
 

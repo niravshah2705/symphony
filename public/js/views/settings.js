@@ -919,7 +919,6 @@ function runtimeTiles(ctx, scopeState) {
 
 const AGENT_PATTERNS = [
   { id: 'cloudrun', label: 'Cloud Run (in-process)', meta: 'Agent runs in the planner container (default).' },
-  { id: 'openshell', label: 'NVIDIA OpenShell', meta: 'gVisor-style K8s sandbox via the OpenShell gateway.' },
   { id: 'substrate', label: 'Agent Substrate', meta: 'Zero-trust K8s runtime; per-run ephemeral actor, managed egress.' },
 ];
 
@@ -1084,7 +1083,7 @@ function guardrailsCard(ctx, scopeState, text) {
 
   return el('div', { class: 'sx-card sx-card-pad', style: 'margin-top:14px;border:1px solid rgba(255,255,255,0.08)' }, [
     el('div', { class: 'sx-card-title' }, 'Security guardrails (shared)'),
-    el('div', { class: 'sx-card-sub', style: 'margin-bottom:10px' }, 'One spec rendered for both OpenShell and Substrate: egress allow-list, metadata-SSRF deny, credential scopes, runtime class. Metadata CIDR 169.254.169.254/32 is always denied.'),
+    el('div', { class: 'sx-card-sub', style: 'margin-bottom:10px' }, 'One spec rendered for the Agent Substrate: egress allow-list, metadata-SSRF deny, credential scopes, runtime class. Metadata CIDR 169.254.169.254/32 is always denied.'),
     area,
     el('div', { style: 'display:flex;gap:8px;margin-top:10px' }, [saveBtn]),
     preview,
@@ -1876,10 +1875,6 @@ function integrationsSection(ctx, scopeState) {
   });
   const githubToken = pwd(settings.hasGithubToken ? 'Configured — paste to replace' : 'github_pat_… / ghp_…');
   const gitlabToken = pwd(settings.hasGitlabToken ? 'Configured — paste to replace' : 'glpat-…');
-  const openshellUrl = el('input', {
-    value: settings.openshellUrl || 'https://openshell.archagentix.com',
-    placeholder: 'https://openshell.archagentix.com',
-  });
   const openrouterApiKey = pwd(settings.hasOpenrouterApiKey ? 'Configured — paste to replace' : 'sk-or-v1-…');
   const jiraBaseUrl = el('input', { value: settings.jiraBaseUrl || '', placeholder: 'https://company.atlassian.net' });
   const jiraEmail = el('input', { value: settings.jiraEmail || '', type: 'email', placeholder: 'you@company.com' });
@@ -1960,7 +1955,6 @@ function integrationsSection(ctx, scopeState) {
       planningProvider: planningProvider.value,
       repositoryProvider: repositoryProvider.value,
       repositoryUrl: repositoryUrl.value.trim(),
-      openshellUrl: openshellUrl.value.trim() || 'https://openshell.archagentix.com',
     };
     if (!vault) {
       if (clearGithub.checkbox.checked) payload.clearGithubToken = true;
@@ -2013,7 +2007,6 @@ function integrationsSection(ctx, scopeState) {
       asanaToken.value = '';
       const hasVaultEntries = Boolean(vault && Object.keys(entries).length);
       const nextState = {
-        openshellUrl: payload.openshellUrl,
         hasGithubToken: hasVaultEntries
           ? Boolean(entries.githubToken && entries.githubToken.set)
           : Boolean(savedIntegrations && savedIntegrations.hasGithubToken),
@@ -2063,8 +2056,8 @@ function integrationsSection(ctx, scopeState) {
 
   const repoName = settings.repositoryProvider === 'gitlab' ? 'GitLab' : 'GitHub';
   const planName = ({ linear: 'Linear', jira: 'Jira', asana: 'Asana' })[settings.planningProvider] || 'Linear';
-  return section('Tool integrations', `${planName} · ${repoName} · NVIDIA OpenShell`, true, [
-    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Credentials are encrypted in the selected scope vault (or stored locally in direct dev mode) and synced as NVIDIA OpenShell secrets when loading project sandboxes.'),
+  return section('Tool integrations', `${planName} · ${repoName}`, true, [
+    el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, 'Credentials are encrypted in the selected scope vault (or stored locally in direct dev mode).'),
     el('div', { class: 'subhead' }, 'Project planning'),
     field('Planning tool', planningProvider),
     linearFields,
@@ -2075,9 +2068,8 @@ function integrationsSection(ctx, scopeState) {
     field('Default repository', repositoryUrl, 'Use owner/name, group/project, or a GitHub/GitLab Git URL.'),
     githubFields,
     gitlabFields,
-    el('div', { class: 'subhead' }, 'NVIDIA OpenShell Sandbox & Secrets'),
-    field('OpenShell Gateway URL', openshellUrl, 'gRPC / HTTPS endpoint for NVIDIA OpenShell sandbox orchestration (default: https://openshell.archagentix.com).'),
-    field('OpenRouter API Key (NVIDIA Secret)', openrouterApiKey, 'Provisioned as an NVIDIA OpenShell secret (OPENROUTER_API_KEY) alongside GITHUB_TOKEN whenever a project sandbox is loaded.'),
+    el('div', { class: 'subhead' }, 'Model provider key'),
+    field('OpenRouter API Key', openrouterApiKey, 'Saved server-side as OPENROUTER_API_KEY and injected by the egress proxy on OpenRouter calls.'),
     clearOpenrouter.row,
     el('div', { class: 'row' }, [save, status]),
   ]);

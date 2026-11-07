@@ -263,11 +263,6 @@ const DEFAULT_STORE = Object.freeze({
     // the configured repo. Stored server-side only; masked in responses, never logged.
     githubToken: '',
     openrouterApiKey: '',
-    openshellUrl: CONFIG.OPENSHELL.url,
-    openshellWorkspace: CONFIG.OPENSHELL.workspace || 'tenant-a',
-    openshellDefaultImage: 'ubuntu:24.04',
-    openshellSandboxes: [],
-    openshellNetworkPolicy: '',
     imageRegistryUrl: 'ghcr.io',
     imageRegistryUsername: '',
     imageRegistryPassword: '',

@@ -1,11 +1,10 @@
 # Agent Substrate Integration (parallel execution substrate)
 
 This document covers how [Agent Substrate](https://github.com/agent-substrate/substrate)
-is wired in as a **third, user-selectable execution substrate** alongside Cloud Run
-and OpenShell, how authentication stays managed (raw credentials never enter the
-actor), and how the **one shared guardrail spec** drives both OpenShell and
-Substrate. It is the substrate sibling of
-[`OPENSHELL_INTEGRATION.md`](./OPENSHELL_INTEGRATION.md).
+is wired in as a **user-selectable execution substrate** alongside Cloud Run, how
+authentication stays managed (raw credentials never enter the actor), and how the
+**one shared guardrail spec** drives Substrate's egress, namespace and credential
+rendering.
 
 ## 1. Three orthogonal "how the agent runs" concepts
 
@@ -15,7 +14,7 @@ Do not confuse these — each is a separate persisted key:
 |---|---|---|---|
 | Harness / SDK | `agentRuntime` | deepagent, claude-agent-sdk, codex-sdk, … | `packages/shared/src/agent/harnesses/registry.js`, admission in `services/gateway/src/pipeline-admission.js` |
 | Reasoning pattern | `workflowPattern` | plan/act/reflect, … | `packages/shared/src/agent/harnesses/contract.js` |
-| **Execution substrate** | **`agentPattern`** | **`cloudrun` \| `openshell` \| `substrate`** | `packages/shared/src/agent/pattern-router.js` (planning stage only) |
+| **Execution substrate** | **`agentPattern`** | **`cloudrun` \| `substrate`** | `packages/shared/src/agent/pattern-router.js` (planning stage only) |
 
 `agentPattern` defaults to `cloudrun`, so **every existing install is byte-for-byte
 unchanged** unless an operator opts in. Only the **planning stage** diverts to
@@ -25,7 +24,7 @@ Substrate; every other stage falls through to `executeAgentRuntime`.
 
 - **Backend** drives Substrate over a **gRPC client to `ateapi`**
   (`packages/shared-core/src/agent/substrate.js`) — no `kubectl-ate` /
-  `ate-setup` at runtime. Protobuf framing is shared with OpenShell via
+  `ate-setup` at runtime. Protobuf framing lives in
   `packages/shared-core/src/agent/grpc-wire.js`.
 - **Sandbox = gVisor (runsc)** on a dedicated, tainted node pool. The `SandboxConfig`
   gvisor runtime class is installed by the platform, so this module does **not**
@@ -109,10 +108,9 @@ in `settings.guardrailSpec`, rendered per pattern by
 - `buildCredentialProviderPolicy(spec)` → which Secrets the atespace may read
   (`spec.credentials.scopes`: `github` → `ghcr-pull-and-clone`,
   `openrouter` → `openrouter-api-key`, `image-registry` → `image-registry-creds`).
-- `buildOpenShellGuardrail(spec)` → the OpenShell NetworkPolicy YAML.
 
 `GET /api/agent/guardrail` returns the normalized spec plus a `preview`
-`{openshellYaml, substrateEgress, credentialProviderPolicy}`; `POST` normalizes +
+`{atenetEgress, namespacePolicy, credentialProvider}`; `POST` normalizes +
 validates + persists. `tools.allowlist` / `denyAll` also feed pipeline admission.
 
 ## 5. Enabling it (operator steps)
@@ -155,9 +153,9 @@ so one streaming planning POST stays open for the whole run.
 
 Two things make the hostname usable rather than decorative:
 
-- **Its own Envoy data plane.** The `eg` GatewayClass pins the *OpenShell* IP at
-  class level (`openshell-proxy-config`), so a second Gateway on that class would
-  fight over the same address. `substrate.tf` therefore renders a per-Gateway
+- **Its own Envoy data plane.** One IP per front: a Gateway that shares another
+  front's class-level `EnvoyProxy` would fight it for the same address, so
+  `substrate.tf` renders a per-Gateway
   `EnvoyProxy substrate-proxy-config` (in `ate-system`, so `parametersRef` needs no
   ReferenceGrant) bound to `substrate-ip`, and points
   `spec.infrastructure.parametersRef` at it.
@@ -217,10 +215,9 @@ Two manifests carry that through:
   `ClusterIssuer`s) lists both fronts. cert-manager's `gatewayHTTPRoute` solver
   creates one HTTPRoute carrying every `parentRefs` entry, and an unprogrammed
   parent still Accepts it, so the challenge answers on whichever front the A record
-  resolves to — including an operator who points the hostname at the shared
-  OpenShell front instead of `substrate-ip`. The issuer used to be pinned to
-  `openshell-ingress` alone, which silently made every substrate challenge depend
-  on that one front.
+  resolves to — including an operator who points the hostname at the agentgateway
+  front instead of `substrate-ip`. The issuer used to be pinned to a single front,
+  which silently made every substrate challenge depend on that one front.
 
 So the sequence is one step, not a dance: apply → create the **A record for
 `substrate_ingress_ip`** → cert-manager issues and the `https` listener lights up.
@@ -328,14 +325,14 @@ preflight's GSA row and the installer flag will disagree.
 - `packages/shared-core/src/agent/substrate.js` — ateapi gRPC client (control plane).
 - `packages/shared-core/src/agent/substrate-runner.js` — credential bridge + per-run
   actor lifecycle (`runPlanningOnSubstrate`) + `verifyActorJwt`.
-- `packages/shared-core/src/agent/grpc-wire.js` — protobuf primitives shared with OpenShell.
+- `packages/shared-core/src/agent/grpc-wire.js` — protobuf framing primitives.
 - `packages/shared-core/src/secrets/s2s-resolver.js` — single managed secret source.
 - `packages/shared-core/src/guardrails/{spec,consumers}.js` — unified spec + per-pattern renderers.
-- `packages/shared/src/agent/pattern-router.js` — `dispatchPlanning` branch (substrate|openshell|cloudrun).
+- `packages/shared/src/agent/pattern-router.js` — `dispatchPlanning` branch (substrate|cloudrun).
 - `services/planner/src/routes/agent.js` — `/agent/substrate/*` and `/agent/guardrail` routes.
 - `services/planner/src/routes/substrate-actor.js` — actor-side `POST /internal/plan/run` (only mounted when `SUBSTRATE_ACTOR_MODE=true`).
 - `services/planner/src/jwks.js` — cached JWKS fetcher used by the actor route.
-- `deploy/gcp/terraform-openshell-gke/substrate.tf` — pool, namespaces, snapshots, ingress.
+- `deploy/gcp/terraform-substrate-gke/substrate.tf` — pool, namespaces, snapshots, ingress.
 - `public/js/views/settings.js` — pattern selector + guardrails panel.
 
 ### Actor-mode env vars (set on the substrate ActorTemplate's container)
@@ -358,13 +355,13 @@ public control-plane route never appears unless asked for.
 `.github/workflows/substrate-control-plane.yml` is the other substrate workflow:
 it is `workflow_dispatch`-only and touches no Cloud Run service and no Terraform
 state, so it can be run from a branch without deploying anything (§5.2). It shares
-`concurrency.group: openshell-cluster-power` with the power workflow so an install
+`concurrency.group: substrate-cluster-power` with the power workflow so an install
 never races a scale-to-zero.
 
 It **reads the live substrate node-pool bounds back** and feeds them as
 `substrate_min/max_nodes`, so a reconcile cannot silently start a pool the power
-workflow parked (the same read-back now covers `openshell-system-node-pool`, which
-`openshell-cluster-power.yml` also parks last). That workflow parks/wakes the
+workflow parked (the same read-back covers the system pool, which
+`substrate-cluster-power.yml` also parks last). That workflow parks/wakes the
 substrate pool in lockstep when `SUBSTRATE_NODE_POOL` is set.
 
 The **first apply with `substrate_enabled = true` shows the new resources as
@@ -393,8 +390,8 @@ The **first apply with `substrate_enabled = true` shows the new resources as
   curl -sI https://substrate.<your-domain>/                      # reply from atenet-router, not a TLS error
   ```
   Envoy names the front `envoy-<namespace>-<gateway>-<hash>` and stamps the owning
-  Gateway on it; the OpenShell front lives in `envoy-gateway-system` because the
-  class-level `EnvoyProxy` does, so expect the substrate one beside its own
+  Gateway on it; the agentgateway front lives in its own namespace, so expect the
+  substrate one beside its own
   `EnvoyProxy` in `ate-system`. A `Gateway` stuck on `Programmed=False` with no
   address means the Envoy Service could not bind `substrate-ip` — check the
   `parametersRef` name/namespace pair, not the DNS.

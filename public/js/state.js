@@ -22,27 +22,7 @@ export const state = {
   sidebarOpen: false,
   sidebarCollapsed: localStorage.getItem(KEY_SIDEBAR_COLLAPSED) === 'true',
   lastWorkspaceRoute: localStorage.getItem(KEY_WORKSPACE_ROUTE) || 'agent',
-  sandbox: null,
-  sandboxesByProject: {},
-  sandboxLoading: false,
 };
-
-export function setProjectSandbox(projectId, sandbox) {
-  if (sandbox && typeof sandbox === 'object') {
-    state.sandbox = sandbox;
-    const key = projectId || sandbox.projectId || 'default';
-    state.sandboxesByProject[key] = sandbox;
-    if (sandbox.projectName) {
-      state.currentProjectName = sandbox.projectName;
-      try { localStorage.setItem(KEY_PROJECT_NAME, sandbox.projectName); } catch (_) { /* ignore */ }
-    }
-    try {
-      window.dispatchEvent(new CustomEvent('lm:sandbox-updated', { detail: { projectId: key, sandbox } }));
-    } catch (_) {
-      // Non-browser test environments may not support CustomEvent.
-    }
-  }
-}
 
 export function setCurrentProject(projectId, projectName = '') {
   state.currentProjectId = projectId || '';

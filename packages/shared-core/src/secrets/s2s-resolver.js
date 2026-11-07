@@ -6,8 +6,8 @@
  * Resolves per-organization provider secrets from the settings service over
  * service-to-service RPC (KMS-decrypted vault values), so raw credentials live
  * only server-side and are never embedded in an agent sandbox. Lifted from the
- * inline block in `services/planner/src/routes/agent.js` so the OpenShell and
- * Agent Substrate patterns resolve secrets identically.
+ * inline block in `services/planner/src/routes/agent.js` so every execution
+ * substrate resolves secrets the same way.
  *
  * - Per-tenant path:  GET {settings}/api/v1/internal/s2s/orgs/{org}/secrets   (x-org-internal-token)
  * - Shared/managed:   GET {settings}/api/v1/internal/s2s/managed-secrets       (x-internal-token)

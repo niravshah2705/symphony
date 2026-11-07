@@ -4,8 +4,8 @@
  * Guardrail spec CONSUMERS — render one normalized guardrail spec into the
  * low-level artifacts each execution substrate enforces. The operator edits the
  * spec once (settings.guardrailSpec); these functions are the single place that
- * maps it onto OpenShell (Kubernetes NetworkPolicy) and Agent Substrate (atenet
- * EgressPolicy rules + namespace NetworkPolicy + credential-provider read policy).
+ * maps it onto Agent Substrate (atenet EgressPolicy rules + namespace
+ * NetworkPolicy + credential-provider read policy).
  *
  * Enforcement is always deny-by-default: a rule appears only if the spec spells it
  * out, and the cloud-metadata CIDR is always denied.
@@ -133,28 +133,9 @@ function buildCredentialProviderPolicy(rawSpec, { namespace = 'substrate-credent
   };
 }
 
-/**
- * OpenShell consumer: the same spec rendered as the operator-facing NetworkPolicy
- * summary + the mitm / runtime knobs. Kept intentionally minimal here; the
- * behavior-identical refactor of openshell.getSampleNetworkPolicy is tracked
- * alongside the OpenShell route wiring.
- */
-function buildOpenShellGuardrail(rawSpec, { workspace = 'tenant-a', orgLabel = 'tenant-a' } = {}) {
-  const spec = normalizeGuardrailSpec(rawSpec);
-  return {
-    workspace,
-    orgLabel,
-    version: spec.version,
-    egress: buildAtenetEgressPolicy(spec),
-    mitmTrust: spec.egress.mitmTrust,
-    networkPolicy: buildNamespaceNetworkPolicy(spec, { namespace: workspace }),
-  };
-}
-
 module.exports = {
   buildAtenetEgressPolicy,
   buildNamespaceNetworkPolicy,
   buildCredentialProviderPolicy,
-  buildOpenShellGuardrail,
   tcpEgressPorts,
 };

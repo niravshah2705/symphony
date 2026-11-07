@@ -472,47 +472,6 @@ export const api = {
   }),
   routeAgentMessage: (payload) =>
     request('/agent/message', { method: 'POST', body: JSON.stringify(payload) }),
-  getSandboxStatus: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/agent/sandbox${query ? `?${query}` : ''}`);
-  },
-  listSandboxes: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/agent/sandboxes${query ? `?${query}` : ''}`);
-  },
-  createSandbox: (payload = {}) =>
-    request('/agent/sandboxes', { method: 'POST', body: JSON.stringify(payload) }),
-  updateSandbox: (sandboxName, payload = {}) =>
-    request(`/agent/sandboxes/${encodeURIComponent(sandboxName)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
-  deleteSandbox: (sandboxName, params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/agent/sandboxes/${encodeURIComponent(sandboxName)}${query ? `?${query}` : ''}`, {
-      method: 'DELETE',
-    });
-  },
-  loadProjectSandbox: (payload = {}) =>
-    request('/agent/sandbox/load', { method: 'POST', body: JSON.stringify(payload) }),
-  changeSandboxImage: (payload = {}) =>
-    request('/agent/sandbox/image', { method: 'POST', body: JSON.stringify(payload) }),
-  stopSandbox: (payload = {}) =>
-    request('/agent/sandbox/stop', { method: 'POST', body: JSON.stringify(payload) }),
-  startSandbox: (payload = {}) =>
-    request('/agent/sandbox/start', { method: 'POST', body: JSON.stringify(payload) }),
-  chatWithSandbox: (payload = {}) =>
-    request('/agent/sandbox/chat', { method: 'POST', body: JSON.stringify(payload) }),
-  execInSandbox: (payload = {}) =>
-    request('/agent/sandbox/exec', { method: 'POST', body: JSON.stringify(payload) }),
-  getSandboxNetworkPolicy: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/agent/sandbox/policy${query ? `?${query}` : ''}`);
-  },
-  saveSandboxNetworkPolicy: (payload = {}) =>
-    request('/agent/sandbox/policy', { method: 'POST', body: JSON.stringify(payload) }),
-  runSandboxSecurityCheck: (payload = {}) =>
-    request('/agent/sandbox/security-check', { method: 'POST', body: JSON.stringify(payload) }),
   // Agent Substrate (execution substrate) + unified guardrails.
   saveAgentPattern: (payload = {}) =>
     request('/agent/substrate/pattern', { method: 'POST', body: JSON.stringify(payload) }),
@@ -527,8 +486,6 @@ export const api = {
   getGuardrail: () => request('/agent/guardrail'),
   saveGuardrail: (spec) =>
     request('/agent/guardrail', { method: 'POST', body: JSON.stringify({ spec }) }),
-  saveSandboxOrgConfig: (payload = {}) =>
-    request('/agent/sandbox/org-config', { method: 'PUT', body: JSON.stringify(payload) }),
   searchAgentKnowledge: (payload) =>
     request('/agent/knowledge-search', { method: 'POST', body: JSON.stringify(payload) }),
   // Typed workspace memory (user | business | project | task | workspace).

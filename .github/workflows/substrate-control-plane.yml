@@ -3,7 +3,7 @@ name: Substrate control plane (preflight / install)
 # Installs the Agent Substrate control plane (the `ate-system` namespace:
 # ateapi, ate-controller, atelet, atenet-router/egress, ate-idp-server,
 # podcertificate-controller, the ate.dev CRDs and the gVisor SandboxConfig) onto
-# the OpenShell GKE cluster, and reports whether that is even possible yet.
+# the Substrate GKE cluster, and reports whether that is even possible yet.
 #
 # Why this is a workflow and not Terraform: those images are ko-built from the
 # substrate checkout, so there are no static manifests to vendor faithfully —
@@ -52,7 +52,7 @@ on:
 # module's substrate.tf, and the power workflow parks the worker pool to zero
 # overnight. Installing a control plane into a pool mid-drain races it.
 concurrency:
-  group: openshell-cluster-power
+  group: substrate-cluster-power
   cancel-in-progress: false
 
 permissions:
@@ -66,8 +66,8 @@ jobs:
     timeout-minutes: 30
     env:
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      CLUSTER: ${{ vars.OPENSHELL_CLUSTER_NAME || 'openshell-multitenant' }}
-      ZONE: ${{ vars.OPENSHELL_CLUSTER_ZONE || 'asia-south1-a' }}
+      CLUSTER: ${{ vars.SUBSTRATE_CLUSTER_NAME || 'substrate-multitenant' }}
+      ZONE: ${{ vars.SUBSTRATE_CLUSTER_ZONE || 'asia-south1-a' }}
       SUBSTRATE_REPO_URL: ${{ vars.SUBSTRATE_REPO_URL || 'https://github.com/agent-substrate/substrate' }}
       SUBSTRATE_GKE_REPO_URL: ${{ vars.SUBSTRATE_GKE_REPO_URL || 'https://github.com/ai-on-gke/substrate-gke' }}
       SUBSTRATE_IMAGE_REPO: ${{ vars.SUBSTRATE_IMAGE_REPO || 'ghcr.io/agent-substrate/substrate' }}
