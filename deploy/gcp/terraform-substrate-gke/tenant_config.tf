@@ -1,5 +1,13 @@
 # ---------------------------------------------------------------------------
-# Per-tenant isolation: NetworkPolicies, quotas, limits, RBAC, workspace chart
+# Per-tenant isolation: NetworkPolicies, quotas, limits, RBAC
+#
+# Tenant namespaces here are the OpenShell-era isolation boundary that predates
+# Substrate: nothing renders a per-tenant execution surface any more, because
+# the Substrate WorkerPool (substrate.tf + the upstream installer) places actor
+# pods in its own atespace namespaces. These objects stay because they are what
+# makes a tenant namespace cheap to keep — default-deny, DNS-only egress, and a
+# resource envelope — and they cost nothing while the pool is the one carrying
+# workloads.
 # ---------------------------------------------------------------------------
 
 locals {
@@ -138,30 +146,4 @@ resource "kubernetes_role_binding_v1" "tenant_admins" {
     name      = kubernetes_role_v1.tenant_admin[each.key].metadata[0].name
     api_group = "rbac.authorization.k8s.io"
   }
-}
-
-# 6. OpenShell workspace release per tenant (vendored chart)
-resource "helm_release" "tenant_workspace" {
-  for_each = local.tenants
-
-  name      = "openshell-workspace-${each.key}"
-  chart     = "${path.module}/charts/openshell-workspace"
-  namespace = kubernetes_namespace_v1.tenants[each.key].metadata[0].name
-  wait      = true
-
-  values = [
-    yamlencode({
-      gateway = {
-        serviceAccount = {
-          name      = "openshell"
-          namespace = kubernetes_namespace_v1.openshell.metadata[0].name
-        }
-      }
-    })
-  ]
-
-  depends_on = [
-    helm_release.openshell,
-    kubernetes_role_binding_v1.tenant_admins,
-  ]
 }

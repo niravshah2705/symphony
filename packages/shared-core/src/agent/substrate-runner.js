@@ -36,6 +36,13 @@ function fingerprintOnly(secrets = {}) {
  * grant the atespace read of that namespace. Secret CRUD is NOT an ateapi RPC, so
  * the caller injects `applyManifest` (a k8s client seam); without it we resolve the
  * intended manifests but fail closed rather than silently skipping the grant.
+ *
+ * "Fail closed" means the scopes the guardrail spec actually grants. A credential
+ * the tenant was never given a read of is not injected and is not an error either:
+ * demanding an applier for it would make this module the owner of a grant that
+ * belongs to `spec.credentials.scopes`. Only a *scoped* secret with no applier is
+ * the misconfiguration, and that one has to be loud.
+ *
  * Returns fingerprint-only state — never raw values.
  */
 async function syncSubstrateSecrets({
@@ -53,39 +60,61 @@ async function syncSubstrateSecrets({
   const manifests = [];
   if (secrets.githubToken) {
     manifests.push({
-      apiVersion: 'v1',
-      kind: 'Secret',
-      metadata: { name: 'ghcr-pull-and-clone', namespace },
-      type: 'Opaque',
-      stringData: { GITHUB_TOKEN: String(secrets.githubToken) },
+      scope: 'github',
+      manifest: {
+        apiVersion: 'v1',
+        kind: 'Secret',
+        metadata: { name: 'ghcr-pull-and-clone', namespace },
+        type: 'Opaque',
+        stringData: { GITHUB_TOKEN: String(secrets.githubToken) },
+      },
     });
   }
   if (secrets.openrouterApiKey) {
     manifests.push({
-      apiVersion: 'v1',
-      kind: 'Secret',
-      metadata: { name: 'openrouter-api-key', namespace },
-      type: 'Opaque',
-      stringData: { OPENROUTER_API_KEY: String(secrets.openrouterApiKey) },
+      scope: 'openrouter',
+      manifest: {
+        apiVersion: 'v1',
+        kind: 'Secret',
+        metadata: { name: 'openrouter-api-key', namespace },
+        type: 'Opaque',
+        stringData: { OPENROUTER_API_KEY: String(secrets.openrouterApiKey) },
+      },
     });
   }
   if (secrets.imageRegistryPassword) {
     manifests.push({
-      apiVersion: 'v1',
-      kind: 'Secret',
-      metadata: { name: 'image-registry-creds', namespace },
-      type: 'kubernetes.io/dockerconfigjson',
-      data: { '.dockerconfigjson': Buffer.from(buildDockerConfigJson({
-        registryUrl: secrets.imageRegistryUrl || 'ghcr.io',
-        username: secrets.imageRegistryUsername || '',
-        password: String(secrets.imageRegistryPassword),
-      }), 'utf8').toString('base64') },
+      scope: 'image-registry',
+      manifest: {
+        apiVersion: 'v1',
+        kind: 'Secret',
+        metadata: { name: 'image-registry-creds', namespace },
+        type: 'kubernetes.io/dockerconfigjson',
+        data: { '.dockerconfigjson': Buffer.from(buildDockerConfigJson({
+          registryUrl: secrets.imageRegistryUrl || 'ghcr.io',
+          username: secrets.imageRegistryUsername || '',
+          password: String(secrets.imageRegistryPassword),
+        }), 'utf8').toString('base64') },
+      },
     });
+  }
+
+  const scoped = manifests.filter((entry) => scopeHas(entry.scope));
+  const withheldScopes = manifests.filter((entry) => !scopeHas(entry.scope)).map((entry) => entry.scope);
+  const needsApplier = scoped.length > 0 && typeof applyManifest !== 'function';
+  if (needsApplier) {
+    throw new Error(
+      `syncSubstrateSecrets: the guardrail spec grants ${scoped.map((e) => e.scope).join(', ')} ` +
+      'to this atespace but no applyManifest seam is wired, so the credential-provider ' +
+      'Secrets cannot be written. Secret CRUD is not an ateapi RPC. Either drop those ' +
+      'scopes from spec.credentials.scopes, or run the agent from a workload that has a ' +
+      'k8s client.',
+    );
   }
 
   const synced = [];
   if (typeof applyManifest === 'function') {
-    for (const manifest of manifests) {
+    for (const { manifest } of scoped) {
       await applyManifest(manifest);
       synced.push(manifest.metadata.name);
     }
@@ -98,11 +127,6 @@ async function syncSubstrateSecrets({
       namespace,
       allowedSecrets: policy.allowedSecrets.map((s) => s.secretName),
     });
-  } else if (manifests.length) {
-    throw new Error(
-      'syncSubstrateSecrets requires an injected applyManifest (k8s client); ' +
-      'Secret CRUD is not exposed by the ateapi Control plane.',
-    );
   }
 
   return {
@@ -110,6 +134,9 @@ async function syncSubstrateSecrets({
     namespace,
     credentialProvider: policy.credentialProvider,
     syncedSecrets: synced,
+    // Present in settings, not granted by the spec: named so a caller can say why
+    // an actor has no GitHub token rather than leaving that to be inferred.
+    withheld: withheldScopes,
     scopes: { github: scopeHas('github'), openrouter: scopeHas('openrouter'), 'image-registry': scopeHas('image-registry') },
     state: fingerprintOnly(secrets),
     applied: typeof applyManifest === 'function',
@@ -282,14 +309,17 @@ async function runPlanningOnSubstrate({
   const opts = { transport };
   const atespace = substrate.resolveSubstrateAtespace({ organizationId, projectId });
 
+  onStep('Substrate: syncing managed credentials to the credential-provider (outside the actor)…');
+  // Before any cluster write: a grant this workload cannot apply is a
+  // configuration error, and finding out after ensureAtespace + ActorTemplate
+  // landed leaves a half-provisioned tenant for a run that never started.
+  const credSync = await syncSubstrateSecrets({ organizationId, atespace, secrets, guardrailSpec, applyManifest });
+
   onStep(`Substrate: ensuring atespace '${atespace}'…`);
   await substrate.ensureAtespace({ ...opts, atespace });
 
   onStep('Substrate: ensuring planner ActorTemplate…');
   await substrate.upsertActorTemplate({ ...opts, atespace, organizationId, projectId });
-
-  onStep('Substrate: syncing managed credentials to the credential-provider (outside the actor)…');
-  const credSync = await syncSubstrateSecrets({ organizationId, atespace, secrets, guardrailSpec, applyManifest });
 
   onStep('Substrate: creating ephemeral actor…');
   const actor = await substrate.createEphemeralActor({ ...opts, atespace, projectId, runId: traceContext.runId });

@@ -1360,9 +1360,9 @@ variable "observability_no_route_alert_count" {
 # -----------------------------------------------------------------------------
 # Substrate agent pattern — where the actor control plane is, and who may use it
 # -----------------------------------------------------------------------------
-# The control plane itself is a different root (deploy/gcp/terraform-openshell-gke
-# today, terraform-substrate-gke after the rename). This root's whole job for the
-# pattern is to tell its services which address to dial and which namespaces they
+# The control plane itself is a different root (deploy/gcp/terraform-substrate-gke).
+# This root's whole job for the pattern is to tell its services which address to
+# dial and which namespaces they
 # are allowed to touch. substrate.tf emits NONE of these as env while
 # substrate_url is blank, which is the state the code already calls "not
 # configured" (DEFAULT_SUBSTRATE_URL = '' in

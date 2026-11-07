@@ -2,22 +2,6 @@
 # Core system namespaces
 # ---------------------------------------------------------------------------
 
-resource "kubernetes_namespace_v1" "openshell" {
-  metadata {
-    name = "openshell"
-  }
-
-  depends_on = [google_container_node_pool.primary_nodes]
-}
-
-resource "kubernetes_namespace_v1" "openshell_credentials" {
-  metadata {
-    name = "openshell-credentials"
-  }
-
-  depends_on = [google_container_node_pool.primary_nodes]
-}
-
 resource "kubernetes_namespace_v1" "cert_manager" {
   metadata {
     name = "cert-manager"
@@ -53,8 +37,7 @@ resource "kubernetes_namespace_v1" "tenants" {
     name = each.key
 
     labels = {
-      tenant                           = each.key
-      "openshell.ai/workspace-allowed" = "true"
+      tenant = each.key
       # Substrate reuses these tenant namespaces as its atespaces; the
       # credential-provider read grant + egress default-deny are applied here
       # when var.substrate_enabled.
@@ -78,8 +61,10 @@ resource "kubernetes_namespace_v1" "tenants" {
 # ---------------------------------------------------------------------------
 
 # The credential-provider Secret vault. The k8s credential provider reads from
-# here via the egress gateway; actors never see the raw values. Mirrors
-# openshell-credentials.
+# here via the egress gateway; actors never see the raw values. This is the only
+# place raw Secret material lives in-cluster, which is why it is a namespace of
+# its own rather than a label on each tenant atespace: the read grant below is
+# one Role, scoped once, instead of one per tenant.
 resource "kubernetes_namespace_v1" "substrate_credentials" {
   count = var.substrate_enabled ? 1 : 0
 

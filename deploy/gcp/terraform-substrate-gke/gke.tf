@@ -1,5 +1,7 @@
 # ---------------------------------------------------------------------------
-# GKE cluster (zonal) — matches live openshell-multitenant config
+# GKE cluster (zonal) — greenfield apply; the OpenShell-era cluster this file was
+# transcribed from no longer exists, so nothing here is reconciled against a
+# live resource any more.
 # ---------------------------------------------------------------------------
 
 resource "google_container_cluster" "primary" {
@@ -8,7 +10,7 @@ resource "google_container_cluster" "primary" {
   location = var.zone
 
   network    = "projects/${var.project_id}/global/networks/${var.vpc_name}"
-  subnetwork = google_compute_subnetwork.openshell_subnet.id
+  subnetwork = google_compute_subnetwork.subnet.id
 
   deletion_protection = var.deletion_protection
 
@@ -56,23 +58,23 @@ resource "google_container_cluster" "primary" {
     }
   }
 
-  # GKE turns Managed Prometheus on by default for a Dataplane V2 cluster, so
-  # leaving this block out is what bought the collection — not an intentional
-  # choice. Nothing in this repo scrapes or reads those metrics, and the
-  # collection bills per monitored pod plus samples ingested. Deleting this
-  # block re-enables it; use `gmp-system`/`gke-managed-cim` pods on the node as
-  # the tell that it is back on.
-  #
-  # Cloud Monitoring's own system metrics (enable_components) and Cloud Logging
-  # are untouched — those are the cheapest way to still see node health.
+  # Observability at every layer is part of the approved plan, and the per-hop
+  # metrics that Stage G added (deploy/gcp/terraform/observability.tf) want the
+  # pod-level series this collection provides. That reverses the earlier
+  # "nothing reads it" call in #252, which was correct while no dashboard or
+  # alert consumed the samples. The cost is real — billed per monitored pod plus
+  # samples ingested — so the tell that this is on remains the `gmp-system` and
+  # `gke-managed-cim` pods landing on the nodes; if the bill outruns the value,
+  # switch these back to false rather than deleting the block, so the choice
+  # stays visible in the plan instead of arriving by default.
   monitoring_config {
     managed_prometheus {
-      enabled = false
+      enabled = true
     }
 
     advanced_datapath_observability_config {
-      enable_metrics = false
-      enable_relay   = false
+      enable_metrics = true
+      enable_relay   = true
     }
   }
 
@@ -89,7 +91,7 @@ resource "google_container_cluster" "primary" {
 
   depends_on = [
     google_project_service.required_apis,
-    google_compute_subnetwork.openshell_subnet,
+    google_compute_subnetwork.subnet,
     google_compute_router_nat.nat,
   ]
 }

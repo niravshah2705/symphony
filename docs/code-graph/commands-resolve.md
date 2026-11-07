@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 244 nodes
+Community of 243 nodes
 
-- **Size**: 244 nodes
-- **Cohesion**: 0.0559
+- **Size**: 243 nodes
+- **Cohesion**: 0.0555
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,6 +17,7 @@ Community of 244 nodes
 | test:agentgateway has a vault key and the platform never holds one@L78 | Test | ./deploy/gcp/agentgateway-config.test.js | 78-96 |
 | test:the Terraform guard never admits an origin the sidecar will refuse@L98 | Test | ./deploy/gcp/agentgateway-config.test.js | 98-139 |
 | test:the gateway origin is sidecar-only@L141 | Test | ./deploy/gcp/agentgateway-config.test.js | 141-161 |
+| test:the gateway allowlist equals the LiteLLM catalog it fronts@L181 | Test | ./deploy/gcp/agentgateway-config.test.js | 181-196 |
 | test:deploy entry points share the blank/valid/invalid GA4 id contract@L35 | Test | ./deploy/gcp/analytics-config.test.js | 35-45 |
 | test:blank or unset bootstrap input removes a stale repo variable and gh failures remain fatal@L59 | Test | ./deploy/gcp/analytics-config.test.js | 59-77 |
 | test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-96 |
@@ -48,6 +49,12 @@ Community of 244 nodes
 | test:the actor callback renders as four names or none, never a half-pair@L427 | Test | ./deploy/gcp/substrate-env.test.js | 427-445 |
 | test:the plan-facing outputs and the operator doc name the gates that exist@L489 | Test | ./deploy/gcp/substrate-env.test.js | 489-525 |
 | test:atespace names Terraform accepts are names the app will not silently drop@L527 | Test | ./deploy/gcp/substrate-env.test.js | 527-567 |
+| test:the worker pool carries the label the actor selector matches@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-604 |
+| test:no CI file names OpenShell any more@L49 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 49-57 |
+| test:every writer of the cluster serialises on the same concurrency group@L59 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 59-70 |
+| test:the reconcile job runs the root that exists, under the documented prefix@L113 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 113-124 |
+| test:the power workflow waits only on namespaces the module still creates@L135 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 135-157 |
+| test:the static-IP grant lists the addresses the module owns@L159 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 159-174 |
 | test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-30 |
 | test:ADLC manifest is served as a static resource@L32 | Test | ./e2e/adlc.spec.js | 32-39 |
 | test:existing Agent workspace route still renders directly@L41 | Test | ./e2e/adlc.spec.js | 41-49 |
@@ -57,15 +64,8 @@ Community of 244 nodes
 | test:settings renders task-model controls without a view error@L39 | Test | ./e2e/page-loading.spec.js | 39-59 |
 | test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
 | test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
-| test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148 | Test | ./e2e/page-loading.spec.js | 148-182 |
-| test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221 | Test | ./e2e/page-loading.spec.js | 221-475 |
-| test:authenticated users without an organization route to onboarding before workspace requests@L477 | Test | ./e2e/page-loading.spec.js | 477-551 |
-| test:Settings Policy uses the active native project and selected-context roles@L553 | Test | ./e2e/page-loading.spec.js | 553-615 |
-| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660 | Test | ./e2e/page-loading.spec.js | 660-709 |
-| test:one stable footer survives view replacement across every application and legal route@L196 | Test | ./e2e/persistent-footer.spec.js | 196-243 |
-| test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
 
-*... and 194 more members.*
+*... and 193 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 244 nodes
 
 ### Outgoing
 
-- `equal` (285 edge(s))
-- `ok` (229 edge(s))
-- `match` (209 edge(s))
+- `equal` (264 edge(s))
+- `ok` (230 edge(s))
+- `match` (223 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
-- `deepEqual` (56 edge(s))
-- `includes` (53 edge(s))
-- `indexOf` (46 edge(s))
-- `map` (41 edge(s))
-- `doesNotMatch` (39 edge(s))
-- `filter` (37 edge(s))
-- `slice` (35 edge(s))
+- `deepEqual` (57 edge(s))
+- `includes` (48 edge(s))
+- `indexOf` (47 edge(s))
+- `map` (45 edge(s))
+- `doesNotMatch` (41 edge(s))
+- `filter` (40 edge(s))
+- `slice` (38 edge(s))
+- `join` (37 edge(s))
 - `request` (33 edge(s))
-- `join` (33 edge(s))
 
 ### Incoming
 
-- `equal` (285 edge(s))
-- `ok` (229 edge(s))
-- `match` (209 edge(s))
+- `equal` (264 edge(s))
+- `ok` (230 edge(s))
+- `match` (223 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
-- `deepEqual` (56 edge(s))
-- `includes` (50 edge(s))
-- `indexOf` (45 edge(s))
-- `doesNotMatch` (39 edge(s))
-- `map` (36 edge(s))
-- `filter` (36 edge(s))
+- `deepEqual` (57 edge(s))
+- `indexOf` (46 edge(s))
+- `includes` (45 edge(s))
+- `doesNotMatch` (41 edge(s))
+- `map` (40 edge(s))
+- `filter` (39 edge(s))
+- `slice` (31 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
-- `slice` (28 edge(s))
 - `toBeVisible` (28 edge(s))

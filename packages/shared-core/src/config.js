@@ -489,20 +489,11 @@ const QODER = Object.freeze({
 });
 
 /**
- * OpenRouter + NVIDIA OpenShell configuration.
- * OpenShell runs at https://openshell.archagentix.com by default and receives
- * project-scoped GitHub + OpenRouter secrets as NVIDIA OpenShell Providers.
+ * OpenRouter — a provider the harnesses can be pointed at, independent of which
+ * execution substrate runs the agent.
  */
 const OPENROUTER = Object.freeze({
   defaultHost: proxied('/openrouter', process.env.OPENROUTER_API_URL, 'https://openrouter.ai/api/v1'),
-});
-
-const OPENSHELL = Object.freeze({
-  url: process.env.OPENSHELL_URL || 'https://openshell.archagentix.com',
-  workspace: process.env.OPENSHELL_WORKSPACE || 'tenant-a',
-  allowedWorkspaces: Object.freeze(['tenant-a', 'tenant-b']),
-  defaultImage: process.env.OPENSHELL_DEFAULT_IMAGE || 'ubuntu:24.04',
-  token: process.env.OPENSHELL_TOKEN || process.env.OPENSHELL_API_KEY || '',
 });
 
 /**
@@ -1014,7 +1005,6 @@ const CONFIG = Object.freeze({
   ANTIGRAVITY,
   QODER,
   OPENROUTER,
-  OPENSHELL,
   SUBSTRATE,
   CODER,
   MCP,

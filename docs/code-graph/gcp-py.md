@@ -7,7 +7,7 @@
 Community of 4 nodes
 
 - **Size**: 4 nodes
-- **Cohesion**: 0.1538
+- **Cohesion**: 0.1463
 - **Dominant Language**: javascript
 
 ## Members
@@ -38,7 +38,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/agentgateway-config.test.js` (6 edge(s))
+- `./deploy/gcp/agentgateway-config.test.js` (8 edge(s))
 - `./deploy/gcp/agentgateway-config.test.js::test:agentgateway has a vault key and the platform never holds one@L78` (4 edge(s))
 - `doesNotMatch` (2 edge(s))
 - `split` (1 edge(s))

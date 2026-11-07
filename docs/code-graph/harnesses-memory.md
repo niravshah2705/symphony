@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 301 nodes
+Community of 302 nodes
 
-- **Size**: 301 nodes
-- **Cohesion**: 0.2635
+- **Size**: 302 nodes
+- **Cohesion**: 0.2632
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,6 +15,7 @@ Community of 301 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
+| test@L143 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 143-143 |
 | memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
 | memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
 | resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |
@@ -63,9 +64,8 @@ Community of 301 nodes
 | test:validateQuestionPatch allows a cross-field edit but not an inconsistent one@L100 | Test | ./packages/shared/src/agent/global-questions.test.js | 100-108 |
 | test:scoreQuestion: zero hits is 0/unanswered and no best score can be papered over@L117 | Test | ./packages/shared/src/agent/global-questions.test.js | 117-136 |
 | test:scoreQuestion discounts off-scope recall and prose-only answers to choice questions@L138 | Test | ./packages/shared/src/agent/global-questions.test.js | 138-151 |
-| test:scoreCoverage excludes rows that were never looked at from the denominator instead of counting them as zero@L153 | Test | ./packages/shared/src/agent/global-questions.test.js | 153-170 |
 
-*... and 251 more members.*
+*... and 252 more members.*
 
 ## Execution Flows
 
@@ -93,8 +93,8 @@ Community of 301 nodes
 - `slice` (26 edge(s))
 - `throws` (23 edge(s))
 - `require` (22 edge(s))
+- `trim` (20 edge(s))
 - `push` (20 edge(s))
-- `trim` (19 edge(s))
 
 ### Incoming
 

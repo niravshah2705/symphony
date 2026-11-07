@@ -175,7 +175,7 @@ outbound call.
   gateway, which reads per-org Secrets from the `substrate-credentials` namespace
   and substitutes outside the gVisor sandbox (`syncSubstrateSecrets` in
   `packages/shared-core/src/agent/substrate-runner.js`, RBAC in
-  `deploy/gcp/terraform-openshell-gke/substrate.tf`). Both exist; neither is a
+  `deploy/gcp/terraform-substrate-gke/substrate.tf`). Both exist; neither is a
   copy of the other, and neither may be treated as the other's fallback. After the
   agentgateway seam (`/agentgw` in `packages/shared-core/src/egress.js`) the split
   is: the sidecar resolves the org's *gateway virtual key* only, and the provider

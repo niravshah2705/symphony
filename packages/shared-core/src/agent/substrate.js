@@ -28,7 +28,7 @@ const {
 // ── Agent Substrate ateapi client ───────────────────────────────────────────
 //
 // Zero-trust Kubernetes agent runtime (github.com/agent-substrate/substrate).
-// Mirrors ./openshell.js: a hand-rolled gRPC-over-HTTP/2 client driving the
+// Hand-rolled gRPC-over-HTTP/2 client driving the
 // `substrate.ateapi.v1.Control` service. Field numbers below are read from the
 // ateapi .proto, not guessed. Reuses the shared protobuf wire codec (./grpc-wire).
 //
@@ -61,7 +61,7 @@ const GRPC_OK = 0;
 const GRPC_NOT_FOUND = 5;
 const GRPC_ALREADY_EXISTS = 6;
 
-// ── URL / atespace resolution (mirror resolveOpenShellUrl / resolveOpenShellWorkspace) ──
+// ── URL / atespace resolution ──────────────────────────────────────────────
 
 function resolveSubstrateUrl(explicitUrl) {
   if (explicitUrl && String(explicitUrl).trim()) {
@@ -190,7 +190,7 @@ function normalizeActorName(explicitName, projectId, runId) {
   return cleaned || `plan-${crypto.randomBytes(4).toString('hex')}`;
 }
 
-// ── gRPC HTTP/2 transport (mirrors openshell grpcCall, adds SPIFFE/mTLS) ──────
+// ── gRPC HTTP/2 transport (adds SPIFFE/mTLS to the shared wire codec) ───────
 
 /**
  * Perform a unary gRPC call over HTTP/2 against the Substrate ateapi Control plane.
@@ -468,7 +468,7 @@ function decodeMintActorJwt(fieldsOrBuf) {
   return { actorJwt: getString(fields, 1), expireTime: getVarint(fields, 2, 0) };
 }
 
-// ── Control-plane operations (mirror the OpenShell equivalents) ──────────────
+// ── Control-plane operations ────────────────────────────────────────────────
 
 async function getControlPlaneStatus(options = {}) {
   const url = resolveSubstrateUrl(options.url);

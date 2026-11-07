@@ -159,3 +159,115 @@ test('the gateway origin is sidecar-only', () => {
   const egressEnv = cloudRun.slice(cloudRun.indexOf('egress_env = {'), cloudRun.indexOf('}', cloudRun.indexOf('EGRESS_PROXY_URL')));
   assert.doesNotMatch(egressEnv, /AGENTGATEWAY/, 'agent containers hold the sentinel and the sidecar address, nothing else');
 });
+
+// ---------------------------------------------------------------------------
+// The GKE half (Stage H): agentgateway.tf in deploy/gcp/terraform-substrate-gke
+// renders the gateway the /agentgw route forwards to. The seams above are what
+// make the route resolvable; these are what keep the rendered gateway from
+// becoming a second, unaudited credential path.
+// ---------------------------------------------------------------------------
+
+const GKE = ['deploy', 'gcp', 'terraform-substrate-gke'];
+const [agentgw, gkeVars, tfvars, gkeOutputs, substrate] =
+  ['agentgateway.tf', 'variables.tf', 'terraform.tfvars.example', 'outputs.tf', 'substrate.tf'].map((file) => read(...GKE, file));
+const litellmConfig = read('deploy', 'litellm', 'config.yaml');
+
+const tfStringList = (source, name) => {
+  const block = source.match(new RegExp(`${name} = \\[([^\\]]*)\\]`, 'm'));
+  assert.ok(block, `${name} not found`);
+  return [...block[1].matchAll(/"([^"]+)"/g)].map(([, value]) => value).filter((v) => !v.startsWith('#'));
+};
+
+test('the gateway allowlist equals the LiteLLM catalog it fronts', () => {
+  // One rule, two renderers. agentgateway matches the inbound `model` exactly
+  // the way LiteLLM does (config.yaml's `model_name` is matched verbatim), so a
+  // divergence is not cosmetic: a model absent from the allowlist 403s mid-run
+  // and a model present there but not served 500s. Both look like a gateway bug.
+  const served = [...litellmConfig.matchAll(/^\s*-\s+model_name:\s*(\S+)$/gm)].map(([, m]) => m);
+  assert.ok(served.length > 0, 'deploy/litellm/config.yaml must define a catalog');
+  const allowed = tfStringList(tfvars, 'agentgateway_models');
+  assert.deepEqual(new Set(allowed), new Set(served), 'tfvars example allowlist must equal the LiteLLM model_list');
+
+  // And the variable itself stays deny-by-default: a tfvars file is what an
+  // operator edits, the default is what a forgetful apply gets.
+  const decl = gkeVars.slice(gkeVars.indexOf('variable "agentgateway_models"'));
+  assert.match(decl, /default\s*=\s*\[\]/, 'no allowlist means no model is allowed');
+  assert.match(agentgw, /__agentgateway_models_unset__/, 'the empty case renders a rule that cannot match');
+});
+
+test('Terraform renders names and hashes, never live material', () => {
+  // The CLAUDE.md invariant, applied to this root: state is readable by anyone
+  // with container.admin, which is the CI deployer identity. So the only key
+  // bytes in these files may be the sha256 form the ConfigMap wants.
+  assert.match(agentgw, /keyHash\s+= hash/, 'virtual keys enter as hashes');
+  assert.doesNotMatch(agentgw, /resource "kubernetes_secret_v1"/, 'no Secret is written from here');
+  assert.match(
+    agentgw,
+    /secretRef = \{ name = var\.agentgateway_provider_key_secret \}/,
+    'the provider key Secret is named, never populated',
+  );
+  const keysVar = gkeVars.slice(gkeVars.indexOf('variable "agentgateway_virtual_keys"'));
+  assert.match(keysVar, /\^sha256:\[0-9a-f\]\{64\}\$/, 'a raw key pasted into tfvars must fail at plan time');
+  assert.match(agentgw, /user_id = "org:\$\{org_id\}"/, 'the metric label is the join key to a usage record');
+});
+
+test('one whole policy, one gateway class, one pinned chart pair', () => {
+  // agentgateway documents that separate policies can overwrite one another
+  // while both still report ACCEPTED/ATTACHED. Two AgentgatewayPolicies here is
+  // not a style break, it is an auth rule that no longer applies.
+  const policies = [...agentgw.matchAll(/kind\s*=\s*"AgentgatewayPolicy"/g)];
+  assert.equal(policies.length, 1, 'render exactly one policy, and never patch it piecemeal');
+  assert.match(agentgw, /mode              = "Strict"/, 'an anonymous request must 401, never pass');
+  assert.match(agentgw, /gatewayClassName = "agentgateway"/);
+  // The chart installs the control plane only; the data plane is per-Gateway, so
+  // the IP and the pool pinning have to live in AgentgatewayParameters.
+  assert.match(agentgw, /kind       = "AgentgatewayParameters"/);
+  assert.match(agentgw, /networking\.gke\.io\/load-balancer-ip-addresses/, 'GKE needs the annotation as well as loadBalancerIP');
+  assert.match(agentgw, /yamlencode\(\{ nodeSelector = local\.system_node_selector \}\)/, 'the controller is pinned to the system pool');
+  assert.doesNotMatch(agentgw, /set \{|set = \[/, 'chart values are yamlencoded, not dotted --set paths that can silently miss');
+  for (const release of ['agentgateway_crds', 'agentgateway']) {
+    const block = agentgw.slice(agentgw.indexOf(`resource "helm_release" "${release}"`));
+    assert.match(block.slice(0, 900), /version\s*=\s*var\.agentgateway_version/, `${release} must be version-pinned`);
+  }
+  assert.match(gkeVars.slice(gkeVars.indexOf('variable "agentgateway_version"')), /default\s*=\s*"v\d+\.\d+\.\d+"/, 'no latest tag');
+});
+
+test('the a2a seam is closed by admission, not by a policy', () => {
+  // Decision #3: a listener and nothing behind it. `from = "None"` is the
+  // strongest available no, because Gateway API enforces it before any
+  // credential is examined, and it cannot be undone by a forgotten policy.
+  const gateway = agentgw.slice(agentgw.indexOf('resource "kubectl_manifest" "agentgateway_gateway"'));
+  const a2a = gateway.slice(gateway.indexOf('name     = "a2a"'));
+  assert.match(a2a.slice(0, 600), /from = "None"/, 'no HTTPRoute may attach to the a2a listener');
+  assert.doesNotMatch(agentgw, /agentgateway_a2a_route|agentgateway_a2a_deny/, 'no placeholder backend, no agent card');
+});
+
+test('the substrate root can hand the sidecar an origin it will accept', () => {
+  // Both addresses the outputs print are candidate AGENTGATEWAY_PROXY_UPSTREAM
+  // values, and a value normalizeTrustedUpstream refuses is a fail-closed 502 on
+  // the first flagged run — with a green apply behind it.
+  const clusterOrigin = 'http://agentgateway-proxy.agentgateway-system.svc.cluster.local:80';
+  const publicOrigin = 'https://gw.example.com';
+  for (const value of [clusterOrigin, publicOrigin]) {
+    assert.doesNotMatch(value, /\?|@|#/);
+    normalizeTrustedUpstream(value, 'AGENTGATEWAY_PROXY_UPSTREAM');
+  }
+  // The public origin only exists with a hostname, and the dark default must be
+  // the empty one: a front nobody asked for is a second public credential hop.
+  assert.match(gkeOutputs, /agentgateway_url[\s\S]*?local\.agentgateway_front \? "https:\/\/\$\{var\.agentgateway_ingress_hostname\}" : null/);
+  assert.match(gkeVars.slice(gkeVars.indexOf('variable "agentgateway_enabled"')), /default\s*=\s*false/);
+  assert.match(tfvars, /agentgateway_enabled = false/);
+});
+
+test('each public front registers itself as an ACME solver parent', () => {
+  // The bug this replaces was a hardcoded parentRef naming a Gateway that no
+  // longer exists: cert-manager then retries forever and the only symptom is a
+  // hostname serving a stale certificate. So the list is built by concat and
+  // every front appends itself — including agentgateway.
+  assert.match(substrate, /acme_solver_parent_refs = concat\(/);
+  assert.match(
+    substrate,
+    /local\.agentgateway_front \? \[\s*\{ name = var\.agentgateway_gateway_name, namespace = var\.agentgateway_namespace, kind = "Gateway" \},?\s*\] : \[\]/,
+    'the gateway front must join the solver parents when it exists',
+  );
+});

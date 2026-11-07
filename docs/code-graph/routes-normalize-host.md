@@ -7,15 +7,15 @@
 Community of 2 nodes
 
 - **Size**: 2 nodes
-- **Cohesion**: 0.0667
+- **Cohesion**: 0.0714
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| normalizeHost | Function | ./services/planner/src/routes/settings.js | 308-318 |
-| normalizeOmlxHost | Function | ./services/planner/src/routes/settings.js | 321-324 |
+| normalizeHost | Function | ./services/planner/src/routes/settings.js | 307-317 |
+| normalizeOmlxHost | Function | ./services/planner/src/routes/settings.js | 320-323 |
 
 ## Execution Flows
 
@@ -31,4 +31,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/settings.js` (9 edge(s))
+- `./services/planner/src/routes/settings.js` (8 edge(s))

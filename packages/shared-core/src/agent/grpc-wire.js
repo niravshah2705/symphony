@@ -3,10 +3,9 @@
 /**
  * Shared minimal protobuf wire codec + gRPC message framing.
  *
- * Lifted verbatim from `./openshell.js` so the OpenShell client and the new
- * Agent Substrate (`./substrate.js`) client can drive gRPC-over-HTTP/2 control
- * planes without each carrying its own copy of the wire primitives. Behavior is
- * identical to the inlined versions these replace.
+ * Lifted out of the retired OpenShell client so every gRPC-over-HTTP/2 caller —
+ * today `./substrate.js` — drives a control plane without carrying its own copy
+ * of the wire primitives.
  */
 
 // ── Minimal Protobuf Wire Encoder / Decoder ─────────────────────────────────

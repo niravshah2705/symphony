@@ -20,7 +20,7 @@ are conditional on it:
 | `packages/shared/**` | rebuild planner, coder, tester, and deployer images |
 | root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
 | `deploy/gcp/terraform/**` | rebuild the shared proxy artifact and run `terraform apply` (required for first broker creation) |
-| `deploy/gcp/terraform-openshell-gke/**` | `gke_reconcile` job: plan **and apply** the multi-tenant OpenShell GKE module (own state prefix, no images; any delete in the plan fails the run instead of applying) |
+| `deploy/gcp/terraform-substrate-gke/**` | `gke_reconcile` job: plan **and apply** the multi-tenant Substrate GKE module (own state prefix, no images; any delete in the plan fails the run instead of applying) |
 | `public/**`, `firebase.json`, SPA obfuscation/deploy tooling | **Firebase Hosting** deploy of the **app** site only (`firebase deploy --only hosting:app`; no images, no Terraform) |
 | docs / anything else | nothing runs |
 
@@ -57,7 +57,7 @@ The GKE stack reconciles on its own, without touching images:
 **`gke_reconcile: true`** plans and applies the module, `gke_plan_only: true`
 stops after the plan, and `gke_allow_destroy: true` is the explicit opt-in that
 lets a plan containing a delete through. See
-`deploy/gcp/terraform-openshell-gke/README.md` for what the job reads back from
+`deploy/gcp/terraform-substrate-gke/README.md` for what the job reads back from
 the live cluster and why.
 
 ## SPA obfuscation (release-time)
@@ -168,7 +168,7 @@ done
 # in a separate call after it exists, so a role without it 403s mid-apply.
 gcloud iam roles create substrateStaticIpAdmin --project "$PROJECT" --quiet \
   --title "Static IP provisioner" --stage GA \
-  --description "Create/update/delete and label the static addresses the OpenShell and Substrate gateways use." \
+  --description "Create/update/delete and label the static addresses the Substrate and agentgateway fronts use." \
   --permissions "compute.addresses.create,compute.addresses.delete,compute.addresses.update,compute.addresses.get,compute.addresses.list,compute.addresses.setLabels"
 gcloud projects add-iam-policy-binding "$PROJECT" \
   --member="serviceAccount:${DEPLOYER}" \

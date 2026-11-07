@@ -138,7 +138,6 @@ const EGRESS_ROUTES = Object.freeze({
   // sidecar-only deployment config; the coder sees only this fixed route.
   openSwe: Object.freeze({ prefix: '/openswe', target: 'openswe', auth: 'none' }),
   openrouter: Object.freeze({ prefix: '/openrouter', upstream: 'https://openrouter.ai/api/v1', auth: 'apiKey', scheme: 'bearer', secretKey: 'openrouterApiKey' }),
-  openshell: Object.freeze({ prefix: '/openshell', upstream: 'https://openshell.archagentix.com', auth: 'none' }),
 });
 
 /**

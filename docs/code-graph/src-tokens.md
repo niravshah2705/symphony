@@ -69,16 +69,16 @@ Community of 312 nodes
 
 ## Execution Flows
 
-- **startProjectSandbox** (criticality: 0.74, depth: 9)
-- **changeSandboxImage** (criticality: 0.74, depth: 9)
-- **chatWithProjectSandbox** (criticality: 0.73, depth: 8)
-- **stopProjectSandbox** (criticality: 0.73, depth: 8)
-- **deleteProjectSandbox** (criticality: 0.73, depth: 8)
-- **execInteractiveSandboxCommand** (criticality: 0.71, depth: 8)
-- **autocompleteSandboxInput** (criticality: 0.71, depth: 8)
-- **listSandboxes** (criticality: 0.71, depth: 8)
 - **listActors** (criticality: 0.71, depth: 8)
-- **runSandboxSecurityChecks** (criticality: 0.70, depth: 8)
+- **getActorTemplate** (criticality: 0.70, depth: 8)
+- **ensureFreshCodexTokens** (criticality: 0.68, depth: 6)
+- **ensureFreshClaudeTokens** (criticality: 0.68, depth: 6)
+- **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
+- **refreshTokens** (criticality: 0.67, depth: 2)
+- **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
+- **refreshTokens** (criticality: 0.67, depth: 2)
+- **getGithubToken** (criticality: 0.62, depth: 8)
+- **consumeLogin** (criticality: 0.61, depth: 1)
 - *... and 24 more flows.*
 
 ## Dependencies

@@ -4,10 +4,10 @@
  * Unified security guardrail spec — a single, pattern-agnostic description of the
  * isolation and egress/ingress rules an agent execution environment must enforce.
  *
- * Both the OpenShell pattern (renders a Kubernetes NetworkPolicy) and the Agent
- * Substrate pattern (renders an atenet egress policy + namespace NetworkPolicy +
- * credential-provider read policy) consume the SAME object, so an operator edits
- * guardrails once in the UI. Persisted per organization/project in
+ * Agent Substrate (renders an atenet egress policy + namespace NetworkPolicy +
+ * credential-provider read policy) is the one consumer, and the spec stays
+ * pattern-agnostic anyway: an operator edits guardrails once in the UI, and a
+ * future substrate renders the same object instead of a new settings screen. Persisted per organization/project in
  * `settings.guardrailSpec` through the settings service.
  *
  * Enforcement is always deny-by-default: consumers must never widen a rule beyond
