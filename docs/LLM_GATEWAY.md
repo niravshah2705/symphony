@@ -299,4 +299,5 @@ authenticate actors (a bearer key inside an actor container is the invariant
 this repo exists to protect), or route per-tenant traffic to per-tenant
 upstream keys (route selection cannot read the virtual identity, so that
 isolation stays in LiteLLM's per-org virtual keys). Its `/a2a` listener admits
-no HTTPRoute from any namespace — see the same file.
+no HTTPRoute from any namespace, and `docs/SUBSTRATE_INTEGRATION.md` §12 says why
+nothing is behind it.
