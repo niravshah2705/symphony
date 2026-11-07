@@ -115,8 +115,8 @@ for role in "${DEPLOYER_ROLES[@]}"; do
 done
 echo "  granted ${#DEPLOYER_ROLES[@]} roles"
 
-# The two Envoy fronts publish on regional static addresses Terraform owns
-# (openshell-ip, substrate-ip). compute.viewer reads them but cannot create one,
+# The Envoy fronts publish on regional static addresses Terraform owns
+# (substrate-ip, agentgateway-ip). compute.viewer reads them but cannot create one,
 # and the substrate apply 403s on exactly that. Grant only addresses, not
 # compute.networkAdmin — that would also hand CI this project's firewalls,
 # subnetworks and NAT configuration.
@@ -134,7 +134,7 @@ else
   log "Custom role projects/${PROJECT_ID}/roles/substrateStaticIpAdmin"
   gcloud iam roles create substrateStaticIpAdmin --project "$PROJECT_ID" --quiet \
     --title "Static IP provisioner" \
-    --description "Create/update/delete and label the regional static addresses the OpenShell and Substrate Envoy gateways publish on." \
+    --description "Create/update/delete and label the regional static addresses the Substrate and agentgateway Envoy fronts publish on." \
     --stage GA \
     --permissions "$STATIC_IP_PERMS" >/dev/null
 fi

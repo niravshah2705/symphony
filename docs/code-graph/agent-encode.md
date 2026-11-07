@@ -4,117 +4,111 @@
 
 ## Overview
 
-Community of 165 nodes
+Community of 124 nodes
 
-- **Size**: 165 nodes
-- **Cohesion**: 0.3735
+- **Size**: 124 nodes
+- **Cohesion**: 0.3601
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| encodeVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 14-26 |
-| encodeTag | Function | ./packages/shared-core/src/agent/grpc-wire.js | 28-30 |
-| pbVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 32-38 |
-| pbBytes | Function | ./packages/shared-core/src/agent/grpc-wire.js | 40-45 |
-| pbString | Function | ./packages/shared-core/src/agent/grpc-wire.js | 47-50 |
-| pbMessage | Function | ./packages/shared-core/src/agent/grpc-wire.js | 52-58 |
-| pbMapStringString | Function | ./packages/shared-core/src/agent/grpc-wire.js | 60-69 |
-| decodeVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 71-87 |
-| skipWireType | Function | ./packages/shared-core/src/agent/grpc-wire.js | 89-116 |
-| decodeFields | Function | ./packages/shared-core/src/agent/grpc-wire.js | 118-158 |
-| getString | Function | ./packages/shared-core/src/agent/grpc-wire.js | 160-165 |
-| getStrings | Function | ./packages/shared-core/src/agent/grpc-wire.js | 167-172 |
-| getVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 174-179 |
-| getSubmessages | Function | ./packages/shared-core/src/agent/grpc-wire.js | 181-186 |
-| getSubmessage | Function | ./packages/shared-core/src/agent/grpc-wire.js | 188-191 |
-| getMapStringString | Function | ./packages/shared-core/src/agent/grpc-wire.js | 193-201 |
-| frameGrpcMessage | Function | ./packages/shared-core/src/agent/grpc-wire.js | 205-211 |
-| unframeGrpcMessages | Function | ./packages/shared-core/src/agent/grpc-wire.js | 213-225 |
+| encodeVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 13-25 |
+| encodeTag | Function | ./packages/shared-core/src/agent/grpc-wire.js | 27-29 |
+| pbVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 31-37 |
+| pbBytes | Function | ./packages/shared-core/src/agent/grpc-wire.js | 39-44 |
+| pbString | Function | ./packages/shared-core/src/agent/grpc-wire.js | 46-49 |
+| pbMessage | Function | ./packages/shared-core/src/agent/grpc-wire.js | 51-57 |
+| pbMapStringString | Function | ./packages/shared-core/src/agent/grpc-wire.js | 59-68 |
+| decodeVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 70-86 |
+| skipWireType | Function | ./packages/shared-core/src/agent/grpc-wire.js | 88-115 |
+| decodeFields | Function | ./packages/shared-core/src/agent/grpc-wire.js | 117-157 |
+| getString | Function | ./packages/shared-core/src/agent/grpc-wire.js | 159-164 |
+| getStrings | Function | ./packages/shared-core/src/agent/grpc-wire.js | 166-171 |
+| getVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 173-178 |
+| getSubmessages | Function | ./packages/shared-core/src/agent/grpc-wire.js | 180-185 |
+| getSubmessage | Function | ./packages/shared-core/src/agent/grpc-wire.js | 187-190 |
+| getMapStringString | Function | ./packages/shared-core/src/agent/grpc-wire.js | 192-200 |
+| frameGrpcMessage | Function | ./packages/shared-core/src/agent/grpc-wire.js | 204-210 |
+| unframeGrpcMessages | Function | ./packages/shared-core/src/agent/grpc-wire.js | 212-224 |
 | test:pbString/pbMessage round-trip through decodeFields@L7 | Test | ./packages/shared-core/src/agent/grpc-wire.test.js | 7-12 |
 | test:pbMapStringString encodes entries decoded back to a plain object@L14 | Test | ./packages/shared-core/src/agent/grpc-wire.test.js | 14-19 |
 | test:pbVarint + getVarint preserve numeric field values@L21 | Test | ./packages/shared-core/src/agent/grpc-wire.test.js | 21-27 |
 | test:grpc frame + unframe is lossless@L29 | Test | ./packages/shared-core/src/agent/grpc-wire.test.js | 29-37 |
 | test:empty pbString/pbMessage are elided@L39 | Test | ./packages/shared-core/src/agent/grpc-wire.test.js | 39-43 |
-| resolveOpenShellUrl | Function | ./packages/shared-core/src/agent/openshell.js | 62-75 |
-| resolveOpenShellWorkspace | Function | ./packages/shared-core/src/agent/openshell.js | 81-116 |
-| grpcCall | Function | ./packages/shared-core/src/agent/openshell.js | 122-239 |
-| finish | Function | ./packages/shared-core/src/agent/openshell.js | 133-143 |
-| encodeWorkspaceScope | Function | ./packages/shared-core/src/agent/openshell.js | 243-245 |
-| encodeObjectMeta | Function | ./packages/shared-core/src/agent/openshell.js | 247-255 |
-| decodeObjectMeta | Function | ./packages/shared-core/src/agent/openshell.js | 257-274 |
-| decodeSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 276-313 |
-| decodeProvider | Function | ./packages/shared-core/src/agent/openshell.js | 315-327 |
-| sanitizeSandboxName | Function | ./packages/shared-core/src/agent/openshell.js | 329-337 |
-| normalizeSandboxName | Function | ./packages/shared-core/src/agent/openshell.js | 339-353 |
-| getGatewayStatus | Function | ./packages/shared-core/src/agent/openshell.js | 357-401 |
-| buildProviderProfile | Function | ./packages/shared-core/src/agent/openshell.js | 405-431 |
-| ensureWorkspace | Function | ./packages/shared-core/src/agent/openshell.js | 433-446 |
-| getProfileById | Function | ./packages/shared-core/src/agent/openshell.js | 448-462 |
-| upsertProfile | Function | ./packages/shared-core/src/agent/openshell.js | 464-486 |
-| buildOrgImagePullSecretManifest | Function | ./packages/shared-core/src/agent/openshell.js | 488-519 |
-| ensureProviderProfiles | Function | ./packages/shared-core/src/agent/openshell.js | 521-588 |
-| getProviderByName | Function | ./packages/shared-core/src/agent/openshell.js | 590-604 |
-| upsertProviderSecret | Function | ./packages/shared-core/src/agent/openshell.js | 606-682 |
-| fingerprintSecret | Function | ./packages/shared-core/src/agent/openshell.js | 684-687 |
-| syncNvidiaSecrets | Function | ./packages/shared-core/src/agent/openshell.js | 693-891 |
-| getProjectSandboxStatus | Function | ./packages/shared-core/src/agent/openshell.js | 895-975 |
-| getLocalSandboxWorkdir | Function | ./packages/shared-core/src/agent/openshell.js | 977-985 |
-| runLocalSandboxShell | Function | ./packages/shared-core/src/agent/openshell.js | 987-1021 |
-| execInSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 1023-1094 |
-| buildOpencodeCliScript | Function | ./packages/shared-core/src/agent/openshell.js | 1096-1155 |
+| normalizeRegistryHost | Function | ./packages/shared-core/src/agent/registry-auth.js | 12-16 |
+| buildDockerConfigJson | Function | ./packages/shared-core/src/agent/registry-auth.js | 22-35 |
+| loadWith | Function | ./packages/shared-core/src/agent/substrate-atespace.test.js | 19-25 |
+| test:a per-tenant stack resolves to the atespace pinned at provision time@L35 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 35-41 |
+| test:a shared deployment routes each organization to its bound space@L43 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 43-47 |
+| test:an organization that is not bound refuses instead of taking the default@L52 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 52-58 |
+| test:a deployment that declared tenancy but bound no organization refuses@L60 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 60-63 |
+| test:a settings atespace outside the declared set is ignored@L67 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 67-75 |
+| fp | Function | ./packages/shared-core/src/agent/substrate-runner.js | 22-22 |
+| fingerprintOnly | Function | ./packages/shared-core/src/agent/substrate-runner.js | 24-32 |
+| syncSubstrateSecrets | Function | ./packages/shared-core/src/agent/substrate-runner.js | 41-117 |
+| scopeHas | Function | ./packages/shared-core/src/agent/substrate-runner.js | 51-51 |
+| dispatchActorPrompt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 125-204 |
+| runPlanningOnSubstrate | Function | ./packages/shared-core/src/agent/substrate-runner.js | 259-375 |
+| mintRawActorJwt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 378-388 |
+| stubSubstrate | Function | ./packages/shared-core/src/agent/substrate-runner.test.js | 14-46 |
+| restore | Function | ./packages/shared-core/src/agent/substrate-runner.test.js | 42-44 |
+| test:a substrate run meters exactly one usage record for the dispatching org@L57 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 57-98 |
+| test:the runner hands the admitted credential decision to metering@L103 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 103-123 |
+| test:a run with no admitted decision reaches metering with none either@L125 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 125-142 |
+| test:metering happens on the control plane, not in the actor request body@L144 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 144-163 |
+| test:an actor that reports no usage still records exactly one (skipped) attempt@L165 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 165-180 |
+| test:traceparent crosses the process boundary when the caller has one@L182 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 182-198 |
+| test:the actor is still torn down when dispatch fails@L200 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 200-217 |
+| resolveSubstrateUrl | Function | ./packages/shared-core/src/agent/substrate.js | 66-79 |
+| resolveSubstrateIngressUrl | Function | ./packages/shared-core/src/agent/substrate.js | 81-94 |
+| resolveSubstrateAtespace | Function | ./packages/shared-core/src/agent/substrate.js | 121-169 |
 
-*... and 115 more members.*
+*... and 74 more members.*
 
 ## Execution Flows
 
-- **startProjectSandbox** (criticality: 0.74, depth: 9)
-- **changeSandboxImage** (criticality: 0.74, depth: 9)
-- **chatWithProjectSandbox** (criticality: 0.73, depth: 8)
-- **stopProjectSandbox** (criticality: 0.73, depth: 8)
-- **deleteProjectSandbox** (criticality: 0.73, depth: 8)
-- **execInteractiveSandboxCommand** (criticality: 0.71, depth: 8)
-- **autocompleteSandboxInput** (criticality: 0.71, depth: 8)
-- **listSandboxes** (criticality: 0.71, depth: 8)
 - **listActors** (criticality: 0.71, depth: 8)
-- **runSandboxSecurityChecks** (criticality: 0.70, depth: 8)
-- *... and 5 more flows.*
+- **getActorTemplate** (criticality: 0.70, depth: 8)
+- **getGithubToken** (criticality: 0.62, depth: 8)
+- **getApiKey** (criticality: 0.58, depth: 7)
+- **getPlanningConfig** (criticality: 0.58, depth: 7)
 
 ## Dependencies
 
 ### Outgoing
 
-- `String` (132 edge(s))
 - `equal` (65 edge(s))
-- `concat` (57 edge(s))
-- `push` (52 edge(s))
-- `trim` (44 edge(s))
-- `alloc` (36 edge(s))
-- `map` (36 edge(s))
-- `replace` (24 edge(s))
-- `join` (23 edge(s))
-- `get` (21 edge(s))
-- `includes` (20 edge(s))
-- `stringify` (18 edge(s))
-- `isBuffer` (16 edge(s))
-- `from` (14 edge(s))
-- `toString` (14 edge(s))
+- `String` (47 edge(s))
+- `alloc` (30 edge(s))
+- `push` (29 edge(s))
+- `concat` (29 edge(s))
+- `map` (26 edge(s))
+- `trim` (17 edge(s))
+- `Number` (12 edge(s))
+- `isBuffer` (12 edge(s))
+- `deepEqual` (11 edge(s))
+- `replace` (10 edge(s))
+- `includes` (10 edge(s))
+- `onStep` (9 edge(s))
+- `get` (8 edge(s))
+- `filter` (8 edge(s))
 
 ### Incoming
 
 - `./packages/shared-core/src/agent/substrate.js` (72 edge(s))
 - `equal` (65 edge(s))
-- `./packages/shared-core/src/agent/openshell.js` (65 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.js` (36 edge(s))
 - `./packages/shared-core/src/store.js` (13 edge(s))
 - `deepEqual` (11 edge(s))
 - `./packages/shared-core/src/agent/substrate-runner.js` (11 edge(s))
 - `./packages/shared-core/src/agent/substrate.test.js` (11 edge(s))
-- `./packages/shared-core/src/guardrails/consumers.js` (10 edge(s))
 - `./packages/shared-core/src/agent/substrate-runner.test.js` (9 edge(s))
+- `./packages/shared-core/src/guardrails/consumers.js` (8 edge(s))
 - `./packages/shared-core/src/guardrails/spec.js` (8 edge(s))
 - `./packages/shared-core/src/agent/substrate-atespace.test.js` (6 edge(s))
 - `push` (6 edge(s))
 - `./packages/shared-core/src/guardrails/spec.test.js` (6 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.test.js` (5 edge(s))
+- `./packages/shared-core/src/agent/registry-auth.js` (4 edge(s))

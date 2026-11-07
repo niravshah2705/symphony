@@ -41,7 +41,7 @@ const LEGACY_PLAINTEXT_SECRET_FIELDS = Object.freeze([
 // Execution substrates the Settings UI offers. Kept in sync with
 // pattern-router's dispatch branch and the POST /api/agent/substrate/pattern
 // validation in routes/agent.js.
-const AGENT_PATTERNS = Object.freeze(['cloudrun', 'openshell', 'substrate']);
+const AGENT_PATTERNS = Object.freeze(['cloudrun', 'substrate']);
 
 // Settings keys backing each LLM role. Provider-class slots ('byom'/'global')
 // stay deployment-pinned; task roles (thinking/execution/testing/deployment)
@@ -271,7 +271,6 @@ function publicSettings() {
     maskedGithubToken: '',
     hasOpenrouterApiKey: Boolean(s.openrouterApiKey),
     maskedOpenrouterApiKey: s.openrouterApiKey ? '••••••••' : '',
-    openshellUrl: s.openshellUrl || CONFIG.OPENSHELL?.url || 'https://openshell.archagentix.com',
     // Execution substrate (agentPattern) + Agent Substrate wiring. Endpoints,
     // tenant names and a digest-pinned image are config, not credentials, and the
     // Settings UI cannot mark the active substrate tile without them.
@@ -749,9 +748,6 @@ router.put('/integrations', (req, res) => {
       return res.status(400).json({ error: 'Repository must be owner/name or a github.com/gitlab.com Git URL.' });
     }
     patch.repositoryUrl = repositoryUrl;
-  }
-  if (b.openshellUrl !== undefined) {
-    patch.openshellUrl = normalizeHost(b.openshellUrl, CONFIG.OPENSHELL?.url || 'https://openshell.archagentix.com');
   }
   if (b.openrouterApiKey !== undefined) {
     patch.openrouterApiKey = String(b.openrouterApiKey || '').trim().slice(0, 500);

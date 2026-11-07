@@ -6,7 +6,6 @@ import {
   isImmersiveRoute,
   setActiveRoute,
   setCurrentProject,
-  setProjectSandbox,
   setSidebarOpen,
   setSidebarCollapsed,
 } from './state.js';
@@ -90,7 +89,6 @@ function route(loader, exportName, styles = []) {
 
 const routes = Object.freeze({
   agent: route(() => import('./views/agent.js'), 'renderAgent', ['/styles/immersive.css']),
-  openshell: route(() => import('./views/openshell.js'), 'renderOpenShell', ['/styles/immersive.css']),
   workflows: route(() => import('./views/workflows.js'), 'renderWorkflows', ['/styles/workflows.css']),
   'agent-jobs': route(() => import('./views/agent-jobs.js'), 'renderAgentJobs', ['/styles/operations.css']),
   calls: route(() => import('./views/calls.js'), 'renderCalls', ['/styles/immersive.css']),
@@ -116,7 +114,6 @@ const AUTHENTICATION_INDEPENDENT_ROUTES = new Set(['privacy', 'terms']);
 
 const routeMeta = {
   agent: { titleKey: 'agentWorkspace', eyebrowKey: 'workspace' },
-  openshell: { title: 'OpenShell Sandbox', eyebrow: 'Workspace' },
   workflows: { titleKey: 'workflows', eyebrowKey: 'workspace' },
   'agent-jobs': { titleKey: 'agentJobs', eyebrowKey: 'workspace' },
   calls: { titleKey: 'callRecorder', eyebrowKey: 'workspace' },
@@ -664,9 +661,6 @@ function renderAuthControl() {
       const chosen = projects.find((p) => p.id === nextProjectId);
       if (nextProjectId) {
         setCurrentProject(nextProjectId, chosen?.name || '');
-        void api.loadProjectSandbox({ projectId: nextProjectId, projectName: chosen?.name || nextProjectId })
-          .then((res) => { if (res?.sandbox) setProjectSandbox(nextProjectId, res.sandbox); })
-          .catch(() => {});
       }
       if (!changeWorkspaceProject(nextProjectId)) return;
       panel.setAttribute('aria-busy', 'true');

@@ -3,8 +3,8 @@
 /**
  * Image-registry credential material, shared by every agent pattern.
  *
- * Lifted out of openshell.js so the Substrate runner does not depend on a
- * sandbox product it is meant to outlive (the same extraction `grpc-wire.js`
+ * Lifted out of the retired OpenShell client so the Substrate runner does not
+ * depend on a sandbox product it outlived (the same extraction `grpc-wire.js`
  * already went through). Pure string/JSON work — no gRPC, no cluster, no store.
  */
 

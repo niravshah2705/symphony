@@ -14,7 +14,7 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| matchRoute | Function | ./packages/shared-core/src/egress.js | 189-204 |
+| matchRoute | Function | ./packages/shared-core/src/egress.js | 188-203 |
 | test:agentgateway: one prefix routes LLM, MCP and A2A as sub-paths@L367 | Test | ./services/proxy/src/proxy.test.js | 367-377 |
 
 ## Execution Flows

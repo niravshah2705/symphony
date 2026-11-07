@@ -28,13 +28,13 @@ test('sanitizeSettingsPatch accepts valid keys and coerces values', () => {
     langfuseTracing: false,
     llmProvider: 'ollama',
     ollamaTemperature: 5, // clamped to 2
-    openshellUrl: 'https://openshell.example.com/', // trailing slash trimmed
+    huggingfaceHost: 'https://hf.example.com/', // trailing slash trimmed
   });
   assert.equal(patch.agentRuntime, 'codex-sdk');
   assert.equal(patch.workflowPattern, 'supervisor');
   assert.equal(patch.langfuseTracing, false);
   assert.equal(patch.ollamaTemperature, 2);
-  assert.equal(patch.openshellUrl, 'https://openshell.example.com');
+  assert.equal(patch.huggingfaceHost, 'https://hf.example.com');
   assert.ok(applied.includes('agentRuntime'));
 });
 

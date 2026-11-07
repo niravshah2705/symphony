@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 245 nodes
+Community of 242 nodes
 
-- **Size**: 245 nodes
-- **Cohesion**: 0.0557
+- **Size**: 242 nodes
+- **Cohesion**: 0.0558
 - **Dominant Language**: javascript
 
 ## Members
@@ -49,6 +49,11 @@ Community of 245 nodes
 | test:the actor callback renders as four names or none, never a half-pair@L427 | Test | ./deploy/gcp/substrate-env.test.js | 427-445 |
 | test:the plan-facing outputs and the operator doc name the gates that exist@L489 | Test | ./deploy/gcp/substrate-env.test.js | 489-525 |
 | test:atespace names Terraform accepts are names the app will not silently drop@L527 | Test | ./deploy/gcp/substrate-env.test.js | 527-567 |
+| test:no CI file names OpenShell any more@L49 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 49-57 |
+| test:every writer of the cluster serialises on the same concurrency group@L59 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 59-70 |
+| test:the reconcile job runs the root that exists, under the documented prefix@L113 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 113-124 |
+| test:the power workflow waits only on namespaces the module still creates@L135 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 135-157 |
+| test:the static-IP grant lists the addresses the module owns@L159 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 159-174 |
 | test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-30 |
 | test:ADLC manifest is served as a static resource@L32 | Test | ./e2e/adlc.spec.js | 32-39 |
 | test:existing Agent workspace route still renders directly@L41 | Test | ./e2e/adlc.spec.js | 41-49 |
@@ -59,13 +64,8 @@ Community of 245 nodes
 | test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
 | test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
 | test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148 | Test | ./e2e/page-loading.spec.js | 148-182 |
-| test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221 | Test | ./e2e/page-loading.spec.js | 221-475 |
-| test:authenticated users without an organization route to onboarding before workspace requests@L477 | Test | ./e2e/page-loading.spec.js | 477-551 |
-| test:Settings Policy uses the active native project and selected-context roles@L553 | Test | ./e2e/page-loading.spec.js | 553-615 |
-| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660 | Test | ./e2e/page-loading.spec.js | 660-709 |
-| test:one stable footer survives view replacement across every application and legal route@L196 | Test | ./e2e/persistent-footer.spec.js | 196-243 |
 
-*... and 195 more members.*
+*... and 192 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 245 nodes
 
 ### Outgoing
 
-- `equal` (285 edge(s))
-- `ok` (230 edge(s))
-- `match` (211 edge(s))
+- `equal` (263 edge(s))
+- `ok` (228 edge(s))
+- `match` (219 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
 - `deepEqual` (57 edge(s))
-- `includes` (53 edge(s))
+- `includes` (48 edge(s))
 - `indexOf` (47 edge(s))
-- `map` (42 edge(s))
-- `doesNotMatch` (39 edge(s))
-- `filter` (37 edge(s))
-- `slice` (36 edge(s))
+- `map` (45 edge(s))
+- `doesNotMatch` (41 edge(s))
+- `filter` (40 edge(s))
+- `slice` (38 edge(s))
+- `join` (37 edge(s))
 - `request` (33 edge(s))
-- `join` (33 edge(s))
 
 ### Incoming
 
-- `equal` (285 edge(s))
-- `ok` (230 edge(s))
-- `match` (211 edge(s))
+- `equal` (263 edge(s))
+- `ok` (228 edge(s))
+- `match` (219 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
 - `deepEqual` (57 edge(s))
-- `includes` (50 edge(s))
 - `indexOf` (46 edge(s))
-- `doesNotMatch` (39 edge(s))
-- `map` (37 edge(s))
-- `filter` (36 edge(s))
-- `slice` (29 edge(s))
+- `includes` (45 edge(s))
+- `doesNotMatch` (41 edge(s))
+- `map` (40 edge(s))
+- `filter` (39 edge(s))
+- `slice` (31 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
 - `toBeVisible` (28 edge(s))

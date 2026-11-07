@@ -16,8 +16,8 @@ Community of 4 nodes
 |------|------|------|-------|
 | settingsMatchTier | Function | ./services/planner/src/routes/settings.js | 78-82 |
 | effectiveComplexityTier | Function | ./services/planner/src/routes/settings.js | 85-88 |
-| publicSettings | Function | ./services/planner/src/routes/settings.js | 142-300 |
-| oneOf | Function | ./services/planner/src/routes/settings.js | 350-352 |
+| publicSettings | Function | ./services/planner/src/routes/settings.js | 142-299 |
+| oneOf | Function | ./services/planner/src/routes/settings.js | 349-351 |
 
 ## Execution Flows
 

@@ -959,7 +959,7 @@ export async function renderWorkflows(view) {
   }
 
   function contextProfileForm(existing = null) {
-    const name = textInput(existing?.name, { required: true, maxlength: '80', placeholder: 'e.g. Staging sandbox' });
+    const name = textInput(existing?.name, { required: true, maxlength: '80', placeholder: 'e.g. Staging environment' });
     const description = textArea(existing?.description, { maxlength: '500', rows: '4', placeholder: 'Describe this non-secret execution context.' });
     const form = el('form', { class: 'workflow-profile-form' }, [
       field('Context name', name), field('Description', description),
