@@ -119,6 +119,19 @@ locals {
     trimspace(local.litellm_url) != "" ? {
       LITELLM_PROXY_UPSTREAM = local.litellm_url
     } : {},
+    # agentgateway (the in-cluster L7 front for LLM, MCP and A2A). Same rule as
+    # LiteLLM, one gateway later: the origin lives ONLY on the sidecar, because
+    # the /agentgw route forwards any sub-path and model-generated code in the
+    # coder would otherwise drive an arbitrary target through a front that holds
+    # a real provider key.
+    #
+    # Empty by default, which IS the dark state — the egress route fails closed
+    # 502 rather than defaulting onto someone else's gateway. There is no
+    # agentgateway_enabled here to disagree with that: the address is rendered by
+    # the substrate root, so this root only ever receives it.
+    trimspace(var.agentgateway_proxy_upstream) != "" ? {
+      AGENTGATEWAY_PROXY_UPSTREAM = trimspace(var.agentgateway_proxy_upstream)
+    } : {},
   )
 
   planner_env = merge(

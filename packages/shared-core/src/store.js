@@ -670,6 +670,10 @@ const SECRET_ENV = Object.freeze({
   // without the sidecar; in proxy mode secretOverlay() returns {} and the
   // sidecar injects the org's minted key.
   litellmApiKey: 'LITELLM_API_KEY',
+  // agentgateway virtual key: the local/dev mirror of the same customer-only vault
+  // entry. Leaving it unset is the dark state — nothing here defaults a run onto a
+  // platform gateway key, the same way the litellm overlay has no fallback.
+  fleetGatewayApiKey: 'FLEET_GATEWAY_API_KEY',
   // Managed LLM API keys (alternative to OAuth), matching the vault's managed set.
   anthropicApiKey: 'ANTHROPIC_API_KEY',
   openaiApiKey: 'OPENAI_API_KEY',

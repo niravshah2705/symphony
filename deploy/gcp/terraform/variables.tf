@@ -412,6 +412,17 @@ variable "openswe_proxy_upstream" {
   }
 }
 
+variable "agentgateway_proxy_upstream" {
+  type        = string
+  description = "Trusted operator-configured agentgateway origin used only by egress proxy containers (the in-cluster L7 front for LLM, MCP and A2A; for example http://agentgateway-gateway.substrate.svc.cluster.local:9900). Browser/request settings can never select this target. Empty leaves the /agentgw route dark — it fails closed rather than defaulting onto a gateway key."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.agentgateway_proxy_upstream) == "" || can(regex("^https?://[^/?#@[:space:]]+(?::[0-9]{1,5})?/?$", trimspace(var.agentgateway_proxy_upstream)))
+    error_message = "agentgateway_proxy_upstream must be empty or a path-free HTTP(S) origin without credentials, query, or fragment."
+  }
+}
+
 variable "managed_provider_secrets" {
   type        = map(string)
   description = "Platform-managed provider keys mounted on the SETTINGS service as ENV_NAME => Secret Manager secret id. The settings service resolves these for a 'managed' selection and returns them over the internal S2S so the egress proxy has ONE resolution path (managed + customer). Hosted LLMs require the matching GEMINI_API_KEY, HUGGINGFACE_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY entry. Agent traces go to Langfuse Cloud, which requires LANGFUSE_PUBLIC_KEY => langfuse-public-key and LANGFUSE_SECRET_KEY => langfuse-secret-key; the egress proxy reassembles the Basic pair from these, so no agent container ever holds them. Each id MUST have an enabled version before it is mounted (else the settings revision fails to start)."
