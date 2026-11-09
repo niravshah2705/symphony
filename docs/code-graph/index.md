@@ -4,7 +4,7 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 249
+**Total communities**: 247
 
 ## Communities
 
@@ -18,7 +18,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-checks | 18 | [agent-checks.md](agent-checks.md) |
 | agent-coder-error | 2 | [agent-coder-error.md](agent-coder-error.md) |
 | agent-derive | 2 | [agent-derive.md](agent-derive.md) |
-| agent-encode | 157 | [agent-encode.md](agent-encode.md) |
+| agent-encode | 155 | [agent-encode.md](agent-encode.md) |
 | agent-failing | 3 | [agent-failing.md](agent-failing.md) |
 | agent-fake | 4 | [agent-fake.md](agent-fake.md) |
 | agent-fake-codex | 3 | [agent-fake-codex.md](agent-fake-codex.md) |
@@ -29,7 +29,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-id | 3 | [agent-id.md](agent-id.md) |
 | agent-knowledge-search-error | 2 | [agent-knowledge-search-error.md](agent-knowledge-search-error.md) |
 | agent-local-intelligence-error | 2 | [agent-local-intelligence-error.md](agent-local-intelligence-error.md) |
-| agent-model | 453 | [agent-model.md](agent-model.md) |
+| agent-model | 481 | [agent-model.md](agent-model.md) |
 | agent-models | 41 | [agent-models.md](agent-models.md) |
 | agent-normalize | 19 | [agent-normalize.md](agent-normalize.md) |
 | agent-organization-context-mismatch | 2 | [agent-organization-context-mismatch.md](agent-organization-context-mismatch.md) |

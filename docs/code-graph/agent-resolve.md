@@ -26,10 +26,10 @@ Community of 249 nodes
 | activeRepositoryArtifactReceipt | Function | ./packages/shared/src/agent/coder.js | 101-104 |
 | resolvePlannedRepository | Function | ./packages/shared/src/agent/coder.js | 111-142 |
 | executeCodingRuntime | Function | ./packages/shared/src/agent/coder.js | 149-278 |
-| runCoderLocal | Function | ./packages/shared/src/agent/coder.js | 285-340 |
-| runCoder | Function | ./packages/shared/src/agent/coder.js | 348-355 |
-| runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 363-471 |
-| runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 474-492 |
+| runCoderLocal | Function | ./packages/shared/src/agent/coder.js | 285-339 |
+| runCoder | Function | ./packages/shared/src/agent/coder.js | 347-354 |
+| runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 362-469 |
+| runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 472-490 |
 | installSkills | Function | ./packages/shared/src/agent/framework.js | 53-87 |
 | validateSkillName | Function | ./packages/shared/src/agent/framework.js | 89-101 |
 | trackedSkillPaths | Function | ./packages/shared/src/agent/framework.js | 103-114 |
