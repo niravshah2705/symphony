@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 58 nodes
+Community of 57 nodes
 
-- **Size**: 58 nodes
-- **Cohesion**: 0.4635
+- **Size**: 57 nodes
+- **Cohesion**: 0.4669
 - **Dominant Language**: python
 
 ## Members
@@ -39,7 +39,6 @@ Community of 58 nodes
 | test_org_member_defaults_to_shared | Test | ./services/org/tests/integration/test_deployment_resolver.py | 39-48 |
 | test_provisioned_org_returns_tenant_gateway | Test | ./services/org/tests/integration/test_deployment_resolver.py | 91-103 |
 | test_provisioning_org_stays_on_shared | Test | ./services/org/tests/integration/test_deployment_resolver.py | 107-117 |
-| _org_id | Function | ./services/org/tests/integration/test_internal_billing_context.py | 20-22 |
 | _org_id | Function | ./services/org/tests/integration/test_internal_writeback.py | 19-21 |
 | _primary_org | Function | ./services/org/tests/integration/test_invitations.py | 13-15 |
 | test_invitation_delivery_resend_and_explicit_acceptance | Test | ./services/org/tests/integration/test_invitations.py | 18-118 |
@@ -64,8 +63,9 @@ Community of 58 nodes
 | test_project_admin_manages_access_developer_cannot | Test | ./services/org/tests/integration/test_projects_tasks.py | 74-99 |
 | test_duplicate_member_is_conflict | Test | ./services/org/tests/integration/test_projects_tasks.py | 102-108 |
 | test_task_tags_and_assignee_validation | Test | ./services/org/tests/integration/test_projects_tasks.py | 111-142 |
+| test_tag_crud_authz | Test | ./services/org/tests/integration/test_projects_tasks.py | 145-158 |
 
-*... and 8 more members.*
+*... and 7 more members.*
 
 ## Execution Flows
 
@@ -75,8 +75,8 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `json` (79 edge(s))
-- `get` (63 edge(s))
+- `json` (78 edge(s))
+- `get` (62 edge(s))
 - `post` (58 edge(s))
 - `delete` (17 edge(s))
 - `patch` (13 edge(s))
@@ -86,10 +86,10 @@ No execution flows pass through this community.
 - `next` (4 edge(s))
 - `put` (3 edge(s))
 - `./services/org/tests/integration/test_internal_writeback.py::test_writes_deployments_and_resolver_reflects_it` (3 edge(s))
-- `./services/org/tests/integration/test_internal_billing_context.py::test_returns_org_identity_and_admin_emails_only` (3 edge(s))
 - `len` (2 edge(s))
 - `./services/org/tests/helpers.py::create_super_admin` (2 edge(s))
 - `./services/org/tests/integration/test_deployment_resolver.py::test_orgless_user_stays_orgless_on_deployment_lookup` (2 edge(s))
+- `set` (2 edge(s))
 
 ### Incoming
 

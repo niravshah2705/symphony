@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 507 nodes
+Community of 560 nodes
 
-- **Size**: 507 nodes
-- **Cohesion**: 0.7496
+- **Size**: 560 nodes
+- **Cohesion**: 0.7432
 - **Dominant Language**: hcl
 
 ## Members
@@ -16,6 +16,8 @@ Community of 507 nodes
 |------|------|------|-------|
 | local.required_apis | Function | ./deploy/gcp/terraform/apis.tf | 8-26 |
 | resource.google_project_service.services | Class | ./deploy/gcp/terraform/apis.tf | 29-35 |
+| local.observability_apis | Function | ./deploy/gcp/terraform/apis.tf | 41-44 |
+| resource.google_project_service.observability_apis | Class | ./deploy/gcp/terraform/apis.tf | 47-53 |
 | resource.google_artifact_registry_repository.docker | Class | ./deploy/gcp/terraform/artifact_registry.tf | 5-36 |
 | resource.google_cloud_run_v2_job.billing_auto_recharge | Class | ./deploy/gcp/terraform/billing_job.tf | 21-115 |
 | resource.google_cloud_run_v2_job_iam_member.billing_launches_recharge_job | Class | ./deploy/gcp/terraform/billing_job.tf | 121-127 |
@@ -44,28 +46,26 @@ Community of 507 nodes
 | local.memory_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 35-37 |
 | local.gateway_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 41-79 |
 | local.egress_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 86-86 |
-| local.proxy_plain_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 92-122 |
-| local.planner_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 124-140 |
-| local.coder_control_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 142-167 |
-| local.coder_worker_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 169-183 |
-| resource.google_secret_manager_secret.google_one_tap_client_id | Class | ./deploy/gcp/terraform/cloud_run.tf | 195-206 |
-| resource.google_secret_manager_secret_version.google_one_tap_client_id | Class | ./deploy/gcp/terraform/cloud_run.tf | 208-212 |
-| resource.google_secret_manager_secret_iam_member.gateway_one_tap | Class | ./deploy/gcp/terraform/cloud_run.tf | 214-220 |
-| local.proxy_sa_members | Function | ./deploy/gcp/terraform/cloud_run.tf | 229-232 |
-| resource.google_cloud_run_v2_service_iam_member.proxy_invokes_settings | Class | ./deploy/gcp/terraform/cloud_run.tf | 235-242 |
-| resource.google_cloud_run_v2_service.gateway | Class | ./deploy/gcp/terraform/cloud_run.tf | 245-338 |
-| resource.google_cloud_run_v2_service.planner | Class | ./deploy/gcp/terraform/cloud_run.tf | 351-522 |
-| resource.google_cloud_run_v2_service.coder_control | Class | ./deploy/gcp/terraform/cloud_run.tf | 525-681 |
-| resource.google_cloud_run_v2_job.coder_worker | Class | ./deploy/gcp/terraform/cloud_run.tf | 687-837 |
+| local.proxy_plain_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 92-135 |
+| local.planner_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 137-156 |
+| local.coder_control_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 158-186 |
+| local.coder_worker_env | Function | ./deploy/gcp/terraform/cloud_run.tf | 188-208 |
+| resource.google_secret_manager_secret.google_one_tap_client_id | Class | ./deploy/gcp/terraform/cloud_run.tf | 220-231 |
+| resource.google_secret_manager_secret_version.google_one_tap_client_id | Class | ./deploy/gcp/terraform/cloud_run.tf | 233-237 |
+| resource.google_secret_manager_secret_iam_member.gateway_one_tap | Class | ./deploy/gcp/terraform/cloud_run.tf | 239-245 |
+| local.proxy_sa_members | Function | ./deploy/gcp/terraform/cloud_run.tf | 254-257 |
+| resource.google_cloud_run_v2_service_iam_member.proxy_invokes_settings | Class | ./deploy/gcp/terraform/cloud_run.tf | 260-267 |
+| resource.google_cloud_run_v2_service.gateway | Class | ./deploy/gcp/terraform/cloud_run.tf | 270-363 |
+| resource.google_cloud_run_v2_service.planner | Class | ./deploy/gcp/terraform/cloud_run.tf | 376-547 |
+| resource.google_cloud_run_v2_service.coder_control | Class | ./deploy/gcp/terraform/cloud_run.tf | 550-706 |
+| resource.google_cloud_run_v2_job.coder_worker | Class | ./deploy/gcp/terraform/cloud_run.tf | 712-862 |
 | local.email_public_app_url | Function | ./deploy/gcp/terraform/email_service.tf | 7-7 |
 | local.email_smtp_secret_refs | Function | ./deploy/gcp/terraform/email_service.tf | 8-8 |
 | resource.google_service_account.email | Class | ./deploy/gcp/terraform/email_service.tf | 11-15 |
 | resource.google_project_iam_member.email_datastore | Class | ./deploy/gcp/terraform/email_service.tf | 19-23 |
 | resource.google_secret_manager_secret.email_smtp_user | Class | ./deploy/gcp/terraform/email_service.tf | 25-33 |
-| resource.google_secret_manager_secret.email_smtp_password | Class | ./deploy/gcp/terraform/email_service.tf | 35-43 |
-| resource.google_secret_manager_secret_iam_member.email_smtp_user_accessor | Class | ./deploy/gcp/terraform/email_service.tf | 62-67 |
 
-*... and 457 more members.*
+*... and 510 more members.*
 
 ## Execution Flows
 
@@ -75,18 +75,18 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform/variables.tf` (179 edge(s))
+- `./deploy/gcp/terraform/variables.tf` (200 edge(s))
 - `./deploy/gcp/terraform/locals.tf` (64 edge(s))
+- `./deploy/gcp/terraform/outputs.tf` (33 edge(s))
 - `./deploy/gcp/terraform/pipeline.tf` (29 edge(s))
-- `./deploy/gcp/terraform/outputs.tf` (27 edge(s))
-- `./deploy/gcp/terraform/iam.tf` (21 edge(s))
+- `./deploy/gcp/terraform/iam.tf` (22 edge(s))
 - `./deploy/gcp/terraform/cloud_run.tf` (20 edge(s))
+- `./deploy/gcp/terraform/provisioner.tf` (19 edge(s))
 - `./deploy/gcp/terraform/settings_service.tf` (19 edge(s))
-- `./deploy/gcp/terraform/provisioner.tf` (17 edge(s))
+- `./deploy/gcp/terraform/observability.tf` (15 edge(s))
 - `./deploy/gcp/terraform/email_service.tf` (14 edge(s))
 - `./deploy/gcp/terraform/litellm.tf` (14 edge(s))
 - `./deploy/gcp/terraform/firebase.tf` (10 edge(s))
 - `./deploy/gcp/terraform/memory.tf` (10 edge(s))
 - `./deploy/gcp/terraform/billing_service.tf` (9 edge(s))
 - `./deploy/gcp/terraform/org_service.tf` (9 edge(s))
-- `./deploy/gcp/terraform/pubsub.tf` (8 edge(s))

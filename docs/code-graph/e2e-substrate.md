@@ -17,12 +17,12 @@ Community of 9 nodes
 | json | Function | ./e2e/substrate-pattern.spec.js | 5-11 |
 | stubSettingsSurface | Function | ./e2e/substrate-pattern.spec.js | 18-51 |
 | openSettings | Function | ./e2e/substrate-pattern.spec.js | 53-56 |
-| describe:substrate pattern toggle@L58 | Test | ./e2e/substrate-pattern.spec.js | 58-169 |
-| test:three tiles render and cloudrun is active by default@L59 | Test | ./e2e/substrate-pattern.spec.js | 59-73 |
+| describe:substrate pattern toggle@L58 | Test | ./e2e/substrate-pattern.spec.js | 58-176 |
+| test:both tiles render and cloudrun is active by default@L59 | Test | ./e2e/substrate-pattern.spec.js | 59-73 |
 | test:clicking Agent Substrate tile saves the pattern and reveals the config card@L75 | Test | ./e2e/substrate-pattern.spec.js | 75-103 |
 | test:toggling back to cloudrun hides the substrate config card@L105 | Test | ./e2e/substrate-pattern.spec.js | 105-119 |
-| test:shared guardrails panel persists a spec edit via /api/agent/guardrail@L121 | Test | ./e2e/substrate-pattern.spec.js | 121-153 |
-| test:orthogonality: picking substrate does not change the runtime or workflow tiles@L155 | Test | ./e2e/substrate-pattern.spec.js | 155-168 |
+| test:shared guardrails panel persists a spec edit via /api/agent/guardrail@L121 | Test | ./e2e/substrate-pattern.spec.js | 121-160 |
+| test:orthogonality: picking substrate does not change the runtime or workflow tiles@L162 | Test | ./e2e/substrate-pattern.spec.js | 162-175 |
 
 ## Execution Flows
 
@@ -34,10 +34,11 @@ No execution flows pass through this community.
 
 - `route` (22 edge(s))
 - `expect` (13 edge(s))
-- `getByRole` (11 edge(s))
-- `locator` (10 edge(s))
-- `toBeVisible` (9 edge(s))
+- `locator` (11 edge(s))
+- `getByRole` (10 edge(s))
+- `toBeVisible` (8 edge(s))
 - `click` (4 edge(s))
+- `toHaveCount` (3 edge(s))
 - `request` (3 edge(s))
 - `postDataJSON` (2 edge(s))
 - `toBe` (2 edge(s))
@@ -45,18 +46,18 @@ No execution flows pass through this community.
 - `catch` (2 edge(s))
 - `textContent` (2 edge(s))
 - `first` (2 edge(s))
-- `toHaveCount` (2 edge(s))
 - `fulfill` (1 edge(s))
 
 ### Incoming
 
 - `expect` (12 edge(s))
-- `getByRole` (11 edge(s))
-- `locator` (9 edge(s))
-- `toBeVisible` (8 edge(s))
+- `locator` (10 edge(s))
+- `getByRole` (10 edge(s))
+- `toBeVisible` (7 edge(s))
 - `./e2e/substrate-pattern.spec.js` (4 edge(s))
 - `route` (4 edge(s))
 - `click` (4 edge(s))
+- `toHaveCount` (3 edge(s))
 - `request` (3 edge(s))
 - `postDataJSON` (2 edge(s))
 - `toBe` (2 edge(s))
@@ -64,4 +65,3 @@ No execution flows pass through this community.
 - `catch` (2 edge(s))
 - `textContent` (2 edge(s))
 - `first` (2 edge(s))
-- `toHaveCount` (2 edge(s))
