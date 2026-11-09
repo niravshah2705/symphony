@@ -89,7 +89,7 @@ jobs:
       # substrate-worker-pool respectively, and only the worker pool is optional.
       # Empty leaves these steps skipped.
       SUBSTRATE_NODE_POOL: ${{ vars.SUBSTRATE_NODE_POOL }}
-      SUBSTRATE_MAX_NODES: ${{ vars.SUBSTRATE_MAX_NODES || '6' }}
+      SUBSTRATE_MAX_NODES: ${{ vars.SUBSTRATE_MAX_NODES || '4' }}
       SUBSTRATE_START_MIN_NODES: ${{ vars.SUBSTRATE_MIN_NODES || '1' }}
       DRAIN_TIMEOUT: 300s
       SETTLE_TIMEOUT: 900
