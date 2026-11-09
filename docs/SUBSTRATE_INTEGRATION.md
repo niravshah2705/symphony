@@ -351,7 +351,7 @@ complete success while no actor is placeable — the symptom is a run that never
 leaves the queue, with a control plane that looks healthy and a
 `no worker available` scheduling message that names nothing a human can act on.
 
-Three things have to line up, and each of them broke here at least once:
+Four things have to line up; the first three each broke here at least once:
 
 1. **The pool must exist, and be named what the planner selects.** ate-controller
    stamps `ate.dev/worker-pool=<WorkerPool name>` on the pool's worker pods; the ate
@@ -372,6 +372,21 @@ Three things have to line up, and each of them broke here at least once:
    kube-scheduler packs nodes by. The ActorTemplate defaults to 1000m / 1Gi
    (`upsertActorTemplate`), so limits below that place nothing. The step sets
    2 CPU / 4Gi per worker.
+4. **The nodes underneath must be a CPU series gVisor can resume on, with disk for
+   the snapshots.** `substrate_machine_type` is `n4-standard-4` on `COS_CONTAINERD`:
+   the docs exclude "machine series that run on mixed CPU architectures" (that is
+   E2) for nodes that resume snapshots, and require COS for ComputeClass plus the
+   `gc_thresh*` / inotify sysctls the installer tunes. The series the docs name,
+   `c3-standard-4`, does not exist in `asia-south1-a` — only `-lssd` variants —
+   which is why this is N4 and why the storage class stayed `dynamic-rwo` (the
+   design doc maps N4/C4 to `dynamic-rwo`; `premium-rwo` was the C3 answer). Worker
+   boot disks get their own `substrate_worker_disk_size_gb` /
+   `substrate_worker_disk_type` instead of the shared `disk_size_gb`, because actor
+   snapshots stage on that disk under `/var/lib/ate/snapshots` and a full boot disk
+   fails resume rather than evicting a pod. pd-balanced bills against the region's
+   `SSD_TOTAL_GB` — the same quota the postgres claim eats — so
+   `substrate_max_nodes × substrate_worker_disk_size_gb` has to fit what postgres
+   leaves: 4 × 100 = 400 of the 500 limit, and 6 would not.
 
 Capacity is demand-driven: the WorkerPool's worker pods are the only thing that pulls
 `substrate-worker-pool` off zero nodes, so a pool parked below its autoscaling minimum

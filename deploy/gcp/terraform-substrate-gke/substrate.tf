@@ -108,11 +108,14 @@ resource "google_container_node_pool" "substrate_nodes" {
 
   node_config {
     machine_type = var.substrate_machine_type
-    disk_size_gb = var.disk_size_gb
-    disk_type    = var.disk_type
-    # UBUNTU_CONTAINERD matches the existing pools; the substrate installer
-    # installs runsc (gVisor) itself on these nodes.
-    image_type = "UBUNTU_CONTAINERD"
+    disk_size_gb = var.substrate_worker_disk_size_gb
+    disk_type    = var.substrate_worker_disk_type
+    # COS, not the UBUNTU_CONTAINERD the other pools use: the Substrate docs
+    # require COS_CONTAINERD on worker nodes for ComputeClass and for the
+    # gc_thresh* / inotify sysctls the installer tunes, and runsc (gVisor) is
+    # installed by the substrate installer itself on either image, so Ubuntu
+    # bought nothing here. Changing image_type recreates the pool's nodes.
+    image_type = "COS_CONTAINERD"
 
     # This label is for operators, not for the scheduler. The actor's
     # `workerSelector: { ate.dev/worker-pool: <pool> }` matches the labels of the
