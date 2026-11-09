@@ -34,6 +34,19 @@ function rateFor(provider) {
   return PRICE_PER_MTOK_USD[String(provider || '').toLowerCase()] || PER_MTOK_USD_DEFAULT;
 }
 
+/**
+ * How the cost number was obtained, so an estimate built from the fallback rate
+ * is countable rather than silent. `Reported` means the runtime billed it and no
+ * table was consulted; `Exact` means this catalog models the provider (ollama at
+ * 0/0 is modeled, not missing); `Default` means it does not, and the run was
+ * priced by guess. A `Default` row is the money version of an unmodeled gateway
+ * key: the number is plausible, wrong, and currently invisible.
+ */
+function priceMatchOf(provider, reportedUsd) {
+  if (Number(reportedUsd) > 0) return 'Reported';
+  return PRICE_PER_MTOK_USD[String(provider || '').toLowerCase()] ? 'Exact' : 'Default';
+}
+
 /** Estimate USD from a normalized usage object using the per-provider table. */
 function estimateCostUsd(usage, provider) {
   const u = usage && typeof usage === 'object' ? usage : {};
@@ -73,6 +86,7 @@ module.exports = {
   PER_MTOK_USD_DEFAULT,
   PRICE_PER_MTOK_USD,
   rateFor,
+  priceMatchOf,
   estimateCostUsd,
   costUsdFromResult,
   usdToPaise,

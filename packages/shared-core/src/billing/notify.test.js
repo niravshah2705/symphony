@@ -88,3 +88,41 @@ test('billing email publishes only the allow-listed central email contract', asy
     orgId: 'org-n',
   });
 });
+
+test('the crossing emits the one alertable line Cloud Logging turns into a metric', async () => {
+  // observability.tf counts `jsonPayload.meta.event="balance_threshold_crossed"`
+  // per threshold value, so the shape of this line is an interface: a renamed
+  // field or a numeric threshold silently deletes an alert nobody notices is gone.
+  const logger = require('../logger');
+  const lines = [];
+  const origWarn = logger.warn;
+  const origError = logger.error;
+  logger.warn = (message, meta) => lines.push({ severity: 'warn', message, meta });
+  logger.error = (message, meta) => lines.push({ severity: 'error', message, meta });
+  try {
+    assert.equal(await checkThresholdsAndNotify(accountWith('org-line', 9000)), 10000);
+    assert.equal(await checkThresholdsAndNotify(accountWith('org-line', -1)), 0);
+    // A repeat at the same level dedupes, so the metric must not count it twice.
+    assert.equal(await checkThresholdsAndNotify(store.getBillingAccount('org-line')), null);
+  } finally {
+    logger.warn = origWarn;
+    logger.error = origError;
+  }
+
+  const crossed = lines.filter((entry) => entry.meta && entry.meta.event === 'balance_threshold_crossed');
+  assert.equal(crossed.length, 2, 'exactly one line per fresh crossing');
+  const [low, exhausted] = crossed;
+  assert.deepEqual(
+    [low.severity, exhausted.severity],
+    ['warn', 'error'],
+    'exhaustion must be louder than lowness',
+  );
+  assert.deepEqual([low.meta.thresholdPaise, exhausted.meta.thresholdPaise], ['10000', '0']);
+  for (const entry of crossed) {
+    assert.equal(typeof entry.meta.thresholdPaise, 'string');
+    assert.equal(typeof entry.meta.balancePaise, 'string');
+    assert.equal(entry.meta.orgId, 'org-line');
+    assert.ok(Object.keys(entry.meta).every((key) => !/token|secret|key|password/i.test(key)),
+      'a money event must not carry a credential-shaped field');
+  }
+});

@@ -143,9 +143,22 @@ async function checkThresholdsAndNotify(account, deps = {}) {
       ? `Balance is ₹${inr.toFixed(2)}. Runner activity will pause until you add credits.`
       : `Balance is low: ₹${inr.toFixed(2)}.`,
   };
-  await notify(account, payload);
+  const sent = await notify(account, payload);
   storeApi.upsertBillingAccount(account.id, { lastAlertedThresholdPaise: crossed });
   account.lastAlertedThresholdPaise = crossed;
+  // The crossing is a money event, so it is logged where the comparison actually
+  // happened rather than in whichever caller remembered to. Cloud Logging turns
+  // this line into the alerting metric (deploy/gcp/terraform/observability.tf) —
+  // which is why `thresholdPaise` is emitted as a STRING: a log filter's equality
+  // is type-sensitive, and a numeric field silently matching nothing is the worst
+  // kind of observability bug. No balances beyond this org's own, no channels.
+  log[exhausted ? 'error' : 'warn']('billing balance crossed an alert threshold', {
+    event: 'balance_threshold_crossed',
+    orgId: account.id,
+    thresholdPaise: String(crossed),
+    balancePaise: String(balance),
+    channels: String(sent.length),
+  });
   return crossed;
 }
 

@@ -114,6 +114,21 @@ copy of the sidecar: it terminates the actor's traffic outside the sandbox, wher
 no in-container env can observe or reach it.
 _Avoid_: egress proxy, atenet-egress (in prose), the sidecar
 
+**Decision record**:
+The egress proxy's one structured line per request: the route prefix, the outcome
+(`forwarded`, `no_route`, `bad_context`, `cred_unavailable`, `redirect_rejected`,
+`upstream_error`) and the correlation handles. Never a header value, a resolved
+credential, a body or a full query string. It is the unit the egress metrics
+count, so a decision that produces no record is a signal nobody can alert on.
+_Avoid_: access log (it carries no request line), audit trail
+
+**Durable cost trail**:
+The log export of the billing service and the hourly recharge job — the copy that
+can still answer a disputed debit after the usage records have been pruned.
+Usage records stay the authoritative ledger; a trail is evidence, never a second
+ledger.
+_Avoid_: cost sink, data warehouse, analytics copy
+
 **Vault**:
 The encrypted per-organization store of provider credentials, resolved by the
 settings service. There is one resolution path for platform-managed and
