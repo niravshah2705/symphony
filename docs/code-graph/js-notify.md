@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 21 nodes
+Community of 22 nodes
 
-- **Size**: 21 nodes
-- **Cohesion**: 0.1237
+- **Size**: 22 nodes
+- **Cohesion**: 0.1238
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,7 +18,6 @@ Community of 21 nodes
 | refreshAccessToken | Function | ./public/js/api.js | 72-75 |
 | readJson | Function | ./public/js/api.js | 77-83 |
 | errorCode | Function | ./public/js/api.js | 87-90 |
-| getApiBase | Function | ./public/js/api.js | 98-101 |
 | notifyAuthenticationRequired | Function | ./public/js/api.js | 142-146 |
 | request | Function | ./public/js/api.js | 148-226 |
 | shouldRetryAuth | Function | ./public/js/auth-retry.mjs | 17-19 |
@@ -35,10 +34,11 @@ Community of 21 nodes
 | test:shouldNotifyAuthenticationRequired: anonymous provider-less identity 401 does not notify@L64 | Test | ./public/js/auth-retry.test.mjs | 64-71 |
 | test:shouldNotifyAuthenticationRequired: signed-in identity 401 notifies@L73 | Test | ./public/js/auth-retry.test.mjs | 73-80 |
 | test:shouldNotifyAuthenticationRequired: unrelated provider 401 never notifies@L82 | Test | ./public/js/auth-retry.test.mjs | 82-89 |
+| loadConfiguration | Function | ./public/js/auth.js | 62-93 |
 
 ## Execution Flows
 
-- **initializeAuthentication** (criticality: 0.78, depth: 4)
+No execution flows pass through this community.
 
 ## Dependencies
 
@@ -47,9 +47,10 @@ Community of 21 nodes
 - `equal` (12 edge(s))
 - `set` (6 edge(s))
 - `delete` (3 edge(s))
+- `fetch` (3 edge(s))
+- `Boolean` (3 edge(s))
+- `json` (2 edge(s))
 - `accessTokenProvider` (2 edge(s))
-- `fetch` (2 edge(s))
-- `Boolean` (2 edge(s))
 - `String` (1 edge(s))
 - `replace` (1 edge(s))
 - `toLowerCase` (1 edge(s))
@@ -57,13 +58,14 @@ Community of 21 nodes
 - `getItem` (1 edge(s))
 - `includes` (1 edge(s))
 - `dispatchEvent` (1 edge(s))
-- `json` (1 edge(s))
 - `resolve` (1 edge(s))
+- `runTokenRefresh` (1 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (197 edge(s))
+- `./public/js/api.js` (194 edge(s))
 - `./public/js/auth-retry.test.mjs` (12 edge(s))
 - `equal` (12 edge(s))
 - `./public/js/auth-retry.mjs` (2 edge(s))
-- `./public/js/auth.js::loadConfiguration` (1 edge(s))
+- `./public/js/auth.js` (1 edge(s))
+- `./public/js/auth.js::initializeAuthentication` (1 edge(s))
