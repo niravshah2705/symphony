@@ -60,3 +60,23 @@ test('callJson omits auth headers when no user credential is given', async () =>
   assert.equal(captured.headers['x-forwarded-authorization'], undefined);
   assert.equal(captured.headers.authorization, undefined);
 });
+
+test('callJson sends server-resolved headers but never lets them replace auth', async () => {
+  const captured = {};
+  const restore = stubFetch(captured);
+  try {
+    await callJson('https://org.example', '/api/v1/me', {
+      userAuth: 'abc.def.ghi',
+      headers: {
+        'x-ai-fleet-billing-org-id': 'org-1',
+        authorization: 'Bearer attacker-supplied',
+        'x-forwarded-authorization': 'Bearer attacker-supplied',
+      },
+    });
+  } finally {
+    restore();
+  }
+  assert.equal(captured.headers['x-ai-fleet-billing-org-id'], 'org-1');
+  assert.equal(captured.headers.authorization, 'Bearer abc.def.ghi');
+  assert.equal(captured.headers['x-forwarded-authorization'], 'Bearer abc.def.ghi');
+});

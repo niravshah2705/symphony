@@ -61,9 +61,9 @@ Community of 208 nodes
 | test:a rejected or absent credential fails closed, never as admin@L78 | Test | ./services/gateway/src/billing-access.test.js | 78-88 |
 | test:requireBillingCaller attaches the caller and always continues@L90 | Test | ./services/gateway/src/billing-access.test.js | 90-102 |
 | test:no headers are injected for an unresolved caller@L104 | Test | ./services/gateway/src/billing-access.test.js | 104-106 |
-| createConfigResolver | Function | ./services/gateway/src/config-resolver.js | 21-63 |
-| makeReq | Function | ./services/gateway/src/config-resolver.test.js | 9-23 |
-| makeRes | Function | ./services/gateway/src/config-resolver.test.js | 25-34 |
+| failedPredicates | Function | ./services/gateway/src/capability-view.js | 73-78 |
+| harnessesFace | Function | ./services/gateway/src/capability-view.js | 85-112 |
+| budgetFace | Function | ./services/gateway/src/capability-view.js | 114-140 |
 
 *... and 158 more members.*
 
@@ -100,7 +100,9 @@ Community of 208 nodes
 - `./services/gateway/src/pipeline-admission.test.js` (29 edge(s))
 - `./services/gateway/src/auth.test.js` (26 edge(s))
 - `./services/gateway/src/request-context.js` (20 edge(s))
+- `handler` (17 edge(s))
 - `./services/gateway/src/auth.js` (16 edge(s))
+- `./services/gateway/src/capability-view.test.js` (15 edge(s))
 - `./services/gateway/src/eula.test.js` (15 edge(s))
 - `throws` (14 edge(s))
 - `./services/gateway/src/request-context.test.js` (14 edge(s))

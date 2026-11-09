@@ -16,6 +16,7 @@ const { mountGlobalQuestionsRoutes } = require('./global-questions-routes');
 const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig, bearerToken } = require('./auth');
 const { callJson } = require('./service-client');
 const { createConfigResolver } = require('./config-resolver');
+const { createCapabilityView } = require('./capability-view');
 const { requireEulaAccepted } = require('./eula');
 const { createCorsMiddleware } = require('./cors');
 const { initStore, getConversation } = require('@ai-fleet/shared-core/store');
@@ -164,6 +165,16 @@ app.get('/api/auth/me', (req, res) => {
 // false } and stay same-origin; authenticated callers are resolved against the
 // org service by the caller's token (no client-supplied org id). See config-resolver.js.
 app.get('/api/config', createConfigResolver());
+
+// The read-only capability surface: harness availability, budget, model usage by
+// key source, and the environment-initialization run — each face answered by the
+// service that already owns it, so there is no second source of truth to drift.
+// settings:read because it exposes which harnesses and models the org is allowed
+// to use; organization context because "available" is a property of the selected
+// tenant; the billing-caller middleware because model usage is scoped by the
+// server-resolved billing identity, never a client header. See capability-view.js.
+app.get('/api/capabilities', requireAuthenticated(), requirePermission('settings'),
+  requireOrganizationContext(), requireBillingCaller, createCapabilityView());
 
 // Mint a short-lived stream token for the authenticated user to open an SSE
 // connection for a specific conversation. AI Fleet is single-tenant by design —

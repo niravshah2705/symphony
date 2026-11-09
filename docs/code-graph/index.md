@@ -106,7 +106,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | js-fake-text-node | 2 | [js-fake-text-node.md](js-fake-text-node.md) |
 | js-legal | 17 | [js-legal.md](js-legal.md) |
 | js-minted | 4 | [js-minted.md](js-minted.md) |
-| js-notify | 22 | [js-notify.md](js-notify.md) |
+| js-notify | 21 | [js-notify.md](js-notify.md) |
 | js-route | 29 | [js-route.md](js-route.md) |
 | js-single | 5 | [js-single.md](js-single.md) |
 | messaging-decode | 2 | [messaging-decode.md](messaging-decode.md) |
@@ -255,5 +255,5 @@ Auto-generated documentation from the code knowledge graph community structure.
 | tools-safe | 2 | [tools-safe.md](tools-safe.md) |
 | v1-step-status-writeback | 2 | [v1-step-status-writeback.md](v1-step-status-writeback.md) |
 | views-el | 5 | [views-el.md](views-el.md) |
-| views-render | 758 | [views-render.md](views-render.md) |
+| views-render | 759 | [views-render.md](views-render.md) |
 | workflows-workflow | 2 | [workflows-workflow.md](workflows-workflow.md) |
