@@ -8,7 +8,7 @@ locals {
 
 # 1. Default deny-all NetworkPolicy
 resource "kubernetes_network_policy_v1" "tenant_default_deny" {
-  for_each = toset(var.tenants)
+  for_each = local.tenants
 
   metadata {
     name      = "default-deny-all"
@@ -23,7 +23,7 @@ resource "kubernetes_network_policy_v1" "tenant_default_deny" {
 
 # 2. Allow DNS egress
 resource "kubernetes_network_policy_v1" "tenant_allow_dns" {
-  for_each = toset(var.tenants)
+  for_each = local.tenants
 
   metadata {
     name      = "allow-dns"
@@ -58,7 +58,7 @@ resource "kubernetes_network_policy_v1" "tenant_allow_dns" {
 
 # 3. Tenant resource quota
 resource "kubernetes_resource_quota_v1" "tenant_quota" {
-  for_each = toset(var.tenants)
+  for_each = local.tenants
 
   metadata {
     name      = "tenant-quota"
@@ -79,7 +79,7 @@ resource "kubernetes_resource_quota_v1" "tenant_quota" {
 
 # 4. Tenant limit range
 resource "kubernetes_limit_range_v1" "tenant_limit_range" {
-  for_each = toset(var.tenants)
+  for_each = local.tenants
 
   metadata {
     name      = "tenant-limit-range"
@@ -105,7 +105,7 @@ resource "kubernetes_limit_range_v1" "tenant_limit_range" {
 
 # 5. Tenant admin RBAC
 resource "kubernetes_role_v1" "tenant_admin" {
-  for_each = toset(var.tenants)
+  for_each = local.tenants
 
   metadata {
     name      = "tenant-admin"
@@ -120,7 +120,7 @@ resource "kubernetes_role_v1" "tenant_admin" {
 }
 
 resource "kubernetes_role_binding_v1" "tenant_admins" {
-  for_each = toset(var.tenants)
+  for_each = local.tenants
 
   metadata {
     name      = "tenant-admins"
@@ -142,7 +142,7 @@ resource "kubernetes_role_binding_v1" "tenant_admins" {
 
 # 6. OpenShell workspace release per tenant (vendored chart)
 resource "helm_release" "tenant_workspace" {
-  for_each = toset(var.tenants)
+  for_each = local.tenants
 
   name      = "openshell-workspace-${each.key}"
   chart     = "${path.module}/charts/openshell-workspace"

@@ -16,10 +16,10 @@ Community of 6 nodes
 |------|------|------|-------|
 | alreadyExists | Function | ./packages/shared/src/provisioning/provisioning.test.js | 51-53 |
 | envEntries | Function | ./packages/shared/src/provisioning/provisioning.test.js | 64-66 |
-| test:GCP adapter reconciles a legacy gateway sidecar down to one brokered container@L296 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 296-370 |
-| createService | Function | ./packages/shared/src/provisioning/provisioning.test.js | 336-338 |
-| test:GCP adapter reconciles an existing tenant worker job with sidecar-only egress credentials@L372 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 372-447 |
-| createJob | Function | ./packages/shared/src/provisioning/provisioning.test.js | 412-414 |
+| test:GCP adapter reconciles a legacy gateway sidecar down to one brokered container@L326 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 326-400 |
+| createService | Function | ./packages/shared/src/provisioning/provisioning.test.js | 366-368 |
+| test:GCP adapter reconciles an existing tenant worker job with sidecar-only egress credentials@L402 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 402-477 |
+| createJob | Function | ./packages/shared/src/provisioning/provisioning.test.js | 442-444 |
 
 ## Execution Flows
 

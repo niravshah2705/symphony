@@ -4,7 +4,7 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 247
+**Total communities**: 250
 
 ## Communities
 
@@ -18,7 +18,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-checks | 18 | [agent-checks.md](agent-checks.md) |
 | agent-coder-error | 2 | [agent-coder-error.md](agent-coder-error.md) |
 | agent-derive | 2 | [agent-derive.md](agent-derive.md) |
-| agent-encode | 155 | [agent-encode.md](agent-encode.md) |
+| agent-encode | 165 | [agent-encode.md](agent-encode.md) |
 | agent-failing | 3 | [agent-failing.md](agent-failing.md) |
 | agent-fake | 4 | [agent-fake.md](agent-fake.md) |
 | agent-fake-codex | 3 | [agent-fake-codex.md](agent-fake-codex.md) |
@@ -71,7 +71,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | archagentix-render | 26 | [archagentix-render.md](archagentix-render.md) |
 | archagentix-setup | 7 | [archagentix-setup.md](archagentix-setup.md) |
 | archagentix-worker | 2 | [archagentix-worker.md](archagentix-worker.md) |
-| attachments-attachment | 104 | [attachments-attachment.md](attachments-attachment.md) |
+| attachments-attachment | 96 | [attachments-attachment.md](attachments-attachment.md) |
 | auth-fetch | 5 | [auth-fetch.md](auth-fetch.md) |
 | billing-job | 7 | [billing-job.md](billing-job.md) |
 | billing-verify | 2 | [billing-verify.md](billing-verify.md) |
@@ -124,7 +124,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | provisioning-completed | 3 | [provisioning-completed.md](provisioning-completed.md) |
 | provisioning-fake | 5 | [provisioning-fake.md](provisioning-fake.md) |
 | provisioning-job | 32 | [provisioning-job.md](provisioning-job.md) |
-| provisioning-provision | 13 | [provisioning-provision.md](provisioning-provision.md) |
+| provisioning-provision | 14 | [provisioning-provision.md](provisioning-provision.md) |
 | provisioning-test:gcp | 6 | [provisioning-test-gcp.md](provisioning-test-gcp.md) |
 | registry-validate | 2 | [registry-validate.md](registry-validate.md) |
 | repositories-project | 609 | [repositories-project.md](repositories-project.md) |
@@ -210,6 +210,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-org | 142 | [src-org.md](src-org.md) |
 | src-origin | 9 | [src-origin.md](src-origin.md) |
 | src-parse | 3 | [src-parse.md](src-parse.md) |
+| src-parse-org | 2 | [src-parse-org.md](src-parse-org.md) |
 | src-path | 8 | [src-path.md](src-path.md) |
 | src-pipeline-admission-error | 2 | [src-pipeline-admission-error.md](src-pipeline-admission-error.md) |
 | src-planner | 3 | [src-planner.md](src-planner.md) |
@@ -233,7 +234,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-stream-token-unavailable-error | 2 | [src-stream-token-unavailable-error.md](src-stream-token-unavailable-error.md) |
 | src-tick | 4 | [src-tick.md](src-tick.md) |
 | src-tick-autonomous | 4 | [src-tick-autonomous.md](src-tick-autonomous.md) |
-| src-tokens | 310 | [src-tokens.md](src-tokens.md) |
+| src-tokens | 318 | [src-tokens.md](src-tokens.md) |
 | src-trust | 5 | [src-trust.md](src-trust.md) |
 | src-trusted | 2 | [src-trusted.md](src-trusted.md) |
 | src-upstream | 5 | [src-upstream.md](src-upstream.md) |
@@ -245,7 +246,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | store-workspace-organization | 2 | [store-workspace-organization.md](store-workspace-organization.md) |
 | support-parse | 107 | [support-parse.md](support-parse.md) |
 | terraform-google | 507 | [terraform-google.md](terraform-google.md) |
-| terraform-openshell-gke-resource | 118 | [terraform-openshell-gke-resource.md](terraform-openshell-gke-resource.md) |
+| terraform-openshell-gke-resource | 119 | [terraform-openshell-gke-resource.md](terraform-openshell-gke-resource.md) |
 | terraform-openshell-gke-resource-kubectl-manifest | 2 | [terraform-openshell-gke-resource-kubectl-manifest.md](terraform-openshell-gke-resource-kubectl-manifest.md) |
 | test-encode | 7 | [test-encode.md](test-encode.md) |
 | tools-arg | 2 | [tools-arg.md](tools-arg.md) |

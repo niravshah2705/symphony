@@ -2,7 +2,11 @@
 
 const http2 = require('node:http2');
 const crypto = require('node:crypto');
-const CONFIG = require('../config');
+// Destructured, not `const CONFIG = require('../config')`: that bound the module
+// object, so every `CONFIG.SUBSTRATE.*` read below resolved to undefined and the
+// SUBSTRATE_URL / SUBSTRATE_ATESPACE / SUBSTRATE_WORKER_POOL env was silently
+// ignored — only settings.substrateUrl ever reached the control plane.
+const { CONFIG } = require('../config');
 const { getSettings } = require('../store');
 const {
   pbVarint,
@@ -35,7 +39,9 @@ const {
 const SERVICE_PATH = '/substrate.ateapi.v1.Control';
 const DEFAULT_SUBSTRATE_URL = ''; // substrate is inert until an operator configures it
 const DEFAULT_ATESPACE = 'tenant-a';
-const ALLOWED_ATESPACES = ['tenant-a', 'tenant-b'];
+// Empty: which spaces exist is a deployment fact, read from config. Hardcoding a
+// permissive list here is what made an unbound org routable into tenant-b.
+const ALLOWED_ATESPACES = [];
 const DEFAULT_WORKER_POOL = 'planner-pool';
 
 // ActorState enum (substrate.ateapi.v1.ActorState)
@@ -89,15 +95,45 @@ function resolveSubstrateIngressUrl(explicitUrl) {
 
 /**
  * Resolve the Substrate atespace (tenant isolation scope) for an org/project.
- * Falls back to the configured default only when it is operator-allowed.
+ *
+ * An atespace is a namespace boundary: two orgs that land in the same one share
+ * actors, worker pools and egress policy. So the answer comes only from the
+ * operator's declared routing (allowlist, per-deployment default, or the
+ * org→atespace binding table) — never from a string shape inside an org id, which
+ * is what the retired `endsWith('-b')` rule did and why an org named `…-b` that
+ * was never provisioned as tenant-b got isolated plumbing it did not own.
+ *
+ * Order:
+ *  1. an explicit `atespace`/`workspace`, or the settings value — honored only if
+ *     the operator allows that name, since these can originate from a request;
+ *  2. the org→atespace binding table (`SUBSTRATE_ATESPACE_BY_ORG`), for a shared
+ *     deployment fronting several tenants;
+ *  3. the deployment's own configured atespace (`SUBSTRATE_ATESPACE`), which is
+ *     what a per-tenant stack pins, derived once at plan time from the validated
+ *     deployment slug rather than re-derived per call;
+ *  4. the single-space default, but only when no multi-tenant routing is
+ *     configured at all.
+ *
+ * Once an operator HAS declared multiple spaces, an organization that is not bound
+ * to any of them is an error rather than a guess: defaulting it into the shared
+ * space is how a tenant's run ends up in another tenant's namespace.
  */
 function resolveSubstrateAtespace(input = {}) {
-  const { atespace, workspace, organizationId, projectId } =
+  const { atespace, workspace, organizationId } =
     typeof input === 'string' ? { atespace: input } : input || {};
-  const allowed = CONFIG?.SUBSTRATE?.allowedAtespaces || ALLOWED_ATESPACES;
+  const configured = CONFIG?.SUBSTRATE || {};
+  const bindings = configured.atespaceByOrg || {};
+  // The operator's own declarations are also nameable by a caller; a request may
+  // not reach a space the deployment has not already put in writing.
+  const nameable = new Set([
+    ...(configured.allowedAtespaces || ALLOWED_ATESPACES),
+    ...Object.values(bindings),
+    ...(configured.atespace ? [configured.atespace] : []),
+  ]);
+  const shape = (raw) => (raw ? String(raw).trim().toLowerCase() : '');
   const pick = (raw) => {
-    const v = raw ? String(raw).trim().toLowerCase() : '';
-    return v && v !== 'default' && allowed.includes(v) ? v : '';
+    const v = shape(raw);
+    return v && v !== 'default' && nameable.has(v) ? v : '';
   };
 
   const direct = pick(atespace) || pick(workspace);
@@ -111,13 +147,25 @@ function resolveSubstrateAtespace(input = {}) {
     // ignore store read errors
   }
 
-  const orgStr = String(organizationId || '').trim().toLowerCase();
-  const projStr = String(projectId || '').trim().toLowerCase();
-  if (orgStr.includes('tenant-b') || orgStr.endsWith('-b') || projStr.includes('tenant-b') || projStr.endsWith('-b')) {
-    return 'tenant-b';
+  const orgStr = shape(organizationId);
+  const bound = orgStr ? shape(bindings[orgStr]) : '';
+  if (bound) return bound;
+
+  const own = shape(configured.atespace);
+  if (own) return own;
+
+  const multiTenant = nameable.size > 0;
+  if (multiTenant) {
+    if (orgStr) {
+      throw new Error(`substrate: organization ${orgStr} is not bound to any atespace `
+        + `(configured: ${[...nameable].join(', ') || 'none'}); set SUBSTRATE_ATESPACE_BY_ORG`);
+    }
+    throw new Error('substrate: no atespace configured for this deployment; set SUBSTRATE_ATESPACE '
+      + 'or SUBSTRATE_ATESPACE_BY_ORG');
   }
-  const fallback = pick(CONFIG?.SUBSTRATE?.atespace);
-  return fallback || (allowed.includes(DEFAULT_ATESPACE) ? DEFAULT_ATESPACE : allowed[0] || DEFAULT_ATESPACE);
+  // A deployment that declared no tenancy at all runs the single historical space.
+  // projectId is no longer consulted: an org, not a project, owns the namespace.
+  return DEFAULT_ATESPACE;
 }
 
 function resolveSubstrateWorkerPool(explicit) {

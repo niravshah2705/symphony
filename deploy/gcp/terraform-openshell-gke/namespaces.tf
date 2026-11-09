@@ -38,8 +38,16 @@ resource "kubernetes_namespace_v1" "envoy_gateway_system" {
 # Tenant namespaces with isolation labels
 # ---------------------------------------------------------------------------
 
+# Inverted from the binding table so a namespace is the instance key: one
+# resource per atespace, and the organization that owns it is recorded on the
+# namespace itself. Two orgs on one atespace is rejected by the variable's
+# validation, not silently collapsed here.
+locals {
+  tenants = { for org_id, atespace in var.tenant_bindings : atespace => org_id }
+}
+
 resource "kubernetes_namespace_v1" "tenants" {
-  for_each = toset(var.tenants)
+  for_each = local.tenants
 
   metadata {
     name = each.key
@@ -52,6 +60,13 @@ resource "kubernetes_namespace_v1" "tenants" {
       # when var.substrate_enabled.
       "substrate.ate.dev/atespace"         = var.substrate_enabled ? "true" : "false"
       "pod-security.kubernetes.io/enforce" = "restricted"
+    }
+
+    annotations = {
+      # Which organization this namespace is reserved for. An annotation, not a
+      # label: org ids are not guaranteed to be label-safe, and nothing selects
+      # on it — it exists so a mis-bound tenant is readable in-cluster.
+      "ai-fleet.internal/organization-id" = each.value
     }
   }
 
