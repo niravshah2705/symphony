@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 778 nodes
+Community of 756 nodes
 
-- **Size**: 778 nodes
-- **Cohesion**: 0.4824
+- **Size**: 756 nodes
+- **Cohesion**: 0.4946
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,15 +26,8 @@ Community of 778 nodes
 | setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
 | contextId | Function | ./public/js/api.js | 20-23 |
 | setRequestContext | Function | ./public/js/api.js | 26-31 |
-| llmGatewayFlag | Function | ./public/js/api.js | 50-57 |
-| refreshAccessToken | Function | ./public/js/api.js | 72-75 |
-| readJson | Function | ./public/js/api.js | 77-83 |
-| errorCode | Function | ./public/js/api.js | 87-90 |
-| getApiBase | Function | ./public/js/api.js | 98-101 |
 | setApiBase | Function | ./public/js/api.js | 112-115 |
 | uploadToSignedUrl | Function | ./public/js/api.js | 123-140 |
-| notifyAuthenticationRequired | Function | ./public/js/api.js | 142-146 |
-| request | Function | ./public/js/api.js | 148-226 |
 | openStream | Function | ./public/js/api.js | 253-332 |
 | mintFailureCanRetry | Function | ./public/js/api.js | 260-264 |
 | scheduleReconnect | Function | ./public/js/api.js | 266-279 |
@@ -47,25 +40,32 @@ Community of 778 nodes
 | organizationContextRequired | Function | ./public/js/app.js | 167-173 |
 | maybeRefreshConnection | Function | ./public/js/app.js | 175-182 |
 | maybeRefreshRole | Function | ./public/js/app.js | 183-192 |
-| syncShell | Function | ./public/js/app.js | 194-245 |
-| syncSidebar | Function | ./public/js/app.js | 247-285 |
-| syncSidebarCollapsed | Function | ./public/js/app.js | 287-297 |
-| copyWithLegacyFallback | Function | ./public/js/app.js | 299-314 |
-| copyAdlcPrompt | Function | ./public/js/app.js | 316-327 |
-| initShellInteractions | Function | ./public/js/app.js | 329-403 |
-| syncFooterHeight | Function | ./public/js/app.js | 342-346 |
-| prepareNavigationTarget | Function | ./public/js/app.js | 362-365 |
-| closeAtBreakpoint | Function | ./public/js/app.js | 398-401 |
-| refreshConnection | Function | ./public/js/app.js | 405-454 |
-| refreshRole | Function | ./public/js/app.js | 457-475 |
-| freshView | Function | ./public/js/app.js | 479-488 |
-| setAuthenticationLocked | Function | ./public/js/app.js | 490-497 |
-| beginSignIn | Function | ./public/js/app.js | 499-507 |
-| beginMicrosoftSignIn | Function | ./public/js/app.js | 509-517 |
-| authProviderButtons | Function | ./public/js/app.js | 524-542 |
-| beginSignOut | Function | ./public/js/app.js | 544-552 |
+| syncShell | Function | ./public/js/app.js | 194-247 |
+| syncSidebar | Function | ./public/js/app.js | 249-287 |
+| syncSidebarCollapsed | Function | ./public/js/app.js | 289-299 |
+| copyWithLegacyFallback | Function | ./public/js/app.js | 301-316 |
+| copyAdlcPrompt | Function | ./public/js/app.js | 318-329 |
+| initShellInteractions | Function | ./public/js/app.js | 331-405 |
+| syncFooterHeight | Function | ./public/js/app.js | 344-348 |
+| prepareNavigationTarget | Function | ./public/js/app.js | 364-367 |
+| closeAtBreakpoint | Function | ./public/js/app.js | 400-403 |
+| refreshConnection | Function | ./public/js/app.js | 407-456 |
+| refreshRole | Function | ./public/js/app.js | 459-477 |
+| freshView | Function | ./public/js/app.js | 481-490 |
+| setAuthenticationLocked | Function | ./public/js/app.js | 492-499 |
+| beginSignIn | Function | ./public/js/app.js | 501-509 |
+| beginMicrosoftSignIn | Function | ./public/js/app.js | 511-519 |
+| authProviderButtons | Function | ./public/js/app.js | 526-544 |
+| beginSignOut | Function | ./public/js/app.js | 546-554 |
+| renderAuthControl | Function | ./public/js/app.js | 556-719 |
+| renderAuthenticationGate | Function | ./public/js/app.js | 721-780 |
+| renderSignInRequired | Function | ./public/js/app.js | 785-807 |
+| renderAccessDenied | Function | ./public/js/app.js | 809-821 |
+| render | Function | ./public/js/app.js | 823-905 |
+| capitalize | Function | ./public/js/app.js | 907-910 |
+| start | Function | ./public/js/app.js | 914-922 |
 
-*... and 728 more members.*
+*... and 706 more members.*
 
 ## Execution Flows
 
@@ -88,25 +88,24 @@ Community of 778 nodes
 - `addEventListener` (247 edge(s))
 - `append` (228 edge(s))
 - `map` (172 edge(s))
-- `String` (121 edge(s))
-- `trim` (109 edge(s))
+- `String` (120 edge(s))
 - `push` (108 edge(s))
-- `equal` (105 edge(s))
+- `trim` (108 edge(s))
+- `equal` (93 edge(s))
 - `filter` (83 edge(s))
 - `isArray` (82 edge(s))
-- `Boolean` (75 edge(s))
+- `Boolean` (72 edge(s))
 - `catch` (66 edge(s))
-- `has` (61 edge(s))
 - `setAttribute` (61 edge(s))
+- `has` (60 edge(s))
 - `querySelector` (53 edge(s))
 - `Number` (49 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (209 edge(s))
 - `./public/js/views/settings.js` (137 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
-- `equal` (105 edge(s))
+- `equal` (93 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/workflow-designer-model.mjs` (56 edge(s))
@@ -115,6 +114,7 @@ Community of 778 nodes
 - `./public/js/i18n.js` (34 edge(s))
 - `match` (29 edge(s))
 - `./public/js/views/organization.js` (29 edge(s))
-- `./public/js/auth.js` (24 edge(s))
+- `./public/js/auth.js` (23 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
+- `./public/js/views/openshell.js` (15 edge(s))

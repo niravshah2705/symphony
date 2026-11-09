@@ -28,8 +28,8 @@ Community of 16 nodes
 | read | Function | ./scripts/marketing-site.test.js | 19-19 |
 | exists | Function | ./scripts/marketing-site.test.js | 20-20 |
 | fileFor | Function | ./scripts/marketing-site.test.js | 22-26 |
-| test:the generated sitemap lists promoted urls backed by files@L79 | Test | ./scripts/marketing-site.test.js | 79-93 |
-| test:a freshly built tree passes the staleness check@L140 | Test | ./scripts/marketing-site.test.js | 140-142 |
+| test:the generated sitemap lists promoted urls backed by files@L88 | Test | ./scripts/marketing-site.test.js | 88-102 |
+| test:a freshly built tree passes the staleness check@L149 | Test | ./scripts/marketing-site.test.js | 149-151 |
 
 ## Execution Flows
 
@@ -46,7 +46,7 @@ No execution flows pass through this community.
 - `indexOf` (6 edge(s))
 - `existsSync` (5 edge(s))
 - `match` (4 edge(s))
-- `./scripts/marketing-site.test.js::test:service worker and manifest are root-scoped on www@L62` (4 edge(s))
+- `./scripts/marketing-site.test.js::test:service worker and manifest are root-scoped on www@L71` (4 edge(s))
 - `ok` (4 edge(s))
 - `rmSync` (2 edge(s))
 - `mkdirSync` (2 edge(s))
@@ -59,10 +59,10 @@ No execution flows pass through this community.
 
 - `./scripts/build-marketing-site.js` (22 edge(s))
 - `./scripts/marketing-site.test.js` (6 edge(s))
-- `./scripts/marketing-site.test.js::test:service worker and manifest are root-scoped on www@L62` (4 edge(s))
+- `./scripts/marketing-site.test.js::test:service worker and manifest are root-scoped on www@L71` (4 edge(s))
 - `ok` (4 edge(s))
 - `./scripts/marketing-site.test.js::test:promoted pages self-canonicalise at the root and drop /adlc/ links@L47` (2 edge(s))
-- `./scripts/marketing-site.test.js::test:legal hash routes point at the SPA on the platform origin@L95` (2 edge(s))
+- `./scripts/marketing-site.test.js::test:legal hash routes point at the SPA on the platform origin@L104` (2 edge(s))
 - `join` (2 edge(s))
 - `includes` (2 edge(s))
 - `startsWith` (1 edge(s))

@@ -40,7 +40,7 @@ import {
 const { initializeI18n, localize, renderLanguageControl, t } = i18n;
 const stylesheetLoads = new Map();
 const SHARED_STYLESHEET = '/styles.css';
-const ADLC_BRAND_TITLE = 'ADLC — Agentic Development Life Cycle';
+const ADLC_BRAND_TITLE = 'Archagentix — ADLC (Agentic Development Life Cycle)';
 let footerResizeObserver = null;
 
 function ensureStylesheet(href) {
@@ -199,7 +199,9 @@ function syncShell(name, view, { analyticsIdentity = null } = {}) {
   setActiveRoute(name);
 
   document.body.dataset.route = name;
-  document.title = name === 'agent' ? `${ADLC_BRAND_TITLE} | AI Fleet` : `${title} | ${ADLC_BRAND_TITLE}`;
+  // The agent view IS the platform root, so its rendered title must match the
+  // static <title> in index.html — a mismatch makes crawlers trust the JS one.
+  document.title = name === 'agent' ? ADLC_BRAND_TITLE : `${title} | ${ADLC_BRAND_TITLE}`;
   const routeEyebrow = document.getElementById('route-eyebrow');
   const routeTitle = document.getElementById('route-title');
   if (meta.eyebrowKey) {

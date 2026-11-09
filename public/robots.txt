@@ -46,4 +46,8 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
+# One line per host. A sitemap may only list URLs on the host that serves it, so
+# the platform app root and the benchmarks panel get their own file rather than
+# being folded into the www sitemap (which must stay www-only).
 Sitemap: https://www.archagentix.com/sitemap.xml
+Sitemap: https://platform.archagentix.com/sitemap-platform.xml

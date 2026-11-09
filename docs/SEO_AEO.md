@@ -195,8 +195,12 @@ Two consequences of moving the marketing site to the root, both intentional:
   generator if www traffic must be measured too.
 
 `platform.archagentix.com` keeps serving the application and the `/adlc/` copy of
-every page; each of those copies declares the `www.archagentix.com` canonical —
-intentional, it consolidates SEO signal on one domain.
+every page; each of those **copies** declares the `www.archagentix.com` canonical
+— intentional, it consolidates SEO signal on one domain. The platform **root** is
+the exception and self-canonicalises to `https://platform.archagentix.com/`: it is
+a distinct destination (the workspace), and as long as it pointed at www, Google
+was instructed to treat the app host as a duplicate and it could never surface as
+its own search result. See "Brand query: both hosts must rank" below.
 
 ### One-time cutover from Hostinger — manual steps
 
@@ -273,3 +277,100 @@ FTP_HOST=your-hostinger-host lftp -e "
   CD (both are served `no-cache` per `firebase.json` headers anyway).
 - If the old `adlc-9e72f.web.app` host stays reachable, add a 301 →
   `https://www.archagentix.com` (hosting redirects) to pass residual link equity.
+
+---
+
+# Brand query round 2 — "archagentix" must return www **and** platform
+
+Date: 2026-11-09 · Goal: searching the brand surfaces `www.archagentix.com` as the
+primary result and `platform.archagentix.com` as its own result, and AI answer
+engines describe one entity rather than three.
+
+## Why it did not rank
+
+1. **The brand was in none of the strings that matter.** The www root title was
+   `ADLC - Agentic Development Life Cycle` and the platform root
+   `ADLC — Agentic Development Life Cycle | AI Fleet`. Neither contains
+   "Archagentix"; `og:site_name` was `ADLC`. A brand query has nothing to match.
+   Three names competed for one entity (Archagentix / ADLC / AI Fleet), and the
+   benchmarks page spelled it a fourth way (`ArchAgentix`).
+2. **The app host opted out of the index.** `platform.archagentix.com/` shipped
+   `rel="canonical" href="https://www.archagentix.com/"` — that tag instructs
+   Google not to index the page — and it appeared in no sitemap. This is the
+   reversal described above.
+3. **`/archagentix/` was invisible.** The most brand-relevant page on the site had
+   no `canonical`, no description, no `robots` directive, no structured data, no
+   sitemap entry, and it answered `404` on www while serving `200` on platform.
+4. **The AEO documents described the wrong subject.** `llms.txt` was titled
+   `# ADLC — …` and introduced Archagentix only as a hyperlink; it never said the
+   company exists or that it operates two hosts.
+
+## What changed
+
+| Area | Change |
+|---|---|
+| Brand-first metadata | Every one of the 16 pages under `public/` now includes "Archagentix" in `<title>` (asserted site-wide, and the two surfaces a brand search must win — `public/index.html` and `public/adlc/index.html` — lead with it). Landing `og:site_name` → `Archagentix`; visible header wordmark `ADLC` → `Archagentix`; `aria-label` matched. |
+| Platform root | `public/index.html` self-canonicalises to `https://platform.archagentix.com/`, `og:url` with it, `application-name` `Archagentix`. Its `@graph` `WebSite`/`SoftwareApplication`/`DefinedTerm` now carry platform `@id`s, and reference — never redeclare — the Organization. |
+| Rendered title | `public/js/app.js` `ADLC_BRAND_TITLE` → `Archagentix — ADLC (Agentic Development Life Cycle)`. The static head alone would have been worthless: `app.js:202` overwrites `document.title` on render and Googlebot renders JS. The agent (root) view now renders exactly the static `<title>` instead of appending `| AI Fleet`. `e2e/agent-jobs.spec.js` updated in the same commit. |
+| Second sitemap | New `public/sitemap-platform.xml` (app root + `/archagentix/`). A sitemap may only list URLs on the host that serves it, so the www sitemap stayed www-only. `public/robots.txt` now advertises both. The platform sitemap is deliberately **not** in `DISCOVERY_FILES` — `validateTree` only inspects `outDir/sitemap.xml`, so a leak would publish platform URLs on www silently; `scripts/seo-archagentix.test.js` pins both the absence and the disjointness. |
+| Benchmarks page | Full head on `public/archagentix/index.html`: brand spelling fixed, self-canonical, 155-char description, `robots` index/follow, `og:*`, `WebPage` + `ItemList` graph that references the www Organization by `@id`. |
+| Entity graph | One Organization node, `@id https://www.archagentix.com/#organization`, present on all 7 marketing surfaces and referenced from platform. www root gained a `WebSite` node (`www#website`) so `SoftwareApplication.isPartOf` resolves instead of declaring an anonymous duplicate. `sameAs` (GitHub) + `alternateName` added. |
+| Topical keywords | `agentic development`, `software factory`, `Human AI Development`, `Centaur Developer`, `AGI` on `SoftwareApplication.keywords` (schema.org), plus 1–2 natural occurrences in visible copy on the landing lede, `/adlc/brief/` canonical definition, and `/adlc/blog/getting-started/`. **Not** a `<meta name="keywords">` tag — asserted absent, since it is a spam signal. |
+| Sitelink anchors | Footer Explore link relabelled `Try now` → `Archagentix Platform` on all 14 marketing pages. Header/body CTAs keep "Try now" (conversion copy); brand anchor text is what Google uses for brand sitelinks. |
+| AEO | `llms.txt` / `llms-full.txt` retitled to lead with Archagentix, add an entity section naming both hosts by role, and a "How to cite Archagentix" instruction telling answer engines not to treat Archagentix / ADLC / AI Fleet as three products. |
+
+## Known issue, deliberately out of scope: the apex domain
+
+`https://archagentix.com` (no `www`) still answers `200` from **Hostinger Apache**
+(`server: Apache`, ~8.5 KB of the pre-GCP static tree) — old content, outside this
+repo, served by a second host. Google therefore sees two competing copies of the
+bare brand domain, and the bare domain is exactly what people type. No change in
+this repo fixes it:
+
+1. Point the apex at Firebase or issue a registrar-level 301 `archagentix.com` →
+   `https://www.archagentix.com` (the `www` CNAME cutover above already moves the
+   `www` host; the apex A/AAAA records are the remaining part).
+2. Until then, treat any apex appearance in the SERP as expected leakage, not a
+   regression in the on-page work.
+
+## Verification
+
+```bash
+node --test scripts/seo-archagentix.test.js scripts/seo-discovery.test.js \
+  scripts/marketing-site.test.js public/adlc/adlc-static.test.mjs \
+  public/archagentix/archagentix-static.test.mjs     # 34 pass
+node scripts/build-marketing-site.js && node scripts/build-marketing-site.js --check
+xmllint --noout public/sitemap.xml public/sitemap-platform.xml
+for f in $(find public -name index.html); do grep -q '<title>[^<]*Archagentix' $f || echo "MISS $f"; done
+```
+
+Live, after both workflows deploy (the app site's `** -> /index.html` rewrite
+answers *anything* with the shell, so a typo'd platform sitemap path 200s the
+wrong document — verify over the network, not on disk):
+
+```bash
+curl -s https://platform.archagentix.com/ | grep -oE '<title>[^<]*|rel="canonical"[^>]*'
+curl -sI https://platform.archagentix.com/sitemap-platform.xml | head -1   # 200
+curl -s https://platform.archagentix.com/archagentix/ | grep -o 'rel="canonical"[^>]*'
+curl -s https://www.archagentix.com/robots.txt | grep -c '^Sitemap:'       # 2
+curl -s https://www.archagentix.com/ | grep -oE '<title>[^<]*</title>'     # Archagentix-led
+curl -s https://www.archagentix.com/sitemap.xml | grep -c platform || echo 0  # must be 0
+```
+
+## Manual steps that decide whether this lands
+
+Code makes the pages eligible; these make them findable.
+
+1. **Google Search Console: add and verify `platform.archagentix.com`** (URL-prefix,
+   plus the Domain property). Without a verified platform property there is no way
+   to submit its sitemap — this is the step that was never done for the app host.
+2. Submit `sitemap.xml` under the www property and `sitemap-platform.xml` under the
+   platform property. Inspect → Request Indexing for both roots.
+3. Watch `Pages → Why pages aren't indexed`. The platform root should leave
+   "Duplicate, Google chose different canonical than user". If it stays there,
+   compare the rendered title/description against the static ones — a JS-rendered
+   override is the usual cause.
+4. Repeat in Bing Webmaster Tools (Bing feeds ChatGPT search).
+5. Re-test the real query in an incognito SERP and in ChatGPT / Perplexity after
+   re-crawl. Expect days-to-weeks of lag; ranking is not guaranteed by on-page work
+   alone, only eligibility.
