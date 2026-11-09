@@ -8,6 +8,7 @@
     ".": "./index.js",
     "./config": "./src/config.js",
     "./egress": "./src/egress.js",
+    "./traceparent": "./src/traceparent.js",
     "./authz": "./src/authz.js",
     "./store": "./src/store.js",
     "./store/*": "./src/store/*.js",

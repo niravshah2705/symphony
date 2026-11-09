@@ -34,6 +34,13 @@ class Organization:
     # coder:{…}, worker:{name,status}, updated_at}. Kept a plain map (Firestore is
     # schemaless) so the provisioner can extend entries without a migration.
     deployments: dict = field(default_factory=dict)
+    # The Substrate atespace (namespace) reserved for this organization, written by
+    # the environment-init job's `org.atespace.bind` step — see
+    # app/services/environment_service.py. Derived from `deployment_slug` with the
+    # same formula as packages/shared-core/src/provisioning/naming.js:atespace();
+    # both sides assert that literal, so a change to one must change the other.
+    # Stored, not re-derived on load, so a tenant never silently moves namespace.
+    substrate_atespace: str = ""
     # Tags applied to the org entity. This is the source of truth; the repository
     # hydrates it on load and to_doc persists it as an id array.
     applied_tags: list["Tag"] = field(default_factory=list, compare=False, repr=False)
@@ -70,6 +77,7 @@ class Organization:
             "slug": self.slug,
             "deployment_slug": self.deployment_slug,
             "deployments": self.deployments,
+            "substrate_atespace": self.substrate_atespace,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "applied_tag_ids": [uuid_str(t.id) for t in self.applied_tags],
@@ -89,6 +97,7 @@ class Organization:
             slug=doc.get("slug", ""),
             deployment_slug=doc.get("deployment_slug", ""),
             deployments=deployments if isinstance(deployments, dict) else {},
+            substrate_atespace=doc.get("substrate_atespace", ""),
             domains=list(domains) if isinstance(domains, list) else [],
             parent_org_id=to_uuid(doc.get("parent_org_id")),
             created_at=doc.get("created_at") or utcnow(),

@@ -86,10 +86,23 @@ variable "envoy_gateway_version" {
   default     = "v1.8.1"
 }
 
-variable "tenants" {
-  description = "List of tenant namespace names"
-  type        = list(string)
-  default     = ["tenant-a", "tenant-b"]
+variable "tenant_bindings" {
+  description = <<-EOT
+    Explicit organization-id -> Substrate atespace bindings, for tenants that this
+    root should provision up front. The atespace is a namespace boundary: one
+    organization per value, and nothing here is inferred from the shape of an org
+    id. Empty by default because the login-triggered environment-init job owns
+    binding a live organization (services/provisioner/src/gke-tenant.js) — terraform
+    renders this table, it does not read the org database, so that a stale org doc
+    can never make a reconcile destroy a namespace that is serving traffic.
+  EOT
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = length(distinct(values(var.tenant_bindings))) == length(var.tenant_bindings)
+    error_message = "Each organization must bind its own atespace; two organizations in one namespace is not tenancy."
+  }
 }
 
 variable "machine_type" {

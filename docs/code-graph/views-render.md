@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 756 nodes
+Community of 758 nodes
 
-- **Size**: 756 nodes
-- **Cohesion**: 0.4946
+- **Size**: 758 nodes
+- **Cohesion**: 0.4947
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 756 nodes
 | capitalize | Function | ./public/js/app.js | 907-910 |
 | start | Function | ./public/js/app.js | 914-922 |
 
-*... and 706 more members.*
+*... and 708 more members.*
 
 ## Execution Flows
 
@@ -89,17 +89,17 @@ Community of 756 nodes
 - `append` (228 edge(s))
 - `map` (172 edge(s))
 - `String` (120 edge(s))
-- `push` (108 edge(s))
+- `push` (109 edge(s))
 - `trim` (108 edge(s))
 - `equal` (93 edge(s))
 - `filter` (83 edge(s))
 - `isArray` (82 edge(s))
 - `Boolean` (72 edge(s))
-- `catch` (66 edge(s))
+- `catch` (67 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (60 edge(s))
+- `Number` (57 edge(s))
 - `querySelector` (53 edge(s))
-- `Number` (49 edge(s))
 
 ### Incoming
 
@@ -117,4 +117,4 @@ Community of 756 nodes
 - `./public/js/auth.js` (23 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
-- `./public/js/views/openshell.js` (15 edge(s))
+- `./public/js/views/cost.js` (15 edge(s))

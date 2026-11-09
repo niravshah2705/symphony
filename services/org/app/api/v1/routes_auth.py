@@ -6,7 +6,7 @@ valid access token.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from app.core.database import Uow
 
 from app.auth.dependencies import get_current_user
@@ -30,9 +30,10 @@ def _rate() -> str:
 async def register(
     request: Request,
     body: RegisterRequest,
+    background: BackgroundTasks,
     session: Uow = Depends(get_session),
 ) -> TokenResponse:
-    return await auth_service.register(session, body)
+    return await auth_service.register(session, body, background=background)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -40,9 +41,10 @@ async def register(
 async def login(
     request: Request,
     body: LoginRequest,
+    background: BackgroundTasks,
     session: Uow = Depends(get_session),
 ) -> TokenResponse:
-    return await auth_service.login(session, body)
+    return await auth_service.login(session, body, background=background)
 
 
 @router.post("/refresh", response_model=TokenResponse)

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 206 nodes
+Community of 208 nodes
 
-- **Size**: 206 nodes
-- **Cohesion**: 0.3614
+- **Size**: 208 nodes
+- **Cohesion**: 0.3623
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 206 nodes
 | makeReq | Function | ./services/gateway/src/config-resolver.test.js | 9-23 |
 | makeRes | Function | ./services/gateway/src/config-resolver.test.js | 25-34 |
 
-*... and 156 more members.*
+*... and 158 more members.*
 
 ## Execution Flows
 
@@ -75,8 +75,8 @@ Community of 206 nodes
 
 ### Outgoing
 
-- `equal` (226 edge(s))
-- `deepEqual` (63 edge(s))
+- `equal` (229 edge(s))
+- `deepEqual` (65 edge(s))
 - `trim` (38 edge(s))
 - `String` (34 edge(s))
 - `json` (28 edge(s))
@@ -93,9 +93,9 @@ Community of 206 nodes
 
 ### Incoming
 
-- `equal` (226 edge(s))
+- `equal` (229 edge(s))
 - `./services/gateway/src/index.js` (94 edge(s))
-- `deepEqual` (63 edge(s))
+- `deepEqual` (65 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (29 edge(s))
 - `./services/gateway/src/auth.test.js` (26 edge(s))
@@ -103,7 +103,7 @@ Community of 206 nodes
 - `./services/gateway/src/auth.js` (16 edge(s))
 - `./services/gateway/src/eula.test.js` (15 edge(s))
 - `throws` (14 edge(s))
-- `./services/gateway/src/request-context.test.js` (12 edge(s))
+- `./services/gateway/src/request-context.test.js` (14 edge(s))
 - `./services/gateway/src/config-resolver.test.js` (11 edge(s))
 - `push` (11 edge(s))
 - `rejects` (11 edge(s))

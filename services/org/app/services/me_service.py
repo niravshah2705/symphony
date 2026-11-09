@@ -9,6 +9,8 @@ import jwt
 
 from app.auth.idp import decode_idp_token, idp_provider, is_idp_issuer
 from app.auth.jwt_local import get_unverified_issuer
+from app.authz.principal import Principal
+from app.core.config import get_settings
 from app.core.database import Uow
 from app.core.timeutils import ensure_aware, utcnow
 from app.errors import ValidationAppError
@@ -16,7 +18,9 @@ from app.models.enums import Persona
 from app.models.user import LinkedIdentity, User
 from app.repositories import email_index
 from app.repositories.base import ORGS, projects_col
+from app.repositories.org_repo import OrgRepository
 from app.repositories.user_repo import UserRepository
+from app.schemas.me import MeDeploymentResponse
 from app.services.common import normalize_email
 
 
@@ -95,3 +99,47 @@ async def list_pending_invitations(session: Uow, user: User) -> list[dict]:
             }
         )
     return out
+
+
+async def resolve_deployment(session: Uow, principal: Principal) -> MeDeploymentResponse:
+    """Resolve which front-facing gateway the caller's workspace should use.
+
+    Server-authoritative: the org is derived from the authenticated principal
+    resolved from Firestore — never from a path/query/body org id — so a caller
+    can only ever learn their selected accessible org's deployment (cross-tenant
+    isolation, CLAUDE.md invariant #1). An org-less user remains org-less and
+    receives the shared gateway. Only ``gateway_url`` is browser-facing;
+    planner/coder/org/settings URLs are never returned.
+
+    Lives here rather than in the route because `/me/environment` embeds this
+    exact shape: two implementations of the SPA's poll would drift.
+    """
+    shared_url = get_settings().shared_gateway_url
+    if principal.org_id is None:
+        return MeDeploymentResponse(status="shared", gateway_url=shared_url, org_id=None)
+
+    org = await OrgRepository(session).get(principal.org_id)
+    if org is None:
+        # Defensive: an org_id with no org doc → treat as shared.
+        return MeDeploymentResponse(status="shared", gateway_url=shared_url, org_id=principal.org_id)
+
+    deployments = org.deployments if isinstance(org.deployments, dict) else {}
+    raw_status = str(deployments.get("status") or "shared")
+    gateway = deployments.get("gateway") if isinstance(deployments.get("gateway"), dict) else {}
+    tenant_url = str(gateway.get("url") or "")
+
+    if raw_status == "provisioned" and tenant_url:
+        resolved_status, gateway_url = "provisioned", tenant_url
+    elif raw_status == "provisioning":
+        # A dedicated stack is coming up; the SPA keeps using — and polls — the
+        # shared gateway until it flips to provisioned.
+        resolved_status, gateway_url = "provisioning", shared_url
+    else:
+        resolved_status, gateway_url = "shared", shared_url
+
+    return MeDeploymentResponse(
+        status=resolved_status,
+        gateway_url=gateway_url,
+        org_id=org.id,
+        org_name=org.name,
+    )

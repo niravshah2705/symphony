@@ -13,8 +13,26 @@
 
 const { executeAgentRuntime } = require('./harnesses/dispatch');
 const { getSettings } = require('../store');
+const { currentTraceparent } = require('./langfuse');
+const { cleanTraceparent, traceparentFromEnv } = require('@ai-fleet/shared-core/traceparent');
 
 const SUBSTRATE = 'substrate';
+
+/**
+ * The trace this run belongs to, whichever way it was handed to us: an explicit
+ * value from the caller, the span we are currently inside, or the ambient value
+ * a job was launched with. None of the three is reliable on its own — an HTTP
+ * route has the header, an in-process run has the span, a Cloud Run job has
+ * neither — and a run that loses its trace id loses its billing history too.
+ */
+function resolveTraceparent(options = {}) {
+  return cleanTraceparent(
+    options.traceparent
+      || (options.ctx && options.ctx.traceparent)
+      || currentTraceparent()
+      || traceparentFromEnv(),
+  ) || null;
+}
 
 function resolveAgentPattern(explicit, settings) {
   if (explicit && String(explicit).trim()) return String(explicit).trim().toLowerCase();
@@ -55,9 +73,18 @@ async function dispatchPlanning(options = {}, deps = {}) {
       agentRuntime: options.agentRuntime || (options.settings && options.settings.agentRuntime),
       workflowPattern: options.workflowPattern || (options.settings && options.settings.workflowPattern),
       settings: options.settings,
+      // Which key pays: a stage run threads the admitted decision on attribution,
+      // the legacy planner on its settings blob. Absent means a platform key.
+      providerSource: (options.attribution && options.attribution.providerSource)
+        || (options.settings && options.settings.providerSource)
+        || null,
       workflow: options.workflow,
       stage: options.stage,
-      traceContext: { runId: options.invokeConfig && options.invokeConfig.runId, organizationId: options.organizationId },
+      traceContext: {
+        runId: options.invokeConfig && options.invokeConfig.runId,
+        organizationId: options.organizationId,
+        traceparent: resolveTraceparent(options),
+      },
       transport: options.substrateTransport,
       applyManifest: options.applyManifest,
       fetchImpl: options.fetchImpl,

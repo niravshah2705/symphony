@@ -14,10 +14,10 @@ Community of 4 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| shouldRunAutonomousTick | Function | ./services/planner/src/pubsub.js | 58-66 |
-| dispatchPlannerTick | Function | ./services/planner/src/pubsub.js | 68-90 |
-| test:planner autonomous ticks fail closed only on an unpinned shared cloud runtime@L187 | Test | ./services/planner/src/pubsub.test.js | 187-224 |
-| test:planner orchestrator rollout suppresses autonomous planning@L226 | Test | ./services/planner/src/pubsub.test.js | 226-239 |
+| shouldRunAutonomousTick | Function | ./services/planner/src/pubsub.js | 66-74 |
+| dispatchPlannerTick | Function | ./services/planner/src/pubsub.js | 76-98 |
+| test:planner autonomous ticks fail closed only on an unpinned shared cloud runtime@L188 | Test | ./services/planner/src/pubsub.test.js | 188-225 |
+| test:planner orchestrator rollout suppresses autonomous planning@L227 | Test | ./services/planner/src/pubsub.test.js | 227-240 |
 
 ## Execution Flows
 

@@ -356,6 +356,11 @@ function stageConfigurationFromDecision(decision, stages, selections, request) {
       model: selections[stage].model,
       modelId: item.modelId,
       providerReady: item.providerReady === true,
+      // Which key pays for this stage: 'customer' means the organization's own
+      // provider credential, and metering must record it without charging it.
+      // Admitted here rather than re-derived downstream, because this is the only
+      // place that saw the preflight's credential decision.
+      providerSource: item.providerSource || null,
       brokered: item.brokered === true,
       ...(stage === 'deploy' ? deploymentConfiguration(request) : {}),
     }];
@@ -827,6 +832,11 @@ function createPipelineAdmission({
           // Per-request LLM gateway feature flag (already availability-gated
           // and allowlisted at ingestion by requestContext).
           llmGateway: context.llmGateway || null,
+          // The W3C traceparent, validated at ingestion. It rides here rather
+          // than only in a header because this message is what survives a push
+          // retry: a header is gone once the HTTP request ends, so a retried
+          // stage would otherwise start an unrelated trace.
+          traceparent: context.traceparent || null,
           policy: decision,
           stageConfiguration: stageConfigurationFromDecision(decision, stages, selections, baseRequest),
         },

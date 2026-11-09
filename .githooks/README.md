@@ -18,13 +18,15 @@ sync with the code that produced them.
   (`.yml/.yaml` is excluded on purpose: this repo's YAML is CI/config, not Ansible.)
 - On drift, it regenerates `docs/code-graph/` for you; just `git add -A docs/code-graph`
   and commit again.
-- Requires the `code-review-graph` CLI (v2.3.7 with igraph for fine-grained community detection):
+- Requires the `code-review-graph` CLI, pinned to the version that generated the
+  committed map (see `CRG_VERSION` in `scripts/gen-code-docs.sh`; a different
+  build reshuffles community clustering and the drift gate will fight you):
   ```bash
-  pipx install --with igraph code-review-graph==2.3.7
+  pipx install --with igraph code-review-graph==2.3.9
   ```
   or via uv:
   ```bash
-  uv tool install --with igraph code-review-graph==2.3.7
+  uv tool install --with igraph code-review-graph==2.3.9
   ```
 - Emergency bypass: `SKIP_DOCS_HOOK=1 git commit …`
 

@@ -14,8 +14,8 @@ Community of 4 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| shouldRunAutonomousTick | Function | ./services/coder/src/pubsub.js | 48-56 |
-| dispatchCoderTick | Function | ./services/coder/src/pubsub.js | 58-81 |
+| shouldRunAutonomousTick | Function | ./services/coder/src/pubsub.js | 56-64 |
+| dispatchCoderTick | Function | ./services/coder/src/pubsub.js | 66-89 |
 | test:coder autonomous ticks fail closed only on an unpinned shared cloud runtime@L127 | Test | ./services/coder/src/pubsub.test.js | 127-158 |
 | test:coder orchestrator rollout suppresses autonomous polling@L160 | Test | ./services/coder/src/pubsub.test.js | 160-173 |
 

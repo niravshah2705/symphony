@@ -25,7 +25,7 @@ Community of 24 nodes
 | run | Function | ./services/coder/src/run-ticket.js | 198-210 |
 | onError | Function | ./services/coder/src/run-ticket.js | 211-232 |
 | onDone | Function | ./services/coder/src/run-ticket.js | 233-237 |
-| runTicket | Function | ./services/coder/src/run-ticket.js | 252-281 |
+| runTicket | Function | ./services/coder/src/run-ticket.js | 252-285 |
 | baseDependencies | Function | ./services/coder/src/run-ticket.test.js | 21-36 |
 | test:in-process coder resolves selected scope before model preflight and enforces policy + prefs@L38 | Test | ./services/coder/src/run-ticket.test.js | 38-113 |
 | test:proxy-vault coder needs no stored Linear key and passes only the sentinel to Linear callers@L115 | Test | ./services/coder/src/run-ticket.test.js | 115-157 |

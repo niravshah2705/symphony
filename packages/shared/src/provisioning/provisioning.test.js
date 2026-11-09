@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { names, urls, assertSlug } = require('./naming');
+const { names, urls, assertSlug, atespace } = require('./naming');
 const { buildPlan } = require('./plan');
 const { provision, teardown } = require('./provisioner');
 const { createGcpClients } = require('./index');
@@ -123,6 +123,36 @@ test('plan encodes tenant isolation: STORE_NAMESPACE, per-tenant topics, shared 
     assert.equal(service.requireEgressProxy, true);
     assert.equal(service.sidecarEnv.PROXY_CAPABILITIES, 'egress');
   }
+});
+
+// The atespace is a namespace boundary, so the name is decided once, here, from
+// the validated slug — and the same helper names the GKE namespace. A tenant that
+// could route itself into another tenant's space would not be a tenant.
+test('plan pins the tenant substrate atespace derived from the slug', () => {
+  const plan = buildPlan(SLUG, CFG);
+  assert.equal(atespace(SLUG), 'tenant-t3f9a1b2c4d5');
+  for (const svc of [plan.services.gateway, plan.services.planner, plan.services.coder, plan.worker]) {
+    assert.equal(svc.env.SUBSTRATE_ATESPACE, atespace(SLUG));
+    assert.equal(svc.env.SUBSTRATE_ALLOWED_ATESPACES, atespace(SLUG));
+    // No substrate configured for this tenant: the pattern stays inert rather
+    // than pointing at another deployment's control plane.
+    assert.equal(svc.env.SUBSTRATE_URL, undefined);
+  }
+  assert.throws(() => atespace('not-a-slug'), /invalid deployment slug/);
+});
+
+test('plan passes the substrate endpoints through when the tenant has them', () => {
+  const plan = buildPlan(SLUG, {
+    ...CFG,
+    substrateUrl: 'https://ateapi.example.com:443',
+    substrateIngressUrl: 'https://substrate.example.com',
+    substrateWorkerPool: 'pool-acme',
+    substratePlannerImage: 'ghcr.io/acme/planner@sha256:aaaa',
+  });
+  assert.equal(plan.services.planner.env.SUBSTRATE_URL, 'https://ateapi.example.com:443');
+  assert.equal(plan.services.planner.env.SUBSTRATE_INGRESS_URL, 'https://substrate.example.com');
+  assert.equal(plan.services.planner.env.SUBSTRATE_WORKER_POOL, 'pool-acme');
+  assert.equal(plan.services.planner.env.SUBSTRATE_PLANNER_IMAGE, 'ghcr.io/acme/planner@sha256:aaaa');
 });
 
 test('plan: passes customDomain as FIREBASE_CUSTOM_DOMAIN to tenant gateway', () => {

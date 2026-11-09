@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 419 nodes
+Community of 424 nodes
 
-- **Size**: 419 nodes
-- **Cohesion**: 0.2528
+- **Size**: 424 nodes
+- **Cohesion**: 0.2540
 - **Dominant Language**: javascript
 
 ## Members
@@ -29,10 +29,10 @@ Community of 419 nodes
 | activeRepositoryArtifactReceipt | Function | ./packages/shared/src/agent/coder.js | 101-104 |
 | resolvePlannedRepository | Function | ./packages/shared/src/agent/coder.js | 111-142 |
 | executeCodingRuntime | Function | ./packages/shared/src/agent/coder.js | 149-278 |
-| runCoderLocal | Function | ./packages/shared/src/agent/coder.js | 285-339 |
-| runCoder | Function | ./packages/shared/src/agent/coder.js | 347-354 |
-| runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 362-469 |
-| runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 472-490 |
+| runCoderLocal | Function | ./packages/shared/src/agent/coder.js | 285-340 |
+| runCoder | Function | ./packages/shared/src/agent/coder.js | 348-355 |
+| runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 363-471 |
+| runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 474-492 |
 | installSkills | Function | ./packages/shared/src/agent/framework.js | 53-87 |
 | validateSkillName | Function | ./packages/shared/src/agent/framework.js | 89-101 |
 | trackedSkillPaths | Function | ./packages/shared/src/agent/framework.js | 103-114 |
@@ -65,14 +65,14 @@ Community of 419 nodes
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
 
-*... and 369 more members.*
+*... and 374 more members.*
 
 ## Execution Flows
 
 - **resume** (criticality: 0.67, depth: 8)
 - **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
-- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **generatePlan** (criticality: 0.67, depth: 6)
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
 - **startScheduler** (criticality: 0.65, depth: 5)
@@ -82,7 +82,7 @@ Community of 419 nodes
 
 ### Outgoing
 
-- `equal` (276 edge(s))
+- `equal` (284 edge(s))
 - `join` (181 edge(s))
 - `String` (86 edge(s))
 - `includes` (67 edge(s))
@@ -90,8 +90,8 @@ Community of 419 nodes
 - `isArray` (55 edge(s))
 - `strictEqual` (50 edge(s))
 - `trim` (46 edge(s))
+- `require` (39 edge(s))
 - `endsWith` (39 edge(s))
-- `require` (38 edge(s))
 - `slice` (37 edge(s))
 - `execFileSync` (37 edge(s))
 - `deepStrictEqual` (37 edge(s))
@@ -100,7 +100,7 @@ Community of 419 nodes
 
 ### Incoming
 
-- `equal` (275 edge(s))
+- `equal` (283 edge(s))
 - `join` (104 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
 - `deepEqual` (55 edge(s))

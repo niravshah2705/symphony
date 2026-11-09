@@ -6,6 +6,7 @@
   "exports": {
     "./config": "./src/config.js",
     "./egress": "./src/egress.js",
+    "./traceparent": "./src/traceparent.js",
     "./logger": "./src/logger.js",
     "./util": "./src/util.js",
     "./authz": "./src/authz.js",

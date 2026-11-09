@@ -126,3 +126,41 @@ class MeDeploymentResponse(BaseModel):
     gateway_url: str = ""
     org_id: uuid.UUID | None = None
     org_name: str | None = None
+
+
+class MeEnvironmentStepResponse(BaseModel):
+    """One initialization step and what it last did.
+
+    `detail` is the step's own record (a project id, an atespace name, a
+    deployment status transition) — never a credential or a provider response body.
+    """
+
+    key: str
+    status: str
+    detail: dict | None = None
+    updated_at: datetime | None = None
+
+
+class MeEnvironmentResponse(BaseModel):
+    """The caller's deployment facts plus the environment-initialization run.
+
+    `deployment` is embedded rather than re-derived here: it is the shape the SPA
+    already polls, and two implementations of it would drift.
+    `initialized` is false when initialization is switched off for this
+    deployment — the run list is then legitimately empty, not still loading.
+    """
+
+    deployment: MeDeploymentResponse
+    initialized: bool = False
+    run_id: uuid.UUID | None = None
+    status: str | None = None
+    desired_revision: str = ""
+    attempted_revision: str | None = None
+    trigger: str | None = None
+    steps: list[MeEnvironmentStepResponse] = Field(default_factory=list)
+
+
+class EnvironmentRetryRequest(BaseModel):
+    """Re-run one named step, or every unfinished step when `step` is omitted."""
+
+    step: str | None = None

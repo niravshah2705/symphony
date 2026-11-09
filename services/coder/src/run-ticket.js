@@ -249,7 +249,7 @@ async function runTicketInProcess({
  * one-shot Cloud Run Job (long-running, scale-to-zero) and returns immediately;
  * locally it runs in-process (detached).
  */
-async function runTicket({ issueId, conversationId = null, orgId = null, nativeProjectId = null, llmGateway = null }, dependencies = {}) {
+async function runTicket({ issueId, conversationId = null, orgId = null, nativeProjectId = null, llmGateway = null, traceparent = null }, dependencies = {}) {
   const jobsImpl = dependencies.jobs || jobs;
   const getSettingsImpl = dependencies.getSettings || getSettings;
   const getApiKeyImpl = dependencies.getApiKey || getApiKey;
@@ -267,6 +267,10 @@ async function runTicket({ issueId, conversationId = null, orgId = null, nativeP
         ...(effectiveOrgId ? { FLEET_ORG_ID: effectiveOrgId } : {}),
         ...(nativeProjectId ? { AI_FLEET_PROJECT_CONTEXT: nativeProjectId } : {}),
         ...(llmGateway ? { LLM_GATEWAY_FLAG: llmGateway } : {}),
+        // The job is a new process, so the trace has to ride its env: without it
+        // a coder run is unreadable as part of the request that started it.
+        // Validated at ingestion and re-validated by whoever reads it.
+        ...(traceparent ? { TRACEPARENT_INBOUND: traceparent } : {}),
       },
     });
     if (conversationId) {

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 152 nodes
+Community of 165 nodes
 
-- **Size**: 152 nodes
-- **Cohesion**: 0.3649
+- **Size**: 165 nodes
+- **Cohesion**: 0.3735
 - **Dominant Language**: javascript
 
 ## Members
@@ -37,84 +37,84 @@ Community of 152 nodes
 | test:pbVarint + getVarint preserve numeric field values@L21 | Test | ./packages/shared-core/src/agent/grpc-wire.test.js | 21-27 |
 | test:grpc frame + unframe is lossless@L29 | Test | ./packages/shared-core/src/agent/grpc-wire.test.js | 29-37 |
 | test:empty pbString/pbMessage are elided@L39 | Test | ./packages/shared-core/src/agent/grpc-wire.test.js | 39-43 |
-| resolveOpenShellUrl | Function | ./packages/shared-core/src/agent/openshell.js | 58-71 |
-| resolveOpenShellWorkspace | Function | ./packages/shared-core/src/agent/openshell.js | 77-112 |
-| grpcCall | Function | ./packages/shared-core/src/agent/openshell.js | 118-235 |
-| finish | Function | ./packages/shared-core/src/agent/openshell.js | 129-139 |
-| encodeWorkspaceScope | Function | ./packages/shared-core/src/agent/openshell.js | 239-241 |
-| encodeObjectMeta | Function | ./packages/shared-core/src/agent/openshell.js | 243-251 |
-| decodeObjectMeta | Function | ./packages/shared-core/src/agent/openshell.js | 253-270 |
-| decodeSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 272-309 |
-| decodeProvider | Function | ./packages/shared-core/src/agent/openshell.js | 311-323 |
-| sanitizeSandboxName | Function | ./packages/shared-core/src/agent/openshell.js | 325-333 |
-| normalizeSandboxName | Function | ./packages/shared-core/src/agent/openshell.js | 335-349 |
-| getGatewayStatus | Function | ./packages/shared-core/src/agent/openshell.js | 353-397 |
-| buildProviderProfile | Function | ./packages/shared-core/src/agent/openshell.js | 401-427 |
-| ensureWorkspace | Function | ./packages/shared-core/src/agent/openshell.js | 429-442 |
-| getProfileById | Function | ./packages/shared-core/src/agent/openshell.js | 444-458 |
-| upsertProfile | Function | ./packages/shared-core/src/agent/openshell.js | 460-482 |
-| normalizeRegistryHost | Function | ./packages/shared-core/src/agent/openshell.js | 484-488 |
-| buildDockerConfigJson | Function | ./packages/shared-core/src/agent/openshell.js | 490-503 |
-| buildOrgImagePullSecretManifest | Function | ./packages/shared-core/src/agent/openshell.js | 505-536 |
-| ensureProviderProfiles | Function | ./packages/shared-core/src/agent/openshell.js | 538-605 |
-| getProviderByName | Function | ./packages/shared-core/src/agent/openshell.js | 607-621 |
-| upsertProviderSecret | Function | ./packages/shared-core/src/agent/openshell.js | 623-699 |
-| fingerprintSecret | Function | ./packages/shared-core/src/agent/openshell.js | 701-704 |
-| syncNvidiaSecrets | Function | ./packages/shared-core/src/agent/openshell.js | 710-908 |
-| getProjectSandboxStatus | Function | ./packages/shared-core/src/agent/openshell.js | 912-992 |
-| getLocalSandboxWorkdir | Function | ./packages/shared-core/src/agent/openshell.js | 994-1002 |
-| runLocalSandboxShell | Function | ./packages/shared-core/src/agent/openshell.js | 1004-1038 |
+| resolveOpenShellUrl | Function | ./packages/shared-core/src/agent/openshell.js | 62-75 |
+| resolveOpenShellWorkspace | Function | ./packages/shared-core/src/agent/openshell.js | 81-116 |
+| grpcCall | Function | ./packages/shared-core/src/agent/openshell.js | 122-239 |
+| finish | Function | ./packages/shared-core/src/agent/openshell.js | 133-143 |
+| encodeWorkspaceScope | Function | ./packages/shared-core/src/agent/openshell.js | 243-245 |
+| encodeObjectMeta | Function | ./packages/shared-core/src/agent/openshell.js | 247-255 |
+| decodeObjectMeta | Function | ./packages/shared-core/src/agent/openshell.js | 257-274 |
+| decodeSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 276-313 |
+| decodeProvider | Function | ./packages/shared-core/src/agent/openshell.js | 315-327 |
+| sanitizeSandboxName | Function | ./packages/shared-core/src/agent/openshell.js | 329-337 |
+| normalizeSandboxName | Function | ./packages/shared-core/src/agent/openshell.js | 339-353 |
+| getGatewayStatus | Function | ./packages/shared-core/src/agent/openshell.js | 357-401 |
+| buildProviderProfile | Function | ./packages/shared-core/src/agent/openshell.js | 405-431 |
+| ensureWorkspace | Function | ./packages/shared-core/src/agent/openshell.js | 433-446 |
+| getProfileById | Function | ./packages/shared-core/src/agent/openshell.js | 448-462 |
+| upsertProfile | Function | ./packages/shared-core/src/agent/openshell.js | 464-486 |
+| buildOrgImagePullSecretManifest | Function | ./packages/shared-core/src/agent/openshell.js | 488-519 |
+| ensureProviderProfiles | Function | ./packages/shared-core/src/agent/openshell.js | 521-588 |
+| getProviderByName | Function | ./packages/shared-core/src/agent/openshell.js | 590-604 |
+| upsertProviderSecret | Function | ./packages/shared-core/src/agent/openshell.js | 606-682 |
+| fingerprintSecret | Function | ./packages/shared-core/src/agent/openshell.js | 684-687 |
+| syncNvidiaSecrets | Function | ./packages/shared-core/src/agent/openshell.js | 693-891 |
+| getProjectSandboxStatus | Function | ./packages/shared-core/src/agent/openshell.js | 895-975 |
+| getLocalSandboxWorkdir | Function | ./packages/shared-core/src/agent/openshell.js | 977-985 |
+| runLocalSandboxShell | Function | ./packages/shared-core/src/agent/openshell.js | 987-1021 |
+| execInSandbox | Function | ./packages/shared-core/src/agent/openshell.js | 1023-1094 |
+| buildOpencodeCliScript | Function | ./packages/shared-core/src/agent/openshell.js | 1096-1155 |
 
-*... and 102 more members.*
+*... and 115 more members.*
 
 ## Execution Flows
 
 - **startProjectSandbox** (criticality: 0.74, depth: 9)
 - **changeSandboxImage** (criticality: 0.74, depth: 9)
+- **chatWithProjectSandbox** (criticality: 0.73, depth: 8)
 - **stopProjectSandbox** (criticality: 0.73, depth: 8)
 - **deleteProjectSandbox** (criticality: 0.73, depth: 8)
-- **chatWithProjectSandbox** (criticality: 0.73, depth: 8)
 - **execInteractiveSandboxCommand** (criticality: 0.71, depth: 8)
 - **autocompleteSandboxInput** (criticality: 0.71, depth: 8)
 - **listSandboxes** (criticality: 0.71, depth: 8)
 - **listActors** (criticality: 0.71, depth: 8)
-- **runPlanningOnSubstrate** (criticality: 0.71, depth: 8)
-- *... and 6 more flows.*
+- **runSandboxSecurityChecks** (criticality: 0.70, depth: 8)
+- *... and 5 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `String` (133 edge(s))
+- `String` (132 edge(s))
+- `equal` (65 edge(s))
 - `concat` (57 edge(s))
-- `push` (48 edge(s))
-- `trim` (46 edge(s))
-- `equal` (40 edge(s))
+- `push` (52 edge(s))
+- `trim` (44 edge(s))
 - `alloc` (36 edge(s))
 - `map` (36 edge(s))
-- `includes` (28 edge(s))
 - `replace` (24 edge(s))
-- `join` (22 edge(s))
+- `join` (23 edge(s))
 - `get` (21 edge(s))
-- `stringify` (20 edge(s))
+- `includes` (20 edge(s))
+- `stringify` (18 edge(s))
 - `isBuffer` (16 edge(s))
 - `from` (14 edge(s))
 - `toString` (14 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/agent/substrate.js` (71 edge(s))
-- `./packages/shared-core/src/agent/openshell.js` (67 edge(s))
-- `equal` (40 edge(s))
+- `./packages/shared-core/src/agent/substrate.js` (72 edge(s))
+- `equal` (65 edge(s))
+- `./packages/shared-core/src/agent/openshell.js` (65 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.js` (36 edge(s))
 - `./packages/shared-core/src/store.js` (13 edge(s))
+- `deepEqual` (11 edge(s))
 - `./packages/shared-core/src/agent/substrate-runner.js` (11 edge(s))
-- `deepEqual` (10 edge(s))
-- `./packages/shared-core/src/agent/substrate.test.js` (10 edge(s))
+- `./packages/shared-core/src/agent/substrate.test.js` (11 edge(s))
 - `./packages/shared-core/src/guardrails/consumers.js` (10 edge(s))
-- `includes` (9 edge(s))
+- `./packages/shared-core/src/agent/substrate-runner.test.js` (9 edge(s))
 - `./packages/shared-core/src/guardrails/spec.js` (8 edge(s))
+- `./packages/shared-core/src/agent/substrate-atespace.test.js` (6 edge(s))
+- `push` (6 edge(s))
 - `./packages/shared-core/src/guardrails/spec.test.js` (6 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.test.js` (5 edge(s))
-- `ok` (5 edge(s))
-- `./packages/shared-core/src/agent/substrate-runner.test.js` (4 edge(s))

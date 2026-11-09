@@ -21,7 +21,7 @@ test('reads and forwards the exact organization/project context headers', () => 
     'x-ai-fleet-organization-id': 'org-1',
     'x-ai-fleet-project-id': 'project:2',
   });
-  assert.deepEqual(requestContext(request), { organizationId: 'org-1', projectId: 'project:2', llmGateway: '' });
+  assert.deepEqual(requestContext(request), { organizationId: 'org-1', projectId: 'project:2', llmGateway: '', traceparent: '' });
   assert.deepEqual(contextHeaders(requestContext(request)), {
     'x-ai-fleet-organization-id': 'org-1',
     'x-ai-fleet-project-id': 'project:2',
@@ -37,7 +37,7 @@ test('drops malformed or unbounded context ids', () => {
   assert.deepEqual(requestContext(req({
     'x-ai-fleet-organization-id': 'bad value\n',
     'x-ai-fleet-project-id': 'x'.repeat(161),
-  })), { organizationId: '', projectId: '', llmGateway: '' });
+  })), { organizationId: '', projectId: '', llmGateway: '', traceparent: '' });
 });
 
 test('llm-gateway flag: honored only when the deployment has the gateway enabled', () => {
@@ -68,12 +68,46 @@ test('llm-gateway flag: survives the validated fleetContext branch and forwards'
     fleetContext: { organizationId: 'org-1', projectId: 'p-1' },
   };
   const context = requestContext(request, { llmGatewayEnabled: true });
-  assert.deepEqual(context, { organizationId: 'org-1', projectId: 'p-1', llmGateway: 'langsmith' });
+  assert.deepEqual(context, { organizationId: 'org-1', projectId: 'p-1', llmGateway: 'langsmith', traceparent: '' });
   assert.deepEqual(contextHeaders(context), {
     'x-ai-fleet-organization-id': 'org-1',
     'x-ai-fleet-project-id': 'p-1',
     'x-ai-fleet-llm-gateway': 'langsmith',
   });
+});
+
+test('traceparent: a valid W3C header is read, kept in context and forwarded downstream', () => {
+  const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+  const request = req({
+    'x-ai-fleet-organization-id': 'org-1',
+    traceparent,
+  });
+  const context = requestContext(request);
+  assert.equal(context.traceparent, traceparent);
+  assert.deepEqual(contextHeaders(context), {
+    'x-ai-fleet-organization-id': 'org-1',
+    traceparent,
+  });
+  // A retried pipeline stage gets the same id from the durable message, not a header.
+  assert.deepEqual(contextHeaders({ organizationId: 'org-1', traceparent }), {
+    'x-ai-fleet-organization-id': 'org-1',
+    traceparent,
+  });
+});
+
+test('traceparent: malformed, all-zero or unknown-version values are dropped', () => {
+  for (const value of [
+    'not-a-traceparent',
+    '00-00000000000000000000000000000000-00f067aa0ba902b7-01',
+    '00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01',
+    // A longer field means a version we cannot parse — only `00` may be carried.
+    '01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+    '4bf92f3577b34da6a3ce929d0e0e4736',
+    // Header-injection material must never reach a downstream request.
+    '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\r\nx-injected: 1',
+  ]) {
+    assert.equal(requestContext(req({ traceparent: value })).traceparent, '', `must reject ${JSON.stringify(value)}`);
+  }
 });
 
 test('notifications flag: off by default, on for any non-blank header value', () => {

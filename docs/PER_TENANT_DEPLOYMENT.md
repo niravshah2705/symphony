@@ -32,6 +32,39 @@ Server-authoritative: the org is derived from the caller's token; **no
 client-supplied org id** is ever accepted, so a caller only learns their own
 org's deployment. Only the browser-facing gateway URL is returned.
 
+## Environment initialization at sign-in
+
+`GET /api/v1/me/deployment` answers *where* a workspace runs. `GET
+/api/v1/me/environment` embeds that same shape and adds *how much of it exists*,
+step by step:
+
+```
+sign in ──► auth_service.login/register ──► environment_service.open_run(org)
+                                                   │  doc id = uuid5(org_id : desired_revision)
+                                                   ▼
+                       organizations/{org}/environment_runs/{run}   (durable, re-runnable)
+                                                   │
+   org.seed → org.atespace.bind → substrate.atespace ──publish──► provisioner ──PATCH …/steps/{key}──┐
+                (deploy.stack calls trigger_provisioning)                                             │
+                                                   ◄────────── set_step_status reconciles the run ◄────┘
+```
+
+- **Triggered by sign-in**, never awaited by it: the run is committed before the
+  token response goes out and the steps execute as a background task, so a slow
+  cluster cannot make login slow. `POST /api/v1/me/environment/retry {step?}`
+  re-runs one step, or every unfinished one.
+- **Idempotent by identity**: the document id *is* the idempotency key, so a
+  stampede of concurrent requests resolves to one run, a completed revision is
+  never re-published, and a `FAILED` run is reopened by the next sign-in rather
+  than left for a manual click.
+- **`substrate.atespace` is asynchronous**: the org service names the namespace
+  (`tenant-<deployment_slug>`, from `naming.js:atespace`) and the provisioner
+  answers `COMPLETED` / `FAILED` / `SKIPPED`. Until it answers, the step reads
+  `RUNNING` — "asked" is not "done".
+- Gated by `ENVIRONMENT_INIT_ENABLED` (off by default): with it off, a login
+  touches no infrastructure and `/me/environment` reports `initialized: false`
+  with no run.
+
 ## Components
 
 - **`packages/shared/src/provisioning/`** — pure core: deterministic Run-safe
@@ -40,11 +73,15 @@ org's deployment. Only the browser-facing gateway URL is returned.
   `@google-cloud` adapter (`index.js`).
 - **`services/provisioner/`** — internal, IAM-gated Node service. Consumes
   `tenant-provision-requests` (OIDC push), runs the executor, writes the resolved
-  URLs back to the org service.
+  URLs back to the org service. Also settles an environment run's
+  `substrate-atespace` step over ateapi — that action runs even with
+  `PROVISIONING_ENABLED=false`, because a namespace is not a Cloud Run resource.
 - **org service** — `provisioning_service.trigger_provisioning/teardown` (publish),
   `GET /api/v1/me/deployment` (resolver), `PATCH /api/v1/internal/orgs/{id}/deployments`
   (S2S write-back, `X-Internal-Token`-guarded), `Organization.deployment_slug` +
-  `deployments` registry.
+  `deployments` registry; `environment_service` +
+  `GET /api/v1/me/environment` / `POST /api/v1/me/environment/retry` and the
+  `PATCH /api/v1/internal/orgs/{id}/environment_runs/{run}/steps/{key}` write-back.
 - **gateway** — `GET /api/config` resolver + `service-client.js` (S2S `callJson`).
 - **SPA** — `api.setApiBase/getRuntimeConfig`, `deployment.pollUntilResolved`,
   `auth.js` re-point.
