@@ -214,6 +214,22 @@ head_ "Actor data plane"
 if kubectl get httproute -n ate-system >/dev/null 2>&1; then
   programmed=$(kubectl get gateway -n ate-system -o jsonpath='{range .items[*]}{.metadata.name}={.status.conditions[?(@.type=="Programmed")].status}{"\n"}{end}' 2>/dev/null | tr '\n' ' ')
   [ -n "$programmed" ] && ok "gateway conditions: $programmed" || hint "no Gateway objects in ate-system"
+  # A Route is Accepted even when its backendRef names a Service that does not
+  # exist: the gateway takes the object, Envoy has nowhere to send the traffic,
+  # and every call through that path prefix fails while the front reports itself
+  # healthy. The public ateapi route sat like that for a week — it referenced
+  # ate-system/ateapi, and the Service `ate-setup` actually creates is named api.
+  for r in $(kubectl get httproute -n ate-system -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null); do
+    st=$(kubectl get httproute -n ate-system "$r" \
+      -o jsonpath='{.status.parents[*].conditions[?(@.type=="ResolvedRefs")].status}' 2>/dev/null)
+    if [ "${st:-}" = "True" ]; then
+      ok "route $r resolves its backend"
+    else
+      msg=$(kubectl get httproute -n ate-system "$r" \
+        -o jsonpath='{.status.parents[*].conditions[?(@.type=="ResolvedRefs")].message}' 2>/dev/null)
+      bad "route $r does not resolve: ${msg:-no ResolvedRefs condition} — the front accepts the connection and has nowhere to send it"
+    fi
+  done
 else
   hint "no HTTPRoute CRDs reachable — the substrate ingress front is not installed"
 fi

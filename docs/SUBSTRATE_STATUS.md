@@ -32,14 +32,16 @@ Run `deploy/gcp/substrate-check.sh` to reproduce every claim in this file.
 | Preflight rows that see all four capacity causes | PR #269 (`WorkerPool created`, `worker node pool placement`, `disk quota headroom`) | preflight run [42672938739](https://github.com/niravshah2705/symphony/actions/runs/42672938739) reported the two FAILs before they were fixed and reports them green now |
 | Worker pool onto N4 / COS / its own boot disk | PR #270 (merged) + the by-hand `gcloud` fix below | machine type + image type + `boot_disk` in `terraform-substrate-gke/substrate.tf`; `substrate_env.test.js` pins the vars and the quota arithmetic |
 | Migrate the recreated database (restart `ate-api-server`) | PR #271, step `Re-migrate the recreated database` | found the hard way: workers were `Running` but `0/1 Ready` with `relation "workers" does not exist` |
-| Read-only verification as plain shell | PR #271, `deploy/gcp/substrate-check.sh` | 12 checks pass on the live cluster |
+| Read-only verification as plain shell | PR #271, `deploy/gcp/substrate-check.sh` | every infrastructure check passes on the live cluster; the one FAIL it reports is cause 9 below, which the script did not look at until #272 |
 | Worker pool actually re-provisioned (cause 8's fix) | by hand: `gcloud container node-pools update` × 2 | machine type `n4-standard-4`, 100 GB `hyperdisk-balanced` (3000 IOPS / 140 MiB/s), min 1 / max 4; the E2 node is deleted and `planner-pool` stayed `2/2` throughout |
 | Worker nodes onto `COS_CONTAINERD` | by hand: `gcloud container clusters upgrade … --image-type=COS_CONTAINERD --quiet` | `node-pools describe … --format="value(config.imageType)"` → `COS_CONTAINERD`; the surge node `gke-…-substrate-worker-1b371960-tpxz` is Ready on `Container-Optimized OS from Google` and the Ubuntu node it replaced is gone |
 | The by-hand cluster state and the Terraform module agree | PR #271, verified by the merge-triggered apply | run [42684395694](https://github.com/niravshah2705/symphony/actions/runs/42684395694) job `reconcile substrate gke`: **"No changes. Your infrastructure matches the configuration"**, `Plan: 0 create, 0 update, 0 delete` — so the node GKE is running is the node the module describes, not just the node someone typed into `gcloud` |
 
-## Root causes, all eight
+## Root causes, all nine
 
-Every one of these had to be fixed; any subset still yields zero sandboxes.
+Causes 1-8 each had to be fixed; any subset of them still yields zero sandboxes.
+Cause 9 does not stop the substrate from running sandboxes — it stops *this app*
+from asking it to, which is why it is the one still open.
 
 | # | Cause | How it hid | Status |
 |---|---|---|---|
@@ -51,6 +53,7 @@ Every one of these had to be fixed; any subset still yields zero sandboxes.
 | 6 | `ate-api-server` applies Postgres migrations only at startup, so recreating the claim left a healthy-looking control plane on an empty schema. | every pod `Running`; every RPC erroring `relation "workers" does not exist`; workers stuck `Running` but not Ready | fixed by #271 |
 | 7 | The substrate GKE apply was gated behind a `terraform fmt` drift. | plan never ran, so no error surfaced | fixed by #268 |
 | 8 | #270 gave the worker pool a `pd-balanced` boot disk, and **N4 supports no Persistent Disk type at all** — the pool could not provision a node. | `terraform apply` planned clean, GKE accepted the pool config, and only the MIG's instance creation failed: `[UNSUPPORTED_OPERATION] pd-balanced disk type cannot be used by n4-standard-4 machine type`. The pool stayed on its old template, so capacity kept working and nothing looked broken | fixed: `boot_disk { disk_type = "hyperdisk-balanced" }` |
+| 9 | The public ateapi route sends to `Service ate-system/ateapi:8443`, but `ate-setup` v1.0.0 creates that Service as **`api` on port 443 (`grpc`)** — the backend the control-plane front routes to has never existed, so `substrateUrl` cannot be that host. | Every signal the old check read is green: Gateway `Programmed=True`, Route `Accepted=True`, DNS resolves, certificate issued. Only `ResolvedRefs=False / BackendNotFound` says otherwise, and nothing looked at that condition until #272 | **open** — the name and port are wrong in the module defaults, but correcting them switches on an *unauthenticated* public actor control plane; see pending 2 |
 
 ## Still pending
 
@@ -60,14 +63,32 @@ Every one of these had to be fixed; any subset still yields zero sandboxes.
    digest-pinned `substratePlannerImage`) into the organization's settings, which is
    the per-tenant path the pattern router reads. Then trigger a planner run with
    `agentPattern=substrate` and watch the actor reach `ACTIVE`.
-2. **Phase 3b**: move the system and substrate node pools off E2 too. That tears down
+2. **Cause 9 — give the planner a control plane it is allowed to dial.** Setting
+   `substrate_url` is only half of it; the address has to actually reach ateapi, and
+   the two ways to do that differ in what they expose:
+   - **Private**: Cloud Run Direct VPC egress (or a Serverless VPC Connector) to the
+     `api` Service, and `substrate_control_plane_public = false`. Nothing new is
+     reachable from the internet, at the cost of a connector on every stack that runs
+     agents, and a cluster whose internal LB the connector can actually see.
+   - **Public**: keep the existing route, fix its backend to `api:443`, and put an
+     authN policy in front of it — an Envoy `SecurityPolicy`/JWT check, or the
+     `SUBSTRATE_TOKEN` bearer the client already supports, enforced server-side. This
+     is the branch `substrate_control_plane_public`'s own description asks for ("leave
+     false until the planner reaches ateapi over VPC egress or an authN policy is
+     attached to that route").
+   Today the flag is on **and** the route is dead, which fails closed by accident: the
+   hostname is published, so whoever fixes the backend name without adding authN
+   exposes an unauthenticated API that creates actors, deletes them and mints actor
+   JWTs. `substrate_ateapi_service` / `substrate_ateapi_port` therefore should not be
+   corrected on their own — they are one change with the authN decision.
+3. **Phase 3b**: move the system and substrate node pools off E2 too. That tears down
    `ate-system`, so it needs `gke_allow_destroy=true` and a re-run of the install
    afterwards. Separate PR, deliberate.
-3. **`kubectl ate` for actor-level verification** — needs Go, which is not installed
+4. **`kubectl ate` for actor-level verification** — needs Go, which is not installed
    here (see the by-hand section). Actors are not CRDs — they live in the control-plane
    Postgres and are reached over the ateapi gRPC Control API, so this is the only
    read path that does not go through the app.
-4. Noted, deliberately not implemented: the `gc_thresh*` / inotify node sysctls, the
+5. Noted, deliberately not implemented: the `gc_thresh*` / inotify node sysctls, the
    STS quota, ComputeClasses and capacity buffers, hyperdisk provisioned IOPS. All of
    these only matter past roughly 800 concurrent sandboxes per node.
 
