@@ -42,8 +42,9 @@ for what the pattern is and what this module deliberately does *not* install.
    a pool-scoped IAM role instead of `roles/container.admin`. Set
    `power_ci_sa_email` to that identity or the binding is skipped.
 5. **Agent Substrate (`substrate.tf`)** — a dedicated `substrate-worker-pool`
-   (tainted `substrate.ate.dev/workers`, gVisor runs on the stock
-   UBUNTU_CONTAINERD image), the `substrate-credentials` and
+   (tainted `ate.dev/sandboxClass=gvisor`, the key the atelet DaemonSet tolerates
+   and the WorkerPool's pods get toleration for automatically; gVisor runs on the
+   stock UBUNTU_CONTAINERD image), the `substrate-credentials` and
    `substrate-snapshots` namespaces, a PD `StorageClass` + `VolumeSnapshotClass`
    for atelet suspend/resume snapshots, a scoped Role/RoleBinding letting the
    atenet-egress service account read Secrets **only** in

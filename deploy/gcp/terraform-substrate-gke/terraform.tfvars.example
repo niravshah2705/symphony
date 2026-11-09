@@ -74,10 +74,12 @@ deletion_protection             = true
 # ---------------------------------------------------------------------------
 substrate_enabled               = true
 substrate_node_pool_name        = "substrate-worker-pool"
-# The label actors actually schedule onto: substrate_worker_pool_label is what
-# workerSelector matches, and it must equal SUBSTRATE_WORKER_POOL on the Cloud
-# Run side (both default to planner-pool). The taint keeps other workloads off
-# the pool; only this label gets actors onto it.
+# The string workerSelector resolves to. It NAMES the WorkerPool custom resource
+# (ate-controller labels the pool's pods ate.dev/worker-pool=<name> and the ate API
+# matches the selector against those), and substrate.tf mirrors it onto this node
+# pool as a label for `kubectl get nodes`. It must equal SUBSTRATE_WORKER_POOL on
+# the Cloud Run side. Nothing schedules unless a WorkerPool of this name exists —
+# the installer does not create one (docs/SUBSTRATE_INTEGRATION.md §5.3).
 substrate_worker_pool_label     = "planner-pool"
 substrate_machine_type          = "e2-standard-4"
 substrate_min_nodes             = 1

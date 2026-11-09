@@ -60,11 +60,19 @@ locals {
       { name = var.agentgateway_gateway_name, namespace = var.agentgateway_namespace, kind = "Gateway" },
     ] : [],
   )
-  # Worker pods carry a toleration for this taint so the scheduler places only
-  # Substrate actors here, never generic tenant workloads.
+  # The taint key is upstream's contract, not ours to invent: ate.dev/sandboxClass
+  # =<class> is what the atelet DaemonSet tolerates (for any value) and what
+  # ate-controller adds to every worker pod automatically for the pool's own
+  # class (workerpool_apply.go applySandboxClassToleration). A pool tainted with
+  # any other key repels both, so the node would host neither atelet nor workers
+  # and no sandbox could ever be created on it — while every pod simply sat
+  # Pending with a taint-and-toleration message. The value names the class this
+  # pool runs, which must equal the WorkerPool's sandboxClasses entry (gvisor,
+  # matching SUBSTRATE_SANDBOX_CLASSES); a microVM class needs its own pool, not
+  # this one, because it is the pool that has to provide nested virtualization.
   substrate_taint = {
-    key    = "substrate.ate.dev/workers"
-    value  = "true"
+    key    = "ate.dev/sandboxClass"
+    value  = "gvisor"
     effect = "NO_SCHEDULE"
   }
 }
@@ -106,14 +114,15 @@ resource "google_container_node_pool" "substrate_nodes" {
     # installs runsc (gVisor) itself on these nodes.
     image_type = "UBUNTU_CONTAINERD"
 
-    # The taint keeps other workloads OFF this pool; the label is what pulls
-    # actors ONTO it. The backend sends `workerSelector: { ate.dev/worker-pool:
-    # <substrateWorkerPool> }`, and a selector matches node labels only — a
-    # tainted but unlabelled pool schedules nothing, so every actor would sit
-    # Pending with a pod that names no reason a human would guess. The value has
-    # to equal what the planner resolves (DEFAULT_WORKER_POOL in
-    # packages/shared-core/src/agent/substrate.js, and substrate_worker_pool in
-    # ../terraform/variables.tf — both `planner-pool`).
+    # This label is for operators, not for the scheduler. The actor's
+    # `workerSelector: { ate.dev/worker-pool: <pool> }` matches the labels of the
+    # Worker objects — scheduling.go compares against worker.GetLabels(), and
+    # ate-controller stamps `ate.dev/worker-pool=<WorkerPool name>` onto the pool's
+    # pods itself — so no node label places an actor, and a pool that carries this
+    # label but no WorkerPool still schedules nothing. Where actors land is decided
+    # by the WorkerPool's own spec.template.nodeSelector (see
+    # docs/SUBSTRATE_INTEGRATION.md §5.3). Keeping the label here costs
+    # nothing and makes the pool recognizable by eye in `kubectl get nodes`.
     labels = {
       "ate.dev/worker-pool" = var.substrate_worker_pool_label
     }

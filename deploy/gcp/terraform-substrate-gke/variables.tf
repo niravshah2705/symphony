@@ -186,7 +186,7 @@ variable "substrate_node_pool_name" {
 }
 
 variable "substrate_worker_pool_label" {
-  description = "Value of the ate.dev/worker-pool node label the actor workerSelector matches. Not the pool name: it must equal what the planner sends as substrateWorkerPool / SUBSTRATE_WORKER_POOL, and a pool that does not carry it schedules no actors."
+  description = "The one string the actor workerSelector resolves to: it names the WorkerPool custom resource (ate-controller stamps ate.dev/worker-pool=<WorkerPool name> on the pool's pods, and the ate API matches the selector against those), and substrate.tf copies it onto this node pool as a label so the pool is recognizable by eye. No node label places an actor. It must equal substrate_worker_pool in ../terraform/variables.tf, DEFAULT_WORKER_POOL in packages/shared-core/src/agent/substrate.js and SUBSTRATE_WORKER_POOL on the Cloud Run side; substrate-env.test.js fails if they drift."
   type        = string
   default     = "planner-pool"
 

@@ -566,13 +566,16 @@ test('atespace names Terraform accepts are names the app will not silently drop'
   }
 });
 
-test('the worker pool carries the label the actor selector matches', () => {
-  // A taint keeps workloads OFF a pool; only a node LABEL pulls actors ONTO it,
-  // and the backend sends `workerSelector: { ate.dev/worker-pool: <pool> }`.
-  // The recreated cluster shipped a tainted but unlabelled pool, so every
-  // ActorTemplate sat Pending and the scheduling message named no reason a
-  // human would guess. This test exists because that failure is invisible in a
-  // plan: the pool is created, the taint is applied, nothing errors.
+test('the worker pool name the planner selects is one string in four places', () => {
+  // What workerSelector matches is the NAME of the WorkerPool: ate-controller
+  // stamps `ate.dev/worker-pool=<WorkerPool name>` onto the pool's worker pods,
+  // and the ate API compares the selector against those pod-derived labels. Node
+  // labels play no part in placement — the substrate.tf label is a copy of the
+  // same string, kept so the pool is recognizable in `kubectl get nodes`. So the
+  // Terraform variable, the two JS defaults and the install workflow's default
+  // all have to agree, or the planner selects a pool that does not exist and
+  // every actor sits Pending naming no reason a human would guess. That failure
+  // is invisible in a plan: the pool is created, nothing errors.
   const gke = read('deploy', 'gcp', 'terraform-substrate-gke', 'substrate.tf');
   const gkeVars = read('deploy', 'gcp', 'terraform-substrate-gke', 'variables.tf');
   const pool = /resource "google_container_node_pool" "substrate_nodes" \{[\s\S]*?\n\}/.exec(gke);
@@ -581,7 +584,7 @@ test('the worker pool carries the label the actor selector matches', () => {
   assert.match(
     pool[0],
     /"ate\.dev\/worker-pool" = var\.substrate_worker_pool_label/,
-    'the worker pool taints without labelling, so nothing can schedule onto it',
+    'the worker pool no longer carries the label, so the pool name is untraceable from a node',
   );
 
   // Three defaults in three languages have to be the ONE string the planner
@@ -601,4 +604,41 @@ test('the worker pool carries the label the actor selector matches', () => {
     new RegExp(`SUBSTRATE_WORKER_POOL \\|\\| '${tfDefault[1]}'`),
     'config.js SUBSTRATE_WORKER_POOL fallback no longer matches the node label',
   );
+
+  // The fifth place is the workflow that CREATES the object: a pool named here
+  // but not there is the same bug wearing a different hat.
+  const wf = read('.github', 'workflows', 'substrate-control-plane.yml');
+  assert.match(
+    wf,
+    new RegExp(`SUBSTRATE_WORKER_POOL: \\\$\\{\\{ vars\\.SUBSTRATE_WORKER_POOL \\|\\| '${tfDefault[1]}' \\}\\}`),
+    'the install workflow defaults the WorkerPool name to something the planner will not select',
+  );
+});
+
+test('the worker pool is tainted with the key atelet tolerates', () => {
+  // A node pool reserved for one sandbox class is tainted
+  // `ate.dev/sandboxClass=<class>:NoSchedule` — that is the contract, not our
+  // invention: the atelet DaemonSet tolerates the key for any value, and
+  // ate-controller adds the class's own toleration to every worker pod. Taint
+  // the pool with any other key and BOTH are repelled, so the node hosts neither
+  // atelet nor workers and no sandbox can ever be created on it — while every
+  // pod merely sits Pending. The first substrate cluster shipped exactly that
+  // taint (`substrate.ate.dev/workers=true`), which is why this is a test.
+  const gke = read('deploy', 'gcp', 'terraform-substrate-gke', 'substrate.tf');
+  const taint = /substrate_taint = \{([\s\S]*?)\n  \}/.exec(gke);
+  assert.ok(taint, 'local.substrate_taint moved out of substrate.tf');
+  assert.match(taint[1], /key\s*=\s*"ate\.dev\/sandboxClass"/,
+    'the worker pool taint is no longer the sandboxClass key, so atelet cannot run on it');
+  assert.match(taint[1], /value\s*=\s*"gvisor"/,
+    'the sandboxClass taint value must name the class the pool runs (gvisor, per sandboxRuntime)');
+  assert.doesNotMatch(taint[1], /substrate\.ate\.dev\/workers/,
+    'the private taint key is back — nothing tolerates it, so no sandbox is placeable');
+
+  // The WorkerPool the install workflow creates must not re-spell a toleration
+  // for the same key: the controller adds it, and a second copy is a drift risk.
+  const wf = read('.github', 'workflows', 'substrate-control-plane.yml');
+  const step = /- name: Create the WorkerPool\n([\s\S]*?)\n      - name: /.exec(wf);
+  assert.ok(step, 'the install workflow no longer creates a WorkerPool — nothing serves actors');
+  assert.doesNotMatch(step[1], /^\s*tolerations:/m,
+    'the WorkerPool hand-writes a toleration the controller already adds for the sandbox class');
 });

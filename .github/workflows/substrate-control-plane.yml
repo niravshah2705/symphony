@@ -82,6 +82,8 @@ jobs:
       SUBSTRATE_ROLLOUT_TIMEOUT: ${{ vars.SUBSTRATE_ROLLOUT_TIMEOUT }}
       SUBSTRATE_ENABLED: ${{ vars.SUBSTRATE_ENABLED }}
       SUBSTRATE_NODE_POOL: ${{ vars.SUBSTRATE_NODE_POOL }}
+      SUBSTRATE_WORKER_NODE_POOL: ${{ vars.SUBSTRATE_WORKER_NODE_POOL || 'substrate-worker-pool' }}
+      SUBSTRATE_WORKER_POOL: ${{ vars.SUBSTRATE_WORKER_POOL || 'planner-pool' }}
       SUBSTRATE_ATEAPI_SERVICE: ${{ vars.SUBSTRATE_ATEAPI_SERVICE }}
     steps:
       - uses: actions/checkout@v6
@@ -187,6 +189,8 @@ jobs:
           IMAGE_REPO: ${{ env.SUBSTRATE_IMAGE_REPO }}
           INGRESS_HOSTNAME: ${{ vars.SUBSTRATE_INGRESS_HOSTNAME }}
           PG_SIZE: ${{ steps.cfg.outputs.pg_size }}
+          WORKER_POOL: ${{ env.SUBSTRATE_WORKER_POOL }}
+          WORKER_NODE_POOL: ${{ env.SUBSTRATE_WORKER_NODE_POOL }}
         run: |
           set -uo pipefail
           # Advisory in both modes: this step never fails the job, because the
@@ -328,6 +332,105 @@ jobs:
             done
             if [ -n "$missing" ]; then echo "absent from $IMAGE_REPO at $VERSION:$missing"; exit 1; fi
             echo "every image $VERSION needs is in $IMAGE_REPO"
+          '
+
+          # ── Sandbox capacity ──────────────────────────────────────────────
+          # Everything above gates the *control plane*; these four gate whether a
+          # sandbox can ever be created, which is the only thing the installer
+          # cannot tell you about. ate-setup installs the WorkerPool CRD and stops
+          # there — only --demo creates a pool — so a green install plus a missing
+          # pool reads as "substrate is up, agents never start". Each row below was
+          # a real, silent failure here once: no pool at all, a pool on a node that
+          # tolerates nothing, a pool parked at zero nodes, and a disk quota spent
+          # entirely on the Postgres claim.
+          check "WorkerPool created" bash -c '
+            kubectl get crd workerpools.ate.dev >/dev/null 2>&1 \
+              || { echo "no workerpools.ate.dev CRD — install mode creates one, then this workflow creates the pool"; exit 1; }
+            line="$(kubectl get workerpools.ate.dev -A --no-headers \
+              -o custom-columns=REF:.metadata.namespace/.metadata.name,REPLICAS:.spec.replicas,READY:.status.readyReplicas 2>/dev/null)"
+            if [ -z "$line" ]; then
+              echo "no WorkerPool exists — ate-setup only installs the CRD, so nothing serves actors. Install creates one named $WORKER_POOL."
+              exit 1
+            fi
+            row="$(grep "/$WORKER_POOL " <<<"$line" | head -1)"
+            if [ -z "$row" ]; then
+              echo "no pool named $WORKER_POOL, which is what the planner sends as workerSelector; present: $(tr "\n" " " <<<"$line")"
+              exit 1
+            fi
+            # The last column is readyReplicas: a pool the controller has not
+            # touched prints <none>, which blocks actors exactly as hard as 0, so
+            # both fail the row rather than passing on format. Split on whitespace
+            # with parameter expansion — an awk program in single quotes would end
+            # this bash -c string. One line per outcome because `check` shows only
+            # the first.
+            ready="${row##* }"
+            case "$ready" in
+              ''|*[!0-9]*) echo "$row — no worker is Ready yet ($ready), so no actor can start"; exit 1 ;;
+            esac
+            [ "$ready" -ge 1 ] \
+              || { echo "$row — 0 workers Ready, so no actor can start"; exit 1; }
+            echo "$row"
+          '
+          # The node pool and the taint are checked together because a pool that
+          # exists but repels everything looks identical from the outside: no
+          # sandbox, no error, and a Pending pod whose only clue is
+          # "had taint(s) that did not match the tolerations".
+          check "worker node pool placement" bash -c '
+            if ! gcloud container node-pools describe "$WORKER_NODE_POOL" \
+              --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" >/dev/null 2>&1; then
+              echo "node pool $WORKER_NODE_POOL is absent — gke_reconcile owns it (substrate.tf substrate_nodes)"
+              exit 1
+            fi
+            # config.taints, not nodeConfig.taints: the v1 NodePool reports the
+            # effective taints under config, and nodeConfig reads back null.
+            taints="$(gcloud container node-pools describe "$WORKER_NODE_POOL" \
+              --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
+              --format "json(config.taints)" 2>/dev/null | jq -r "[.config.taints[]?.key] | join(\" \")")"
+            if [ -z "$taints" ]; then
+              echo "untainted — nothing is repelled, but actors will share the pool with generic workloads"
+              exit 0
+            fi
+            tolerated="$(kubectl -n ate-system get ds atelet \
+              -o jsonpath="{.spec.template.spec.tolerations[*].key}" 2>/dev/null | tr " " "\n" | sort -u)"
+            [ -n "$tolerated" ] || { echo "taints [$taints] but atelet is not installed yet — cannot compare"; exit 1; }
+            for k in $taints; do
+              grep -qxF "$k" <<<"$tolerated" \
+                || { echo "taint $k is tolerated by nothing — atelet would never run on this pool, so no sandbox can be created on it (atelet tolerates: $(tr "\n" " " <<<"$tolerated"))"; exit 1; }
+            done
+            nodes="$(kubectl get nodes -l "cloud.google.com/gke-nodepool=$WORKER_NODE_POOL" \
+              -o json 2>/dev/null | jq -r "[.items[] | select(.status.conditions[]? | .type==\"Ready\" and .status==\"True\")] | length")"
+            if [ "${nodes:-0}" -le 0 ]; then
+              echo "taints [$(tr " " ", " <<<"$taints")] are tolerated, but the pool has 0 Ready nodes — it sits below its autoscaling minimum until a WorkerPool demands one"
+              exit 1
+            fi
+            echo "taints [$(tr " " ", " <<<"$taints")] tolerated by atelet, $nodes Ready node(s)"
+          '
+          # Snapshots stage on the node boot disk, so a worker disk is a billed PD
+          # in the region. pd-ssd and pd-balanced both count against SSD_TOTAL_GB —
+          # the same quota the bundled Postgres claim eats — and an exhausted quota
+          # does not fail fast: the node just never appears, and the install waits
+          # out its rollout timeout.
+          check "disk quota headroom" bash -c '
+            pool="$(gcloud container node-pools describe "$WORKER_NODE_POOL" \
+              --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
+              --format "value(autoscaling.maxNodeCount,config.diskSizeGb,config.diskType)" 2>/dev/null)" \
+              || { echo "node pool $WORKER_NODE_POOL absent — nothing to size"; exit 1; }
+            read -r max size dtype <<<"$pool"
+            case "$dtype" in
+              pd-ssd|pd-balanced|hyperdisk-*) metric=SSD_TOTAL_GB ;;
+              *)                               metric=DISKS_TOTAL_GB ;;
+            esac
+            q="$(gcloud compute regions describe "$BUCKET_REGION" --project "$PROJECT_ID" \
+              --format "json(quotas)" | jq -r ".quotas[] | select(.metric==\"$metric\") | \"\\(.usage) \\(.limit)\"")"
+            [ -n "$q" ] || { echo "$metric is not reported for $BUCKET_REGION — cannot check headroom"; exit 0; }
+            read -r usage limit <<<"$q"
+            need="$(awk -v n="$max" -v g="$size" "BEGIN{printf \"%.0f\", n*g}")"
+            left="$(awk -v l="$limit" -v u="$usage" "BEGIN{printf \"%.0f\", l-u}")"
+            if [ "$need" -gt "$left" ]; then
+              echo "$dtype ${size}GB × $max node(s) = ${need}GB, but $metric has ${usage%.*}/${limit%.*} used and only ${left}GB left — raise the quota or lower substrate_max_nodes"
+              exit 1
+            fi
+            echo "$dtype ${size}GB × $max node(s) = ${need}GB, within $metric at ${usage%.*}/${limit%.*} (${left}GB left)"
           '
 
           # The apply 403s when the CI identity was provisioned before the
@@ -513,6 +616,105 @@ jobs:
           # Run from the checkout: the installer reads its manifests from there,
           # which is why the checkout and --image-tag must name the same revision.
           ( cd substrate && go run ./cmd/ate-setup "${args[@]}" )
+
+      - name: Create the WorkerPool
+        if: inputs.mode == 'install'
+        timeout-minutes: 15
+        env:
+          VERSION: ${{ steps.cfg.outputs.version }}
+          IMAGE_REPO: ${{ env.SUBSTRATE_IMAGE_REPO }}
+          WORKER_POOL: ${{ env.SUBSTRATE_WORKER_POOL }}
+          WORKER_NODE_POOL: ${{ env.SUBSTRATE_WORKER_NODE_POOL }}
+          REPLICAS: ${{ vars.SUBSTRATE_WORKER_POOL_REPLICAS || '2' }}
+          ROLLOUT_TIMEOUT: ${{ steps.cfg.outputs.rollout_timeout }}
+        run: |
+          set -euo pipefail
+          # ate-setup installs the WorkerPool CRD and stops there: a pool is a
+          # user-managed object (the installer only makes one for --demo), so an
+          # install that reports success has nothing to place actors on and every
+          # run dies at "no worker available" with nothing wrong in the control
+          # plane. This step is what closes that gap for the shared stack.
+          #
+          # The name is the whole contract. ate-controller stamps
+          # ate.dev/worker-pool=<WorkerPool name> onto each worker pod, the ate API
+          # matches a template's workerSelector against the Worker's labels, and the
+          # planner sends workerSelector {ate.dev/worker-pool: <pool>} built from
+          # SUBSTRATE_WORKER_POOL — so the pool must be named exactly what the
+          # planner resolves, or nothing matches and every actor sits Pending.
+          [[ "$WORKER_POOL" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] \
+            || { echo "::error::SUBSTRATE_WORKER_POOL '$WORKER_POOL' is not a DNS label; it must equal substrate_worker_pool in deploy/gcp/terraform/variables.tf."; exit 1; }
+          [[ "$REPLICAS" =~ ^[0-9]+$ ]] && [ "$REPLICAS" -ge 1 ] \
+            || { echo "::error::SUBSTRATE_WORKER_POOL_REPLICAS '$REPLICAS' must be a positive integer."; exit 1; }
+
+          WORKER_NS=substrate-workers
+          kubectl create namespace "$WORKER_NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+          # workerImage must be a concrete tag: the demo manifests carry a ko://
+          # build reference, which only resolves inside upstream's own build. The
+          # preflight already proved $IMAGE_REPO/ateworker-gvisor carries $VERSION,
+          # and ate-setup resolves every other image the same way, so the checkout
+          # and the worker stay on one revision.
+          #
+          # No configRef: the pool follows the class default SandboxConfig
+          # (gvisor-default as installed) and moves with it. No tolerations either —
+          # the controller adds the ate.dev/sandboxClass toleration for the pool's
+          # own class, which is the taint substrate.tf puts on the node pool.
+          #
+          # resources limits are not "what the pod consumes": they advertise the
+          # per-actor ceiling the ate scheduler books against. They must exceed the
+          # ActorTemplate request (1000m / 1Gi default in substrate.js), or no actor
+          # ever fits a worker. requests is what kube-scheduler packs the node by.
+          kubectl apply -f - <<EOF
+          apiVersion: ate.dev/v1
+          kind: WorkerPool
+          metadata:
+            name: ${WORKER_POOL}
+            namespace: ${WORKER_NS}
+          spec:
+            replicas: ${REPLICAS}
+            workerImage: ${IMAGE_REPO}/ateworker-gvisor:${VERSION}
+            sandboxClasses:
+            - name: gvisor
+            template:
+              nodeSelector:
+                cloud.google.com/gke-nodepool: ${WORKER_NODE_POOL}
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 1Gi
+                limits:
+                  cpu: "2"
+                  memory: 4Gi
+          EOF
+
+          # The pool's Deployment is created by ate-controller asynchronously, so
+          # `rollout status` would fail with "no matching resources found" if it is
+          # polled a moment too early.
+          deadline=$((SECONDS + 180))
+          until kubectl -n "$WORKER_NS" get deployment "$WORKER_POOL" >/dev/null 2>&1; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::ate-controller never created a Deployment for WorkerPool ${WORKER_NS}/${WORKER_POOL}."
+              kubectl -n "$WORKER_NS" describe workerpool "$WORKER_POOL" | tail -25 || true
+              exit 1
+            fi
+            sleep 5
+          done
+          kubectl -n "$WORKER_NS" rollout status deployment "$WORKER_POOL" --timeout="$ROLLOUT_TIMEOUT"
+
+          {
+            echo "### WorkerPool"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| name / namespace | \`${WORKER_POOL}\` / \`${WORKER_NS}\` |"
+            echo "| replicas | \`${REPLICAS}\` |"
+            echo "| workerImage | \`${IMAGE_REPO}/ateworker-gvisor:${VERSION}\` |"
+            echo "| nodeSelector | \`cloud.google.com/gke-nodepool=${WORKER_NODE_POOL}\` |"
+            echo "| per-actor ceiling (limits) | \`2 CPU / 4Gi\` per worker |"
+            echo ""
+            echo "The planner must send \`workerSelector {ate.dev/worker-pool: ${WORKER_POOL}}\` —"
+            echo "set \`substrate_worker_pool\` to the same string in the Terraform workspace."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report what landed
         if: inputs.mode == 'install'
