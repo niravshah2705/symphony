@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 2 nodes
+Community of 4 nodes
 
-- **Size**: 2 nodes
-- **Cohesion**: 0.0769
+- **Size**: 4 nodes
+- **Cohesion**: 0.1429
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,7 +15,9 @@ Community of 2 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | ensureDir | Function | ./packages/shared-core/src/logger.js | 11-13 |
-| write | Function | ./packages/shared-core/src/logger.js | 15-27 |
+| formatMeta | Function | ./packages/shared-core/src/logger.js | 21-31 |
+| secretsAsMask | Function | ./packages/shared-core/src/logger.js | 36-40 |
+| write | Function | ./packages/shared-core/src/logger.js | 42-54 |
 
 ## Execution Flows
 
@@ -27,6 +29,10 @@ No execution flows pass through this community.
 
 - `existsSync` (1 edge(s))
 - `mkdirSync` (1 edge(s))
+- `stringify` (1 edge(s))
+- `String` (1 edge(s))
+- `test` (1 edge(s))
+- `isBuffer` (1 edge(s))
 - `toISOString` (1 edge(s))
 - `padEnd` (1 edge(s))
 - `toUpperCase` (1 edge(s))
@@ -35,4 +41,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./packages/shared-core/src/logger.js` (5 edge(s))
+- `./packages/shared-core/src/logger.js` (7 edge(s))
