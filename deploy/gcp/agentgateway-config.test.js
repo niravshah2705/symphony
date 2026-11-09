@@ -240,6 +240,18 @@ test('the a2a seam is closed by admission, not by a policy', () => {
   const a2a = gateway.slice(gateway.indexOf('name     = "a2a"'));
   assert.match(a2a.slice(0, 600), /from = "None"/, 'no HTTPRoute may attach to the a2a listener');
   assert.doesNotMatch(agentgw, /agentgateway_a2a_route|agentgateway_a2a_deny/, 'no placeholder backend, no agent card');
+
+  // …and the reason stays written down. The seam is one line from being opened
+  // (`from = "None"` → `"Same"`), and the case against opening it is a
+  // non-obvious one: an actor's address dies with the run, so a card is not
+  // merely premature but stale-by-construction. If that prose goes, the flip
+  // looks like a formatting change.
+  const doc = read('docs', 'SUBSTRATE_INTEGRATION.md');
+  const section = doc.slice(doc.indexOf('## 12. A2A'));
+  assert.notEqual(section, -1, 'the a2a scope section was deleted while the seam stayed');
+  assert.match(section, /the planner/, 'it must name who would publish a card');
+  assert.match(section, /allowedRoutes\.namespaces\.from/, 'it must name the line that opens the seam');
+  assert.match(section, /suspend|delete/, 'it must say why an actor address cannot back a card');
 });
 
 test('the substrate root can hand the sidecar an origin it will accept', () => {
