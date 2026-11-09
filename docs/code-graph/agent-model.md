@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 200 nodes
+Community of 262 nodes
 
-- **Size**: 200 nodes
-- **Cohesion**: 0.3051
+- **Size**: 262 nodes
+- **Cohesion**: 0.3196
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,9 +20,14 @@ Community of 200 nodes
 | test:createChatModel maps antigravity to a ChatOpenAI targeting the Gemini endpoint@L52 | Test | ./packages/shared/src/agent/antigravity.test.js | 52-58 |
 | test:availability probes the Gemini key against the OpenAI-compatible endpoint@L73 | Test | ./packages/shared/src/agent/antigravity.test.js | 73-86 |
 | test:availability fails fast when the Gemini key is missing@L88 | Test | ./packages/shared/src/agent/antigravity.test.js | 88-94 |
-| selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 120-125 |
-| normalize | Function | ./packages/shared/src/agent/availability.js | 123-123 |
-| probeModelAvailability | Function | ./packages/shared/src/agent/availability.js | 127-223 |
+| statusOf | Function | ./packages/shared/src/agent/availability.js | 43-46 |
+| selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 122-127 |
+| normalize | Function | ./packages/shared/src/agent/availability.js | 125-125 |
+| probeModelAvailability | Function | ./packages/shared/src/agent/availability.js | 129-236 |
+| probeRepositoryAvailability | Function | ./packages/shared/src/agent/availability.js | 238-293 |
+| response | Function | ./packages/shared/src/agent/availability.test.js | 18-24 |
+| test:repository preflight converts provider 403 into a sanitized availability error@L44 | Test | ./packages/shared/src/agent/availability.test.js | 44-67 |
+| test:repository preflight requires write permission before dispatch@L69 | Test | ./packages/shared/src/agent/availability.test.js | 69-77 |
 | test:local model preflight verifies that the selected model is loaded@L79 | Test | ./packages/shared/src/agent/availability.test.js | 79-93 |
 | messageText | Function | ./packages/shared/src/agent/business-pipeline.js | 71-77 |
 | parseJsonObject | Function | ./packages/shared/src/agent/business-pipeline.js | 79-85 |
@@ -48,65 +53,60 @@ Community of 200 nodes
 | test:createChatModel returns a ChatOpenAI targeting the router@L42 | Test | ./packages/shared/src/agent/huggingface.test.js | 42-49 |
 | test:normalizeEvaluation-style signal clamp is not relevant here; readiness probe validates the token@L68 | Test | ./packages/shared/src/agent/huggingface.test.js | 68-83 |
 | test:probe fails fast when the token is missing@L85 | Test | ./packages/shared/src/agent/huggingface.test.js | 85-91 |
-| proxyProjectHeaders | Function | ./packages/shared/src/agent/llm.js | 15-17 |
-| clampStreamRetries | Function | ./packages/shared/src/agent/llm.js | 20-24 |
-| lmstudioJsonKwargs | Function | ./packages/shared/src/agent/llm.js | 75-86 |
-| lmstudioMaxTokens | Function | ./packages/shared/src/agent/llm.js | 95-99 |
-| omlxMaxTokens | Function | ./packages/shared/src/agent/llm.js | 102-106 |
-| codexMaxTokens | Function | ./packages/shared/src/agent/llm.js | 114-117 |
-| codexPromptBudget | Function | ./packages/shared/src/agent/llm.js | 125-130 |
-| lmstudioPromptBudget | Function | ./packages/shared/src/agent/llm.js | 150-155 |
-| omlxPromptBudget | Function | ./packages/shared/src/agent/llm.js | 157-161 |
-| warnContextMismatch | Function | ./packages/shared/src/agent/llm.js | 171-179 |
-| clampContextWindow | Function | ./packages/shared/src/agent/llm.js | 189-194 |
-| fetchLmstudioLoadedContext | Function | ./packages/shared/src/agent/llm.js | 202-222 |
-| getCodexChatModelClass | Function | ./packages/shared/src/agent/llm.js | 238-252 |
-| createCodexChatgptModel | Function | ./packages/shared/src/agent/llm.js | 267-305 |
-| getClaudeChatModelClass | Function | ./packages/shared/src/agent/llm.js | 337-367 |
-| constructor | Function | ./packages/shared/src/agent/llm.js | 342-345 |
+| statusOf | Function | ./packages/shared/src/agent/llm-retry.js | 37-40 |
+| codeOf | Function | ./packages/shared/src/agent/llm-retry.js | 42-45 |
+| isRetryableStreamError | Function | ./packages/shared/src/agent/llm-retry.js | 52-62 |
+| runWithRetry | Function | ./packages/shared/src/agent/llm-retry.js | 70-83 |
+| test:an OpenAI in-stream error (APIError with no status) is retryable@L10 | Test | ./packages/shared/src/agent/llm-retry.test.js | 10-16 |
+| test:transient HTTP statuses (429, 500, 503, 529) are retryable@L18 | Test | ./packages/shared/src/agent/llm-retry.test.js | 18-22 |
+| test:deterministic client errors (400, 401, 404) are NOT retryable@L24 | Test | ./packages/shared/src/agent/llm-retry.test.js | 24-31 |
+| test:dropped-connection error codes are retryable@L33 | Test | ./packages/shared/src/agent/llm-retry.test.js | 33-36 |
+| test:an ordinary error with no signal is not retryable@L38 | Test | ./packages/shared/src/agent/llm-retry.test.js | 38-41 |
+| apiStreamError | Function | ./packages/shared/src/agent/llm-retry.test.js | 45-49 |
+| test:runWithRetry returns the first success without retrying@L51 | Test | ./packages/shared/src/agent/llm-retry.test.js | 51-56 |
 
-*... and 150 more members.*
+*... and 212 more members.*
 
 ## Execution Flows
 
 - **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **generatePlan** (criticality: 0.67, depth: 6)
-- **startScheduler** (criticality: 0.66, depth: 6)
+- **startScheduler** (criticality: 0.65, depth: 5)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (137 edge(s))
-- `deepEqual` (39 edge(s))
-- `strictEqual` (28 edge(s))
-- `Number` (27 edge(s))
+- `equal` (163 edge(s))
+- `deepEqual` (41 edge(s))
+- `strictEqual` (37 edge(s))
+- `Number` (34 edge(s))
+- `join` (26 edge(s))
 - `replace` (25 edge(s))
-- `String` (24 edge(s))
-- `join` (21 edge(s))
-- `slice` (19 edge(s))
-- `includes` (19 edge(s))
-- `trim` (17 edge(s))
-- `map` (17 edge(s))
-- `isFinite` (17 edge(s))
-- `match` (16 edge(s))
-- `require` (15 edge(s))
-- `isArray` (14 edge(s))
+- `String` (25 edge(s))
+- `slice` (23 edge(s))
+- `includes` (22 edge(s))
+- `map` (21 edge(s))
+- `ok` (20 edge(s))
+- `isFinite` (20 edge(s))
+- `push` (20 edge(s))
+- `isArray` (19 edge(s))
+- `max` (18 edge(s))
 
 ### Incoming
 
-- `equal` (137 edge(s))
+- `equal` (163 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
+- `./packages/shared/src/agent/llm.js` (47 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (46 edge(s))
-- `./packages/shared/src/agent/llm.js` (42 edge(s))
-- `deepEqual` (39 edge(s))
-- `strictEqual` (28 edge(s))
+- `deepEqual` (41 edge(s))
+- `strictEqual` (37 edge(s))
+- `./packages/shared/src/agent/lmstudio-context.js` (23 edge(s))
+- `ok` (20 edge(s))
+- `match` (14 edge(s))
 - `./packages/shared/src/agent/local-intelligence.test.js` (14 edge(s))
+- `throws` (14 edge(s))
 - `./packages/shared/src/agent/localization.test.js` (14 edge(s))
-- `match` (13 edge(s))
-- `ok` (13 edge(s))
-- `throws` (13 edge(s))
+- `./packages/shared/src/agent/llm-retry.test.js` (13 edge(s))
 - `./packages/shared/src/agent/codex-budget.test.js` (12 edge(s))
 - `./packages/shared/src/agent/lmstudio-budget.test.js` (12 edge(s))
-- `./packages/shared/src/agent/memory-middleware.js` (8 edge(s))
-- `./packages/shared/src/agent/model-routing.test.js` (7 edge(s))

@@ -136,7 +136,7 @@ variable "system_machine_type" {
   # PostgreSQL: ate-setup gives postgres-0 a 2 CPU request, which can never
   # schedule on a 2-vCPU node alongside the gateway, cert-manager and the
   # control-plane add-ons, and the install dies waiting for the StatefulSet.
-  default     = "e2-standard-4"
+  default = "e2-standard-4"
 }
 
 variable "system_min_nodes" {
