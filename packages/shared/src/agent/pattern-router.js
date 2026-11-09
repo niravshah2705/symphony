@@ -3,11 +3,11 @@
 /**
  * Execution-substrate router for the PLANNING stage.
  *
- * `agentPattern` selects WHERE the agent process runs (in-process Cloud Run,
- * OpenShell, or Agent Substrate) — orthogonal to `agentRuntime`/harness (which SDK)
- * and `workflowPattern` (how it reasons). This router diverts only the planning stage
- * to a substrate runner when the operator selects 'substrate'; every other pattern
- * falls through to the existing in-process dispatcher, so `cloudrun`/`openshell`
+ * `agentPattern` selects WHERE the agent process runs (in-process Cloud Run or
+ * Agent Substrate) — orthogonal to `agentRuntime`/harness (which SDK) and
+ * `workflowPattern` (how it reasons). This router diverts only the planning stage
+ * to a substrate runner when the operator selects 'substrate'; every other
+ * pattern falls through to the existing in-process dispatcher, so `cloudrun`
  * behavior is byte-for-byte unchanged.
  */
 

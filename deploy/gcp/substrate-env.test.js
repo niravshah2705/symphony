@@ -565,3 +565,40 @@ test('atespace names Terraform accepts are names the app will not silently drop'
     );
   }
 });
+
+test('the worker pool carries the label the actor selector matches', () => {
+  // A taint keeps workloads OFF a pool; only a node LABEL pulls actors ONTO it,
+  // and the backend sends `workerSelector: { ate.dev/worker-pool: <pool> }`.
+  // The recreated cluster shipped a tainted but unlabelled pool, so every
+  // ActorTemplate sat Pending and the scheduling message named no reason a
+  // human would guess. This test exists because that failure is invisible in a
+  // plan: the pool is created, the taint is applied, nothing errors.
+  const gke = read('deploy', 'gcp', 'terraform-substrate-gke', 'substrate.tf');
+  const gkeVars = read('deploy', 'gcp', 'terraform-substrate-gke', 'variables.tf');
+  const pool = /resource "google_container_node_pool" "substrate_nodes" \{[\s\S]*?\n\}/.exec(gke);
+  assert.ok(pool, 'the substrate worker pool block moved');
+  assert.match(pool[0], /taint/, 'the worker pool is no longer tainted — the isolation the label complements');
+  assert.match(
+    pool[0],
+    /"ate\.dev\/worker-pool" = var\.substrate_worker_pool_label/,
+    'the worker pool taints without labelling, so nothing can schedule onto it',
+  );
+
+  // Three defaults in three languages have to be the ONE string the planner
+  // sends: this variable, the JS fallback, and the config.js default.
+  const tfDefault = /variable "substrate_worker_pool_label" \{[\s\S]*?default\s*=\s*"([^"]+)"/.exec(gkeVars);
+  assert.ok(tfDefault, 'substrate_worker_pool_label has no default');
+  const jsDefault = varDefault('substrate_worker_pool');
+  assert.equal(`"${tfDefault[1]}"`, jsDefault.trim(),
+    'the node label and var.substrate_worker_pool disagree — a pool nothing selects');
+  assert.match(
+    read('packages', 'shared-core', 'src', 'agent', 'substrate.js'),
+    new RegExp(`DEFAULT_WORKER_POOL = '${tfDefault[1]}'`),
+    'substrate.js DEFAULT_WORKER_POOL no longer matches the node label',
+  );
+  assert.match(
+    read('packages', 'shared-core', 'src', 'config.js'),
+    new RegExp(`SUBSTRATE_WORKER_POOL \\|\\| '${tfDefault[1]}'`),
+    'config.js SUBSTRATE_WORKER_POOL fallback no longer matches the node label',
+  );
+});

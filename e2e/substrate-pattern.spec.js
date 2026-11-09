@@ -56,14 +56,14 @@ async function openSettings(page) {
 }
 
 test.describe('substrate pattern toggle', () => {
-  test('three tiles render and cloudrun is active by default', async ({ page }) => {
+  test('both tiles render and cloudrun is active by default', async ({ page }) => {
     await stubSettingsSurface(page);
     await openSettings(page);
 
     const tiles = page.locator('.sx-tiles[data-lock-key="agentPattern"]');
     await expect(tiles.getByRole('button', { name: /Cloud Run \(in-process\)/ })).toBeVisible();
-    await expect(tiles.getByRole('button', { name: /NVIDIA OpenShell/ })).toBeVisible();
     await expect(tiles.getByRole('button', { name: /Agent Substrate/ })).toBeVisible();
+    await expect(tiles.locator('button')).toHaveCount(2);
 
     // The active tile gets the `active` class; substrate config card is only
     // rendered when the active pattern is substrate.
@@ -136,7 +136,14 @@ test.describe('substrate pattern toggle', () => {
           credentials: { scopes: ['github', 'openrouter'] },
           pssProfile: 'restricted',
         },
-        preview: { openshellYaml: '', substrateEgress: '', credentialProviderPolicy: '' },
+        preview: {
+          atenetEgress: {
+            rules: [{ name: 'allow-openrouter', hosts: ['api.openrouter.ai'] }],
+            denyCidrs: ['169.254.169.254/32'],
+          },
+          namespacePolicy: { egress: [] },
+          credentialProvider: { allowedSecrets: [{ secretName: 'github-token' }] },
+        },
       });
     });
 

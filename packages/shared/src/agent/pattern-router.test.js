@@ -6,7 +6,7 @@ const router = require('./pattern-router');
 
 test('resolveAgentPattern prefers explicit, then settings, then cloudrun', () => {
   assert.equal(router.resolveAgentPattern('substrate'), 'substrate');
-  assert.equal(router.resolveAgentPattern('', { agentPattern: 'OpenShell' }), 'openshell');
+  assert.equal(router.resolveAgentPattern('', { agentPattern: 'Substrate' }), 'substrate');
   assert.equal(router.resolveAgentPattern(undefined, {}), 'cloudrun');
 });
 

@@ -18,7 +18,7 @@ resource "kubectl_manifest" "power_ci_cluster_role" {
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: openshell-node-maintainer
+  name: substrate-node-maintainer
 rules:
   - apiGroups: [""]
     resources: ["nodes"]
@@ -45,11 +45,11 @@ resource "kubectl_manifest" "power_ci_cluster_role_binding" {
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: openshell-node-maintainer
+  name: substrate-node-maintainer
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: openshell-node-maintainer
+  name: substrate-node-maintainer
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: User

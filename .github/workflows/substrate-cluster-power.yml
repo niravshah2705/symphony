@@ -1,33 +1,33 @@
-name: OpenShell cluster power (start/stop)
+name: Substrate cluster power (start/stop)
 
-# Turns every node pool in the cluster off (zero nodes) and on again: the
-# openshell-multitenant tenant pool, the optional substrate worker pool, and the
-# system pool the platform add-ons live on. The control plane and the static IP
-# survive either way. The Envoy gateway pods have no node to run on while the
-# system pool is parked, so the hosted site and cert-manager's renewals are down
-# for the stop window — that spend is in scope now that the add-ons carry load.
+# Turns every node pool in the cluster off (zero nodes) and on again: the tenant
+# pool, the optional Substrate worker pool, and the system pool the platform
+# add-ons live on. The control plane and the static IPs survive either way. The
+# Envoy gateway pods have no node to run on while the system pool is parked, so
+# the hosted site and cert-manager's renewals are down for the stop window —
+# that spend is in scope now that the add-ons carry load.
 #
 # Why this workflow drains instead of only setting min-nodes=0:
 #
 #   1. It used to assert autoscaling.minNodeCount — the value it had just
 #      written — so a pool still holding nodes went green. The stop run is now
 #      judged on observed Ready nodes in the pool, not on config.
-#   2. Setting min 0 deletes nothing when the pool has work on it. The OpenShell
-#      runtime creates bare Pods (no controller), and the cluster autoscaler
-#      will not evict one (no.scale.down.node.pod.not.backed.by.controller);
-#      the singleton platform add-ons sharing that node are reported as
-#      unmovable (no.scale.down.node.pod.kube.system.unmovable). Draining
-#      removes both blockers, and --force is what lets the bare sandbox Pods go.
+#   2. Setting min 0 deletes nothing when the pool has work on it. A Pod no
+#      controller owns cannot be evicted at all (the autoscaler reports
+#      no.scale.down.node.pod.not.backed.by.controller), and the singleton
+#      platform add-ons sharing that node are reported as unmovable
+#      (no.scale.down.node.pod.kube.system.unmovable). Draining removes both
+#      blockers, and --force is what lets the pods with no controller go.
 #   3. The add-ons are still moved off the tenant pool first, into their own
-#      system pool (deploy/gcp/terraform-openshell-gke pins them to node pool
-#      openshell-system-node-pool): evict Envoy Gateway, cert-manager, the
-#      agent-sandbox controller or the OpenShell gateway while it sits on a
-#      tenant node and the autoscaler buys that node straight back, so the stop
-#      churns forever. The placement preflight below refuses to drain while any
-#      of them still sits on a tenant node. The system pool is therefore drained
-#      last, and every pool's ceiling goes to 0 *before* its nodes are drained:
-#      the add-ons are Deployment-backed, so an eviction that lands while max is
-#      still >0 just re-buys the node it freed.
+#      system pool (deploy/gcp/terraform-substrate-gke pins them to node pool
+#      substrate-system-node-pool): evict Envoy Gateway, cert-manager or the
+#      agentgateway controller while it sits on a tenant node and the autoscaler
+#      buys that node straight back, so the stop churns forever. The placement
+#      preflight below refuses to drain while any of them still sits on a tenant
+#      node. The system pool is therefore drained last, and every pool's ceiling
+#      goes to 0 *before* its nodes are drained: the add-ons are
+#      Deployment-backed, so an eviction that lands while max is still >0 just
+#      re-buys the node it freed.
 #
 # Zero is forced with --max-nodes=0 rather than by resizing the managed instance
 # group directly: GKE's node-pool controller owns MIG size and reconciles a
@@ -60,7 +60,7 @@ on:
       id: morning-start
 
 concurrency:
-  group: openshell-cluster-power
+  group: substrate-cluster-power
   cancel-in-progress: false
 
 permissions:
@@ -69,23 +69,25 @@ permissions:
 
 jobs:
   power:
-    # Scheduled runs are opt-in via the OPENSHELL_CLUSTER_AUTOSTOP repo variable.
+    # Scheduled runs are opt-in via the SUBSTRATE_CLUSTER_AUTOSTOP repo variable.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'schedule' && vars.OPENSHELL_CLUSTER_AUTOSTOP == 'true')
+      (github.event_name == 'schedule' && vars.SUBSTRATE_CLUSTER_AUTOSTOP == 'true')
     runs-on: ubuntu-latest
     env:
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      CLUSTER: ${{ vars.OPENSHELL_CLUSTER_NAME || 'openshell-multitenant' }}
-      ZONE: ${{ vars.OPENSHELL_CLUSTER_ZONE || 'asia-south1-a' }}
-      NODE_POOL: ${{ vars.OPENSHELL_NODE_POOL || 'openshell-multitenant-node-pool' }}
-      SYSTEM_NODE_POOL: ${{ vars.OPENSHELL_SYSTEM_NODE_POOL || 'openshell-system-node-pool' }}
-      MAX_NODES: ${{ vars.OPENSHELL_MAX_NODES || '8' }}
-      START_MIN_NODES: ${{ vars.OPENSHELL_MIN_NODES || '2' }}
-      SYSTEM_MAX_NODES: ${{ vars.OPENSHELL_SYSTEM_MAX_NODES || '3' }}
-      SYSTEM_START_MIN_NODES: ${{ vars.OPENSHELL_SYSTEM_MIN_NODES || '1' }}
-      # Agent Substrate worker pool is parked/woken in lockstep only when the
-      # operator set SUBSTRATE_NODE_POOL; empty leaves these steps skipped.
+      CLUSTER: ${{ vars.SUBSTRATE_CLUSTER_NAME || 'substrate-multitenant' }}
+      ZONE: ${{ vars.SUBSTRATE_CLUSTER_ZONE || 'asia-south1-a' }}
+      NODE_POOL: ${{ vars.SUBSTRATE_TENANT_NODE_POOL || 'substrate-node-pool' }}
+      SYSTEM_NODE_POOL: ${{ vars.SUBSTRATE_SYSTEM_NODE_POOL || 'substrate-system-node-pool' }}
+      MAX_NODES: ${{ vars.SUBSTRATE_TENANT_MAX_NODES || '8' }}
+      START_MIN_NODES: ${{ vars.SUBSTRATE_TENANT_MIN_NODES || '2' }}
+      SYSTEM_MAX_NODES: ${{ vars.SUBSTRATE_SYSTEM_MAX_NODES || '3' }}
+      SYSTEM_START_MIN_NODES: ${{ vars.SUBSTRATE_SYSTEM_MIN_NODES || '1' }}
+      # SUBSTRATE_NODE_POOL is the Substrate *worker* pool (the actor nodes), not
+      # the tenant pool above: the module names them substrate-node-pool and
+      # substrate-worker-pool respectively, and only the worker pool is optional.
+      # Empty leaves these steps skipped.
       SUBSTRATE_NODE_POOL: ${{ vars.SUBSTRATE_NODE_POOL }}
       SUBSTRATE_MAX_NODES: ${{ vars.SUBSTRATE_MAX_NODES || '6' }}
       SUBSTRATE_START_MIN_NODES: ${{ vars.SUBSTRATE_MIN_NODES || '1' }}
@@ -142,7 +144,7 @@ jobs:
           set -uo pipefail
           # container.admin maps this identity to cluster-admin, so these normally
           # pass. A pool-scoped role instead needs the ClusterRole in deploy/gcp/
-          # terraform-openshell-gke/ci_rbac.tf, whose binding only exists when
+          # terraform-substrate-gke/ci_rbac.tf, whose binding only exists when
           # power_ci_sa_email is set in terraform.tfvars.
           MISSING=()
           require() {
@@ -158,7 +160,7 @@ jobs:
             printf '  %s\n' "${MISSING[@]}"
             echo "Fix: grant the role in deploy/gcp/bootstrap.sh, or set"
             echo "power_ci_sa_email = \"$IDENTITY\" in terraform.tfvars and apply"
-            echo "deploy/gcp/terraform-openshell-gke/ci_rbac.tf."
+            echo "deploy/gcp/terraform-substrate-gke/ci_rbac.tf."
             kubectl auth whoami || true
             exit 1
           fi
@@ -179,10 +181,14 @@ jobs:
           # Running somewhere other than a system node means the pinning has not
           # taken effect, and evicting them would have the autoscaler re-buy that
           # node before the stop can finish.
+          # The namespaces whose only pods must sit on the system pool. ate-system
+          # is deliberately absent: it also hosts the substrate control plane,
+          # which belongs on the worker pool, so listing it would make this refuse
+          # a legitimate stop.
           STRAY="$(kubectl get pods -A -o json | jq -r --argjson sys "$SYS_NODES" '
             [.items[]
              | select(.metadata.namespace
-                      | IN("agent-sandbox-system", "cert-manager", "envoy-gateway-system", "openshell"))
+                      | IN("cert-manager", "envoy-gateway-system", "agentgateway-system"))
              | select((.status.phase // "") == "Running")
              | select(.spec.nodeName != null)
              | select(.spec.nodeName as $n | ($sys | index($n)) | not)
@@ -275,10 +281,11 @@ jobs:
             # common case for a scheduled stop.
             for n in ${nodes[@]+"${nodes[@]}"}; do
               echo "::group::drain $n"
-              # --force: sandbox Pods are bare (no controller) and the drain refuses
-              # them otherwise. --ignore-daemonsets: the per-node GKE agents (anetd,
-              # fluent-bit, node-local-dns, ...) are recreated wherever a node exists
-              # and do not block scale-down.
+              # --force: pods with no backing controller are refused by a plain
+              # drain, and an actor or a finished bare Job is exactly what is left
+              # on a tenant node. --ignore-daemonsets: the per-node GKE agents
+              # (anetd, fluent-bit, node-local-dns, ...) are recreated wherever a
+              # node exists and do not block scale-down.
               if ! kubectl drain "$n" --ignore-daemonsets --delete-emptydir-data --force \
                 --grace-period=30 --timeout="$DRAIN_TIMEOUT"; then
                 # The add-ons carry PodDisruptionBudgets and, with every pool already
@@ -399,7 +406,7 @@ jobs:
           ADDON_TIMEOUT: 300
         run: |
           set -uo pipefail
-          NAMESPACES=(envoy-gateway-system cert-manager agent-sandbox-system openshell)
+          NAMESPACES=(envoy-gateway-system cert-manager agentgateway-system)
           if [ -n "$SUBSTRATE_NODE_POOL" ]; then NAMESPACES+=(ate-system); fi
           RC=0
           for ns in "${NAMESPACES[@]}"; do
@@ -439,7 +446,7 @@ jobs:
           kubectl get nodes -L cloud.google.com/gke-nodepool || echo "(no nodes registered — expected after a stop)"
           echo
           {
-            echo "### OpenShell cluster ${ACTION}"
+            echo "### Substrate cluster ${ACTION}"
             echo
             while IFS='|' read -r role pool _ _; do
               [ -n "$pool" ] || continue

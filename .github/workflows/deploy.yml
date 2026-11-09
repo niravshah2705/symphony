@@ -7,8 +7,8 @@ name: Deploy to GCP
 #   • shared packages changed → rebuild all service images.
 #   • root deps changed → rebuild all service images + republish the SPA.
 #   • deploy/gcp/terraform/** changed → `terraform apply` only (no image rebuild).
-#   • deploy/gcp/terraform-openshell-gke/** changed → the gke-reconcile job plans
-#                                  and applies the multi-tenant OpenShell GKE
+#   • deploy/gcp/terraform-substrate-gke/** changed → the gke-reconcile job plans
+#                                  and applies the multi-tenant Substrate GKE
 #                                  module (separate state prefix, no images).
 #   • SPA source, config, or release tooling changed → Firebase Hosting deploy.
 #   • docs / anything else → nothing runs.
@@ -24,7 +24,7 @@ on:
         type: boolean
         default: false
       gke_reconcile:
-        description: "Reconcile the OpenShell GKE module (plan + apply)"
+        description: "Reconcile the Substrate GKE module (plan + apply)"
         type: boolean
         default: false
       gke_plan_only:
@@ -86,7 +86,7 @@ jobs:
             infra:    ['deploy/gcp/terraform/**']
             # Separate stack, separate state prefix — deliberately NOT under
             # infra's terraform/** glob.
-            gke:      ['deploy/gcp/terraform-openshell-gke/**']
+            gke:      ['deploy/gcp/terraform-substrate-gke/**']
             root:     ['package.json', 'package-lock.json']
             org:      ['services/org/**']
             settings: ['services/settings/**']
@@ -186,7 +186,7 @@ jobs:
           # mandatory egress sidecars and stream-token broker have this SHA.
           if [ "$run_tf" = "true" ]; then push proxy proxy deploy/gcp/Dockerfile.proxy . ; fi
 
-          # The OpenShell GKE module is its own stack (own state prefix, no
+          # The Substrate GKE module is its own stack (own state prefix, no
           # images). It reconciles when its paths changed, when everything is
           # forced, or when a dispatch asks for it by name.
           run_gke=false
@@ -610,8 +610,8 @@ jobs:
         run: terraform output
 
   # --------------------------------------------------------------------------
-  # 4. OpenShell GKE reconcile. Separate stack, separate state prefix, no
-  #    images — see deploy/gcp/terraform-openshell-gke/README.md.
+  # 4. Substrate GKE reconcile. Separate stack, separate state prefix, no
+  #    images — see deploy/gcp/terraform-substrate-gke/README.md.
   #
   #    Applies the plan it just published, EXCEPT for anything destructive: a
   #    plan containing a delete (a node-pool or gateway replacement counts) fails
@@ -630,20 +630,20 @@ jobs:
     needs: changes
     if: needs.changes.outputs.run_gke == 'true'
     runs-on: ubuntu-24.04
-    name: reconcile openshell gke
-    # Shared with openshell-cluster-power: that workflow owns the node pools'
+    name: reconcile substrate gke
+    # Shared with substrate-cluster-power: that workflow owns the node pools'
     # min/max, and this job reads them to pass them back unchanged.
     concurrency:
-      group: openshell-cluster-power
+      group: substrate-cluster-power
       cancel-in-progress: false
     env:
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      CLUSTER: ${{ vars.OPENSHELL_CLUSTER_NAME || 'openshell-multitenant' }}
-      ZONE: ${{ vars.OPENSHELL_CLUSTER_ZONE || 'asia-south1-a' }}
-      NODE_POOL: ${{ vars.OPENSHELL_NODE_POOL || 'openshell-multitenant-node-pool' }}
-      SYSTEM_NODE_POOL: ${{ vars.OPENSHELL_SYSTEM_NODE_POOL || 'openshell-system-node-pool' }}
-      GKE_TF_DIR: deploy/gcp/terraform-openshell-gke
-      GKE_TF_STATE_PREFIX: openshell/gke
+      CLUSTER: ${{ vars.SUBSTRATE_CLUSTER_NAME || 'substrate-multitenant' }}
+      ZONE: ${{ vars.SUBSTRATE_CLUSTER_ZONE || 'asia-south1-a' }}
+      NODE_POOL: ${{ vars.SUBSTRATE_TENANT_NODE_POOL || 'substrate-node-pool' }}
+      SYSTEM_NODE_POOL: ${{ vars.SUBSTRATE_SYSTEM_NODE_POOL || 'substrate-system-node-pool' }}
+      GKE_TF_DIR: deploy/gcp/terraform-substrate-gke
+      GKE_TF_STATE_PREFIX: substrate/gke
       GKE_TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
     steps:
       - uses: actions/checkout@v6
@@ -662,7 +662,7 @@ jobs:
         id: gke
         env:
           PLAN_ONLY: ${{ inputs.gke_plan_only }}
-          CERT_EMAIL: ${{ vars.OPENSHELL_CERT_EMAIL }}
+          CERT_EMAIL: ${{ vars.SUBSTRATE_CERT_EMAIL }}
         run: |
           set -euo pipefail
           if [ "$PLAN_ONLY" = "true" ]; then
@@ -674,7 +674,7 @@ jobs:
           fi
           # cert_email is a required module variable with no default.
           if [ -z "$CERT_EMAIL" ]; then
-            echo "::error::Set the ACME email once: gh variable set OPENSHELL_CERT_EMAIL --body \"<email>\""
+            echo "::error::Set the ACME email once: gh variable set SUBSTRATE_CERT_EMAIL --body \"<email>\""
             exit 1
           fi
           echo "cert_email=$CERT_EMAIL" >> "$GITHUB_OUTPUT"
@@ -685,16 +685,24 @@ jobs:
           SUBSTRATE_NODE_POOL: ${{ vars.SUBSTRATE_NODE_POOL }}
         run: |
           set -euo pipefail
-          POOL_JSON="$(gcloud container node-pools describe "$NODE_POOL" \
-            --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" --format json)"
-          # The power workflow parks min at 0 to stop the cluster and GKE omits
-          # minNodeCount when it is 0. Passing the live bounds back in is what
-          # keeps a reconcile from silently starting (or capping) the pool.
-          MIN="$(jq -r '.autoscaling.minNodeCount // .initialNodeCount // 0' <<<"$POOL_JSON")"
-          MAX="$(jq -r '.autoscaling.maxNodeCount // .initialNodeCount // 1' <<<"$POOL_JSON")"
-          echo "min=$MIN" >> "$GITHUB_OUTPUT"
-          echo "max=$MAX" >> "$GITHUB_OUTPUT"
-          echo "Live node pool bounds: min=$MIN max=$MAX"
+          # The pool may not exist yet: this root is greenfield, and the first
+          # reconcile of a fresh stack is what creates it. So read the live bounds
+          # when they are there and leave the module defaults in plan when they
+          # are not — same shape as the substrate and system pools below. An
+          # unguarded describe here fails the job before Terraform ever runs.
+          if POOL_JSON="$(gcloud container node-pools describe "$NODE_POOL" \
+            --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" --format json 2>/dev/null)"; then
+            # The power workflow parks min at 0 to stop the cluster and GKE omits
+            # minNodeCount when it is 0. Passing the live bounds back in is what
+            # keeps a reconcile from silently starting (or capping) the pool.
+            MIN="$(jq -r '.autoscaling.minNodeCount // .initialNodeCount // 0' <<<"$POOL_JSON")"
+            MAX="$(jq -r '.autoscaling.maxNodeCount // .initialNodeCount // 1' <<<"$POOL_JSON")"
+            echo "min=$MIN" >> "$GITHUB_OUTPUT"
+            echo "max=$MAX" >> "$GITHUB_OUTPUT"
+            echo "Live node pool bounds: min=$MIN max=$MAX"
+          else
+            echo "Tenant pool $NODE_POOL not found yet; leaving module defaults in plan."
+          fi
           # The substrate worker pool is parked the same way by the power
           # workflow; read its live bounds too so a reconcile cannot spin a
           # stopped substrate node back up by applying the module default.
@@ -737,14 +745,21 @@ jobs:
           terraform init -input=false \
             -backend-config="bucket=$BUCKET" \
             -backend-config="prefix=$GKE_TF_STATE_PREFIX"
-          # An unadopted state would make "reconcile" mean "create a second
-          # cluster next to the live one" — see IMPORT.md.
+          # GREENFIELD: the cluster and every GKE resource this file describes were
+          # destroyed before the root was re-pointed here, so an empty state is the
+          # expected starting condition and the first plan is a create, not an
+          # adoption. The guard that used to sit here failed an empty prefix ("run
+          # the IMPORT.md adoption pass first") on the assumption that a live
+          # cluster was waiting to be duplicated — that assumption is gone, and so
+          # is the runbook. The opposite risk (a populated state whose resources
+          # were deleted out from under it) is still caught: the delete count below
+          # fails the run rather than applying it.
           STATE_COUNT="$(terraform state list | wc -l | tr -d ' ')"
           if [ "$STATE_COUNT" -lt 1 ]; then
-            echo "::error::Remote state at gs://$BUCKET/$GKE_TF_STATE_PREFIX is empty. Run the IMPORT.md adoption pass first."
-            exit 1
+            echo "::notice::Remote state at gs://$BUCKET/$GKE_TF_STATE_PREFIX is empty — greenfield first apply, everything in plan is a create."
+          else
+            echo "State already holds $STATE_COUNT resources"
           fi
-          echo "Adopted state holds $STATE_COUNT resources"
 
       - name: Validate configuration
         working-directory: ${{ env.GKE_TF_DIR }}
@@ -791,7 +806,11 @@ jobs:
           [ -n "$SUBSTRATE_LIVE_MIN" ]         && substrate_args+=(-var="substrate_min_nodes=$SUBSTRATE_LIVE_MIN")
           [ -n "$SUBSTRATE_LIVE_MAX" ]         && substrate_args+=(-var="substrate_max_nodes=$SUBSTRATE_LIVE_MAX")
           # Empty when the pool does not exist yet (fresh stack): the module
-          # default describes it, so keep the default in the plan.
+          # defaults describe it, so keep the defaults in the plan rather than
+          # passing -var="min_nodes=" and failing Terraform's type check.
+          tenant_args=()
+          [ -n "$MIN_NODES" ] && tenant_args+=(-var="min_nodes=$MIN_NODES")
+          [ -n "$MAX_NODES" ] && tenant_args+=(-var="max_nodes=$MAX_NODES")
           system_args=()
           [ -n "$SYS_MIN_NODES" ] && system_args+=(-var="system_min_nodes=$SYS_MIN_NODES")
           [ -n "$SYS_MAX_NODES" ] && system_args+=(-var="system_max_nodes=$SYS_MAX_NODES")
@@ -801,14 +820,13 @@ jobs:
             -var="cluster_name=$CLUSTER" \
             -var="node_pool_name=$NODE_POOL" \
             -var="cert_email=$CERT_EMAIL" \
-            -var="min_nodes=$MIN_NODES" \
-            -var="max_nodes=$MAX_NODES" \
+            "${tenant_args[@]}" \
             "${system_args[@]}" \
             "${substrate_args[@]}" \
             -out=gke.tfplan
           terraform show -json gke.tfplan > gke.json
           {
-            echo "## Terraform plan — OpenShell GKE"
+            echo "## Terraform plan — Substrate GKE"
             echo ""
             echo "Mode: **$MODE_LABEL** · scope: the whole module (GKE, network, in-cluster platform), refreshed against live."
             echo ""

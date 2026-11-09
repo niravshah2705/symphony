@@ -99,8 +99,8 @@ export async function renderCost(view) {
   }
   if (summary.fundStatus === 'unavailable' || Number(summary.balancePaise) <= 0) {
     content.push(el('div', { class: 'notice operational-notice operational-notice-warn' }, [
-      el('strong', {}, 'Funds Unavailable — Runners, Sandbox Creation & Scheduled Calls Disabled'),
-      el('span', {}, ` Organization balance is ${inr(summary.balanceInr)}. Add credits or configure auto-reload${summary.isAdmin ? ' below' : ''} to re-enable sandbox provisioning and scheduled ticks.`),
+      el('strong', {}, 'Funds Unavailable — Runners & Scheduled Calls Disabled'),
+      el('span', {}, ` Organization balance is ${inr(summary.balanceInr)}. Add credits or configure auto-reload${summary.isAdmin ? ' below' : ''} to re-enable runner jobs and scheduled ticks.`),
     ]));
   }
 
@@ -108,7 +108,7 @@ export async function renderCost(view) {
     el('section', { class: 'metric-grid', 'aria-label': 'Billing summary' }, [
       metric('Balance', inr(summary.balanceInr), `${summary.currency} · seeded ${inr(summary.initialCreditInr)}`),
       metric('Fund Status', summary.fundStatus === 'unavailable' ? 'Unavailable' : 'Available',
-        summary.fundStatus === 'unavailable' ? 'Sandbox & scheduler paused' : 'Active & ready'),
+        summary.fundStatus === 'unavailable' ? 'Runners & scheduler paused' : 'Active & ready'),
       // Two series, deliberately: the second one is the number the platform never
       // spent, and its zero is what an organization on its own key is buying.
       metric('Managed spend (7 days)', inr(sourceSeries(summary, 'managed').costInr),

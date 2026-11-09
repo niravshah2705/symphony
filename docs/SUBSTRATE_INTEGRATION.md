@@ -1,11 +1,10 @@
 # Agent Substrate Integration (parallel execution substrate)
 
 This document covers how [Agent Substrate](https://github.com/agent-substrate/substrate)
-is wired in as a **third, user-selectable execution substrate** alongside Cloud Run
-and OpenShell, how authentication stays managed (raw credentials never enter the
-actor), and how the **one shared guardrail spec** drives both OpenShell and
-Substrate. It is the substrate sibling of
-[`OPENSHELL_INTEGRATION.md`](./OPENSHELL_INTEGRATION.md).
+is wired in as a **user-selectable execution substrate** alongside Cloud Run, how
+authentication stays managed (raw credentials never enter the actor), and how the
+**one shared guardrail spec** drives Substrate's egress, namespace and credential
+rendering.
 
 ## 1. Three orthogonal "how the agent runs" concepts
 
@@ -15,7 +14,7 @@ Do not confuse these — each is a separate persisted key:
 |---|---|---|---|
 | Harness / SDK | `agentRuntime` | deepagent, claude-agent-sdk, codex-sdk, … | `packages/shared/src/agent/harnesses/registry.js`, admission in `services/gateway/src/pipeline-admission.js` |
 | Reasoning pattern | `workflowPattern` | plan/act/reflect, … | `packages/shared/src/agent/harnesses/contract.js` |
-| **Execution substrate** | **`agentPattern`** | **`cloudrun` \| `openshell` \| `substrate`** | `packages/shared/src/agent/pattern-router.js` (planning stage only) |
+| **Execution substrate** | **`agentPattern`** | **`cloudrun` \| `substrate`** | `packages/shared/src/agent/pattern-router.js` (planning stage only) |
 
 `agentPattern` defaults to `cloudrun`, so **every existing install is byte-for-byte
 unchanged** unless an operator opts in. Only the **planning stage** diverts to
@@ -25,7 +24,7 @@ Substrate; every other stage falls through to `executeAgentRuntime`.
 
 - **Backend** drives Substrate over a **gRPC client to `ateapi`**
   (`packages/shared-core/src/agent/substrate.js`) — no `kubectl-ate` /
-  `ate-setup` at runtime. Protobuf framing is shared with OpenShell via
+  `ate-setup` at runtime. Protobuf framing lives in
   `packages/shared-core/src/agent/grpc-wire.js`.
 - **Sandbox = gVisor (runsc)** on a dedicated, tainted node pool. The `SandboxConfig`
   gvisor runtime class is installed by the platform, so this module does **not**
@@ -109,10 +108,9 @@ in `settings.guardrailSpec`, rendered per pattern by
 - `buildCredentialProviderPolicy(spec)` → which Secrets the atespace may read
   (`spec.credentials.scopes`: `github` → `ghcr-pull-and-clone`,
   `openrouter` → `openrouter-api-key`, `image-registry` → `image-registry-creds`).
-- `buildOpenShellGuardrail(spec)` → the OpenShell NetworkPolicy YAML.
 
 `GET /api/agent/guardrail` returns the normalized spec plus a `preview`
-`{openshellYaml, substrateEgress, credentialProviderPolicy}`; `POST` normalizes +
+`{atenetEgress, namespacePolicy, credentialProvider}`; `POST` normalizes +
 validates + persists. `tools.allowlist` / `denyAll` also feed pipeline admission.
 
 ## 5. Enabling it (operator steps)
@@ -155,9 +153,9 @@ so one streaming planning POST stays open for the whole run.
 
 Two things make the hostname usable rather than decorative:
 
-- **Its own Envoy data plane.** The `eg` GatewayClass pins the *OpenShell* IP at
-  class level (`openshell-proxy-config`), so a second Gateway on that class would
-  fight over the same address. `substrate.tf` therefore renders a per-Gateway
+- **Its own Envoy data plane.** One IP per front: a Gateway that shares another
+  front's class-level `EnvoyProxy` would fight it for the same address, so
+  `substrate.tf` renders a per-Gateway
   `EnvoyProxy substrate-proxy-config` (in `ate-system`, so `parametersRef` needs no
   ReferenceGrant) bound to `substrate-ip`, and points
   `spec.infrastructure.parametersRef` at it.
@@ -217,10 +215,9 @@ Two manifests carry that through:
   `ClusterIssuer`s) lists both fronts. cert-manager's `gatewayHTTPRoute` solver
   creates one HTTPRoute carrying every `parentRefs` entry, and an unprogrammed
   parent still Accepts it, so the challenge answers on whichever front the A record
-  resolves to — including an operator who points the hostname at the shared
-  OpenShell front instead of `substrate-ip`. The issuer used to be pinned to
-  `openshell-ingress` alone, which silently made every substrate challenge depend
-  on that one front.
+  resolves to — including an operator who points the hostname at the agentgateway
+  front instead of `substrate-ip`. The issuer used to be pinned to a single front,
+  which silently made every substrate challenge depend on that one front.
 
 So the sequence is one step, not a dance: apply → create the **A record for
 `substrate_ingress_ip`** → cert-manager issues and the `https` listener lights up.
@@ -240,7 +237,7 @@ Leave `SUBSTRATE_INGRESS_HOSTNAME` unset and the installer stays the sole owner.
 | `substrateUrl` | `https://substrate.archagentix.com` with `SUBSTRATE_CONTROL_PLANE_PUBLIC=true` (gRPC rides the `/substrate.ateapi.v1.Control` prefix); otherwise the in-cluster `ateapi.ate-system.svc:8443`, reachable only from inside the VPC |
 | `substrateIngressUrl` | `https://substrate.archagentix.com` |
 | `substrateAtespace` | **must be a space this deployment has already declared** — i.e. listed in `SUBSTRATE_ALLOWED_ATESPACES`, pinned as `SUBSTRATE_ATESPACE`, or a value in `SUBSTRATE_ATESPACE_BY_ORG`. Anything else is dropped by `resolveSubstrateAtespace`, which then resolves from the binding table by organization id. Nothing is derived from the *text* of an org id any more, and once a deployment declares more than one space an organization that is not bound **throws** instead of landing in `tenant-a`. A per-tenant stack does not need this field: the provisioner pins `SUBSTRATE_ATESPACE` from the deployment slug. `GET /api/agent/substrate/status` echoes what was resolved; the runner creates the atespace over ateapi (`CreateAtespace`/`GetAtespace`) if missing |
-| `substrateWorkerPool` | the value of the `ate.dev/worker-pool` **node label** the `workerSelector` matches — not automatically the GKE pool name. This config taints the pool but does not label it, so either label the nodes (`gcloud container node-pools update substrate-worker-pool … --node-labels ate.dev/worker-pool=substrate-worker-pool`) or set the field to whatever label the upstream installer applied. Blank falls back to `planner-pool` |
+| `substrateWorkerPool` | the value of the `ate.dev/worker-pool` **node label** the `workerSelector` matches — not automatically the GKE pool name. `substrate.tf` labels the worker pool with `var.substrate_worker_pool_label` (default `planner-pool`), which is also `DEFAULT_WORKER_POOL` in `packages/shared-core/src/agent/substrate.js` and `substrate_worker_pool` in `deploy/gcp/terraform/variables.tf`: the three defaults are one value, and changing only one of them schedules nothing. Blank falls back to `planner-pool` |
 | `substrateActorTemplate` | `planner` |
 | `substratePlannerImage` | the planner image **pinned by digest** (`name@sha256:…`) — `upsertActorTemplate` throws on a tag, so use the digest the stack is on |
 | `substrateTimeoutMs` | per-call gRPC deadline; `60000` is the default. Keep it under the Cloud Run / ingress budget of the calling service |
@@ -328,14 +325,14 @@ preflight's GSA row and the installer flag will disagree.
 - `packages/shared-core/src/agent/substrate.js` — ateapi gRPC client (control plane).
 - `packages/shared-core/src/agent/substrate-runner.js` — credential bridge + per-run
   actor lifecycle (`runPlanningOnSubstrate`) + `verifyActorJwt`.
-- `packages/shared-core/src/agent/grpc-wire.js` — protobuf primitives shared with OpenShell.
+- `packages/shared-core/src/agent/grpc-wire.js` — protobuf framing primitives.
 - `packages/shared-core/src/secrets/s2s-resolver.js` — single managed secret source.
 - `packages/shared-core/src/guardrails/{spec,consumers}.js` — unified spec + per-pattern renderers.
-- `packages/shared/src/agent/pattern-router.js` — `dispatchPlanning` branch (substrate|openshell|cloudrun).
+- `packages/shared/src/agent/pattern-router.js` — `dispatchPlanning` branch (substrate|cloudrun).
 - `services/planner/src/routes/agent.js` — `/agent/substrate/*` and `/agent/guardrail` routes.
 - `services/planner/src/routes/substrate-actor.js` — actor-side `POST /internal/plan/run` (only mounted when `SUBSTRATE_ACTOR_MODE=true`).
 - `services/planner/src/jwks.js` — cached JWKS fetcher used by the actor route.
-- `deploy/gcp/terraform-openshell-gke/substrate.tf` — pool, namespaces, snapshots, ingress.
+- `deploy/gcp/terraform-substrate-gke/substrate.tf` — pool, namespaces, snapshots, ingress.
 - `public/js/views/settings.js` — pattern selector + guardrails panel.
 
 ### Actor-mode env vars (set on the substrate ActorTemplate's container)
@@ -358,13 +355,13 @@ public control-plane route never appears unless asked for.
 `.github/workflows/substrate-control-plane.yml` is the other substrate workflow:
 it is `workflow_dispatch`-only and touches no Cloud Run service and no Terraform
 state, so it can be run from a branch without deploying anything (§5.2). It shares
-`concurrency.group: openshell-cluster-power` with the power workflow so an install
+`concurrency.group: substrate-cluster-power` with the power workflow so an install
 never races a scale-to-zero.
 
 It **reads the live substrate node-pool bounds back** and feeds them as
 `substrate_min/max_nodes`, so a reconcile cannot silently start a pool the power
-workflow parked (the same read-back now covers `openshell-system-node-pool`, which
-`openshell-cluster-power.yml` also parks last). That workflow parks/wakes the
+workflow parked (the same read-back covers the system pool, which
+`substrate-cluster-power.yml` also parks last). That workflow parks/wakes the
 substrate pool in lockstep when `SUBSTRATE_NODE_POOL` is set.
 
 The **first apply with `substrate_enabled = true` shows the new resources as
@@ -393,8 +390,8 @@ The **first apply with `substrate_enabled = true` shows the new resources as
   curl -sI https://substrate.<your-domain>/                      # reply from atenet-router, not a TLS error
   ```
   Envoy names the front `envoy-<namespace>-<gateway>-<hash>` and stamps the owning
-  Gateway on it; the OpenShell front lives in `envoy-gateway-system` because the
-  class-level `EnvoyProxy` does, so expect the substrate one beside its own
+  Gateway on it; the agentgateway front lives in its own namespace, so expect the
+  substrate one beside its own
   `EnvoyProxy` in `ate-system`. A `Gateway` stuck on `Programmed=False` with no
   address means the Envoy Service could not bind `substrate-ip` — check the
   `parametersRef` name/namespace pair, not the DNS.
@@ -463,15 +460,14 @@ Unprovisioned pieces on the shared deployment today, each of which the run call 
 as an error rather than a silent no-op:
 
 - `SUBSTRATE_ENABLED=true` and `SUBSTRATE_NODE_POOL=substrate-worker-pool` are set, and
-  the pool exists (tainted, never labelled) — so `substrate.tf` is in plan.
+  the pool exists (tainted, and labelled `ate.dev/worker-pool=planner-pool` by
+  `substrate.tf` since the label is what the selector matches) — so `substrate.tf` is in plan.
 - The front is applied but **not yet serving** `substrate.archagentix.com`:
   `substrate-ip` is allocated (34.14.137.62), `substrate-ingress` is Programmed and its
   Envoy LoadBalancer is up on port 80, but `substrate-server-external-tls` has never been
   issued so the `https` listener is still invalid — and there is no DNS record for the
   hostname at all (§5.1). Until the record lands, HTTP-01 cannot complete and the two URL
   fields have nowhere public to point.
-- The pool is tainted but carries no `ate.dev/worker-pool` **label**, so the installer's
-  `workerSelector` matches nothing until the nodes are labelled (§5.1 field table).
 - `SUBSTRATE_VERSION` is unset, so every preflight/install run resolves the tag from
   "latest release" and warns; pin it once the cluster is live (§5.2).
 - The `ate-system` control plane is never installed by Terraform; it lands when the
@@ -479,8 +475,11 @@ as an error rather than a silent no-op:
   (§5 step 3, §5.2).
 - Neither Cloud Run service carries `SUBSTRATE_URL` / `SUBSTRATE_INGRESS_URL`, so
   `configured: false` until the Settings store supplies them.
-- `POST /api/agent/substrate/run` passes no `applyManifest` seam, and
-  `syncSubstrateSecrets` fails closed when a credential resolves without one (Secret CRUD
-  is not an ateapi RPC). Until a cluster-side applier exists, apply the
-  `substrate-credentials` Secret and the `atenet-egress` read grant out of band, or smoke
-  against an organization whose vault resolves nothing.
+- `POST /api/agent/substrate/run` passes no `applyManifest` seam, so a credential the
+  guardrail spec **grants** cannot be written (Secret CRUD is not an ateapi RPC, and no
+  Cloud Run workload in this stack has a k8s client). The run refuses before it creates
+  an atespace or an actor, and names the scopes it needed. A credential the spec does not
+  grant is not an error: it is withheld and reported as `substrate.credentialWithheld`.
+  Until a cluster-side applier exists, apply the `substrate-credentials` Secret and the
+  `atenet-egress` read grant out of band (`substrate.tf` owns the read grant in
+  Terraform), or smoke against an organization whose vault resolves nothing.
