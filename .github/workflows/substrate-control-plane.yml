@@ -298,6 +298,30 @@ jobs:
             echo "not Programmed (${line:-no status yet}) — no Envoy data plane, so port 80 answers nothing and HTTP-01 cannot complete"
             exit 1
           '
+          # Accepted is not routable. A Route whose backendRef names a Service that
+          # does not exist is still Accepted — the gateway takes the object, Envoy
+          # has nowhere to send the traffic, and every request through that path
+          # prefix fails while the Gateway reports itself healthy. The ateapi
+          # control-plane route shipped exactly like that: it references
+          # ate-system/ateapi, and `ate-setup` names the Service `api`.
+          check "ingress route backends resolve" bash -c '
+            pairs="$(kubectl -n ate-system get httproute \
+              -o jsonpath="{range .items[*]}{.metadata.name}={.status.parents[*].conditions[?(@.type==\"ResolvedRefs\")].status} {end}" 2>/dev/null)" \
+              || { echo "no HTTPRoutes in ate-system — the ingress front is not applied yet"; exit 1; }
+            [ -n "${pairs// /}" ] || { echo "no HTTPRoutes in ate-system — the ingress front is not applied yet"; exit 1; }
+            bad=""
+            for p in $pairs; do
+              case "$p" in
+                *=True) : ;;
+                *) bad="$bad $p" ;;
+              esac
+            done
+            if [ -n "$bad" ]; then
+              echo "no such backend:$bad — the front accepts the connection and cannot serve it"
+              exit 1
+            fi
+            echo "$pairs"
+          '
           # Distinguishes "no hostname asked for" from "asked for and the apply
           # failed", which the Gateway row alone cannot tell apart.
           check "hostname front requested" bash -c '
