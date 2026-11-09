@@ -49,7 +49,16 @@ test('promoted pages self-canonicalise at the root and drop /adlc/ links', () =>
   assert.match(landing, new RegExp(`<link rel="canonical" href="${CANONICAL_ORIGIN}/" />`));
   assert.match(landing, new RegExp(`<meta property="og:url" content="${CANONICAL_ORIGIN}/" />`));
   const first = landing.match(/<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/)[1];
-  assert.equal(JSON.parse(first).url, `${CANONICAL_ORIGIN}/`);
+  const rootEntity = JSON.parse(first);
+  // The www root declares its WebSite entity, and that entity is the one every
+  // other surface points at; a flat node is still accepted.
+  const website = Array.isArray(rootEntity['@graph'])
+    ? rootEntity['@graph'].find((entity) => entity['@type'] === 'WebSite')
+    : rootEntity;
+  assert.ok(website, 'the promoted landing must declare a WebSite entity');
+  assert.equal(website.url, `${CANONICAL_ORIGIN}/`);
+  assert.equal(website['@id'], `${CANONICAL_ORIGIN}/#website`);
+  assert.equal(website.publisher['@id'], `${CANONICAL_ORIGIN}/#organization`);
   for (const rel of built.files) {
     assert.ok(!read(rel).includes('/adlc/'), `marketing/${rel} still references /adlc/`);
   }

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 453 nodes
+Community of 474 nodes
 
-- **Size**: 453 nodes
-- **Cohesion**: 0.3273
+- **Size**: 474 nodes
+- **Cohesion**: 0.3293
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,14 +65,13 @@ Community of 453 nodes
 | realResolveModel | Function | ./packages/shared/src/agent/business-pipeline.js | 89-94 |
 | invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
 
-*... and 403 more members.*
+*... and 424 more members.*
 
 ## Execution Flows
 
 - **resume** (criticality: 0.67, depth: 8)
 - **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
 - **generatePlan** (criticality: 0.67, depth: 6)
-- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **startScheduler** (criticality: 0.65, depth: 5)
 - **proposeSettings** (criticality: 0.58, depth: 4)
 
@@ -80,26 +79,26 @@ Community of 453 nodes
 
 ### Outgoing
 
-- `equal` (403 edge(s))
-- `deepEqual` (77 edge(s))
-- `String` (58 edge(s))
+- `equal` (417 edge(s))
+- `deepEqual` (84 edge(s))
+- `String` (64 edge(s))
 - `strictEqual` (48 edge(s))
 - `push` (44 edge(s))
 - `Number` (42 edge(s))
-- `replace` (37 edge(s))
+- `replace` (41 edge(s))
+- `ok` (37 edge(s))
 - `match` (33 edge(s))
-- `ok` (33 edge(s))
 - `map` (32 edge(s))
 - `slice` (31 edge(s))
-- `Boolean` (28 edge(s))
+- `Boolean` (31 edge(s))
+- `rejects` (29 edge(s))
 - `join` (28 edge(s))
-- `require` (25 edge(s))
-- `isFinite` (25 edge(s))
+- `trim` (27 edge(s))
 
 ### Incoming
 
-- `equal` (403 edge(s))
-- `deepEqual` (77 edge(s))
+- `equal` (417 edge(s))
+- `deepEqual` (84 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (55 edge(s))
 - `strictEqual` (48 edge(s))
@@ -107,9 +106,9 @@ Community of 453 nodes
 - `./packages/shared/src/agent/business-pipeline.js` (46 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (44 edge(s))
 - `./packages/shared/src/agent/llm.js` (40 edge(s))
-- `ok` (33 edge(s))
+- `ok` (37 edge(s))
+- `rejects` (29 edge(s))
 - `match` (28 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
-- `rejects` (22 edge(s))
 - `after` (22 edge(s))
 - `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))

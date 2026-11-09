@@ -19,8 +19,21 @@ const PLATFORM_URL = 'https://platform.archagentix.com/';
 const MARKETING_PAGES = ['pricing', 'about', 'careers', 'newsroom', 'contact'];
 const COMPANY_LINKS = ['About Company', 'Careers', 'Newsroom', 'Contact Us'];
 
-const sitemapLocs = () =>
-  [...read('sitemap.xml').matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+const locsFrom = (source) =>
+  [...source.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+const sitemapLocs = () => locsFrom(read('sitemap.xml'));
+const platformSitemapLocs = () => locsFrom(read('sitemap-platform.xml'));
+
+// A sitemap entry is only a promise that a real, statically served document exists
+// behind it. Firebase's `** -> /index.html` rewrite answers anything with the SPA
+// shell, so a path that is not a file on disk silently 200s the wrong page.
+const isBackedByStaticFile = (loc) => {
+  const rel = new URL(loc).pathname;
+  const candidates = rel.endsWith('/')
+    ? ['index.html', path.join(rel.slice(1), 'index.html')]
+    : [rel.slice(1)];
+  return candidates.some((candidate) => fs.existsSync(path.join(PUBLIC, candidate)));
+};
 
 test('sitemap lists only the www.archagentix.com canonical domain', () => {
   const locs = sitemapLocs();
@@ -34,15 +47,8 @@ test('sitemap lists only the www.archagentix.com canonical domain', () => {
 });
 
 test('every sitemap URL is backed by a literal crawlable file on disk', () => {
-  for (const loc of sitemapLocs()) {
-    const rel = new URL(loc).pathname;
-    const candidates = rel.endsWith('/')
-      ? [path.join('index.html'), path.join(rel.slice(1), 'index.html')]
-      : [rel.slice(1)];
-    const exists = candidates.some((candidate) =>
-      fs.existsSync(path.join(PUBLIC, candidate)),
-    );
-    assert.ok(exists, `sitemap url has no static file for ${rel}`);
+  for (const loc of [...sitemapLocs(), ...platformSitemapLocs()]) {
+    assert.ok(isBackedByStaticFile(loc), `sitemap url has no static file for ${new URL(loc).pathname}`);
   }
 });
 
@@ -254,4 +260,92 @@ test('footer mirrors the platform footer and carries the company sections', () =
     assert.ok(spaFooter.includes(label), `platform footer missing ${label}`);
   }
   assert.match(spaFooter, /aria-label="Company"/);
+});
+
+test('the brand query has a landing page: every public title names Archagentix', () => {
+  const pages = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) walk(path.join(dir, entry.name));
+      else if (entry.name.endsWith('.html')) pages.push(path.relative(PUBLIC, path.join(dir, entry.name)));
+    }
+  };
+  walk(PUBLIC);
+  assert.ok(pages.length >= 16, `expected every public page, found ${pages.length}`);
+  for (const page of pages) {
+    const title = read(page).match(/<title>([^<]*)<\/title>/)?.[1];
+    assert.ok(title, `${page} has no <title>`);
+    assert.match(title, /Archagentix/, `${page} title drops the brand: ${title}`);
+    assert.doesNotMatch(title, /ArchAgentix/, `${page} misspells the brand`);
+  }
+  // The two surfaces a brand search must win lead with it.
+  for (const page of ['index.html', 'adlc/index.html']) {
+    assert.match(read(page), /<title>Archagentix\b/, `${page} must lead with the brand`);
+  }
+});
+
+test('platform owns its sitemap, and www never publishes it', () => {
+  const locs = platformSitemapLocs();
+  assert.equal(locs.length, 2, `platform sitemap should list its two owned urls, got ${locs.length}`);
+  for (const loc of locs) {
+    assert.ok(loc.startsWith(PLATFORM_URL), `platform sitemap url off the app origin: ${loc}`);
+  }
+  assert.ok(locs.includes(PLATFORM_URL), 'platform sitemap must list the app root');
+
+  // The two sitemaps must stay disjoint: one origin each, or Google picks the host
+  // that is not the destination and the app root goes back to being a duplicate.
+  for (const loc of sitemapLocs()) assert.ok(!loc.startsWith(PLATFORM_URL), `www sitemap lists a platform url: ${loc}`);
+
+  const builder = fs.readFileSync(path.join(ROOT, 'scripts/build-marketing-site.js'), 'utf8');
+  const discovery = builder.match(/const DISCOVERY_FILES = \[([\s\S]*?)\];/)[1];
+  assert.doesNotMatch(discovery, /sitemap-platform/, 'www must not serve the platform sitemap');
+  if (fs.existsSync(path.join(ROOT, 'marketing'))) {
+    assert.ok(!fs.existsSync(path.join(ROOT, 'marketing', 'sitemap-platform.xml')), 'platform sitemap leaked into the marketing tree');
+  }
+});
+
+test('robots.txt advertises a sitemap for each host', () => {
+  const robots = read('robots.txt');
+  assert.match(robots, new RegExp(`Sitemap: ${PLATFORM_URL.replace(/[/.]/g, '\\$&')}sitemap-platform\\.xml`));
+  const lines = robots.split('\n').filter((line) => line.startsWith('Sitemap:'));
+  assert.equal(lines.length, 2, `one sitemap line per host, found ${lines.length}`);
+});
+
+test('both hosts describe one organization, and only www declares it', () => {
+  const wwwRoot = read('adlc/index.html');
+  assert.match(wwwRoot, /"@id": "https:\/\/www\.archagentix\.com\/#organization"/, 'the referenced @id must exist on www');
+
+  const spa = read('index.html');
+  const orgs = [...spa.matchAll(/"@type": "Organization",\s*"@id": "([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(orgs, [`${CANONICAL_ORIGIN}/#organization`], 'platform must reference the org, not redeclare it');
+  assert.match(spa, /<link rel="canonical" href="https:\/\/platform\.archagentix\.com\/" \/>/, 'platform root self-canonicalises');
+
+  // Marketing copies on platform still consolidate to www; only the app root is its own destination.
+  for (const page of ['adlc/index.html', ...MARKETING_PAGES.map((slug) => `${slug}/index.html`)]) {
+    assert.match(read(page), new RegExp(`<link rel="canonical" href="${CANONICAL_ORIGIN}/`), `${page} lost its www canonical`);
+  }
+});
+
+test('the benchmarks panel is an indexed, self-canonical Archagentix page', () => {
+  const html = read('archagentix/index.html');
+  assert.match(html, /<link rel="canonical" href="https:\/\/platform\.archagentix\.com\/archagentix\/" \/>/);
+  assert.match(html, /<meta name="robots" content="index, follow/);
+  const description = html.match(/name="description"\s+content="([^"]+)"/)?.[1];
+  assert.ok(description && description.length >= 120 && description.length <= 175, `benchmarks description: ${description?.length}`);
+  assert.match(html, /<meta property="og:site_name" content="Archagentix"/);
+  const blocks = [...html.matchAll(/<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/g)];
+  assert.equal(blocks.length, 1, 'the panel page needs exactly one JSON-LD graph');
+  const entities = JSON.parse(blocks[0][1])['@graph'];
+  assert.ok(entities.some((e) => e.publisher?.['@id'] === `${CANONICAL_ORIGIN}/#organization`));
+  assert.equal(entities.filter((e) => e['@type'] === 'Organization').length, 0, 'must not redeclare the org');
+});
+
+test('answer engines are told which host does what', () => {
+  for (const doc of ['llms.txt', 'llms-full.txt']) {
+    const text = read(doc);
+    assert.match(text, /^# Archagentix — ADLC/m, `${doc} must lead with the brand entity`);
+    assert.match(text, /platform\.archagentix\.com/, `${doc} never mentions the platform host`);
+    assert.match(text, /https:\/\/platform\.archagentix\.com\/archagentix\//, `${doc} omits the benchmarks url`);
+  }
+  assert.match(read('llms.txt'), /operates two hosts/);
 });

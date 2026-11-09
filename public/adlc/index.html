@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ADLC - Agentic Development Life Cycle</title>
+    <title>Archagentix — Agentic Development Life Cycle (ADLC) Platform</title>
     <meta
       name="description"
-      content="ADLC is the Agentic Development Life Cycle: a human-governed operating model for planning, coding, testing, reviewing, shipping, and learning with AI agents."
+      content="Archagentix builds ADLC, the Agentic Development Life Cycle: a human-governed software factory where AI agents plan, code, test, review, and ship while people stay in control."
     />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" content="#16201d" />
@@ -16,9 +16,9 @@
     <link rel="alternate" type="text/markdown" href="/llms-full.txt" title="Full ADLC machine-readable brief" />
     <link rel="stylesheet" href="/adlc/styles.css" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="ADLC" />
+    <meta property="og:site_name" content="Archagentix" />
     <meta property="og:url" content="https://www.archagentix.com/adlc/" />
-    <meta property="og:title" content="ADLC - Agentic Development Life Cycle" />
+    <meta property="og:title" content="Archagentix — Agentic Development Life Cycle (ADLC) Platform" />
     <meta
       property="og:description"
       content="A compact, governed workflow for shipping software with planner, coder, tester, reviewer, and delivery agents."
@@ -26,34 +26,57 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "ADLC",
-        "alternateName": "Agentic Development Life Cycle",
-        "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "Web",
-        "url": "https://www.archagentix.com/adlc/",
-        "description": "A human-governed agentic lifecycle for planning, implementing, testing, reviewing, delivering, and learning from software changes.",
-        "featureList": [
-          "Intent capture",
-          "Agent planning",
-          "Isolated coding workspaces",
-          "Automated verification",
-          "Human review gates",
-          "Delivery evidence"
-        ],
-        "isPartOf": {
-          "@type": "WebSite",
-          "name": "AI Fleet"
-        }
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://www.archagentix.com/#website",
+            "url": "https://www.archagentix.com/",
+            "name": "Archagentix",
+            "alternateName": "Archagentix ADLC",
+            "description": "Archagentix is the company behind ADLC, the Agentic Development Life Cycle: agentic development documentation, pricing, and product entry.",
+            "inLanguage": "en",
+            "publisher": { "@id": "https://www.archagentix.com/#organization" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "ADLC",
+            "alternateName": "Agentic Development Life Cycle",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "Web",
+            "url": "https://www.archagentix.com/adlc/",
+            "description": "A human-governed agentic lifecycle for planning, implementing, testing, reviewing, delivering, and learning from software changes.",
+            "brand": { "@type": "Brand", "name": "Archagentix" },
+            "publisher": { "@id": "https://www.archagentix.com/#organization" },
+            "keywords": [
+              "agentic development",
+              "AGI",
+              "software factory",
+              "Human AI Development",
+              "Centaur Developer"
+            ],
+            "featureList": [
+              "Intent capture",
+              "Agent planning",
+              "Isolated coding workspaces",
+              "Automated verification",
+              "Human review gates",
+              "Delivery evidence"
+            ],
+            "isPartOf": { "@id": "https://www.archagentix.com/#website" }
+          }
+        ]
       }
     </script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "Organization",
+        "@id": "https://www.archagentix.com/#organization",
         "name": "Archagentix Private Limited",
+        "alternateName": ["Archagentix", "ADLC"],
         "url": "https://www.archagentix.com/",
         "email": "archagentix@gmail.com",
+        "sameAs": ["https://github.com/niravshah2705/symphony"],
         "address": {
           "@type": "PostalAddress",
           "addressLocality": "Pune",
@@ -69,9 +92,9 @@
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="/adlc/" aria-label="ADLC home">
+      <a class="brand" href="/adlc/" aria-label="Archagentix home">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-        <span>ADLC</span>
+        <span>Archagentix</span>
       </a>
       <nav aria-label="Primary">
         <a href="/pricing/">Pricing</a>
@@ -90,6 +113,9 @@
           <p class="lede">
             ADLC turns a product intent into planned work, isolated implementation,
             verification evidence, review decisions, and release learning.
+            Archagentix runs it as a software factory for Human AI Development —
+            centaur developer teams, where people hold intent and approval and
+            agents do the bounded work.
           </p>
           <div class="hero-actions">
             <a class="primary-cta" href="https://platform.archagentix.com/" data-try-now>Try now</a>
@@ -181,7 +207,7 @@ release      ready when approved</code></pre>
         <a href="/pricing/">Pricing</a>
         <a href="/adlc/blog/">Blog</a>
         <a href="/adlc/brief/">Full brief</a>
-        <a href="https://platform.archagentix.com/" rel="noopener">Try now</a>
+        <a href="https://platform.archagentix.com/" rel="noopener">Archagentix Platform</a>
       </nav>
       <div class="footer-col footer-legal">
         <p>&copy; 2026 Archagentix Private Limited &middot; Pune, Maharashtra, India</p>

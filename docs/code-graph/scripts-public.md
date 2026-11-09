@@ -15,9 +15,9 @@ Community of 4 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | readPublic | Function | ./scripts/seo-discovery.test.js | 9-9 |
-| test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L35 | Test | ./scripts/seo-discovery.test.js | 35-50 |
-| test:sitemap and language-model documents expose one canonical public source@L52 | Test | ./scripts/seo-discovery.test.js | 52-86 |
-| test:persistent ADLC launcher has five named, local-icon assistant links@L88 | Test | ./scripts/seo-discovery.test.js | 88-99 |
+| test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L55 | Test | ./scripts/seo-discovery.test.js | 55-70 |
+| test:sitemap and language-model documents expose one canonical public source@L72 | Test | ./scripts/seo-discovery.test.js | 72-106 |
+| test:persistent ADLC launcher has five named, local-icon assistant links@L108 | Test | ./scripts/seo-discovery.test.js | 108-119 |
 
 ## Execution Flows
 
