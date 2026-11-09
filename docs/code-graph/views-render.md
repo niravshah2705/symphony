@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 742 nodes
+Community of 741 nodes
 
-- **Size**: 742 nodes
-- **Cohesion**: 0.4727
+- **Size**: 741 nodes
+- **Cohesion**: 0.4730
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 742 nodes
 | renderAccessDenied | Function | ./public/js/app.js | 803-815 |
 | render | Function | ./public/js/app.js | 817-899 |
 
-*... and 692 more members.*
+*... and 691 more members.*
 
 ## Execution Flows
 
@@ -94,7 +94,7 @@ Community of 742 nodes
 - `equal` (93 edge(s))
 - `filter` (84 edge(s))
 - `isArray` (73 edge(s))
-- `Boolean` (69 edge(s))
+- `Boolean` (68 edge(s))
 - `catch` (63 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (59 edge(s))
@@ -115,6 +115,6 @@ Community of 742 nodes
 - `./public/js/i18n.js` (34 edge(s))
 - `match` (29 edge(s))
 - `./public/js/views/organization.js` (27 edge(s))
-- `./public/js/auth.js` (24 edge(s))
+- `./public/js/auth.js` (23 edge(s))
 - `locator` (21 edge(s))
 - `deepEqual` (21 edge(s))

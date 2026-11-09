@@ -129,33 +129,47 @@ else
   bad "$WORKER_NODE_POOL: 0 Ready nodes — pending worker pods are what force the autoscaler to add one"
 fi
 
-# 4. Regional SSD quota. dynamic-rwo / pd-balanced / pd-ssd disks all bill against
-#    SSD_TOTAL_GB, so the postgres claim and the worker boot disks share one limit.
+# 4. Regional disk quota. pd-balanced and pd-ssd — which is what the bundled
+#    postgres claim is (dynamic-rwo provisions pd-balanced here) — bill against one
+#    shared SSD_TOTAL_GB limit, and that is how the old 500Gi claim starved every
+#    other disk. Hyperdisk does not: measured 2026-11-10, a 100 GB hyperdisk-balanced
+#    worker boot disk left SSD_TOTAL_GB at 50/500, and asia-south1 reports no
+#    Hyperdisk capacity quota among its 113 regional metrics.
 usage=$(gcloud compute regions describe "$REGION" --project="$PROJECT" \
   --format="json(quotas)" | jq -r '.quotas[] | select(.metric=="SSD_TOTAL_GB") | .usage' 2>/dev/null)
 limit=$(gcloud compute regions describe "$REGION" --project="$PROJECT" \
   --format="json(quotas)" | jq -r '.quotas[] | select(.metric=="SSD_TOTAL_GB") | .limit' 2>/dev/null)
-max_nodes=$(gcloud container node-pools describe "$WORKER_NODE_POOL" \
-  --cluster="$CLUSTER" --zone="$ZONE" --project="$PROJECT" \
-  --format="value(autoscaling.maxNodeCount)" 2>/dev/null)
-disk_gb=$(gcloud container node-pools describe "$WORKER_NODE_POOL" \
-  --cluster="$CLUSTER" --zone="$ZONE" --project="$PROJECT" \
-  --format="value(config.diskSizeGb)" 2>/dev/null)
-disk_type=$(gcloud container node-pools describe "$WORKER_NODE_POOL" \
-  --cluster="$CLUSTER" --zone="$ZONE" --project="$PROJECT" \
-  --format="value(config.diskType)" 2>/dev/null)
+read -r max_nodes disk_gb disk_type machine_type <<<"$(gcloud container node-pools describe \
+  "$WORKER_NODE_POOL" --cluster="$CLUSTER" --zone="$ZONE" --project="$PROJECT" \
+  --format="value(autoscaling.maxNodeCount,config.diskSizeGb,config.diskType,config.machineType)" 2>/dev/null)"
+# Compute refuses these series for EVERY Persistent Disk type, and it does so when
+# the MIG creates the instance — after `node-pools update` and `terraform apply` have
+# both reported success. The visible symptom is a pool that keeps its old template.
+case "${machine_type}" in
+  n4*|c4*|m4*|x4*|g4*|a4*|a5*|h4d*)
+    case "${disk_type}" in
+      pd-*) bad "$machine_type supports no Persistent Disk: $disk_type is refused at instance creation — use hyperdisk-balanced" ;;
+      *) ok "worker nodes are $machine_type on ${disk_type:-unknown} (that series has no Persistent Disk option)" ;;
+    esac ;;
+  *) [ -n "${machine_type:-}" ] && ok "worker nodes are $machine_type on ${disk_type:-unknown}" ;;
+esac
 if [ -z "${usage:-}" ]; then
   hint "SSD_TOTAL_GB: could not read the regional quota"
-elif [ "${disk_type:-}" = "pd-standard" ]; then
-  ok "worker boot disks are $disk_type (billed against DISKS_TOTAL_GB, not SSD_TOTAL_GB)"
 else
-  left=$(( ${limit%.*} - ${usage%.*} ))
-  need=$(( ${max_nodes:-0} * ${disk_gb:-0} ))
-  if [ "$left" -ge "$need" ]; then
-    ok "SSD_TOTAL_GB: ${usage%.*}/${limit%.*} used, $left GB free, worker pool needs $need GB ($max_nodes x $disk_gb $disk_type)"
-  else
-    bad "SSD_TOTAL_GB: ${usage%.*}/${limit%.*} used, $left GB free < the $need GB this pool can request ($max_nodes x $disk_gb) — nodes fail to provision with a quota error"
-  fi
+  case "${disk_type:-}" in
+    hyperdisk-*)
+      ok "SSD_TOTAL_GB: ${usage%.*}/${limit%.*} used, by the PD-type disks (postgres); $disk_type worker disks do not bill against it" ;;
+    pd-standard)
+      ok "worker boot disks are pd-standard (billed against DISKS_TOTAL_GB, not SSD_TOTAL_GB)" ;;
+    *)
+      left=$(( ${limit%.*} - ${usage%.*} ))
+      need=$(( ${max_nodes:-0} * ${disk_gb:-0} ))
+      if [ "$left" -ge "$need" ]; then
+        ok "SSD_TOTAL_GB: ${usage%.*}/${limit%.*} used, $left GB free, worker pool needs $need GB ($max_nodes x $disk_gb $disk_type)"
+      else
+        bad "SSD_TOTAL_GB: ${usage%.*}/${limit%.*} used, $left GB free < the $need GB this pool can request ($max_nodes x $disk_gb) — nodes fail to provision with a quota error"
+      fi ;;
+  esac
 fi
 
 head_ "Bundled postgres claim"

@@ -406,19 +406,38 @@ jobs:
             echo "taints [$(tr " " ", " <<<"$taints")] tolerated by atelet, $nodes Ready node(s)"
           '
           # Snapshots stage on the node boot disk, so a worker disk is a billed PD
-          # in the region. pd-ssd and pd-balanced both count against SSD_TOTAL_GB —
-          # the same quota the bundled Postgres claim eats — and an exhausted quota
-          # does not fail fast: the node just never appears, and the install waits
-          # out its rollout timeout.
+          # in the region. pd-ssd and pd-balanced — including whatever the bundled
+          # Postgres claim uses — share the one SSD_TOTAL_GB limit, and an exhausted
+          # quota does not fail fast: the node just never appears, and the install
+          # waits out its rollout timeout. Hyperdisk is a separate story (below).
           check "disk quota headroom" bash -c '
             pool="$(gcloud container node-pools describe "$WORKER_NODE_POOL" \
               --cluster "$CLUSTER" --location "$ZONE" --project "$PROJECT_ID" \
-              --format "value(autoscaling.maxNodeCount,config.diskSizeGb,config.diskType)" 2>/dev/null)" \
+              --format "value(autoscaling.maxNodeCount,config.diskSizeGb,config.diskType,config.machineType)" 2>/dev/null)" \
               || { echo "node pool $WORKER_NODE_POOL absent — nothing to size"; exit 1; }
-            read -r max size dtype <<<"$pool"
+            read -r max size dtype mtype <<<"$pool"
+            # Some machine series offer no Persistent Disk at all — Compute's
+            # series table lists N4/C4/M4/X4/G4/A4/A5X/H4D as unsupported for every
+            # PD type — and the pair is refused when the MIG creates the instance,
+            # NOT when the pool is updated. So a pd-* disk on those series plans and
+            # applies green, then leaves the pool on its old template with no nodes.
+            case "$mtype" in
+              n4*|c4*|m4*|x4*|g4*|a4*|a5*|h4d*)
+                case "$dtype" in
+                  pd-*) echo "$mtype supports no Persistent Disk type: $dtype is refused at instance creation — use hyperdisk-balanced"
+                        exit 1 ;;
+                esac ;;
+            esac
             case "$dtype" in
-              pd-ssd|pd-balanced|hyperdisk-*) metric=SSD_TOTAL_GB ;;
-              *)                               metric=DISKS_TOTAL_GB ;;
+              hyperdisk-*)
+                # Measured on this project 2026-11-10: a 100 GB hyperdisk-balanced
+                # worker boot disk left SSD_TOTAL_GB at 50/500, and the region lists
+                # no Hyperdisk capacity quota at all. Reporting headroom here would
+                # blame a quota the disk does not spend, so say what bounds it: cost.
+                echo "$dtype ${size}GB × $max node(s): Hyperdisk capacity is not metered by a regional disk quota"
+                exit 0 ;;
+              pd-ssd|pd-balanced) metric=SSD_TOTAL_GB ;;
+              *)                  metric=DISKS_TOTAL_GB ;;
             esac
             q="$(gcloud compute regions describe "$BUCKET_REGION" --project "$PROJECT_ID" \
               --format "json(quotas)" | jq -r ".quotas[] | select(.metric==\"$metric\") | \"\\(.usage) \\(.limit)\"")"

@@ -383,10 +383,24 @@ Four things have to line up; the first three each broke here at least once:
    boot disks get their own `substrate_worker_disk_size_gb` /
    `substrate_worker_disk_type` instead of the shared `disk_size_gb`, because actor
    snapshots stage on that disk under `/var/lib/ate/snapshots` and a full boot disk
-   fails resume rather than evicting a pod. pd-balanced bills against the region's
-   `SSD_TOTAL_GB` — the same quota the postgres claim eats — so
-   `substrate_max_nodes × substrate_worker_disk_size_gb` has to fit what postgres
-   leaves: 4 × 100 = 400 of the 500 limit, and 6 would not.
+   fails resume rather than evicting a pod. The type is `hyperdisk-balanced`, not a
+   Persistent Disk: **N4 supports no PD type at all** — `pd-standard`, `pd-balanced`
+   and `pd-ssd` are all listed unsupported for the series — so a pd-balanced worker
+   disk failed at instance creation, after a clean plan, with
+   `[UNSUPPORTED_OPERATION] pd-balanced disk type cannot be used by n4-standard-4
+   machine type`. That is why the pool sets GKE's `boot_disk` block rather than the
+   sibling `disk_type` / `disk_size_gb` fields, which only speak Persistent Disk, and
+   why `provisioned_iops` / `provisioned_throughput` are passed only for a
+   `hyperdisk-*` type (GKE rejects them on PD). Both stay at GKE's free 3000 IOPS /
+   140 MiB/s baseline. Hyperdisk also escapes the quota that made this pool's disk
+   size a problem: `pd-balanced` and `pd-ssd` — including the `dynamic-rwo` volume
+   behind the bundled Postgres — all spend the region's one `SSD_TOTAL_GB` (500),
+   which is how the 500Gi claim starved everything next to it, but a 100 GB
+   `hyperdisk-balanced` worker disk measured 2026-11-10 left `SSD_TOTAL_GB` untouched
+   at 50/500, and `asia-south1` reports no Hyperdisk capacity quota among its 113
+   regional metrics. So `substrate_max_nodes = 4` is a cost and `CPUS` bound today,
+   not a disk-quota one; the arithmetic `max_nodes × substrate_worker_disk_size_gb ≤
+   450` only bites again if the disk type goes back to a PD one.
 
 Capacity is demand-driven: the WorkerPool's worker pods are the only thing that pulls
 `substrate-worker-pool` off zero nodes, so a pool parked below its autoscaling minimum

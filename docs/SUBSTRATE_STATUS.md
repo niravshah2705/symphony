@@ -30,11 +30,13 @@ Run `deploy/gcp/substrate-check.sh` to reproduce every claim in this file.
 | `WorkerPool` created by the install workflow | PR #269, step `Create the WorkerPool` | `planner-pool  2  2  2  gvisor-default  True` in `substrate-workers` |
 | Worker node pool taint `substrate.ate.dev/workers=true` → `ate.dev/sandboxClass=gvisor` | PR #269 + GKE apply run [42674849918](https://github.com/niravshah2705/symphony/actions/runs/42674849918) (plan was `0 to add, 1 to change, 0 to destroy`) | `gcloud container node-pools describe … --format="value(config.taints)"` shows the sandboxClass key; an `atelet` pod is on the worker node |
 | Preflight rows that see all four capacity causes | PR #269 (`WorkerPool created`, `worker node pool placement`, `disk quota headroom`) | preflight run [42672938739](https://github.com/niravshah2705/symphony/actions/runs/42672938739) reported the two FAILs before they were fixed and reports them green now |
-| Worker pool onto N4 / COS / its own boot disk | PR #270 (open) | `substrate_env.test.js` pins machine type, image type, disk vars and the quota arithmetic |
+| Worker pool onto N4 / COS / its own boot disk | PR #270 (merged) + the by-hand `gcloud` fix below | machine type + image type + `boot_disk` in `terraform-substrate-gke/substrate.tf`; `substrate_env.test.js` pins the vars and the quota arithmetic |
 | Migrate the recreated database (restart `ate-api-server`) | PR #271, step `Re-migrate the recreated database` | found the hard way: workers were `Running` but `0/1 Ready` with `relation "workers" does not exist` |
 | Read-only verification as plain shell | PR #271, `deploy/gcp/substrate-check.sh` | 12 checks pass on the live cluster |
+| Worker pool actually re-provisioned (cause 8's fix) | by hand: `gcloud container node-pools update` × 2 | machine type `n4-standard-4`, 100 GB `hyperdisk-balanced` (3000 IOPS / 140 MiB/s), min 1 / max 4; the E2 node is deleted and `planner-pool` stayed `2/2` throughout |
+| Worker nodes onto `COS_CONTAINERD` | by hand: `gcloud container clusters upgrade … --image-type=COS_CONTAINERD --quiet` | `node-pools describe … --format="value(config.imageType)"` → `COS_CONTAINERD`; the surge node `gke-…-substrate-worker-1b371960-tpxz` is Ready on `Container-Optimized OS from Google` and the Ubuntu node it replaced is gone |
 
-## Root causes, all seven
+## Root causes, all eight
 
 Every one of these had to be fixed; any subset still yields zero sandboxes.
 
@@ -47,6 +49,7 @@ Every one of these had to be fixed; any subset still yields zero sandboxes.
 | 5 | The deployed planner has **no `SUBSTRATE_*` env**: `substrate_url` defaults to `""`, so `substrate_control_env = {}` in the platform root. | the app silently keeps using the Cloud Run pattern; `GET /api/agent/substrate/status` answers `401` to the CI identity, so it cannot be confirmed from outside | **open** |
 | 6 | `ate-api-server` applies Postgres migrations only at startup, so recreating the claim left a healthy-looking control plane on an empty schema. | every pod `Running`; every RPC erroring `relation "workers" does not exist`; workers stuck `Running` but not Ready | fixed by #271 |
 | 7 | The substrate GKE apply was gated behind a `terraform fmt` drift. | plan never ran, so no error surfaced | fixed by #268 |
+| 8 | #270 gave the worker pool a `pd-balanced` boot disk, and **N4 supports no Persistent Disk type at all** — the pool could not provision a node. | `terraform apply` planned clean, GKE accepted the pool config, and only the MIG's instance creation failed: `[UNSUPPORTED_OPERATION] pd-balanced disk type cannot be used by n4-standard-4 machine type`. The pool stayed on its old template, so capacity kept working and nothing looked broken | fixed: `boot_disk { disk_type = "hyperdisk-balanced" }` |
 
 ## Still pending
 
@@ -56,9 +59,13 @@ Every one of these had to be fixed; any subset still yields zero sandboxes.
    digest-pinned `substratePlannerImage`) into the organization's settings, which is
    the per-tenant path the pattern router reads. Then trigger a planner run with
    `agentPattern=substrate` and watch the actor reach `ACTIVE`.
-2. **Apply PR #270** (`deploy.yml` with `gke_reconcile=true`, plan first) — only after
-   the 50Gi claim landed, which it has. Expect a node-pool replacement; the pool holds
-   one node, so do it before actors are running.
+2. **Reconcile the by-hand state with Terraform.** The live pool is now
+   `n4-standard-4` / `hyperdisk-balanced` / `COS_CONTAINERD` / min 1 – max 4, which is
+   what this branch's `terraform-substrate-gke/` renders, so the next apply should plan
+   `0 to add, 0 to change`. If it does not, trust the cluster and fix the module —
+   #270 is the cautionary example: it planned clean and still could not provision a
+   node, because GKE checks the disk type against the machine type only when the MIG
+   creates the instance.
 3. **Phase 3b**: move the system and substrate node pools off E2 too. That tears down
    `ate-system`, so it needs `gke_allow_destroy=true` and a re-run of the install
    afterwards. Separate PR, deliberate.
@@ -67,6 +74,67 @@ Every one of these had to be fixed; any subset still yields zero sandboxes.
 5. Noted, deliberately not implemented: the `gc_thresh*` / inotify node sysctls, the
    STS quota, ComputeClasses and capacity buffers, hyperdisk provisioned IOPS. All of
    these only matter past roughly 800 concurrent sandboxes per node.
+
+## By hand, on the live cluster
+
+The four things this fix had to change are all plain `gcloud` / `kubectl` — no
+installer, no Go, no Terraform run. What each command is the by-hand form of:
+
+```bash
+PROJECT=adlc-9e72f CLUSTER=substrate-multitenant ZONE=asia-south1-a
+POOL=substrate-multitenant WORKER_NODE_POOL=substrate-worker-pool
+
+# 1. The worker nodes: N4 + Hyperdisk Balanced + 100 GB, and the autoscaling bounds.
+#    gcloud accepts exactly ONE flag group per `node-pools update` call, so the
+#    machine/disk group and the autoscaling group are two operations.
+gcloud container node-pools update "$WORKER_NODE_POOL" --cluster "$CLUSTER" \
+  --zone "$ZONE" --project "$PROJECT" \
+  --machine-type=n4-standard-4 --disk-type=hyperdisk-balanced --disk-size=100GB \
+  --boot-disk-provisioned-iops=3000 --boot-disk-provisioned-throughput=140
+gcloud container node-pools update "$WORKER_NODE_POOL" --cluster "$CLUSTER" \
+  --zone "$ZONE" --project "$PROJECT" \
+  --enable-autoscaling --min-nodes=1 --max-nodes=4
+
+# 2. The node image. `node-pools update` has no --image-type (not in GA, beta or
+#    alpha), and the container v1 discovery document has no nodePools.patch method at
+#    all — a PATCH or POST :patch there returns an HTML 404, not a JSON error. The
+#    image lives on the *upgrade* command:
+gcloud container clusters upgrade "$CLUSTER" --zone "$ZONE" --project "$PROJECT" \
+  --node-pool "$WORKER_NODE_POOL" --image-type=COS_CONTAINERD --quiet
+#    (--quiet is not optional in a script: the command prompts Y/n and exits 1 with
+#     "This prompt could not be answered because you are not in an interactive session")
+
+# 3. The bundled Postgres claim size (the original ask) — this one is NOT a gcloud
+#    command: upstream's postgres.yaml hardcodes 500Gi and `ate-setup` has no flag,
+#    so the install workflow rewrites the manifest before applying it. By hand it is
+#    delete statefulset/postgres + pvc data-postgres-0, re-apply at 50Gi, then restart
+#    deploy/ate-api-server so it re-runs migrations against the new database.
+kubectl -n ate-system get pvc data-postgres-0 -o jsonpath='{.spec.resources.requests.storage}'
+
+# 4. The WorkerPool (upstream only creates one with --demo): kubectl apply -f -, the
+#    manifest in SUBSTRATE_INTEGRATION.md §5.3. Idempotent, so CI and a hand-run
+#    apply converge.
+
+# Then verify — read-only, PASS/FAIL per check:
+deploy/gcp/substrate-check.sh
+```
+
+Three behaviours of this path worth knowing before trusting it:
+
+* **A bad (machine type, disk type) pair is not rejected where it is set.** The
+  `node-pools update` call and `terraform apply` both succeed; GKE only asks Compute
+  when the MIG creates the instance, so the error surfaces as
+  `Instance '…' creation failed: … disk type cannot be used by … machine type`
+  minutes later, and the pool silently keeps its old template. The live symptom is a
+  worker pool that reports `config.machineType` unchanged, not a failed operation.
+* **`gcloud … describe --format="value(config.diskType)"` still works** after the move
+  to `boot_disk`: the API mirrors the values into both `config.diskType` /
+  `config.diskSizeGb` and `config.bootDisk.diskType` / `.sizeGb`. Read either, not a
+  third name.
+* **Terraform and this path do not fight.** The provider refreshes node-pool state from
+  the API before planning, so a hand-applied change shows as no diff once the module
+  defaults match it — which is the whole reason the corrected disk type landed in
+  `variables.tf` in the same commit as this list.
 
 ## Following the official guide by hand
 
@@ -146,13 +214,23 @@ workload (or through the public `substrate.archagentix.com` front with its own a
 | `install.sh` on a local machine | `substrate-control-plane.yml` `mode=install` | no Go locally; CI has the toolchain and keyless auth, and the run is auditable |
 | Build images from source into `ate-images` | release images from ghcr, tag pinned by `SUBSTRATE_VERSION` | no local Docker build in CI for this; the `release images present` row checks every image the install needs |
 | Installer creates the cluster and its node pools | Terraform creates them (`terraform-substrate-gke`) | the pools need labels, taints and an actor-egress IAM binding the installer does not model |
-| Cluster machine types `c3-standard-4` or larger | `n4-standard-4` | `c3-standard-4` does not exist in `asia-south1-a` (only `-lssd` variants) |
+| Cluster machine types `c3-standard-4` or larger | `n4-standard-4`, and therefore `hyperdisk-balanced` boot disks | `c3-standard-4` does not exist in `asia-south1-a` (only `-lssd` variants), and N4 has no Persistent Disk option to fall back on |
 | Postgres on a 500 GiB PD | 50 GiB via a manifest rewrite | upstream hardcodes 500Gi and `ate-setup` has no flag for it; 500Gi consumed the whole regional SSD quota |
 | `WorkerPool` only for `--demo` | created by the install workflow, one shared `planner-pool` | the app selects `ate.dev/worker-pool=planner-pool`, so the CR must exist without the demo |
 | `cleanup-gcp` deletes everything | it does **not** delete the Postgres PD | its own note: find it with `gcloud compute disks list --filter="description~data-postgres-0"` |
 
-## Two corrections worth recording
+## Corrections worth recording
 
+* **Hyperdisk capacity is not the regional SSD quota — a comment said it was, before
+  measuring.** The `substrate_max_nodes = 4` bound and the preflight's
+  `disk quota headroom` row were both written assuming `hyperdisk-balanced` bills
+  against `SSD_TOTAL_GB` the way `pd-balanced` does. It does not: with the N4 worker
+  node live on a 100 GB hyperdisk-balanced boot disk, `SSD_TOTAL_GB` reads 50/500
+  (that 50 is the Postgres volume, which `dynamic-rwo` provisions as `pd-balanced`),
+  and `gcloud compute regions describe asia-south1` lists no Hyperdisk capacity metric
+  at all. So the SSD arithmetic still guards a PD disk type, and for Hyperdisk the
+  node count is a cost and `CPUS` decision. Both check implementations now say so
+  instead of reporting headroom against a quota the disk never spends.
 * **"The database holds nothing of value" was wrong when it was said.** The pre-install
   check ran `psql -c '\dt'`, which lists only the session `search_path` — and the
   control plane's tables live in the `substrate` **schema**, not `public`. The old
