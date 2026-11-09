@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 4 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.0833
+- **Size**: 4 nodes
+- **Cohesion**: 0.0820
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,6 +16,7 @@ Community of 3 nodes
 |------|------|------|-------|
 | newSourceBucket | Function | ./services/billing/src/billing-api.js | 97-99 |
 | bySourceWindow | Function | ./services/billing/src/billing-api.js | 101-128 |
+| test:the spend split reports charged and notional as two separate series@L47 | Test | ./services/billing/src/billing-api.test.js | 47-62 |
 | test:both series exist even for an org that has never used its own key@L64 | Test | ./services/billing/src/billing-api.test.js | 64-70 |
 
 ## Execution Flows
@@ -26,30 +27,32 @@ No execution flows pass through this community.
 
 ### Outgoing
 
+- `equal` (6 edge(s))
 - `Number` (3 edge(s))
+- `addUsageRecord` (3 edge(s))
+- `toISOString` (2 edge(s))
 - `paiseToInr` (2 edge(s))
-- `toISOString` (1 edge(s))
+- `listUsageRecords` (2 edge(s))
+- `now` (2 edge(s))
 - `filter` (1 edge(s))
 - `String` (1 edge(s))
 - `usageRecordCount` (1 edge(s))
 - `fromEntries` (1 edge(s))
 - `map` (1 edge(s))
 - `entries` (1 edge(s))
-- `./services/billing/src/billing-api.test.js::test:the spend split reports charged and notional as two separate series@L47` (1 edge(s))
-- `listUsageRecords` (1 edge(s))
-- `now` (1 edge(s))
 - `deepEqual` (1 edge(s))
 - `sort` (1 edge(s))
-- `keys` (1 edge(s))
 
 ### Incoming
 
 - `./services/billing/src/billing-api.js` (6 edge(s))
-- `./services/billing/src/billing-api.test.js::test:the spend split reports charged and notional as two separate series@L47` (1 edge(s))
-- `./services/billing/src/billing-api.test.js` (1 edge(s))
-- `listUsageRecords` (1 edge(s))
-- `now` (1 edge(s))
+- `equal` (6 edge(s))
+- `addUsageRecord` (3 edge(s))
+- `./services/billing/src/billing-api.test.js` (2 edge(s))
+- `listUsageRecords` (2 edge(s))
+- `now` (2 edge(s))
 - `deepEqual` (1 edge(s))
 - `sort` (1 edge(s))
 - `keys` (1 edge(s))
-- `equal` (1 edge(s))
+- `toISOString` (1 edge(s))
+- `ok` (1 edge(s))

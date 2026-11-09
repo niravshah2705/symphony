@@ -213,10 +213,13 @@ jobs:
           '
           # Location matters: setup-gcp create bucket errors on an existing bucket
           # in another region, so a wrong-location bucket is an install failure.
+          # Compare case-insensitively: gcloud reports location upper-cased
+          # (ASIA-SOUTH1) while the region derived from the zone is lower-case,
+          # and a raw != fails the row on a bucket that is in the right region.
           check "snapshot bucket" bash -c '
             loc="$(gcloud storage buckets describe "gs://$BUCKET" --project "$PROJECT_ID" --format "value(location)" 2>/dev/null)" \
               || { echo "gs://$BUCKET not created yet — install mode creates it in $BUCKET_REGION"; exit 1; }
-            if [ "$loc" != "$BUCKET_REGION" ]; then
+            if [ "${loc^^}" != "${BUCKET_REGION^^}" ]; then
               echo "gs://$BUCKET exists in $loc, but install would need $BUCKET_REGION (the cluster region)"
               exit 1
             fi
@@ -228,6 +231,26 @@ jobs:
           # this deploy rolls a control plane that is already serving.
           check "existing control plane" bash -c \
             'if kubectl get crd -o name 2>/dev/null | grep -q ate.dev; then echo "ate.dev CRDs present — this deploy rolls the running control plane"; else echo "no ate.dev CRDs — fresh install"; fi'
+          # Substrate v1.0.0 needs the PodCertificate APIs (clustertrustbundles,
+          # podcertificaterequests), which GKE only serves from 1.37. On 1.36 the
+          # install gets as far as podcertcontroller, which CrashLoops with
+          # "neither v1 nor v1beta1 PodCertificateRequest is served", and then
+          # dies on the ClusterTrustBundle wait — tens of minutes in. The kubelet
+          # serves pod certificates, so every node pool must be 1.37 too.
+          check "GKE 1.37+ control plane and nodes" bash -c '
+            minor="$(kubectl version -o json 2>/dev/null | jq -r ".serverVersion.minor" | tr -cd "0-9")"
+            [ -n "$minor" ] || { echo "could not read the control plane version"; exit 1; }
+            if [ "$minor" -lt 37 ]; then
+              echo "control plane is 1.$minor — Substrate needs GKE 1.37+ for the PodCertificate API; upgrade the cluster before install"
+              exit 1
+            fi
+            stale="$(kubectl get nodes -o "jsonpath={.items[*].status.nodeInfo.kubeletVersion}" | tr " " "\n" | grep -vcE "v1\.(3[7-9]|[4-9][0-9])" || true)"
+            if [ "$stale" != "0" ]; then
+              echo "$stale node pool node(s) below 1.37 — upgrade every pool; the kubelet is what serves pod certificates"
+              exit 1
+            fi
+            echo "control plane 1.$minor and every node on 1.37+"
+          '
           check "Envoy Gateway CRDs" kubectl get crd gateways.gateway.networking.k8s.io -o 'jsonpath={.metadata.name}'
           check "cert-manager CRDs" kubectl get crd certificates.cert-manager.io -o 'jsonpath={.metadata.name}'
           # Exists is not serving: with only the HTTPS listener, the unissued

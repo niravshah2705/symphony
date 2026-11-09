@@ -4,16 +4,20 @@
 
 ## Overview
 
-Community of 142 nodes
+Community of 157 nodes
 
-- **Size**: 142 nodes
-- **Cohesion**: 0.2952
+- **Size**: 157 nodes
+- **Cohesion**: 0.2960
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| runtimeAccepts | Function | ./deploy/gcp/agentgateway-config.test.js | 107-114 |
+| test@L122 | Test | ./deploy/gcp/agentgateway-config.test.js | 122-122 |
+| test@L137 | Test | ./deploy/gcp/agentgateway-config.test.js | 137-137 |
+| test:the substrate root can hand the sidecar an origin it will accept@L245 | Test | ./deploy/gcp/agentgateway-config.test.js | 245-260 |
 | configuredProxyOrgId | Function | ./services/proxy/src/credentials.js | 17-24 |
 | proxyOrgId | Function | ./services/proxy/src/credentials.js | 40-44 |
 | resolveSecrets | Function | ./services/proxy/src/credentials.js | 46-69 |
@@ -25,10 +29,10 @@ Community of 142 nodes
 | normalizeOmlxUpstream | Function | ./services/proxy/src/credentials.js | 141-143 |
 | normalizeJiraConfig | Function | ./services/proxy/src/credentials.js | 145-173 |
 | normalizeSlackWebhook | Function | ./services/proxy/src/credentials.js | 175-196 |
-| resolveUpstream | Function | ./services/proxy/src/credentials.js | 198-225 |
-| buildInjection | Function | ./services/proxy/src/credentials.js | 227-329 |
-| resolvedSecrets | Function | ./services/proxy/src/credentials.js | 229-231 |
-| resolveRoute | Function | ./services/proxy/src/credentials.js | 331-335 |
+| resolveUpstream | Function | ./services/proxy/src/credentials.js | 198-226 |
+| buildInjection | Function | ./services/proxy/src/credentials.js | 228-330 |
+| resolvedSecrets | Function | ./services/proxy/src/credentials.js | 230-232 |
+| resolveRoute | Function | ./services/proxy/src/credentials.js | 332-336 |
 | parseCapabilities | Function | ./services/proxy/src/index.js | 30-35 |
 | pathname | Function | ./services/proxy/src/index.js | 37-43 |
 | sendJson | Function | ./services/proxy/src/index.js | 45-48 |
@@ -51,21 +55,17 @@ Community of 142 nodes
 | filterResponseHeaders | Function | ./services/proxy/src/proxy.js | 78-86 |
 | sendJson | Function | ./services/proxy/src/proxy.js | 88-91 |
 | requestProjectId | Function | ./services/proxy/src/proxy.js | 93-100 |
-| createProxyHandler | Function | ./services/proxy/src/proxy.js | 109-186 |
-| test:buildUpstreamUrl appends the path remainder@L15 | Test | ./services/proxy/src/proxy.test.js | 15-23 |
-| test:buildForwardHeaders strips inbound auth and retargets Host@L25 | Test | ./services/proxy/src/proxy.test.js | 25-60 |
-| test:buildForwardHeaders cannot smuggle an OAuth beta header into API-key auth@L62 | Test | ./services/proxy/src/proxy.test.js | 62-70 |
-| test:filterResponseHeaders drops body-frame + hop-by-hop but keeps content-type@L72 | Test | ./services/proxy/src/proxy.test.js | 72-87 |
-| test:resolveStaticKey: managed value from the settings payload (one path)@L91 | Test | ./services/proxy/src/proxy.test.js | 91-97 |
-| test:resolveStaticKey: fails closed instead of falling back to process env@L99 | Test | ./services/proxy/src/proxy.test.js | 99-104 |
-| test:proxy credential scope accepts a dedicated fleet org but rejects conflicting pins@L106 | Test | ./services/proxy/src/proxy.test.js | 106-113 |
-| test:buildInjection: managed static key injects the settings-resolved value (Bearer)@L115 | Test | ./services/proxy/src/proxy.test.js | 115-120 |
-| test:buildInjection: customer static key uses the vault plaintext@L122 | Test | ./services/proxy/src/proxy.test.js | 122-128 |
-| test:buildInjection: customer-selected but missing key FAILS CLOSED@L130 | Test | ./services/proxy/src/proxy.test.js | 130-138 |
-| test:buildInjection: git route builds x-access-token Basic auth@L140 | Test | ./services/proxy/src/proxy.test.js | 140-146 |
-| test:buildInjection: langfuse basic-pair injects Basic base64(publicKey:secretKey)@L148 | Test | ./services/proxy/src/proxy.test.js | 148-159 |
+| statusClass | Function | ./services/proxy/src/proxy.js | 123-126 |
+| probeSegment | Function | ./services/proxy/src/proxy.js | 129-132 |
+| upstreamHost | Function | ./services/proxy/src/proxy.js | 134-140 |
+| createProxyHandler | Function | ./services/proxy/src/proxy.js | 149-258 |
+| decide | Function | ./services/proxy/src/proxy.js | 168-184 |
+| test:buildUpstreamUrl appends the path remainder@L17 | Test | ./services/proxy/src/proxy.test.js | 17-25 |
+| test:buildForwardHeaders strips inbound auth and retargets Host@L27 | Test | ./services/proxy/src/proxy.test.js | 27-62 |
+| test:buildForwardHeaders cannot smuggle an OAuth beta header into API-key auth@L64 | Test | ./services/proxy/src/proxy.test.js | 64-72 |
+| test:filterResponseHeaders drops body-frame + hop-by-hop but keeps content-type@L74 | Test | ./services/proxy/src/proxy.test.js | 74-89 |
 
-*... and 92 more members.*
+*... and 107 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 142 nodes
 
 ### Outgoing
 
-- `equal` (126 edge(s))
-- `deepEqual` (34 edge(s))
-- `String` (26 edge(s))
+- `equal` (154 edge(s))
+- `deepEqual` (35 edge(s))
+- `String` (28 edge(s))
+- `rejects` (22 edge(s))
 - `trim` (21 edge(s))
-- `rejects` (19 edge(s))
+- `stringify` (15 edge(s))
 - `fetch` (13 edge(s))
 - `toString` (12 edge(s))
 - `from` (12 edge(s))
 - `end` (12 edge(s))
-- `stringify` (12 edge(s))
 - `resolve` (10 edge(s))
 - `toLowerCase` (9 edge(s))
 - `close` (9 edge(s))
 - `json` (9 edge(s))
-- `writeHead` (8 edge(s))
+- `match` (8 edge(s))
 
 ### Incoming
 
-- `equal` (126 edge(s))
-- `./services/proxy/src/proxy.test.js` (40 edge(s))
-- `deepEqual` (34 edge(s))
+- `equal` (154 edge(s))
+- `./services/proxy/src/proxy.test.js` (47 edge(s))
+- `deepEqual` (35 edge(s))
 - `./services/proxy/src/credentials.js` (28 edge(s))
-- `rejects` (19 edge(s))
+- `rejects` (22 edge(s))
+- `./services/proxy/src/proxy.js` (17 edge(s))
 - `./services/proxy/src/secrets-client.js` (13 edge(s))
 - `fetch` (12 edge(s))
 - `./services/proxy/src/stream-token-server.test.js` (12 edge(s))
-- `./services/proxy/src/proxy.js` (11 edge(s))
 - `./services/proxy/src/stream-token-rpc.js` (10 edge(s))
 - `./services/proxy/src/stream-token-rpc.test.js` (10 edge(s))
 - `close` (9 edge(s))
+- `match` (8 edge(s))
+- `stringify` (8 edge(s))
 - `json` (8 edge(s))
-- `./services/proxy/src/index.js` (7 edge(s))
-- `./services/proxy/src/stream-token.test.js` (7 edge(s))

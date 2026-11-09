@@ -132,7 +132,11 @@ variable "system_node_pool_name" {
 variable "system_machine_type" {
   description = "Machine type for the system node pool"
   type        = string
-  default     = "e2-standard-2"
+  # e2-standard-2, not e2-standard-4, left no headroom for the bundled
+  # PostgreSQL: ate-setup gives postgres-0 a 2 CPU request, which can never
+  # schedule on a 2-vCPU node alongside the gateway, cert-manager and the
+  # control-plane add-ons, and the install dies waiting for the StatefulSet.
+  default     = "e2-standard-4"
 }
 
 variable "system_min_nodes" {

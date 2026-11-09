@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 208 nodes
+Community of 273 nodes
 
-- **Size**: 208 nodes
-- **Cohesion**: 0.3623
+- **Size**: 273 nodes
+- **Cohesion**: 0.3496
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 208 nodes
 | harnessesFace | Function | ./services/gateway/src/capability-view.js | 85-112 |
 | budgetFace | Function | ./services/gateway/src/capability-view.js | 114-140 |
 
-*... and 158 more members.*
+*... and 223 more members.*
 
 ## Execution Flows
 
@@ -75,38 +75,36 @@ Community of 208 nodes
 
 ### Outgoing
 
-- `equal` (229 edge(s))
-- `deepEqual` (65 edge(s))
-- `trim` (38 edge(s))
-- `String` (34 edge(s))
-- `json` (28 edge(s))
-- `map` (27 edge(s))
+- `equal` (305 edge(s))
+- `deepEqual` (85 edge(s))
+- `trim` (52 edge(s))
+- `String` (46 edge(s))
+- `map` (34 edge(s))
+- `json` (32 edge(s))
+- `includes` (28 edge(s))
+- `push` (22 edge(s))
 - `next` (20 edge(s))
-- `includes` (20 edge(s))
-- `push` (20 edge(s))
-- `isArray` (18 edge(s))
-- `status` (16 edge(s))
-- `toLowerCase` (15 edge(s))
-- `throws` (14 edge(s))
-- `get` (13 edge(s))
-- `freeze` (13 edge(s))
+- `isArray` (20 edge(s))
+- `status` (19 edge(s))
+- `handler` (18 edge(s))
+- `toLowerCase` (17 edge(s))
+- `rejects` (16 edge(s))
+- `stringify` (15 edge(s))
 
 ### Incoming
 
-- `equal` (229 edge(s))
-- `./services/gateway/src/index.js` (94 edge(s))
-- `deepEqual` (65 edge(s))
+- `equal` (305 edge(s))
+- `./services/gateway/src/index.js` (110 edge(s))
+- `deepEqual` (85 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (29 edge(s))
 - `./services/gateway/src/auth.test.js` (26 edge(s))
 - `./services/gateway/src/request-context.js` (20 edge(s))
 - `handler` (17 edge(s))
 - `./services/gateway/src/auth.js` (16 edge(s))
+- `rejects` (16 edge(s))
+- `ok` (15 edge(s))
 - `./services/gateway/src/capability-view.test.js` (15 edge(s))
+- `throws` (15 edge(s))
 - `./services/gateway/src/eula.test.js` (15 edge(s))
-- `throws` (14 edge(s))
-- `./services/gateway/src/request-context.test.js` (14 edge(s))
-- `./services/gateway/src/config-resolver.test.js` (11 edge(s))
-- `push` (11 edge(s))
-- `rejects` (11 edge(s))
-- `ok` (10 edge(s))
+- `./services/gateway/src/stream-token.js` (15 edge(s))

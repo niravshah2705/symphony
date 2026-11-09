@@ -119,6 +119,22 @@ The **`ate-system` control plane is NOT installed by Terraform** — its images 
 ko-built (no static manifests). Install it with the upstream installer once the
 pool exists, then apply the module's stable infra pieces.
 
+**Prerequisite: GKE 1.37+ on the control plane AND every node pool.** Substrate
+v1.0.0 needs the `certificates.k8s.io` PodCertificate APIs
+(`clustertrustbundles`, `podcertificaterequests`), which GKE only serves from
+1.37. On 1.36 the install dies minutes in: `podcertcontroller` CrashLoops with
+`neither v1 nor v1beta1 PodCertificateRequest is served` and the deploy times out
+waiting for the `podidentity.podcert.ate.dev:identity:primary-bundle` trust
+bundle. REGULAR tops out at 1.36 for now; switch the channel and upgrade, e.g.
+```bash
+gcloud container clusters update CLUSTER --release-channel=extended
+gcloud container clusters upgrade CLUSTER --master --cluster-version=1.37.1-gke.XXXX
+for p in $(gcloud container node-pools list --cluster CLUSTER --format='value(name)'); do
+  gcloud container clusters upgrade CLUSTER --node-pool="$p" --cluster-version=1.37.1-gke.XXXX
+done
+```
+The preflight reports this as the `GKE 1.37+ control plane and nodes` row.
+
 1. Set the substrate repo variables and enable the flag so the pool + namespaces
    get created:
    ```bash
@@ -396,6 +412,45 @@ The **first apply with `substrate_enabled = true` shows the new resources as
   address means the Envoy Service could not bind `substrate-ip` — check the
   `parametersRef` name/namespace pair, not the DNS.
 
+### 8.1 Substrate can create a sandbox — end-to-end check
+
+Run this after the install workflow and before pointing any organization at the
+`substrate` pattern. Each step names what it proves:
+
+```bash
+# 1. Control plane landed: ateapi/atenet-router/atelet/ate-idp-server pods Running,
+#    ate.dev CRDs present.
+kubectl -n ate-system get deploy,sts,svc
+kubectl get crd | grep ate.dev
+
+# 2. gVisor is installed on the worker pool and the pool carries the
+#    ate.dev/worker-pool label the ActorTemplate's workerSelector matches.
+kubectl get nodes -L ate.dev/worker-pool -L cloud.google.com/gke-nodepool
+kubectl get sandboxconfigs.ate.dev -o wide 2>/dev/null || kubectl api-resources --api-group=ate.dev
+
+# 3. The certificate is issued so the https listener serves (needs the A record
+#    for substrate_ingress_ip; see §5.1).
+kubectl -n ate-system get certificate substrate-server-tls
+curl -sI https://substrate.<your-domain>/          # 301/404 from the front, not a TLS error
+
+# 4. The control plane answers over the public route.
+GW=https://platform.archagentix.com
+curl -s $GW/api/agent/substrate/status | jq .substrate   # expect connected: true
+
+# 5. One real sandbox lifecycle, one API call (§11): ensure→create→dispatch→teardown.
+curl -s -X POST $GW/api/agent/substrate/run -H 'content-type: application/json' \
+     -d '{"prompt":"summarize this repo in five bullets"}' | jq
+
+# 6. While it runs, watch the actor appear on a labelled worker node as a
+#    gVisor sandbox, then get torn down after substrateActorTtlMs.
+kubectl get pods -A -o wide -w | grep -i actor
+```
+
+Pass criteria: step 4 reports `connected: true`; step 5 streams a result; step 6
+shows the actor pod scheduled on a node labelled `ate.dev/worker-pool`, running
+under `runsc`, and disappearing after the TTL. A step-5 failure that names a
+missing atespace/worker pool is the §5.1 field table, not a broken install.
+
 ## 9. Known limits / risks
 
 - Pre-1.0 upstream: ateapi proto field numbers and CRD schemas can drift — pinned
@@ -463,13 +518,14 @@ as an error rather than a silent no-op:
   the pool exists (tainted, and labelled `ate.dev/worker-pool=planner-pool` by
   `substrate.tf` since the label is what the selector matches) — so `substrate.tf` is in plan.
 - The front is applied but **not yet serving** `substrate.archagentix.com`:
-  `substrate-ip` is allocated (34.14.137.62), `substrate-ingress` is Programmed and its
-  Envoy LoadBalancer is up on port 80, but `substrate-server-external-tls` has never been
-  issued so the `https` listener is still invalid — and there is no DNS record for the
-  hostname at all (§5.1). Until the record lands, HTTP-01 cannot complete and the two URL
-  fields have nowhere public to point.
-- `SUBSTRATE_VERSION` is unset, so every preflight/install run resolves the tag from
-  "latest release" and warns; pin it once the cluster is live (§5.2).
+  `substrate-ip` is allocated (34.14.188.214), `substrate-ingress` is Programmed and its
+  Envoy LoadBalancer is up on port 80, but the hostname's A record still resolves to the
+  previous box's address (34.14.137.62), so HTTP-01 answers nothing,
+  `substrate-server-external-tls` has never been issued and the `https` listener is still
+  invalid (§5.1). The record lives at the domain's nameservers (`ns1/ns2.bmctech.in`, not
+  Cloud DNS), so repointing `substrate` → 34.14.188.214 is an operator step; until it
+  lands the two URL fields have nowhere public to point.
+- `SUBSTRATE_VERSION` is pinned to `v1.0.0` (checkout + image tag together, §5.2).
 - The `ate-system` control plane is never installed by Terraform; it lands when the
   **Substrate control plane (preflight / install)** workflow runs with `mode=install`
   (§5 step 3, §5.2).

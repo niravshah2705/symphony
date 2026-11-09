@@ -143,6 +143,29 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --role="projects/${PROJECT_ID}/roles/substrateStaticIpAdmin" --condition=None >/dev/null
 echo "  granted the static-IP custom role"
 
+# Substrate provisions its own network objects (subnet, router/NAT, firewalls)
+# under the substrate GKE root. Grant only those resources, not
+# compute.networkAdmin — that would also cover addresses, which the narrower
+# substrateStaticIpAdmin above already handles. Re-apply the list on an
+# existing role so a project bootstrapped before a permission landed converges
+# instead of staying stale.
+NET_PERMS="compute.subnetworks.create,compute.subnetworks.delete,compute.subnetworks.get,compute.subnetworks.list,compute.subnetworks.update,compute.subnetworks.use,compute.subnetworks.setPrivateIpGoogleAccess,compute.networks.get,compute.networks.list,compute.networks.use,compute.networks.updatePolicy,compute.routers.create,compute.routers.delete,compute.routers.get,compute.routers.list,compute.routers.update,compute.routers.use,compute.firewalls.create,compute.firewalls.delete,compute.firewalls.get,compute.firewalls.list,compute.firewalls.update,compute.globalOperations.get,compute.globalOperations.list,compute.regionOperations.get,compute.regionOperations.list,compute.regions.get,compute.regions.list"
+if gcloud iam roles describe substrateNetworkProvisioner --project "$PROJECT_ID" >/dev/null 2>&1; then
+  gcloud iam roles update substrateNetworkProvisioner --project "$PROJECT_ID" --quiet \
+    --permissions "$NET_PERMS" >/dev/null
+else
+  log "Custom role projects/${PROJECT_ID}/roles/substrateNetworkProvisioner"
+  gcloud iam roles create substrateNetworkProvisioner --project "$PROJECT_ID" --quiet \
+    --title "Substrate network provisioner" \
+    --description "Create/update/delete the subnet, router, NAT and firewall the substrate GKE root owns." \
+    --stage GA \
+    --permissions "$NET_PERMS" >/dev/null
+fi
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${DEPLOYER}" \
+  --role="projects/${PROJECT_ID}/roles/substrateNetworkProvisioner" --condition=None >/dev/null
+echo "  granted the network-provisioner custom role"
+
 # --- 4. Workload Identity Federation (bind the repo to the deployer SA) ------
 log "Workload Identity Federation for ${REPO}"
 gcloud iam workload-identity-pools describe github \
