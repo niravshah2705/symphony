@@ -158,7 +158,10 @@ if [ -z "${usage:-}" ]; then
 else
   case "${disk_type:-}" in
     hyperdisk-*)
-      ok "SSD_TOTAL_GB: ${usage%.*}/${limit%.*} used, by the PD-type disks (postgres); $disk_type worker disks do not bill against it" ;;
+      # The usage on this line is every PD-type disk in the region — the postgres
+      # claim today, plus any substrate-snapshot PV once actors snapshot (that
+      # StorageClass is pd-balanced), but never the worker boot disks.
+      ok "SSD_TOTAL_GB: ${usage%.*}/${limit%.*} used, by PD-type disks only; $disk_type worker disks do not bill against it" ;;
     pd-standard)
       ok "worker boot disks are pd-standard (billed against DISKS_TOTAL_GB, not SSD_TOTAL_GB)" ;;
     *)

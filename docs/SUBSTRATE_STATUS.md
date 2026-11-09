@@ -35,6 +35,7 @@ Run `deploy/gcp/substrate-check.sh` to reproduce every claim in this file.
 | Read-only verification as plain shell | PR #271, `deploy/gcp/substrate-check.sh` | 12 checks pass on the live cluster |
 | Worker pool actually re-provisioned (cause 8's fix) | by hand: `gcloud container node-pools update` × 2 | machine type `n4-standard-4`, 100 GB `hyperdisk-balanced` (3000 IOPS / 140 MiB/s), min 1 / max 4; the E2 node is deleted and `planner-pool` stayed `2/2` throughout |
 | Worker nodes onto `COS_CONTAINERD` | by hand: `gcloud container clusters upgrade … --image-type=COS_CONTAINERD --quiet` | `node-pools describe … --format="value(config.imageType)"` → `COS_CONTAINERD`; the surge node `gke-…-substrate-worker-1b371960-tpxz` is Ready on `Container-Optimized OS from Google` and the Ubuntu node it replaced is gone |
+| The by-hand cluster state and the Terraform module agree | PR #271, verified by the merge-triggered apply | run [42684395694](https://github.com/niravshah2705/symphony/actions/runs/42684395694) job `reconcile substrate gke`: **"No changes. Your infrastructure matches the configuration"**, `Plan: 0 create, 0 update, 0 delete` — so the node GKE is running is the node the module describes, not just the node someone typed into `gcloud` |
 
 ## Root causes, all eight
 
@@ -59,19 +60,14 @@ Every one of these had to be fixed; any subset still yields zero sandboxes.
    digest-pinned `substratePlannerImage`) into the organization's settings, which is
    the per-tenant path the pattern router reads. Then trigger a planner run with
    `agentPattern=substrate` and watch the actor reach `ACTIVE`.
-2. **Reconcile the by-hand state with Terraform.** The live pool is now
-   `n4-standard-4` / `hyperdisk-balanced` / `COS_CONTAINERD` / min 1 – max 4, which is
-   what this branch's `terraform-substrate-gke/` renders, so the next apply should plan
-   `0 to add, 0 to change`. If it does not, trust the cluster and fix the module —
-   #270 is the cautionary example: it planned clean and still could not provision a
-   node, because GKE checks the disk type against the machine type only when the MIG
-   creates the instance.
-3. **Phase 3b**: move the system and substrate node pools off E2 too. That tears down
+2. **Phase 3b**: move the system and substrate node pools off E2 too. That tears down
    `ate-system`, so it needs `gke_allow_destroy=true` and a re-run of the install
    afterwards. Separate PR, deliberate.
-4. **`kubectl ate` for actor-level verification** — needs Go, which is not installed
-   here (see the by-hand section).
-5. Noted, deliberately not implemented: the `gc_thresh*` / inotify node sysctls, the
+3. **`kubectl ate` for actor-level verification** — needs Go, which is not installed
+   here (see the by-hand section). Actors are not CRDs — they live in the control-plane
+   Postgres and are reached over the ateapi gRPC Control API, so this is the only
+   read path that does not go through the app.
+4. Noted, deliberately not implemented: the `gc_thresh*` / inotify node sysctls, the
    STS quota, ComputeClasses and capacity buffers, hyperdisk provisioned IOPS. All of
    these only matter past roughly 800 concurrent sandboxes per node.
 
