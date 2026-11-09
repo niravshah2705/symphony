@@ -124,6 +124,18 @@ resource "google_cloud_run_v2_service" "org" {
         name  = "PROVISIONING_TOPIC"
         value = var.provisioning_topic
       }
+      # Login-triggered environment initialization (services/org/app/core/config.py
+      # `environment_init_enabled`). Its substrate.atespace step publishes on the
+      # topic above and its deploy.stack step calls trigger_provisioning, which
+      # checks PROVISIONING_ENABLED itself — so with provisioning off this switch
+      # still binds the org's atespace and asks the cluster for it, and simply
+      # leaves deploy.stack a recorded no-op. Terraform never couples the two: an
+      # operator turning init on has not asked for per-tenant stacks, and standing
+      # one up from a login is not something a default should do.
+      env {
+        name  = "ENVIRONMENT_INIT_ENABLED"
+        value = tostring(var.environment_init_enabled)
+      }
       env {
         name = "JWT_SECRET"
         value_source {

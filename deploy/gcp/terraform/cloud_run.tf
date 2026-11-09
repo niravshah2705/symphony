@@ -150,6 +150,9 @@ locals {
     local.skills_env,
     local.memory_env,
     local.egress_env,
+    # The planner is the service that routes a run to an actor and answers an
+    # actor's own dispatch, so it gets the callback pair too (see substrate.tf).
+    local.substrate_env,
   )
 
   coder_control_env = merge(
@@ -177,6 +180,9 @@ locals {
     local.skills_env,
     local.memory_env,
     local.egress_env,
+    # Control plane only: coder-control dispatches a substrate-coded run, and
+    # packages/shared/src/agent/framework.js reaches pattern-router from here.
+    local.substrate_control_env,
   )
 
   coder_worker_env = merge(local.common_env, {
@@ -193,6 +199,12 @@ locals {
     SETTINGS_URL = local.settings_url
     # ISSUE_ID (+ CONVERSATION_ID) are supplied per-execution by coder-control
     # as container overrides — see packages/shared/src/messaging/jobs.js.
+    #
+    # Deliberately NO substrate env. This is the container that runs
+    # model-generated code, and under the substrate pattern it runs inside an
+    # actor: handing it SUBSTRATE_URL would hand the workload the control plane
+    # that creates, assigns and deletes actors in OTHER tenants' atespaces. A
+    # worker is addressed by the pattern, it does not drive the pattern.
   }, local.skills_env, local.memory_env, local.egress_env)
 }
 
