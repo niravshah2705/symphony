@@ -78,6 +78,7 @@ jobs:
       SUBSTRATE_CREDENTIAL_PROVIDER: ${{ vars.SUBSTRATE_CREDENTIAL_PROVIDER }}
       SUBSTRATE_INGRESS_SPIFFE_IDS: ${{ vars.SUBSTRATE_INGRESS_SPIFFE_IDS }}
       SUBSTRATE_POSTGRES_STORAGE_CLASS: ${{ vars.SUBSTRATE_POSTGRES_STORAGE_CLASS }}
+      SUBSTRATE_POSTGRES_STORAGE_SIZE: ${{ vars.SUBSTRATE_POSTGRES_STORAGE_SIZE }}
       SUBSTRATE_ROLLOUT_TIMEOUT: ${{ vars.SUBSTRATE_ROLLOUT_TIMEOUT }}
       SUBSTRATE_ENABLED: ${{ vars.SUBSTRATE_ENABLED }}
       SUBSTRATE_NODE_POOL: ${{ vars.SUBSTRATE_NODE_POOL }}
@@ -129,6 +130,16 @@ jobs:
           spiffe_ids="${SUBSTRATE_INGRESS_SPIFFE_IDS:-spiffe://cluster.local/ns/ate-system/sa/atenet-client}"
           rollout_timeout="${SUBSTRATE_ROLLOUT_TIMEOUT:-10m}"
 
+          # The bundled Postgres claim. Upstream ships 500Gi of headroom for WAL
+          # churn; a fleet-sized control plane writes a few MB, and on
+          # dynamic-rwo that 500Gi is the slowest and most expensive part of the
+          # install — it is what timed out `rollout status statefulset/postgres`
+          # at 10m. There is no ate-setup flag for it, so it is rewritten into the
+          # checkout below.
+          pg_size="${SUBSTRATE_POSTGRES_STORAGE_SIZE:-50Gi}"
+          [[ "$pg_size" =~ ^[0-9]+(Mi|Gi|Ti)$ ]] \
+            || fail "SUBSTRATE_POSTGRES_STORAGE_SIZE '$pg_size' is not a Kubernetes quantity like 50Gi."
+
           # setup-gcp's --region defaults to us-west1 and it *refuses* an existing
           # bucket whose location differs, so pass the cluster's own region: a zone
           # ends in a single letter (asia-south1-a), a region does not.
@@ -147,6 +158,7 @@ jobs:
             echo "credential_provider=$credential_provider"
             echo "spiffe_ids=$spiffe_ids"
             echo "rollout_timeout=$rollout_timeout"
+            echo "pg_size=$pg_size"
           } >> "$GITHUB_OUTPUT"
 
           {
@@ -162,6 +174,7 @@ jobs:
             echo "| credential provider | \`$credential_provider\` |"
             echo "| ingress SPIFFE allowlist | \`$spiffe_ids\` |"
             echo "| rollout timeout | \`$rollout_timeout\` |"
+            echo "| postgres volume | \`$pg_size\` (upstream ships 500Gi) |"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -173,6 +186,7 @@ jobs:
           SANDBOX_CLASSES: ${{ steps.cfg.outputs.sandbox_classes }}
           IMAGE_REPO: ${{ env.SUBSTRATE_IMAGE_REPO }}
           INGRESS_HOSTNAME: ${{ vars.SUBSTRATE_INGRESS_HOSTNAME }}
+          PG_SIZE: ${{ steps.cfg.outputs.pg_size }}
         run: |
           set -uo pipefail
           # Advisory in both modes: this step never fails the job, because the
@@ -231,6 +245,18 @@ jobs:
           # this deploy rolls a control plane that is already serving.
           check "existing control plane" bash -c \
             'if kubectl get crd -o name 2>/dev/null | grep -q ate.dev; then echo "ate.dev CRDs present — this deploy rolls the running control plane"; else echo "no ate.dev CRDs — fresh install"; fi'
+          # The bundled Postgres claim is not a flag ate-setup takes, so install
+          # rewrites the manifest — and a bound claim cannot shrink, so a size
+          # mismatch means the install deletes the StatefulSet and the claim with
+          # it. Say so before the run, not after the 10-minute rollout wait.
+          check "postgres volume size" bash -c '
+            have="$(kubectl -n ate-system get pvc data-postgres-0 \
+              -o jsonpath="{.spec.resources.requests.storage}" 2>/dev/null || true)"
+            if [ -z "$have" ]; then echo "no claim yet — install provisions ${PG_SIZE}"; exit 0; fi
+            if [ "$have" = "$PG_SIZE" ]; then echo "data-postgres-0 is ${have} — left in place"; exit 0; fi
+            echo "data-postgres-0 is ${have}, wants ${PG_SIZE} — install deletes the claim and its atespace/actor metadata"
+            exit 1
+          '
           # Substrate v1.0.0 needs the PodCertificate APIs (clustertrustbundles,
           # podcertificaterequests), which GKE only serves from 1.37. On 1.36 the
           # install gets as far as podcertcontroller, which CrashLoops with
@@ -410,6 +436,46 @@ jobs:
           # Both before setup-go, which reads substrate/go.mod for the toolchain.
           git clone --depth 1 --branch "$VERSION" "$SUBSTRATE_URL" substrate
           git clone --depth 1 "$SUBSTRATE_GKE_URL" substrate-gke
+
+      - name: Set the bundled Postgres volume size
+        if: inputs.mode == 'install'
+        env:
+          PG_SIZE: ${{ steps.cfg.outputs.pg_size }}
+        run: |
+          set -euo pipefail
+          # ate-setup has no flag for the Postgres claim, but it reads its
+          # manifests out of this checkout (installDir = manifests/ate-install),
+          # so rewriting the file is the knob. The claim is the only `storage:`
+          # entry in the manifest; the guard below fails the job otherwise.
+          manifest=substrate/manifests/ate-install/postgres/postgres.yaml
+          before="$(sed -nE 's/^[[:space:]]*storage:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\1/p' "$manifest")"
+          [ -n "$before" ] || { echo "::error::No storage request found in $manifest — upstream changed the manifest shape."; exit 1; }
+          sed -i -E "s|^([[:space:]]*storage:[[:space:]]*).*$|\1${PG_SIZE}|" "$manifest"
+          echo "Postgres claim: ${before} -> ${PG_SIZE}"
+
+          # A claim is immutable below its own size and Kubernetes cannot shrink a
+          # bound PVC, so an existing install needs the StatefulSet and its claim
+          # deleted before the apply — otherwise the installer waits on a rollout
+          # that keeps serving the old volume. The StorageClass is
+          # reclaimPolicy=Delete, so the disk goes with the claim. This drops
+          # atespace and actor metadata (snapshots live in GCS and survive); the
+          # app re-provisions the atespace on its next run.
+          have="$(kubectl -n ate-system get pvc data-postgres-0 \
+            -o jsonpath='{.spec.resources.requests.storage}' 2>/dev/null || true)"
+          if [ -n "$have" ] && [ "$have" != "$PG_SIZE" ]; then
+            echo "::warning::data-postgres-0 is bound at ${have}; deleting it with the StatefulSet so ${PG_SIZE} can be provisioned."
+            kubectl -n ate-system delete statefulset postgres --wait=true >/dev/null
+            kubectl -n ate-system delete pvc data-postgres-0 --wait=true >/dev/null
+          elif [ -n "$have" ]; then
+            echo "Existing claim is already at ${have}; left in place."
+          fi
+          {
+            echo "### Postgres volume"
+            echo ""
+            echo "- manifest claim: \`$before\` -> \`$PG_SIZE\`"
+            echo "- existing claim: ${have:-none}"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-go@v7
         if: inputs.mode == 'install'

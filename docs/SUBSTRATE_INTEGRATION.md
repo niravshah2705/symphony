@@ -281,7 +281,7 @@ the clone is pinned to the same revision the images carry.
 
 | Mode | What it does | Mutates? |
 |---|---|---|
-| `preflight` | Reports every prerequisite PASS/FAIL (worker pool, snapshot bucket **and its region**, transfer GSA, `ate-system`, existing `ate.dev` CRDs, Envoy Gateway + cert-manager CRDs, whether the substrate front is `Programmed` and on which address, whether the CI identity may create **and label** `substrate-ip`, and whether the release images actually exist at the pinned tag) and prints the exact `ate-setup` command install mode will run | No |
+| `preflight` | Reports every prerequisite PASS/FAIL (worker pool, snapshot bucket **and its region**, transfer GSA, `ate-system`, existing `ate.dev` CRDs, Envoy Gateway + cert-manager CRDs, whether the substrate front is `Programmed` and on which address, whether the CI identity may create **and label** `substrate-ip`, and whether the release images actually exist at the pinned tag, and whether the live postgres claim matches `SUBSTRATE_POSTGRES_STORAGE_SIZE` or is about to be deleted and re-provisioned) and prints the exact `ate-setup` command install mode will run | No |
 | `install` | After the same report: provisions the GCS snapshot bucket + IAM through substrate-gke's `setup-gcp`, clones substrate at the pinned tag, and runs `deploy ate-system` | Yes (creates `ate-system`) |
 
 Before the first install, three rows read FAIL by design — the snapshot bucket,
@@ -328,6 +328,7 @@ Repo variables it reads (all optional; defaults shown):
 | `SUBSTRATE_CREDENTIAL_PROVIDER` | `{"name":"k8s.io"}` | The zero-trust path: the bundled Secrets provider plus a NetworkPolicy admitting only the egress gateway |
 | `SUBSTRATE_INGRESS_SPIFFE_IDS` | `spiffe://cluster.local/ns/ate-system/sa/atenet-client` | Unset means **no** client may reach actors through the router |
 | `SUBSTRATE_POSTGRES_STORAGE_CLASS` | unset (cluster default) | Set `dynamic-rwo` if the bundled postgres PVC will not attach to your node machine type |
+| `SUBSTRATE_POSTGRES_STORAGE_SIZE` | `50Gi` | Size of the bundled postgres claim. Upstream hardcodes `500Gi` in `manifests/ate-install/postgres/postgres.yaml` and ate-setup has no flag for it, so the workflow rewrites that file in the checkout before installing. **A bound PVC cannot shrink**: if the live claim is a different size, the install deletes the `postgres` StatefulSet and `data-postgres-0` with it (the `dynamic-rwo` StorageClass is `reclaimPolicy: Delete`, so the disk goes too). atespace and actor metadata are rebuilt on the next app run; snapshots in GCS survive. The preflight reports the mismatch before it happens |
 | `SUBSTRATE_ROLLOUT_TIMEOUT` | `10m` | Cold-start image pulls on a just-created pool are slow; the installer default is 60s |
 | `SUBSTRATE_REPO_URL` / `SUBSTRATE_GKE_REPO_URL` | upstream GitHub URLs | Only change these to mirror or to pin a fork |
 
