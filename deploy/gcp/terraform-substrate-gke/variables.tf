@@ -197,9 +197,16 @@ variable "substrate_worker_pool_label" {
 }
 
 variable "substrate_machine_type" {
-  description = "Machine type for Substrate worker nodes (resume wants headroom memory)"
+  description = <<-EOT
+    Machine type for Substrate worker nodes (resume wants headroom memory).
+    N4, not E2: the Substrate docs exclude "machine series that run on mixed CPU
+    architectures", which is what E2 is, and a snapshot resumed on a different CPU
+    generation than it was taken on is the failure mode that makes this worth
+    moving off. c3-standard-4 does not exist in asia-south1-a (only -lssd
+    variants), so N4 is the family available in this zone.
+  EOT
   type        = string
-  default     = "e2-standard-4"
+  default     = "n4-standard-4"
 }
 
 variable "substrate_min_nodes" {
@@ -209,9 +216,32 @@ variable "substrate_min_nodes" {
 }
 
 variable "substrate_max_nodes" {
-  description = "Maximum Substrate worker nodes"
+  description = <<-EOT
+    Maximum Substrate worker nodes. 4, not 6: the worker boot disks are
+    pd-balanced, which counts against the regional SSD_TOTAL_GB quota (limit 500,
+    same pool as the postgres claim), so max_nodes x substrate_worker_disk_size_gb
+    has to fit what is left after postgres. 4 x 100 = 400 GB against the ~450 GB
+    the 50Gi claim leaves. Raise this together with a quota increase.
+  EOT
   type        = number
-  default     = 6
+  default     = 4
+}
+
+variable "substrate_worker_disk_size_gb" {
+  description = <<-EOT
+    Boot disk size for Substrate worker nodes, separate from var.disk_size_gb
+    that the other pools share. Actor snapshots stage on the boot disk under
+    /var/lib/ate/snapshots, so a worker whose disk fills mid-snapshot fails
+    resume, not just a pod eviction.
+  EOT
+  type        = number
+  default     = 100
+}
+
+variable "substrate_worker_disk_type" {
+  description = "Boot disk type for Substrate worker nodes. pd-balanced counts against SSD_TOTAL_GB; pd-standard would move the spend to DISKS_TOTAL_GB at 50 GB of shared quota per node."
+  type        = string
+  default     = "pd-balanced"
 }
 
 variable "substrate_ingress_hostname" {

@@ -81,9 +81,15 @@ substrate_node_pool_name        = "substrate-worker-pool"
 # the Cloud Run side. Nothing schedules unless a WorkerPool of this name exists —
 # the installer does not create one (docs/SUBSTRATE_INTEGRATION.md §5.3).
 substrate_worker_pool_label     = "planner-pool"
-substrate_machine_type          = "e2-standard-4"
-substrate_min_nodes             = 1
-substrate_max_nodes             = 6
+# N4 + COS_CONTAINERD + a dedicated boot disk: the Substrate docs exclude mixed
+# CPU-architecture series (E2) for nodes that resume gVisor snapshots, and actor
+# snapshots stage on the worker boot disk. max x disk must stay inside the
+# regional SSD_TOTAL_GB quota — see variables.tf.
+substrate_machine_type           = "n4-standard-4"
+substrate_min_nodes              = 1
+substrate_max_nodes              = 4
+substrate_worker_disk_size_gb    = 100
+substrate_worker_disk_type       = "pd-balanced"
 substrate_snapshot_storage_class = "substrate-snapshot-pd"
 substrate_credentials_namespace  = "substrate-credentials"
 

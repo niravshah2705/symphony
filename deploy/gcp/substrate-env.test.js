@@ -642,3 +642,51 @@ test('the worker pool is tainted with the key atelet tolerates', () => {
   assert.doesNotMatch(step[1], /^\s*tolerations:/m,
     'the WorkerPool hand-writes a toleration the controller already adds for the sandbox class');
 });
+
+test('the worker pool boots on its own disk and inside the regional SSD quota', () => {
+  // Actor snapshots stage on the worker BOOT disk (/var/lib/ate/snapshots), so
+  // the pool cannot share the generic node-disk variables: at 50 GB pd-standard
+  // a resume fails on a full disk rather than evicting a pod. And because
+  // pd-balanced bills against the same regional SSD_TOTAL_GB quota as the
+  // bundled postgres claim, max_nodes x disk_size is a quota statement, not a
+  // sizing preference — 6 x 100 GB overran the 500 GB limit and starved the
+  // postgres claim next to it.
+  const gke = read('deploy', 'gcp', 'terraform-substrate-gke', 'substrate.tf');
+  const from = gke.indexOf('resource "google_container_node_pool" "substrate_nodes"');
+  assert.ok(from >= 0, 'the substrate worker node pool moved out of substrate.tf');
+  const next = gke.indexOf('resource "', from + 10);
+  const pool = gke.slice(from, next === -1 ? undefined : next);
+  assert.match(pool, /disk_size_gb\s*=\s*var\.substrate_worker_disk_size_gb/,
+    'the worker pool borrowed the shared disk size again — snapshots need their own');
+  assert.match(pool, /disk_type\s*=\s*var\.substrate_worker_disk_type/,
+    'the worker pool borrowed the shared disk type again');
+  assert.doesNotMatch(pool, /disk_size_gb\s*=\s*var\.disk_size_gb/,
+    'worker boot disks are sized by var.disk_size_gb, which every other pool shares');
+  assert.match(pool, /image_type\s*=\s*"COS_CONTAINERD"/,
+    'the docs require COS_CONTAINERD on worker nodes (ComputeClass + the snapshot sysctls)');
+
+  const tfvars = read('deploy', 'gcp', 'terraform-substrate-gke', 'variables.tf');
+  const declared = (name) => {
+    const m = new RegExp(`variable "${name}" \\{[\\s\\S]*?default\\s*=\\s*"?([^"\\n]+)"?\\s*\\n\\}`)
+      .exec(tfvars);
+    assert.ok(m, `variable "${name}" no longer declares a default`);
+    return m[1].trim();
+  };
+  assert.equal(declared('substrate_machine_type'), 'n4-standard-4',
+    'worker nodes moved back onto a mixed-CPU-architecture series (E2), which the substrate docs exclude');
+  const maxNodes = Number(declared('substrate_max_nodes'));
+  const diskGb = Number(declared('substrate_worker_disk_size_gb'));
+  assert.ok(maxNodes * diskGb <= 450,
+    `substrate_max_nodes x substrate_worker_disk_size_gb = ${maxNodes * diskGb} GB, ` +
+    'over the SSD_TOTAL_GB (500) the regional quota allows once postgres holds its claim');
+
+  const example = read('deploy', 'gcp', 'terraform-substrate-gke', 'terraform.tfvars.example');
+  for (const [name, value] of [
+    ['substrate_machine_type', 'n4-standard-4'],
+    ['substrate_max_nodes', String(maxNodes)],
+    ['substrate_worker_disk_size_gb', String(diskGb)],
+  ]) {
+    assert.ok(new RegExp(`^${name}\\s*=\\s*"?${value}"?\\s*$`, 'm').test(example),
+      `terraform.tfvars.example still advertises a different ${name} than the module default`);
+  }
+});

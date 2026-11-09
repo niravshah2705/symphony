@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 247 nodes
+Community of 248 nodes
 
-- **Size**: 247 nodes
-- **Cohesion**: 0.0542
+- **Size**: 248 nodes
+- **Cohesion**: 0.0538
 - **Dominant Language**: javascript
 
 ## Members
@@ -51,6 +51,7 @@ Community of 247 nodes
 | test:atespace names Terraform accepts are names the app will not silently drop@L527 | Test | ./deploy/gcp/substrate-env.test.js | 527-567 |
 | test:the worker pool name the planner selects is one string in four places@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-616 |
 | test:the worker pool is tainted with the key atelet tolerates@L618 | Test | ./deploy/gcp/substrate-env.test.js | 618-644 |
+| test:the worker pool boots on its own disk and inside the regional SSD quota@L646 | Test | ./deploy/gcp/substrate-env.test.js | 646-692 |
 | test:no CI file names OpenShell any more@L49 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 49-57 |
 | test:every writer of the cluster serialises on the same concurrency group@L59 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 59-70 |
 | test:the reconcile job runs the root that exists, under the documented prefix@L113 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 113-124 |
@@ -63,9 +64,8 @@ Community of 247 nodes
 | test:direct Agent jobs navigation is hidden and gated for a public visitor@L237 | Test | ./e2e/anonymous-agent.spec.js | 237-246 |
 | test:parallel application-auth failures expire an authenticated session once and stop private loading@L342 | Test | ./e2e/anonymous-agent.spec.js | 342-367 |
 | test:settings renders task-model controls without a view error@L39 | Test | ./e2e/page-loading.spec.js | 39-59 |
-| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
 
-*... and 197 more members.*
+*... and 198 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 247 nodes
 
 ### Outgoing
 
-- `equal` (276 edge(s))
-- `ok` (242 edge(s))
-- `match` (235 edge(s))
+- `equal` (277 edge(s))
+- `ok` (245 edge(s))
+- `match` (238 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
 - `deepEqual` (57 edge(s))
 - `includes` (50 edge(s))
-- `indexOf` (47 edge(s))
-- `doesNotMatch` (46 edge(s))
+- `indexOf` (49 edge(s))
+- `doesNotMatch` (47 edge(s))
 - `map` (45 edge(s))
 - `filter` (41 edge(s))
 - `join` (38 edge(s))
-- `slice` (36 edge(s))
+- `slice` (37 edge(s))
 - `request` (33 edge(s))
 
 ### Incoming
 
-- `equal` (276 edge(s))
-- `ok` (242 edge(s))
-- `match` (235 edge(s))
+- `equal` (277 edge(s))
+- `ok` (245 edge(s))
+- `match` (238 edge(s))
 - `expect` (175 edge(s))
 - `locator` (84 edge(s))
 - `route` (58 edge(s))
 - `deepEqual` (57 edge(s))
+- `indexOf` (48 edge(s))
 - `includes` (47 edge(s))
-- `indexOf` (46 edge(s))
-- `doesNotMatch` (46 edge(s))
+- `doesNotMatch` (47 edge(s))
 - `map` (40 edge(s))
 - `filter` (40 edge(s))
-- `slice` (29 edge(s))
+- `slice` (30 edge(s))
 - `./e2e/page-loading.spec.js::json` (29 edge(s))
 - `join` (28 edge(s))
