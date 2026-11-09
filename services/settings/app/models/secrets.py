@@ -69,6 +69,12 @@ SECRET_KEYS: tuple[str, ...] = (
     # /key/generate mints a NEW token per call and nothing here can receive one
     # back. See CUSTOMER_ONLY_SECRET_KEYS below and docs/LLM_GATEWAY.md.
     "litellmApiKey",
+    # agentgateway virtual key for the `/agentgw` egress route — an L7 front for
+    # LLM, MCP and A2A traffic, deployed in-cluster. Same shape as litellmApiKey:
+    # operator-minted per organization and model-scoped, never the gateway master
+    # key, because the route forwards any sub-path and a coder-reachable admin key
+    # is the exact failure the egress sidecar exists to prevent.
+    "fleetGatewayApiKey",
     # Langfuse Cloud tracing pair. The sidecar builds `Basic base64(pk:sk)` for the
     # /langfuse route, so the public key is a stored key too (not a constant).
     # Platform-managed only, like the LLM gateway key: one shared project receives
@@ -86,7 +92,8 @@ SECRET_KEYS: tuple[str, ...] = (
 # shared trace sink, and a writable key would let a tenant redirect its
 # observations into a project the platform does not control. The LiteLLM
 # credential is operator-written too: a browser-writable value would let an org
-# point the platform's LiteLLM-routed traffic at an arbitrary gateway.
+# point the platform's LiteLLM-routed traffic at an arbitrary gateway. The
+# agentgateway virtual key is excluded for exactly that reason, one gateway later.
 BROWSER_WRITABLE_SECRET_KEYS: tuple[str, ...] = tuple(
     key
     for key in SECRET_KEYS
@@ -97,6 +104,7 @@ BROWSER_WRITABLE_SECRET_KEYS: tuple[str, ...] = tuple(
         "langfusePublicKey",
         "langfuseSecretKey",
         "litellmApiKey",
+        "fleetGatewayApiKey",
     )
 )
 
@@ -133,6 +141,11 @@ CUSTOMER_ONLY_SECRET_KEYS: frozenset[str] = frozenset(
         # sidecar exists to prevent. docs/LLM_GATEWAY.md covers the ephemeral-DB
         # consequence (re-mint after a redeploy; runs fail closed until then).
         "litellmApiKey",
+        # The agentgateway virtual key is per-organization by address for the same
+        # reason, and there is no platform-shared gateway account to manage: one
+        # shared key would attribute every tenant's MCP and A2A traffic to whoever
+        # happened to own it. Customer-only, so the shared stack omits it.
+        "fleetGatewayApiKey",
     }
 )
 

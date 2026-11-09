@@ -122,6 +122,18 @@ const EGRESS_ROUTES = Object.freeze({
   // fetchOrgSecrets(PROXY_ORG_ID) and fails closed when absent, so spend on the
   // gateway attributes to the tenant that caused it.
   litellm: Object.freeze({ prefix: '/litellm', target: 'litellm', auth: 'apiKey', scheme: 'bearer', secretKey: 'litellmApiKey' }),
+  // agentgateway — an L7 front for LLM, MCP and A2A traffic, deployed in-cluster.
+  // One prefix is enough for all three because MCP and A2A ride the same target as
+  // sub-paths. A `target` route for the same reason LiteLLM is one: the gateway
+  // fans out to the internet and holds a real provider key, so a caller-selected
+  // origin would be an SSRF pivot with a credential attached to it.
+  //
+  // There is no enable flag. With AGENTGATEWAY_PROXY_UPSTREAM unset, resolveUpstream
+  // fails closed 502 — which is the dark state, enforced by deployment config
+  // instead of a second knob that can disagree with the first. A `litellm` run is
+  // unaffected: this deployment puts the gateway *in front of* LiteLLM, so the
+  // physical target of LITELLM_PROXY_UPSTREAM moves and no route or mode does.
+  agentgateway: Object.freeze({ prefix: '/agentgw', target: 'agentgateway', auth: 'apiKey', scheme: 'bearer', secretKey: 'fleetGatewayApiKey' }),
   // OpenSWE is a separate LangGraph server. Its real origin is trusted
   // sidecar-only deployment config; the coder sees only this fixed route.
   openSwe: Object.freeze({ prefix: '/openswe', target: 'openswe', auth: 'none' }),

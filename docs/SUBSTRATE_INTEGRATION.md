@@ -73,6 +73,30 @@ Actor identity: `mintActorJwt` (audience-scoped, expiring), verified against the
 `ate-idp-server` JWKS in `verifyActorJwt` (malformed / expired /
 audience_mismatch / trust_domain_mismatch).
 
+### 3.1 Two egress boundaries, and which one owns a key
+
+Everything above describes **actor egress** (see
+[`GLOSSARY.md`](../GLOSSARY.md)). It is a second boundary alongside the Cloud Run
+**egress proxy** sidecar (`services/proxy`), and conflating them is how a key ends
+up with two rotation paths:
+
+| | Cloud Run egress proxy | Substrate actor egress |
+|---|---|---|
+| Substitution point | loopback sidecar, inside the container's network namespace | the substrate gateway, outside the gVisor sandbox |
+| Credential source | settings S2S → vault, per call | k8s Secrets in `substrate-credentials`, pushed by `syncSubstrateSecrets` |
+| Route table | `EGRESS_ROUTES` (`packages/shared-core/src/egress.js`) | the guardrail `CredentialProviderPolicy` scopes |
+| Today | every provider key the run uses | `ghcr-pull-and-clone`, `image-registry-creds`, `openrouter-api-key` |
+
+The `openrouter-api-key` row is the seam to close, not a design: model traffic
+belongs behind a **model gateway** (agentgateway's `/agentgw` route is the seam
+that exists for it), so that actor egress narrows to registry-pull and clone
+credentials, which are not LLM spend. That re-pointing lands with the substrate
+root's `agentgateway.tf`; until then a substrate run's LLM calls are injected at
+this boundary and are **not** covered by the `/agentgw` route, which ships dark —
+no client-side base URL points at it, and an unconfigured
+`AGENTGATEWAY_PROXY_UPSTREAM` fails closed with a 502 rather than defaulting onto
+someone else's gateway.
+
 ## 4. Shared unified guardrail spec
 
 One structured object (`packages/shared-core/src/guardrails/spec.js`) persisted
