@@ -253,15 +253,17 @@ Leave `SUBSTRATE_INGRESS_HOSTNAME` unset and the installer stays the sole owner.
 | `substrateUrl` | `https://substrate.archagentix.com` with `SUBSTRATE_CONTROL_PLANE_PUBLIC=true` (gRPC rides the `/substrate.ateapi.v1.Control` prefix); otherwise the in-cluster `ateapi.ate-system.svc:8443`, reachable only from inside the VPC |
 | `substrateIngressUrl` | `https://substrate.archagentix.com` |
 | `substrateAtespace` | **must be a space this deployment has already declared** — i.e. listed in `SUBSTRATE_ALLOWED_ATESPACES`, pinned as `SUBSTRATE_ATESPACE`, or a value in `SUBSTRATE_ATESPACE_BY_ORG`. Anything else is dropped by `resolveSubstrateAtespace`, which then resolves from the binding table by organization id. Nothing is derived from the *text* of an org id any more, and once a deployment declares more than one space an organization that is not bound **throws** instead of landing in `tenant-a`. A per-tenant stack does not need this field: the provisioner pins `SUBSTRATE_ATESPACE` from the deployment slug. `GET /api/agent/substrate/status` echoes what was resolved; the runner creates the atespace over ateapi (`CreateAtespace`/`GetAtespace`) if missing |
-| `substrateWorkerPool` | the value of the `ate.dev/worker-pool` **node label** the `workerSelector` matches — not automatically the GKE pool name. `substrate.tf` labels the worker pool with `var.substrate_worker_pool_label` (default `planner-pool`), which is also `DEFAULT_WORKER_POOL` in `packages/shared-core/src/agent/substrate.js` and `substrate_worker_pool` in `deploy/gcp/terraform/variables.tf`: the three defaults are one value, and changing only one of them schedules nothing. Blank falls back to `planner-pool` |
+| `substrateWorkerPool` | **the name of the `WorkerPool` custom resource** the actors land on. ate-controller stamps `ate.dev/worker-pool=<WorkerPool name>` onto the pool's worker pods and the ate API matches the template's `workerSelector` against those pod labels — no node label participates in placement. `substrate.tf` also copies the same string onto the GKE node pool as `ate.dev/worker-pool`, purely so the pool is recognizable in `kubectl get nodes`. It is `var.substrate_worker_pool_label` (default `planner-pool`), `DEFAULT_WORKER_POOL` in `packages/shared-core/src/agent/substrate.js`, `substrate_worker_pool` in `deploy/gcp/terraform/variables.tf` and the install workflow's `SUBSTRATE_WORKER_POOL` fallback: four defaults, one value, and `deploy/gcp/substrate-env.test.js` fails if they drift. Blank falls back to `planner-pool`. A pool that is selected but never *created* is §5.3 |
 | `substrateActorTemplate` | `planner` |
 | `substratePlannerImage` | the planner image **pinned by digest** (`name@sha256:…`) — `upsertActorTemplate` throws on a tag, so use the digest the stack is on |
 | `substrateTimeoutMs` | per-call gRPC deadline; `60000` is the default. Keep it under the Cloud Run / ingress budget of the calling service |
 | `substrateActorTtlMs` | how long the per-run actor survives before the power path suspends/reaps it; `120000` default. Below the actor's resume cost is wasted |
 
-The node label is a one-off, but note `gcloud container node-pools update --node-labels`
-rolls the pool's nodes, so do it while the pool is parked (the power workflow scales it
-to zero overnight).
+The node label is a one-off, and it does not place actors (see the row above) — but
+`gcloud container node-pools update --node-labels` rolls the pool's nodes, so do it
+while the pool is parked (the power workflow scales it to zero overnight). The taint
+that does matter, `ate.dev/sandboxClass=gvisor:NoSchedule`, is updated the same way and
+is what §5.3's WorkerPool pods tolerate automatically.
 
 ### 5.2 Installing `ate-system` from CI
 
@@ -330,11 +332,58 @@ Repo variables it reads (all optional; defaults shown):
 | `SUBSTRATE_POSTGRES_STORAGE_CLASS` | unset (cluster default) | Set `dynamic-rwo` if the bundled postgres PVC will not attach to your node machine type |
 | `SUBSTRATE_POSTGRES_STORAGE_SIZE` | `50Gi` | Size of the bundled postgres claim. Upstream hardcodes `500Gi` in `manifests/ate-install/postgres/postgres.yaml` and ate-setup has no flag for it, so the workflow rewrites that file in the checkout before installing. **A bound PVC cannot shrink**: if the live claim is a different size, the install deletes the `postgres` StatefulSet and `data-postgres-0` with it (the `dynamic-rwo` StorageClass is `reclaimPolicy: Delete`, so the disk goes too). atespace and actor metadata are rebuilt on the next app run; snapshots in GCS survive. The preflight reports the mismatch before it happens |
 | `SUBSTRATE_ROLLOUT_TIMEOUT` | `10m` | Cold-start image pulls on a just-created pool are slow; the installer default is 60s |
+| `SUBSTRATE_WORKER_POOL` | `planner-pool` | Name of the `WorkerPool` the install step creates (§5.3). Must equal what the planner sends as `workerSelector` — the same string as `substrate_worker_pool` in Terraform and `DEFAULT_WORKER_POOL` in `substrate.js` |
+| `SUBSTRATE_WORKER_NODE_POOL` | `substrate-worker-pool` | The GKE node pool the WorkerPool's `nodeSelector` pins workers to; `var.substrate_node_pool_name` in `terraform-substrate-gke` |
+| `SUBSTRATE_WORKER_POOL_REPLICAS` | `2` | How many idle worker pods stay ready. Each advertises a 2 CPU / 4Gi per-actor ceiling, so this is the concurrent-sandbox budget of the pool |
 | `SUBSTRATE_REPO_URL` / `SUBSTRATE_GKE_REPO_URL` | upstream GitHub URLs | Only change these to mirror or to pin a fork |
 
 The snapshot transfer service account is fixed to substrate-gke's default name,
 `ate-snapshot-transfer`; if you override `SNAPSHOT_TRANSFER_GSA_NAME` there, the
 preflight's GSA row and the installer flag will disagree.
+
+### 5.3 The WorkerPool — the object that makes a sandbox exist
+
+`ate-setup install ate-system` brings up the control plane and installs the
+`workerpools.ate.dev` CRD, and **stops there**. A WorkerPool is a user-managed
+object: upstream creates one only for `--demo`, and nothing in this repo did until
+the install workflow's `Create the WorkerPool` step. So an install can report
+complete success while no actor is placeable — the symptom is a run that never
+leaves the queue, with a control plane that looks healthy and a
+`no worker available` scheduling message that names nothing a human can act on.
+
+Three things have to line up, and each of them broke here at least once:
+
+1. **The pool must exist, and be named what the planner selects.** ate-controller
+   stamps `ate.dev/worker-pool=<WorkerPool name>` on the pool's worker pods; the ate
+   API matches the ActorTemplate's `workerSelector` against those labels
+   (`cmd/ateapi/internal/scheduling/scheduling.go`, comparing `worker.GetLabels()`).
+   `substrate.js` sends `{ate.dev/worker-pool: <pool>}` for both the template and the
+   actor, so `metadata.name` of the CR is the coupling — not a node label.
+2. **The node pool's taint must be one atelet tolerates.** The contract is
+   `ate.dev/sandboxClass=<class>:NoSchedule`. atelet tolerates that key for any value,
+   and ate-controller adds the class's own toleration to every worker pod
+   (`applySandboxClassToleration`). A privately-named taint like
+   `substrate.ate.dev/workers=true` repels both, so even a node that exists hosts
+   neither atelet nor workers and can never run a sandbox. `substrate-env.test.js`
+   pins the key, the value, and that the workflow does not hand-write a second
+   toleration for it.
+3. **Worker limits are the per-actor ceiling, not resource usage.** `spec.template`
+   `limits` are what the ate scheduler books an actor against; `requests` are what
+   kube-scheduler packs nodes by. The ActorTemplate defaults to 1000m / 1Gi
+   (`upsertActorTemplate`), so limits below that place nothing. The step sets
+   2 CPU / 4Gi per worker.
+
+Capacity is demand-driven: the WorkerPool's worker pods are the only thing that pulls
+`substrate-worker-pool` off zero nodes, so a pool parked below its autoscaling minimum
+recovers as soon as a WorkerPool with `replicas > 0` exists. The preflight's
+`WorkerPool created` / `worker node pool placement` rows report all of this before an
+install rather than after a silent queue.
+
+```bash
+kubectl get workerpools.ate.dev -A
+kubectl -n substrate-workers get pods -l ate.dev/worker-pool=planner-pool -o wide
+kubectl -n ate-system get pods -l app=atelet -o wide    # one per worker node, or the taint is wrong
+```
 
 ## 6. Key files
 
@@ -424,8 +473,12 @@ Run this after the install workflow and before pointing any organization at the
 kubectl -n ate-system get deploy,sts,svc
 kubectl get crd | grep ate.dev
 
-# 2. gVisor is installed on the worker pool and the pool carries the
-#    ate.dev/worker-pool label the ActorTemplate's workerSelector matches.
+# 2. A WorkerPool exists, is named what the planner selects, and has a Ready
+#    worker on a node atelet also runs on (see §5.3 — the pool is not installed
+#    by ate-setup, and a tainted-with-the-wrong-key node hosts no atelet).
+kubectl get workerpools.ate.dev -A
+kubectl -n substrate-workers get pods -l ate.dev/worker-pool=planner-pool -o wide
+kubectl -n ate-system get pods -l app=atelet -o wide
 kubectl get nodes -L ate.dev/worker-pool -L cloud.google.com/gke-nodepool
 kubectl get sandboxconfigs.ate.dev -o wide 2>/dev/null || kubectl api-resources --api-group=ate.dev
 

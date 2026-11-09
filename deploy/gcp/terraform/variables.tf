@@ -1421,7 +1421,7 @@ variable "substrate_atespace_by_org" {
 
 variable "substrate_worker_pool" {
   type        = string
-  description = "Worker pool name an actor run is scheduled onto (the `ate.dev/worker-pool` node-selector label). Pools are created by the substrate root; this only has to agree with their label."
+  description = "Name of the WorkerPool an actor run is scheduled onto, sent as workerSelector {ate.dev/worker-pool = this}. It matches the WorkerPool CR's name (ate-controller labels the pool's pods with it), NOT any node label — and the substrate GKE root creates no WorkerPool: the install workflow does (docs/SUBSTRATE_INTEGRATION.md §5.3), so this must agree with SUBSTRATE_WORKER_POOL there or every actor sits Pending."
   default     = "planner-pool"
 
   validation {
