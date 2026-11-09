@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 12 nodes
+Community of 13 nodes
 
-- **Size**: 12 nodes
-- **Cohesion**: 0.1618
+- **Size**: 13 nodes
+- **Cohesion**: 0.1655
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,6 +26,7 @@ Community of 12 nodes
 | test:litellm: non-proxied direct run uses LITELLM_URL and the org virtual key@L171 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 171-181 |
 | test:litellm: non-proxied without a minted virtual key fails 401 (never OAuth)@L183 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 183-191 |
 | test:an unknown gateway selector is inert even with both gates on@L193 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 193-202 |
+| test:wire id and anthropic-beta header stay untouched for non-gateway descriptors@L204 | Test | ./packages/shared/src/agent/llm-gateway.test.js | 204-211 |
 
 ## Execution Flows
 
@@ -35,19 +36,19 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (39 edge(s))
-- `deepEqual` (7 edge(s))
+- `equal` (41 edge(s))
+- `deepEqual` (8 edge(s))
 - `match` (2 edge(s))
 - `execFileSync` (1 edge(s))
 - `resolve` (1 edge(s))
 - `parse` (1 edge(s))
 - `trim` (1 edge(s))
-- `./packages/shared/src/agent/llm-gateway.test.js::test:wire id and anthropic-beta header stay untouched for non-gateway descriptors@L204` (1 edge(s))
+- `ok` (1 edge(s))
 
 ### Incoming
 
-- `equal` (39 edge(s))
-- `./packages/shared/src/agent/llm-gateway.test.js` (12 edge(s))
-- `deepEqual` (7 edge(s))
+- `equal` (41 edge(s))
+- `./packages/shared/src/agent/llm-gateway.test.js` (13 edge(s))
+- `deepEqual` (8 edge(s))
 - `match` (2 edge(s))
-- `./packages/shared/src/agent/llm-gateway.test.js::test:wire id and anthropic-beta header stay untouched for non-gateway descriptors@L204` (1 edge(s))
+- `ok` (1 edge(s))

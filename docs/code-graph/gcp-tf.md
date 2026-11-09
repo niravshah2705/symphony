@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 7 nodes
 
-- **Size**: 5 nodes
-- **Cohesion**: 0.0930
+- **Size**: 7 nodes
+- **Cohesion**: 0.1928
 - **Dominant Language**: javascript
 
 ## Members
@@ -19,6 +19,8 @@ Community of 5 nodes
 | tfProbe | Function | ./deploy/gcp/substrate-env.test.js | 76-85 |
 | tfMap | Function | ./deploy/gcp/substrate-env.test.js | 90-95 |
 | tfStr | Function | ./deploy/gcp/substrate-env.test.js | 98-102 |
+| test:the rendered substrate map is the shape the JS side parses@L389 | Test | ./deploy/gcp/substrate-env.test.js | 389-425 |
+| test:the actor callback renders as four names or none, never a half-pair@L427 | Test | ./deploy/gcp/substrate-env.test.js | 427-445 |
 
 ## Execution Flows
 
@@ -28,24 +30,31 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./deploy/gcp/substrate-env.test.js::test:the rendered substrate map is the shape the JS side parses@L389` (4 edge(s))
+- `equal` (7 edge(s))
+- `match` (4 edge(s))
+- `skip` (2 edge(s))
+- `deepEqual` (2 edge(s))
+- `ok` (2 edge(s))
 - `String` (2 edge(s))
-- `match` (2 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the actor callback renders as four names or none, never a half-pair@L427` (2 edge(s))
 - `stringify` (2 edge(s))
 - `slice` (2 edge(s))
+- `sort` (1 edge(s))
+- `filter` (1 edge(s))
+- `keys` (1 edge(s))
+- `doesNotMatch` (1 edge(s))
 - `entries` (1 edge(s))
 - `trim` (1 edge(s))
 - `replace` (1 edge(s))
-- `toString` (1 edge(s))
-- `execFileSync` (1 edge(s))
-- `matchAll` (1 edge(s))
-- `fromEntries` (1 edge(s))
-- `map` (1 edge(s))
-- `join` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/substrate-env.test.js` (6 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the rendered substrate map is the shape the JS side parses@L389` (4 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the actor callback renders as four names or none, never a half-pair@L427` (2 edge(s))
+- `./deploy/gcp/substrate-env.test.js` (8 edge(s))
+- `equal` (7 edge(s))
+- `skip` (2 edge(s))
+- `deepEqual` (2 edge(s))
+- `ok` (2 edge(s))
+- `match` (2 edge(s))
+- `sort` (1 edge(s))
+- `filter` (1 edge(s))
+- `keys` (1 edge(s))
+- `doesNotMatch` (1 edge(s))

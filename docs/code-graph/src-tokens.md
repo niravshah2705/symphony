@@ -4,16 +4,17 @@
 
 ## Overview
 
-Community of 312 nodes
+Community of 316 nodes
 
-- **Size**: 312 nodes
-- **Cohesion**: 0.1923
+- **Size**: 316 nodes
+- **Cohesion**: 0.1869
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:each metric filter names a field the emitting code actually writes@L95 | Test | ./deploy/gcp/observability-config.test.js | 95-118 |
 | prunePending | Function | ./packages/shared-core/src/agent/claude-oauth.js | 34-38 |
 | buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/claude-oauth.js | 41-51 |
 | createLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 57-68 |
@@ -63,9 +64,8 @@ Community of 312 nodes
 | generateVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 17-19 |
 | challengeFromVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 22-24 |
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
-| getBaseUrl | Function | ./packages/shared-core/src/billing/cashfree-client.js | 6-15 |
 
-*... and 262 more members.*
+*... and 266 more members.*
 
 ## Execution Flows
 
@@ -85,17 +85,17 @@ Community of 312 nodes
 
 ### Outgoing
 
-- `equal` (235 edge(s))
-- `filter` (40 edge(s))
+- `equal` (242 edge(s))
+- `filter` (42 edge(s))
 - `String` (37 edge(s))
 - `toISOString` (37 edge(s))
 - `Number` (34 edge(s))
-- `deepEqual` (27 edge(s))
+- `deepEqual` (28 edge(s))
+- `ok` (27 edge(s))
 - `slice` (25 edge(s))
 - `trim` (25 edge(s))
 - `isArray` (24 edge(s))
 - `includes` (23 edge(s))
-- `ok` (23 edge(s))
 - `push` (22 edge(s))
 - `set` (21 edge(s))
 - `isFinite` (19 edge(s))
@@ -103,18 +103,18 @@ Community of 312 nodes
 
 ### Incoming
 
-- `equal` (235 edge(s))
+- `equal` (242 edge(s))
 - `./packages/shared-core/src/store.js` (181 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
-- `deepEqual` (27 edge(s))
+- `deepEqual` (28 edge(s))
+- `ok` (27 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
-- `ok` (23 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
 - `push` (18 edge(s))
 - `./packages/shared-core/src/billing/cashfree-client.js` (17 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
-- `filter` (13 edge(s))
+- `filter` (15 edge(s))
+- `match` (14 edge(s))
+- `getBillingAccount` (13 edge(s))
 - `./packages/shared-core/src/billing/pricing.js` (12 edge(s))
-- `require` (11 edge(s))
-- `./packages/shared-core/src/billing/recharge.test.js` (11 edge(s))

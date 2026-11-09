@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 18 nodes
+Community of 19 nodes
 
-- **Size**: 18 nodes
-- **Cohesion**: 0.4784
+- **Size**: 19 nodes
+- **Cohesion**: 0.4923
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,6 +17,7 @@ Community of 18 nodes
 | handlerFor | Function | ./services/planner/src/routes/agent-attachments.test.js | 10-15 |
 | call | Function | ./services/planner/src/routes/agent-attachments.test.js | 18-25 |
 | freshRouter | Function | ./services/planner/src/routes/agent-attachments.test.js | 35-54 |
+| test:GET /attachment-types is a pure passthrough of the canonical table@L56 | Test | ./services/planner/src/routes/agent-attachments.test.js | 56-61 |
 | test:mint/complete/delete all reject and list returns empty when org or project context is missing@L63 | Test | ./services/planner/src/routes/agent-attachments.test.js | 63-83 |
 | test:routes fall back to stored conversation org and project context when headers are omitted@L85 | Test | ./services/planner/src/routes/agent-attachments.test.js | 85-104 |
 | test:routes reject an unknown/foreign conversation even with valid org/project headers@L106 | Test | ./services/planner/src/routes/agent-attachments.test.js | 106-114 |
@@ -41,27 +42,27 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (33 edge(s))
+- `equal` (34 edge(s))
 - `match` (7 edge(s))
 - `assign` (4 edge(s))
 - `deepEqual` (4 edge(s))
 - `resolve` (3 edge(s))
-- `./services/planner/src/routes/agent-attachments.test.js::test:GET /attachment-types is a pure passthrough of the canonical table@L56` (3 edge(s))
 - `attachmentsService` (2 edge(s))
 - `llm` (2 edge(s))
+- `ok` (2 edge(s))
 - `catch` (1 edge(s))
 - `then` (1 edge(s))
 - `handler` (1 edge(s))
 - `after` (1 edge(s))
 - `require` (1 edge(s))
 - `find` (1 edge(s))
-- `ok` (1 edge(s))
+- `toUpperCase` (1 edge(s))
 
 ### Incoming
 
-- `equal` (33 edge(s))
-- `./services/planner/src/routes/agent-attachments.test.js` (18 edge(s))
+- `equal` (34 edge(s))
+- `./services/planner/src/routes/agent-attachments.test.js` (19 edge(s))
 - `match` (7 edge(s))
 - `deepEqual` (4 edge(s))
-- `./services/planner/src/routes/agent-attachments.test.js::test:GET /attachment-types is a pure passthrough of the canonical table@L56` (3 edge(s))
+- `ok` (1 edge(s))
 - `repeat` (1 edge(s))

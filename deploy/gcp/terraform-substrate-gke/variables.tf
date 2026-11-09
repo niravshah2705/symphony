@@ -217,11 +217,13 @@ variable "substrate_min_nodes" {
 
 variable "substrate_max_nodes" {
   description = <<-EOT
-    Maximum Substrate worker nodes. 4, not 6: the worker boot disks are
-    pd-balanced, which counts against the regional SSD_TOTAL_GB quota (limit 500,
-    same pool as the postgres claim), so max_nodes x substrate_worker_disk_size_gb
-    has to fit what is left after postgres. 4 x 100 = 400 GB against the ~450 GB
-    the 50Gi claim leaves. Raise this together with a quota increase.
+    Maximum Substrate worker nodes. 4: the bound that used to justify it — the
+    regional SSD_TOTAL_GB quota (limit 500, which the postgres claim consumes at
+    50 GiB today) — does NOT apply to a hyperdisk-balanced boot disk, measured on
+    2026-11-10: a 100 GB worker node disk left SSD_TOTAL_GB at 50/500 and the region
+    reports no Hyperdisk capacity quota at all. What still bounds this number is
+    cost per running node and the CPUS quota (4 vCPU x nodes against a limit of 100),
+    plus the fact that the power workflow has to park the pool when idle.
   EOT
   type        = number
   default     = 4
@@ -239,9 +241,40 @@ variable "substrate_worker_disk_size_gb" {
 }
 
 variable "substrate_worker_disk_type" {
-  description = "Boot disk type for Substrate worker nodes. pd-balanced counts against SSD_TOTAL_GB; pd-standard would move the spend to DISKS_TOTAL_GB at 50 GB of shared quota per node."
+  description = <<-EOT
+    Boot disk type for Substrate worker nodes. hyperdisk-balanced, because N4
+    supports no Persistent Disk type at all: a pd-balanced boot disk here failed
+    live with [UNSUPPORTED_OPERATION] "pd-balanced disk type cannot be used by
+    n4-standard-4 machine type", and Compute's machine-series table lists N4 as
+    unsupported for pd-standard / pd-balanced / pd-ssd. Hyperdisk Balanced is the
+    boot-eligible choice (Extreme / ML / Throughput are not boot disks) and, unlike
+    pd-balanced, its capacity is not metered by the regional SSD_TOTAL_GB quota.
+    Only IOPS and throughput above the 3000 / 140 MiB/s baseline are billed, and
+    GKE provisions exactly that baseline, so the price matches pd-balanced at the
+    same size.
+  EOT
   type        = string
-  default     = "pd-balanced"
+  default     = "hyperdisk-balanced"
+}
+
+variable "substrate_worker_disk_provisioned_iops" {
+  description = <<-EOT
+    Provisioned IOPS for the worker boot disk; only valid on hyperdisk-balanced
+    (substrate.tf omits it for any other type, which GKE rejects). 3000 is GKE's
+    default and the free baseline — raising it is the knob for snapshot write
+    throughput, and it costs per provisioned IOPS, not per GB.
+  EOT
+  type        = number
+  default     = 3000
+}
+
+variable "substrate_worker_disk_provisioned_throughput" {
+  description = <<-EOT
+    Provisioned throughput (MiB/s) for the worker boot disk; only valid on
+    hyperdisk-balanced. 140 is GKE's default and the free baseline.
+  EOT
+  type        = number
+  default     = 140
 }
 
 variable "substrate_ingress_hostname" {

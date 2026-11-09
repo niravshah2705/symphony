@@ -644,24 +644,28 @@ test('the worker pool is tainted with the key atelet tolerates', () => {
 });
 
 test('the worker pool boots on its own disk and inside the regional SSD quota', () => {
-  // Actor snapshots stage on the worker BOOT disk (/var/lib/ate/snapshots), so
-  // the pool cannot share the generic node-disk variables: at 50 GB pd-standard
-  // a resume fails on a full disk rather than evicting a pod. And because
-  // pd-balanced bills against the same regional SSD_TOTAL_GB quota as the
-  // bundled postgres claim, max_nodes x disk_size is a quota statement, not a
-  // sizing preference — 6 x 100 GB overran the 500 GB limit and starved the
-  // postgres claim next to it.
+  // Actor snapshots stage on the worker BOOT disk (/var/lib/ate/snapshots), so the
+  // pool cannot share the generic node-disk variables: at 50 GB pd-standard a resume
+  // fails on a full disk rather than evicting a pod. The size is therefore paired
+  // with the node count in a quota check below — that pairing mattered because the
+  // PD types that WERE configured (pd-balanced, and the 500Gi postgres claim before
+  // it) bill against the region's single SSD_TOTAL_GB limit of 500.
   const gke = read('deploy', 'gcp', 'terraform-substrate-gke', 'substrate.tf');
   const from = gke.indexOf('resource "google_container_node_pool" "substrate_nodes"');
   assert.ok(from >= 0, 'the substrate worker node pool moved out of substrate.tf');
   const next = gke.indexOf('resource "', from + 10);
   const pool = gke.slice(from, next === -1 ? undefined : next);
-  assert.match(pool, /disk_size_gb\s*=\s*var\.substrate_worker_disk_size_gb/,
+  // boot_disk, not node_config's disk_type / disk_size_gb: those two are the
+  // Persistent Disk fields, and N4 supports no Persistent Disk type — a
+  // pd-balanced worker disk got as far as the MIG before Compute refused it.
+  const boot = /boot_disk \{([\s\S]*?)\n    \}/.exec(pool);
+  assert.ok(boot, 'the worker pool has no boot_disk block, so its disk is Persistent Disk and N4 refuses it');
+  assert.match(boot[1], /size_gb\s*=\s*var\.substrate_worker_disk_size_gb/,
     'the worker pool borrowed the shared disk size again — snapshots need their own');
-  assert.match(pool, /disk_type\s*=\s*var\.substrate_worker_disk_type/,
+  assert.match(boot[1], /disk_type\s*=\s*var\.substrate_worker_disk_type/,
     'the worker pool borrowed the shared disk type again');
-  assert.doesNotMatch(pool, /disk_size_gb\s*=\s*var\.disk_size_gb/,
-    'worker boot disks are sized by var.disk_size_gb, which every other pool shares');
+  assert.doesNotMatch(pool, /disk_size_gb\s*=\s*var\./,
+    'worker boot disks are sized by the shared var.disk_size_gb, which every other pool uses');
   assert.match(pool, /image_type\s*=\s*"COS_CONTAINERD"/,
     'the docs require COS_CONTAINERD on worker nodes (ComputeClass + the snapshot sysctls)');
 
@@ -674,19 +678,71 @@ test('the worker pool boots on its own disk and inside the regional SSD quota', 
   };
   assert.equal(declared('substrate_machine_type'), 'n4-standard-4',
     'worker nodes moved back onto a mixed-CPU-architecture series (E2), which the substrate docs exclude');
+  assert.match(declared('substrate_worker_disk_type'), /^hyperdisk-/,
+    `substrate_worker_disk_type is "${declared('substrate_worker_disk_type')}": N4 supports no ` +
+    'Persistent Disk type, and GKE reports that only when the MIG creates the node');
+  // Provisioned performance is billed above this baseline, and GKE rejects the
+  // field outright on a Persistent Disk boot disk.
+  assert.equal(declared('substrate_worker_disk_provisioned_iops'), '3000',
+    'the worker disk moved off GKE\'s free Hyperdisk Balanced IOPS baseline — that is a billed change');
+  assert.equal(declared('substrate_worker_disk_provisioned_throughput'), '140',
+    'the worker disk moved off GKE\'s free Hyperdisk Balanced throughput baseline (MiB/s)');
   const maxNodes = Number(declared('substrate_max_nodes'));
   const diskGb = Number(declared('substrate_worker_disk_size_gb'));
-  assert.ok(maxNodes * diskGb <= 450,
-    `substrate_max_nodes x substrate_worker_disk_size_gb = ${maxNodes * diskGb} GB, ` +
-    'over the SSD_TOTAL_GB (500) the regional quota allows once postgres holds its claim');
+  const diskType = declared('substrate_worker_disk_type');
+  if (diskType.startsWith('pd-')) {
+    // pd-balanced / pd-ssd capacity DOES bill against SSD_TOTAL_GB (that is how the
+    // 500Gi postgres claim exhausted it), so the node count is a quota statement.
+    assert.ok(maxNodes * diskGb <= 450,
+      `substrate_max_nodes x substrate_worker_disk_size_gb = ${maxNodes * diskGb} GB, ` +
+      'over the SSD_TOTAL_GB (500) the regional quota allows once postgres holds its claim');
+  } else {
+    // Measured 2026-11-10: a 100 GB hyperdisk-balanced worker boot disk left
+    // SSD_TOTAL_GB at 50/500, and asia-south1 reports no Hyperdisk capacity quota.
+    // A PD type is not an option on N4 at all, so this is the only shape that
+    // reaches the check today — keep the node count modest for cost and CPUS.
+    assert.ok(maxNodes <= 6,
+      `substrate_max_nodes = ${maxNodes}: hyperdisk capacity is unquota'd but every node is billed ` +
+      'per hour and spends CPUS. Raising it past 6 is a cost decision, not a quota one.');
+  }
 
   const example = read('deploy', 'gcp', 'terraform-substrate-gke', 'terraform.tfvars.example');
   for (const [name, value] of [
     ['substrate_machine_type', 'n4-standard-4'],
     ['substrate_max_nodes', String(maxNodes)],
     ['substrate_worker_disk_size_gb', String(diskGb)],
+    ['substrate_worker_disk_type', declared('substrate_worker_disk_type')],
   ]) {
     assert.ok(new RegExp(`^${name}\\s*=\\s*"?${value}"?\\s*$`, 'm').test(example),
       `terraform.tfvars.example still advertises a different ${name} than the module default`);
   }
+});
+
+test('rewriting the postgres claim also re-migrates the database', () => {
+  // ate-api-server applies migrations ONLY at startup, so a claim the install
+  // deletes and re-provisions leaves a RUNNING control plane on an EMPTY schema:
+  // every pod Ready, every query failing with `relation "workers" does not
+  // exist`, workers never acquiring an epoch, WorkerPool stuck at 0 ready
+  // replicas. It cost a full install run to find; the rewrite and the restart
+  // are one change, so the workflow must not contain just the first half.
+  const wf = read('.github', 'workflows', 'substrate-control-plane.yml');
+  const step = /- name: Set the bundled Postgres volume size\n([\s\S]*?)\n      - /.exec(wf);
+  assert.ok(step, 'the Postgres volume-size step moved out of the install job');
+  const deletes = /delete pvc data-postgres-0/.test(step[1]);
+  if (!deletes) {
+    assert.doesNotMatch(wf, /rollout restart deploy ate-api-server/,
+      'the install restarts ate-api-server for no reason — it no longer deletes the claim');
+    return;
+  }
+  assert.match(step[1], /recreated=true" >> "\$GITHUB_OUTPUT/,
+    'the claim delete no longer reports itself, so the migration step can be skipped silently');
+  const restart = /- name: Re-migrate the recreated database\n([\s\S]*?)\n      - name: /.exec(wf);
+  assert.ok(restart,
+    'the install deletes data-postgres-0 but never restarts ate-api-server — the schema stays missing and no worker ever registers');
+  assert.match(restart[1], /steps\.pgsize\.outputs\.recreated == 'true'/,
+    'the re-migration step must run exactly when the claim was recreated, not on every install');
+  assert.match(restart[1], /rollout restart deploy ate-api-server/,
+    'the re-migration step does not restart the only component that applies migrations');
+  assert.match(restart[1], /rollout status deploy ate-api-server/,
+    'the step must wait for the restarted replicas, or the WorkerPool check below races the rollout');
 });

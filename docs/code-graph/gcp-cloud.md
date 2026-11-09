@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 20 nodes
+Community of 26 nodes
 
-- **Size**: 20 nodes
-- **Cohesion**: 0.2229
+- **Size**: 26 nodes
+- **Cohesion**: 0.2095
 - **Dominant Language**: javascript
 
 ## Members
@@ -23,11 +23,17 @@ Community of 20 nodes
 | test:gateway sets an explicit long-lived request timeout for SSE streams@L89 | Test | ./deploy/gcp/pipeline-infra.test.js | 89-97 |
 | test:fixed-memory gen2 Cloud Run CPU variables reject incompatible allocations@L99 | Test | ./deploy/gcp/pipeline-infra.test.js | 99-112 |
 | test:skills mounts preserve configured Cloud Run service and proxy CPUs@L114 | Test | ./deploy/gcp/pipeline-infra.test.js | 114-130 |
+| test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L132 | Test | ./deploy/gcp/pipeline-infra.test.js | 132-165 |
+| test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L167 | Test | ./deploy/gcp/pipeline-infra.test.js | 167-181 |
+| test:deploy workflow does not query disabled optional Cloud Run services@L183 | Test | ./deploy/gcp/pipeline-infra.test.js | 183-214 |
 | test:identity verification is deployed as an internal Firestore-backed gateway dependency@L216 | Test | ./deploy/gcp/pipeline-infra.test.js | 216-247 |
 | test:required image resolution failure makes the tag output step fail@L297 | Test | ./deploy/gcp/pipeline-infra.test.js | 297-319 |
+| test:pipeline topology enforces dedicated topics and brokered agent egress@L321 | Test | ./deploy/gcp/pipeline-infra.test.js | 321-371 |
+| test:stream-token broker owns the signing secret behind private IAM@L373 | Test | ./deploy/gcp/pipeline-infra.test.js | 373-469 |
 | test@L439 | Test | ./deploy/gcp/pipeline-infra.test.js | 439-439 |
 | test@L454 | Test | ./deploy/gcp/pipeline-infra.test.js | 454-454 |
 | test:proxy artifact retention preserves a multi-revision broker rollback window@L471 | Test | ./deploy/gcp/pipeline-infra.test.js | 471-476 |
+| test:OpenSWE upstream is trusted proxy-only deployment configuration@L478 | Test | ./deploy/gcp/pipeline-infra.test.js | 478-494 |
 | test:orchestrator image remains free of the heavy shared agent SDK workspace@L496 | Test | ./deploy/gcp/pipeline-infra.test.js | 496-502 |
 | test:coder image installs the seccomp launcher for model-controlled commands@L504 | Test | ./deploy/gcp/pipeline-infra.test.js | 504-514 |
 | test:tester image installs the capability-free network sandbox for repository commands@L516 | Test | ./deploy/gcp/pipeline-infra.test.js | 516-525 |
@@ -43,36 +49,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `match` (53 edge(s))
-- `./deploy/gcp/pipeline-infra.test.js::test:stream-token broker owns the signing secret behind private IAM@L373` (15 edge(s))
-- `doesNotMatch` (11 edge(s))
-- `indexOf` (8 edge(s))
-- `slice` (4 edge(s))
+- `match` (127 edge(s))
+- `doesNotMatch` (26 edge(s))
+- `indexOf` (23 edge(s))
+- `slice` (15 edge(s))
+- `ok` (7 edge(s))
+- `equal` (7 edge(s))
+- `map` (4 edge(s))
+- `filter` (4 edge(s))
+- `matchAll` (4 edge(s))
 - `join` (3 edge(s))
-- `./deploy/gcp/pipeline-infra.test.js::test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L132` (3 edge(s))
-- `./deploy/gcp/pipeline-infra.test.js::test:pipeline topology enforces dedicated topics and brokered agent egress@L321` (3 edge(s))
-- `./deploy/gcp/pipeline-infra.test.js::test:OpenSWE upstream is trusted proxy-only deployment configuration@L478` (3 edge(s))
 - `notEqual` (3 edge(s))
-- `sort` (2 edge(s))
+- `sort` (3 edge(s))
+- `deepEqual` (3 edge(s))
 - `flatMap` (2 edge(s))
-- `map` (2 edge(s))
 - `localeCompare` (2 edge(s))
-- `equal` (2 edge(s))
 
 ### Incoming
 
-- `match` (53 edge(s))
-- `./deploy/gcp/pipeline-infra.test.js` (18 edge(s))
-- `./deploy/gcp/pipeline-infra.test.js::test:stream-token broker owns the signing secret behind private IAM@L373` (17 edge(s))
-- `doesNotMatch` (11 edge(s))
-- `indexOf` (4 edge(s))
-- `./deploy/gcp/pipeline-infra.test.js::test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L132` (3 edge(s))
-- `./deploy/gcp/pipeline-infra.test.js::test:pipeline topology enforces dedicated topics and brokered agent egress@L321` (3 edge(s))
-- `./deploy/gcp/pipeline-infra.test.js::test:OpenSWE upstream is trusted proxy-only deployment configuration@L478` (3 edge(s))
-- `sort` (2 edge(s))
+- `match` (127 edge(s))
+- `doesNotMatch` (26 edge(s))
+- `./deploy/gcp/pipeline-infra.test.js` (24 edge(s))
+- `indexOf` (19 edge(s))
+- `slice` (13 edge(s))
+- `ok` (7 edge(s))
+- `equal` (7 edge(s))
+- `map` (4 edge(s))
+- `filter` (4 edge(s))
+- `matchAll` (4 edge(s))
+- `sort` (3 edge(s))
+- `deepEqual` (3 edge(s))
 - `flatMap` (2 edge(s))
-- `map` (2 edge(s))
 - `localeCompare` (2 edge(s))
-- `equal` (2 edge(s))
 - `join` (2 edge(s))
-- `filter` (2 edge(s))

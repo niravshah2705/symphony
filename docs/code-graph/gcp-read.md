@@ -4,19 +4,18 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 2 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.1667
+- **Size**: 2 nodes
+- **Cohesion**: 0.0625
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| read | Function | ./deploy/gcp/litellm-config.test.js | 16-16 |
-| test@L69 | Test | ./deploy/gcp/litellm-config.test.js | 69-69 |
-| test:the gateway is internal-only and the upstream URL lives on the sidecar only@L123 | Test | ./deploy/gcp/litellm-config.test.js | 123-138 |
+| read | Function | ./deploy/gcp/analytics-config.test.js | 9-9 |
+| test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-96 |
 
 ## Execution Flows
 
@@ -26,23 +25,27 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `match` (3 edge(s))
-- `./deploy/gcp/litellm-config.test.js::test:litellm image tags follow the fleet per-service fallback@L217` (2 edge(s))
+- `indexOf` (3 edge(s))
 - `readFileSync` (1 edge(s))
 - `join` (1 edge(s))
-- `./deploy/gcp/litellm-config.test.js::test:config.yaml carries no secret values and no DB/master-key wiring@L61` (1 edge(s))
-- `./deploy/gcp/litellm-config.test.js::test:the app overlay puts config.yaml where Terraform points CONFIG_FILE_PATH@L168` (1 edge(s))
-- `./deploy/gcp/litellm-config.test.js::test:CI builds and rolls all three LiteLLM images as one unit@L184` (1 edge(s))
+- `parse` (1 edge(s))
+- `isArray` (1 edge(s))
+- `find` (1 edge(s))
+- `deepEqual` (1 edge(s))
+- `ok` (1 edge(s))
+- `slice` (1 edge(s))
+- `match` (1 edge(s))
 - `doesNotMatch` (1 edge(s))
-- `replace` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/litellm-config.test.js` (7 edge(s))
-- `match` (3 edge(s))
-- `./deploy/gcp/litellm-config.test.js::test:config.yaml carries no secret values and no DB/master-key wiring@L61` (2 edge(s))
-- `./deploy/gcp/litellm-config.test.js::test:litellm image tags follow the fleet per-service fallback@L217` (2 edge(s))
-- `./deploy/gcp/litellm-config.test.js::test:the app overlay puts config.yaml where Terraform points CONFIG_FILE_PATH@L168` (1 edge(s))
-- `./deploy/gcp/litellm-config.test.js::test:CI builds and rolls all three LiteLLM images as one unit@L184` (1 edge(s))
+- `./deploy/gcp/analytics-config.test.js` (6 edge(s))
+- `indexOf` (3 edge(s))
+- `parse` (1 edge(s))
+- `isArray` (1 edge(s))
+- `find` (1 edge(s))
+- `deepEqual` (1 edge(s))
+- `ok` (1 edge(s))
+- `slice` (1 edge(s))
+- `match` (1 edge(s))
 - `doesNotMatch` (1 edge(s))
-- `replace` (1 edge(s))

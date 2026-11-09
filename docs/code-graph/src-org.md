@@ -4,16 +4,17 @@
 
 ## Overview
 
-Community of 157 nodes
+Community of 159 nodes
 
-- **Size**: 157 nodes
-- **Cohesion**: 0.2960
+- **Size**: 159 nodes
+- **Cohesion**: 0.2925
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:the Terraform guard never admits an origin the sidecar will refuse@L98 | Test | ./deploy/gcp/agentgateway-config.test.js | 98-139 |
 | runtimeAccepts | Function | ./deploy/gcp/agentgateway-config.test.js | 107-114 |
 | test@L122 | Test | ./deploy/gcp/agentgateway-config.test.js | 122-122 |
 | test@L137 | Test | ./deploy/gcp/agentgateway-config.test.js | 137-137 |
@@ -63,9 +64,8 @@ Community of 157 nodes
 | test:buildUpstreamUrl appends the path remainder@L17 | Test | ./services/proxy/src/proxy.test.js | 17-25 |
 | test:buildForwardHeaders strips inbound auth and retargets Host@L27 | Test | ./services/proxy/src/proxy.test.js | 27-62 |
 | test:buildForwardHeaders cannot smuggle an OAuth beta header into API-key auth@L64 | Test | ./services/proxy/src/proxy.test.js | 64-72 |
-| test:filterResponseHeaders drops body-frame + hop-by-hop but keeps content-type@L74 | Test | ./services/proxy/src/proxy.test.js | 74-89 |
 
-*... and 107 more members.*
+*... and 109 more members.*
 
 ## Execution Flows
 
@@ -75,26 +75,26 @@ Community of 157 nodes
 
 ### Outgoing
 
-- `equal` (154 edge(s))
+- `equal` (162 edge(s))
 - `deepEqual` (35 edge(s))
 - `String` (28 edge(s))
 - `rejects` (22 edge(s))
 - `trim` (21 edge(s))
-- `stringify` (15 edge(s))
+- `stringify` (16 edge(s))
 - `fetch` (13 edge(s))
 - `toString` (12 edge(s))
 - `from` (12 edge(s))
 - `end` (12 edge(s))
 - `resolve` (10 edge(s))
+- `match` (9 edge(s))
 - `toLowerCase` (9 edge(s))
 - `close` (9 edge(s))
 - `json` (9 edge(s))
-- `match` (8 edge(s))
 
 ### Incoming
 
-- `equal` (154 edge(s))
-- `./services/proxy/src/proxy.test.js` (47 edge(s))
+- `equal` (162 edge(s))
+- `./services/proxy/src/proxy.test.js` (48 edge(s))
 - `deepEqual` (35 edge(s))
 - `./services/proxy/src/credentials.js` (28 edge(s))
 - `rejects` (22 edge(s))
@@ -104,7 +104,7 @@ Community of 157 nodes
 - `./services/proxy/src/stream-token-server.test.js` (12 edge(s))
 - `./services/proxy/src/stream-token-rpc.js` (10 edge(s))
 - `./services/proxy/src/stream-token-rpc.test.js` (10 edge(s))
+- `match` (9 edge(s))
 - `close` (9 edge(s))
-- `match` (8 edge(s))
-- `stringify` (8 edge(s))
+- `stringify` (9 edge(s))
 - `json` (8 edge(s))

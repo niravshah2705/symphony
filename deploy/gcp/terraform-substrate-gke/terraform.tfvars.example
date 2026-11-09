@@ -83,13 +83,15 @@ substrate_node_pool_name        = "substrate-worker-pool"
 substrate_worker_pool_label     = "planner-pool"
 # N4 + COS_CONTAINERD + a dedicated boot disk: the Substrate docs exclude mixed
 # CPU-architecture series (E2) for nodes that resume gVisor snapshots, and actor
-# snapshots stage on the worker boot disk. max x disk must stay inside the
-# regional SSD_TOTAL_GB quota — see variables.tf.
+# snapshots stage on the worker boot disk. The disk type is hyperdisk-balanced
+# because N4 supports no Persistent Disk type at all — and unlike the pd-balanced
+# it replaces, hyperdisk capacity is not metered by the regional SSD_TOTAL_GB
+# quota, so substrate_max_nodes is bounded by cost and CPUS rather than by disk.
 substrate_machine_type           = "n4-standard-4"
 substrate_min_nodes              = 1
 substrate_max_nodes              = 4
 substrate_worker_disk_size_gb    = 100
-substrate_worker_disk_type       = "pd-balanced"
+substrate_worker_disk_type       = "hyperdisk-balanced"
 substrate_snapshot_storage_class = "substrate-snapshot-pd"
 substrate_credentials_namespace  = "substrate-credentials"
 

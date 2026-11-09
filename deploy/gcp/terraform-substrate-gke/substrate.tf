@@ -75,6 +75,10 @@ locals {
     value  = "gvisor"
     effect = "NO_SCHEDULE"
   }
+  # GKE rejects provisioned IOPS / throughput on a Persistent Disk boot disk, so
+  # the two hyperdisk-only fields are set only when the operator asked for a
+  # hyperdisk type.
+  substrate_worker_hyperdisk = startswith(var.substrate_worker_disk_type, "hyperdisk-")
 }
 
 # ---------------------------------------------------------------------------
@@ -108,8 +112,22 @@ resource "google_container_node_pool" "substrate_nodes" {
 
   node_config {
     machine_type = var.substrate_machine_type
-    disk_size_gb = var.substrate_worker_disk_size_gb
-    disk_type    = var.substrate_worker_disk_type
+    # boot_disk, not the sibling disk_type / disk_size_gb: those two only speak
+    # Persistent Disk, and N4 supports no Persistent Disk type at all (see
+    # substrate_worker_disk_type). A pd-balanced boot disk here failed live with
+    # "[UNSUPPORTED_OPERATION] pd-balanced disk type cannot be used by
+    # n4-standard-4 machine type" — at instance-creation time, after the plan
+    # looked clean, because GKE validates the disk type against the machine type
+    # only when the MIG provisions a node.
+    boot_disk {
+      disk_type = var.substrate_worker_disk_type
+      size_gb   = var.substrate_worker_disk_size_gb
+      # GKE's own baseline for Hyperdisk Balanced, and the point above which the
+      # type is billed: provisioning more buys snapshot-throughput headroom, not
+      # a bigger disk.
+      provisioned_iops       = local.substrate_worker_hyperdisk ? var.substrate_worker_disk_provisioned_iops : null
+      provisioned_throughput = local.substrate_worker_hyperdisk ? var.substrate_worker_disk_provisioned_throughput : null
+    }
     # COS, not the UBUNTU_CONTAINERD the other pools use: the Substrate docs
     # require COS_CONTAINERD on worker nodes for ComputeClass and for the
     # gc_thresh* / inotify sysctls the installer tunes, and runsc (gVisor) is
