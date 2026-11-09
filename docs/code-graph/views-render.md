@@ -40,30 +40,30 @@ Community of 758 nodes
 | organizationContextRequired | Function | ./public/js/app.js | 167-173 |
 | maybeRefreshConnection | Function | ./public/js/app.js | 175-182 |
 | maybeRefreshRole | Function | ./public/js/app.js | 183-192 |
-| syncShell | Function | ./public/js/app.js | 194-245 |
-| syncSidebar | Function | ./public/js/app.js | 247-285 |
-| syncSidebarCollapsed | Function | ./public/js/app.js | 287-297 |
-| copyWithLegacyFallback | Function | ./public/js/app.js | 299-314 |
-| copyAdlcPrompt | Function | ./public/js/app.js | 316-327 |
-| initShellInteractions | Function | ./public/js/app.js | 329-403 |
-| syncFooterHeight | Function | ./public/js/app.js | 342-346 |
-| prepareNavigationTarget | Function | ./public/js/app.js | 362-365 |
-| closeAtBreakpoint | Function | ./public/js/app.js | 398-401 |
-| refreshConnection | Function | ./public/js/app.js | 405-454 |
-| refreshRole | Function | ./public/js/app.js | 457-475 |
-| freshView | Function | ./public/js/app.js | 479-488 |
-| setAuthenticationLocked | Function | ./public/js/app.js | 490-497 |
-| beginSignIn | Function | ./public/js/app.js | 499-507 |
-| beginMicrosoftSignIn | Function | ./public/js/app.js | 509-517 |
-| authProviderButtons | Function | ./public/js/app.js | 524-542 |
-| beginSignOut | Function | ./public/js/app.js | 544-552 |
-| renderAuthControl | Function | ./public/js/app.js | 554-717 |
-| renderAuthenticationGate | Function | ./public/js/app.js | 719-778 |
-| renderSignInRequired | Function | ./public/js/app.js | 783-805 |
-| renderAccessDenied | Function | ./public/js/app.js | 807-819 |
-| render | Function | ./public/js/app.js | 821-903 |
-| capitalize | Function | ./public/js/app.js | 905-908 |
-| start | Function | ./public/js/app.js | 912-920 |
+| syncShell | Function | ./public/js/app.js | 194-247 |
+| syncSidebar | Function | ./public/js/app.js | 249-287 |
+| syncSidebarCollapsed | Function | ./public/js/app.js | 289-299 |
+| copyWithLegacyFallback | Function | ./public/js/app.js | 301-316 |
+| copyAdlcPrompt | Function | ./public/js/app.js | 318-329 |
+| initShellInteractions | Function | ./public/js/app.js | 331-405 |
+| syncFooterHeight | Function | ./public/js/app.js | 344-348 |
+| prepareNavigationTarget | Function | ./public/js/app.js | 364-367 |
+| closeAtBreakpoint | Function | ./public/js/app.js | 400-403 |
+| refreshConnection | Function | ./public/js/app.js | 407-456 |
+| refreshRole | Function | ./public/js/app.js | 459-477 |
+| freshView | Function | ./public/js/app.js | 481-490 |
+| setAuthenticationLocked | Function | ./public/js/app.js | 492-499 |
+| beginSignIn | Function | ./public/js/app.js | 501-509 |
+| beginMicrosoftSignIn | Function | ./public/js/app.js | 511-519 |
+| authProviderButtons | Function | ./public/js/app.js | 526-544 |
+| beginSignOut | Function | ./public/js/app.js | 546-554 |
+| renderAuthControl | Function | ./public/js/app.js | 556-719 |
+| renderAuthenticationGate | Function | ./public/js/app.js | 721-780 |
+| renderSignInRequired | Function | ./public/js/app.js | 785-807 |
+| renderAccessDenied | Function | ./public/js/app.js | 809-821 |
+| render | Function | ./public/js/app.js | 823-905 |
+| capitalize | Function | ./public/js/app.js | 907-910 |
+| start | Function | ./public/js/app.js | 914-922 |
 
 *... and 708 more members.*
 
@@ -95,7 +95,7 @@ Community of 758 nodes
 - `filter` (83 edge(s))
 - `isArray` (82 edge(s))
 - `Boolean` (72 edge(s))
-- `catch` (66 edge(s))
+- `catch` (67 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (60 edge(s))
 - `Number` (57 edge(s))

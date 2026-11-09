@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sitemap for the platform.archagentix.com host. A sitemap may only list URLs on
+  the host that serves it, so the marketing pages stay in public/sitemap.xml on
+  www (platform's /adlc/** and /pricing/** copies canonicalise there) and this file
+  carries only the two destinations platform.archagentix.com owns outright.
+
+  Deliberately NOT copied into the generated marketing/ tree: see DISCOVERY_FILES in
+  scripts/build-marketing-site.js. Adding it there would publish a sitemap of
+  platform URLs on www, which validateTree does not inspect.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://platform.archagentix.com/</loc>
+    <lastmod>2026-11-09</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://platform.archagentix.com/archagentix/</loc>
+    <lastmod>2026-11-09</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+</urlset>

@@ -3,27 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ADLC — Agentic Development Life Cycle | AI Fleet</title>
+    <title>Archagentix Platform — ADLC (Agentic Development Life Cycle)</title>
     <meta
       name="description"
-      content="ADLC (Agentic Development Life Cycle) by AI Fleet coordinates human-governed AI planning, implementation, testing, review, delivery, and operational learning."
+      content="Archagentix platform — ADLC (Agentic Development Life Cycle): the human-governed workspace where AI agents plan, implement, test, review, and ship software."
     />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-    <meta name="application-name" content="ADLC" />
+    <meta name="application-name" content="Archagentix" />
     <meta name="theme-color" content="#15181f" />
-    <link rel="canonical" href="https://www.archagentix.com/" />
-    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <link rel="canonical" href="https://platform.archagentix.com/" />
+    <link rel="sitemap" type="application/xml" href="/sitemap-platform.xml" />
     <link rel="describedby" type="text/markdown" href="/llms.txt" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="ADLC" />
-    <meta property="og:url" content="https://www.archagentix.com/" />
-    <meta property="og:title" content="ADLC — Agentic Development Life Cycle" />
+    <meta property="og:site_name" content="Archagentix" />
+    <meta property="og:url" content="https://platform.archagentix.com/" />
+    <meta property="og:title" content="Archagentix Platform — ADLC (Agentic Development Life Cycle)" />
     <meta
       property="og:description"
       content="A human-governed agentic lifecycle for planning, implementing, testing, reviewing, delivering, and learning from software changes."
     />
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="ADLC — Agentic Development Life Cycle" />
+    <meta name="twitter:title" content="Archagentix Platform — ADLC (Agentic Development Life Cycle)" />
     <meta
       name="twitter:description"
       content="A human-governed agentic lifecycle for planning, implementing, testing, reviewing, delivering, and learning from software changes."
@@ -34,27 +34,37 @@
         "@graph": [
           {
             "@type": "WebSite",
-            "@id": "https://www.archagentix.com/#website",
-            "url": "https://www.archagentix.com/",
-            "name": "AI Fleet — ADLC Workspace",
-            "alternateName": "Agentic Development Life Cycle Workspace",
-            "description": "AI Fleet is a reference workspace for ADLC, the human-governed Agentic Development Life Cycle.",
+            "@id": "https://platform.archagentix.com/#website",
+            "url": "https://platform.archagentix.com/",
+            "name": "Archagentix Platform",
+            "alternateName": ["AI Fleet — ADLC Workspace", "Agentic Development Life Cycle Workspace"],
+            "description": "The Archagentix platform runs AI Fleet, a human-governed workspace for ADLC, the Agentic Development Life Cycle.",
             "inLanguage": "en",
-            "about": { "@id": "https://www.archagentix.com/#adlc" },
-            "mainEntity": { "@id": "https://www.archagentix.com/#application" }
+            "publisher": { "@id": "https://www.archagentix.com/#organization" },
+            "about": { "@id": "https://platform.archagentix.com/#adlc" },
+            "mainEntity": { "@id": "https://platform.archagentix.com/#application" }
           },
           {
             "@type": "SoftwareApplication",
-            "@id": "https://www.archagentix.com/#application",
-            "url": "https://www.archagentix.com/",
+            "@id": "https://platform.archagentix.com/#application",
+            "url": "https://platform.archagentix.com/",
             "name": "AI Fleet",
             "alternateName": "ADLC Workspace",
             "description": "A workspace for human-governed AI planning, isolated implementation, testing, review, delivery, and operational learning.",
             "applicationCategory": "DeveloperApplication",
             "applicationSubCategory": "Agentic software delivery",
             "operatingSystem": "Web",
-            "isPartOf": { "@id": "https://www.archagentix.com/#website" },
-            "about": { "@id": "https://www.archagentix.com/#adlc" },
+            "brand": { "@type": "Brand", "name": "Archagentix" },
+            "keywords": [
+              "agentic development",
+              "software factory",
+              "Human AI Development",
+              "Centaur Developer",
+              "AGI"
+            ],
+            "publisher": { "@id": "https://www.archagentix.com/#organization" },
+            "isPartOf": { "@id": "https://platform.archagentix.com/#website" },
+            "about": { "@id": "https://platform.archagentix.com/#adlc" },
             "featureList": [
               "Intent-aware workspace and knowledge search",
               "Agentic business and software planning",
@@ -65,7 +75,7 @@
           },
           {
             "@type": "DefinedTerm",
-            "@id": "https://www.archagentix.com/#adlc",
+            "@id": "https://platform.archagentix.com/#adlc",
             "name": "ADLC",
             "termCode": "ADLC",
             "url": "https://www.archagentix.com/llms.txt",
@@ -78,9 +88,12 @@
       {
         "@context": "https://schema.org",
         "@type": "Organization",
+        "@id": "https://www.archagentix.com/#organization",
         "name": "Archagentix Private Limited",
+        "alternateName": ["Archagentix", "ADLC"],
         "url": "https://www.archagentix.com/",
         "email": "archagentix@gmail.com",
+        "sameAs": ["https://github.com/niravshah2705/symphony"],
         "address": {
           "@type": "PostalAddress",
           "addressLocality": "Pune",

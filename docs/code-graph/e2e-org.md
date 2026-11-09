@@ -7,7 +7,7 @@
 Community of 12 nodes
 
 - **Size**: 12 nodes
-- **Cohesion**: 0.1141
+- **Cohesion**: 0.1155
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,14 +18,14 @@ Community of 12 nodes
 | makeOrgState | Function | ./e2e/organization-flow.spec.js | 16-30 |
 | createStateOrg | Function | ./e2e/organization-flow.spec.js | 32-43 |
 | organizationIdFor | Function | ./e2e/organization-flow.spec.js | 45-50 |
-| installStubs | Function | ./e2e/organization-flow.spec.js | 52-252 |
-| page1 | Function | ./e2e/organization-flow.spec.js | 88-88 |
-| test:user creates orgs and projects, then manages pending invitations@L254 | Test | ./e2e/organization-flow.spec.js | 254-311 |
-| test:fragment invitation requires an explicit accept and refreshes selectable context@L313 | Test | ./e2e/organization-flow.spec.js | 313-338 |
-| test:captures a persona at onboarding and reflects it after reload@L340 | Test | ./e2e/organization-flow.spec.js | 340-362 |
-| test:manages a project access mode, outside collaborators, and partner-org grants@L364 | Test | ./e2e/organization-flow.spec.js | 364-403 |
-| test@L376 | Test | ./e2e/organization-flow.spec.js | 376-376 |
-| test@L377 | Test | ./e2e/organization-flow.spec.js | 377-377 |
+| installStubs | Function | ./e2e/organization-flow.spec.js | 52-262 |
+| page1 | Function | ./e2e/organization-flow.spec.js | 98-98 |
+| test:user creates orgs and projects, then manages pending invitations@L264 | Test | ./e2e/organization-flow.spec.js | 264-321 |
+| test:fragment invitation requires an explicit accept and refreshes selectable context@L323 | Test | ./e2e/organization-flow.spec.js | 323-348 |
+| test:captures a persona at onboarding and reflects it after reload@L350 | Test | ./e2e/organization-flow.spec.js | 350-372 |
+| test:manages a project access mode, outside collaborators, and partner-org grants@L374 | Test | ./e2e/organization-flow.spec.js | 374-413 |
+| test@L386 | Test | ./e2e/organization-flow.spec.js | 386-386 |
+| test@L387 | Test | ./e2e/organization-flow.spec.js | 387-387 |
 
 ## Execution Flows
 
@@ -36,7 +36,7 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `expect` (30 edge(s))
-- `route` (22 edge(s))
+- `route` (23 edge(s))
 - `getByRole` (18 edge(s))
 - `method` (17 edge(s))
 - `request` (15 edge(s))

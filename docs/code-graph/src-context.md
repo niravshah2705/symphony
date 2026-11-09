@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 249 nodes
+Community of 208 nodes
 
-- **Size**: 249 nodes
-- **Cohesion**: 0.3571
+- **Size**: 208 nodes
+- **Cohesion**: 0.3623
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 249 nodes
 | makeReq | Function | ./services/gateway/src/config-resolver.test.js | 9-23 |
 | makeRes | Function | ./services/gateway/src/config-resolver.test.js | 25-34 |
 
-*... and 199 more members.*
+*... and 158 more members.*
 
 ## Execution Flows
 
@@ -75,32 +75,36 @@ Community of 249 nodes
 
 ### Outgoing
 
-- `equal` (264 edge(s))
-- `deepEqual` (73 edge(s))
-- `trim` (52 edge(s))
-- `String` (45 edge(s))
-- `json` (31 edge(s))
+- `equal` (229 edge(s))
+- `deepEqual` (65 edge(s))
+- `trim` (38 edge(s))
+- `String` (34 edge(s))
+- `json` (28 edge(s))
 - `map` (27 edge(s))
 - `next` (20 edge(s))
 - `includes` (20 edge(s))
 - `push` (20 edge(s))
 - `isArray` (18 edge(s))
-- `toLowerCase` (16 edge(s))
-- `rejects` (16 edge(s))
-- `stringify` (15 edge(s))
-- `ok` (15 edge(s))
+- `status` (16 edge(s))
+- `toLowerCase` (15 edge(s))
+- `throws` (14 edge(s))
+- `get` (13 edge(s))
+- `freeze` (13 edge(s))
 
 ### Incoming
 
-- `equal` (264 edge(s))
-- `./services/gateway/src/index.js` (105 edge(s))
-- `deepEqual` (73 edge(s))
+- `equal` (229 edge(s))
+- `./services/gateway/src/index.js` (94 edge(s))
+- `deepEqual` (65 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (29 edge(s))
 - `./services/gateway/src/auth.test.js` (26 edge(s))
 - `./services/gateway/src/request-context.js` (20 edge(s))
 - `./services/gateway/src/auth.js` (16 edge(s))
 - `./services/gateway/src/eula.test.js` (15 edge(s))
-- `./services/gateway/src/stream-token.js` (15 edge(s))
+- `throws` (14 edge(s))
 - `./services/gateway/src/request-context.test.js` (14 edge(s))
-- `./services/gateway/src/stream-token.test.js` (13 edge(s))
+- `./services/gateway/src/config-resolver.test.js` (11 edge(s))
+- `push` (11 edge(s))
+- `rejects` (11 edge(s))
+- `ok` (10 edge(s))

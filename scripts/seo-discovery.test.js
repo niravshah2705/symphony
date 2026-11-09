@@ -15,7 +15,12 @@ test('SPA publishes complete ADLC search metadata and valid JSON-LD', () => {
   assert.ok(description, 'meta description must be present');
   assert.match(description, /ADLC \(Agentic Development Life Cycle\)/);
   assert.ok(description.length >= 120 && description.length <= 170, `unexpected description length: ${description.length}`);
-  assert.match(html, /<link rel="canonical" href="https:\/\/www\.archagentix\.com\/" \/>/);
+  // platform.archagentix.com serves this shell and must self-canonicalise: pointing
+  // it at www told Google the app host was a duplicate, so it never ranked as its
+  // own result. The marketing copies on platform (/adlc/**, /pricing/**) still
+  // consolidate to www — only this root declares itself.
+  assert.match(html, /<link rel="canonical" href="https:\/\/platform\.archagentix\.com\/" \/>/);
+  assert.match(html, /<link rel="sitemap" type="application\/xml" href="\/sitemap-platform\.xml" \/>/);
   assert.match(html, /<link rel="describedby" type="text\/markdown" href="\/llms\.txt" \/>/);
   assert.doesNotMatch(html, /<link rel="alternate"[^>]+href="\/llms\.txt"/);
 
@@ -30,6 +35,21 @@ test('SPA publishes complete ADLC search metadata and valid JSON-LD', () => {
   assert.match(term.description, /Agentic Development Life Cycle/);
   assert.equal(application.name, 'AI Fleet');
   assert.equal(application.about['@id'], term['@id']);
+
+  // The app host describes itself, and links to — never re-declares — the single
+  // Organization entity that lives on www.
+  const website = jsonLd['@graph'].find((item) => item['@type'] === 'WebSite');
+  assert.equal(website.url, 'https://platform.archagentix.com/');
+  assert.equal(website['@id'], 'https://platform.archagentix.com/#website');
+  assert.equal(website.name, 'Archagentix Platform');
+  assert.equal(application.url, 'https://platform.archagentix.com/');
+  assert.equal(application.brand.name, 'Archagentix');
+  assert.equal(website.publisher['@id'], 'https://www.archagentix.com/#organization');
+  assert.equal(application.publisher['@id'], 'https://www.archagentix.com/#organization');
+  for (const phrase of ['agentic development', 'software factory', 'Human AI Development', 'Centaur Developer', 'AGI']) {
+    assert.ok(application.keywords.includes(phrase), `keywords must expose "${phrase}" to answer engines`);
+  }
+  assert.doesNotMatch(html, /<meta\s+name="keywords"/, 'meta keywords is a spam signal, not a ranking one');
 });
 
 test('robots policy is valid, AI-crawler explicit, and points to the canonical sitemap', () => {
