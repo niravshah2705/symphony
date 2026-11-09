@@ -62,6 +62,12 @@ def tasks_col(org_id: uuid.UUID, project_id: uuid.UUID) -> str:
     return f"{ORGS}/{org_id}/projects/{project_id}/tasks"
 
 
+def environment_runs_col(org_id: uuid.UUID) -> str:
+    """`organizations/{org_id}/environment_runs` — one durable init run per
+    desired revision (the document id is derived from the revision)."""
+    return f"{ORGS}/{org_id}/environment_runs"
+
+
 def tags_col(org_id: uuid.UUID) -> str:
     return f"{ORGS}/{org_id}/tags"
 

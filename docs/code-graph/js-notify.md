@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 20 nodes
+Community of 22 nodes
 
-- **Size**: 20 nodes
-- **Cohesion**: 0.1195
+- **Size**: 22 nodes
+- **Cohesion**: 0.1238
 - **Dominant Language**: javascript
 
 ## Members
@@ -51,9 +51,8 @@ No execution flows pass through this community.
 - `Boolean` (3 edge(s))
 - `json` (2 edge(s))
 - `accessTokenProvider` (2 edge(s))
-- `fetch` (2 edge(s))
-- `./public/js/api.js::getApiBase` (2 edge(s))
-- `Boolean` (2 edge(s))
+- `String` (1 edge(s))
+- `replace` (1 edge(s))
 - `toLowerCase` (1 edge(s))
 - `trim` (1 edge(s))
 - `getItem` (1 edge(s))
@@ -68,3 +67,5 @@ No execution flows pass through this community.
 - `./public/js/auth-retry.test.mjs` (12 edge(s))
 - `equal` (12 edge(s))
 - `./public/js/auth-retry.mjs` (2 edge(s))
+- `./public/js/auth.js` (1 edge(s))
+- `./public/js/auth.js::initializeAuthentication` (1 edge(s))

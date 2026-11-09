@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 609 nodes
+Community of 722 nodes
 
-- **Size**: 609 nodes
-- **Cohesion**: 0.5559
+- **Size**: 722 nodes
+- **Cohesion**: 0.5411
 - **Dominant Language**: python
 
 ## Members
@@ -16,33 +16,36 @@ Community of 609 nodes
 |------|------|------|-------|
 | page_params | Function | ./services/org/app/api/deps.py | 9-13 |
 | _rate | Function | ./services/org/app/api/v1/routes_auth.py | 24-25 |
-| register | Function | ./services/org/app/api/v1/routes_auth.py | 30-35 |
-| login | Function | ./services/org/app/api/v1/routes_auth.py | 40-45 |
-| refresh | Function | ./services/org/app/api/v1/routes_auth.py | 50-55 |
-| logout | Function | ./services/org/app/api/v1/routes_auth.py | 59-64 |
-| verify_email | Function | ./services/org/app/api/v1/routes_auth.py | 68-73 |
-| me | Function | ./services/org/app/api/v1/routes_auth.py | 77-78 |
+| register | Function | ./services/org/app/api/v1/routes_auth.py | 30-36 |
+| login | Function | ./services/org/app/api/v1/routes_auth.py | 41-47 |
+| refresh | Function | ./services/org/app/api/v1/routes_auth.py | 52-57 |
+| logout | Function | ./services/org/app/api/v1/routes_auth.py | 61-66 |
+| verify_email | Function | ./services/org/app/api/v1/routes_auth.py | 70-75 |
+| me | Function | ./services/org/app/api/v1/routes_auth.py | 79-80 |
 | readiness | Function | ./services/org/app/api/v1/routes_health.py | 19-22 |
-| require_internal_token | Function | ./services/org/app/api/v1/routes_internal.py | 45-49 |
-| write_deployments | Function | ./services/org/app/api/v1/routes_internal.py | 53-65 |
-| billing_context | Function | ./services/org/app/api/v1/routes_internal.py | 69-87 |
+| require_internal_token | Function | ./services/org/app/api/v1/routes_internal.py | 72-76 |
+| write_deployments | Function | ./services/org/app/api/v1/routes_internal.py | 80-92 |
+| write_step_status | Function | ./services/org/app/api/v1/routes_internal.py | 99-126 |
+| billing_context | Function | ./services/org/app/api/v1/routes_internal.py | 130-148 |
 | create_invitation | Function | ./services/org/app/api/v1/routes_invitations.py | 26-31 |
 | list_invitations | Function | ./services/org/app/api/v1/routes_invitations.py | 35-39 |
 | resend_invitation | Function | ./services/org/app/api/v1/routes_invitations.py | 43-48 |
 | revoke_invitation | Function | ./services/org/app/api/v1/routes_invitations.py | 52-57 |
 | accept_invitation | Function | ./services/org/app/api/v1/routes_invitations.py | 61-69 |
-| get_me | Function | ./services/org/app/api/v1/routes_me.py | 55-67 |
-| set_my_persona | Function | ./services/org/app/api/v1/routes_me.py | 71-86 |
-| list_my_pending_invitations | Function | ./services/org/app/api/v1/routes_me.py | 90-94 |
-| link_my_identity | Function | ./services/org/app/api/v1/routes_me.py | 102-107 |
-| get_my_context | Function | ./services/org/app/api/v1/routes_me.py | 111-116 |
-| get_my_deployment | Function | ./services/org/app/api/v1/routes_me.py | 120-161 |
-| create_my_organization | Function | ./services/org/app/api/v1/routes_me.py | 166-171 |
-| list_my_projects | Function | ./services/org/app/api/v1/routes_me.py | 175-181 |
-| create_my_project | Function | ./services/org/app/api/v1/routes_me.py | 185-190 |
-| get_my_project | Function | ./services/org/app/api/v1/routes_me.py | 194-199 |
-| update_my_project | Function | ./services/org/app/api/v1/routes_me.py | 203-210 |
-| delete_my_project | Function | ./services/org/app/api/v1/routes_me.py | 214-220 |
+| get_me | Function | ./services/org/app/api/v1/routes_me.py | 58-70 |
+| set_my_persona | Function | ./services/org/app/api/v1/routes_me.py | 74-89 |
+| list_my_pending_invitations | Function | ./services/org/app/api/v1/routes_me.py | 93-97 |
+| link_my_identity | Function | ./services/org/app/api/v1/routes_me.py | 105-110 |
+| get_my_context | Function | ./services/org/app/api/v1/routes_me.py | 114-119 |
+| get_my_deployment | Function | ./services/org/app/api/v1/routes_me.py | 123-132 |
+| get_my_environment | Function | ./services/org/app/api/v1/routes_me.py | 136-166 |
+| retry_my_environment | Function | ./services/org/app/api/v1/routes_me.py | 170-201 |
+| create_my_organization | Function | ./services/org/app/api/v1/routes_me.py | 206-214 |
+| list_my_projects | Function | ./services/org/app/api/v1/routes_me.py | 218-224 |
+| create_my_project | Function | ./services/org/app/api/v1/routes_me.py | 228-233 |
+| get_my_project | Function | ./services/org/app/api/v1/routes_me.py | 237-242 |
+| update_my_project | Function | ./services/org/app/api/v1/routes_me.py | 246-253 |
+| delete_my_project | Function | ./services/org/app/api/v1/routes_me.py | 257-263 |
 | list_members | Function | ./services/org/app/api/v1/routes_members.py | 26-42 |
 | add_member | Function | ./services/org/app/api/v1/routes_members.py | 46-52 |
 | update_member | Function | ./services/org/app/api/v1/routes_members.py | 56-62 |
@@ -61,60 +64,57 @@ Community of 609 nodes
 | create_external_grant | Function | ./services/org/app/api/v1/routes_project_grants.py | 27-35 |
 | list_external_grants | Function | ./services/org/app/api/v1/routes_project_grants.py | 39-43 |
 | revoke_external_grant | Function | ./services/org/app/api/v1/routes_project_grants.py | 47-54 |
-| create_project_invitation | Function | ./services/org/app/api/v1/routes_project_invitations.py | 41-49 |
-| list_project_invitations | Function | ./services/org/app/api/v1/routes_project_invitations.py | 53-57 |
-| revoke_project_invitation | Function | ./services/org/app/api/v1/routes_project_invitations.py | 61-68 |
 
-*... and 559 more members.*
+*... and 672 more members.*
 
 ## Execution Flows
 
 - **logout** (criticality: 0.84, depth: 3)
 - **refresh** (criticality: 0.77, depth: 4)
 - **__call__** (criticality: 0.75, depth: 7)
+- **register** (criticality: 0.74, depth: 9)
 - **verify_email** (criticality: 0.74, depth: 3)
 - **change_password** (criticality: 0.73, depth: 4)
-- **register** (criticality: 0.73, depth: 7)
 - **get_project_context** (criticality: 0.72, depth: 6)
+- **login** (criticality: 0.72, depth: 9)
 - **detach_task_tag** (criticality: 0.71, depth: 6)
-- **login** (criticality: 0.71, depth: 8)
 - **get_current_user** (criticality: 0.71, depth: 3)
-- *... and 66 more flows.*
+- *... and 70 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `get` (250 edge(s))
-- `Depends` (167 edge(s))
-- `str` (160 edge(s))
-- `uuid4` (43 edge(s))
-- `setattr` (37 edge(s))
-- `set` (36 edge(s))
-- `delete` (36 edge(s))
-- `raises` (35 edge(s))
-- `query` (30 edge(s))
-- `track` (29 edge(s))
-- `BaseModel` (25 edge(s))
-- `len` (23 edge(s))
-- `append` (20 edge(s))
-- `isinstance` (17 edge(s))
-- `UUID` (15 edge(s))
+- `get` (334 edge(s))
+- `str` (178 edge(s))
+- `Depends` (173 edge(s))
+- `json` (98 edge(s))
+- `post` (62 edge(s))
+- `setattr` (54 edge(s))
+- `delete` (53 edge(s))
+- `uuid4` (44 edge(s))
+- `set` (38 edge(s))
+- `raises` (36 edge(s))
+- `query` (32 edge(s))
+- `track` (31 edge(s))
+- `len` (29 edge(s))
+- `BaseModel` (27 edge(s))
+- `patch` (21 edge(s))
 
 ### Incoming
 
-- `setattr` (37 edge(s))
-- `uuid4` (36 edge(s))
-- `raises` (35 edge(s))
+- `json` (87 edge(s))
+- `get` (74 edge(s))
+- `post` (56 edge(s))
+- `setattr` (49 edge(s))
+- `uuid4` (37 edge(s))
+- `raises` (36 edge(s))
 - `./services/org/tests/unit/test_project_collaboration.py` (24 edge(s))
-- `./services/org/app/api/v1/routes_me.py` (16 edge(s))
-- `len` (16 edge(s))
+- `len` (22 edge(s))
+- `patch` (21 edge(s))
+- `./services/org/app/api/v1/routes_me.py` (20 edge(s))
+- `delete` (17 edge(s))
+- `./services/org/tests/unit/test_environment_init.py` (16 edge(s))
 - `./services/org/app/api/v1/routes_auth.py` (13 edge(s))
-- `get` (13 edge(s))
+- `./services/org/app/services/environment_service.py` (13 edge(s))
 - `./services/org/tests/unit/test_services.py` (13 edge(s))
-- `./services/org/app/errors.py` (12 edge(s))
-- `./services/org/app/services/invitation_service.py` (12 edge(s))
-- `./services/org/app/api/v1/routes_org.py` (11 edge(s))
-- `./services/org/app/repositories/base.py` (11 edge(s))
-- `./services/org/app/services/auth_service.py` (11 edge(s))
-- `./services/org/app/services/tag_service.py` (10 edge(s))
