@@ -430,6 +430,7 @@ async function generatePlan({ project, assumedRole, config, llm, keys, onStep, s
         projectId: project.id || null,
         projectName: project.name || null,
         source: 'planner',
+        providerSource: settings.providerSource || null,
       },
     });
     draft = finalText;

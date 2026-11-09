@@ -356,6 +356,11 @@ function stageConfigurationFromDecision(decision, stages, selections, request) {
       model: selections[stage].model,
       modelId: item.modelId,
       providerReady: item.providerReady === true,
+      // Which key pays for this stage: 'customer' means the organization's own
+      // provider credential, and metering must record it without charging it.
+      // Admitted here rather than re-derived downstream, because this is the only
+      // place that saw the preflight's credential decision.
+      providerSource: item.providerSource || null,
       brokered: item.brokered === true,
       ...(stage === 'deploy' ? deploymentConfiguration(request) : {}),
     }];

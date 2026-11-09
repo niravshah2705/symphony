@@ -463,6 +463,9 @@ async function resolveStageAgent(command, { role, workflowStage }, dependencies 
     prefs,
     llm,
     harness,
+    // The admitted credential decision for THIS stage, for usage metering. Null
+    // when the snapshot predates BYOK metering, which meters as a platform key.
+    providerSource: configuration.providerSource === 'customer' ? 'customer' : null,
     workflowPattern: typeof prefs.workflowPattern === 'string' && prefs.workflowPattern.trim()
       ? prefs.workflowPattern.trim()
       : 'sequential',
@@ -605,6 +608,7 @@ async function executeTestingStage(command, dependencies = {}) {
         projectId: command.projectId,
         taskId: command.preflight.workItem && command.preflight.workItem.id,
         source: 'tester',
+        providerSource: agent.providerSource,
       },
     });
     const verdict = parseStageVerdict(execution.finalText);
@@ -697,6 +701,7 @@ async function executeDeploymentStage(command, dependencies = {}) {
         projectId: command.projectId,
         taskId: command.preflight.workItem && command.preflight.workItem.id,
         source: 'deployer',
+        providerSource: agent.providerSource,
       },
     });
     const availabilityError = workspace.repositoryBroker.availabilityError();

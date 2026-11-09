@@ -389,11 +389,11 @@ test('admission forwards user auth and authoritative scope, then dispatches only
   assert.deepEqual(start.request.stageConfiguration, {
     plan: {
       harness: 'deepagent', provider: 'ollama', model: 'gpt-oss:20b', modelId: 'ollama-gpt-oss-20b',
-      providerReady: true, brokered: true,
+      providerReady: true, providerSource: 'managed', brokered: true,
     },
     code: {
       harness: 'deepagent', provider: 'ollama', model: 'gpt-oss:20b', modelId: 'ollama-gpt-oss-20b',
-      providerReady: true, brokered: true,
+      providerReady: true, providerSource: 'customer', brokered: true,
     },
   });
   assert.equal(start.metadata.preflightDecisionId, 'decision-123');

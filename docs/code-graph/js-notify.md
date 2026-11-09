@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 22 nodes
+Community of 20 nodes
 
-- **Size**: 22 nodes
-- **Cohesion**: 0.1238
+- **Size**: 20 nodes
+- **Cohesion**: 0.1195
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,7 +18,6 @@ Community of 22 nodes
 | refreshAccessToken | Function | ./public/js/api.js | 72-75 |
 | readJson | Function | ./public/js/api.js | 77-83 |
 | errorCode | Function | ./public/js/api.js | 87-90 |
-| getApiBase | Function | ./public/js/api.js | 98-101 |
 | notifyAuthenticationRequired | Function | ./public/js/api.js | 142-146 |
 | request | Function | ./public/js/api.js | 148-226 |
 | shouldRetryAuth | Function | ./public/js/auth-retry.mjs | 17-19 |
@@ -39,7 +38,7 @@ Community of 22 nodes
 
 ## Execution Flows
 
-- **initializeAuthentication** (criticality: 0.78, depth: 4)
+No execution flows pass through this community.
 
 ## Dependencies
 
@@ -52,20 +51,20 @@ Community of 22 nodes
 - `Boolean` (3 edge(s))
 - `json` (2 edge(s))
 - `accessTokenProvider` (2 edge(s))
-- `String` (1 edge(s))
-- `replace` (1 edge(s))
+- `fetch` (2 edge(s))
+- `./public/js/api.js::getApiBase` (2 edge(s))
+- `Boolean` (2 edge(s))
 - `toLowerCase` (1 edge(s))
 - `trim` (1 edge(s))
 - `getItem` (1 edge(s))
 - `includes` (1 edge(s))
 - `dispatchEvent` (1 edge(s))
 - `resolve` (1 edge(s))
+- `runTokenRefresh` (1 edge(s))
 
 ### Incoming
 
-- `./public/js/api.js` (197 edge(s))
+- `./public/js/api.js` (194 edge(s))
 - `./public/js/auth-retry.test.mjs` (12 edge(s))
 - `equal` (12 edge(s))
 - `./public/js/auth-retry.mjs` (2 edge(s))
-- `./public/js/auth.js` (1 edge(s))
-- `./public/js/auth.js::initializeAuthentication` (1 edge(s))

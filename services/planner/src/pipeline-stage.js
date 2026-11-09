@@ -172,6 +172,7 @@ async function executePlanningStage(command, dependencies = {}) {
     effectivePolicy: agent.effectivePolicy,
     orgId: command.organizationId,
     nativeProjectId: command.projectId,
+    providerSource: agent.providerSource,
   };
   let summary;
   let traceUrl = null;

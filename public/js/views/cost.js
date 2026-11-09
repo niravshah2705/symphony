@@ -13,6 +13,7 @@ const GROUPS = [
   { key: 'user', label: 'User' },
   { key: 'task', label: 'Task' },
   { key: 'day', label: 'Day' },
+  { key: 'billingSource', label: 'Who paid' },
 ];
 const PERIODS = [
   { key: 'day', label: 'Last 24h' },
@@ -35,6 +36,30 @@ function metric(label, value, note) {
     el('strong', { class: 'metric-value' }, value),
     note ? el('span', { class: 'metric-note' }, note) : null,
   ]);
+}
+
+/** One "who paid" series, with zeros rather than gaps when the billing service
+ * predates the split (a missing series must never read as an unmeasured one). */
+function sourceSeries(summary, source) {
+  const week = summary.spend && summary.spend.week;
+  const bySource = summary.bySource && summary.bySource.week && summary.bySource.week.sources;
+  const series = bySource && bySource[source];
+  if (series) {
+    return {
+      runs: Number(series.runs) || 0,
+      tokens: Number(series.tokens) || 0,
+      costInr: Number(series.costInr) || 0,
+      notionalInr: Number(series.notionalInr) || 0,
+    };
+  }
+  return source === 'customer'
+    ? { runs: 0, tokens: 0, costInr: 0, notionalInr: 0 }
+    : {
+        runs: (week && Number(week.runs)) || 0,
+        tokens: (week && Number(week.tokens)) || 0,
+        costInr: (week && Number(week.costInr)) || 0,
+        notionalInr: 0,
+      };
 }
 
 export async function renderCost(view) {
@@ -84,11 +109,26 @@ export async function renderCost(view) {
       metric('Balance', inr(summary.balanceInr), `${summary.currency} · seeded ${inr(summary.initialCreditInr)}`),
       metric('Fund Status', summary.fundStatus === 'unavailable' ? 'Unavailable' : 'Available',
         summary.fundStatus === 'unavailable' ? 'Sandbox & scheduler paused' : 'Active & ready'),
-      metric('Spend (7 days)', inr(summary.spend.week.costInr), `${formatNumber(summary.spend.week.runs)} runs · ${formatNumber(summary.spend.week.tokens)} tokens`),
+      // Two series, deliberately: the second one is the number the platform never
+      // spent, and its zero is what an organization on its own key is buying.
+      metric('Managed spend (7 days)', inr(sourceSeries(summary, 'managed').costInr),
+        `${formatNumber(sourceSeries(summary, 'managed').runs)} runs · ${formatNumber(sourceSeries(summary, 'managed').tokens)} tokens`),
+      metric('Your key (not charged)', inr(sourceSeries(summary, 'customer').notionalInr),
+        `${formatNumber(sourceSeries(summary, 'customer').runs)} runs at list price — debited ₹0`),
       metric('Auto-recharge', summary.autoRecharge.enabled ? 'On' : 'Off',
         summary.autoRecharge.enabled ? `+${inr(summary.autoRecharge.amountInr)} below ${inr(summary.autoRecharge.thresholdInr)}` : `FX ₹${summary.fxUsdToInr}/USD`),
     ]),
   );
+
+  // The notional figure has no ledger copy — a run on your own key posts no debit
+  // — so the retained window is its real history, and the page must say so instead
+  // of implying the two series above add up to all time.
+  const history = summary.bySource && summary.bySource.month;
+  if (history && history.retentionDays) {
+    content.push(el('p', { class: 'muted cost-history-note' }, history.historyTruncated
+      ? `Per-run figures cover the most recent ${history.retentionDays} days and the record store is at its cap, so older runs are no longer listed.`
+      : `Per-run figures cover the most recent ${history.retentionDays} days.`));
+  }
 
   // Usage table panel (group-by + period controls; its body is loaded async).
   const tableHost = el('div', { class: 'table-host' }, loading('Loading usage…'));
@@ -156,10 +196,22 @@ function usageTable(rows, totals) {
     : null;
   return el('div', { class: 'table-scroll' }, [
     el('table', { class: 'operational-table' }, [
-      el('thead', {}, [el('tr', {}, [groupBy === 'task' ? 'Task' : groupBy === 'user' ? 'User' : groupBy === 'day' ? 'Day' : 'Project', 'Runs', 'Tokens', 'Cost'].map((h) => el('th', {}, h)))]),
+      el('thead', {}, [el('tr', {}, [groupBy === 'task' ? 'Task' : groupBy === 'user' ? 'User' : groupBy === 'day' ? 'Day' : groupBy === 'billingSource' ? 'Who paid' : 'Project', 'Runs', 'Tokens', 'Cost'].map((h) => el('th', {}, h)))]),
       body,
       foot,
     ].filter(Boolean)),
+  ]);
+}
+
+/** The charge, plus — when the organization paid the provider itself — the value it
+ * did NOT pay us. Both in one cell, because a bare ₹0 next to real token volume
+ * reads as missing data rather than as the whole point of bring-your-own-key. */
+function costCell(value, notionalInr) {
+  const notional = Number(notionalInr) || 0;
+  if (!notional) return el('td', { class: 'cost-cell' }, inr(value));
+  return el('td', { class: 'cost-cell' }, [
+    el('strong', {}, inr(value)),
+    el('small', { class: 'table-sub' }, `${inr(notional)} at list price · not charged`),
   ]);
 }
 
@@ -172,7 +224,7 @@ function usageRow(row) {
     labelCell,
     el('td', {}, formatNumber(row.runs)),
     el('td', {}, formatNumber(row.tokens)),
-    el('td', { class: 'cost-cell' }, inr(row.costInr)),
+    costCell(row.costInr, row.notionalInr),
   ]);
   if (!expandable) return tr;
 
@@ -212,7 +264,7 @@ function taskDetail(records) {
         el('td', {}, r.projectName || '—'),
         el('td', {}, [el('span', {}, r.source || 'agent'), el('small', { class: 'table-sub' }, `${r.provider || '—'} / ${r.model || '—'}`)]),
         el('td', {}, formatNumber(r.tokens)),
-        el('td', { class: 'cost-cell' }, inr(r.costInr)),
+        costCell(r.costInr, r.notionalInr),
       ]))),
     ]),
   ]);

@@ -323,6 +323,7 @@ async function runCoderLocal({ issue, llm, apiKey, keys = {}, onStep, settings =
         taskId: issue.id || null,
         taskIdentifier: issue.identifier || null,
         source: 'coder',
+        providerSource: settings.providerSource || null,
       },
       settings,
     });
@@ -445,6 +446,7 @@ async function runPlannedCoderLocal({
         taskId: issue.id || null,
         taskIdentifier: issue.identifier || null,
         source: 'coder',
+        providerSource: settings.providerSource || null,
       },
       settings,
     });
