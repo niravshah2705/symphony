@@ -84,6 +84,16 @@ async function installStubs(page, state) {
   }));
   await page.route('**/api/settings', (route) => json(route, { hasKey: false, planningConfigured: false }));
   await page.route('**/api/roles/assumed', (route) => json(route, { assumedRole: null }));
+  // The org view reads the sandbox control plane, whose default URL is a real
+  // external host. Left unstubbed, this file's outcome depends on that host's
+  // reachability rather than the org/project contract under test.
+  await page.route('**/api/agent/sandbox*', (route) => json(route, {
+    gateway: { connected: false, status: 'OFFLINE' },
+    sandbox: { exists: false, phase: 'NOT_LOADED' },
+    sandboxes: [],
+    orgConfig: { workspace: 'tenant-a' },
+    networkPolicy: {},
+  }));
 
   const page1 = (rows) => ({ data: rows, meta: { total: rows.length, page: 1, limit: 20 } });
 

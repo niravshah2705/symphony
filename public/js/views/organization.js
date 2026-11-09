@@ -628,7 +628,10 @@ async function renderOrg(section, organization, rerender) {
     ? await api.org.listOrgUsers().then((p) => p.data || []).catch(() => [])
     : [];
   await renderOrgProjects(projectsSection, organization, orgUsers, rerender);
-  await renderOrgOpenShellConfig(openshellSection, organization, isAdmin);
+  // Deliberately not awaited: this is the only section that talks to an external
+  // control plane, and awaiting it here held the billing and invitation controls
+  // behind that host's reachability. The section fills in when it answers.
+  renderOrgOpenShellConfig(openshellSection, organization, isAdmin).catch(() => {});
   await renderOrgBilling(billingSection, organization, isAdmin);
   if (peopleSection) await renderPeople(peopleSection, rerender);
 }
