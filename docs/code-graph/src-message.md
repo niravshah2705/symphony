@@ -7,16 +7,16 @@
 Community of 3 nodes
 
 - **Size**: 3 nodes
-- **Cohesion**: 0.1250
+- **Cohesion**: 0.1579
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| messageWorkspaceContext | Function | ./services/coder/src/pubsub.js | 30-32 |
-| messageWorkspaceContextInput | Function | ./services/coder/src/pubsub.js | 34-39 |
-| runMessageInWorkspace | Function | ./services/coder/src/pubsub.js | 41-46 |
+| messageWorkspaceContext | Function | ./services/coder/src/pubsub.js | 31-33 |
+| messageWorkspaceContextInput | Function | ./services/coder/src/pubsub.js | 35-40 |
+| runMessageInWorkspace | Function | ./services/coder/src/pubsub.js | 42-54 |
 
 ## Execution Flows
 
@@ -27,6 +27,8 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `normalizeWorkspaceContext` (1 edge(s))
+- `runWithContext` (1 edge(s))
+- `cleanTraceparent` (1 edge(s))
 - `runWithWorkspaceContext` (1 edge(s))
 - `initStore` (1 edge(s))
 - `task` (1 edge(s))

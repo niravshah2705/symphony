@@ -4,17 +4,17 @@
 
 ## Overview
 
-Community of 12 nodes
+Community of 16 nodes
 
-- **Size**: 12 nodes
-- **Cohesion**: 0.1810
+- **Size**: 16 nodes
+- **Cohesion**: 0.1849
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| createSubstrateActorRouter | Function | ./services/planner/src/routes/substrate-actor.js | 28-91 |
+| createSubstrateActorRouter | Function | ./services/planner/src/routes/substrate-actor.js | 30-115 |
 | signJwt | Function | ./services/planner/src/routes/substrate-actor.test.js | 11-19 |
 | b64 | Function | ./services/planner/src/routes/substrate-actor.test.js | 12-12 |
 | makeKeypair | Function | ./services/planner/src/routes/substrate-actor.test.js | 21-28 |
@@ -24,8 +24,12 @@ Community of 12 nodes
 | test:substrate-actor: 503 when JWKS is unconfigured@L78 | Test | ./services/planner/src/routes/substrate-actor.test.js | 78-95 |
 | test:substrate-actor: 400 when prompt is missing@L97 | Test | ./services/planner/src/routes/substrate-actor.test.js | 97-113 |
 | test:substrate-actor: runs planning in-process and returns the result shape@L115 | Test | ./services/planner/src/routes/substrate-actor.test.js | 115-152 |
-| test:substrate-actor: real verifyActorJwt accepts a well-signed RS256 token@L154 | Test | ./services/planner/src/routes/substrate-actor.test.js | 154-182 |
-| test:substrate-actor: real verifyActorJwt rejects a tampered signature@L184 | Test | ./services/planner/src/routes/substrate-actor.test.js | 184-208 |
+| test:substrate-actor: binds the caller trace so actor logs and spans join the run@L154 | Test | ./services/planner/src/routes/substrate-actor.test.js | 154-179 |
+| test:substrate-actor: an unusable traceparent is dropped, not carried into the logs@L181 | Test | ./services/planner/src/routes/substrate-actor.test.js | 181-200 |
+| test:substrate-actor: reports usage to the caller and never meters locally@L202 | Test | ./services/planner/src/routes/substrate-actor.test.js | 202-236 |
+| test:substrate-actor: a run without usage reports null rather than fabricating a row@L238 | Test | ./services/planner/src/routes/substrate-actor.test.js | 238-255 |
+| test:substrate-actor: real verifyActorJwt accepts a well-signed RS256 token@L257 | Test | ./services/planner/src/routes/substrate-actor.test.js | 257-285 |
+| test:substrate-actor: real verifyActorJwt rejects a tampered signature@L287 | Test | ./services/planner/src/routes/substrate-actor.test.js | 287-311 |
 
 ## Execution Flows
 
@@ -35,36 +39,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (18 edge(s))
+- `equal` (33 edge(s))
 - `json` (14 edge(s))
-- `stringify` (9 edge(s))
-- `fetch` (7 edge(s))
-- `close` (7 edge(s))
-- `status` (6 edge(s))
-- `String` (4 edge(s))
-- `slice` (3 edge(s))
+- `stringify` (13 edge(s))
+- `fetch` (11 edge(s))
+- `close` (11 edge(s))
+- `status` (5 edge(s))
+- `require` (4 edge(s))
 - `trim` (2 edge(s))
-- `error` (2 edge(s))
+- `slice` (2 edge(s))
+- `String` (2 edge(s))
 - `replace` (2 edge(s))
 - `toString` (2 edge(s))
+- `currentContext` (2 edge(s))
 - `floor` (2 edge(s))
 - `now` (2 edge(s))
-- `require` (2 edge(s))
 
 ### Incoming
 
-- `equal` (18 edge(s))
-- `./services/planner/src/routes/substrate-actor.test.js` (11 edge(s))
-- `fetch` (7 edge(s))
-- `stringify` (7 edge(s))
-- `close` (7 edge(s))
-- `json` (6 edge(s))
+- `equal` (33 edge(s))
+- `./services/planner/src/routes/substrate-actor.test.js` (15 edge(s))
+- `fetch` (11 edge(s))
+- `stringify` (11 edge(s))
+- `close` (11 edge(s))
+- `json` (8 edge(s))
+- `require` (4 edge(s))
 - `./services/planner/src/routes/substrate-actor.js` (2 edge(s))
+- `currentContext` (2 edge(s))
 - `floor` (2 edge(s))
 - `now` (2 edge(s))
-- `require` (2 edge(s))
+- `deepEqual` (2 edge(s))
 - `./services/planner/src/index.js` (1 edge(s))
 - `split` (1 edge(s))
 - `repeat` (1 edge(s))
-- `match` (1 edge(s))
-- `deepEqual` (1 edge(s))

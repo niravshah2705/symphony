@@ -8,6 +8,7 @@ const log = require('@ai-fleet/shared/logger');
 const orchestrator = require('@ai-fleet/shared/agent/coder-orchestrator');
 const { runTicket } = require('./run-ticket');
 const { CONFIG, normalizeLlmGatewayMode } = require('@ai-fleet/shared/config');
+const { cleanTraceparent } = require('@ai-fleet/shared/traceparent');
 const store = require('@ai-fleet/shared/store');
 const {
   normalizeWorkspaceContext,
@@ -39,10 +40,17 @@ function messageWorkspaceContextInput(message = {}) {
 }
 
 function runMessageInWorkspace(message, task) {
-  return runWithWorkspaceContext(messageWorkspaceContextInput(message), async () => {
+  // Bind the correlation handles for the whole message, so every log line this
+  // dispatch produces — including from code that never heard of logging — is
+  // findable by tenant and by the trace the browser request started.
+  return log.runWithContext({
+    ...messageWorkspaceContextInput(message),
+    runId: message.runId,
+    traceparent: cleanTraceparent(message.traceparent),
+  }, () => runWithWorkspaceContext(messageWorkspaceContextInput(message), async () => {
     await store.initStore();
     return task(currentWorkspaceContext());
-  });
+  }));
 }
 
 function shouldRunAutonomousTick(context, {
@@ -112,6 +120,7 @@ router.post('/coder', pushAuth(), async (req, res) => {
         nativeProjectId: nativeProjectId || null,
         // Re-allowlist at the trust boundary; only a known selector survives.
         llmGateway: normalizeLlmGatewayMode(message.llmGateway) || null,
+        traceparent: cleanTraceparent(message.traceparent) || null,
       })).catch((err) => {
         const detail = err && err.message ? err.message : String(err);
         log.error(`coder pubsub dispatch failed: ${detail}`);

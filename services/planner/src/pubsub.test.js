@@ -68,6 +68,7 @@ test('planner Pub/Sub scopes every conversation event to the native workspace co
     orgId: 'org-a',
     nativeProjectId: 'native-project-a',
     llmGateway: null,
+    traceparent: null,
   }]);
   assert.equal(published.length, 2);
   assert.ok(published.every(([, , context]) => (

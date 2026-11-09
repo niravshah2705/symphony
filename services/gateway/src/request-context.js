@@ -1,5 +1,7 @@
 'use strict';
 
+const { TRACEPARENT_HEADER, cleanTraceparent } = require('@ai-fleet/shared-core/traceparent');
+
 /** Browser-selected native AI Fleet scope. These names are part of the public API. */
 const ORGANIZATION_HEADER = 'x-ai-fleet-organization-id';
 const PROJECT_HEADER = 'x-ai-fleet-project-id';
@@ -19,6 +21,9 @@ const NOTIFICATIONS_HEADER = 'x-ai-fleet-notifications';
 // Board, Identity, Agent jobs). They are removed from the default sidebar and
 // stay reachable only when the request carries `x-ai-fleet-deprecated: true`.
 const DEPRECATED_HEADER = 'x-ai-fleet-deprecated';
+// W3C trace context. Unlike the ids above this is not tenant state — it is the
+// handle that ties one run's logs, Pub/Sub messages, jobs and traces together,
+// so it is read from the request and re-emitted on every downstream call.
 const MAX_CONTEXT_ID_CHARS = 160;
 
 function cleanContextId(value) {
@@ -66,18 +71,21 @@ function llmGatewayAvailable() {
 
 function requestContext(req, { llmGatewayEnabled = llmGatewayAvailable() } = {}) {
   const llmGateway = llmGatewayEnabled ? cleanLlmGateway(header(req, LLM_GATEWAY_HEADER)) : '';
+  const traceparent = cleanTraceparent(header(req, TRACEPARENT_HEADER));
   const validated = req && req.fleetContext;
   if (validated && typeof validated === 'object') {
     return Object.freeze({
       organizationId: cleanContextId(validated.organizationId),
       projectId: cleanContextId(validated.projectId),
       llmGateway,
+      traceparent,
     });
   }
   return Object.freeze({
     organizationId: cleanContextId(header(req, ORGANIZATION_HEADER)),
     projectId: cleanContextId(header(req, PROJECT_HEADER)),
     llmGateway,
+    traceparent,
   });
 }
 
@@ -86,10 +94,14 @@ function contextHeaders(context) {
   const organizationId = cleanContextId(source.organizationId);
   const projectId = cleanContextId(source.projectId);
   const llmGateway = cleanLlmGateway(source.llmGateway);
+  // Continues the caller's trace rather than starting a new one. Emitted for
+  // every downstream hop, including internal service-to-service calls.
+  const traceparent = cleanTraceparent(source.traceparent);
   return {
     ...(organizationId ? { [ORGANIZATION_HEADER]: organizationId } : {}),
     ...(projectId ? { [PROJECT_HEADER]: projectId } : {}),
     ...(llmGateway ? { [LLM_GATEWAY_HEADER]: llmGateway } : {}),
+    ...(traceparent ? { [TRACEPARENT_HEADER]: traceparent } : {}),
   };
 }
 

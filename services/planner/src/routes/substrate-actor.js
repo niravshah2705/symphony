@@ -22,6 +22,8 @@
 const express = require('express');
 const { executeAgentRuntime } = require('@ai-fleet/shared/agent/runtimes');
 const { verifyActorJwt } = require('@ai-fleet/shared/agent/substrate-runner');
+const { runWithRemoteTraceparent } = require('@ai-fleet/shared/agent/langfuse');
+const { cleanTraceparent } = require('@ai-fleet/shared/traceparent');
 const { getJwks } = require('../jwks');
 const log = require('@ai-fleet/shared/logger');
 
@@ -52,39 +54,61 @@ function createSubstrateActorRouter({ verify = verifyActorJwt, runner = executeA
       return res.status(400).json({ error: 'prompt_required' });
     }
 
+    // The caller's trace continues into this process: the header is the only
+    // thing that ties an actor's log lines and spans to the run that created it,
+    // and an actor that starts its own trace makes every run look like two.
+    const traceparent = cleanTraceparent(req.headers.traceparent);
+
     // Never route through dispatchPlanning here — that would send the request
     // back out to substrate and loop. Run the harness directly.
-    try {
-      const result = await runner({
-        runtime: body.runtime || body.agentRuntime,
-        workflowPattern: body.workflowPattern,
-        workflow: body.workflow,
-        stage: body.stage || 'planning',
-        prompt: String(body.prompt),
-        llm: body.llm,
-        organizationId: body.organizationId,
-        projectId: body.projectId,
-        projectName: body.projectName,
-        settings: body.settings || {},
-        invokeConfig: { runId: body.runId, actorVerified: true, actorSub: check.claims && check.claims.sub },
-        ctx: {
+    async function execute() {
+      try {
+        const result = await runner({
+          runtime: body.runtime || body.agentRuntime,
+          workflowPattern: body.workflowPattern,
+          workflow: body.workflow,
+          stage: body.stage || 'planning',
+          prompt: String(body.prompt),
+          llm: body.llm,
           organizationId: body.organizationId,
           projectId: body.projectId,
           projectName: body.projectName,
-          stage: body.stage || 'planning',
-        },
-      });
-      const finalText = (result && result.finalText) || '';
-      res.json({
-        finalText,
-        messages: Array.isArray(result && result.messages) ? result.messages : [{ role: 'assistant', content: finalText }],
-        model: (body.llm && body.llm.model) || null,
-      });
-    } catch (err) {
-      const status = err && (err.statusCode || err.httpStatus) || 500;
-      log.error(`substrate actor: planning failed: ${err && err.message || err}`);
-      res.status(status).json({ error: 'planning_failed', message: String((err && err.message) || err).slice(0, 300) });
+          settings: body.settings || {},
+          invokeConfig: { runId: body.runId, actorVerified: true, actorSub: check.claims && check.claims.sub },
+          ctx: {
+            organizationId: body.organizationId,
+            projectId: body.projectId,
+            projectName: body.projectName,
+            stage: body.stage || 'planning',
+          },
+        });
+        const finalText = (result && result.finalText) || '';
+        res.json({
+          finalText,
+          messages: Array.isArray(result && result.messages) ? result.messages : [{ role: 'assistant', content: finalText }],
+          model: (body.llm && body.llm.model) || null,
+          // Metering is the caller's job: this process was created by an
+          // ActorTemplate that sets no env at all (substrate.js upsertActorTemplate),
+          // so it has no tenant store to write a usage record to. We only report
+          // what the run consumed; the planner pod that dispatched us owns the
+          // billing write. See billing/usage.js recordUsage.
+          usage: (result && result.usage) || null,
+          costUsd: (result && result.costUsd) ?? null,
+          traceId: (result && result.traceId) || null,
+        });
+      } catch (err) {
+        const status = err && (err.statusCode || err.httpStatus) || 500;
+        log.error(`substrate actor: planning failed: ${err && err.message || err}`);
+        res.status(status).json({ error: 'planning_failed', message: String((err && err.message) || err).slice(0, 300) });
+      }
     }
+
+    return runWithRemoteTraceparent(traceparent, () => log.runWithContext({
+      organizationId: body.organizationId,
+      projectId: body.projectId,
+      runId: body.runId,
+      traceparent,
+    }, execute));
   });
 
   return router;

@@ -16,7 +16,7 @@ const CONFIG = require('../config');
 const { getSettings } = require('../store');
 const substrate = require('./substrate');
 const { buildCredentialProviderPolicy } = require('../guardrails/consumers');
-const { buildDockerConfigJson } = require('./openshell');
+const { buildDockerConfigJson } = require('./registry-auth');
 
 const REDACTED = '***REDACTED***';
 const fp = (v) => (v ? crypto.createHash('sha256').update(String(v)).digest('hex').slice(0, 12) : '');
@@ -159,6 +159,10 @@ async function dispatchActorPrompt({
         authorization: `Bearer ${actorJwt}`,
         ...(traceContext.runId ? { 'x-aifleet-run-id': String(traceContext.runId) } : {}),
         ...(organizationId ? { 'x-aifleet-org-id': String(organizationId) } : {}),
+        // One trace across the process boundary: the actor's harness span is a
+        // child of the caller's, so a run is readable as a single trace instead
+        // of two unrelated ones.
+        ...(traceContext.traceparent ? { traceparent: String(traceContext.traceparent) } : {}),
       },
       // The actor has no settings store — everything the in-process
       // executeAgentRuntime call needs must ride on the request body. No raw
@@ -189,6 +193,9 @@ async function dispatchActorPrompt({
       finalText: parsed.finalText ?? parsed.text ?? text,
       messages: Array.isArray(parsed.messages) ? parsed.messages : [{ role: 'assistant', content: parsed.finalText ?? text }],
       model: parsed.model || null,
+      usage: parsed.usage || null,
+      costUsd: parsed.costUsd ?? null,
+      traceId: parsed.traceId || null,
       raw: parsed,
     };
   } finally {
@@ -267,6 +274,7 @@ async function runPlanningOnSubstrate({
   transport,
   applyManifest,
   fetchImpl,
+  recordUsage = (...args) => require('../billing/usage').recordUsage(...args),
   onStep = () => {},
 } = {}) {
   if (!prompt || !String(prompt).trim()) throw new Error('runPlanningOnSubstrate: prompt is required');
@@ -331,10 +339,27 @@ async function runPlanningOnSubstrate({
       fetchImpl,
     });
 
+    // Meter the run HERE, not in the actor. The ActorTemplate creates the
+    // container with no env at all, so an in-actor recordUsage would land in the
+    // actor's ephemeral local store and vanish with it — a run that consumed
+    // real tokens and reported nothing. This pod owns the tenant store and the
+    // org context, so it is the one authoritative writer.
+    recordUsage({
+      orgId: organizationId || null,
+      projectId: projectId || null,
+      projectName: projectName || null,
+      runId: traceContext.runId || null,
+      traceId: result.traceId || null,
+      source: 'substrate-plan',
+    }, { usage: result.usage, costUsd: result.costUsd }, llm || {});
+
     return {
       finalText: result.finalText,
       messages: result.messages,
       model: result.model || (llm && llm.model) || null,
+      usage: result.usage || null,
+      costUsd: result.costUsd ?? null,
+      traceId: result.traceId || null,
       traced: { substrate: { atespace, actorName, credentialSync: credSync.state, egress: true } },
       substrate: { atespace, actorName, credentialSync: credSync },
     };

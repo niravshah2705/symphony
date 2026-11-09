@@ -60,6 +60,7 @@ function createCompatibilityHandlers({
         orgId: context.organizationId || null,
         nativeProjectId: context.projectId || null,
         llmGateway: context.llmGateway || null,
+        traceparent: context.traceparent || null,
       });
       return res.status(202).json({ accepted: true, conversationId: conversation.id });
     }
@@ -102,6 +103,7 @@ function createCompatibilityHandlers({
         orgId: context.organizationId || null,
         nativeProjectId: context.projectId || null,
         llmGateway: context.llmGateway || null,
+        traceparent: context.traceparent || null,
       });
       return res.status(202).json({ accepted: true, conversationId: conversation.id });
     }

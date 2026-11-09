@@ -7,7 +7,7 @@
 Community of 303 nodes
 
 - **Size**: 303 nodes
-- **Cohesion**: 0.1918
+- **Cohesion**: 0.1917
 - **Dominant Language**: javascript
 
 ## Members
@@ -71,14 +71,14 @@ Community of 303 nodes
 
 - **startProjectSandbox** (criticality: 0.74, depth: 9)
 - **changeSandboxImage** (criticality: 0.74, depth: 9)
+- **chatWithProjectSandbox** (criticality: 0.73, depth: 8)
 - **stopProjectSandbox** (criticality: 0.73, depth: 8)
 - **deleteProjectSandbox** (criticality: 0.73, depth: 8)
-- **chatWithProjectSandbox** (criticality: 0.73, depth: 8)
 - **execInteractiveSandboxCommand** (criticality: 0.71, depth: 8)
 - **autocompleteSandboxInput** (criticality: 0.71, depth: 8)
 - **listSandboxes** (criticality: 0.71, depth: 8)
 - **listActors** (criticality: 0.71, depth: 8)
-- **runPlanningOnSubstrate** (criticality: 0.71, depth: 8)
+- **runSandboxSecurityChecks** (criticality: 0.70, depth: 8)
 - *... and 28 more flows.*
 
 ## Dependencies
