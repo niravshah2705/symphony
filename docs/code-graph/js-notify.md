@@ -34,6 +34,7 @@ Community of 20 nodes
 | test:shouldNotifyAuthenticationRequired: anonymous provider-less identity 401 does not notify@L64 | Test | ./public/js/auth-retry.test.mjs | 64-71 |
 | test:shouldNotifyAuthenticationRequired: signed-in identity 401 notifies@L73 | Test | ./public/js/auth-retry.test.mjs | 73-80 |
 | test:shouldNotifyAuthenticationRequired: unrelated provider 401 never notifies@L82 | Test | ./public/js/auth-retry.test.mjs | 82-89 |
+| loadConfiguration | Function | ./public/js/auth.js | 62-93 |
 
 ## Execution Flows
 
@@ -46,6 +47,9 @@ No execution flows pass through this community.
 - `equal` (12 edge(s))
 - `set` (6 edge(s))
 - `delete` (3 edge(s))
+- `fetch` (3 edge(s))
+- `Boolean` (3 edge(s))
+- `json` (2 edge(s))
 - `accessTokenProvider` (2 edge(s))
 - `fetch` (2 edge(s))
 - `./public/js/api.js::getApiBase` (2 edge(s))
@@ -55,7 +59,6 @@ No execution flows pass through this community.
 - `getItem` (1 edge(s))
 - `includes` (1 edge(s))
 - `dispatchEvent` (1 edge(s))
-- `json` (1 edge(s))
 - `resolve` (1 edge(s))
 - `runTokenRefresh` (1 edge(s))
 

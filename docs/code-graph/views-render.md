@@ -114,7 +114,7 @@ Community of 760 nodes
 - `./public/js/i18n.js` (34 edge(s))
 - `match` (29 edge(s))
 - `./public/js/views/organization.js` (29 edge(s))
-- `./public/js/auth.js` (24 edge(s))
+- `./public/js/auth.js` (23 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
 - `./public/js/api.js` (15 edge(s))
