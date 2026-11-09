@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 741 nodes
+Community of 739 nodes
 
-- **Size**: 741 nodes
-- **Cohesion**: 0.4908
+- **Size**: 739 nodes
+- **Cohesion**: 0.4915
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,7 +26,6 @@ Community of 741 nodes
 | setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
 | contextId | Function | ./public/js/api.js | 20-23 |
 | setRequestContext | Function | ./public/js/api.js | 26-31 |
-| getApiBase | Function | ./public/js/api.js | 98-101 |
 | setApiBase | Function | ./public/js/api.js | 112-115 |
 | uploadToSignedUrl | Function | ./public/js/api.js | 123-140 |
 | openStream | Function | ./public/js/api.js | 253-332 |
@@ -64,8 +63,9 @@ Community of 741 nodes
 | renderAccessDenied | Function | ./public/js/app.js | 803-815 |
 | render | Function | ./public/js/app.js | 817-899 |
 | capitalize | Function | ./public/js/app.js | 901-904 |
+| start | Function | ./public/js/app.js | 908-916 |
 
-*... and 691 more members.*
+*... and 689 more members.*
 
 ## Execution Flows
 
@@ -88,13 +88,13 @@ Community of 741 nodes
 - `addEventListener` (227 edge(s))
 - `append` (221 edge(s))
 - `map` (166 edge(s))
-- `String` (115 edge(s))
+- `String` (114 edge(s))
 - `push` (101 edge(s))
 - `trim` (97 edge(s))
 - `equal` (93 edge(s))
 - `filter` (82 edge(s))
 - `isArray` (73 edge(s))
-- `Boolean` (69 edge(s))
+- `Boolean` (68 edge(s))
 - `catch` (63 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (59 edge(s))
@@ -114,7 +114,7 @@ Community of 741 nodes
 - `./public/js/i18n.js` (34 edge(s))
 - `match` (29 edge(s))
 - `./public/js/views/organization.js` (27 edge(s))
-- `./public/js/auth.js` (24 edge(s))
+- `./public/js/auth.js` (23 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
-- `./public/js/api.js` (15 edge(s))
+- `./public/js/views/cost.js` (15 edge(s))

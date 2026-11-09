@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 12 nodes
+Community of 14 nodes
 
-- **Size**: 12 nodes
-- **Cohesion**: 0.2133
+- **Size**: 14 nodes
+- **Cohesion**: 0.1916
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,6 +26,8 @@ Community of 12 nodes
 | test@L297 | Test | ./deploy/gcp/substrate-env.test.js | 297-297 |
 | test:the substrate surface is dark until an operator names a control plane@L447 | Test | ./deploy/gcp/substrate-env.test.js | 447-487 |
 | test@L563 | Test | ./deploy/gcp/substrate-env.test.js | 563-563 |
+| declared | Function | ./deploy/gcp/substrate-env.test.js | 669-674 |
+| test@L689 | Test | ./deploy/gcp/substrate-env.test.js | 689-689 |
 
 ## Execution Flows
 
@@ -38,23 +40,24 @@ No execution flows pass through this community.
 - `equal` (9 edge(s))
 - `join` (8 edge(s))
 - `match` (7 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the worker pool boots on its own disk and inside the regional SSD quota@L646` (6 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L569` (6 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:environment_init reaches the org service under the name its settings class reads@L303` (4 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:atespace names Terraform accepts are names the app will not silently drop@L527` (4 edge(s))
+- `exec` (3 edge(s))
+- `ok` (3 edge(s))
+- `trim` (2 edge(s))
 - `matchAll` (2 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:Terraform emits only SUBSTRATE_* names that shipped code reads@L177` (2 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:the actor callback opens only with an identity allowed to call it@L239` (2 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:the worker pool is tainted with the key atelet tolerates@L618` (2 edge(s))
-- `exec` (2 edge(s))
-- `ok` (2 edge(s))
 - `replace` (1 edge(s))
-- `map` (1 edge(s))
-- `existsSync` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/substrate-env.test.js` (10 edge(s))
+- `./deploy/gcp/substrate-env.test.js` (11 edge(s))
 - `equal` (9 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the worker pool boots on its own disk and inside the regional SSD quota@L646` (7 edge(s))
 - `match` (7 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L569` (6 edge(s))
 - `./deploy/gcp/substrate-env.test.js::test:atespace names Terraform accepts are names the app will not silently drop@L527` (5 edge(s))
