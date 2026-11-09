@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 4 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.0423
+- **Size**: 4 nodes
+- **Cohesion**: 0.0345
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,6 +15,7 @@ Community of 3 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | json | Function | ./e2e/route-loading.spec.js | 5-11 |
+| test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
 | test:a non-Agent hash never exposes or preloads the Agent scaffold@L107 | Test | ./e2e/route-loading.spec.js | 107-137 |
 | test:Google Analytics receives one sanitized virtual page view per SPA route@L139 | Test | ./e2e/route-loading.spec.js | 139-210 |
 
@@ -26,36 +27,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (18 edge(s))
-- `locator` (10 edge(s))
-- `route` (6 edge(s))
-- `evaluate` (5 edge(s))
-- `toHaveCount` (5 edge(s))
-- `filter` (4 edge(s))
-- `toHaveAttribute` (4 edge(s))
-- `map` (4 edge(s))
+- `expect` (40 edge(s))
+- `locator` (22 edge(s))
+- `evaluate` (10 edge(s))
+- `route` (9 edge(s))
+- `toContain` (9 edge(s))
+- `toHaveCount` (8 edge(s))
+- `toHaveAttribute` (6 edge(s))
+- `toBe` (6 edge(s))
+- `filter` (6 edge(s))
+- `url` (5 edge(s))
+- `map` (5 edge(s))
+- `toEqual` (5 edge(s))
+- `toBeVisible` (4 edge(s))
+- `poll` (4 edge(s))
 - `stringMatching` (4 edge(s))
-- `toContain` (4 edge(s))
-- `fulfill` (3 edge(s))
-- `./e2e/route-loading.spec.js::test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13` (3 edge(s))
-- `toBe` (3 edge(s))
-- `toEqual` (3 edge(s))
-- `stringify` (2 edge(s))
 
 ### Incoming
 
-- `expect` (18 edge(s))
-- `locator` (10 edge(s))
-- `route` (6 edge(s))
-- `evaluate` (5 edge(s))
-- `toHaveCount` (5 edge(s))
-- `filter` (4 edge(s))
-- `toHaveAttribute` (4 edge(s))
-- `map` (4 edge(s))
-- `stringMatching` (4 edge(s))
-- `toContain` (4 edge(s))
-- `./e2e/route-loading.spec.js` (3 edge(s))
-- `./e2e/route-loading.spec.js::test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13` (3 edge(s))
-- `toBe` (3 edge(s))
-- `toEqual` (3 edge(s))
-- `fulfill` (2 edge(s))
+- `expect` (40 edge(s))
+- `locator` (22 edge(s))
+- `evaluate` (10 edge(s))
+- `route` (9 edge(s))
+- `toContain` (9 edge(s))
+- `toHaveCount` (8 edge(s))
+- `toHaveAttribute` (6 edge(s))
+- `toBe` (6 edge(s))
+- `filter` (6 edge(s))
+- `url` (5 edge(s))
+- `map` (5 edge(s))
+- `toEqual` (5 edge(s))
+- `./e2e/route-loading.spec.js` (4 edge(s))
+- `toBeVisible` (4 edge(s))
+- `poll` (4 edge(s))

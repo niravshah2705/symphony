@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 21 nodes
+Community of 22 nodes
 
-- **Size**: 21 nodes
-- **Cohesion**: 0.4545
+- **Size**: 22 nodes
+- **Cohesion**: 0.4556
 - **Dominant Language**: javascript
 
 ## Members
@@ -22,6 +22,7 @@ Community of 21 nodes
 | resolveEffective | Function | ./packages/shared/src/agent/settings-policy.js | 113-120 |
 | dp | Function | ./packages/shared/src/agent/settings-policy.test.js | 28-30 |
 | test:models domain cascades: org/project deny then user shortlist@L36 | Test | ./packages/shared/src/agent/settings-policy.test.js | 36-45 |
+| test:globToRegExp matches literal, wildcard and char class@L67 | Test | ./packages/shared/src/agent/settings-policy.test.js | 67-75 |
 | test:security:raven@L68 | Test | ./packages/shared/src/agent/settings-policy.test.js | 68-68 |
 | test:web-research@L69 | Test | ./packages/shared/src/agent/settings-policy.test.js | 69-69 |
 | test:codex-sdk@L70 | Test | ./packages/shared/src/agent/settings-policy.test.js | 70-70 |
@@ -45,7 +46,7 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `deepEqual` (13 edge(s))
-- `ok` (6 edge(s))
+- `ok` (13 edge(s))
 - `includes` (6 edge(s))
 - `filter` (2 edge(s))
 - `test` (2 edge(s))
@@ -57,8 +58,7 @@ No execution flows pass through this community.
 ### Incoming
 
 - `deepEqual` (13 edge(s))
+- `ok` (13 edge(s))
 - `./packages/shared/src/agent/settings-policy.js` (11 edge(s))
-- `./packages/shared/src/agent/settings-policy.test.js` (8 edge(s))
-- `./packages/shared/src/agent/settings-policy.test.js::test:globToRegExp matches literal, wildcard and char class@L67` (7 edge(s))
-- `ok` (6 edge(s))
+- `./packages/shared/src/agent/settings-policy.test.js` (9 edge(s))
 - `includes` (6 edge(s))

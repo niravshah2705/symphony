@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 4 nodes
+Community of 5 nodes
 
-- **Size**: 4 nodes
-- **Cohesion**: 0.2000
+- **Size**: 5 nodes
+- **Cohesion**: 0.1569
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,6 +18,7 @@ Community of 4 nodes
 | test:trimMessagesForBudget returns the history unchanged when it already fits@L97 | Test | ./packages/shared/src/agent/lmstudio-budget.test.js | 97-100 |
 | test:trimMessagesForBudget is a pass-through when trimming is disabled (budget 0)@L102 | Test | ./packages/shared/src/agent/lmstudio-budget.test.js | 102-105 |
 | test:trimMessagesForBudget keeps system + first human + most recent turn, drops the middle@L107 | Test | ./packages/shared/src/agent/lmstudio-budget.test.js | 107-113 |
+| test:trimMessagesForBudget never leaves an orphaned tool result leading the tail@L115 | Test | ./packages/shared/src/agent/lmstudio-budget.test.js | 115-130 |
 
 ## Execution Flows
 
@@ -27,18 +28,24 @@ No execution flows pass through this community.
 
 ### Outgoing
 
+- `./packages/shared/src/agent/llm.js::estimateMessageTokens` (5 edge(s))
 - `repeat` (4 edge(s))
-- `./packages/shared/src/agent/llm.js::trimMessagesForBudget` (3 edge(s))
+- `./packages/shared/src/agent/llm.js::trimMessagesForBudget` (4 edge(s))
 - `strictEqual` (2 edge(s))
-- `./packages/shared/src/agent/lmstudio-budget.test.js::test:trimMessagesForBudget never leaves an orphaned tool result leading the tail@L115` (1 edge(s))
-- `./packages/shared/src/agent/llm.js::estimateMessageTokens` (1 edge(s))
-- `deepStrictEqual` (1 edge(s))
+- `deepStrictEqual` (2 edge(s))
+- `ok` (1 edge(s))
+- `includes` (1 edge(s))
+- `notStrictEqual` (1 edge(s))
+- `_getType` (1 edge(s))
 
 ### Incoming
 
-- `./packages/shared/src/agent/lmstudio-budget.test.js` (4 edge(s))
-- `./packages/shared/src/agent/llm.js::trimMessagesForBudget` (3 edge(s))
+- `./packages/shared/src/agent/lmstudio-budget.test.js` (5 edge(s))
+- `./packages/shared/src/agent/llm.js::estimateMessageTokens` (5 edge(s))
+- `./packages/shared/src/agent/llm.js::trimMessagesForBudget` (4 edge(s))
 - `strictEqual` (2 edge(s))
-- `./packages/shared/src/agent/lmstudio-budget.test.js::test:trimMessagesForBudget never leaves an orphaned tool result leading the tail@L115` (1 edge(s))
-- `./packages/shared/src/agent/llm.js::estimateMessageTokens` (1 edge(s))
-- `deepStrictEqual` (1 edge(s))
+- `deepStrictEqual` (2 edge(s))
+- `ok` (1 edge(s))
+- `includes` (1 edge(s))
+- `notStrictEqual` (1 edge(s))
+- `_getType` (1 edge(s))

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 6 nodes
 
-- **Size**: 5 nodes
-- **Cohesion**: 0.2286
+- **Size**: 6 nodes
+- **Cohesion**: 0.3333
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,6 +16,7 @@ Community of 5 nodes
 |------|------|------|-------|
 | normalizeShell | Function | ./deploy/gcp/analytics-config.test.js | 18-22 |
 | runtimeConfigLines | Function | ./deploy/gcp/analytics-config.test.js | 24-33 |
+| test:deploy entry points share the blank/valid/invalid GA4 id contract@L35 | Test | ./deploy/gcp/analytics-config.test.js | 35-45 |
 | accepted | Function | ./deploy/gcp/analytics-config.test.js | 36-36 |
 | test@L36 | Test | ./deploy/gcp/analytics-config.test.js | 36-36 |
 | test:manual, Firebase, and Cloud Build deploys generate identical runtime config@L47 | Test | ./deploy/gcp/analytics-config.test.js | 47-57 |
@@ -28,17 +29,22 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./deploy/gcp/analytics-config.test.js::test:deploy entry points share the blank/valid/invalid GA4 id contract@L35` (4 edge(s))
 - `indexOf` (4 edge(s))
+- `equal` (3 edge(s))
 - `deepEqual` (3 edge(s))
+- `ok` (2 edge(s))
 - `replaceAll` (1 edge(s))
-- `ok` (1 edge(s))
 - `slice` (1 edge(s))
 - `map` (1 edge(s))
 - `matchAll` (1 edge(s))
+- `entries` (1 edge(s))
+- `includes` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/analytics-config.test.js` (4 edge(s))
-- `./deploy/gcp/analytics-config.test.js::test:deploy entry points share the blank/valid/invalid GA4 id contract@L35` (4 edge(s))
+- `./deploy/gcp/analytics-config.test.js` (5 edge(s))
+- `equal` (3 edge(s))
 - `deepEqual` (3 edge(s))
+- `entries` (1 edge(s))
+- `ok` (1 edge(s))
+- `includes` (1 edge(s))

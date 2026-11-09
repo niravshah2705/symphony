@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 382 nodes
+Community of 383 nodes
 
-- **Size**: 382 nodes
-- **Cohesion**: 0.3247
+- **Size**: 383 nodes
+- **Cohesion**: 0.3238
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 382 nodes
 | test:runtime repository unavailability pauses safely without finishing the Linear issue@L579 | Test | ./packages/shared/src/agent/coder-flow.test.js | 579-640 |
 | test:planned runtime policy denial records a governed error without pausing or finalizing the issue@L642 | Test | ./packages/shared/src/agent/coder-flow.test.js | 642-697 |
 
-*... and 332 more members.*
+*... and 333 more members.*
 
 ## Execution Flows
 
@@ -79,7 +79,7 @@ Community of 382 nodes
 
 ### Outgoing
 
-- `equal` (321 edge(s))
+- `equal` (325 edge(s))
 - `deepEqual` (79 edge(s))
 - `String` (49 edge(s))
 - `strictEqual` (48 edge(s))
@@ -88,16 +88,16 @@ Community of 382 nodes
 - `match` (29 edge(s))
 - `replace` (29 edge(s))
 - `rejects` (26 edge(s))
+- `push` (26 edge(s))
 - `warn` (26 edge(s))
+- `ok` (25 edge(s))
 - `map` (25 edge(s))
-- `push` (25 edge(s))
-- `ok` (24 edge(s))
-- `includes` (24 edge(s))
+- `includes` (25 edge(s))
 - `slice` (23 edge(s))
 
 ### Incoming
 
-- `equal` (321 edge(s))
+- `equal` (325 edge(s))
 - `deepEqual` (79 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (69 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (53 edge(s))
@@ -107,8 +107,8 @@ Community of 382 nodes
 - `./packages/shared/src/agent/llm.js` (40 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (27 edge(s))
 - `rejects` (26 edge(s))
+- `ok` (25 edge(s))
 - `match` (24 edge(s))
-- `ok` (24 edge(s))
 - `after` (21 edge(s))
 - `./packages/shared/src/agent/scheduler.test.js` (18 edge(s))
 - `./packages/shared/src/agent/availability.js` (17 edge(s))

@@ -4,68 +4,68 @@
 
 ## Overview
 
-Community of 248 nodes
+Community of 112 nodes
 
-- **Size**: 248 nodes
-- **Cohesion**: 0.0538
+- **Size**: 112 nodes
+- **Cohesion**: 0.2084
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:agentgateway has a vault key and the platform never holds one@L78 | Test | ./deploy/gcp/agentgateway-config.test.js | 78-96 |
-| test:the Terraform guard never admits an origin the sidecar will refuse@L98 | Test | ./deploy/gcp/agentgateway-config.test.js | 98-139 |
-| test:the gateway origin is sidecar-only@L141 | Test | ./deploy/gcp/agentgateway-config.test.js | 141-161 |
-| test:the gateway allowlist equals the LiteLLM catalog it fronts@L181 | Test | ./deploy/gcp/agentgateway-config.test.js | 181-196 |
-| test:deploy entry points share the blank/valid/invalid GA4 id contract@L35 | Test | ./deploy/gcp/analytics-config.test.js | 35-45 |
-| test:blank or unset bootstrap input removes a stale repo variable and gh failures remain fatal@L59 | Test | ./deploy/gcp/analytics-config.test.js | 59-77 |
-| test:manual and Cloud Build GCS deploys match Firebase no-store config policy@L79 | Test | ./deploy/gcp/analytics-config.test.js | 79-96 |
-| test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
-| test:matrix provisions only the harness-specific runtimes and publishes registry index last@L103 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 103-136 |
-| test:config.yaml carries no secret values and no DB/master-key wiring@L61 | Test | ./deploy/gcp/litellm-config.test.js | 61-72 |
-| test:PoC privacy default: message bodies are redacted, agent timeouts stay long@L74 | Test | ./deploy/gcp/litellm-config.test.js | 74-82 |
-| test:every LiteLLM base image is pinned by digest@L148 | Test | ./deploy/gcp/litellm-config.test.js | 148-166 |
-| test:the app overlay puts config.yaml where Terraform points CONFIG_FILE_PATH@L168 | Test | ./deploy/gcp/litellm-config.test.js | 168-182 |
-| test:CI builds and rolls all three LiteLLM images as one unit@L184 | Test | ./deploy/gcp/litellm-config.test.js | 184-215 |
-| test:litellm image tags follow the fleet per-service fallback@L217 | Test | ./deploy/gcp/litellm-config.test.js | 217-246 |
-| test:every alertable egress decision is a decision the sidecar can record@L46 | Test | ./deploy/gcp/observability-config.test.js | 46-61 |
-| test:the sidecar severity table only names levels the logger exposes@L63 | Test | ./deploy/gcp/observability-config.test.js | 63-70 |
-| test:each metric filter names a field the emitting code actually writes@L95 | Test | ./deploy/gcp/observability-config.test.js | 95-118 |
-| test:observability is dark by default, and every resource is gated@L120 | Test | ./deploy/gcp/observability-config.test.js | 120-142 |
-| test:sinks name services and jobs this root actually declares@L144 | Test | ./deploy/gcp/observability-config.test.js | 144-154 |
-| test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L132 | Test | ./deploy/gcp/pipeline-infra.test.js | 132-165 |
-| test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L167 | Test | ./deploy/gcp/pipeline-infra.test.js | 167-181 |
-| test:deploy workflow does not query disabled optional Cloud Run services@L183 | Test | ./deploy/gcp/pipeline-infra.test.js | 183-214 |
-| test:pipeline topology enforces dedicated topics and brokered agent egress@L321 | Test | ./deploy/gcp/pipeline-infra.test.js | 321-371 |
-| test:stream-token broker owns the signing secret behind private IAM@L373 | Test | ./deploy/gcp/pipeline-infra.test.js | 373-469 |
-| test:OpenSWE upstream is trusted proxy-only deployment configuration@L478 | Test | ./deploy/gcp/pipeline-infra.test.js | 478-494 |
-| test:Terraform emits only SUBSTRATE_* names that shipped code reads@L177 | Test | ./deploy/gcp/substrate-env.test.js | 177-184 |
-| test:substrate env reaches the dispatchers and never the worker@L213 | Test | ./deploy/gcp/substrate-env.test.js | 213-237 |
-| test:the actor callback opens only with an identity allowed to call it@L239 | Test | ./deploy/gcp/substrate-env.test.js | 239-301 |
-| test:environment_init reaches the org service under the name its settings class reads@L303 | Test | ./deploy/gcp/substrate-env.test.js | 303-324 |
-| test:an init run has a topic and an answer, without buying run.admin@L326 | Test | ./deploy/gcp/substrate-env.test.js | 326-387 |
-| test:the rendered substrate map is the shape the JS side parses@L389 | Test | ./deploy/gcp/substrate-env.test.js | 389-425 |
-| test:the actor callback renders as four names or none, never a half-pair@L427 | Test | ./deploy/gcp/substrate-env.test.js | 427-445 |
-| test:the plan-facing outputs and the operator doc name the gates that exist@L489 | Test | ./deploy/gcp/substrate-env.test.js | 489-525 |
-| test:atespace names Terraform accepts are names the app will not silently drop@L527 | Test | ./deploy/gcp/substrate-env.test.js | 527-567 |
-| test:the worker pool name the planner selects is one string in four places@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-616 |
-| test:the worker pool is tainted with the key atelet tolerates@L618 | Test | ./deploy/gcp/substrate-env.test.js | 618-644 |
-| test:the worker pool boots on its own disk and inside the regional SSD quota@L646 | Test | ./deploy/gcp/substrate-env.test.js | 646-692 |
-| test:no CI file names OpenShell any more@L49 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 49-57 |
-| test:every writer of the cluster serialises on the same concurrency group@L59 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 59-70 |
-| test:the reconcile job runs the root that exists, under the documented prefix@L113 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 113-124 |
-| test:the power workflow waits only on namespaces the module still creates@L135 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 135-157 |
-| test:the static-IP grant lists the addresses the module owns@L159 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 159-174 |
-| test:ADLC landing renders without an auth prompt and links to the workspace@L13 | Test | ./e2e/adlc.spec.js | 13-30 |
 | test:ADLC manifest is served as a static resource@L32 | Test | ./e2e/adlc.spec.js | 32-39 |
-| test:existing Agent workspace route still renders directly@L41 | Test | ./e2e/adlc.spec.js | 41-49 |
-| test:Agent jobs restores complete grouped planner and coding history@L99 | Test | ./e2e/agent-jobs.spec.js | 99-166 |
-| test:direct Agent jobs navigation is hidden and gated for a public visitor@L237 | Test | ./e2e/anonymous-agent.spec.js | 237-246 |
-| test:parallel application-auth failures expire an authenticated session once and stop private loading@L342 | Test | ./e2e/anonymous-agent.spec.js | 342-367 |
-| test:settings renders task-model controls without a view error@L39 | Test | ./e2e/page-loading.spec.js | 39-59 |
+| test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148 | Test | ./e2e/page-loading.spec.js | 148-182 |
+| test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221 | Test | ./e2e/page-loading.spec.js | 221-475 |
+| test:Settings Policy uses the active native project and selected-context roles@L553 | Test | ./e2e/page-loading.spec.js | 553-615 |
+| test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660 | Test | ./e2e/page-loading.spec.js | 660-709 |
+| test:SEO and AI discovery resources bypass the SPA fallback@L212 | Test | ./e2e/route-loading.spec.js | 212-228 |
+| topUsage | Function | ./packages/cli/bin/adlc.js | 23-45 |
+| main | Function | ./packages/cli/bin/adlc.js | 47-72 |
+| parseArgs | Function | ./packages/cli/src/args.js | 13-46 |
+| test:parses positionals@L8 | Test | ./packages/cli/src/args.test.js | 8-12 |
+| test:parses --flag value@L14 | Test | ./packages/cli/src/args.test.js | 14-17 |
+| test:parses --flag=value@L19 | Test | ./packages/cli/src/args.test.js | 19-22 |
+| test:treats a bare --flag at end of argv as boolean true@L24 | Test | ./packages/cli/src/args.test.js | 24-27 |
+| test:treats --flag followed by another --flag as boolean true@L29 | Test | ./packages/cli/src/args.test.js | 29-33 |
+| test:mixes positionals and flags in any order@L35 | Test | ./packages/cli/src/args.test.js | 35-39 |
+| test:everything after a lone -- is positional@L41 | Test | ./packages/cli/src/args.test.js | 41-45 |
+| test:empty argv yields empty result@L47 | Test | ./packages/cli/src/args.test.js | 47-50 |
+| resolveBaseUrl | Function | ./packages/cli/src/client.js | 20-26 |
+| resolveToken | Function | ./packages/cli/src/client.js | 34-37 |
+| createClient | Function | ./packages/cli/src/client.js | 42-110 |
+| headers | Function | ./packages/cli/src/client.js | 51-55 |
+| request | Function | ./packages/cli/src/client.js | 61-107 |
+| withEnv | Function | ./packages/cli/src/client.test.js | 22-32 |
+| test:resolveBaseUrl prefers the --api flag and strips trailing slashes@L34 | Test | ./packages/cli/src/client.test.js | 34-36 |
+| test:resolveBaseUrl falls back to $ADLC_API_URL@L38 | Test | ./packages/cli/src/client.test.js | 38-42 |
+| test:resolveToken reads ADLC_TOKEN from the environment only@L44 | Test | ./packages/cli/src/client.test.js | 44-51 |
+| test:request sends a bearer Authorization header when a token is set@L53 | Test | ./packages/cli/src/client.test.js | 53-64 |
+| test:request omits Authorization when no token is configured@L66 | Test | ./packages/cli/src/client.test.js | 66-75 |
+| test:request serializes a JSON body and sets Content-Type@L77 | Test | ./packages/cli/src/client.test.js | 77-87 |
+| test:request accepts caller context headers without replacing auth or version headers@L89 | Test | ./packages/cli/src/client.test.js | 89-108 |
+| test:non-2xx throws with the server error message and status@L110 | Test | ./packages/cli/src/client.test.js | 110-122 |
+| test:a network failure surfaces a reachability hint@L124 | Test | ./packages/cli/src/client.test.js | 124-130 |
+| test:every request carries the adlc version (User-Agent + X-Adlc-Version)@L132 | Test | ./packages/cli/src/client.test.js | 132-142 |
+| test:a 401 attaches a re-login hint@L144 | Test | ./packages/cli/src/client.test.js | 144-155 |
+| test:resolveToken prefers $ADLC_TOKEN, else the stored credential@L157 | Test | ./packages/cli/src/client.test.js | 157-176 |
+| jwtExpiry | Function | ./packages/cli/src/commands/admin.js | 34-43 |
+| normalizeBundle | Function | ./packages/cli/src/commands/admin.js | 45-66 |
+| readBundle | Function | ./packages/cli/src/commands/admin.js | 68-82 |
+| operatorUrl | Function | ./packages/cli/src/commands/admin.js | 84-96 |
+| requestOperator | Function | ./packages/cli/src/commands/admin.js | 108-148 |
+| pendingDeploymentApproval | Function | ./packages/cli/src/commands/admin.js | 150-193 |
+| run | Function | ./packages/cli/src/commands/admin.js | 195-251 |
+| test:operator URL permits loopback HTTP but rejects remote plaintext and embedded credentials@L8 | Test | ./packages/cli/src/commands/admin.test.js | 8-21 |
+| test:normalizeBundle accepts Codex CLI auth.json shape without retaining unrelated fields@L23 | Test | ./packages/cli/src/commands/admin.test.js | 23-43 |
+| test:operator request separates Cloud Run IAM and forwarded user identity@L45 | Test | ./packages/cli/src/commands/admin.test.js | 45-66 |
+| test:operator request supports a run-bound deployment approval path@L68 | Test | ./packages/cli/src/commands/admin.test.js | 68-86 |
+| test:deployment approval lineage is derived from the authenticated, scoped pipeline status@L88 | Test | ./packages/cli/src/commands/admin.test.js | 88-135 |
+| test:deployment approval refuses a mismatched pending scope@L137 | Test | ./packages/cli/src/commands/admin.test.js | 137-166 |
+| promptSecret | Function | ./packages/cli/src/commands/auth.js | 32-47 |
+| write | Function | ./packages/cli/src/commands/auth.js | 35-37 |
 
-*... and 198 more members.*
+*... and 62 more members.*
 
 ## Execution Flows
 
@@ -77,36 +77,36 @@ Community of 248 nodes
 
 ### Outgoing
 
-- `equal` (277 edge(s))
-- `ok` (245 edge(s))
-- `match` (238 edge(s))
-- `expect` (175 edge(s))
-- `locator` (84 edge(s))
-- `route` (58 edge(s))
-- `deepEqual` (57 edge(s))
-- `includes` (50 edge(s))
-- `indexOf` (49 edge(s))
-- `doesNotMatch` (47 edge(s))
-- `map` (45 edge(s))
-- `filter` (41 edge(s))
-- `join` (38 edge(s))
-- `slice` (37 edge(s))
-- `request` (33 edge(s))
+- `equal` (61 edge(s))
+- `expect` (56 edge(s))
+- `route` (34 edge(s))
+- `request` (27 edge(s))
+- `String` (26 edge(s))
+- `trim` (21 edge(s))
+- `locator` (16 edge(s))
+- `./e2e/page-loading.spec.js::json` (15 edge(s))
+- `deepEqual` (14 edge(s))
+- `toContain` (13 edge(s))
+- `toBe` (13 edge(s))
+- `join` (11 edge(s))
+- `test` (11 edge(s))
+- `push` (10 edge(s))
+- `filter` (10 edge(s))
 
 ### Incoming
 
-- `equal` (277 edge(s))
-- `ok` (245 edge(s))
-- `match` (238 edge(s))
-- `expect` (175 edge(s))
-- `locator` (84 edge(s))
-- `route` (58 edge(s))
-- `deepEqual` (57 edge(s))
-- `indexOf` (48 edge(s))
-- `includes` (47 edge(s))
-- `doesNotMatch` (47 edge(s))
-- `map` (40 edge(s))
-- `filter` (40 edge(s))
-- `slice` (30 edge(s))
-- `./e2e/page-loading.spec.js::json` (29 edge(s))
-- `join` (28 edge(s))
+- `equal` (61 edge(s))
+- `expect` (56 edge(s))
+- `route` (34 edge(s))
+- `locator` (16 edge(s))
+- `./packages/cli/src/output.js` (16 edge(s))
+- `./e2e/page-loading.spec.js::json` (15 edge(s))
+- `deepEqual` (14 edge(s))
+- `./packages/cli/src/credentials.js` (14 edge(s))
+- `toContain` (13 edge(s))
+- `toBe` (13 edge(s))
+- `./packages/cli/src/client.test.js` (13 edge(s))
+- `./packages/cli/src/commands/admin.js` (13 edge(s))
+- `./e2e/page-loading.spec.js::authorizedJson` (10 edge(s))
+- `get` (9 edge(s))
+- `fulfill` (9 edge(s))

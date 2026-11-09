@@ -4,18 +4,22 @@
 
 ## Overview
 
-Community of 295 nodes
+Community of 300 nodes
 
-- **Size**: 295 nodes
-- **Cohesion**: 0.2623
+- **Size**: 300 nodes
+- **Cohesion**: 0.2498
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
 | test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
+| test:the worker pool name the planner selects is one string in four places@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-616 |
+| test:the power workflow waits only on namespaces the module still creates@L135 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 135-157 |
 | test@L143 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 143-143 |
+| test:the static-IP grant lists the addresses the module owns@L159 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 159-174 |
 | memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
 | memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
 | resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |
@@ -60,12 +64,8 @@ Community of 295 nodes
 | test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
 | test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
 | test:normalizeQuestion rejects malformed input rather than storing it@L83 | Test | ./packages/shared/src/agent/global-questions.test.js | 83-92 |
-| test:normalizeQuestion coerces unknown answer types to free_text and clamps order@L94 | Test | ./packages/shared/src/agent/global-questions.test.js | 94-98 |
-| test:validateQuestionPatch allows a cross-field edit but not an inconsistent one@L100 | Test | ./packages/shared/src/agent/global-questions.test.js | 100-108 |
-| test:scoreQuestion: zero hits is 0/unanswered and no best score can be papered over@L117 | Test | ./packages/shared/src/agent/global-questions.test.js | 117-136 |
-| test:scoreQuestion discounts off-scope recall and prose-only answers to choice questions@L138 | Test | ./packages/shared/src/agent/global-questions.test.js | 138-151 |
 
-*... and 245 more members.*
+*... and 250 more members.*
 
 ## Execution Flows
 
@@ -80,36 +80,36 @@ Community of 295 nodes
 
 ### Outgoing
 
-- `equal` (383 edge(s))
+- `equal` (388 edge(s))
 - `join` (73 edge(s))
+- `match` (65 edge(s))
+- `ok` (55 edge(s))
 - `String` (54 edge(s))
+- `map` (48 edge(s))
 - `isArray` (48 edge(s))
-- `map` (45 edge(s))
-- `ok` (44 edge(s))
-- `deepEqual` (42 edge(s))
-- `includes` (41 edge(s))
-- `match` (39 edge(s))
-- `filter` (26 edge(s))
-- `slice` (24 edge(s))
+- `deepEqual` (44 edge(s))
+- `includes` (43 edge(s))
+- `filter` (29 edge(s))
+- `slice` (27 edge(s))
+- `trim` (24 edge(s))
 - `require` (22 edge(s))
 - `push` (20 edge(s))
-- `trim` (19 edge(s))
-- `throws` (19 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (20 edge(s))
 
 ### Incoming
 
-- `equal` (383 edge(s))
+- `equal` (388 edge(s))
+- `match` (61 edge(s))
+- `ok` (55 edge(s))
 - `./packages/shared/src/agent/harnesses/contract.js` (55 edge(s))
 - `join` (46 edge(s))
-- `ok` (44 edge(s))
-- `deepEqual` (42 edge(s))
-- `match` (35 edge(s))
+- `deepEqual` (44 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js` (25 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
-- `./packages/shared/src/agent/runtimes.test.js` (24 edge(s))
 - `./packages/shared/src/agent/global-questions.js` (21 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
+- `includes` (20 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
-- `throws` (19 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (20 edge(s))

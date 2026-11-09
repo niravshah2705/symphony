@@ -541,6 +541,7 @@ jobs:
           git clone --depth 1 "$SUBSTRATE_GKE_URL" substrate-gke
 
       - name: Set the bundled Postgres volume size
+        id: pgsize
         if: inputs.mode == 'install'
         env:
           PG_SIZE: ${{ steps.cfg.outputs.pg_size }}
@@ -569,6 +570,7 @@ jobs:
             echo "::warning::data-postgres-0 is bound at ${have}; deleting it with the StatefulSet so ${PG_SIZE} can be provisioned."
             kubectl -n ate-system delete statefulset postgres --wait=true >/dev/null
             kubectl -n ate-system delete pvc data-postgres-0 --wait=true >/dev/null
+            echo "recreated=true" >> "$GITHUB_OUTPUT"
           elif [ -n "$have" ]; then
             echo "Existing claim is already at ${have}; left in place."
           fi
@@ -616,6 +618,29 @@ jobs:
           # Run from the checkout: the installer reads its manifests from there,
           # which is why the checkout and --image-tag must name the same revision.
           ( cd substrate && go run ./cmd/ate-setup "${args[@]}" )
+
+      - name: Re-migrate the recreated database
+        if: inputs.mode == 'install' && steps.pgsize.outputs.recreated == 'true'
+        timeout-minutes: 15
+        env:
+          ROLLOUT_TIMEOUT: ${{ steps.cfg.outputs.rollout_timeout }}
+        run: |
+          set -euo pipefail
+          # ate-api-server applies its PostgreSQL migrations only at startup — its
+          # first log lines say "PostgreSQL migrations ready" and it never revisits
+          # them. Deleting the claim above hands that running API server a database
+          # with no tables: every pod stays Running, every query fails with
+          # `relation "workers" does not exist`, workers never acquire an epoch, the
+          # WorkerPool sits at 0 ready replicas and no actor is ever placed. The
+          # restart is part of the rewrite, not a cleanup someone can skip.
+          kubectl -n ate-system rollout restart deploy ate-api-server
+          kubectl -n ate-system rollout status deploy ate-api-server --timeout="$ROLLOUT_TIMEOUT"
+          if kubectl -n ate-system logs deploy/ate-api-server --tail=500 2>&1 |
+               grep -q 'relation "workers" does not exist'; then
+            echo "::error::ate-api-server still reads an unmigrated database after the restart — the schema was never applied."
+            exit 1
+          fi
+          echo "- restarted \`ate-api-server\` so it migrated the fresh \`atepg\` schema" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create the WorkerPool
         if: inputs.mode == 'install'

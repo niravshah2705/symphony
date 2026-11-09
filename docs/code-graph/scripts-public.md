@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 4 nodes
+Community of 5 nodes
 
-- **Size**: 4 nodes
-- **Cohesion**: 0.1282
+- **Size**: 5 nodes
+- **Cohesion**: 0.0863
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,6 +15,7 @@ Community of 4 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | readPublic | Function | ./scripts/seo-discovery.test.js | 9-9 |
+| test:SPA publishes complete ADLC search metadata and valid JSON-LD@L11 | Test | ./scripts/seo-discovery.test.js | 11-53 |
 | test:robots policy is valid, AI-crawler explicit, and points to the canonical sitemap@L55 | Test | ./scripts/seo-discovery.test.js | 55-70 |
 | test:sitemap and language-model documents expose one canonical public source@L72 | Test | ./scripts/seo-discovery.test.js | 72-106 |
 | test:persistent ADLC launcher has five named, local-icon assistant links@L108 | Test | ./scripts/seo-discovery.test.js | 108-119 |
@@ -27,25 +28,31 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `match` (15 edge(s))
-- `equal` (4 edge(s))
-- `doesNotMatch` (4 edge(s))
-- `map` (2 edge(s))
+- `match` (22 edge(s))
+- `equal` (14 edge(s))
+- `doesNotMatch` (6 edge(s))
+- `ok` (4 edge(s))
+- `map` (3 edge(s))
+- `deepEqual` (3 edge(s))
+- `find` (3 edge(s))
 - `matchAll` (2 edge(s))
-- `deepEqual` (2 edge(s))
 - `readFileSync` (1 edge(s))
 - `join` (1 edge(s))
-- `./scripts/seo-discovery.test.js::test:SPA publishes complete ADLC search metadata and valid JSON-LD@L11` (1 edge(s))
+- `parse` (1 edge(s))
+- `includes` (1 edge(s))
 - `replace` (1 edge(s))
 
 ### Incoming
 
-- `match` (15 edge(s))
-- `./scripts/seo-discovery.test.js` (4 edge(s))
-- `equal` (4 edge(s))
-- `doesNotMatch` (4 edge(s))
-- `map` (2 edge(s))
+- `match` (22 edge(s))
+- `equal` (14 edge(s))
+- `doesNotMatch` (6 edge(s))
+- `./scripts/seo-discovery.test.js` (5 edge(s))
+- `ok` (4 edge(s))
+- `map` (3 edge(s))
+- `deepEqual` (3 edge(s))
+- `find` (3 edge(s))
 - `matchAll` (2 edge(s))
-- `deepEqual` (2 edge(s))
-- `./scripts/seo-discovery.test.js::test:SPA publishes complete ADLC search metadata and valid JSON-LD@L11` (1 edge(s))
+- `parse` (1 edge(s))
+- `includes` (1 edge(s))
 - `replace` (1 edge(s))

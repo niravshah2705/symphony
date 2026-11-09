@@ -4,30 +4,18 @@
 
 ## Overview
 
-Community of 14 nodes
+Community of 2 nodes
 
-- **Size**: 14 nodes
-- **Cohesion**: 0.1916
+- **Size**: 2 nodes
+- **Cohesion**: 0.2069
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| read | Function | ./deploy/gcp/substrate-env.test.js | 27-27 |
-| envNamesRead | Function | ./deploy/gcp/substrate-env.test.js | 122-144 |
-| walk | Function | ./deploy/gcp/substrate-env.test.js | 132-141 |
-| envNamesEmitted | Function | ./deploy/gcp/substrate-env.test.js | 147-150 |
-| varBlock | Function | ./deploy/gcp/substrate-env.test.js | 163-167 |
-| varDefault | Function | ./deploy/gcp/substrate-env.test.js | 169-175 |
-| test:every substrate setting the code can honor is reachable from Terraform@L186 | Test | ./deploy/gcp/substrate-env.test.js | 186-201 |
-| test:no credential-shaped key is ever emitted into the substrate env maps@L203 | Test | ./deploy/gcp/substrate-env.test.js | 203-211 |
-| test@L293 | Test | ./deploy/gcp/substrate-env.test.js | 293-293 |
-| test@L297 | Test | ./deploy/gcp/substrate-env.test.js | 297-297 |
-| test:the substrate surface is dark until an operator names a control plane@L447 | Test | ./deploy/gcp/substrate-env.test.js | 447-487 |
-| test@L563 | Test | ./deploy/gcp/substrate-env.test.js | 563-563 |
-| declared | Function | ./deploy/gcp/substrate-env.test.js | 669-674 |
-| test@L689 | Test | ./deploy/gcp/substrate-env.test.js | 689-689 |
+| envLocal | Function | ./deploy/gcp/substrate-env.test.js | 153-160 |
+| test:substrate env reaches the dispatchers and never the worker@L213 | Test | ./deploy/gcp/substrate-env.test.js | 213-237 |
 
 ## Execution Flows
 
@@ -37,35 +25,18 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (9 edge(s))
-- `join` (8 edge(s))
-- `match` (7 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the worker pool boots on its own disk and inside the regional SSD quota@L646` (6 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L569` (6 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:environment_init reaches the org service under the name its settings class reads@L303` (4 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:atespace names Terraform accepts are names the app will not silently drop@L527` (4 edge(s))
-- `exec` (3 edge(s))
-- `ok` (3 edge(s))
-- `trim` (2 edge(s))
-- `matchAll` (2 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:Terraform emits only SUBSTRATE_* names that shipped code reads@L177` (2 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the actor callback opens only with an identity allowed to call it@L239` (2 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the worker pool is tainted with the key atelet tolerates@L618` (2 edge(s))
-- `replace` (1 edge(s))
+- `match` (4 edge(s))
+- `indexOf` (2 edge(s))
+- `ok` (2 edge(s))
+- `doesNotMatch` (2 edge(s))
+- `notEqual` (1 edge(s))
+- `filter` (1 edge(s))
+- `slice` (1 edge(s))
+- `min` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/substrate-env.test.js` (11 edge(s))
-- `equal` (9 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the worker pool boots on its own disk and inside the regional SSD quota@L646` (7 edge(s))
-- `match` (7 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L569` (6 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:atespace names Terraform accepts are names the app will not silently drop@L527` (5 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the actor callback opens only with an identity allowed to call it@L239` (4 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:environment_init reaches the org service under the name its settings class reads@L303` (4 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:Terraform emits only SUBSTRATE_* names that shipped code reads@L177` (2 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the worker pool is tainted with the key atelet tolerates@L618` (2 edge(s))
-- `filter` (1 edge(s))
-- `has` (1 edge(s))
-- `deepEqual` (1 edge(s))
-- `doesNotMatch` (1 edge(s))
+- `match` (4 edge(s))
+- `./deploy/gcp/substrate-env.test.js` (2 edge(s))
+- `doesNotMatch` (2 edge(s))
+- `ok` (1 edge(s))

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 6 nodes
 
-- **Size**: 5 nodes
-- **Cohesion**: 0.1143
+- **Size**: 6 nodes
+- **Cohesion**: 0.1839
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,6 +18,7 @@ Community of 5 nodes
 | pyTuple | Function | ./deploy/gcp/agentgateway-config.test.js | 26-33 |
 | pyDict | Function | ./deploy/gcp/agentgateway-config.test.js | 36-42 |
 | test:the dark state is real: no client-side module names the gateway@L60 | Test | ./deploy/gcp/agentgateway-config.test.js | 60-76 |
+| test:agentgateway has a vault key and the platform never holds one@L78 | Test | ./deploy/gcp/agentgateway-config.test.js | 78-96 |
 | test:the a2a seam is closed by admission, not by a policy@L235 | Test | ./deploy/gcp/agentgateway-config.test.js | 235-255 |
 
 ## Execution Flows
@@ -28,23 +29,25 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `indexOf` (8 edge(s))
-- `slice` (6 edge(s))
-- `./deploy/gcp/agentgateway-config.test.js::test:agentgateway has a vault key and the platform never holds one@L78` (4 edge(s))
-- `match` (4 edge(s))
+- `indexOf` (9 edge(s))
+- `slice` (7 edge(s))
+- `match` (7 edge(s))
+- `doesNotMatch` (4 edge(s))
 - `split` (3 edge(s))
 - `notEqual` (3 edge(s))
-- `doesNotMatch` (3 edge(s))
 - `readFileSync` (1 edge(s))
 - `join` (1 edge(s))
+- `ok` (1 edge(s))
+- `includes` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/agentgateway-config.test.js` (9 edge(s))
-- `./deploy/gcp/agentgateway-config.test.js::test:agentgateway has a vault key and the platform never holds one@L78` (4 edge(s))
-- `slice` (4 edge(s))
-- `match` (4 edge(s))
-- `indexOf` (3 edge(s))
-- `doesNotMatch` (3 edge(s))
+- `./deploy/gcp/agentgateway-config.test.js` (10 edge(s))
+- `match` (7 edge(s))
+- `slice` (5 edge(s))
+- `indexOf` (4 edge(s))
+- `doesNotMatch` (4 edge(s))
+- `ok` (1 edge(s))
+- `includes` (1 edge(s))
 - `notEqual` (1 edge(s))
 - `split` (1 edge(s))

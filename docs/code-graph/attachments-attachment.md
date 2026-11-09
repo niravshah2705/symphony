@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 104 nodes
+Community of 105 nodes
 
-- **Size**: 104 nodes
-- **Cohesion**: 0.3850
+- **Size**: 105 nodes
+- **Cohesion**: 0.3826
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 104 nodes
 | isValidAttachmentId | Function | ./packages/shared-core/src/attachments/model.js | 78-80 |
 | test:sanitizeFilename strips path separators and control characters, bounds length@L16 | Test | ./packages/shared-core/src/attachments/model.test.js | 16-23 |
 
-*... and 54 more members.*
+*... and 55 more members.*
 
 ## Execution Flows
 
@@ -75,9 +75,9 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (80 edge(s))
+- `equal` (82 edge(s))
 - `from` (12 edge(s))
-- `ok` (9 edge(s))
+- `ok` (10 edge(s))
 - `throws` (8 edge(s))
 - `String` (7 edge(s))
 - `deepEqual` (7 edge(s))
@@ -93,15 +93,15 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (80 edge(s))
+- `equal` (82 edge(s))
 - `./packages/shared-core/src/attachments/store.js` (22 edge(s))
 - `./packages/shared-core/src/attachments/gcs.js` (14 edge(s))
 - `./packages/shared-core/src/attachments/model.js` (14 edge(s))
 - `./packages/shared-core/src/attachments/service.js` (13 edge(s))
 - `from` (12 edge(s))
 - `./packages/shared-core/src/attachments/model.test.js` (12 edge(s))
-- `./packages/shared-core/src/attachments/service.test.js` (11 edge(s))
-- `ok` (9 edge(s))
+- `./packages/shared-core/src/attachments/service.test.js` (12 edge(s))
+- `ok` (10 edge(s))
 - `throws` (8 edge(s))
 - `./packages/shared-core/src/attachments/store.test.js` (8 edge(s))
 - `deepEqual` (7 edge(s))

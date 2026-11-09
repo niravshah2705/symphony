@@ -4,16 +4,18 @@
 
 ## Overview
 
-Community of 445 nodes
+Community of 447 nodes
 
-- **Size**: 445 nodes
-- **Cohesion**: 0.4235
+- **Size**: 447 nodes
+- **Cohesion**: 0.4182
 - **Dominant Language**: python
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:preset overrides are allowlisted and clamped to model capabilities@L188 | Test | ./packages/shared/src/agent/model-presets.test.js | 188-203 |
+| test:every managed-capable egress key has a settings MANAGED_ENV entry@L77 | Test | ./packages/shared/src/egress-secret-parity.test.js | 77-89 |
 | test:concurrent Firestore context initialization is deduplicated per backend@L176 | Test | ./packages/shared/src/store-workspace-isolation.test.js | 176-220 |
 | get_org_connectors | Function | ./services/settings/app/api/v1/routes_connectors.py | 22-26 |
 | put_org_connectors | Function | ./services/settings/app/api/v1/routes_connectors.py | 30-35 |
@@ -62,10 +64,8 @@ Community of 445 nodes
 | _uuid | Function | ./services/settings/app/auth/org_context.py | 46-53 |
 | _items | Function | ./services/settings/app/auth/org_context.py | 56-57 |
 | parse_context_payload | Function | ./services/settings/app/auth/org_context.py | 60-138 |
-| _audience | Function | ./services/settings/app/auth/org_context.py | 141-143 |
-| _cloud_run_token | Function | ./services/settings/app/auth/org_context.py | 146-153 |
 
-*... and 395 more members.*
+*... and 397 more members.*
 
 ## Execution Flows
 
@@ -99,7 +99,7 @@ Community of 445 nodes
 - `bool` (13 edge(s))
 - `ValueError` (11 edge(s))
 - `dict` (11 edge(s))
-- `strip` (10 edge(s))
+- `equal` (10 edge(s))
 
 ### Incoming
 
@@ -117,4 +117,4 @@ Community of 445 nodes
 - `./services/settings/app/errors.py` (12 edge(s))
 - `./services/settings/tests/integration/test_settings.py` (12 edge(s))
 - `./services/settings/app/domain/resolver.py` (11 edge(s))
-- `./services/settings/tests/integration/test_authz.py` (10 edge(s))
+- `equal` (10 edge(s))

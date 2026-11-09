@@ -690,3 +690,32 @@ test('the worker pool boots on its own disk and inside the regional SSD quota', 
       `terraform.tfvars.example still advertises a different ${name} than the module default`);
   }
 });
+
+test('rewriting the postgres claim also re-migrates the database', () => {
+  // ate-api-server applies migrations ONLY at startup, so a claim the install
+  // deletes and re-provisions leaves a RUNNING control plane on an EMPTY schema:
+  // every pod Ready, every query failing with `relation "workers" does not
+  // exist`, workers never acquiring an epoch, WorkerPool stuck at 0 ready
+  // replicas. It cost a full install run to find; the rewrite and the restart
+  // are one change, so the workflow must not contain just the first half.
+  const wf = read('.github', 'workflows', 'substrate-control-plane.yml');
+  const step = /- name: Set the bundled Postgres volume size\n([\s\S]*?)\n      - /.exec(wf);
+  assert.ok(step, 'the Postgres volume-size step moved out of the install job');
+  const deletes = /delete pvc data-postgres-0/.test(step[1]);
+  if (!deletes) {
+    assert.doesNotMatch(wf, /rollout restart deploy ate-api-server/,
+      'the install restarts ate-api-server for no reason — it no longer deletes the claim');
+    return;
+  }
+  assert.match(step[1], /recreated=true" >> "\$GITHUB_OUTPUT/,
+    'the claim delete no longer reports itself, so the migration step can be skipped silently');
+  const restart = /- name: Re-migrate the recreated database\n([\s\S]*?)\n      - name: /.exec(wf);
+  assert.ok(restart,
+    'the install deletes data-postgres-0 but never restarts ate-api-server — the schema stays missing and no worker ever registers');
+  assert.match(restart[1], /steps\.pgsize\.outputs\.recreated == 'true'/,
+    'the re-migration step must run exactly when the claim was recreated, not on every install');
+  assert.match(restart[1], /rollout restart deploy ate-api-server/,
+    'the re-migration step does not restart the only component that applies migrations');
+  assert.match(restart[1], /rollout status deploy ate-api-server/,
+    'the step must wait for the restarted replicas, or the WorkerPool check below races the rollout');
+});

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 17 nodes
+Community of 18 nodes
 
-- **Size**: 17 nodes
-- **Cohesion**: 0.1127
+- **Size**: 18 nodes
+- **Cohesion**: 0.1048
 - **Dominant Language**: javascript
 
 ## Members
@@ -22,6 +22,7 @@ Community of 17 nodes
 | expectSingleVisibleFooter | Function | ./e2e/persistent-footer.spec.js | 163-170 |
 | expectToastOutsideFooter | Function | ./e2e/persistent-footer.spec.js | 172-188 |
 | settlePublishedWork | Function | ./e2e/persistent-footer.spec.js | 190-194 |
+| test:one stable footer survives view replacement across every application and legal route@L196 | Test | ./e2e/persistent-footer.spec.js | 196-243 |
 | test:the non-Agent launcher copies its prompt and remains aligned without narrow-screen overflow@L245 | Test | ./e2e/persistent-footer.spec.js | 245-349 |
 | test@L422 | Test | ./e2e/persistent-footer.spec.js | 422-422 |
 | test:Cookie Preferences reports a storage failure without changing consent or reloading@L457 | Test | ./e2e/persistent-footer.spec.js | 457-499 |
@@ -40,36 +41,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (54 edge(s))
-- `locator` (24 edge(s))
-- `toBeVisible` (15 edge(s))
+- `expect` (66 edge(s))
+- `locator` (32 edge(s))
+- `toBeVisible` (18 edge(s))
+- `evaluate` (16 edge(s))
 - `getBoundingClientRect` (13 edge(s))
-- `evaluate` (12 edge(s))
+- `getByRole` (12 edge(s))
+- `toHaveAttribute` (11 edge(s))
+- `getElementById` (10 edge(s))
 - `route` (10 edge(s))
-- `getByRole` (10 edge(s))
+- `goto` (9 edge(s))
 - `toBe` (8 edge(s))
-- `goto` (8 edge(s))
 - `toHaveText` (6 edge(s))
-- `toHaveAttribute` (6 edge(s))
 - `querySelector` (6 edge(s))
 - `toHaveCount` (5 edge(s))
 - `url` (4 edge(s))
-- `./e2e/persistent-footer.spec.js::test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L351` (4 edge(s))
 
 ### Incoming
 
-- `expect` (49 edge(s))
-- `locator` (21 edge(s))
-- `./e2e/persistent-footer.spec.js` (16 edge(s))
-- `toBeVisible` (13 edge(s))
+- `expect` (61 edge(s))
+- `locator` (29 edge(s))
+- `./e2e/persistent-footer.spec.js` (17 edge(s))
+- `toBeVisible` (16 edge(s))
+- `evaluate` (13 edge(s))
+- `getByRole` (12 edge(s))
+- `toHaveAttribute` (11 edge(s))
 - `getBoundingClientRect` (11 edge(s))
-- `getByRole` (10 edge(s))
-- `evaluate` (9 edge(s))
-- `goto` (8 edge(s))
+- `goto` (9 edge(s))
+- `getElementById` (8 edge(s))
 - `route` (7 edge(s))
 - `toHaveText` (6 edge(s))
-- `toHaveAttribute` (6 edge(s))
 - `toBe` (6 edge(s))
 - `querySelector` (6 edge(s))
 - `./e2e/persistent-footer.spec.js::test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L351` (5 edge(s))
-- `click` (4 edge(s))

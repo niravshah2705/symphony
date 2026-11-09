@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 16 nodes
+Community of 19 nodes
 
-- **Size**: 16 nodes
-- **Cohesion**: 0.1481
+- **Size**: 19 nodes
+- **Cohesion**: 0.1774
 - **Dominant Language**: javascript
 
 ## Members
@@ -28,7 +28,10 @@ Community of 16 nodes
 | read | Function | ./scripts/marketing-site.test.js | 19-19 |
 | exists | Function | ./scripts/marketing-site.test.js | 20-20 |
 | fileFor | Function | ./scripts/marketing-site.test.js | 22-26 |
+| test:promoted pages self-canonicalise at the root and drop /adlc/ links@L47 | Test | ./scripts/marketing-site.test.js | 47-65 |
+| test:service worker and manifest are root-scoped on www@L71 | Test | ./scripts/marketing-site.test.js | 71-87 |
 | test:the generated sitemap lists promoted urls backed by files@L88 | Test | ./scripts/marketing-site.test.js | 88-102 |
+| test:legal hash routes point at the SPA on the platform origin@L104 | Test | ./scripts/marketing-site.test.js | 104-110 |
 | test:a freshly built tree passes the staleness check@L149 | Test | ./scripts/marketing-site.test.js | 149-151 |
 
 ## Execution Flows
@@ -40,32 +43,35 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `join` (26 edge(s))
+- `match` (11 edge(s))
 - `push` (10 edge(s))
+- `ok` (10 edge(s))
 - `readFileSync` (9 edge(s))
-- `slice` (8 edge(s))
+- `slice` (9 edge(s))
 - `indexOf` (6 edge(s))
+- `equal` (6 edge(s))
 - `existsSync` (5 edge(s))
-- `match` (4 edge(s))
-- `./scripts/marketing-site.test.js::test:service worker and manifest are root-scoped on www@L71` (4 edge(s))
-- `ok` (4 edge(s))
+- `includes` (5 edge(s))
+- `filter` (3 edge(s))
 - `rmSync` (2 edge(s))
 - `mkdirSync` (2 edge(s))
 - `writeFileSync` (2 edge(s))
 - `replace` (2 edge(s))
-- `write` (2 edge(s))
-- `sort` (2 edge(s))
 
 ### Incoming
 
 - `./scripts/build-marketing-site.js` (22 edge(s))
-- `./scripts/marketing-site.test.js` (6 edge(s))
-- `./scripts/marketing-site.test.js::test:service worker and manifest are root-scoped on www@L71` (4 edge(s))
-- `ok` (4 edge(s))
-- `./scripts/marketing-site.test.js::test:promoted pages self-canonicalise at the root and drop /adlc/ links@L47` (2 edge(s))
-- `./scripts/marketing-site.test.js::test:legal hash routes point at the SPA on the platform origin@L104` (2 edge(s))
+- `ok` (10 edge(s))
+- `./scripts/marketing-site.test.js` (9 edge(s))
+- `match` (7 edge(s))
+- `equal` (6 edge(s))
+- `includes` (5 edge(s))
 - `join` (2 edge(s))
-- `includes` (2 edge(s))
+- `filter` (2 edge(s))
+- `parse` (2 edge(s))
+- `endsWith` (1 edge(s))
+- `isArray` (1 edge(s))
+- `find` (1 edge(s))
+- `slice` (1 edge(s))
 - `startsWith` (1 edge(s))
-- `filter` (1 edge(s))
 - `readFileSync` (1 edge(s))
-- `equal` (1 edge(s))
