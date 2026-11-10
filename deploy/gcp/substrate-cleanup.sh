@@ -82,7 +82,10 @@ after() { [ "$DRY_RUN" = 1 ] || note "$1"; }
 # Every mutating step goes through run, so --dry-run is a real rehearsal rather than
 # a comment describing what the script would do.
 run()  { local desc="$1"; shift
-  if [ "$DRY_RUN" = 1 ]; then printf '  would %s\n' "$desc"; return 0; fi
+  # stderr: the call sites pipe the real command's noise to /dev/null, and a stdout
+  # "would …" line would be eaten by that same redirect — leaving a dry run that
+  # silently omits the very commands it is meant to rehearse.
+  if [ "$DRY_RUN" = 1 ]; then printf '  would %s: %s\n' "$desc" "$*" >&2; return 0; fi
   "$@"; }
 
 STAMP="$(date -u +%Y-%m-%dT%H%M%SZ)"

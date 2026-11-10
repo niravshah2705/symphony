@@ -109,7 +109,10 @@ say() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 run() {
   local desc="$1"; shift
   if [ "$DRY_RUN" = 1 ]; then
-    printf '  would %s: %s\n' "$desc" "$*"
+    # stderr, not stdout: the call sites pipe the real command's noise away
+    # (`>/dev/null`), and that redirect would otherwise eat the rehearsal line too —
+    # which is how a dry run came to print nothing at all for the pool creates.
+    printf '  would %s: %s\n' "$desc" "$*" >&2
     return 0
   fi
   printf '  %s…\n' "$desc"
@@ -197,6 +200,11 @@ create_pool() {
     --cluster "$CLUSTER" --zone "$ZONE" --project "$PROJECT"
     --machine-type "$machine" --disk-type "$dtype" --disk-size "${dsize}GB"
     --image-type "$image"
+    # --num-nodes defaults to 3 (see `node-pools create --help`), and it wins over the
+    # autoscaling floor at creation: the first --with-primary run bought three
+    # e2-standard-2 machines for a pool whose min_nodes is 2, and node-pools update has
+    # no --num-nodes to undo it with. Pin the start size to the floor.
+    --num-nodes "$min"
     --enable-autoscaling --min-nodes "$min" --max-nodes "$max"
     --location-policy BALANCED
     --scopes cloud-platform --workload-metadata GKE_METADATA
