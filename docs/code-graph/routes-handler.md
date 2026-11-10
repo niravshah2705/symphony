@@ -4,22 +4,21 @@
 
 ## Overview
 
-Community of 6 nodes
+Community of 5 nodes
 
-- **Size**: 6 nodes
-- **Cohesion**: 0.2623
+- **Size**: 5 nodes
+- **Cohesion**: 0.1005
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| postHandler | Function | ./services/coder/src/routes/coder.test.js | 9-15 |
-| invoke | Function | ./services/coder/src/routes/coder.test.js | 17-24 |
-| routeHandler | Function | ./services/coder/src/routes/coder.test.js | 26-32 |
-| test:manual coder route forwards the gateway-validated organization and native project@L34 | Test | ./services/coder/src/routes/coder.test.js | 34-67 |
-| test:coder status and monitor lifecycle use the exact selected context@L69 | Test | ./services/coder/src/routes/coder.test.js | 69-108 |
-| request | Function | ./services/coder/src/routes/coder.test.js | 93-96 |
+| handlerFor | Function | ./services/planner/src/routes/agent.test.js | 17-22 |
+| call | Function | ./services/planner/src/routes/agent.test.js | 37-44 |
+| test:message yields a confirmable memory draft and canPrepare, never auto-writing@L230 | Test | ./services/planner/src/routes/agent.test.js | 230-240 |
+| test:business/prepare re-blocks unsafe input without a model call@L242 | Test | ./services/planner/src/routes/agent.test.js | 242-247 |
+| test:conversation routes reject malformed ids and unknown threads@L310 | Test | ./services/planner/src/routes/agent.test.js | 310-316 |
 
 ## Execution Flows
 
@@ -29,31 +28,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `resolve` (4 edge(s))
-- `find` (2 edge(s))
-- `ok` (2 edge(s))
-- `after` (2 edge(s))
-- `require` (2 edge(s))
-- `deepEqual` (2 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:conversation threads: create, append (auto-title), list, get, rename, delete@L266` (16 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:planner job and status routes honor the exact selected organization and project@L447` (16 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:memory write, list, and delete round-trip with server-side validation@L144` (14 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L567` (8 edge(s))
+- `equal` (7 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:memory records are stamped and isolated by selected organization/project@L192` (6 edge(s))
+- `ok` (3 edge(s))
+- `require` (3 edge(s))
+- `resolve` (2 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:memory-search detects scope from the query and returns scoped stored matches@L175` (2 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:business/prepare resolves the linked business and forwards pipeline output@L249` (2 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:deleting a conversation cascades to its attachments (best-effort) before removing it@L318` (2 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:a cascade failure never blocks the conversation delete itself@L347` (2 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:a conversation with no org/project context skips the cascade entirely (nothing could have been attached without it)@L374` (2 edge(s))
 - `catch` (1 edge(s))
-- `handler` (1 edge(s))
-- `toLowerCase` (1 edge(s))
-- `String` (1 edge(s))
-- `toUpperCase` (1 edge(s))
-- `at` (1 edge(s))
-- `keys` (1 edge(s))
-- `push` (1 edge(s))
-- `assign` (1 edge(s))
 
 ### Incoming
 
-- `./services/coder/src/routes/coder.test.js` (6 edge(s))
-- `resolve` (2 edge(s))
-- `after` (2 edge(s))
-- `require` (2 edge(s))
-- `deepEqual` (2 edge(s))
-- `keys` (1 edge(s))
-- `push` (1 edge(s))
-- `assign` (1 edge(s))
-- `map` (1 edge(s))
-- `equal` (1 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:conversation threads: create, append (auto-title), list, get, rename, delete@L266` (16 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:planner job and status routes honor the exact selected organization and project@L447` (16 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:memory write, list, and delete round-trip with server-side validation@L144` (14 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L567` (8 edge(s))
+- `equal` (7 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:memory records are stamped and isolated by selected organization/project@L192` (6 edge(s))
+- `./services/planner/src/routes/agent.test.js` (5 edge(s))
+- `require` (3 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:memory-search detects scope from the query and returns scoped stored matches@L175` (2 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:business/prepare resolves the linked business and forwards pipeline output@L249` (2 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:deleting a conversation cascades to its attachments (best-effort) before removing it@L318` (2 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:a cascade failure never blocks the conversation delete itself@L347` (2 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:a conversation with no org/project context skips the cascade entirely (nothing could have been attached without it)@L374` (2 edge(s))
+- `ok` (2 edge(s))
+- `every` (1 edge(s))

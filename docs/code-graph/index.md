@@ -4,7 +4,7 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 266
+**Total communities**: 263
 
 ## Communities
 
@@ -16,9 +16,9 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-backend | 2 | [agent-backend.md](agent-backend.md) |
 | agent-business | 2 | [agent-business.md](agent-business.md) |
 | agent-business-pipeline-error | 2 | [agent-business-pipeline-error.md](agent-business-pipeline-error.md) |
-| agent-checks | 18 | [agent-checks.md](agent-checks.md) |
+| agent-checks | 15 | [agent-checks.md](agent-checks.md) |
 | agent-coder-error | 2 | [agent-coder-error.md](agent-coder-error.md) |
-| agent-context | 383 | [agent-context.md](agent-context.md) |
+| agent-context | 362 | [agent-context.md](agent-context.md) |
 | agent-derive | 2 | [agent-derive.md](agent-derive.md) |
 | agent-encode | 126 | [agent-encode.md](agent-encode.md) |
 | agent-failing | 3 | [agent-failing.md](agent-failing.md) |
@@ -31,6 +31,8 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-id | 3 | [agent-id.md](agent-id.md) |
 | agent-knowledge-search-error | 2 | [agent-knowledge-search-error.md](agent-knowledge-search-error.md) |
 | agent-local-intelligence-error | 2 | [agent-local-intelligence-error.md](agent-local-intelligence-error.md) |
+| agent-memory | 253 | [agent-memory.md](agent-memory.md) |
+| agent-model | 201 | [agent-model.md](agent-model.md) |
 | agent-models | 41 | [agent-models.md](agent-models.md) |
 | agent-normalize | 19 | [agent-normalize.md](agent-normalize.md) |
 | agent-organization-context-mismatch | 2 | [agent-organization-context-mismatch.md](agent-organization-context-mismatch.md) |
@@ -44,14 +46,12 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-query | 11 | [agent-query.md](agent-query.md) |
 | agent-query-test-l113 | 4 | [agent-query-test-l113.md](agent-query-test-l113.md) |
 | agent-repository-broker-error | 2 | [agent-repository-broker-error.md](agent-repository-broker-error.md) |
-| agent-resolve | 249 | [agent-resolve.md](agent-resolve.md) |
+| agent-resolve | 2 | [agent-resolve.md](agent-resolve.md) |
 | agent-resolve-effective | 2 | [agent-resolve-effective.md](agent-resolve-effective.md) |
-| agent-resolve-proxied | 2 | [agent-resolve-proxied.md](agent-resolve-proxied.md) |
 | agent-response | 2 | [agent-response.md](agent-response.md) |
-| agent-review | 121 | [agent-review.md](agent-review.md) |
 | agent-scope | 22 | [agent-scope.md](agent-scope.md) |
-| agent-seed | 92 | [agent-seed.md](agent-seed.md) |
 | agent-settings | 6 | [agent-settings.md](agent-settings.md) |
+| agent-skill | 423 | [agent-skill.md](agent-skill.md) |
 | agent-stage | 170 | [agent-stage.md](agent-stage.md) |
 | agent-stage-execution-error | 2 | [agent-stage-execution-error.md](agent-stage-execution-error.md) |
 | agent-stage-execution-store-error | 2 | [agent-stage-execution-store-error.md](agent-stage-execution-store-error.md) |
@@ -74,7 +74,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | archagentix-setup | 7 | [archagentix-setup.md](archagentix-setup.md) |
 | archagentix-worker | 2 | [archagentix-worker.md](archagentix-worker.md) |
 | attachments-attachment | 105 | [attachments-attachment.md](attachments-attachment.md) |
-| auth-fetch | 5 | [auth-fetch.md](auth-fetch.md) |
+| auth-fetch | 3 | [auth-fetch.md](auth-fetch.md) |
 | billing-job | 7 | [billing-job.md](billing-job.md) |
 | billing-verify | 2 | [billing-verify.md](billing-verify.md) |
 | commands-resolve | 112 | [commands-resolve.md](commands-resolve.md) |
@@ -101,6 +101,8 @@ Auto-generated documentation from the code knowledge graph community structure.
 | gcp-ensure | 3 | [gcp-ensure.md](gcp-ensure.md) |
 | gcp-env | 2 | [gcp-env.md](gcp-env.md) |
 | gcp-names | 22 | [gcp-names.md](gcp-names.md) |
+| gcp-note | 51 | [gcp-note.md](gcp-note.md) |
+| gcp-pool | 3 | [gcp-pool.md](gcp-pool.md) |
 | gcp-py | 6 | [gcp-py.md](gcp-py.md) |
 | gcp-read | 2 | [gcp-read.md](gcp-read.md) |
 | gcp-runtime | 6 | [gcp-runtime.md](gcp-runtime.md) |
@@ -114,15 +116,13 @@ Auto-generated documentation from the code knowledge graph community structure.
 | harnesses-agent-runtime-error | 2 | [harnesses-agent-runtime-error.md](harnesses-agent-runtime-error.md) |
 | harnesses-fake | 3 | [harnesses-fake.md](harnesses-fake.md) |
 | harnesses-fake-google | 3 | [harnesses-fake-google.md](harnesses-fake-google.md) |
-| harnesses-memory | 307 | [harnesses-memory.md](harnesses-memory.md) |
 | hooks-touch | 7 | [hooks-touch.md](hooks-touch.md) |
-| js-analytics | 46 | [js-analytics.md](js-analytics.md) |
+| js-analytics | 45 | [js-analytics.md](js-analytics.md) |
 | js-fake | 4 | [js-fake.md](js-fake.md) |
 | js-fake-text-node | 2 | [js-fake-text-node.md](js-fake-text-node.md) |
 | js-legal | 17 | [js-legal.md](js-legal.md) |
 | js-minted | 4 | [js-minted.md](js-minted.md) |
-| js-notify | 22 | [js-notify.md](js-notify.md) |
-| js-route | 29 | [js-route.md](js-route.md) |
+| js-route | 30 | [js-route.md](js-route.md) |
 | js-single | 5 | [js-single.md](js-single.md) |
 | messaging-decode | 2 | [messaging-decode.md](messaging-decode.md) |
 | messaging-job | 3 | [messaging-job.md](messaging-job.md) |
@@ -132,7 +132,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | pipeline-pipeline-contract-error | 2 | [pipeline-pipeline-contract-error.md](pipeline-pipeline-contract-error.md) |
 | pipeline-pipeline-repository-error | 2 | [pipeline-pipeline-repository-error.md](pipeline-pipeline-repository-error.md) |
 | pipeline-snapshot | 6 | [pipeline-snapshot.md](pipeline-snapshot.md) |
-| pipeline-stage | 141 | [pipeline-stage.md](pipeline-stage.md) |
+| pipeline-stage | 135 | [pipeline-stage.md](pipeline-stage.md) |
 | provisioning-completed | 3 | [provisioning-completed.md](provisioning-completed.md) |
 | provisioning-job | 32 | [provisioning-job.md](provisioning-job.md) |
 | provisioning-provision | 14 | [provisioning-provision.md](provisioning-provision.md) |
@@ -147,8 +147,9 @@ Auto-generated documentation from the code knowledge graph community structure.
 | routes-context | 5 | [routes-context.md](routes-context.md) |
 | routes-conversation | 19 | [routes-conversation.md](routes-conversation.md) |
 | routes-discovery | 2 | [routes-discovery.md](routes-discovery.md) |
-| routes-handler | 6 | [routes-handler.md](routes-handler.md) |
-| routes-invoke | 5 | [routes-invoke.md](routes-invoke.md) |
+| routes-handler | 5 | [routes-handler.md](routes-handler.md) |
+| routes-handler-post | 4 | [routes-handler-post.md](routes-handler-post.md) |
+| routes-invoke | 3 | [routes-invoke.md](routes-invoke.md) |
 | routes-normalize | 6 | [routes-normalize.md](routes-normalize.md) |
 | routes-normalize-host | 2 | [routes-normalize-host.md](routes-normalize-host.md) |
 | routes-project-task-error | 2 | [routes-project-task-error.md](routes-project-task-error.md) |
@@ -158,15 +159,13 @@ Auto-generated documentation from the code knowledge graph community structure.
 | routes-request-workspace | 2 | [routes-request-workspace.md](routes-request-workspace.md) |
 | routes-route | 6 | [routes-route.md](routes-route.md) |
 | routes-route-handler | 5 | [routes-route-handler.md](routes-route-handler.md) |
-| routes-route-invoke | 3 | [routes-route-invoke.md](routes-route-invoke.md) |
+| routes-route-invoke | 2 | [routes-route-invoke.md](routes-route-invoke.md) |
 | routes-sanitize | 3 | [routes-sanitize.md](routes-sanitize.md) |
 | routes-settings | 5 | [routes-settings.md](routes-settings.md) |
 | routes-settings-tier | 4 | [routes-settings-tier.md](routes-settings-tier.md) |
 | routes-state | 2 | [routes-state.md](routes-state.md) |
+| routes-stub | 3 | [routes-stub.md](routes-stub.md) |
 | routes-substrate | 16 | [routes-substrate.md](routes-substrate.md) |
-| routes-test:confirmed | 2 | [routes-test-confirmed.md](routes-test-confirmed.md) |
-| routes-test:get | 5 | [routes-test-get.md](routes-test-get.md) |
-| routes-test:memory | 15 | [routes-test-memory.md](routes-test-memory.md) |
 | routes-workspace | 4 | [routes-workspace.md](routes-workspace.md) |
 | schemas-github | 6 | [schemas-github.md](schemas-github.md) |
 | schemas-jira | 5 | [schemas-jira.md](schemas-jira.md) |
@@ -189,16 +188,16 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-agent | 2 | [src-agent.md](src-agent.md) |
 | src-blockers | 25 | [src-blockers.md](src-blockers.md) |
 | src-checkpoint | 30 | [src-checkpoint.md](src-checkpoint.md) |
-| src-coder | 3 | [src-coder.md](src-coder.md) |
+| src-coder | 2 | [src-coder.md](src-coder.md) |
 | src-coding | 30 | [src-coding.md](src-coding.md) |
 | src-command | 10 | [src-command.md](src-command.md) |
 | src-command-workspace | 10 | [src-command-workspace.md](src-command-workspace.md) |
 | src-configured | 2 | [src-configured.md](src-configured.md) |
 | src-constant | 5 | [src-constant.md](src-constant.md) |
-| src-context | 232 | [src-context.md](src-context.md) |
+| src-context | 273 | [src-context.md](src-context.md) |
 | src-context-forwarded | 10 | [src-context-forwarded.md](src-context-forwarded.md) |
 | src-context-request | 10 | [src-context-request.md](src-context-request.md) |
-| src-context-trace | 26 | [src-context-trace.md](src-context-trace.md) |
+| src-context-trace | 24 | [src-context-trace.md](src-context-trace.md) |
 | src-context-trusted | 7 | [src-context-trusted.md](src-context-trusted.md) |
 | src-cors | 8 | [src-cors.md](src-cors.md) |
 | src-docs | 18 | [src-docs.md](src-docs.md) |
@@ -214,7 +213,6 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-javascript | 3 | [src-javascript.md](src-javascript.md) |
 | src-javascript-files | 3 | [src-javascript-files.md](src-javascript-files.md) |
 | src-javascript-static | 3 | [src-javascript-static.md](src-javascript-static.md) |
-| src-label | 86 | [src-label.md](src-label.md) |
 | src-linear-error | 2 | [src-linear-error.md](src-linear-error.md) |
 | src-match | 2 | [src-match.md](src-match.md) |
 | src-message | 3 | [src-message.md](src-message.md) |
@@ -228,6 +226,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-parse-org | 2 | [src-parse-org.md](src-parse-org.md) |
 | src-path | 8 | [src-path.md](src-path.md) |
 | src-pipeline-admission-error | 2 | [src-pipeline-admission-error.md](src-pipeline-admission-error.md) |
+| src-planner | 2 | [src-planner.md](src-planner.md) |
 | src-provider-unavailable | 2 | [src-provider-unavailable.md](src-provider-unavailable.md) |
 | src-public | 22 | [src-public.md](src-public.md) |
 | src-py | 6 | [src-py.md](src-py.md) |
@@ -240,16 +239,14 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-shutdown | 2 | [src-shutdown.md](src-shutdown.md) |
 | src-skills | 2 | [src-skills.md](src-skills.md) |
 | src-source | 4 | [src-source.md](src-source.md) |
-| src-stage | 106 | [src-stage.md](src-stage.md) |
+| src-stage | 98 | [src-stage.md](src-stage.md) |
 | src-state | 6 | [src-state.md](src-state.md) |
 | src-status | 5 | [src-status.md](src-status.md) |
 | src-store | 20 | [src-store.md](src-store.md) |
-| src-stream | 41 | [src-stream.md](src-stream.md) |
 | src-stream-token-unavailable-error | 2 | [src-stream-token-unavailable-error.md](src-stream-token-unavailable-error.md) |
-| src-test:planner | 4 | [src-test-planner.md](src-test-planner.md) |
 | src-tick | 4 | [src-tick.md](src-tick.md) |
 | src-tick-autonomous | 4 | [src-tick-autonomous.md](src-tick-autonomous.md) |
-| src-tokens | 316 | [src-tokens.md](src-tokens.md) |
+| src-tokens | 311 | [src-tokens.md](src-tokens.md) |
 | src-trust | 5 | [src-trust.md](src-trust.md) |
 | src-trusted | 2 | [src-trusted.md](src-trusted.md) |
 | src-upstream | 5 | [src-upstream.md](src-upstream.md) |
@@ -274,5 +271,5 @@ Auto-generated documentation from the code knowledge graph community structure.
 | tools-safe | 2 | [tools-safe.md](tools-safe.md) |
 | v1-step-status-writeback | 2 | [v1-step-status-writeback.md](v1-step-status-writeback.md) |
 | views-el | 5 | [views-el.md](views-el.md) |
-| views-render | 741 | [views-render.md](views-render.md) |
+| views-render | 764 | [views-render.md](views-render.md) |
 | workflows-workflow | 2 | [workflows-workflow.md](workflows-workflow.md) |

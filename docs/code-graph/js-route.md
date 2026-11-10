@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 29 nodes
+Community of 30 nodes
 
-- **Size**: 29 nodes
-- **Cohesion**: 0.1754
+- **Size**: 30 nodes
+- **Cohesion**: 0.1669
 - **Dominant Language**: javascript
 
 ## Members
@@ -31,6 +31,7 @@ Community of 29 nodes
 | test:rapid re-entry into "+ New chat" never leaves the composer stuck disabled@L538 | Test | ./e2e/agent-workspace.spec.js | 538-568 |
 | test:remember phrasing surfaces a confirm-before-save memory draft@L570 | Test | ./e2e/agent-workspace.spec.js | 570-586 |
 | test:troubleshooting requests combine diagnostic checks with retained log signals@L588 | Test | ./e2e/agent-workspace.spec.js | 588-627 |
+| test:implementation drafts require project selection and explicit approval before task creation@L629 | Test | ./e2e/agent-workspace.spec.js | 629-676 |
 | installFakeSpeechRecognition | Function | ./e2e/agent-workspace.spec.js | 680-703 |
 | test:mic dictation button has a distinct accessible name from Send@L705 | Test | ./e2e/agent-workspace.spec.js | 705-712 |
 | test:dictation button degrades gracefully when the browser has no SpeechRecognition@L714 | Test | ./e2e/agent-workspace.spec.js | 714-729 |
@@ -52,36 +53,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (126 edge(s))
-- `locator` (92 edge(s))
-- `toBeVisible` (28 edge(s))
-- `getByRole` (27 edge(s))
-- `toContainText` (25 edge(s))
+- `expect` (143 edge(s))
+- `locator` (95 edge(s))
+- `getByRole` (33 edge(s))
+- `toBeVisible` (30 edge(s))
+- `toContainText` (27 edge(s))
 - `request` (24 edge(s))
 - `toHaveCount` (22 edge(s))
-- `click` (18 edge(s))
+- `click` (19 edge(s))
 - `toHaveURL` (13 edge(s))
 - `postDataJSON` (11 edge(s))
+- `toHaveLength` (11 edge(s))
 - `split` (10 edge(s))
 - `method` (8 edge(s))
 - `push` (8 edge(s))
 - `filter` (7 edge(s))
-- `toHaveLength` (7 edge(s))
 
 ### Incoming
 
-- `expect` (123 edge(s))
-- `locator` (90 edge(s))
-- `./e2e/agent-workspace.spec.js` (27 edge(s))
-- `toBeVisible` (27 edge(s))
-- `getByRole` (25 edge(s))
-- `toContainText` (25 edge(s))
+- `expect` (140 edge(s))
+- `locator` (93 edge(s))
+- `getByRole` (31 edge(s))
+- `toBeVisible` (29 edge(s))
+- `./e2e/agent-workspace.spec.js` (28 edge(s))
+- `toContainText` (27 edge(s))
 - `toHaveCount` (22 edge(s))
-- `click` (17 edge(s))
+- `click` (18 edge(s))
 - `toHaveURL` (13 edge(s))
+- `toHaveLength` (11 edge(s))
 - `./public/js/omnibox-router.mjs::classifyOmniboxIntent` (9 edge(s))
-- `toHaveLength` (7 edge(s))
+- `toBeEnabled` (7 edge(s))
 - `split` (6 edge(s))
 - `request` (6 edge(s))
-- `toBeEnabled` (5 edge(s))
 - `setInputFiles` (5 edge(s))

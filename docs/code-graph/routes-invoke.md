@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 3 nodes
 
-- **Size**: 5 nodes
-- **Cohesion**: 0.2222
+- **Size**: 3 nodes
+- **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,8 +17,6 @@ Community of 5 nodes
 | routeHandler | Function | ./services/planner/src/routes/agent.test.js | 10-14 |
 | invoke | Function | ./services/planner/src/routes/agent.test.js | 24-28 |
 | invokeWithBody | Function | ./services/planner/src/routes/agent.test.js | 30-34 |
-| test:omnibox policy routes greetings and unsafe requests before local inference@L66 | Test | ./services/planner/src/routes/agent.test.js | 66-96 |
-| test:OMLX model discovery uses /v1/models, keeps Bearer auth server-side, and normalizes profiles@L98 | Test | ./services/planner/src/routes/agent.test.js | 98-142 |
 
 ## Execution Flows
 
@@ -28,24 +26,14 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (11 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:omnibox policy routes greetings and unsafe requests before local inference@L66` (5 edge(s))
 - `handler` (2 edge(s))
-- `resolve` (2 edge(s))
-- `after` (2 edge(s))
-- `require` (2 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:OMLX model discovery uses /v1/models, keeps Bearer auth server-side, and normalizes profiles@L98` (2 edge(s))
 - `find` (1 edge(s))
 - `ok` (1 edge(s))
-- `deepEqual` (1 edge(s))
-- `includes` (1 edge(s))
-- `stringify` (1 edge(s))
 
 ### Incoming
 
-- `equal` (11 edge(s))
-- `./services/planner/src/routes/agent.test.js` (5 edge(s))
-- `resolve` (2 edge(s))
-- `after` (2 edge(s))
-- `require` (2 edge(s))
-- `deepEqual` (1 edge(s))
-- `includes` (1 edge(s))
-- `stringify` (1 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:omnibox policy routes greetings and unsafe requests before local inference@L66` (5 edge(s))
+- `./services/planner/src/routes/agent.test.js` (3 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:OMLX model discovery uses /v1/models, keeps Bearer auth server-side, and normalizes profiles@L98` (2 edge(s))

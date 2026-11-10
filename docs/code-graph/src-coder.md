@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 2 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.1333
+- **Size**: 2 nodes
+- **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,7 +16,6 @@ Community of 3 nodes
 |------|------|------|-------|
 | coderHandler | Function | ./services/coder/src/pubsub.test.js | 9-13 |
 | invoke | Function | ./services/coder/src/pubsub.test.js | 15-22 |
-| test:coder Pub/Sub threads the allowlisted llm-gateway flag into runTicket@L75 | Test | ./services/coder/src/pubsub.test.js | 75-101 |
 
 ## Execution Flows
 
@@ -26,30 +25,20 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `find` (3 edge(s))
 - `./services/coder/src/pubsub.test.js::test:coder Pub/Sub binds concurrent decoded contexts for the full async dispatch@L24` (3 edge(s))
-- `resolve` (3 edge(s))
+- `./services/coder/src/pubsub.test.js::test:coder Pub/Sub threads the allowlisted llm-gateway flag into runTicket@L75` (3 edge(s))
 - `./services/coder/src/pubsub.test.js::test:coder Pub/Sub missing context retains the legacy empty workspace@L103` (2 edge(s))
-- `equal` (2 edge(s))
+- `resolve` (2 edge(s))
+- `find` (1 edge(s))
 - `ok` (1 edge(s))
 - `at` (1 edge(s))
 - `catch` (1 edge(s))
 - `handler` (1 edge(s))
 - `toPushEnvelope` (1 edge(s))
-- `push` (1 edge(s))
-- `finish` (1 edge(s))
-- `after` (1 edge(s))
-- `require` (1 edge(s))
 
 ### Incoming
 
-- `./services/coder/src/pubsub.test.js` (3 edge(s))
 - `./services/coder/src/pubsub.test.js::test:coder Pub/Sub binds concurrent decoded contexts for the full async dispatch@L24` (3 edge(s))
+- `./services/coder/src/pubsub.test.js::test:coder Pub/Sub threads the allowlisted llm-gateway flag into runTicket@L75` (3 edge(s))
+- `./services/coder/src/pubsub.test.js` (2 edge(s))
 - `./services/coder/src/pubsub.test.js::test:coder Pub/Sub missing context retains the legacy empty workspace@L103` (2 edge(s))
-- `equal` (2 edge(s))
-- `find` (2 edge(s))
-- `resolve` (1 edge(s))
-- `push` (1 edge(s))
-- `finish` (1 edge(s))
-- `after` (1 edge(s))
-- `require` (1 edge(s))
