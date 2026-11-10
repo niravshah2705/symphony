@@ -4,68 +4,107 @@
 
 ## Overview
 
-Community of 19 nodes
+Community of 281 nodes
 
-- **Size**: 19 nodes
-- **Cohesion**: 0.3448
+- **Size**: 281 nodes
+- **Cohesion**: 0.2843
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| ConversationError | Class | ./packages/shared/src/agent/conversations.js | 26-32 |
-| constructor | Function | ./packages/shared/src/agent/conversations.js | 27-31 |
-| bound | Function | ./packages/shared/src/agent/conversations.js | 35-37 |
-| normalizeAttachmentRef | Function | ./packages/shared/src/agent/conversations.js | 40-52 |
-| normalizeAttachmentRefs | Function | ./packages/shared/src/agent/conversations.js | 54-61 |
-| normalizeCitation | Function | ./packages/shared/src/agent/conversations.js | 64-74 |
-| normalizeCitations | Function | ./packages/shared/src/agent/conversations.js | 76-83 |
-| normalizeMessage | Function | ./packages/shared/src/agent/conversations.js | 85-113 |
-| normalizeMessages | Function | ./packages/shared/src/agent/conversations.js | 116-124 |
-| normalizeTitle | Function | ./packages/shared/src/agent/conversations.js | 132-136 |
-| test:normalizeMessages keeps only allowlisted fields per role (no mass assignment)@L15 | Test | ./packages/shared/src/agent/conversations.test.js | 15-25 |
-| test:normalizeMessages validates array shape and size@L27 | Test | ./packages/shared/src/agent/conversations.test.js | 27-31 |
-| test:normalizeMessages enforces role and required content@L33 | Test | ./packages/shared/src/agent/conversations.test.js | 33-37 |
-| test:normalizeMessages bounds long fields@L39 | Test | ./packages/shared/src/agent/conversations.test.js | 39-42 |
-| test:normalizeTitle trims/bounds and rejects empty@L50 | Test | ./packages/shared/src/agent/conversations.test.js | 50-53 |
-| test:normalizeMessages keeps a bounded attachments array on user messages, omitted when absent@L55 | Test | ./packages/shared/src/agent/conversations.test.js | 55-62 |
-| test:normalizeMessages rejects malformed or oversized attachment references@L64 | Test | ./packages/shared/src/agent/conversations.test.js | 64-82 |
-| test:normalizeMessages keeps a bounded citations array on assistant messages, omitted when absent@L84 | Test | ./packages/shared/src/agent/conversations.test.js | 84-93 |
-| test:normalizeMessages rejects malformed citations@L95 | Test | ./packages/shared/src/agent/conversations.test.js | 95-104 |
+| test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
+| test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
+| test:the worker pool name the planner selects is one string in four places@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-616 |
+| test:the power workflow waits only on namespaces the module still creates@L138 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 138-160 |
+| test@L146 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 146-146 |
+| test:the static-IP grant lists the addresses the module owns@L162 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 162-177 |
+| test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L351 | Test | ./e2e/persistent-footer.spec.js | 351-455 |
+| resolveDeps | Function | ./packages/shared/src/agent/approval-gate.js | 32-48 |
+| bp | Function | ./packages/shared/src/agent/approval-gate.js | 34-34 |
+| defaultResolveBusiness | Function | ./packages/shared/src/agent/approval-gate.js | 50-64 |
+| computeDeadline | Function | ./packages/shared/src/agent/approval-gate.js | 67-71 |
+| createGate | Function | ./packages/shared/src/agent/approval-gate.js | 77-98 |
+| proceedGate | Function | ./packages/shared/src/agent/approval-gate.js | 107-166 |
+| approveGate | Function | ./packages/shared/src/agent/approval-gate.js | 169-175 |
+| reevaluateGate | Function | ./packages/shared/src/agent/approval-gate.js | 182-221 |
+| sweepExpiredGates | Function | ./packages/shared/src/agent/approval-gate.js | 229-254 |
+| makeStore | Function | ./packages/shared/src/agent/approval-gate.test.js | 9-33 |
+| getApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 21-21 |
+| updateApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 22-27 |
+| makeDeps | Function | ./packages/shared/src/agent/approval-gate.test.js | 36-50 |
+| test:createGate sets deadline = createdAt + waitMinutes exactly and starts awaiting@L52 | Test | ./packages/shared/src/agent/approval-gate.test.js | 52-58 |
+| test:sweepExpiredGates auto-approves a past-deadline gate once and documents the decision@L60 | Test | ./packages/shared/src/agent/approval-gate.test.js | 60-76 |
+| test:sweepExpiredGates leaves a gate whose deadline is still in the future@L78 | Test | ./packages/shared/src/agent/approval-gate.test.js | 78-85 |
+| test:proceedGate is idempotent — prepareBusiness runs once across repeated calls@L87 | Test | ./packages/shared/src/agent/approval-gate.test.js | 87-97 |
+| test:approveGate proceeds a human decision; a non-awaiting or missing gate throws GateError@L99 | Test | ./packages/shared/src/agent/approval-gate.test.js | 99-108 |
+| test:sweepExpiredGates recovers gates decided but not yet proceeded (crash between)@L110 | Test | ./packages/shared/src/agent/approval-gate.test.js | 110-121 |
+| test:reevaluateGate supersedes the old gate; green returns no gate, amber creates a fresh one with attempts+1@L123 | Test | ./packages/shared/src/agent/approval-gate.test.js | 123-146 |
+| test:gate lifecycle preserves native context and publishes only to that workspace@L148 | Test | ./packages/shared/src/agent/approval-gate.test.js | 148-169 |
+| test:default business resolution selects only the gate workspace when ids collide@L171 | Test | ./packages/shared/src/agent/approval-gate.test.js | 171-192 |
+| clean | Function | ./packages/shared/src/agent/business-pipeline.js | 62-64 |
+| fenced | Function | ./packages/shared/src/agent/business-pipeline.js | 67-69 |
+| buildDeps | Function | ./packages/shared/src/agent/business-pipeline.js | 120-131 |
+| evaluationSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 141-155 |
+| fraudSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 157-165 |
+| revenueModelSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 167-173 |
+| revenueSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 175-181 |
+| segmentsSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 183-190 |
+| architectureNodes | Function | ./packages/shared/src/agent/business-pipeline.js | 192-201 |
+| designSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 203-210 |
+| designHtmlSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 212-222 |
+| escapeHtml | Function | ./packages/shared/src/agent/business-pipeline.js | 224-227 |
+| sanitizeDesignHtml | Function | ./packages/shared/src/agent/business-pipeline.js | 237-248 |
+| evaluatePrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 258-266 |
+| fraudPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 268-274 |
+| revenuePrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 276-282 |
+| breakdownPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 284-290 |
+| designPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 292-298 |
+| clampScore | Function | ./packages/shared/src/agent/business-pipeline.js | 302-304 |
+| signalFromScore | Function | ./packages/shared/src/agent/business-pipeline.js | 306-310 |
+| normalizeCriteria | Function | ./packages/shared/src/agent/business-pipeline.js | 312-321 |
+
+*... and 231 more members.*
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 
 ## Dependencies
 
 ### Outgoing
 
-- `throws` (13 edge(s))
-- `isArray` (6 edge(s))
-- `equal` (6 edge(s))
-- `deepEqual` (5 edge(s))
-- `trim` (4 edge(s))
-- `String` (4 edge(s))
-- `map` (3 edge(s))
-- `sort` (3 edge(s))
-- `keys` (3 edge(s))
-- `slice` (2 edge(s))
-- `test` (2 edge(s))
-- `fill` (2 edge(s))
-- `Number` (1 edge(s))
-- `isFinite` (1 edge(s))
-- `replace` (1 edge(s))
+- `equal` (291 edge(s))
+- `ok` (50 edge(s))
+- `String` (50 edge(s))
+- `match` (46 edge(s))
+- `map` (43 edge(s))
+- `isArray` (36 edge(s))
+- `deepEqual` (34 edge(s))
+- `filter` (33 edge(s))
+- `join` (33 edge(s))
+- `slice` (32 edge(s))
+- `includes` (30 edge(s))
+- `expect` (29 edge(s))
+- `trim` (28 edge(s))
+- `push` (26 edge(s))
+- `require` (22 edge(s))
 
 ### Incoming
 
-- `./packages/shared/src/agent/conversations.js` (15 edge(s))
-- `throws` (13 edge(s))
-- `./packages/shared/src/agent/conversations.test.js` (9 edge(s))
-- `equal` (6 edge(s))
-- `deepEqual` (5 edge(s))
-- `sort` (3 edge(s))
-- `keys` (3 edge(s))
-- `fill` (2 edge(s))
-- `repeat` (1 edge(s))
+- `equal` (291 edge(s))
+- `ok` (50 edge(s))
+- `match` (43 edge(s))
+- `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
+- `deepEqual` (34 edge(s))
+- `expect` (29 edge(s))
+- `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
+- `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
+- `./packages/shared/src/agent/global-questions.js` (21 edge(s))
+- `throws` (21 edge(s))
+- `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
+- `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
+- `./packages/shared/src/agent/coverage-service.test.js` (16 edge(s))
+- `filter` (15 edge(s))
+- `./packages/shared/src/agent/approval-gate.js` (15 edge(s))

@@ -34,10 +34,11 @@ name: Substrate node pools (cleanup / recreate)
 #   in GCS is the real backup either way, so the flag is belt-and-braces — but do
 #   not enable it until the grant is made. Granting is deliberately NOT automated
 #   here; an IAM write is a wider blast radius than a node-pool delete, because
-#   the runner runs the code of whatever branch is checked out. When it is wanted:
+#   the runner runs the code of whatever branch is checked out. When it is wanted —
+#   `<GCP_DEPLOYER_SA>` is that secret's value, which the runner masks in every log:
 #
 #     gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-#       --member="serviceAccount:$SA" \
+#       --member="serviceAccount:<GCP_DEPLOYER_SA>" \
 #       --role="roles/compute.storageAdmin"
 #
 #   The "Report authorization" step re-checks this at run time instead of trusting
@@ -170,16 +171,32 @@ jobs:
       - name: Report authorization
         run: |
           set -euo pipefail
+          # The SA email is the GCP_DEPLOYER_SA secret, so the runner masks every
+          # occurrence of it in this log and in the summary. Nothing is wrong — it is
+          # simply not printable, which is why the grant command below is emitted with
+          # a placeholder rather than a value an operator could paste.
           SA="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
-          echo "identity: $SA"
+          echo "identity: $SA  (masked in logs: this is secrets.GCP_DEPLOYER_SA)"
 
           # Read the live policy rather than trusting the header: roles are edited
           # outside this repo, and the failure mode of a stale matrix is a teardown
           # that aborts halfway — pools deleted, backup unwritten, no undo.
+          #
+          # `bindings.members:` with a colon, not `=`: gcloud's `=` form matches
+          # nothing today (it prints a deprecation warning saying it will match in the
+          # future) and exits 0, so `=` reads as "this SA holds no roles at all" and
+          # the step fails a perfectly authorized run.
           ROLES="$(gcloud projects get-iam-policy "$PROJECT" \
                     --flatten='bindings[].members' \
-                    --filter="bindings.members=$SA" \
+                    --filter="bindings.members:$SA" \
                     --format='value(bindings.role)' | sort)"
+          if [ -z "$ROLES" ]; then
+            # Say which half broke. Reporting "lacks container.admin" when the policy
+            # read produced nothing would send the operator to IAM when the problem is
+            # resourcemanager.getIamPolicy.
+            echo "::error::could not read $PROJECT's IAM policy for this identity — the role table below would be fiction"
+            exit 1
+          fi
 
           MISSING=""
           # need <full-role-id> <what it is for>. The if-form matters: a bare
@@ -230,11 +247,11 @@ jobs:
             for role in $MISSING; do
               {
                 echo ''
-                echo "\`$SA\` lacks \`$role\`."
+                echo "This identity lacks \`$role\`."
                 echo ''
                 echo '```'
                 echo "gcloud projects add-iam-policy-binding $PROJECT \\"
-                echo "  --member=\"serviceAccount:$SA\" \\"
+                echo '  --member="serviceAccount:<GCP_DEPLOYER_SA>" \'
                 echo "  --role=\"$role\""
                 echo '```'
               } >> "$GITHUB_STEP_SUMMARY"
@@ -242,7 +259,7 @@ jobs:
             # Granting is not automated here: an IAM write is a wider blast radius
             # than a node-pool delete, because this runner checks out whatever branch
             # is dispatched. So the job stops and hands over the exact command.
-            echo "::error::$SA lacks$MISSING for this run; the grant command is in the summary"
+            echo "::error::missing role(s):$MISSING for this run; the grant command is in the summary"
             exit 1
           fi
 
