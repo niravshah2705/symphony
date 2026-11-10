@@ -16,10 +16,10 @@ Community of 51 nodes
 |------|------|------|-------|
 | note | Function | ./deploy/gcp/substrate-cleanup.sh | 75-75 |
 | after | Function | ./deploy/gcp/substrate-cleanup.sh | 81-81 |
-| run | Function | ./deploy/gcp/substrate-cleanup.sh | 84-86 |
-| clean_pool | Function | ./deploy/gcp/substrate-cleanup.sh | 156-176 |
-| mask_creds | Function | ./deploy/gcp/substrate-cleanup.sh | 208-217 |
-| park | Function | ./deploy/gcp/substrate-cleanup.sh | 291-293 |
+| run | Function | ./deploy/gcp/substrate-cleanup.sh | 84-89 |
+| clean_pool | Function | ./deploy/gcp/substrate-cleanup.sh | 159-179 |
+| mask_creds | Function | ./deploy/gcp/substrate-cleanup.sh | 211-220 |
+| park | Function | ./deploy/gcp/substrate-cleanup.sh | 294-296 |
 | test:logger: text output stays a human-readable line when nothing is bound@L21 | Test | ./packages/shared-core/src/logger.test.js | 21-25 |
 | test:logger: a credential in the meta payload stays masked in both formats@L69 | Test | ./packages/shared-core/src/logger.test.js | 69-83 |
 | test:measureSkillContextSize &amp; computeContextMetrics calculate context reduction@L21 | Test | ./packages/shared/src/agent/skill-router/skill-router.test.js | 21-65 |
