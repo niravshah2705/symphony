@@ -54,3 +54,6 @@ registry-bundle/
 .agents/skills/cashfree-skills/
 .kiro/skills/
 .opencode/skills/cashfree-skills/
+
+# substrate-cleanup.sh snapshot mirror (cluster config; never commit)
+.substrate-state/

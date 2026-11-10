@@ -13,7 +13,9 @@ progress ledger and the by-hand path.
 **Sandbox capacity is live.** A `WorkerPool` exists, its 2 workers are Ready and
 registered, `atelet` runs on the worker node, and the bundled Postgres claim is 50Gi.
 The original ask — "fix everything until we see a sandbox getting created" — is met at
-the infrastructure layer.
+the infrastructure layer. It has been torn down and brought back since: as of
+2026-11-10 `substrate-check.sh` reports **14 passed, 1 failed**, and the one failure is
+cause 9 below, which does not affect sandbox capacity.
 
 **Not yet proven:** an actor created by *this app* reaching `ACTIVE`. The planner
 deployment still has no `SUBSTRATE_*` environment (see cause 5 below), so the
@@ -36,6 +38,55 @@ Run `deploy/gcp/substrate-check.sh` to reproduce every claim in this file.
 | Worker pool actually re-provisioned (cause 8's fix) | by hand: `gcloud container node-pools update` × 2 | machine type `n4-standard-4`, 100 GB `hyperdisk-balanced` (3000 IOPS / 140 MiB/s), min 1 / max 4; the E2 node is deleted and `planner-pool` stayed `2/2` throughout |
 | Worker nodes onto `COS_CONTAINERD` | by hand: `gcloud container clusters upgrade … --image-type=COS_CONTAINERD --quiet` | `node-pools describe … --format="value(config.imageType)"` → `COS_CONTAINERD`; the surge node `gke-…-substrate-worker-1b371960-tpxz` is Ready on `Container-Optimized OS from Google` and the Ubuntu node it replaced is gone |
 | The by-hand cluster state and the Terraform module agree | PR #271, verified by the merge-triggered apply | run [42684395694](https://github.com/niravshah2705/symphony/actions/runs/42684395694) job `reconcile substrate gke`: **"No changes. Your infrastructure matches the configuration"**, `Plan: 0 create, 0 update, 0 delete` — so the node GKE is running is the node the module describes, not just the node someone typed into `gcloud` |
+| Backup, force-teardown and restore as two scripts | `deploy/gcp/substrate-cleanup.sh`, `deploy/gcp/substrate-recreate.sh` | the restore ran end-to-end on 2026-11-10: 6 Ready nodes, `postgres-0 2/2`, `planner-pool` `2/2 Ready`, `atelet` on every worker node; the backup ran into `gs://adlc-9e72f-substrate-backup/` with 7/7 objects verified |
+
+## Teardown and restore
+
+The cluster has now been emptied and rebuilt twice by hand, so the pair of scripts
+exists to make that a documented operation instead of a sequence of `gcloud` calls
+remembered under pressure.
+
+```bash
+# 1. Back everything up, then delete the pools (add --dry-run to rehearse,
+#    --keep-pools to park at 0 nodes instead of deleting, --backup-only to skip the teardown)
+deploy/gcp/substrate-cleanup.sh
+# 2. Rebuild from exactly that configuration, then prove a worker pod comes up
+deploy/gcp/substrate-recreate.sh --snapshot=gs://<bucket>/<cluster>/<stamp>
+deploy/gcp/substrate-check.sh
+```
+
+What the cleanup guarantees, because each of these was a bug found while writing it:
+
+- **No teardown without a proven backup.** The dump is gzip-tested, size-checked and
+  required to contain `CREATE ROLE` before any `gcloud` delete runs, and the upload is
+  verified object-by-object; a failed or short backup aborts the script.
+- **The dump is real.** The first run produced 18 `CREATE TABLE` and 22 `COPY` blocks
+  from `atepg`, and **0 role password hashes** — those roles authenticate by workload
+  certificate — so the bucket holds a restore path without holding a credential.
+- **Secret values never leave the cluster.** The namespace export omits `secret` from
+  its resource list, `secrets.json` records names and data *keys* only, and a mask pass
+  reduces any credential-shaped inline env value to a placeholder and prints how many
+  it hit (0 today) so an empty result is visible rather than merely plausible.
+- **The PD is the one thing it will not delete.** `data-postgres-0`'s 50 GiB
+  `pd-balanced` disk holds every atespace, actor and session key, survives the
+  teardown, and is removed only by `--destroy-pvc --yes`.
+- **The load balancer is cleaned by its owner, not by the pools.** Deleting every node
+  leaves the forwarding rule, target pool and health check provisioned and billing, so
+  the script deletes the `LoadBalancer` Service in `envoy-gateway-system` and lets the
+  in-cluster service controller release the Compute objects.
+
+The recreate side reads `pools.json` from the snapshot (`gs://` or local) so a restore
+reproduces what was running rather than what the script last guessed: machine type,
+boot disk type/size/IOPS/throughput, image type, autoscaling bounds, taint and label.
+A snapshot prefix it cannot read is a loud warning, not a silent fallback — the
+hyperdisk values took three attempts to get right and the defaults are the only other
+place they are written down.
+
+One timing lesson is encoded in the verify step: worker pods are **Ready minutes after
+they are Running**, because ateworker first waits for atelet to create
+`/var/lib/ate/worker-support.sock` and then for an epoch from ateapi. Checking once
+right after creation reports a false failure — which is exactly what the first restore
+run did, against a pool that was healthy ten seconds later.
 
 ## Root causes, all nine
 

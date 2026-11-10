@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 106 nodes
+Community of 98 nodes
 
-- **Size**: 106 nodes
-- **Cohesion**: 0.3328
+- **Size**: 98 nodes
+- **Cohesion**: 0.3086
 - **Dominant Language**: javascript
 
 ## Members
@@ -31,14 +31,6 @@ Community of 106 nodes
 | jsonRequest | Function | ./services/orchestrator/src/app.test.js | 78-88 |
 | integratedSetup | Function | ./services/orchestrator/src/app.test.js | 90-123 |
 | waitFor | Function | ./services/orchestrator/src/app.test.js | 125-131 |
-| test:control API starts, reads, resumes, and cancels a scoped run@L133 | Test | ./services/orchestrator/src/app.test.js | 133-162 |
-| test:direct HTTP start returns after durable admission without waiting for stage execution@L259 | Test | ./services/orchestrator/src/app.test.js | 259-295 |
-| test:authoritative context cannot be overridden and cross-scope status is hidden as 404@L297 | Test | ./services/orchestrator/src/app.test.js | 297-315 |
-| test:cloud mode exposes no direct internal result ingress despite a valid shared token@L350 | Test | ./services/orchestrator/src/app.test.js | 350-370 |
-| test:direct result ingress requires the shared token when configured@L395 | Test | ./services/orchestrator/src/app.test.js | 395-409 |
-| test:direct stage-specific result ingress enforces the stage in its URL@L411 | Test | ./services/orchestrator/src/app.test.js | 411-428 |
-| test:cloud internal ingress has neither a stage-specific nor generic shared-token bypass@L430 | Test | ./services/orchestrator/src/app.test.js | 430-453 |
-| test:cloud result ingress fails closed when OIDC identity constraints are absent@L455 | Test | ./services/orchestrator/src/app.test.js | 455-468 |
 | requiredString | Function | ./services/orchestrator/src/checkpointer.js | 24-27 |
 | checkpointIdFromConfig | Function | ./services/orchestrator/src/checkpointer.js | 29-33 |
 | configParts | Function | ./services/orchestrator/src/checkpointer.js | 35-44 |
@@ -64,8 +56,16 @@ Community of 106 nodes
 | test:production defaults deployment approval on while deployment itself stays off@L14 | Test | ./services/orchestrator/src/config.test.js | 14-21 |
 | test:settings approval service URL is explicit and normalized@L23 | Test | ./services/orchestrator/src/config.test.js | 23-26 |
 | test:pipeline messaging uses dedicated StageCommand topics@L28 | Test | ./services/orchestrator/src/config.test.js | 28-40 |
+| test:pipeline topic env names and push identity are configurable@L42 | Test | ./services/orchestrator/src/config.test.js | 42-57 |
+| approvalFromClaim | Function | ./services/orchestrator/src/controller.js | 12-26 |
+| PipelineOrchestrator | Class | ./services/orchestrator/src/controller.js | 28-293 |
+| constructor | Function | ./services/orchestrator/src/controller.js | 29-57 |
+| info | Function | ./services/orchestrator/src/controller.js | 48-48 |
+| error | Function | ./services/orchestrator/src/controller.js | 48-48 |
+| start | Function | ./services/orchestrator/src/controller.js | 59-76 |
+| advance | Function | ./services/orchestrator/src/controller.js | 78-108 |
 
-*... and 56 more members.*
+*... and 48 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 106 nodes
 
 ### Outgoing
 
-- `equal` (100 edge(s))
-- `json` (25 edge(s))
-- `deepEqual` (23 edge(s))
+- `equal` (77 edge(s))
 - `status` (22 edge(s))
+- `json` (20 edge(s))
+- `deepEqual` (19 edge(s))
 - `String` (18 edge(s))
 - `trim` (15 edge(s))
 - `map` (10 edge(s))
-- `after` (9 edge(s))
 - `next` (8 edge(s))
-- `close` (8 edge(s))
 - `./services/orchestrator/src/app.test.js::test:direct HTTP cancellation reports requested until the active worker result actually stops it@L181` (7 edge(s))
 - `repeat` (7 edge(s))
 - `post` (6 edge(s))
 - `includes` (6 edge(s))
 - `./services/orchestrator/src/app.test.js::test:direct HTTP retry returns typed 409 at attempt 100 without reopening the failed run@L224` (6 edge(s))
+- `./services/orchestrator/src/app.test.js::test:control API starts, reads, resumes, and cancels a scoped run@L133` (6 edge(s))
+- `push` (6 edge(s))
 
 ### Incoming
 
-- `equal` (100 edge(s))
-- `deepEqual` (23 edge(s))
+- `equal` (77 edge(s))
+- `deepEqual` (19 edge(s))
 - `./services/orchestrator/src/app.js` (17 edge(s))
 - `./services/orchestrator/src/controller.test.js` (16 edge(s))
-- `./services/orchestrator/src/app.test.js` (13 edge(s))
-- `after` (9 edge(s))
-- `close` (8 edge(s))
 - `./services/orchestrator/src/index.js` (8 edge(s))
 - `./services/orchestrator/src/app.test.js::test:direct HTTP cancellation reports requested until the active worker result actually stops it@L181` (7 edge(s))
 - `./services/orchestrator/src/checkpointer.js` (7 edge(s))
 - `./services/orchestrator/src/index.test.js` (7 edge(s))
 - `./services/orchestrator/src/app.test.js::test:direct HTTP retry returns typed 409 at attempt 100 without reopening the failed run@L224` (6 edge(s))
+- `./services/orchestrator/src/app.test.js::test:control API starts, reads, resumes, and cancels a scoped run@L133` (6 edge(s))
 - `repeat` (6 edge(s))
 - `map` (6 edge(s))
-- `json` (5 edge(s))
+- `./services/orchestrator/src/app.test.js` (5 edge(s))
+- `./services/orchestrator/src/config.js` (5 edge(s))
+- `./services/orchestrator/src/config.test.js` (5 edge(s))

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 316 nodes
+Community of 311 nodes
 
-- **Size**: 316 nodes
-- **Cohesion**: 0.1869
+- **Size**: 311 nodes
+- **Cohesion**: 0.1959
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 316 nodes
 | challengeFromVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 22-24 |
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 
-*... and 266 more members.*
+*... and 261 more members.*
 
 ## Execution Flows
 
@@ -85,36 +85,36 @@ Community of 316 nodes
 
 ### Outgoing
 
-- `equal` (242 edge(s))
+- `equal` (230 edge(s))
 - `filter` (42 edge(s))
 - `String` (37 edge(s))
 - `toISOString` (37 edge(s))
 - `Number` (34 edge(s))
-- `deepEqual` (28 edge(s))
 - `ok` (27 edge(s))
 - `slice` (25 edge(s))
 - `trim` (25 edge(s))
 - `isArray` (24 edge(s))
 - `includes` (23 edge(s))
-- `push` (22 edge(s))
+- `deepEqual` (22 edge(s))
 - `set` (21 edge(s))
 - `isFinite` (19 edge(s))
-- `map` (19 edge(s))
+- `find` (19 edge(s))
+- `now` (18 edge(s))
 
 ### Incoming
 
-- `equal` (242 edge(s))
+- `equal` (230 edge(s))
 - `./packages/shared-core/src/store.js` (181 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
-- `deepEqual` (28 edge(s))
 - `ok` (27 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
+- `deepEqual` (22 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
-- `push` (18 edge(s))
 - `./packages/shared-core/src/billing/cashfree-client.js` (17 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
 - `filter` (15 edge(s))
 - `match` (14 edge(s))
+- `push` (14 edge(s))
 - `getBillingAccount` (13 edge(s))
 - `./packages/shared-core/src/billing/pricing.js` (12 edge(s))

@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 3 nodes
 
-- **Size**: 5 nodes
+- **Size**: 3 nodes
 - **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
@@ -16,8 +16,6 @@ Community of 5 nodes
 |------|------|------|-------|
 | test:health is live while readiness reflects the SMTP transport@L82 | Test | ./services/email/src/app.test.js | 82-93 |
 | test:CORS preflight passes the gates untouched and an unlisted method falls to the catch-all@L170 | Test | ./services/gateway/src/global-questions-routes.test.js | 170-187 |
-| test:direct control and result ingress fail closed without a configured token@L164 | Test | ./services/orchestrator/src/app.test.js | 164-179 |
-| test:production broker entrypoint listens without gateway authentication config@L178 | Test | ./services/proxy/src/stream-token-server.test.js | 178-213 |
 | fetch | Function | ./services/settings/app/auth/org_context.py | 147-151 |
 
 ## Execution Flows
@@ -28,36 +26,31 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (12 edge(s))
-- `fetch` (6 edge(s))
-- `json` (4 edge(s))
-- `deepEqual` (3 edge(s))
-- `close` (3 edge(s))
-- `after` (2 edge(s))
-- `keys` (2 edge(s))
-- `startsWith` (2 edge(s))
+- `equal` (5 edge(s))
+- `fetch` (3 edge(s))
+- `close` (2 edge(s))
 - `./services/email/src/app.test.js::start` (1 edge(s))
+- `deepEqual` (1 edge(s))
+- `json` (1 edge(s))
 - `./services/gateway/src/global-questions-routes.test.js::buildApp` (1 edge(s))
 - `./services/gateway/src/global-questions-routes.test.js::start` (1 edge(s))
 - `at` (1 edge(s))
 - `./services/gateway/src/global-questions-routes.test.js::call` (1 edge(s))
-- `./services/orchestrator/src/app.test.js::setup` (1 edge(s))
-- `./services/orchestrator/src/app.test.js::listen` (1 edge(s))
+- `fetch_id_token` (1 edge(s))
+- `Request` (1 edge(s))
 
 ### Incoming
 
-- `equal` (12 edge(s))
-- `fetch` (6 edge(s))
-- `json` (4 edge(s))
-- `deepEqual` (3 edge(s))
-- `close` (3 edge(s))
-- `after` (2 edge(s))
-- `keys` (2 edge(s))
-- `startsWith` (2 edge(s))
+- `equal` (5 edge(s))
+- `fetch` (3 edge(s))
+- `close` (2 edge(s))
 - `./services/email/src/app.test.js` (1 edge(s))
 - `./services/email/src/app.test.js::start` (1 edge(s))
+- `deepEqual` (1 edge(s))
+- `json` (1 edge(s))
 - `./services/gateway/src/global-questions-routes.test.js` (1 edge(s))
 - `./services/gateway/src/global-questions-routes.test.js::buildApp` (1 edge(s))
 - `./services/gateway/src/global-questions-routes.test.js::start` (1 edge(s))
 - `at` (1 edge(s))
 - `./services/gateway/src/global-questions-routes.test.js::call` (1 edge(s))
+- `./services/settings/app/auth/org_context.py` (1 edge(s))

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 2 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.0909
+- **Size**: 2 nodes
+- **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,7 +16,6 @@ Community of 3 nodes
 |------|------|------|-------|
 | plannerHandler | Function | ./services/planner/src/pubsub.test.js | 11-15 |
 | invoke | Function | ./services/planner/src/pubsub.test.js | 17-28 |
-| test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L81 | Test | ./services/planner/src/pubsub.test.js | 81-104 |
 
 ## Execution Flows
 
@@ -27,30 +26,21 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `./services/planner/src/pubsub.test.js::test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L106` (3 edge(s))
-- `equal` (3 edge(s))
-- `resolve` (2 edge(s))
 - `./services/planner/src/pubsub.test.js::test:planner Pub/Sub scopes every conversation event to the native workspace context@L30` (2 edge(s))
+- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L81` (2 edge(s))
 - `./services/planner/src/pubsub.test.js::test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L158` (2 edge(s))
+- `resolve` (1 edge(s))
 - `handler` (1 edge(s))
 - `toPushEnvelope` (1 edge(s))
 - `reject` (1 edge(s))
 - `find` (1 edge(s))
 - `ok` (1 edge(s))
 - `at` (1 edge(s))
-- `push` (1 edge(s))
-- `after` (1 edge(s))
-- `require` (1 edge(s))
-- `deepEqual` (1 edge(s))
 
 ### Incoming
 
-- `./services/planner/src/pubsub.test.js` (3 edge(s))
 - `./services/planner/src/pubsub.test.js::test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L106` (3 edge(s))
-- `equal` (3 edge(s))
+- `./services/planner/src/pubsub.test.js` (2 edge(s))
 - `./services/planner/src/pubsub.test.js::test:planner Pub/Sub scopes every conversation event to the native workspace context@L30` (2 edge(s))
+- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L81` (2 edge(s))
 - `./services/planner/src/pubsub.test.js::test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L158` (2 edge(s))
-- `resolve` (1 edge(s))
-- `push` (1 edge(s))
-- `after` (1 edge(s))
-- `require` (1 edge(s))
-- `deepEqual` (1 edge(s))

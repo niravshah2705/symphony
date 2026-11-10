@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 2 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.0984
+- **Size**: 2 nodes
+- **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,7 +16,6 @@ Community of 3 nodes
 |------|------|------|-------|
 | routeHandler | Function | ./services/planner/src/routes/settings.omlx.test.js | 8-14 |
 | invoke | Function | ./services/planner/src/routes/settings.omlx.test.js | 16-36 |
-| test:planner OMLX preset settings reject plaintext keys and save only non-secret connection data@L38 | Test | ./services/planner/src/routes/settings.omlx.test.js | 38-101 |
 
 ## Execution Flows
 
@@ -26,32 +25,15 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (13 edge(s))
-- `call` (2 edge(s))
+- `./services/planner/src/routes/settings.omlx.test.js::test:planner OMLX preset settings reject plaintext keys and save only non-secret connection data@L38` (3 edge(s))
 - `handler` (1 edge(s))
 - `catch` (1 edge(s))
 - `reject` (1 edge(s))
 - `find` (1 edge(s))
 - `ok` (1 edge(s))
 - `toUpperCase` (1 edge(s))
-- `resolve` (1 edge(s))
-- `originalGetSettings` (1 edge(s))
-- `push` (1 edge(s))
-- `after` (1 edge(s))
-- `require` (1 edge(s))
-- `match` (1 edge(s))
-- `includes` (1 edge(s))
 
 ### Incoming
 
-- `equal` (13 edge(s))
-- `./services/planner/src/routes/settings.omlx.test.js` (3 edge(s))
-- `call` (2 edge(s))
-- `resolve` (1 edge(s))
-- `originalGetSettings` (1 edge(s))
-- `push` (1 edge(s))
-- `after` (1 edge(s))
-- `require` (1 edge(s))
-- `match` (1 edge(s))
-- `includes` (1 edge(s))
-- `stringify` (1 edge(s))
+- `./services/planner/src/routes/settings.omlx.test.js::test:planner OMLX preset settings reject plaintext keys and save only non-secret connection data@L38` (3 edge(s))
+- `./services/planner/src/routes/settings.omlx.test.js` (2 edge(s))

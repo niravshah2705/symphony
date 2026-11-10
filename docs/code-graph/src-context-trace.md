@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 26 nodes
+Community of 24 nodes
 
-- **Size**: 26 nodes
-- **Cohesion**: 0.2664
+- **Size**: 24 nodes
+- **Cohesion**: 0.2704
 - **Dominant Language**: javascript
 
 ## Members
@@ -27,11 +27,9 @@ Community of 26 nodes
 | withContext | Function | ./packages/shared-core/src/logger.js | 150-156 |
 | runWithContext | Function | ./packages/shared-core/src/logger.js | 163-166 |
 | capture | Function | ./packages/shared-core/src/logger.test.js | 12-19 |
-| test:logger: text output stays a human-readable line when nothing is bound@L21 | Test | ./packages/shared-core/src/logger.test.js | 21-25 |
 | test:logger: withContext labels the line with the run it belongs to@L27 | Test | ./packages/shared-core/src/logger.test.js | 27-35 |
 | test:logger: runWithContext reaches code that knows nothing about the run@L37 | Test | ./packages/shared-core/src/logger.test.js | 37-47 |
 | test:logger: LOG_FORMAT=json emits one Cloud Logging-shaped record per line@L49 | Test | ./packages/shared-core/src/logger.test.js | 49-67 |
-| test:logger: a credential in the meta payload stays masked in both formats@L69 | Test | ./packages/shared-core/src/logger.test.js | 69-83 |
 | test:logger: a fabricated or malformed trace id never becomes a trace link@L85 | Test | ./packages/shared-core/src/logger.test.js | 85-97 |
 | cleanTraceparent | Function | ./packages/shared-core/src/traceparent.js | 30-38 |
 | traceIdOf | Function | ./packages/shared-core/src/traceparent.js | 41-44 |
@@ -49,36 +47,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (23 edge(s))
+- `equal` (20 edge(s))
 - `String` (7 edge(s))
-- `after` (7 edge(s))
-- `match` (7 edge(s))
+- `match` (6 edge(s))
+- `after` (5 edge(s))
 - `toLowerCase` (4 edge(s))
 - `stringify` (4 edge(s))
-- `parse` (4 edge(s))
-- `info` (4 edge(s))
 - `entries` (3 edge(s))
 - `toUpperCase` (3 edge(s))
+- `parse` (3 edge(s))
 - `slice` (3 edge(s))
-- `warn` (3 edge(s))
-- `doesNotMatch` (3 edge(s))
+- `info` (3 edge(s))
 - `test` (2 edge(s))
 - `toISOString` (2 edge(s))
+- `./packages/shared-core/src/logger.test.js::test:logger: a credential in the meta payload stays masked in both formats@L69` (2 edge(s))
+- `getStore` (1 edge(s))
 
 ### Incoming
 
-- `equal` (23 edge(s))
+- `equal` (20 edge(s))
 - `./packages/shared-core/src/logger.js` (17 edge(s))
-- `./packages/shared-core/src/logger.test.js` (7 edge(s))
-- `match` (7 edge(s))
-- `after` (6 edge(s))
+- `match` (6 edge(s))
 - `./packages/shared-core/src/traceparent.js` (6 edge(s))
-- `info` (4 edge(s))
+- `./packages/shared-core/src/logger.test.js` (5 edge(s))
+- `after` (4 edge(s))
 - `./packages/shared-core/src/traceparent.test.js` (4 edge(s))
-- `parse` (3 edge(s))
-- `warn` (3 edge(s))
-- `doesNotMatch` (3 edge(s))
+- `info` (3 edge(s))
+- `./packages/shared-core/src/logger.test.js::test:logger: a credential in the meta payload stays masked in both formats@L69` (2 edge(s))
+- `parse` (2 edge(s))
 - `slice` (2 edge(s))
+- `./packages/shared-core/src/logger.test.js::test:logger: text output stays a human-readable line when nothing is bound@L21` (1 edge(s))
 - `error` (1 edge(s))
 - `String` (1 edge(s))
 - `getFullYear` (1 edge(s))
