@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 45 nodes
+Community of 46 nodes
 
-- **Size**: 45 nodes
-- **Cohesion**: 0.3569
+- **Size**: 46 nodes
+- **Cohesion**: 0.3591
 - **Dominant Language**: javascript
 
 ## Members
@@ -40,6 +40,7 @@ Community of 45 nodes
 | routeConfig | Function | ./public/js/google-analytics.mjs | 275-289 |
 | initialize | Function | ./public/js/google-analytics.mjs | 291-304 |
 | trackPageView | Function | ./public/js/google-analytics.mjs | 306-362 |
+| trackGoogleAnalyticsPageView | Function | ./public/js/google-analytics.mjs | 373-376 |
 | memoryStorage | Function | ./public/js/google-analytics.test.mjs | 17-24 |
 | fakeBrowser | Function | ./public/js/google-analytics.test.mjs | 26-50 |
 | callsOf | Function | ./public/js/google-analytics.test.mjs | 52-56 |
@@ -87,7 +88,7 @@ Community of 45 nodes
 ### Incoming
 
 - `equal` (67 edge(s))
-- `./public/js/google-analytics.mjs` (21 edge(s))
+- `./public/js/google-analytics.mjs` (22 edge(s))
 - `./public/js/google-analytics.test.mjs` (18 edge(s))
 - `deepEqual` (14 edge(s))
 - `includes` (7 edge(s))
@@ -95,9 +96,9 @@ Community of 45 nodes
 - `map` (5 edge(s))
 - `stringify` (5 edge(s))
 - `ok` (4 edge(s))
-- `./public/js/google-analytics.mjs::trackGoogleAnalyticsPageView` (2 edge(s))
 - `defineProperty` (2 edge(s))
 - `push` (2 edge(s))
 - `repeat` (2 edge(s))
 - `every` (2 edge(s))
 - `some` (2 edge(s))
+- `./public/js/app.js` (1 edge(s))

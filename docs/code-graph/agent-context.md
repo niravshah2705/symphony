@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 362 nodes
+Community of 357 nodes
 
-- **Size**: 362 nodes
-- **Cohesion**: 0.3382
+- **Size**: 357 nodes
+- **Cohesion**: 0.3391
 - **Dominant Language**: javascript
 
 ## Members
@@ -51,21 +51,21 @@ Community of 362 nodes
 | test:reevaluateGate supersedes the old gate; green returns no gate, amber creates a fresh one with attempts+1@L123 | Test | ./packages/shared/src/agent/approval-gate.test.js | 123-146 |
 | test:gate lifecycle preserves native context and publishes only to that workspace@L148 | Test | ./packages/shared/src/agent/approval-gate.test.js | 148-169 |
 | test:default business resolution selects only the gate workspace when ids collide@L171 | Test | ./packages/shared/src/agent/approval-gate.test.js | 171-192 |
-| statusOf | Function | ./packages/shared/src/agent/availability.js | 43-46 |
 | publicAvailabilityMessage | Function | ./packages/shared/src/agent/availability.js | 48-75 |
 | pauseReasonFor | Function | ./packages/shared/src/agent/availability.js | 77-89 |
 | isRepositoryAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 91-101 |
 | isModelAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 103-120 |
-| probeRepositoryAvailability | Function | ./packages/shared/src/agent/availability.js | 238-293 |
-| response | Function | ./packages/shared/src/agent/availability.test.js | 18-24 |
 | test:pause reasons expose a stable, nontechnical UI contract@L26 | Test | ./packages/shared/src/agent/availability.test.js | 26-42 |
-| test:repository preflight converts provider 403 into a sanitized availability error@L44 | Test | ./packages/shared/src/agent/availability.test.js | 44-67 |
-| test:repository preflight requires write permission before dispatch@L69 | Test | ./packages/shared/src/agent/availability.test.js | 69-77 |
 | test:model classifier recognizes hosted authorization and network availability failures@L95 | Test | ./packages/shared/src/agent/availability.test.js | 95-119 |
 | test:repository classifier distinguishes remote outages from local workflow errors@L121 | Test | ./packages/shared/src/agent/availability.test.js | 121-142 |
 | clean | Function | ./packages/shared/src/agent/business-pipeline.js | 62-64 |
+| fenced | Function | ./packages/shared/src/agent/business-pipeline.js | 67-69 |
+| buildDeps | Function | ./packages/shared/src/agent/business-pipeline.js | 120-131 |
+| evaluationSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 141-155 |
+| fraudSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 157-165 |
+| revenueModelSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 167-173 |
 
-*... and 312 more members.*
+*... and 307 more members.*
 
 ## Execution Flows
 
@@ -76,25 +76,25 @@ Community of 362 nodes
 
 ### Outgoing
 
-- `equal` (275 edge(s))
+- `equal` (270 edge(s))
 - `String` (57 edge(s))
 - `deepEqual` (52 edge(s))
 - `push` (49 edge(s))
 - `strictEqual` (40 edge(s))
 - `step` (37 edge(s))
 - `filter` (30 edge(s))
-- `map` (28 edge(s))
+- `map` (27 edge(s))
 - `warn` (25 edge(s))
 - `toISOString` (24 edge(s))
-- `ok` (24 edge(s))
-- `rejects` (23 edge(s))
+- `ok` (23 edge(s))
 - `test` (22 edge(s))
 - `trim` (21 edge(s))
+- `rejects` (21 edge(s))
 - `after` (21 edge(s))
 
 ### Incoming
 
-- `equal` (275 edge(s))
+- `equal` (270 edge(s))
 - `./packages/shared/src/agent/coder-orchestrator.js` (77 edge(s))
 - `./packages/shared/src/linear.js` (72 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (55 edge(s))
@@ -102,9 +102,9 @@ Community of 362 nodes
 - `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
 - `strictEqual` (40 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (32 edge(s))
-- `ok` (24 edge(s))
-- `rejects` (23 edge(s))
+- `ok` (23 edge(s))
 - `./packages/shared/src/agent/apply.js` (22 edge(s))
+- `rejects` (21 edge(s))
 - `after` (21 edge(s))
 - `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
 - `./packages/shared/src/agent/scheduler.test.js` (19 edge(s))

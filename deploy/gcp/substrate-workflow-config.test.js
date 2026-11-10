@@ -18,11 +18,14 @@ const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8');
 const power = read('.github', 'workflows', 'substrate-cluster-power.yml');
 const deploy = read('.github', 'workflows', 'deploy.yml');
 const control = read('.github', 'workflows', 'substrate-control-plane.yml');
+const nodepools = read('.github', 'workflows', 'substrate-nodepools.yml');
+const cleanup = read('deploy', 'gcp', 'substrate-cleanup.sh');
+const recreate = read('deploy', 'gcp', 'substrate-recreate.sh');
 const bootstrap = read('deploy', 'gcp', 'bootstrap.sh');
 const vars = read(GKE_DIR, 'variables.tf');
 const versions = read(GKE_DIR, 'versions.tf');
 const namespaces = read(GKE_DIR, 'namespaces.tf');
-const workflows = { power, deploy, control };
+const workflows = { power, deploy, control, nodepools };
 
 // The `variable "x" { ... }` block's scalar default, as written in Terraform.
 function tfDefault(name) {
@@ -171,4 +174,65 @@ test('the static-IP grant lists the addresses the module owns', () => {
   for (const address of listed[1].split(',').map((s) => s.trim())) {
     assert.ok(addresses.includes(address), `bootstrap.sh lists ${address}, which nothing creates`);
   }
+});
+
+// --- substrate-nodepools.yml: the CI face of substrate-cleanup/recreate.sh ---------
+// Neither graph indexes YAML, so these four assertions are the only thing standing
+// between a flag rename in a shell `case` and a workflow that silently stops passing
+// it — which reads as "the restore ignored the snapshot" and costs a node pool.
+
+test('the node-pool workflow is manual-only', () => {
+  // One of these two scripts deletes three node pools. A push or cron trigger here
+  // would make an unrelated merge a teardown.
+  const on = nodepools.match(/^on:\n([\s\S]*?)^\n/m)[1];
+  assert.match(on, /^ {2}workflow_dispatch:/m);
+  assert.doesNotMatch(on, /^\s{2}(push|schedule|pull_request|workflow_call|repository_dispatch):/m,
+    'substrate-nodepools.yml gained a non-manual trigger');
+  assert.doesNotMatch(nodepools, /^\s+cron:/m);
+});
+
+test('every flag the workflow passes is one the script parses', () => {
+  const run = nodepools.match(/- name: Run\n        run: \|\n([\s\S]*?)\n\n      - name:/)[1];
+  const flags = [...new Set([...run.matchAll(/FLAGS\+=\((--[a-z-]+)/g)].map((m) => m[1]))];
+  assert.ok(flags.length >= 6, `expected the flag matrix, saw ${flags.join(' ')}`);
+  // `--snapshot=*)` is a pattern label, not a plain one, so the closing paren can sit
+  // after an `=`/glob. Matching only `--x)` would call that flag unparseable.
+  const accepts = (src) => new Set([...src.matchAll(/^\s*--([a-z-]+)[=*][^)]*\)|^\s*--([a-z-]+)\)/gm)]
+    .map((m) => `--${m[1] || m[2]}`));
+  const want = { '--dry-run': [cleanup, recreate], '--keep-pools': [cleanup], '--backup-only': [cleanup],
+    '--release-ip': [cleanup], '--with-disk-snapshot': [cleanup], '--skip-backup': [cleanup],
+    '--destroy-pvc': [cleanup], '--yes': [cleanup], '--snapshot': [recreate],
+    '--with-primary': [recreate] };
+  for (const flag of flags) {
+    const scripts = want[flag];
+    assert.ok(scripts, `the workflow passes ${flag}, which nothing here declares — add it to the table`);
+    for (const src of scripts) {
+      assert.ok(accepts(src).has(flag.replace(/=$/, '')), `${flag} is not in that script's argument case`);
+    }
+  }
+});
+
+test('a live run needs a typed word and a rehearsal needs none', () => {
+  assert.match(nodepools, /description: "recreate: snapshot to restore from\. latest/m);
+  // dry_run defaulting to false is how a click becomes a teardown.
+  assert.match(nodepools, /dry_run:\n(?:.*\n){1,4}        default: true/);
+  const gate = nodepools.match(/- name: Check the inputs agree[\s\S]*?\n      - name: Run/)[0];
+  for (const word of ['teardown', 'release-ip', 'destroy-pvc', 'restore']) {
+    assert.match(gate, new RegExp(`REQUIRED=${word.replace(/-/g, '\\-')}`), `no gate word ${word}`);
+  }
+  assert.match(gate, /\[ "\$CONFIRM" = "\$REQUIRED" \]/);
+});
+
+test('the worker namespace is one name across the scripts and the workflows', () => {
+  // substrate-workers has no Terraform variable, so equality here is the only check
+  // that a rename does not leave the recreate script applying a WorkerPool into a
+  // namespace nothing schedules from.
+  const ns = (src) => (src.match(/POOL_NS:-'(substrate-workers)'/) || src.match(/POOL_NS\}:-?(substrate-workers)/) || [])[1]
+    ?? (src.match(/POOL_NS="\$\{POOL_NS:-(substrate[-a-z]*)\}"/) || [])[1]
+    ?? (src.match(/WORKER_NS=(\S+)/) || [])[1];
+  const expected = 'substrate-workers';
+  assert.equal(ns(recreate), expected, 'substrate-recreate.sh moved off substrate-workers');
+  assert.equal(ns(cleanup), expected, 'substrate-cleanup.sh moved off substrate-workers');
+  assert.match(nodepools, new RegExp(`POOL_NS: '${expected}'`));
+  assert.match(control, new RegExp(`WORKER_NS=${expected}`));
 });

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 253 nodes
+Community of 301 nodes
 
-- **Size**: 253 nodes
-- **Cohesion**: 0.2398
+- **Size**: 301 nodes
+- **Cohesion**: 0.2355
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,9 +17,9 @@ Community of 253 nodes
 | test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
 | test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
 | test:the worker pool name the planner selects is one string in four places@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-616 |
-| test:the power workflow waits only on namespaces the module still creates@L135 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 135-157 |
-| test@L143 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 143-143 |
-| test:the static-IP grant lists the addresses the module owns@L159 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 159-174 |
+| test:the power workflow waits only on namespaces the module still creates@L138 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 138-160 |
+| test@L146 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 146-146 |
+| test:the static-IP grant lists the addresses the module owns@L162 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 162-177 |
 | test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L351 | Test | ./e2e/persistent-footer.spec.js | 351-455 |
 | memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
 | memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
@@ -65,46 +65,48 @@ Community of 253 nodes
 | test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
 | test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
 
-*... and 203 more members.*
+*... and 251 more members.*
 
 ## Execution Flows
 
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
+- **runCoder** (criticality: 0.67, depth: 7)
+- **runPlannedCoder** (criticality: 0.66, depth: 7)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (379 edge(s))
+- `equal` (394 edge(s))
+- `join` (74 edge(s))
 - `match` (64 edge(s))
-- `map` (48 edge(s))
-- `ok` (47 edge(s))
+- `ok` (56 edge(s))
+- `String` (53 edge(s))
+- `map` (50 edge(s))
+- `isArray` (47 edge(s))
 - `deepEqual` (46 edge(s))
-- `includes` (43 edge(s))
-- `join` (42 edge(s))
-- `String` (39 edge(s))
-- `isArray` (36 edge(s))
+- `includes` (44 edge(s))
 - `filter` (32 edge(s))
 - `expect` (29 edge(s))
-- `slice` (26 edge(s))
-- `trim` (25 edge(s))
+- `slice` (28 edge(s))
+- `trim` (26 edge(s))
 - `throws` (23 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (20 edge(s))
+- `require` (21 edge(s))
 
 ### Incoming
 
-- `equal` (379 edge(s))
+- `equal` (394 edge(s))
 - `match` (61 edge(s))
-- `ok` (47 edge(s))
+- `ok` (56 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (48 edge(s))
 - `deepEqual` (46 edge(s))
+- `join` (46 edge(s))
 - `expect` (29 edge(s))
-- `join` (24 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js` (25 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
 - `throws` (23 edge(s))
-- `./packages/shared/src/agent/runtimes.test.js` (23 edge(s))
 - `./packages/shared/src/agent/global-questions.js` (21 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
 - `includes` (20 edge(s))
-- `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))

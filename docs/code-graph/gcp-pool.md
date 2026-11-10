@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| run | Function | ./deploy/gcp/substrate-recreate.sh | 109-120 |
-| pool_exists | Function | ./deploy/gcp/substrate-recreate.sh | 185-188 |
-| create_pool | Function | ./deploy/gcp/substrate-recreate.sh | 193-220 |
+| run | Function | ./deploy/gcp/substrate-recreate.sh | 129-140 |
+| pool_exists | Function | ./deploy/gcp/substrate-recreate.sh | 211-214 |
+| create_pool | Function | ./deploy/gcp/substrate-recreate.sh | 219-246 |
 
 ## Execution Flows
 
