@@ -10,16 +10,18 @@
 # colliding with it.
 #
 # Config precedence, printed on every run so a restore is never a guess:
-#   1. --snapshot=<path|gs://uri>  the pools.json written by substrate-cleanup.sh
-#   2. .substrate-state/pools.json  the local mirror of the last cleanup
-#   3. the DEFAULTS below, which mirror deploy/gcp/terraform-substrate-gke/
-# If (3) is used the script says so, because the module is then the only place the
+#   1. --snapshot=latest           the newest pools.json in the backup bucket
+#   2. --snapshot=<path|gs://uri>  a specific substrate-cleanup.sh snapshot
+#   3. .substrate-state/pools.json  the local mirror of the last cleanup
+#   4. the DEFAULTS below, which mirror deploy/gcp/terraform-substrate-gke/
+# If (4) is used the script says so, because the module is then the only place the
 # numbers are right — keep the two in sync or stop using this script.
 #
 # Usage:
 #   deploy/gcp/substrate-recreate.sh                 # worker + system pools
 #   deploy/gcp/substrate-recreate.sh --with-primary  # also the tenant pool (2 nodes)
 #   deploy/gcp/substrate-recreate.sh --dry-run       # print, change nothing
+#   deploy/gcp/substrate-recreate.sh --snapshot=latest
 #   deploy/gcp/substrate-recreate.sh --snapshot=gs://BUCKET/CLUSTER/STAMP
 #   SNAPSHOT=/tmp/pools.json deploy/gcp/substrate-recreate.sh
 set -uo pipefail
@@ -31,15 +33,30 @@ POOL_NS="${POOL_NS:-substrate-workers}"
 SNAPSHOT="${SNAPSHOT:-.substrate-state/pools.json}"
 WITH_PRIMARY=0
 DRY_RUN=0
+EXPLICIT_SNAPSHOT=0
+WARNED=0
 
 for arg in "$@"; do
   case "$arg" in
     --with-primary) WITH_PRIMARY=1 ;;
     --dry-run)      DRY_RUN=1 ;;
-    --snapshot=*)   SNAPSHOT="${arg#*=}" ;;
-    *) echo "unknown argument: $arg (expected --snapshot=<path|gs://uri>, --with-primary or --dry-run)"; exit 2 ;;
+    --snapshot=*)   SNAPSHOT="${arg#*=}"; EXPLICIT_SNAPSHOT=1 ;;
+    *) echo "unknown argument: $arg (expected --snapshot=<path|gs://uri|latest>, --with-primary or --dry-run)"; exit 2 ;;
   esac
 done
+
+# `latest` resolves the newest snapshot the cleanup wrote, so a restore after an
+# unplanned teardown needs no copy-pasted URI. substrate-cleanup.sh keys each run as
+# <cluster>/<%Y-%m-%dT%H%M%SZ>/pools.json — fixed-width and already UTC — so the
+# lexical maximum IS the chronological one, and no per-object mtime call is needed.
+BACKUP_BUCKET_URL="${BACKUP_BUCKET_URL:-gs://${PROJECT}-substrate-backup}"
+if [ "$SNAPSHOT" = latest ]; then
+  SNAPSHOT="$(gcloud storage ls "$BACKUP_BUCKET_URL/$CLUSTER/*/pools.json" 2>/dev/null | sort | tail -1)"
+  if [ -z "$SNAPSHOT" ]; then
+    echo "  WARNING: no pools.json under $BACKUP_BUCKET_URL/$CLUSTER/ — nothing to restore from" >&2
+    SNAPSHOT="$BACKUP_BUCKET_URL/_absent_/pools.json"
+  fi
+fi
 
 # A gs:// URI is where the snapshot actually lives — substrate-cleanup.sh uploads it
 # from whatever machine ran the teardown, which is usually not this one. Stage it
@@ -52,12 +69,15 @@ if [ "${SNAPSHOT#gs://}" != "$SNAPSHOT" ]; then
     */pools.json) src="$base" ;;
     *)            src="$base/pools.json" ;;
   esac
+  echo "  snapshot: $src"
   staged="$(mktemp -d)"
   if gcloud storage cp "$src" "$staged/pools.json" >/dev/null 2>&1; then
     SNAPSHOT="$staged/pools.json"
   else
     echo "  WARNING: could not read $src — this run uses the module defaults below, NOT the last cleanup configuration" >&2
     SNAPSHOT="$staged/absent.json"
+    # The fallback is already announced here; the reader below must not say it twice.
+    WARNED=1
   fi
 fi
 
@@ -125,6 +145,12 @@ if [ -f "$SNAPSHOT" ]; then
   SRC="snapshot $SNAPSHOT"
   snap() { jq -r "$1 // empty" "$SNAPSHOT"; }
 else
+  # A missing file is only an acceptable fallback when nobody asked for a file (the
+  # default mirror path). If --snapshot named one and it is not there, silently
+  # restoring the baked-in numbers is the misreading this whole block exists to
+  # prevent — so say it, and say it on stderr where the report cannot bury it.
+  [ "$EXPLICIT_SNAPSHOT" = 1 ] && [ "$WARNED" = 0 ] \
+    && printf '  WARNING: %s is not readable — restoring module defaults, NOT that snapshot\n' "$SNAPSHOT" >&2
   SRC="module defaults baked into this script"
   snap() { printf ''; }
 fi

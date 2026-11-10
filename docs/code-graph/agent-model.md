@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 201 nodes
+Community of 205 nodes
 
-- **Size**: 201 nodes
-- **Cohesion**: 0.3056
+- **Size**: 205 nodes
+- **Cohesion**: 0.3043
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,9 +20,14 @@ Community of 201 nodes
 | test:createChatModel maps antigravity to a ChatOpenAI targeting the Gemini endpoint@L52 | Test | ./packages/shared/src/agent/antigravity.test.js | 52-58 |
 | test:availability probes the Gemini key against the OpenAI-compatible endpoint@L73 | Test | ./packages/shared/src/agent/antigravity.test.js | 73-86 |
 | test:availability fails fast when the Gemini key is missing@L88 | Test | ./packages/shared/src/agent/antigravity.test.js | 88-94 |
+| statusOf | Function | ./packages/shared/src/agent/availability.js | 43-46 |
 | selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 122-127 |
 | normalize | Function | ./packages/shared/src/agent/availability.js | 125-125 |
 | probeModelAvailability | Function | ./packages/shared/src/agent/availability.js | 129-236 |
+| probeRepositoryAvailability | Function | ./packages/shared/src/agent/availability.js | 238-293 |
+| response | Function | ./packages/shared/src/agent/availability.test.js | 18-24 |
+| test:repository preflight converts provider 403 into a sanitized availability error@L44 | Test | ./packages/shared/src/agent/availability.test.js | 44-67 |
+| test:repository preflight requires write permission before dispatch@L69 | Test | ./packages/shared/src/agent/availability.test.js | 69-77 |
 | test:local model preflight verifies that the selected model is loaded@L79 | Test | ./packages/shared/src/agent/availability.test.js | 79-93 |
 | messageText | Function | ./packages/shared/src/agent/business-pipeline.js | 71-77 |
 | parseJsonObject | Function | ./packages/shared/src/agent/business-pipeline.js | 79-85 |
@@ -59,13 +64,8 @@ Community of 201 nodes
 | omlxPromptBudget | Function | ./packages/shared/src/agent/llm.js | 157-161 |
 | warnContextMismatch | Function | ./packages/shared/src/agent/llm.js | 171-179 |
 | clampContextWindow | Function | ./packages/shared/src/agent/llm.js | 189-194 |
-| fetchLmstudioLoadedContext | Function | ./packages/shared/src/agent/llm.js | 202-222 |
-| getCodexChatModelClass | Function | ./packages/shared/src/agent/llm.js | 238-252 |
-| createCodexChatgptModel | Function | ./packages/shared/src/agent/llm.js | 267-305 |
-| getClaudeChatModelClass | Function | ./packages/shared/src/agent/llm.js | 337-367 |
-| constructor | Function | ./packages/shared/src/agent/llm.js | 342-345 |
 
-*... and 151 more members.*
+*... and 155 more members.*
 
 ## Execution Flows
 
@@ -78,36 +78,36 @@ Community of 201 nodes
 
 ### Outgoing
 
-- `equal` (148 edge(s))
+- `equal` (153 edge(s))
 - `deepEqual` (39 edge(s))
+- `Number` (29 edge(s))
 - `strictEqual` (28 edge(s))
-- `Number` (27 edge(s))
 - `replace` (25 edge(s))
 - `String` (24 edge(s))
 - `join` (21 edge(s))
 - `includes` (20 edge(s))
 - `slice` (19 edge(s))
+- `map` (18 edge(s))
 - `match` (17 edge(s))
-- `map` (17 edge(s))
 - `isFinite` (17 edge(s))
 - `trim` (16 edge(s))
-- `require` (14 edge(s))
-- `ok` (14 edge(s))
+- `ok` (15 edge(s))
+- `max` (15 edge(s))
 
 ### Incoming
 
-- `equal` (148 edge(s))
+- `equal` (153 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (44 edge(s))
 - `./packages/shared/src/agent/llm.js` (42 edge(s))
 - `deepEqual` (39 edge(s))
 - `strictEqual` (28 edge(s))
+- `ok` (15 edge(s))
 - `match` (14 edge(s))
-- `ok` (14 edge(s))
 - `throws` (14 edge(s))
 - `./packages/shared/src/agent/localization.test.js` (14 edge(s))
 - `./packages/shared/src/agent/local-intelligence.test.js` (13 edge(s))
 - `./packages/shared/src/agent/codex-budget.test.js` (12 edge(s))
 - `./packages/shared/src/agent/lmstudio-budget.test.js` (12 edge(s))
-- `./packages/shared/src/agent/model-routing.test.js` (7 edge(s))
-- `./packages/shared/src/agent/omlx.test.js` (7 edge(s))
+- `./packages/shared/src/agent/availability.js` (9 edge(s))
+- `rejects` (8 edge(s))

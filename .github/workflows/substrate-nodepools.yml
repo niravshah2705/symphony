@@ -1,0 +1,329 @@
+name: Substrate node pools (cleanup / recreate)
+
+# Runs deploy/gcp/substrate-cleanup.sh and substrate-recreate.sh on a runner, so
+# the teardown-and-restore runbook in docs/SUBSTRATE_STATUS.md does not depend on
+# someone having gcloud + kubectl + jq configured, on the right machine, while the
+# cluster is down. Both are manual-only on purpose: neither has a schedule and
+# neither is triggered by a push, because one of them deletes three node pools.
+#
+# Nothing here is clever. The scripts already carry the safety design (backup
+# proven before anything is destroyed; secret VALUES never leave the cluster;
+# snapshot-first config resolution). The workflow's only added value is the
+# authorization report and the typed-confirmation gate, which a terminal has no
+# equivalent of — there the operator just remembers to pass --yes.
+#
+# ── Required permissions, verified against live IAM for
+#   gh-deployer@<project>.iam.gserviceaccount.com on 2026-11-10 ──
+#
+#   Needed for                     Role the deployer SA holds
+#   ─────────────────────────────  ──────────────────────────────────────────────
+#   pool get/list/park/delete/     roles/container.admin            (has it)
+#     create, and every kubectl    — GKE 1.30+ authorization is IAM-derived, so
+#     call in this repo            container.admin covers the in-cluster verbs too
+#   bucket read + backup write     roles/storage.admin              (has it)
+#   disk/instance/address list     roles/compute.viewer             (has it)
+#   --release-ip (substrate-ip)    projects/<p>/roles/substrateStaticIpAdmin
+#                                                             (has it: addresses
+#                                                             create/delete/get/
+#                                                             list/setLabels/update)
+#   --with-disk-snapshot           roles/compute.storageAdmin       **MISSING**
+#   ──
+#   compute.snapshots.create is granted nowhere in this project for this SA
+#   (compute.viewer explicitly excludes it), so a cleanup run with
+#   --with-disk-snapshot will fail that step with PERMISSION_DENIED. The pg_dump
+#   in GCS is the real backup either way, so the flag is belt-and-braces — but do
+#   not enable it until the grant is made. Granting is deliberately NOT automated
+#   here; an IAM write is a wider blast radius than a node-pool delete, because
+#   the runner runs the code of whatever branch is checked out. When it is wanted:
+#
+#     gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+#       --member="serviceAccount:$SA" \
+#       --role="roles/compute.storageAdmin"
+#
+#   The "Report authorization" step re-checks this at run time instead of trusting
+#   this comment, and fails a --with-disk-snapshot run before it starts.
+#
+# dry_run defaults to true, and a live destructive run additionally needs the
+# `confirm` input typed to the exact word the run prints. A green button with no
+# words is a rehearsal.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Which script to run
+        type: choice
+        required: true
+        default: recreate
+        options:
+          - recreate
+          - cleanup
+      dry_run:
+        description: "Print every step, change nothing"
+        type: boolean
+        required: true
+        default: true
+      confirm:
+        description: "Live runs only: type the word the run prints as REQUIRED (teardown | release-ip | destroy-pvc | restore)"
+        type: string
+        required: false
+        default: ""
+      cleanup_mode:
+        description: "cleanup: what to do with the pools after the backup"
+        type: choice
+        required: false
+        default: delete
+        options:
+          - delete
+          - park
+          - backup
+      snapshot:
+        description: "recreate: snapshot to restore from. latest = newest pools.json in the backup bucket"
+        type: string
+        required: false
+        default: latest
+      with_primary:
+        description: "recreate: also restore the tenant pool (substrate-node-pool, 2 nodes)"
+        type: boolean
+        required: false
+        default: false
+      release_ip:
+        description: "cleanup: also delete the static substrate-ip address"
+        type: boolean
+        required: false
+        default: false
+      destroy_pvc:
+        description: "cleanup: also delete the postgres PVC and its 50Gi PD (irreversible: atespaces, actors, WorkerPool record)"
+        type: boolean
+        required: false
+        default: false
+      with_disk_snapshot:
+        description: "cleanup: also take a disk snapshot (needs roles/compute.storageAdmin — not granted)"
+        type: boolean
+        required: false
+        default: false
+      skip_backup:
+        description: "cleanup: clear without proving a DB dump first (only if the DB is known-empty)"
+        type: boolean
+        required: false
+        default: false
+
+# Serialised with the cluster's other writers: substrate-control-plane.yml installs
+# ate-system into these pools, and gke_reconcile applies the module that owns them.
+# cancel-in-progress: false because a half-run teardown is the state this script
+# exists to escape from.
+concurrency:
+  group: substrate-cluster-power
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation for the deployer SA
+
+jobs:
+  substrate_node_pools:
+    name: ${{ inputs.action }} ${{ inputs.dry_run && '(dry run)' || '(LIVE)' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PROJECT: ${{ vars.GCP_PROJECT_ID }}
+      CLUSTER: ${{ vars.SUBSTRATE_CLUSTER_NAME || 'substrate-multitenant' }}
+      ZONE: ${{ vars.SUBSTRATE_CLUSTER_ZONE || 'asia-south1-a' }}
+      REGION: ${{ vars.SUBSTRATE_CLUSTER_REGION || 'asia-south1' }}
+      # substrate-workers is a literal everywhere: the module has no namespace
+      # variable for it (only substrate_credentials_namespace), and
+      # substrate-control-plane.yml hardcodes the same WORKER_NS. A repo variable
+      # here would be a fourth spelling of one name.
+      POOL_NS: 'substrate-workers'
+      ACTION: ${{ inputs.action }}
+      DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+      CONFIRM: ${{ inputs.confirm }}
+      CLEANUP_MODE: ${{ inputs.cleanup_mode }}
+      SNAPSHOT: ${{ inputs.snapshot }}
+      WITH_PRIMARY: ${{ inputs.with_primary && 'true' || 'false' }}
+      RELEASE_IP: ${{ inputs.release_ip && 'true' || 'false' }}
+      DESTROY_PVC: ${{ inputs.destroy_pvc && 'true' || 'false' }}
+      DISK_SNAPSHOT: ${{ inputs.with_disk_snapshot && 'true' || 'false' }}
+      SKIP_BACKUP: ${{ inputs.skip_backup && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT }}
+
+      - name: Set up kubectl
+        run: |
+          set -euo pipefail
+          # GKE 1.30+ kubeconfigs authenticate by shelling out to this plugin;
+          # without it every kubectl call dies with "gke-gcloud-auth-plugin: not
+          # found" and both scripts read the cluster as gone.
+          gcloud components install kubectl gke-gcloud-auth-plugin --quiet
+          gcloud container clusters get-credentials "$CLUSTER" --zone "$ZONE" --project "$PROJECT"
+          kubectl get nodes >/dev/null
+
+      - name: Report authorization
+        run: |
+          set -euo pipefail
+          SA="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+          echo "identity: $SA"
+
+          # Read the live policy rather than trusting the header: roles are edited
+          # outside this repo, and the failure mode of a stale matrix is a teardown
+          # that aborts halfway — pools deleted, backup unwritten, no undo.
+          ROLES="$(gcloud projects get-iam-policy "$PROJECT" \
+                    --flatten='bindings[].members' \
+                    --filter="bindings.members=$SA" \
+                    --format='value(bindings.role)' | sort)"
+
+          MISSING=""
+          # need <full-role-id> <what it is for>. The if-form matters: a bare
+          # `[ -z "$3" ] && MISSING=…` as the function's last statement would return
+          # non-zero on a held role and take the whole step down with it.
+          need() {
+            if printf '%s\n' "$ROLES" | grep -qxF -- "$1"; then
+              echo "| $1 | $2 | yes |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| $1 | $2 | **no** |" >> "$GITHUB_STEP_SUMMARY"
+              MISSING="$MISSING $1"
+            fi
+          }
+          echo '### Authorization for this run' >> "$GITHUB_STEP_SUMMARY"
+          echo '| Role | Needed for | Held |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|---|---|---|' >> "$GITHUB_STEP_SUMMARY"
+          need roles/container.admin 'node-pool list/create/update/delete + every kubectl verb (GKE authorization is IAM-derived)'
+          need roles/storage.admin   'the pg_dump and pools.json backup write, and reading --snapshot=latest'
+          need roles/compute.viewer  'disk / instance / address lookups in the teardown report'
+          if [ "$ACTION" = cleanup ] && [ "$RELEASE_IP" = true ]; then
+            need "projects/$PROJECT/roles/substrateStaticIpAdmin" 'compute.addresses.delete for --release-ip'
+          fi
+          if [ "$ACTION" = cleanup ] && [ "$DISK_SNAPSHOT" = true ]; then
+            # compute.snapshots.create lives only in compute.storageAdmin, which this
+            # project has never granted. Fail here, not after the backup has run.
+            need roles/compute.storageAdmin 'compute.snapshots.create for --with-disk-snapshot'
+          fi
+
+          # In-cluster half of the same question. These answer yes because
+          # container.admin maps to the k8s verbs, but say so explicitly: if a
+          # cluster is ever switched to pure RBAC (IAM authorization mode off), the
+          # scripts start failing on `exec statefulset/postgres` and `delete pvc`.
+          {
+            echo ''
+            echo '| kubectl | Allowed |'
+            echo '|---|---|'
+            k8s_probe() {
+              printf '| %s %s %s | %s |\n' "$1" "$2" "$3" \
+                "$(kubectl auth can-i "$1" "$2" "$3" 2>/dev/null || echo no)"
+            }
+            k8s_probe create 'workerpool.ate.dev' "-n $POOL_NS"
+            k8s_probe exec   'pods'              '-n ate-system'
+            k8s_probe delete 'persistentvolumeclaim' '-n ate-system'
+            k8s_probe delete 'service'           '-n envoy-gateway-system'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$MISSING" ]; then
+            for role in $MISSING; do
+              {
+                echo ''
+                echo "\`$SA\` lacks \`$role\`."
+                echo ''
+                echo '```'
+                echo "gcloud projects add-iam-policy-binding $PROJECT \\"
+                echo "  --member=\"serviceAccount:$SA\" \\"
+                echo "  --role=\"$role\""
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+            done
+            # Granting is not automated here: an IAM write is a wider blast radius
+            # than a node-pool delete, because this runner checks out whatever branch
+            # is dispatched. So the job stops and hands over the exact command.
+            echo "::error::$SA lacks$MISSING for this run; the grant command is in the summary"
+            exit 1
+          fi
+
+      - name: Check the inputs agree with each other
+        id: gate
+        run: |
+          set -euo pipefail
+          die() { echo "::error::$1"; exit 1; }
+
+          if [ "$ACTION" = recreate ]; then
+            for flag in RELEASE_IP DESTROY_PVC DISK_SNAPSHOT SKIP_BACKUP; do
+              if [ "${!flag}" = true ]; then
+                echo "::warning::$flag is a cleanup-only input and is ignored by recreate"
+              fi
+            done
+          fi
+
+          if [ "$SKIP_BACKUP" = true ] && [ "$DESTROY_PVC" = true ]; then
+            die "skip_backup + destroy_pvc destroys the DB with no copy of it anywhere. Run the backup first, or restore the PD."
+          fi
+
+          # The typed word. Strongest applicable requirement wins, so an operator who
+          # ticks destroy_pvc cannot satisfy the gate with the word for a plain teardown.
+          REQUIRED=restore
+          [ "$ACTION" = cleanup ] && REQUIRED=teardown
+          [ "$ACTION" = cleanup ] && [ "$RELEASE_IP" = true ] && REQUIRED=release-ip
+          [ "$ACTION" = cleanup ] && [ "$DESTROY_PVC" = true ] && REQUIRED=destroy-pvc
+          if [ "$DRY_RUN" = true ]; then
+            echo "Dry run: no confirmation needed, nothing will change."
+          else
+            [ "$CONFIRM" = "$REQUIRED" ] \
+              || die "LIVE $ACTION requires confirm=\"$REQUIRED\" (got \"$CONFIRM\"). Flip dry_run back on to rehearse."
+          fi
+          echo "required-confirm: $REQUIRED" >> "$GITHUB_STEP_SUMMARY"
+          # Exported instead of recomputed downstream: the word an operator must type
+          # has exactly one definition, and a second copy of the mapping is how a
+          # rehearsal and a live run start disagreeing about what counts as consent.
+          echo "required=$REQUIRED" >> "$GITHUB_OUTPUT"
+
+      - name: Run
+        run: |
+          set -euo pipefail
+          # Every conditional here is an if-block, not `[ cond ] && FLAGS+=(…)`: as the
+          # last command of the step a false test exits 1, and a real false — an
+          # unticked box — would then fail the job.
+          FLAGS=()
+          if [ "$DRY_RUN" = true ]; then FLAGS+=(--dry-run); fi
+          if [ "$ACTION" = cleanup ]; then
+            case "$CLEANUP_MODE" in
+              park)   FLAGS+=(--keep-pools) ;;
+              backup) FLAGS+=(--backup-only) ;;
+            esac
+            if [ "$RELEASE_IP" = true ]; then FLAGS+=(--release-ip); fi
+            if [ "$DISK_SNAPSHOT" = true ]; then FLAGS+=(--with-disk-snapshot); fi
+            if [ "$SKIP_BACKUP" = true ]; then FLAGS+=(--skip-backup); fi
+            if [ "$DESTROY_PVC" = true ]; then FLAGS+=(--destroy-pvc --yes); fi
+            SCRIPT=deploy/gcp/substrate-cleanup.sh
+          else
+            # `latest` is what makes this usable after a teardown nobody planned: the
+            # restore pulls the newest pools.json from the bucket instead of asking for
+            # a gs:// URI that only existed in the terminating operator's shell history.
+            FLAGS+=(--snapshot="$SNAPSHOT")
+            if [ "$WITH_PRIMARY" = true ]; then FLAGS+=(--with-primary); fi
+            SCRIPT=deploy/gcp/substrate-recreate.sh
+          fi
+          echo "::group::$SCRIPT ${FLAGS[*]}"
+          bash "$SCRIPT" "${FLAGS[@]}"
+          echo "::endgroup::"
+
+      - name: What to look at next
+        if: always()
+        env:
+          REQUIRED_WORD: ${{ steps.gate.outputs.required }}
+        run: |
+          {
+            if [ "$DRY_RUN" = true ]; then
+              echo "This was a rehearsal. Re-run with dry_run=false and confirm=\`${REQUIRED_WORD:-the word this run prints}\` to make it real."
+            elif [ "$ACTION" = cleanup ]; then
+              echo "Pools are gone. Restore with this workflow (action=recreate, snapshot=latest), then verify with deploy/gcp/substrate-check.sh."
+            else
+              echo "Run deploy/gcp/substrate-check.sh for the full picture; the recreate step already proved the worker pods are Ready."
+            fi
+            echo "Terraform still owns these pools: the next gke_reconcile refreshes and adopts whatever this run created."
+          } >> "$GITHUB_STEP_SUMMARY"

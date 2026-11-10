@@ -39,6 +39,7 @@ Run `deploy/gcp/substrate-check.sh` to reproduce every claim in this file.
 | Worker nodes onto `COS_CONTAINERD` | by hand: `gcloud container clusters upgrade … --image-type=COS_CONTAINERD --quiet` | `node-pools describe … --format="value(config.imageType)"` → `COS_CONTAINERD`; the surge node `gke-…-substrate-worker-1b371960-tpxz` is Ready on `Container-Optimized OS from Google` and the Ubuntu node it replaced is gone |
 | The by-hand cluster state and the Terraform module agree | PR #271, verified by the merge-triggered apply | run [42684395694](https://github.com/niravshah2705/symphony/actions/runs/42684395694) job `reconcile substrate gke`: **"No changes. Your infrastructure matches the configuration"**, `Plan: 0 create, 0 update, 0 delete` — so the node GKE is running is the node the module describes, not just the node someone typed into `gcloud` |
 | Backup, force-teardown and restore as two scripts | `deploy/gcp/substrate-cleanup.sh`, `deploy/gcp/substrate-recreate.sh` | the restore ran end-to-end on 2026-11-10: 6 Ready nodes, `postgres-0 2/2`, `planner-pool` `2/2 Ready`, `atelet` on every worker node; the backup ran into `gs://adlc-9e72f-substrate-backup/` with 7/7 objects verified |
+| Both scripts as manual CI, with the permissions they need reported from the live policy | `.github/workflows/substrate-nodepools.yml`, pinned by `substrate-workflow-config.test.js` | `workflow_dispatch` only; `dry_run` default true plus a typed `confirm`; the authorization step fails a `--with-disk-snapshot` run because `compute.snapshots.create` is granted to the deployer SA nowhere in this project |
 
 ## Teardown and restore
 
@@ -51,9 +52,35 @@ remembered under pressure.
 #    --keep-pools to park at 0 nodes instead of deleting, --backup-only to skip the teardown)
 deploy/gcp/substrate-cleanup.sh
 # 2. Rebuild from exactly that configuration, then prove a worker pod comes up
-deploy/gcp/substrate-recreate.sh --snapshot=gs://<bucket>/<cluster>/<stamp>
+deploy/gcp/substrate-recreate.sh --snapshot=latest   # or gs://<bucket>/<cluster>/<stamp>
 deploy/gcp/substrate-check.sh
 ```
+
+Both are also **manual** GitHub Actions —
+`.github/workflows/substrate-nodepools.yml`, `workflow_dispatch` only, no push and
+no schedule — so the runbook works from the Actions tab while CI is the only machine
+in reach. `dry_run` defaults to **true**, and a live run additionally requires the
+`confirm` input typed to the strongest applicable word: `restore` (recreate, because
+it buys machines), `teardown`, `release-ip` or `destroy-pvc` (cleanup, whichever of
+those the checkboxes imply). Nothing on the workflow is destructive until someone
+types.
+
+The authorization it needs, read from the live policy rather than assumed:
+
+| Needed for | Role | `gh-deployer@<project>` |
+|---|---|---|
+| pool list/create/update/delete, and every `kubectl` verb | `roles/container.admin` | yes |
+| the `pg_dump` + `pools.json` write, and `--snapshot=latest` reads | `roles/storage.admin` | yes |
+| disk / instance / address lookups in the teardown report | `roles/compute.viewer` | yes |
+| `--release-ip` | `projects/<p>/roles/substrateStaticIpAdmin` | yes |
+| `--with-disk-snapshot` | `roles/compute.storageAdmin` | **no** |
+
+`compute.snapshots.create` is granted to this service account nowhere in the project,
+so a cleanup with `--with-disk-snapshot` fails that step. The `pg_dump` is the real
+backup either way. The workflow's first step re-checks all five at run time and stops
+before the backup with the exact `add-iam-policy-binding` command — granting is not
+automated, because an IAM write is a wider blast radius than a node-pool delete and
+the runner checks out whatever branch is dispatched.
 
 What the cleanup guarantees, because each of these was a bug found while writing it:
 
@@ -75,12 +102,15 @@ What the cleanup guarantees, because each of these was a bug found while writing
   the script deletes the `LoadBalancer` Service in `envoy-gateway-system` and lets the
   in-cluster service controller release the Compute objects.
 
-The recreate side reads `pools.json` from the snapshot (`gs://` or local) so a restore
-reproduces what was running rather than what the script last guessed: machine type,
-boot disk type/size/IOPS/throughput, image type, autoscaling bounds, taint and label.
-A snapshot prefix it cannot read is a loud warning, not a silent fallback — the
-hyperdisk values took three attempts to get right and the defaults are the only other
-place they are written down.
+The recreate side reads `pools.json` from the snapshot (`latest`, `gs://` or local) so
+a restore reproduces what was running rather than what the script last guessed:
+machine type, boot disk type/size/IOPS/throughput, image type, autoscaling bounds,
+taint and label. `latest` resolves the newest `<cluster>/<stamp>/pools.json` in the
+backup bucket — the stamps are fixed-width UTC, so the lexical maximum is the
+chronological one — which is what makes a restore after an *unplanned* teardown a
+single command instead of a URI hunt. A snapshot prefix it cannot read is a loud
+warning, not a silent fallback — the hyperdisk values took three attempts to get right
+and the defaults are the only other place they are written down.
 
 One timing lesson is encoded in the verify step: worker pods are **Ready minutes after
 they are Running**, because ateworker first waits for atelet to create

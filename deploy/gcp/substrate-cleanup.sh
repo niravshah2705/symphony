@@ -354,4 +354,6 @@ printf '  backup:    %s/%s/\n' "$BACKUP_BUCKET_URL" "$PREFIX"
 if [ "$DESTROY_PVC" != 1 ]; then
   note "the postgres PD was kept on purpose: about \$6/month, and the only copy of the metadata."
   note "Restore capacity with: deploy/gcp/substrate-recreate.sh --snapshot=${BACKUP_BUCKET_URL}/${PREFIX}"
+  note "  (or --snapshot=latest once this run's prefix is the newest one in the bucket)"
+  note "Or from CI: the 'Substrate node pools (cleanup / recreate)' workflow, action=recreate."
 fi
