@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 255 nodes
+Community of 424 nodes
 
-- **Size**: 255 nodes
-- **Cohesion**: 0.2411
+- **Size**: 424 nodes
+- **Cohesion**: 0.2540
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,7 +18,10 @@ Community of 255 nodes
 | test:coder results report the broker branch after an automatic retry rotation@L77 | Test | ./packages/shared/src/agent/coder-flow.test.js | 77-81 |
 | test:planned coder results export the broker-authoritative artifact receipt@L83 | Test | ./packages/shared/src/agent/coder-flow.test.js | 83-94 |
 | test:proxied coding isolates DeepAgent shell and developer-tool contexts@L440 | Test | ./packages/shared/src/agent/coder-flow.test.js | 440-486 |
+| test:recordStackLink persists the link and recovers the blocker identifier@L952 | Test | ./packages/shared/src/agent/coder-flow.test.js | 952-973 |
+| test:recordStackLink is a no-op when the run was not stacked@L975 | Test | ./packages/shared/src/agent/coder-flow.test.js | 975-984 |
 | resolveRole | Function | ./packages/shared/src/agent/coder-orchestrator.js | 362-371 |
+| recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 690-710 |
 | buildTicketPrompt | Function | ./packages/shared/src/agent/coder.js | 42-76 |
 | isCoderLlmUsable | Function | ./packages/shared/src/agent/coder.js | 79-84 |
 | assertOpenSweRepositoryProvider | Function | ./packages/shared/src/agent/coder.js | 86-93 |
@@ -61,11 +64,8 @@ Community of 255 nodes
 | normalizeFsToolArgs | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 41-49 |
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
-| test:remaps aliases for write_file and edit_file too@L21 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 21-30 |
-| test:honors alias priority: prefers `path` over lower-priority keys@L32 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 32-35 |
-| test:leaves a correct call untouched (same reference, no rewrite)@L37 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 37-40 |
 
-*... and 205 more members.*
+*... and 374 more members.*
 
 ## Execution Flows
 
@@ -82,36 +82,36 @@ Community of 255 nodes
 
 ### Outgoing
 
-- `equal` (156 edge(s))
-- `join` (87 edge(s))
-- `deepEqual` (47 edge(s))
-- `strictEqual` (42 edge(s))
-- `String` (38 edge(s))
+- `equal` (284 edge(s))
+- `join` (181 edge(s))
+- `String` (86 edge(s))
+- `includes` (67 edge(s))
+- `deepEqual` (57 edge(s))
+- `isArray` (55 edge(s))
+- `strictEqual` (50 edge(s))
+- `trim` (46 edge(s))
+- `require` (39 edge(s))
+- `endsWith` (39 edge(s))
+- `slice` (37 edge(s))
+- `execFileSync` (37 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `isArray` (35 edge(s))
-- `require` (32 edge(s))
-- `step` (30 edge(s))
-- `trim` (28 edge(s))
-- `map` (28 edge(s))
-- `slice` (24 edge(s))
-- `filter` (21 edge(s))
-- `after` (19 edge(s))
-- `Boolean` (18 edge(s))
+- `map` (36 edge(s))
+- `step` (34 edge(s))
 
 ### Incoming
 
-- `equal` (156 edge(s))
-- `join` (48 edge(s))
-- `deepEqual` (47 edge(s))
-- `strictEqual` (42 edge(s))
+- `equal` (283 edge(s))
+- `join` (104 edge(s))
+- `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
+- `deepEqual` (55 edge(s))
+- `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
+- `strictEqual` (50 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (47 edge(s))
 - `deepStrictEqual` (37 edge(s))
+- `ok` (32 edge(s))
+- `tmpdir` (28 edge(s))
+- `writeFileSync` (28 edge(s))
+- `mkdtempSync` (27 edge(s))
+- `after` (26 edge(s))
 - `./packages/shared/src/agent/framework.js` (26 edge(s))
-- `./packages/shared/src/agent/langfuse.js` (24 edge(s))
-- `./packages/shared/src/agent/settings-policy.js` (24 edge(s))
-- `./packages/shared/src/agent/coder.js` (22 edge(s))
-- `after` (19 edge(s))
-- `./packages/shared/src/agent/plan.js` (17 edge(s))
-- `./packages/shared/src/agent/trace-annotations.test.js` (16 edge(s))
-- `mkdtempSync` (15 edge(s))
-- `tmpdir` (15 edge(s))
-- `rmSync` (15 edge(s))
+- `execFileSync` (26 edge(s))

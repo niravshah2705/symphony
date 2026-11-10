@@ -236,3 +236,13 @@ test('the worker namespace is one name across the scripts and the workflows', ()
   assert.match(nodepools, new RegExp(`POOL_NS: '${expected}'`));
   assert.match(control, new RegExp(`WORKER_NS=${expected}`));
 });
+
+test('the authorization step reads the policy with the filter form that matches', () => {
+  // gcloud's `--filter "bindings.members=x"` (equals) matches nothing today and
+  // still exits 0. The step then reports every role as missing and fails a
+  // perfectly authorized run — proven by the first dispatch of this workflow.
+  assert.match(nodepools, /--filter="bindings\.members:\$SA"/,
+    'the IAM filter must use the colon form, not `=`');
+  // And an empty read must be named as an unread policy, not as absent grants.
+  assert.match(nodepools, /if \[ -z "\$ROLES" \]; then/);
+});
