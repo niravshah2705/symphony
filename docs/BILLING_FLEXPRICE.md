@@ -298,14 +298,34 @@ These deletions are **explicitly blocked** pending the AGPL memo. Removing the
 working money path while the replacement may be undeployable would leave the
 product unable to bill at all.
 
+**Status after Phase 2.** The `type:'recharge'` path in `verify-order` is gone —
+every one-time credit now runs through `settle()` and the wallet, and nothing it
+does touches `ledgerEntries`. Two items are still standing, on purpose:
+`ledger.js`'s ₹500 local opening seed, because `gate.js` still reads
+`balancePaise` and deleting the seed without moving the gate would lock everyone
+out of a run (it goes in Phase 3 with the gate, which is the phase that replaces
+it — the FlexPrice-side `FREE_CREDIT_GRANT` from Phase 1's provisioner already
+exists, so no second funding source is being created); and the
+`SUBSCRIPTION_PAYMENT_SUCCESS` mandate path, which is a *cashfree subscription*
+credit with no quote and therefore no intent — the plan assigns the mandate spine
+to Phase 6. The mandate path did get the two cheap fixes it was holding: replayed
+events no longer double-credit, and its rupee conversion no longer goes through a
+float.
+
 ## 8. Independent of all of this
 
-`verify-order` (`billing-api.js:488-536`) is a live cross-tenant credit-theft hole
-today: it takes an arbitrary `orderId`, fetches it from Cashfree, and credits
+> ✅ **Closed in Phase 2**, as planned. `verify-order` and both webhooks now go
+> through `settle()`, which refuses an order that is not the caller's (403
+> `order_not_mine`) and takes the amount from the persisted intent rather than from
+> whatever the gateway reports. §11 has the live transcript of the refusal.
+
+`verify-order` (`billing-api.js:488-536`) **was** a live cross-tenant credit-theft
+hole: it took an arbitrary `orderId`, fetched it from Cashfree, and credited
 **the caller's own org** with `order.order_amount`, with no ownership check; the
-dedupe at `:498` scans only the caller's ledger so it cannot detect it. A ~10-line
-fix (own the order or refuse) does not depend on FlexPrice and should not wait for
-Phase 1.
+dedupe then scanned only the caller's ledger, so it could not even detect the
+duplicate. The fix did not depend on FlexPrice and did not wait — `settle()`'s
+ownership and amount assertions are ~10 lines, and they are what the replay and
+cross-org checks in §11 exercise.
 
 ---
 
@@ -320,6 +340,8 @@ Nothing deploys to cloud in either phase.
 npm run billing:flexprice:bootstrap  # A1 — checkout → secrets → build → up → verify
 npm run billing:flexprice:spike      # A3 — 14 probes (pipeline-health first), prints + writes results.json
 npm run billing:flexprice:inspect    # read back a wallet / balance / transactions / meter
+npm run billing:flexprice:provision  # keys, meters, prices, GST prices, per-org customer+wallet
+npm run billing:recharge:verify      # §11 — the recharge spine end to end, 53 checks
 npm run billing:flexprice:down       # compose down -v (the -v matters: see §0.6)
 npm run billing:metrics:check   # bash scripts/kind-metrics-install.sh
 npm run billing:metrics:probe   # bash scripts/kind-otel-roundtrip.sh
@@ -353,7 +375,7 @@ accept ≠ ingest ≠ queryable, and that is the trap in this system.
 ### What Phase 0 still owes
 
 Nothing in the stack: it comes up with one command and the four modules are tested.
-What is owed is *decisions* — §11 — and the Phase 1 work itself, which the item-18
+What is owed is *decisions* — §12 — and the Phase 1 work itself, which the item-18
 gate blocks.
 
 Phase 1 has since been built and measured: the catalog is in §10, and the four
@@ -379,6 +401,7 @@ we validate locally is the thing that will run.
 | a metric reaches Prometheus | `npm run billing:metrics:probe` — never trust the 200 |
 | a name is still emitted | `npm run billing:metrics:check` |
 | money math | `node --test packages/shared-core/src/billing/` |
+| **the recharge spine, end to end** | `npm run billing:recharge:verify` — §11. The unit suites can only prove the refusals (`CONFIG` is a require-time snapshot), so this is the command that proves the ₹590 → 500-credit half against a live wallet |
 | **the ingest pipeline actually works** | `npm run billing:flexprice:spike -- --only pipeline-health` — posts one event and requires it back through the meter. If this fails, every usage number below is a property of the compose stack, not of FlexPrice |
 | a FlexPrice behaviour | the graded table in `docs/FLEXPRICE_FINDINGS.md` §9 (measured: ✅ / 🔴 / ◻, each citing its probe). If a claim is marked ◻ it was **not** probed and source reading is not evidence; re-run the spike rather than reasoning harder |
 
@@ -445,7 +468,157 @@ aggregation field nothing else uses, and probe D mints and **revokes** a key to
 prove the money key cannot. Neither is part of the catalog; delete the meters if
 the list bothers you, they are not referenced.
 
-## 11. Decisions still needed from you
+## 11. The recharge spine — as built (Phase 2)
+
+Four pieces, and one rule: **`services/billing/src/recharge-settle.js` is the only
+code in this repository that adds spendable credit.**
+
+```
+POST /recharge            → quote only. Returns ₹500 + CGST ₹45 + SGST ₹45 = ₹590,
+                            500 credits. Persists nothing, credits nothing.
+POST /recharge/create-order  (also /cashfree/…, /razorpay/…)
+                          → re-quotes, writes the `rechargeIntents` row (status
+                            QUOTED), then asks the chosen gateway for an order.
+POST /cashfree/verify-order · /razorpay/verify-order · /recharge/settle
+POST /cashfree/webhook · /razorpay/webhook
+                          → all five delegate to settle(), in that order:
+                            intent exists → belongs to the caller's org → not
+                            already settled → the GST recomputes to the intent's
+                            own totals → the provider confirms the intent's
+                            amount → credit `paiseToCredits(subtotalPaise)` →
+                            read the wallet back → only then status SETTLED.
+```
+
+`payment-providers.js` is the two adapters behind that seam (Cashfree takes rupees
+as a decimal string, Razorpay takes integer paise; both are verified, neither is
+allowed to define the price). `BILLING_ALLOW_MOCK_PAYMENTS` is read in exactly two
+places — `settle()` and the create-order gate — and both read the same helper, so
+a deployment cannot create mock orders in one place and refuse them in the other.
+
+**Both live holes in §8 are closed by it.** `verify-order` credited the *caller's*
+org for any `order_<org>_` id it could fetch; it now refuses with 403
+`order_not_mine` before touching a wallet, and the org comes from the gateway's
+`x-ai-fleet-billing-org-id` header, never from the request body. The webhook
+credited any PAID order with no server-side amount check; it now settles the
+*intent*, so the amount is the one this server quoted.
+
+### Running it
+
+```bash
+npm run billing:recharge:verify        # 53 checks against the live stack
+npm run billing:recharge:verify -- --keep
+```
+
+It boots the real `services/billing/src/app.js` on an ephemeral loopback port with
+a throwaway org id, drives the routes exactly as a browser and the gateway would,
+and reads the money back out of FlexPrice rather than trusting its own responses.
+It needs the stack up and provisioned (`billing:flexprice:bootstrap`,
+`billing:flexprice:provision`) and reads both plane keys from
+`deploy/flexprice/.env` — it never echoes one. No Cashfree or Razorpay credentials
+are involved: the payment is the local mock (decision D1), so **what this proves is
+the arithmetic, the ownership and the idempotency — not a real ₹590 capture**,
+which stays Phase 7 item 5.
+
+### Transcript (2026-11-12, FlexPrice v2.1.48, org `org-recharge-verify-mwdpe7v1`)
+
+```
+1. quote ₹500 (POST /recharge — quote only)
+  [ok] settled:false — a quote credits nothing
+  [ok] subtotal 50000p + gst 9000p = total 59000p
+  [ok] total rendered as the decimal string "590.00"
+  [ok] CGST 9% 4500p + SGST 9% 4500p
+  [ok] credits = 500 = subtotal/100, never total/100   (total/100 would be 590)
+  [ok] place of supply assumed from the supplier state (no GSTIN saved) — state=24 assumed=true
+
+2. place of supply from the saved GSTIN (24=Gujarat supplier)
+  [ok] intra-state GSTIN 24 → CGST+SGST, assumed:false, total still 59000p
+  [ok] inter-state GSTIN 27 → one IGST 9000p, total unchanged at 59000p, credits=500
+  [ok] a malformed GSTIN is refused at the write, not stored — 400 invalid_gstin
+  [ok] a rejected GSTIN changes nothing — the previously saved 27 still prices the quote
+
+3. Cashfree — create-order persists, verify-order settles
+  [ok] create-order returns the mock checkout for an unconfigured gateway
+  [ok] provider recorded as cashfree (org default) with environment named — env=sandbox
+  [ok] create-order echoes the gross as "590.00", never a provider number
+  [ok] intent persisted — QUOTED 50000/9000/59000/500 gstin=24AAACR1296F1Z5
+  [ok] settlement reports 500 credits added, ₹590.00 collected
+  [ok] collected == gst + prepaid×100 + promo×100  →  59000 = 9000 + 500×100 + 0×100
+  [ok] wallet real_time_credit_balance is EXACTLY 500
+
+4. replay the same order
+  [ok] replay is accepted as already-processed, not re-charged
+  [ok] balance still EXACTLY 500 after the replay
+  [ok] exactly one credit row for the settled order
+
+5. ownership and provenance refusals
+  [ok] another org cannot settle my order — 403 order_not_mine
+  [ok] an order id with no intent is refused — 404 intent_not_found
+  [ok] a missing order id is refused — 400 missing_order_id
+  [ok] a caller context with no admin role cannot mutate billing — 403 access_denied
+  [ok] none of the refusals moved the balance
+
+6. 10% coupon bonus on a ₹500 recharge
+  [ok] coupon settle reports 500 paid + 50 bonus credits
+  [ok] charged unchanged at ₹590.00 (the bonus is not a discount)
+  [ok] balance is now 1,050   [ok] the bonus is a FREE_CREDIT_GRANT row, not a bonus field
+
+7. Razorpay — second gateway, same settle()
+  [ok] quote ₹1,000 → 18,000p GST → 118,000p total
+  [ok] a bad Razorpay signature is refused before any credit — payment_signature_invalid
+  [ok] the refused signature left the intent QUOTED
+  [ok] razorpay verify-order settles — wallet balance is now 2,050 credits
+
+8. credit-row proof
+  [ok] three purchase rows totalling 2,000 credits — never 2,270 (₹590+₹590+₹1,180)
+  [ok] every purchase row carries priority 1 and reason PURCHASED_CREDIT_DIRECT
+  [ok] each row's idempotency key is the recharge order
+  [ok] GST metadata on the row is the ₹90, recorded but never credited
+
+9. the mock refusal (BILLING_ALLOW_MOCK_PAYMENTS=false)
+  [ok] create-order with no gateway and no mock flag is refused — provider_not_configured
+  [ok] the refusal wrote no intent   [ok] and left the balance at 2,050
+```
+
+The headline invariant, in one line of that output: `59000 = 9000 + 500×100`. ₹590
+is collected, ₹90 of it is tax, 500 credits become spendable, and the identity
+`collected = gst + prepaid×100 + promo×100` is asserted from the settled intent —
+so a future change that credits the gross shows up as a failure here, not as an
+invoice that quietly over-funds someone.
+
+### Measured while proving it
+
+* 🔴 **`GET /v1/customers/:id/wallets` answers a bare JSON array** — not the
+  `{items}` envelope every search route uses. And it reports `currency: "inr"`
+  lower-case. The first live run caught the consequence: `ensureWallet()` looked
+  for `items`, found none, re-created the wallet, took the `409 already_exists`
+  echo as the created resource, and then asked for the balance of wallet
+  `undefined`. That is not a first-recharge bug — **every second recharge for the
+  same org would fail.** Fixed at the client boundary (`flexprice-client.js`
+  `rowsOf()`), with the casing fixed in `recharge-settle.js` and
+  `scripts/flexprice-provision.js` too, and a refusal (`flexprice_wallet_unresolved`)
+  for a wallet that still cannot be resolved, so the failure is a 502 with a
+  sentence rather than a credit to `undefined`. Regression tests: the client's
+  three-shape read, and `recharge-settle.test.js`'s "a second recharge for the
+  same org reuses its wallet".
+* A credit row is `type: "credit"` with `transaction_reason:
+  "PURCHASED_CREDIT_DIRECT"`; the credited amount is `credit_amount` (string) and
+  the remaining amount is `credits_available`. `idempotency_key` round-trips on
+  the row, which is what makes a replay provably one row.
+* `metadata` on the row carries `subtotal_paise`, `gst_paise`, `collected_paise`,
+  `provider`, `fleet_order_id` — the GST is *recorded* next to the credit and is
+  never part of it.
+* `placeOfSupply` in a quote response is `{type, stateCode, supplierStateCode,
+  assumed, basis}`. Nothing in the tree reads a nested `code` key.
+
+### What Phase 2 deliberately did not finish
+
+Recorded as deviations in `docs/BILLING_IMPLEMENTATION_PLAN.md` §Phase 2 outcome —
+the unknown-location GST rule (supplier-state default + `assumed`, not IGST), the
+`ledger.js` opening ₹500 seed left in place one phase longer (the gate still reads
+`balancePaise`; the FlexPrice-side `FREE_CREDIT_GRANT` already exists), and the
+Razorpay checkout-signature check being conditional on the browser presenting one.
+
+## 12. Decisions still needed from you
 
 1. **AGPL** — the memo's five options with a recommendation. Nothing else here is
    actionable until this is chosen; I am not treating "probably fine" as an answer.

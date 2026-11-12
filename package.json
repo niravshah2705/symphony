@@ -43,6 +43,7 @@
     "billing:flexprice:spike": "node scripts/flexprice-spike/run.js",
     "billing:flexprice:provision": "node scripts/flexprice-provision.js",
     "billing:flexprice:phase1-probes": "node scripts/flexprice-phase1-probes.js",
+    "billing:recharge:verify": "node scripts/flexprice-recharge-verify.js",
     "billing:flexprice:down": "docker compose -f deploy/flexprice/compose.yaml down -v",
     "billing:flexprice:inspect": "node scripts/flexprice-inspect.js",
     "spa:obfuscate": "node scripts/obfuscate-spa.js",

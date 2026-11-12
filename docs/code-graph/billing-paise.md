@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 184 nodes
+Community of 189 nodes
 
-- **Size**: 184 nodes
-- **Cohesion**: 0.2494
+- **Size**: 189 nodes
+- **Cohesion**: 0.2498
 - **Dominant Language**: javascript
 
 ## Members
@@ -27,29 +27,31 @@ Community of 184 nodes
 | test:savingsEstimate: always-on baseline minus what was actually billed@L78 | Test | ./packages/shared-core/src/billing/compute-pricing.test.js | 78-95 |
 | test:savingsEstimate: never reports a saving that is a refund@L97 | Test | ./packages/shared-core/src/billing/compute-pricing.test.js | 97-108 |
 | test:savingsEstimate: unusable inputs are reported, not defaulted@L110 | Test | ./packages/shared-core/src/billing/compute-pricing.test.js | 110-117 |
-| bonusPaise | Function | ./packages/shared-core/src/billing/credits.js | 27-35 |
-| topUpCrediting | Function | ./packages/shared-core/src/billing/credits.js | 44-73 |
-| assertNoTaxCredited | Function | ./packages/shared-core/src/billing/credits.js | 83-97 |
+| bonusPaise | Function | ./packages/shared-core/src/billing/credits.js | 31-39 |
+| topUpCrediting | Function | ./packages/shared-core/src/billing/credits.js | 48-77 |
+| assertNoTaxCredited | Function | ./packages/shared-core/src/billing/credits.js | 87-101 |
 | test:topUpCrediting: ₹590 collected credits ₹500 of prepaid wallet@L18 | Test | ./packages/shared-core/src/billing/credits.test.js | 18-28 |
-| test:topUpCrediting: a 10% bonus is a second, expiring wallet — not a new exchange rate@L30 | Test | ./packages/shared-core/src/billing/credits.test.js | 30-42 |
-| test:topUpCrediting: an explicit bonusBps overrides the quote, for a ratio set outside the coupon table@L44 | Test | ./packages/shared-core/src/billing/credits.test.js | 44-47 |
-| test:topUpCrediting: refuses a quote-shaped object that is not one@L49 | Test | ./packages/shared-core/src/billing/credits.test.js | 49-53 |
-| test:assertNoTaxCredited: refuses to credit the GST-inclusive total@L58 | Test | ./packages/shared-core/src/billing/credits.test.js | 58-66 |
-| test:assertNoTaxCredited: an untaxed quote has nothing to leak@L68 | Test | ./packages/shared-core/src/billing/credits.test.js | 68-71 |
-| test:bonusPaise: validates its inputs@L73 | Test | ./packages/shared-core/src/billing/credits.test.js | 73-80 |
+| test:the credit unit has exactly one source (D6)@L30 | Test | ./packages/shared-core/src/billing/credits.test.js | 30-41 |
+| test:topUpCrediting: a 10% bonus is a second, expiring wallet — not a new exchange rate@L43 | Test | ./packages/shared-core/src/billing/credits.test.js | 43-55 |
+| test:topUpCrediting: an explicit bonusBps overrides the quote, for a ratio set outside the coupon table@L57 | Test | ./packages/shared-core/src/billing/credits.test.js | 57-60 |
+| test:topUpCrediting: refuses a quote-shaped object that is not one@L62 | Test | ./packages/shared-core/src/billing/credits.test.js | 62-66 |
+| test:assertNoTaxCredited: refuses to credit the GST-inclusive total@L71 | Test | ./packages/shared-core/src/billing/credits.test.js | 71-79 |
+| test:assertNoTaxCredited: an untaxed quote has nothing to leak@L81 | Test | ./packages/shared-core/src/billing/credits.test.js | 81-84 |
+| test:bonusPaise: validates its inputs@L86 | Test | ./packages/shared-core/src/billing/credits.test.js | 86-93 |
 | FlexpriceError | Class | ./packages/shared-core/src/billing/flexprice-client.js | 41-53 |
 | constructor | Function | ./packages/shared-core/src/billing/flexprice-client.js | 42-52 |
 | truncate | Function | ./packages/shared-core/src/billing/flexprice-client.js | 55-58 |
 | safeStringify | Function | ./packages/shared-core/src/billing/flexprice-client.js | 60-62 |
 | seg | Function | ./packages/shared-core/src/billing/flexprice-client.js | 68-68 |
 | parseJson | Function | ./packages/shared-core/src/billing/flexprice-client.js | 70-72 |
-| createFlexpriceClient | Function | ./packages/shared-core/src/billing/flexprice-client.js | 81-238 |
-| headersFor | Function | ./packages/shared-core/src/billing/flexprice-client.js | 88-101 |
-| once | Function | ./packages/shared-core/src/billing/flexprice-client.js | 103-115 |
-| request | Function | ./packages/shared-core/src/billing/flexprice-client.js | 117-161 |
-| get | Function | ./packages/shared-core/src/billing/flexprice-client.js | 163-163 |
-| post | Function | ./packages/shared-core/src/billing/flexprice-client.js | 164-164 |
-| isAlreadyExists | Function | ./packages/shared-core/src/billing/flexprice-client.js | 240-244 |
+| rowsOf | Function | ./packages/shared-core/src/billing/flexprice-client.js | 83-89 |
+| createFlexpriceClient | Function | ./packages/shared-core/src/billing/flexprice-client.js | 98-266 |
+| headersFor | Function | ./packages/shared-core/src/billing/flexprice-client.js | 105-118 |
+| once | Function | ./packages/shared-core/src/billing/flexprice-client.js | 120-132 |
+| request | Function | ./packages/shared-core/src/billing/flexprice-client.js | 134-178 |
+| get | Function | ./packages/shared-core/src/billing/flexprice-client.js | 180-180 |
+| post | Function | ./packages/shared-core/src/billing/flexprice-client.js | 181-181 |
+| isAlreadyExists | Function | ./packages/shared-core/src/billing/flexprice-client.js | 268-272 |
 | recorder | Function | ./packages/shared-core/src/billing/flexprice-client.test.js | 21-34 |
 | client | Function | ./packages/shared-core/src/billing/flexprice-client.test.js | 36-45 |
 | test:the environment id comes from config and lands on every data route@L47 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 47-53 |
@@ -62,27 +64,25 @@ Community of 184 nodes
 | test:a connection failure on a keyed write retries; on an unkeyed one it does not@L106 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 106-114 |
 | test:a 409 already_exists reads as success, since a replay and a race look the same@L116 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 116-121 |
 | test:a 409 that is not a duplicate still raises with the status and route@L123 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 123-135 |
-| test:an error message never carries a credential@L137 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 137-145 |
-| test:grantPromo stamps FREE_CREDIT_GRANT and never asks for a bonus@L147 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 147-158 |
 
-*... and 134 more members.*
+*... and 139 more members.*
 
 ## Execution Flows
 
 - **main** (criticality: 0.67, depth: 4)
-- **main** (criticality: 0.59, depth: 4)
+- **main** (criticality: 0.60, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (212 edge(s))
+- `equal` (220 edge(s))
 - `expect` (43 edge(s))
-- `throws` (42 edge(s))
+- `throws` (43 edge(s))
+- `String` (31 edge(s))
 - `getByRole` (30 edge(s))
-- `String` (30 edge(s))
+- `deepEqual` (29 edge(s))
 - `locator` (28 edge(s))
-- `deepEqual` (28 edge(s))
 - `Number` (25 edge(s))
 - `stringify` (23 edge(s))
 - `map` (22 edge(s))
@@ -94,18 +94,18 @@ Community of 184 nodes
 
 ### Incoming
 
-- `equal` (212 edge(s))
+- `equal` (220 edge(s))
 - `expect` (43 edge(s))
-- `throws` (42 edge(s))
+- `throws` (43 edge(s))
 - `./scripts/flexprice-phase1-probes.js` (34 edge(s))
 - `getByRole` (30 edge(s))
+- `deepEqual` (29 edge(s))
 - `locator` (28 edge(s))
-- `deepEqual` (28 edge(s))
 - `./packages/shared-core/src/billing/money-wire.test.js` (21 edge(s))
+- `./packages/shared-core/src/billing/money-wire.js` (20 edge(s))
+- `./packages/shared-core/src/billing/flexprice-client.test.js` (19 edge(s))
 - `click` (18 edge(s))
-- `./packages/shared-core/src/billing/flexprice-client.test.js` (18 edge(s))
-- `./packages/shared-core/src/billing/money-wire.js` (16 edge(s))
-- `./packages/shared-core/src/billing/flexprice-client.js` (15 edge(s))
+- `./packages/shared-core/src/billing/flexprice-client.js` (17 edge(s))
 - `./packages/shared-core/src/billing/flexprice-config.test.js` (15 edge(s))
 - `./scripts/flexprice-provision.js` (15 edge(s))
 - `fill` (14 edge(s))

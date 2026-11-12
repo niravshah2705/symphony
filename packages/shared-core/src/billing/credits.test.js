@@ -18,13 +18,26 @@ const RECHARGE = { subtotalPaise: 50000, supplierStateCode: '27', customerStateC
 test('topUpCrediting: ₹590 collected credits ₹500 of prepaid wallet', () => {
   const crediting = topUpCrediting({ quote: quote(RECHARGE) });
   assert.equal(crediting.prepaidPaise, 50000);
-  assert.equal(crediting.prepaidCredits, 50000, '1 credit = 1 paise of prepaid value');
+  assert.equal(crediting.prepaidCredits, 500, 'D6: 1 credit = ₹1, so ₹500 is 500 credits — the number FlexPrice gets as credits_to_add');
   assert.equal(crediting.promoPaise, 0);
   assert.equal(crediting.collectedPaise, 59000);
   assert.equal(crediting.gstPaise, 9000);
   assert.equal(crediting.prepaidPaise + crediting.gstPaise, crediting.collectedPaise);
   assert.equal(crediting.instructions.length, 1);
   assert.deepEqual(crediting.instructions[0], { walletType: CREDIT_SOURCE_PREPAID, amountPaise: 50000, expiry: null });
+});
+
+test('the credit unit has exactly one source (D6)', () => {
+  // credits.js re-exports money-wire's constant rather than re-spelling it: a
+  // second literal is a second number that can disagree, and probe A made the
+  // rupee side of that equation measured, not assumed.
+  const { PAISE_PER_CREDIT } = require('./credits');
+  const wire = require('./money-wire');
+  assert.equal(PAISE_PER_CREDIT, wire.PAISE_PER_CREDIT);
+  assert.equal(PAISE_PER_CREDIT, 100);
+  assert.equal(wire.paiseToCredits(50000), 500);
+  assert.equal(wire.creditsToPaise(500), 50000);
+  assert.throws(() => wire.paiseToCredits(50050), /not a whole number of credits/);
 });
 
 test('topUpCrediting: a 10% bonus is a second, expiring wallet — not a new exchange rate', () => {

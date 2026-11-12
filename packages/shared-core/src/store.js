@@ -319,6 +319,11 @@ const DEFAULT_STORE = Object.freeze({
   usageRecords: [],
   ledgerEntries: [],
   billingAccounts: [],
+  // Recharge intents: the order-side record of "we quoted ₹590 for ₹500 of
+  // credit and the gateway said PAID". Created at quote time, settled exactly
+  // once (services/billing/src/recharge-settle.js); keyed by the provider order
+  // id because that is what both the browser and the webhook present.
+  rechargeIntents: [],
   billing: { lastAggregatedAt: null }, // sweep watermark (see billing/sweep.js)
 
   // End User License Agreement acceptance, keyed at two scopes. `users[key]` and
@@ -435,6 +440,7 @@ function normalizeStore(parsed) {
     usageRecords: Array.isArray(source.usageRecords) ? source.usageRecords : [],
     ledgerEntries: Array.isArray(source.ledgerEntries) ? source.ledgerEntries : [],
     billingAccounts: Array.isArray(source.billingAccounts) ? source.billingAccounts : [],
+    rechargeIntents: Array.isArray(source.rechargeIntents) ? source.rechargeIntents : [],
     billing: normalizeBilling(source.billing),
     eula: normalizeEula(source.eula),
   };
@@ -469,7 +475,7 @@ const STORE_COLLECTION_KEYS = [
   // Billing: append-heavy records — each becomes one Firestore sub-collection doc
   // keyed by `id`, so no single document approaches the 1 MB limit and concurrent
   // appends never clobber one another (the ledger is the money source of truth).
-  'usageRecords', 'ledgerEntries', 'billingAccounts',
+  'usageRecords', 'ledgerEntries', 'billingAccounts', 'rechargeIntents',
 ];
 
 const LEGACY_BACKEND_KEY = 'legacy';
@@ -1163,6 +1169,79 @@ function upsertBillingAccount(orgId, patch = {}) {
   return merged;
 }
 
+/* --------------------------- Recharge intents ---------------------------- */
+//
+// The order-side half of a recharge: `recharge-settle.js` is the only writer
+// that may move money, and it moves it exactly once per intent, so the intent —
+// not the provider order and not the ledger — is the idempotency record. Amounts
+// are integer paise as decided at quote time and are frozen after: `update`
+// appends settlement fields (status, settledAt, providerOrderId) and may not
+// rewrite money, the same rule `updateUsageRecord` applies to `costPaise`.
+
+/** Create one recharge intent (newest first). */
+function addRechargeIntent(intent) {
+  if (!intent || !intent.orderId || !intent.orgId) {
+    throw new Error('addRechargeIntent requires { orderId, orgId }');
+  }
+  const current = readLegacyStore();
+  const now = new Date().toISOString();
+  const record = {
+    status: 'QUOTED',
+    ...intent,
+    orderId: String(intent.orderId),
+    id: `ric_${randomUUID()}`,
+    createdAt: intent.createdAt || now,
+  };
+  writeLegacyStore({ ...current, rechargeIntents: [record, ...current.rechargeIntents] });
+  return record;
+}
+
+/** The intent for one provider order id, or null. */
+function getRechargeIntent(orderId) {
+  if (!orderId) return null;
+  return readLegacyStore().rechargeIntents.find((i) => i.orderId === String(orderId)) || null;
+}
+
+/** Merge settlement fields onto the intent for `orderId`; money fields are immutable. */
+function updateRechargeIntent(orderId, patch = {}) {
+  const key = String(orderId || '');
+  if (!key) throw new Error('updateRechargeIntent requires an orderId');
+  const current = readLegacyStore();
+  let touched = false;
+  const rechargeIntents = current.rechargeIntents.map((i) => {
+    if (i.orderId !== key) return i;
+    touched = true;
+    return {
+      ...i,
+      ...patch,
+      id: i.id,
+      orderId: i.orderId,
+      orgId: i.orgId,
+      createdAt: i.createdAt,
+      subtotalPaise: i.subtotalPaise,
+      couponBps: i.couponBps,
+      bonusPaise: i.bonusPaise,
+      gstPaise: i.gstPaise,
+      totalPaise: i.totalPaise,
+      creditCount: i.creditCount,
+      settledAt: patch.status === 'SETTLED'
+        ? (patch.settledAt || new Date().toISOString())
+        : ('settledAt' in patch ? patch.settledAt : i.settledAt),
+    };
+  });
+  if (touched) writeLegacyStore({ ...current, rechargeIntents });
+  return touched ? rechargeIntents.find((i) => i.orderId === key) : null;
+}
+
+/** Intents, newest first — optionally filtered by orgId and/or status. */
+function listRechargeIntents(filter = {}) {
+  const { orgId, status } = filter || {};
+  let intents = readLegacyStore().rechargeIntents;
+  if (orgId) intents = intents.filter((i) => i.orgId === orgId);
+  if (status) intents = intents.filter((i) => i.status === status);
+  return intents;
+}
+
 /* ------------------------- Settings history ----------------------------- */
 
 // Append-only trail of model/tier selections + indicative cost, kept for future
@@ -1438,6 +1517,10 @@ module.exports = {
   getBillingAccount,
   listBillingAccounts,
   upsertBillingAccount,
+  addRechargeIntent,
+  getRechargeIntent,
+  updateRechargeIntent,
+  listRechargeIntents,
   MAX_SETTINGS_HISTORY,
   listSettingsHistory,
   addSettingsHistory,

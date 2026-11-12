@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { el, clear, loading, toast } from '../dom.js';
+import { payRecharge, isSettled } from '../recharge.js';
 import {
   activeWorkspaceOrganization,
   activeWorkspaceProject,
@@ -639,7 +640,9 @@ async function renderOrgBilling(section, organization, isAdmin) {
   }
 
   if (isAdmin) {
-    // 1. On-demand Reload with Cashfree Checkout
+    // 1. On-demand Reload — the quote, the checkout and the settlement all come
+    // from the server (public/js/recharge.js), because a recharge is ₹500 + ₹90
+    // GST = ₹590 for 500 credits and no number in this file gets to decide that.
     const reloadInput = el('input', { type: 'number', min: '10', step: '100', value: '500', style: 'width: 120px;' });
     const payCashfreeBtn = el('button', { type: 'button', class: 'primary' }, 'Reload via Cashfree (UPI / Card / Netbanking)');
 
@@ -648,43 +651,24 @@ async function renderOrgBilling(section, organization, isAdmin) {
       if (!Number.isFinite(val) || val <= 0) return toast('Enter a valid reload amount');
       payCashfreeBtn.disabled = true;
       try {
-        toast('Creating Cashfree order…');
-        const orderRes = await api.billing.createCashfreeOrder({
+        toast('Creating order…');
+        const settlement = await payRecharge({
           amountInr: val,
-          customerName: pi.billingName || organization.name || 'Organization Admin',
-          customerEmail: pi.billingEmail || 'billing@example.com',
-          customerPhone: pi.billingPhone || '9999999999',
+          provider: (pi.provider === 'razorpay') ? 'razorpay' : 'cashfree',
+          customer: {
+            customerName: pi.billingName || organization.name || 'Organization Admin',
+            customerEmail: pi.billingEmail || 'billing@example.com',
+            customerPhone: pi.billingPhone || '9999999999',
+          },
+          returnUrl: window.location.href,
+          onStatus: (msg) => toast(msg),
         });
-
-        if (!orderRes.paymentSessionId) {
-          throw new Error('No payment session received from Cashfree.');
+        if (isSettled(settlement)) {
+          toast(`Payment successful! ${settlement.creditsAdded} credits added for ${inr(settlement.totalInr)}.`);
+        } else {
+          toast(`The gateway answered, but nothing was credited (${settlement && settlement.status || 'no settlement'}).`, 'warn');
         }
-
-        toast('Launching Cashfree Checkout…');
-        const CashfreeSdk = await loadCashfreeSdk();
-        const cashfree = CashfreeSdk({ mode: 'sandbox' });
-
-        cashfree.checkout({
-          paymentSessionId: orderRes.paymentSessionId,
-          redirectTarget: '_modal',
-        }).then(async (result) => {
-          if (result && result.error) {
-            toast(`Payment error: ${result.error.message}`);
-            payCashfreeBtn.disabled = false;
-          } else {
-            toast('Verifying payment with Cashfree…');
-            const verifyRes = await api.billing.verifyCashfreeOrder(orderRes.orderId);
-            if (verifyRes.status === 'PAID') {
-              toast(`Payment successful! Reloaded ${inr(val)}.`);
-            } else {
-              toast(`Payment status: ${verifyRes.status}`);
-            }
-            await reload();
-          }
-        }).catch((err) => {
-          toast((err && err.message) || 'Checkout failed or modal dismissed');
-          payCashfreeBtn.disabled = false;
-        });
+        await reload();
       } catch (err) {
         toast((err && err.message) || 'Failed to initialize Cashfree reload');
         payCashfreeBtn.disabled = false;

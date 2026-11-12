@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const crypto = require('node:crypto');
 const { CONFIG } = require('@ai-fleet/shared-core/config');
 const { asyncHandler } = require('@ai-fleet/shared-core/util');
 const log = require('@ai-fleet/shared-core/logger');
@@ -9,6 +10,10 @@ const ledger = require('@ai-fleet/shared-core/billing/ledger');
 const { paiseToInr } = require('@ai-fleet/shared-core/billing/pricing');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
 const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
+const gst = require('@ai-fleet/shared-core/billing/gst');
+const moneyWire = require('@ai-fleet/shared-core/billing/money-wire');
+const providers = require('./payment-providers');
+const { settle, allowsMockPayments } = require('./recharge-settle');
 
 /**
  * Cost-monitoring + billing API. Billing state lives in the shared JS store;
@@ -38,10 +43,120 @@ const BILLING_ORG_HEADER = 'x-ai-fleet-billing-org-id';
 const BILLING_ROLE_HEADER = 'x-ai-fleet-billing-org-role';
 const BILLING_USER_HEADER = 'x-ai-fleet-billing-user-id';
 
+/**
+ * Rupees in, integer paise out — on the digits, via `money-wire`. The previous
+ * `Math.round(Number(x) * 100)` was exact for the values a UI form sends and
+ * wrong for the ones a script sends (₹1.005 → 101p in some orders, 100p in
+ * others). Anything unparseable is NaN, which every caller already rejects.
+ */
 function inrToPaise(inr) {
-  const n = Number(inr);
-  if (!Number.isFinite(n)) return NaN;
-  return Math.round(n * 100);
+  const text = String(inr == null ? '' : inr).trim();
+  if (!/^-?\d+(\.\d{1,2})?$/.test(text)) return NaN;
+  try {
+    return moneyWire.paiseFromDecimal(text);
+  } catch (_) {
+    return NaN;
+  }
+}
+
+/**
+ * A recharge subtotal. Stricter than `inrToPaise`: it must be a positive whole
+ * number of *rupees*, because 1 credit = ₹1 (decision D6) and FlexPrice counts
+ * credits, so ₹500.50 has no representation in the wallet it would be spent from.
+ */
+function parseRechargeSubtotal(value) {
+  const text = String(value == null ? '' : value).trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) {
+    return { error: 'amountInr must be an amount of rupees, e.g. 500 or 500.00.' };
+  }
+  let paise;
+  try {
+    paise = moneyWire.paiseFromDecimal(text);
+  } catch (_) {
+    return { error: 'amountInr is not a valid amount.' };
+  }
+  if (!Number.isSafeInteger(paise) || paise <= 0) return { error: 'amountInr must be greater than zero.' };
+  if (paise > MAX_RECHARGE_PAISE) return { error: `amountInr must be at most ₹${MAX_RECHARGE_PAISE / 100}.` };
+  if (paise % moneyWire.PAISE_PER_CREDIT !== 0) {
+    return { error: 'Recharge amounts must be whole rupees — 1 credit = ₹1, so paise cannot be credited.' };
+  }
+  return { paise };
+}
+
+function parseCouponBps(value) {
+  if (value == null || value === '') return { bps: 0 };
+  const bps = Number(value);
+  if (!Number.isInteger(bps) || bps < 0 || bps > 10000) {
+    return { error: 'couponBps must be an integer between 0 and 10000 (basis points of bonus credit).' };
+  }
+  return { bps };
+}
+
+/**
+ * The GSTIN the org saved, used only if it is a valid one. An invalid string is
+ * not a hard error at quote time — the place of supply then falls back to the
+ * supplier state and `placeOfSupply.assumed` says so in the response, which is
+ * the honest presentation: an intra-state supply may not be taxed as IGST just
+ * because a customer typed a bad GSTIN.
+ */
+function customerGstinFor(paymentInfo) {
+  const raw = String((paymentInfo && paymentInfo.taxId) || '').trim();
+  if (!raw) return { gstin: '', invalid: false };
+  const parsed = gst.parseGstin(raw);
+  return parsed.present && parsed.valid
+    ? { gstin: raw.toUpperCase(), invalid: false }
+    : { gstin: '', invalid: true };
+}
+
+/** The supplier's own state: the other half of every GST split, config-owned. */
+function supplierStateCode() {
+  return String(CONFIG.FLEXPRICE.supplierStateCode || '').trim();
+}
+
+function quoteRecharge({ subtotalPaise, couponBps = 0, paymentInfo = {} }) {
+  const state = supplierStateCode();
+  if (!state) {
+    const err = new Error('GST cannot be computed: FLEXPRICE_SUPPLIER_STATE_CODE is not configured on this server.');
+    err.status = 503;
+    err.code = 'supplier_state_not_configured';
+    throw err;
+  }
+  const { gstin, invalid } = customerGstinFor(paymentInfo);
+  const quote = gst.quote({
+    subtotalPaise,
+    couponBps,
+    supplierStateCode: state,
+    ...(gstin ? { customerGstin: gstin } : {}),
+  });
+  return { quote, supplierStateCode: state, customerGstin: gstin, gstinIgnored: invalid };
+}
+
+/** What the browser is shown: every number as paise AND as a decimal string. */
+function quoteView(quote) {
+  return {
+    subtotalPaise: quote.subtotalPaise,
+    subtotalInr: moneyWire.decimalFromPaise(quote.subtotalPaise),
+    components: quote.components.map((c) => ({
+      name: c.name,
+      rateBps: c.rateBps,
+      paise: c.paise,
+      inr: moneyWire.decimalFromPaise(c.paise),
+    })),
+    gstPaise: quote.gstPaise,
+    gstInr: moneyWire.decimalFromPaise(quote.gstPaise),
+    totalPaise: quote.totalPaise,
+    totalInr: moneyWire.decimalFromPaise(quote.totalPaise),
+    bonusPaise: quote.bonusPaise || 0,
+    bonusInr: moneyWire.decimalFromPaise(quote.bonusPaise || 0),
+    credits: moneyWire.paiseToCredits(quote.subtotalPaise),
+    placeOfSupply: quote.placeOfSupply,
+  };
+}
+
+/** `order_<org>_<ts>` plus a suffix, so two recharges in one millisecond are two intents. */
+function newOrderId(orgId) {
+  const sanitized = String(orgId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `order_${sanitized}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 }
 
 /**
@@ -303,21 +418,36 @@ router.get('/ledger', asyncHandler(async (req, res) => {
   res.json({ orgId: caller.orgId, entries });
 }));
 
-// POST /api/billing/recharge { amountInr } — manual top-up (org-admin only).
+// POST /api/billing/recharge { amountInr, couponBps? } — the GST quote ONLY.
+//
+// It credits nothing. Before this route's predecessor, POST /recharge moved money
+// straight into the org's balance with no payment behind it at all; the credit now
+// lives in `recharge-settle.js` and can only be reached by an order the provider
+// confirms. What remains here is the breakdown the customer must see before paying:
+// ₹500 + CGST ₹45 + SGST ₹45 = ₹590, for 500 credits.
 router.post('/recharge', asyncHandler(async (req, res) => {
   const caller = resolveCallerOrg(req);
   if (!requireAdmin(caller, res)) return;
-  const amountPaise = inrToPaise(req.body && req.body.amountInr);
-  if (!Number.isFinite(amountPaise) || amountPaise <= 0 || amountPaise > MAX_RECHARGE_PAISE) {
-    return res.status(400).json({ error: 'amountInr must be a positive amount within limits.' });
-  }
-  const { account } = ledger.postEntry(caller.orgId, {
-    type: 'recharge',
-    amountPaise,
-    description: 'Manual recharge',
-    meta: { manual: true },
+
+  const subtotal = parseRechargeSubtotal(req.body && req.body.amountInr);
+  if (subtotal.error) return res.status(400).json({ error: subtotal.error, code: 'invalid_amount' });
+  const coupon = parseCouponBps(req.body && req.body.couponBps);
+  if (coupon.error) return res.status(400).json({ error: coupon.error, code: 'invalid_coupon' });
+
+  const account = store.getBillingAccount(caller.orgId);
+  const { quote, gstinIgnored } = quoteRecharge({
+    subtotalPaise: subtotal.paise,
+    couponBps: coupon.bps,
+    paymentInfo: (account && account.paymentInfo) || {},
   });
-  res.json({ orgId: caller.orgId, balanceInr: paiseToInr(account.balancePaise), balancePaise: account.balancePaise });
+  res.json({
+    orgId: caller.orgId,
+    quote: quoteView(quote),
+    // The quote is not an order: nothing is reserved, and the amount must be
+    // re-quoted by create-order in case the org's GST details changed meanwhile.
+    settled: false,
+    ...(gstinIgnored ? { warnings: ['saved_tax_id_invalid'] } : {}),
+  });
 }));
 
 // PUT /api/billing/config — thresholds / auto-recharge / channels (org-admin only).
@@ -359,11 +489,31 @@ router.put('/config', asyncHandler(async (req, res) => {
   if (body.paymentInfo && typeof body.paymentInfo === 'object') {
     const existingAccount = store.getBillingAccount(caller.orgId);
     const existingInfo = (existingAccount && existingAccount.paymentInfo) || {};
+    // The GSTIN decides the place of supply on every recharge this org buys, and
+    // it is the field Zoho needs. Storing garbage unvalidated (which is what this
+    // did) meant a typo silently produced the wrong tax split; now it is refused
+    // on the way in and, if it somehow arrives anyway, `customerGstinFor` ignores
+    // it and the quote reports `assumed: true`.
+    const incomingTaxId = body.paymentInfo.taxId !== undefined
+      ? String(body.paymentInfo.taxId || '').trim().toUpperCase().slice(0, 50)
+      : String(existingInfo.taxId || '');
+    if (incomingTaxId) {
+      const parsed = gst.parseGstin(incomingTaxId);
+      if (!parsed.valid) {
+        return res.status(400).json({
+          error: `That does not look like a GSTIN (${parsed.reason}). Leave it blank for B2C billing — GST will then be charged on the basis of your billing state.`,
+          code: 'invalid_gstin',
+        });
+      }
+    }
     patch.paymentInfo = {
       billingName: String(body.paymentInfo.billingName || existingInfo.billingName || '').slice(0, 100),
       billingEmail: String(body.paymentInfo.billingEmail || existingInfo.billingEmail || '').slice(0, 100),
       billingPhone: String(body.paymentInfo.billingPhone || existingInfo.billingPhone || '').slice(0, 20),
-      taxId: String(body.paymentInfo.taxId || existingInfo.taxId || '').slice(0, 50),
+      taxId: incomingTaxId,
+      provider: providers.normalizeProvider(body.paymentInfo.provider)
+        || providers.normalizeProvider(existingInfo.provider)
+        || 'cashfree',
       address: body.paymentInfo.address && typeof body.paymentInfo.address === 'object'
         ? {
             line1: String(body.paymentInfo.address.line1 || '').slice(0, 120),
@@ -442,105 +592,222 @@ router.post('/cashfree/create-mandate', asyncHandler(async (req, res) => {
   });
 }));
 
-// POST /api/billing/cashfree/create-order — create Cashfree PG order for on-demand reload
-router.post('/cashfree/create-order', asyncHandler(async (req, res) => {
+// --- Recharge orders: quote → provider order → intent -------------------------
+//
+// One code path for both gateways. It exists because the two things that made a
+// recharge forgeable were both done per-gateway: the amount came from the request
+// body, and nothing recorded what had been quoted. Here the quote is computed
+// server-side from the subtotal, stored as an intent, and the provider is asked for
+// the *gross* of that quote. `settle()` later refuses anything the intent does not
+// corroborate, so neither the browser nor a webhook payload sets a price.
+
+function resolveProvider(req, paymentInfo) {
+  const requested = req.body && req.body.provider;
+  if (requested != null && String(requested).trim() !== '') {
+    const name = providers.normalizeProvider(requested);
+    if (!name) {
+      const err = new Error(`Unknown payment provider "${requested}". Supported: ${providers.PROVIDERS.join(', ')}.`);
+      err.status = 400;
+      err.code = 'unknown_provider';
+      throw err;
+    }
+    return name;
+  }
+  return providers.normalizeProvider(paymentInfo && paymentInfo.provider) || 'cashfree';
+}
+
+function bonusExpiryFrom(value) {
+  if (value == null || value === '') return {};
+  const at = new Date(String(value));
+  if (Number.isNaN(at.getTime())) {
+    const err = new Error('bonusExpiresAt must be an ISO date/time.');
+    err.status = 400;
+    err.code = 'invalid_bonus_expiry';
+    throw err;
+  }
+  return { promoExpiresAt: at.toISOString() };
+}
+
+async function createRechargeOrder(req, res, { provider: providerOverride } = {}) {
   const caller = resolveCallerOrg(req);
   if (!requireAdmin(caller, res)) return;
 
-  const amountInr = Number(req.body && req.body.amountInr);
-  const amountPaise = inrToPaise(amountInr);
-  if (!Number.isFinite(amountPaise) || amountPaise <= 0 || amountPaise > MAX_RECHARGE_PAISE) {
-    return res.status(400).json({ error: `amountInr must be between ₹1 and ₹${MAX_RECHARGE_PAISE / 100}`, code: 'invalid_amount' });
+  const subtotal = parseRechargeSubtotal(req.body && req.body.amountInr);
+  if (subtotal.error) return res.status(400).json({ error: subtotal.error, code: 'invalid_amount' });
+  const coupon = parseCouponBps(req.body && req.body.couponBps);
+  if (coupon.error) return res.status(400).json({ error: coupon.error, code: 'invalid_coupon' });
+
+  const account = store.getBillingAccount(caller.orgId) || {};
+  const paymentInfo = account.paymentInfo || {};
+  const { quote, supplierStateCode: state, customerGstin, gstinIgnored } = quoteRecharge({
+    subtotalPaise: subtotal.paise,
+    couponBps: coupon.bps,
+    paymentInfo,
+  });
+  const expiry = bonusExpiryFrom(req.body && req.body.bonusExpiresAt);
+  const provider = providerOverride || resolveProvider(req, paymentInfo);
+  const adapter = providers.providerFor(provider, { env: process.env });
+
+  // Refuse before writing anything: an intent for a gateway this server cannot
+  // talk to is a record of an order nobody can pay. The dev-only mock flag is the
+  // same one settle() reads — a deployment must not be able to create mock orders
+  // in one place and refuse them in the other.
+  if (!adapter.isConfigured() && !allowsMockPayments()) {
+    const err = new Error(`${adapter.name} is not configured on this server, so no payment can be collected. Add its keys, or set BILLING_ALLOW_MOCK_PAYMENTS=true for local development only.`);
+    err.status = 400;
+    err.code = 'provider_not_configured';
+    throw err;
   }
 
-  const account = store.getBillingAccount(caller.orgId);
-  const paymentInfo = (account && account.paymentInfo) || {};
-  const sanitizedOrg = String(caller.orgId).replace(/[^a-zA-Z0-9_-]/g, '_');
-  const orderId = `order_${sanitizedOrg}_${Date.now()}`;
-  const customerId = `cust_${sanitizedOrg}`;
-  const customerName = req.body?.customerName || paymentInfo.billingName || 'Admin User';
-  const customerEmail = req.body?.customerEmail || paymentInfo.billingEmail || 'admin@aifleet.local';
-  const customerPhone = req.body?.customerPhone || paymentInfo.billingPhone || '9999999999';
-  const returnUrl = req.body?.returnUrl || '';
+  const orderId = newOrderId(caller.orgId);
 
-  const order = await cashfreeClient.createOrder({
+  // The intent is written BEFORE the provider is called: an order that exists at
+  // the gateway with no record here could be paid and then never credited, which
+  // is a refund; the reverse (a record with no payment) settles into nothing.
+  store.addRechargeIntent({
     orderId,
-    orderAmount: amountInr,
-    customerId,
-    customerName,
-    customerEmail,
-    customerPhone,
-    returnUrl,
-    orderNote: `AI Fleet Wallet Reload for Org ${caller.orgId}`,
+    orgId: caller.orgId,
+    provider: adapter.name,
+    status: 'QUOTED',
+    subtotalPaise: quote.subtotalPaise,
+    couponBps: coupon.bps,
+    bonusPaise: quote.bonusPaise || 0,
+    gstPaise: quote.gstPaise,
+    totalPaise: quote.totalPaise,
+    creditCount: moneyWire.paiseToCredits(quote.subtotalPaise),
+    supplierStateCode: state,
+    ...(customerGstin ? { customerGstin } : {}),
+    ...expiry,
+    // Recorded for the audit trail; deliberately NOT an input to the re-quote,
+    // because `assumed` is what tells a human the split was guessed.
+    placeOfSupply: quote.placeOfSupply,
+    createdBy: caller.userId || caller.orgId,
   });
+
+  let order;
+  if (adapter.isConfigured()) {
+    order = await adapter.createOrder({
+      orderId,
+      amountPaise: quote.totalPaise,
+      customer: {
+        id: `cust_${String(caller.orgId).replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+        name: req.body?.customerName || paymentInfo.billingName || 'AI Fleet Org',
+        email: req.body?.customerEmail || paymentInfo.billingEmail || 'billing@aifleet.local',
+        phone: req.body?.customerPhone || paymentInfo.billingPhone || '',
+      },
+      returnUrl: req.body?.returnUrl || '',
+      note: `AI Fleet wallet recharge for ${caller.orgId}`,
+    });
+  } else {
+    // Local development with the mock flag on: the order is synthesized rather
+    // than requested, because Cashfree's unconfigured client fabricates a
+    // response and Razorpay's would call out with an empty key pair and come
+    // back 401. `mode: 'mock'` is also what tells the UI to skip checkout and
+    // call settle directly.
+    order = { providerOrderId: null, checkout: { mode: 'mock', provider: adapter.name } };
+  }
+  if (order.providerOrderId && order.providerOrderId !== orderId) {
+    store.updateRechargeIntent(orderId, { providerOrderId: order.providerOrderId });
+  }
 
   res.json({
     orgId: caller.orgId,
     orderId,
-    amountInr,
-    paymentSessionId: order.payment_session_id || '',
-    orderStatus: order.order_status || 'ACTIVE',
-    cashfreeData: order,
+    provider: adapter.name,
+    // Which environment the checkout SDK must open against. The browser cannot
+    // infer it (and guessing 'sandbox' is how a production payment gets pointed
+    // at a test mode).
+    environment: adapter.environment(),
+    // The gross the gateway will charge, as the string the wire expects. The UI
+    // must render `quote.totalInr`, never a number FlexPrice or the provider
+    // echoes back — ₹590 is ours.
+    amountInr: quoteView(quote).totalInr,
+    quote: quoteView(quote),
+    checkout: order.checkout,
+    paymentSessionId: order.checkout.paymentSessionId || null,
+    orderStatus: 'ACTIVE',
+    ...(gstinIgnored ? { warnings: ['saved_tax_id_invalid'] } : {}),
   });
+}
+
+function settlementView(result) {
+  return {
+    success: true,
+    orderId: result.orderId,
+    orgId: result.orgId,
+    provider: result.provider || null,
+    status: result.status,
+    alreadyProcessed: result.status === 'already_processed',
+    orderStatus: 'PAID',
+    creditsAdded: result.creditCount,
+    bonusCredits: result.promoCredits || 0,
+    balanceCredits: result.balanceCredits,
+    subtotalInr: result.subtotalPaise == null ? null : moneyWire.decimalFromPaise(result.subtotalPaise),
+    gstInr: result.gstPaise == null ? null : moneyWire.decimalFromPaise(result.gstPaise),
+    totalInr: result.totalPaise == null ? null : moneyWire.decimalFromPaise(result.totalPaise),
+    mock: Boolean(result.mock),
+    settledAt: result.settledAt || null,
+  };
+}
+
+// POST /api/billing/recharge/create-order — quote + persist + provider order.
+// `provider` in the body picks the gateway; an org's saved preference is the default.
+router.post('/recharge/create-order', asyncHandler((req, res) => createRechargeOrder(req, res)));
+
+// POST /api/billing/recharge/settle — the browser's "I have paid" call.
+router.post('/recharge/settle', asyncHandler(async (req, res) => {
+  const caller = resolveCallerOrg(req);
+  if (!requireAdmin(caller, res)) return;
+  const orderId = String(req.body && req.body.orderId || '').trim();
+  if (!orderId) return res.status(400).json({ error: 'orderId is required', code: 'missing_order_id' });
+  const result = await settle({ orderId, orgId: caller.orgId, actor: caller.userId || 'recharge-settle-route' });
+  res.json(settlementView(result));
 }));
 
-// POST /api/billing/cashfree/verify-order — verify Cashfree PG payment and post ledger credit
+// POST /api/billing/cashfree/create-order — Cashfree-named alias of the above.
+router.post('/cashfree/create-order', asyncHandler((req, res) => createRechargeOrder(req, res, { provider: 'cashfree' })));
+
+// POST /api/billing/razorpay/create-order
+router.post('/razorpay/create-order', asyncHandler((req, res) => createRechargeOrder(req, res, { provider: 'razorpay' })));
+
+/**
+ * POST /api/billing/razorpay/verify-order — check the checkout signature, then
+ * settle. The signature proves the browser really completed that order; the
+ * *amount* still comes from the server-side `verify()` inside settle, because a
+ * signature over a client-chosen amount would prove nothing about the price.
+ */
+router.post('/razorpay/verify-order', asyncHandler(async (req, res) => {
+  const caller = resolveCallerOrg(req);
+  if (!requireAdmin(caller, res)) return;
+  const orderId = String(req.body && req.body.orderId || '').trim();
+  if (!orderId) return res.status(400).json({ error: 'orderId is required', code: 'missing_order_id' });
+
+  const paymentId = String(req.body?.razorpayPaymentId || '').trim();
+  const razorpayOrderId = String(req.body?.razorpayOrderId || '').trim();
+  const signature = String(req.body?.razorpayPaymentSignature || '').trim();
+  if (paymentId || razorpayOrderId || signature) {
+    const adapter = providers.providerFor('razorpay', { env: process.env });
+    if (!adapter.verifyPaymentSignature({ razorpayOrderId, razorpayPaymentId: paymentId, signature })) {
+      return res.status(400).json({
+        error: 'That Razorpay payment signature does not match this order.',
+        code: 'payment_signature_invalid',
+      });
+    }
+  }
+  const result = await settle({ orderId, orgId: caller.orgId, actor: caller.userId || 'razorpay-verify' });
+  res.json(settlementView(result));
+}));
+
+// POST /api/billing/cashfree/verify-order — the browser's post-checkout call.
+// Formerly this credited whatever org presented any `order_<org>_` id it could
+// obtain, with the amount taken from Cashfree's response. Both are settle()'s now.
 router.post('/cashfree/verify-order', asyncHandler(async (req, res) => {
   const caller = resolveCallerOrg(req);
   if (!requireAdmin(caller, res)) return;
-
   const orderId = String(req.body && req.body.orderId || '').trim();
-  if (!orderId) {
-    return res.status(400).json({ error: 'orderId is required', code: 'missing_order_id' });
-  }
-
-  // Idempotency: verify order not already processed
-  const existingEntries = store.listLedgerEntries({ orgId: caller.orgId });
-  const alreadyCredited = existingEntries.find((e) => e.meta && e.meta.cashfreeOrderId === orderId);
-  if (alreadyCredited) {
-    const account = store.getBillingAccount(caller.orgId);
-    return res.json({
-      success: true,
-      alreadyProcessed: true,
-      orderId,
-      orderStatus: 'PAID',
-      balanceInr: paiseToInr(account ? account.balancePaise : 0),
-      balancePaise: account ? account.balancePaise : 0,
-    });
-  }
-
-  const order = await cashfreeClient.getOrder(orderId);
-  const status = String(order.order_status || '').toUpperCase();
-
-  if (status === 'PAID') {
-    const amountInr = Number(order.order_amount);
-    const amountPaise = inrToPaise(amountInr);
-    const { entry, account } = ledger.postEntry(caller.orgId, {
-      type: 'recharge',
-      amountPaise,
-      description: `Cashfree recharge (${orderId})`,
-      meta: {
-        cashfreeOrderId: orderId,
-        cfOrderId: order.cf_order_id || null,
-        paymentSessionId: order.payment_session_id || null,
-      },
-    });
-
-    return res.json({
-      success: true,
-      orderId,
-      orderStatus: status,
-      entry: { ...entry, amountInr: paiseToInr(entry.amountPaise) },
-      balanceInr: paiseToInr(account.balancePaise),
-      balancePaise: account.balancePaise,
-    });
-  }
-
-  return res.status(400).json({
-    error: 'Order is not in PAID status',
-    orderStatus: status,
-    orderId,
-  });
+  if (!orderId) return res.status(400).json({ error: 'orderId is required', code: 'missing_order_id' });
+  const result = await settle({ orderId, orgId: caller.orgId, actor: caller.userId || 'cashfree-verify' });
+  res.json(settlementView(result));
 }));
 
 // POST /api/billing/cashfree/verify-mandate — verify and associate Cashfree subscription mandate
@@ -577,13 +844,24 @@ router.post('/cashfree/verify-mandate', asyncHandler(async (req, res) => {
   });
 }));
 
-// POST /api/billing/cashfree/webhook — incoming Cashfree subscription webhook events
+// POST /api/billing/cashfree/webhook — incoming Cashfree PG/subscription events
+//
+// The signature gate used to be `if (!isValid && NODE_ENV === 'production')`, i.e.
+// it failed open everywhere else — which is where every test and every local stack
+// runs. An unsigned `ORDER_PAID_SUCCESS` used to credit a wallet. Now an unsigned
+// webhook is refused outright, and the one exception is the same dev-only flag
+// settle() reads: without it, an unsigned event can do nothing here, and with it,
+// it can only settle an order this server quoted and mocked.
 router.post('/cashfree/webhook', asyncHandler(async (req, res) => {
   const rawBody = req.rawBody || JSON.stringify(req.body || {});
   const isValid = cashfreeClient.verifyWebhookSignature(req.headers, rawBody);
+  const devMockAllowed = allowsMockPayments();
 
-  if (!isValid && process.env.NODE_ENV === 'production') {
-    return res.status(401).json({ error: 'Invalid webhook signature' });
+  if (!isValid && !devMockAllowed) {
+    return res.status(401).json({ error: 'Invalid webhook signature', code: 'webhook_signature_invalid' });
+  }
+  if (!isValid) {
+    log.warn('cashfree_webhook_signature_unverified', { reason: 'BILLING_ALLOW_MOCK_PAYMENTS is set (local development only)' });
   }
 
   const eventType = req.body && req.body.type;
@@ -602,46 +880,76 @@ router.post('/cashfree/webhook', asyncHandler(async (req, res) => {
       }
     }
   } else if (eventType === 'SUBSCRIPTION_PAYMENT_SUCCESS') {
+    // Mandate-driven auto-recharge. This is the one credit path that does not yet
+    // run through settle() — it has no quote and therefore no intent, because the
+    // amount comes from the mandate threshold, not from a user entering ₹500. It
+    // keeps the ledger for now (its spine is a Phase 6 item), but it no longer
+    // double-credits a replayed event and no longer converts rupees with floats.
     const subId = data.subscription && data.subscription.subscription_id;
-    const paymentAmount = data.payment && data.payment.payment_amount;
-    const paymentId = data.payment && data.payment.payment_id;
-
-    if (subId && paymentAmount) {
+    const payment = data.payment || {};
+    const paymentId = payment.payment_id;
+    const amountPaise = payment.payment_amount == null ? NaN : moneyWire.paiseFromDecimal(String(payment.payment_amount));
+    if (subId && paymentId && Number.isSafeInteger(amountPaise) && amountPaise > 0) {
       for (const acc of store.listBillingAccounts()) {
         if (acc.autoRecharge && acc.autoRecharge.cashfreeSubscriptionId === subId) {
-          const amountPaise = Math.round(Number(paymentAmount) * 100);
+          const already = store.listLedgerEntries({ orgId: acc.id })
+            .find((e) => e.meta && e.meta.cashfreePaymentId === paymentId);
+          if (already) continue;
           ledger.postEntry(acc.id, {
             type: 'recharge',
             amountPaise,
-            description: `Auto-recharge webhook payment (${paymentId || subId})`,
-            meta: { cashfreeSubscriptionId: subId, paymentId },
+            description: `Auto-recharge webhook payment (${paymentId})`,
+            meta: { cashfreeSubscriptionId: subId, cashfreePaymentId: paymentId, paymentId },
           });
         }
       }
     }
   } else if (eventType === 'ORDER_PAID_SUCCESS' || eventType === 'PAYMENT_SUCCESS_WEBHOOK') {
+    // The event names the order; it does not price it. settle() looks the intent up
+    // by that id, re-verifies the amount against the gateway, and credits the org
+    // that owns the intent — which is why the old prefix scan over every account
+    // (`order_<org>_` matched against a caller-supplied string) is gone rather than
+    // fixed.
     const order = data.order || {};
     const orderId = order.order_id || (data.payment && data.payment.order_id);
-    const amount = order.order_amount || (data.payment && data.payment.payment_amount);
-    if (orderId && amount) {
-      for (const acc of store.listBillingAccounts()) {
-        const orgPrefix = `order_${String(acc.id).replace(/[^a-zA-Z0-9_-]/g, '_')}_`;
-        if (orderId.startsWith(orgPrefix)) {
-          const orgId = acc.id;
-          const existing = store.listLedgerEntries({ orgId }).find((e) => e.meta && e.meta.cashfreeOrderId === orderId);
-          if (!existing) {
-            ledger.postEntry(orgId, {
-              type: 'recharge',
-              amountPaise: Math.round(Number(amount) * 100),
-              description: `Cashfree order paid webhook (${orderId})`,
-              meta: { cashfreeOrderId: orderId, webhook: true },
-            });
-          }
+    if (orderId && store.getRechargeIntent(orderId)) {
+      try {
+        const result = await settle({ orderId, actor: 'cashfree-webhook' });
+        log.info('cashfree_webhook_settled', { orderId, status: result.status });
+      } catch (err) {
+        // A 5xx here is deliberate: a transient FlexPrice outage must make Cashfree
+        // retry, whereas a 200 acknowledges an event that credited nothing.
+        if (err && (err.code === 'intent_not_found' || err.status === 403)) {
+          log.warn('cashfree_webhook_refused', { orderId, code: err.code });
+        } else {
+          throw err;
         }
       }
+    } else {
+      log.warn('cashfree_webhook_no_intent', { orderId: orderId || null });
     }
   }
 
+  res.json({ status: 'ok' });
+}));
+
+// POST /api/billing/razorpay/webhook — `payment.captured` / `order.paid`
+//
+// Same shape as the Cashfree one and for the same reason: the event carries an
+// order id, never an authority to price it. RAZORPAY_WEBHOOK_SECRET is required —
+// there is no dev bypass here, because unlike Cashfree's sandbox mock, an unsigned
+// Razorpay event is simply an unauthenticated request to a credit path.
+router.post('/razorpay/webhook', asyncHandler(async (req, res) => {
+  const rawBody = req.rawBody || JSON.stringify(req.body || {});
+  const adapter = providers.providerFor('razorpay', { env: process.env });
+  const event = adapter.parseWebhook(rawBody, req.headers);
+  if (!event.verified) {
+    return res.status(401).json({ error: 'Invalid webhook signature', code: 'webhook_signature_invalid' });
+  }
+  if (event.event === 'ORDER_PAID_SUCCESS' && event.orderId && store.getRechargeIntent(event.orderId)) {
+    const result = await settle({ orderId: event.orderId, actor: 'razorpay-webhook' });
+    log.info('razorpay_webhook_settled', { orderId: event.orderId, status: result.status });
+  }
   res.json({ status: 'ok' });
 }));
 

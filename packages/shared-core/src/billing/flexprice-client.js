@@ -72,6 +72,23 @@ function parseJson(text) {
 }
 
 /**
+ * The rows of a list response, whichever of its three shapes FlexPrice used.
+ *
+ * Measured against the live stack: search routes answer `{items}`, `GET
+ * /v1/environments` answers `{environments}`, and `GET /v1/customers/:id/wallets`
+ * answers a bare array. A caller that picks one of those keys and finds nothing
+ * does not get an error — it gets "there are none", which in the wallet case
+ * means creating a resource that already exists and reading back no id.
+ */
+function rowsOf(out) {
+  if (Array.isArray(out)) return out;
+  if (!out || typeof out !== 'object') return [];
+  const keyed = ['items', 'data', 'environments', 'wallets', 'prices', 'meters'];
+  for (const key of keyed) if (Array.isArray(out[key])) return out[key];
+  return [];
+}
+
+/**
  * Build a client over a config snapshot.
  *
  * `fetchImpl` is injectable so the unit tests (and the Phase 5 Zoho contract
@@ -181,7 +198,18 @@ function createFlexpriceClient({ config = FLEXPRICE, fetchImpl = globalThis.fetc
 
     // ---- wallets (money plane) -----------------------------------------------
     createWallet: (wallet) => post('/v1/wallets', wallet),
-    listWalletsByCustomer: (customerId) => get(`/v1/customers/${seg(customerId)}/wallets`),
+    /**
+     * `GET /v1/customers/:id/wallets` answers a BARE JSON array (measured live),
+     * unlike the search routes' `{items}` envelope. Normalised here so a caller
+     * cannot confuse "this customer has no wallets" with "the response had no
+     * items key": that confusion is what made a second recharge for the same org
+     * re-create a wallet, take the `409 already_exists` echo as the created
+     * resource, and then read the balance of wallet `undefined`.
+     */
+    listWalletsByCustomer: async (customerId) => {
+      const out = await get(`/v1/customers/${seg(customerId)}/wallets`);
+      return { items: rowsOf(out) };
+    },
     topUpWallet: (walletId, body, opts = {}) => post(`/v1/wallets/${seg(walletId)}/top-up`, body, opts),
     /**
      * Promotional / free credit grant.
@@ -252,4 +280,5 @@ module.exports = {
   FlexpriceError,
   createFlexpriceClient,
   isAlreadyExists,
+  rowsOf,
 };

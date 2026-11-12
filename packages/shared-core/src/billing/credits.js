@@ -4,7 +4,11 @@
 //
 // Two rules hold this together:
 //
-//  1. `1 credit = 1 paise` of prepaid value. The credit unit is never
+//  1. `1 credit = ₹1 = 100 paise` of prepaid value (D6), and the unit lives in
+//     exactly one place — `money-wire.PAISE_PER_CREDIT`, re-exported below.
+//     Probe A confirmed the direction: FlexPrice's `credits_to_add` is
+//     denominated in credits and `conversion_rate:'1'` scales credits to rupees
+//     1:1, so 500 paise of rupees is 500 credits. The credit unit is never
 //     re-denominated. A promotional ratio ("pay ₹500, get ₹550 of usage") is
 //     expressed as a *separate expiring promotional wallet*, not by moving the
 //     exchange rate — otherwise one org's balance is in a different unit than
@@ -17,9 +21,9 @@
 //     than a number, so a caller structurally cannot hand it the total.
 
 const { roundHalfUpPaise } = require('./gst');
+const { PAISE_PER_CREDIT } = require('./money-wire');
 
 const BPS = 10000;
-const PAISE_PER_CREDIT = 1;
 const CREDIT_SOURCE_PREPAID = 'prepaid';
 const CREDIT_SOURCE_PROMOTIONAL = 'promotional';
 

@@ -1167,3 +1167,43 @@ whole §9 spike was re-run against it — see the re-validation row below. The
 confirmed at the tag. Where the two disagree, the probe result in
 `docs/flexprice-spike/results.json` wins, because that is the binary we run.
 
+
+## 13. Phase 2 — two response shapes that broke the money path, measured live
+
+Found by `npm run billing:recharge:verify` (the first run of the recharge spine
+against the stack rather than against fakes). Both are silent: neither produces an
+error FlexPrice reports, and neither is visible from the OpenAPI shape.
+
+| Route | What it answers | What the code assumed | What that did |
+|---|---|---|---|
+| `GET /v1/customers/:id/wallets` | a **bare JSON array** (`[{...}]`) | the `{items}` envelope the search routes use | `ensureWallet()` never found the org's existing wallet, so it called `POST /v1/wallets` again, FlexPrice answered `409 already_exists` (unique index, no pre-check), the client mapped that to `{alreadyExists: true}` — **which has no `id`** — and the next call was `GET /v1/wallets/undefined/balance/real-time` → 404. Net effect: the *first* recharge for an org succeeded and **every second one failed**. |
+| the same route's `currency` field | `"inr"` (lower-cased on read) | `'INR'` as sent on create | an exact `===` comparison, so even an `{items}` read would have missed the wallet. Their DTO lower-cases on the way out; nothing in the request told us. |
+
+The failure mode is the reason it is recorded here rather than just fixed: a
+shape mismatch on a *list* route does not raise, it reads as "there are none", and
+the next verb is a create. For wallets that means the create's 409 is what tells
+you the resource existed — and a 409 mapped to success carries no id, so the money
+path proceeds with an undefined target.
+
+Fixed at the boundary instead of at the call site: `flexprice-client.js` now
+normalises that route to `{items}` through one `rowsOf()` helper that accepts a
+bare array, `items`, `data`, or the `{environments}` key `GET /v1/environments`
+uses. `recharge-settle.js` compares currency case-insensitively and refuses with
+`flexprice_wallet_unresolved` (502) if a wallet still cannot be resolved, so an
+unresolved target is a refusal with a sentence rather than a credit to `undefined`.
+`scripts/flexprice-provision.js` had the same comparison and is fixed the same way —
+provision was not idempotent for wallets, it only looked so because each org had
+been provisioned once.
+
+Credit-row field names, for the record (Phase 3's reconciler reads these):
+`type: "credit"`, `transaction_reason: "PURCHASED_CREDIT_DIRECT"` (or
+`"FREE_CREDIT_GRANT"` for a promo), the amount as `credit_amount`, the remainder as
+`credits_available`, both as **strings**, `priority` as a number, and
+`idempotency_key` echoed back on the row — which is what makes "a replay produced
+exactly one row" checkable instead of assumed. `metadata` on a top-up row keeps
+whatever we sent it (`subtotal_paise`, `gst_paise`, `collected_paise`, `provider`,
+`fleet_order_id`), so the GST that was collected next to a credit is auditable
+without reading our store.
+
+Pinned at the same `v2.1.48` (`21524530`, image `4ad8d8ca6e69`) as §12; the
+transcript is `docs/BILLING_FLEXPRICE.md` §11.

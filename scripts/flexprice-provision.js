@@ -419,7 +419,11 @@ async function ensureOrg(client, orgId, opts) {
   }
 
   const wallets = await client.listWalletsByCustomer(customer.id);
-  let wallet = (wallets.items || []).find((w) => w.currency === CURRENCY && (w.wallet_type || '').toUpperCase() === 'PRE_PAID');
+  // The wallets route reports `currency` lower-case ('inr'), so an exact match on
+  // 'INR' would re-create a wallet on every run and report the 409 as a new id.
+  let wallet = (wallets.items || []).find(
+    (w) => String(w.currency || '').toUpperCase() === CURRENCY && (w.wallet_type || '').toUpperCase() === 'PRE_PAID',
+  );
   if (!wallet) {
     if (DRY) {
       report('wallet', orgId, 'dry-run', 'INR PRE_PAID conversion_rate 1');

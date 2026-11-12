@@ -109,6 +109,39 @@ function creditsFromPaise(paise) {
   return formatScaled(roundDiv(n * 100n, BigInt(PAISE_PER_CREDIT)), 2);
 }
 
+/**
+ * Integer credits → integer paise.
+ *
+ * The named pair the money path uses at the credit boundary (D6: 1 credit = ₹1,
+ * so ₹500 is 500 credits and 50000 paise). `paiseFromCredits` is the general
+ * decimal form; this is the whole-credit case, named because a recharge is
+ * counted in credits on the wire and in paise in our ledger, and a reader of
+ * either side should be able to tell which one they are looking at.
+ */
+function creditsToPaise(credits) {
+  return paiseFromCredits(credits);
+}
+
+/**
+ * Integer paise → integer credits, exactly.
+ *
+ * Refuses a non-divisible amount instead of inventing a fraction of a credit:
+ * every credit a human is told about is a whole one, because a recharge is a
+ * whole number of rupees. A remainder here means a caller is crediting GST or
+ * sub-rupee usage money as credits, which is the mistake
+ * `credits.assertNoTaxCredited` exists to catch — so `creditsFromPaise` (the
+ * decimal string) is for display and this is for money movement.
+ */
+function paiseToCredits(paise) {
+  const n = wholePaise(paise, 'paiseToCredits');
+  if (n % PAISE_PER_CREDIT !== 0) {
+    throw new TypeError(
+      `money-wire: ${n}p is not a whole number of credits (₹1 = ${PAISE_PER_CREDIT}p); a fractional credit is a unit error — use creditsFromPaise to display it`,
+    );
+  }
+  return n / PAISE_PER_CREDIT;
+}
+
 function wholePaise(value, context) {
   const n = Number(value);
   if (!Number.isInteger(n)) {
@@ -147,5 +180,7 @@ module.exports = {
   decimalFromPaise,
   paiseFromCredits,
   creditsFromPaise,
+  creditsToPaise,
+  paiseToCredits,
   assertPaise,
 };

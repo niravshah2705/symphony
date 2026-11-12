@@ -1,6 +1,7 @@
 import { api } from '../api.js';
 import { el, clear, loading, toast } from '../dom.js';
 import { formatNumber, formatDate, getLocale } from '../i18n.js';
+import { payRecharge, isSettled } from '../recharge.js';
 
 // Cost monitoring + billing. Per-organization / project / user / task usage with
 // task drill-down, backed by first-party LLM metering (services/gateway billing
@@ -321,63 +322,78 @@ function adminPanel(view, summary) {
   const currentMode = ar.mode || 'amount';
 
   const amount = el('input', { type: 'number', min: '1', step: '1', placeholder: 'Amount (INR)' });
-  const addBtn = el('button', { type: 'button', class: 'btn' }, 'Add credits (manual)');
-  addBtn.addEventListener('click', async () => {
+  const preferredProvider = (summary.paymentInfo && summary.paymentInfo.provider) === 'razorpay' ? 'razorpay' : 'cashfree';
+  const payCashfree = el('input', { type: 'radio', name: 'rechargeProvider', value: 'cashfree', ...(preferredProvider === 'cashfree' ? { checked: 'checked' } : {}) });
+  const payRazorpay = el('input', { type: 'radio', name: 'rechargeProvider', value: 'razorpay', ...(preferredProvider === 'razorpay' ? { checked: 'checked' } : {}) });
+  const quoteBox = el('div', { class: 'recharge-quote muted' }, 'Enter an amount to see the GST breakdown.');
+
+  // The quote comes from the server because it IS the server's: ₹500 + ₹45 + ₹45
+  // = ₹590 for 500 credits, and 1 credit = ₹1 on the subtotal, never on the ₹590.
+  // Computing any of it here would put a second copy of the tax rule in the
+  // browser, which is the thing that made the old "Add credits" button lie.
+  let quoteToken = 0;
+  const showQuote = async () => {
+    const value = Number(amount.value);
+    const token = quoteToken + 1;
+    quoteToken = token;
+    if (!Number.isFinite(value) || value <= 0) {
+      clear(quoteBox);
+      quoteBox.append(el('span', {}, 'Enter an amount to see the GST breakdown.'));
+      return;
+    }
+    try {
+      const data = await api.billing.rechargeQuote(value);
+      if (token !== quoteToken) return;
+      const q = data.quote;
+      clear(quoteBox);
+      quoteBox.append(
+        el('div', {}, `Recharge ${inr(q.subtotalInr)}`),
+        ...q.components.map((c) => el('div', { class: 'muted' }, `${c.name} ${c.rateBps / 100}% · ${inr(c.inr)}`)),
+        el('strong', {}, `Total payable ${inr(q.totalInr)}`),
+        el('div', {}, `${q.credits} credits added · 1 credit = ₹1, so the ${inr(q.gstInr)} GST is collected and never spendable`),
+        q.bonusPaise ? el('div', { class: 'muted' }, `Coupon bonus ${inr(q.bonusInr)} (${q.bonusPaise / 100} credits), credited separately`) : null,
+        q.placeOfSupply && q.placeOfSupply.assumed
+          ? el('small', { class: 'muted' }, `Place of supply assumed as state ${q.placeOfSupply.stateCode}. Add your GSTIN in Organization → Billing for the exact split.`)
+          : null,
+        ...(data.warnings || []).map((w) => el('small', { class: 'muted' }, w === 'saved_tax_id_invalid'
+          ? 'Your saved GSTIN is not valid, so it was ignored for this quote.'
+          : w)),
+      );
+    } catch (err) {
+      if (token !== quoteToken) return;
+      clear(quoteBox).append(el('span', { class: 'muted' }, (err && err.message) || 'That amount cannot be quoted.'));
+    }
+  };
+  amount.addEventListener('input', showQuote);
+
+  const payBtn = el('button', { type: 'button', class: 'btn primary' }, 'Pay and add credits');
+  payBtn.addEventListener('click', async () => {
     const value = Number(amount.value);
     if (!Number.isFinite(value) || value <= 0) return toast('Enter a positive amount', 'warn');
-    addBtn.disabled = true;
+    payBtn.disabled = true;
+    const pi = summary.paymentInfo || {};
     try {
-      await api.billing.recharge(value);
-      toast('Credits added', 'ok');
+      const settlement = await payRecharge({
+        amountInr: value,
+        provider: payRazorpay.checked ? 'razorpay' : 'cashfree',
+        customer: {
+          customerName: pi.billingName || 'Admin',
+          customerEmail: pi.billingEmail || 'billing@example.com',
+          customerPhone: pi.billingPhone || '9999999999',
+        },
+        returnUrl: window.location.href,
+        onStatus: (msg) => toast(msg, 'ok'),
+      });
+      if (isSettled(settlement)) {
+        const bonus = settlement.bonusCredits ? ` + ${settlement.bonusCredits} bonus` : '';
+        toast(`₹${settlement.totalInr} paid · ${settlement.creditsAdded} credits added${bonus}`, 'ok');
+      } else {
+        toast(`The gateway answered, but nothing was credited (${settlement && settlement.status || 'no settlement'}).`, 'warn');
+      }
       renderCost(view);
     } catch (err) {
       toast((err && err.message) || 'Recharge failed', 'error');
-      addBtn.disabled = false;
-    }
-  });
-
-  const payCashfreeBtn = el('button', { type: 'button', class: 'btn primary' }, 'Pay with Cashfree');
-  payCashfreeBtn.addEventListener('click', async () => {
-    const value = Number(amount.value);
-    if (!Number.isFinite(value) || value <= 0) return toast('Enter a positive amount', 'warn');
-    payCashfreeBtn.disabled = true;
-    try {
-      toast('Creating Cashfree order…', 'ok');
-      const pi = summary.paymentInfo || {};
-      const orderRes = await api.billing.createCashfreeOrder({
-        amountInr: value,
-        customerName: pi.billingName || 'Admin',
-        customerEmail: pi.billingEmail || 'billing@example.com',
-        customerPhone: pi.billingPhone || '9999999999',
-      });
-      if (!orderRes.paymentSessionId) throw new Error('No payment session returned from Cashfree.');
-      
-      const CashfreeSdk = await loadCashfreeSdk();
-      const cashfree = CashfreeSdk({ mode: 'sandbox' });
-      cashfree.checkout({
-        paymentSessionId: orderRes.paymentSessionId,
-        redirectTarget: '_modal',
-      }).then(async (result) => {
-        if (result && result.error) {
-          toast(`Payment error: ${result.error.message}`, 'error');
-          payCashfreeBtn.disabled = false;
-        } else {
-          toast('Verifying payment…', 'ok');
-          const verifyRes = await api.billing.verifyCashfreeOrder(orderRes.orderId);
-          if (verifyRes.status === 'PAID') {
-            toast(`Payment successful! Reloaded ₹${value}.`, 'ok');
-          } else {
-            toast(`Payment status: ${verifyRes.status}`, 'warn');
-          }
-          renderCost(view);
-        }
-      }).catch((err) => {
-        toast((err && err.message) || 'Checkout modal dismissed', 'warn');
-        payCashfreeBtn.disabled = false;
-      });
-    } catch (err) {
-      toast((err && err.message) || 'Failed to start Cashfree checkout', 'error');
-      payCashfreeBtn.disabled = false;
+      payBtn.disabled = false;
     }
   });
 
@@ -491,7 +507,15 @@ function adminPanel(view, summary) {
       ]),
     ]),
     el('div', { class: 'form-grid' }, [
-      el('div', { class: 'row' }, [amount, payCashfreeBtn, addBtn]),
+      el('div', { class: 'row' }, [amount, payBtn]),
+      el('div', { class: 'field-group' }, [
+        el('strong', {}, 'Payment gateway'),
+        el('div', { class: 'row' }, [
+          el('label', { class: 'radio-label' }, [payCashfree, el('span', {}, 'Cashfree')]),
+          el('label', { class: 'radio-label' }, [payRazorpay, el('span', {}, 'Razorpay')]),
+        ]),
+      ]),
+      quoteBox,
       field('Alert thresholds (INR, comma-separated)', thresholds),
       el('div', { class: 'field-group' }, [
         el('strong', {}, 'Auto-Reload Threshold Method (OpenAI style)'),

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 311 nodes
+Community of 329 nodes
 
-- **Size**: 311 nodes
-- **Cohesion**: 0.1959
+- **Size**: 329 nodes
+- **Cohesion**: 0.1748
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 311 nodes
 | challengeFromVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 22-24 |
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 
-*... and 261 more members.*
+*... and 279 more members.*
 
 ## Execution Flows
 
@@ -79,42 +79,42 @@ Community of 311 nodes
 - **refreshTokens** (criticality: 0.67, depth: 2)
 - **getGithubToken** (criticality: 0.62, depth: 8)
 - **consumeLogin** (criticality: 0.61, depth: 1)
-- *... and 22 more flows.*
+- *... and 19 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (230 edge(s))
-- `filter` (42 edge(s))
-- `String` (37 edge(s))
-- `toISOString` (37 edge(s))
+- `equal` (293 edge(s))
+- `filter` (44 edge(s))
+- `String` (41 edge(s))
+- `toISOString` (40 edge(s))
 - `Number` (34 edge(s))
-- `ok` (27 edge(s))
+- `ok` (28 edge(s))
+- `deepEqual` (26 edge(s))
 - `slice` (25 edge(s))
 - `trim` (25 edge(s))
-- `isArray` (24 edge(s))
+- `isArray` (25 edge(s))
 - `includes` (23 edge(s))
-- `deepEqual` (22 edge(s))
 - `set` (21 edge(s))
-- `isFinite` (19 edge(s))
-- `find` (19 edge(s))
-- `now` (18 edge(s))
+- `stringify` (21 edge(s))
+- `find` (21 edge(s))
+- `now` (19 edge(s))
 
 ### Incoming
 
-- `equal` (230 edge(s))
-- `./packages/shared-core/src/store.js` (181 edge(s))
+- `equal` (293 edge(s))
+- `./packages/shared-core/src/store.js` (189 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
-- `ok` (27 edge(s))
+- `ok` (28 edge(s))
+- `deepEqual` (26 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
-- `deepEqual` (22 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
 - `./packages/shared-core/src/billing/cashfree-client.js` (17 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
+- `match` (15 edge(s))
 - `filter` (15 edge(s))
-- `match` (14 edge(s))
+- `getBillingAccount` (15 edge(s))
 - `push` (14 edge(s))
-- `getBillingAccount` (13 edge(s))
 - `./packages/shared-core/src/billing/pricing.js` (12 edge(s))

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 757 nodes
+Community of 745 nodes
 
-- **Size**: 757 nodes
-- **Cohesion**: 0.4863
+- **Size**: 745 nodes
+- **Cohesion**: 0.4923
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 757 nodes
 | render | Function | ./public/js/app.js | 817-899 |
 | capitalize | Function | ./public/js/app.js | 901-904 |
 
-*... and 707 more members.*
+*... and 695 more members.*
 
 ## Execution Flows
 
@@ -79,25 +79,25 @@ Community of 757 nodes
 - **beginSignOut** (criticality: 0.76, depth: 6)
 - **hostedConnection** (criticality: 0.75, depth: 8)
 - **render** (criticality: 0.73, depth: 6)
-- *... and 13 more flows.*
+- *... and 14 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `append` (231 edge(s))
 - `addEventListener` (227 edge(s))
-- `map` (170 edge(s))
-- `String` (118 edge(s))
-- `push` (115 edge(s))
-- `trim` (108 edge(s))
-- `equal` (98 edge(s))
-- `filter` (83 edge(s))
+- `append` (224 edge(s))
+- `map` (168 edge(s))
+- `String` (115 edge(s))
+- `push` (101 edge(s))
+- `trim` (97 edge(s))
+- `equal` (88 edge(s))
+- `filter` (82 edge(s))
 - `isArray` (73 edge(s))
 - `Boolean` (70 edge(s))
-- `setAttribute` (65 edge(s))
-- `catch` (63 edge(s))
-- `has` (61 edge(s))
+- `catch` (62 edge(s))
+- `setAttribute` (61 edge(s))
+- `has` (59 edge(s))
 - `Number` (57 edge(s))
 - `querySelector` (53 edge(s))
 
@@ -105,16 +105,16 @@ Community of 757 nodes
 
 - `./public/js/views/settings.js` (137 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
-- `equal` (98 edge(s))
+- `equal` (88 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/workflow-designer-model.mjs` (56 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
-- `match` (31 edge(s))
+- `match` (29 edge(s))
 - `./public/js/views/organization.js` (27 edge(s))
 - `./public/js/auth.js` (24 edge(s))
-- `deepEqual` (24 edge(s))
+- `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
-- `./public/js/api.js` (15 edge(s))
+- `./public/js/views/cost.js` (16 edge(s))

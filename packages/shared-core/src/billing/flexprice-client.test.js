@@ -171,6 +171,24 @@ test('balance reads hit the two distinct routes and expand is encoded', async ()
   assert.match(rec.calls[1].url, /\/balance\/real-time-cached\?expand=credits_available_breakdown$/);
 });
 
+test('list rows are read from whichever envelope the route actually used', async () => {
+  // Measured against the live stack: `GET /v1/customers/:id/wallets` answers a
+  // BARE ARRAY, `GET /v1/environments` answers `{environments}`, and the search
+  // routes answer `{items}`. A caller that picks one key and finds nothing does
+  // not get an error — it gets "there are none", which for wallets means creating
+  // a resource that already exists and then reading back no id.
+  const { c } = client([
+    { status: 200, json: [{ id: 'wallet_1', currency: 'inr' }] },
+    { status: 200, json: { items: [{ id: 'wtxn_1' }] } },
+    { status: 200, json: { environments: [{ id: 'env-1111' }] } },
+  ]);
+  assert.deepEqual(await c.listWalletsByCustomer('cust_1'), { items: [{ id: 'wallet_1', currency: 'inr' }] });
+  const search = await c.walletTransactionsSearch({ id: 'wallet_1' });
+  assert.equal(search.items[0].id, 'wtxn_1');
+  const envs = await c.listEnvironments();
+  assert.equal(envs.environments[0].id, 'env-1111');
+});
+
 test('there is no route on this client that marks an invoice paid, because that is the double-credit loop', async () => {
   const { c } = client([]);
   for (const name of Object.keys(c)) {

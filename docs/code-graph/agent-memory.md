@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 236 nodes
+Community of 253 nodes
 
-- **Size**: 236 nodes
-- **Cohesion**: 0.2648
+- **Size**: 253 nodes
+- **Cohesion**: 0.2432
 - **Dominant Language**: javascript
 
 ## Members
@@ -21,51 +21,51 @@ Community of 236 nodes
 | test@L146 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 146-146 |
 | test:the static-IP grant lists the addresses the module owns@L162 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 162-177 |
 | test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L351 | Test | ./e2e/persistent-footer.spec.js | 351-455 |
-| resolveDeps | Function | ./packages/shared/src/agent/approval-gate.js | 32-48 |
-| bp | Function | ./packages/shared/src/agent/approval-gate.js | 34-34 |
-| defaultResolveBusiness | Function | ./packages/shared/src/agent/approval-gate.js | 50-64 |
-| computeDeadline | Function | ./packages/shared/src/agent/approval-gate.js | 67-71 |
-| createGate | Function | ./packages/shared/src/agent/approval-gate.js | 77-98 |
-| proceedGate | Function | ./packages/shared/src/agent/approval-gate.js | 107-166 |
-| approveGate | Function | ./packages/shared/src/agent/approval-gate.js | 169-175 |
-| reevaluateGate | Function | ./packages/shared/src/agent/approval-gate.js | 182-221 |
-| sweepExpiredGates | Function | ./packages/shared/src/agent/approval-gate.js | 229-254 |
-| makeStore | Function | ./packages/shared/src/agent/approval-gate.test.js | 9-33 |
-| getApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 21-21 |
-| updateApprovalGate | Function | ./packages/shared/src/agent/approval-gate.test.js | 22-27 |
-| makeDeps | Function | ./packages/shared/src/agent/approval-gate.test.js | 36-50 |
-| test:createGate sets deadline = createdAt + waitMinutes exactly and starts awaiting@L52 | Test | ./packages/shared/src/agent/approval-gate.test.js | 52-58 |
-| test:sweepExpiredGates auto-approves a past-deadline gate once and documents the decision@L60 | Test | ./packages/shared/src/agent/approval-gate.test.js | 60-76 |
-| test:sweepExpiredGates leaves a gate whose deadline is still in the future@L78 | Test | ./packages/shared/src/agent/approval-gate.test.js | 78-85 |
-| test:proceedGate is idempotent — prepareBusiness runs once across repeated calls@L87 | Test | ./packages/shared/src/agent/approval-gate.test.js | 87-97 |
-| test:approveGate proceeds a human decision; a non-awaiting or missing gate throws GateError@L99 | Test | ./packages/shared/src/agent/approval-gate.test.js | 99-108 |
-| test:sweepExpiredGates recovers gates decided but not yet proceeded (crash between)@L110 | Test | ./packages/shared/src/agent/approval-gate.test.js | 110-121 |
-| test:reevaluateGate supersedes the old gate; green returns no gate, amber creates a fresh one with attempts+1@L123 | Test | ./packages/shared/src/agent/approval-gate.test.js | 123-146 |
-| test:gate lifecycle preserves native context and publishes only to that workspace@L148 | Test | ./packages/shared/src/agent/approval-gate.test.js | 148-169 |
-| test:default business resolution selects only the gate workspace when ids collide@L171 | Test | ./packages/shared/src/agent/approval-gate.test.js | 171-192 |
-| clean | Function | ./packages/shared/src/agent/business-pipeline.js | 62-64 |
-| fenced | Function | ./packages/shared/src/agent/business-pipeline.js | 67-69 |
-| buildDeps | Function | ./packages/shared/src/agent/business-pipeline.js | 120-131 |
-| evaluationSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 141-155 |
-| fraudSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 157-165 |
-| revenueModelSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 167-173 |
-| revenueSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 175-181 |
-| segmentsSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 183-190 |
-| architectureNodes | Function | ./packages/shared/src/agent/business-pipeline.js | 192-201 |
-| designSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 203-210 |
-| designHtmlSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 212-222 |
-| escapeHtml | Function | ./packages/shared/src/agent/business-pipeline.js | 224-227 |
-| sanitizeDesignHtml | Function | ./packages/shared/src/agent/business-pipeline.js | 237-248 |
-| evaluatePrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 258-266 |
-| fraudPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 268-274 |
-| revenuePrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 276-282 |
-| breakdownPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 284-290 |
-| designPrompt | Function | ./packages/shared/src/agent/business-pipeline.js | 292-298 |
-| clampScore | Function | ./packages/shared/src/agent/business-pipeline.js | 302-304 |
-| signalFromScore | Function | ./packages/shared/src/agent/business-pipeline.js | 306-310 |
-| normalizeCriteria | Function | ./packages/shared/src/agent/business-pipeline.js | 312-321 |
+| memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
+| memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
+| resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |
+| embedQuestions | Function | ./packages/shared/src/agent/coverage-service.js | 83-96 |
+| rankScopesWithLaya | Function | ./packages/shared/src/agent/coverage-service.js | 103-144 |
+| candidates | Function | ./packages/shared/src/agent/coverage-service.js | 116-116 |
+| mapWithConcurrency | Function | ./packages/shared/src/agent/coverage-service.js | 146-159 |
+| cacheKey | Function | ./packages/shared/src/agent/coverage-service.js | 161-166 |
+| computeCoverage | Function | ./packages/shared/src/agent/coverage-service.js | 178-301 |
+| invalidateCoverageCache | Function | ./packages/shared/src/agent/coverage-service.js | 309-323 |
+| makeStore | Function | ./packages/shared/src/agent/coverage-service.test.js | 37-51 |
+| baseDeps | Function | ./packages/shared/src/agent/coverage-service.test.js | 53-55 |
+| beforeEach@L57 | Test | ./packages/shared/src/agent/coverage-service.test.js | 57-57 |
+| test:with memory disabled nothing is assessed and no recall is attempted@L59 | Test | ./packages/shared/src/agent/coverage-service.test.js | 59-76 |
+| test:one store load serves the whole bank — questions never re-read the pool@L78 | Test | ./packages/shared/src/agent/coverage-service.test.js | 78-97 |
+| test:an unreadable store reads as unconfigured, not as 0% coverage@L99 | Test | ./packages/shared/src/agent/coverage-service.test.js | 99-108 |
+| test:a genuinely empty memory is real 0% coverage, distinct from not_assessed@L110 | Test | ./packages/shared/src/agent/coverage-service.test.js | 110-120 |
+| test:embeddings are one batched call, and an embedder failure degrades to lexical@L122 | Test | ./packages/shared/src/agent/coverage-service.test.js | 122-148 |
+| test:laya is reported as not_configured when no URL is deployed, and cannot change a score@L150 | Test | ./packages/shared/src/agent/coverage-service.test.js | 150-178 |
+| test:an unreachable laya fails open without failing the coverage request@L180 | Test | ./packages/shared/src/agent/coverage-service.test.js | 180-194 |
+| test:laya reorders matched scopes without inventing ones@L196 | Test | ./packages/shared/src/agent/coverage-service.test.js | 196-214 |
+| test:reports are cached per org and bank, bypassed by refresh and by invalidation@L216 | Test | ./packages/shared/src/agent/coverage-service.test.js | 216-227 |
+| test:inactive questions are dropped and an oversized bank is capped@L229 | Test | ./packages/shared/src/agent/coverage-service.test.js | 229-240 |
+| test:questionIds narrows a pass so one category refresh never scans the whole bank@L242 | Test | ./packages/shared/src/agent/coverage-service.test.js | 242-253 |
+| test:a bank edit clears only the editing organisation\'s cached report@L255 | Test | ./packages/shared/src/agent/coverage-service.test.js | 255-266 |
+| test:a run that outlives its budget returns 200-shaped partial results, not fake gaps@L268 | Test | ./packages/shared/src/agent/coverage-service.test.js | 268-295 |
+| QuestionError | Class | ./packages/shared/src/agent/global-questions.js | 55-61 |
+| constructor | Function | ./packages/shared/src/agent/global-questions.js | 56-60 |
+| trim | Function | ./packages/shared/src/agent/global-questions.js | 63-67 |
+| isValidId | Function | ./packages/shared/src/agent/global-questions.js | 69-71 |
+| mergeBank | Function | ./packages/shared/src/agent/global-questions.js | 90-122 |
+| normalizeQuestion | Function | ./packages/shared/src/agent/global-questions.js | 125-172 |
+| validateQuestionPatch | Function | ./packages/shared/src/agent/global-questions.js | 179-218 |
+| clamp | Function | ./packages/shared/src/agent/global-questions.js | 230-232 |
+| normalizeText | Function | ./packages/shared/src/agent/global-questions.js | 234-236 |
+| scoreQuestion | Function | ./packages/shared/src/agent/global-questions.js | 248-282 |
+| statusForScore | Function | ./packages/shared/src/agent/global-questions.js | 284-289 |
+| scoreCoverage | Function | ./packages/shared/src/agent/global-questions.js | 299-321 |
+| notAssessedResults | Function | ./packages/shared/src/agent/global-questions.js | 327-341 |
+| randomId | Function | ./packages/shared/src/agent/global-questions.js | 343-348 |
+| test:mergeBank keeps untouched defaults as origin=default and layers overrides@L56 | Test | ./packages/shared/src/agent/global-questions.test.js | 56-66 |
+| test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
+| test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
 
-*... and 186 more members.*
+*... and 203 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 236 nodes
 
 ### Outgoing
 
-- `equal` (262 edge(s))
-- `match` (46 edge(s))
-- `ok` (46 edge(s))
-- `String` (42 edge(s))
-- `map` (40 edge(s))
+- `equal` (355 edge(s))
+- `match` (62 edge(s))
+- `ok` (47 edge(s))
+- `map` (47 edge(s))
+- `deepEqual` (43 edge(s))
+- `join` (42 edge(s))
+- `includes` (41 edge(s))
+- `String` (39 edge(s))
+- `isArray` (36 edge(s))
 - `filter` (32 edge(s))
-- `isArray` (32 edge(s))
-- `slice` (30 edge(s))
 - `expect` (29 edge(s))
-- `deepEqual` (26 edge(s))
-- `trim` (23 edge(s))
-- `push` (23 edge(s))
-- `includes` (20 edge(s))
-- `replace` (19 edge(s))
-- `test` (19 edge(s))
+- `slice` (26 edge(s))
+- `trim` (25 edge(s))
+- `throws` (23 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
 
 ### Incoming
 
-- `equal` (262 edge(s))
-- `ok` (46 edge(s))
-- `match` (43 edge(s))
-- `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
+- `equal` (355 edge(s))
+- `match` (59 edge(s))
+- `ok` (47 edge(s))
+- `deepEqual` (43 edge(s))
 - `expect` (29 edge(s))
-- `deepEqual` (26 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
+- `join` (24 edge(s))
+- `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
+- `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
+- `throws` (23 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js` (22 edge(s))
 - `./packages/shared/src/agent/global-questions.js` (21 edge(s))
-- `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
+- `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
-- `./packages/shared/src/agent/coverage-service.test.js` (16 edge(s))
-- `./packages/shared/src/agent/approval-gate.js` (15 edge(s))
-- `throws` (15 edge(s))
-- `filter` (14 edge(s))
-- `./packages/shared/src/agent/memory.js` (14 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))

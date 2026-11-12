@@ -4,52 +4,53 @@
 
 ## Overview
 
-Community of 4 nodes
+Community of 11 nodes
 
-- **Size**: 4 nodes
-- **Cohesion**: 0.1091
+- **Size**: 11 nodes
+- **Cohesion**: 0.4454
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:balance thresholds are mirrored from the ledger, never copied into HCL@L72 | Test | ./deploy/gcp/observability-config.test.js | 72-93 |
-| readThresholds | Function | ./scripts/gen-observability-inputs.js | 30-43 |
-| serialize | Function | ./scripts/gen-observability-inputs.js | 45-49 |
-| main | Function | ./scripts/gen-observability-inputs.js | 51-68 |
+| check | Function | ./scripts/flexprice-recharge-verify.js | 66-70 |
+| section | Function | ./scripts/flexprice-recharge-verify.js | 71-73 |
+| request | Function | ./scripts/flexprice-recharge-verify.js | 76-110 |
+| main | Function | ./scripts/flexprice-recharge-verify.js | 112-429 |
+| get | Function | ./scripts/flexprice-recharge-verify.js | 167-167 |
+| post | Function | ./scripts/flexprice-recharge-verify.js | 168-168 |
+| call | Function | ./scripts/flexprice-recharge-verify.js | 169-169 |
+| as | Function | ./scripts/flexprice-recharge-verify.js | 170-170 |
+| readBalance | Function | ./scripts/flexprice-recharge-verify.js | 172-175 |
+| readCreditRows | Function | ./scripts/flexprice-recharge-verify.js | 176-179 |
+| saveGstin | Function | ./scripts/flexprice-recharge-verify.js | 207-218 |
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **main** (criticality: 0.62, depth: 2)
+- **get** (criticality: 0.61, depth: 1)
 
 ## Dependencies
 
 ### Outgoing
 
-- `readFileSync` (4 edge(s))
-- `doesNotMatch` (4 edge(s))
-- `join` (3 edge(s))
-- `match` (2 edge(s))
-- `log` (2 edge(s))
-- `equal` (1 edge(s))
-- `deepEqual` (1 edge(s))
-- `parse` (1 edge(s))
-- `includes` (1 edge(s))
-- `existsSync` (1 edge(s))
-- `error` (1 edge(s))
-- `exit` (1 edge(s))
-- `writeFileSync` (1 edge(s))
-- `exec` (1 edge(s))
-- `map` (1 edge(s))
+- `join` (11 edge(s))
+- `log` (10 edge(s))
+- `slice` (9 edge(s))
+- `map` (9 edge(s))
+- `getRechargeIntent` (6 edge(s))
+- `Boolean` (5 edge(s))
+- `String` (5 edge(s))
+- `require` (4 edge(s))
+- `every` (4 edge(s))
+- `filter` (4 edge(s))
+- `Number` (4 edge(s))
+- `stringify` (3 edge(s))
+- `on` (3 edge(s))
+- `configMapKeyValues` (2 edge(s))
+- `getBillingAccount` (2 edge(s))
 
 ### Incoming
 
-- `./scripts/gen-observability-inputs.js` (6 edge(s))
-- `doesNotMatch` (4 edge(s))
-- `readFileSync` (2 edge(s))
-- `match` (2 edge(s))
-- `./deploy/gcp/observability-config.test.js` (1 edge(s))
-- `equal` (1 edge(s))
-- `deepEqual` (1 edge(s))
-- `parse` (1 edge(s))
+- `./scripts/flexprice-recharge-verify.js` (12 edge(s))

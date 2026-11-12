@@ -150,6 +150,63 @@ Deleted in this phase: the `type:'recharge'` ledger path (`billing-api.js:513-52
 Verification: `BILLING_ALLOW_MOCK_PAYMENTS=true FLEXPRICE_ENABLED=true npm start`, scripted recharge on **both** providers → intent `totalPaise 59000`, `gstPaise 9000`, wallet `real_time_credit_balance` **exactly 500**, credit-row `credits_available` delta 500, `collectedPaise == gstPaise + prepaidCredits×100 + promoCredits×100`; replay the same order → one credit; a cross-org order id → refused; Razorpay bad signature → refused.
 Docs: `BILLING_FLEXPRICE.md` §11 recharge runbook with a payload transcript for both gateways.
 
+### Phase 2 outcome (recorded here, decisions above left as written)
+
+Done and green. `npm run billing:recharge:verify` — 53/53 checks against the live
+stack at `v2.1.48`; `node --test packages/shared-core/src/billing/
+services/billing/src/` 220 tests / 218 pass / 0 fail / 2 skipped; `npm test` 2139
+tests / 2135 pass / **0 fail** / 4 skipped. The
+transcript is `BILLING_FLEXPRICE.md` §11 and the plan's Phase 2 verification line
+is met verbatim: intent `totalPaise 59000`, `gstPaise 9000`, wallet
+`real_time_credit_balance` **exactly 500**, `collected 59000 = 9000 + 500×100 +
+0×100`, replay → one credit row, cross-org → 403, bad Razorpay signature → refused,
+and the `BILLING_ALLOW_MOCK_PAYMENTS=false` run → refused with no intent written.
+
+Four deviations, each deliberate:
+
+- **The unknown-location GST rule is not IGST.** The plan said "absent or invalid
+  GSTIN ⇒ IGST, never a silent CGST split". Charged as written, that is wrong law
+  and it blocks recharges: under Art 269 / the IGST Act s.7 the levy follows the
+  *place of supply*, which for an unregistered consumer is their location — and
+  when that is genuinely unavailable the default rule is the supplier's state, not
+  inter-state. Forcing IGST on every GSTIN-less B2C customer would over-collect
+  tax in our own state and refuse the ₹45+₹45 headline case. `gst.js` now resolves
+  supplier-state and reports `placeOfSupply.assumed: true` + `basis`, and the quote
+  response and the UI both show it, so the guess is visible rather than silent
+  (which was the actual worry behind the rule). An invalid GSTIN is refused at the
+  *write* (`PUT /config` → 400 `invalid_gstin`) instead of being stored and
+  ignored, so the `assumed` path is for a customer who never gave one.
+- **`ledger.js`'s ₹500 opening seed is not deleted in this phase.** D5 says delete
+  inside the phase that replaces the thing, and the replacement is `gate.js`
+  reading the wallet — which is Phase 3. Deleting the seed now would leave every
+  org with a zero first-party balance and a gate that still reads it, i.e. nobody
+  could run anything. The FlexPrice-side `FREE_CREDIT_GRANT` from Phase 1's
+  provisioner already exists, so Phase 3 removes the local seed with no new work.
+  The `type:'recharge'` path the plan did assign to this phase **is** gone.
+- **The Razorpay checkout signature is verified when the browser presents one.**
+  The plan's `verify(orderId)` shape has no signature arguments, because
+  Razorpay's proof is over `order_id|payment_id`, which only the client has after
+  checkout. So `/razorpay/verify-order` takes `razorpayOrderId`,
+  `razorpayPaymentId`, `razorpayPaymentSignature` and refuses a mismatch (400
+  `payment_signature_invalid`) before `settle()` runs; with no signature fields it
+  falls through to `settle()`'s own server-side amount check, which is the
+  authority either way. `parseWebhook` covers the webhook half.
+- **Two gates added that the plan did not name.** `create-order` refuses an
+  unconfigured gateway with 400 `provider_not_configured` *before* writing an
+  intent (an order nobody can pay is not a record worth keeping), and
+  `settle()` refuses with 502 `flexprice_wallet_unresolved` rather than crediting
+  wallet `undefined`. The second one is the live bug the first run found —
+  `GET /v1/customers/:id/wallets` answers a bare array with lower-case `currency`,
+  so every second recharge for an org re-created its wallet and read the 409 back
+  as a missing id. Fixed at the client boundary (`rowsOf()`), documented in
+  `FLEXPRICE_FINDINGS.md` §13 with its regression tests.
+
+Beyond the code the plan listed, the UI half moved too: `public/js/recharge.js` is
+the shared checkout flow for both gateways (the old inline Cashfree block and the
+"Add credits (manual)" button that credited without paying are deleted), and the
+cost page renders the server's quote — ₹500 + ₹45 + ₹45 = ₹590, 500 credits — from
+`textContent` only.
+
 ## Phase 3 — Usage → outbox → ingest; the gate reads the wallet; first-party balance dies
 
 New files.

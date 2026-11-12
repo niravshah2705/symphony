@@ -19,6 +19,7 @@ const assert = require('node:assert/strict');
 const gst = require('./gst.js');
 const credits = require('./credits.js');
 const compute = require('./compute-pricing.js');
+const moneyWire = require('./money-wire.js');
 
 const RECHARGE_PAISE = 50000; // ₹500 of prepaid value
 const GST_PAISE = 9000; // ₹45 CGST + ₹45 SGST
@@ -93,7 +94,9 @@ test('a 10% coupon adds a promotional wallet without touching the ₹590 charged
     { walletType: credits.CREDIT_SOURCE_PREPAID, amountPaise: RECHARGE_PAISE, expiry: null },
     { walletType: credits.CREDIT_SOURCE_PROMOTIONAL, amountPaise: 5000, expiry: '2027-03-31T23:59:59.000Z' },
   ]);
-  assert.equal(c.prepaidCredits, 50000, '1 credit = 1 paise of prepaid value, so credits are never re-denominated');
+  assert.equal(c.prepaidCredits, 500, 'D6: 1 credit = ₹1, so the ₹500 subtotal is 500 credits — the number Phase 2 sends as credits_to_add');
+  assert.equal(c.prepaidCredits, moneyWire.paiseToCredits(RECHARGE_PAISE), 'the credit count comes from the same boundary as the wire value');
+  assert.equal(moneyWire.decimalFromPaise(c.collectedPaise), '590.00', 'the gross that reaches the gateway equals the gross on the invoice');
 });
 
 test('interstate supply charges IGST and, critically, the same total', () => {

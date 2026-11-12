@@ -4,19 +4,68 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 70 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.0000
+- **Size**: 70 nodes
+- **Cohesion**: 0.3055
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| parseSpaOrigins | Function | ./packages/shared-core/src/config.js | 755-766 |
-| test:parseSpaOrigins combines SPA_ORIGIN and FIREBASE_CUSTOM_DOMAIN with normalization@L68 | Test | ./services/gateway/src/cors.test.js | 68-79 |
-| test:parseSpaOrigins handles empty or unset env@L81 | Test | ./services/gateway/src/cors.test.js | 81-84 |
+| parseRechargeSubtotal | Function | ./services/billing/src/billing-api.js | 67-84 |
+| parseCouponBps | Function | ./services/billing/src/billing-api.js | 86-93 |
+| customerGstinFor | Function | ./services/billing/src/billing-api.js | 102-109 |
+| supplierStateCode | Function | ./services/billing/src/billing-api.js | 112-114 |
+| quoteRecharge | Function | ./services/billing/src/billing-api.js | 116-132 |
+| quoteView | Function | ./services/billing/src/billing-api.js | 135-154 |
+| newOrderId | Function | ./services/billing/src/billing-api.js | 157-160 |
+| resolveCallerOrg | Function | ./services/billing/src/billing-api.js | 168-175 |
+| requireAdmin | Function | ./services/billing/src/billing-api.js | 245-249 |
+| resolveProvider | Function | ./services/billing/src/billing-api.js | 604-617 |
+| bonusExpiryFrom | Function | ./services/billing/src/billing-api.js | 619-629 |
+| createRechargeOrder | Function | ./services/billing/src/billing-api.js | 631-731 |
+| normalizeProvider | Function | ./services/billing/src/payment-providers.js | 37-40 |
+| timingSafeHexEqual | Function | ./services/billing/src/payment-providers.js | 42-47 |
+| parseJson | Function | ./services/billing/src/payment-providers.js | 49-56 |
+| mapCashfreeStatus | Function | ./services/billing/src/payment-providers.js | 60-65 |
+| createCashfreeAdapter | Function | ./services/billing/src/payment-providers.js | 67-130 |
+| createOrder | Function | ./services/billing/src/payment-providers.js | 172-188 |
+| verify | Function | ./services/billing/src/payment-providers.js | 190-203 |
+| parseWebhook | Function | ./services/billing/src/payment-providers.js | 219-236 |
+| mapRazorpayOrderStatus | Function | ./services/billing/src/payment-providers.js | 136-141 |
+| createRazorpayAdapter | Function | ./services/billing/src/payment-providers.js | 143-238 |
+| baseUrl | Function | ./services/billing/src/payment-providers.js | 144-144 |
+| keyId | Function | ./services/billing/src/payment-providers.js | 145-145 |
+| keySecret | Function | ./services/billing/src/payment-providers.js | 146-146 |
+| webhookSecret | Function | ./services/billing/src/payment-providers.js | 147-147 |
+| call | Function | ./services/billing/src/payment-providers.js | 149-164 |
+| verifyPaymentSignature | Function | ./services/billing/src/payment-providers.js | 211-217 |
+| providerFor | Function | ./services/billing/src/payment-providers.js | 240-247 |
+| fakeFetch | Function | ./services/billing/src/payment-providers.test.js | 21-35 |
+| test:normalizeProvider accepts only the two supported gateways@L37 | Test | ./services/billing/src/payment-providers.test.js | 37-43 |
+| test:providerFor builds the adapter the caller asked for, with its own proof methods@L45 | Test | ./services/billing/src/payment-providers.test.js | 45-51 |
+| test:cashfree createOrder sends the GROSS as a rupee decimal, never paise or a float@L55 | Test | ./services/billing/src/payment-providers.test.js | 55-71 |
+| test:cashfree verify maps PAID and reads the amount as reported by the gateway@L73 | Test | ./services/billing/src/payment-providers.test.js | 73-89 |
+| test:cashfree statuses collapse to the three the settlement path switches on@L91 | Test | ./services/billing/src/payment-providers.test.js | 91-99 |
+| verify | Function | ./services/billing/src/payment-providers.test.js | 92-94 |
+| test:cashfree reports the unconfigured mock instead of hiding it@L101 | Test | ./services/billing/src/payment-providers.test.js | 101-114 |
+| test:cashfree webhook parse pulls the order id and amount out of both envelope shapes@L116 | Test | ./services/billing/src/payment-providers.test.js | 116-134 |
+| test:razorpay createOrder sends integer paise and hands back the ids checkout needs@L145 | Test | ./services/billing/src/payment-providers.test.js | 145-159 |
+| test:razorpay verify reads amount_paid, because amount is only what was asked for@L161 | Test | ./services/billing/src/payment-providers.test.js | 161-182 |
+| test:razorpay http errors are typed and never echo the secret@L184 | Test | ./services/billing/src/payment-providers.test.js | 184-194 |
+| test:razorpay checkout signature is order_id&#124;payment_id, constant-time, and requires a secret@L196 | Test | ./services/billing/src/payment-providers.test.js | 196-213 |
+| sign | Function | ./services/billing/src/payment-providers.test.js | 198-198 |
+| test:razorpay webhook is verified over the raw body and normalized onto the shared event name@L215 | Test | ./services/billing/src/payment-providers.test.js | 215-239 |
+| test:razorpay is unconfigured until both the key id and the secret exist@L241 | Test | ./services/billing/src/payment-providers.test.js | 241-245 |
+| allowsMockPayments | Function | ./services/billing/src/recharge-settle.js | 59-61 |
+| requote | Function | ./services/billing/src/recharge-settle.js | 69-84 |
+| wholeCredits | Function | ./services/billing/src/recharge-settle.js | 86-93 |
+| readCredits | Function | ./services/billing/src/recharge-settle.js | 95-109 |
+| customerBody | Function | ./services/billing/src/recharge-settle.js | 116-129 |
+
+*... and 20 more members.*
 
 ## Execution Flows
 
@@ -26,21 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `parseSpaOrigins` (3 edge(s))
-- `deepEqual` (3 edge(s))
-- `filter` (2 edge(s))
-- `map` (2 edge(s))
-- `split` (2 edge(s))
-- `String` (2 edge(s))
-- `replace` (2 edge(s))
-- `trim` (2 edge(s))
-- `test` (1 edge(s))
-- `freeze` (1 edge(s))
-- `from` (1 edge(s))
+- `equal` (85 edge(s))
+- `String` (40 edge(s))
+- `decimalFromPaise` (13 edge(s))
+- `trim` (10 edge(s))
+- `deepEqual` (10 edge(s))
+- `isConfigured` (9 edge(s))
+- `Number` (7 edge(s))
+- `Boolean` (7 edge(s))
+- `toUpperCase` (6 edge(s))
+- `slice` (6 edge(s))
+- `json` (5 edge(s))
+- `stringify` (5 edge(s))
+- `digest` (5 edge(s))
+- `update` (5 edge(s))
+- `createHmac` (5 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/config.js` (3 edge(s))
-- `parseSpaOrigins` (3 edge(s))
-- `deepEqual` (3 edge(s))
-- `./services/gateway/src/cors.test.js` (2 edge(s))
+- `equal` (83 edge(s))
+- `./services/billing/src/billing-api.js` (50 edge(s))
+- `./services/billing/src/payment-providers.js` (25 edge(s))
+- `./services/billing/src/recharge-settle.test.js` (18 edge(s))
+- `./services/billing/src/payment-providers.test.js` (16 edge(s))
+- `./services/billing/src/recharge-settle.js` (13 edge(s))
+- `deepEqual` (10 edge(s))
+- `isConfigured` (5 edge(s))
+- `./services/billing/src/recharge-settle.test.js::test:another org cannot settle my order@L268` (5 edge(s))
+- `./services/billing/src/recharge-settle.test.js::test:a gateway that collected a different amount settles nothing@L299` (5 edge(s))
+- `./services/billing/src/recharge-settle.test.js::test:a retry after FlexPrice took the credit but before we recorded it does not double-credit@L250` (5 edge(s))
+- `verify` (4 edge(s))
+- `stringify` (4 edge(s))
+- `./services/billing/src/recharge-settle.test.js::test:a read-back that disagrees with the credit is not marked settled@L443` (4 edge(s))
+- `./services/billing/src/recharge-settle.test.js::test:a ₹500 recharge collects ₹590 and credits 500 spendable credits@L130` (4 edge(s))
