@@ -146,7 +146,10 @@ async function ensureWallet({ client, orgId, account, storeImpl, now }) {
       }
     }
     if (!customer || !customer.id) {
-      customer = await client.createCustomer(customerBody(orgId, account && account.paymentInfo));
+      // `|| {}` and not the default parameter: an org that has never opened the
+      // billing page has no account document at all, and `account && account.paymentInfo`
+      // is then `null` — which a `= {}` default does not replace.
+      customer = await client.createCustomer(customerBody(orgId, (account && account.paymentInfo) || {}));
       if (!customer || !customer.id) {
         throw new SettleError(502, 'flexprice_customer_uncreated', 'FlexPrice accepted no customer for this org.');
       }
@@ -211,6 +214,7 @@ async function settle({ orderId, orgId: callerOrgId, actor = 'unknown' } = {}, d
   const env = deps.env || process.env;
   const now = deps.now || (() => new Date().toISOString());
   const logImpl = deps.log || log;
+  const gateImpl = deps.gate || require('@ai-fleet/shared-core/billing/gate');
 
   const key = String(orderId || '').trim();
   if (!key) throw new SettleError(400, 'missing_order_id', 'orderId is required.');
@@ -368,6 +372,10 @@ async function settle({ orderId, orgId: callerOrgId, actor = 'unknown' } = {}, d
     throw new SettleError(500, 'intent_not_marked',
       `The wallet was credited but order ${key} could not be marked settled. Do not retry blindly — reconcile.`);
   }
+
+  // The wallet moved, so whatever this process last believed about this org is
+  // now wrong in the direction that matters: an org blocked at zero is not.
+  gateImpl.invalidate(orgId);
 
   logImpl.info('recharge_settled', {
     orderId: key,

@@ -209,6 +209,15 @@ that list on purpose** (the field exists in the DTO, but it silently disappears 
 a 200 response on any wallet holding a `PURCHASED_CREDIT_BONUS` row — findings §7d),
 so nothing may branch on it.
 
+As built (Phase 3), the view exposes the balance, the derived state, and
+`unpaid_invoices_amount` — **and no usage number**. `current_period_usage` answers
+`"0"` for every wallet in the stack, including one a manual debit drove to −2900:
+it is anchored to the current *invoice* cycle, which does not exist until usage
+invoices are finalized. Nothing was harmed by reading it; it is simply not the
+accrued-usage figure it sounds like, and a field with that name on an admission
+view would be read that way. Accrued usage lives where it was measured — the meter
+sum the outbox drain reads back (findings §14).
+
 Three consequences:
 
 - B5's cache is load-bearing, not an optimisation. 8 call sites in 6 modules hit
@@ -218,9 +227,16 @@ Three consequences:
   stale-while-revalidate rather than a synchronous fetch per call site.
 - `CONFIG.BILLING.sweepEnabled` cannot stay the gate switch, because the sweep
   debit it names is being deleted. → explicit
-  `gatePolicy: enforced | stale_ok | off`, where `off` is a **named, logged,
+  `gatePolicy: enforced | off`, where `off` is a **named, logged,
   non-default** local-dev mode replacing today's silent fail-open. The boot
-  invariant is zero-credential `npm start`.
+  invariant is zero-credential `npm start`. As built it is two values, not the
+  three planned: `stale_ok` would have been a policy about *freshness*, and
+  freshness is already the `stale`/`isCachedFallback` flags on the view, so a
+  policy that also carried it would have said the same thing twice. The default
+  follows the money source — `enforced` when FlexPrice is configured, `off`
+  otherwise — and `BILLING_GATE_POLICY` overrides it by name; `reportBoot()`
+  refuses `enforced` with no FlexPrice rather than opening a door that logs as
+  shut.
 - A balance **can** go negative, via exactly one path: `MANUAL_BALANCE_DEBIT`
   bypasses the insufficient-balance check (`wallet.go:2438-2448`). Usage never
   overdraws; the platform charge does. So the gate needs a third state beyond
@@ -312,6 +328,30 @@ to Phase 6. The mandate path did get the two cheap fixes it was holding: replaye
 events no longer double-credit, and its rupee conversion no longer goes through a
 float.
 
+**Status after Phase 3 — the list above is executed, and the grep gate holds it.**
+`sweep.js` aggregates and prunes only (its balance debit is gone); `ledger.js`'s
+money semantics went with its ₹500 local opening seed; `gate.js` reads the wallet
+projection and no longer predicates on anything the store holds; and
+`billingAccounts` carries no readable balance — the live proof is an account whose
+keys are `createdAt, updatedAt, flexprice, id, orgId`. `ledgerEntries` is now what
+the paragraph above says it must be: write-only.
+
+The enforcement is `services/billing/src/balance-authority.test.js`, which scans the
+tree and fails on any of: reading `account.balancePaise` (or any of its aliases),
+calling `postEntry`/`refreshBalance`/`balanceFromLedger`/`currentBalancePaise`/
+`maybeAutoRecharge`, calling `listLedgerEntries(` outside `store.js`, moving credits
+outside the five files allowed to (`flexprice-client.js`, `recharge-settle.js`, and
+the three provisioning/spike scripts), a `balancePaise` anywhere under `public/`, or
+a reference to the deleted `/api/billing/ledger` route. It covers `packages`,
+`services`, `public`, `scripts`, `e2e` and `e2e-live` — the last two because a test
+fixture that still claims the old money model teaches it to the next reader.
+
+Still standing, on purpose: the Cashfree `SUBSCRIPTION_PAYMENT_SUCCESS` mandate
+spine (Phase 6). It is the one credit path with no quote and therefore no intent,
+and the compensating control is that it **charges nothing** — `auto-recharge-job.js`
+answers "the mandate is not settled into the FlexPrice wallet" and alerts the org
+instead of capturing a payment that would leave the tenant paid and still blocked.
+
 ## 8. Independent of all of this
 
 > ✅ **Closed in Phase 2**, as planned. `verify-order` and both webhooks now go
@@ -375,7 +415,7 @@ accept ≠ ingest ≠ queryable, and that is the trap in this system.
 ### What Phase 0 still owes
 
 Nothing in the stack: it comes up with one command and the four modules are tested.
-What is owed is *decisions* — §12 — and the Phase 1 work itself, which the item-18
+What is owed is *decisions* — §13 — and the Phase 1 work itself, which the item-18
 gate blocks.
 
 Phase 1 has since been built and measured: the catalog is in §10, and the four
@@ -451,8 +491,13 @@ proven to do are different sentences — see §6 before describing it as a bound
   prices, `USAGE`/`ARREAR`. `actor-compute` is priced **0** per D4.
 - `rate-<provider>-input` / `rate-<provider>-output` × 7 providers (claude, codex,
   antigravity, ollama, lmstudio, omlx, huggingface) — generated from
-  `pricing.js` × `USD_TO_INR`, with the FX date recorded in metadata (D9: this is
-  a catalog snapshot, not a money-path input).
+  `pricing.js` × `USD_TO_INR`, with the FX date recorded in metadata. **Read this
+  twice:** the catalog snapshot is decoration next to the live one. D9 moved
+  `USD_TO_INR` out of the *display* path and into the *ingest* path —
+  `usage.js` calls `pricing.usdToPaise()` with it to produce the `cost_paise` the
+  outbox delivers, so the rate reprices every future run and is a versioned
+  catalog input, not a page setting. Changing it should go with a re-provision, so
+  the two copies (the prices here and `CONFIG.BILLING.usdToInr`) do not drift.
 
 **Per-org** — `POST /v1/customers` with **flat** `address_*` fields (nested
 `address` is accepted and dropped) then a `PRE_PAID` INR wallet with
@@ -461,6 +506,23 @@ read: `cust_01M77WCFMW6T54FYP70EMPZ7HA` / `wallet_01M77WCFN8WCQ8H1DKARS1DFD1`,
 seeded with **500 free credits** as `FREE_CREDIT_GRANT` — never
 `bonus_credits_to_add`, which silently breaks the credit-row breakdown.
 `--org <id>` provisions another org; `FLEET_ORG_ID` does the same non-interactively.
+
+The opening grant is the replacement for `ledger.js`'s deleted ₹500 local seed, so
+it is the only way an org gets money without paying:
+
+```bash
+node scripts/flexprice-provision.js --org <orgId> --free-credit
+node scripts/flexprice-inspect.js balance <walletId>     # → real_time_credit_balance 500
+```
+
+It reads the wallet before it writes one: a non-zero balance means **no grant**
+(`openingCreditDecision`), so a second run cannot stack a second ₹500. The same
+grant happens on its own for an org the org service reports as the free tier — the
+`is_default` flag, never the name or a tag — and `--free-credit` is the deliberate
+exception for when that answer is unavailable (no org service, id not a tenant
+UUID, or the call failed). An org that needs money after that recharges (`§11`):
+nothing in the app can hand an org credits any more, because `settle()` is the only
+credit site and it requires a quoted, paid intent.
 
 Two known pieces of litter, both intentional: probe B creates a dedicated meter
 per run (`phase1-<run> probe-b`) because measuring float behaviour needs an
@@ -618,7 +680,70 @@ the unknown-location GST rule (supplier-state default + `assumed`, not IGST), th
 `balancePaise`; the FlexPrice-side `FREE_CREDIT_GRANT` already exists), and the
 Razorpay checkout-signature check being conditional on the browser presenting one.
 
-## 12. Decisions still needed from you
+## 12. The usage pipeline — as built (Phase 3)
+
+Four pieces, and one rule: **a run never waits for billing, and billing never
+believes a 202.**
+
+```
+recordUsage()  (usage.js)        writes the usage record AND one `billingOutbox`
+                                 row. No network call on this path, ever.
+        ↓  on the 5-minute billing tick
+drainOnce()    (outbox-drain.js)  POST /v1/events/bulk ≤1000 rows, keyed
+                                 ev:{org}:{run|recordId}:{meter} → rows go `sent`
+        ↓  next pass
+verify()       (outbox-drain.js)  POST /v1/events/usage/meter per org+meter over the
+                                 window; equal ⇒ `verified`, else WARN + stay `sent`
+        ↓  continuously, on demand
+gate.js                           GET /v1/wallets/:id/balance/real-time behind a
+                                 single-flight SWR cache (15 s TTL)
+```
+
+The three rules that make the pipeline honest, each measured rather than assumed:
+
+- **`sent` is not `verified`.** A 202 from `eventsBulk` means Kafka took the batch;
+  findings §3 shows it does not mean ClickHouse aggregated it, and an event whose
+  `event_name` matches no meter — or whose property is spelled wrong — is stored,
+  acknowledged, and contributes nothing *silently*. So the drain reads the number
+  back out of the meter and only then marks the row, and the row that stays `sent`
+  past 30 minutes is the standing alarm (`staleSent()`).
+- **The window is the event's clock, not the drain's.** `occurredAt` is stamped at
+  enqueue, so a backlog drained an hour late still meters into the hour it happened
+  — otherwise the read-back disagrees with what was sent, which is exactly the drift
+  the alarm is supposed to be able to see.
+- **The gate reports money and nothing else.** `current_period_usage` is `"0"` on
+  every wallet in the stack (findings §14), so the view carries the balance, the
+  derived state (`available` / `exhausted` / `negative` / `unknown`),
+  `unpaid_invoices_amount` and `gatePolicy`. Accrued usage lives on the meter.
+
+`npm run billing:usage:verify` — 40 checks, `scripts/flexprice-usage-verify.js` —
+proves the above end to end against the live stack: four runs → three rows (a BYOK
+run queues nothing) → ₹35.50 hand-computed → meter reads exactly `3550` → the credit
+balance has *not* moved → a blind double re-send does not move the meter → a typo'd
+`event_name` complains and the row stays `sent` → a closed port leaves every row
+`pending` with `attempts` at 1 and the usage records untouched → and with every
+`FLEXPRICE_*` unset the fleet still boots, logging `gatePolicy=off`. Full read-back
+transcript: `docs/FLEXPRICE_FINDINGS.md` §14.
+
+**The first-party money paths are gone.** `sweep.js` no longer touches balances,
+`ledger.js` keeps no money semantics and its ₹500 local opening seed is deleted (the
+FlexPrice-side `FREE_CREDIT_GRANT` from §10 replaced it), `billingAccounts` holds no
+readable balance, `USD_TO_INR` moved *into* the ingest path and its float arithmetic
+replaced with the BigInt boundary, and `cost.js` renders only what the server
+derived. What enforces that is §7's grep gate — `services/billing/src/balance-authority.test.js`,
+7 checks over `packages`, `services`, `public`, `scripts`, `e2e` and `e2e-live`.
+
+### What Phase 3 deliberately did differently
+
+Recorded as deviations in `docs/BILLING_IMPLEMENTATION_PLAN.md` §Phase 3 outcome:
+the drain lives at `packages/shared-core/src/billing/outbox-drain.js` rather than
+`services/billing/src/` (the gateway and planner import it), the exit criterion is
+the **meter sum** rather than the wallet balance (findings §2 — consumption does not
+debit at ingest), the ingest outage is a **closed port** rather than a container
+restart, `gate.js` carries no usage field, and `pricing.js usdToPaise` is decimal
+arithmetic rather than the display-only helper D9 assumed it was.
+
+## 13. Decisions still needed from you
 
 1. **AGPL** — the memo's five options with a recommendation. Nothing else here is
    actionable until this is chosen; I am not treating "probably fine" as an answer.
@@ -657,3 +782,14 @@ Razorpay checkout-signature check being conditional on the browser presenting on
    deltas, or we drop it and show promo/prepaid balances separately. Deriving is
    honest but is arithmetic on someone else's rows; dropping loses a column the plan
    promised.
+8. **Auto-recharge on a Cashfree mandate — charge it, or keep refusing.** Since
+   Phase 3 the job **does not charge**: a mandate payment has no quote and therefore
+   no `rechargeIntents` row, and `settle()` — the only code that may credit — refuses
+   an order it never quoted. Charging anyway would take money and leave the org
+   blocked, which is the worst available outcome, so the job alerts the org instead
+   (`rechargeIsNotChargeable`: "the mandate is not settled into the FlexPrice
+   wallet"). The decision is the shape of the replacement: mint an intent at
+   mandate-charge time (the org's saved amount + GST + place of supply, quoted by the
+   same `gst.quote` as a manual recharge) and let `settle()` credit it, or retire the
+   mandate and keep recharges manual. The first is Phase 6's assignment; the second
+   is a product decision nothing in the code can make.

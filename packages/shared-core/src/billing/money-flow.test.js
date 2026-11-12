@@ -20,6 +20,7 @@ const gst = require('./gst.js');
 const credits = require('./credits.js');
 const compute = require('./compute-pricing.js');
 const moneyWire = require('./money-wire.js');
+const pricing = require('./pricing.js');
 
 const RECHARGE_PAISE = 50000; // ₹500 of prepaid value
 const GST_PAISE = 9000; // ₹45 CGST + ₹45 SGST
@@ -206,4 +207,31 @@ test('the savings panel reads as a counterfactual and is not wired to any debit'
     9,
     'the charge depends on billed seconds only',
   );
+});
+
+// D9 left one FX multiplication inside the money path, and Phase 3 is what made it
+// load-bearing: `cost_paise` is no longer a page decoration, it is the quantity the
+// outbox delivers and the meter sums. So the two figures below are computed with
+// pencil arithmetic — 100k in + 20k out at claude's ₹3/₹15 per MTok, at ₹87/USD.
+test('a run’s tokens become the paise the meter will sum, exactly', () => {
+  const usd = pricing.estimateCostUsd({ inputTokens: 100_000, outputTokens: 20_000 }, 'claude');
+  // The float wobble is visible right here — 0.6000000000000001 rather than 0.6 —
+  // and it is exactly why the paise conversion below is not float arithmetic.
+  assert.ok(Math.abs(usd - 0.6) < 1e-12, `(100000/1e6)×3 + (20000/1e6)×15 = 0.60, got ${usd}`);
+
+  const paise = pricing.usdToPaise(usd, 87);
+  assert.equal(paise, 5220, '0.6 USD × ₹87 × 100 = ₹52.20 = 5220p');
+  moneyWire.assertPaise(paise, 'outbox cost_paise');
+  assert.equal(moneyWire.decimalFromPaise(paise), '52.20', 'the same number the page shows');
+
+  // Usage money is a decimal amount of credits, never a whole count, so the credit
+  // mover refuses it. If someone routes a metered run through `paiseToCredits` the
+  // bill silently rounds away ₹0.20 per run — which is the direction that adds up.
+  assert.throws(() => moneyWire.paiseToCredits(paise), /whole number of credits/);
+
+  // The reason this is BigInt arithmetic: ₹1.005 is an exact half-paise, and binary
+  // float puts it just BELOW the half, so the naive round is short by one on every
+  // such run and both sides of a reconciliation agree that they undercharged.
+  assert.equal(Math.round(1.005 * 1 * 100), 100, 'the defect, stated so it is not re-introduced');
+  assert.equal(pricing.usdToPaise(1.005, 1), 101, 'half away from zero, once, at the boundary');
 });

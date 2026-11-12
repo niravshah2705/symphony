@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 307 nodes
+Community of 303 nodes
 
-- **Size**: 307 nodes
-- **Cohesion**: 0.2382
+- **Size**: 303 nodes
+- **Cohesion**: 0.2393
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,7 +20,7 @@ Community of 307 nodes
 | test:the power workflow waits only on namespaces the module still creates@L138 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 138-160 |
 | test@L146 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 146-146 |
 | test:the static-IP grant lists the addresses the module owns@L162 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 162-177 |
-| test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L351 | Test | ./e2e/persistent-footer.spec.js | 351-455 |
+| test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L357 | Test | ./e2e/persistent-footer.spec.js | 357-461 |
 | memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
 | memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
 | resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |
@@ -65,44 +65,39 @@ Community of 307 nodes
 | test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
 | test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
 
-*... and 257 more members.*
+*... and 253 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
-- **generatePlan** (criticality: 0.67, depth: 6)
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
-- **runCoder** (criticality: 0.67, depth: 7)
-- **runPlannedCoder** (criticality: 0.66, depth: 7)
-- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (370 edge(s))
-- `join` (74 edge(s))
+- `equal` (366 edge(s))
+- `join` (69 edge(s))
 - `match` (63 edge(s))
-- `ok` (56 edge(s))
 - `String` (56 edge(s))
+- `ok` (55 edge(s))
 - `isArray` (51 edge(s))
 - `map` (49 edge(s))
 - `deepEqual` (43 edge(s))
 - `includes` (43 edge(s))
 - `filter` (33 edge(s))
-- `slice` (29 edge(s))
 - `expect` (29 edge(s))
+- `slice` (28 edge(s))
 - `trim` (26 edge(s))
 - `throws` (23 edge(s))
 - `require` (22 edge(s))
 
 ### Incoming
 
-- `equal` (370 edge(s))
+- `equal` (366 edge(s))
 - `match` (59 edge(s))
-- `ok` (56 edge(s))
+- `ok` (55 edge(s))
 - `./packages/shared/src/agent/harnesses/contract.js` (55 edge(s))
-- `join` (46 edge(s))
+- `join` (44 edge(s))
 - `deepEqual` (43 edge(s))
 - `expect` (29 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))

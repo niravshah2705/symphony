@@ -226,6 +226,101 @@ Deleted in this phase: `sweep.js:57-63` (the only debit path today), `ledger.js`
 Verification: fixed event set → FlexPrice balance equals hand-computed paise at **zero tolerance**; kill the api container mid-drain → row stays `pending` and a blind retry is safe; typo an `event_name` → the reconciler complains rather than the balance silently freezing; every `FLEXPRICE_*` unset → `npm start` boots and logs `gatePolicy=off`; `grep` gate finds no readable first-party balance.
 Docs: `FLEXPRICE_FINDINGS.md` §13 "Outbox + gate as built, with the read-back transcript".
 
+### Phase 3 outcome (recorded here, decisions above left as written)
+
+Done and green. `npm run billing:usage:verify` — **40/40 checks** against the live
+stack at `v2.1.48`; the three billing suites 307 tests / 305 pass / **0 fail** / 2
+skipped; `npm test` 2198 / 2194 / **0 fail** / 4 skipped; the grep gate
+(`services/billing/src/balance-authority.test.js`) 7/7; and `npm start` with every
+`FLEXPRICE_*` unset boots clean, logging
+`billing_gate_policy {policy:"off", because:"flexprice_disabled"}` in each service.
+
+The verification line, clause by clause:
+
+- **"fixed event set → FlexPrice balance equals hand-computed paise at zero
+  tolerance" — met on the *meter*, not the balance.** §2 (measured in Phase 0 and
+  re-measured here) is that consumption does not debit at ingest: four runs → 3550p
+  hand-computed → three rows → the meter answers `{"value":3550}` exactly, while
+  `real_time_credit_balance` stayed at the 500 credits the recharge put there.
+  Asserting that a *balance* equals the usage would assert a thing FlexPrice does
+  not do; the zero-tolerance half is therefore the meter sum, and the
+  balance-did-not-move half is asserted beside it, because a balance that *did*
+  move would mean the gate is subtracting the same usage twice.
+- **"kill the api container mid-drain → row stays `pending`, blind retry safe" —
+  done with a closed port instead** (`http://127.0.0.1:1`), which produces the same
+  `connect ECONNREFUSED` with no blast radius on a stack shared with kind and
+  LiteLLM. Every row stayed `pending` at `attempts: 1` — a transport failure does
+  not consume the retry ceiling, because it is not the payload's fault — and the
+  four usage records were untouched. Two blind re-sends of the same three
+  `event_id`s left the meter at 3550.
+- **"typo an `event_name` → the reconciler complains rather than the balance
+  silently freezing" — met:** delivered under its own org, the row goes `sent` on a
+  202, the read-back reports `{expected: 700, observed: 0}`, the row *stays* `sent`,
+  `staleSent()` returns it as the standing alarm, the corrected event aggregates to
+  700 and the next pass verifies it. Nothing freezes because the complaint is the
+  mechanism, not a side effect of a balance.
+- **"every `FLEXPRICE_*` unset → `npm start` boots and logs `gatePolicy=off`" — met**
+  both as a child process inside step 8 of the verify script and as a real
+  `npm start`.
+- **"grep gate finds no readable first-party balance" — met and extended.** `e2e/`
+  and `e2e-live/` joined the scan roots: a stubbed response and a readiness
+  assertion are contract claims too, and a stale one teaches the deleted money model
+  to the next reader. Seven checks now — account-shaped `.balancePaise` reads, the
+  five deleted function names, `listLedgerEntries(` outside `store.js`, credit
+  movers outside the five files allowed to call them, any `balancePaise` under
+  `public/`, any reference to the deleted `/api/billing/ledger` route, and an
+  assertion that the scan is still covering the money files at all.
+
+Deviations, each deliberate:
+
+- **The drain lives at `packages/shared-core/src/billing/outbox-drain.js`, not
+  `services/billing/src/`.** `packages/shared/src/agent/scheduler.js` drains on the
+  local profile's tick as well as the billing service, and a shared-core module
+  cannot require a service. The billing tick remains the caller in production.
+- **`gate.js` carries no usage field at all.** The plan named `current_period_usage`
+  as a number the gate should surface. Measured: it answers `"0"` on all 21 wallets
+  in the stack, including one a manual debit drove to −2900 — it is anchored to the
+  *invoice* cycle, which does not exist until Phase 5 finalizes usage invoices. A
+  field with that name on an admission view would be read as accrued consumption and
+  always read as none, which is the silent direction of error. The view is balance +
+  state + `unpaid_invoices_amount`; findings §14 records the measurement and the
+  verify script asserts the field is still zero, so the day FlexPrice populates it
+  the script fails rather than agreeing silently.
+- **`pricing.js usdToPaise` is not display-only, and is now decimal-exact.** D9 put
+  `USD_TO_INR` out of the money path; enumerating its consumers (accepted risk 5)
+  found it still load-bearing — `usage.js` calls it to produce the `cost_paise` the
+  outbox delivers, so it reprices every future run. It was
+  `Math.round(usd * rate * 100)`: float, and exactly the defect `money-wire.js`
+  exists to prevent (`1.005 × 100 = 100.4999…` is short by a paise on every such
+  run, with both sides of a reconciliation agreeing that they undercharged). It now
+  delegates to `decimalToScaled`/`roundDiv`; `money-flow.test.js` pins
+  0.6 USD × ₹87 = **5220p** and `config.js` + `BILLING_FLEXPRICE.md` §10 say what
+  the rate does instead of calling it an estimate.
+- **No `is_default` backfill was written.** The flag is read where the org service
+  has it, and `null` means *not proven* — which is why the provisioner's opening
+  grant needs `--free-credit` for an org whose status cannot be confirmed. Refusing
+  to guess free money is the same rule the plan already states for a missing actor
+  price.
+- **`reportBoot()` is called from the gateway, planner, coder and provisioner
+  indexes, not from `services/billing`.** Those are the processes that enforce
+  admission, so a policy line logged anywhere else would describe a process that
+  blocks nothing. It also refuses to start when asked for `enforced` with no
+  FlexPrice: a gate with no wallet to read admits everything, and that combination
+  is an operator error rather than a degradation to log quietly.
+- **The auto-recharge mandate now refuses instead of crediting.** The credit half of
+  its path wrote a local ledger entry, and a mandate charge has no quote and so no
+  intent; charging it would take money and leave the org blocked, so the job alerts
+  the org and says why (`BILLING_FLEXPRICE.md` §13 item 8 is the decision the
+  replacement needs).
+- **Two live bugs the first verify run found, both now held by tests.**
+  `customerBody(orgId, account && account.paymentInfo)` passed `null` for an org
+  that has never opened the billing page — **a default parameter replaces
+  `undefined`, not `null`** — so `settle()` returned 500 on `.address` for the most
+  common new-org case (Phase 2's verify had masked it by writing a GSTIN before
+  ordering, which creates the account). And the section numbering: this phase's docs
+  landed as findings **§14**, not §13, which Phase 2 had already taken.
+
+
 ## Phase 4 — Substrate actor sessions, OTel emitter, orphan sweeper
 
 Modified `packages/shared-core/src/agent/substrate-runner.js`:

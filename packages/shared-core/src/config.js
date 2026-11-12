@@ -895,21 +895,43 @@ const MEMORY = Object.freeze({
  * Billing / cost-metering knobs. All optional and INERT for local dev — billing
  * only meters and sweeps when explicitly enabled. Money is handled in INTEGER
  * paise everywhere (never floating INR) to avoid rounding drift.
- *   BILLING_SWEEP_ENABLED  master switch for the periodic usage→ledger sweep and
- *                          the negative-balance runner gate (default off).
- *   USD_TO_INR             approximate FX rate applied to third-party LLM cost.
- *   INITIAL_CREDIT_INR     starting credit seeded once per org account (500 INR).
+ *   BILLING_SWEEP_ENABLED  master switch for the periodic usage aggregation and
+ *                          retention prune (default off). It moves no money: since
+ *                          Phase 3 the only spendable balance is FlexPrice's wallet.
+ *   USD_TO_INR             the FX rate applied to third-party LLM cost. It is NOT
+ *                          display-only: `pricing.usdToPaise` turns a run's USD cost
+ *                          into the `cost_paise` that the outbox delivers to the
+ *                          wallet, so changing it reprices every future run. Treat it
+ *                          as a versioned catalog input, and note that the same rate
+ *                          is stamped into the per-model INR prices that
+ *                          `scripts/flexprice-provision.js` writes.
+ *   INITIAL_CREDIT_INR     the free-tier opening grant, recorded on the account as
+ *                          configuration and minted in FlexPrice as
+ *                          FREE_CREDIT_GRANT by the provisioner (500 INR). Not a
+ *                          balance and not spendable on its own.
  *   FLEET_ORG_ID           the org this deployment bills to. Set on a DEDICATED
  *                          per-tenant stack (falls back to PROXY_ORG_ID). Empty on
  *                          the shared stack ⇒ usage attributes to the shared
  *                          free-tier account (see billing/org-context.js).
  *   BILLING_USAGE_RETENTION_DAYS  how long granular usage records are kept for
  *                          per-task drill-down before the sweep prunes them.
+ *   BILLING_GATE_POLICY    the admission rule: 'enforced' | 'off'. Unset means
+ *                          'enforced' when FlexPrice is configured and 'off' when
+ *                          it is not — there is no wallet to ask. See billing/gate.js.
+ *   BILLING_GATE_TTL_MS    how long a wallet balance is served from cache before
+ *                          a background refresh (default 15000; the read measures
+ *                          p50 5 ms / p95 17 ms, so it is a per-run cost, not free).
  */
 const toPositiveNumber = (value, fallback) =>
   Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : fallback;
+const gatePolicyFromEnv = () => {
+  const raw = String(process.env.BILLING_GATE_POLICY || '').trim().toLowerCase();
+  return raw === 'enforced' || raw === 'off' ? raw : '';
+};
 const BILLING = Object.freeze({
   sweepEnabled: String(process.env.BILLING_SWEEP_ENABLED || '').trim().toLowerCase() === 'true',
+  gatePolicy: gatePolicyFromEnv(),
+  gateTtlMs: toPositiveNumber(process.env.BILLING_GATE_TTL_MS, 15000),
   usdToInr: toPositiveNumber(process.env.USD_TO_INR, 87),
   initialCreditPaise: Math.round(
     (Number.isFinite(Number(process.env.INITIAL_CREDIT_INR)) && Number(process.env.INITIAL_CREDIT_INR) >= 0

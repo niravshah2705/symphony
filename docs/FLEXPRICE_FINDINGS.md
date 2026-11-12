@@ -1207,3 +1207,90 @@ without reading our store.
 
 Pinned at the same `v2.1.48` (`21524530`, image `4ad8d8ca6e69`) as §12; the
 transcript is `docs/BILLING_FLEXPRICE.md` §11.
+
+
+## 14. Phase 3 — the outbox and the gate as built, with the read-back transcript
+
+Measured by `npm run billing:usage:verify` (40 checks, `scripts/flexprice-usage-verify.js`)
+against the live stack at the same `v2.1.48` pin. The plan named this section §13;
+§13 was already taken by the Phase 2 shapes, so the numbering is off by one and the
+content is unchanged.
+
+### The read-back, verbatim
+
+Four runs queued three billable quantities (₹10 + ₹25 + ₹0.50 = **3550p**, hand-computed,
+the fourth being a BYOK run that charges nothing); the drain then did this:
+
+```
+POST /v1/events/bulk      3 events → 202  {"inserted":3,...}     delivered=3 batches=1
+                                                        → rows: pending 0, sent 3, verified 0
+POST /v1/events/usage/meter {meter_id, external_customer_id, from, to}
+                          → {}                                   drift: expected 3550, observed 0
+   … 1.5 s …
+POST /v1/events/usage/meter → {"value":3550,"event_name":"fleet.llm_cost","type":"SUM"}
+                                                        → rows: verified 3, drift 0
+```
+
+Three things worth pinning down, each of which the drain's code now assumes
+explicitly rather than by luck:
+
+- **`value` is omitted, not `0`.** An empty window answers `{}`, so "the meter has
+  nothing" and "the meter was not read" are the same shape. `meterRead()` treats a
+  missing `value` as 0 and the *outbox rows* remain the record of what was sent.
+- **`value` is a JSON number, not a string** (`3550`, not `"3550"`), unlike every
+  money field on the wallet routes (§13). Quantities are compared as integers; the
+  drain does not `parseFloat` them into the money path.
+- **The first pass after delivery always reports drift.** ClickHouse materialises
+  the events a beat after the 202, so `expected 3550 / observed 0` on the pass that
+  just delivered is normal and resolves on the next. It is therefore a *log line*
+  (`outbox_readback_mismatch`, WARN), and the alarm is a row that stays `sent` past
+  the threshold (`staleSent()`, 30 min by default) — not a first-pass mismatch.
+  Paging on the mismatch itself would page on every drain.
+
+And the retry-safety claim, checked rather than assumed: re-sending the same three
+`event_id`s twice more left the meter at 3550 (§3's first-wins dedup).
+
+### `current_period_usage` is always zero, and the gate therefore does not report it
+
+The plan's Phase 3 shape had the gate surface `current_period_usage` beside the
+balance as the accrued-usage figure. It is not one. Enumerating the whole local
+stack — 31 customers, 21 wallets, each read through
+`GET /v1/wallets/:id/balance/real-time` — **every single wallet answers
+`current_period_usage: "0"`**, including the ones that have genuinely been debited:
+
+| Wallet (`external_id`) | `real_time_credit_balance` | `current_period_usage` | Why it is interesting |
+|---|---|---|---|
+| `org-usage-verify-*` | `"500"` | `"0"` | 3550p of meter usage delivered and verified one minute earlier |
+| `spike-…-debit` | `"-2900"` | `"0"` | §2's negative-balance measurement — a real `MANUAL_BALANCE_DEBIT` |
+| `org-gate-neg-*` | `"-35"` | `"0"` | driven negative by the gate's own live test |
+| `phase1-….rbac` | `"0"` | `"0"` | drained to exactly zero |
+
+The field is anchored to the current **invoice** cycle, which only exists once usage
+invoices are finalized — Phase 5's platform charge is the first thing in this
+product that creates them. So it measures neither meter usage nor wallet debits,
+and a gate view called `currentPeriodUsagePaise` would read as "accrued spend" while
+always reading as none. That is the silent direction of error this phase exists to
+close, so `gate.js` does not carry the field at all: the view is the balance, the
+state, and `unpaid_invoices_amount` (kept, because it *will* be non-zero in Phase 5
+and it is reported rather than subtracted — FlexPrice already nets it into
+`real_time_credit_balance`; it reads `"0"` on all 21 wallets today for the same
+reason). Usage authority is the meter sum the drain reads back, plus the outbox rows
+that prove what we sent.
+
+
+Re-check this if Phase 5's finalized invoices ever make the field non-zero: the
+verify script asserts it is still zero, so it fails rather than silently agreeing.
+
+### The two failure modes the drain was built for, both reproduced
+
+- **Ingest down.** A closed port produces the same `connect ECONNREFUSED` a stopped
+  api container does: the batch fails, the rows stay `pending` with `attempts` at 1
+  (a transport failure is not the payload's fault, so it does not consume the retry
+  ceiling), and the four usage records are untouched. A run never fails because
+  billing could not be told about it.
+- **A typo'd `event_name`.** Delivered under its own org, the row goes `sent` on a
+  202, the read-back reports `expected 700 / observed 0`, the row *stays* `sent`,
+  `staleSent()` returns it as the standing alarm, and the corrected event aggregates
+  to 700. Nothing about the balance moves and nothing about the balance freezes: the
+  complaint is the mechanism.
+

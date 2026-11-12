@@ -48,7 +48,7 @@ const substrate = require('@ai-fleet/shared/agent/substrate');
 const substrateRunner = require('@ai-fleet/shared/agent/substrate-runner');
 const guardrailSpec = require('@ai-fleet/shared/guardrails/spec');
 const guardrailConsumers = require('@ai-fleet/shared/guardrails/consumers');
-const { getOrgFundStatus } = require('@ai-fleet/shared/billing/gate');
+const billingGate = require('@ai-fleet/shared/billing/gate');
 
 const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const CONV_ID_PATTERN = /^conv_[A-Za-z0-9_-]{1,64}$/;
@@ -933,12 +933,12 @@ router.post(
     const context = requestWorkspaceContext(req);
     const orgId = context.organizationId || null;
     if (orgId) {
-      const fundInfo = getOrgFundStatus(orgId);
+      const fundInfo = billingGate.getOrgFundStatus(orgId);
       if (fundInfo && fundInfo.fundsAvailable === false) {
         return res.status(402).json({
           error: fundInfo.reason || 'Organization funds unavailable — scheduled calls and enqueue disabled.',
           code: 'funds_unavailable',
-          fundStatus: 'unavailable',
+          fundStatus: fundInfo.fundStatus || 'unavailable',
           fundsAvailable: false,
         });
       }
@@ -964,12 +964,12 @@ router.post(
     const context = requestWorkspaceContext(req);
     const orgId = context.organizationId || null;
     if (orgId) {
-      const fundInfo = getOrgFundStatus(orgId);
+      const fundInfo = billingGate.getOrgFundStatus(orgId);
       if (fundInfo && fundInfo.fundsAvailable === false) {
         return res.status(402).json({
           error: fundInfo.reason || 'Organization funds unavailable — scheduled calls disabled.',
           code: 'funds_unavailable',
-          fundStatus: 'unavailable',
+          fundStatus: fundInfo.fundStatus || 'unavailable',
           fundsAvailable: false,
         });
       }

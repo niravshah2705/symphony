@@ -216,6 +216,32 @@ test('a second recharge for the same org reuses its wallet rather than creating 
   assert.equal(second.balanceCredits, 1500, 'the two recharges land in one wallet');
 });
 
+// An org that has never opened the billing page has no account document, so
+// `account && account.paymentInfo` is `null` — which a `= {}` default parameter
+// does not replace. The first `npm run billing:usage:verify` run hit exactly this
+// and died with a 500 on `paymentInfo.address`.
+test('an org with no billing account at all still settles, with placeholder address fields', async () => {
+  const freshOrg = 'org-never-opened-billing';
+  assert.equal(store.getBillingAccount(freshOrg), null, 'the precondition: no account document');
+  const intent = makeIntent({ record: { orgId: freshOrg } });
+  const client = fakeFlexprice({ customerMissing: true });
+
+  const r = await settle({ orderId: intent.orderId, orgId: freshOrg }, {
+    store,
+    providers: fakeProviders(fakeAdapter({ amountDecimal: '590.00' })),
+    flexpriceClient: client,
+    flexpriceConfig: { enabled: true, supplierStateCode: GUJARAT },
+    env: {},
+    log: QUIET,
+  });
+
+  assert.equal(r.status, 'settled');
+  assert.equal(r.creditCount, 500);
+  assert.equal(client.state.customerBody.address_line1, 'Not provided');
+  assert.equal(client.state.customerBody.address_country, 'IN');
+  assert.equal(client.state.customerBody.metadata.gstin, '', 'an absent GSTIN is an empty string, never "undefined"');
+});
+
 test('a wallet that cannot be resolved is a refusal, not a credit to wallet undefined', async () => {
   const client = fakeFlexprice({ conversionRate: null });
   client.createWallet = async () => ({ alreadyExists: true, status: 409, detail: {} });

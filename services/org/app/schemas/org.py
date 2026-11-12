@@ -16,6 +16,8 @@ class OrgResponse(BaseModel):
     name: str
     description: str | None
     slug: str
+    # Never settable: absent from OrgCreate/OrgUpdate, written only by onboarding.
+    is_default: bool = False
     tags: list[TagResponse] = []
     created_at: datetime
     updated_at: datetime
@@ -45,10 +47,15 @@ class BillingContextResponse(BaseModel):
     name: str
     slug: str
     deployment_slug: str
+    # The free-tier marker, read by the billing side from here rather than from
+    # the name: a money decision cannot rest on a field the customer edits.
+    is_default: bool = False
     admins: list[BillingAdmin] = []
 
 
 class OrgUpdate(BaseModel):
+    """`is_default` is deliberately absent: onboarding owns it, a caller does not."""
+
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
 

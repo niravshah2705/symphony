@@ -62,8 +62,10 @@ below are the source of truth. Fields marked optional may be absent or `null`.
 │   ├── stackLinks/{id}
 │   ├── settingsHistory/{id}
 │   ├── usageRecords/{id}
-│   ├── ledgerEntries/{id}
-│   └── billingAccounts/{id}
+│   ├── ledgerEntries/{id}            write-only journal; no money is read from it
+│   ├── rechargeIntents/{orderId}     the quoted amount authority for settle()
+│   ├── billingOutbox/{id}            quantities awaiting FlexPrice ingest
+│   └── billingAccounts/{id}          config only — holds no balance
 ├── aifleet_events[__{store_namespace}]/{channel_id}/steps/{auto_id}
 ├── aifleet_pipeline_runs[__{store_namespace}]/{sha256(run_id)}
 │   └── stages/{sha256(idempotency_key)}
@@ -289,8 +291,10 @@ document ID.
 | `stackLinks` | `id`, `projectId?`, `provider`, `repoFullName?`, `dependentBranch`, `blockerBranch`, `blockerIdentifier?`, `defaultBase`, `dependentReviewId?`, `dependentReviewUrl?`, `orgId?`, `nativeProjectId?`, `createdAt`, `resolvedAt?` |
 | `settingsHistory` | `id`, `ts`, `orgId`, `complexityTier`, `perRolePicks` (thinking/execution/testing/deployment provider, preset, and model), `estMonthlyCostUsd`, `harness`; non-secret selection history only |
 | `usageRecords` | `id`, `orgId`, `projectId?`, `projectName?`, `userId?`, `userEmail?`, `taskId?`, `taskIdentifier?`, `source`, `provider?`, `model?`, `usage` (token counts), `costUsd`, `costPaise`, `createdAt` |
-| `ledgerEntries` | `id`, `orgId`, `type`, signed integer `amountPaise`, `description`, `meta`, `createdAt` |
-| `billingAccounts` | `id = orgId`, `orgId`, `currency`, `balancePaise`, `initialCreditPaise`, `alertThresholdsPaise[]`, `lastAlertedThresholdPaise?`, `notifyChannels`, `notifyEmails[]`, `autoRecharge`, `gateEnabled`, `createdAt`, `updatedAt` |
+| `ledgerEntries` | `id`, `orgId`, `type`, signed integer `amountPaise`, `description`, `meta`, `createdAt` — **write-only developer journal**: nothing may read a money number out of it (grep gate: `services/billing/src/balance-authority.test.js`) |
+| `billingAccounts` | `id = orgId`, `orgId`, `currency`, `initialCreditPaise` (the configured free-tier opening grant, not a balance), `alertThresholdsPaise[]`, `lastAlertedThresholdPaise?`, `notifyChannels`, `notifyEmails[]`, `autoRecharge`, `gateEnabled`, `paymentInfo{provider, billingName, taxId, address{}}`, `flexprice{customerId, walletId, conversionRate, cachedAt}`, `createdAt`, `updatedAt`. **No `balancePaise`** — since Phase 3 the only spendable balance is the FlexPrice wallet, and `gate.js` reads it from `GET /v1/wallets/:id/balance/real-time` |
+| `rechargeIntents` | `orderId`, `orgId`, `provider`, `providerOrderId?`, integer paise (`subtotalPaise`, `couponBps`, `bonusPaise`, `gstPaise`, `totalPaise`), `creditCount`, `supplierStateCode`, `placeOfSupply`, `status` (`QUOTED → SETTLED`, once), `createdAt`, `settledAt?`, `verification?`, `flexprice_settlement?` — the amount authority for `settle()`; the money fields freeze once settled |
+| `billingOutbox` | `id`, `orgId`, `projectId?`, `userId?`, `runId?`, `recordId?`, `meter`, `eventName`, `quantityPaise`/`quantitySeconds`/`quantityMinutes`, `idempotencyKey` (doubles as FlexPrice's `event_id`), `status` (`pending → sent → verified`, `failed` after 12 attempts), `attempts`, `occurredAt`, `sentAt?`, `verifiedAt?`, `lastError?` |
 
 Sources: [store schema and partition](../packages/shared-core/src/store.js) and
 [Firestore backend](../packages/shared-core/src/store/firestore-backend.js).

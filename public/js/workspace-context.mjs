@@ -63,8 +63,11 @@ function normalizeOrganization(value) {
       return true;
     });
   const tags = normalizeTags(value.tags || value.applied_tags);
-  const tagNames = tags.map((t) => t.name.toLowerCase());
-  const isDefault = tagNames.includes('default=true') || value.name === 'default';
+  // The org service's stored bool, never the name or the `default=true` tag:
+  // an org admin edits both (`OrgUpdate.name`, tag writes), so a guess built
+  // from them is something a customer can turn on or off at will. Free-tier
+  // status is a money fact, so it is read from the server that owns it.
+  const isDefault = value.is_default === true || value.isDefault === true;
   return {
     id,
     name: boundedText(value.name || value.org_name || value.organization_name) || id,

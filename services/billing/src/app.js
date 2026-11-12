@@ -6,9 +6,11 @@ const log = require('@ai-fleet/shared-core/logger');
 const { asyncHandler } = require('@ai-fleet/shared-core/util');
 const store = require('@ai-fleet/shared-core/store');
 const ledger = require('@ai-fleet/shared-core/billing/ledger');
+const gate = require('@ai-fleet/shared-core/billing/gate');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
 const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
 const { processBillingSweep } = require('@ai-fleet/shared-core/billing/sweep');
+const outboxDrain = require('@ai-fleet/shared-core/billing/outbox-drain');
 const rechargeTrigger = require('@ai-fleet/shared-core/billing/recharge-trigger');
 const autoRechargeJob = require('./auto-recharge-job');
 const billingApi = require('./billing-api');
@@ -45,16 +47,20 @@ function createApp(options = {}) {
   app.use(hydrateStore);
 
   // Standalone Basic UI Dashboard
-  app.get('/', (req, res) => {
+  app.get('/', asyncHandler(async (req, res) => {
     const orgId = CONFIG.BILLING.orgId || SHARED_ORG_ID;
     const account = ledger.ensureAccount(orgId);
+    // The balance on this page is the wallet's, read now — the account document
+    // has no balance field to render any more.
+    const fund = await gate.ensureFundStatus(orgId);
     const html = renderDashboardHtml({
       account,
+      fund,
       cashfreeConfigured: cashfreeClient.isConfigured(),
       environment: process.env.CASHFREE_ENV || 'sandbox',
     });
     res.set('Content-Type', 'text/html').send(html);
-  });
+  }));
   app.get('/ui', (req, res) => res.redirect('/'));
 
   // Cloud Scheduler / PubSub sweep tick target
@@ -62,7 +68,14 @@ function createApp(options = {}) {
     try {
       const result = await processBillingSweep();
       log.info(`Billing sweep completed via /pubsub/billing-tick: ${JSON.stringify(result)}`);
-      return res.status(200).json({ status: 'ok', result });
+      // The drain is its own step, and its own failures: a tick must not report
+      // 500 because FlexPrice was unreachable, or Cloud Scheduler replays the
+      // sweep too, and the outbox already says exactly what is undelivered.
+      const outbox = await outboxDrain.drainOnce().catch((err) => {
+        log.error(`Billing outbox drain failed: ${err && err.message ? err.message : err}`);
+        return null;
+      });
+      return res.status(200).json({ status: 'ok', result, outbox });
     } catch (err) {
       log.error(`Billing sweep error: ${err && err.message ? err.message : err}`);
       return res.status(500).json({ error: err && err.message ? err.message : 'Sweep error' });
@@ -70,10 +83,9 @@ function createApp(options = {}) {
   }));
 
   // Hourly auto-recharge + alert tick. The sweep runs as a one-shot Cloud Run Job
-  // execution rather than inside this request: it reads the org service once per
-  // candidate org and may post several Cashfree charges, which would outlive the
-  // scheduler's ack deadline and could leave the recharge cooldown stamped
-  // half-written if the container were killed mid-pass. See billing_job.tf.
+  // execution rather than inside this request: it reads the FlexPrice wallet and
+  // the org service once per candidate org, which would outlive the scheduler's
+  // ack deadline. See billing_job.tf.
   // Local (direct mode) has no Job to launch, so the entrypoint runs in-process.
   app.post('/pubsub/billing-recharge-tick', asyncHandler(async (req, res) => {
     const trigger = options.rechargeTrigger || rechargeTrigger;

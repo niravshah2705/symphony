@@ -61,9 +61,9 @@ Community of 230 nodes
 | test:a rejected or absent credential fails closed, never as admin@L78 | Test | ./services/gateway/src/billing-access.test.js | 78-88 |
 | test:requireBillingCaller attaches the caller and always continues@L90 | Test | ./services/gateway/src/billing-access.test.js | 90-102 |
 | test:no headers are injected for an unresolved caller@L104 | Test | ./services/gateway/src/billing-access.test.js | 104-106 |
-| failedPredicates | Function | ./services/gateway/src/capability-view.js | 73-78 |
-| harnessesFace | Function | ./services/gateway/src/capability-view.js | 85-112 |
-| budgetFace | Function | ./services/gateway/src/capability-view.js | 114-140 |
+| failedPredicates | Function | ./services/gateway/src/capability-view.js | 75-80 |
+| harnessesFace | Function | ./services/gateway/src/capability-view.js | 87-114 |
+| budgetFace | Function | ./services/gateway/src/capability-view.js | 116-142 |
 
 *... and 180 more members.*
 

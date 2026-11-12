@@ -12,6 +12,7 @@
 //
 //   node scripts/flexprice-provision.js --dry-run
 //   node scripts/flexprice-provision.js --org acme --org-name "Acme Analytics" --state 27
+//   node scripts/flexprice-provision.js --org acme --free-credit   # opening credit for a non-free-tier org
 //   node scripts/flexprice-provision.js --rotate-keys   # revoke and re-mint both planes
 //   FLEET_ORG_ID=acme node scripts/flexprice-provision.js
 //
@@ -30,6 +31,10 @@ const { DEFAULT_BASE_URL } = require('../packages/shared-core/src/billing/flexpr
 const { PRICE_PER_MTOK_USD } = require('../packages/shared-core/src/billing/pricing');
 const { decimalFromPaise, paiseFromDecimal, roundDiv } = require('../packages/shared-core/src/billing/money-wire');
 const CONFIG = require('../packages/shared-core/src/config').CONFIG;
+// Reused rather than re-implemented: this is the org service's internal
+// billing-context read, with its token and IAM-bearer handling already settled,
+// and the same one the auto-recharge job trusts before it charges anyone.
+const { fetchBillingContext } = require('../services/billing/src/auto-recharge-job');
 
 const ROOT = path.resolve(__dirname, '..');
 const ENV_FILE = path.join(ROOT, 'deploy', 'flexprice', '.env');
@@ -73,6 +78,11 @@ const all = (flagName) => args.reduce((out, a, i) => (a === `--${flagName}` && a
 
 const DRY = has('--dry-run');
 const QUIET_JSON = has('--json');
+// Explicit operator grant for an org the org service does not report as a
+// default (free-tier) organization — a promotion, a pilot, a support goodwill
+// credit. It exists so the free credit is a decision someone made, in the
+// command line, rather than a side effect of a name.
+const FREE_CREDIT_OVERRIDE = has('--free-credit');
 // After `npm run billing:flexprice:down` the database is new but the .env is not:
 // the stored plane keys authenticate as service accounts that no longer exist,
 // and a key that only ever 401s is worse than a missing one because every later
@@ -388,8 +398,54 @@ async function ensurePrices(client, planId, meterIds) {
   return ids;
 }
 
+/**
+ * Is this org the free tier? The answer is the org service's `is_default` flag,
+ * which onboarding writes and no request body can. Name and tag equality are
+ * not acceptable inputs here: `PUT /orgs/current` edits the name and the tag
+ * editor edits the tag, so either one would let a paying org claim ₹500 of free
+ * credit — or a free org make itself unchargeable by renaming away from
+ * "default".
+ *
+ * `isDefault: null` means no answer (org service not configured, the id is not a
+ * tenant UUID, or the call failed). Callers must treat that as *not* proven,
+ * which is why the free credit then needs `--free-credit`.
+ */
+async function freeTierStatus(orgId) {
+  let context;
+  try {
+    context = await fetchBillingContext(orgId, { baseUrl: val('org-url', '') || undefined });
+  } catch (err) {
+    return { isDefault: null, why: err.message };
+  }
+  if (context === null) return { isDefault: null, why: 'the org service has no such organization' };
+  return { isDefault: context.is_default === true };
+}
+
+/**
+ * The opening-credit decision, in one place so the dry run and the real run
+ * cannot disagree about it. Free money needs a reason: either the org service
+ * says this is the onboarding free tier, or an operator said `--free-credit`.
+ */
+function openingCreditDecision(tier, opening, already) {
+  if (opening <= 0) return { grant: false, why: `opening credit is ${opening}` };
+  if (already > 0) return { grant: false, why: `balance ${already}, opening ${opening}` };
+  if (tier.isDefault === true || FREE_CREDIT_OVERRIDE) {
+    return { grant: true, why: `${opening} credits${FREE_CREDIT_OVERRIDE && tier.isDefault !== true ? ' by --free-credit' : ''}` };
+  }
+  return {
+    grant: false,
+    why: tier.isDefault === false
+      ? 'not a default (free-tier) org per the org service; pass --free-credit to grant it as a deliberate exception'
+      : `free tier unverified (${tier.why}); pass --free-credit to grant it without the org service`,
+  };
+}
+
 async function ensureOrg(client, orgId, opts) {
   const name = opts.name || orgId;
+  const opening = Number(opts.initialCredits) || 0;
+  // Asked before anything is written, and itself read-only: a dry run has to
+  // show the same free-tier verdict the real run will act on.
+  const tier = opening > 0 ? await freeTierStatus(orgId) : { isDefault: null, why: 'opening credit is 0' };
   let customer = null;
   try {
     customer = await client.getCustomerByExternalId(orgId);
@@ -398,6 +454,8 @@ async function ensureOrg(client, orgId, opts) {
     if (err.status !== 404) throw err;
     if (DRY) {
       report('customer', orgId, 'dry-run', `${opts.city}, ${opts.state}`);
+      const decision = openingCreditDecision(tier, opening, 0);
+      report('credit', orgId, 'dry-run', decision.grant ? `would ${decision.why.toLowerCase()}` : decision.why);
       return { orgId, walletId: 'DRY' };
     }
     // Flat `address_*` names. The nested `billing_address` object is accepted at
@@ -427,6 +485,8 @@ async function ensureOrg(client, orgId, opts) {
   if (!wallet) {
     if (DRY) {
       report('wallet', orgId, 'dry-run', 'INR PRE_PAID conversion_rate 1');
+      const decision = openingCreditDecision(tier, opening, 0);
+      report('credit', orgId, 'dry-run', decision.grant ? `would ${decision.why.toLowerCase()}` : decision.why);
       return { orgId, walletId: 'DRY' };
     }
     wallet = await client.createWallet({
@@ -453,18 +513,18 @@ async function ensureOrg(client, orgId, opts) {
 
   const balance = await client.walletRealTimeBalance(wallet.id);
   const already = Number(balance.real_time_credit_balance || 0);
-  const opening = opts.initialCredits;
-  if (already > 0 || opening <= 0) {
-    report('credit', orgId, 'skipped', `balance ${already}, opening ${opening}`);
-  } else if (DRY) {
-    report('credit', orgId, 'dry-run', `FREE_CREDIT_GRANT ${opening}`);
+  const decision = openingCreditDecision(tier, opening, already);
+  if (!decision.grant) {
+    report('credit', orgId, 'skipped', decision.why);
   } else {
     // FREE_CREDIT_GRANT, never bonus_credits_to_add: a PURCHASED_CREDIT_BONUS row
     // poisons credits_available_breakdown while returning 200.
     const grant = await client.grantPromo(wallet.id, {
       credits: opening,
       idempotencyKey: `initial-credit:${orgId}`,
-      description: 'AI Fleet opening credit',
+      description: FREE_CREDIT_OVERRIDE && tier.isDefault !== true
+        ? 'AI Fleet opening credit (operator --free-credit)'
+        : 'AI Fleet opening credit',
     });
     report('credit', orgId, grant.alreadyExists ? 'existing' : 'created', `${opening} credits`);
   }

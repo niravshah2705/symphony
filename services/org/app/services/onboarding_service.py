@@ -86,6 +86,10 @@ async def ensure_default_organization_and_project(
     org = Organization(
         name=DEFAULT_ORG_NAME,
         slug=await allocate_org_slug(session),
+        # The flag is stamped here and nowhere else: this is the only code path
+        # that creates a free-tier organization, and it is not reachable from a
+        # request body.
+        is_default=True,
     )
     await org_repo.add(org)
 

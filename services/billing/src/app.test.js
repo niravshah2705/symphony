@@ -248,8 +248,13 @@ test('billing /pubsub/billing-tick runs sweep', async () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
     });
+    const body = await res.json();
     assert.equal(res.status, 200);
-    assert.equal((await res.json()).status, 'ok');
+    assert.equal(body.status, 'ok');
+    // The tick owns the outbox drain too, and with FlexPrice disabled — the state
+    // every local suite runs in — the drain must report that it skipped rather
+    // than reaching for a client it has no keys for.
+    assert.deepEqual(body.outbox, { skipped: 'disabled' });
   } finally {
     await server.close();
   }

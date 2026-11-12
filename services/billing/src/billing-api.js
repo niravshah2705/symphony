@@ -7,6 +7,7 @@ const { asyncHandler } = require('@ai-fleet/shared-core/util');
 const log = require('@ai-fleet/shared-core/logger');
 const store = require('@ai-fleet/shared-core/store');
 const ledger = require('@ai-fleet/shared-core/billing/ledger');
+const gate = require('@ai-fleet/shared-core/billing/gate');
 const { paiseToInr } = require('@ai-fleet/shared-core/billing/pricing');
 const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
 const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
@@ -37,7 +38,6 @@ const router = express.Router();
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PERIOD_DAYS = Object.freeze({ day: 1, week: 7, month: 30 });
 const MAX_RECHARGE_PAISE = 100000000; // ₹1,000,000 sanity cap on a single top-up
-const MAX_LEDGER_PAGE = 200;
 
 const BILLING_ORG_HEADER = 'x-ai-fleet-billing-org-id';
 const BILLING_ROLE_HEADER = 'x-ai-fleet-billing-org-role';
@@ -248,25 +248,40 @@ function requireAdmin(caller, res) {
   return false;
 }
 
-// GET /api/billing/summary — balance + period spend + config for the caller's org.
+// GET /api/billing/summary — the wallet balance + period spend + config for the caller's org.
+//
+// The balance is the gate's number, read here rather than served from cache: this
+// is the page a customer looks at when money has just moved, and `BILLING_GATE_TTL_MS`
+// of "still ₹0" after a recharge is not an acceptable answer. `fundState` is the
+// gate's four-value verdict and the UI renders from IT rather than from a
+// comparison against zero, because `unknown` (no wallet, or a read that failed)
+// must not be drawn as "exhausted" any more than a negative balance is drawn as
+// "available".
 router.get('/summary', asyncHandler(async (req, res) => {
   const caller = resolveCallerOrg(req);
   const account = store.getBillingAccount(caller.orgId);
-  const balancePaise = account ? Number(account.balancePaise) || 0 : ledger.balanceFromLedger(caller.orgId);
-  const fundsAvailable = balancePaise > 0;
+  const fund = await gate.ensureFundStatus(caller.orgId);
+  const balancePaise = fund.balancePaise;
   const records = scopedUsageRecords(caller);
   const now = Date.now();
   res.json({
     orgId: caller.orgId,
     isAdmin: caller.isAdmin,
     currency: 'INR',
-    balanceInr: paiseToInr(balancePaise),
+    balanceInr: balancePaise === null ? null : paiseToInr(balancePaise),
     balancePaise,
-    fundsAvailable,
-    fundStatus: fundsAvailable ? 'available' : 'unavailable',
-    sandboxCreationDisabled: !fundsAvailable,
-    scheduledCallsDisabled: !fundsAvailable,
-    initialCreditInr: account ? paiseToInr(account.initialCreditPaise) : paiseToInr(CONFIG.BILLING.initialCreditPaise),
+    fundsAvailable: fund.fundsAvailable,
+    fundStatus: fund.fundStatus,
+    fundState: fund.state,
+    gatePolicy: fund.gatePolicy,
+    balanceStale: Boolean(fund.stale),
+    sandboxCreationDisabled: fund.sandboxCreationDisabled,
+    scheduledCallsDisabled: fund.scheduledCallsDisabled,
+    // The rupee value of the free-tier opening grant, i.e. what the provisioner
+    // minted as FREE_CREDIT_GRANT. Configuration, not a balance — the balance
+    // above is the only spendable number on this page.
+    initialCreditInr: paiseToInr((account && account.initialCreditPaise)
+      || CONFIG.BILLING.initialCreditPaise),
     fxUsdToInr: CONFIG.BILLING.usdToInr,
     spend: {
       day: sumWindow(records, PERIOD_DAYS.day, now),
@@ -403,21 +418,6 @@ router.get('/usage/task/:taskId', asyncHandler(async (req, res) => {
   res.json({ orgId: caller.orgId, taskId, records });
 }));
 
-// GET /api/billing/ledger?limit= — recent ledger line items (scoped to the org).
-router.get('/ledger', asyncHandler(async (req, res) => {
-  const caller = resolveCallerOrg(req);
-  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), MAX_LEDGER_PAGE);
-  const entries = store.listLedgerEntries({ orgId: caller.orgId }).slice(0, limit).map((e) => ({
-    id: e.id,
-    type: e.type,
-    amountInr: paiseToInr(e.amountPaise),
-    description: e.description,
-    createdAt: e.createdAt,
-    meta: e.meta || {},
-  }));
-  res.json({ orgId: caller.orgId, entries });
-}));
-
 // POST /api/billing/recharge { amountInr, couponBps? } — the GST quote ONLY.
 //
 // It credits nothing. Before this route's predecessor, POST /recharge moved money
@@ -483,7 +483,6 @@ router.put('/config', asyncHandler(async (req, res) => {
       thresholdPaise: Number.isFinite(thresholdPaise) ? thresholdPaise : 0,
       thresholdPercent,
       amountPaise: Number.isFinite(amountPaise) && amountPaise > 0 ? Math.min(amountPaise, MAX_RECHARGE_PAISE) : 0,
-      lastRechargedAt: null,
     };
   }
   if (body.paymentInfo && typeof body.paymentInfo === 'object') {
@@ -880,30 +879,35 @@ router.post('/cashfree/webhook', asyncHandler(async (req, res) => {
       }
     }
   } else if (eventType === 'SUBSCRIPTION_PAYMENT_SUCCESS') {
-    // Mandate-driven auto-recharge. This is the one credit path that does not yet
-    // run through settle() — it has no quote and therefore no intent, because the
-    // amount comes from the mandate threshold, not from a user entering ₹500. It
-    // keeps the ledger for now (its spine is a Phase 6 item), but it no longer
-    // double-credits a replayed event and no longer converts rupees with floats.
+    // Mandate-driven auto-recharge. It credits NOTHING, and that is the point
+    // rather than an oversight: the only amount authority this service accepts is
+    // a quoted intent, and a mandate payment has none — the amount came from the
+    // subscription, not from a quote anyone agreed to. Crediting a wallet from
+    // `payment.payment_amount` is the same hole the one-time path had before
+    // `settle()` closed it, one field name wider.
+    //
+    // The job that USED to initiate these charges no longer does, so an event
+    // here means a mandate was charged outside this repo (Cashfree's own schedule,
+    // or a subscription minted before the local-balance path was removed). Loud on
+    // purpose: money arrived and no credit was applied, which is a reconciliation
+    // the operator has to see, not a success line in a log.
     const subId = data.subscription && data.subscription.subscription_id;
     const payment = data.payment || {};
-    const paymentId = payment.payment_id;
-    const amountPaise = payment.payment_amount == null ? NaN : moneyWire.paiseFromDecimal(String(payment.payment_amount));
-    if (subId && paymentId && Number.isSafeInteger(amountPaise) && amountPaise > 0) {
-      for (const acc of store.listBillingAccounts()) {
-        if (acc.autoRecharge && acc.autoRecharge.cashfreeSubscriptionId === subId) {
-          const already = store.listLedgerEntries({ orgId: acc.id })
-            .find((e) => e.meta && e.meta.cashfreePaymentId === paymentId);
-          if (already) continue;
-          ledger.postEntry(acc.id, {
-            type: 'recharge',
-            amountPaise,
-            description: `Auto-recharge webhook payment (${paymentId})`,
-            meta: { cashfreeSubscriptionId: subId, cashfreePaymentId: paymentId, paymentId },
-          });
-        }
+    let amountPaise = null;
+    try {
+      if (payment.payment_amount != null) {
+        amountPaise = moneyWire.paiseFromDecimal(String(payment.payment_amount));
       }
+    } catch (_) {
+      // An amount this server cannot read is reported as unreadable, not as zero,
+      // and it does not stop the log line: the payment happened either way.
     }
+    log.error('cashfree_mandate_payment_unsettled', {
+      cashfreeSubscriptionId: subId || null,
+      cashfreePaymentId: payment.payment_id || null,
+      paymentAmountPaise: Number.isSafeInteger(amountPaise) ? amountPaise : null,
+      note: 'a mandate was charged without a quoted intent, so no credits were added; reconcile this payment and grant the credits in FlexPrice',
+    });
   } else if (eventType === 'ORDER_PAID_SUCCESS' || eventType === 'PAYMENT_SUCCESS_WEBHOOK') {
     // The event names the order; it does not price it. settle() looks the intent up
     // by that id, re-verifies the amount against the gateway, and credits the org

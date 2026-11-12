@@ -88,6 +88,10 @@ class ContextProjectResponse(BaseModel):
 class ContextOrganizationResponse(BaseModel):
     id: uuid.UUID
     name: str
+    # Server-derived free-tier marker. The browser must read this rather than
+    # guess from the name or the `default=true` tag, both of which an org admin
+    # can edit; see app/models/organization.py.
+    is_default: bool = False
     parent_org_id: uuid.UUID | None = None
     membership_id: uuid.UUID
     role: OrgRole

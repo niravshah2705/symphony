@@ -1,13 +1,10 @@
 'use strict';
 
 const store = require('../store');
-const log = require('../logger');
 const { CONFIG } = require('../config');
-const ledger = require('./ledger');
 
-// In-process guard: the sweep runs only in the scheduler process and
-// never overlaps itself, so debits have a single writer (business-logic: no
-// double-processing / double-spend).
+// In-process guard: the sweep runs only in the scheduler process and never
+// overlaps itself, so the watermark advances once per pass.
 let sweeping = false;
 
 /** Group usage records by orgId, summing paise + tokens. */
@@ -26,12 +23,20 @@ function aggregateByOrg(records) {
 
 /**
  * One billing sweep:
- *   1. turn usage since the watermark into ONE debit ledger line item per org,
- *   2. refresh each affected org's balance snapshot,
- *   3. advance the watermark and prune granular usage past the retention window.
+ *   1. report the usage accumulated since the watermark, per org,
+ *   2. advance the watermark and prune granular usage past the retention window.
  *
- * Auto-recharge and threshold alerts deliberately do NOT happen here: this runs
- * on every billing tick (and used to run on every planner tick too), so an
+ * It moves no money. Every org's usage was already handed to the FlexPrice
+ * ingest API by the outbox drain (`billing/outbox-drain.js`), which is the only
+ * delivery-proofed path, and the balance that admission decisions read is the
+ * wallet's. This sweep used to post one aggregated debit per org into the local
+ * ledger — a second copy of the same spend that could and did disagree with the
+ * wallet, since a notional (customer-key) run posted a debit here while FlexPrice
+ * saw nothing. `usageRecords` still feeds the outbox and the Usage page, and the
+ * watermark and the retention prune are still this function's job.
+ *
+ * Auto-recharge and threshold alerts deliberately do NOT happen here either: this
+ * runs on every billing tick (and used to run on every planner tick too), so an
  * all-accounts money path inside it re-charged orgs far below the intended
  * cadence. That work lives in the scheduled auto-recharge job
  * (services/billing/src/auto-recharge-job.js), which validates before charging.
@@ -48,31 +53,10 @@ async function processBillingSweep(deps = {}) {
       .listUsageRecords()
       .filter((r) => String(r.createdAt || '') > watermark && String(r.createdAt || '') <= now);
     const groups = aggregateByOrg(records);
-    const periodStart = watermark || (records.length ? records[records.length - 1].createdAt : now);
 
-    // 1 + 2: post one aggregated debit per org with usage this window.
-    for (const g of groups) {
-      try {
-        ledger.ensureAccount(g.orgId);
-        if (g.costPaise > 0) {
-          ledger.postEntry(g.orgId, {
-            type: 'usage',
-            amountPaise: -g.costPaise,
-            description: `LLM usage (${g.count} run${g.count === 1 ? '' : 's'}, ${g.tokens} tokens)`,
-            meta: { periodStart, periodEnd: now, tokens: g.tokens, records: g.count },
-          });
-        } else {
-          ledger.refreshBalance(g.orgId); // zero-cost (local) runs still keep the snapshot fresh
-        }
-      } catch (err) {
-        log.warn(`sweep: failed to post usage for org ${g.orgId}: ${err && err.message ? err.message : err}`);
-      }
-    }
-
-    // 3: advance the watermark.
     store.setBillingState({ lastAggregatedAt: now });
 
-    // 4: retention prune (the ledger itself persists).
+    // Retention prune (the usage records themselves; the outbox has its own lifecycle).
     const retentionMs = CONFIG.BILLING.usageRetentionDays * 24 * 60 * 60 * 1000;
     const cutoff = new Date((deps.nowMs || Date.now()) - retentionMs).toISOString();
     const pruned = store.pruneUsageRecords(cutoff);

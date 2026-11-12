@@ -577,7 +577,6 @@ export const api = {
     getUsage: (groupBy = 'project', period = 'week') =>
       request(`/billing/usage?groupBy=${encodeURIComponent(groupBy)}&period=${encodeURIComponent(period)}`),
     getTaskUsage: (taskId) => request(`/billing/usage/task/${encodeURIComponent(taskId)}`),
-    getLedger: (limit = 50) => request(`/billing/ledger?limit=${encodeURIComponent(limit)}`),
     // POST /billing/recharge is a QUOTE: it returns the GST breakdown and credits
     // nothing. Credit only arrives from a settle of an order the gateway confirms,
     // so nothing here may be labelled "add credits".

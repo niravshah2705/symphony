@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 70 nodes
+Community of 71 nodes
 
-- **Size**: 70 nodes
-- **Cohesion**: 0.3055
+- **Size**: 71 nodes
+- **Cohesion**: 0.3074
 - **Dominant Language**: javascript
 
 ## Members
@@ -23,9 +23,9 @@ Community of 70 nodes
 | newOrderId | Function | ./services/billing/src/billing-api.js | 157-160 |
 | resolveCallerOrg | Function | ./services/billing/src/billing-api.js | 168-175 |
 | requireAdmin | Function | ./services/billing/src/billing-api.js | 245-249 |
-| resolveProvider | Function | ./services/billing/src/billing-api.js | 604-617 |
-| bonusExpiryFrom | Function | ./services/billing/src/billing-api.js | 619-629 |
-| createRechargeOrder | Function | ./services/billing/src/billing-api.js | 631-731 |
+| resolveProvider | Function | ./services/billing/src/billing-api.js | 603-616 |
+| bonusExpiryFrom | Function | ./services/billing/src/billing-api.js | 618-628 |
+| createRechargeOrder | Function | ./services/billing/src/billing-api.js | 630-730 |
 | normalizeProvider | Function | ./services/billing/src/payment-providers.js | 37-40 |
 | timingSafeHexEqual | Function | ./services/billing/src/payment-providers.js | 42-47 |
 | parseJson | Function | ./services/billing/src/payment-providers.js | 49-56 |
@@ -65,7 +65,7 @@ Community of 70 nodes
 | readCredits | Function | ./services/billing/src/recharge-settle.js | 95-109 |
 | customerBody | Function | ./services/billing/src/recharge-settle.js | 116-129 |
 
-*... and 20 more members.*
+*... and 21 more members.*
 
 ## Execution Flows
 
@@ -75,7 +75,7 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (85 edge(s))
+- `equal` (91 edge(s))
 - `String` (40 edge(s))
 - `decimalFromPaise` (13 edge(s))
 - `trim` (10 edge(s))
@@ -93,18 +93,18 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (83 edge(s))
-- `./services/billing/src/billing-api.js` (50 edge(s))
+- `equal` (89 edge(s))
+- `./services/billing/src/billing-api.js` (49 edge(s))
 - `./services/billing/src/payment-providers.js` (25 edge(s))
-- `./services/billing/src/recharge-settle.test.js` (18 edge(s))
+- `./services/billing/src/recharge-settle.test.js` (19 edge(s))
 - `./services/billing/src/payment-providers.test.js` (16 edge(s))
 - `./services/billing/src/recharge-settle.js` (13 edge(s))
 - `deepEqual` (10 edge(s))
 - `isConfigured` (5 edge(s))
-- `./services/billing/src/recharge-settle.test.js::test:another org cannot settle my order@L268` (5 edge(s))
-- `./services/billing/src/recharge-settle.test.js::test:a gateway that collected a different amount settles nothing@L299` (5 edge(s))
-- `./services/billing/src/recharge-settle.test.js::test:a retry after FlexPrice took the credit but before we recorded it does not double-credit@L250` (5 edge(s))
+- `./services/billing/src/recharge-settle.test.js::test:another org cannot settle my order@L294` (5 edge(s))
+- `./services/billing/src/recharge-settle.test.js::test:a gateway that collected a different amount settles nothing@L325` (5 edge(s))
+- `./services/billing/src/recharge-settle.test.js::test:a retry after FlexPrice took the credit but before we recorded it does not double-credit@L276` (5 edge(s))
 - `verify` (4 edge(s))
 - `stringify` (4 edge(s))
-- `./services/billing/src/recharge-settle.test.js::test:a read-back that disagrees with the credit is not marked settled@L443` (4 edge(s))
+- `./services/billing/src/recharge-settle.test.js::test:a read-back that disagrees with the credit is not marked settled@L469` (4 edge(s))
 - `./services/billing/src/recharge-settle.test.js::test:a ₹500 recharge collects ₹590 and credits 500 spendable credits@L130` (4 edge(s))

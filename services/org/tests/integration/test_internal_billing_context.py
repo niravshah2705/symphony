@@ -65,6 +65,9 @@ async def test_returns_org_identity_and_admin_emails_only(client, monkeypatch):
     assert body["id"] == org_id
     assert body["name"] == "Acme"
     assert body["slug"]
+    # An org someone named is not the free tier: onboarding sets the flag, and
+    # this is the field a billing decision may rest on.
+    assert body["is_default"] is False
     assert [a["email"] for a in body["admins"]] == ["admin@acme.com"]
     # The DTO is an allowlist: no credentials, membership status or role leak out.
     assert "password_hash" not in r.text

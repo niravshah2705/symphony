@@ -611,8 +611,16 @@ async function renderOrgBilling(section, organization, isAdmin) {
   }
 
   const inr = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(val) || 0);
-  const isAvailable = summary.fundStatus !== 'unavailable' && Number(summary.balancePaise) > 0;
-  const statusBadge = el('span', { class: `badge ${isAvailable ? 'active' : 'warn'}` }, isAvailable ? 'Funds Available' : 'Funds Unavailable');
+  // The balance is the wallet's, and the server may report it as null when the
+  // gate could not read it — which is not ₹0.00 and not a pause.
+  const money = (val) => (val === null || val === undefined ? '—' : inr(val));
+  const fundState = summary.fundState || 'unknown';
+  const isBlocked = summary.fundsAvailable === false;
+  const statusBadge = el('span', {
+    class: `badge ${isBlocked ? 'warn' : (fundState === 'available' ? 'active' : '')}`,
+  }, fundState === 'negative' ? 'Balance Negative'
+    : fundState === 'exhausted' ? 'Out of Credit'
+    : fundState === 'unknown' ? 'Balance Unknown' : 'Funds Available');
   const ar = summary.autoRecharge || {};
   const isAutoEnabled = Boolean(ar.enabled);
   const currentMode = ar.mode || 'amount';
@@ -622,19 +630,19 @@ async function renderOrgBilling(section, organization, isAdmin) {
   const rows = [
     el('div', { class: 'org-row' }, [
       el('div', { class: 'org-row-copy' }, [
-        el('strong', {}, 'Current Balance'),
-        el('small', { class: 'muted' }, `Seeded credit: ${inr(summary.initialCreditInr)}`),
+        el('strong', {}, 'Wallet Balance'),
+        el('small', { class: 'muted' }, `Opening credit: ${inr(summary.initialCreditInr)}`),
       ]),
       el('div', { class: 'org-row-actions' }, [
-        el('span', { class: 'cost-cell', style: 'font-size: 16px; margin-right: 8px;' }, inr(summary.balanceInr)),
+        el('span', { class: 'cost-cell', style: 'font-size: 16px; margin-right: 8px;' }, money(summary.balanceInr)),
         statusBadge,
       ]),
     ]),
   ];
 
-  if (!isAvailable) {
+  if (isBlocked) {
     rows.push(el('div', { class: 'notice operational-notice operational-notice-warn', style: 'margin-top: 10px;' }, [
-      el('strong', {}, 'Account Low / Negative: '),
+      el('strong', {}, fundState === 'negative' ? 'Account Negative: ' : 'Account Out of Credit: '),
       el('span', {}, 'Runner jobs and scheduled calls are paused until payment is added or auto-renew triggers.'),
     ]));
   }

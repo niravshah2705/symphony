@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 722 nodes
+Community of 723 nodes
 
-- **Size**: 722 nodes
-- **Cohesion**: 0.5411
+- **Size**: 723 nodes
+- **Cohesion**: 0.5417
 - **Dominant Language**: python
 
 ## Members
@@ -26,7 +26,7 @@ Community of 722 nodes
 | require_internal_token | Function | ./services/org/app/api/v1/routes_internal.py | 72-76 |
 | write_deployments | Function | ./services/org/app/api/v1/routes_internal.py | 80-92 |
 | write_step_status | Function | ./services/org/app/api/v1/routes_internal.py | 99-126 |
-| billing_context | Function | ./services/org/app/api/v1/routes_internal.py | 130-148 |
+| billing_context | Function | ./services/org/app/api/v1/routes_internal.py | 130-149 |
 | create_invitation | Function | ./services/org/app/api/v1/routes_invitations.py | 26-31 |
 | list_invitations | Function | ./services/org/app/api/v1/routes_invitations.py | 35-39 |
 | resend_invitation | Function | ./services/org/app/api/v1/routes_invitations.py | 43-48 |
@@ -65,15 +65,15 @@ Community of 722 nodes
 | list_external_grants | Function | ./services/org/app/api/v1/routes_project_grants.py | 39-43 |
 | revoke_external_grant | Function | ./services/org/app/api/v1/routes_project_grants.py | 47-54 |
 
-*... and 672 more members.*
+*... and 673 more members.*
 
 ## Execution Flows
 
 - **logout** (criticality: 0.84, depth: 3)
 - **refresh** (criticality: 0.77, depth: 4)
 - **__call__** (criticality: 0.75, depth: 7)
-- **register** (criticality: 0.74, depth: 9)
 - **verify_email** (criticality: 0.74, depth: 3)
+- **register** (criticality: 0.74, depth: 9)
 - **change_password** (criticality: 0.73, depth: 4)
 - **get_project_context** (criticality: 0.72, depth: 6)
 - **login** (criticality: 0.72, depth: 9)
@@ -85,8 +85,8 @@ Community of 722 nodes
 
 ### Outgoing
 
-- `get` (334 edge(s))
-- `str` (178 edge(s))
+- `get` (335 edge(s))
+- `str` (179 edge(s))
 - `Depends` (173 edge(s))
 - `json` (98 edge(s))
 - `post` (62 edge(s))

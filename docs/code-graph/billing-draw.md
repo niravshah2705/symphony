@@ -18,7 +18,7 @@ Community of 5 nodes
 | test:drawOrderForDebit: promotional credit is spent before real money, earliest expiry first@L95 | Test | ./packages/shared-core/src/billing/credits.test.js | 95-106 |
 | test:drawOrderForDebit: draws only what exists, so a shortfall is visible to the caller@L108 | Test | ./packages/shared-core/src/billing/credits.test.js | 108-117 |
 | test:drawOrderForDebit: ignores empty wallets and a zero or negative debit@L119 | Test | ./packages/shared-core/src/billing/credits.test.js | 119-130 |
-| test:debits draw the promotional wallet first and the earliest expiry first inside it@L167 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 167-189 |
+| test:debits draw the promotional wallet first and the earliest expiry first inside it@L168 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 168-190 |
 
 ## Execution Flows
 

@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 32 nodes
+Community of 31 nodes
 
-- **Size**: 32 nodes
+- **Size**: 31 nodes
 - **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
@@ -22,7 +22,7 @@ Community of 32 nodes
 | test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
 | test:authenticated users without an organization route to onboarding before workspace requests@L477 | Test | ./e2e/page-loading.spec.js | 477-551 |
 | test:selected organization admins can open scoped policy without global settings write@L617 | Test | ./e2e/page-loading.spec.js | 617-658 |
-| test:Cookie Preferences reports a storage failure without changing consent or reloading@L457 | Test | ./e2e/persistent-footer.spec.js | 457-499 |
+| test:Cookie Preferences reports a storage failure without changing consent or reloading@L463 | Test | ./e2e/persistent-footer.spec.js | 463-505 |
 | test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
 | test:a non-Agent hash never exposes or preloads the Agent scaffold@L107 | Test | ./e2e/route-loading.spec.js | 107-137 |
 | test:lazy Workflows route renders the selected organization and five realistic examples@L177 | Test | ./e2e/workflow-designer.spec.js | 177-233 |
@@ -38,7 +38,6 @@ Community of 32 nodes
 | test:the price match is recorded, and an unmodeled provider says so out loud@L110 | Test | ./packages/shared/src/billing/usage.test.js | 110-145 |
 | test:every clean-URL /adlc/ link resolves to an index.html on disk@L62 | Test | ./public/adlc/adlc-static.test.mjs | 62-97 |
 | push | Function | ./scripts/kind-otel-roundtrip.sh | 45-50 |
-| test:missing Cashfree credentials skip the charge but still alert the admins@L321 | Test | ./services/billing/src/auto-recharge-job.test.js | 321-349 |
 | test:billing service source imports shared-core and no heavy AI workspace@L25 | Test | ./services/billing/src/dependency-boundary.test.js | 25-44 |
 | test:delivers a valid invitation once and acknowledges a duplicate@L108 | Test | ./services/email/src/app.test.js | 108-120 |
 | test:dispatches the allow-listed billing alert contract@L140 | Test | ./services/email/src/app.test.js | 140-152 |
@@ -57,17 +56,17 @@ No execution flows pass through this community.
 
 - `expect` (133 edge(s))
 - `locator` (69 edge(s))
-- `equal` (57 edge(s))
-- `push` (36 edge(s))
+- `equal` (52 edge(s))
+- `push` (35 edge(s))
 - `toBeVisible` (30 edge(s))
 - `route` (28 edge(s))
 - `toHaveCount` (26 edge(s))
 - `getByRole` (23 edge(s))
 - `toEqual` (18 edge(s))
 - `./e2e/page-loading.spec.js::json` (18 edge(s))
-- `deepEqual` (17 edge(s))
 - `url` (16 edge(s))
 - `toHaveAttribute` (16 edge(s))
+- `deepEqual` (16 edge(s))
 - `join` (16 edge(s))
 - `evaluate` (15 edge(s))
 
@@ -75,16 +74,16 @@ No execution flows pass through this community.
 
 - `expect` (133 edge(s))
 - `locator` (69 edge(s))
-- `equal` (57 edge(s))
-- `push` (36 edge(s))
+- `equal` (52 edge(s))
+- `push` (35 edge(s))
 - `toBeVisible` (30 edge(s))
 - `route` (28 edge(s))
 - `toHaveCount` (26 edge(s))
 - `getByRole` (23 edge(s))
 - `toEqual` (18 edge(s))
 - `./e2e/page-loading.spec.js::json` (18 edge(s))
-- `deepEqual` (17 edge(s))
 - `url` (16 edge(s))
 - `toHaveAttribute` (16 edge(s))
+- `deepEqual` (16 edge(s))
 - `join` (16 edge(s))
 - `evaluate` (15 edge(s))

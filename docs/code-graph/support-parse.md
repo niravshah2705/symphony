@@ -7,7 +7,7 @@
 Community of 107 nodes
 
 - **Size**: 107 nodes
-- **Cohesion**: 0.2800
+- **Cohesion**: 0.2805
 - **Dominant Language**: javascript
 
 ## Members
@@ -30,14 +30,14 @@ Community of 107 nodes
 | normalizeRepository | Function | ./e2e-live/scripts/audit.js | 134-136 |
 | hasCanary | Function | ./e2e-live/scripts/audit.js | 138-140 |
 | ownContextHeaders | Function | ./e2e-live/scripts/audit.js | 142-144 |
-| auditTenantReadiness | Function | ./e2e-live/scripts/audit.js | 146-188 |
-| githubHeaders | Function | ./e2e-live/scripts/audit.js | 190-199 |
-| githubRequest | Function | ./e2e-live/scripts/audit.js | 201-215 |
-| githubContent | Function | ./e2e-live/scripts/audit.js | 217-225 |
-| auditRepository | Function | ./e2e-live/scripts/audit.js | 227-252 |
-| auditRecord | Function | ./e2e-live/scripts/audit.js | 254-256 |
-| writeAudit | Function | ./e2e-live/scripts/audit.js | 258-265 |
-| runAudit | Function | ./e2e-live/scripts/audit.js | 267-372 |
+| auditTenantReadiness | Function | ./e2e-live/scripts/audit.js | 146-194 |
+| githubHeaders | Function | ./e2e-live/scripts/audit.js | 196-205 |
+| githubRequest | Function | ./e2e-live/scripts/audit.js | 207-221 |
+| githubContent | Function | ./e2e-live/scripts/audit.js | 223-231 |
+| auditRepository | Function | ./e2e-live/scripts/audit.js | 233-258 |
+| auditRecord | Function | ./e2e-live/scripts/audit.js | 260-262 |
+| writeAudit | Function | ./e2e-live/scripts/audit.js | 264-271 |
+| runAudit | Function | ./e2e-live/scripts/audit.js | 273-378 |
 | usage | Function | ./e2e-live/scripts/capture-auth.js | 12-18 |
 | parseCaptureArgs | Function | ./e2e-live/scripts/capture-auth.js | 20-43 |
 | atomicWriteStorageState | Function | ./e2e-live/scripts/capture-auth.js | 45-63 |

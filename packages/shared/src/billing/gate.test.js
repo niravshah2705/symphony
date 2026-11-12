@@ -8,45 +8,30 @@ const assert = require('node:assert/strict');
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-gate-'));
 process.env.AI_FLEET_DATA_DIR = TMP_DIR;
-process.env.BILLING_SWEEP_ENABLED = 'true';
-process.env.INITIAL_CREDIT_INR = '500';
+// The unconfigured local profile, which is what this file is for: no FlexPrice,
+// no named policy. The rule itself is tested where it lives —
+// packages/shared-core/src/billing/gate.test.js.
+delete process.env.BILLING_SWEEP_ENABLED;
+delete process.env.BILLING_GATE_POLICY;
+delete process.env.FLEXPRICE_ENABLED;
 process.env.FLEET_ORG_ID = 'org-gate';
 
-const store = require('../store');
-const ledger = require('./ledger');
+const coreGate = require('@ai-fleet/shared-core/billing/gate');
 const { billingStatus, isBillingBlocked, getOrgFundStatus } = require('./gate');
 
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
-test('no account yet → not blocked (first sweep seeds credit)', () => {
-  assert.equal(isBillingBlocked({}), false);
-  assert.equal(billingStatus({}).orgId, 'org-gate');
+test('the agent-side gate IS the shared-core gate, not a second copy', () => {
+  assert.equal(billingStatus, coreGate.billingStatus);
+  assert.equal(isBillingBlocked, coreGate.isBillingBlocked);
+  assert.equal(getOrgFundStatus, coreGate.getOrgFundStatus);
 });
 
-test('positive balance → not blocked; negative balance → blocked with a reason', () => {
-  ledger.ensureAccount('org-gate');
+test('with no FlexPrice configured the gate is off, so a local run is never blocked', () => {
   assert.equal(isBillingBlocked({}), false);
-  let fundStatus = getOrgFundStatus('org-gate');
-  assert.equal(fundStatus.fundsAvailable, true);
-  assert.equal(fundStatus.fundStatus, 'available');
-  assert.equal(fundStatus.sandboxCreationDisabled, false);
-  assert.equal(fundStatus.scheduledCallsDisabled, false);
-
-  ledger.postEntry('org-gate', { type: 'usage', amountPaise: -60000, description: 'drain past zero' });
   const status = billingStatus({});
-  assert.equal(status.blocked, true);
-  assert.match(status.reason, /balance/i);
-
-  fundStatus = getOrgFundStatus('org-gate');
-  assert.equal(fundStatus.fundsAvailable, false);
-  assert.equal(fundStatus.fundStatus, 'unavailable');
-  assert.equal(fundStatus.sandboxCreationDisabled, true);
-  assert.equal(fundStatus.scheduledCallsDisabled, true);
-});
-
-test('gateEnabled:false opts out of the pause even when negative', () => {
-  store.upsertBillingAccount('org-gate', { gateEnabled: false });
-  assert.equal(isBillingBlocked({}), false);
-  store.upsertBillingAccount('org-gate', { gateEnabled: true });
-  assert.equal(isBillingBlocked({}), true);
+  assert.equal(status.orgId, 'org-gate');
+  assert.equal(status.gatePolicy, 'off');
+  assert.equal(status.fundsAvailable, true);
+  assert.equal(status.balancePaise, null, 'nothing was read, so nothing is claimed');
 });

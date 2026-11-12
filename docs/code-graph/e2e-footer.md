@@ -15,22 +15,22 @@ Community of 17 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | json | Function | ./e2e/persistent-footer.spec.js | 61-67 |
-| disabledApiPayload | Function | ./e2e/persistent-footer.spec.js | 69-134 |
-| installDisabledAuthStubs | Function | ./e2e/persistent-footer.spec.js | 136-141 |
-| installFirebaseAssets | Function | ./e2e/persistent-footer.spec.js | 143-154 |
-| expectDisabledAuthentication | Function | ./e2e/persistent-footer.spec.js | 156-161 |
-| expectSingleVisibleFooter | Function | ./e2e/persistent-footer.spec.js | 163-170 |
-| expectToastOutsideFooter | Function | ./e2e/persistent-footer.spec.js | 172-188 |
-| settlePublishedWork | Function | ./e2e/persistent-footer.spec.js | 190-194 |
-| test:one stable footer survives view replacement across every application and legal route@L196 | Test | ./e2e/persistent-footer.spec.js | 196-243 |
-| test:the non-Agent launcher copies its prompt and remains aligned without narrow-screen overflow@L245 | Test | ./e2e/persistent-footer.spec.js | 245-349 |
-| test@L422 | Test | ./e2e/persistent-footer.spec.js | 422-422 |
-| test:the footer is visible while authentication configuration is loading@L501 | Test | ./e2e/persistent-footer.spec.js | 501-518 |
-| test:a stalled auth failure follows a privacy-to-application hash transition@L520 | Test | ./e2e/persistent-footer.spec.js | 520-544 |
-| test:a stalled auth failure preserves an application-to-privacy hash transition@L546 | Test | ./e2e/persistent-footer.spec.js | 546-570 |
-| test:the footer remains available on an authentication configuration error@L572 | Test | ./e2e/persistent-footer.spec.js | 572-585 |
-| test:the footer remains available on the signed-out sign-in screen@L587 | Test | ./e2e/persistent-footer.spec.js | 587-605 |
-| test:the footer remains available on an authenticated access-denied screen@L607 | Test | ./e2e/persistent-footer.spec.js | 607-651 |
+| disabledApiPayload | Function | ./e2e/persistent-footer.spec.js | 69-140 |
+| installDisabledAuthStubs | Function | ./e2e/persistent-footer.spec.js | 142-147 |
+| installFirebaseAssets | Function | ./e2e/persistent-footer.spec.js | 149-160 |
+| expectDisabledAuthentication | Function | ./e2e/persistent-footer.spec.js | 162-167 |
+| expectSingleVisibleFooter | Function | ./e2e/persistent-footer.spec.js | 169-176 |
+| expectToastOutsideFooter | Function | ./e2e/persistent-footer.spec.js | 178-194 |
+| settlePublishedWork | Function | ./e2e/persistent-footer.spec.js | 196-200 |
+| test:one stable footer survives view replacement across every application and legal route@L202 | Test | ./e2e/persistent-footer.spec.js | 202-249 |
+| test:the non-Agent launcher copies its prompt and remains aligned without narrow-screen overflow@L251 | Test | ./e2e/persistent-footer.spec.js | 251-355 |
+| test@L428 | Test | ./e2e/persistent-footer.spec.js | 428-428 |
+| test:the footer is visible while authentication configuration is loading@L507 | Test | ./e2e/persistent-footer.spec.js | 507-524 |
+| test:a stalled auth failure follows a privacy-to-application hash transition@L526 | Test | ./e2e/persistent-footer.spec.js | 526-550 |
+| test:a stalled auth failure preserves an application-to-privacy hash transition@L552 | Test | ./e2e/persistent-footer.spec.js | 552-576 |
+| test:the footer remains available on an authentication configuration error@L578 | Test | ./e2e/persistent-footer.spec.js | 578-591 |
+| test:the footer remains available on the signed-out sign-in screen@L593 | Test | ./e2e/persistent-footer.spec.js | 593-611 |
+| test:the footer remains available on an authenticated access-denied screen@L613 | Test | ./e2e/persistent-footer.spec.js | 613-657 |
 
 ## Execution Flows
 
@@ -71,5 +71,5 @@ No execution flows pass through this community.
 - `getElementById` (7 edge(s))
 - `toBe` (6 edge(s))
 - `querySelector` (6 edge(s))
-- `./e2e/persistent-footer.spec.js::test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L351` (5 edge(s))
+- `./e2e/persistent-footer.spec.js::test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L357` (5 edge(s))
 - `toHaveText` (5 edge(s))

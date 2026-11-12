@@ -4,18 +4,18 @@
 
 ## Overview
 
-Community of 28 nodes
+Community of 30 nodes
 
-- **Size**: 28 nodes
-- **Cohesion**: 0.1522
+- **Size**: 30 nodes
+- **Cohesion**: 0.1565
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| createStoreHydrationMiddleware | Function | ./services/billing/src/app.js | 17-21 |
-| createApp | Function | ./services/billing/src/app.js | 23-126 |
+| createStoreHydrationMiddleware | Function | ./services/billing/src/app.js | 19-23 |
+| createApp | Function | ./services/billing/src/app.js | 25-138 |
 | listen | Function | ./services/billing/src/app.test.js | 32-43 |
 | test:billing service health probes@L45 | Test | ./services/billing/src/app.test.js | 45-54 |
 | test:billing standalone UI dashboard serves HTML@L56 | Test | ./services/billing/src/app.test.js | 56-66 |
@@ -25,23 +25,25 @@ Community of 28 nodes
 | test:a client-controlled org header is ignored without the trusted billing header@L117 | Test | ./services/billing/src/app.test.js | 117-129 |
 | test:the quote is the GST breakdown the customer is shown before paying@L165 | Test | ./services/billing/src/app.test.js | 165-196 |
 | test:an amount that is not a whole number of rupees is refused on the way in@L198 | Test | ./services/billing/src/app.test.js | 198-219 |
-| test:billing /pubsub/billing-tick runs sweep@L243 | Test | ./services/billing/src/app.test.js | 243-256 |
-| test:the Razorpay path picks its gateway, proves its signature, and settles nothing without it@L343 | Test | ./services/billing/src/app.test.js | 343-383 |
-| test:a gateway with no keys creates no order unless the dev mock flag is on@L385 | Test | ./services/billing/src/app.test.js | 385-407 |
-| test:cashfree mandate creation fails closed when Cashfree is not configured@L409 | Test | ./services/billing/src/app.test.js | 409-428 |
-| sign | Function | ./services/billing/src/app.test.js | 444-444 |
-| post | Function | ./services/billing/src/app.test.js | 445-453 |
-| signed | Function | ./services/billing/src/app.test.js | 454-457 |
-| test:the Razorpay webhook needs its secret and settles only an order we quoted@L510 | Test | ./services/billing/src/app.test.js | 510-552 |
-| test:a saved GSTIN is validated on the way in and decides the tax split on the way out@L554 | Test | ./services/billing/src/app.test.js | 554-589 |
-| putConfig | Function | ./services/billing/src/app.test.js | 558-560 |
-| recharge | Function | ./services/billing/src/app.test.js | 561-563 |
-| test:billing recharge tick launches the Cloud Run Job instead of sweeping in-request@L595 | Test | ./services/billing/src/app.test.js | 595-619 |
-| test:billing recharge tick runs the sweep in-process when no Job is configured@L621 | Test | ./services/billing/src/app.test.js | 621-643 |
-| test:billing recharge tick reports a launch failure as 500 so the scheduler retries@L645 | Test | ./services/billing/src/app.test.js | 645-659 |
-| test:a Cashfree credential rejection surfaces as a typed 502, not an opaque 500@L661 | Test | ./services/billing/src/app.test.js | 661-703 |
+| test:billing /pubsub/billing-tick runs sweep@L243 | Test | ./services/billing/src/app.test.js | 243-261 |
+| test:the Razorpay path picks its gateway, proves its signature, and settles nothing without it@L348 | Test | ./services/billing/src/app.test.js | 348-388 |
+| test:a gateway with no keys creates no order unless the dev mock flag is on@L390 | Test | ./services/billing/src/app.test.js | 390-412 |
+| test:cashfree mandate creation fails closed when Cashfree is not configured@L414 | Test | ./services/billing/src/app.test.js | 414-433 |
+| sign | Function | ./services/billing/src/app.test.js | 449-449 |
+| post | Function | ./services/billing/src/app.test.js | 450-458 |
+| signed | Function | ./services/billing/src/app.test.js | 459-462 |
+| test:the Razorpay webhook needs its secret and settles only an order we quoted@L515 | Test | ./services/billing/src/app.test.js | 515-557 |
+| test:a saved GSTIN is validated on the way in and decides the tax split on the way out@L559 | Test | ./services/billing/src/app.test.js | 559-594 |
+| putConfig | Function | ./services/billing/src/app.test.js | 563-565 |
+| recharge | Function | ./services/billing/src/app.test.js | 566-568 |
+| test:billing recharge tick launches the Cloud Run Job instead of sweeping in-request@L600 | Test | ./services/billing/src/app.test.js | 600-624 |
+| test:billing recharge tick runs the sweep in-process when no Job is configured@L626 | Test | ./services/billing/src/app.test.js | 626-648 |
+| test:billing recharge tick reports a launch failure as 500 so the scheduler retries@L650 | Test | ./services/billing/src/app.test.js | 650-664 |
+| test:a Cashfree credential rejection surfaces as a typed 502, not an opaque 500@L666 | Test | ./services/billing/src/app.test.js | 666-708 |
 | start | Function | ./services/billing/src/index.js | 7-15 |
-| renderDashboardHtml | Function | ./services/billing/src/ui.js | 3-358 |
+| inr | Function | ./services/billing/src/ui.js | 6-10 |
+| renderDashboardHtml | Function | ./services/billing/src/ui.js | 12-378 |
+| rupees | Function | ./services/billing/src/ui.js | 35-35 |
 
 ## Execution Flows
 
@@ -56,16 +58,16 @@ No execution flows pass through this community.
 - `fetch` (28 edge(s))
 - `close` (19 edge(s))
 - `stringify` (17 edge(s))
-- `Number` (7 edge(s))
 - `match` (7 edge(s))
 - `await` (7 edge(s))
 - `get` (6 edge(s))
 - `status` (6 edge(s))
-- `./services/billing/src/app.test.js::test:the Cashfree webhook is signature-gated everywhere and never prices an order@L430` (6 edge(s))
+- `./services/billing/src/app.test.js::test:the Cashfree webhook is signature-gated everywhere and never prices an order@L435` (6 edge(s))
+- `deepEqual` (6 edge(s))
 - `use` (5 edge(s))
-- `deepEqual` (5 edge(s))
+- `Number` (5 edge(s))
 - `info` (4 edge(s))
-- `toFixed` (4 edge(s))
+- `error` (4 edge(s))
 
 ### Incoming
 
@@ -77,10 +79,10 @@ No execution flows pass through this community.
 - `stringify` (13 edge(s))
 - `match` (7 edge(s))
 - `await` (7 edge(s))
-- `./services/billing/src/app.test.js::test:the Cashfree webhook is signature-gated everywhere and never prices an order@L430` (6 edge(s))
-- `deepEqual` (5 edge(s))
+- `./services/billing/src/app.test.js::test:the Cashfree webhook is signature-gated everywhere and never prices an order@L435` (6 edge(s))
+- `deepEqual` (6 edge(s))
 - `./services/billing/src/index.js` (4 edge(s))
+- `./services/billing/src/ui.js` (4 edge(s))
 - `./services/billing/src/app.js` (3 edge(s))
 - `./services/billing/src/app.test.js::test:mutations require the admin role on the trusted header@L131` (2 edge(s))
 - `./services/billing/src/app.test.js::test:config update with percentage mode keeps Cashfree mandate fields@L221` (2 edge(s))
-- `./services/billing/src/app.test.js::test:create-order persists the quote as an intent, and verify-order settles it or refuses@L258` (2 edge(s))
