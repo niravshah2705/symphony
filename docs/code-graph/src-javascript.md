@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 2 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.1136
+- **Size**: 2 nodes
+- **Cohesion**: 0.0667
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,7 +16,6 @@ Community of 3 nodes
 |------|------|------|-------|
 | javascriptFiles | Function | ./services/billing/src/dependency-boundary.test.js | 13-19 |
 | staticRequires | Function | ./services/billing/src/dependency-boundary.test.js | 21-23 |
-| test:billing service source imports shared-core and no heavy AI workspace@L25 | Test | ./services/billing/src/dependency-boundary.test.js | 25-44 |
 
 ## Execution Flows
 
@@ -26,31 +25,17 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `join` (6 edge(s))
-- `split` (2 edge(s))
+- `./services/billing/src/dependency-boundary.test.js::test:billing service source imports shared-core and no heavy AI workspace@L25` (2 edge(s))
 - `flatMap` (1 edge(s))
 - `readdirSync` (1 edge(s))
+- `join` (1 edge(s))
 - `isDirectory` (1 edge(s))
 - `isFile` (1 edge(s))
 - `endsWith` (1 edge(s))
 - `map` (1 edge(s))
 - `matchAll` (1 edge(s))
-- `readFileSync` (1 edge(s))
-- `startsWith` (1 edge(s))
-- `slice` (1 edge(s))
-- `has` (1 edge(s))
-- `push` (1 edge(s))
-- `relative` (1 edge(s))
 
 ### Incoming
 
-- `join` (5 edge(s))
-- `./services/billing/src/dependency-boundary.test.js` (3 edge(s))
-- `split` (2 edge(s))
-- `readFileSync` (1 edge(s))
-- `startsWith` (1 edge(s))
-- `slice` (1 edge(s))
-- `has` (1 edge(s))
-- `push` (1 edge(s))
-- `relative` (1 edge(s))
-- `deepEqual` (1 edge(s))
+- `./services/billing/src/dependency-boundary.test.js` (2 edge(s))
+- `./services/billing/src/dependency-boundary.test.js::test:billing service source imports shared-core and no heavy AI workspace@L25` (2 edge(s))

@@ -1,0 +1,9 @@
+# The telemetry the actor-session billing reads, as it runs in kind-kind.
+# Apply order does not matter: these are the two ConfigMaps only, and the
+# Deployments that mount them already exist in the cluster.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: otel-system
+resources:
+  - prometheus-configmap.yaml
+  - otel-collector-configmap.yaml

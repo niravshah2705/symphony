@@ -37,6 +37,12 @@
     "observability:inputs": "node scripts/gen-observability-inputs.js",
     "observability:inputs:check": "node scripts/gen-observability-inputs.js --check",
     "billing:reconcile": "node --env-file-if-exists=.env services/billing/src/reconcile-gateway-spend.js",
+    "billing:metrics:check": "bash scripts/kind-metrics-install.sh",
+    "billing:metrics:probe": "bash scripts/kind-otel-roundtrip.sh",
+    "billing:flexprice:bootstrap": "node scripts/flexprice-bootstrap.js",
+    "billing:flexprice:spike": "node scripts/flexprice-spike/run.js",
+    "billing:flexprice:down": "docker compose -f deploy/flexprice/compose.yaml down -v",
+    "billing:flexprice:inspect": "node scripts/flexprice-inspect.js",
     "spa:obfuscate": "node scripts/obfuscate-spa.js",
     "hooks:install": "git config core.hooksPath .githooks && echo 'Git hooks enabled (core.hooksPath=.githooks)'"
   },

@@ -7,7 +7,7 @@
 Community of 11 nodes
 
 - **Size**: 11 nodes
-- **Cohesion**: 0.0995
+- **Cohesion**: 0.1109
 - **Dominant Language**: javascript
 
 ## Members
@@ -22,9 +22,9 @@ Community of 11 nodes
 | profileField | Function | ./e2e/workflow-designer.spec.js | 156-160 |
 | selectCanvasNode | Function | ./e2e/workflow-designer.spec.js | 162-170 |
 | expectNoWorkflowBackendCalls | Function | ./e2e/workflow-designer.spec.js | 172-175 |
-| test:lazy Workflows route renders the selected organization and five realistic examples@L177 | Test | ./e2e/workflow-designer.spec.js | 177-233 |
 | test:organization admin creates a safe custom agent, links nodes, and persists isolated drafts@L235 | Test | ./e2e/workflow-designer.spec.js | 235-359 |
 | test:organization members can inspect workflows but cannot mutate the local copy@L361 | Test | ./e2e/workflow-designer.spec.js | 361-387 |
+| test:an authenticated user without an organization is routed to organization onboarding@L389 | Test | ./e2e/workflow-designer.spec.js | 389-401 |
 
 ## Execution Flows
 
@@ -34,36 +34,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (58 edge(s))
-- `locator` (37 edge(s))
+- `expect` (50 edge(s))
 - `getByRole` (33 edge(s))
-- `toHaveCount` (12 edge(s))
-- `evaluate` (10 edge(s))
+- `locator` (30 edge(s))
+- `toHaveCount` (10 edge(s))
 - `click` (10 edge(s))
 - `fill` (9 edge(s))
+- `evaluate` (9 edge(s))
 - `toBeDisabled` (9 edge(s))
-- `toBeVisible` (8 edge(s))
-- `selectOption` (8 edge(s))
 - `getItem` (8 edge(s))
-- `toHaveAttribute` (7 edge(s))
-- `toContainText` (7 edge(s))
-- `toEqual` (6 edge(s))
-- `poll` (6 edge(s))
+- `toBeVisible` (7 edge(s))
+- `selectOption` (7 edge(s))
+- `toContainText` (6 edge(s))
+- `toHaveAttribute` (5 edge(s))
+- `parse` (5 edge(s))
+- `toEqual` (4 edge(s))
 
 ### Incoming
 
-- `expect` (50 edge(s))
+- `expect` (42 edge(s))
 - `getByRole` (33 edge(s))
-- `locator` (32 edge(s))
-- `toHaveCount` (11 edge(s))
+- `locator` (25 edge(s))
 - `./e2e/workflow-designer.spec.js` (10 edge(s))
-- `evaluate` (10 edge(s))
 - `click` (10 edge(s))
+- `toHaveCount` (9 edge(s))
 - `fill` (9 edge(s))
+- `evaluate` (9 edge(s))
 - `toBeDisabled` (9 edge(s))
-- `selectOption` (8 edge(s))
 - `getItem` (8 edge(s))
-- `toBeVisible` (7 edge(s))
-- `toHaveAttribute` (6 edge(s))
-- `toContainText` (6 edge(s))
-- `poll` (6 edge(s))
+- `selectOption` (7 edge(s))
+- `toBeVisible` (6 edge(s))
+- `toContainText` (5 edge(s))
+- `parse` (5 edge(s))
+- `toHaveAttribute` (4 edge(s))

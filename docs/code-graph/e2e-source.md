@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 8 nodes
+Community of 6 nodes
 
-- **Size**: 8 nodes
-- **Cohesion**: 0.1792
+- **Size**: 6 nodes
+- **Cohesion**: 0.1207
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,8 +20,6 @@ Community of 8 nodes
 | close | Function | ./e2e/workspace-stream-failure.spec.js | 137-137 |
 | setUpFlappingHarness | Function | ./e2e/workspace-stream-failure.spec.js | 118-144 |
 | flapLatestSource | Function | ./e2e/workspace-stream-failure.spec.js | 149-161 |
-| test:a stream that flaps (dies before 60s) on every open stops reconnecting after 6 failures@L163 | Test | ./e2e/workspace-stream-failure.spec.js | 163-174 |
-| test:a connection that stays open past the 60s health threshold resets the failure budget@L176 | Test | ./e2e/workspace-stream-failure.spec.js | 176-203 |
 
 ## Execution Flows
 
@@ -31,33 +29,26 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `evaluate` (9 edge(s))
-- `push` (5 edge(s))
-- `expect` (5 edge(s))
+- `./e2e/workspace-stream-failure.spec.js::test:a connection that stays open past the 60s health threshold resets the failure budget@L176` (4 edge(s))
 - `./e2e/workspace-stream-failure.spec.js::test:a terminal workspace stream-token rejection never opens or retries the SSE stream@L13` (3 edge(s))
+- `push` (3 edge(s))
 - `String` (3 edge(s))
-- `fastForward` (3 edge(s))
-- `toBe` (3 edge(s))
-- `onopen` (2 edge(s))
-- `onerror` (2 edge(s))
-- `waitForTimeout` (2 edge(s))
+- `evaluate` (3 edge(s))
+- `./e2e/workspace-stream-failure.spec.js::test:a stream that flaps (dies before 60s) on every open stops reconnecting after 6 failures@L163` (2 edge(s))
 - `./e2e/workspace-stream-failure.spec.js::test:a blank minted token never opens the workspace SSE stream@L71` (2 edge(s))
 - `route` (2 edge(s))
-- `toEqual` (2 edge(s))
+- `onopen` (1 edge(s))
+- `onerror` (1 edge(s))
+- `fastForward` (1 edge(s))
+- `waitForTimeout` (1 edge(s))
 - `fulfill` (1 edge(s))
 - `stringify` (1 edge(s))
+- `abort` (1 edge(s))
 
 ### Incoming
 
-- `./e2e/workspace-stream-failure.spec.js` (8 edge(s))
-- `evaluate` (6 edge(s))
-- `expect` (5 edge(s))
+- `./e2e/workspace-stream-failure.spec.js` (6 edge(s))
+- `./e2e/workspace-stream-failure.spec.js::test:a connection that stays open past the 60s health threshold resets the failure budget@L176` (4 edge(s))
 - `./e2e/workspace-stream-failure.spec.js::test:a terminal workspace stream-token rejection never opens or retries the SSE stream@L13` (3 edge(s))
-- `toBe` (3 edge(s))
+- `./e2e/workspace-stream-failure.spec.js::test:a stream that flaps (dies before 60s) on every open stops reconnecting after 6 failures@L163` (2 edge(s))
 - `./e2e/workspace-stream-failure.spec.js::test:a blank minted token never opens the workspace SSE stream@L71` (2 edge(s))
-- `fastForward` (2 edge(s))
-- `push` (2 edge(s))
-- `toEqual` (2 edge(s))
-- `onopen` (1 edge(s))
-- `onerror` (1 edge(s))
-- `waitForTimeout` (1 edge(s))

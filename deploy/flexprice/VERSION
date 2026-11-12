@@ -1,0 +1,41 @@
+# What this FlexPrice stack is built from, and why it is not a pulled image.
+#
+# Pinned by commit, not by tag, because the Phase 0 findings
+# (docs/FLEXPRICE_FINDINGS.md) cite `file:line` from this exact tree. Pointing the
+# build at a different commit than the one the findings were read from would make
+# every line reference in that document a guess.
+#
+# PHASE 1 MUST RE-POINT THIS AT A RELEASE TAG AND RE-RUN THE SPIKE. Running 226
+# commits of `main` for a billing review is acceptable locally and not acceptable
+# as a deployment target.
+
+upstream=flexprice/flexprice
+url=https://github.com/flexprice/flexprice
+ref=main
+commit=709ff3bc6f4869fc6cba5e83fe3478c20cca1402
+describe=v2.1.48-226-g709ff3bc6
+nearest_release_tag=v2.1.48
+captured=2026-11-12
+
+# The published image is NOT usable here.
+#
+#   docker pull ghcr.io/flexprice/flexprice:v2.1.48
+#   -> Error response from daemon: error from registry: unauthorized
+#
+# `ghcr.io/flexprice/flexprice` is published by `.github/workflows/publish-app-image.yml`
+# (IMAGE_NAME = ${{ github.repository_owner }}/flexprice, multi-arch amd64+arm64,
+# cosign-signed, Trivy-gated, label AGPL-3.0-only) but the package is private:
+# anonymous token requests get UNAUTHORIZED and there is no Docker Hub image
+# (hub.docker.com/v2/repositories/flexprice/flexprice -> 404). So `compose.yaml`
+# builds from this checkout instead. That is what upstream's own docker-compose.yml
+# does too (`image: flexprice-app:local`, built from the local Dockerfile), so we
+# are not doing anything they do not.
+#
+# Consequence for the AGPL memo's "pin by digest" discipline: for a locally built
+# image the pin is the commit above plus the image ID below, recorded after the
+# build. It is NOT a registry digest, and no `:latest` is involved.
+image=sha256:f2a7842ca2c61d2ea7b4353ef6c4a09ef7fbfa212064ea9b554168a3b781505d
+
+# Tag-format trap, left here so nobody re-discovers it: the upstream tag list
+# contains a non-SemVer `v2.17`, which sorts *after* v2.1.48 under `sort -V` and
+# before it under `sort`. Never derive "latest" by sorting tags.

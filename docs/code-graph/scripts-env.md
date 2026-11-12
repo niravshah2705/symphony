@@ -4,24 +4,33 @@
 
 ## Overview
 
-Community of 8 nodes
+Community of 17 nodes
 
-- **Size**: 8 nodes
-- **Cohesion**: 0.1505
+- **Size**: 17 nodes
+- **Cohesion**: 0.4054
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| envFor | Function | ./scripts/start-all.js | 77-122 |
-| prefixStream | Function | ./scripts/start-all.js | 124-135 |
-| startService | Function | ./scripts/start-all.js | 137-153 |
-| waitForHealth | Function | ./scripts/start-all.js | 155-172 |
-| probe | Function | ./scripts/start-all.js | 158-169 |
-| shutdown | Function | ./scripts/start-all.js | 174-181 |
-| main | Function | ./scripts/start-all.js | 183-190 |
-| test:local stream-token broker is standalone and exclusively receives its secret@L6 | Test | ./scripts/start-all.test.js | 6-32 |
+| log | Function | ./scripts/flexprice-bootstrap.js | 46-46 |
+| step | Function | ./scripts/flexprice-bootstrap.js | 47-47 |
+| run | Function | ./scripts/flexprice-bootstrap.js | 49-66 |
+| compose | Function | ./scripts/flexprice-bootstrap.js | 68-70 |
+| ensureCheckout | Function | ./scripts/flexprice-bootstrap.js | 74-102 |
+| hex | Function | ./scripts/flexprice-bootstrap.js | 113-113 |
+| reusable | Function | ./scripts/flexprice-bootstrap.js | 126-129 |
+| ensureEnv | Function | ./scripts/flexprice-bootstrap.js | 131-193 |
+| parseEnv | Function | ./scripts/flexprice-bootstrap.js | 195-202 |
+| build | Function | ./scripts/flexprice-bootstrap.js | 206-217 |
+| up | Function | ./scripts/flexprice-bootstrap.js | 219-228 |
+| dockerEnv | Function | ./scripts/flexprice-bootstrap.js | 234-236 |
+| healthUrl | Function | ./scripts/flexprice-bootstrap.js | 240-240 |
+| verify | Function | ./scripts/flexprice-bootstrap.js | 242-333 |
+| note | Function | ./scripts/flexprice-bootstrap.js | 245-248 |
+| apiGet | Function | ./scripts/flexprice-bootstrap.js | 335-347 |
+| record | Function | ./scripts/flexprice-bootstrap.js | 351-366 |
 
 ## Execution Flows
 
@@ -31,27 +40,22 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (8 edge(s))
-- `String` (5 edge(s))
-- `write` (4 edge(s))
-- `on` (4 edge(s))
-- `resolve` (3 edge(s))
-- `now` (3 edge(s))
-- `setTimeout` (3 edge(s))
-- `trim` (2 edge(s))
-- `reject` (2 edge(s))
-- `fromEntries` (1 edge(s))
-- `filter` (1 edge(s))
-- `entries` (1 edge(s))
-- `test` (1 edge(s))
-- `includes` (1 edge(s))
-- `toLowerCase` (1 edge(s))
+- `trim` (14 edge(s))
+- `slice` (11 edge(s))
+- `join` (6 edge(s))
+- `split` (4 edge(s))
+- `filter` (3 edge(s))
+- `existsSync` (3 edge(s))
+- `relative` (3 edge(s))
+- `fetch` (2 edge(s))
+- `timeout` (2 edge(s))
+- `text` (2 edge(s))
+- `writeFileSync` (2 edge(s))
+- `write` (2 edge(s))
+- `readFileSync` (2 edge(s))
+- `every` (2 edge(s))
+- `test` (2 edge(s))
 
 ### Incoming
 
-- `./scripts/start-all.js` (12 edge(s))
-- `equal` (8 edge(s))
-- `resolve` (2 edge(s))
-- `./scripts/start-all.test.js` (1 edge(s))
-- `require` (1 edge(s))
-- `find` (1 edge(s))
+- `./scripts/flexprice-bootstrap.js` (25 edge(s))

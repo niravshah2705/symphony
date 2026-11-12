@@ -7,7 +7,7 @@
 Community of 301 nodes
 
 - **Size**: 301 nodes
-- **Cohesion**: 0.2355
+- **Cohesion**: 0.2384
 - **Dominant Language**: javascript
 
 ## Members
@@ -77,15 +77,15 @@ Community of 301 nodes
 
 ### Outgoing
 
-- `equal` (394 edge(s))
+- `equal` (370 edge(s))
 - `join` (74 edge(s))
-- `match` (64 edge(s))
+- `match` (62 edge(s))
 - `ok` (56 edge(s))
 - `String` (53 edge(s))
-- `map` (50 edge(s))
+- `map` (49 edge(s))
 - `isArray` (47 edge(s))
-- `deepEqual` (46 edge(s))
-- `includes` (44 edge(s))
+- `deepEqual` (43 edge(s))
+- `includes` (42 edge(s))
 - `filter` (32 edge(s))
 - `expect` (29 edge(s))
 - `slice` (28 edge(s))
@@ -95,18 +95,18 @@ Community of 301 nodes
 
 ### Incoming
 
-- `equal` (394 edge(s))
-- `match` (61 edge(s))
+- `equal` (370 edge(s))
+- `match` (59 edge(s))
 - `ok` (56 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (48 edge(s))
-- `deepEqual` (46 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (50 edge(s))
 - `join` (46 edge(s))
+- `deepEqual` (43 edge(s))
 - `expect` (29 edge(s))
-- `./packages/shared/src/agent/runtimes.test.js` (25 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js` (24 edge(s))
 - `throws` (23 edge(s))
 - `./packages/shared/src/agent/global-questions.js` (21 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
-- `includes` (20 edge(s))
+- `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
