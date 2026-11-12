@@ -1,21 +1,30 @@
 # What this FlexPrice stack is built from, and why it is not a pulled image.
 #
-# Pinned by commit, not by tag, because the Phase 0 findings
-# (docs/FLEXPRICE_FINDINGS.md) cite `file:line` from this exact tree. Pointing the
-# build at a different commit than the one the findings were read from would make
-# every line reference in that document a guess.
+# Pinned by commit, because the findings (docs/FLEXPRICE_FINDINGS.md) cite
+# `file:line` from one exact tree and a build from anywhere else makes those
+# references a guess.
 #
-# PHASE 1 MUST RE-POINT THIS AT A RELEASE TAG AND RE-RUN THE SPIKE. Running 226
-# commits of `main` for a billing review is acceptable locally and not acceptable
-# as a deployment target.
+# Phase 0 built from `main` at 709ff3bc (= v2.1.48 + 226 commits) because that is
+# where the findings were read. Phase 1 re-pointed this at the release tag, as
+# this file then demanded, and re-ran the whole spike against it: a 226-commit
+# `main` checkout is fine for reading source and not acceptable as a deployment
+# target. Two consequences of moving 226 commits backwards, both accepted:
+#   - the `file:line` citations in FLEXPRICE_FINDINGS.md point at the Phase 0
+#     tree, not this one. They are how the behaviour was READ; the spike re-run
+#     is how it was CONFIRMED at this commit. Where a citation matters, trust the
+#     probe result in docs/flexprice-spike/results.json.
+#   - the running volumes had already been migrated by the newer build, and an
+#     older binary over a newer schema is a downgrade, not a restart. The stack
+#     was therefore torn down (`npm run billing:flexprice:down`) and reinitialised.
 
 upstream=flexprice/flexprice
 url=https://github.com/flexprice/flexprice
-ref=main
-commit=709ff3bc6f4869fc6cba5e83fe3478c20cca1402
-describe=v2.1.48-226-g709ff3bc6
+ref=v2.1.48
+commit=2152453032098000f8b76b07bc869013313ff338
+describe=v2.1.48
 nearest_release_tag=v2.1.48
 captured=2026-11-12
+phase0_commit=709ff3bc6f4869fc6cba5e83fe3478c20cca1402
 
 # The published image is NOT usable here.
 #
@@ -34,7 +43,7 @@ captured=2026-11-12
 # Consequence for the AGPL memo's "pin by digest" discipline: for a locally built
 # image the pin is the commit above plus the image ID below, recorded after the
 # build. It is NOT a registry digest, and no `:latest` is involved.
-image=sha256:f2a7842ca2c61d2ea7b4353ef6c4a09ef7fbfa212064ea9b554168a3b781505d
+image=sha256:4ad8d8ca6e69bcf510bc47224efdf591908522f863df20bcf27188cb105728c1
 
 # Tag-format trap, left here so nobody re-discovers it: the upstream tag list
 # contains a non-SemVer `v2.17`, which sorts *after* v2.1.48 under `sort -V` and

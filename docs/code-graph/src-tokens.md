@@ -79,7 +79,7 @@ Community of 311 nodes
 - **refreshTokens** (criticality: 0.67, depth: 2)
 - **getGithubToken** (criticality: 0.62, depth: 8)
 - **consumeLogin** (criticality: 0.61, depth: 1)
-- *... and 24 more flows.*
+- *... and 22 more flows.*
 
 ## Dependencies
 

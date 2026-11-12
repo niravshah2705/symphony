@@ -41,6 +41,8 @@
     "billing:metrics:probe": "bash scripts/kind-otel-roundtrip.sh",
     "billing:flexprice:bootstrap": "node scripts/flexprice-bootstrap.js",
     "billing:flexprice:spike": "node scripts/flexprice-spike/run.js",
+    "billing:flexprice:provision": "node scripts/flexprice-provision.js",
+    "billing:flexprice:phase1-probes": "node scripts/flexprice-phase1-probes.js",
     "billing:flexprice:down": "docker compose -f deploy/flexprice/compose.yaml down -v",
     "billing:flexprice:inspect": "node scripts/flexprice-inspect.js",
     "spa:obfuscate": "node scripts/obfuscate-spa.js",

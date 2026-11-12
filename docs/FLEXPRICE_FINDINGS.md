@@ -1046,7 +1046,7 @@ never again be written up as class 1.
 | B8 platform charge | **Two calls, specified:** a `ONE_OFF`/`FINALIZED`/`metadata.auto_completed=true` statement invoice carrying its own amount line and no tax, then `MANUAL_BALANCE_DEBIT` with key `platform-charge:<org>:<YYYY-MM>`. §5, §6b |
 | B2 `settle()` | **Never** set `metadata.wallet_transaction_id` on an invoice it credits, and never call `/invoices/:id/payment` on one — that path credits the wallet itself, which is the real double-credit loop (not the webhook). §6b. **New (measured):** mint a coupon bonus as **`FREE_CREDIT_GRANT`**, never `bonus_credits_to_add`/`PURCHASED_CREDIT_BONUS` — the latter silently destroys the wallet's own breakdown read. §7d |
 | Item 4 `credit-expiry-job.js` | Their cron + read-time filter covers it; ours becomes an assertion. §4 |
-| Item 9 GST | Their split already matches; but their tax engine reads the customer's auto-apply associations and there is no per-invoice exempt switch → **don't use their tax engine at all**; GST as invoice line items, `sum(tax)==0` everywhere by construction. §5. **New (measured):** price-less tax lines are legal but **excluded from `total`** (requested 590, lines 500+45+45, `total "500"`) — never render FlexPrice `total` as the charged amount. §9 |
+| Item 9 GST | Their split already matches; but their tax engine reads the customer's auto-apply associations and there is no per-invoice exempt switch → **don't use their tax engine at all**; GST as invoice line items, `sum(tax)==0` everywhere by construction. §5. **Corrected by Phase 1 probe C:** the ₹500 `total` was not an exclusion of price-less lines — `total` is copied from the sent `subtotal`, and line price-ness never mattered. Send the **gross** in the header. §12 |
 | B1 key scoping | Measured, not reasoned: cross-tenant access **is** refused on money writes (403), environment confinement **holds**, but **read RBAC is shadow-only** — a lesser key reads any wallet in its tenant at 200. → two keys (ingest vs money), **DB-minted** (`type:"private_key"` on a service account), never the config-map key (super_admin + caller-chosen env = unconfinable), and the design doc must not call the split a *read* boundary. §7 |
 | Item 15 drawn-source column | 🔴 **No per-line-item source attribution exists** (`drawn_source_reported: false`; a 700 draw across two credit rows wrote one debit row). The column is derived from the credit rows' `credits_available` deltas, or dropped. §9 |
 | Item 19 promo expiry UI | Worse than "no promo bucket": the **whole breakdown vanishes** on any wallet holding a bonus row, at HTTP 200. Remaining + next-expiry come from `POST /v1/wallets/transactions/search` (keyed `items`, not `data`). §7d |
@@ -1086,3 +1086,84 @@ the plan's recommendation), and the price *lives* in FlexPrice as a per-tier pri
 a change is an edit and not a redeploy. The number itself is the operator's to set:
 it is not discoverable by probing, and nothing in Phase 1 is blocked on it except the
 `compute-pricing.js` fixture's expected-paise assertion.
+
+## 12. Phase 1 — the four contract probes, and the one Phase 0 answer they reversed
+
+Phase 0 left four questions open because no DTO could answer them. They are now
+measured on the live stack by `npm run billing:flexprice:phase1-probes`
+(`scripts/flexprice-phase1-probes.js`), appended to
+`docs/flexprice-spike/results.json` in the same `{name,item,ok,observed,decision,at}`
+shape as §9. All four are green; **one reversed a Phase 0 conclusion.**
+
+| Probe | Question | Measured answer | What it changes |
+|---|---|---|---|
+| **A** `wallet-conversion-rate-direction` | Which side of `amount = credits × conversion_rate` is the rupee? | `credits_to_add: "100"` on a `conversion_rate: "1"` wallet → **100 credits**. The same call on a `conversion_rate: "2"` wallet → **still 100 credits**. `amount: "100.00"` on the rate-2 wallet → **+50 credits**. | `credits_to_add` is denominated in **credits** and the rate only scales them to rupees, so `conversion_rate: "1"` genuinely means **1 credit = ₹1** (D6 stands; `money-wire.PAISE_PER_CREDIT = 100`). Phase 2 tops up with `credits_to_add` and **never** with `amount` — `amount` divides by the rate and would silently credit the wrong number on any wallet that is not 1. |
+| **B** `float64-inside-event-properties` | What width does a `properties` value survive? The one path §9 never probed. | integers 1+2+3 → **6** in 203 ms; 0.1+0.2 → **0.30000000000000004**; `9007199254740993` → **9007199254740992** (JS rewrote it before the wire, not ClickHouse after). | Every quantity we emit is an **integer** (`cost_paise`, `duration_seconds`, `minutes`), so no float reaches this path and Phase 3's outbox can rely on exactness. A value that needs a fraction of the smallest unit is a **unit error**, not a rounding problem — measured, not preferred. |
+| **C** `gst-lands-in-invoice-total` | Do priced GST lines land in `total` while `invoice.tax` stays 0? | **`total` is copied from the sent `subtotal`.** Line price-ness is irrelevant. Four corners below. | Reverses the Phase 0 row in §10 and rewrites D3's *mechanism*, not its outcome. |
+| **D** `two-plane-write-confinement` | Is the money/ingest split a real boundary, and can a leaked money key mint credentials? | money-plane key minting an API key → **403 `permission_denied`**; the admin key, same request → **201** (the control; the mint was revoked again); ingest key creating a meter / topping up / debiting → **403** each; ingest key ingesting an event → **accepted**. | The split is a **write** boundary and the money key cannot escalate to credential issuance, because `IsSuperAdminUser()` is false for service accounts even though `super_admin` is the only writer role one can hold. It is still **not a read boundary** (§7: read RBAC is shadow-only), so no document may call it one. |
+
+### C, in the four corners that separate the two hypotheses
+
+Phase 0 sent `subtotal 500 / amount_due 590` with lines `500 + 45 + 45`, got
+`total "500"`, and concluded *price-less lines are excluded from `total`*. Phase 1
+sent the same three lines twice — once carrying `price_id`, once `display_name` —
+across two header shapes:
+
+| Sent `subtotal` | Sent `amount_due` | Lines | Resulting `total` |
+|---|---|---|---|
+| `590.00` | `590.00` | priced (3 × `price_id`) | **590** |
+| `590.00` | `590.00` | price-less (3 × `display_name`) | **590** — identical |
+| `500.00` | `590.00` | priced | **500** ← the number Phase 0 mistook for an exclusion |
+| `590.00` | `500.00` | priced | **400** `sum of line item amounts 590 must equal invoice amount_due 500` |
+
+So: **the header is the gross**; `total_tax` is 0 and is never the GST; the
+bind-time check compares the **lines against `amount_due`** (not `subtotal`); and
+the catalog's `gst-cgst-9` / `gst-sgst-9` / `gst-igst-18` prices are rate-card
+**metadata**, not invoice arithmetic. The plan's pre-agreed fallback for probe C —
+"GST stops being disclosed through FlexPrice `total`" — is **not needed**: ₹590
+with both components visible does reach the invoice, and therefore Zoho, but it
+arrives through the header and the line amounts, which is exactly where `gst.js`
+already computes them.
+
+### The DTO surface the client and provisioner had to measure rather than read
+
+Each of these returned a 400 to a request that looked correct against the OpenAPI
+docs, and each is now encoded in `flexprice-client.js` or
+`scripts/flexprice-provision.js`:
+
+- `idempotency_key` is a **JSON body field** (`dto/wallet.go:346,589`), required on a
+  manual debit. There is no `Idempotency-Key` header anywhere in their router, so
+  sending one buys a retry that duplicates the write.
+- Prices attach to `entity_type: "PLAN"`; `"PRICE"` is unsupported and
+  `"SUBSCRIPTION"` needs an existing subscription.
+- `billing_period_count` must be sent explicitly.
+- A `USAGE` price requires `invoice_cadence: "ARREAR"`; `ADVANCE` is a 400.
+- `USAGE` on a `SUM` meter forbids `PER_UNIT` (allowed: `FLAT_FEE | PACKAGE | TIERED`);
+  per-unit is `PACKAGE` + `transform_quantity {divide_by, round: "up"|"down"}`.
+- Wallet alert-condition operators are **lower-case** `above` / `below`; `"BELOW"`
+  is rejected as "Please provide a valid critical threshold condition".
+- `DELETE /v1/meters/:id` **archives**: the meter keeps status `archived`, still
+  appears in `GET /v1/meters`, and still resolves by id — an idempotency check that
+  looks only at ids will never re-create a meter it deleted.
+- `DELETE /v1/prices/:id` requires a JSON body.
+- Customer address is **flat** — `address_line1 / address_city / address_state /
+  address_postal_code / address_country` — never a nested `address` object.
+- Usage reads take `start_time` / `end_time` and return `value`, which is
+  `omitempty`: an absent key means **zero rows matched**, not a failed request.
+- A line's `amount` is taken at face value; a line with **no** `amount` binds to `0`,
+  because `amount` is `validate:"required"` on the DTO — which is how a request that
+  meant ₹590 arrives as ₹0 and fails the check above.
+- `invoice_status: "DRAFT"` on `POST /v1/invoices` is ignored — a one-off invoice
+  lands `FINALIZED` — so `POST /:id/compute` and `/:id/finalize` both answer 400 on
+  it ("Only draft or skipped invoices can be computed"). The draft-first flow is not
+  reachable through this endpoint.
+
+### The pin this section was measured at
+
+`deploy/flexprice/VERSION` moved from `main`+226 (`709ff3bc`, what §1-§11 were read
+from) to the release tag **`v2.1.48` (`21524530`, image `4ad8d8ca6e69`)**, and the
+whole §9 spike was re-run against it — see the re-validation row below. The
+`file:line` citations above therefore point at the Phase 0 tree; the *behaviour* is
+confirmed at the tag. Where the two disagree, the probe result in
+`docs/flexprice-spike/results.json` wins, because that is the binary we run.
+

@@ -3,6 +3,10 @@
 const path = require('path');
 const { ROLES } = require('./authz');
 const { egressUrl, llmGatewayUpstream, langfuseUpstream, normalizeProxyBase } = require('./egress');
+// The FlexPrice snapshot is built (and its env vars read) in one module; this
+// file only republishes it, so CONFIG.FLEXPRICE and the client's config cannot
+// drift into two different views of the same stack.
+const { FLEXPRICE } = require('./billing/flexprice-config');
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -1013,6 +1017,12 @@ const CONFIG = Object.freeze({
   SKILLS,
   MEMORY,
   BILLING,
+  // FlexPrice connection: baseUrl, environmentId, the two plane keys, timeout,
+  // supplier GST state. Data only — the checks that refuse a bad combination are
+  // `validateForBoot()` in billing/flexprice-config.js, called at billing
+  // startup. Importing config must never fail, since `npm start` boots with no
+  // billing configured at all.
+  FLEXPRICE,
 });
 
 /**

@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 31 nodes
+Community of 32 nodes
 
-- **Size**: 31 nodes
+- **Size**: 32 nodes
 - **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
@@ -14,9 +14,11 @@ Community of 31 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:Agent jobs restores complete grouped planner and coding history@L99 | Test | ./e2e/agent-jobs.spec.js | 99-166 |
 | test:fragment invitation requires an explicit accept and refreshes selectable context@L323 | Test | ./e2e/organization-flow.spec.js | 323-348 |
 | test:manages a project access mode, outside collaborators, and partner-org grants@L374 | Test | ./e2e/organization-flow.spec.js | 374-413 |
 | test:settings renders task-model controls without a view error@L39 | Test | ./e2e/page-loading.spec.js | 39-59 |
+| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
 | test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
 | test:authenticated users without an organization route to onboarding before workspace requests@L477 | Test | ./e2e/page-loading.spec.js | 477-551 |
 | test:selected organization admins can open scoped policy without global settings write@L617 | Test | ./e2e/page-loading.spec.js | 617-658 |
@@ -34,7 +36,6 @@ Community of 31 nodes
 | test:OMLX diagnostics probe the configured endpoint without exposing its API key@L162 | Test | ./packages/shared/src/agent/omlx.test.js | 162-186 |
 | test:Qoder SDK adapter returns the contract shape over a run-scoped daemon@L860 | Test | ./packages/shared/src/agent/runtimes.test.js | 860-926 |
 | test:the price match is recorded, and an unmodeled provider says so out loud@L110 | Test | ./packages/shared/src/billing/usage.test.js | 110-145 |
-| test:AsyncLocalStorage keeps concurrent workspace contexts independent@L35 | Test | ./packages/shared/src/store/workspace-context.test.js | 35-53 |
 | test:every clean-URL /adlc/ link resolves to an index.html on disk@L62 | Test | ./public/adlc/adlc-static.test.mjs | 62-97 |
 | push | Function | ./scripts/kind-otel-roundtrip.sh | 45-50 |
 | test:missing Cashfree credentials skip the charge but still alert the admins@L321 | Test | ./services/billing/src/auto-recharge-job.test.js | 321-349 |
@@ -54,36 +55,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (98 edge(s))
+- `expect` (133 edge(s))
+- `locator` (69 edge(s))
 - `equal` (57 edge(s))
-- `locator` (48 edge(s))
-- `push` (33 edge(s))
-- `toBeVisible` (24 edge(s))
-- `route` (20 edge(s))
-- `deepEqual` (19 edge(s))
-- `getByRole` (16 edge(s))
+- `push` (36 edge(s))
+- `toBeVisible` (30 edge(s))
+- `route` (28 edge(s))
+- `toHaveCount` (26 edge(s))
+- `getByRole` (23 edge(s))
+- `toEqual` (18 edge(s))
+- `./e2e/page-loading.spec.js::json` (18 edge(s))
+- `deepEqual` (17 edge(s))
+- `url` (16 edge(s))
+- `toHaveAttribute` (16 edge(s))
 - `join` (16 edge(s))
-- `toEqual` (15 edge(s))
-- `toHaveCount` (15 edge(s))
 - `evaluate` (15 edge(s))
-- `url` (14 edge(s))
-- `toBe` (11 edge(s))
-- `toContain` (11 edge(s))
 
 ### Incoming
 
-- `expect` (98 edge(s))
+- `expect` (133 edge(s))
+- `locator` (69 edge(s))
 - `equal` (57 edge(s))
-- `locator` (48 edge(s))
-- `push` (33 edge(s))
-- `toBeVisible` (24 edge(s))
-- `route` (20 edge(s))
-- `deepEqual` (19 edge(s))
-- `getByRole` (16 edge(s))
+- `push` (36 edge(s))
+- `toBeVisible` (30 edge(s))
+- `route` (28 edge(s))
+- `toHaveCount` (26 edge(s))
+- `getByRole` (23 edge(s))
+- `toEqual` (18 edge(s))
+- `./e2e/page-loading.spec.js::json` (18 edge(s))
+- `deepEqual` (17 edge(s))
+- `url` (16 edge(s))
+- `toHaveAttribute` (16 edge(s))
 - `join` (16 edge(s))
-- `toEqual` (15 edge(s))
-- `toHaveCount` (15 edge(s))
 - `evaluate` (15 edge(s))
-- `url` (14 edge(s))
-- `toBe` (11 edge(s))
-- `toContain` (11 edge(s))

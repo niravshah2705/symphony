@@ -95,9 +95,13 @@ function ensureCheckout() {
   }
   const describe = run('git', ['-C', dir, 'describe', '--tags', '--always'], { allowFail: true }).stdout.trim();
   log(`  ${dir} @ ${describe || 'unknown'}`);
-  log('  note: this is 226 commits past v2.1.48 on main. VERSION says why (the');
-  log('  findings cite file:line from this tree) and that Phase 1 must re-pin to a');
-  log('  release tag and re-run the spike.');
+  // `git describe` says it for us: `v2.1.48` is the deployment-shaped answer,
+  // `v2.1.48-226-g709ff3bc6` is a moving branch and VERSION explains why that
+  // used to be acceptable here and why it no longer is.
+  if (/-\d+-g[0-9a-f]+$/.test(describe)) {
+    log(`  WARNING: ${describe} is not a release tag — this is an untagged commit,`);
+    log('  so it cannot be a deployment target. See deploy/flexprice/VERSION.');
+  }
   return dir;
 }
 

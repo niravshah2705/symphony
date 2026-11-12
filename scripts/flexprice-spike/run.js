@@ -633,9 +633,13 @@ const PROBES = [
       //   (a) are price-less tax lines LEGAL? -> lines accepted at all.
       //   (b) is FlexPrice's `total` the sum of the disclosed lines? -> measured
       //       answer is NO: total came back equal to the subtotal ("500") with
-      //       total_tax "0" while three lines of 500 + 45 + 45 were stored. So the
-      //       invoice total is NOT a number the recharge UI may render as "charged",
-      //       and gst.js's derived-by-addition total is the only authoritative one.
+      //       total_tax "0" while three lines of 500 + 45 + 45 were stored.
+      // CORRECTED by Phase 1 probe C (`npm run billing:flexprice:phase1-probes`):
+      // the ₹500 is this probe's own sent `subtotal`, not an exclusion of the tax
+      // lines. `total` is copied from the header `subtotal` and line price-ness
+      // never matters — the same lines with subtotal "590.00" report total "590".
+      // So (b) is a fact about the request we built, and the rule for the code is
+      // "send the gross in the header", not "never trust their total".
       const lineSum = lines.reduce((a, li) => a + Number(li.amount || 0), 0);
       return verdict('invoice-line-item-without-price', '9/GST',
         res.status < 400 && lines.length === 3,
@@ -651,7 +655,7 @@ const PROBES = [
           with_explicit_empty_tax_rates: { status: emptyTax.status, total: e.total, total_tax: e.total_tax },
           error_body: truncate(res.text).slice(0, 400) },
         res.status < 400
-          ? 'price-less tax lines are LEGAL, but the invoice total does not include them — B2/B7 must render the GST breakdown from gst.js (total derived by addition) and never present FlexPrice `total` as the amount charged; sum(tax)==0 on period invoices still holds by construction'
+          ? 'price-less tax lines are LEGAL. `total` here is NOT the line sum because `total` is copied from the sent `subtotal` — see Phase 1 probe C, which sent the same lines with subtotal "590.00" and got "590" back, priced or not. Rule for B2/B7: send subtotal == total == amount_due == the gross, render the GST breakdown from gst.js, and never read `total_tax` as the GST (it is always 0 here). sum(tax)==0 still holds by construction'
           : 'fallback needed: ONE_OFF prices per tax component, or a second exempt customer record for statements',
       );
     },

@@ -30,11 +30,11 @@ Community of 21 nodes
 | txRows | Function | ./scripts/flexprice-spike/run.js | 216-218 |
 | pollUsage | Function | ./scripts/flexprice-spike/run.js | 236-259 |
 | done | Function | ./scripts/flexprice-spike/run.js | 249-249 |
-| run | Function | ./scripts/flexprice-spike/run.js | 1098-1123 |
+| run | Function | ./scripts/flexprice-spike/run.js | 1102-1127 |
 | ev | Function | ./scripts/flexprice-spike/run.js | 371-378 |
 | readBack | Function | ./scripts/flexprice-spike/run.js | 552-560 |
 | line | Function | ./scripts/flexprice-spike/run.js | 605-607 |
-| parseMiB | Function | ./scripts/flexprice-spike/run.js | 1103-1108 |
+| parseMiB | Function | ./scripts/flexprice-spike/run.js | 1107-1112 |
 
 ## Execution Flows
 

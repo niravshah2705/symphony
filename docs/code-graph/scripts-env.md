@@ -7,7 +7,7 @@
 Community of 17 nodes
 
 - **Size**: 17 nodes
-- **Cohesion**: 0.4054
+- **Cohesion**: 0.4000
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,19 +18,19 @@ Community of 17 nodes
 | step | Function | ./scripts/flexprice-bootstrap.js | 47-47 |
 | run | Function | ./scripts/flexprice-bootstrap.js | 49-66 |
 | compose | Function | ./scripts/flexprice-bootstrap.js | 68-70 |
-| ensureCheckout | Function | ./scripts/flexprice-bootstrap.js | 74-102 |
-| hex | Function | ./scripts/flexprice-bootstrap.js | 113-113 |
-| reusable | Function | ./scripts/flexprice-bootstrap.js | 126-129 |
-| ensureEnv | Function | ./scripts/flexprice-bootstrap.js | 131-193 |
-| parseEnv | Function | ./scripts/flexprice-bootstrap.js | 195-202 |
-| build | Function | ./scripts/flexprice-bootstrap.js | 206-217 |
-| up | Function | ./scripts/flexprice-bootstrap.js | 219-228 |
-| dockerEnv | Function | ./scripts/flexprice-bootstrap.js | 234-236 |
-| healthUrl | Function | ./scripts/flexprice-bootstrap.js | 240-240 |
-| verify | Function | ./scripts/flexprice-bootstrap.js | 242-333 |
-| note | Function | ./scripts/flexprice-bootstrap.js | 245-248 |
-| apiGet | Function | ./scripts/flexprice-bootstrap.js | 335-347 |
-| record | Function | ./scripts/flexprice-bootstrap.js | 351-366 |
+| ensureCheckout | Function | ./scripts/flexprice-bootstrap.js | 74-106 |
+| hex | Function | ./scripts/flexprice-bootstrap.js | 117-117 |
+| reusable | Function | ./scripts/flexprice-bootstrap.js | 130-133 |
+| ensureEnv | Function | ./scripts/flexprice-bootstrap.js | 135-197 |
+| parseEnv | Function | ./scripts/flexprice-bootstrap.js | 199-206 |
+| build | Function | ./scripts/flexprice-bootstrap.js | 210-221 |
+| up | Function | ./scripts/flexprice-bootstrap.js | 223-232 |
+| dockerEnv | Function | ./scripts/flexprice-bootstrap.js | 238-240 |
+| healthUrl | Function | ./scripts/flexprice-bootstrap.js | 244-244 |
+| verify | Function | ./scripts/flexprice-bootstrap.js | 246-337 |
+| note | Function | ./scripts/flexprice-bootstrap.js | 249-252 |
+| apiGet | Function | ./scripts/flexprice-bootstrap.js | 339-351 |
+| record | Function | ./scripts/flexprice-bootstrap.js | 355-370 |
 
 ## Execution Flows
 
@@ -46,6 +46,7 @@ No execution flows pass through this community.
 - `split` (4 edge(s))
 - `filter` (3 edge(s))
 - `existsSync` (3 edge(s))
+- `test` (3 edge(s))
 - `relative` (3 edge(s))
 - `fetch` (2 edge(s))
 - `timeout` (2 edge(s))
@@ -54,7 +55,6 @@ No execution flows pass through this community.
 - `write` (2 edge(s))
 - `readFileSync` (2 edge(s))
 - `every` (2 edge(s))
-- `test` (2 edge(s))
 
 ### Incoming
 

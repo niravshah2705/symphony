@@ -6,8 +6,8 @@ status table as each phase lands, and record any deviation in place rather than 
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Repo hygiene: branch, commit Phase 0 artifacts, code-graph fresh | ⬜ in progress |
-| 1 | Money boundary, FlexPrice config/client, catalog provisioning, probes A/B/C | ⬜ |
+| 0 | Repo hygiene: branch, commit Phase 0 artifacts, code-graph fresh | ✅ `91cd2c9` + `ad479cb`, PR #278 |
+| 1 | Money boundary, FlexPrice config/client, catalog provisioning, probes A/B/C/D | ✅ recorded below |
 | 2 | Recharge spine — Cashfree + Razorpay, one `settle()`, ₹590 / 500 credits | ⬜ |
 | 3 | Usage outbox → ingest, gate reads the wallet, first-party balance deleted | ⬜ |
 | 4 | Actor sessions, OTel emitter, orphan sweeper | ⬜ |
@@ -30,6 +30,7 @@ Headline invariant, enforced end to end: **a ₹500 recharge charges ₹590 (CGS
 | D1 | Payment proof locally | **Mock-only.** No Cashfree/Razorpay keys exist in this worktree (there is no `.env` at all). Money math is asserted exactly; the live ₹590 capture is a Phase 7 launch item |
 | D2 | Gateways | **Cashfree + Razorpay, org picks.** One provider seam → one `settle()` → one `rechargeIntents`. FlexPrice's native Razorpay connector is **not** used: payment success stays Node's, or we reintroduce the double-credit loop |
 | D3 | Zoho | **Their first-class connector only; no Zoho code of ours.** To make that correct, GST lines become **priced** price objects so invoice `total` = ₹590 (price-less lines are measured to be excluded from `total`) |
+| D3a | D3 mechanism, corrected by probe C | The connector choice **stands**; the reason changed. `invoice.total` is copied from the sent `subtotal` — `price_id` on a line is decoration, and priced and labelled lines came out byte-identical. So the shape is `subtotal == total == amount_due ==` gross ₹590, the CGST/SGST lines carry ₹45 each as Zoho's disclosure, and `total_tax` is always `0` and must never be read as the GST. GST is rendered from **our** header, not from FlexPrice's line arithmetic. |
 | D4 | Actor price | **Meter `duration_seconds`, price 0.** Item 27 stays an operator number; nothing bills actor compute yet |
 | D5 | First-party money paths | **Deleted outright, inside the phase that replaces them.** No shadow, no dual-write, no migration, no held-back deletion phase |
 | D6 | Credit unit | **1 credit = ₹1 = 100 paise.** `credits.js:22 PAISE_PER_CREDIT` flips 1 → 100. All internal arithmetic stays integer paise; conversion happens only in `money-wire.js` |
@@ -87,7 +88,7 @@ Banned anywhere in the money path: `parseFloat` on money, `Math.round(x*100)`, F
 - per-org: `POST /v1/customers {external_id: org_id, address_line1, city, state, postal_code, country}` — **flat** address fields, never nested — then `POST /v1/wallets {external_customer_id, currency:'INR', wallet_type:'PRE_PAID', conversion_rate:'1', alert_settings:{…}}`.
 - free initial credit (replaces `ledger.js:50-62`'s local seed) as **`FREE_CREDIT_GRANT`**, never `bonus_credits_to_add` / `PURCHASED_CREDIT_BONUS` — a single bonus row silently destroys `credits_available_breakdown` at HTTP 200.
 
-`scripts/flexprice-phase1-probes.js` — three probes appended to `docs/flexprice-spike/results.json` in the existing `{name,item,ok,observed,decision,at}` shape: **A** `conversion_rate` direction; **B** integer-vs-float64 inside event `properties` (the one path findings §12 marks unprobed); **C** a priced tax line lands in `total` while `invoice.tax` stays 0.
+`scripts/flexprice-phase1-probes.js` — four probes appended to `docs/flexprice-spike/results.json` in the existing `{name,item,ok,observed,decision,at}` shape: **A** `conversion_rate` direction — measured: `credits_to_add` is denominated in **credits** and rate-independent, while `amount` divides by the rate, so Phase 2 tops up with `credits_to_add`; **B** integer-vs-float64 inside event `properties` (the one path findings §12 marks unprobed) — measured: integers exact including one JS rewrites at 2^53, fractions arrive as float64 sums, which is why quantities are integer paise / integer seconds; **C** whether the GST lands in the invoice total — measured: **D3 holds, not by the mechanism named above** (see D3a); **D** the two-plane write confinement, including that the money key cannot mint or enumerate credentials. All four green at the re-pinned `v2.1.48`.
 
 `deploy/flexprice/VERSION` re-pointed at tag `v2.1.48` (from `main`+226) with `FLEXPRICE_REBUILD=1`, then the full 14-probe spike re-run — `VERSION`'s own instruction.
 
@@ -98,6 +99,31 @@ Committed answers + pre-agreed fallbacks:
 
 Verification: `npm run billing:flexprice:bootstrap && npm run billing:flexprice:provision && npm run billing:flexprice:spike && npm run billing:flexprice:phase1-probes && node --test packages/shared-core/src/billing/` → all green, 0 failing verdicts, `node scripts/flexprice-inspect.js meters` and `customer <org>` show the catalog.
 Docs: `FLEXPRICE_FINDINGS.md` §12 (probes A/B/C + re-run), `BILLING_FLEXPRICE.md` §10 (catalog as provisioned).
+
+### Phase 1 outcome (recorded here, decisions above left as written)
+
+Green at the re-pinned `v2.1.48` (commit `21524530`, locally built image `4ad8d8ca6e69`):
+bootstrap 11 checks, the full 14-probe spike **re-run** with 0 failing verdicts, probes
+**A/B/C/D** 4/4, provisioner 32 created / 0 failed, `node --test
+packages/shared-core/src/billing/` green.
+
+- **A confirmed the assumption.** `credits_to_add` is denominated in credits and
+  rate-independent; `amount` divides by `conversion_rate`. `PAISE_PER_CREDIT = 100`
+  stands and Phase 2 uses `credits_to_add`. The fallback was not needed.
+- **B confirmed the rule** — integers exact (including one JS rewrites at 2^53),
+  fractions arrive as float64 sums. Nothing depends on a fractional property.
+- **C is the deviation.** D3's outcome held (₹590 with both components reaches the
+  invoice, `total_tax` 0) but the mechanism is the **header**, not the priced line:
+  `total` is copied from the sent `subtotal`, and priced and labelled lines came out
+  identical. Recorded as D3a; Phase 2/5 wording follows it. The pre-agreed fallback
+  was not needed — no disclosure moved.
+- **D added** beyond the plan: the two-plane split verified as a *write* boundary,
+  and the money key proven unable to mint credentials (`IsSuperAdminUser()` is false
+  for service accounts). Any key probe D mints is revoked before it exits.
+- The stack was torn down and reinitialised for the re-pin — an older binary over a
+  newer schema is a downgrade, not a restart (see `deploy/flexprice/VERSION`).
+  `scripts/flexprice-provision.js --rotate-keys` exists because of it: after `down -v`
+  the stored keys are dead, and a stale key 401s with no hint where it came from.
 
 ## Phase 2 — Recharge spine: quote → dual-gateway order → one `settle()`
 
@@ -115,7 +141,7 @@ Cashfree adapter wraps the existing `cashfree-client.js` (order amount `"590.00"
 
 `rechargeIntents` store collection — `store.js:464-473` key list + accessors modelled on `addLedgerEntry`, working for both the file and Firestore backends: `{ orderId, orgId, provider, subtotalPaise, couponBps, bonusPaise, gstPaise, totalPaise, creditCount, status, createdAt, settledAt, providerOrderId }`. Created at quote time — `create-order` persists nothing today (`billing-api.js:466-475`), which is exactly why the ownership hole cannot be fixed in place.
 
-Modified: `billing-api.js` — `/recharge` (`:307`) becomes quote-only (returns the full GST breakdown); `create-order` persists the intent and emits `totalPaise` as `"590.00"`; `verify-order` (`:488-544`) and `webhook` (`:604-643`) both delegate to `settle()`; GSTIN written through `gst.parseGstin` (`ledger.js:33`'s `taxId` is stored unvalidated and unread today) and `resolvePlaceOfSupply` from it — absent or invalid GSTIN ⇒ **IGST**, never a silent CGST split. `credits.js:22` → `PAISE_PER_CREDIT = 100`. `public/js/views/cost.js` recharge widget renders ₹500 + ₹45 + ₹45 = ₹590 via `el()`/`textContent`.
+Modified: `billing-api.js` — `/recharge` (`:307`) becomes quote-only (returns the full GST breakdown); `create-order` persists the intent and emits `totalPaise` as `"590.00"`; `verify-order` (`:488-544`) and `webhook` (`:604-643`) both delegate to `settle()`; GSTIN written through `gst.parseGstin` (`ledger.js:33`'s `taxId` is stored unvalidated and unread today) and `resolvePlaceOfSupply` from it — absent or invalid GSTIN ⇒ **IGST**, never a silent CGST split. `credits.js:22` → `PAISE_PER_CREDIT = 100`. The wallet top-up is `credits_to_add` = subtotal rupees, **never** `amount`, which FlexPrice divides by `conversion_rate` (probe A). `public/js/views/cost.js` recharge widget renders ₹500 + ₹45 + ₹45 = ₹590 via `el()`/`textContent`.
 
 **Security fix in this phase (live today, independent of FlexPrice):** `verify-order` credits **the caller's own org** with any fetchable `order_<org>_` id, and the webhook credits any PAID order with no server-side amount re-verification (`billing-api.js:612-642`). `settle()`'s ownership + amount assertions close both, in ~10 lines.
 
@@ -166,7 +192,7 @@ Docs: `docs/SUBSTRATE_METRICS.md` §10 "Emitter as built + the two PromQL oracle
 
 ## Phase 5 — Zoho connector, platform charge, expiry assertion, reconciliation
 
-Zoho (D3): configure FlexPrice's `internal/integration/zoho/` connector for customers + invoices; **we write no Zoho API code**. Correctness comes from Phase 1 probe C — GST rendered as priced `cgst-9`/`sgst-9`/`igst-18` lines so the invoice `total` reaching Zoho is ₹590 with both components visible, while customer `tax_rates` stay empty so `sum(invoice.tax) == 0` and their tax engine never fires. GSTIN + address arrive from the flat customer fields provisioned in Phase 1. Verification is a recorded-response contract test (`ZOHO_MODE=fake`, captured-body assertions, no credentials needed — none exist locally); the live OAuth call is one documented operator step.
+Zoho (D3, mechanism per D3a): configure FlexPrice's `internal/integration/zoho/` connector for customers + invoices; **we write no Zoho API code**. Correctness comes from Phase 1 probe C — the invoice `total` reaching Zoho is ₹590 because the **header** is sent gross (`subtotal == total == amount_due == 590.00`), and the CGST/SGST lines carry ₹45 each so both components are visible on the document. `price_id` on those lines is decoration, not arithmetic (D3a). Customer `tax_rates` stay empty so `sum(invoice.tax) == 0` and their tax engine never fires. GSTIN + address arrive from the flat customer fields provisioned in Phase 1. Verification is a recorded-response contract test (`ZOHO_MODE=fake`, captured-body assertions, no credentials needed — none exist locally); the live OAuth call is one documented operator step.
 
 Platform charge ₹3000/month as **two ordered calls**: `POST /v1/invoices {invoice_type:'ONE_OFF', billing_reason:'MANUAL', invoice_status:'FINALIZED', external_customer_id, metadata:{auto_completed:'true'}}` — the `payment_status`/`amount_paid` request fields are accepted then **silently dropped**, and the `auto_finalize` cron defaults true, hence FINALIZED-at-creation — then `POST /v1/wallets/:id/debit {transaction_reason:'MANUAL_BALANCE_DEBIT', idempotency_key:'platform-charge:<org>:<YYYY-MM>', credit_amount, metadata:{invoice_id}}` (there is no invoice field on a debit, hence metadata). **Never** `metadata.wallet_transaction_id` on an invoice we also credit, **never** `/invoices/:id/payment` — `UpdatePaymentStatus(SUCCEEDED)` credits the wallet inside FlexPrice, which is the real double-credit loop. Debit replay returns `409 already_exists` (unique index, no pre-check) and maps to success. The balance is pre-checked so the charge cannot drive it negative.
 

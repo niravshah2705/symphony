@@ -112,11 +112,16 @@ attached, representing **money collected**:
 | Field | Value | Why |
 |---|---|---|
 | `invoice_type` | `ONE_OFF` | never a subscription; nothing may cancel or downgrade |
-| `amount` | **59000 paise (gross)** | the invoice is what was charged |
-| GST | **two line items**, CGST 4500p + SGST 4500p, amounts produced by `gst.js` | *not* their tax engine — see the note under Shape B |
-| `payment_status` | `SUCCEEDED` after Cashfree confirms | statement of fact, not a receivable |
-| wallet credit | **50000 paise (net)** | `CreditAmount = credits_to_add`, tax excluded |
+| `subtotal` / `total` / `amount_due` | **all three = `590.00` (gross)** | `total` is copied from the sent `subtotal` and their tax adds 0, so the taxable figure has to go in the line items, not the header — measured in Phase 1, see the note below |
+| GST | **two line items**, CGST ₹45.00 + SGST ₹45.00, amounts produced by `gst.js` | *not* their tax engine — see the note under Shape B |
+| `payment_status` | `SUCCEEDED` after the gateway confirms | statement of fact, not a receivable |
+| wallet credit | **500 credits** (`credits_to_add: "500"`) | tax excluded; never the `amount` field, which divides by the wallet's `conversion_rate` |
 | `metadata.wallet_transaction_id` | set *only* if FlexPrice is the sole creditor | see the trap below |
+
+`POST /v1/invoices` also checks the document against itself before it accepts it:
+`sum(line amounts)` must equal the sent `amount_due`, or the request is a 400. So
+Shape A is one number stated three ways — ₹590 in the header, ₹590 across the
+lines — and a half-written invoice cannot reach the customer's Zoho.
 
 ### Shape B — the statement invoice (zero-tax, used for the platform charge)
 
@@ -156,13 +161,27 @@ produced.** Then:
   for Zoho, not inputs to arithmetic. That removes the two-sources-for-one-fact
   problem the plan flagged.
 
-✅ Both of those were probed, and the answer came with a caveat the DTO could not
-have told us: an invoice line item **may** carry an explicit amount with no
-`price_id` (201, three `price_type:"FIXED"` lines), and `tax_rates: []` behaves
-identically to omitting the key — **but price-less lines do not enter the invoice
-`total`** (lines summing to ₹590 reported `total "500"`, `total_tax "0"`). So the
-shape holds, their tax engine stays unused, and the charged figure is ours to derive.
-The `ONE_OFF`-price-per-component fallback is not needed. §9 of the findings doc.
+✅ This was probed twice, and the second probe corrected the first. Phase 0 read
+`total "500"` from a document whose lines summed to ₹590 and concluded that
+**price-less lines do not enter `total`**. Phase 1 probe C rebuilt the same
+document four ways and the rule turned out to be simpler and different: **`total`
+is copied from the sent `subtotal`**, and whether a line carries a `price_id` or a
+`display_name` makes no difference at all (priced and labelled invoices were
+byte-identical). The ₹500 Phase 0 saw was its own `subtotal: "500.00"`, not an
+exclusion.
+
+Three things follow, and each is now a rule rather than a preference:
+
+- The header carries the **gross**: `subtotal == total == amount_due == 590.00`.
+  Sending the taxable ₹500 there produces a ₹500 invoice and a customer who was
+  charged ₹590.
+- `invoice.total_tax` is **always 0 on our invoices and must never be read as the
+  GST**. The ₹90 exists only in the two line amounts and in our own `gst.quote`
+  payload. Anything that wants the tax figure reads ours.
+- The catalog's `gst-cgst-9` / `gst-sgst-9` / `gst-igst-18` price objects are
+  **rate-card metadata** — the record of what the rate was on the day an invoice
+  was issued — not invoice arithmetic. Changing them changes nothing already
+  issued. §12 of the findings doc has the four-corner table.
 
 **The double-credit trap.** `UpdatePaymentStatus(…, SUCCEEDED)` on an invoice
 carrying `metadata.wallet_transaction_id` credits the wallet *inside FlexPrice*
@@ -334,8 +353,12 @@ accept ≠ ingest ≠ queryable, and that is the trap in this system.
 ### What Phase 0 still owes
 
 Nothing in the stack: it comes up with one command and the four modules are tested.
-What is owed is *decisions* — §10 — and the Phase 1 work itself, which the item-18
+What is owed is *decisions* — §11 — and the Phase 1 work itself, which the item-18
 gate blocks.
+
+Phase 1 has since been built and measured: the catalog is in §10, and the four
+contract probes (A/B/C/D) are in `docs/FLEXPRICE_FINDINGS.md` §12. One Phase 0
+reading did not survive probe C — the mechanism, not the outcome, changed; see §4.
 
 Two compose traps found in source and easy to re-introduce:
 `redis.cluster_mode` defaults to **true** (must be false against `redis:7-alpine`),
@@ -370,7 +393,59 @@ for a documented DDL-lock incident. Concurrency safety is deploy orchestration, 
 in-repo advisory locks — which means **two app pods migrating at once is our
 problem to avoid**, and the compose file must run migration as a one-shot.
 
-## 10. Decisions still needed from you
+## 10. The catalog as provisioned
+
+`npm run billing:flexprice:provision` is what created this, and re-running it is
+what keeps it true: it reports `created / existing / failed` per resource and is
+safe to run against a live stack (the dry run above wrote nothing and found 27
+existing). Ids are not secret and are not stable across a teardown — after
+`billing:flexprice:down` everything below is re-minted, so read them from the
+provisioner or `billing:flexprice:inspect` rather than copying them into code.
+
+**Two keys, two planes.** `FLEXPRICE_API_KEY_INGEST` (service account
+`fleet ingest plane`, role `event_ingestor`) and `FLEXPRICE_API_KEY_MONEY`
+(`fleet money plane`, `super_admin`). Both live in `deploy/flexprice/.env`, which
+is not committed. What the split is proven to do (probe D) and what it is not
+proven to do are different sentences — see §6 before describing it as a boundary.
+
+**Meters** — three, all `SUM`, all `reset_usage: DAILY`:
+
+| Meter | event_name | aggregation field | Emitted by |
+|---|---|---|---|
+| `llm-cost` | `fleet.llm_cost` | `cost_paise` | Phase 3 outbox |
+| `actor-compute` | `fleet.actor_compute` | `duration_seconds` | Phase 4 runner STOP |
+| `deployment-minutes` | `fleet.deployment_minutes` | `minutes` | **nothing** (D8 — meter defined, no emitter; the UI renders it inert, not zero) |
+
+**Prices** — 16, all attached to the `fleet-catalog` plan, all INR:
+
+- `recharge-principal` — the ₹500 taxable line.
+- `gst-cgst-9` / `gst-sgst-9` / `gst-igst-18` — rate-card metadata only. Probe C
+  settled that the invoice total comes from the header, not from these
+  (`§4`), so nothing may treat their presence as the reason a GST line was
+  charged; and nothing may read `invoice.total_tax` as the GST amount, because it
+  is always `0` on our invoices.
+- `meter-llm-cost` / `meter-actor-compute` / `meter-deployment-minutes` — usage
+  prices, `USAGE`/`ARREAR`. `actor-compute` is priced **0** per D4.
+- `rate-<provider>-input` / `rate-<provider>-output` × 7 providers (claude, codex,
+  antigravity, ollama, lmstudio, omlx, huggingface) — generated from
+  `pricing.js` × `USD_TO_INR`, with the FX date recorded in metadata (D9: this is
+  a catalog snapshot, not a money-path input).
+
+**Per-org** — `POST /v1/customers` with **flat** `address_*` fields (nested
+`address` is accepted and dropped) then a `PRE_PAID` INR wallet with
+`conversion_rate:'1'`. The local org `ota` exists so the gate has something to
+read: `cust_01M77WCFMW6T54FYP70EMPZ7HA` / `wallet_01M77WCFN8WCQ8H1DKARS1DFD1`,
+seeded with **500 free credits** as `FREE_CREDIT_GRANT` — never
+`bonus_credits_to_add`, which silently breaks the credit-row breakdown.
+`--org <id>` provisions another org; `FLEET_ORG_ID` does the same non-interactively.
+
+Two known pieces of litter, both intentional: probe B creates a dedicated meter
+per run (`phase1-<run> probe-b`) because measuring float behaviour needs an
+aggregation field nothing else uses, and probe D mints and **revokes** a key to
+prove the money key cannot. Neither is part of the catalog; delete the meters if
+the list bothers you, they are not referenced.
+
+## 11. Decisions still needed from you
 
 1. **AGPL** — the memo's five options with a recommendation. Nothing else here is
    actionable until this is chosen; I am not treating "probably fine" as an answer.
@@ -383,13 +458,18 @@ problem to avoid**, and the compose file must run migration as a one-shot.
    fire it — no alert consumer was minted by the spike. So the decision is only
    "do we let FlexPrice notify, or keep our own threshold-and-mail" — and keeping ours
    is the safe default until that is measured.
-4. ~~GST as line items depends on price-less invoice lines.~~ ✅ **Settled by
-   measurement, with a sting.** Price-less lines are legal (three lines 500/45/45,
-   `price_id: null`, 201) and `tax_rates: []` is identical to omitting it, so their
-   tax engine stays unused exactly as planned. **But those lines do not enter the
-   invoice `total`** — an invoice whose lines sum to ₹590 reports `total "500"`. So
-   the ₹590 is ours to compute and render (`gst.js`), and no UI may label a FlexPrice
-   `total` as "amount charged". §9 of the findings doc has the raw response.
+4. ~~GST as line items depends on price-less invoice lines.~~ ✅ **Settled twice —
+   and the second settling reversed the first.** Phase 0 measured that an invoice
+   whose lines sum to ₹590 reports `total "590"` and concluded *priced* lines were
+   what made that true. Phase 1 probe C re-ran it with the header held constant and
+   found the truth is elsewhere: `total` is **copied from the sent `subtotal`**, and
+   `price_id` on a line is decoration (priced and labelled lines came out identical).
+   So the ₹500-taxable header comes back ₹500 no matter how the lines are built.
+   The conclusion for us is unchanged and now better founded: the ₹590 is ours to
+   compute and render (`gst.js`), no UI may label a FlexPrice `total` as "amount
+   charged", and Phase 2 sends `subtotal == total == amount_due ==` the **gross**.
+   What did change is that the GST lines' ₹45 each are a disclosure for Zoho rather
+   than the source of the total. §12 of the findings doc has the probe.
 5. **Do you want pod-level infra visibility at all.** Billing does not need it
    (duration model). If you want it in the same panel for capacity conversations,
    kube-state-metrics + node-exporter is the OpenCost-shaped addition this plan

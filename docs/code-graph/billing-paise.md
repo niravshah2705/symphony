@@ -4,16 +4,19 @@
 
 ## Overview
 
-Community of 75 nodes
+Community of 184 nodes
 
-- **Size**: 75 nodes
-- **Cohesion**: 0.3368
+- **Size**: 184 nodes
+- **Cohesion**: 0.2494
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:user creates orgs and projects, then manages pending invitations@L264 | Test | ./e2e/organization-flow.spec.js | 264-321 |
+| test:captures a persona at onboarding and reflects it after reload@L350 | Test | ./e2e/organization-flow.spec.js | 350-372 |
+| test:organization admin creates a safe custom agent, links nodes, and persists isolated drafts@L235 | Test | ./e2e/workflow-designer.spec.js | 235-359 |
 | priceActorUsage | Function | ./packages/shared-core/src/billing/compute-pricing.js | 61-83 |
 | referenceCostInr | Function | ./packages/shared-core/src/billing/compute-pricing.js | 92-95 |
 | savingsEstimate | Function | ./packages/shared-core/src/billing/compute-pricing.js | 106-132 |
@@ -34,77 +37,75 @@ Community of 75 nodes
 | test:assertNoTaxCredited: refuses to credit the GST-inclusive total@L58 | Test | ./packages/shared-core/src/billing/credits.test.js | 58-66 |
 | test:assertNoTaxCredited: an untaxed quote has nothing to leak@L68 | Test | ./packages/shared-core/src/billing/credits.test.js | 68-71 |
 | test:bonusPaise: validates its inputs@L73 | Test | ./packages/shared-core/src/billing/credits.test.js | 73-80 |
-| roundHalfUpPaise | Function | ./packages/shared-core/src/billing/gst.js | 40-44 |
-| parseGstin | Function | ./packages/shared-core/src/billing/gst.js | 59-85 |
-| resolvePlaceOfSupply | Function | ./packages/shared-core/src/billing/gst.js | 96-105 |
-| quote | Function | ./packages/shared-core/src/billing/gst.js | 119-188 |
-| toCashfreeOrderAmount | Function | ./packages/shared-core/src/billing/gst.js | 191-197 |
-| test:quote: ₹500 recharge collects 18% GST as CGST + SGST@L16 | Test | ./packages/shared-core/src/billing/gst.test.js | 16-28 |
-| test:quote: a different state is IGST in one component, same total@L30 | Test | ./packages/shared-core/src/billing/gst.test.js | 30-35 |
-| test:quote: a customer GSTIN decides the place of supply@L37 | Test | ./packages/shared-core/src/billing/gst.test.js | 37-42 |
-| test:quote: total is always subtotal + the rounded components@L47 | Test | ./packages/shared-core/src/billing/gst.test.js | 47-54 |
-| test:quote: halves round up per component, even when that over-collects@L56 | Test | ./packages/shared-core/src/billing/gst.test.js | 56-68 |
-| test:quote: zero subtotal is zero everything@L70 | Test | ./packages/shared-core/src/billing/gst.test.js | 70-75 |
-| test:quote: a coupon bonus does not reduce the taxable value@L77 | Test | ./packages/shared-core/src/billing/gst.test.js | 77-84 |
-| test:quote: rejects input that could not be a paise amount@L86 | Test | ./packages/shared-core/src/billing/gst.test.js | 86-96 |
-| test:parseGstin: shape is checked, the check digit deliberately is not@L98 | Test | ./packages/shared-core/src/billing/gst.test.js | 98-112 |
-| test:resolvePlaceOfSupply: an unknown customer falls back to the supplier state, and says so@L114 | Test | ./packages/shared-core/src/billing/gst.test.js | 114-123 |
-| test:roundHalfUpPaise: symmetric, and never returns NaN@L125 | Test | ./packages/shared-core/src/billing/gst.test.js | 125-133 |
-| test:toCashfreeOrderAmount: rupees with two decimals, no float artifacts@L135 | Test | ./packages/shared-core/src/billing/gst.test.js | 135-141 |
-| test:a ₹500 intra-state recharge charges ₹590 and credits ₹500@L37 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 37-60 |
-| test:the ₹90 GST is never spendable, which is the identity that keeps tax out of the balance@L62 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 62-76 |
-| test:a 10% coupon adds a promotional wallet without touching the ₹590 charged@L78 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 78-97 |
-| test:interstate supply charges IGST and, critically, the same total@L99 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 99-106 |
-| test:the rupee that exposes why the total must be derived by adding the components@L108 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 108-118 |
-| test:actor sessions price from whole seconds and never from fractional rupees@L120 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 120-146 |
-| test:a fixed set of sessions plus the platform charge equals a hand-computed debit@L148 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 148-162 |
-| test:the savings panel reads as a counterfactual and is not wired to any debit@L188 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 188-206 |
-| decimalToScaled | Function | ./packages/shared-core/src/billing/money-wire.js | 45-70 |
-| formatScaled | Function | ./packages/shared-core/src/billing/money-wire.js | 73-81 |
-| toSafeNumber | Function | ./packages/shared-core/src/billing/money-wire.js | 83-88 |
-| paiseFromDecimal | Function | ./packages/shared-core/src/billing/money-wire.js | 91-93 |
-| decimalFromPaise | Function | ./packages/shared-core/src/billing/money-wire.js | 96-98 |
+| FlexpriceError | Class | ./packages/shared-core/src/billing/flexprice-client.js | 41-53 |
+| constructor | Function | ./packages/shared-core/src/billing/flexprice-client.js | 42-52 |
+| truncate | Function | ./packages/shared-core/src/billing/flexprice-client.js | 55-58 |
+| safeStringify | Function | ./packages/shared-core/src/billing/flexprice-client.js | 60-62 |
+| seg | Function | ./packages/shared-core/src/billing/flexprice-client.js | 68-68 |
+| parseJson | Function | ./packages/shared-core/src/billing/flexprice-client.js | 70-72 |
+| createFlexpriceClient | Function | ./packages/shared-core/src/billing/flexprice-client.js | 81-238 |
+| headersFor | Function | ./packages/shared-core/src/billing/flexprice-client.js | 88-101 |
+| once | Function | ./packages/shared-core/src/billing/flexprice-client.js | 103-115 |
+| request | Function | ./packages/shared-core/src/billing/flexprice-client.js | 117-161 |
+| get | Function | ./packages/shared-core/src/billing/flexprice-client.js | 163-163 |
+| post | Function | ./packages/shared-core/src/billing/flexprice-client.js | 164-164 |
+| isAlreadyExists | Function | ./packages/shared-core/src/billing/flexprice-client.js | 240-244 |
+| recorder | Function | ./packages/shared-core/src/billing/flexprice-client.test.js | 21-34 |
+| client | Function | ./packages/shared-core/src/billing/flexprice-client.test.js | 36-45 |
+| test:the environment id comes from config and lands on every data route@L47 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 47-53 |
+| test:ingest calls use the ingest key and money calls use the money key@L55 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 55-64 |
+| test:/health is sent without credentials@L66 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 66-71 |
+| test:a missing plane key says which plane and points at provisioning@L73 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 73-79 |
+| test:idempotency_key travels in the body, which is the only place FlexPrice reads it@L81 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 81-87 |
+| test:a write with no dedup key is attempted exactly once, even on a 503@L89 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 89-93 |
+| test:an idempotency-keyed write retries a 503 and then succeeds@L95 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 95-104 |
+| test:a connection failure on a keyed write retries; on an unkeyed one it does not@L106 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 106-114 |
+| test:a 409 already_exists reads as success, since a replay and a race look the same@L116 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 116-121 |
+| test:a 409 that is not a duplicate still raises with the status and route@L123 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 123-135 |
+| test:an error message never carries a credential@L137 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 137-145 |
+| test:grantPromo stamps FREE_CREDIT_GRANT and never asks for a bonus@L147 | Test | ./packages/shared-core/src/billing/flexprice-client.test.js | 147-158 |
 
-*... and 25 more members.*
+*... and 134 more members.*
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **main** (criticality: 0.67, depth: 4)
+- **main** (criticality: 0.59, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (165 edge(s))
-- `throws` (29 edge(s))
-- `Number` (15 edge(s))
-- `deepEqual` (15 edge(s))
-- `stringify` (11 edge(s))
-- `map` (10 edge(s))
-- `BigInt` (9 edge(s))
-- `isInteger` (8 edge(s))
-- `String` (7 edge(s))
-- `isFinite` (5 edge(s))
-- `max` (5 edge(s))
-- `padStart` (4 edge(s))
-- `reduce` (4 edge(s))
-- `floor` (3 edge(s))
-- `round` (3 edge(s))
+- `equal` (212 edge(s))
+- `expect` (43 edge(s))
+- `throws` (42 edge(s))
+- `getByRole` (30 edge(s))
+- `String` (30 edge(s))
+- `locator` (28 edge(s))
+- `deepEqual` (28 edge(s))
+- `Number` (25 edge(s))
+- `stringify` (23 edge(s))
+- `map` (22 edge(s))
+- `click` (18 edge(s))
+- `push` (16 edge(s))
+- `fill` (14 edge(s))
+- `toBeVisible` (13 edge(s))
+- `ok` (13 edge(s))
 
 ### Incoming
 
-- `equal` (165 edge(s))
-- `throws` (29 edge(s))
+- `equal` (212 edge(s))
+- `expect` (43 edge(s))
+- `throws` (42 edge(s))
+- `./scripts/flexprice-phase1-probes.js` (34 edge(s))
+- `getByRole` (30 edge(s))
+- `locator` (28 edge(s))
+- `deepEqual` (28 edge(s))
 - `./packages/shared-core/src/billing/money-wire.test.js` (21 edge(s))
+- `click` (18 edge(s))
+- `./packages/shared-core/src/billing/flexprice-client.test.js` (18 edge(s))
 - `./packages/shared-core/src/billing/money-wire.js` (16 edge(s))
-- `deepEqual` (15 edge(s))
-- `./packages/shared-core/src/billing/gst.test.js` (12 edge(s))
-- `./packages/shared-core/src/billing/gst.js` (10 edge(s))
-- `map` (9 edge(s))
-- `./packages/shared-core/src/billing/money-flow.test.js` (8 edge(s))
-- `./packages/shared-core/src/billing/compute-pricing.test.js` (7 edge(s))
-- `./packages/shared-core/src/billing/credits.test.js` (7 edge(s))
-- `./packages/shared-core/src/billing/compute-pricing.js` (6 edge(s))
-- `./packages/shared-core/src/billing/credits.js` (6 edge(s))
-- `reduce` (3 edge(s))
-- `round` (2 edge(s))
+- `./packages/shared-core/src/billing/flexprice-client.js` (15 edge(s))
+- `./packages/shared-core/src/billing/flexprice-config.test.js` (15 edge(s))
+- `./scripts/flexprice-provision.js` (15 edge(s))
+- `fill` (14 edge(s))

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 11 nodes
+Community of 10 nodes
 
-- **Size**: 11 nodes
-- **Cohesion**: 0.1109
+- **Size**: 10 nodes
+- **Cohesion**: 0.0932
 - **Dominant Language**: javascript
 
 ## Members
@@ -22,7 +22,6 @@ Community of 11 nodes
 | profileField | Function | ./e2e/workflow-designer.spec.js | 156-160 |
 | selectCanvasNode | Function | ./e2e/workflow-designer.spec.js | 162-170 |
 | expectNoWorkflowBackendCalls | Function | ./e2e/workflow-designer.spec.js | 172-175 |
-| test:organization admin creates a safe custom agent, links nodes, and persists isolated drafts@L235 | Test | ./e2e/workflow-designer.spec.js | 235-359 |
 | test:organization members can inspect workflows but cannot mutate the local copy@L361 | Test | ./e2e/workflow-designer.spec.js | 361-387 |
 | test:an authenticated user without an organization is routed to organization onboarding@L389 | Test | ./e2e/workflow-designer.spec.js | 389-401 |
 
@@ -34,36 +33,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (50 edge(s))
-- `getByRole` (33 edge(s))
-- `locator` (30 edge(s))
-- `toHaveCount` (10 edge(s))
-- `click` (10 edge(s))
-- `fill` (9 edge(s))
-- `evaluate` (9 edge(s))
+- `expect` (25 edge(s))
+- `./e2e/workflow-designer.spec.js::test:organization admin creates a safe custom agent, links nodes, and persists isolated drafts@L235` (19 edge(s))
+- `getByRole` (14 edge(s))
 - `toBeDisabled` (9 edge(s))
-- `getItem` (8 edge(s))
-- `toBeVisible` (7 edge(s))
-- `selectOption` (7 edge(s))
-- `toContainText` (6 edge(s))
-- `toHaveAttribute` (5 edge(s))
-- `parse` (5 edge(s))
-- `toEqual` (4 edge(s))
+- `locator` (8 edge(s))
+- `fulfill` (4 edge(s))
+- `./e2e/workflow-designer.spec.js::test:lazy Workflows route renders the selected organization and five realistic examples@L177` (3 edge(s))
+- `route` (3 edge(s))
+- `toBeVisible` (3 edge(s))
+- `toEqual` (2 edge(s))
+- `method` (2 edge(s))
+- `push` (2 edge(s))
+- `goto` (2 edge(s))
+- `toBeTruthy` (2 edge(s))
+- `ok` (2 edge(s))
 
 ### Incoming
 
-- `expect` (42 edge(s))
-- `getByRole` (33 edge(s))
-- `locator` (25 edge(s))
-- `./e2e/workflow-designer.spec.js` (10 edge(s))
-- `click` (10 edge(s))
-- `toHaveCount` (9 edge(s))
-- `fill` (9 edge(s))
-- `evaluate` (9 edge(s))
+- `./e2e/workflow-designer.spec.js::test:organization admin creates a safe custom agent, links nodes, and persists isolated drafts@L235` (19 edge(s))
+- `expect` (17 edge(s))
+- `getByRole` (14 edge(s))
+- `./e2e/workflow-designer.spec.js` (9 edge(s))
 - `toBeDisabled` (9 edge(s))
-- `getItem` (8 edge(s))
-- `selectOption` (7 edge(s))
-- `toBeVisible` (6 edge(s))
-- `toContainText` (5 edge(s))
-- `parse` (5 edge(s))
-- `toHaveAttribute` (4 edge(s))
+- `./e2e/workflow-designer.spec.js::test:lazy Workflows route renders the selected organization and five realistic examples@L177` (3 edge(s))
+- `locator` (3 edge(s))
+- `toBeVisible` (2 edge(s))
+- `goto` (1 edge(s))
+- `toBeTruthy` (1 edge(s))
+- `ok` (1 edge(s))
+- `toHaveURL` (1 edge(s))
+- `toHaveCount` (1 edge(s))
+- `toHaveAttribute` (1 edge(s))
+- `toContainText` (1 edge(s))
