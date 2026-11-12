@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 45 nodes
+Community of 75 nodes
 
-- **Size**: 45 nodes
-- **Cohesion**: 0.3174
+- **Size**: 75 nodes
+- **Cohesion**: 0.3368
 - **Dominant Language**: javascript
 
 ## Members
@@ -34,11 +34,11 @@ Community of 45 nodes
 | test:assertNoTaxCredited: refuses to credit the GST-inclusive total@L58 | Test | ./packages/shared-core/src/billing/credits.test.js | 58-66 |
 | test:assertNoTaxCredited: an untaxed quote has nothing to leak@L68 | Test | ./packages/shared-core/src/billing/credits.test.js | 68-71 |
 | test:bonusPaise: validates its inputs@L73 | Test | ./packages/shared-core/src/billing/credits.test.js | 73-80 |
-| roundHalfUpPaise | Function | ./packages/shared-core/src/billing/gst.js | 38-42 |
-| parseGstin | Function | ./packages/shared-core/src/billing/gst.js | 57-83 |
-| resolvePlaceOfSupply | Function | ./packages/shared-core/src/billing/gst.js | 94-103 |
-| quote | Function | ./packages/shared-core/src/billing/gst.js | 117-186 |
-| toCashfreeOrderAmount | Function | ./packages/shared-core/src/billing/gst.js | 189-192 |
+| roundHalfUpPaise | Function | ./packages/shared-core/src/billing/gst.js | 40-44 |
+| parseGstin | Function | ./packages/shared-core/src/billing/gst.js | 59-85 |
+| resolvePlaceOfSupply | Function | ./packages/shared-core/src/billing/gst.js | 96-105 |
+| quote | Function | ./packages/shared-core/src/billing/gst.js | 119-188 |
+| toCashfreeOrderAmount | Function | ./packages/shared-core/src/billing/gst.js | 191-197 |
 | test:quote: ₹500 recharge collects 18% GST as CGST + SGST@L16 | Test | ./packages/shared-core/src/billing/gst.test.js | 16-28 |
 | test:quote: a different state is IGST in one component, same total@L30 | Test | ./packages/shared-core/src/billing/gst.test.js | 30-35 |
 | test:quote: a customer GSTIN decides the place of supply@L37 | Test | ./packages/shared-core/src/billing/gst.test.js | 37-42 |
@@ -59,6 +59,13 @@ Community of 45 nodes
 | test:actor sessions price from whole seconds and never from fractional rupees@L120 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 120-146 |
 | test:a fixed set of sessions plus the platform charge equals a hand-computed debit@L148 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 148-162 |
 | test:the savings panel reads as a counterfactual and is not wired to any debit@L188 | Test | ./packages/shared-core/src/billing/money-flow.test.js | 188-206 |
+| decimalToScaled | Function | ./packages/shared-core/src/billing/money-wire.js | 45-70 |
+| formatScaled | Function | ./packages/shared-core/src/billing/money-wire.js | 73-81 |
+| toSafeNumber | Function | ./packages/shared-core/src/billing/money-wire.js | 83-88 |
+| paiseFromDecimal | Function | ./packages/shared-core/src/billing/money-wire.js | 91-93 |
+| decimalFromPaise | Function | ./packages/shared-core/src/billing/money-wire.js | 96-98 |
+
+*... and 25 more members.*
 
 ## Execution Flows
 
@@ -68,26 +75,28 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (123 edge(s))
-- `throws` (22 edge(s))
+- `equal` (165 edge(s))
+- `throws` (29 edge(s))
+- `Number` (15 edge(s))
 - `deepEqual` (15 edge(s))
-- `Number` (14 edge(s))
+- `stringify` (11 edge(s))
 - `map` (10 edge(s))
-- `stringify` (7 edge(s))
-- `isInteger` (6 edge(s))
+- `BigInt` (9 edge(s))
+- `isInteger` (8 edge(s))
+- `String` (7 edge(s))
+- `isFinite` (5 edge(s))
 - `max` (5 edge(s))
-- `isFinite` (4 edge(s))
-- `String` (4 edge(s))
+- `padStart` (4 edge(s))
 - `reduce` (4 edge(s))
 - `floor` (3 edge(s))
-- `padStart` (3 edge(s))
-- `round` (2 edge(s))
-- `ok` (2 edge(s))
+- `round` (3 edge(s))
 
 ### Incoming
 
-- `equal` (123 edge(s))
-- `throws` (22 edge(s))
+- `equal` (165 edge(s))
+- `throws` (29 edge(s))
+- `./packages/shared-core/src/billing/money-wire.test.js` (21 edge(s))
+- `./packages/shared-core/src/billing/money-wire.js` (16 edge(s))
 - `deepEqual` (15 edge(s))
 - `./packages/shared-core/src/billing/gst.test.js` (12 edge(s))
 - `./packages/shared-core/src/billing/gst.js` (10 edge(s))
@@ -98,6 +107,4 @@ No execution flows pass through this community.
 - `./packages/shared-core/src/billing/compute-pricing.js` (6 edge(s))
 - `./packages/shared-core/src/billing/credits.js` (6 edge(s))
 - `reduce` (3 edge(s))
-- `ok` (2 edge(s))
-- `round` (1 edge(s))
-- `max` (1 edge(s))
+- `round` (2 edge(s))

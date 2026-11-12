@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 744 nodes
+Community of 743 nodes
 
-- **Size**: 744 nodes
-- **Cohesion**: 0.4711
+- **Size**: 743 nodes
+- **Cohesion**: 0.4724
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,7 +16,6 @@ Community of 744 nodes
 |------|------|------|-------|
 | test:Agent jobs restores complete grouped planner and coding history@L99 | Test | ./e2e/agent-jobs.spec.js | 99-166 |
 | test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
-| test:SEO and AI discovery resources bypass the SPA fallback@L212 | Test | ./e2e/route-loading.spec.js | 212-228 |
 | test:a terminal workspace stream-token rejection never opens or retries the SSE stream@L13 | Test | ./e2e/workspace-stream-failure.spec.js | 13-69 |
 | test:a blank minted token never opens the workspace SSE stream@L71 | Test | ./e2e/workspace-stream-failure.spec.js | 71-111 |
 | pauseCode | Function | ./public/js/agent-pause.js | 36-42 |
@@ -64,8 +63,9 @@ Community of 744 nodes
 | renderAuthControl | Function | ./public/js/app.js | 553-713 |
 | renderAuthenticationGate | Function | ./public/js/app.js | 715-774 |
 | renderSignInRequired | Function | ./public/js/app.js | 779-801 |
+| renderAccessDenied | Function | ./public/js/app.js | 803-815 |
 
-*... and 694 more members.*
+*... and 693 more members.*
 
 ## Execution Flows
 
@@ -109,7 +109,7 @@ Community of 744 nodes
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/workflow-designer-model.mjs` (56 edge(s))
-- `expect` (47 edge(s))
+- `expect` (43 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))

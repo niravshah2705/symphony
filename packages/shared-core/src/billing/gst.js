@@ -14,6 +14,8 @@
 // consume that credit must carry zero tax. Charging GST again on consumption
 // would tax the same supply twice.
 
+const { decimalFromPaise } = require('./money-wire');
+
 const BPS = 10000;
 
 const GST_RATE_BPS = 1800; // 18%
@@ -187,8 +189,11 @@ function quote(params = {}) {
 
 /** The `order_amount` Cashfree expects: rupees, two decimals, no float artifacts. */
 function toCashfreeOrderAmount(totalPaise) {
-  const paise = Number(totalPaise) || 0;
-  return (Math.trunc(paise) / 100).toFixed(2);
+  // Delegated so there is exactly one paise→rupee-string rule in the tree.
+  // The previous local implementation (`(Math.trunc(paise) / 100).toFixed(2)`)
+  // went through a float division, which is exact for whole paise but is not a
+  // rule you can state for any amount the engine may hold.
+  return decimalFromPaise(totalPaise);
 }
 
 module.exports = {
