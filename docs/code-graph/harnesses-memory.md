@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 303 nodes
+Community of 305 nodes
 
-- **Size**: 303 nodes
-- **Cohesion**: 0.2393
+- **Size**: 305 nodes
+- **Cohesion**: 0.2379
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,43 +65,45 @@ Community of 303 nodes
 | test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
 | test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
 
-*... and 253 more members.*
+*... and 255 more members.*
 
 ## Execution Flows
 
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
+- **runCoder** (criticality: 0.67, depth: 7)
+- **runPlannedCoder** (criticality: 0.66, depth: 7)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (366 edge(s))
-- `join` (69 edge(s))
+- `equal` (370 edge(s))
+- `join` (74 edge(s))
 - `match` (63 edge(s))
+- `ok` (56 edge(s))
 - `String` (56 edge(s))
-- `ok` (55 edge(s))
 - `isArray` (51 edge(s))
 - `map` (49 edge(s))
 - `deepEqual` (43 edge(s))
 - `includes` (43 edge(s))
 - `filter` (33 edge(s))
+- `slice` (29 edge(s))
 - `expect` (29 edge(s))
-- `slice` (28 edge(s))
 - `trim` (26 edge(s))
 - `throws` (23 edge(s))
-- `require` (22 edge(s))
+- `require` (21 edge(s))
 
 ### Incoming
 
-- `equal` (366 edge(s))
+- `equal` (370 edge(s))
 - `match` (59 edge(s))
-- `ok` (55 edge(s))
+- `ok` (56 edge(s))
 - `./packages/shared/src/agent/harnesses/contract.js` (55 edge(s))
-- `join` (44 edge(s))
+- `join` (46 edge(s))
 - `deepEqual` (43 edge(s))
 - `expect` (29 edge(s))
-- `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
+- `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/runtimes.test.js` (24 edge(s))
 - `throws` (23 edge(s))

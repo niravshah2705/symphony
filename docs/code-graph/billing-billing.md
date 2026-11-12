@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 389 nodes
+Community of 469 nodes
 
-- **Size**: 389 nodes
-- **Cohesion**: 0.2611
+- **Size**: 469 nodes
+- **Cohesion**: 0.2914
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,19 +18,35 @@ Community of 389 nodes
 | test:user creates orgs and projects, then manages pending invitations@L264 | Test | ./e2e/organization-flow.spec.js | 264-321 |
 | test:captures a persona at onboarding and reflects it after reload@L350 | Test | ./e2e/organization-flow.spec.js | 350-372 |
 | test:organization admin creates a safe custom agent, links nodes, and persists isolated drafts@L235 | Test | ./e2e/workflow-designer.spec.js | 235-359 |
+| startActorSession | Function | ./packages/shared-core/src/billing/actor-sessions.js | 10-18 |
+| heartbeatActorSession | Function | ./packages/shared-core/src/billing/actor-sessions.js | 20-25 |
+| finishActorSession | Function | ./packages/shared-core/src/billing/actor-sessions.js | 27-39 |
+| monitorActorSession | Function | ./packages/shared-core/src/billing/actor-sessions.js | 41-70 |
+| emit | Function | ./packages/shared-core/src/billing/actor-sessions.js | 45-45 |
+| stop | Function | ./packages/shared-core/src/billing/actor-sessions.js | 54-68 |
+| test:a 90 second zero-priced session persists attribution and seconds, and replay meters once@L22 | Test | ./packages/shared-core/src/billing/actor-sessions.test.js | 22-46 |
+| test:two actors in the same run have distinct delivery keys@L48 | Test | ./packages/shared-core/src/billing/actor-sessions.test.js | 48-56 |
+| test:a backwards clock bills nothing and emits no negative quantity@L58 | Test | ./packages/shared-core/src/billing/actor-sessions.test.js | 58-63 |
+| test:missing or unknown rates/shapes are refused rather than guessed@L65 | Test | ./packages/shared-core/src/billing/actor-sessions.test.js | 65-71 |
+| test:heartbeats never move last-seen backwards@L73 | Test | ./packages/shared-core/src/billing/actor-sessions.test.js | 73-78 |
+| test:failed settlement keeps a closed row retryable without extending its frozen duration@L80 | Test | ./packages/shared-core/src/billing/actor-sessions.test.js | 80-90 |
+| test:monitor owns a heartbeat timer and stops it before publishing final seconds@L92 | Test | ./packages/shared-core/src/billing/actor-sessions.test.js | 92-108 |
+| at | Function | ./packages/shared-core/src/billing/actor-sessions.test.js | 96-96 |
+| test:only accepted final exports acknowledge telemetry in the persisted session@L110 | Test | ./packages/shared-core/src/billing/actor-sessions.test.js | 110-131 |
+| test:shared sessions are observable but never queued for money@L133 | Test | ./packages/shared-core/src/billing/actor-sessions.test.js | 133-137 |
 | isEnabled | Function | ./packages/shared-core/src/billing/billing-outbox.js | 60-62 |
 | eventKey | Function | ./packages/shared-core/src/billing/billing-outbox.js | 74-78 |
-| enqueue | Function | ./packages/shared-core/src/billing/billing-outbox.js | 85-154 |
-| enqueueLlmCost | Function | ./packages/shared-core/src/billing/billing-outbox.js | 161-173 |
-| pending | Function | ./packages/shared-core/src/billing/billing-outbox.js | 176-178 |
-| sent | Function | ./packages/shared-core/src/billing/billing-outbox.js | 185-187 |
-| toEvent | Function | ./packages/shared-core/src/billing/billing-outbox.js | 194-206 |
-| markSent | Function | ./packages/shared-core/src/billing/billing-outbox.js | 208-214 |
-| markVerified | Function | ./packages/shared-core/src/billing/billing-outbox.js | 216-221 |
-| markFailed | Function | ./packages/shared-core/src/billing/billing-outbox.js | 229-248 |
-| rowsInWindow | Function | ./packages/shared-core/src/billing/billing-outbox.js | 256-263 |
-| counts | Function | ./packages/shared-core/src/billing/billing-outbox.js | 266-268 |
-| prune | Function | ./packages/shared-core/src/billing/billing-outbox.js | 271-273 |
+| enqueue | Function | ./packages/shared-core/src/billing/billing-outbox.js | 85-157 |
+| enqueueLlmCost | Function | ./packages/shared-core/src/billing/billing-outbox.js | 164-176 |
+| pending | Function | ./packages/shared-core/src/billing/billing-outbox.js | 179-181 |
+| sent | Function | ./packages/shared-core/src/billing/billing-outbox.js | 188-190 |
+| toEvent | Function | ./packages/shared-core/src/billing/billing-outbox.js | 197-216 |
+| markSent | Function | ./packages/shared-core/src/billing/billing-outbox.js | 218-224 |
+| markVerified | Function | ./packages/shared-core/src/billing/billing-outbox.js | 226-231 |
+| markFailed | Function | ./packages/shared-core/src/billing/billing-outbox.js | 239-258 |
+| rowsInWindow | Function | ./packages/shared-core/src/billing/billing-outbox.js | 266-273 |
+| counts | Function | ./packages/shared-core/src/billing/billing-outbox.js | 276-278 |
+| prune | Function | ./packages/shared-core/src/billing/billing-outbox.js | 281-283 |
 | withQuietLog | Function | ./packages/shared-core/src/billing/billing-outbox.test.js | 23-29 |
 | record | Function | ./packages/shared-core/src/billing/billing-outbox.test.js | 34-45 |
 | test:a recorded cost becomes one pending row, keyed by org + run + meter@L47 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 47-58 |
@@ -48,65 +64,52 @@ Community of 389 nodes
 | test:the quantity and the key of a row are immutable, even to the drain@L151 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 151-166 |
 | test:a failing row stays retryable, and only gives up after the ceiling@L168 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 168-178 |
 | test:enqueue never throws at a run that already happened@L180 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 180-190 |
-| test:an outbox full of undelivered rows alarms instead of dropping a quantity@L192 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 192-209 |
-| test:pruning clears terminal rows and never touches an undelivered one@L211 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 211-224 |
-| test:rows come back oldest first, so a backlog drains in arrival order@L226 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 226-231 |
-| test:the drain asks for a bounded batch, and the ceiling is honoured@L233 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 233-239 |
-| priceActorUsage | Function | ./packages/shared-core/src/billing/compute-pricing.js | 61-83 |
-| referenceCostInr | Function | ./packages/shared-core/src/billing/compute-pricing.js | 92-95 |
-| savingsEstimate | Function | ./packages/shared-core/src/billing/compute-pricing.js | 106-132 |
-| test:priceActorUsage: 90 seconds of a standard actor@L33 | Test | ./packages/shared-core/src/billing/compute-pricing.test.js | 33-41 |
-| test:priceActorUsage: the paise conversion happens once, at the end@L43 | Test | ./packages/shared-core/src/billing/compute-pricing.test.js | 43-51 |
-| test:priceActorUsage: a free rate is free, a missing rate is an error@L53 | Test | ./packages/shared-core/src/billing/compute-pricing.test.js | 53-61 |
-| test:agrees with the reference formula to within one paise@L66 | Test | ./packages/shared-core/src/billing/compute-pricing.test.js | 66-76 |
-| test:savingsEstimate: always-on baseline minus what was actually billed@L78 | Test | ./packages/shared-core/src/billing/compute-pricing.test.js | 78-95 |
-| test:savingsEstimate: never reports a saving that is a refund@L97 | Test | ./packages/shared-core/src/billing/compute-pricing.test.js | 97-108 |
-| test:savingsEstimate: unusable inputs are reported, not defaulted@L110 | Test | ./packages/shared-core/src/billing/compute-pricing.test.js | 110-117 |
-| bonusPaise | Function | ./packages/shared-core/src/billing/credits.js | 31-39 |
-| topUpCrediting | Function | ./packages/shared-core/src/billing/credits.js | 48-77 |
 
-*... and 339 more members.*
+*... and 419 more members.*
 
 ## Execution Flows
 
+- **childMain** (criticality: 0.73, depth: 9)
 - **isBillingBlocked** (criticality: 0.69, depth: 7)
 - **main** (criticality: 0.68, depth: 4)
 - **main** (criticality: 0.67, depth: 4)
+- **main** (criticality: 0.67, depth: 4)
+- **recordActorUsage** (criticality: 0.61, depth: 3)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (524 edge(s))
-- `String` (68 edge(s))
-- `deepEqual` (59 edge(s))
-- `Number` (46 edge(s))
-- `throws` (45 edge(s))
+- `equal` (628 edge(s))
+- `deepEqual` (82 edge(s))
+- `String` (76 edge(s))
+- `Number` (54 edge(s))
+- `throws` (53 edge(s))
+- `map` (49 edge(s))
 - `expect` (43 edge(s))
-- `stringify` (38 edge(s))
-- `ok` (37 edge(s))
-- `map` (36 edge(s))
-- `toISOString` (35 edge(s))
-- `push` (32 edge(s))
-- `filter` (31 edge(s))
+- `filter` (41 edge(s))
+- `ok` (41 edge(s))
+- `stringify` (41 edge(s))
+- `push` (41 edge(s))
+- `now` (38 edge(s))
+- `toISOString` (36 edge(s))
+- `find` (31 edge(s))
 - `getByRole` (30 edge(s))
-- `locator` (28 edge(s))
-- `find` (26 edge(s))
 
 ### Incoming
 
-- `equal` (524 edge(s))
-- `deepEqual` (59 edge(s))
-- `./packages/shared-core/src/store.js` (53 edge(s))
-- `throws` (45 edge(s))
+- `equal` (628 edge(s))
+- `deepEqual` (82 edge(s))
+- `./packages/shared-core/src/store.js` (61 edge(s))
+- `throws` (53 edge(s))
 - `expect` (43 edge(s))
-- `ok` (37 edge(s))
+- `ok` (41 edge(s))
 - `./scripts/flexprice-phase1-probes.js` (34 edge(s))
 - `getByRole` (30 edge(s))
 - `locator` (28 edge(s))
 - `./packages/shared-core/src/billing/billing-outbox.js` (26 edge(s))
 - `./packages/shared-core/src/billing/gate.js` (26 edge(s))
+- `map` (22 edge(s))
 - `./packages/shared-core/src/billing/money-wire.js` (22 edge(s))
 - `./packages/shared-core/src/billing/billing-outbox.test.js` (21 edge(s))
 - `./packages/shared-core/src/billing/money-wire.test.js` (21 edge(s))
-- `./packages/shared-core/src/billing/flexprice-client.test.js` (19 edge(s))

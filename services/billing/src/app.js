@@ -14,6 +14,8 @@ const outboxDrain = require('@ai-fleet/shared-core/billing/outbox-drain');
 const rechargeTrigger = require('@ai-fleet/shared-core/billing/recharge-trigger');
 const autoRechargeJob = require('./auto-recharge-job');
 const billingApi = require('./billing-api');
+const { sweepActorSessions } = require('./actor-session-sweeper');
+const reconcileGatewaySpend = require('./reconcile-gateway-spend');
 const { renderDashboardHtml } = require('./ui');
 
 function createStoreHydrationMiddleware(initStore) {
@@ -71,11 +73,22 @@ function createApp(options = {}) {
       // The drain is its own step, and its own failures: a tick must not report
       // 500 because FlexPrice was unreachable, or Cloud Scheduler replays the
       // sweep too, and the outbox already says exactly what is undelivered.
-      const outbox = await outboxDrain.drainOnce().catch((err) => {
+      const actorSessions = await (options.sweepActorSessions || sweepActorSessions)().catch(() => {
+        log.error('actor_session_sweep_failed');
+        return null;
+      });
+      const outbox = await (options.drainOutbox || outboxDrain.drainOnce)().catch((err) => {
         log.error(`Billing outbox drain failed: ${err && err.message ? err.message : err}`);
         return null;
       });
-      return res.status(200).json({ status: 'ok', result, outbox });
+      const reconciliation = await (options.reconcileGatewaySpend || reconcileGatewaySpend.main)({
+        initStoreImpl: async () => {},
+        write: (line) => log.info(line),
+      }).catch((err) => {
+        log.error(`Billing spend reconciliation failed: ${err && err.message ? err.message : err}`);
+        return null;
+      });
+      return res.status(200).json({ status: 'ok', result, actorSessions, outbox, reconciliation });
     } catch (err) {
       log.error(`Billing sweep error: ${err && err.message ? err.message : err}`);
       return res.status(500).json({ error: err && err.message ? err.message : 'Sweep error' });

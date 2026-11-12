@@ -114,9 +114,9 @@ test('each meter writes its own quantity field, because a wrong name is a silent
   const llm = outbox.enqueue({ kind: 'llmCost', orgId: 'org-map', runId: 'r1', quantity: 1200 }, ON);
   const actor = outbox.enqueue({ kind: 'actorCompute', orgId: 'org-map', runId: 'r2', quantity: 90 }, ON);
   const deploy = outbox.enqueue({ kind: 'deploymentMinutes', orgId: 'org-map', runId: 'r3', quantity: 5 }, ON);
-  assert.deepEqual(outbox.toEvent(llm).properties, { cost_paise: 1200 });
-  assert.deepEqual(outbox.toEvent(actor).properties, { duration_seconds: 90 });
-  assert.deepEqual(outbox.toEvent(deploy).properties, { minutes: 5 });
+  assert.deepEqual(outbox.toEvent(llm).properties, { cost_paise: 1200, org_id: 'org-map' });
+  assert.deepEqual(outbox.toEvent(actor).properties, { duration_seconds: 90, org_id: 'org-map' });
+  assert.deepEqual(outbox.toEvent(deploy).properties, { minutes: 5, org_id: 'org-map' });
   assert.equal(outbox.toEvent(llm).event_name, 'fleet.llm_cost');
   assert.equal(outbox.toEvent(actor).event_name, 'fleet.actor_compute');
 });

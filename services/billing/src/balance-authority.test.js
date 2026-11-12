@@ -101,13 +101,15 @@ test('nothing reads the ledger journal', () => {
   assert.deepEqual(violations, []);
 });
 
-test('only the settle path may move credits in FlexPrice', () => {
-  // One credit site, one debit site, one top-up path in the tooling. Anything else
+test('only approved money paths may move credits in FlexPrice', () => {
+  // One recharge credit site, one platform debit site, and bounded tooling. Anything else
   // that can add credits is a second way to fund a wallet without an intent — the
   // double-credit loop this repo had a "manual add credits" button for.
   const ALLOWED = [
     'packages/shared-core/src/billing/flexprice-client.js', // the transport itself
     'services/billing/src/recharge-settle.js', // quoted intent → credits, once
+    'services/billing/src/platform-charge-job.js', // monthly statement → debit, once
+    'scripts/flexprice-phase5-verify.js', // destructive local money-boundary fixture
     'scripts/flexprice-provision.js', // operator bootstrap: FREE_CREDIT_GRANT
     'scripts/flexprice-phase1-probes.js', // contract probes, no product traffic
     'scripts/flexprice-spike/run.js', // the Phase 0 measurements the probes restate

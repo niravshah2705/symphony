@@ -125,7 +125,38 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
   }
 }
 
+function recordActorUsage(session, deps = {}) {
+  const { priceActorUsage } = require('./compute-pricing');
+  const priced = priceActorUsage(session);
+  const record = store.addUsageRecord({
+    orgId: session.orgId,
+    projectId: session.projectId,
+    userId: session.userId,
+    userEmail: session.userEmail || null,
+    runId: session.runId || null,
+    actorSessionId: session.id,
+    agentId: session.agentId,
+    tier: session.tier,
+    source: 'substrate-actor',
+    meter: 'actor-compute',
+    durationSeconds: priced.meterValue,
+    costPaise: priced.expectedPaise,
+    createdAt: new Date(session.stoppedAt * 1000).toISOString(),
+  });
+  const row = billingOutbox.enqueue({
+    kind: 'actorCompute', orgId: record.orgId, projectId: record.projectId, userId: record.userId,
+    runId: record.runId, actorSessionId: session.id, recordId: record.id, agentId: record.agentId, tier: record.tier,
+    quantity: record.durationSeconds, occurredAt: record.createdAt,
+  }, deps);
+  if (billingOutbox.isEnabled(deps) && record.durationSeconds > 0
+    && record.orgId !== require('./org-context').SHARED_ORG_ID && !row) {
+    throw new Error('actor usage has no outbox row');
+  }
+  return record;
+}
+
 module.exports = {
+  recordActorUsage,
   pickUsage,
   resolveBillingSource,
   recordUsage,

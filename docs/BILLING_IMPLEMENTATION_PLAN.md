@@ -342,18 +342,108 @@ New `services/billing/src/savings-panel.js` — always-on baseline minus actual,
 Verification: `./scripts/kind-metrics-install.sh --dry-run` clean, then `--apply`; `/api/v1/label/__name__/values | grep substrate_actor` lists all three with `fleet_org_id` present on the datapoints; create an actor, kill the planner, confirm the gauge accrues and the sweeper closes at last-seen with no unbounded charge; a 90-second session equals `compute-pricing.js`'s fixture exactly at a test rate and 0 at price 0; clock-skew test → bills nothing rather than crediting.
 Docs: `docs/SUBSTRATE_METRICS.md` §10 "Emitter as built + the two PromQL oracles". ConfigMaps stay in-tree, never hand-patched.
 
+### Phase 4 outcome (recorded here, decisions above left as written)
+
+Implemented locally. `npm run billing:actor:verify` passed **14/14** against the
+real OTLP collector, Prometheus and FlexPrice: a real isolated runner process,
+with substrate RPCs stubbed, accrued **5s**, was killed with SIGKILL, and the
+sweeper froze duration at its persisted **6s** last-seen. Final scrape and
+FlexPrice meter both reported **6 seconds**; a second sweep emitted no duplicate
+usage. Actor price remains **0**, while the 90-second test fixture at 463p/hour
+is exactly **12p**. `npm test`: **2248 / 2244 pass / 0 fail / 4 skipped**;
+existing `billing:usage:verify`: **40/40**. The in-tree kind ConfigMaps were
+validated and applied; the settled follow-up guard confirmed both collector
+scrape targets and `ate_actor_stats_*` for two atespaces.
+
+Implementation details and deviations:
+
+- Added persisted `actorSessions` and shared-core `billing/actor-sessions.js`.
+  In-memory Maps alone cannot survive the planner crash this phase must recover.
+  The runner opens at actor creation, heartbeats every 15 seconds, and closes at
+  the start of `finally`, including failed or token-empty runs. Closed clocks and
+  duration are immutable; closed-but-unmetered rows retry. Final telemetry has a
+  separate `metricsExported` acknowledgement and retries without re-billing. Actor-session identity
+  deduplicates usage and seconds events, so two actors in one run do not collapse.
+- Settlement uses **persisted runner last-seen**, not Prometheus scrape-age.
+  The collector can keep exposing an old value after a writer dies, so fresh
+  scrape timestamps do not prove liveness. `settleOrphans` still closes at
+  last-seen, with the existing default 180-second grace. The billing tick sweeps
+  before draining. These writes use the existing file/Firestore store model,
+  not a new distributed transaction guarantee.
+- The OTLP HTTP JSON emitter uses standard
+  `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, rather than adding a new `SUBSTRATE_*`
+  capability name that Terraform does not wire. No cloud code changed. All three
+  metric names survive the scrape filter; the `_total` series is a gauge holding
+  final duration, not a counter. STOP clears the live-start gauge. Exports are
+  ordered, bounded and fail open for runs; no telemetry headers carry credentials.
+- The savings reader uses first-seen min-over-time and running-seconds
+  last-over-time, grouped by actor/tier with a safely escaped exact tenant matcher.
+  Latest duration honors downward final clock-skew corrections instead of retaining
+  a larger historical heartbeat.
+  It is analytics only, priced explicitly at zero, and reports unavailable rather
+  than fabricated zeros. No Prometheus price metric or deployment emitter exists.
+  Browser presentation remains Phase 6.
+- User attribution now survives the runner's LLM and actor usage paths and the
+  pattern-router forwarding seam. The direct planner route uses gateway-stamped
+  identity; a missing user stays null. Bare event properties expose org/project/
+  user/tier, never an email or secret.
+- The kill rehearsal shortens heartbeat/grace to 1s/0s and stubs the substrate
+  control/data planes; **no real gVisor actor or deployed planner pod was killed**,
+  consistent with the local real-actor exclusion. The keys remain only in the
+  trusted parent, not its runner child. Full deployed-actor verification remains
+  a launch task.
+- The existing Phase 3 verifier exposed a same-second current-window mismatch
+  after a wider read-back saw the corrected event. Its repair assertion now
+  permits bounded subsequent drain passes, just like the normal ingest check;
+  production delivery and drift alarms are unchanged.
+
+Reuse commands, measured transcript and both PromQL queries are documented in
+`docs/SUBSTRATE_METRICS.md` **§10**.
+
 ## Phase 5 — Zoho connector, platform charge, expiry assertion, reconciliation
 
 Zoho (D3, mechanism per D3a): configure FlexPrice's `internal/integration/zoho/` connector for customers + invoices; **we write no Zoho API code**. Correctness comes from Phase 1 probe C — the invoice `total` reaching Zoho is ₹590 because the **header** is sent gross (`subtotal == total == amount_due == 590.00`), and the CGST/SGST lines carry ₹45 each so both components are visible on the document. `price_id` on those lines is decoration, not arithmetic (D3a). Customer `tax_rates` stay empty so `sum(invoice.tax) == 0` and their tax engine never fires. GSTIN + address arrive from the flat customer fields provisioned in Phase 1. Verification is a recorded-response contract test (`ZOHO_MODE=fake`, captured-body assertions, no credentials needed — none exist locally); the live OAuth call is one documented operator step.
 
-Platform charge ₹3000/month as **two ordered calls**: `POST /v1/invoices {invoice_type:'ONE_OFF', billing_reason:'MANUAL', invoice_status:'FINALIZED', external_customer_id, metadata:{auto_completed:'true'}}` — the `payment_status`/`amount_paid` request fields are accepted then **silently dropped**, and the `auto_finalize` cron defaults true, hence FINALIZED-at-creation — then `POST /v1/wallets/:id/debit {transaction_reason:'MANUAL_BALANCE_DEBIT', idempotency_key:'platform-charge:<org>:<YYYY-MM>', credit_amount, metadata:{invoice_id}}` (there is no invoice field on a debit, hence metadata). **Never** `metadata.wallet_transaction_id` on an invoice we also credit, **never** `/invoices/:id/payment` — `UpdatePaymentStatus(SUCCEEDED)` credits the wallet inside FlexPrice, which is the real double-credit loop. Debit replay returns `409 already_exists` (unique index, no pre-check) and maps to success. The balance is pre-checked so the charge cannot drive it negative.
+Platform charge ₹3000/month as **two ordered calls**: `POST /v1/invoices {invoice_type:'ONE_OFF', billing_reason:'MANUAL', invoice_status:'FINALIZED', customer_id, metadata:{auto_completed:'true'}}` — the internal customer ID is required, and an exact `idempotency_key` search recovers a finalized replay/race before any debit — then `POST /v1/wallets/:id/debit {transaction_reason:'MANUAL_BALANCE_DEBIT', idempotency_key:'platform-charge:<org>:<YYYY-MM>', credits:'3000', metadata:{invoice_id}}` (there is no invoice field on a debit, hence metadata). **Never** `metadata.wallet_transaction_id` on an invoice we also credit, **never** `/invoices/:id/payment` — `UpdatePaymentStatus(SUCCEEDED)` credits the wallet inside FlexPrice, which is the real double-credit loop. Debit replay returns `409 already_exists` (unique index, no pre-check) and maps to success. The balance is checked before statement creation and again before debit so the charge cannot drive it negative.
 
-`credit-expiry-job.js` becomes an **assertion**, not a scheduler: their read-time filter plus Temporal `WalletCreditExpiryWorkflow` do the work; ours verifies a back-dated promo grant is no longer drawable and warns otherwise.
+`credit-expiry-job.js` becomes an **assertion**, not a scheduler: their read-time filter plus Temporal `WalletCreditExpiryWorkflow` do the work. FlexPrice rejects a grant whose expiry is already past, so the live fixture grants a near-future promo, waits past expiry, and proves it is no longer drawable. Materialization has a measured two-hour settlement grace plus the 15-minute schedule; ours warns only after a three-hour observation grace.
 
 `reconcile-gateway-spend.js` extends from printing one JSON line per org (today, read-only, unscheduled) to a FlexPrice-vs-recorded comparison reusing `MATCH_TOLERANCE_PAISE`, wired to the tick so it is the standing drift alarm. Credit reads use `POST /v1/wallets/transactions/search` (response keyed `items`, not `data`); `credits_available_breakdown` stays banned.
 
-Verification: run the charge job twice → exactly one debit; the Zoho fixture shows ₹590 with CGST+SGST disclosed and `invoice.tax == 0`; a back-dated promo grant → the next debit draws prepaid; a deliberately dropped event → the reconciler reports divergence.
+Verification: run the charge job twice → exactly one debit; the Zoho fixture shows ₹590 with CGST+SGST disclosed and `invoice.tax == 0`; a promo observed after its expiry → the next debit draws prepaid; a deliberately dropped event → the reconciler reports divergence.
 Docs: `BILLING_FLEXPRICE.md` §12 runbook (charge, Zoho setup, upgrade, two-key rotation).
+
+### Phase 5 outcome (2026-11-13)
+
+- The client now writes invoice idempotency in the JSON body, searches invoices by
+  the exact key, and still exposes no invoice-payment method.
+- `platform-charge-job.js` creates/reuses one finalized ₹3000 statement and performs
+  one replay-safe 3000-credit debit only after two balance checks. It stores no local
+  job state; FlexPrice's invoice search and debit uniqueness are the recovery record.
+- `credit-expiry-job.js` is read-only. It reports bounded stale positive credit rows
+  after an observation grace and leaves both read-time exclusion and
+  `CREDIT_EXPIRED` materialization to FlexPrice/Temporal.
+- The billing tick now reconciles after actor settlement and outbox delivery.
+  LiteLLM and FlexPrice availability/verdicts are independent, and the dropped-event
+  regression proves FlexPrice can report `we_are_ahead` while LiteLLM remains a
+  match. No correction or money API is called.
+- `npm run billing:zoho:contract` passed against the exact pinned detached worktree:
+  the native connector preserved the ₹500 + ₹45 + ₹45 lines, totalled ₹590, carried
+  place of supply from GSTIN, and added no line tax override. This proves request
+  mapping only; Zoho-side item configuration, OAuth, and live acceptance remain an
+  operator launch check.
+- Focused Phase 5 unit/tick verification passes. Live local verification proved one
+  platform invoice/debit, the exact 3000-credit reduction, no 2999-credit overdraft,
+  and expired-promo read-time exclusion (prepaid 100→75 while promo stayed 50).
+  A deliberately short 90-second Temporal wait reported materialization unmet, as it
+  must: the pinned source has a two-hour settlement grace plus a 15-minute schedule.
+  The verifier's honest default is 140 minutes; that full observation was not run,
+  and no short-run success is inferred.
+- Existing live recharge and usage verifiers passed 53/53 and 40/40. The actor
+  verifier could not reach its local endpoint (`fetch failed`), so it has no Phase 5
+  pass result. The complete unit suite passed 2259 tests with 4 skipped and 0
+  failures, and `git diff --check` passed. The focused credential scan found no
+  credential material introduced on an added Phase 5 line.
 
 ## Phase 6 — UI split, read-boundary posture, pre-existing fixes, full suite
 

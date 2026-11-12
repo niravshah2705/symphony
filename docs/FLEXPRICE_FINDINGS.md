@@ -1001,6 +1001,31 @@ and must not be written up as a finding.** The run reported
 | — | webhook transport | `GET /v1/webhooks` and the config read both **404** → endpoints come from operator YAML, not tenant input. | ℹ️ INFO — no user-settable URL, no per-tenant management without Svix |
 | **18** | AGPL | not empirical. | ⚖️ **hard gate** — `docs/FLEXPRICE_AGPL_MEMO.md`, unsigned. Nothing in Phase 1 proceeds on "probably fine". |
 
+### Phase 5 native Zoho contract (measured 2026-11-13)
+
+`ZOHO_MODE=fake npm run billing:zoho:contract` checked Probe C's recorded gross
+header (`subtotal == total == 590`, `total_tax == 0`, lines `500 + 45 + 45`), then
+ran `TestFleetGrossGSTInvoiceContract` inside a temporary detached worktree at the
+exact `deploy/flexprice/VERSION` commit. The captured native
+`InvoiceCreateRequest` retained the three names/rates, summed to ₹590, derived place
+of supply `24` from the test GSTIN, and carried neither `tax_id` nor
+`tax_exemption_id` on any line. The original checkout was unchanged.
+
+This is evidence about connector request mapping only. It does not authenticate to
+Zoho and cannot prove item configuration, OAuth, or Zoho's accepted invoice total;
+a live operator check must verify that Zoho does not add tax before launch.
+
+### Phase 5 expiry timing (measured 2026-11-13)
+
+The top-up API rejects an already-past `expiry_date_utc` with `400 validation_error:
+Expiry date must be in the future`. A near-future 50-credit promo was accepted; after
+its expiry, a 25-credit debit reduced prepaid from 100 to 75 while the expired promo
+remained 50, proving read-time exclusion. A 90-second wait correctly found no
+`CREDIT_EXPIRED`: the pinned service sets `settlementGracePeriod = 2h`, and Temporal
+runs `wallet-credit-expiry` every 15 minutes. The assertion grace is therefore three
+hours and the full verifier bound is 140 minutes. Reachability alone is not reported
+as materialization success.
+
 **Answered by the source pass, no live instance needed:** 2, 4, 7, 9(half), 11, 16,
 20, and items 21-27 (cluster → `docs/SUBSTRATE_METRICS.md`). Items 6, 12, 15, 17, 19
 were *framed* from source and are now closed by measurement.

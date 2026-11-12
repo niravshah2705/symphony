@@ -259,7 +259,11 @@ function createFlexpriceClient({ config = FLEXPRICE, fetchImpl = globalThis.fetc
     eventsUsageMeter: (query) => post('/v1/events/usage/meter', query, { plane: PLANES.ingest }),
 
     // ---- invoices (money plane) ----------------------------------------------
-    createInvoice: (invoice) => post('/v1/invoices', invoice),
+    createInvoice: (invoice, opts = {}) => post('/v1/invoices', invoice, opts),
+    searchInvoices: async (query) => {
+      const out = await post('/v1/invoices/search', query);
+      return { ...out, items: rowsOf(out) };
+    },
     getInvoice: (invoiceId) => get(`/v1/invoices/${seg(invoiceId)}`),
     finalizeInvoice: (invoiceId, opts = {}) => post(`/v1/invoices/${seg(invoiceId)}/finalize`, undefined, opts),
   };

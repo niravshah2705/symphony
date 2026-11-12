@@ -7,7 +7,7 @@
 Community of 194 nodes
 
 - **Size**: 194 nodes
-- **Cohesion**: 0.1906
+- **Cohesion**: 0.1904
 - **Dominant Language**: javascript
 
 ## Members
@@ -69,6 +69,7 @@ Community of 194 nodes
 
 ## Execution Flows
 
+- **childMain** (criticality: 0.73, depth: 9)
 - **listActors** (criticality: 0.71, depth: 8)
 - **getActorTemplate** (criticality: 0.70, depth: 8)
 - **isBillingBlocked** (criticality: 0.69, depth: 7)
@@ -78,15 +79,14 @@ Community of 194 nodes
 - **refreshTokens** (criticality: 0.67, depth: 2)
 - **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
 - **refreshTokens** (criticality: 0.67, depth: 2)
-- **getGithubToken** (criticality: 0.62, depth: 8)
-- *... and 18 more flows.*
+- *... and 17 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
 - `equal` (53 edge(s))
-- `isArray` (26 edge(s))
+- `isArray` (27 edge(s))
 - `filter` (23 edge(s))
 - `String` (22 edge(s))
 - `includes` (22 edge(s))

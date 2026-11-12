@@ -106,7 +106,7 @@ function enqueue(input = {}, deps = {}) {
     if (spec.unit === 'paise') assertPaise(quantity, 'outbox cost_paise');
     const idempotencyKey = eventKey({
       orgId,
-      runId: input.runId,
+      runId: input.actorSessionId || input.runId,
       meterName: spec.meter,
       recordId: input.recordId,
     });
@@ -125,6 +125,9 @@ function enqueue(input = {}, deps = {}) {
       userId: input.userId || null,
       runId: input.runId || null,
       recordId: input.recordId || null,
+      actorSessionId: input.actorSessionId || null,
+      agentId: input.agentId || null,
+      tier: input.tier || null,
       meter: spec.meter,
       eventName: spec.eventName,
       [QUANTITY_FIELD[spec.unit]]: quantity,
@@ -200,7 +203,14 @@ function toEvent(row) {
     event_name: row.eventName,
     external_customer_id: row.orgId,
     timestamp: row.occurredAt || row.createdAt,
-    properties: { [spec.field]: quantity },
+    properties: {
+      [spec.field]: quantity,
+      org_id: row.orgId,
+      ...(row.projectId ? { project_id: row.projectId } : {}),
+      ...(row.userId ? { user_id: row.userId } : {}),
+      ...(row.agentId ? { agent_id: row.agentId } : {}),
+      ...(row.tier ? { tier: row.tier } : {}),
+    },
     source: 'ai-fleet-outbox',
   };
 }

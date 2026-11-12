@@ -330,6 +330,7 @@ const DEFAULT_STORE = Object.freeze({
   // inline — a billing outage must not become run failures — so this row is the
   // only proof that a quantity exists that has not yet been reported.
   billingOutbox: [],
+  actorSessions: [],
   billing: { lastAggregatedAt: null }, // sweep watermark (see billing/sweep.js)
 
   // End User License Agreement acceptance, keyed at two scopes. `users[key]` and
@@ -448,6 +449,7 @@ function normalizeStore(parsed) {
     billingAccounts: Array.isArray(source.billingAccounts) ? source.billingAccounts : [],
     rechargeIntents: Array.isArray(source.rechargeIntents) ? source.rechargeIntents : [],
     billingOutbox: Array.isArray(source.billingOutbox) ? source.billingOutbox : [],
+    actorSessions: Array.isArray(source.actorSessions) ? source.actorSessions : [],
     billing: normalizeBilling(source.billing),
     eula: normalizeEula(source.eula),
   };
@@ -482,7 +484,7 @@ const STORE_COLLECTION_KEYS = [
   // Billing: append-heavy records — each becomes one Firestore sub-collection doc
   // keyed by `id`, so no single document approaches the 1 MB limit and concurrent
   // appends never clobber one another (the ledger is the money source of truth).
-  'usageRecords', 'ledgerEntries', 'billingAccounts', 'rechargeIntents', 'billingOutbox',
+  'usageRecords', 'ledgerEntries', 'billingAccounts', 'rechargeIntents', 'billingOutbox', 'actorSessions',
 ];
 
 const LEGACY_BACKEND_KEY = 'legacy';
@@ -1079,6 +1081,10 @@ function setBillingState(patch) {
 /** Append a granular usage record (newest first), capped to bound growth. */
 function addUsageRecord(record) {
   const current = readLegacyStore();
+  if (record.actorSessionId) {
+    const existing = current.usageRecords.find((r) => r.actorSessionId === record.actorSessionId);
+    if (existing) return existing;
+  }
   const now = new Date().toISOString();
   const entry = { ...record, id: `use_${randomUUID()}`, createdAt: record.createdAt || now };
   const usageRecords = [entry, ...current.usageRecords].slice(0, MAX_USAGE_RECORDS);
@@ -1176,6 +1182,45 @@ function upsertBillingAccount(orgId, patch = {}) {
     : [merged, ...current.billingAccounts];
   writeLegacyStore({ ...current, billingAccounts });
   return merged;
+}
+
+function addActorSession(session) {
+  const current = readLegacyStore();
+  const existing = current.actorSessions.find((s) => s.id === session.id);
+  if (existing) return existing;
+  writeLegacyStore({ ...current, actorSessions: [session, ...current.actorSessions] });
+  return session;
+}
+
+function getActorSession(id) {
+  return readLegacyStore().actorSessions.find((s) => s.id === id) || null;
+}
+
+function listActorSessions({ orgId, status } = {}) {
+  return readLegacyStore().actorSessions.filter((s) => (!orgId || s.orgId === orgId)
+    && (!status || s.status === status));
+}
+
+function updateActorSession(id, patch) {
+  const current = readLegacyStore();
+  const existing = current.actorSessions.find((s) => s.id === id);
+  if (!existing) return null;
+  // A late heartbeat or STOP cannot reopen or extend a session the sweeper closed.
+  const updated = existing.status === 'CLOSED'
+    ? {
+      ...existing, metered: Boolean(existing.metered || patch.metered),
+      metricsExported: Boolean(existing.metricsExported || patch.metricsExported),
+    }
+    : {
+      ...existing,
+      lastSeenAt: Math.max(existing.lastSeenAt, patch.lastSeenAt ?? existing.lastSeenAt),
+      ...(patch.status === 'CLOSED' ? {
+        status: 'CLOSED', stoppedAt: patch.stoppedAt, durationSeconds: patch.durationSeconds,
+        closeReason: patch.closeReason, metered: Boolean(patch.metered),
+      } : {}),
+    };
+  writeLegacyStore({ ...current, actorSessions: current.actorSessions.map((s) => s.id === id ? updated : s) });
+  return updated;
 }
 
 /* --------------------------- Recharge intents ---------------------------- */
@@ -1628,6 +1673,10 @@ module.exports = {
   getBillingState,
   setBillingState,
   addUsageRecord,
+  addActorSession,
+  getActorSession,
+  listActorSessions,
+  updateActorSession,
   listUsageRecords,
   pruneUsageRecords,
   updateUsageRecord,

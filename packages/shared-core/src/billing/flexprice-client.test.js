@@ -189,6 +189,29 @@ test('list rows are read from whichever envelope the route actually used', async
   assert.equal(envs.environments[0].id, 'env-1111');
 });
 
+test('invoice creation is body-idempotent and exact-key search normalizes items', async () => {
+  const { c, rec } = client([
+    { status: 201, json: { id: 'inv_1' } },
+    { status: 200, json: { items: [{ id: 'inv_1' }], pagination: { total: 1 } } },
+  ]);
+  await c.createInvoice({ customer_id: 'cust_1' }, { idempotencyKey: 'platform-charge-invoice:org-a:2026-11' });
+  const filter = {
+    filters: [{
+      field: 'idempotency_key',
+      operator: 'eq',
+      data_type: 'string',
+      value: { string: 'platform-charge-invoice:org-a:2026-11' },
+    }],
+  };
+  const found = await c.searchInvoices(filter);
+  assert.equal(rec.calls[0].body.idempotency_key, 'platform-charge-invoice:org-a:2026-11');
+  assert.equal(rec.calls[0].headers['Idempotency-Key'], undefined);
+  assert.equal(rec.calls[1].url, 'http://127.0.0.1:18080/v1/invoices/search');
+  assert.deepEqual(rec.calls[1].body, filter);
+  assert.deepEqual(found.items, [{ id: 'inv_1' }]);
+  assert.deepEqual(found.pagination, { total: 1 });
+});
+
 test('there is no route on this client that marks an invoice paid, because that is the double-credit loop', async () => {
   const { c } = client([]);
   for (const name of Object.keys(c)) {

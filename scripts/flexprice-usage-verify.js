@@ -409,10 +409,14 @@ async function main() {
     await client.eventsBulk([outbox.toEvent(rowById(typoRow.id))]);
     const repaired = await until(async () => (await meterRead(client, meterIds, typoOrg, typoRow.occurredAt)).value, 700);
     check('the correct event_name is aggregated', Number(repaired.value) === 700, `value=${repaired.value}`);
-    const afterRepair = await drain.drainOnce({ client, meterIds, now: new Date().toISOString() });
-    check('the next pass verifies it and the drift clears',
-      rowById(typoRow.id).status === 'verified' && !afterRepair.drift.length,
-      `status=${rowById(typoRow.id).status} drift=${JSON.stringify(afterRepair.drift)}`);
+    let afterRepair;
+    const repairProof = await until(async () => {
+      afterRepair = await drain.drainOnce({ client, meterIds, now: new Date().toISOString() });
+      return rowById(typoRow.id).status;
+    }, 'verified');
+    check('a subsequent pass verifies it and the drift clears',
+      repairProof.value === 'verified' && !afterRepair.drift.length,
+      `status=${repairProof.value} passes=${repairProof.attempts} drift=${JSON.stringify(afterRepair.drift)}`);
 
     section('8. a fleet with no FlexPrice at all');
     const off = await bootWithNoFlexprice();

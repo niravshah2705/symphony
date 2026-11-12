@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 357 nodes
+Community of 356 nodes
 
-- **Size**: 357 nodes
-- **Cohesion**: 0.3389
+- **Size**: 356 nodes
+- **Cohesion**: 0.3397
 - **Dominant Language**: javascript
 
 ## Members
@@ -51,7 +51,6 @@ Community of 357 nodes
 | test:reevaluateGate supersedes the old gate; green returns no gate, amber creates a fresh one with attempts+1@L123 | Test | ./packages/shared/src/agent/approval-gate.test.js | 123-146 |
 | test:gate lifecycle preserves native context and publishes only to that workspace@L148 | Test | ./packages/shared/src/agent/approval-gate.test.js | 148-169 |
 | test:default business resolution selects only the gate workspace when ids collide@L171 | Test | ./packages/shared/src/agent/approval-gate.test.js | 171-192 |
-| publicAvailabilityMessage | Function | ./packages/shared/src/agent/availability.js | 48-75 |
 | pauseReasonFor | Function | ./packages/shared/src/agent/availability.js | 77-89 |
 | isRepositoryAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 91-101 |
 | isModelAvailabilityError | Function | ./packages/shared/src/agent/availability.js | 103-120 |
@@ -64,8 +63,9 @@ Community of 357 nodes
 | evaluationSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 141-155 |
 | fraudSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 157-165 |
 | revenueModelSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 167-173 |
+| revenueSeed | Function | ./packages/shared/src/agent/business-pipeline.js | 175-181 |
 
-*... and 307 more members.*
+*... and 306 more members.*
 
 ## Execution Flows
 

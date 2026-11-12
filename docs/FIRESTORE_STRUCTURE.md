@@ -64,6 +64,7 @@ below are the source of truth. Fields marked optional may be absent or `null`.
 │   ├── usageRecords/{id}
 │   ├── ledgerEntries/{id}            write-only journal; no money is read from it
 │   ├── rechargeIntents/{orderId}     the quoted amount authority for settle()
+│   ├── actorSessions/{id}            runner START/last-seen/STOP and frozen duration
 │   ├── billingOutbox/{id}            quantities awaiting FlexPrice ingest
 │   └── billingAccounts/{id}          config only — holds no balance
 ├── aifleet_events[__{store_namespace}]/{channel_id}/steps/{auto_id}
@@ -290,11 +291,12 @@ document ID.
 | `approvals` | `id`, `requirement`, `businessId?`, `conversationId?`, `evaluation?`, `signal`, `waitMinutes`, `status`, `deadline?`, `decidedAt?`, `decision?`, `proceededAt?`, `jobId?`, `attempts`, `orgId?`, `nativeProjectId?`, `createdAt`, `updatedAt` |
 | `stackLinks` | `id`, `projectId?`, `provider`, `repoFullName?`, `dependentBranch`, `blockerBranch`, `blockerIdentifier?`, `defaultBase`, `dependentReviewId?`, `dependentReviewUrl?`, `orgId?`, `nativeProjectId?`, `createdAt`, `resolvedAt?` |
 | `settingsHistory` | `id`, `ts`, `orgId`, `complexityTier`, `perRolePicks` (thinking/execution/testing/deployment provider, preset, and model), `estMonthlyCostUsd`, `harness`; non-secret selection history only |
-| `usageRecords` | `id`, `orgId`, `projectId?`, `projectName?`, `userId?`, `userEmail?`, `taskId?`, `taskIdentifier?`, `source`, `provider?`, `model?`, `usage` (token counts), `costUsd`, `costPaise`, `createdAt` |
+| `usageRecords` | `id`, `orgId`, `projectId?`, `projectName?`, `userId?`, `userEmail?`, `taskId?`, `taskIdentifier?`, `source`, `provider?`, `model?`, `usage?` (token counts), `costUsd?`, `costPaise`, `createdAt`; actor records additionally carry `actorSessionId`, `agentId`, `tier`, `meter: actor-compute`, `durationSeconds` and are replay-deduped by session |
 | `ledgerEntries` | `id`, `orgId`, `type`, signed integer `amountPaise`, `description`, `meta`, `createdAt` — **write-only developer journal**: nothing may read a money number out of it (grep gate: `services/billing/src/balance-authority.test.js`) |
 | `billingAccounts` | `id = orgId`, `orgId`, `currency`, `initialCreditPaise` (the configured free-tier opening grant, not a balance), `alertThresholdsPaise[]`, `lastAlertedThresholdPaise?`, `notifyChannels`, `notifyEmails[]`, `autoRecharge`, `gateEnabled`, `paymentInfo{provider, billingName, taxId, address{}}`, `flexprice{customerId, walletId, conversionRate, cachedAt}`, `createdAt`, `updatedAt`. **No `balancePaise`** — since Phase 3 the only spendable balance is the FlexPrice wallet, and `gate.js` reads it from `GET /v1/wallets/:id/balance/real-time` |
 | `rechargeIntents` | `orderId`, `orgId`, `provider`, `providerOrderId?`, integer paise (`subtotalPaise`, `couponBps`, `bonusPaise`, `gstPaise`, `totalPaise`), `creditCount`, `supplierStateCode`, `placeOfSupply`, `status` (`QUOTED → SETTLED`, once), `createdAt`, `settledAt?`, `verification?`, `flexprice_settlement?` — the amount authority for `settle()`; the money fields freeze once settled |
-| `billingOutbox` | `id`, `orgId`, `projectId?`, `userId?`, `runId?`, `recordId?`, `meter`, `eventName`, `quantityPaise`/`quantitySeconds`/`quantityMinutes`, `idempotencyKey` (doubles as FlexPrice's `event_id`), `status` (`pending → sent → verified`, `failed` after 12 attempts), `attempts`, `occurredAt`, `sentAt?`, `verifiedAt?`, `lastError?` |
+| `actorSessions` | `id`, `agentId`, `atespace`, `orgId`, `projectId?`, `userId?`, `userEmail?`, `runId?`, `tier`, explicit `hourlyRatePaise` (currently 0), integer epoch-second `startedAt`, `lastSeenAt`, `stoppedAt?`, `durationSeconds?`, `status` (`RUNNING → CLOSED`), `closeReason?`, `metered`, `metricsExported` (independent final-telemetry acknowledgement) — persisted runner heartbeats allow orphan settlement at last-seen; closed duration cannot extend on a late STOP |
+| `billingOutbox` | `id`, `orgId`, `projectId?`, `userId?`, `runId?`, `recordId?`, `actorSessionId?`, `agentId?`, `tier?`, `meter`, `eventName`, `quantityPaise`/`quantitySeconds`/`quantityMinutes`, `idempotencyKey` (doubles as FlexPrice's `event_id`; actor events key on session, not run), `status` (`pending → sent → verified`, `failed` after 12 attempts), `attempts`, `occurredAt`, `sentAt?`, `verifiedAt?`, `lastError?` |
 
 Sources: [store schema and partition](../packages/shared-core/src/store.js) and
 [Firestore backend](../packages/shared-core/src/store/firestore-backend.js).

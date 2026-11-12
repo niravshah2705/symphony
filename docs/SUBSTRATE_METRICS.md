@@ -271,7 +271,7 @@ either: completed cost is what FlexPrice says it is.
 
 | # | Item | Blocker |
 |---|---|---|
-| 26 | Prove an orphaned session accrues and is then swept | needs the real emitter from Phase 1; the probe proves the *query* half works, not that a killed planner leaves the series stale in the way `settleOrphans` assumes |
+| 26 | Prove an orphaned session accrues and is then swept | Verified locally in Phase 4 (§10): real runner process killed with SIGKILL, real OTLP/Prometheus/FlexPrice, stubbed substrate RPCs; no gVisor actor was created |
 | 27 | The ₹/hour for `standard-1v1g`, and where it is edited | operator input; `priceActorUsage` throws rather than defaulting, so nothing mis-bills while this is open |
 | — | Per-tenant atespace ⇒ org mapping for the **shared** stack | `ate_template_atespace` values seen here are demo pools (`ate-demo-sandbox`, `ate-demo-counter`). Whether a shared-stack atespace name is derived from `org_id` deterministically is unverified, and without it the reconciliation oracle cannot attribute CPU to an org at all |
 
@@ -284,3 +284,111 @@ either: completed cost is what FlexPrice says it is.
 Read-only except for one synthetic OTLP datapoint per run, written under
 `fleet_org_id=org-probe`; no product code path emits that label, so its series can
 be ignored or deleted without affecting anything real.
+
+## 10. Emitter as built + the two PromQL oracles (Phase 4)
+
+`substrate-runner.js` opens a persisted `actorSessions` row immediately after actor
+creation. The runner owns START, a 15-second heartbeat, and STOP at the beginning
+of `finally`, including failed or token-empty dispatches. Rows carry org, project,
+user, run, atespace, the `standard-1v1g` tier, integer epoch-second clocks and an
+explicit hourly rate of **0**. The ActorTemplate now takes its default resource
+shape from `compute-pricing.js` rather than repeating the CPU/memory literals.
+
+`usage.js recordActorUsage` writes seconds even at price zero and hands them to the
+`actor-compute` outbox. Actor-session identity, not run identity, is the delivery
+key: two actors in one run cannot collapse into one event. Event properties use
+bare `org_id`, `project_id`, `user_id`, `agent_id`, `tier` and `duration_seconds`.
+Emails stay in the internal usage record, not in OTLP or FlexPrice events. The
+runner also now preserves user attribution on its LLM usage call; the direct
+planner route takes user identity from the gateway-stamped header, never the body.
+Missing identity remains null, not a guessed user.
+
+`otel/actor-metrics.js` sends native OTLP HTTP JSON to the operator-configured
+**`OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`** (full `/v1/metrics` URL). Unset means no
+network call; there is no collector endpoint guessed in shipped code and no
+`OTEL_EXPORTER_OTLP_HEADERS` credential path. Exports are serialized so a delayed
+heartbeat cannot overwrite STOP, bounded to two seconds, and fail open for the
+run. A non-2xx or rejected datapoints in OTLP `partialSuccess` are failures.
+
+All three series are **gauges**, including the one named `_total`: do not use
+`rate()` or `increase()` on it. Datapoint labels carry `fleet_org_id`,
+`substrate_tier`, `agent_id`, plus known project/user ids. `service.name` is the
+fixed resource label `fleet-actor-sessions`, not a tenancy carrier. On close,
+`start_timestamp_seconds` becomes zero, `first_seen_timestamp_seconds` preserves
+START, and `running_seconds_total` preserves the final duration.
+
+### The liveness oracle is the persisted runner heartbeat
+
+A collector can keep exposing its last gauge after the producer dies. Prometheus
+then records *new scrape timestamps for old values*, so `timestamp(series)` is
+not proof that the actor or planner is alive. The approved plan's scrape-age
+assumption is therefore not used for settlement.
+
+`services/billing/src/actor-session-sweeper.js` runs before the outbox drain on
+`/pubsub/billing-tick`. It applies `settleOrphans` using persisted `lastSeenAt`:
+after `SUBSTRATE_ORPHAN_GRACE_SECONDS` (default **180**), STOP is **last-seen**, not
+sweep time. Young sessions and fresh heartbeats are left alone. A closed session
+never reopens or extends when a late heartbeat/STOP arrives. Closed-but-unmetered
+rows retry their frozen duration; usage and outbox identities prevent duplicate
+local settlement. Final telemetry has a separate `metricsExported` acknowledgement:
+failed final exports retry without metering the session again. These guarantees inherit the existing file/Firestore store's
+persistence model, not a new cross-process transactional ledger.
+
+### The two PromQL analytics oracles
+
+`savings-panel.js` is read-only, configured with `SUBSTRATE_PROMETHEUS_URL` on the
+billing service. It queries, with an escaped exact tenant matcher:
+
+```promql
+max by(agent_id,substrate_tier) (
+  min_over_time(substrate_actor_first_seen_timestamp_seconds{fleet_org_id="ORG"}[30d])
+)
+max by(agent_id,substrate_tier) (
+  last_over_time(substrate_actor_running_seconds_total{fleet_org_id="ORG"}[30d])
+)
+```
+
+The first value gives the always-on baseline clock; the second gives observed
+actual seconds, including closed actors after collector expiry. `last_over_time`
+preserves a downward final-duration correction after a backwards-clock STOP;
+historical maxima would incorrectly keep the longer heartbeat. Matching is by
+actor **and** tier, never a cross-tenant or many-to-many join. Missing, inconsistent
+or failed reads return unavailable, not zero usage. Lookback is bounded to 1 minute
+through 90 days; default 30 days. `compute-pricing.js savingsEstimate` derives idle
+seconds and a zero-paise monetary estimate at D4's explicit zero rate. No
+`substrate_hourly_rate` metric exists and neither PromQL value feeds a debit.
+Deployment usage remains inert: its meter exists, with no emitter.
+
+### Local reuse and measured verification
+
+```bash
+./scripts/kind-metrics-install.sh --dry-run
+./scripts/kind-metrics-install.sh --apply
+# In separate terminals, AFTER any rollout:
+kubectl --context kind-kind -n otel-system port-forward svc/opentelemetry-collector 14319:4318
+kubectl --context kind-kind -n otel-system port-forward svc/prometheus 19093:9090
+npm run billing:actor:verify
+# Optional: -- --keep retains the temporary store; endpoint overrides use the env names above.
+```
+
+The verifier uses real runner code, kills only its own isolated Node child with
+SIGKILL, and reads real OTLP → collector → Prometheus and FlexPrice responses.
+Substrate RPCs and the outstanding prompt dispatch are stubbed: this is **not** a
+claim that a real gVisor actor ran or that a deployed planner pod was killed.
+Provider and FlexPrice keys are not passed to the child. Local FlexPrice keys are
+read only in the trusted parent from gitignored `deploy/flexprice/.env`.
+
+Measured after the recovery fixes: **14/14 checks**, org `org-actor-verify-mwdww2to`:
+live gauge **5s**, last-seen STOP **6s**, a second sweep produces no second usage row,
+final scraped seconds **6**, zero charged paise, and the FlexPrice meter verifies **6 seconds**
+exactly. A separate 90-second fixture at 463p/hour is **12p**, and at price zero
+is **0p**; backwards clocks meter zero, never a credit. The rehearsal shortens
+heartbeat to 1 second and grace to 0; production defaults remain 15/180 seconds.
+
+The apply guard briefly reported zero up targets immediately after rolling the
+collector/Prometheus; a subsequent read-only guard passed both targets and found
+`ate_actor_stats_*` for two atespaces. The final full `npm test` result was
+**2248 tests / 2244 pass / 0 fail / 4 skipped**. The earlier Phase 3 live verifier's
+repair assertion now permits bounded later drain passes: its broad read-back can
+see an event before the drain's current-time window does. No production drift
+alarm or delivery semantics changed.

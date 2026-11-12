@@ -743,6 +743,53 @@ debit at ingest), the ingest outage is a **closed port** rather than a container
 restart, `gate.js` carries no usage field, and `pricing.js usdToPaise` is decimal
 arithmetic rather than the display-only helper D9 assumed it was.
 
+### Phase 5 operating runbook
+
+**Monthly platform statement.** Run `npm run billing:platform:charge -- --validate`
+first, then run without `--validate`. Each organization uses two deterministic keys:
+`platform-charge-invoice:<org>:<YYYY-MM>` and
+`platform-charge:<org>:<YYYY-MM>`. The job requires at least 3000 credits before it
+creates anything, recovers a finalized statement by exact invoice-key search, reads
+the balance again, then debits exactly 3000 credits. A retry recovers the same invoice
+and FlexPrice's duplicate debit is success. It never calls an invoice-payment route,
+so the statement cannot credit the wallet back.
+
+**Expiry assertion.** `npm run billing:expiry:check` searches positive credit rows
+whose expiry is before now. Rows older than `CREDIT_EXPIRY_GRACE_MS` are reported as
+unresolved Temporal materialization; the job does not expire, debit, or repair them.
+`npm run billing:phase5:verify` is the local destructive fixture: because FlexPrice
+rejects grants whose expiry is already in the past, it grants a near-future promo,
+waits past expiry, proves prepaid supplies the debit, then waits for
+`CREDIT_EXPIRED`. v2.1.48 intentionally has a two-hour settlement grace plus a
+15-minute schedule; the default verifier bound is therefore 140 minutes and the
+assertion job's default observation grace is three hours. A missing or stalled
+Temporal is a failed check, never fabricated as success.
+
+**Standing reconciliation.** Every billing tick runs actor settlement, drains the
+outbox, then emits one report per organization. `delta` compares LiteLLM with
+`managedPaise + customerNotionalPaise`; `flexprice_delta` compares the `llm-cost`
+meter with `costPaise`, because BYOK events are zero-valued in FlexPrice. Each side
+has its own availability and verdict. `platform_unavailable` or
+`flexprice_unavailable` means unknown, never zero; no reconciliation path writes a
+correction or touches wallet money.
+
+**Zoho contract.** `npm run billing:zoho:contract` validates recorded Probe C and
+runs `TestFleetGrossGSTInvoiceContract` in a temporary detached worktree at the exact
+`deploy/flexprice/VERSION` commit. It proves that the native connector maps three
+lines (₹500 + ₹45 + ₹45), total ₹590, and adds no line-level tax override without any
+OAuth credential or network request. It does **not** prove Zoho-side item setup or
+acceptance. Before launch, an operator must configure the native connector and verify
+a real Zoho invoice remains ₹590 with no extra tax.
+
+**Upgrade and key rotation.** Keep the FlexPrice ref and full commit in
+`deploy/flexprice/VERSION` together; upgrades must rerun Phase 1 probes, the Phase 5
+live verifier, and the fake Zoho contract before changing the pin. Rotate the ingest
+and money credentials independently: stop the affected writer, mint a replacement
+with the same plane role, update only `FLEXPRICE_API_KEY_INGEST` or
+`FLEXPRICE_API_KEY_MONEY`, verify that plane, then revoke the old key. Never merge the
+two credentials, print them, or commit `deploy/flexprice/.env`; the split limits write
+capability and is not a read boundary.
+
 ## 13. Decisions still needed from you
 
 1. **AGPL** — the memo's five options with a recommendation. Nothing else here is

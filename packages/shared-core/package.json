@@ -19,6 +19,7 @@
     "./attachments/*": "./src/attachments/*.js",
     "./messaging/*": "./src/messaging/*.js",
     "./billing/*": "./src/billing/*.js",
+    "./otel/*": "./src/otel/*.js",
     "./secrets/*": "./src/secrets/*.js",
     "./provisioning": "./src/provisioning/index.js",
     "./provisioning/*": "./src/provisioning/*.js"

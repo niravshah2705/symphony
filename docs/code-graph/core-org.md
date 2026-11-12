@@ -4,19 +4,16 @@
 
 ## Overview
 
-Community of 447 nodes
+Community of 444 nodes
 
-- **Size**: 447 nodes
-- **Cohesion**: 0.4182
+- **Size**: 444 nodes
+- **Cohesion**: 0.4276
 - **Dominant Language**: python
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:preset overrides are allowlisted and clamped to model capabilities@L188 | Test | ./packages/shared/src/agent/model-presets.test.js | 188-203 |
-| test:every managed-capable egress key has a settings MANAGED_ENV entry@L77 | Test | ./packages/shared/src/egress-secret-parity.test.js | 77-89 |
-| test:concurrent Firestore context initialization is deduplicated per backend@L176 | Test | ./packages/shared/src/store-workspace-isolation.test.js | 176-220 |
 | get_org_connectors | Function | ./services/settings/app/api/v1/routes_connectors.py | 22-26 |
 | put_org_connectors | Function | ./services/settings/app/api/v1/routes_connectors.py | 30-35 |
 | get_org_connectors_readiness | Function | ./services/settings/app/api/v1/routes_connectors.py | 39-46 |
@@ -64,8 +61,11 @@ Community of 447 nodes
 | _uuid | Function | ./services/settings/app/auth/org_context.py | 46-53 |
 | _items | Function | ./services/settings/app/auth/org_context.py | 56-57 |
 | parse_context_payload | Function | ./services/settings/app/auth/org_context.py | 60-138 |
+| _audience | Function | ./services/settings/app/auth/org_context.py | 141-143 |
+| _cloud_run_token | Function | ./services/settings/app/auth/org_context.py | 146-153 |
+| resolve_org_context | Function | ./services/settings/app/auth/org_context.py | 156-207 |
 
-*... and 397 more members.*
+*... and 394 more members.*
 
 ## Execution Flows
 
@@ -99,7 +99,7 @@ Community of 447 nodes
 - `bool` (13 edge(s))
 - `ValueError` (11 edge(s))
 - `dict` (11 edge(s))
-- `equal` (10 edge(s))
+- `strip` (10 edge(s))
 
 ### Incoming
 
@@ -117,4 +117,4 @@ Community of 447 nodes
 - `./services/settings/app/errors.py` (12 edge(s))
 - `./services/settings/tests/integration/test_settings.py` (12 edge(s))
 - `./services/settings/app/domain/resolver.py` (11 edge(s))
-- `equal` (10 edge(s))
+- `./services/settings/tests/integration/test_authz.py` (10 edge(s))

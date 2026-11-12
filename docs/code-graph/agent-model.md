@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 205 nodes
+Community of 206 nodes
 
-- **Size**: 205 nodes
-- **Cohesion**: 0.3060
+- **Size**: 206 nodes
+- **Cohesion**: 0.3117
 - **Dominant Language**: javascript
 
 ## Members
@@ -21,6 +21,7 @@ Community of 205 nodes
 | test:availability probes the Gemini key against the OpenAI-compatible endpoint@L73 | Test | ./packages/shared/src/agent/antigravity.test.js | 73-86 |
 | test:availability fails fast when the Gemini key is missing@L88 | Test | ./packages/shared/src/agent/antigravity.test.js | 88-94 |
 | statusOf | Function | ./packages/shared/src/agent/availability.js | 43-46 |
+| publicAvailabilityMessage | Function | ./packages/shared/src/agent/availability.js | 48-75 |
 | selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 122-127 |
 | normalize | Function | ./packages/shared/src/agent/availability.js | 125-125 |
 | probeModelAvailability | Function | ./packages/shared/src/agent/availability.js | 129-236 |
@@ -63,12 +64,12 @@ Community of 205 nodes
 | lmstudioPromptBudget | Function | ./packages/shared/src/agent/llm.js | 150-155 |
 | omlxPromptBudget | Function | ./packages/shared/src/agent/llm.js | 157-161 |
 | warnContextMismatch | Function | ./packages/shared/src/agent/llm.js | 171-179 |
-| clampContextWindow | Function | ./packages/shared/src/agent/llm.js | 189-194 |
 
-*... and 155 more members.*
+*... and 156 more members.*
 
 ## Execution Flows
 
+- **resume** (criticality: 0.67, depth: 8)
 - **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
 - **generatePlan** (criticality: 0.67, depth: 6)
 - **startScheduler** (criticality: 0.65, depth: 5)
@@ -92,14 +93,14 @@ Community of 205 nodes
 - `isFinite` (17 edge(s))
 - `trim` (16 edge(s))
 - `max` (15 edge(s))
-- `ok` (14 edge(s))
+- `require` (14 edge(s))
 
 ### Incoming
 
 - `equal` (149 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (44 edge(s))
-- `./packages/shared/src/agent/llm.js` (43 edge(s))
+- `./packages/shared/src/agent/llm.js` (42 edge(s))
 - `deepEqual` (39 edge(s))
 - `strictEqual` (28 edge(s))
 - `match` (14 edge(s))
@@ -109,5 +110,5 @@ Community of 205 nodes
 - `./packages/shared/src/agent/local-intelligence.test.js` (13 edge(s))
 - `./packages/shared/src/agent/codex-budget.test.js` (12 edge(s))
 - `./packages/shared/src/agent/lmstudio-budget.test.js` (12 edge(s))
-- `./packages/shared/src/agent/availability.js` (9 edge(s))
+- `./packages/shared/src/agent/availability.js` (11 edge(s))
 - `rejects` (8 edge(s))

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 33 nodes
+Community of 31 nodes
 
-- **Size**: 33 nodes
-- **Cohesion**: 0.4000
+- **Size**: 31 nodes
+- **Cohesion**: 0.4158
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,8 +15,6 @@ Community of 33 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | truthy | Function | ./services/billing/src/auto-recharge-job.js | 46-48 |
-| idTokenHeader | Function | ./services/billing/src/auto-recharge-job.js | 56-68 |
-| fetchBillingContext | Function | ./services/billing/src/auto-recharge-job.js | 75-105 |
 | walletBalancePaise | Function | ./services/billing/src/auto-recharge-job.js | 113-120 |
 | chargeBelowThreshold | Function | ./services/billing/src/auto-recharge-job.js | 123-128 |
 | alertSuspect | Function | ./services/billing/src/auto-recharge-job.js | 135-140 |
@@ -50,37 +48,36 @@ Community of 33 nodes
 
 ## Execution Flows
 
-- **main** (criticality: 0.68, depth: 4)
+No execution flows pass through this community.
 
 ## Dependencies
 
 ### Outgoing
 
 - `equal` (41 edge(s))
-- `String` (6 edge(s))
 - `match` (6 edge(s))
 - `map` (5 edge(s))
 - `warn` (5 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:a real threshold crossing persists lastAlertedThresholdPaise@L328` (5 edge(s))
 - `filter` (4 edge(s))
-- `trim` (4 edge(s))
+- `String` (4 edge(s))
 - `Number` (4 edge(s))
 - `exit` (3 edge(s))
 - `getBillingAccount` (3 edge(s))
 - `deepEqual` (3 edge(s))
+- `trim` (2 edge(s))
 - `getEffectiveThresholdPaise` (2 edge(s))
-- `get` (2 edge(s))
 - `includes` (2 edge(s))
+- `error` (2 edge(s))
 
 ### Incoming
 
 - `equal` (41 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js` (21 edge(s))
-- `./services/billing/src/auto-recharge-job.js` (19 edge(s))
+- `./services/billing/src/auto-recharge-job.js` (16 edge(s))
 - `match` (6 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:a real threshold crossing persists lastAlertedThresholdPaise@L328` (5 edge(s))
 - `deepEqual` (3 edge(s))
-- `./scripts/flexprice-provision.js::freeTierStatus` (1 edge(s))
 - `String` (1 edge(s))
 - `map` (1 edge(s))
 - `./services/billing/src/sandbox-e2e.test.js` (1 edge(s))

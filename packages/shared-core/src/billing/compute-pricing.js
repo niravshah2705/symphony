@@ -67,7 +67,7 @@ function priceActorUsage({ durationSeconds, tier = DEFAULT_TIER, hourlyRatePaise
     throw new TypeError(`computePricing: unknown actor tier ${JSON.stringify(tier)} (known: ${Object.keys(TIERS).join(', ')})`);
   }
   const rate = Number(hourlyRatePaise);
-  if (!Number.isFinite(rate) || rate < 0) {
+  if (hourlyRatePaise == null || hourlyRatePaise === '' || !Number.isFinite(rate) || rate < 0) {
     throw new TypeError(`computePricing: hourlyRatePaise is required for tier ${tier}; refusing to guess a price`);
   }
 

@@ -21,10 +21,10 @@ Community of 11 nodes
 | until | Function | ./scripts/flexprice-usage-verify.js | 130-138 |
 | bootWithNoFlexprice | Function | ./scripts/flexprice-usage-verify.js | 145-164 |
 | gateOffBootProbe | Function | ./scripts/flexprice-usage-verify.js | 168-183 |
-| main | Function | ./scripts/flexprice-usage-verify.js | 185-441 |
+| main | Function | ./scripts/flexprice-usage-verify.js | 185-445 |
 | call | Function | ./scripts/flexprice-usage-verify.js | 237-237 |
 | rowById | Function | ./scripts/flexprice-usage-verify.js | 238-238 |
-| meterRead | Function | ./scripts/flexprice-usage-verify.js | 444-455 |
+| meterRead | Function | ./scripts/flexprice-usage-verify.js | 448-459 |
 
 ## Execution Flows
 

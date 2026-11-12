@@ -725,6 +725,7 @@ router.post(
       organizationId,
       projectId,
       projectName: (req.body && req.body.projectName) || projectId,
+      userId: String(req.get('x-ai-fleet-user-id') || '').slice(0, 200) || null,
       prompt,
       guardrailSpec: guardrailSpec.normalizeGuardrailSpec(settings.guardrailSpec),
       secrets: creds,

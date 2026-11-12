@@ -255,6 +255,30 @@ test('billing /pubsub/billing-tick runs sweep', async () => {
     // every local suite runs in — the drain must report that it skipped rather
     // than reaching for a client it has no keys for.
     assert.deepEqual(body.outbox, { skipped: 'disabled' });
+    assert.equal(typeof body.reconciliation.orgs, 'number');
+  } finally {
+    await server.close();
+  }
+});
+
+test('billing tick reconciles after actor sweep and outbox drain without coupling failures', async () => {
+  const order = [];
+  const server = await listen(createApp({
+    sweepActorSessions: async () => { order.push('actors'); return { swept: 1 }; },
+    drainOutbox: async () => { order.push('outbox'); return { delivered: 1 }; },
+    reconcileGatewaySpend: async () => {
+      order.push('reconcile');
+      throw new Error('meter unavailable');
+    },
+  }));
+  try {
+    const res = await fetch(`${server.url}/pubsub/billing-tick`, { method: 'POST' });
+    const body = await res.json();
+    assert.equal(res.status, 200);
+    assert.deepEqual(order, ['actors', 'outbox', 'reconcile']);
+    assert.deepEqual(body.actorSessions, { swept: 1 });
+    assert.deepEqual(body.outbox, { delivered: 1 });
+    assert.equal(body.reconciliation, null);
   } finally {
     await server.close();
   }

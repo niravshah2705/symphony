@@ -17,9 +17,9 @@ Community of 6 nodes
 | matchesPerFile | Function | ./services/billing/src/balance-authority.test.js | 49-57 |
 | test:no account-shaped object carries a balance@L79 | Test | ./services/billing/src/balance-authority.test.js | 79-89 |
 | test:nothing reads the ledger journal@L91 | Test | ./services/billing/src/balance-authority.test.js | 91-102 |
-| test:the deleted first-party money functions stay deleted@L125 | Test | ./services/billing/src/balance-authority.test.js | 125-132 |
-| test:the browser never does paise arithmetic@L134 | Test | ./services/billing/src/balance-authority.test.js | 134-144 |
-| test:nothing claims the deleted ledger route still exists@L146 | Test | ./services/billing/src/balance-authority.test.js | 146-155 |
+| test:the deleted first-party money functions stay deleted@L127 | Test | ./services/billing/src/balance-authority.test.js | 127-134 |
+| test:the browser never does paise arithmetic@L136 | Test | ./services/billing/src/balance-authority.test.js | 136-146 |
+| test:nothing claims the deleted ledger route still exists@L148 | Test | ./services/billing/src/balance-authority.test.js | 148-157 |
 
 ## Execution Flows
 

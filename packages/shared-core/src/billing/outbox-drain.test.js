@@ -105,7 +105,7 @@ test('the event carries the delivery key as event_id and the org as its customer
   const [event] = flex.calls.bulk[0];
   assert.equal(event.event_id, row.idempotencyKey);
   assert.equal(event.external_customer_id, 'org-drain-2');
-  assert.deepEqual(event.properties, { cost_paise: 250 });
+  assert.deepEqual(event.properties, { cost_paise: 250, org_id: 'org-drain-2' });
 });
 
 test('the window it reads back starts at the oldest event, not at now', async () => {
