@@ -142,6 +142,7 @@ async def billing_context(
         name=org.name,
         slug=org.slug,
         deployment_slug=org.deployment_slug,
+        is_default=org.is_default,
         admins=[
             BillingAdmin(user_id=u.id, email=u.email) for u in admins if u.email.strip()
         ],

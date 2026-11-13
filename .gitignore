@@ -57,3 +57,7 @@ registry-bundle/
 
 # substrate-cleanup.sh snapshot mirror (cluster config; never commit)
 .substrate-state/
+
+# FlexPrice spike output: re-written on every run, and its ids/amounts are run
+# fixtures. docs/FLEXPRICE_FINDINGS.md is the graded record of what was observed.
+docs/flexprice-spike/results.json

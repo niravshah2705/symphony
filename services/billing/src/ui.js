@@ -1,21 +1,41 @@
 'use strict';
 
+const { decimalFromPaise } = require('@ai-fleet/shared-core/billing/money-wire');
+
+/** Rupees for display, or an em-dash when this process does not know the number. */
+function inr(paise) {
+  const raw = Number(paise);
+  if (paise === null || paise === undefined || !Number.isFinite(raw)) return '—';
+  return `₹${decimalFromPaise(raw)}`;
+}
+
 function renderDashboardHtml(data = {}) {
   const {
     account = {},
+    fund = {},
     summary = {},
     cashfreeConfigured = false,
     environment = 'sandbox',
   } = data;
 
-  const balanceInr = (Number(account.balancePaise || 0) / 100).toFixed(2);
-  const initialCreditInr = (Number(account.initialCreditPaise || 0) / 100).toFixed(2);
+  // The wallet's balance, never a locally maintained one: the balance card shows
+  // "—" when the gate could not read it, because an unread number is not zero.
+  const balanceInr = inr(fund.balancePaise);
+  const fundNote = fund.balancePaise === null || fund.balancePaise === undefined
+    ? (fund.gatePolicy === 'off'
+      ? 'No wallet read: the billing gate is off'
+      : `Balance unavailable${fund.reason ? ` (${fund.reason})` : ''}`)
+    : `${fund.state}${fund.stale ? ' (cached, last read failed)' : ''} · gate ${fund.gatePolicy}`;
+  const initialCreditInr = inr(account.initialCreditPaise);
   const autoRecharge = account.autoRecharge || {};
   const isAutoEnabled = Boolean(autoRecharge.enabled);
   const mode = autoRecharge.mode || 'amount';
-  const thresholdInr = ((Number(autoRecharge.thresholdPaise) || 0) / 100).toFixed(2);
+  // Configured thresholds are inputs, so they stay bare numbers; only the wallet
+  // balance is allowed to be unknown.
+  const rupees = (paise) => decimalFromPaise(Number(paise) || 0);
+  const thresholdInr = rupees(autoRecharge.thresholdPaise);
   const thresholdPercent = Number(autoRecharge.thresholdPercent) || 20;
-  const rechargeAmountInr = ((Number(autoRecharge.amountPaise) || 0) / 100).toFixed(2);
+  const rechargeAmountInr = rupees(autoRecharge.amountPaise);
   const subscriptionId = autoRecharge.cashfreeSubscriptionId || '';
   const paymentInfo = account.paymentInfo || {};
   const billingName = paymentInfo.billingName || 'Not configured';
@@ -196,9 +216,9 @@ function renderDashboardHtml(data = {}) {
 
     <div class="grid">
       <div class="card">
-        <div class="card-title">Available Balance</div>
-        <div class="metric">₹${balanceInr}</div>
-        <div class="metric-sub">Seeded credit: ₹${initialCreditInr}</div>
+        <div class="card-title">Wallet Balance</div>
+        <div class="metric">${balanceInr}</div>
+        <div class="metric-sub">${fundNote} · opening credit ${initialCreditInr}</div>
       </div>
       <div class="card">
         <div class="card-title">Auto-Reload Status</div>
@@ -268,7 +288,6 @@ function renderDashboardHtml(data = {}) {
 
         <div class="actions">
           <button type="submit" class="btn">Save Configuration</button>
-          <button type="button" id="trigger-sweep-btn" class="btn secondary">Run Auto-Recharge Sweep Now</button>
         </div>
       </form>
     </div>
@@ -280,7 +299,6 @@ function renderDashboardHtml(data = {}) {
     const modeRadios = document.getElementsByName('threshold-mode');
     const groupAmount = document.getElementById('group-amount');
     const groupPercentage = document.getElementById('group-percentage');
-    const sweepBtn = document.getElementById('trigger-sweep-btn');
 
     function updateVisibility() {
       const isPercent = Array.from(modeRadios).find(r => r.checked)?.value === 'percentage';
@@ -328,28 +346,6 @@ function renderDashboardHtml(data = {}) {
         }
       } catch (err) {
         showToast(err.message || 'Request failed', false);
-      }
-    });
-
-    sweepBtn.addEventListener('click', async () => {
-      sweepBtn.disabled = true;
-      try {
-        const res = await fetch('/pubsub/billing-recharge-tick', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        if (res.ok) {
-          const body = await res.json().catch(() => ({}));
-          showToast(body.status === 'launched' ? 'Auto-recharge Job execution launched.' : 'Auto-recharge sweep executed.');
-          setTimeout(() => location.reload(), 1000);
-        } else {
-          showToast('Sweep returned status: ' + res.status, false);
-        }
-      } catch (err) {
-        showToast('Sweep error: ' + err.message, false);
-      } finally {
-        sweepBtn.disabled = false;
       }
     });
   </script>

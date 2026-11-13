@@ -754,14 +754,32 @@ variable "coder_schedule" {
 
 variable "billing_schedule" {
   type        = string
-  description = "Billing usage-aggregation sweep tick — POSTs to /pubsub/billing-tick. Aggregation/watermark/prune only; money moved to the hourly billing_recharge_schedule Job."
+  description = "Billing tick — POSTs to /pubsub/billing-tick: usage sweep, actor-session sweep, then the FlexPrice outbox drain. Money and reconciliation run as Jobs."
   default     = "*/5 * * * *"
 }
 
 variable "billing_recharge_schedule" {
   type        = string
-  description = "Auto-recharge + alert tick — publishes to the billing auto-recharge Job. Hourly to match CONFIG.BILLING.rechargeIntervalMin (60)."
+  description = "Cron for the auto-recharge Job; Cloud Scheduler calls jobs/<name>:run directly. Hourly to match CONFIG.BILLING.rechargeIntervalMin (60)."
   default     = "0 * * * *"
+}
+
+variable "billing_platform_charge_schedule" {
+  type        = string
+  description = "Cron for the monthly platform-charge Job (platform-charge-job.js)."
+  default     = "0 2 1 * *"
+}
+
+variable "billing_credit_expiry_schedule" {
+  type        = string
+  description = "Cron for the hourly credit-expiry assertion Job (credit-expiry-job.js)."
+  default     = "15 * * * *"
+}
+
+variable "billing_reconcile_schedule" {
+  type        = string
+  description = "Cron for the daily gateway-spend reconciliation Job (reconcile-gateway-spend.js)."
+  default     = "30 3 * * *"
 }
 
 variable "scheduler_time_zone" {
@@ -769,18 +787,59 @@ variable "scheduler_time_zone" {
   default = "Etc/UTC"
 }
 
-# --- Billing auto-recharge Job knobs -------------------------------------------
+# --- Billing Job knobs -----------------------------------------------------------
 
 variable "billing_job_name" {
   type        = string
-  description = "Cloud Run Job that evaluates every auto-recharge opt-in org and fires its Cashfree charge once per tick. Must match google_pubsub_subscription.push_config.cloud_run_job.service."
+  description = "Name of the auto-recharge Cloud Run Job (kept stable so the existing Job is not replaced)."
   default     = "billing-auto-recharge"
+}
+
+variable "billing_job_name_prefix" {
+  type        = string
+  description = "Prefix for the platform-charge, credit-expiry and reconcile Job names."
+  default     = "billing"
 }
 
 variable "billing_job_task_timeout" {
   type        = string
-  description = "Max wall-clock for one auto-recharge Job task — it walks every candidate org serially, validating before each charge. Cloud Run Job task timeout maxes at 24h."
+  description = "Max wall-clock for one billing Job task. Cloud Run Job task timeout maxes at 24h."
   default     = "600s"
+}
+
+# --- FlexPrice (external HTTPS endpoint; keys live in Secret Manager) ------------
+
+variable "flexprice_enabled" {
+  type        = bool
+  description = "Enable FlexPrice-backed billing on the billing service and Jobs."
+  default     = true
+}
+
+variable "flexprice_base_url" {
+  type        = string
+  description = "FlexPrice API base URL. Must be https://."
+  validation {
+    condition     = can(regex("^https://[^\\s/]+", var.flexprice_base_url))
+    error_message = "flexprice_base_url must be an https:// URL."
+  }
+}
+
+variable "flexprice_environment_id" {
+  type        = string
+  description = "FlexPrice environment id (UUID)."
+  validation {
+    condition     = can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.flexprice_environment_id))
+    error_message = "flexprice_environment_id must be a UUID."
+  }
+}
+
+variable "flexprice_supplier_state_code" {
+  type        = string
+  description = "Supplier GST state code, two digits 01-37."
+  validation {
+    condition     = can(regex("^(0[1-9]|[12][0-9]|3[0-7])$", var.flexprice_supplier_state_code))
+    error_message = "flexprice_supplier_state_code must be a two-digit GST state code 01-37."
+  }
 }
 
 variable "billing_job_dry_run" {

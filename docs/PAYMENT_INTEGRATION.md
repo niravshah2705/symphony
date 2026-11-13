@@ -16,7 +16,6 @@ This document describes how to configure environment variables and secrets for t
 | `BILLING_URL` | No | Base URL for billing service S2S calls | `http://localhost:4050` |
 | `BILLING_SWEEP_ENABLED` | No | Enables the usage-aggregation sweep (charges moved to the recharge Job) | `true` |
 | `BILLING_RECHARGE_INTERVAL_MIN` | No | Cooldown between one org's recharge attempts; also the Job's cadence | `60` |
-| `BILLING_JOB_NAME` | No | Cloud Run Job the hourly tick launches (`auto-recharge-job.js`) | `billing-auto-recharge` |
 | `BILLING_JOB_DRY_RUN` | No | `true` = select + validate + log, charge nothing | `false` |
 | `ORG_URL` | No | Org service base URL — the Job reads `/internal/orgs/{id}/billing-context` | `https://org-<…>.run.app` |
 | `BILLING_NOTIFY_EMAIL` | No | Email address for low-balance notifications | `billing-alerts@example.com` |
@@ -156,7 +155,7 @@ The dedicated billing microservice exposes two ways to control auto-renew thresh
 
 1. **Standalone Basic UI (`GET /` or `GET /ui`)**:
    - Access directly on the billing Cloud Run service (e.g. `http://localhost:4050` or `https://billing-<suffix>.run.app`).
-   - Offers real-time service health, store backend status, Cashfree environment indicator, and an interactive form to toggle Auto-Renew, switch between Fixed Amount (₹) and Percentage (%) modes, set trigger thresholds, and launch the auto-recharge sweep ("Run Auto-Recharge Sweep Now" → `POST /pubsub/billing-recharge-tick`).
+   - Offers real-time service health, store backend status, Cashfree environment indicator, and an interactive form to toggle Auto-Renew, switch between Fixed Amount (₹) and Percentage (%) modes, set trigger thresholds. The auto-recharge sweep runs only as the scheduled Job (locally: `npm run job:recharge -w @ai-fleet/billing`).
 
 2. **Main Application SPA (`/#cost`)**:
    - Integrated into the Symphony web dashboard (`public/js/views/cost.js`).
@@ -171,7 +170,7 @@ Money moves in a one-shot Cloud Run **Job**, not in the 5-minute tick:
 | Cadence | Endpoint | Work |
 |---|---|---|
 | `*/5 * * * *` (`billing-tick` scheduler) | `POST /pubsub/billing-tick` on billing | usage aggregation, watermark, retention prune — **no charges** |
-| `0 * * * *` (`billing-auto-recharge-tick` scheduler) | `POST /pubsub/billing-recharge-tick` on billing | launches one execution of the `billing-auto-recharge` Job |
+| `0 * * * *` (`billing-auto-recharge-tick` scheduler) | Run Admin API `jobs/billing-auto-recharge:run` as `billing-scheduler-sa` | one execution of the `billing-auto-recharge` Job |
 | Job execution | `services/billing/src/auto-recharge-job.js` | select → validate → charge → alert |
 
 Why the split: the aggregation tick used to loop **every** account and post an ON-DEMAND

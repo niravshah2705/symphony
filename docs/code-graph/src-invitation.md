@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 53 nodes
+Community of 51 nodes
 
-- **Size**: 53 nodes
-- **Cohesion**: 0.3445
+- **Size**: 51 nodes
+- **Cohesion**: 0.3216
 - **Dominant Language**: javascript
 
 ## Members
@@ -22,9 +22,7 @@ Community of 53 nodes
 | start | Function | ./services/email/src/app.test.js | 55-72 |
 | post | Function | ./services/email/src/app.test.js | 74-80 |
 | test:push authentication runs before delivery@L95 | Test | ./services/email/src/app.test.js | 95-106 |
-| test:delivers a valid invitation once and acknowledges a duplicate@L108 | Test | ./services/email/src/app.test.js | 108-120 |
 | test:does not acknowledge a concurrent redelivery while SMTP is unresolved@L122 | Test | ./services/email/src/app.test.js | 122-138 |
-| test:dispatches the allow-listed billing alert contract@L140 | Test | ./services/email/src/app.test.js | 140-152 |
 | test:acknowledges without releasing after SMTP succeeds but completion persistence fails@L154 | Test | ./services/email/src/app.test.js | 154-169 |
 | test:SMTP failure returns 500 and releases the key for a Pub/Sub retry@L171 | Test | ./services/email/src/app.test.js | 171-191 |
 | test:unsupported or malformed messages are acknowledged without sending@L193 | Test | ./services/email/src/app.test.js | 193-205 |
@@ -64,8 +62,10 @@ Community of 53 nodes
 | test:uses the Pub/Sub message id when a caller idempotency key is absent@L40 | Test | ./services/email/src/templates.test.js | 40-44 |
 | test:rejects arbitrary templates, invalid mailboxes, controls, and unsafe keys@L46 | Test | ./services/email/src/templates.test.js | 46-55 |
 | test:renders a fixed invitation template and escapes values and token URL@L57 | Test | ./services/email/src/templates.test.js | 57-65 |
+| test:builds invitation links for both origins and concrete hosted SPA objects@L67 | Test | ./services/email/src/templates.test.js | 67-76 |
+| test:parses and server-renders a bounded billing alert@L78 | Test | ./services/email/src/templates.test.js | 78-97 |
 
-*... and 3 more members.*
+*... and 1 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 53 nodes
 
 ### Outgoing
 
-- `equal` (48 edge(s))
+- `equal` (40 edge(s))
 - `String` (17 edge(s))
 - `trim` (14 edge(s))
-- `push` (14 edge(s))
+- `push` (12 edge(s))
 - `status` (9 edge(s))
 - `json` (8 edge(s))
 - `test` (8 edge(s))
 - `match` (8 edge(s))
-- `close` (7 edge(s))
+- `./services/email/src/app.test.js::test:delivers a valid invitation once and acknowledges a duplicate@L108` (7 edge(s))
 - `freeze` (7 edge(s))
 - `includes` (6 edge(s))
 - `stringify` (5 edge(s))
+- `close` (5 edge(s))
 - `isArray` (5 edge(s))
 - `throws` (5 edge(s))
-- `end` (4 edge(s))
 
 ### Incoming
 
-- `equal` (48 edge(s))
+- `equal` (40 edge(s))
 - `./services/email/src/templates.js` (20 edge(s))
-- `./services/email/src/app.test.js` (13 edge(s))
+- `./services/email/src/app.test.js` (11 edge(s))
 - `./services/email/src/mailer.js` (8 edge(s))
 - `match` (8 edge(s))
 - `./services/email/src/templates.test.js` (8 edge(s))
-- `close` (7 edge(s))
+- `./services/email/src/app.test.js::test:delivers a valid invitation once and acknowledges a duplicate@L108` (7 edge(s))
 - `./services/email/src/config.js` (6 edge(s))
+- `close` (5 edge(s))
 - `./services/email/src/mailer.test.js` (5 edge(s))
 - `throws` (5 edge(s))
-- `push` (4 edge(s))
+- `./services/email/src/app.test.js::test:dispatches the allow-listed billing alert contract@L140` (4 edge(s))
 - `includes` (3 edge(s))
 - `stringify` (3 edge(s))
 - `./services/email/src/index.js` (3 edge(s))
-- `./services/email/src/app.js` (2 edge(s))

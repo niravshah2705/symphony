@@ -5,17 +5,25 @@
  *
  * This is the money path that deliberately does NOT run on the 5-minute billing
  * tick (see shared-core/billing/sweep.js). It is a one-shot process: select the
- * orgs that actually need attention, VALIDATE that a charge can legally and
- * correctly happen, pull each org's identity and administrator emails from the
- * org service, and only then charge and alert. Every guard is fail-closed — a
- * skipped charge is a loud log line, never a silent success — because the
- * alternative is charging a tenant that did not ask to be charged, or crediting
- * a wallet for money that never moved.
+ * orgs that actually need attention, READ each one's balance from FlexPrice's
+ * wallet, VALIDATE that a charge can legally and correctly happen, pull each
+ * org's identity and administrator emails from the org service, and only then
+ * charge and alert. Every guard is fail-closed — a skipped charge is a loud log
+ * line, never a silent success — because the alternative is charging a tenant
+ * that did not ask to be charged, or crediting a wallet for money that never
+ * moved.
  *
  * Two independent duties per org: the CHARGE is guarded and only for orgs that
  * opted in, the ALERT is for anyone whose balance crossed a threshold. An org
  * that declined auto-recharge still has to be told it is running dry, and an org
  * whose charge was just refused needs to hear about it immediately.
+ *
+ * Both duties now start from a network read instead of a stored number, because
+ * the number that decides them is `real_time_credit_balance` and not a local
+ * balance. That makes the run O(candidates) wallet reads per hour — bounded by
+ * the org count, and cheap measured (p50 5 ms), but it is why the selection step
+ * filters on the org's own CONFIG (opted in, or has thresholds) before it spends
+ * a read on the balance.
  *
  * Dry run (`BILLING_JOB_DRY_RUN=true` or `--validate`) executes selection,
  * validation and the org-service read, and charges nothing. Use it before
@@ -27,14 +35,13 @@ const log = require('@ai-fleet/shared-core/logger');
 const store = require('@ai-fleet/shared-core/store');
 const recharge = require('@ai-fleet/shared-core/billing/recharge');
 const notify = require('@ai-fleet/shared-core/billing/notify');
-const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
+const gate = require('@ai-fleet/shared-core/billing/gate');
 
 // Org ids are UUIDs (services/org scopes every document by one). Anything else —
 // notably the shared stack's '__shared__' pseudo-org — has no org-service record
 // to validate against and no administrator to notify, so it is never a candidate
 // here. The shared stack's own usage is still visible on the billing dashboard.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CHARGEABLE_SUBSCRIPTION_STATUSES = new Set(['ACTIVE']);
 
 function truthy(value) {
   return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
@@ -97,35 +104,60 @@ async function fetchBillingContext(orgId, deps) {
   return res.json();
 }
 
-/** Opted in and below its own (amount- or percentage-mode) recharge threshold. */
-function chargeBelowThreshold(account) {
+/**
+ * The balance both duties are decided on, in paise, or null when it is not known.
+ * `unknown` is a state of this process's knowledge, not of the tenant's money: the
+ * gate returns null when there is no wallet, the read failed, or enforcement is
+ * off. Charging or alerting on any of those would act on a number we never read.
+ */
+async function walletBalancePaise(orgId, deps) {
+  const fundStatus = deps.fundStatus || gate.ensureFundStatus;
+  const status = await fundStatus(orgId);
+  const raw = status && status.balancePaise;
+  if (raw === null || raw === undefined) return null;
+  const paise = Number(raw);
+  return Number.isFinite(paise) ? paise : null;
+}
+
+/** Opted in and, at `balancePaise`, below its own (amount- or percentage-mode) trigger. */
+function chargeBelowThreshold(account, balancePaise) {
   const cfg = (account && account.autoRecharge) || {};
   if (!cfg.enabled) return false;
-  const threshold = recharge.getEffectiveThresholdPaise(account, cfg);
-  return (Number(account.balancePaise) || 0) < threshold;
+  if (balancePaise === null || balancePaise === undefined) return false;
+  return Number(balancePaise) < recharge.getEffectiveThresholdPaise(account, cfg);
 }
 
 /**
- * Cheap pre-filter for the alert duty: has the balance reached the *highest*
- * configured threshold at all. Whether this specific crossing was already
- * alerted is decided once, authoritatively, inside notify.checkThresholdsAndNotify.
+ * Has the balance reached the *highest* configured threshold at all. Whether this
+ * specific crossing was already alerted is decided once, authoritatively, inside
+ * notify.checkThresholdsAndNotify.
  */
-function alertSuspect(account) {
+function alertSuspect(account, balancePaise) {
   const thresholds = ((account && account.alertThresholdsPaise) || []).map(Number).filter(Number.isFinite);
   if (!thresholds.length) return false;
-  return (Number(account.balancePaise) || 0) <= Math.max(...thresholds);
+  if (balancePaise === null || balancePaise === undefined) return false;
+  return Number(balancePaise) <= Math.max(...thresholds);
 }
 
-/** The charge gates that stored state alone can answer — no network involved. */
-function rechargeBlockers(orgId, cfg, deps, now = Date.now()) {
-  if (!deps.cashfreeApi.isConfigured()) return 'Cashfree credentials are not configured';
+/**
+ * Why a due recharge cannot be charged, in the customer's terms.
+ *
+ * This is the reason auto-recharge charges nothing today: the credit half of the
+ * old path wrote an `auto_recharge` entry into the local ledger, and the local
+ * ledger is no longer spendable money (`billing/recharge.js` — only
+ * `recharge-settle.js` may credit, and it credits FlexPrice's wallet against a
+ * quoted intent). Charging a mandate that then credits nothing is the worst
+ * available outcome — the tenant pays and is still blocked — so the mandate is
+ * not touched, and the org is alerted instead so it can recharge from the UI.
+ *
+ * The remaining gates are what a migrated path will have to answer, and they are
+ * kept here as the shape of the check rather than as live code: the mandate must
+ * be recorded on the account, positive, and outside its cooldown window.
+ */
+function rechargeIsNotChargeable(cfg) {
   if (!cfg.cashfreeSubscriptionId) return 'no ON_DEMAND subscription (mandate) on file';
   if (!(Number(cfg.amountPaise) > 0)) return 'recharge amount is not positive';
-  const gateMs = recharge.lastChargeGateMs(cfg);
-  if (gateMs !== null && now - gateMs < recharge.RECHARGE_COOLDOWN_MS) {
-    return 'inside the recharge cooldown window';
-  }
-  return null;
+  return 'the mandate is not settled into the FlexPrice wallet; add credits from the billing UI';
 }
 
 function adminEmailsOf(context) {
@@ -134,35 +166,20 @@ function adminEmailsOf(context) {
     .filter(Boolean);
 }
 
-/** Charge gate #2: the mandate must be live on Cashfree's side, not merely stored. */
-async function subscriptionBlockers(deps, subscriptionId) {
-  let subscription;
-  try {
-    subscription = await deps.cashfreeApi.getSubscription(subscriptionId);
-  } catch (err) {
-    return `subscription lookup failed: ${err && err.message ? err.message : err}`;
-  }
-  const status = String((subscription && (subscription.subscription_status ?? subscription.status)) || '')
-    .toUpperCase();
-  if (!CHARGEABLE_SUBSCRIPTION_STATUSES.has(status)) {
-    return `subscription ${subscriptionId} is ${status || 'UNKNOWN'}, not ACTIVE`;
-  }
-  return null;
-}
-
 async function runCandidate(orgId, account, opts) {
-  const { deps, counters, dryRun, now } = opts;
+  const { deps, counters } = opts;
   const cfg = account.autoRecharge || {};
-  const wantCharge = chargeBelowThreshold(account);
 
-  // A blocked charge is still an alert-worthy event, so the org-service read
-  // happens unless BOTH duties are moot.
-  const blockers = wantCharge ? rechargeBlockers(orgId, cfg, deps, now) : null;
-  if (blockers) {
-    counters.skipped += 1;
-    deps.log.warn(`auto-recharge ${orgId}: charge skipped — ${blockers}`);
-    if (!alertSuspect(account)) return;
+  // Both duties start from the same read. A balance this process could not read
+  // is neither a trigger nor a crossing, and saying so is the only useful output.
+  const balancePaise = await walletBalancePaise(orgId, deps);
+  if (balancePaise === null) {
+    counters.unread += 1;
+    deps.log.warn(`auto-recharge ${orgId}: no wallet balance to decide on (no wallet, unreadable, or the gate is off) — nothing charged, nothing alerted`);
+    return;
   }
+  const due = chargeBelowThreshold(account, balancePaise);
+  if (!due && !alertSuspect(account, balancePaise)) return;
 
   // Org info from the org service: proves the tenant still exists and gives the
   // alert audience. Never fall back to a cached email list — an admin who was
@@ -186,26 +203,17 @@ async function runCandidate(orgId, account, opts) {
   }
   counters.checked += 1;
 
-  if (wantCharge && !blockers) {
-    const mandateIssue = await subscriptionBlockers(deps, cfg.cashfreeSubscriptionId);
-    if (mandateIssue) {
-      counters.skipped += 1;
-      deps.log.warn(`auto-recharge ${orgId}: charge skipped — ${mandateIssue}`);
-    } else if (dryRun) {
-      deps.log.info(`auto-recharge DRY RUN ${orgId} (${context.name}): would charge `
-        + `${Number(cfg.amountPaise) / 100} INR (balance ${account.balancePaise} paise), `
-        + `notify ${emails.length} admin(s)`);
-    } else {
-      const posted = await deps.rechargeApi.maybeAutoRecharge(orgId, now);
-      if (posted && posted.entry) {
-        counters.charged += 1;
-        deps.log.info(`auto-recharge ${orgId} (${context.name}): charged `
-          + `${Number(cfg.amountPaise) / 100} INR (ledger entry ${posted.entry.id})`);
-      }
-    }
+  if (due) {
+    counters.due += 1;
+    const trigger = recharge.getEffectiveThresholdPaise(account, cfg);
+    deps.log.warn(`auto-recharge ${orgId} (${context.name}): wallet is at ${balancePaise} paise, below the ${trigger} paise trigger, `
+      + `but ${rechargeIsNotChargeable(cfg)}.`);
   }
 
-  if (dryRun || !alertSuspect(account)) return;
+  // A dry run stops here: it has read the balance, asked the org service and
+  // reported the due verdict, which is the whole question `--validate` exists to
+  // answer. Alerting from a rehearsal would email real admins.
+  if (opts.dryRun) return;
   // Alerts go to the ORG_ADMINs the org service just reported, overriding the
   // account's own channel config for THIS run only: the persisted notifyEmails
   // list is a stale copy of that same data.
@@ -215,7 +223,10 @@ async function runCandidate(orgId, account, opts) {
     notifyChannels: { ...(refreshed.notifyChannels || {}), email: true },
     notifyEmails: emails,
   };
-  const alerted = await deps.notifyApi.checkThresholdsAndNotify(alertAccount, { store: deps.storeApi });
+  const alerted = await deps.notifyApi.checkThresholdsAndNotify(alertAccount, {
+    store: deps.storeApi,
+    balancePaise,
+  });
   if (alerted !== null && alerted !== undefined) {
     counters.alerted += 1;
     deps.log.info(`billing alert ${orgId} (${context.name}): threshold ${alerted} paise, `
@@ -224,17 +235,19 @@ async function runCandidate(orgId, account, opts) {
 }
 
 /**
- * Candidates come from the billing store rather than the org list: an org only
- * reaches the charge path once it has enabled auto-recharge AND fallen below its
- * own threshold, and reaches the alert path once its balance touches any
- * configured threshold. The store is also the only place the mandate id and
- * amount live.
+ * Candidates come from the billing store rather than the org list, filtered on the
+ * org's own CONFIG — the balance is not in the store any more, so deciding it here
+ * would mean a wallet read per account whether or not the org asked for anything.
+ * An org reaches this job once it has opted into auto-recharge (charge duty) or
+ * has any alert threshold configured (alert duty), and the balance read inside
+ * `runCandidate` then decides whether either actually applies.
  */
 function selectCandidates(storeApi) {
   return storeApi
     .listBillingAccounts()
     .filter((account) => account && account.id && UUID_RE.test(account.id))
-    .filter((account) => chargeBelowThreshold(account) || alertSuspect(account))
+    .filter((account) => (account.autoRecharge && account.autoRecharge.enabled)
+      || ((account.alertThresholdsPaise || []).length > 0))
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
@@ -243,17 +256,15 @@ async function main({
   argv = process.argv.slice(2),
   initStoreImpl = store.initStore,
   deps = {},
-  now = Date.now(),
   logImpl = log,
   exit = (code) => process.exit(code),
 } = {}) {
   const dryRun = truthy(env.BILLING_JOB_DRY_RUN) || argv.includes('--validate');
-  const counters = { checked: 0, charged: 0, alerted: 0, skipped: 0 };
+  const counters = { checked: 0, due: 0, alerted: 0, unread: 0 };
   const resolved = {
     storeApi: deps.storeApi || store,
-    rechargeApi: deps.rechargeApi || recharge,
     notifyApi: deps.notifyApi || notify,
-    cashfreeApi: deps.cashfreeApi || cashfreeClient,
+    fundStatus: deps.fundStatus || gate.ensureFundStatus,
     fetchBillingContext: deps.fetchBillingContext || fetchBillingContext,
     fetchImpl: deps.fetchImpl,
     idTokenHeader: deps.idTokenHeader,
@@ -262,7 +273,7 @@ async function main({
     timeoutMs: deps.timeoutMs,
     log: logImpl,
   };
-  const options = { deps: resolved, counters, dryRun, now };
+  const options = { deps: resolved, counters, dryRun };
 
   try {
     // Firestore-backed reads are synchronous against the hydrated mirror, so
@@ -304,7 +315,8 @@ module.exports = {
   selectCandidates,
   chargeBelowThreshold,
   alertSuspect,
-  rechargeBlockers,
+  rechargeIsNotChargeable,
+  walletBalancePaise,
   fetchBillingContext,
   UUID_RE,
 };

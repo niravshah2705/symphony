@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 432 nodes
+Community of 469 nodes
 
-- **Size**: 432 nodes
-- **Cohesion**: 0.2887
+- **Size**: 469 nodes
+- **Cohesion**: 0.2671
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,36 +20,36 @@ Community of 432 nodes
 | test:proxied coding isolates DeepAgent shell and developer-tool contexts@L440 | Test | ./packages/shared/src/agent/coder-flow.test.js | 440-486 |
 | test:recordStackLink persists the link and recovers the blocker identifier@L952 | Test | ./packages/shared/src/agent/coder-flow.test.js | 952-973 |
 | test:recordStackLink is a no-op when the run was not stacked@L975 | Test | ./packages/shared/src/agent/coder-flow.test.js | 975-984 |
-| resolveRole | Function | ./packages/shared/src/agent/coder-orchestrator.js | 363-372 |
-| recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 689-709 |
+| resolveRole | Function | ./packages/shared/src/agent/coder-orchestrator.js | 362-371 |
+| recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 690-710 |
 | buildTicketPrompt | Function | ./packages/shared/src/agent/coder.js | 42-76 |
 | isCoderLlmUsable | Function | ./packages/shared/src/agent/coder.js | 79-84 |
 | assertOpenSweRepositoryProvider | Function | ./packages/shared/src/agent/coder.js | 86-93 |
 | activeRepositoryBranch | Function | ./packages/shared/src/agent/coder.js | 95-99 |
 | activeRepositoryArtifactReceipt | Function | ./packages/shared/src/agent/coder.js | 101-104 |
 | resolvePlannedRepository | Function | ./packages/shared/src/agent/coder.js | 111-142 |
-| executeCodingRuntime | Function | ./packages/shared/src/agent/coder.js | 149-277 |
-| runCoderLocal | Function | ./packages/shared/src/agent/coder.js | 284-338 |
-| runCoder | Function | ./packages/shared/src/agent/coder.js | 346-353 |
-| runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 361-468 |
-| runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 471-489 |
-| installSkills | Function | ./packages/shared/src/agent/framework.js | 52-86 |
-| validateSkillName | Function | ./packages/shared/src/agent/framework.js | 88-100 |
-| trackedSkillPaths | Function | ./packages/shared/src/agent/framework.js | 102-113 |
-| claimSkillsDirectory | Function | ./packages/shared/src/agent/framework.js | 115-145 |
-| assertContained | Function | ./packages/shared/src/agent/framework.js | 147-152 |
-| assertNoSymlinks | Function | ./packages/shared/src/agent/framework.js | 154-164 |
-| lstatOrNull | Function | ./packages/shared/src/agent/framework.js | 166-173 |
-| isDir | Function | ./packages/shared/src/agent/framework.js | 175-181 |
-| loadWorkflow | Function | ./packages/shared/src/agent/framework.js | 189-195 |
-| prepareScratch | Function | ./packages/shared/src/agent/framework.js | 202-208 |
-| cleanup | Function | ./packages/shared/src/agent/framework.js | 206-206 |
-| buildAgent | Function | ./packages/shared/src/agent/framework.js | 211-213 |
-| configuredResourceNames | Function | ./packages/shared/src/agent/framework.js | 223-232 |
-| runWorkflow | Function | ./packages/shared/src/agent/framework.js | 240-366 |
-| contentToText | Function | ./packages/shared/src/agent/framework.js | 369-373 |
-| messageText | Function | ./packages/shared/src/agent/framework.js | 382-388 |
-| lastText | Function | ./packages/shared/src/agent/framework.js | 390-393 |
+| executeCodingRuntime | Function | ./packages/shared/src/agent/coder.js | 149-278 |
+| runCoderLocal | Function | ./packages/shared/src/agent/coder.js | 285-340 |
+| runCoder | Function | ./packages/shared/src/agent/coder.js | 348-355 |
+| runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 363-471 |
+| runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 474-492 |
+| installSkills | Function | ./packages/shared/src/agent/framework.js | 53-87 |
+| validateSkillName | Function | ./packages/shared/src/agent/framework.js | 89-101 |
+| trackedSkillPaths | Function | ./packages/shared/src/agent/framework.js | 103-114 |
+| claimSkillsDirectory | Function | ./packages/shared/src/agent/framework.js | 116-146 |
+| assertContained | Function | ./packages/shared/src/agent/framework.js | 148-153 |
+| assertNoSymlinks | Function | ./packages/shared/src/agent/framework.js | 155-165 |
+| lstatOrNull | Function | ./packages/shared/src/agent/framework.js | 167-174 |
+| isDir | Function | ./packages/shared/src/agent/framework.js | 176-182 |
+| loadWorkflow | Function | ./packages/shared/src/agent/framework.js | 190-196 |
+| prepareScratch | Function | ./packages/shared/src/agent/framework.js | 203-209 |
+| cleanup | Function | ./packages/shared/src/agent/framework.js | 207-207 |
+| buildAgent | Function | ./packages/shared/src/agent/framework.js | 212-214 |
+| configuredResourceNames | Function | ./packages/shared/src/agent/framework.js | 224-233 |
+| runWorkflow | Function | ./packages/shared/src/agent/framework.js | 241-372 |
+| contentToText | Function | ./packages/shared/src/agent/framework.js | 375-379 |
+| messageText | Function | ./packages/shared/src/agent/framework.js | 388-394 |
+| lastText | Function | ./packages/shared/src/agent/framework.js | 396-399 |
 | withSkillsEnv | Function | ./packages/shared/src/agent/framework.test.js | 26-38 |
 | test:installSkills refuses a symbolic-link destination without writing outside the root@L40 | Test | ./packages/shared/src/agent/framework.test.js | 40-56 |
 | test:installSkills refuses tracked project-owned .agent-skills files@L58 | Test | ./packages/shared/src/agent/framework.test.js | 58-73 |
@@ -65,53 +65,53 @@ Community of 432 nodes
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
 
-*... and 382 more members.*
+*... and 419 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.68, depth: 4)
 - **resume** (criticality: 0.67, depth: 8)
-- **generatePlan** (criticality: 0.66, depth: 4)
-- **startScheduler** (criticality: 0.66, depth: 6)
-- **runCoder** (criticality: 0.65, depth: 5)
-- **runPlannedCoder** (criticality: 0.65, depth: 5)
-- **executeClaude** (criticality: 0.61, depth: 2)
-- **executeCodex** (criticality: 0.60, depth: 2)
+- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
+- **generatePlan** (criticality: 0.67, depth: 6)
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
+- **runCoder** (criticality: 0.67, depth: 7)
+- **runPlannedCoder** (criticality: 0.66, depth: 7)
+- **startScheduler** (criticality: 0.65, depth: 5)
+- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (259 edge(s))
-- `join` (142 edge(s))
-- `String` (86 edge(s))
-- `includes` (76 edge(s))
-- `deepEqual` (52 edge(s))
-- `isArray` (51 edge(s))
+- `equal` (313 edge(s))
+- `join` (196 edge(s))
+- `String` (94 edge(s))
+- `includes` (77 edge(s))
+- `deepEqual` (65 edge(s))
+- `isArray` (59 edge(s))
+- `trim` (51 edge(s))
 - `strictEqual` (50 edge(s))
-- `trim` (45 edge(s))
-- `map` (43 edge(s))
+- `require` (43 edge(s))
+- `map` (39 edge(s))
 - `slice` (39 edge(s))
 - `endsWith` (39 edge(s))
+- `mkdirSync` (38 edge(s))
+- `writeFileSync` (38 edge(s))
 - `execFileSync` (37 edge(s))
-- `deepStrictEqual` (37 edge(s))
-- `throws` (34 edge(s))
-- `step` (34 edge(s))
 
 ### Incoming
 
-- `equal` (258 edge(s))
+- `equal` (312 edge(s))
+- `join` (114 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
-- `join` (65 edge(s))
-- `./packages/shared/src/agent/harnesses/contract.js` (57 edge(s))
+- `deepEqual` (63 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (53 edge(s))
 - `strictEqual` (50 edge(s))
-- `deepEqual` (50 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `throws` (34 edge(s))
-- `match` (27 edge(s))
+- `ok` (36 edge(s))
+- `writeFileSync` (32 edge(s))
+- `throws` (30 edge(s))
+- `tmpdir` (30 edge(s))
+- `mkdtempSync` (29 edge(s))
+- `after` (28 edge(s))
 - `./packages/shared/src/agent/framework.js` (26 edge(s))
-- `execFileSync` (26 edge(s))
-- `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
-- `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
-- `./packages/shared/src/agent/settings-policy.js` (24 edge(s))

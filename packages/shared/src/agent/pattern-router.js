@@ -65,6 +65,8 @@ async function dispatchPlanning(options = {}, deps = {}) {
       organizationId: options.organizationId || (options.ctx && options.ctx.organizationId),
       projectId: options.projectId || (options.ctx && options.ctx.projectId),
       projectName: options.projectName || (options.ctx && options.ctx.projectName),
+      userId: (options.attribution && options.attribution.userId) || (options.ctx && options.ctx.userId) || null,
+      userEmail: (options.attribution && options.attribution.userEmail) || (options.ctx && options.ctx.userEmail) || null,
       prompt: options.prompt,
       guardrailSpec: (options.settings && options.settings.guardrailSpec) || undefined,
       secrets: options.secrets || {},

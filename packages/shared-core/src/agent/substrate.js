@@ -531,6 +531,11 @@ async function ensureAtespace(input = {}) {
  * image MUST be pinned by digest (image@sha256:...) per the ActorTemplate schema.
  */
 async function upsertActorTemplate(input = {}) {
+  const { TIERS, DEFAULT_TIER } = require('../billing/compute-pricing');
+  const resources = input.resources || {
+    cpuMillicores: TIERS[DEFAULT_TIER].cpuMillicores,
+    memoryBytes: TIERS[DEFAULT_TIER].memoryBytes,
+  };
   const atespace = resolveSubstrateAtespace(input);
   const name = input.name || (await readSetting('substrateActorTemplate')) || 'planner';
   const image = input.image || (await readSetting('substratePlannerImage')) || CONFIG?.SUBSTRATE?.plannerImage || '';
@@ -542,13 +547,13 @@ async function upsertActorTemplate(input = {}) {
     name: 'planner',
     image,
     wakeupProbe: input.wakeupProbe || { path: '/healthz', port: 8080, timeoutSeconds: 5 },
-    resources: input.resources || { cpuMillicores: 1000, memoryBytes: 1073741824 },
+    resources,
   }];
   const template = {
     metadata: { atespace, name },
     workerSelector: { 'ate.dev/worker-pool': workerPool },
     containers,
-    resources: input.resources || { cpuMillicores: 1000, memoryBytes: 1073741824 },
+    resources,
     goldenEgressPolicy: input.goldenEgressPolicy || [],
   };
   const req = pbMessage(1, encodeActorTemplate(template));

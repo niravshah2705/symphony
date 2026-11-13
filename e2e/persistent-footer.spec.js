@@ -95,11 +95,18 @@ function disabledApiPayload(request) {
   if (path === '/api/billing/summary') {
     return {
       currency: 'INR',
-      balancePaise: 0,
-      balanceInr: 0,
+      // The gate-off shape: the balance is the FlexPrice wallet's and there is no
+      // wallet here, so it is unknown rather than zero. A 0 would render as an
+      // exhausted org and the page would warn about money this test never touched.
+      balancePaise: null,
+      balanceInr: null,
+      fundsAvailable: true,
+      fundState: 'unknown',
+      fundStatus: 'available',
+      gatePolicy: 'off',
+      balanceStale: false,
       initialCreditInr: 0,
       fxUsdToInr: 83,
-      sweepEnabled: false,
       isAdmin: false,
       spend: {
         week: { costInr: 0, runs: 0, tokens: 0 },
@@ -109,7 +116,6 @@ function disabledApiPayload(request) {
     };
   }
   if (path === '/api/billing/usage') return { rows: [] };
-  if (path === '/api/billing/ledger') return { entries: [] };
   if (path === '/api/org/me') {
     return {
       user_id: 'local-footer-test',

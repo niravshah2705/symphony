@@ -17,6 +17,10 @@ const { getSettings } = require('../store');
 const substrate = require('./substrate');
 const { buildCredentialProviderPolicy } = require('../guardrails/consumers');
 const { buildDockerConfigJson } = require('./registry-auth');
+const { monitorActorSession } = require('../billing/actor-sessions');
+const { TIERS, DEFAULT_TIER, tierFor } = require('../billing/compute-pricing');
+const { createActorMetrics } = require('../otel/actor-metrics');
+const log = require('../logger');
 
 const REDACTED = '***REDACTED***';
 const fp = (v) => (v ? crypto.createHash('sha256').update(String(v)).digest('hex').slice(0, 12) : '');
@@ -287,6 +291,8 @@ async function runPlanningOnSubstrate({
   organizationId,
   projectId,
   projectName,
+  userId = null,
+  userEmail = null,
   prompt,
   guardrailSpec,
   secrets = {},
@@ -303,6 +309,9 @@ async function runPlanningOnSubstrate({
   applyManifest,
   fetchImpl,
   recordUsage = (...args) => require('../billing/usage').recordUsage(...args),
+  actorSessionMonitor = monitorActorSession,
+  actorMetrics,
+  now = Date.now,
   onStep = () => {},
 } = {}) {
   if (!prompt || !String(prompt).trim()) throw new Error('runPlanningOnSubstrate: prompt is required');
@@ -324,8 +333,19 @@ async function runPlanningOnSubstrate({
   onStep('Substrate: creating ephemeral actor…');
   const actor = await substrate.createEphemeralActor({ ...opts, atespace, projectId, runId: traceContext.runId });
   const actorName = actor.metadata.name;
+  const startedAt = now();
+  let sessionMonitor;
 
   try {
+    try {
+      sessionMonitor = actorSessionMonitor({
+        agentId: actorName, atespace, orgId: organizationId || require('../billing/org-context').resolveOrgId(),
+        projectId, userId, userEmail, runId: traceContext.runId,
+        tier: tierFor(TIERS[DEFAULT_TIER]), hourlyRatePaise: 0, startedAt,
+      }, { now, metrics: actorMetrics || createActorMetrics() });
+    } catch {
+      log.error('actor_session_start_failed', { actorName });
+    }
     onStep('Substrate: applying per-actor egress policy from the shared guardrail spec…');
     await substrate.createActorEgressPolicy({ ...opts, atespace, name: actorName, guardrailSpec });
 
@@ -379,6 +399,8 @@ async function runPlanningOnSubstrate({
       orgId: organizationId || null,
       projectId: projectId || null,
       projectName: projectName || null,
+      userId,
+      userEmail,
       runId: traceContext.runId || null,
       traceId: result.traceId || null,
       source: 'substrate-plan',
@@ -397,6 +419,7 @@ async function runPlanningOnSubstrate({
       substrate: { atespace, actorName, credentialSync: credSync },
     };
   } finally {
+    sessionMonitor?.stop();
     // Per-run ephemeral: always suspend then delete so no idle actor lingers.
     onStep('Substrate: tearing down ephemeral actor…');
     try { await substrate.suspendActor({ ...opts, atespace, name: actorName }); } catch { /* best-effort */ }

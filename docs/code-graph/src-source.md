@@ -14,8 +14,8 @@ Community of 4 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| newSourceBucket | Function | ./services/billing/src/billing-api.js | 97-99 |
-| bySourceWindow | Function | ./services/billing/src/billing-api.js | 101-128 |
+| newSourceBucket | Function | ./services/billing/src/billing-api.js | 212-214 |
+| bySourceWindow | Function | ./services/billing/src/billing-api.js | 216-243 |
 | test:the spend split reports charged and notional as two separate series@L47 | Test | ./services/billing/src/billing-api.test.js | 47-62 |
 | test:both series exist even for an org that has never used its own key@L64 | Test | ./services/billing/src/billing-api.test.js | 64-70 |
 

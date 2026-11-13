@@ -1,0 +1,406 @@
+# FlexPrice, locally, for the Phase 0 billing spike.
+#
+# Separate compose project on purpose: the root `compose.yaml` models the Cloud
+# Run loopback topology and keeps `npm start` at zero containers. Nothing here is
+# meant to merge into it.
+#
+# One topology, no `full` / `minimal` profiles. The plan allowed for two, and
+# docs/FLEXPRICE_FINDINGS.md §0.2 killed that: Kafka and ClickHouse are
+# load-bearing, not optional accelerators. Event ingest needs the broker, usage
+# reads need ClickHouse, and the top-up/expiry paths need Temporal. A `minimal`
+# profile would be a stack that does not work, documented as if it did.
+#
+# Bring it up with `npm run billing:flexprice:bootstrap` (scripts/flexprice-bootstrap.js),
+# which generates deploy/flexprice/.env first. Starting this file directly fails
+# with a missing-env-file error, which is the intended behaviour: an empty API key
+# map is a service that authenticates nothing.
+#
+# Ports avoid the ranges this machine already uses: 4000-4090 and 8000/8100 for the
+# services, 5432/6379 for litellm-poc's Postgres and Redis, 8084/8088 already taken
+# by other stacks. Each host port below was checked free before it was chosen.
+
+name: fleet-flexprice
+
+x-checkout: &checkout
+  # Required. The image is built from this tree — see VERSION for why a pulled
+  # image is not available (ghcr.io/flexprice/flexprice is a private package).
+  # Set by the bootstrap script; `FLEXPRICE_CHECKOUT=./src` is not a real default.
+  FLEXPRICE_CHECKOUT: ${FLEXPRICE_CHECKOUT:?run scripts/flexprice-bootstrap.js first}
+
+# The three application modes of one binary. `local` is deliberately absent:
+# FLEXPRICE_DEPLOYMENT_MODE=local skips config validation entirely, so a
+# successful local-mode boot proves nothing about the env you would deploy.
+# api / consumer / temporal_worker all run the real validation path.
+x-app: &app
+  image: flexprice-app:phase0
+  build:
+    context: ${FLEXPRICE_CHECKOUT}
+    dockerfile: Dockerfile
+  depends_on:
+    postgres:
+      condition: service_healthy
+    kafka:
+      condition: service_healthy
+    clickhouse:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    temporal:
+      condition: service_started
+  restart: unless-stopped
+  environment: &app-env
+    <<: *checkout
+    # Postgres / ClickHouse / Temporal are all reached by service name inside the
+    # project network; the host ports exist only for psql and clickhouse-client.
+    FLEXPRICE_POSTGRES_HOST: postgres
+    FLEXPRICE_POSTGRES_PORT: "5432"
+    FLEXPRICE_POSTGRES_READER_HOST: postgres
+    FLEXPRICE_POSTGRES_USER: ${FLEXPRICE_PG_USER}
+    FLEXPRICE_POSTGRES_PASSWORD: ${FLEXPRICE_PG_PASSWORD}
+    FLEXPRICE_POSTGRES_DATABASE: ${FLEXPRICE_PG_DB}
+    FLEXPRICE_KAFKA_BROKERS: kafka:9092
+    # config.yaml sizes its topic set for a three-broker cluster
+    # (topics_defaults.replication_factor: 3, events at 6 partitions). On one
+    # broker `./migrate kafka` does not degrade — it fails on the first topic
+    # with "Replication-factor is invalid … only 1 broker(s) are registered" and
+    # the one-shot exits 1, which blocks api/consumer/worker behind it. So the
+    # replication factor is overridden.
+    FLEXPRICE_KAFKA_TOPICS_DEFAULTS_REPLICATION_FACTOR: "1"
+    # 🔴 And the *names* DO have to be fixed — an earlier comment here claimed
+    # leaving FLEXPRICE_KAFKA_TOPICS unset "keeps the topics the app publishes to
+    # identical to the topics that get created". It does not, and the spike proved
+    # it the hard way: the shipped internal/config/config.yaml is written across
+    # two naming conventions at once. The producer publishes to kafka.topic =
+    # "staging_events" (:62), while the consumers that turn events into usage
+    # subscribe to event_processing.topic = "events" (:523) and
+    # meter_usage_tracking.topic = "events" (:546), and `migrate kafka` creates the
+    # unprefixed block at :99-122. So the message goes to a topic nobody reads
+    # (auto-create is off, so it goes nowhere at all), ingest answers HTTP 202, and
+    # ClickHouse `events` stays at **0 rows forever** — no error, no rejected write,
+    # no absent target. That is item 6's "silently free usage" failure mode, one
+    # layer down and worse, because it is not a misconfigured meter: it is the stack
+    # not delivering any usage to any meter. It is also invisible to every probe that
+    # reads usage, which is how this stack passed its bootstrap checks while billing
+    # nothing. The fix is ONE flat namespace, asserted three ways: producer keys,
+    # consumer keys and the created set all name the same unprefixed topics.
+    FLEXPRICE_KAFKA_TOPIC: events
+    FLEXPRICE_KAFKA_TOPIC_LAZY: events_lazy
+    FLEXPRICE_KAFKA_TOPIC_BULK: events_bulk
+    FLEXPRICE_KAFKA_TOPIC_DLQ: events_dlq
+    FLEXPRICE_WEBHOOK_TOPIC: system_events
+    FLEXPRICE_RAW_EVENTS_REPROCESSING_OUTPUT_TOPIC: events
+    FLEXPRICE_RAW_EVENT_CONSUMPTION_TOPIC: events_backfill
+    FLEXPRICE_RAW_EVENT_CONSUMPTION_OUTPUT_TOPIC: events
+    FLEXPRICE_BULK_EVENT_CONSUMPTION_TOPIC: events_bulk
+    FLEXPRICE_BULK_EVENT_CONSUMPTION_TOPIC_DLQ: events_dlq
+    FLEXPRICE_BULK_METER_USAGE_TRACKING_TOPIC: events_bulk
+    FLEXPRICE_BULK_METER_USAGE_TRACKING_TOPIC_DLQ: events_dlq
+    # FLEXPRICE_KAFKA_TOPICS FULLY REPLACES the config block (no merge), so this is
+    # the complete desired set: the 11 topics upstream lists, the 6 per-consumer-group
+    # DLQs those groups name, the two activity topics (the activity publisher retries
+    # against `activity_logs` even though activity.enabled is false — a missing topic
+    # there is a permanent error loop in the API log), and the dotted analytics sink
+    # (the broker currently holds a bare `analytics` from the pre-rename spec, which is
+    # not the name config.yaml points at). Partition counts are upstream's.
+    FLEXPRICE_KAFKA_TOPICS: '{"defaults":{"replicationFactor":1,"retentionMs":604800000},"topics":{"events":{"partitions":6},"events_lazy":{"partitions":6},"events_bulk":{"partitions":6},"events_dlq":{"partitions":3},"events_backfill":{"partitions":6},"events_post_processing":{"partitions":6},"events_post_processing_backfill":{"partitions":6},"system_events":{"partitions":3},"wallet_alert":{"partitions":3},"onboarding_events":{"partitions":3},"analytics.meter_usage.sink.realtime":{"partitions":6},"activity_logs":{"partitions":3},"activity_logs_dlq":{"partitions":3},"event_processing_dlq":{"partitions":3},"event_processing_lazy_dlq":{"partitions":3},"meter_usage_tracking_service_dlq":{"partitions":3},"meter_usage_tracking_service_lazy_dlq":{"partitions":3}}}'
+    FLEXPRICE_CLICKHOUSE_ADDRESS: clickhouse:9000
+    FLEXPRICE_CLICKHOUSE_DATABASE: ${FLEXPRICE_CH_DB}
+    FLEXPRICE_CLICKHOUSE_USER: ${FLEXPRICE_CH_USER}
+    FLEXPRICE_CLICKHOUSE_PASSWORD: ${FLEXPRICE_CH_PASSWORD}
+    FLEXPRICE_TEMPORAL_ADDRESS: temporal:7233
+    # Single-node redis container: redis.cluster_mode defaults to TRUE in
+    # config.yaml, which is for ElastiCache/MemoryDB. Left true it fails every
+    # cache call and the app runs on the DB path only — quietly.
+    FLEXPRICE_REDIS_HOST: redis
+    FLEXPRICE_REDIS_PORT: "6379"
+    FLEXPRICE_REDIS_CLUSTER_MODE: "false"
+    FLEXPRICE_CACHE_ENABLED: "true"
+    FLEXPRICE_CACHE_REDIS_ENABLED: "true"
+    # Real generated secrets, so FLEXPRICE_ALLOW_INSECURE_DEFAULTS stays false and
+    # the boot path that prod takes is the path we actually exercise. Upstream's
+    # own compose sets it true and ships the public dev API key; the check it
+    # bypasses exists precisely to reject that key, and its own comment says the
+    # flag "must never be set outside local Docker Compose". Setting it false here
+    # is the difference between a stack that validates like prod and one that
+    # merely looks like it.
+    FLEXPRICE_ALLOW_INSECURE_DEFAULTS: ${FLEXPRICE_ALLOW_INSECURE_DEFAULTS:-false}
+    FLEXPRICE_AUTH_SECRET: ${FLEXPRICE_AUTH_SECRET}
+    FLEXPRICE_SECRETS_ENCRYPTION_KEY: ${FLEXPRICE_SECRETS_ENCRYPTION_KEY}
+    FLEXPRICE_AUTH_PROVIDER: api_key
+    # config.yaml's rbac.roles_config_path is "internal/config/rbac/roles.json" —
+    # a path relative to the SOURCE TREE, which only resolves if the checkout is
+    # bind-mounted at /app/internal/config (what upstream's compose does). This
+    # file deliberately mounts nothing (see the note on the app anchor: viper tries
+    # internal/config before ./config, so the mount shadows the baked config), and
+    # the consequence was not a warning but a crashloop: api/consumer/worker each
+    # died in fx before listening, with
+    # `failed to read config: open internal/config/rbac/roles.json: no such file or
+    # directory`. The image does contain the file, at /app/config/rbac/roles.json
+    # (Dockerfile copies internal/config to ./config). Pointing the setting at the
+    # real location is what makes the no-mount design workable instead of
+    # cosmetically nicer.
+    FLEXPRICE_RBAC_ROLES_CONFIG_PATH: /app/config/rbac/roles.json
+    FLEXPRICE_AUTH_API_KEY_HEADER: x-api-key
+    # JSON map of sha256(raw key) -> {tenant_id,user_id,name,is_active}, read raw
+    # from env to dodge a Viper decode panic. Generated and hashed by the
+    # bootstrap script into .env; the raw key never enters this file or git.
+    FLEXPRICE_AUTH_API_KEY_KEYS: ${FLEXPRICE_AUTH_API_KEY_KEYS}
+    FLEXPRICE_ACTIVITY_ENABLED: "true"
+  # No mount of ./internal/config, unlike upstream. The loader tries
+  # internal/config before ./config (config.go:1246-1251), so mounting a checkout
+  # directory SHADOWS the config.yaml baked into the image and makes behaviour
+  # depend on whatever the working tree happens to contain. Every value this stack
+  # needs is reachable by FLEXPRICE_* env, which is applied by reflection over
+  # every leaf key and therefore lands regardless of which file loaded.
+
+services:
+  postgres:
+    image: postgres:17
+    ports:
+      - "127.0.0.1:15432:5432"
+    environment:
+      POSTGRES_USER: ${FLEXPRICE_PG_USER}
+      POSTGRES_PASSWORD: ${FLEXPRICE_PG_PASSWORD}
+      POSTGRES_DB: ${FLEXPRICE_PG_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # NOT the whole migrations/postgres directory, which is what upstream mounts.
+      # That directory mixes two kinds of file: V0__init.sql is pre-Ent bootstrap
+      # (schemas and extensions, zero CREATE TABLE statements) and V1__seed.sql is
+      # seed data, while V2-V5 are post-Ent schema changes. Mounted wholesale, an
+      # empty data directory runs V5 first-boot and it dies on
+      # `relation "public.settings" does not exist` — the table is created by the
+      # Ent migration layer, which has not run yet — so postgres exits 3 and the
+      # stack never comes up. Upstream does not see this because their developers
+      # already have a populated volume, and initdb.d is first-boot-only.
+      # So: seed the prerequisites here, and apply the data after the schema exists.
+      - ${FLEXPRICE_CHECKOUT}/migrations/postgres/V0__init.sql:/docker-entrypoint-initdb.d/00__init.sql:ro
+      - ${FLEXPRICE_CHECKOUT}/migrations/postgres/init-temporal-db.sh:/docker-entrypoint-initdb.d/10__init-temporal-db.sh:ro
+      # V1__seed.sql is mounted into the `seed` service below, not here. Its own
+      # header says it is designed to run twice (guarded by IF EXISTS on the tables
+      # and idempotent under ON CONFLICT DO NOTHING), and `make seed-db` runs it
+      # after migrate-ent — that ordering is the contract, not an accident.
+      # init-temporal-db.sh is why FLEXPRICE_PG_USER must be `flexprice`: it runs
+      # `GRANT ... TO flexprice` with the role name hardcoded.
+    healthcheck:
+      # The init phase starts a temporary server (unix socket only) BEFORE it
+      # runs the scripts above, and pg_isready answers "accepting connections"
+      # throughout — so health on that alone means "postgres is up", not "the
+      # seed ran". `temporal` is created by the last init script, so its presence
+      # is the deterministic end-of-init signal: nothing downstream (temporal's
+      # auto-setup, the migrate container) can start against a half-initialised
+      # cluster while still passing a check that says it is ready.
+      test: ["CMD-SHELL", "pg_isready -U ${FLEXPRICE_PG_USER} -d ${FLEXPRICE_PG_DB} && psql -U ${FLEXPRICE_PG_USER} -d ${FLEXPRICE_PG_DB} -Atc \"SELECT 1 FROM pg_database WHERE datname='temporal'\" | grep -qx 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 100
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    ports:
+      - "127.0.0.1:19092:29092"
+    environment:
+      # KRaft, no zookeeper. The id is fixed rather than generated so a recreated
+      # volume keeps pointing at the same cluster; changing it orphans kafka-data.
+      CLUSTER_ID: 6d3e4a51-9f0b-4f8e-9c2a-0f3b7d1e5a21
+      KAFKA_BROKER_ID: 0
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:19092
+      KAFKA_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://0.0.0.0:29092,CONTROLLER://kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      # False on purpose: `./migrate kafka` creates the 15 topics explicitly, with
+      # the retention each one needs. Auto-create would make a typo'd topic name
+      # look like a working pipeline.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9092 --list"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.9-alpine
+    ports:
+      - "127.0.0.1:18123:8123"
+      - "127.0.0.1:18124:9000"
+    environment:
+      CLICKHOUSE_USER: ${FLEXPRICE_CH_USER}
+      CLICKHOUSE_PASSWORD: ${FLEXPRICE_CH_PASSWORD}
+      CLICKHOUSE_DB: ${FLEXPRICE_CH_DB}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      # 127.0.0.1, not localhost, and a GET rather than --spider. Inside this
+      # network IPv6 is unavailable (the server logs `Listen [::]:8123 failed:
+      # Address family for hostname not supported` on every boot), so `localhost`
+      # resolves to ::1 first and a `wget --spider http://localhost:8123/ping`
+      # check fails forever against a ClickHouse that answers `Ok.` on IPv4 — the
+      # container then reads unhealthy while it is perfectly serving requests.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping | grep -q Ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:16379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  temporal:
+    image: temporalio/auto-setup:1.26.2
+    ports:
+      - "127.0.0.1:17233:7233"
+    environment:
+      DB: postgres12
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: temporal
+      DB_USER: ${FLEXPRICE_PG_USER}
+      DB_PWD: ${FLEXPRICE_PG_PASSWORD}
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: ${FLEXPRICE_PG_USER}
+      POSTGRES_PWD: ${FLEXPRICE_PG_PASSWORD}
+      ENABLE_ES: "false"
+      TEMPORAL_PERSISTENCE_SCHEMA_DIR: /etc/temporal/schema/postgresql/v96/temporal/versioned
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # One-shot: applies the dbmate versioned migrations (baseline + everything after
+  # it), the ClickHouse schema, and the Kafka topics. `migrate postgres up` rather
+  # than bare `migrate postgres` because the versioned path is what upstream
+  # replaced Ent auto-migration with — every change is a reviewed .sql file and
+  # what ran is recorded in schema_migrations instead of inferred from a live
+  # schema diff. `restart: "no"` (not `unless-stopped`) so a failed migration does
+  # not become a crashloop in front of the API services.
+  migrate:
+    <<: *app
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        ./migrate postgres up
+        ./migrate clickhouse
+        ./migrate kafka
+        echo "flexprice migrations complete"
+
+  # One-shot, after the schema exists: the Default Tenant, the super_admin user,
+  # and the Sandbox + Production environments. Without these there is no tenant
+  # row for FLEXPRICE_AUTH_API_KEY_KEYS to name, so every authenticated call 401s
+  # and the failure looks like a bad key rather than an unseeded database.
+  # Runs on every `up`, not only the first: V1__seed.sql is ON CONFLICT DO NOTHING
+  # throughout, which is what makes an idempotent re-apply safe.
+  seed:
+    image: postgres:17
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: ${FLEXPRICE_PG_USER}
+      PGPASSWORD: ${FLEXPRICE_PG_PASSWORD}
+      PGDATABASE: ${FLEXPRICE_PG_DB}
+    volumes:
+      - ${FLEXPRICE_CHECKOUT}/migrations/postgres/V1__seed.sql:/seed.sql:ro
+    command: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/seed.sql"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    <<: *app
+    ports:
+      - "127.0.0.1:18080:8080"
+    environment:
+      <<: *app-env
+      FLEXPRICE_DEPLOYMENT_MODE: api
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  # The consumer drains Kafka into ClickHouse. Without it, ingest returns 202 and
+  # usage queries return nothing forever — the single most misleading failure this
+  # stack can produce, because 202 looks like success.
+  consumer:
+    <<: *app
+    environment:
+      <<: *app-env
+      FLEXPRICE_DEPLOYMENT_MODE: consumer
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  # Runs the Temporal workflows: the credit-expiry cron, the draft-finalization
+  # cron, the subscription schedulers. Everything §6b of the findings says fires
+  # or does not fire, fires here.
+  worker:
+    <<: *app
+    environment:
+      <<: *app-env
+      FLEXPRICE_DEPLOYMENT_MODE: temporal_worker
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  # Inspection only, both under a profile so the default up does not pay for them.
+  temporal-ui:
+    profiles: ["dev"]
+    image: temporalio/ui:2.31.2
+    ports:
+      - "127.0.0.1:18088:8080"
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      - temporal
+
+  kafka-ui:
+    profiles: ["dev"]
+    image: ghcr.io/kafbat/kafka-ui:main
+    ports:
+      - "127.0.0.1:18087:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    depends_on:
+      - kafka
+
+volumes:
+  postgres-data:
+  kafka-data:
+  clickhouse-data:
+  redis-data:

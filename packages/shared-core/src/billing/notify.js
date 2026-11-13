@@ -104,16 +104,24 @@ async function notify(account, payload) {
 }
 
 /**
- * Compare the account balance to its configured alert thresholds and notify on a
- * fresh DOWNWARD crossing. Dedupes via `lastAlertedThresholdPaise` so each
+ * Compare the org's WALLET balance to its configured alert thresholds and notify
+ * on a fresh DOWNWARD crossing. Dedupes via `lastAlertedThresholdPaise` so each
  * threshold fires once per crossing and escalation (low → exhausted) still
  * alerts; a recharge above the highest threshold re-arms it. Mutates the account
  * (dedupe marker). Returns the threshold alerted on (paise) or null.
+ *
+ * `deps.balancePaise` is the caller's FlexPrice number, normally from
+ * `gate.getOrgFundStatus` — this module does not read a balance of its own, and a
+ * balance it cannot read (`null`, the gate's `unknown`) alerts on nothing rather
+ * than being treated as zero. An alert that says "balance is ₹0.00" about a wallet
+ * the read failed on sends the customer to look for a charge that never happened.
  */
 async function checkThresholdsAndNotify(account, deps = {}) {
   if (!account) return null;
   const storeApi = deps.store || require('../store');
-  const balance = Number(account.balancePaise) || 0;
+  const balance = deps.balancePaise === undefined || deps.balancePaise === null
+    ? null : Number(deps.balancePaise);
+  if (!Number.isFinite(balance)) return null;
   const thresholds = (account.alertThresholdsPaise || []).map(Number).filter(Number.isFinite);
   if (!thresholds.length) return null;
 

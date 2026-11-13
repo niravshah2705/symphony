@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 6 nodes
+Community of 5 nodes
 
-- **Size**: 6 nodes
-- **Cohesion**: 0.1250
+- **Size**: 5 nodes
+- **Cohesion**: 0.1064
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,7 +16,6 @@ Community of 6 nodes
 |------|------|------|-------|
 | main | Function | ./services/coder/src/job.js | 18-55 |
 | pause | Function | ./services/coder/src/job.test.js | 8-8 |
-| test:coder workers bind their job context across init and execution concurrently@L10 | Test | ./services/coder/src/job.test.js | 10-55 |
 | run | Function | ./services/coder/src/job.test.js | 14-31 |
 | byOrganization | Function | ./services/coder/src/job.test.js | 35-35 |
 | test:coder worker without context keeps legacy empty-workspace behavior@L57 | Test | ./services/coder/src/job.test.js | 57-68 |
@@ -29,31 +28,28 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `deepEqual` (6 edge(s))
 - `exit` (4 edge(s))
 - `String` (4 edge(s))
 - `push` (3 edge(s))
 - `currentWorkspaceContext` (3 edge(s))
-- `sort` (3 edge(s))
 - `error` (2 edge(s))
 - `info` (2 edge(s))
-- `localeCompare` (2 edge(s))
-- `map` (2 edge(s))
+- `./services/coder/src/job.test.js::test:coder workers bind their job context across init and execution concurrently@L10` (2 edge(s))
 - `trim` (1 edge(s))
 - `normalizeLlmGatewayMode` (1 edge(s))
 - `runWithWorkspaceContext` (1 edge(s))
 - `initStoreImpl` (1 edge(s))
 - `runTicketImpl` (1 edge(s))
+- `localeCompare` (1 edge(s))
+- `setImmediate` (1 edge(s))
+- `equal` (1 edge(s))
 
 ### Incoming
 
-- `deepEqual` (6 edge(s))
-- `./services/coder/src/job.test.js` (5 edge(s))
+- `./services/coder/src/job.test.js` (4 edge(s))
 - `./services/coder/src/job.js` (3 edge(s))
-- `sort` (3 edge(s))
-- `map` (2 edge(s))
+- `./services/coder/src/job.test.js::test:coder workers bind their job context across init and execution concurrently@L10` (2 edge(s))
 - `./services/coder/src/main.js` (1 edge(s))
 - `currentWorkspaceContext` (1 edge(s))
 - `equal` (1 edge(s))
-- `all` (1 edge(s))
-- `localeCompare` (1 edge(s))
+- `deepEqual` (1 edge(s))

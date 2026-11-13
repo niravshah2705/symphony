@@ -14,7 +14,7 @@ Community of 5 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| proxied | Function | ./packages/shared-core/src/config.js | 20-21 |
+| proxied | Function | ./packages/shared-core/src/config.js | 24-25 |
 | llmGatewayUpstream | Function | ./packages/shared-core/src/egress.js | 56-58 |
 | langfuseUpstream | Function | ./packages/shared-core/src/egress.js | 66-68 |
 | normalizeProxyBase | Function | ./packages/shared-core/src/egress.js | 157-159 |

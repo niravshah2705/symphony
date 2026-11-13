@@ -7,7 +7,11 @@
   "scripts": {
     "start": "node --env-file-if-exists=../../.env src/index.js",
     "dev": "node --watch --env-file-if-exists=../../.env src/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "job:recharge": "node --env-file-if-exists=../../.env src/auto-recharge-job.js",
+    "job:platform-charge": "node --env-file-if-exists=../../.env src/platform-charge-job.js",
+    "job:credit-expiry": "node --env-file-if-exists=../../.env src/credit-expiry-job.js",
+    "job:reconcile": "node --env-file-if-exists=../../.env src/reconcile-gateway-spend.js"
   },
   "engines": {
     "node": ">=22"

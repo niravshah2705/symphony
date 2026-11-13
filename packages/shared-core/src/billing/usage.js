@@ -3,6 +3,7 @@
 const store = require('../store');
 const log = require('../logger');
 const pricing = require('./pricing');
+const billingOutbox = require('./billing-outbox');
 const { resolveOrgId } = require('./org-context');
 
 /**
@@ -86,7 +87,7 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
     // org still sees the value it consumed. Exactly one of the two is ever
     // non-zero, and `costPaise + notionalCostPaise` is the gross.
     const isCustomerKey = billingSource === 'customer';
-    return store.addUsageRecord({
+    const record = store.addUsageRecord({
       orgId,
       projectId: attribution.projectId || null,
       projectName: attribution.projectName || null,
@@ -113,13 +114,49 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
       costPaise: isCustomerKey ? 0 : grossPaise,
       notionalCostPaise: isCustomerKey ? grossPaise : 0,
     });
+    // Hand the same number to FlexPrice, through the outbox rather than the
+    // network: this is the one place a run's cost becomes a fact, so it is also
+    // the place the delivery record has to be written. Nothing here awaits.
+    billingOutbox.enqueueLlmCost(record);
+    return record;
   } catch (err) {
     log.warn(`recordUsage failed: ${err && err.message ? err.message : err}`);
     return null;
   }
 }
 
+function recordActorUsage(session, deps = {}) {
+  const { priceActorUsage } = require('./compute-pricing');
+  const priced = priceActorUsage(session);
+  const record = store.addUsageRecord({
+    orgId: session.orgId,
+    projectId: session.projectId,
+    userId: session.userId,
+    userEmail: session.userEmail || null,
+    runId: session.runId || null,
+    actorSessionId: session.id,
+    agentId: session.agentId,
+    tier: session.tier,
+    source: 'substrate-actor',
+    meter: 'actor-compute',
+    durationSeconds: priced.meterValue,
+    costPaise: priced.expectedPaise,
+    createdAt: new Date(session.stoppedAt * 1000).toISOString(),
+  });
+  const row = billingOutbox.enqueue({
+    kind: 'actorCompute', orgId: record.orgId, projectId: record.projectId, userId: record.userId,
+    runId: record.runId, actorSessionId: session.id, recordId: record.id, agentId: record.agentId, tier: record.tier,
+    quantity: record.durationSeconds, occurredAt: record.createdAt,
+  }, deps);
+  if (billingOutbox.isEnabled(deps) && record.durationSeconds > 0
+    && record.orgId !== require('./org-context').SHARED_ORG_ID && !row) {
+    throw new Error('actor usage has no outbox row');
+  }
+  return record;
+}
+
 module.exports = {
+  recordActorUsage,
   pickUsage,
   resolveBillingSource,
   recordUsage,

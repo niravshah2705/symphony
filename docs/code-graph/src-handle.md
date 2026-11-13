@@ -7,7 +7,7 @@
 Community of 27 nodes
 
 - **Size**: 27 nodes
-- **Cohesion**: 0.2656
+- **Cohesion**: 0.2646
 - **Dominant Language**: javascript
 
 ## Members
@@ -31,15 +31,15 @@ Community of 27 nodes
 | test:substrate-atespace: refuses a name the deployment would not resolve to itself@L125 | Test | ./services/provisioner/src/handler.test.js | 125-136 |
 | test:substrate-atespace: an ateapi error still settles the step as FAILED@L138 | Test | ./services/provisioner/src/handler.test.js | 138-147 |
 | test:substrate-atespace: a message without the step address performs nothing@L149 | Test | ./services/provisioner/src/handler.test.js | 149-155 |
-| buildCfg | Function | ./services/provisioner/src/index.js | 28-72 |
-| enabled | Function | ./services/provisioner/src/index.js | 29-32 |
-| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 75-85 |
-| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 89-101 |
-| patchInternal | Function | ./services/provisioner/src/index.js | 104-113 |
-| writeBack | Function | ./services/provisioner/src/index.js | 115-117 |
-| writeStepStatus | Function | ./services/provisioner/src/index.js | 122-128 |
-| createApp | Function | ./services/provisioner/src/index.js | 130-156 |
-| start | Function | ./services/provisioner/src/index.js | 158-166 |
+| buildCfg | Function | ./services/provisioner/src/index.js | 29-73 |
+| enabled | Function | ./services/provisioner/src/index.js | 30-33 |
+| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 76-86 |
+| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 90-102 |
+| patchInternal | Function | ./services/provisioner/src/index.js | 105-114 |
+| writeBack | Function | ./services/provisioner/src/index.js | 116-118 |
+| writeStepStatus | Function | ./services/provisioner/src/index.js | 123-129 |
+| createApp | Function | ./services/provisioner/src/index.js | 131-157 |
+| start | Function | ./services/provisioner/src/index.js | 159-169 |
 | test:buildCfg passes the shared stream-token broker URL into tenant plans@L8 | Test | ./services/provisioner/src/index.test.js | 8-20 |
 
 ## Execution Flows

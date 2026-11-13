@@ -312,13 +312,25 @@ const DEFAULT_STORE = Object.freeze({
   // ({ id, active: false }) rather than removal, or the next revision revives it.
   globalQuestions: [],
 
-  // Billing / cost metering (see packages/shared/src/billing/*). All amounts are
-  // integer paise. usageRecords are granular per-run events (pruned after a
-  // retention window); ledgerEntries are the append-only money source of truth;
-  // billingAccounts hold per-org config + a derived balance snapshot (id = orgId).
+  // Billing / cost metering (see packages/shared-core/src/billing/*). All amounts
+  // are integer paise. usageRecords are granular per-run events (pruned after a
+  // retention window) and the outbox's source; ledgerEntries are a write-only
+  // developer journal — FlexPrice's wallet is the money truth, not these rows;
+  // billingAccounts hold per-org config (id = orgId) and no balance.
   usageRecords: [],
   ledgerEntries: [],
   billingAccounts: [],
+  // Recharge intents: the order-side record of "we quoted ₹590 for ₹500 of
+  // credit and the gateway said PAID". Created at quote time, settled exactly
+  // once (services/billing/src/recharge-settle.js); keyed by the provider order
+  // id because that is what both the browser and the webhook present.
+  rechargeIntents: [],
+  // Usage outbox: one row per billable quantity, written where the usage is
+  // recorded and read by the drain that posts it to FlexPrice. Delivery is never
+  // inline — a billing outage must not become run failures — so this row is the
+  // only proof that a quantity exists that has not yet been reported.
+  billingOutbox: [],
+  actorSessions: [],
   billing: { lastAggregatedAt: null }, // sweep watermark (see billing/sweep.js)
 
   // End User License Agreement acceptance, keyed at two scopes. `users[key]` and
@@ -435,6 +447,9 @@ function normalizeStore(parsed) {
     usageRecords: Array.isArray(source.usageRecords) ? source.usageRecords : [],
     ledgerEntries: Array.isArray(source.ledgerEntries) ? source.ledgerEntries : [],
     billingAccounts: Array.isArray(source.billingAccounts) ? source.billingAccounts : [],
+    rechargeIntents: Array.isArray(source.rechargeIntents) ? source.rechargeIntents : [],
+    billingOutbox: Array.isArray(source.billingOutbox) ? source.billingOutbox : [],
+    actorSessions: Array.isArray(source.actorSessions) ? source.actorSessions : [],
     billing: normalizeBilling(source.billing),
     eula: normalizeEula(source.eula),
   };
@@ -469,7 +484,7 @@ const STORE_COLLECTION_KEYS = [
   // Billing: append-heavy records — each becomes one Firestore sub-collection doc
   // keyed by `id`, so no single document approaches the 1 MB limit and concurrent
   // appends never clobber one another (the ledger is the money source of truth).
-  'usageRecords', 'ledgerEntries', 'billingAccounts',
+  'usageRecords', 'ledgerEntries', 'billingAccounts', 'rechargeIntents', 'billingOutbox', 'actorSessions',
 ];
 
 const LEGACY_BACKEND_KEY = 'legacy';
@@ -1032,12 +1047,14 @@ function removeGlobalQuestion(id) {
 
 /* --------------------------- Billing ------------------------------------ */
 
-// All amounts are INTEGER paise. The ledger (ledgerEntries) is append-only and
-// is the money source of truth; a per-org account (id = orgId) caches a derived
-// balance snapshot for the frequent runner gate. usageRecords are granular
-// per-run events feeding the cost page's per-project / per-user / per-task
-// drill-down; they are pruned after a retention window (the ledger persists).
-// See packages/shared/src/billing/* for the logic that uses these primitives.
+// All amounts are INTEGER paise. FlexPrice's wallet is the money source of truth;
+// nothing here is. usageRecords are granular per-run events — the outbox's source
+// and the cost page's per-project / per-user / per-task drill-down — pruned after a
+// retention window (docs/BILLING_FLEXPRICE.md §10). ledgerEntries have no writer
+// since the sweep stopped posting its own debits: they remain a generic append-only
+// journal a developer can write to, and no code path may read a money number out
+// of them. billingAccounts (id = orgId) is per-org CONFIG only.
+// See packages/shared-core/src/billing/* for the logic that uses these primitives.
 //
 // The BYOK `notionalCostPaise` deliberately has NO ledger copy — a run on the
 // org's own key spends no platform money, so there is nothing to post. That makes
@@ -1064,6 +1081,10 @@ function setBillingState(patch) {
 /** Append a granular usage record (newest first), capped to bound growth. */
 function addUsageRecord(record) {
   const current = readLegacyStore();
+  if (record.actorSessionId) {
+    const existing = current.usageRecords.find((r) => r.actorSessionId === record.actorSessionId);
+    if (existing) return existing;
+  }
   const now = new Date().toISOString();
   const entry = { ...record, id: `use_${randomUUID()}`, createdAt: record.createdAt || now };
   const usageRecords = [entry, ...current.usageRecords].slice(0, MAX_USAGE_RECORDS);
@@ -1100,9 +1121,9 @@ function usageRecordCount() {
 
 /**
  * Merge a `patch` into one usage record by id. Exists for the one-off billing-source
- * backfill; the fields it may rewrite are labels, never money — a caller that wants
- * to change `costPaise` has to post a ledger correction instead, because the sweep
- * already debited from the original number.
+ * backfill; the fields it may rewrite are labels, never money — `costPaise` and
+ * `createdAt` are pinned, because the record's createdAt is what the sweep window
+ * and the outbox's delivery proof are both keyed on.
  */
 function updateUsageRecord(id, patch = {}) {
   if (!id) throw new Error('updateUsageRecord requires an id');
@@ -1161,6 +1182,230 @@ function upsertBillingAccount(orgId, patch = {}) {
     : [merged, ...current.billingAccounts];
   writeLegacyStore({ ...current, billingAccounts });
   return merged;
+}
+
+function addActorSession(session) {
+  const current = readLegacyStore();
+  const existing = current.actorSessions.find((s) => s.id === session.id);
+  if (existing) return existing;
+  writeLegacyStore({ ...current, actorSessions: [session, ...current.actorSessions] });
+  return session;
+}
+
+function getActorSession(id) {
+  return readLegacyStore().actorSessions.find((s) => s.id === id) || null;
+}
+
+function listActorSessions({ orgId, status } = {}) {
+  return readLegacyStore().actorSessions.filter((s) => (!orgId || s.orgId === orgId)
+    && (!status || s.status === status));
+}
+
+function updateActorSession(id, patch) {
+  const current = readLegacyStore();
+  const existing = current.actorSessions.find((s) => s.id === id);
+  if (!existing) return null;
+  // A late heartbeat or STOP cannot reopen or extend a session the sweeper closed.
+  const updated = existing.status === 'CLOSED'
+    ? {
+      ...existing, metered: Boolean(existing.metered || patch.metered),
+      metricsExported: Boolean(existing.metricsExported || patch.metricsExported),
+    }
+    : {
+      ...existing,
+      lastSeenAt: Math.max(existing.lastSeenAt, patch.lastSeenAt ?? existing.lastSeenAt),
+      ...(patch.status === 'CLOSED' ? {
+        status: 'CLOSED', stoppedAt: patch.stoppedAt, durationSeconds: patch.durationSeconds,
+        closeReason: patch.closeReason, metered: Boolean(patch.metered),
+      } : {}),
+    };
+  writeLegacyStore({ ...current, actorSessions: current.actorSessions.map((s) => s.id === id ? updated : s) });
+  return updated;
+}
+
+/* --------------------------- Recharge intents ---------------------------- */
+//
+// The order-side half of a recharge: `recharge-settle.js` is the only writer
+// that may move money, and it moves it exactly once per intent, so the intent —
+// not the provider order and not the ledger — is the idempotency record. Amounts
+// are integer paise as decided at quote time and are frozen after: `update`
+// appends settlement fields (status, settledAt, providerOrderId) and may not
+// rewrite money, the same rule `updateUsageRecord` applies to `costPaise`.
+
+/** Create one recharge intent (newest first). */
+function addRechargeIntent(intent) {
+  if (!intent || !intent.orderId || !intent.orgId) {
+    throw new Error('addRechargeIntent requires { orderId, orgId }');
+  }
+  const current = readLegacyStore();
+  const now = new Date().toISOString();
+  const record = {
+    status: 'QUOTED',
+    ...intent,
+    orderId: String(intent.orderId),
+    id: `ric_${randomUUID()}`,
+    createdAt: intent.createdAt || now,
+  };
+  writeLegacyStore({ ...current, rechargeIntents: [record, ...current.rechargeIntents] });
+  return record;
+}
+
+/** The intent for one provider order id, or null. */
+function getRechargeIntent(orderId) {
+  if (!orderId) return null;
+  return readLegacyStore().rechargeIntents.find((i) => i.orderId === String(orderId)) || null;
+}
+
+/** Merge settlement fields onto the intent for `orderId`; money fields are immutable. */
+function updateRechargeIntent(orderId, patch = {}) {
+  const key = String(orderId || '');
+  if (!key) throw new Error('updateRechargeIntent requires an orderId');
+  const current = readLegacyStore();
+  let touched = false;
+  const rechargeIntents = current.rechargeIntents.map((i) => {
+    if (i.orderId !== key) return i;
+    touched = true;
+    return {
+      ...i,
+      ...patch,
+      id: i.id,
+      orderId: i.orderId,
+      orgId: i.orgId,
+      createdAt: i.createdAt,
+      subtotalPaise: i.subtotalPaise,
+      couponBps: i.couponBps,
+      bonusPaise: i.bonusPaise,
+      gstPaise: i.gstPaise,
+      totalPaise: i.totalPaise,
+      creditCount: i.creditCount,
+      settledAt: patch.status === 'SETTLED'
+        ? (patch.settledAt || new Date().toISOString())
+        : ('settledAt' in patch ? patch.settledAt : i.settledAt),
+    };
+  });
+  if (touched) writeLegacyStore({ ...current, rechargeIntents });
+  return touched ? rechargeIntents.find((i) => i.orderId === key) : null;
+}
+
+/** Intents, newest first — optionally filtered by orgId and/or status. */
+function listRechargeIntents(filter = {}) {
+  const { orgId, status } = filter || {};
+  let intents = readLegacyStore().rechargeIntents;
+  if (orgId) intents = intents.filter((i) => i.orgId === orgId);
+  if (status) intents = intents.filter((i) => i.status === status);
+  return intents;
+}
+
+/* --------------------------- Usage outbox ------------------------------- */
+
+// One row per billable quantity waiting to be reported to FlexPrice. Rows are
+// appended where usage is recorded and are never mutated in their quantity: an
+// event already sent keeps the identity FlexPrice deduplicated it under, so a
+// retry of a row whose quantity changed would be a second, different charge.
+// Bounded by pruning terminal rows on the retention pass — the cap can never
+// evict a pending row, because dropping an unsent quantity is an unbillable hole
+// that reads as a healthy drain.
+const MAX_BILLING_OUTBOX_ROWS = 50000;
+const BILLING_OUTBOX_TERMINAL = new Set(['verified', 'failed']);
+
+/** Create one outbox row, or return the existing one for the same key. */
+function addBillingOutboxRow(row) {
+  if (!row || !row.orgId || !row.meter || !row.idempotencyKey) {
+    throw new Error('addBillingOutboxRow requires { orgId, meter, idempotencyKey }');
+  }
+  const current = readLegacyStore();
+  const existing = current.billingOutbox.find((r) => r.idempotencyKey === row.idempotencyKey);
+  if (existing) return existing;
+  const record = {
+    status: 'pending',
+    attempts: 0,
+    ...row,
+    id: `obx_${randomUUID()}`,
+    orgId: String(row.orgId),
+    idempotencyKey: String(row.idempotencyKey),
+    createdAt: row.createdAt || new Date().toISOString(),
+  };
+  const billingOutbox = [record, ...current.billingOutbox];
+  writeLegacyStore({ ...current, billingOutbox: boundBillingOutbox(billingOutbox) });
+  return record;
+}
+
+/**
+ * Keep the collection bounded without ever losing an unreported quantity:
+ * terminal rows go first. If the collection is still over the cap it is full of
+ * rows that have not been delivered, and dropping one of those is a silently
+ * unbilled run — so this throws and the caller alarms instead.
+ */
+function boundBillingOutbox(rows) {
+  if (rows.length <= MAX_BILLING_OUTBOX_ROWS) return rows;
+  const dropped = new Set();
+  for (let i = rows.length - 1; i >= 0 && rows.length - dropped.size > MAX_BILLING_OUTBOX_ROWS; i -= 1) {
+    if (BILLING_OUTBOX_TERMINAL.has(rows[i].status)) dropped.add(rows[i].id);
+  }
+  const kept = dropped.size ? rows.filter((r) => !dropped.has(r.id)) : rows;
+  if (kept.length > MAX_BILLING_OUTBOX_ROWS) {
+    throw Object.assign(new Error('billing outbox is over its cap with undelivered rows'), {
+      code: 'billing_outbox_overflow',
+      rows: kept.length,
+      cap: MAX_BILLING_OUTBOX_ROWS,
+    });
+  }
+  return kept;
+}
+
+/** Outbox rows, oldest first (a backlog must drain in the order it arrived). */
+function listBillingOutboxRows(filter = {}) {
+  const { status, orgId } = filter || {};
+  let rows = [...readLegacyStore().billingOutbox].reverse();
+  if (status) rows = rows.filter((r) => r.status === status);
+  if (orgId) rows = rows.filter((r) => r.orgId === orgId);
+  return typeof filter.limit === 'number' ? rows.slice(0, filter.limit) : rows;
+}
+
+/** Merge delivery fields onto one row; the quantity and key are immutable. */
+function updateBillingOutboxRow(id, patch = {}) {
+  const current = readLegacyStore();
+  let touched = false;
+  const billingOutbox = current.billingOutbox.map((r) => {
+    if (r.id !== id) return r;
+    touched = true;
+    return {
+      ...r,
+      ...patch,
+      id: r.id,
+      orgId: r.orgId,
+      meter: r.meter,
+      eventName: r.eventName,
+      idempotencyKey: r.idempotencyKey,
+      createdAt: r.createdAt,
+      quantityPaise: r.quantityPaise,
+      quantitySeconds: r.quantitySeconds,
+      quantityMinutes: r.quantityMinutes,
+    };
+  });
+  if (touched) writeLegacyStore({ ...current, billingOutbox });
+  return touched ? billingOutbox.find((r) => r.id === id) : null;
+}
+
+/** Drop terminal rows older than `beforeIso`; pending and sent rows never go. */
+function pruneBillingOutbox(beforeIso) {
+  const current = readLegacyStore();
+  const billingOutbox = current.billingOutbox.filter(
+    (r) => !BILLING_OUTBOX_TERMINAL.has(r.status) || String(r.createdAt || '') >= beforeIso,
+  );
+  const removed = current.billingOutbox.length - billingOutbox.length;
+  if (removed) writeLegacyStore({ ...current, billingOutbox });
+  return removed;
+}
+
+/** Row counts by status — the drain's and the dashboard's only summary. */
+function billingOutboxCounts() {
+  const counts = { pending: 0, sent: 0, verified: 0, failed: 0, total: 0 };
+  for (const row of readLegacyStore().billingOutbox) {
+    counts.total += 1;
+    counts[row.status] = (counts[row.status] || 0) + 1;
+  }
+  return counts;
 }
 
 /* ------------------------- Settings history ----------------------------- */
@@ -1428,6 +1673,10 @@ module.exports = {
   getBillingState,
   setBillingState,
   addUsageRecord,
+  addActorSession,
+  getActorSession,
+  listActorSessions,
+  updateActorSession,
   listUsageRecords,
   pruneUsageRecords,
   updateUsageRecord,
@@ -1438,6 +1687,16 @@ module.exports = {
   getBillingAccount,
   listBillingAccounts,
   upsertBillingAccount,
+  addRechargeIntent,
+  getRechargeIntent,
+  updateRechargeIntent,
+  listRechargeIntents,
+  MAX_BILLING_OUTBOX_ROWS,
+  addBillingOutboxRow,
+  listBillingOutboxRows,
+  updateBillingOutboxRow,
+  pruneBillingOutbox,
+  billingOutboxCounts,
   MAX_SETTINGS_HISTORY,
   listSettingsHistory,
   addSettingsHistory,

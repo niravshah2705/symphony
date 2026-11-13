@@ -1,6 +1,13 @@
 'use strict';
 
 const { CONFIG } = require('../config');
+const { decimalToScaled, roundDiv } = require('./money-wire');
+
+// The precision this module is willing to multiply: 8 dp of USD (a provider
+// reporting below that is reporting nothing) and 4 dp of FX (an operator who
+// sets USD_TO_INR=87.5321 gets exactly that).
+const USD_DP = 8;
+const FX_DP = 4;
 
 /**
  * SDK-free cost + currency helpers for billing. Money is handled in INTEGER paise
@@ -70,11 +77,29 @@ function costUsdFromResult(result, llm) {
   return reported !== null && reported >= 0 ? reported : 0;
 }
 
-/** Convert USD to integer paise using the configured (approximate) FX rate. */
+/**
+ * Convert USD to integer paise using the configured FX rate.
+ *
+ * This is a money-path multiplication, not a display one: since Phase 3 the
+ * result is the `cost_paise` the outbox delivers and the wallet is debited
+ * against. So it is BigInt on digit strings (see money-wire.js) rather than
+ * `Math.round(usd * rate * 100)` — binary float puts some exact halves just
+ * below themselves, which would short every such run by a paise in a direction
+ * that never varies and never fails a check.
+ *
+ * `toFixed` bounds the precision we claim: a cost reported to the nanoruupee is
+ * still a whole-paise charge, and anything below half a paise is zero rather
+ * than an exponent-notation string the decimal parser would refuse.
+ */
 function usdToPaise(usd, rate = CONFIG.BILLING.usdToInr) {
   const amount = Number(usd);
+  const fx = Number(rate);
   if (!Number.isFinite(amount) || amount <= 0) return 0;
-  return Math.round(amount * rate * 100);
+  if (!Number.isFinite(fx) || fx <= 0) return 0;
+  const scaled = decimalToScaled(amount.toFixed(USD_DP), USD_DP)
+    * decimalToScaled(fx.toFixed(FX_DP), FX_DP)
+    * 100n;
+  return Number(roundDiv(scaled, 10n ** BigInt(USD_DP + FX_DP)));
 }
 
 /** Convert integer paise to a rupee number (for display only). */

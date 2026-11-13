@@ -21,7 +21,6 @@ from app.schemas.me import (
 )
 from app.schemas.tag import TagResponse
 from app.services.onboarding_service import (
-    DEFAULT_ORG_NAME,
     ensure_default_organization_and_project,
     ensure_default_project_for_org,
 )
@@ -46,7 +45,10 @@ async def get_context(session: Uow, principal: Principal, user: User) -> MeConte
         projects: list[ContextProjectResponse] = []
         if membership.role == OrgRole.ORG_ADMIN:
             project_docs = await session.query(projects_col(org.id), order_by="created_at")
-            if not project_docs and org.name == DEFAULT_ORG_NAME:
+            # The flag, not `org.name == DEFAULT_ORG_NAME`: the name is editable
+            # through OrgUpdate, so matching on it let any org claim or shed the
+            # free tier by renaming itself.
+            if not project_docs and org.is_default:
                 default_proj = await ensure_default_project_for_org(session, org, user)
                 project_docs = [default_proj.to_doc()]
             for doc in project_docs:
@@ -84,6 +86,7 @@ async def get_context(session: Uow, principal: Principal, user: User) -> MeConte
             ContextOrganizationResponse(
                 id=org.id,
                 name=org.name,
+                is_default=org.is_default,
                 parent_org_id=org.parent_org_id,
                 membership_id=membership.id,
                 role=membership.role,

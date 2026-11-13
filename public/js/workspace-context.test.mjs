@@ -103,6 +103,7 @@ test('normalizes tags and default flags on organization and project', () => {
       {
         id: 'org-default-1',
         name: 'default',
+        is_default: true,
         tags: [{ name: 'default=true' }, { name: 'initialise=false' }],
         projects: [
           {
@@ -124,4 +125,24 @@ test('normalizes tags and default flags on organization and project', () => {
   assert.equal(proj.name, 'default');
   assert.equal(proj.isDefault, true);
   assert.deepEqual(proj.tags, [{ id: null, name: 'default=true' }, { id: null, name: 'initialise=false' }]);
+
+  // The org flag is the server's, so renaming the org or editing its tags moves
+  // nothing: free-tier status is not something a customer can grant itself.
+  const renamed = normalizeWorkspaceContext({
+    user: { id: 'u-1', email: 'test@example.com' },
+    organizations: [{
+      id: 'org-default-1',
+      name: 'Acme Industries',
+      is_default: false,
+      tags: [{ name: 'default=true' }],
+      projects: [],
+    }],
+  }).organizations[0];
+  assert.equal(renamed.isDefault, false);
+
+  const claimed = normalizeWorkspaceContext({
+    user: { id: 'u-1', email: 'test@example.com' },
+    organizations: [{ id: 'org-real', name: 'default', tags: [], projects: [] }],
+  }).organizations[0];
+  assert.equal(claimed.isDefault, false, 'no is_default field is not the free tier');
 });
