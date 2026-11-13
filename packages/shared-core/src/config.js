@@ -786,9 +786,6 @@ const GCP = Object.freeze({
   emailTopic: process.env.EMAIL_TOPIC || 'email-delivery',
   // Cloud Run Job launched (by coder-control) to run one coder ticket to completion.
   coderJobName: process.env.CODER_JOB_NAME || 'coder-worker',
-  // Cloud Run Job launched (by the billing service's hourly recharge tick) to run one
-  // auto-recharge + alert sweep. Must match google_cloud_run_v2_job.billing_auto_recharge.
-  billingJobName: process.env.BILLING_JOB_NAME || 'billing-auto-recharge',
   // Pub/Sub push OIDC verification (enforced only when MESSAGING_MODE=pubsub):
   //   pushAudience        expected `aud` of the push token (the push endpoint URL)
   //   pushServiceAccount  the SA email Pub/Sub is configured to sign push tokens as

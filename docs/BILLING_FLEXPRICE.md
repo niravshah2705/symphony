@@ -790,6 +790,38 @@ with the same plane role, update only `FLEXPRICE_API_KEY_INGEST` or
 two credentials, print them, or commit `deploy/flexprice/.env`; the split limits write
 capability and is not a read boundary.
 
+### Cloud deployment and rollout
+
+FlexPrice is an external HTTPS endpoint. Terraform creates the secret containers
+`flexprice-api-key-ingest` and `flexprice-api-key-money` (readable by `billing-sa`
+only) and never their values. The billing service and four Cloud Run Jobs share one
+FlexPrice env map (`BILLING_GATE_POLICY=enforced`, `FLEXPRICE_DEPLOYMENT_MODE=production`):
+
+| Job | Entrypoint | Default schedule |
+|---|---|---|
+| `billing-auto-recharge` | `auto-recharge-job.js` | `0 * * * *` |
+| `billing-platform-charge` | `platform-charge-job.js` | `0 2 1 * *` |
+| `billing-credit-expiry` | `credit-expiry-job.js` | `15 * * * *` |
+| `billing-reconcile` | `reconcile-gateway-spend.js` | `30 3 * * *` |
+
+Cloud Scheduler calls `jobs/<name>:run` directly as `billing-scheduler-sa`
+(`run.invoker` on each Job only). `/pubsub/billing-tick` now runs only the usage
+sweep, actor-session sweep and outbox drain. Locally, run a Job with
+`npm run job:<recharge|platform-charge|credit-expiry|reconcile> -w @ai-fleet/billing`.
+
+1. Add each key: `printf '%s' "$KEY" | gcloud secrets versions add flexprice-api-key-ingest --data-file=-`
+   (same for `-money`). The deploy fails closed until both have an enabled version.
+2. Set the repository variables `FLEXPRICE_BASE_URL` (https), `FLEXPRICE_ENVIRONMENT_ID`
+   (UUID) and `FLEXPRICE_SUPPLIER_STATE_CODE` (01–37).
+3. Merge; the workflow runs fmt, validate, `plan -out`, then applies that plan.
+4. Execute each Job once: `gcloud run jobs execute <name> --region <region> --wait`
+   (platform charge first with `--args=services/billing/src/platform-charge-job.js,--validate`),
+   then watch one cycle of each schedule in the logs.
+
+**Rollback:** pause the schedulers (`gcloud scheduler jobs pause <name>-tick`) or
+redeploy the previous revision. Never weaken the gate policy and never delete the
+secret containers.
+
 ## 13. Decisions still needed from you
 
 1. **AGPL** — the memo's five options with a recommendation. Nothing else here is

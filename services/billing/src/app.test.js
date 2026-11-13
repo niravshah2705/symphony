@@ -255,30 +255,26 @@ test('billing /pubsub/billing-tick runs sweep', async () => {
     // every local suite runs in — the drain must report that it skipped rather
     // than reaching for a client it has no keys for.
     assert.deepEqual(body.outbox, { skipped: 'disabled' });
-    assert.equal(typeof body.reconciliation.orgs, 'number');
+    assert.equal('reconciliation' in body, false);
   } finally {
     await server.close();
   }
 });
 
-test('billing tick reconciles after actor sweep and outbox drain without coupling failures', async () => {
+test('billing tick runs actor sweep then outbox drain, and no longer reconciles', async () => {
   const order = [];
   const server = await listen(createApp({
-    sweepActorSessions: async () => { order.push('actors'); return { swept: 1 }; },
+    sweepActorSessions: async () => { order.push('actors'); throw new Error('sweep down'); },
     drainOutbox: async () => { order.push('outbox'); return { delivered: 1 }; },
-    reconcileGatewaySpend: async () => {
-      order.push('reconcile');
-      throw new Error('meter unavailable');
-    },
   }));
   try {
     const res = await fetch(`${server.url}/pubsub/billing-tick`, { method: 'POST' });
     const body = await res.json();
     assert.equal(res.status, 200);
-    assert.deepEqual(order, ['actors', 'outbox', 'reconcile']);
-    assert.deepEqual(body.actorSessions, { swept: 1 });
+    assert.deepEqual(order, ['actors', 'outbox']);
+    assert.equal(body.actorSessions, null);
     assert.deepEqual(body.outbox, { delivered: 1 });
-    assert.equal(body.reconciliation, null);
+    assert.equal('reconciliation' in body, false);
   } finally {
     await server.close();
   }
@@ -617,71 +613,13 @@ test('a saved GSTIN is validated on the way in and decides the tax split on the 
   }
 });
 
-// --- hourly auto-recharge tick ------------------------------------------------
-// The route is the only thing between a scheduler tick and real money, so its two
-// branches are pinned: in the cloud it must LAUNCH the one-shot Job and do nothing
-// else; locally (no Job to launch) it must run the entrypoint in-process.
-test('billing recharge tick launches the Cloud Run Job instead of sweeping in-request', async () => {
-  const launched = [];
-  let ranInProcess = 0;
-  const server = await listen(createApp({
-    rechargeTrigger: {
-      isCloudJobEnabled: () => true,
-      runRechargeJob: async (params) => {
-        launched.push(params);
-        return { execution: 'projects/p/locations/r/jobs/billing-auto-recharge/executions/e', job: 'jobs/billing-auto-recharge' };
-      },
-    },
-    runAutoRechargeJob: async () => { ranInProcess += 1; return {}; },
-  }));
+// Recharge runs only as a scheduled Cloud Run Job; the service no longer exposes
+// a route that can start a charge.
+test('the service has no recharge tick route', async () => {
+  const server = await listen(createApp());
   try {
     const res = await fetch(`${server.url}/pubsub/billing-recharge-tick`, { method: 'POST' });
-    assert.equal(res.status, 200);
-    const body = await res.json();
-    assert.equal(body.status, 'launched');
-    assert.match(body.execution, /executions\/e$/);
-    assert.equal(ranInProcess, 0, 'the cloud path must never charge inside the service');
-    assert.equal(launched.length, 1);
-  } finally {
-    await server.close();
-  }
-});
-
-test('billing recharge tick runs the sweep in-process when no Job is configured', async () => {
-  let jobOptions = null;
-  const server = await listen(createApp({
-    rechargeTrigger: { isCloudJobEnabled: () => false, runRechargeJob: async () => { throw new Error('must not launch'); } },
-    runAutoRechargeJob: async (opts) => {
-      jobOptions = opts;
-      return { checked: 2, charged: 1, alerted: 1, skipped: 0, dryRun: false };
-    },
-  }));
-  try {
-    const res = await fetch(`${server.url}/pubsub/billing-recharge-tick`, { method: 'POST' });
-    assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), {
-      status: 'completed', checked: 2, charged: 1, alerted: 1, skipped: 0, dryRun: false,
-    });
-    // The entrypoint exits the process on a fully-failed sweep, so a request handler
-    // must hand it a no-op: one bad org cannot kill the serving container.
-    assert.equal(typeof jobOptions.exit, 'function');
-    jobOptions.exit(1);
-  } finally {
-    await server.close();
-  }
-});
-
-test('billing recharge tick reports a launch failure as 500 so the scheduler retries', async () => {
-  const server = await listen(createApp({
-    rechargeTrigger: {
-      isCloudJobEnabled: () => true,
-      runRechargeJob: async () => { throw new Error('run.jobs.run denied'); },
-    },
-  }));
-  try {
-    const res = await fetch(`${server.url}/pubsub/billing-recharge-tick`, { method: 'POST' });
-    assert.equal(res.status, 500);
-    assert.match((await res.json()).error, /run\.jobs\.run denied/);
+    assert.notEqual(res.status, 200);
   } finally {
     await server.close();
   }

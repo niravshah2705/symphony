@@ -288,7 +288,6 @@ function renderDashboardHtml(data = {}) {
 
         <div class="actions">
           <button type="submit" class="btn">Save Configuration</button>
-          <button type="button" id="trigger-sweep-btn" class="btn secondary">Run Auto-Recharge Sweep Now</button>
         </div>
       </form>
     </div>
@@ -300,7 +299,6 @@ function renderDashboardHtml(data = {}) {
     const modeRadios = document.getElementsByName('threshold-mode');
     const groupAmount = document.getElementById('group-amount');
     const groupPercentage = document.getElementById('group-percentage');
-    const sweepBtn = document.getElementById('trigger-sweep-btn');
 
     function updateVisibility() {
       const isPercent = Array.from(modeRadios).find(r => r.checked)?.value === 'percentage';
@@ -348,28 +346,6 @@ function renderDashboardHtml(data = {}) {
         }
       } catch (err) {
         showToast(err.message || 'Request failed', false);
-      }
-    });
-
-    sweepBtn.addEventListener('click', async () => {
-      sweepBtn.disabled = true;
-      try {
-        const res = await fetch('/pubsub/billing-recharge-tick', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        if (res.ok) {
-          const body = await res.json().catch(() => ({}));
-          showToast(body.status === 'launched' ? 'Auto-recharge Job execution launched.' : 'Auto-recharge sweep executed.');
-          setTimeout(() => location.reload(), 1000);
-        } else {
-          showToast('Sweep returned status: ' + res.status, false);
-        }
-      } catch (err) {
-        showToast('Sweep error: ' + err.message, false);
-      } finally {
-        sweepBtn.disabled = false;
       }
     });
   </script>

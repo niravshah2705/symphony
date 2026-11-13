@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 560 nodes
+Community of 576 nodes
 
-- **Size**: 560 nodes
-- **Cohesion**: 0.7432
+- **Size**: 576 nodes
+- **Cohesion**: 0.7416
 - **Dominant Language**: hcl
 
 ## Members
@@ -19,21 +19,28 @@ Community of 560 nodes
 | local.observability_apis | Function | ./deploy/gcp/terraform/apis.tf | 41-44 |
 | resource.google_project_service.observability_apis | Class | ./deploy/gcp/terraform/apis.tf | 47-53 |
 | resource.google_artifact_registry_repository.docker | Class | ./deploy/gcp/terraform/artifact_registry.tf | 5-36 |
-| resource.google_cloud_run_v2_job.billing_auto_recharge | Class | ./deploy/gcp/terraform/billing_job.tf | 21-115 |
-| resource.google_cloud_run_v2_job_iam_member.billing_launches_recharge_job | Class | ./deploy/gcp/terraform/billing_job.tf | 121-127 |
-| resource.google_service_account_iam_member.billing_actas_self | Class | ./deploy/gcp/terraform/billing_job.tf | 129-133 |
-| resource.google_cloud_run_v2_service_iam_member.billing_invokes_org | Class | ./deploy/gcp/terraform/billing_job.tf | 139-145 |
-| resource.google_secret_manager_secret_iam_member.billing_internal_token | Class | ./deploy/gcp/terraform/billing_job.tf | 149-155 |
-| resource.google_cloud_scheduler_job.billing_auto_recharge | Class | ./deploy/gcp/terraform/billing_job.tf | 162-195 |
+| local.billing_jobs | Function | ./deploy/gcp/terraform/billing_job.tf | 11-52 |
+| local.billing_job_cashfree_secrets | Function | ./deploy/gcp/terraform/billing_job.tf | 54-57 |
+| resource.google_cloud_run_v2_job.billing | Class | ./deploy/gcp/terraform/billing_job.tf | 65-161 |
+| resource.google_cloud_run_v2_service_iam_member.billing_invokes_org | Class | ./deploy/gcp/terraform/billing_job.tf | 164-170 |
+| resource.google_cloud_run_v2_service_iam_member.billing_invokes_settings | Class | ./deploy/gcp/terraform/billing_job.tf | 173-179 |
+| resource.google_secret_manager_secret_iam_member.billing_internal_token | Class | ./deploy/gcp/terraform/billing_job.tf | 181-187 |
+| resource.google_service_account.billing_scheduler | Class | ./deploy/gcp/terraform/billing_job.tf | 192-196 |
+| resource.google_cloud_run_v2_job_iam_member.billing_scheduler_runs_job | Class | ./deploy/gcp/terraform/billing_job.tf | 198-206 |
+| resource.google_cloud_scheduler_job.billing_job | Class | ./deploy/gcp/terraform/billing_job.tf | 213-243 |
 | resource.google_service_account.billing | Class | ./deploy/gcp/terraform/billing_service.tf | 6-10 |
 | resource.google_project_iam_member.billing_datastore | Class | ./deploy/gcp/terraform/billing_service.tf | 12-16 |
 | resource.google_secret_manager_secret.cashfree_app_id | Class | ./deploy/gcp/terraform/billing_service.tf | 18-28 |
 | resource.google_secret_manager_secret.cashfree_secret_key | Class | ./deploy/gcp/terraform/billing_service.tf | 30-40 |
 | resource.google_secret_manager_secret_iam_member.billing_cashfree_app_id_accessor | Class | ./deploy/gcp/terraform/billing_service.tf | 42-47 |
 | resource.google_secret_manager_secret_iam_member.billing_cashfree_secret_key_accessor | Class | ./deploy/gcp/terraform/billing_service.tf | 49-54 |
-| resource.google_cloud_run_v2_service.billing | Class | ./deploy/gcp/terraform/billing_service.tf | 56-158 |
-| resource.google_cloud_run_v2_service_iam_member.gateway_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 160-166 |
-| resource.google_cloud_run_v2_service_iam_member.push_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 168-174 |
+| resource.google_secret_manager_secret.flexprice | Class | ./deploy/gcp/terraform/billing_service.tf | 61-73 |
+| resource.google_secret_manager_secret_iam_member.billing_flexprice_accessor | Class | ./deploy/gcp/terraform/billing_service.tf | 75-82 |
+| local.billing_flexprice_env | Function | ./deploy/gcp/terraform/billing_service.tf | 85-93 |
+| local.billing_flexprice_secrets | Function | ./deploy/gcp/terraform/billing_service.tf | 95-98 |
+| resource.google_cloud_run_v2_service.billing | Class | ./deploy/gcp/terraform/billing_service.tf | 101-213 |
+| resource.google_cloud_run_v2_service_iam_member.gateway_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 215-221 |
+| resource.google_cloud_run_v2_service_iam_member.push_invokes_billing | Class | ./deploy/gcp/terraform/billing_service.tf | 223-229 |
 | resource.google_service_account.clm_inference | Class | ./deploy/gcp/terraform/clm_inference.tf | 6-10 |
 | resource.google_cloud_run_v2_service.clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 12-71 |
 | resource.google_cloud_run_v2_service_iam_member.planner_invokes_clm | Class | ./deploy/gcp/terraform/clm_inference.tf | 74-80 |
@@ -57,15 +64,8 @@ Community of 560 nodes
 | resource.google_cloud_run_v2_service_iam_member.proxy_invokes_settings | Class | ./deploy/gcp/terraform/cloud_run.tf | 260-267 |
 | resource.google_cloud_run_v2_service.gateway | Class | ./deploy/gcp/terraform/cloud_run.tf | 270-363 |
 | resource.google_cloud_run_v2_service.planner | Class | ./deploy/gcp/terraform/cloud_run.tf | 376-547 |
-| resource.google_cloud_run_v2_service.coder_control | Class | ./deploy/gcp/terraform/cloud_run.tf | 550-706 |
-| resource.google_cloud_run_v2_job.coder_worker | Class | ./deploy/gcp/terraform/cloud_run.tf | 712-862 |
-| local.email_public_app_url | Function | ./deploy/gcp/terraform/email_service.tf | 7-7 |
-| local.email_smtp_secret_refs | Function | ./deploy/gcp/terraform/email_service.tf | 8-8 |
-| resource.google_service_account.email | Class | ./deploy/gcp/terraform/email_service.tf | 11-15 |
-| resource.google_project_iam_member.email_datastore | Class | ./deploy/gcp/terraform/email_service.tf | 19-23 |
-| resource.google_secret_manager_secret.email_smtp_user | Class | ./deploy/gcp/terraform/email_service.tf | 25-33 |
 
-*... and 510 more members.*
+*... and 526 more members.*
 
 ## Execution Flows
 
@@ -75,9 +75,9 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform/variables.tf` (200 edge(s))
+- `./deploy/gcp/terraform/variables.tf` (208 edge(s))
 - `./deploy/gcp/terraform/locals.tf` (64 edge(s))
-- `./deploy/gcp/terraform/outputs.tf` (33 edge(s))
+- `./deploy/gcp/terraform/outputs.tf` (34 edge(s))
 - `./deploy/gcp/terraform/pipeline.tf` (29 edge(s))
 - `./deploy/gcp/terraform/iam.tf` (22 edge(s))
 - `./deploy/gcp/terraform/cloud_run.tf` (20 edge(s))
@@ -86,7 +86,7 @@ No execution flows pass through this community.
 - `./deploy/gcp/terraform/observability.tf` (15 edge(s))
 - `./deploy/gcp/terraform/email_service.tf` (14 edge(s))
 - `./deploy/gcp/terraform/litellm.tf` (14 edge(s))
+- `./deploy/gcp/terraform/billing_service.tf` (13 edge(s))
 - `./deploy/gcp/terraform/firebase.tf` (10 edge(s))
 - `./deploy/gcp/terraform/memory.tf` (10 edge(s))
-- `./deploy/gcp/terraform/billing_service.tf` (9 edge(s))
-- `./deploy/gcp/terraform/org_service.tf` (9 edge(s))
+- `./deploy/gcp/terraform/billing_job.tf` (9 edge(s))

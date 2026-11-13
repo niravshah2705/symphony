@@ -11,6 +11,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | Community | Size | Link |
 |-----------|------|------|
 | agent-30 | 2 | [agent-30.md](agent-30.md) |
+| agent-agent | 469 | [agent-agent.md](agent-agent.md) |
 | agent-agent-availability-error | 2 | [agent-agent-availability-error.md](agent-agent-availability-error.md) |
 | agent-agent-error | 2 | [agent-agent-error.md](agent-agent-error.md) |
 | agent-backend | 2 | [agent-backend.md](agent-backend.md) |
@@ -18,7 +19,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-business-pipeline-error | 2 | [agent-business-pipeline-error.md](agent-business-pipeline-error.md) |
 | agent-checks | 15 | [agent-checks.md](agent-checks.md) |
 | agent-coder-error | 2 | [agent-coder-error.md](agent-coder-error.md) |
-| agent-context | 356 | [agent-context.md](agent-context.md) |
+| agent-context | 384 | [agent-context.md](agent-context.md) |
 | agent-derive | 2 | [agent-derive.md](agent-derive.md) |
 | agent-encode | 130 | [agent-encode.md](agent-encode.md) |
 | agent-failing | 3 | [agent-failing.md](agent-failing.md) |
@@ -31,7 +32,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-id | 3 | [agent-id.md](agent-id.md) |
 | agent-knowledge-search-error | 2 | [agent-knowledge-search-error.md](agent-knowledge-search-error.md) |
 | agent-local-intelligence-error | 2 | [agent-local-intelligence-error.md](agent-local-intelligence-error.md) |
-| agent-model | 206 | [agent-model.md](agent-model.md) |
+| agent-memory | 234 | [agent-memory.md](agent-memory.md) |
 | agent-models | 41 | [agent-models.md](agent-models.md) |
 | agent-normalize | 19 | [agent-normalize.md](agent-normalize.md) |
 | agent-organization-context-mismatch | 2 | [agent-organization-context-mismatch.md](agent-organization-context-mismatch.md) |
@@ -45,10 +46,9 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-query | 11 | [agent-query.md](agent-query.md) |
 | agent-query-test-l113 | 4 | [agent-query-test-l113.md](agent-query-test-l113.md) |
 | agent-repository-broker-error | 2 | [agent-repository-broker-error.md](agent-repository-broker-error.md) |
-| agent-resolve | 249 | [agent-resolve.md](agent-resolve.md) |
+| agent-resolve | 2 | [agent-resolve.md](agent-resolve.md) |
 | agent-resolve-effective | 2 | [agent-resolve-effective.md](agent-resolve-effective.md) |
-| agent-resolve-proxied | 2 | [agent-resolve-proxied.md](agent-resolve-proxied.md) |
-| agent-review | 121 | [agent-review.md](agent-review.md) |
+| agent-rubric | 64 | [agent-rubric.md](agent-rubric.md) |
 | agent-scope | 22 | [agent-scope.md](agent-scope.md) |
 | agent-settings | 6 | [agent-settings.md](agent-settings.md) |
 | agent-stage | 170 | [agent-stage.md](agent-stage.md) |
@@ -77,7 +77,6 @@ Auto-generated documentation from the code knowledge graph community structure.
 | billing-billing | 469 | [billing-billing.md](billing-billing.md) |
 | billing-draw | 5 | [billing-draw.md](billing-draw.md) |
 | billing-effective | 5 | [billing-effective.md](billing-effective.md) |
-| billing-job | 7 | [billing-job.md](billing-job.md) |
 | billing-read | 3 | [billing-read.md](billing-read.md) |
 | billing-subscription | 14 | [billing-subscription.md](billing-subscription.md) |
 | billing-verify | 2 | [billing-verify.md](billing-verify.md) |
@@ -105,6 +104,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | gcp-enabled | 2 | [gcp-enabled.md](gcp-enabled.md) |
 | gcp-ensure | 3 | [gcp-ensure.md](gcp-ensure.md) |
 | gcp-env | 2 | [gcp-env.md](gcp-env.md) |
+| gcp-job | 22 | [gcp-job.md](gcp-job.md) |
 | gcp-names | 22 | [gcp-names.md](gcp-names.md) |
 | gcp-note | 51 | [gcp-note.md](gcp-note.md) |
 | gcp-pool | 3 | [gcp-pool.md](gcp-pool.md) |
@@ -123,7 +123,6 @@ Auto-generated documentation from the code knowledge graph community structure.
 | harnesses-agent-runtime-error | 2 | [harnesses-agent-runtime-error.md](harnesses-agent-runtime-error.md) |
 | harnesses-fake | 3 | [harnesses-fake.md](harnesses-fake.md) |
 | harnesses-fake-google | 3 | [harnesses-fake-google.md](harnesses-fake-google.md) |
-| harnesses-memory | 305 | [harnesses-memory.md](harnesses-memory.md) |
 | hooks-touch | 7 | [hooks-touch.md](hooks-touch.md) |
 | js-analytics | 46 | [js-analytics.md](js-analytics.md) |
 | js-fake | 4 | [js-fake.md](js-fake.md) |
@@ -228,6 +227,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-javascript | 2 | [src-javascript.md](src-javascript.md) |
 | src-javascript-files | 2 | [src-javascript-files.md](src-javascript-files.md) |
 | src-javascript-static | 2 | [src-javascript-static.md](src-javascript-static.md) |
+| src-label | 86 | [src-label.md](src-label.md) |
 | src-linear-error | 2 | [src-linear-error.md](src-linear-error.md) |
 | src-match | 2 | [src-match.md](src-match.md) |
 | src-message | 3 | [src-message.md](src-message.md) |
@@ -261,7 +261,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-stage | 98 | [src-stage.md](src-stage.md) |
 | src-state | 6 | [src-state.md](src-state.md) |
 | src-status | 5 | [src-status.md](src-status.md) |
-| src-store | 31 | [src-store.md](src-store.md) |
+| src-store | 29 | [src-store.md](src-store.md) |
 | src-stream | 41 | [src-stream.md](src-stream.md) |
 | src-stream-token-unavailable-error | 2 | [src-stream-token-unavailable-error.md](src-stream-token-unavailable-error.md) |
 | src-test:nothing | 6 | [src-test-nothing.md](src-test-nothing.md) |
@@ -281,7 +281,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | store-workspace-context-error | 2 | [store-workspace-context-error.md](store-workspace-context-error.md) |
 | store-workspace-organization | 2 | [store-workspace-organization.md](store-workspace-organization.md) |
 | support-parse | 107 | [support-parse.md](support-parse.md) |
-| terraform-google | 560 | [terraform-google.md](terraform-google.md) |
+| terraform-google | 576 | [terraform-google.md](terraform-google.md) |
 | terraform-substrate-gke-resource | 145 | [terraform-substrate-gke-resource.md](terraform-substrate-gke-resource.md) |
 | terraform-substrate-gke-resource-kubectl-manifest | 2 | [terraform-substrate-gke-resource-kubectl-manifest.md](terraform-substrate-gke-resource-kubectl-manifest.md) |
 | tools-arg | 2 | [tools-arg.md](tools-arg.md) |
