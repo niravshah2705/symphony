@@ -4,53 +4,67 @@
 
 ## Overview
 
-Community of 11 nodes
+Community of 26 nodes
 
-- **Size**: 11 nodes
-- **Cohesion**: 0.4454
+- **Size**: 26 nodes
+- **Cohesion**: 0.3940
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| check | Function | ./scripts/flexprice-recharge-verify.js | 66-70 |
-| section | Function | ./scripts/flexprice-recharge-verify.js | 71-73 |
-| request | Function | ./scripts/flexprice-recharge-verify.js | 76-110 |
-| main | Function | ./scripts/flexprice-recharge-verify.js | 112-429 |
-| get | Function | ./scripts/flexprice-recharge-verify.js | 167-167 |
-| post | Function | ./scripts/flexprice-recharge-verify.js | 168-168 |
-| call | Function | ./scripts/flexprice-recharge-verify.js | 169-169 |
-| as | Function | ./scripts/flexprice-recharge-verify.js | 170-170 |
-| readBalance | Function | ./scripts/flexprice-recharge-verify.js | 172-175 |
-| readCreditRows | Function | ./scripts/flexprice-recharge-verify.js | 176-179 |
-| saveGstin | Function | ./scripts/flexprice-recharge-verify.js | 207-218 |
+| log | Function | ./scripts/flexprice-helm.js | 68-68 |
+| step | Function | ./scripts/flexprice-helm.js | 69-69 |
+| die | Function | ./scripts/flexprice-helm.js | 70-70 |
+| run | Function | ./scripts/flexprice-helm.js | 80-98 |
+| redact | Function | ./scripts/flexprice-helm.js | 103-106 |
+| ignore | Function | ./scripts/flexprice-helm.js | 107-107 |
+| readVersionField | Function | ./scripts/flexprice-helm.js | 109-112 |
+| loadIntoCluster | Function | ./scripts/flexprice-helm.js | 130-153 |
+| preflight | Function | ./scripts/flexprice-helm.js | 157-202 |
+| secrets | Function | ./scripts/flexprice-helm.js | 206-237 |
+| stageChart | Function | ./scripts/flexprice-helm.js | 250-268 |
+| readChartVersion | Function | ./scripts/flexprice-helm.js | 270-273 |
+| helmPhase | Function | ./scripts/flexprice-helm.js | 280-301 |
+| relaxInfraProbes | Function | ./scripts/flexprice-helm.js | 318-342 |
+| registerTemporalNamespace | Function | ./scripts/flexprice-helm.js | 354-376 |
+| healPendingRelease | Function | ./scripts/flexprice-helm.js | 383-393 |
+| whyNotReady | Function | ./scripts/flexprice-helm.js | 395-414 |
+| infra | Function | ./scripts/flexprice-helm.js | 416-429 |
+| dbinit | Function | ./scripts/flexprice-helm.js | 431-441 |
+| temporal | Function | ./scripts/flexprice-helm.js | 443-453 |
+| migration | Function | ./scripts/flexprice-helm.js | 455-460 |
+| app | Function | ./scripts/flexprice-helm.js | 462-471 |
+| verify | Function | ./scripts/flexprice-helm.js | 481-568 |
+| note | Function | ./scripts/flexprice-helm.js | 485-488 |
+| api | Function | ./scripts/flexprice-helm.js | 503-511 |
+| pgq | Function | ./scripts/flexprice-helm.js | 546-547 |
 
 ## Execution Flows
 
-- **main** (criticality: 0.62, depth: 2)
-- **get** (criticality: 0.61, depth: 1)
+No execution flows pass through this community.
 
 ## Dependencies
 
 ### Outgoing
 
-- `join` (11 edge(s))
-- `log` (10 edge(s))
+- `split` (16 edge(s))
+- `join` (14 edge(s))
+- `trim` (12 edge(s))
+- `filter` (9 edge(s))
 - `slice` (9 edge(s))
-- `map` (9 edge(s))
-- `getRechargeIntent` (6 edge(s))
-- `Boolean` (5 edge(s))
-- `String` (5 edge(s))
-- `require` (4 edge(s))
-- `every` (4 edge(s))
-- `filter` (4 edge(s))
-- `Number` (4 edge(s))
-- `stringify` (3 edge(s))
-- `on` (3 edge(s))
-- `configMapKeyValues` (2 edge(s))
-- `getBillingAccount` (2 edge(s))
+- `test` (6 edge(s))
+- `String` (4 edge(s))
+- `execFileSync` (4 edge(s))
+- `startsWith` (4 edge(s))
+- `includes` (3 edge(s))
+- `readFileSync` (3 edge(s))
+- `Number` (3 edge(s))
+- `fetch` (2 edge(s))
+- `timeout` (2 edge(s))
+- `text` (2 edge(s))
 
 ### Incoming
 
-- `./scripts/flexprice-recharge-verify.js` (12 edge(s))
+- `./scripts/flexprice-helm.js` (60 edge(s))

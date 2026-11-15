@@ -4,68 +4,112 @@
 
 ## Overview
 
-Community of 19 nodes
+Community of 428 nodes
 
-- **Size**: 19 nodes
-- **Cohesion**: 0.3448
+- **Size**: 428 nodes
+- **Cohesion**: 0.2535
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| ConversationError | Class | ./packages/shared/src/agent/conversations.js | 26-32 |
-| constructor | Function | ./packages/shared/src/agent/conversations.js | 27-31 |
-| bound | Function | ./packages/shared/src/agent/conversations.js | 35-37 |
-| normalizeAttachmentRef | Function | ./packages/shared/src/agent/conversations.js | 40-52 |
-| normalizeAttachmentRefs | Function | ./packages/shared/src/agent/conversations.js | 54-61 |
-| normalizeCitation | Function | ./packages/shared/src/agent/conversations.js | 64-74 |
-| normalizeCitations | Function | ./packages/shared/src/agent/conversations.js | 76-83 |
-| normalizeMessage | Function | ./packages/shared/src/agent/conversations.js | 85-113 |
-| normalizeMessages | Function | ./packages/shared/src/agent/conversations.js | 116-124 |
-| normalizeTitle | Function | ./packages/shared/src/agent/conversations.js | 132-136 |
-| test:normalizeMessages keeps only allowlisted fields per role (no mass assignment)@L15 | Test | ./packages/shared/src/agent/conversations.test.js | 15-25 |
-| test:normalizeMessages validates array shape and size@L27 | Test | ./packages/shared/src/agent/conversations.test.js | 27-31 |
-| test:normalizeMessages enforces role and required content@L33 | Test | ./packages/shared/src/agent/conversations.test.js | 33-37 |
-| test:normalizeMessages bounds long fields@L39 | Test | ./packages/shared/src/agent/conversations.test.js | 39-42 |
-| test:normalizeTitle trims/bounds and rejects empty@L50 | Test | ./packages/shared/src/agent/conversations.test.js | 50-53 |
-| test:normalizeMessages keeps a bounded attachments array on user messages, omitted when absent@L55 | Test | ./packages/shared/src/agent/conversations.test.js | 55-62 |
-| test:normalizeMessages rejects malformed or oversized attachment references@L64 | Test | ./packages/shared/src/agent/conversations.test.js | 64-82 |
-| test:normalizeMessages keeps a bounded citations array on assistant messages, omitted when absent@L84 | Test | ./packages/shared/src/agent/conversations.test.js | 84-93 |
-| test:normalizeMessages rejects malformed citations@L95 | Test | ./packages/shared/src/agent/conversations.test.js | 95-104 |
+| test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
+| test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
+| test:the worker pool name the planner selects is one string in four places@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-616 |
+| test:the power workflow waits only on namespaces the module still creates@L138 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 138-160 |
+| test@L146 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 146-146 |
+| test:the static-IP grant lists the addresses the module owns@L162 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 162-177 |
+| test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L357 | Test | ./e2e/persistent-footer.spec.js | 357-461 |
+| test:recordStackLink persists the link and recovers the blocker identifier@L952 | Test | ./packages/shared/src/agent/coder-flow.test.js | 952-973 |
+| test:recordStackLink is a no-op when the run was not stacked@L975 | Test | ./packages/shared/src/agent/coder-flow.test.js | 975-984 |
+| recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 690-710 |
+| memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
+| memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
+| resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |
+| embedQuestions | Function | ./packages/shared/src/agent/coverage-service.js | 83-96 |
+| rankScopesWithLaya | Function | ./packages/shared/src/agent/coverage-service.js | 103-144 |
+| candidates | Function | ./packages/shared/src/agent/coverage-service.js | 116-116 |
+| mapWithConcurrency | Function | ./packages/shared/src/agent/coverage-service.js | 146-159 |
+| cacheKey | Function | ./packages/shared/src/agent/coverage-service.js | 161-166 |
+| computeCoverage | Function | ./packages/shared/src/agent/coverage-service.js | 178-301 |
+| invalidateCoverageCache | Function | ./packages/shared/src/agent/coverage-service.js | 309-323 |
+| makeStore | Function | ./packages/shared/src/agent/coverage-service.test.js | 37-51 |
+| baseDeps | Function | ./packages/shared/src/agent/coverage-service.test.js | 53-55 |
+| beforeEach@L57 | Test | ./packages/shared/src/agent/coverage-service.test.js | 57-57 |
+| test:with memory disabled nothing is assessed and no recall is attempted@L59 | Test | ./packages/shared/src/agent/coverage-service.test.js | 59-76 |
+| test:one store load serves the whole bank — questions never re-read the pool@L78 | Test | ./packages/shared/src/agent/coverage-service.test.js | 78-97 |
+| test:an unreadable store reads as unconfigured, not as 0% coverage@L99 | Test | ./packages/shared/src/agent/coverage-service.test.js | 99-108 |
+| test:a genuinely empty memory is real 0% coverage, distinct from not_assessed@L110 | Test | ./packages/shared/src/agent/coverage-service.test.js | 110-120 |
+| test:embeddings are one batched call, and an embedder failure degrades to lexical@L122 | Test | ./packages/shared/src/agent/coverage-service.test.js | 122-148 |
+| test:laya is reported as not_configured when no URL is deployed, and cannot change a score@L150 | Test | ./packages/shared/src/agent/coverage-service.test.js | 150-178 |
+| test:an unreachable laya fails open without failing the coverage request@L180 | Test | ./packages/shared/src/agent/coverage-service.test.js | 180-194 |
+| test:laya reorders matched scopes without inventing ones@L196 | Test | ./packages/shared/src/agent/coverage-service.test.js | 196-214 |
+| test:reports are cached per org and bank, bypassed by refresh and by invalidation@L216 | Test | ./packages/shared/src/agent/coverage-service.test.js | 216-227 |
+| test:inactive questions are dropped and an oversized bank is capped@L229 | Test | ./packages/shared/src/agent/coverage-service.test.js | 229-240 |
+| test:questionIds narrows a pass so one category refresh never scans the whole bank@L242 | Test | ./packages/shared/src/agent/coverage-service.test.js | 242-253 |
+| test:a bank edit clears only the editing organisation\'s cached report@L255 | Test | ./packages/shared/src/agent/coverage-service.test.js | 255-266 |
+| test:a run that outlives its budget returns 200-shaped partial results, not fake gaps@L268 | Test | ./packages/shared/src/agent/coverage-service.test.js | 268-295 |
+| QuestionError | Class | ./packages/shared/src/agent/global-questions.js | 55-61 |
+| constructor | Function | ./packages/shared/src/agent/global-questions.js | 56-60 |
+| trim | Function | ./packages/shared/src/agent/global-questions.js | 63-67 |
+| isValidId | Function | ./packages/shared/src/agent/global-questions.js | 69-71 |
+| mergeBank | Function | ./packages/shared/src/agent/global-questions.js | 90-122 |
+| normalizeQuestion | Function | ./packages/shared/src/agent/global-questions.js | 125-172 |
+| validateQuestionPatch | Function | ./packages/shared/src/agent/global-questions.js | 179-218 |
+| clamp | Function | ./packages/shared/src/agent/global-questions.js | 230-232 |
+| normalizeText | Function | ./packages/shared/src/agent/global-questions.js | 234-236 |
+| scoreQuestion | Function | ./packages/shared/src/agent/global-questions.js | 248-282 |
+| statusForScore | Function | ./packages/shared/src/agent/global-questions.js | 284-289 |
+| scoreCoverage | Function | ./packages/shared/src/agent/global-questions.js | 299-321 |
+| notAssessedResults | Function | ./packages/shared/src/agent/global-questions.js | 327-341 |
+| randomId | Function | ./packages/shared/src/agent/global-questions.js | 343-348 |
+
+*... and 378 more members.*
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
+- **generatePlan** (criticality: 0.67, depth: 6)
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
+- **runCoder** (criticality: 0.67, depth: 7)
+- **runPlannedCoder** (criticality: 0.66, depth: 7)
+- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `throws` (13 edge(s))
-- `isArray` (6 edge(s))
-- `equal` (6 edge(s))
-- `deepEqual` (5 edge(s))
-- `trim` (4 edge(s))
-- `String` (4 edge(s))
-- `map` (3 edge(s))
-- `sort` (3 edge(s))
-- `keys` (3 edge(s))
-- `slice` (2 edge(s))
-- `test` (2 edge(s))
-- `fill` (2 edge(s))
-- `Number` (1 edge(s))
-- `isFinite` (1 edge(s))
-- `replace` (1 edge(s))
+- `equal` (483 edge(s))
+- `join` (136 edge(s))
+- `includes` (100 edge(s))
+- `String` (90 edge(s))
+- `match` (73 edge(s))
+- `ok` (72 edge(s))
+- `isArray` (60 edge(s))
+- `map` (55 edge(s))
+- `deepEqual` (53 edge(s))
+- `trim` (43 edge(s))
+- `filter` (41 edge(s))
+- `slice` (40 edge(s))
+- `endsWith` (39 edge(s))
+- `throws` (35 edge(s))
+- `execFileSync` (34 edge(s))
 
 ### Incoming
 
-- `./packages/shared/src/agent/conversations.js` (15 edge(s))
-- `throws` (13 edge(s))
-- `./packages/shared/src/agent/conversations.test.js` (9 edge(s))
-- `equal` (6 edge(s))
-- `deepEqual` (5 edge(s))
-- `sort` (3 edge(s))
-- `keys` (3 edge(s))
-- `fill` (2 edge(s))
-- `repeat` (1 edge(s))
+- `equal` (482 edge(s))
+- `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
+- `join` (80 edge(s))
+- `ok` (72 edge(s))
+- `match` (68 edge(s))
+- `./packages/shared/src/agent/harnesses/contract.js` (55 edge(s))
+- `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
+- `deepEqual` (51 edge(s))
+- `throws` (35 edge(s))
+- `includes` (30 edge(s))
+- `expect` (29 edge(s))
+- `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
+- `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
+- `execFileSync` (24 edge(s))
+- `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))

@@ -188,6 +188,84 @@ their own docs say to treat the payload as advisory — so nothing in this proje
 accepts a FlexPrice webhook as an amount, ever. Read the record back over the
 authenticated API instead.
 
+## On kind, from the upstream Helm chart
+
+`npm run billing:flexprice:helm` (`scripts/flexprice-helm.js`) installs the same
+FlexPrice into the existing `kind-<cluster>` cluster from the chart that ships inside
+the pinned checkout (`internal/ee/infrastructure/helm/flexprice`, staged into
+`helm/build/` because it is not published as an OCI artifact). Nine phases —
+`preflight secrets chart infra dbinit temporal migration app verify` — each idempotent,
+so `--from migration` resumes cleanly and `--dry-run` rehearses the whole thing without
+changing anything. It refuses a non-kind kubectl context: the values are kind values.
+
+```bash
+npm run billing:flexprice:helm -- --dry-run                 # print every command
+npm run billing:flexprice:helm -- --verbose                 # full install
+kubectl -n flexprice port-forward svc/flexprice-api 18080:80 &
+npm run billing:flexprice:provision                          # mints THIS cluster's keys
+```
+
+Environment: `helm/values-kind.yaml` uses the migrated config shape only —
+`.Values.env` for plaintext and `.Values.secretEnv` (name → Secret key) with
+`secrets.existingSecret: flexprice-secrets`, which `secrets` creates from
+`deploy/flexprice/.env`. The legacy structured-values + ConfigMap path emits nothing
+useful at this pin (no `FLEXPRICE_KAFKA_TOPICS`, so topics get RF3 on a one-broker
+cluster). Preflight requires `FLEXPRICE_PG_PASSWORD`, `FLEXPRICE_CH_PASSWORD`,
+`FLEXPRICE_AUTH_SECRET`, `FLEXPRICE_SECRETS_ENCRYPTION_KEY`,
+`FLEXPRICE_AUTH_API_KEY_KEYS` and `FLEXPRICE_API_KEY` in `.env`, and fails if a value
+that `values-kind.yaml` or `extras/` hardcodes (tenant, environment, service names)
+disagrees — that class of drift is silent at runtime. The image is the locally built
+`flexprice-app:phase0` with `pullPolicy: Never`, loaded with `kind load`, or with
+`docker save | ctr --namespace=k8s.io images import` when the kind CLI is absent.
+
+Four things the chart cannot do on this pin, each covered deliberately:
+
+- **the `temporal` database** — nothing in it creates the database Temporal's own
+  schema setup then expects, so `extras/01-db-init.yaml` does.
+- **a reachable Temporal server** — `infra/temporal.yaml` renders one only when
+  `temporalConfig.enabled` is false, under a Service name that
+  `flexprice.temporalAddress` does not emit; the official subchart needs four
+  Deployments and three disabled Bitnami dependencies. `extras/02-temporal.yaml`
+  runs compose's own `temporalio/auto-setup` behind the address the helpers produce.
+- **registering the `default` namespace** — auto-setup.sh does it in a *background*
+  step (`setup_server &`), so a pod killed by a probe during that window comes back
+  serving traffic with no namespace, and the worker crash-loops on
+  `Namespace default is not found` looking like a Temporal client bug. The script
+  registers it in the foreground instead.
+- **surviving a busy node** — the infra probes are hardcoded (`pg_isready` at
+  `timeoutSeconds: 3`, ClickHouse at 1s) with no values key, so CPU starvation reads as
+  a dead database: Postgres gets SIGTERM'd mid-`dbmate`, `backoffLimit: 0` fails the
+  whole pre-upgrade hook, and Temporal answers
+  `no usable database connection found`. `relaxInfraProbes()` widens the timings after
+  every phase — which is why every `helm upgrade` here runs `--force-conflicts`: the
+  patch is an out-of-band write, and server-side apply otherwise refuses the next
+  upgrade with a conflict on exactly those fields. Patching with
+  `--field-manager=helm` does *not* avoid this; it creates a second entry under helm's
+  name that helm's own apply then conflicts with. Widening the template also does not
+  reach a running pod, so the function compares the live pod to the template and
+  recreates it once.
+
+Verified 2026-11-14: all eleven checks in `verify` pass — `/health`, authenticated
+`/v1/meters`, 401 without a key, 403 without `X-Environment-ID`, both seeded
+environments, 18 Kafka topics including `events`, 5 ClickHouse tables in the
+`flexprice` database, 46 `schema_migrations` rows, the default tenant, Temporal's
+`schema_version`, and every pod Running/Completed.
+
+What the checks had to be re-aimed to learn: the API Service is `svc/flexprice-api`,
+not the `svc/flexprice` the chart's own NOTES prints (a forward to the short name fails
+into "unreachable"); this Kafka image has `kafka-topics` in `/usr/bin`, not
+`kafka-topics.sh`; Temporal's version table is `schema_version`, singular, unlike
+dbmate's `schema_migrations`.
+
+`frontend.enabled=false`, so there is no dashboard here either — same posture as the
+compose stack. And the two stacks contend: with compose *and* kind both warm the Docker
+VM hit load 47-80 with `wa` at 95%, which is what killed Postgres mid-migration in the
+first place. Stopping compose for the install is what made the timings survivable.
+
+Teardown: `helm -n flexprice uninstall flexprice` removes chart-owned objects only —
+the `extras/` Job, Deployment and Service are kubectl-owned and stay, as does the
+`flexprice` namespace and its Secret.
+
 ## Spike
 
 `npm run billing:flexprice:spike` (`scripts/flexprice-spike/run.js`) runs fourteen
