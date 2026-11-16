@@ -478,19 +478,46 @@ jobs:
           CASHFREE_SECRET_KEY: ${{ secrets.CASHFREE_SECRET_KEY }}
         run: |
           set -euo pipefail
-          terraform apply -input=false -auto-approve \
-            -var="project_id=${PROJECT_ID}" \
-            -var="region=${REGION}" \
-            -var="spa_bucket_name=${{ vars.SPA_BUCKET }}" \
-            -var="flexprice_base_url=${{ vars.FLEXPRICE_BASE_URL }}" \
-            -var="flexprice_environment_id=${{ vars.FLEXPRICE_ENVIRONMENT_ID }}" \
-            -var="flexprice_supplier_state_code=${{ vars.FLEXPRICE_SUPPLIER_STATE_CODE }}" \
-            -target='google_secret_manager_secret.flexprice["flexprice-api-key-ingest"]' \
-            -target='google_secret_manager_secret.flexprice["flexprice-api-key-money"]' \
-            -target=google_secret_manager_secret.stream_token_secret \
-            -target=google_secret_manager_secret.identity_hash_pepper \
-            -target=google_secret_manager_secret.cashfree_app_id \
+          tf_vars=(
+            -var="project_id=${PROJECT_ID}"
+            -var="region=${REGION}"
+            -var="spa_bucket_name=${{ vars.SPA_BUCKET }}"
+            -var="flexprice_base_url=${{ vars.FLEXPRICE_BASE_URL }}"
+            -var="flexprice_environment_id=${{ vars.FLEXPRICE_ENVIRONMENT_ID }}"
+            -var="flexprice_supplier_state_code=${{ vars.FLEXPRICE_SUPPLIER_STATE_CODE }}"
+          )
+          secret_targets=(
+            -target='google_secret_manager_secret.flexprice["flexprice-api-key-ingest"]'
+            -target='google_secret_manager_secret.flexprice["flexprice-api-key-money"]'
+            -target=google_secret_manager_secret.stream_token_secret
+            -target=google_secret_manager_secret.identity_hash_pepper
+            -target=google_secret_manager_secret.cashfree_app_id
             -target=google_secret_manager_secret.cashfree_secret_key
+          )
+          # While a `moved` block's SOURCE address is still in state, the move is
+          # pending, and a pending move makes terraform refuse ANY targeted plan —
+          # "Moved resource instances excluded by targeting" — even one targeting
+          # unrelated resources. So the first deploy after a PR that renames a
+          # resource address dies here, before the un-targeted apply below could
+          # land the move itself.
+          #
+          # terraform offers two remedies: drop -target, or widen it to cover the
+          # moved addresses. Neither is right here: this step exists to create the
+          # secret CONTAINERS before their values are seeded, so widening it drags
+          # in the billing Jobs that mount those secrets with version=latest, which
+          # Cloud Run rejects until the values exist — the exact bootstrap case this
+          # step handles. Instead land the moves, which is what they are: a state
+          # address change. -refresh-only rewrites the addresses and takes no action
+          # on any remote object (0 added / 0 changed / 0 destroyed), so the retry
+          # below plans the same six secrets it always planned.
+          apply_log=/tmp/secret-stage-apply.log
+          if ! terraform apply -no-color -input=false -auto-approve \
+               "${tf_vars[@]}" "${secret_targets[@]}" 2>&1 | tee "$apply_log"; then
+            grep -q 'Moved resource instances excluded by targeting' "$apply_log" || exit 1
+            echo "::notice::Pending state moves blocked the targeted apply; recording them first."
+            terraform apply -no-color -refresh-only -auto-approve -input=false "${tf_vars[@]}"
+            terraform apply -no-color -input=false -auto-approve "${tf_vars[@]}" "${secret_targets[@]}"
+          fi
 
           enabled_value() {
             local v
