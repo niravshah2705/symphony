@@ -59,9 +59,9 @@ Community of 51 nodes
 | test:deleting a conversation cascades to its attachments (best-effort) before removing it@L318 | Test | ./services/planner/src/routes/agent.test.js | 318-345 |
 | test:a cascade failure never blocks the conversation delete itself@L347 | Test | ./services/planner/src/routes/agent.test.js | 347-372 |
 | test:a conversation with no org/project context skips the cascade entirely (nothing could have been attached without it)@L374 | Test | ./services/planner/src/routes/agent.test.js | 374-398 |
-| test:enqueue is role-gated, validates projectId, and queues exactly one project@L400 | Test | ./services/planner/src/routes/agent.test.js | 400-445 |
-| test:planner job and status routes honor the exact selected organization and project@L447 | Test | ./services/planner/src/routes/agent.test.js | 447-565 |
-| test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L567 | Test | ./services/planner/src/routes/agent.test.js | 567-632 |
+| test:enqueue is role-gated, validates projectId, and queues exactly one project@L400 | Test | ./services/planner/src/routes/agent.test.js | 400-464 |
+| test:planner job and status routes honor the exact selected organization and project@L466 | Test | ./services/planner/src/routes/agent.test.js | 466-584 |
+| test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L586 | Test | ./services/planner/src/routes/agent.test.js | 586-651 |
 | test:confirmed project task creation derives the team and replays duplicate requests once@L28 | Test | ./services/planner/src/routes/issues.test.js | 28-61 |
 | test:planner OMLX preset settings reject plaintext keys and save only non-secret connection data@L38 | Test | ./services/planner/src/routes/settings.omlx.test.js | 38-101 |
 
@@ -75,11 +75,11 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (155 edge(s))
-- `after` (45 edge(s))
+- `equal` (157 edge(s))
+- `after` (46 edge(s))
 - `./services/planner/src/routes/agent.test.js::call` (35 edge(s))
 - `./services/planner/src/routes/agent.test.js::handlerFor` (35 edge(s))
-- `require` (31 edge(s))
+- `require` (32 edge(s))
 - `deepEqual` (30 edge(s))
 - `./services/orchestrator/src/app.test.js::jsonRequest` (29 edge(s))
 - `resolve` (24 edge(s))
@@ -93,12 +93,12 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (155 edge(s))
+- `equal` (157 edge(s))
 - `./deploy/gcp/substrate-cleanup.sh` (56 edge(s))
-- `after` (45 edge(s))
+- `after` (46 edge(s))
 - `./services/planner/src/routes/agent.test.js::call` (35 edge(s))
 - `./services/planner/src/routes/agent.test.js::handlerFor` (35 edge(s))
-- `require` (31 edge(s))
+- `require` (32 edge(s))
 - `deepEqual` (30 edge(s))
 - `./services/orchestrator/src/app.test.js::jsonRequest` (29 edge(s))
 - `resolve` (24 edge(s))

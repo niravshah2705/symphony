@@ -1,0 +1,158 @@
+# In-cluster Temporal server, replacing the two halves of the chart that cannot
+# provide one.
+#
+# The chart offers Temporal three ways and none of them works on this pin with the
+# toggles deploy/flexprice/helm/values-kind.yaml has to use:
+#
+#   * templates/infra/temporal.yaml renders a server Deployment only when
+#     `temporalConfig.enabled` is FALSE, and its Service is `<fullname>-temporal`
+#     (port from `temporalConfig.internal.server.service.port`) — not the
+#     `<release>-temporal-frontend:7233` that `flexprice.temporalAddress` emits. It
+#     also assumes the `temporal` database already exists (deploy/flexprice/helm/
+#     extras/01-db-init.yaml is what makes that true).
+#   * the official `temporal` subchart renders four server Deployments plus web and
+#     admin-tools, and requires `helm dependency build` against go.temporal.io and
+#     three Bitnami charts we then disable anyway.
+#   * `temporalConfig.external.enabled=true` (the shape values-kind.yaml uses)
+#     renders nothing at all — which is correct, because the server comes from here.
+#
+# So this is the compose stack's own server: temporalio/auto-setup, the image and
+# env that Phases 0-5 ran against. It creates its schemas on boot, which is why the
+# chart's `temporalBootstrap` Job is switched off. It does NOT reliably register the
+# `default` namespace: that step runs in the background after the server starts
+# (`setup_server &` at the end of auto-setup.sh), so a pod killed by a probe during
+# that window comes back with a serving frontend and no namespace. The install script
+# registers it in the foreground instead (registerTemporalNamespace).
+#
+# The Service is named `<fullname>-temporal-frontend` deliberately: that is the
+# string `include "flexprice.temporalAddress"` produces, so anything in the chart
+# that still resolves the address the old way lands on a real endpoint instead of a
+# dangling one.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flexprice-temporal-frontend
+  namespace: flexprice
+  labels:
+    app.kubernetes.io/name: flexprice-temporal
+    app.kubernetes.io/component: temporal-frontend
+    app.kubernetes.io/part-of: flexprice
+    fleet.dev/component: billing
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: flexprice-temporal
+  ports:
+    - name: frontend-rpc
+      port: 7233
+      targetPort: 7233
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flexprice-temporal
+  namespace: flexprice
+  labels:
+    app.kubernetes.io/name: flexprice-temporal
+    app.kubernetes.io/component: temporal
+    app.kubernetes.io/part-of: flexprice
+    fleet.dev/component: billing
+spec:
+  # Recreate, not RollingUpdate: every auto-setup pod runs the schema-setup step at
+  # entrypoint, so a rollout that briefly overlaps two of them has two processes
+  # applying versioned schemas to the same database at the same time.
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flexprice-temporal
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flexprice-temporal
+        app.kubernetes.io/component: temporal
+    spec:
+      securityContext:
+        # Relaxed on purpose, and only here: the auto-setup entrypoint writes its
+        # rendered config into /etc/temporal and chowns /var/temporal, which a
+        # read-only rootfs under a non-root uid refuses. This is the same
+        # relaxation upstream's own kind values file applies to the Temporal pods —
+        # a third-party image's requirement, not a FlexPrice one. The FlexPrice
+        # containers keep the chart's non-root + read-only defaults.
+        runAsNonRoot: false
+        runAsUser: 0
+      containers:
+        - name: temporal
+          image: temporalio/auto-setup:1.26.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: frontend-rpc
+              containerPort: 7233
+            - name: membership
+              containerPort: 7234
+            - name: internal-rpc
+              containerPort: 7235
+            - name: metrics
+              containerPort: 7239
+          env:
+            - name: DB
+              value: postgres12
+            - name: DB_HOST
+              value: flexprice-postgres
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: temporal
+            - name: DB_USER
+              value: flexprice
+            - name: DB_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: flexprice-secrets
+                  key: postgres-password
+            - name: POSTGRES_SEEDS
+              value: flexprice-postgres
+            - name: POSTGRES_USER
+              value: flexprice
+            - name: POSTGRES_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: flexprice-secrets
+                  key: postgres-password
+            - name: ENABLE_ES
+              value: "false"
+            # Same absolute schema dir compose set; without it the setup step looks
+            # for the schema relative to the working directory.
+            - name: TEMPORAL_PERSISTENCE_SCHEMA_DIR
+              value: /etc/temporal/schema/postgresql/v96/temporal/versioned
+            - name: VISIBILITY_SCHEMA_DIR
+              value: /etc/temporal/schema/postgresql/v96/visibility/versioned
+            # Fail fast rather than hang a rollout: the database exists by the time
+            # this pod is created (extras/01-db-init.yaml is waited on first).
+            - name: DB_CONNECT_RETRIES
+              value: "10"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            tcpSocket:
+              port: frontend-rpc
+            # Schema setup runs first and takes ~15-30s on a cold database; a
+            # shorter delay just makes the pod flap.
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: frontend-rpc
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6

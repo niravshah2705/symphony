@@ -130,6 +130,7 @@ test('org selection: a targeted sweep wins, otherwise every real org with usage'
 test('a reconcile run writes one report per org and touches no money API', async () => {
   const storeApi = fakeStore();
   const lines = [];
+  const meterCalls = [];
   const summary = await job.main({
     env: { RECONCILE_ORG_IDS: ORG, RECONCILE_WINDOW_DAYS: '2' },
     initStoreImpl: async () => {},
@@ -141,6 +142,13 @@ test('a reconcile run writes one report per org and touches no money API', async
       baseUrl: 'https://gw.internal',
       fetchS2sSecrets: async () => ({ litellmApiKey: 'virtual-key' }),
       fetchGatewaySpend: async () => ({ available: true, requests: 2, spendUsd: 0.1, spendPaise: 1000 }),
+      flexpriceClient: {
+        listMeters: async () => ({ items: [{ id: 'meter_llm', name: 'llm-cost' }] }),
+        eventsUsageMeter: async (query) => {
+          meterCalls.push(query);
+          return { value: 4250 };
+        },
+      },
     },
   });
 
@@ -150,6 +158,14 @@ test('a reconcile run writes one report per org and touches no money API', async
   assert.equal(report.platform_says.spendPaise, 1000);
   assert.equal(report.we_recorded.comparablePaise, 5750);
   assert.equal(report.delta.verdict, 'we_are_ahead');
+  assert.equal(report.flexprice_says.spendPaise, 4250);
+  assert.equal(report.flexprice_delta.verdict, 'match');
+  assert.deepEqual(meterCalls, [{
+    meter_id: 'meter_llm',
+    external_customer_id: ORG,
+    start_time: '2026-11-04T00:00:00.000Z',
+    end_time: '2026-11-06T00:00:00.000Z',
+  }]);
   assert.deepEqual(summary.window, { since: '2026-11-04T00:00:00.000Z', until: '2026-11-06T00:00:00.000Z' });
 
   // The whole point of the read-only claim: nothing but reads happened.
@@ -160,6 +176,39 @@ test('a reconcile run writes one report per org and touches no money API', async
     // Prose may name the money APIs it refuses to call; code may not.
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   assert.doesNotMatch(source, /addUsageRecord|updateUsageRecord|recordLedgerEntry|postLedger|debit|credit|balancePaise\s*=/);
+});
+
+test('a dropped FlexPrice event diverges independently while LiteLLM remains intact', async () => {
+  let meterLists = 0;
+  const lines = [];
+  await job.main({
+    env: { RECONCILE_ORG_IDS: ORG },
+    initStoreImpl: async () => {},
+    write: (line) => lines.push(line),
+    logImpl: { info() {}, warn() {}, error() {} },
+    now: new Date('2026-11-06T00:00:00.000Z'),
+    deps: {
+      storeApi: fakeStore(),
+      baseUrl: 'https://gw.internal',
+      fetchS2sSecrets: async () => ({ litellmApiKey: 'virtual-key' }),
+      fetchGatewaySpend: async () => ({ available: true, spendPaise: 5750 }),
+      flexpriceClient: {
+        listMeters: async () => {
+          meterLists += 1;
+          return { items: [{ id: 'meter_llm', name: 'llm-cost' }] };
+        },
+        eventsUsageMeter: async () => ({ value: 4000 }),
+      },
+    },
+  });
+
+  const report = JSON.parse(lines[0]);
+  assert.equal(meterLists, 1);
+  assert.equal(report.delta.verdict, 'match');
+  assert.equal(report.flexprice_delta.paise, -250);
+  assert.equal(report.flexprice_delta.verdict, 'we_are_ahead');
+  assert.equal(report.we_recorded.costPaise, 4250);
+  assert.equal(report.we_recorded.comparablePaise, 5750);
 });
 
 test('a per-org failure is reported, not swallowed or fatal', async () => {
@@ -180,7 +229,10 @@ test('a per-org failure is reported, not swallowed or fatal', async () => {
     },
   });
   assert.equal(lines.length, 2, 'the healthy org is still answered');
-  assert.equal(JSON.parse(lines[1]).delta.verdict, 'reconcile_failed');
+  const failedGateway = JSON.parse(lines[1]);
+  assert.equal(failedGateway.delta.verdict, 'platform_unavailable');
+  assert.match(failedGateway.platform_says.reason, /^gateway_secrets_unavailable/);
+  assert.equal(failedGateway.flexprice_delta.verdict, 'flexprice_unavailable');
   assert.equal(summary.orgs, 2);
   assert.equal(summary.unavailable, 1);
 });

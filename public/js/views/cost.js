@@ -1,6 +1,7 @@
 import { api } from '../api.js';
 import { el, clear, loading, toast } from '../dom.js';
 import { formatNumber, formatDate, getLocale } from '../i18n.js';
+import { payRecharge, isSettled } from '../recharge.js';
 
 // Cost monitoring + billing. Per-organization / project / user / task usage with
 // task drill-down, backed by first-party LLM metering (services/gateway billing
@@ -24,10 +25,27 @@ const PERIODS = [
 let groupBy = 'project';
 let period = 'week';
 
+// The gate's four states, spelled out. A negative wallet (only a platform debit
+// can make one) and an unreadable one are both different facts from "out of
+// credit", and each needs its own words on the page a customer reads before paying.
+const FUND_STATE_LABEL = {
+  available: 'Available',
+  exhausted: 'Out of credit',
+  negative: 'Negative',
+  unknown: 'Unknown',
+};
+
 function inr(value) {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return '—';
   return new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(amount);
+}
+
+/** The wallet's money, which the server is allowed to report as `null`. inr()
+ * would render a null balance as ₹0.00 — "you are out of credit" — so the balance
+ * and the spend figures, which mean different things when missing, stay separate. */
+function money(value) {
+  return value === null || value === undefined ? '—' : inr(value);
 }
 
 function metric(label, value, note) {
@@ -93,22 +111,38 @@ export async function renderCost(view) {
 
   if (!summary.sweepEnabled) {
     content.push(el('div', { class: 'notice operational-notice' }, [
-      el('strong', {}, 'Billing is in preview'),
-      el('span', {}, ' Usage is recorded, but the periodic sweep and negative-balance pause are off until BILLING_SWEEP_ENABLED is set.'),
+      el('strong', {}, 'Usage aggregation is off'),
+      el('span', {}, ' Runs are metered and delivered to the wallet, but the periodic usage sweep and retention prune stay off until BILLING_SWEEP_ENABLED is set.'),
     ]));
   }
-  if (summary.fundStatus === 'unavailable' || Number(summary.balancePaise) <= 0) {
+  // The gate's verdict decides what this says, and `unknown` is its own case: a
+  // balance that could not read is not an empty wallet, so telling the customer to
+  // add credits would be wrong twice over.
+  if (summary.fundState === 'unknown') {
+    content.push(el('div', { class: 'notice operational-notice' }, [
+      el('strong', {}, 'Wallet balance unknown'),
+      el('span', {}, summary.gatePolicy === 'off'
+        ? ' The billing gate is off (BILLING_GATE_POLICY=off, or no FlexPrice wallet is configured), so nothing is enforced and no balance is read.'
+        : ' The FlexPrice wallet could not be read, so runs are still allowed. This resolves itself on the next read.'),
+    ]));
+  } else if (!summary.fundsAvailable) {
+    const why = summary.fundState === 'negative'
+      ? 'a platform debit exceeded it'
+      : 'the credit is spent';
     content.push(el('div', { class: 'notice operational-notice operational-notice-warn' }, [
       el('strong', {}, 'Funds Unavailable — Runners & Scheduled Calls Disabled'),
-      el('span', {}, ` Organization balance is ${inr(summary.balanceInr)}. Add credits or configure auto-reload${summary.isAdmin ? ' below' : ''} to re-enable runner jobs and scheduled ticks.`),
+      el('span', {}, ` Organization balance is ${money(summary.balanceInr)} because ${why}. Add credits or configure auto-reload${summary.isAdmin ? ' below' : ''} to re-enable runner jobs and scheduled ticks.`),
     ]));
   }
 
   content.push(
     el('section', { class: 'metric-grid', 'aria-label': 'Billing summary' }, [
-      metric('Balance', inr(summary.balanceInr), `${summary.currency} · seeded ${inr(summary.initialCreditInr)}`),
-      metric('Fund Status', summary.fundStatus === 'unavailable' ? 'Unavailable' : 'Available',
-        summary.fundStatus === 'unavailable' ? 'Runners & scheduler paused' : 'Active & ready'),
+      metric('Wallet balance', money(summary.balanceInr),
+        `${summary.currency} · opening credit ${inr(summary.initialCreditInr)}${summary.balanceStale ? ' · cached read' : ''}`),
+      metric('Fund status', FUND_STATE_LABEL[summary.fundState] || 'Unknown',
+        summary.fundsAvailable
+          ? (summary.gatePolicy === 'off' ? 'Gate off — nothing enforced' : 'Active & ready')
+          : (summary.fundState === 'negative' ? 'Platform debit exceeded the wallet' : 'Runners & scheduler paused')),
       // Two series, deliberately: the second one is the number the platform never
       // spent, and its zero is what an organization on its own key is buying.
       metric('Managed spend (7 days)', inr(sourceSeries(summary, 'managed').costInr),
@@ -116,7 +150,10 @@ export async function renderCost(view) {
       metric('Your key (not charged)', inr(sourceSeries(summary, 'customer').notionalInr),
         `${formatNumber(sourceSeries(summary, 'customer').runs)} runs at list price — debited ₹0`),
       metric('Auto-recharge', summary.autoRecharge.enabled ? 'On' : 'Off',
-        summary.autoRecharge.enabled ? `+${inr(summary.autoRecharge.amountInr)} below ${inr(summary.autoRecharge.thresholdInr)}` : `FX ₹${summary.fxUsdToInr}/USD`),
+        // The FX rate is not a display garnish here: `usdToPaise` in the billing
+        // service applied it to produce the paise that was delivered to the wallet,
+        // so every rupee on this page inherits it. Say "estimate rate", not "FX".
+        summary.autoRecharge.enabled ? `+${inr(summary.autoRecharge.amountInr)} below ${inr(summary.autoRecharge.thresholdInr)}` : `Estimate rate ₹${summary.fxUsdToInr}/USD`),
     ]),
   );
 
@@ -148,14 +185,12 @@ export async function renderCost(view) {
       ]),
       tableHost,
     ]),
-    ledgerPanel(),
   );
 
   if (summary.isAdmin) content.push(adminPanel(view, summary));
 
   clear(view).append(...content);
   loadUsage(tableHost, groupControls);
-  loadLedger(view);
 }
 
 function syncSeg(groupControls, active) {
@@ -270,41 +305,6 @@ function taskDetail(records) {
   ]);
 }
 
-function ledgerPanel() {
-  return el('section', { class: 'operational-panel', id: 'billing-ledger' }, [
-    el('div', { class: 'panel-heading' }, [el('div', {}, [el('h2', {}, 'Ledger'), el('p', { class: 'muted' }, 'Credits, recharges and usage debits (newest first).')])]),
-    el('div', { class: 'table-host' }, loading('Loading ledger…')),
-  ]);
-}
-
-async function loadLedger(view) {
-  const host = view.querySelector('#billing-ledger .table-host');
-  if (!host) return;
-  let data;
-  try {
-    data = await api.billing.getLedger(50);
-  } catch (_) {
-    clear(host).append(el('p', { class: 'muted' }, 'Ledger could not be loaded.'));
-    return;
-  }
-  const entries = Array.isArray(data.entries) ? data.entries : [];
-  if (!entries.length) {
-    clear(host).append(el('div', { class: 'empty compact-empty' }, [el('p', { class: 'muted' }, 'No ledger entries yet.')]));
-    return;
-  }
-  clear(host).append(el('div', { class: 'table-scroll' }, [
-    el('table', { class: 'operational-table' }, [
-      el('thead', {}, [el('tr', {}, ['When', 'Type', 'Description', 'Amount'].map((h) => el('th', {}, h)))]),
-      el('tbody', {}, entries.map((e) => el('tr', {}, [
-        el('td', {}, e.createdAt ? formatDate(e.createdAt, { dateStyle: 'medium', timeStyle: 'short' }) : '—'),
-        el('td', {}, [el('span', { class: `status-pill ${e.type === 'usage' ? 'neutral' : 'ok'}` }, e.type)]),
-        el('td', {}, e.description || '—'),
-        el('td', { class: 'cost-cell' }, `${e.amountInr >= 0 ? '+' : ''}${inr(e.amountInr)}`),
-      ]))),
-    ]),
-  ]));
-}
-
 function loadCashfreeSdk() {
   if (window.Cashfree) return Promise.resolve(window.Cashfree);
   return new Promise((resolve, reject) => {
@@ -321,63 +321,78 @@ function adminPanel(view, summary) {
   const currentMode = ar.mode || 'amount';
 
   const amount = el('input', { type: 'number', min: '1', step: '1', placeholder: 'Amount (INR)' });
-  const addBtn = el('button', { type: 'button', class: 'btn' }, 'Add credits (manual)');
-  addBtn.addEventListener('click', async () => {
+  const preferredProvider = (summary.paymentInfo && summary.paymentInfo.provider) === 'razorpay' ? 'razorpay' : 'cashfree';
+  const payCashfree = el('input', { type: 'radio', name: 'rechargeProvider', value: 'cashfree', ...(preferredProvider === 'cashfree' ? { checked: 'checked' } : {}) });
+  const payRazorpay = el('input', { type: 'radio', name: 'rechargeProvider', value: 'razorpay', ...(preferredProvider === 'razorpay' ? { checked: 'checked' } : {}) });
+  const quoteBox = el('div', { class: 'recharge-quote muted' }, 'Enter an amount to see the GST breakdown.');
+
+  // The quote comes from the server because it IS the server's: ₹500 + ₹45 + ₹45
+  // = ₹590 for 500 credits, and 1 credit = ₹1 on the subtotal, never on the ₹590.
+  // Computing any of it here would put a second copy of the tax rule in the
+  // browser, which is the thing that made the old "Add credits" button lie.
+  let quoteToken = 0;
+  const showQuote = async () => {
+    const value = Number(amount.value);
+    const token = quoteToken + 1;
+    quoteToken = token;
+    if (!Number.isFinite(value) || value <= 0) {
+      clear(quoteBox);
+      quoteBox.append(el('span', {}, 'Enter an amount to see the GST breakdown.'));
+      return;
+    }
+    try {
+      const data = await api.billing.rechargeQuote(value);
+      if (token !== quoteToken) return;
+      const q = data.quote;
+      clear(quoteBox);
+      quoteBox.append(
+        el('div', {}, `Recharge ${inr(q.subtotalInr)}`),
+        ...q.components.map((c) => el('div', { class: 'muted' }, `${c.name} ${c.rateBps / 100}% · ${inr(c.inr)}`)),
+        el('strong', {}, `Total payable ${inr(q.totalInr)}`),
+        el('div', {}, `${q.credits} credits added · 1 credit = ₹1, so the ${inr(q.gstInr)} GST is collected and never spendable`),
+        q.bonusPaise ? el('div', { class: 'muted' }, `Coupon bonus ${inr(q.bonusInr)} (${q.bonusPaise / 100} credits), credited separately`) : null,
+        q.placeOfSupply && q.placeOfSupply.assumed
+          ? el('small', { class: 'muted' }, `Place of supply assumed as state ${q.placeOfSupply.stateCode}. Add your GSTIN in Organization → Billing for the exact split.`)
+          : null,
+        ...(data.warnings || []).map((w) => el('small', { class: 'muted' }, w === 'saved_tax_id_invalid'
+          ? 'Your saved GSTIN is not valid, so it was ignored for this quote.'
+          : w)),
+      );
+    } catch (err) {
+      if (token !== quoteToken) return;
+      clear(quoteBox).append(el('span', { class: 'muted' }, (err && err.message) || 'That amount cannot be quoted.'));
+    }
+  };
+  amount.addEventListener('input', showQuote);
+
+  const payBtn = el('button', { type: 'button', class: 'btn primary' }, 'Pay and add credits');
+  payBtn.addEventListener('click', async () => {
     const value = Number(amount.value);
     if (!Number.isFinite(value) || value <= 0) return toast('Enter a positive amount', 'warn');
-    addBtn.disabled = true;
+    payBtn.disabled = true;
+    const pi = summary.paymentInfo || {};
     try {
-      await api.billing.recharge(value);
-      toast('Credits added', 'ok');
+      const settlement = await payRecharge({
+        amountInr: value,
+        provider: payRazorpay.checked ? 'razorpay' : 'cashfree',
+        customer: {
+          customerName: pi.billingName || 'Admin',
+          customerEmail: pi.billingEmail || 'billing@example.com',
+          customerPhone: pi.billingPhone || '9999999999',
+        },
+        returnUrl: window.location.href,
+        onStatus: (msg) => toast(msg, 'ok'),
+      });
+      if (isSettled(settlement)) {
+        const bonus = settlement.bonusCredits ? ` + ${settlement.bonusCredits} bonus` : '';
+        toast(`₹${settlement.totalInr} paid · ${settlement.creditsAdded} credits added${bonus}`, 'ok');
+      } else {
+        toast(`The gateway answered, but nothing was credited (${settlement && settlement.status || 'no settlement'}).`, 'warn');
+      }
       renderCost(view);
     } catch (err) {
       toast((err && err.message) || 'Recharge failed', 'error');
-      addBtn.disabled = false;
-    }
-  });
-
-  const payCashfreeBtn = el('button', { type: 'button', class: 'btn primary' }, 'Pay with Cashfree');
-  payCashfreeBtn.addEventListener('click', async () => {
-    const value = Number(amount.value);
-    if (!Number.isFinite(value) || value <= 0) return toast('Enter a positive amount', 'warn');
-    payCashfreeBtn.disabled = true;
-    try {
-      toast('Creating Cashfree order…', 'ok');
-      const pi = summary.paymentInfo || {};
-      const orderRes = await api.billing.createCashfreeOrder({
-        amountInr: value,
-        customerName: pi.billingName || 'Admin',
-        customerEmail: pi.billingEmail || 'billing@example.com',
-        customerPhone: pi.billingPhone || '9999999999',
-      });
-      if (!orderRes.paymentSessionId) throw new Error('No payment session returned from Cashfree.');
-      
-      const CashfreeSdk = await loadCashfreeSdk();
-      const cashfree = CashfreeSdk({ mode: 'sandbox' });
-      cashfree.checkout({
-        paymentSessionId: orderRes.paymentSessionId,
-        redirectTarget: '_modal',
-      }).then(async (result) => {
-        if (result && result.error) {
-          toast(`Payment error: ${result.error.message}`, 'error');
-          payCashfreeBtn.disabled = false;
-        } else {
-          toast('Verifying payment…', 'ok');
-          const verifyRes = await api.billing.verifyCashfreeOrder(orderRes.orderId);
-          if (verifyRes.status === 'PAID') {
-            toast(`Payment successful! Reloaded ₹${value}.`, 'ok');
-          } else {
-            toast(`Payment status: ${verifyRes.status}`, 'warn');
-          }
-          renderCost(view);
-        }
-      }).catch((err) => {
-        toast((err && err.message) || 'Checkout modal dismissed', 'warn');
-        payCashfreeBtn.disabled = false;
-      });
-    } catch (err) {
-      toast((err && err.message) || 'Failed to start Cashfree checkout', 'error');
-      payCashfreeBtn.disabled = false;
+      payBtn.disabled = false;
     }
   });
 
@@ -491,7 +506,15 @@ function adminPanel(view, summary) {
       ]),
     ]),
     el('div', { class: 'form-grid' }, [
-      el('div', { class: 'row' }, [amount, payCashfreeBtn, addBtn]),
+      el('div', { class: 'row' }, [amount, payBtn]),
+      el('div', { class: 'field-group' }, [
+        el('strong', {}, 'Payment gateway'),
+        el('div', { class: 'row' }, [
+          el('label', { class: 'radio-label' }, [payCashfree, el('span', {}, 'Cashfree')]),
+          el('label', { class: 'radio-label' }, [payRazorpay, el('span', {}, 'Razorpay')]),
+        ]),
+      ]),
+      quoteBox,
       field('Alert thresholds (INR, comma-separated)', thresholds),
       el('div', { class: 'field-group' }, [
         el('strong', {}, 'Auto-Reload Threshold Method (OpenAI style)'),

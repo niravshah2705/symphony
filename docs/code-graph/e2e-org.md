@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 12 nodes
+Community of 8 nodes
 
-- **Size**: 12 nodes
-- **Cohesion**: 0.1155
+- **Size**: 8 nodes
+- **Cohesion**: 0.2151
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,10 +20,6 @@ Community of 12 nodes
 | organizationIdFor | Function | ./e2e/organization-flow.spec.js | 45-50 |
 | installStubs | Function | ./e2e/organization-flow.spec.js | 52-262 |
 | page1 | Function | ./e2e/organization-flow.spec.js | 98-98 |
-| test:user creates orgs and projects, then manages pending invitations@L264 | Test | ./e2e/organization-flow.spec.js | 264-321 |
-| test:fragment invitation requires an explicit accept and refreshes selectable context@L323 | Test | ./e2e/organization-flow.spec.js | 323-348 |
-| test:captures a persona at onboarding and reflects it after reload@L350 | Test | ./e2e/organization-flow.spec.js | 350-372 |
-| test:manages a project access mode, outside collaborators, and partner-org grants@L374 | Test | ./e2e/organization-flow.spec.js | 374-413 |
 | test@L386 | Test | ./e2e/organization-flow.spec.js | 386-386 |
 | test@L387 | Test | ./e2e/organization-flow.spec.js | 387-387 |
 
@@ -35,36 +31,26 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (30 edge(s))
 - `route` (23 edge(s))
-- `getByRole` (18 edge(s))
-- `method` (17 edge(s))
 - `request` (15 edge(s))
-- `postDataJSON` (15 edge(s))
-- `toBeVisible` (14 edge(s))
-- `click` (14 edge(s))
-- `url` (11 edge(s))
-- `locator` (11 edge(s))
-- `push` (9 edge(s))
+- `method` (11 edge(s))
+- `postDataJSON` (10 edge(s))
 - `match` (8 edge(s))
-- `getByText` (8 edge(s))
-- `getByPlaceholder` (8 edge(s))
-- `fill` (7 edge(s))
+- `push` (7 edge(s))
+- `fulfill` (6 edge(s))
+- `url` (5 edge(s))
+- `find` (4 edge(s))
+- `decodeURIComponent` (4 edge(s))
+- `./e2e/organization-flow.spec.js::test:fragment invitation requires an explicit accept and refreshes selectable context@L323` (3 edge(s))
+- `./e2e/organization-flow.spec.js::test:captures a persona at onboarding and reflects it after reload@L350` (3 edge(s))
+- `./e2e/organization-flow.spec.js::test:manages a project access mode, outside collaborators, and partner-org grants@L374` (3 edge(s))
+- `filter` (3 edge(s))
+- `findIndex` (3 edge(s))
 
 ### Incoming
 
-- `expect` (30 edge(s))
-- `getByRole` (18 edge(s))
-- `toBeVisible` (14 edge(s))
-- `click` (14 edge(s))
-- `locator` (11 edge(s))
-- `./e2e/organization-flow.spec.js` (10 edge(s))
-- `getByText` (8 edge(s))
-- `getByPlaceholder` (8 edge(s))
-- `fill` (7 edge(s))
-- `method` (6 edge(s))
-- `url` (6 edge(s))
-- `on` (5 edge(s))
-- `postDataJSON` (5 edge(s))
-- `toEqual` (5 edge(s))
-- `addInitScript` (4 edge(s))
+- `./e2e/organization-flow.spec.js` (6 edge(s))
+- `./e2e/organization-flow.spec.js::test:manages a project access mode, outside collaborators, and partner-org grants@L374` (5 edge(s))
+- `./e2e/organization-flow.spec.js::test:fragment invitation requires an explicit accept and refreshes selectable context@L323` (3 edge(s))
+- `./e2e/organization-flow.spec.js::test:captures a persona at onboarding and reflects it after reload@L350` (3 edge(s))
+- `./e2e/organization-flow.spec.js::test:user creates orgs and projects, then manages pending invitations@L264` (2 edge(s))

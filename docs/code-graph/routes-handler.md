@@ -29,9 +29,9 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `./services/planner/src/routes/agent.test.js::test:conversation threads: create, append (auto-title), list, get, rename, delete@L266` (16 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:planner job and status routes honor the exact selected organization and project@L447` (16 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:planner job and status routes honor the exact selected organization and project@L466` (16 edge(s))
 - `./services/planner/src/routes/agent.test.js::test:memory write, list, and delete round-trip with server-side validation@L144` (14 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L567` (8 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L586` (8 edge(s))
 - `equal` (7 edge(s))
 - `./services/planner/src/routes/agent.test.js::test:memory records are stamped and isolated by selected organization/project@L192` (6 edge(s))
 - `ok` (3 edge(s))
@@ -47,9 +47,9 @@ No execution flows pass through this community.
 ### Incoming
 
 - `./services/planner/src/routes/agent.test.js::test:conversation threads: create, append (auto-title), list, get, rename, delete@L266` (16 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:planner job and status routes honor the exact selected organization and project@L447` (16 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:planner job and status routes honor the exact selected organization and project@L466` (16 edge(s))
 - `./services/planner/src/routes/agent.test.js::test:memory write, list, and delete round-trip with server-side validation@L144` (14 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L567` (8 edge(s))
+- `./services/planner/src/routes/agent.test.js::test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L586` (8 edge(s))
 - `equal` (7 edge(s))
 - `./services/planner/src/routes/agent.test.js::test:memory records are stamped and isolated by selected organization/project@L192` (6 edge(s))
 - `./services/planner/src/routes/agent.test.js` (5 edge(s))

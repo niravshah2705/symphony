@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 6 nodes
+Community of 7 nodes
 
-- **Size**: 6 nodes
-- **Cohesion**: 0.1266
+- **Size**: 7 nodes
+- **Cohesion**: 0.1522
 - **Dominant Language**: javascript
 
 ## Members
@@ -19,6 +19,7 @@ Community of 6 nodes
 | jsMapKeys | Function | ./packages/shared/src/egress-secret-parity.test.js | 45-52 |
 | pyNotInList | Function | ./packages/shared/src/egress-secret-parity.test.js | 55-64 |
 | test:every egress secretKey is allow-listed in the settings vault@L70 | Test | ./packages/shared/src/egress-secret-parity.test.js | 70-75 |
+| test:every managed-capable egress key has a settings MANAGED_ENV entry@L77 | Test | ./packages/shared/src/egress-secret-parity.test.js | 77-89 |
 | test:the Langfuse pair is present in all four maps@L91 | Test | ./packages/shared/src/egress-secret-parity.test.js | 91-106 |
 
 ## Execution Flows
@@ -30,21 +31,25 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `indexOf` (10 edge(s))
-- `ok` (6 edge(s))
+- `ok` (7 edge(s))
+- `has` (7 edge(s))
 - `notEqual` (5 edge(s))
-- `has` (5 edge(s))
 - `readFileSync` (4 edge(s))
 - `join` (4 edge(s))
 - `slice` (4 edge(s))
 - `map` (4 edge(s))
 - `matchAll` (4 edge(s))
-- `./packages/shared/src/egress-secret-parity.test.js::test:every managed-capable egress key has a settings MANAGED_ENV entry@L77` (2 edge(s))
+- `filter` (1 edge(s))
+- `flatMap` (1 edge(s))
+- `values` (1 edge(s))
 - `./packages/shared/src/egress.js::EGRESS_SECRET_KEYS.includes` (1 edge(s))
 
 ### Incoming
 
-- `./packages/shared/src/egress-secret-parity.test.js` (6 edge(s))
-- `ok` (6 edge(s))
-- `has` (5 edge(s))
-- `./packages/shared/src/egress-secret-parity.test.js::test:every managed-capable egress key has a settings MANAGED_ENV entry@L77` (2 edge(s))
+- `./packages/shared/src/egress-secret-parity.test.js` (7 edge(s))
+- `ok` (7 edge(s))
+- `has` (7 edge(s))
+- `filter` (1 edge(s))
+- `flatMap` (1 edge(s))
+- `values` (1 edge(s))
 - `./packages/shared/src/egress.js::EGRESS_SECRET_KEYS.includes` (1 edge(s))

@@ -53,6 +53,51 @@ resource "google_secret_manager_secret_iam_member" "billing_cashfree_secret_key_
   member    = "serviceAccount:${google_service_account.billing.email}"
 }
 
+# --- FlexPrice --------------------------------------------------------------------
+# Containers only: values are added out of band (gcloud secrets versions add) and
+# the deploy workflow refuses to plan until each has an enabled version. Only
+# billing-sa may read them; no agent, gateway or proxy workload references them.
+
+resource "google_secret_manager_secret" "flexprice" {
+  for_each = toset(["flexprice-api-key-ingest", "flexprice-api-key-money"])
+
+  project   = var.project_id
+  secret_id = each.value
+  labels    = merge(local.common_labels, { component = "billing" })
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+resource "google_secret_manager_secret_iam_member" "billing_flexprice_accessor" {
+  for_each = google_secret_manager_secret.flexprice
+
+  project   = var.project_id
+  secret_id = each.value.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.billing.email}"
+}
+
+locals {
+  billing_flexprice_env = {
+    FLEXPRICE_ENABLED                 = tostring(var.flexprice_enabled)
+    FLEXPRICE_BASE_URL                = var.flexprice_base_url
+    FLEXPRICE_ENVIRONMENT_ID          = var.flexprice_environment_id
+    FLEXPRICE_SUPPLIER_STATE_CODE     = var.flexprice_supplier_state_code
+    FLEXPRICE_DEPLOYMENT_MODE         = "production"
+    FLEXPRICE_ALLOW_INSECURE_DEFAULTS = "false"
+    BILLING_GATE_POLICY               = "enforced"
+  }
+
+  billing_flexprice_secrets = {
+    FLEXPRICE_API_KEY_INGEST = google_secret_manager_secret.flexprice["flexprice-api-key-ingest"].secret_id
+    FLEXPRICE_API_KEY_MONEY  = google_secret_manager_secret.flexprice["flexprice-api-key-money"].secret_id
+  }
+}
+
 resource "google_cloud_run_v2_service" "billing" {
   project             = var.project_id
   name                = var.billing_service_name
@@ -80,20 +125,29 @@ resource "google_cloud_run_v2_service" "billing" {
       }
 
       dynamic "env" {
-        for_each = merge(local.common_env, {
+        for_each = merge(local.common_env, local.billing_flexprice_env, {
           BILLING_SERVICE_PORT  = "8080"
           STORE_BACKEND         = "firestore"
           BILLING_SWEEP_ENABLED = "true"
-          # The hourly tick handler launches this Job (packages/shared-core/src/billing/
-          # recharge-trigger.js) rather than charging in-request; must match
-          # google_cloud_run_v2_job.billing_auto_recharge.name.
-          BILLING_JOB_NAME  = var.billing_job_name
-          CASHFREE_ENV      = var.cashfree_env
-          CASHFREE_BASE_URL = var.cashfree_base_url
+          CASHFREE_ENV          = var.cashfree_env
+          CASHFREE_BASE_URL     = var.cashfree_base_url
         })
         content {
           name  = env.key
           value = env.value
+        }
+      }
+
+      dynamic "env" {
+        for_each = local.billing_flexprice_secrets
+        content {
+          name = env.key
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
+          }
         }
       }
 
@@ -154,6 +208,7 @@ resource "google_cloud_run_v2_service" "billing" {
     google_project_iam_member.billing_datastore,
     google_secret_manager_secret_iam_member.billing_cashfree_app_id_accessor,
     google_secret_manager_secret_iam_member.billing_cashfree_secret_key_accessor,
+    google_secret_manager_secret_iam_member.billing_flexprice_accessor,
   ]
 }
 

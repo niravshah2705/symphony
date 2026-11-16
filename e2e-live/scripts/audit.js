@@ -155,7 +155,13 @@ async function auditTenantReadiness(session, config) {
   const eula = await requestJson(session.apiBaseUrl, '/api/eula', { headers });
   assert(eula.data?.accepted === true, 'Tenant A has not accepted the current EULA.');
   const billing = await requestJson(session.apiBaseUrl, '/api/billing/summary', { headers });
-  assert(Number(billing.data?.balancePaise) > 0, 'Tenant A must have a positive synthetic billing balance.');
+  // The balance is FlexPrice's wallet, so this is a readiness check on the gate, not
+  // on a number the app holds. An env with the gate off has no wallet to prove, and
+  // asserting a positive balance there would fail for a reason no tenant controls.
+  assert(billing.data?.fundsAvailable !== false,
+    `Tenant A is blocked from spending: ${billing.data?.fundStatus || 'fund status unknown'}.`);
+  assert(billing.data?.gatePolicy !== 'enforced' || Number(billing.data?.balancePaise) > 0,
+    'Tenant A must have a positive FlexPrice wallet balance while the billing gate is enforced.');
 
   const businesses = await requestJson(session.apiBaseUrl, '/api/businesses', { headers });
   const linked = (Array.isArray(businesses.data?.businesses) ? businesses.data.businesses : []).find((item) => (

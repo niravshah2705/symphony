@@ -6,6 +6,7 @@ const log = require('@ai-fleet/shared-core/logger');
 const { decodePushMessage } = require('@ai-fleet/shared-core/messaging/publisher');
 const { pushAuth } = require('@ai-fleet/shared-core/messaging/oidc');
 const { provisionTenant, teardownTenant } = require('@ai-fleet/shared-core/provisioning');
+const { reportBoot: reportBillingGateBoot } = require('@ai-fleet/shared-core/billing/gate');
 const { handleMessage } = require('./handler');
 
 /**
@@ -162,6 +163,8 @@ async function start() {
     log.error('provisioner: PROVISIONING_ENABLED but INTERNAL_API_TOKEN unset — write-back will be refused.');
   }
   const app = createApp(cfg);
+  // Stack creation is a spend decision, so it is gated — and the rule is stated.
+  reportBillingGateBoot();
   app.listen(PORT, () => log.info(`provisioner listening on :${PORT} (enabled=${PROVISIONING_ENABLED})`));
 }
 

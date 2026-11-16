@@ -15,7 +15,7 @@ Community of 2 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | test:a malformed binding entry is dropped, not half-applied@L77 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 77-82 |
-| parseOrgAtespaces | Function | ./packages/shared-core/src/config.js | 162-172 |
+| parseOrgAtespaces | Function | ./packages/shared-core/src/config.js | 166-176 |
 
 ## Execution Flows
 

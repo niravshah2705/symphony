@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 135 nodes
+Community of 134 nodes
 
-- **Size**: 135 nodes
-- **Cohesion**: 0.4942
+- **Size**: 134 nodes
+- **Cohesion**: 0.4959
 - **Dominant Language**: javascript
 
 ## Members
@@ -27,7 +27,6 @@ Community of 135 nodes
 | constructor | Function | ./packages/shared-core/src/pipeline/bus.js | 103-108 |
 | dispatch | Function | ./packages/shared-core/src/pipeline/bus.js | 110-128 |
 | command | Function | ./packages/shared-core/src/pipeline/bus.test.js | 24-44 |
-| test:DirectStageCommandBus dispatches the contract to an injected local handler@L46 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 46-57 |
 | test:HTTP direct delivery and Pub/Sub use the same push-compatible message body@L59 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 59-90 |
 | test:push envelope decoding returns null for malformed or non-JSON messages@L92 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 92-96 |
 | test:StageCommand transport budget accounts for base64 expansion and rejects one byte over the raw ceiling@L98 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 98-142 |
@@ -64,8 +63,9 @@ Community of 135 nodes
 | validatePreflightSnapshot | Function | ./packages/shared-core/src/pipeline/contracts.js | 455-455 |
 | validateStageCommandV1 | Function | ./packages/shared-core/src/pipeline/contracts.js | 456-456 |
 | validateStageResultV1 | Function | ./packages/shared-core/src/pipeline/contracts.js | 457-457 |
+| clock | Function | ./packages/shared-core/src/pipeline/contracts.test.js | 18-18 |
 
-*... and 85 more members.*
+*... and 84 more members.*
 
 ## Execution Flows
 
@@ -77,7 +77,7 @@ No execution flows pass through this community.
 
 - `equal` (78 edge(s))
 - `throws` (23 edge(s))
-- `deepEqual` (20 edge(s))
+- `deepEqual` (18 edge(s))
 - `stringify` (15 edge(s))
 - `has` (15 edge(s))
 - `includes` (14 edge(s))
@@ -96,7 +96,7 @@ No execution flows pass through this community.
 - `equal` (78 edge(s))
 - `./packages/shared-core/src/pipeline/contracts.js` (40 edge(s))
 - `throws` (23 edge(s))
-- `deepEqual` (20 edge(s))
+- `deepEqual` (18 edge(s))
 - `./packages/shared-core/src/pipeline/repository.test.js` (18 edge(s))
 - `./packages/shared-core/src/pipeline/repository.js` (12 edge(s))
 - `./packages/shared-core/src/pipeline/bus.js` (11 edge(s))
@@ -104,7 +104,7 @@ No execution flows pass through this community.
 - `./packages/shared-core/src/pipeline/storage.js` (9 edge(s))
 - `repeat` (8 edge(s))
 - `rejects` (8 edge(s))
-- `./packages/shared-core/src/pipeline/bus.test.js` (7 edge(s))
-- `dispatch` (5 edge(s))
+- `./packages/shared-core/src/pipeline/bus.test.js` (6 edge(s))
+- `dispatch` (4 edge(s))
 - `isFrozen` (3 edge(s))
 - `getRun` (3 edge(s))

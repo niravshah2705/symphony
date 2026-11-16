@@ -6,6 +6,7 @@ const { sendError } = require('@ai-fleet/shared/util');
 const log = require('@ai-fleet/shared/logger');
 const { initStore } = require('@ai-fleet/shared/store');
 const scheduler = require('@ai-fleet/shared/agent/scheduler');
+const { reportBoot: reportBillingGateBoot } = require('@ai-fleet/shared/billing/gate');
 const { MAX_STAGE_COMMAND_PUSH_BODY_BYTES } = require('@ai-fleet/shared/agent/pipeline-stage-service');
 const { internalServiceAuth } = require('@ai-fleet/shared/internal-auth');
 
@@ -83,6 +84,8 @@ initStore()
   .then(() => {
     app.listen(CONFIG.SERVICES.plannerPort, () => {
       log.info(`AI Fleet planner service running at http://localhost:${CONFIG.SERVICES.plannerPort}`);
+      // The scheduler and /enqueue both ask the gate, so say which rule is in force.
+      reportBillingGateBoot();
       if (CONFIG.MESSAGING_MODE !== 'pubsub' && !CONFIG.PIPELINE.orchestratorEnabled) {
         scheduler.startScheduler();
       }

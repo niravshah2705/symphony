@@ -7,6 +7,7 @@ const log = require('@ai-fleet/shared/logger');
 const { initStore } = require('@ai-fleet/shared/store');
 const { MAX_STAGE_COMMAND_PUSH_BODY_BYTES } = require('@ai-fleet/shared/agent/pipeline-stage-service');
 const coderMonitor = require('@ai-fleet/shared/agent/coder-orchestrator');
+const { reportBoot: reportBillingGateBoot } = require('@ai-fleet/shared/billing/gate');
 const { internalServiceAuth } = require('@ai-fleet/shared/internal-auth');
 
 const coderRoutes = require('./routes/coder');
@@ -45,6 +46,8 @@ initStore()
   .then(() => {
     app.listen(CONFIG.SERVICES.coderPort, () => {
       log.info(`AI Fleet coder service running at http://localhost:${CONFIG.SERVICES.coderPort}`);
+      // Ticket acceptance asks the gate, so the rule is stated before any ticket runs.
+      reportBillingGateBoot();
       if (CONFIG.MESSAGING_MODE !== 'pubsub' && !CONFIG.PIPELINE.orchestratorEnabled) {
         coderMonitor.start();
       }

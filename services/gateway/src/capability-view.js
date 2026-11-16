@@ -29,8 +29,10 @@
  *    purpose of the endpoint; a single boolean would not answer it.
  *
  * 2. **Budget is a token limit in the glossary and a balance in the code.**
- *    `GLOSSARY.md` defines Budget as a token allowance; `billing/gate.js` blocks
- *    at `balancePaise <= 0` and nothing anywhere enforces a token count. So this
+ *    `GLOSSARY.md` defines Budget as a token allowance; `billing/gate.js` blocks on
+ *    the FlexPrice wallet balance — the `state` it derives from
+ *    `real_time_credit_balance`, not an amount compared against a locally held
+ *    figure — and nothing anywhere enforces a token count. So this
  *    reports the money gate it can observe and `tokenBudget.configured: false`
  *    for the one it cannot. Inventing a Firestore field to fill the shape would
  *    make the API a lie with storage behind it.

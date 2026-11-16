@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 118 nodes
+Community of 119 nodes
 
-- **Size**: 118 nodes
-- **Cohesion**: 0.6456
+- **Size**: 119 nodes
+- **Cohesion**: 0.6448
 - **Dominant Language**: hcl
 
 ## Members
@@ -45,8 +45,9 @@ Community of 118 nodes
 | resource.kubernetes_namespace_v1.openshell_credentials | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 13-19 |
 | resource.kubernetes_namespace_v1.cert_manager | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 21-27 |
 | resource.kubernetes_namespace_v1.envoy_gateway_system | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 29-35 |
-| resource.kubernetes_namespace_v1.tenants | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 41-59 |
-| resource.kubernetes_namespace_v1.substrate_credentials | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 68-81 |
+| local.tenants | Function | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 46-46 |
+| resource.kubernetes_namespace_v1.tenants | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 49-74 |
+| resource.kubernetes_namespace_v1.substrate_credentials | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 83-96 |
 | resource.google_project_service.required_apis | Class | ./deploy/gcp/terraform-openshell-gke/network.tf | 5-18 |
 | resource.google_compute_subnetwork.openshell_subnet | Class | ./deploy/gcp/terraform-openshell-gke/network.tf | 24-43 |
 | resource.google_compute_router.router | Class | ./deploy/gcp/terraform-openshell-gke/network.tf | 49-56 |
@@ -63,9 +64,8 @@ Community of 118 nodes
 | output.dns_setup_instructions | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 36-39 |
 | output.substrate_enabled | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 45-48 |
 | output.substrate_worker_pool | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 50-53 |
-| output.substrate_credentials_namespace | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 55-58 |
 
-*... and 68 more members.*
+*... and 69 more members.*
 
 ## Execution Flows
 
@@ -81,6 +81,6 @@ No execution flows pass through this community.
 - `./deploy/gcp/terraform-openshell-gke/helm_components.tf` (15 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/main.tf` (8 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/tenant_config.tf` (8 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/namespaces.tf` (6 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/namespaces.tf` (7 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/network.tf` (6 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/gke.tf` (4 edge(s))

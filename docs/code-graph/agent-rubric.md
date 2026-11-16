@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 65 nodes
+Community of 64 nodes
 
-- **Size**: 65 nodes
-- **Cohesion**: 0.1807
+- **Size**: 64 nodes
+- **Cohesion**: 0.1887
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 65 nodes
 | test:RubricMiddleware grades a DeepAgent run and surfaces its verdict on the trace@L473 | Test | ./packages/shared/src/agent/runtimes.test.js | 473-499 |
 | describe@L494 | Test | ./packages/shared/src/agent/runtimes.test.js | 494-494 |
 
-*... and 15 more members.*
+*... and 14 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (184 edge(s))
-- `match` (22 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (20 edge(s))
-- `deepEqual` (17 edge(s))
+- `equal` (160 edge(s))
+- `match` (20 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
 - `join` (15 edge(s))
-- `includes` (15 edge(s))
-- `map` (12 edge(s))
+- `deepEqual` (14 edge(s))
+- `includes` (13 edge(s))
 - `guard` (12 edge(s))
+- `map` (11 edge(s))
 - `ok` (10 edge(s))
-- `push` (6 edge(s))
 - `rejects` (6 edge(s))
-- `hasOwn` (5 edge(s))
+- `push` (5 edge(s))
 - `String` (4 edge(s))
 - `isArray` (4 edge(s))
 - `throws` (4 edge(s))
+- `hasOwn` (4 edge(s))
 
 ### Incoming
 
-- `equal` (184 edge(s))
+- `equal` (160 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
-- `./packages/shared/src/agent/runtimes.test.js` (23 edge(s))
-- `match` (22 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js` (22 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (20 edge(s))
-- `deepEqual` (17 edge(s))
-- `includes` (15 edge(s))
+- `match` (20 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
+- `deepEqual` (14 edge(s))
+- `includes` (13 edge(s))
 - `guard` (12 edge(s))
 - `join` (11 edge(s))
 - `ok` (10 edge(s))
 - `rejects` (6 edge(s))
-- `hasOwn` (5 edge(s))
-- `map` (4 edge(s))
 - `throws` (4 edge(s))
+- `hasOwn` (4 edge(s))
+- `map` (3 edge(s))

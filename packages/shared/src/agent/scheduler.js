@@ -21,6 +21,7 @@ const {
 } = require('./policy-runtime');
 const workspaceEvents = require('./workspace-events');
 const { processBillingSweep } = require('../billing/sweep');
+const { drainOnce: drainBillingOutbox } = require('@ai-fleet/shared-core/billing/outbox-drain');
 const { billingStatus, getOrgFundStatus } = require('../billing/gate');
 const {
   normalizeWorkspaceContext,
@@ -728,6 +729,9 @@ function scheduleNext(context) {
       // The billing sweep runs every cadence INDEPENDENT of scheduleEnabled and
       // of the billing gate (a recharge posted here unblocks a paused runner).
       await processBillingSweep().catch(() => {});
+      // Local mode has no Cloud Scheduler, so the outbox drain rides this tick
+      // instead. It is a no-op unless FlexPrice ingest is enabled.
+      await drainBillingOutbox().catch(() => {});
       if (config.scheduleEnabled) {
         // Approval deadlines first, independent of processPending's guards.
         await processApprovalDeadlines().catch(() => {});

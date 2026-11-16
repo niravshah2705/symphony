@@ -17,6 +17,7 @@ const { createAuthenticationMiddleware, requirePermission, requireAuthenticated,
 const { callJson } = require('./service-client');
 const { createConfigResolver } = require('./config-resolver');
 const { createCapabilityView } = require('./capability-view');
+const { reportBoot: reportBillingGateBoot } = require('@ai-fleet/shared-core/billing/gate');
 const { requireEulaAccepted } = require('./eula');
 const { createCorsMiddleware } = require('./cors');
 const { initStore, getConversation } = require('@ai-fleet/shared-core/store');
@@ -418,6 +419,11 @@ initStore()
       log.info(`AI Fleet gateway running at http://localhost:${CONFIG.SERVICES.gatewayPort}`);
       log.info(`  → proxying /api/agent to ${CONFIG.SERVICES.plannerUrl}`);
       log.info(`  → proxying /api/coder to ${CONFIG.SERVICES.coderUrl}`);
+      // Which admission rule this process will apply, stated at boot. A named
+      // `enforced` with no FlexPrice throws, and an uncaught throw in here stops
+      // the service — which is the point: that combination is a gate that admits
+      // everything while logging like it blocks nothing.
+      reportBillingGateBoot();
     });
   })
   .catch((err) => {

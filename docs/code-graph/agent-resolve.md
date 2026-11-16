@@ -4,37 +4,114 @@
 
 ## Overview
 
-Community of 2 nodes
+Community of 249 nodes
 
-- **Size**: 2 nodes
-- **Cohesion**: 0.1333
+- **Size**: 249 nodes
+- **Cohesion**: 0.2413
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| resolveProxied | Function | ./packages/shared/src/agent/qoder.test.js | 23-41 |
-| test:the Qoder harness fails closed when the egress sidecar is armed@L75 | Test | ./packages/shared/src/agent/qoder.test.js | 75-81 |
+| test:OpenSWE fails closed for a GitLab repository selection@L72 | Test | ./packages/shared/src/agent/coder-flow.test.js | 72-75 |
+| test:coder results report the broker branch after an automatic retry rotation@L77 | Test | ./packages/shared/src/agent/coder-flow.test.js | 77-81 |
+| test:planned coder results export the broker-authoritative artifact receipt@L83 | Test | ./packages/shared/src/agent/coder-flow.test.js | 83-94 |
+| test:proxied coding isolates DeepAgent shell and developer-tool contexts@L440 | Test | ./packages/shared/src/agent/coder-flow.test.js | 440-486 |
+| resolveRole | Function | ./packages/shared/src/agent/coder-orchestrator.js | 362-371 |
+| buildTicketPrompt | Function | ./packages/shared/src/agent/coder.js | 42-76 |
+| isCoderLlmUsable | Function | ./packages/shared/src/agent/coder.js | 79-84 |
+| assertOpenSweRepositoryProvider | Function | ./packages/shared/src/agent/coder.js | 86-93 |
+| activeRepositoryBranch | Function | ./packages/shared/src/agent/coder.js | 95-99 |
+| activeRepositoryArtifactReceipt | Function | ./packages/shared/src/agent/coder.js | 101-104 |
+| resolvePlannedRepository | Function | ./packages/shared/src/agent/coder.js | 111-142 |
+| executeCodingRuntime | Function | ./packages/shared/src/agent/coder.js | 149-278 |
+| runCoderLocal | Function | ./packages/shared/src/agent/coder.js | 285-340 |
+| runCoder | Function | ./packages/shared/src/agent/coder.js | 348-355 |
+| runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 363-471 |
+| runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 474-492 |
+| installSkills | Function | ./packages/shared/src/agent/framework.js | 53-87 |
+| validateSkillName | Function | ./packages/shared/src/agent/framework.js | 89-101 |
+| trackedSkillPaths | Function | ./packages/shared/src/agent/framework.js | 103-114 |
+| claimSkillsDirectory | Function | ./packages/shared/src/agent/framework.js | 116-146 |
+| assertContained | Function | ./packages/shared/src/agent/framework.js | 148-153 |
+| assertNoSymlinks | Function | ./packages/shared/src/agent/framework.js | 155-165 |
+| lstatOrNull | Function | ./packages/shared/src/agent/framework.js | 167-174 |
+| isDir | Function | ./packages/shared/src/agent/framework.js | 176-182 |
+| loadWorkflow | Function | ./packages/shared/src/agent/framework.js | 190-196 |
+| prepareScratch | Function | ./packages/shared/src/agent/framework.js | 203-209 |
+| cleanup | Function | ./packages/shared/src/agent/framework.js | 207-207 |
+| buildAgent | Function | ./packages/shared/src/agent/framework.js | 212-214 |
+| configuredResourceNames | Function | ./packages/shared/src/agent/framework.js | 224-233 |
+| runWorkflow | Function | ./packages/shared/src/agent/framework.js | 241-372 |
+| contentToText | Function | ./packages/shared/src/agent/framework.js | 375-379 |
+| messageText | Function | ./packages/shared/src/agent/framework.js | 388-394 |
+| lastText | Function | ./packages/shared/src/agent/framework.js | 396-399 |
+| withSkillsEnv | Function | ./packages/shared/src/agent/framework.test.js | 26-38 |
+| test:installSkills refuses a symbolic-link destination without writing outside the root@L40 | Test | ./packages/shared/src/agent/framework.test.js | 40-56 |
+| test:installSkills refuses tracked project-owned .agent-skills files@L58 | Test | ./packages/shared/src/agent/framework.test.js | 58-73 |
+| test:installSkills refuses an unclaimed project-owned destination@L75 | Test | ./packages/shared/src/agent/framework.test.js | 75-87 |
+| test:installSkills can refresh a framework-owned skill directory@L89 | Test | ./packages/shared/src/agent/framework.test.js | 89-100 |
+| test:installSkills reads the vendored default skills when SKILLS_ROOT is unset (backward-compat)@L102 | Test | ./packages/shared/src/agent/framework.test.js | 102-116 |
+| test:installSkills honors SKILLS_ROOT + SKILLS_VERSION and installs from the pinned bundle@L118 | Test | ./packages/shared/src/agent/framework.test.js | 118-144 |
+| test:configuredResourceNames prefers a deepagent build’s resolved set@L183 | Test | ./packages/shared/src/agent/framework.test.js | 183-196 |
+| test:configuredResourceNames falls back to the workflow declaration when no build@L198 | Test | ./packages/shared/src/agent/framework.test.js | 198-206 |
+| test:configuredResourceNames reports only policy-permitted MCP plugins@L208 | Test | ./packages/shared/src/agent/framework.test.js | 208-218 |
+| test:runWorkflow filters denied plugins before the MCP loader is called@L220 | Test | ./packages/shared/src/agent/framework.test.js | 220-250 |
+| normalizeFsToolArgs | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 41-49 |
+| createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
+| test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
+| test:remaps aliases for write_file and edit_file too@L21 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 21-30 |
+| test:honors alias priority: prefers `path` over lower-priority keys@L32 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 32-35 |
+| test:leaves a correct call untouched (same reference, no rewrite)@L37 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 37-40 |
+
+*... and 199 more members.*
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **resume** (criticality: 0.67, depth: 8)
+- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
+- **generatePlan** (criticality: 0.67, depth: 6)
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
+- **runCoder** (criticality: 0.67, depth: 7)
+- **runPlannedCoder** (criticality: 0.66, depth: 7)
+- **startScheduler** (criticality: 0.65, depth: 5)
+- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (2 edge(s))
-- `stringify` (1 edge(s))
-- `parse` (1 edge(s))
-- `trim` (1 edge(s))
-- `execFileSync` (1 edge(s))
-- `resolve` (1 edge(s))
-- `match` (1 edge(s))
+- `equal` (156 edge(s))
+- `join` (87 edge(s))
+- `deepEqual` (47 edge(s))
+- `strictEqual` (42 edge(s))
+- `deepStrictEqual` (37 edge(s))
+- `String` (35 edge(s))
+- `require` (31 edge(s))
+- `isArray` (31 edge(s))
+- `step` (30 edge(s))
+- `trim` (28 edge(s))
+- `map` (28 edge(s))
+- `slice` (23 edge(s))
+- `filter` (20 edge(s))
+- `after` (19 edge(s))
+- `Boolean` (18 edge(s))
 
 ### Incoming
 
-- `./packages/shared/src/agent/qoder.test.js` (2 edge(s))
-- `equal` (2 edge(s))
-- `match` (1 edge(s))
+- `equal` (156 edge(s))
+- `join` (48 edge(s))
+- `deepEqual` (47 edge(s))
+- `strictEqual` (42 edge(s))
+- `deepStrictEqual` (37 edge(s))
+- `./packages/shared/src/agent/framework.js` (26 edge(s))
+- `./packages/shared/src/agent/langfuse.js` (24 edge(s))
+- `./packages/shared/src/agent/settings-policy.js` (24 edge(s))
+- `./packages/shared/src/agent/coder.js` (22 edge(s))
+- `after` (19 edge(s))
+- `./packages/shared/src/agent/plan.js` (17 edge(s))
+- `./packages/shared/src/agent/trace-annotations.test.js` (16 edge(s))
+- `mkdtempSync` (15 edge(s))
+- `tmpdir` (15 edge(s))
+- `rmSync` (15 edge(s))

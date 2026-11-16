@@ -1,0 +1,50 @@
+# What this FlexPrice stack is built from, and why it is not a pulled image.
+#
+# Pinned by commit, because the findings (docs/FLEXPRICE_FINDINGS.md) cite
+# `file:line` from one exact tree and a build from anywhere else makes those
+# references a guess.
+#
+# Phase 0 built from `main` at 709ff3bc (= v2.1.48 + 226 commits) because that is
+# where the findings were read. Phase 1 re-pointed this at the release tag, as
+# this file then demanded, and re-ran the whole spike against it: a 226-commit
+# `main` checkout is fine for reading source and not acceptable as a deployment
+# target. Two consequences of moving 226 commits backwards, both accepted:
+#   - the `file:line` citations in FLEXPRICE_FINDINGS.md point at the Phase 0
+#     tree, not this one. They are how the behaviour was READ; the spike re-run
+#     is how it was CONFIRMED at this commit. Where a citation matters, trust the
+#     probe result in docs/flexprice-spike/results.json.
+#   - the running volumes had already been migrated by the newer build, and an
+#     older binary over a newer schema is a downgrade, not a restart. The stack
+#     was therefore torn down (`npm run billing:flexprice:down`) and reinitialised.
+
+upstream=flexprice/flexprice
+url=https://github.com/flexprice/flexprice
+ref=v2.1.48
+commit=2152453032098000f8b76b07bc869013313ff338
+describe=v2.1.48
+nearest_release_tag=v2.1.48
+captured=2026-11-12
+phase0_commit=709ff3bc6f4869fc6cba5e83fe3478c20cca1402
+
+# The published image is NOT usable here.
+#
+#   docker pull ghcr.io/flexprice/flexprice:v2.1.48
+#   -> Error response from daemon: error from registry: unauthorized
+#
+# `ghcr.io/flexprice/flexprice` is published by `.github/workflows/publish-app-image.yml`
+# (IMAGE_NAME = ${{ github.repository_owner }}/flexprice, multi-arch amd64+arm64,
+# cosign-signed, Trivy-gated, label AGPL-3.0-only) but the package is private:
+# anonymous token requests get UNAUTHORIZED and there is no Docker Hub image
+# (hub.docker.com/v2/repositories/flexprice/flexprice -> 404). So `compose.yaml`
+# builds from this checkout instead. That is what upstream's own docker-compose.yml
+# does too (`image: flexprice-app:local`, built from the local Dockerfile), so we
+# are not doing anything they do not.
+#
+# Consequence for the AGPL memo's "pin by digest" discipline: for a locally built
+# image the pin is the commit above plus the image ID below, recorded after the
+# build. It is NOT a registry digest, and no `:latest` is involved.
+image=sha256:4ad8d8ca6e69bcf510bc47224efdf591908522f863df20bcf27188cb105728c1
+
+# Tag-format trap, left here so nobody re-discovers it: the upstream tag list
+# contains a non-SemVer `v2.17`, which sorts *after* v2.1.48 under `sort -V` and
+# before it under `sort`. Never derive "latest" by sorting tags.

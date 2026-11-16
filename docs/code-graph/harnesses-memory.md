@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 307 nodes
+Community of 305 nodes
 
-- **Size**: 307 nodes
-- **Cohesion**: 0.2509
+- **Size**: 305 nodes
+- **Cohesion**: 0.2379
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,9 +17,10 @@ Community of 307 nodes
 | test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
 | test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
 | test:the worker pool name the planner selects is one string in four places@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-616 |
-| test:the power workflow waits only on namespaces the module still creates@L135 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 135-157 |
-| test@L143 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 143-143 |
-| test:the static-IP grant lists the addresses the module owns@L159 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 159-174 |
+| test:the power workflow waits only on namespaces the module still creates@L138 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 138-160 |
+| test@L146 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 146-146 |
+| test:the static-IP grant lists the addresses the module owns@L162 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 162-177 |
+| test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L357 | Test | ./e2e/persistent-footer.spec.js | 357-461 |
 | memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
 | memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
 | resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |
@@ -63,53 +64,49 @@ Community of 307 nodes
 | test:mergeBank keeps untouched defaults as origin=default and layers overrides@L56 | Test | ./packages/shared/src/agent/global-questions.test.js | 56-66 |
 | test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
 | test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
-| test:normalizeQuestion rejects malformed input rather than storing it@L83 | Test | ./packages/shared/src/agent/global-questions.test.js | 83-92 |
 
-*... and 257 more members.*
+*... and 255 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
-- **generatePlan** (criticality: 0.67, depth: 6)
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
-- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (394 edge(s))
+- `equal` (370 edge(s))
 - `join` (74 edge(s))
-- `match` (65 edge(s))
+- `match` (63 edge(s))
 - `ok` (56 edge(s))
 - `String` (56 edge(s))
-- `isArray` (50 edge(s))
+- `isArray` (51 edge(s))
 - `map` (49 edge(s))
-- `deepEqual` (46 edge(s))
-- `includes` (45 edge(s))
-- `filter` (30 edge(s))
+- `deepEqual` (43 edge(s))
+- `includes` (43 edge(s))
+- `filter` (33 edge(s))
 - `slice` (29 edge(s))
-- `trim` (25 edge(s))
+- `expect` (29 edge(s))
+- `trim` (26 edge(s))
 - `throws` (23 edge(s))
-- `require` (22 edge(s))
-- `push` (20 edge(s))
+- `require` (21 edge(s))
 
 ### Incoming
 
-- `equal` (394 edge(s))
-- `match` (61 edge(s))
+- `equal` (370 edge(s))
+- `match` (59 edge(s))
 - `ok` (56 edge(s))
 - `./packages/shared/src/agent/harnesses/contract.js` (55 edge(s))
-- `deepEqual` (46 edge(s))
 - `join` (46 edge(s))
-- `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
-- `./packages/shared/src/agent/runtimes.test.js` (25 edge(s))
+- `deepEqual` (43 edge(s))
+- `expect` (29 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
+- `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js` (24 edge(s))
 - `throws` (23 edge(s))
 - `./packages/shared/src/agent/global-questions.js` (21 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
-- `includes` (20 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))

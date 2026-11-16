@@ -4,7 +4,7 @@ const { defineTool } = require('./exec');
 const store = require('../../store');
 const { resolveOrgId } = require('../../billing/org-context');
 const { paiseToInr } = require('../../billing/pricing');
-const ledger = require('../../billing/ledger');
+const gate = require('../../billing/gate');
 
 /**
  * Billing usage tool — lets an agent fetch its org's current credit balance and
@@ -37,19 +37,23 @@ const getBillingUsageTool = defineTool(
   },
   async (input) => {
     const orgId = resolveOrgId({});
-    const account = store.getBillingAccount(orgId);
-    const balanceInr = account
-      ? paiseToInr(account.balancePaise)
-      : paiseToInr(ledger.balanceFromLedger(orgId));
+    // Awaited rather than cached: this tool exists to answer "may I start
+    // expensive work", so it should read the wallet instead of the last admission.
+    const fund = await gate.ensureFundStatus(orgId);
     const period = input.period && PERIOD_DAYS[input.period] ? input.period : 'week';
     const usage = usageSince(orgId, PERIOD_DAYS[period]);
+    const balance = fund.balancePaise === null || fund.balancePaise === undefined
+      ? 'unknown (no FlexPrice wallet balance could be read)'
+      : `₹${paiseToInr(fund.balancePaise).toFixed(2)}`;
     const lines = [
       `Organization: ${orgId}`,
-      `Balance: ₹${balanceInr.toFixed(2)}`,
+      `Balance: ${balance}`,
       `Usage (last ${period}): ${usage.records} run(s), ${usage.tokens} tokens, ₹${usage.costInr.toFixed(2)}`,
     ];
-    if (account && Number(account.balancePaise) < 0) {
-      lines.push('⚠️ Balance is negative — runner activity is paused until credits are added.');
+    if (fund.state === gate.STATE.negative) {
+      lines.push('⚠️ Balance is negative — a platform debit exceeded it. Runner activity is paused until credits are added.');
+    } else if (!fund.fundsAvailable) {
+      lines.push('⚠️ Balance is exhausted — runner activity is paused until credits are added.');
     }
     return lines.join('\n');
   },

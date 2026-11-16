@@ -1,0 +1,96 @@
+# Snapshot of otel-system/prometheus-config, captured from the live cluster.
+# See deploy/flexprice/kind/README.md for what billing depends on here.
+#
+# Generated, not hand-maintained: scripts/kind-metrics-install.sh --snapshot
+# rewrites this file from the cluster. The default verify mode fails when this
+# file and the cluster disagree, so drift is an error rather than a fork.
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: otel-system
+data:
+  prometheus.yml: |
+    # The kubernetes-pods scrape job below is adapted from the
+    # prometheus-community Helm chart's job of the same name:
+    # https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus/values.yaml
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - ate-system
+                - otel-system
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+            action: replace
+            regex: (\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})
+            replacement: '[$2]:$1'
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+            action: replace
+            regex: (\d+);((([0-9]+?)(\.|$)){4})
+            replacement: $2:$1
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            action: replace
+            target_label: node
+          - source_labels: [__meta_kubernetes_pod_phase]
+            action: drop
+            regex: Pending|Succeeded|Failed
+
+      # The two read ports of the collector: 8889 carries the substrate_*
+      # counts of the count connector, and 8888 the otelcol_* counters of the
+      # collector itself. The two go together: when a service reports zero
+      # volume, otelcol_receiver_accepted_* shows the difference between a
+      # service that sent nothing and data that never arrived.
+      #
+      # This job, and not the annotation job above, reads the collector. The
+      # annotation can name one port only, thus the collector pod carries no
+      # prometheus.io/scrape annotation. Read the two ports here instead.
+      #
+      # 8889 re-exports each metric that the pipelines push, and the pods of
+      # ate-api-server, atelet, and atenet-router already carry the annotation
+      # on 9090. Keep the substrate_* and otelcol_* names only, or every
+      # series of those services arrives twice and sum() gives double.
+      - job_name: otel-collector-self
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - otel-system
+        relabel_configs:
+          - source_labels:
+              - __meta_kubernetes_pod_label_app
+              - __meta_kubernetes_pod_container_port_number
+            action: keep
+            regex: opentelemetry-collector;(8888|8889)
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            action: keep
+            regex: (substrate|otelcol)_.*

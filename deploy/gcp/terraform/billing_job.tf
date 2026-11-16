@@ -1,32 +1,78 @@
 # -----------------------------------------------------------------------------
-# Billing auto-recharge — hourly Cloud Run JOB, scheduler-triggered.
+# Billing Jobs — one Cloud Run Job per money/accounting sweep, each started by
+# Cloud Scheduler calling the Run Admin API (jobs/<name>:run) directly.
 # -----------------------------------------------------------------------------
-# Recharge and alert evaluation deliberately left the 5-minute /pubsub/billing-tick
-# path (that tick now only aggregates usage): every tick looped ALL accounts and
-# re-issued a Cashfree charge whose success response the code read as a failure, so
-# the cooldown never armed and the same org was charged again on the next tick.
-#
-# A Job fixes the cadence (hourly, matching CONFIG.BILLING.rechargeIntervalMin), the
-# blast radius (one task, max_retries 1, non-zero exit only when EVERY org errored),
-# and the ordering — services/billing/src/auto-recharge-job.js validates credentials,
-# mandate status, threshold and cooldown BEFORE it charges.
-#
-# Trigger shape: Cloud Run Jobs are not HTTP-addressable and the pinned google /
-# google-beta providers (~> 6.0, 6.50.0) have NO push_config.cloud_run_job field — a
-# Pub/Sub subscription cannot push to a Job here. So the scheduler POSTs the billing
-# SERVICE's /pubsub/billing-recharge-tick (the existing OIDC tick pattern), and the
-# service launches one Job execution through the Admin API exactly the way
-# coder-control launches the coder-worker Job (iam.tf: coder_runs_worker).
+# Every Job overrides the image CMD (which starts the HTTP server) with its own
+# entrypoint, runs one task with max_retries 1, and receives only the secrets
+# its entrypoint reads. FlexPrice env + keys come from local.billing_flexprice_*
+# in billing_service.tf; Cashfree secrets go to the recharge Job only.
 
-resource "google_cloud_run_v2_job" "billing_auto_recharge" {
+locals {
+  billing_jobs = {
+    recharge = {
+      name     = var.billing_job_name
+      script   = "services/billing/src/auto-recharge-job.js"
+      schedule = var.billing_recharge_schedule
+      cashfree = true
+      internal = true
+      env = {
+        BILLING_JOB_DRY_RUN = tostring(var.billing_job_dry_run)
+        CASHFREE_ENV        = var.cashfree_env
+        CASHFREE_BASE_URL   = var.cashfree_base_url
+        ORG_URL             = local.org_url
+      }
+    }
+    platform-charge = {
+      name     = "${var.billing_job_name_prefix}-platform-charge"
+      script   = "services/billing/src/platform-charge-job.js"
+      schedule = var.billing_platform_charge_schedule
+      cashfree = false
+      internal = false
+      env      = {}
+    }
+    credit-expiry = {
+      name     = "${var.billing_job_name_prefix}-credit-expiry"
+      script   = "services/billing/src/credit-expiry-job.js"
+      schedule = var.billing_credit_expiry_schedule
+      cashfree = false
+      internal = false
+      env      = {}
+    }
+    reconcile = {
+      name     = "${var.billing_job_name_prefix}-reconcile"
+      script   = "services/billing/src/reconcile-gateway-spend.js"
+      schedule = var.billing_reconcile_schedule
+      cashfree = false
+      internal = true
+      env = merge(
+        { SETTINGS_URL = local.settings_url },
+        local.litellm_url != "" ? { LITELLM_URL = local.litellm_url } : {},
+      )
+    }
+  }
+
+  billing_job_cashfree_secrets = {
+    CASHFREE_APP_ID     = google_secret_manager_secret.cashfree_app_id.secret_id
+    CASHFREE_SECRET_KEY = google_secret_manager_secret.cashfree_secret_key.secret_id
+  }
+}
+
+moved {
+  from = google_cloud_run_v2_job.billing_auto_recharge
+  to   = google_cloud_run_v2_job.billing["recharge"]
+}
+
+resource "google_cloud_run_v2_job" "billing" {
+  for_each = local.billing_jobs
+
   project             = var.project_id
-  name                = var.billing_job_name
+  name                = each.value.name
   location            = var.region
-  labels              = merge(local.common_labels, { component = "billing" })
+  labels              = merge(local.common_labels, { component = "billing", billing_job = each.key })
   deletion_protection = false
 
   template {
-    parallelism = 1 # one sweep per execution
+    parallelism = 1
     task_count  = 1
 
     template {
@@ -36,30 +82,50 @@ resource "google_cloud_run_v2_job" "billing_auto_recharge" {
       execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
 
       containers {
-        name  = "app"
-        image = local.billing_image
+        name    = "app"
+        image   = local.billing_image
+        command = ["node"]
+        args    = [each.value.script]
 
         dynamic "env" {
-          for_each = merge(local.common_env, {
-            STORE_BACKEND       = "firestore"
-            BILLING_JOB_DRY_RUN = tostring(var.billing_job_dry_run)
-            CASHFREE_ENV        = var.cashfree_env
-            CASHFREE_BASE_URL   = var.cashfree_base_url
-            ORG_URL             = local.org_url
-          })
+          for_each = merge(local.common_env, local.billing_flexprice_env, {
+            STORE_BACKEND = "firestore"
+          }, each.value.env)
           content {
             name  = env.key
             value = env.value
           }
         }
 
-        # The org service's billing-context read is guarded by the same shared
-        # internal token as the provisioner's write-back. Splat-driven for_each over
-        # the count-gated secret so a stack without internal_api_token set simply
-        # omits the env — the job then fails closed for that org instead of sending an
-        # unauthenticated request.
         dynamic "env" {
-          for_each = toset(google_secret_manager_secret.internal_api_token[*].secret_id)
+          for_each = local.billing_flexprice_secrets
+          content {
+            name = env.key
+            value_source {
+              secret_key_ref {
+                secret  = env.value
+                version = "latest"
+              }
+            }
+          }
+        }
+
+        dynamic "env" {
+          for_each = each.value.cashfree ? local.billing_job_cashfree_secrets : {}
+          content {
+            name = env.key
+            value_source {
+              secret_key_ref {
+                secret  = env.value
+                version = "latest"
+              }
+            }
+          }
+        }
+
+        # Count-gated secret: absent token => env omitted => the Job fails closed.
+        dynamic "env" {
+          for_each = each.value.internal ? toset(google_secret_manager_secret.internal_api_token[*].secret_id) : toset([])
           content {
             name = "INTERNAL_API_TOKEN"
             value_source {
@@ -71,28 +137,6 @@ resource "google_cloud_run_v2_job" "billing_auto_recharge" {
           }
         }
 
-        env {
-          name = "CASHFREE_APP_ID"
-          value_source {
-            secret_key_ref {
-              secret  = google_secret_manager_secret.cashfree_app_id.secret_id
-              version = "latest"
-            }
-          }
-        }
-
-        env {
-          name = "CASHFREE_SECRET_KEY"
-          value_source {
-            secret_key_ref {
-              secret  = google_secret_manager_secret.cashfree_secret_key.secret_id
-              version = "latest"
-            }
-          }
-        }
-
-        # Jobs get no autoscaling knobs: one task, sized for a serial sweep with a
-        # 10s-per-org HTTP timeout.
         resources {
           limits = {
             cpu    = "1"
@@ -109,33 +153,14 @@ resource "google_cloud_run_v2_job" "billing_auto_recharge" {
     google_project_iam_member.billing_datastore,
     google_secret_manager_secret_iam_member.billing_cashfree_app_id_accessor,
     google_secret_manager_secret_iam_member.billing_cashfree_secret_key_accessor,
+    google_secret_manager_secret_iam_member.billing_flexprice_accessor,
     google_secret_manager_secret_iam_member.billing_internal_token,
     google_cloud_run_v2_service_iam_member.billing_invokes_org,
+    google_cloud_run_v2_service_iam_member.billing_invokes_settings,
   ]
 }
 
-# --- Who may run it ------------------------------------------------------------
-# The billing SERVICE launches the execution (its tick handler), so billing-sa needs
-# run.jobs.run on this job plus actAs on the job's runtime SA — which is billing-sa
-# itself. Mirrors coder_runs_worker / coder_actas_self in iam.tf.
-resource "google_cloud_run_v2_job_iam_member" "billing_launches_recharge_job" {
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_job.billing_auto_recharge.name
-  role     = "roles/run.developer"
-  member   = "serviceAccount:${google_service_account.billing.email}"
-}
-
-resource "google_service_account_iam_member" "billing_actas_self" {
-  service_account_id = google_service_account.billing.name
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${google_service_account.billing.email}"
-}
-
-# The Job authenticates to the org service twice over: Cloud Run IAM (this binding —
-# the org service is internal + no-allow-unauthenticated) and the app-level
-# X-Internal-Token. Without it the OIDC token the job mints is rejected with 403 and
-# every org is skipped.
+# Org service is internal + IAM-gated; the Jobs also send X-Internal-Token.
 resource "google_cloud_run_v2_service_iam_member" "billing_invokes_org" {
   project  = var.project_id
   location = var.region
@@ -144,8 +169,15 @@ resource "google_cloud_run_v2_service_iam_member" "billing_invokes_org" {
   member   = "serviceAccount:${google_service_account.billing.email}"
 }
 
-# Same shared secret the provisioner and the org service hold; accessor only when the
-# token exists (see provisioner.tf).
+# The reconcile Job resolves the LiteLLM key through the settings S2S resolver.
+resource "google_cloud_run_v2_service_iam_member" "billing_invokes_settings" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.settings.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.billing.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "billing_internal_token" {
   count     = var.internal_api_token != "" ? 1 : 0
   project   = var.project_id
@@ -154,32 +186,51 @@ resource "google_secret_manager_secret_iam_member" "billing_internal_token" {
   member    = "serviceAccount:${google_service_account.billing.email}"
 }
 
-# --- Scheduler ------------------------------------------------------------------
-# pubsub_push-sa already holds run.invoker on the billing service
-# (push_invokes_billing), so the OIDC token signed here is accepted; the audience is
-# the service URL, matching its PUBSUB_PUSH_AUDIENCE.
+# --- Scheduler -----------------------------------------------------------------
+# A dedicated identity whose only grant is run.invoker on each billing Job.
 
-resource "google_cloud_scheduler_job" "billing_auto_recharge" {
+resource "google_service_account" "billing_scheduler" {
+  project      = var.project_id
+  account_id   = "billing-scheduler-sa"
+  display_name = "AI Fleet Billing Job Scheduler"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "billing_scheduler_runs_job" {
+  for_each = local.billing_jobs
+
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_job.billing[each.key].name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.billing_scheduler.email}"
+}
+
+moved {
+  from = google_cloud_scheduler_job.billing_auto_recharge
+  to   = google_cloud_scheduler_job.billing_job["recharge"]
+}
+
+resource "google_cloud_scheduler_job" "billing_job" {
+  for_each = local.billing_jobs
+
   project   = var.project_id
   region    = var.region
-  name      = "${var.billing_job_name}-tick"
-  schedule  = var.billing_recharge_schedule
+  name      = "${each.value.name}-tick"
+  schedule  = each.value.schedule
   time_zone = var.scheduler_time_zone
 
   http_target {
     http_method = "POST"
-    uri         = "${local.billing_url}/pubsub/billing-recharge-tick"
+    uri         = "https://run.googleapis.com/v2/projects/${var.project_id}/locations/${var.region}/jobs/${google_cloud_run_v2_job.billing[each.key].name}:run"
     headers     = { "Content-Type" = "application/json" }
     body        = base64encode("{}")
 
-    oidc_token {
-      service_account_email = google_service_account.pubsub_push.email
-      audience              = local.billing_url
+    oauth_token {
+      service_account_email = google_service_account.billing_scheduler.email
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
     }
   }
 
-  # The launch call is a single Admin API request; if it fails the org is simply not
-  # recharged until the next hour, so one prompt retry is enough.
   retry_config {
     retry_count          = 1
     min_backoff_duration = "30s"
@@ -187,9 +238,6 @@ resource "google_cloud_scheduler_job" "billing_auto_recharge" {
 
   depends_on = [
     google_project_service.services,
-    google_cloud_run_v2_service.billing,
-    google_cloud_run_v2_service_iam_member.push_invokes_billing,
-    google_cloud_run_v2_job.billing_auto_recharge,
-    google_cloud_run_v2_job_iam_member.billing_launches_recharge_job,
+    google_cloud_run_v2_job_iam_member.billing_scheduler_runs_job,
   ]
 }

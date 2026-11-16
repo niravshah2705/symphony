@@ -16,40 +16,53 @@ const ledger = require('./ledger');
 
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
-test('ensureAccount seeds the initial credit once and is idempotent', () => {
+test('ensureAccount records config and moves no money', () => {
   const a = ledger.ensureAccount('org-1');
-  assert.equal(a.balancePaise, 50000); // 500 INR
+  // The opening credit is a number the percentage-mode trigger multiplies, not a
+  // balance: the spendable one lives in the FlexPrice wallet (billing/gate.js).
   assert.equal(a.initialCreditPaise, 50000);
-  assert.equal(store.listLedgerEntries({ orgId: 'org-1' }).filter((e) => e.type === 'credit').length, 1);
-  // Spend it down, then call ensureAccount again — it must NOT re-credit.
-  ledger.postEntry('org-1', { type: 'usage', amountPaise: -50000, description: 'spend' });
-  const again = ledger.ensureAccount('org-1');
-  assert.equal(again.balancePaise, 0);
-  assert.equal(store.listLedgerEntries({ orgId: 'org-1' }).filter((e) => e.type === 'credit').length, 1);
+  assert.equal(a.balancePaise, undefined, 'an account must not carry a balance');
+  assert.equal(a.currency, 'INR');
+  assert.deepEqual(a.alertThresholdsPaise, [10000, 0]);
+  assert.equal(a.lastAlertedThresholdPaise, null);
+  assert.deepEqual(a.autoRecharge, {
+    enabled: false, mode: 'amount', thresholdPaise: 0, thresholdPercent: 20,
+    amountPaise: 50000, cashfreeSubscriptionId: null, paymentMethodType: null,
+  });
+  assert.deepEqual(a.notifyChannels, { browser: true, email: false, slack: false });
+  assert.deepEqual(a.paymentInfo, {
+    billingName: '', billingEmail: '', billingPhone: '', taxId: '', address: null, updatedAt: null,
+  });
+  assert.equal(store.listLedgerEntries({ orgId: 'org-1' }).length, 0, 'creating an account credits nothing');
 });
 
-test('balanceFromLedger is the signed sum of entries; snapshot matches', () => {
+test('ensureAccount is idempotent and does not rewrite an existing account', () => {
   ledger.ensureAccount('org-2');
-  ledger.postEntry('org-2', { type: 'usage', amountPaise: -12345, description: 'x' });
-  ledger.postEntry('org-2', { type: 'recharge', amountPaise: 20000, description: 'y' });
-  const expected = 50000 - 12345 + 20000;
-  assert.equal(ledger.balanceFromLedger('org-2'), expected);
-  assert.equal(store.getBillingAccount('org-2').balancePaise, expected);
+  store.upsertBillingAccount('org-2', { initialCreditPaise: 100 });
+  const again = ledger.ensureAccount('org-2');
+  assert.equal(again.initialCreditPaise, 100, 'a configured value is not reset by a page load');
+  assert.equal(store.listLedgerEntries({ orgId: 'org-2' }).length, 0);
 });
 
-test('postEntry rounds amounts to integer paise and never mutates prior entries', () => {
+// The money semantics this module used to own are gone, and a function creeping
+// back would quietly create a second balance again — which is the bug, not a
+// refactor. See docs/BILLING_FLEXPRICE.md §10.
+test('the local balance arithmetic is gone', () => {
+  for (const name of ['postEntry', 'refreshBalance', 'balanceFromLedger', 'currentBalancePaise']) {
+    assert.equal(ledger[name], undefined, `ledger.${name} must not come back`);
+  }
+});
+
+test('a new account gets the alert policy defaults, not a copy of the constants', () => {
   ledger.ensureAccount('org-3');
-  const before = store.listLedgerEntries({ orgId: 'org-3' }).length;
-  ledger.postEntry('org-3', { type: 'usage', amountPaise: -10.6, description: 'round' });
-  const entries = store.listLedgerEntries({ orgId: 'org-3' });
-  assert.equal(entries.length, before + 1);
-  assert.equal(entries[0].amountPaise, -11); // Math.round(-10.6)
-});
-
-test('refreshBalance recomputes the snapshot from the ledger (self-heals drift)', () => {
-  ledger.ensureAccount('org-4');
-  // Simulate a stale snapshot, then refresh.
-  store.upsertBillingAccount('org-4', { balancePaise: 999999 });
-  const healed = ledger.refreshBalance('org-4');
-  assert.equal(healed.balancePaise, 50000);
+  const a = store.getBillingAccount('org-3');
+  assert.deepEqual(a.alertThresholdsPaise, [...ledger.DEFAULT_ALERT_THRESHOLDS_PAISE]);
+  assert.deepEqual(a.autoRecharge, { ...ledger.DEFAULT_AUTO_RECHARGE });
+  assert.deepEqual(a.paymentInfo, { ...ledger.DEFAULT_PAYMENT_INFO });
+  a.alertThresholdsPaise.push(1);
+  a.autoRecharge.enabled = true;
+  assert.deepEqual(ledger.DEFAULT_AUTO_RECHARGE, {
+    enabled: false, mode: 'amount', thresholdPaise: 0, thresholdPercent: 20,
+    amountPaise: 50000, cashfreeSubscriptionId: null, paymentMethodType: null,
+  }, 'one org editing its config must not edit every org’s defaults');
 });

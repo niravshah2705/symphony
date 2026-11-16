@@ -53,6 +53,7 @@ const log = require('@ai-fleet/shared-core/logger');
 const store = require('@ai-fleet/shared-core/store');
 const pricing = require('@ai-fleet/shared-core/billing/pricing');
 const { fetchS2sSecrets } = require('@ai-fleet/shared-core/secrets/s2s-resolver');
+const { createFlexpriceClient, rowsOf } = require('@ai-fleet/shared-core/billing/flexprice-client');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_WINDOW_DAYS = 1;
@@ -127,6 +128,44 @@ function summarizeSpendLogs(payload) {
   return { available: true, requests, spendUsd, spendPaise: pricing.usdToPaise(spendUsd) };
 }
 
+function comparison(actualPaise, expectedPaise, unavailableVerdict) {
+  if (!Number.isFinite(actualPaise)) return { paise: null, verdict: unavailableVerdict };
+  const paise = Math.round(actualPaise - expectedPaise);
+  if (Math.abs(paise) <= MATCH_TOLERANCE_PAISE) return { paise, verdict: 'match' };
+  return { paise, verdict: paise > 0 ? 'platform_ahead' : 'we_are_ahead' };
+}
+
+async function resolveLlmCostMeter(client) {
+  if (!client) return { available: false, reason: 'flexprice_unconfigured' };
+  try {
+    const matches = rowsOf(await client.listMeters())
+      .filter((meter) => meter && meter.name === 'llm-cost');
+    if (matches.length !== 1 || !matches[0].id) {
+      return { available: false, reason: matches.length ? 'flexprice_meter_ambiguous' : 'flexprice_meter_unavailable' };
+    }
+    return { available: true, meterId: matches[0].id };
+  } catch (err) {
+    return { available: false, reason: `flexprice_meter_unreachable: ${err && err.message ? err.message : err}` };
+  }
+}
+
+async function fetchFlexpriceSpend({ client, meter, orgId, since, until }) {
+  if (!meter || !meter.available) return meter || { available: false, reason: 'flexprice_meter_unavailable' };
+  try {
+    const usage = await client.eventsUsageMeter({
+      meter_id: meter.meterId,
+      external_customer_id: orgId,
+      start_time: since,
+      end_time: until,
+    });
+    const value = Number(usage && usage.value);
+    if (!Number.isFinite(value)) return { available: false, reason: 'flexprice_usage_unshapeled' };
+    return { available: true, meterId: meter.meterId, spendPaise: Math.round(value) };
+  } catch (err) {
+    return { available: false, reason: `flexprice_usage_unreachable: ${err && err.message ? err.message : err}` };
+  }
+}
+
 /**
  * `GET /global/spend/logs` for one org's virtual key. The key scopes the response
  * to that org — which is why the plan requires per-org, model-scoped virtual keys
@@ -166,20 +205,27 @@ async function fetchGatewaySpend({ orgId, since, until, baseUrl, key, fetchImpl,
  * The one line an operator reads. Named for the two sides so a reviewer cannot
  * mistake `deltaPaise` for an amount owed.
  */
-function buildReport({ orgId, window, platform, recorded }) {
-  const deltaPaise = platform.available ? platform.spendPaise - recorded.comparablePaise : null;
-  let verdict = 'platform_unavailable';
-  if (platform.available) {
-    if (Math.abs(deltaPaise) <= MATCH_TOLERANCE_PAISE) verdict = 'match';
-    else verdict = deltaPaise > 0 ? 'platform_ahead' : 'we_are_ahead';
-  }
-  return {
+function buildReport({ orgId, window, platform, flexprice, recorded }) {
+  const report = {
     orgId,
     window,
     platform_says: platform,
     we_recorded: recorded,
-    delta: { paise: deltaPaise, verdict },
+    delta: comparison(
+      platform.available ? platform.spendPaise : NaN,
+      recorded.comparablePaise,
+      'platform_unavailable',
+    ),
   };
+  if (flexprice) {
+    report.flexprice_says = flexprice;
+    report.flexprice_delta = comparison(
+      flexprice.available ? flexprice.spendPaise : NaN,
+      recorded.costPaise,
+      'flexprice_unavailable',
+    );
+  }
+  return report;
 }
 
 /**
@@ -201,17 +247,31 @@ function selectOrgs(storeApi, env) {
 async function reconcileOrg(orgId, options) {
   const { deps, window } = options;
   const recorded = recordedTotals(windowRecords(deps.storeApi, { orgId, ...window }));
-  const secrets = await deps.fetchS2sSecrets({ organizationId: orgId });
-  const secretKey = CONFIG.LLM_GATEWAY_MODES.litellm.secretKey;
-  const platform = await deps.fetchGatewaySpend({
+  const gatewayPromise = (async () => {
+    if (!deps.baseUrl) return deps.fetchGatewaySpend({ orgId, ...window, baseUrl: '' });
+    try {
+      const secrets = await deps.fetchS2sSecrets({ organizationId: orgId });
+      const secretKey = CONFIG.LLM_GATEWAY_MODES.litellm.secretKey;
+      return deps.fetchGatewaySpend({
+        orgId,
+        ...window,
+        baseUrl: deps.baseUrl,
+        key: secrets[secretKey] || '',
+        fetchImpl: deps.fetchImpl,
+        timeoutMs: deps.timeoutMs,
+      });
+    } catch (err) {
+      return { available: false, reason: `gateway_secrets_unavailable: ${err && err.message ? err.message : err}` };
+    }
+  })();
+  const flexpricePromise = deps.fetchFlexpriceSpend({
+    client: deps.flexpriceClient,
+    meter: deps.flexpriceMeter,
     orgId,
     ...window,
-    baseUrl: deps.baseUrl,
-    key: secrets[secretKey] || '',
-    fetchImpl: deps.fetchImpl,
-    timeoutMs: deps.timeoutMs,
   });
-  return buildReport({ orgId, window, platform, recorded });
+  const [platform, flexprice] = await Promise.all([gatewayPromise, flexpricePromise]);
+  return buildReport({ orgId, window, platform, flexprice, recorded });
 }
 
 async function main({
@@ -224,43 +284,52 @@ async function main({
 } = {}) {
   const days = Number(env.RECONCILE_WINDOW_DAYS) || DEFAULT_WINDOW_DAYS;
   const window = isoWindow(days, now);
+  const flexpriceClient = Object.hasOwn(deps, 'flexpriceClient')
+    ? deps.flexpriceClient
+    : (CONFIG.FLEXPRICE.enabled ? createFlexpriceClient({ config: CONFIG.FLEXPRICE }) : null);
   const resolved = {
     storeApi: deps.storeApi || store,
     fetchS2sSecrets: deps.fetchS2sSecrets || fetchS2sSecrets,
     fetchGatewaySpend: deps.fetchGatewaySpend || fetchGatewaySpend,
+    fetchFlexpriceSpend: deps.fetchFlexpriceSpend || fetchFlexpriceSpend,
+    flexpriceClient,
     fetchImpl: deps.fetchImpl,
     baseUrl: deps.baseUrl ?? (CONFIG.LITELLM.url || String(env.LITELLM_URL || '').trim()),
     timeoutMs: deps.timeoutMs,
   };
 
   await initStoreImpl();
+  resolved.flexpriceMeter = deps.flexpriceMeter || await resolveLlmCostMeter(flexpriceClient);
   const orgs = selectOrgs(resolved.storeApi, env);
   logImpl.info(`gateway spend reconcile: ${orgs.length} org(s) over ${window.since.slice(0, 10)}..${window.until.slice(0, 10)}`, {
     gateway: resolved.baseUrl ? 'configured' : 'not configured',
   });
 
   let unavailable = 0;
+  let flexpriceUnavailable = 0;
   for (const orgId of orgs) {
     try {
       const report = await reconcileOrg(orgId, { deps: resolved, window });
       if (!report.platform_says.available) unavailable += 1;
-      // One JSON line per org: the report IS the log line, so Cloud Logging's
-      // log metric can count verdicts without a second sink.
+      if (!report.flexprice_says.available) flexpriceUnavailable += 1;
       write(JSON.stringify(report));
     } catch (err) {
-      // One org's failure must not hide the others' answer.
       unavailable += 1;
+      flexpriceUnavailable += 1;
+      const reason = `reconcile_failed: ${err && err.message ? err.message : err}`;
       write(JSON.stringify({
         orgId,
         window,
-        platform_says: { available: false, reason: `reconcile_failed: ${err && err.message ? err.message : err}` },
+        platform_says: { available: false, reason },
+        flexprice_says: { available: false, reason },
         we_recorded: null,
         delta: { paise: null, verdict: 'reconcile_failed' },
+        flexprice_delta: { paise: null, verdict: 'reconcile_failed' },
       }));
     }
   }
 
-  return { orgs: orgs.length, unavailable, window, days };
+  return { orgs: orgs.length, unavailable, flexpriceUnavailable, window, days };
 }
 
 if (require.main === module) {
@@ -279,6 +348,9 @@ module.exports = {
   windowRecords,
   recordedTotals,
   summarizeSpendLogs,
+  comparison,
+  resolveLlmCostMeter,
+  fetchFlexpriceSpend,
   fetchGatewaySpend,
   buildReport,
   isoWindow,

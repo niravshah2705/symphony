@@ -53,6 +53,14 @@ class Organization:
     # that existing FK — no further change needed for a project to belong to a
     # sub-org.
     parent_org_id: uuid.UUID | None = None
+    # The organization onboarding silently created for a user — the free tier.
+    # This field, not the name and not the `default=true` tag, is the signal:
+    # `OrgUpdate.name` lets any org admin rename itself, and tags are editable by
+    # anyone too, so either of those as the marker is a hole in both directions —
+    # a paying org renames itself to claim the free credit, a free org renames
+    # itself and stops being chargeable. Set once, by onboarding; never settable
+    # through a request schema.
+    is_default: bool = False
 
     @property
     def tags(self) -> list["Tag"]:
@@ -83,6 +91,7 @@ class Organization:
             "applied_tag_ids": [uuid_str(t.id) for t in self.applied_tags],
             "domains": self.domains,
             "parent_org_id": uuid_str(self.parent_org_id),
+            "is_default": bool(self.is_default),
         }
 
     @classmethod
@@ -100,6 +109,11 @@ class Organization:
             substrate_atespace=doc.get("substrate_atespace", ""),
             domains=list(domains) if isinstance(domains, list) else [],
             parent_org_id=to_uuid(doc.get("parent_org_id")),
+            # A document written before this field existed reads as False, which
+            # is the direction that cannot give away money: an old free-tier org
+            # loses its claim on the opening credit rather than a real org
+            # gaining one. Nothing derives the flag from the name or the tag.
+            is_default=bool(doc.get("is_default", False)),
             created_at=doc.get("created_at") or utcnow(),
             updated_at=doc.get("updated_at") or utcnow(),
         )

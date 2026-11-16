@@ -20,7 +20,6 @@ module.exports = {
   pickUsage: usage.pickUsage,
   billingStatus: gate.billingStatus,
   isBillingBlocked: gate.isBillingBlocked,
-  maybeAutoRecharge: recharge.maybeAutoRecharge,
   getEffectiveThresholdPaise: recharge.getEffectiveThresholdPaise,
   notify: notify.notify,
   checkThresholdsAndNotify: notify.checkThresholdsAndNotify,

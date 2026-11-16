@@ -1,12 +1,16 @@
 'use strict';
 
 /**
- * The auto-recharge job: selection, the validate-before-charge gates, the
- * org-service read and the ledger shape. Everything runs against a temp file
- * store and stubbed Cashfree / org-service transports — no network. The Cashfree
- * client is stubbed on the real module, because the job's validation gates and
- * shared-core/recharge both reach it there: stubbing only the job's injected copy
- * would let the two disagree and prove nothing.
+ * The auto-recharge job: selection, the wallet read that every decision starts
+ * from, the org-service read and the alert duty. Everything runs against a temp
+ * file store and stubbed transports — no network, and no FlexPrice.
+ *
+ * What this suite is mostly about is what the job no longer does. It used to run
+ * O(candidates) Cashfree mandate charges and post an `auto_recharge` credit into
+ * the local ledger; the ledger stopped being spendable money, so a charge that
+ * "succeeded" left the tenant billed and still blocked. The job now refuses the
+ * charge with a named reason and alerts instead, and these tests hold both halves
+ * of that: nothing is ever charged, and the org is still told.
  */
 
 const os = require('node:os');
@@ -18,14 +22,12 @@ const assert = require('node:assert/strict');
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-auto-recharge-'));
 process.env.AI_FLEET_DATA_DIR = TMP_DIR;
-// 1000 INR of seed credit so the dataset's initialCreditPaise is reproducible.
+// 1000 INR of opening credit so the dataset's initialCreditPaise is reproducible.
 process.env.INITIAL_CREDIT_INR = '1000';
 
 const store = require('@ai-fleet/shared-core/store');
 const ledger = require('@ai-fleet/shared-core/billing/ledger');
 const notify = require('@ai-fleet/shared-core/billing/notify');
-const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
 const job = require('./auto-recharge-job');
 
 const DATASET = JSON.parse(
@@ -36,32 +38,43 @@ const UUID_B = '6a1d5b22-3d4c-4f60-8b2c-1e2f3a4b5c6d';
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
 /**
- * A dataset org under a fresh id. Balances are ledger-derived, so two tests
- * cannot share one org: the second seed would debit on top of the first.
+ * A dataset org under a fresh id, so tests share the store without sharing an org.
  */
 function freshSpec(index) {
   return { ...DATASET.orgs[index], orgId: crypto.randomUUID() };
 }
 
-/** Seed one dataset org into the store: credit, debit, then its auto-recharge config. */
+/**
+ * The balance the wallet would report for a dataset org: the fixture spends
+ * `debitPaise` off the opening credit. It used to be seeded through the ledger,
+ * which is exactly the number this job is no longer allowed to read.
+ */
+function walletPaiseOf(spec) {
+  return spec.account.initialCreditPaise - spec.account.debitPaise;
+}
+
+/** Seed one dataset org's CONFIG into the store. No balance: there is nowhere to put one. */
 function seedOrg(spec) {
   ledger.ensureAccount(spec.orgId);
-  assert.equal(
-    spec.account.initialCreditPaise,
-    CONFIG.BILLING.initialCreditPaise,
-    `fixture seed credit for "${spec.label}" must match INITIAL_CREDIT_INR`,
-  );
-  ledger.postEntry(spec.orgId, {
-    type: 'usage',
-    amountPaise: -spec.account.debitPaise,
-    description: 'synthetic sandbox usage',
-  });
   return store.upsertBillingAccount(spec.orgId, {
-    autoRecharge: { lastRechargedAt: null, lastAttemptedAt: null, ...spec.account.autoRecharge },
+    initialCreditPaise: spec.account.initialCreditPaise,
+    autoRecharge: { ...ledger.DEFAULT_AUTO_RECHARGE, ...spec.account.autoRecharge },
     alertThresholdsPaise: spec.account.alertThresholdsPaise,
     notifyChannels: { browser: true, email: false, slack: false },
     notifyEmails: ['stale-list-should-be-ignored@example.com'],
   });
+}
+
+/** `deps.fundStatus` standing in for the FlexPrice wallet read. */
+function walletStub(balances = {}) {
+  const reads = [];
+  const fundStatus = async (orgId) => {
+    reads.push(orgId);
+    const raw = balances[orgId];
+    if (raw instanceof Error) throw raw;
+    return { balancePaise: raw === undefined ? null : raw };
+  };
+  return { fundStatus, reads };
 }
 
 /** A fetch stub standing in for the org service: context per org, or 404/503. */
@@ -87,56 +100,18 @@ function orgContextStub(specs, overrides = {}) {
   return { fetchImpl, calls };
 }
 
-/** Patch the REAL Cashfree client, so the job's gates and the charge agree. */
-async function withCashfree(options, run) {
-  const cfg = { subscriptionStatus: 'ACTIVE', paymentStatus: 'SUCCESS', configured: true, ...options };
-  const charges = [];
-  const originals = {
-    getSubscription: cashfreeClient.getSubscription,
-    chargeSubscription: cashfreeClient.chargeSubscription,
-  };
-  const envKeys = ['CASHFREE_APP_ID', 'CASHFREE_SECRET_KEY'];
-  const envBackup = envKeys.map((key) => process.env[key]);
-  if (cfg.configured) {
-    process.env.CASHFREE_APP_ID = 'TEST_SANDBOX_APP_ID';
-    process.env.CASHFREE_SECRET_KEY = 'cfsk_test_placeholder_never_a_real_key';
-  } else {
-    delete process.env.CASHFREE_APP_ID;
-    delete process.env.CASHFREE_SECRET_KEY;
-  }
-  cashfreeClient.getSubscription = async (subscriptionId) => {
-    if (cfg.subscriptionStatus instanceof Error) throw cfg.subscriptionStatus;
-    return { subscription_id: subscriptionId, subscription_status: cfg.subscriptionStatus };
-  };
-  cashfreeClient.chargeSubscription = async ({ subscriptionId, paymentId, amountInr }) => {
-    charges.push({ subscriptionId, paymentId, amountInr });
-    if (cfg.paymentStatus instanceof Error) throw cfg.paymentStatus;
-    return cfg.paymentStatus === null
-      ? {}
-      : { payment_status: cfg.paymentStatus, cf_payment_id: 'cf_test_1' };
-  };
-  try {
-    return await run({ charges });
-  } finally {
-    cashfreeClient.getSubscription = originals.getSubscription;
-    cashfreeClient.chargeSubscription = originals.chargeSubscription;
-    envKeys.forEach((key, i) => {
-      if (envBackup[i] === undefined) delete process.env[key];
-      else process.env[key] = envBackup[i];
-    });
-  }
-}
-
 /**
  * Run the job with its candidate list scoped to `specs`. Every test creates its
  * own orgs, but the store is shared and a previous fixture stays a legitimate
  * candidate; scoping selection here is what makes the assertions per-test
- * instead of suite-order-dependent. The account objects come from the real
- * store, so nothing about the charge/ledger path is mocked.
+ * instead of suite-order-dependent.
  */
-function runJob({ specs = [], env = {}, deps = {}, initStoreImpl } = {}) {
+function runJob({ specs = [], env = {}, wallet, deps = {}, initStoreImpl } = {}) {
   const exitCodes = [];
-  const noAlert = { checkThresholdsAndNotify: async () => null };
+  const alerts = [];
+  const balances = {};
+  for (const spec of specs) balances[spec.orgId] = walletPaiseOf(spec);
+  const stub = wallet || walletStub(balances);
   const storeApi = specs.length ? {
     listBillingAccounts: () => specs.map((spec) => store.getBillingAccount(spec.orgId)).filter(Boolean),
     getBillingAccount: (orgId) => store.getBillingAccount(orgId),
@@ -146,220 +121,163 @@ function runJob({ specs = [], env = {}, deps = {}, initStoreImpl } = {}) {
     env,
     argv: [],
     initStoreImpl: initStoreImpl || (async () => {}),
-    now: Date.now(),
     logImpl: { info() {}, warn() {}, error() {} },
     exit: (code) => exitCodes.push(code),
-    deps: { storeApi, notifyApi: noAlert, ...deps },
-  }).then((summary) => ({ summary, exitCodes }));
+    deps: {
+      storeApi,
+      fundStatus: stub.fundStatus,
+      notifyApi: {
+        checkThresholdsAndNotify: async (account, options) => {
+          alerts.push({ account, balancePaise: options.balancePaise });
+          return null;
+        },
+      },
+      ...deps,
+    },
+  }).then((summary) => ({ summary, exitCodes, alerts, walletReads: stub.reads }));
 }
 
-/** The usual deps for a charged run: real recharge/notify, stubbed org service. */
+/** The usual deps for a run that reaches the org service. */
 function transportDeps(org) {
   return { fetchImpl: org.fetchImpl, baseUrl: 'https://org.test', token: 's2s-token' };
 }
 
 // --- selection -----------------------------------------------------------------
 
-test('only opted-in, below-threshold orgs are selected', () => {
+test('candidates come from config, because the balance is not in the store', () => {
   const accounts = [
-    {
-      id: UUID_B,
-      balancePaise: 15000,
-      initialCreditPaise: 100000,
-      autoRecharge: { enabled: true, mode: 'percentage', thresholdPercent: 20, amountPaise: 25000 },
-    },
-    {
-      id: '8c3f7d44-5f6e-4b82-ad4e-3a4b5c6d7e8f',
-      balancePaise: 90000,
-      initialCreditPaise: 100000,
-      autoRecharge: { enabled: true, mode: 'amount', thresholdPaise: 40000, amountPaise: 50000 },
-    },
-    { id: '7b2e6c33-4e5d-4a71-9c3d-2f3a4b5c6d7e', balancePaise: 100, autoRecharge: { enabled: false } },
-    {
-      id: '__shared__',
-      balancePaise: 0,
-      initialCreditPaise: 100000,
-      autoRecharge: { enabled: true, mode: 'amount', thresholdPaise: 40000, amountPaise: 50000 },
-    },
+    // Opted in: a charge candidate whatever its wallet says.
+    { id: UUID_B, autoRecharge: { enabled: true, mode: 'percentage', thresholdPercent: 20, amountPaise: 25000 } },
+    // Solvent-looking on paper, but it has thresholds, so it is an alert candidate.
+    { id: '8c3f7d44-5f6e-4b82-ad4e-3a4b5c6d7e8f', alertThresholdsPaise: [10000, 0], autoRecharge: { enabled: false } },
+    // Asked for nothing: no opt-in, no thresholds.
+    { id: '7b2e6c33-4e5d-4a71-9c3d-2f3a4b5c6d7e', autoRecharge: { enabled: false }, alertThresholdsPaise: [] },
+    // The shared stack's pseudo-org has no tenant to validate and no admin to notify.
+    { id: '__shared__', autoRecharge: { enabled: true, thresholdPaise: 40000 } },
   ];
   const selected = job.selectCandidates({ listBillingAccounts: () => accounts }).map((a) => a.id);
-  // The percentage org sits below 20% of its initial credit; the well-funded and
-  // opted-out orgs are not; the shared pseudo-org has no tenant to validate.
-  assert.deepEqual(selected, [UUID_B]);
-  assert.equal(job.chargeBelowThreshold(accounts[1]), false);
-  assert.equal(job.alertSuspect(accounts[1]), false);
+  assert.deepEqual(selected, [UUID_B, '8c3f7d44-5f6e-4b82-ad4e-3a4b5c6d7e8f']);
 });
 
-test('an org with a configured alert threshold and a low balance is a candidate', () => {
-  const account = { id: UUID_B, balancePaise: 5000, alertThresholdsPaise: [10000, 0] };
-  assert.equal(job.chargeBelowThreshold(account), false);
-  assert.equal(job.alertSuspect(account), true);
-  assert.deepEqual(job.selectCandidates({ listBillingAccounts: () => [account] }).map((a) => a.id), [UUID_B]);
+test('a balance this job cannot read triggers neither a charge nor an alert', () => {
+  const optedIn = { autoRecharge: { enabled: true, mode: 'amount', thresholdPaise: 40000 } };
+  for (const balance of [null, undefined]) {
+    assert.equal(job.chargeBelowThreshold(optedIn, balance), false, `unknown balance ${String(balance)} is not a trigger`);
+    assert.equal(job.alertSuspect({ alertThresholdsPaise: [10000, 0] }, balance), false);
+  }
+  assert.equal(job.chargeBelowThreshold(optedIn, 39999), true);
+  assert.equal(job.chargeBelowThreshold(optedIn, 40000), false, 'the trigger is strictly below');
+  assert.equal(job.chargeBelowThreshold({ autoRecharge: { enabled: false, thresholdPaise: 40000 } }, 1), false,
+    'an org that declined is never a charge candidate, however dry its wallet');
+  assert.equal(job.alertSuspect({ alertThresholdsPaise: [10000, 0] }, 10001), false);
+  assert.equal(job.alertSuspect({ alertThresholdsPaise: [] }, 1), false, 'no thresholds configured, nothing to cross');
 });
 
-// --- the happy path, per mode ---------------------------------------------------
+// --- the charge duty: reported, never executed -----------------------------------
 
-test('a below-threshold org in amount mode is charged once, with an auto_recharge ledger entry', async () => {
+test('a below-trigger org is reported due and charged nothing', async () => {
+  const spec = freshSpec(0); // amount mode, trigger 40000, wallet 12000
+  seedOrg(spec);
+  const org = orgContextStub([spec]);
+
+  const { summary, exitCodes, alerts } = await runJob({ specs: [spec], deps: transportDeps(org) });
+
+  assert.equal(summary.due, 1);
+  assert.equal(summary.checked, 1);
+  assert.equal(exitCodes[exitCodes.length - 1], 0);
+  // The reason is the point of the line an operator reads: which half is missing.
+  assert.equal(job.rechargeIsNotChargeable(spec.account.autoRecharge),
+    'the mandate is not settled into the FlexPrice wallet; add credits from the billing UI');
+  // The alert duty still runs, so the tenant is told rather than merely logged.
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].balancePaise, 12000, 'the alert compares against the wallet number');
+  assert.deepEqual(alerts[0].account.notifyEmails, ['ops@amount.sandbox.test'],
+    'recipients come from the org service, not the account’s stale list');
+  assert.equal(alerts[0].account.notifyChannels.email, true);
+  // The S2S call is the org service's internal route, token-gated.
+  assert.match(org.calls[0].url, new RegExp(`/api/v1/internal/orgs/${spec.orgId}/billing-context$`));
+  assert.equal(org.calls[0].headers['x-internal-token'], 's2s-token');
+});
+
+test('percentage mode compares the wallet against a share of the opening credit', async () => {
+  const spec = freshSpec(1); // 20% of 100000 = 20000; wallet 15000 → due
+  seedOrg(spec);
+  const org = orgContextStub([spec]);
+
+  const { summary } = await runJob({ specs: [spec], deps: transportDeps(org) });
+
+  assert.equal(summary.due, 1);
+  // Raise the wallet above the trigger and the same org is no longer due.
+  const { summary: funded } = await runJob({
+    specs: [spec],
+    wallet: walletStub({ [spec.orgId]: 25000 }),
+    deps: transportDeps(org),
+  });
+  assert.equal(funded.due, 0);
+});
+
+test('an org that declined auto-recharge is still alerted when its wallet drops', async () => {
+  const spec = freshSpec(2); // enabled: false, wallet 100, thresholds [40000, 0]
+  seedOrg(spec);
+  const org = orgContextStub([spec]);
+
+  const { summary, alerts } = await runJob({ specs: [spec], deps: transportDeps(org) });
+
+  assert.equal(summary.due, 0);
+  assert.equal(summary.checked, 1);
+  assert.equal(alerts.length, 1, 'declining to be auto-charged is not declining to be told');
+});
+
+test('an unreadable wallet is neither a trigger nor a crossing', async () => {
   const spec = freshSpec(0);
   seedOrg(spec);
   const org = orgContextStub([spec]);
 
-  await withCashfree({}, async ({ charges }) => {
-    const { summary, exitCodes } = await runJob({ specs: [spec], deps: transportDeps(org) });
-
-    assert.equal(summary.charged, 1);
-    assert.equal(summary.skipped, 0);
-    assert.equal(exitCodes[exitCodes.length - 1], 0);
-    assert.equal(charges.length, 1, 'exactly one charge request');
-    assert.equal(charges[0].subscriptionId, spec.account.autoRecharge.cashfreeSubscriptionId);
-    assert.equal(charges[0].amountInr, spec.account.autoRecharge.amountPaise / 100);
-
-    const rechargeEntry = store.listLedgerEntries({ orgId: spec.orgId }).find((e) => e.type === 'auto_recharge');
-    assert.ok(rechargeEntry, 'the recharge is on the ledger with the canonical type');
-    assert.equal(rechargeEntry.amountPaise, 50000);
-    assert.equal(rechargeEntry.meta.simulated, false, 'a real charge is never reported as simulated');
-    assert.equal(rechargeEntry.meta.cfPaymentId, 'cf_test_1');
-    assert.equal(store.getBillingAccount(spec.orgId).balancePaise, 62000);
-    assert.ok(store.getBillingAccount(spec.orgId).autoRecharge.lastRechargedAt, 'cooldown stamped');
-
-    // The S2S call is the org service's internal route, token-gated.
-    assert.match(org.calls[0].url, new RegExp(`/api/v1/internal/orgs/${spec.orgId}/billing-context$`));
-    assert.equal(org.calls[0].headers['x-internal-token'], 's2s-token');
+  const { summary, alerts } = await runJob({
+    specs: [spec],
+    wallet: walletStub({}), // no balance for this org → the gate's `unknown`
+    deps: transportDeps(org),
   });
+
+  assert.equal(summary.unread, 1);
+  assert.equal(summary.checked, 0);
+  assert.equal(summary.due, 0);
+  assert.equal(alerts.length, 0, 'a balance that could not be read must not be drawn as zero');
+  assert.equal(org.calls.length, 0, 'nothing to validate against, so no org read either');
 });
 
-test('percentage mode charges the configured top-up, not an absolute threshold', async () => {
-  const spec = freshSpec(1);
-  seedOrg(spec);
-  const org = orgContextStub([spec]);
-
-  await withCashfree({}, async ({ charges }) => {
-    const { summary } = await runJob({ specs: [spec], deps: transportDeps(org) });
-
-    assert.equal(summary.charged, 1);
-    assert.equal(charges[0].amountInr, 250, spec.account.autoRecharge.amountPaise / 100);
-    assert.equal(store.getBillingAccount(spec.orgId).balancePaise, 40000);
-  });
-});
-
-test('an org that declined auto-recharge is never charged', async () => {
-  const spec = freshSpec(2);
-  seedOrg(spec);
-  const org = orgContextStub([spec]);
-
-  await withCashfree({}, async ({ charges }) => {
-    const { summary } = await runJob({ specs: [spec], deps: transportDeps(org) });
-
-    assert.equal(summary.charged, 0);
-    assert.equal(charges.length, 0);
-    assert.equal(store.listLedgerEntries({ orgId: spec.orgId }).some((e) => e.type === 'auto_recharge'), false);
-  });
-});
-
-// --- the validate-before-charge gates -------------------------------------------
-
-test('dry run validates end to end and charges nothing', async () => {
+test('dry run reads, validates and reports due — then alerts nobody', async () => {
   const spec = freshSpec(0);
   seedOrg(spec);
   const org = orgContextStub([spec]);
 
-  await withCashfree({}, async ({ charges }) => {
-    const { summary } = await runJob({
-      specs: [spec],
-      env: { BILLING_JOB_DRY_RUN: 'true' },
-      deps: {
-        ...transportDeps(org),
-        notifyApi: { checkThresholdsAndNotify: async () => { throw new Error('must not notify in a dry run'); } },
-      },
-    });
-
-    assert.equal(summary.dryRun, true);
-    assert.equal(summary.charged, 0);
-    assert.equal(charges.length, 0);
-    assert.equal(org.calls.length, 1, 'the org read still ran, so a dry run proves the wiring');
-    assert.equal(store.getBillingAccount(spec.orgId).balancePaise, 12000);
+  const { summary, alerts } = await runJob({
+    specs: [spec],
+    env: { BILLING_JOB_DRY_RUN: 'true' },
+    deps: {
+      ...transportDeps(org),
+      notifyApi: { checkThresholdsAndNotify: async () => { throw new Error('must not notify in a dry run'); } },
+    },
   });
+
+  assert.equal(summary.dryRun, true);
+  assert.equal(summary.due, 1);
+  assert.equal(org.calls.length, 1, 'the org read still ran, so a dry run proves the wiring');
+  assert.equal(alerts.length, 0);
 });
 
-test('a cancelled mandate is skipped instead of charged', async () => {
-  const spec = freshSpec(0);
-  seedOrg(spec);
-  const org = orgContextStub([spec]);
-
-  await withCashfree({ subscriptionStatus: 'CANCELLED' }, async ({ charges }) => {
-    const { summary } = await runJob({ specs: [spec], deps: transportDeps(org) });
-
-    assert.equal(summary.charged, 0);
-    assert.equal(summary.skipped, 1);
-    assert.equal(charges.length, 0);
-    assert.equal(store.getBillingAccount(spec.orgId).balancePaise, 12000, 'no phantom credit');
-  });
-});
-
-test('an unsettled payment_status credits nothing and blocks a retry', async () => {
-  const spec = freshSpec(0);
-  seedOrg(spec);
-  const org = orgContextStub([spec]);
-
-  await withCashfree({ paymentStatus: 'FAILED' }, async () => {
-    const { summary } = await runJob({ specs: [spec], deps: transportDeps(org) });
-
-    assert.equal(summary.charged, 0);
-    assert.equal(store.getBillingAccount(spec.orgId).balancePaise, 12000, 'a failed charge must not fund the wallet');
-    assert.ok(store.getBillingAccount(spec.orgId).autoRecharge.lastAttemptedAt, 'attempt stamped');
-  });
-
-  // Second run, inside the cooldown: not even a charge request is issued.
-  await withCashfree({ paymentStatus: 'SUCCESS' }, async ({ charges }) => {
-    const { summary } = await runJob({ specs: [spec], deps: transportDeps(org) });
-
-    assert.equal(summary.skipped, 1);
-    assert.equal(charges.length, 0);
-  });
-});
-
-test('missing Cashfree credentials skip the charge but still alert the admins', async () => {
-  const spec = freshSpec(0);
-  seedOrg(spec);
-  const org = orgContextStub([spec]);
-  const addressed = [];
-
-  await withCashfree({ configured: false }, async ({ charges }) => {
-    const { summary } = await runJob({
-      specs: [spec],
-      deps: {
-        ...transportDeps(org),
-        notifyApi: {
-          checkThresholdsAndNotify: async (account) => {
-            addressed.push(account);
-            return 0;
-          },
-        },
-      },
-    });
-
-    assert.equal(summary.charged, 0);
-    assert.equal(summary.skipped, 1);
-    assert.equal(summary.alerted, 1);
-    assert.equal(charges.length, 0);
-    // Recipients come from the org service, not the account's stale list.
-    assert.deepEqual(addressed[0].notifyEmails, ['ops@amount.sandbox.test']);
-    assert.equal(addressed[0].notifyChannels.email, true);
-  });
-});
+// --- the org-service gates -------------------------------------------------------
 
 test('an orphan billing account is skipped when the org service says 404', async () => {
   const spec = freshSpec(0);
   seedOrg(spec);
   const org = orgContextStub([spec], { [spec.orgId]: { status: 404 } });
 
-  await withCashfree({}, async ({ charges }) => {
-    const { summary } = await runJob({ specs: [spec], deps: transportDeps(org) });
+  const { summary, alerts } = await runJob({ specs: [spec], deps: transportDeps(org) });
 
-    assert.equal(summary.charged, 0);
-    assert.equal(summary.checked, 0);
-    assert.equal(charges.length, 0);
-  });
+  assert.equal(summary.checked, 0);
+  assert.equal(summary.due, 0);
+  assert.equal(alerts.length, 0);
 });
 
 test('a failing org-service call skips the org without failing the run', async () => {
@@ -367,13 +285,10 @@ test('a failing org-service call skips the org without failing the run', async (
   seedOrg(spec);
   const org = orgContextStub([spec], { [spec.orgId]: { status: 503 } });
 
-  await withCashfree({}, async ({ charges }) => {
-    const { summary, exitCodes } = await runJob({ specs: [spec], deps: transportDeps(org) });
+  const { summary, exitCodes } = await runJob({ specs: [spec], deps: transportDeps(org) });
 
-    assert.equal(summary.charged, 0);
-    assert.equal(charges.length, 0);
-    assert.equal(exitCodes[exitCodes.length - 1], 0, 'one bad tenant must not burn job retries');
-  });
+  assert.equal(summary.due, 0);
+  assert.equal(exitCodes[exitCodes.length - 1], 0, 'one bad tenant must not burn job retries');
 });
 
 test('an org with no active administrator is neither charged nor alerted', async () => {
@@ -381,106 +296,105 @@ test('an org with no active administrator is neither charged nor alerted', async
   seedOrg(spec);
   const org = orgContextStub([spec], { [spec.orgId]: { admins: [] } });
 
-  await withCashfree({}, async ({ charges }) => {
-    const { summary } = await runJob({
-      specs: [spec],
-      deps: {
-        ...transportDeps(org),
-        notifyApi: { checkThresholdsAndNotify: async () => { throw new Error('nobody to notify'); } },
-      },
-    });
-
-    assert.equal(summary.charged, 0);
-    assert.equal(summary.alerted, 0);
-    assert.equal(charges.length, 0);
+  const { summary, alerts } = await runJob({
+    specs: [spec],
+    deps: {
+      ...transportDeps(org),
+      notifyApi: { checkThresholdsAndNotify: async () => { throw new Error('nobody to notify'); } },
+    },
   });
+
+  assert.equal(summary.checked, 0);
+  assert.equal(alerts.length, 0);
 });
 
-test('the cooldown gate is evaluated before any network call', async () => {
+test('an org that is neither due nor a crossing costs no org-service read', async () => {
   const spec = freshSpec(0);
   seedOrg(spec);
-  store.upsertBillingAccount(spec.orgId, {
-    autoRecharge: { ...spec.account.autoRecharge, lastRechargedAt: new Date().toISOString() },
-    alertThresholdsPaise: [],
-  });
   const org = orgContextStub([spec]);
 
-  await withCashfree({}, async ({ charges }) => {
-    const { summary } = await runJob({ specs: [spec], deps: transportDeps(org) });
-
-    assert.equal(summary.skipped, 1);
-    assert.equal(charges.length, 0);
-    assert.equal(org.calls.length, 0, 'no org read for an org that can neither be charged nor alerted');
+  const { walletReads } = await runJob({
+    specs: [spec],
+    wallet: walletStub({ [spec.orgId]: 90000 }), // above the 40000 trigger and the 40000/0 thresholds
+    deps: transportDeps(org),
   });
+
+  assert.equal(walletReads.length, 1, 'the balance is one read per candidate');
+  assert.equal(org.calls.length, 0, 'the S2S read is only for an org that needs something');
 });
 
-// --- the alert duty -------------------------------------------------------------
+// --- the alert duty, end to end through the real notifier ------------------------
 
 test('a real threshold crossing persists lastAlertedThresholdPaise', async () => {
-  const spec = freshSpec(0);
-  // Exhausted balance with auto-recharge OFF: an alert-only candidate.
-  store.upsertBillingAccount(spec.orgId, {
-    balancePaise: 0,
-    initialCreditPaise: spec.account.initialCreditPaise,
-    alertThresholdsPaise: spec.account.alertThresholdsPaise,
-    lastAlertedThresholdPaise: null,
-    notifyChannels: { browser: false, email: true, slack: false },
-    autoRecharge: { ...spec.account.autoRecharge, enabled: false },
-  });
+  const spec = freshSpec(2);
+  seedOrg(spec);
+  store.upsertBillingAccount(spec.orgId, { lastAlertedThresholdPaise: null });
   const org = orgContextStub([spec]);
 
-  await withCashfree({}, async ({ charges }) => {
-    const { summary } = await runJob({
-      specs: [spec],
-      deps: { ...transportDeps(org), notifyApi: notify },
-    });
-
-    assert.equal(summary.alerted, 1);
-    assert.equal(summary.charged, 0);
-    assert.equal(charges.length, 0);
-    assert.equal(store.getBillingAccount(spec.orgId).lastAlertedThresholdPaise, 0);
+  const { summary } = await runJob({
+    specs: [spec],
+    deps: { ...transportDeps(org), notifyApi: notify },
   });
+
+  assert.equal(summary.alerted, 1);
+  assert.equal(summary.due, 0);
+  // ₹1.00 of a 40000/0 policy has crossed the low level, not exhaustion.
+  assert.equal(store.getBillingAccount(spec.orgId).lastAlertedThresholdPaise, 40000);
 });
 
-// --- run-level behaviour --------------------------------------------------------
+// --- the mandate reasons ---------------------------------------------------------
+
+test('every reason a due recharge cannot be charged is named', () => {
+  const base = { enabled: true, mode: 'amount', thresholdPaise: 40000, amountPaise: 50000 };
+  assert.match(job.rechargeIsNotChargeable({ ...base }), /no ON_DEMAND subscription/);
+  assert.match(job.rechargeIsNotChargeable({ ...base, cashfreeSubscriptionId: 'sub_x', amountPaise: 0 }),
+    /not positive/);
+  // A recorded, positive mandate is the case that still cannot be settled: the
+  // charge would move money out and credit nothing.
+  assert.match(job.rechargeIsNotChargeable({ ...base, cashfreeSubscriptionId: 'sub_x' }),
+    /not settled into the FlexPrice wallet/);
+});
+
+// --- run-level behaviour ---------------------------------------------------------
 
 test('a run where every org errored exits non-zero', async () => {
   const spec = freshSpec(0);
   seedOrg(spec);
   const org = orgContextStub([spec]);
 
-  await withCashfree({}, async () => {
-    const { summary, exitCodes } = await runJob({
-      specs: [spec],
-      deps: {
-        ...transportDeps(org),
-        rechargeApi: { maybeAutoRecharge: async () => { throw new Error('ledger write failed'); } },
-      },
-    });
-
-    assert.equal(summary.charged, 0);
-    assert.equal(exitCodes[exitCodes.length - 1], 1);
+  const { summary, exitCodes } = await runJob({
+    specs: [spec],
+    wallet: walletStub({ [spec.orgId]: new Error('flexprice timeout') }),
+    deps: transportDeps(org),
   });
+
+  assert.equal(summary.due, 0);
+  assert.equal(exitCodes[exitCodes.length - 1], 1, 'an all-failed run must be visible to the scheduler');
 });
 
 test('a store that cannot hydrate is fatal and touches nothing', async () => {
-  await withCashfree({}, async ({ charges }) => {
-    const { summary, exitCodes } = await runJob({
-      initStoreImpl: async () => { throw new Error('firestore unreachable'); },
-    });
-
-    assert.equal(summary.fatal, 'store init failed');
-    assert.deepEqual(exitCodes, [1]);
-    assert.equal(charges.length, 0);
+  const { summary, exitCodes } = await runJob({
+    initStoreImpl: async () => { throw new Error('firestore unreachable'); },
   });
+
+  assert.equal(summary.fatal, 'store init failed');
+  assert.deepEqual(exitCodes, [1]);
 });
 
-test('recharge is not reachable from the 5-minute sweep any more', () => {
-  // The job owns the money path. If the sweep grew a recharge call back, this
-  // suite's whole premise (hourly, validated, once per org) is undone.
+// --- the shape of the job --------------------------------------------------------
+
+test('the job holds no charge path and no 5-minute sweep reaches it', () => {
+  // Two source gates, because both halves are "the thing that must not come back":
+  // a charge call here would bill a tenant for credits nothing grants, and a
+  // recharge on the billing tick re-charges far below the intended cadence.
+  const jobSource = fs.readFileSync(path.join(__dirname, 'auto-recharge-job.js'), 'utf8');
+  for (const banned of ['chargeSubscription', 'addLedgerEntry', 'maybeAutoRecharge', 'postEntry']) {
+    assert.doesNotMatch(jobSource, new RegExp(banned), `the job must not touch ${banned}`);
+  }
   const sweepSource = fs.readFileSync(
     path.join(__dirname, '..', '..', '..', 'packages', 'shared-core', 'src', 'billing', 'sweep.js'),
     'utf8',
   );
-  assert.doesNotMatch(sweepSource, /maybeAutoRecharge/, 'sweep.js must not auto-recharge');
+  assert.doesNotMatch(sweepSource, /autoRecharge|require\('\.\/recharge'\)/,
+    'the 5-minute sweep must not reach the auto-recharge logic');
 });

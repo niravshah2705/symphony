@@ -431,6 +431,13 @@ jobs:
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
             -backend-config="prefix=${TF_STATE_PREFIX}"
 
+      - name: Terraform fmt and validate
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -euo pipefail
+          terraform fmt -check -recursive -diff -no-color
+          terraform validate -no-color
+
       - name: Prepare internal S2S token
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -475,6 +482,11 @@ jobs:
             -var="project_id=${PROJECT_ID}" \
             -var="region=${REGION}" \
             -var="spa_bucket_name=${{ vars.SPA_BUCKET }}" \
+            -var="flexprice_base_url=${{ vars.FLEXPRICE_BASE_URL }}" \
+            -var="flexprice_environment_id=${{ vars.FLEXPRICE_ENVIRONMENT_ID }}" \
+            -var="flexprice_supplier_state_code=${{ vars.FLEXPRICE_SUPPLIER_STATE_CODE }}" \
+            -target='google_secret_manager_secret.flexprice["flexprice-api-key-ingest"]' \
+            -target='google_secret_manager_secret.flexprice["flexprice-api-key-money"]' \
             -target=google_secret_manager_secret.stream_token_secret \
             -target=google_secret_manager_secret.identity_hash_pepper \
             -target=google_secret_manager_secret.cashfree_app_id \
@@ -506,6 +518,23 @@ jobs:
           seed_secret identity-hash-pepper "" allow-random
           seed_secret cashfree-app-id "${CASHFREE_APP_ID:-}"
           seed_secret cashfree-secret-key "${CASHFREE_SECRET_KEY:-}"
+
+      # FlexPrice keys are added out of band by an operator. Check only that an
+      # enabled version exists; never read the value.
+      - name: Verify FlexPrice secret versions
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          for id in flexprice-api-key-ingest flexprice-api-key-money; do
+            v="$(gcloud secrets versions list "$id" --project "$PROJECT_ID" \
+              --filter=state:enabled --limit=1 --format='value(name)')"
+            if [ -z "$v" ]; then
+              echo "::error::$id has no enabled version; add one with 'gcloud secrets versions add $id --data-file=-'."
+              exit 1
+            fi
+            echo "  $id: enabled version present"
+          done
 
       - name: Terraform apply
         working-directory: ${{ env.TF_DIR }}
@@ -561,6 +590,9 @@ jobs:
             -var="email_public_app_url=${{ vars.EMAIL_PUBLIC_APP_URL }}"
             -var="cashfree_env=${{ vars.CASHFREE_ENV || 'sandbox' }}"
             -var="cashfree_base_url=${{ vars.CASHFREE_BASE_URL || 'https://sandbox.cashfree.com' }}"
+            -var="flexprice_base_url=${{ vars.FLEXPRICE_BASE_URL }}"
+            -var="flexprice_environment_id=${{ vars.FLEXPRICE_ENVIRONMENT_ID }}"
+            -var="flexprice_supplier_state_code=${{ vars.FLEXPRICE_SUPPLIER_STATE_CODE }}"
           )
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
@@ -603,7 +635,12 @@ jobs:
             fi
           fi
 
-          terraform apply -input=false -auto-approve "${apply_args[@]}"
+          terraform plan -input=false -no-color -out=primary.tfplan "${apply_args[@]}" | tee primary-plan.txt
+          {
+            echo '### Primary Terraform plan'
+            grep -E '^Plan:|^No changes' primary-plan.txt || echo 'No summary line found.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          terraform apply -input=false primary.tfplan
 
       - name: Outputs
         working-directory: ${{ env.TF_DIR }}

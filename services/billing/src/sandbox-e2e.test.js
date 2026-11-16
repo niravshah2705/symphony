@@ -71,16 +71,19 @@ test('the sandbox credentials reach Cashfree and return a parseable order', { sk
 test('a dummy org without a signed mandate is validated and NOT charged', { skip: SKIP }, async () => {
   const spec = DATASET.orgs[0];
   ledger.ensureAccount(spec.orgId);
-  assert.notEqual(
-    job.rechargeBlockers(spec.orgId, { ...spec.account.autoRecharge, cashfreeSubscriptionId: null },
-      { cashfreeApi: cashfreeClient }),
-    null,
-    'no mandate on file must block the charge before any call is made',
+  // The job charges nothing at all today, and a missing mandate is the first reason
+  // it says so (`recharge.js`): the credit half of the old path wrote to a ledger
+  // that is no longer spendable money, so the mandate is left alone.
+  assert.match(
+    job.rechargeIsNotChargeable({ ...spec.account.autoRecharge, cashfreeSubscriptionId: null }),
+    /no ON_DEMAND subscription/,
+    'no mandate on file must be named before anything is attempted',
   );
+  assert.match(job.rechargeIsNotChargeable(spec.account.autoRecharge), /not settled into the FlexPrice wallet/);
 
   // The dataset's subscription id is a fixture, not a mandate this App ID owns.
-  // Cashfree answers 404, which is exactly what the job's gate turns into a
-  // skip — the proof that a dummy org can never be charged for real.
+  // Cashfree answers 404, which is the proof that a dummy org can never be charged
+  // for real even once the settlement path exists.
   await assert.rejects(
     () => cashfreeClient.getSubscription(spec.account.autoRecharge.cashfreeSubscriptionId),
     /404|not found/i,

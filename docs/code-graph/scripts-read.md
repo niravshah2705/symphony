@@ -4,20 +4,42 @@
 
 ## Overview
 
-Community of 4 nodes
+Community of 26 nodes
 
-- **Size**: 4 nodes
-- **Cohesion**: 0.1091
+- **Size**: 26 nodes
+- **Cohesion**: 0.3940
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:balance thresholds are mirrored from the ledger, never copied into HCL@L72 | Test | ./deploy/gcp/observability-config.test.js | 72-93 |
-| readThresholds | Function | ./scripts/gen-observability-inputs.js | 30-43 |
-| serialize | Function | ./scripts/gen-observability-inputs.js | 45-49 |
-| main | Function | ./scripts/gen-observability-inputs.js | 51-68 |
+| log | Function | ./scripts/flexprice-helm.js | 68-68 |
+| step | Function | ./scripts/flexprice-helm.js | 69-69 |
+| die | Function | ./scripts/flexprice-helm.js | 70-70 |
+| run | Function | ./scripts/flexprice-helm.js | 80-98 |
+| redact | Function | ./scripts/flexprice-helm.js | 103-106 |
+| ignore | Function | ./scripts/flexprice-helm.js | 107-107 |
+| readVersionField | Function | ./scripts/flexprice-helm.js | 109-112 |
+| loadIntoCluster | Function | ./scripts/flexprice-helm.js | 130-153 |
+| preflight | Function | ./scripts/flexprice-helm.js | 157-202 |
+| secrets | Function | ./scripts/flexprice-helm.js | 206-237 |
+| stageChart | Function | ./scripts/flexprice-helm.js | 250-268 |
+| readChartVersion | Function | ./scripts/flexprice-helm.js | 270-273 |
+| helmPhase | Function | ./scripts/flexprice-helm.js | 280-301 |
+| relaxInfraProbes | Function | ./scripts/flexprice-helm.js | 318-342 |
+| registerTemporalNamespace | Function | ./scripts/flexprice-helm.js | 354-376 |
+| healPendingRelease | Function | ./scripts/flexprice-helm.js | 383-393 |
+| whyNotReady | Function | ./scripts/flexprice-helm.js | 395-414 |
+| infra | Function | ./scripts/flexprice-helm.js | 416-429 |
+| dbinit | Function | ./scripts/flexprice-helm.js | 431-441 |
+| temporal | Function | ./scripts/flexprice-helm.js | 443-453 |
+| migration | Function | ./scripts/flexprice-helm.js | 455-460 |
+| app | Function | ./scripts/flexprice-helm.js | 462-471 |
+| verify | Function | ./scripts/flexprice-helm.js | 481-568 |
+| note | Function | ./scripts/flexprice-helm.js | 485-488 |
+| api | Function | ./scripts/flexprice-helm.js | 503-511 |
+| pgq | Function | ./scripts/flexprice-helm.js | 546-547 |
 
 ## Execution Flows
 
@@ -27,29 +49,22 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `readFileSync` (4 edge(s))
-- `doesNotMatch` (4 edge(s))
-- `join` (3 edge(s))
-- `match` (2 edge(s))
-- `log` (2 edge(s))
-- `equal` (1 edge(s))
-- `deepEqual` (1 edge(s))
-- `parse` (1 edge(s))
-- `includes` (1 edge(s))
-- `existsSync` (1 edge(s))
-- `error` (1 edge(s))
-- `exit` (1 edge(s))
-- `writeFileSync` (1 edge(s))
-- `exec` (1 edge(s))
-- `map` (1 edge(s))
+- `split` (16 edge(s))
+- `join` (14 edge(s))
+- `trim` (12 edge(s))
+- `filter` (9 edge(s))
+- `slice` (9 edge(s))
+- `test` (6 edge(s))
+- `String` (4 edge(s))
+- `execFileSync` (4 edge(s))
+- `startsWith` (4 edge(s))
+- `includes` (3 edge(s))
+- `readFileSync` (3 edge(s))
+- `Number` (3 edge(s))
+- `fetch` (2 edge(s))
+- `timeout` (2 edge(s))
+- `text` (2 edge(s))
 
 ### Incoming
 
-- `./scripts/gen-observability-inputs.js` (6 edge(s))
-- `doesNotMatch` (4 edge(s))
-- `readFileSync` (2 edge(s))
-- `match` (2 edge(s))
-- `./deploy/gcp/observability-config.test.js` (1 edge(s))
-- `equal` (1 edge(s))
-- `deepEqual` (1 edge(s))
-- `parse` (1 edge(s))
+- `./scripts/flexprice-helm.js` (60 edge(s))

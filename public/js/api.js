@@ -577,13 +577,20 @@ export const api = {
     getUsage: (groupBy = 'project', period = 'week') =>
       request(`/billing/usage?groupBy=${encodeURIComponent(groupBy)}&period=${encodeURIComponent(period)}`),
     getTaskUsage: (taskId) => request(`/billing/usage/task/${encodeURIComponent(taskId)}`),
-    getLedger: (limit = 50) => request(`/billing/ledger?limit=${encodeURIComponent(limit)}`),
-    recharge: (amountInr) => request('/billing/recharge', { method: 'POST', body: JSON.stringify({ amountInr }) }),
+    // POST /billing/recharge is a QUOTE: it returns the GST breakdown and credits
+    // nothing. Credit only arrives from a settle of an order the gateway confirms,
+    // so nothing here may be labelled "add credits".
+    rechargeQuote: (amountInr, couponBps) =>
+      request('/billing/recharge', { method: 'POST', body: JSON.stringify({ amountInr, ...(couponBps ? { couponBps } : {}) }) }),
+    createRechargeOrder: (payload = {}) => request('/billing/recharge/create-order', { method: 'POST', body: JSON.stringify(payload) }),
+    settleRecharge: (orderId) => request('/billing/recharge/settle', { method: 'POST', body: JSON.stringify({ orderId }) }),
     updateConfig: (payload) => request('/billing/config', { method: 'PUT', body: JSON.stringify(payload) }),
     createCashfreeMandate: (payload = {}) => request('/billing/cashfree/create-mandate', { method: 'POST', body: JSON.stringify(payload) }),
     verifyCashfreeMandate: (subscriptionId) => request('/billing/cashfree/verify-mandate', { method: 'POST', body: JSON.stringify({ subscriptionId }) }),
     createCashfreeOrder: (payload = {}) => request('/billing/cashfree/create-order', { method: 'POST', body: JSON.stringify(payload) }),
     verifyCashfreeOrder: (orderId) => request('/billing/cashfree/verify-order', { method: 'POST', body: JSON.stringify({ orderId }) }),
+    createRazorpayOrder: (payload = {}) => request('/billing/razorpay/create-order', { method: 'POST', body: JSON.stringify(payload) }),
+    verifyRazorpayOrder: (payload = {}) => request('/billing/razorpay/verify-order', { method: 'POST', body: JSON.stringify(payload) }),
   },
 
   identity: {

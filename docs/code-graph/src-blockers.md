@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 25 nodes
+Community of 24 nodes
 
-- **Size**: 25 nodes
-- **Cohesion**: 0.2459
+- **Size**: 24 nodes
+- **Cohesion**: 0.2225
 - **Dominant Language**: javascript
 
 ## Members
@@ -33,7 +33,6 @@ Community of 25 nodes
 | transportDeps | Function | ./services/billing/src/auto-recharge-job.test.js | 157-159 |
 | test:only opted-in, below-threshold orgs are selected@L163 | Test | ./services/billing/src/auto-recharge-job.test.js | 163-191 |
 | test:an org with a configured alert threshold and a low balance is a candidate@L193 | Test | ./services/billing/src/auto-recharge-job.test.js | 193-198 |
-| test:missing Cashfree credentials skip the charge but still alert the admins@L321 | Test | ./services/billing/src/auto-recharge-job.test.js | 321-349 |
 | test:an orphan billing account is skipped when the org service says 404@L351 | Test | ./services/billing/src/auto-recharge-job.test.js | 351-363 |
 | test:a failing org-service call skips the org without failing the run@L365 | Test | ./services/billing/src/auto-recharge-job.test.js | 365-377 |
 | test:an org with no active administrator is neither charged nor alerted@L379 | Test | ./services/billing/src/auto-recharge-job.test.js | 379-397 |
@@ -48,7 +47,7 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (23 edge(s))
+- `equal` (18 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:an unsettled payment_status credits nothing and blocks a retry@L299` (9 edge(s))
 - `map` (7 edge(s))
 - `String` (6 edge(s))
@@ -57,27 +56,27 @@ No execution flows pass through this community.
 - `./services/billing/src/auto-recharge-job.test.js::test:an org that declined auto-recharge is never charged@L245` (6 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:dry run validates end to end and charges nothing@L261` (6 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:a cancelled mandate is skipped instead of charged@L284` (6 edge(s))
+- `./services/billing/src/auto-recharge-job.test.js::test:missing Cashfree credentials skip the charge but still alert the admins@L321` (6 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:the cooldown gate is evaluated before any network call@L399` (6 edge(s))
 - `Number` (5 edge(s))
 - `warn` (5 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:a real threshold crossing persists lastAlertedThresholdPaise@L419` (5 edge(s))
 - `filter` (4 edge(s))
-- `trim` (4 edge(s))
 
 ### Incoming
 
-- `equal` (22 edge(s))
 - `./services/billing/src/auto-recharge-job.js` (18 edge(s))
-- `./services/billing/src/auto-recharge-job.test.js` (14 edge(s))
+- `equal` (17 edge(s))
+- `./services/billing/src/auto-recharge-job.test.js` (13 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:an unsettled payment_status credits nothing and blocks a retry@L299` (9 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:a below-threshold org in amount mode is charged once, with an auto_recharge ledger entry@L202` (6 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:percentage mode charges the configured top-up, not an absolute threshold@L231` (6 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:an org that declined auto-recharge is never charged@L245` (6 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:dry run validates end to end and charges nothing@L261` (6 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:a cancelled mandate is skipped instead of charged@L284` (6 edge(s))
+- `./services/billing/src/auto-recharge-job.test.js::test:missing Cashfree credentials skip the charge but still alert the admins@L321` (6 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:the cooldown gate is evaluated before any network call@L399` (6 edge(s))
 - `./services/billing/src/auto-recharge-job.test.js::test:a real threshold crossing persists lastAlertedThresholdPaise@L419` (5 edge(s))
-- `deepEqual` (4 edge(s))
+- `deepEqual` (3 edge(s))
 - `map` (2 edge(s))
 - `./services/billing/src/sandbox-e2e.test.js::test:a dummy org without a signed mandate is validated and NOT charged@L71` (1 edge(s))
-- `push` (1 edge(s))

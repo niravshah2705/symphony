@@ -4,18 +4,16 @@
 
 ## Overview
 
-Community of 741 nodes
+Community of 743 nodes
 
-- **Size**: 741 nodes
-- **Cohesion**: 0.4730
+- **Size**: 743 nodes
+- **Cohesion**: 0.4928
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:Agent jobs restores complete grouped planner and coding history@L99 | Test | ./e2e/agent-jobs.spec.js | 99-166 |
-| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
 | test:a terminal workspace stream-token rejection never opens or retries the SSE stream@L13 | Test | ./e2e/workspace-stream-failure.spec.js | 13-69 |
 | test:a blank minted token never opens the workspace SSE stream@L71 | Test | ./e2e/workspace-stream-failure.spec.js | 71-111 |
 | pauseCode | Function | ./public/js/agent-pause.js | 36-42 |
@@ -64,8 +62,10 @@ Community of 741 nodes
 | renderSignInRequired | Function | ./public/js/app.js | 779-801 |
 | renderAccessDenied | Function | ./public/js/app.js | 803-815 |
 | render | Function | ./public/js/app.js | 817-899 |
+| capitalize | Function | ./public/js/app.js | 901-904 |
+| start | Function | ./public/js/app.js | 908-916 |
 
-*... and 691 more members.*
+*... and 693 more members.*
 
 ## Execution Flows
 
@@ -79,7 +79,7 @@ Community of 741 nodes
 - **beginSignOut** (criticality: 0.76, depth: 6)
 - **hostedConnection** (criticality: 0.75, depth: 8)
 - **render** (criticality: 0.73, depth: 6)
-- *... and 13 more flows.*
+- *... and 14 more flows.*
 
 ## Dependencies
 
@@ -87,34 +87,34 @@ Community of 741 nodes
 
 - `addEventListener` (227 edge(s))
 - `append` (221 edge(s))
-- `map` (166 edge(s))
+- `map` (165 edge(s))
 - `String` (114 edge(s))
-- `push` (106 edge(s))
+- `push` (102 edge(s))
 - `trim` (97 edge(s))
-- `equal` (93 edge(s))
-- `filter` (84 edge(s))
-- `isArray` (73 edge(s))
-- `Boolean` (68 edge(s))
-- `catch` (63 edge(s))
+- `equal` (90 edge(s))
+- `filter` (82 edge(s))
+- `isArray` (72 edge(s))
+- `Boolean` (69 edge(s))
+- `catch` (62 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (59 edge(s))
-- `Number` (57 edge(s))
-- `querySelector` (53 edge(s))
+- `Number` (55 edge(s))
+- `querySelector` (52 edge(s))
 
 ### Incoming
 
 - `./public/js/views/settings.js` (137 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
-- `equal` (93 edge(s))
+- `equal` (90 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/workflow-designer-model.mjs` (56 edge(s))
-- `expect` (43 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
 - `match` (29 edge(s))
-- `./public/js/views/organization.js` (27 edge(s))
+- `./public/js/views/organization.js` (28 edge(s))
 - `./public/js/auth.js` (23 edge(s))
-- `locator` (21 edge(s))
 - `deepEqual` (21 edge(s))
+- `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
+- `./public/js/views/cost.js` (15 edge(s))

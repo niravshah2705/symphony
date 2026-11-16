@@ -62,7 +62,36 @@ const BASE = {
   prompt: 'plan the thing',
   llm: { provider: 'anthropic', model: 'claude-sonnet-4-5' },
   traceContext: { runId: 'run-1' },
+  userId: 'user-1',
+  userEmail: 'user@test.invalid',
 };
+
+test('START follows actor creation and STOP precedes teardown, even when dispatch fails', async () => {
+  const { restore, record } = stubSubstrate();
+  let started;
+  let stopped = false;
+  try {
+    await assert.rejects(runner.runPlanningOnSubstrate({
+      ...BASE,
+      fetchImpl: async () => { throw new Error('dispatch failed'); },
+      actorSessionMonitor: (session) => {
+        assert.equal(record.calls.at(-1), 'createEphemeralActor');
+        started = session;
+        return { stop: () => {
+          assert.ok(!record.calls.includes('suspendActor'));
+          stopped = true;
+        } };
+      },
+    }), /dispatch failed/);
+    assert.equal(started.userId, BASE.userId);
+    assert.equal(started.userEmail, BASE.userEmail);
+    assert.equal(started.tier, 'standard-1v1g');
+    assert.equal(started.hourlyRatePaise, 0);
+    assert.equal(stopped, true);
+    assert.equal(record.suspended, true);
+    assert.equal(record.deleted, true);
+  } finally { restore(); }
+});
 
 test('a substrate run meters exactly one usage record for the dispatching org', async () => {
   const { fetchImpl, restore, record } = stubSubstrate({
@@ -87,6 +116,8 @@ test('a substrate run meters exactly one usage record for the dispatching org', 
     assert.equal(calls.length, 1, 'exactly one usage record per run — never two, never zero');
     assert.equal(calls[0].attribution.orgId, 'org-1');
     assert.equal(calls[0].attribution.projectId, 'proj-1');
+    assert.equal(calls[0].attribution.userId, 'user-1');
+    assert.equal(calls[0].attribution.userEmail, 'user@test.invalid');
     assert.equal(calls[0].attribution.runId, 'run-1');
     assert.equal(calls[0].attribution.traceId, 'trace-xyz');
     assert.equal(calls[0].attribution.source, 'substrate-plan');

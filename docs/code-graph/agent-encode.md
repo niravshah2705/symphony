@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 126 nodes
+Community of 130 nodes
 
-- **Size**: 126 nodes
-- **Cohesion**: 0.3574
+- **Size**: 130 nodes
+- **Cohesion**: 0.3489
 - **Dominant Language**: javascript
 
 ## Members
@@ -45,30 +45,31 @@ Community of 126 nodes
 | test:an organization that is not bound refuses instead of taking the default@L52 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 52-58 |
 | test:a deployment that declared tenancy but bound no organization refuses@L60 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 60-63 |
 | test:a settings atespace outside the declared set is ignored@L67 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 67-75 |
-| fp | Function | ./packages/shared-core/src/agent/substrate-runner.js | 22-22 |
-| fingerprintOnly | Function | ./packages/shared-core/src/agent/substrate-runner.js | 24-32 |
-| syncSubstrateSecrets | Function | ./packages/shared-core/src/agent/substrate-runner.js | 48-144 |
-| scopeHas | Function | ./packages/shared-core/src/agent/substrate-runner.js | 58-58 |
-| dispatchActorPrompt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 152-231 |
-| runPlanningOnSubstrate | Function | ./packages/shared-core/src/agent/substrate-runner.js | 286-405 |
-| mintRawActorJwt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 408-418 |
+| fp | Function | ./packages/shared-core/src/agent/substrate-runner.js | 26-26 |
+| fingerprintOnly | Function | ./packages/shared-core/src/agent/substrate-runner.js | 28-36 |
+| syncSubstrateSecrets | Function | ./packages/shared-core/src/agent/substrate-runner.js | 52-148 |
+| scopeHas | Function | ./packages/shared-core/src/agent/substrate-runner.js | 62-62 |
+| dispatchActorPrompt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 156-235 |
+| runPlanningOnSubstrate | Function | ./packages/shared-core/src/agent/substrate-runner.js | 290-428 |
+| mintRawActorJwt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 431-441 |
 | stubSubstrate | Function | ./packages/shared-core/src/agent/substrate-runner.test.js | 14-56 |
 | restore | Function | ./packages/shared-core/src/agent/substrate-runner.test.js | 52-54 |
-| test:a substrate run meters exactly one usage record for the dispatching org@L67 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 67-108 |
-| test:the runner hands the admitted credential decision to metering@L113 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 113-133 |
-| test:a run with no admitted decision reaches metering with none either@L135 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 135-152 |
-| test:metering happens on the control plane, not in the actor request body@L154 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 154-173 |
-| test:an actor that reports no usage still records exactly one (skipped) attempt@L175 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 175-190 |
-| test:traceparent crosses the process boundary when the caller has one@L192 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 192-208 |
-| test:the actor is still torn down when dispatch fails@L210 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 210-227 |
-| test:a granted scope with no applier refuses before any cluster write@L236 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 236-256 |
-| test:a scope the spec never grants is withheld by name, not an error@L258 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 258-287 |
-| resolveSubstrateUrl | Function | ./packages/shared-core/src/agent/substrate.js | 66-79 |
+| test:START follows actor creation and STOP precedes teardown, even when dispatch fails@L69 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 69-94 |
+| test:a substrate run meters exactly one usage record for the dispatching org@L96 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 96-139 |
+| test:the runner hands the admitted credential decision to metering@L144 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 144-164 |
+| test:a run with no admitted decision reaches metering with none either@L166 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 166-183 |
+| test:metering happens on the control plane, not in the actor request body@L185 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 185-204 |
+| test:an actor that reports no usage still records exactly one (skipped) attempt@L206 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 206-221 |
+| test:traceparent crosses the process boundary when the caller has one@L223 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 223-239 |
+| test:the actor is still torn down when dispatch fails@L241 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 241-258 |
+| test:a granted scope with no applier refuses before any cluster write@L267 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 267-287 |
+| test:a scope the spec never grants is withheld by name, not an error@L289 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 289-318 |
 
-*... and 76 more members.*
+*... and 80 more members.*
 
 ## Execution Flows
 
+- **childMain** (criticality: 0.73, depth: 9)
 - **listActors** (criticality: 0.71, depth: 8)
 - **getActorTemplate** (criticality: 0.70, depth: 8)
 - **getGithubToken** (criticality: 0.62, depth: 8)
@@ -79,36 +80,36 @@ Community of 126 nodes
 
 ### Outgoing
 
-- `equal` (68 edge(s))
+- `equal` (82 edge(s))
 - `String` (47 edge(s))
 - `push` (30 edge(s))
 - `alloc` (30 edge(s))
 - `concat` (29 edge(s))
 - `map` (28 edge(s))
 - `trim` (17 edge(s))
-- `deepEqual` (14 edge(s))
-- `Number` (12 edge(s))
+- `deepEqual` (15 edge(s))
+- `Number` (14 edge(s))
+- `require` (14 edge(s))
+- `includes` (13 edge(s))
 - `isBuffer` (12 edge(s))
-- `includes` (12 edge(s))
 - `filter` (10 edge(s))
 - `replace` (10 edge(s))
 - `onStep` (9 edge(s))
-- `get` (8 edge(s))
 
 ### Incoming
 
+- `equal` (82 edge(s))
 - `./packages/shared-core/src/agent/substrate.js` (72 edge(s))
-- `equal` (68 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.js` (36 edge(s))
-- `deepEqual` (14 edge(s))
+- `deepEqual` (15 edge(s))
 - `./packages/shared-core/src/store.js` (13 edge(s))
+- `./packages/shared-core/src/agent/substrate-runner.test.js` (12 edge(s))
 - `./packages/shared-core/src/agent/substrate-runner.js` (11 edge(s))
-- `./packages/shared-core/src/agent/substrate-runner.test.js` (11 edge(s))
 - `./packages/shared-core/src/agent/substrate.test.js` (11 edge(s))
 - `./packages/shared-core/src/guardrails/consumers.js` (8 edge(s))
 - `./packages/shared-core/src/guardrails/spec.js` (8 edge(s))
+- `ok` (7 edge(s))
+- `includes` (7 edge(s))
 - `./packages/shared-core/src/agent/substrate-atespace.test.js` (6 edge(s))
 - `push` (6 edge(s))
-- `ok` (6 edge(s))
-- `includes` (6 edge(s))
 - `./packages/shared-core/src/guardrails/spec.test.js` (6 edge(s))

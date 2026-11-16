@@ -57,3 +57,12 @@ registry-bundle/
 
 # substrate-cleanup.sh snapshot mirror (cluster config; never commit)
 .substrate-state/
+
+# FlexPrice spike output: re-written on every run, and its ids/amounts are run
+# fixtures. docs/FLEXPRICE_FINDINGS.md is the graded record of what was observed.
+docs/flexprice-spike/results.json
+
+# The kind Helm install stages a copy of the pinned upstream chart here with its
+# subchart dependencies stripped (scripts/flexprice-helm.js). Derived from the
+# checkout on every run; committing it would fork 2000 lines of AGPL templates.
+deploy/flexprice/helm/build/

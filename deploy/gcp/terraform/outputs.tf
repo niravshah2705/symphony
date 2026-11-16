@@ -194,3 +194,13 @@ output "environment_init" {
     steps               = ["org.seed", "org.atespace.bind", "substrate.atespace", "deploy.stack"]
   }
 }
+
+output "billing_jobs" {
+  description = "Billing Cloud Run Job and Cloud Scheduler job names, keyed by job."
+  value = {
+    for k, j in google_cloud_run_v2_job.billing : k => {
+      job       = j.name
+      scheduler = google_cloud_scheduler_job.billing_job[k].name
+    }
+  }
+}

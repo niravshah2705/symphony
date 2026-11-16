@@ -433,8 +433,25 @@ test('enqueue is role-gated, validates projectId, and queues exactly one project
   assert.equal(enqueued[0].projectId, 'proj_1');
   assert.equal(enqueued[0].assumedRole.id, 'r1');
 
-  // Organization-level fund gating rejects with 402 when funds are unavailable
-  store.upsertBillingAccount('org_broke', { balancePaise: -500, gateEnabled: true });
+  // Fund gating: the route honours whatever the gate says, and passes the gate's
+  // state through. The rule itself — the wallet read, the three states, the cache —
+  // is tested where it lives (packages/shared-core/src/billing/gate.test.js); this
+  // test only covers the 402 seam, which is why the gate is stubbed here rather than
+  // a first-party balance being written (nothing reads that any more).
+  const gate = require('@ai-fleet/shared/billing/gate');
+  const originalFundStatus = gate.getOrgFundStatus;
+  gate.getOrgFundStatus = (orgId) => (orgId === 'org_broke'
+    ? {
+      orgId,
+      fundsAvailable: false,
+      fundStatus: 'negative',
+      state: 'negative',
+      balancePaise: -50000,
+      reason: 'Organization credit balance is negative — a platform debit exceeded it. Add credits to resume runner activity.',
+    }
+    : { orgId, fundsAvailable: true, fundStatus: 'available', state: 'available', balancePaise: 50000 });
+  t.after(() => { gate.getOrgFundStatus = originalFundStatus; });
+
   const blocked = await callRoute(router, 'post', '/enqueue', {
     headers: { 'x-ai-fleet-organization-id': 'org_broke' },
     body: { projectId: 'proj_1' },
@@ -442,6 +459,8 @@ test('enqueue is role-gated, validates projectId, and queues exactly one project
   assert.equal(blocked.status, 402);
   assert.equal(blocked.body.code, 'funds_unavailable');
   assert.equal(blocked.body.fundsAvailable, false);
+  assert.equal(blocked.body.fundStatus, 'negative', 'the negative state survives the route');
+  assert.equal(enqueued.length, 1, 'a blocked org never reaches the queue');
 });
 
 test('planner job and status routes honor the exact selected organization and project', async (t) => {

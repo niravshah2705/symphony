@@ -13,7 +13,9 @@ from app.repositories.org_repo import OrgRepository
 from app.repositories.organization_membership_repo import OrganizationMembershipRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.me import CreateOrgRequest
+from app.schemas.org import OrgUpdate
 from app.services.context_service import get_context
+from app.services.org_service import _apply_org_update
 from app.services.onboarding_service import (
     DEFAULT_ORG_NAME,
     DEFAULT_PROJECT_NAME,
@@ -72,6 +74,7 @@ async def test_ensure_default_organization_and_project_creates_defaults_with_tag
     await db_session.commit()
 
     assert org.name == DEFAULT_ORG_NAME
+    assert org.is_default is True
     assert project.name == DEFAULT_PROJECT_NAME
     assert isinstance(org.id, type(user.id))
     assert isinstance(project.id, type(user.id))
@@ -105,8 +108,39 @@ async def test_context_silently_creates_default_org_and_project_for_orgless_user
     assert len(context.organizations) == 1
     org_res = context.organizations[0]
     assert org_res.name == "default"
+    assert org_res.is_default is True, "the browser reads the flag, not the name"
     assert {t.name for t in org_res.tags} == {"default=true", "initialise=false"}
     assert len(org_res.projects) == 1
     proj_res = org_res.projects[0]
     assert proj_res.name == "default"
     assert {t.name for t in proj_res.tags} == {"default=true", "initialise=false"}
+
+
+@pytest.mark.asyncio
+async def test_is_default_survives_a_rename_and_only_onboarding_sets_it(db_session):
+    """The free-tier marker is a stored bool, not the name.
+
+    `OrgUpdate.name` is editable by any org admin, so a rule keyed on the name
+    could be claimed by a paying org or shed by a free one with a rename.
+    """
+    user = User(email="rename@example.com")
+    await UserRepository(db_session).add(user)
+    org, _project = await ensure_default_organization_and_project(db_session, user)
+    await db_session.commit()
+
+    _apply_org_update(org, OrgUpdate(name="Acme Industries"))
+    await db_session.commit()
+    reloaded = await OrgRepository(db_session).get(org.id)
+    assert reloaded.name == "Acme Industries"
+    assert reloaded.is_default is True, "renaming does not move the free tier"
+
+    explicit = await create_organization_for_user(
+        db_session, user, CreateOrgRequest(name="Acme Ltd"), background=BackgroundTasks()
+    )
+    assert explicit.is_default is False
+
+    # A document written before the field existed reads as False, which is the
+    # direction that cannot hand out free credit.
+    legacy = Organization.from_doc({"id": str(org.id), "name": "default"})
+    assert legacy.is_default is False
+    assert Organization.from_doc(reloaded.to_doc()).is_default is True
