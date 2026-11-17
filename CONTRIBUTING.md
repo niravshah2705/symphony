@@ -51,17 +51,20 @@ The Python services have their own `pytest` suites (see `services/org` and
 `services/settings`). CI runs all of these — see the **Checks** workflow at
 [`.github/workflows/checks.yml`](./.github/workflows/checks.yml).
 
-## The code-map pre-commit hook (important)
+## The code map (local, not committed)
 
-A pre-commit hook regenerates `docs/code-graph/` and **blocks the commit** if the
-result differs from what you staged, so the map never drifts from the code.
+`docs/code-graph/` is an auto-generated structural map of the codebase. It is
+**gitignored** and there is **no commit gate** on it — a commit is never blocked
+for doc drift, and CI does not depend on it.
 
 ```bash
-npm run hooks:install   # enable the repo git hooks (once per clone)
+npm run docs:code     # regenerate the map whenever it looks stale
+npm run hooks:install # enable the repo git hooks (once per clone)
 ```
 
-- On a block: `git add -A docs/code-graph` and commit again.
-- Regenerate manually anytime: `npm run docs:code`.
+`post-commit` refreshes the local query indexes (`.code-review-graph/graph.db`,
+`graphify-out/`) in the background; it never stages or commits anything.
+
 - Requires the CLI: `pipx install code-review-graph`.
 
 See [`.githooks/README.md`](./.githooks/README.md) for details.

@@ -33,7 +33,7 @@ intentional. Integrating them behind `substratePlannerImage` /
 | --- | --- | --- |
 | claude | `ghcr.io/niravshah2705/symphony/claude-runtime` | `@anthropic-ai/claude-code` CLI (musl binary, sha256-pinned) |
 | codex | `ghcr.io/niravshah2705/symphony/codex-runtime` | `openai/codex` `rust-v*` release (musl tarball, sha256-pinned) |
-| deepagent | `ghcr.io/niravshah2705/symphony/deepagent-runtime` | PyPI `deepagents-code` (uv tool install) |
+| deepagent | `ghcr.io/niravshah2705/symphony/deepagent-runtime` | PyPI `deepagents-code` (uv tool install; glibc base — see below) |
 | deepseek | `ghcr.io/niravshah2705/symphony/deepseek-runtime` | npm `@deepseek-ai/dsh` (global install; glibc base for native deps) |
 
 Each runtime ships **current + last 3 versions** (4 tags) in the CSV.
@@ -89,10 +89,12 @@ exit, e.g. `docker run --rm claude-runtime:local --check`.
   stream-JSON Claude/Codex drivers), so the driver emits each stdout line as a
   text delta and maps the exit status to success/failure. Grow the drivers with
   real tool/usage events once the CLIs' streaming shape is confirmed.
-- **deepseek uses a glibc base** (`node:22-slim`) because `dsh` pulls native node
-  modules (`koffi`, `node-pty`) that don't build cleanly on the musl/alpine base
-  the other three use.
+- **deepagent and deepseek use glibc bases, alpine is not an option for them.**
+  `deepagents-code` depends on `langgraph-checkpoint-sqlite` → `sqlite-vec`, which
+  publishes manylinux/mac/win wheels and **no musl wheel**, so `uv tool install`
+  cannot resolve on alpine in either architecture (`python:3.14-slim`, matching the
+  CLI's own `>=3.14,<3.15` floor). `dsh` pulls native node modules (`koffi`,
+  `node-pty`) that don't build cleanly on musl (`node:22-slim`). Only claude and
+  codex stay on the musl base, because their vendors ship prebuilt musl binaries.
 - `npm install -g --allow-scripts=…` is kept verbatim; native-module postinstall
   steps run by default with npm.
-- The fleet's `code-review-graph` pre-commit hook indexes `.go`; committing these
-  files may ask you to `git add -A docs/code-graph` and re-commit.

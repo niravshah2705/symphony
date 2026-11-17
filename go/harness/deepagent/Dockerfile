@@ -3,7 +3,6 @@
 # Pin the CLI release via the build arg (driven by go/harness/runtime-images.csv):
 #   --build-arg RUNTIME_VERSION=0.2.9
 ARG BASE_IMAGE_REGISTRY=cgr.dev
-ARG ALPINE_VERSION=3.24
 ARG BUILDPLATFORM
 FROM --platform=$BUILDPLATFORM ${BASE_IMAGE_REGISTRY}/chainguard/go:latest AS builder
 ARG TARGETARCH
@@ -21,9 +20,11 @@ RUN --mount=type=cache,target=/root/go/pkg/mod,rw \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -trimpath -o /deepagent-runtime ./harness/deepagent/cmd
 
-FROM alpine:${ALPINE_VERSION}
+# glibc base, not alpine: deepagents-code needs langgraph-checkpoint-sqlite, which
+# depends on sqlite-vec — published as manylinux/mac/win wheels only, so no musl
+# environment can resolve it. Python is pinned to the CLI's own >=3.14,<3.15 floor.
+FROM python:3.14-slim
 ARG RUNTIME_VERSION=0.2.9
-ARG TARGETARCH
 
 # uv places the deepagents-code shim in UV_TOOL_BIN_DIR (on PATH) and its tool
 # env under UV_TOOL_DIR, both world-readable so the non-root runtime user can run it.
@@ -31,11 +32,13 @@ ENV UV_TOOL_BIN_DIR=/usr/local/bin \
     UV_TOOL_DIR=/usr/local/share/uv/tools \
     DEEPAGENTS_DISABLE_UPDATES=1 \
     DEEPAGENTS_CODE_VERSION=${RUNTIME_VERSION}
-RUN apk upgrade --no-cache && apk add --no-cache bash ca-certificates git python3 py3-pip libgcc libstdc++ \
-    && python3 -m pip install --no-cache-dir --break-system-packages uv \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash ca-certificates git libgcc-s1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir uv \
     && uv tool install deepagents-code==${RUNTIME_VERSION} \
-    && addgroup -S -g 65532 runtime \
-    && adduser -S -D -H -u 65532 -G runtime -h /data -s /sbin/nologin runtime \
+    && groupadd --system -g 65532 runtime \
+    && useradd --system --uid 65532 --gid runtime --home-dir /data --shell /usr/sbin/nologin runtime \
     && mkdir -p /data/adapter /data/deepagent /data/workspace \
     && chown -R 65532:65532 /data
 
