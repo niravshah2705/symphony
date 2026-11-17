@@ -364,6 +364,13 @@ export const api = {
   }),
   deleteWorkflow: (id) => request(`/workflows/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   importWorkflows: (workflows) => request('/workflows/import', { method: 'POST', body: JSON.stringify({ workflows }) }),
+  // Which Harness / ModelConfig / RemoteMCPServer names the kagent namespace
+  // actually holds. Read-only, and answered even when kagent is off.
+  kagentCapabilities: () => request('/workflows/kagent/capabilities'),
+  publishWorkflowNode: (workflowId, nodeId) => request(
+    `/workflows/${encodeURIComponent(workflowId)}/nodes/${encodeURIComponent(nodeId)}/publish`,
+    { method: 'POST' },
+  ),
 
   // Projects
   getProjects: () => request('/projects'),

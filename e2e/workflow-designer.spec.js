@@ -135,9 +135,15 @@ async function installDesignerStubs(page, {
   organizations = [PRIMARY_ORG],
   permissions = { org: 'read' },
   workflows = {},
+  // The designer reads the cluster the way the gateway does: a disabled kagent
+  // is a normal deployment, so that is the default a spec opts out of.
+  kagent = { enabled: false, reason: 'kagent_not_configured' },
+  publish = null,
 } = {}) {
   const apiMutations = [];
   const workflowApiRequests = [];
+  const publishes = [];
+  const capabilitiesReads = [];
   // The gateway seeds platform defaults into a tenant the first time it is
   // read, so the stub starts from the same example graphs the model ships.
   const { createInitialState } = await import('../public/js/workflow-designer-model.mjs');
@@ -182,6 +188,36 @@ async function installDesignerStubs(page, {
     }
     if (pathname === '/api/workflows/import') {
       return json(route, store.import(organizationHeader, postedGraph().workflows || []));
+    }
+    if (pathname === '/api/workflows/kagent/capabilities') {
+      capabilitiesReads.push(organizationHeader);
+      return json(route, {
+        namespace: 'kagent',
+        harnesses: [],
+        modelConfigs: [],
+        remoteMcpServers: [],
+        agentTemplates: [],
+        ...kagent,
+      });
+    }
+    const nodePublish = pathname.match(/^\/api\/workflows\/([^/]+)\/nodes\/([^/]+)\/publish$/);
+    if (nodePublish) {
+      const [, graphId, nodeId] = nodePublish.map(decodeURIComponent);
+      // Read the saved graph, the way the gateway renders it: whatever the node
+      // looks like here is what the designer managed to persist before asking.
+      const graph = store.graphs(organizationHeader).find((item) => item.id === graphId);
+      const node = (graph?.nodes || []).find((item) => item.id === nodeId) || {};
+      publishes.push({ graphId, nodeId, backend: node.backend || '', env: node.kagentSpec?.env || [] });
+      if (publish) return json(route, publish.body, publish.status || 200);
+      return json(route, {
+        ok: true,
+        created: true,
+        name: `${graphId}-${nodeId}`,
+        namespace: 'kagent',
+        backend: 'kagent',
+        workflowId: graphId,
+        nodeId,
+      });
     }
     if (pathname.startsWith('/api/workflows/') && request.method() === 'PUT') {
       const id = decodeURIComponent(pathname.slice('/api/workflows/'.length));
@@ -261,7 +297,7 @@ async function installDesignerStubs(page, {
     return json(route, {});
   });
 
-  return { apiMutations, workflowApiRequests, store };
+  return { apiMutations, workflowApiRequests, store, publishes, capabilitiesReads };
 }
 
 async function openDesigner(page, path = '/#/workflows') {
@@ -290,10 +326,14 @@ async function selectCanvasNode(page, name) {
 /**
  * The designer reads the organization's graphs on open. It must not write
  * anything the operator did not ask for: no import of the built-in examples,
- * no re-create of a graph the server already has.
+ * no re-create of a graph the server already has. Reads are allowed to include
+ * the cluster names behind a kagent binding — looking up a name is not a write.
  */
 function expectWorkflowReadsOnly(recording) {
-  expect(recording.workflowApiRequests, 'opening the designer loads the shared graphs').toEqual(['GET /api/workflows']);
+  expect(recording.workflowApiRequests, 'opening the designer loads the shared graphs')
+    .toContain('GET /api/workflows');
+  const writes = recording.workflowApiRequests.filter((line) => !line.startsWith('GET '));
+  expect(writes, 'viewing workflows must never mutate the organization').toEqual([]);
   expect(recording.apiMutations, 'viewing workflows must never mutate the organization').toEqual([]);
 }
 
@@ -615,6 +655,106 @@ test('a teammate saving first surfaces a conflict instead of being overwritten',
     const workflow = state?.workflows?.find((item) => item.id === state.activeWorkflowId);
     return { name: workflow?.name, description: workflow?.description };
   }, workflowStorageKey(PRIMARY_ORG.id))).toEqual({ name: 'Contested flow', description: 'Edited from the first tab.' });
+});
+
+test('a kagent node offers the names the cluster reported, and publishing saves the graph first', async ({ page }) => {
+  const publishing = await installDesignerStubs(page, {
+    kagent: {
+      enabled: true,
+      namespace: 'kagent',
+      harnesses: ['my-first-harness', 'codex'],
+      modelConfigs: ['default-model-config', 'openrouter-model-config'],
+      remoteMcpServers: ['kagent-tool-server'],
+    },
+  });
+  await openDesigner(page);
+  const selectExample = () => page.getByRole('combobox', { name: 'Active workflow' })
+    .selectOption({ label: 'Independent operations · example' });
+  await selectExample();
+  await selectCanvasNode(page, 'DevOps readiness');
+
+  const inspector = page.getByRole('complementary', { name: 'Workflow inspector' });
+  const cluster = inspector.locator('.workflow-inspector-section', { hasText: /^Cluster bindings/ });
+  await expect(inspector.getByRole('button', { name: 'Kagent (in-cluster CRDs)' }).first()).toBeVisible();
+  await inspector.getByRole('button', { name: 'Kagent (in-cluster CRDs)' }).click();
+
+  // The namespace answered, so its names are the choices and the platform list
+  // is what is not deployed yet. The card says which is which, because a
+  // published name that the cluster has never seen fails with nothing to point
+  // the operator at.
+  await expect(cluster).toContainText('Namespace kagent · 2 harness · 2 ModelConfig · 1 RemoteMCPServer');
+  await expect(cluster.locator('.workflow-caps-reread')).toHaveCount(0, 'a cluster that answered is not offering a retry');
+  const harnessField = inspector.locator('.workflow-field', { hasText: /^Harness/ });
+  await expect(harnessField.locator('option').nth(1)).toHaveText('my-first-harness · in the namespace');
+  await expect(harnessField.locator('option', { hasText: 'otel' }))
+    .toHaveText('otel', 'a platform harness stays selectable but is not dressed up as deployed');
+
+  const modelConfig = inspector.locator('.workflow-field', { hasText: /^ModelConfig/ }).locator('select');
+  await expect(modelConfig.locator('option')).toHaveText([
+    'Cluster default (from the Harness)', 'default-model-config', 'openrouter-model-config',
+  ]);
+  await modelConfig.selectOption('openrouter-model-config');
+
+  const mcp = inspector.locator('.workflow-field', { hasText: /^Remote MCP servers/ });
+  await expect(mcp.locator('input[type=checkbox]')).toHaveCount(1);
+  await mcp.locator('input[type=checkbox]').check();
+
+  // One read per organization, however many times the inspector is redrawn: the
+  // cluster is asked once, not once per keystroke.
+  await inspector.locator('.workflow-field', { hasText: /^Task tier/ }).locator('select').selectOption('complex');
+  await selectCanvasNode(page, 'Support triage');
+  await selectCanvasNode(page, 'DevOps readiness');
+  expect(publishing.capabilitiesReads, 'the cluster is read once per organization, not once per keystroke').toEqual([PRIMARY_ORG.id]);
+
+  // A binding the namespace never heard of saves exactly as a known one does —
+  // the guardrail is the labelling, not a rejection.
+  await modelConfig.selectOption('default-model-config');
+  const bound = () => (publishing.store.graphs(PRIMARY_ORG.id)
+    .flatMap((graph) => graph.nodes || []).find((node) => node.id === 'io-devops') || {});
+  await expect.poll(bound).toHaveProperty('backend', 'kagent');
+  await expect.poll(() => bound().kagentSpec?.modelConfig).toEqual({ name: 'default-model-config' });
+  await expect.poll(() => bound().kagentSpec?.tools).toEqual([{ kind: 'mcp', server: 'kagent-tool-server', tools: [] }]);
+
+  // Publishing renders the saved graph, so the graph has to be saved first and
+  // the answer has to name the CR the cluster actually holds.
+  await inspector.getByRole('button', { name: 'Publish this node to kagent' }).click();
+  const result = inspector.locator('.workflow-publish-result');
+  // The name is the graph-qualified one the cluster keys on, so two workflows
+  // with a node called io-devops cannot both claim to have published.
+  await expect(result).toContainText('Created kagent/seed-independent-operations-io-devops.');
+
+  const published = publishing.publishes.at(-1);
+  expect(published.graphId).toBe('seed-independent-operations');
+  expect(published.nodeId).toBe('io-devops');
+  expect(published, 'the runtime receives what the server has, not what this tab still holds').toMatchObject({
+    backend: 'kagent',
+    env: [],
+  });
+
+  // Switching to substrate takes the kagent surface with it: those names mean
+  // nothing to an actor, and leaving them on screen would imply they were used.
+  await inspector.getByRole('button', { name: 'Substrate (sandbox actors)' }).click();
+  await expect(cluster).toHaveCount(0);
+  await expect(inspector.getByRole('button', { name: 'Publish this profile to substrate' })).toBeVisible();
+});
+
+test('a kagent publish answers 503 when the cluster is not configured, and says so', async ({ page }) => {
+  await installDesignerStubs(page, {
+    publish: { status: 503, body: { error: 'kagent_not_configured' } },
+  });
+  await openDesigner(page);
+  await page.getByRole('combobox', { name: 'Active workflow' })
+    .selectOption({ label: 'Independent operations · example' });
+  await selectCanvasNode(page, 'DevOps readiness');
+
+  const inspector = page.getByRole('complementary', { name: 'Workflow inspector' });
+  await inspector.getByRole('button', { name: 'Kagent (in-cluster CRDs)' }).click();
+  const cluster = inspector.locator('.workflow-inspector-section', { hasText: /^Cluster bindings/ });
+  await expect(cluster).toContainText('503', 'an unconfigured deployment says publish will refuse, instead of leaving it a surprise');
+  await expect(cluster.locator('.workflow-caps-reread')).toBeVisible();
+  await inspector.getByRole('button', { name: 'Publish this node to kagent' }).click();
+  await expect(inspector.locator('.workflow-publish-result'))
+    .toContainText('no runtime configured', 'the refusal is explained, not just echoed as an error code');
 });
 
 test('an authenticated user without an organization is routed to organization onboarding', async ({ page }) => {

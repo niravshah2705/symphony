@@ -22,12 +22,12 @@ const IDENTITIES = {
   admin: { authenticated: true, mode: 'firebase', role: 'admin', user: { sub: 'uid-admin', email: 'admin@t.test' } },
 };
 
-function buildApp({ identity = IDENTITIES.builder, kagentAdapter = null } = {}) {
+function buildApp({ identity = IDENTITIES.builder, kagentAdapter = null, substrateAdapter = null } = {}) {
   const app = express();
   app.use(express.json());
   const state = { identity };
   app.use((req, _res, next) => { req.auth = state.identity; next(); });
-  app.use('/api/workflows', createWorkflowsRouter({ kagentAdapter }));
+  app.use('/api/workflows', createWorkflowsRouter({ kagentAdapter, substrateAdapter }));
   return { app, state };
 }
 
@@ -189,6 +189,95 @@ test('kagent capabilities report disabled and publish refuses with 503 until con
     const publish = await call(url, 'POST', '/api/workflows/agents/k-coding/publish');
     assert.equal(publish.status, 503);
     assert.equal(publish.body.error, 'kagent_not_configured');
+
+    // An unconfigured cluster refuses the node route the same way: the designer
+    // can save a kagent binding, but nothing renders until the switch is on.
+    await call(url, 'POST', '/api/workflows', {
+      body: graph({ id: 'unconfigured-node-flow', nodes: [{ id: 'n1', kind: 'agent', refId: 'coding', name: 'Coding', x: 0, y: 0, backend: 'kagent' }] }),
+    });
+    const nodePublish = await call(url, 'POST', '/api/workflows/unconfigured-node-flow/nodes/n1/publish');
+    assert.equal(nodePublish.status, 503);
+    assert.equal(nodePublish.body.error, 'kagent_not_configured');
+  } finally { server.close(); }
+});
+
+test('publishing a node renders the node binding rather than a copy of the profile', async () => {
+  const published = [];
+  const kagentAdapter = {
+    enabled: () => true,
+    capabilities: async () => ({ namespace: 'kagent', harnesses: [], modelConfigs: [], remoteMcpServers: [], agentTemplates: [] }),
+    publishProfile: async (node) => {
+      published.push(node);
+      return { ok: true, name: node.refId, namespace: 'kagent', created: true };
+    },
+  };
+  const { app } = buildApp({ kagentAdapter });
+  const { server, url } = await start(app);
+  try {
+    await call(url, 'POST', '/api/workflows', {
+      body: graph({
+        id: 'node-binding-flow',
+        nodes: [
+          {
+            id: 'n1', kind: 'agent', refId: 'coding', name: 'Coding', x: 0, y: 0,
+            backend: 'kagent', harness: 'claude-code', taskTier: 'complex', systemPrompt: 'Base prompt.',
+            kagentSpec: {
+              modelConfig: { name: 'default-model-config' },
+              env: [{ name: 'LOG_LEVEL', value: 'debug' }],
+              tools: [{ kind: 'mcp', server: 'kagent-tool-server', tools: [] }],
+            },
+          },
+          { id: 'n2', kind: 'approval', refId: '', name: 'Sign off', x: 300, y: 0 },
+        ],
+      }),
+    });
+
+    const outcome = await call(url, 'POST', '/api/workflows/node-binding-flow/nodes/n1/publish');
+    assert.equal(outcome.status, 200);
+    assert.equal(outcome.body.backend, 'kagent');
+    assert.equal(outcome.body.nodeId, 'n1');
+    assert.equal(published.length, 1);
+    assert.equal(published[0].id, 'n1', 'the renderer receives the node the canvas saved');
+    assert.equal(published[0].refId, 'coding');
+    assert.equal(published[0].crdName, 'node-binding-flow-n1', 'the CR is named by where the binding lives, so two graphs with a node called n1 do not overwrite each other');
+    assert.equal(published[0].kagentSpec.env[0].name, 'LOG_LEVEL', 'the harness environment the canvas saved reaches the renderer');
+
+    const notAnAgent = await call(url, 'POST', '/api/workflows/node-binding-flow/nodes/n2/publish');
+    assert.equal(notAnAgent.status, 400);
+
+    const missingNode = await call(url, 'POST', '/api/workflows/node-binding-flow/nodes/nope/publish');
+    assert.equal(missingNode.status, 404);
+    const missingGraph = await call(url, 'POST', '/api/workflows/nope-flow/nodes/n1/publish');
+    assert.equal(missingGraph.status, 404);
+  } finally { server.close(); }
+});
+
+test('a substrate node publishes the profile behind it, and the persona gate still applies', async () => {
+  const published = [];
+  const { app, state } = buildApp({
+    substrateAdapter: { publishProfile: async (profile) => { published.push(profile.id); return { ok: true, name: profile.id }; } },
+  });
+  const { server, url } = await start(app);
+  try {
+    await call(url, 'POST', '/api/workflows', {
+      body: graph({ id: 'node-actor-flow', nodes: [{ id: 'n1', kind: 'agent', refId: 'coding', name: 'Coding', x: 0, y: 0, backend: 'substrate' }] }),
+    });
+
+    const allowed = await call(url, 'POST', '/api/workflows/node-actor-flow/nodes/n1/publish');
+    assert.equal(allowed.status, 200);
+    assert.equal(allowed.body.backend, 'substrate');
+    assert.deepEqual(published, ['coding'], 'an actor runs the curated profile, not the node drawing of it');
+
+    // The persona is a stored record per uid, not the credential: swapping the
+    // identity alone would keep publishing as whoever that uid was last set to.
+    state.identity = IDENTITIES.designer;
+    await call(url, 'GET', '/api/workflows');
+    assert.equal((await call(url, 'PUT', '/api/workflows/me/persona', { body: { persona: 'product-designer' } })).status, 200);
+    const denied = await call(url, 'POST', '/api/workflows/node-actor-flow/nodes/n1/publish');
+    assert.equal(denied.status, 403);
+    assert.equal(denied.body.code, 'persona_denied');
+    assert.match(denied.body.violations[0], /Coding/, 'the node it points at, not the graph, is what the grant is checked against');
+    assert.equal(published.length, 1, 'a denied publish never reached the runtime');
   } finally { server.close(); }
 });
 

@@ -6,6 +6,7 @@ import {
 } from '../workspace-context.js';
 import { api } from '../api.js';
 import { createWorkflowSync } from '../workflow-sync.mjs';
+import * as workflowCaps from '../workflow-capabilities.mjs';
 import * as designerModel from '../workflow-designer-model.mjs';
 import {
   addEdge,
@@ -33,6 +34,25 @@ import {
   updateNode,
   upsertWorkflow,
 } from '../workflow-designer-model.mjs';
+
+// One reader for the module: the namespace does not change while the tab is
+// open, and forty agent nodes must not cost forty reads.
+const kagentCapabilities = workflowCaps.createCapabilitiesReader({
+  read: () => api.kagentCapabilities(),
+});
+
+function describePublishFailure(error) {
+  const payload = (error && error.payload) || {};
+  if (payload.error === 'kagent_not_configured' || payload.error === 'substrate_not_configured') {
+    return 'This deployment has no runtime configured, so nothing was rendered. An operator turns the switch on (docs/GCP_DEPLOY.md); the binding you saved stays saved.';
+  }
+  if (payload.code === 'persona_denied') {
+    return `Your persona is not granted this agent: ${(payload.violations || []).join(' ') || (error && error.message) || ''}`;
+  }
+  const detail = payload.detail
+    || (Array.isArray(payload.errors) ? payload.errors.join(' ') : '');
+  return `${(error && error.message) || 'The publish failed.'}${detail ? ` — ${detail}` : ''}`;
+}
 
 const CANVAS_WIDTH = 2500;
 const CANVAS_HEIGHT = 1040;
@@ -328,6 +348,42 @@ export async function renderWorkflows(view) {
     setSaveStatus(syncedWithServer ? 'Saving…' : 'Saving locally…');
     if (persistTimer) window.clearTimeout(persistTimer);
     persistTimer = window.setTimeout(() => persistNow(), SAVE_DELAY_MS);
+  }
+
+  const capabilities = kagentCapabilities;
+
+  /**
+   * Publish one agent node. The graph is saved first and the save has to
+   * settle: the gateway renders the graph it has, so publishing an unsaved
+   * binding would answer 200 about a CR that is not what is on the screen.
+   */
+  async function publishNode(node, graphId, host) {
+    const show = (lines, tone) => {
+      const list = el('ul', { class: `workflow-publish-lines workflow-publish-lines--${tone}` });
+      for (const line of lines) list.append(el('li', {}, line));
+      host.replaceChildren(list);
+    };
+    try {
+      persistPendingViewport();
+      if (persistTimer) persistNow({ silent: true });
+      await pushToServer();
+      if (!syncedWithServer) {
+        show(['The graph could not be saved, so nothing was published. The runtime renders the saved copy, not this tab.'], 'err');
+        return;
+      }
+      const outcome = await api.publishWorkflowNode(graphId, node.id);
+      const lines = [`${outcome.created ? 'Created' : 'Updated'} ${outcome.namespace || 'kagent'}/${outcome.name}.`];
+      for (const warning of outcome.warnings || []) lines.push(`Warning: ${warning}`);
+      if (outcome.harnessWarning) {
+        lines.push(outcome.harnessWarning);
+        for (const row of outcome.harnessEnv || []) lines.push(`${row.name}=${row.value}`);
+      }
+      show(lines, 'ok');
+      toast(`Published ${outcome.name} to ${outcome.namespace || 'the kagent namespace'}.`, 'ok');
+    } catch (error) {
+      show([describePublishFailure(error)], 'err');
+      toast('The publish did not complete.', 'err');
+    }
   }
 
   function persistPendingViewport() {
@@ -939,9 +995,14 @@ export async function renderWorkflows(view) {
     }
 
     const choice = (label, values, current, key, emptyLabel) => {
+      const items = values.map((item) => (typeof item === 'string' ? { value: item, label: item, source: 'platform' } : item));
       const select = el('select', { disabled: !canEdit }, [
         ...(emptyLabel ? [option('', emptyLabel, !current)] : []),
-        ...values.map((value) => option(value, value, value === current)),
+        ...items.map((item) => option(
+          item.value,
+          item.source === 'cluster' ? `${item.label} · in the namespace` : item.label,
+          item.value === current,
+        )),
       ]);
       select.addEventListener('change', () => patch({ [key]: select.value }));
       return field(label, select);
@@ -1060,18 +1121,106 @@ export async function renderWorkflows(view) {
     }
     renderRows();
 
+    const caps = capabilities.peek(organization.id);
+    if (!caps) {
+      capabilities.load(organization.id).then((value) => {
+        // A refusal is not a redraw: it changes one sentence, and the section
+        // already says it. Redrawing on every refusal would replace the
+        // inspector while the operator is typing into it.
+        if (!value.enabled) return;
+        if (selected.kind !== 'node' || selected.id !== node.id) return;
+        // The read answers when the cluster feels like it, not when the operator
+        // is done typing, and this redraw replaces the whole inspector: never
+        // pull the field out from under the caret for a list of names.
+        const active = document.activeElement;
+        if (active && active.closest && active.closest('.workflow-env-rows')) return;
+        renderInspector();
+      });
+    }
+    const reread = el('button', { type: 'button', class: 'workflow-caps-reread' }, 'Read the cluster again');
+    reread.addEventListener('click', () => {
+      reread.disabled = true;
+      capabilities.load(organization.id, { force: true }).finally(() => {
+        reread.disabled = false;
+        if (selected.kind === 'node' && selected.id === node.id) renderInspector();
+      });
+    });
+
+    const specOf = () => {
+      const spec = live().kagentSpec;
+      return spec && typeof spec === 'object' ? spec : {};
+    };
+    const patchSpec = (changes) => patch({ kagentSpec: { ...deepClone(specOf()), ...changes } });
+    const boundServers = () => (Array.isArray(specOf().tools) ? specOf().tools : [])
+      .filter((tool) => tool && tool.kind === 'mcp').map((tool) => tool.server);
+
+    const modelConfig = el('select', { disabled: !canEdit }, [
+      option('', workflowCaps.modelConfigEmptyLabel(caps), !specOf().modelConfig),
+      ...workflowCaps.modelConfigChoices(caps)
+        .map((item) => option(item.value, item.value, specOf().modelConfig && specOf().modelConfig.name === item.value)),
+    ]);
+    modelConfig.addEventListener('change', () => patchSpec({ modelConfig: modelConfig.value ? { name: modelConfig.value } : null }));
+
+    const mcpList = el('div', { class: 'workflow-check-list' });
+    const mcpChoices = workflowCaps.mcpChoices(caps);
+    for (const item of mcpChoices) {
+      const box = el('input', { type: 'checkbox', disabled: !canEdit });
+      box.checked = boundServers().includes(item.value);
+      box.addEventListener('change', () => {
+        const kept = (Array.isArray(specOf().tools) ? specOf().tools : [])
+          .filter((tool) => !(tool && tool.kind === 'mcp' && tool.server === item.value));
+        patchSpec({ tools: box.checked ? [...kept, { kind: 'mcp', server: item.value, tools: [] }] : kept });
+      });
+      mcpList.append(el('label', { class: 'workflow-check' }, [box, el('span', {}, item.value)]));
+    }
+    if (!mcpChoices.length) {
+      mcpList.append(el('p', { class: 'muted' }, caps && caps.enabled
+        ? 'This namespace has no RemoteMCPServer, so an MCP binding has nothing to point at.'
+        : 'Server names appear once the namespace has been read.'));
+    }
+
+    const publishResult = el('div', { class: 'workflow-publish-result', role: 'status' }, '');
+    const publishButton = el('button', {
+      type: 'button', class: 'btn primary', disabled: !canEdit,
+      title: node.backend === 'kagent'
+        ? 'Render this node as an Agent CR in the kagent namespace'
+        : 'Publish the profile behind this node as a substrate actor',
+    }, node.backend === 'kagent' ? 'Publish this node to kagent' : 'Publish this profile to substrate');
+    publishButton.addEventListener('click', () => {
+      publishButton.disabled = true;
+      publishResult.textContent = 'Saving the graph, then rendering…';
+      publishNode(node, currentWorkflow().id, publishResult).finally(() => {
+        publishButton.disabled = !canEdit;
+      });
+    });
+
     const sections = [
       el('section', { class: 'workflow-inspector-section' }, [
         el('h3', {}, 'Runtime binding'),
         field('Execution backend', segmented),
-        choice('Harness', designerModel.HARNESS_OPTIONS, node.harness, 'harness', 'Platform default'),
+        choice('Harness', workflowCaps.harnessChoices(caps, designerModel.HARNESS_OPTIONS), node.harness, 'harness', 'Platform default'),
         choice('Model family', designerModel.MODEL_FAMILIES, node.modelFamily, 'modelFamily', 'Inherit from the profile'),
         choice('Task tier', designerModel.TASK_TIERS, node.taskTier || 'medium', 'taskTier', ''),
-        el('p', { class: 'muted' }, 'Publish reads these four; the substrate pattern ignores the kagent bindings and runs the profile as an actor.'),
+        el('p', { class: 'muted' }, 'A kagent publish renders from this node. Substrate runs the curated profile as an actor, so its kagent bindings are ignored.'),
+        // Not field(): a <label for> would rename the button to "Runtime" and
+        // the only thing saying what the click does would be its own title.
+        el('div', { class: 'workflow-field' }, [
+          el('div', { class: 'workflow-field-label' }, 'Publish to runtime'),
+          publishButton,
+        ]),
+        publishResult,
       ]),
     ];
 
     if (node.backend === 'kagent') {
+      sections.push(el('section', { class: 'workflow-inspector-section' }, [
+        el('h3', {}, 'Cluster bindings'),
+        el('p', { class: 'workflow-kagent-caps' }, workflowCaps.capabilitiesSummary(caps)),
+        caps && caps.enabled ? null : reread,
+        field('ModelConfig', modelConfig),
+        field('Remote MCP servers', mcpList),
+        el('p', { class: 'muted' }, 'Names here are the ones this namespace holds. A name typed anywhere else saves, and then fails to resolve when the Agent is applied.'),
+      ]));
       sections.push(el('section', { class: 'workflow-inspector-section' }, [
         el('h3', {}, 'Harness environment'),
         rows,

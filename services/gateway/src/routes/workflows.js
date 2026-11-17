@@ -229,6 +229,52 @@ function createWorkflowsRouter({ kagentAdapter = null, substrateAdapter = null }
     return res.status(outcome.ok ? 200 : 502).json(outcome);
   }));
 
+  // Publish one agent NODE of a saved graph. This is a node route because the
+  // node is where the runtime binding lives: `renderAgentCrd` reads
+  // `systemPrompt` / `kagentSpec` / `harness` off the same object the canvas
+  // saved, so publishing the profile instead would render a CR for a binding
+  // nobody edited. Substrate is the exception and it is deliberate: a substrate
+  // run executes the curated profile as an actor, so the node contributes only
+  // its location in the graph and the profile is what gets published.
+  router.post('/:id/nodes/:nodeId/publish', asyncHandler(async (req, res) => {
+    const ctx = callerContext(req);
+    const graph = wfStore.getWorkflow(cleanContextId(String(req.params.id || '')));
+    if (!graph) return res.status(404).json({ error: 'Workflow was not found.' });
+    const nodeId = cleanContextId(String(req.params.nodeId || ''));
+    const node = (graph.nodes || []).find((candidate) => candidate.id === nodeId);
+    if (!node) return res.status(404).json({ error: 'Agent node was not found in this workflow.' });
+    if (node.kind !== 'agent') {
+      return res.status(400).json({ error: 'Only an agent node can be published to a runtime.' });
+    }
+    if (!ctx.isAdmin) {
+      // The same grant check as a graph save, applied to this node alone: an
+      // agent node the persona may not run cannot be published by it either.
+      const violations = wfStore.graphPersonaViolations(
+        { ...graph, nodes: [node], edges: [] },
+        ctx.persona,
+        ctx.grants,
+      );
+      if (violations.length) return denyPersona(res, violations);
+    }
+    if (node.backend === 'kagent') {
+      if (!kagentAdapter || !kagentAdapter.enabled || !kagentAdapter.enabled()) {
+        return res.status(503).json({ error: 'kagent_not_configured' });
+      }
+      // The CR is named after where the binding lives, not after the bare node
+      // id: `n1` is unique inside a graph and identical across every graph, so
+      // two workflows would overwrite one another's Agent.
+      const outcome = await kagentAdapter.publishProfile({ ...node, crdName: `${graph.id}-${node.id}` });
+      return res.status(outcome.ok ? 200 : 502).json({ ...outcome, workflowId: graph.id, nodeId: node.id, backend: 'kagent' });
+    }
+    const profile = wfStore.getAgentProfile(node.refId);
+    if (!profile) return res.status(404).json({ error: 'The agent profile behind this node was not found.' });
+    if (!substrateAdapter || !substrateAdapter.publishProfile) {
+      return res.status(503).json({ error: 'substrate_not_configured' });
+    }
+    const outcome = await substrateAdapter.publishProfile(profile);
+    return res.status(outcome.ok ? 200 : 502).json({ ...outcome, workflowId: graph.id, nodeId: node.id, backend: 'substrate' });
+  }));
+
   // ---------------------------------------------- platform-global defaults API
 
   router.get('/defaults', asyncHandler(async (req, res) => {

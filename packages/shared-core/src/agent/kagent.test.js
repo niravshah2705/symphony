@@ -164,6 +164,17 @@ test('renderAgentCrd reports Harness env instead of writing it into the shared H
   assert.equal(JSON.stringify(out.agent).includes('LOG_LEVEL'), false, 'env must not be smuggled into the Agent CR');
 });
 
+test('a node publish names the Agent by its graph and node, not by the bare node id', () => {
+  const node = { id: 'n1', refId: 'coding', systemPrompt: 'base', kagentSpec: {} };
+  const sales = renderAgentCrd({ ...node, crdName: 'sales-onboarding-n1' }, { namespace: 'kagent' });
+  const support = renderAgentCrd({ ...node, crdName: 'support-triage-n1' }, { namespace: 'kagent' });
+  assert.equal(sales.name, 'sales-onboarding-n1');
+  assert.equal(sales.agent.metadata.name, 'sales-onboarding-n1', 'the metadata name is what the cluster keys on');
+  assert.notEqual(sales.name, support.name, 'two graphs whose agent node is called n1 must not overwrite each other');
+  assert.equal(renderAgentCrd({ ...node, crdName: 'Sales Onboarding/n1' }, { namespace: 'kagent' }).name, 'sales-onboarding-n1');
+  assert.equal(renderAgentCrd(node, { namespace: 'kagent' }).name, 'n1', 'with no graph qualifier the id the caller passed is still the name');
+});
+
 test('renderAgentCrd rejects a profile with no prompt to compose', () => {
   const out = renderAgentCrd({ id: 'bare', systemPrompt: '', kagentSpec: {} }, { namespace: 'kagent' });
   assert.equal(out.ok, false);

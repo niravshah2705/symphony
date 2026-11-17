@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 818 nodes
+Community of 838 nodes
 
-- **Size**: 818 nodes
-- **Cohesion**: 0.4723
+- **Size**: 838 nodes
+- **Cohesion**: 0.4685
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,15 +65,15 @@ Community of 818 nodes
 | capitalize | Function | ./public/js/app.js | 901-904 |
 | start | Function | ./public/js/app.js | 908-916 |
 
-*... and 768 more members.*
+*... and 788 more members.*
 
 ## Execution Flows
 
-- **envRow** (criticality: 0.84, depth: 10)
-- **commit** (criticality: 0.84, depth: 10)
-- **onMove** (criticality: 0.83, depth: 9)
+- **envRow** (criticality: 0.82, depth: 11)
+- **commit** (criticality: 0.82, depth: 11)
+- **onMove** (criticality: 0.81, depth: 9)
 - **start** (criticality: 0.81, depth: 6)
-- **onUp** (criticality: 0.81, depth: 7)
+- **onUp** (criticality: 0.79, depth: 7)
 - **renderWorkflows** (criticality: 0.79, depth: 7)
 - **initializeAuthentication** (criticality: 0.78, depth: 4)
 - **beginSignIn** (criticality: 0.76, depth: 6)
@@ -85,36 +85,36 @@ Community of 818 nodes
 
 ### Outgoing
 
-- `addEventListener` (235 edge(s))
-- `append` (223 edge(s))
-- `map` (191 edge(s))
-- `equal` (141 edge(s))
-- `push` (138 edge(s))
-- `String` (118 edge(s))
-- `trim` (100 edge(s))
-- `filter` (96 edge(s))
-- `isArray` (91 edge(s))
-- `has` (73 edge(s))
-- `Boolean` (71 edge(s))
+- `addEventListener` (239 edge(s))
+- `append` (226 edge(s))
+- `map` (201 edge(s))
+- `equal` (166 edge(s))
+- `push` (144 edge(s))
+- `String` (127 edge(s))
+- `trim` (101 edge(s))
+- `filter` (99 edge(s))
+- `isArray` (95 edge(s))
+- `has` (77 edge(s))
+- `Boolean` (72 edge(s))
+- `get` (64 edge(s))
 - `catch` (62 edge(s))
 - `setAttribute` (61 edge(s))
-- `get` (60 edge(s))
 - `Number` (55 edge(s))
 
 ### Incoming
 
-- `equal` (141 edge(s))
+- `equal` (166 edge(s))
 - `./public/js/views/settings.js` (137 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
 - `./public/js/app.js` (86 edge(s))
-- `./public/js/views/workflows.js` (76 edge(s))
+- `./public/js/views/workflows.js` (83 edge(s))
 - `./public/js/workflow-designer-model.mjs` (65 edge(s))
+- `deepEqual` (51 edge(s))
 - `./services/org/tests/helpers.py::auth` (45 edge(s))
-- `deepEqual` (43 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
-- `match` (29 edge(s))
+- `match` (33 edge(s))
 - `./public/js/views/organization.js` (28 edge(s))
 - `./public/js/auth.js` (23 edge(s))
-- `./public/js/workflow-sync.test.mjs` (23 edge(s))
+- `map` (23 edge(s))

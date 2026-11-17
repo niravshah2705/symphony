@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 469 nodes
+Community of 466 nodes
 
-- **Size**: 469 nodes
-- **Cohesion**: 0.2903
+- **Size**: 466 nodes
+- **Cohesion**: 0.2920
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,7 +17,7 @@ Community of 469 nodes
 | test:each metric filter names a field the emitting code actually writes@L95 | Test | ./deploy/gcp/observability-config.test.js | 95-118 |
 | test:user creates orgs and projects, then manages pending invitations@L264 | Test | ./e2e/organization-flow.spec.js | 264-321 |
 | test:captures a persona at onboarding and reflects it after reload@L350 | Test | ./e2e/organization-flow.spec.js | 350-372 |
-| test:organization admin creates a safe custom agent, links nodes, and shares the graph with the organization@L358 | Test | ./e2e/workflow-designer.spec.js | 358-493 |
+| test:organization admin creates a safe custom agent, links nodes, and shares the graph with the organization@L398 | Test | ./e2e/workflow-designer.spec.js | 398-533 |
 | startActorSession | Function | ./packages/shared-core/src/billing/actor-sessions.js | 10-18 |
 | heartbeatActorSession | Function | ./packages/shared-core/src/billing/actor-sessions.js | 20-25 |
 | finishActorSession | Function | ./packages/shared-core/src/billing/actor-sessions.js | 27-39 |
@@ -65,7 +65,7 @@ Community of 469 nodes
 | test:a failing row stays retryable, and only gives up after the ceiling@L168 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 168-178 |
 | test:enqueue never throws at a run that already happened@L180 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 180-190 |
 
-*... and 419 more members.*
+*... and 416 more members.*
 
 ## Execution Flows
 
@@ -80,9 +80,9 @@ Community of 469 nodes
 
 ### Outgoing
 
-- `equal` (628 edge(s))
+- `equal` (623 edge(s))
 - `deepEqual` (82 edge(s))
-- `String` (76 edge(s))
+- `String` (74 edge(s))
 - `Number` (54 edge(s))
 - `throws` (53 edge(s))
 - `map` (50 edge(s))
@@ -98,7 +98,7 @@ Community of 469 nodes
 
 ### Incoming
 
-- `equal` (628 edge(s))
+- `equal` (623 edge(s))
 - `deepEqual` (82 edge(s))
 - `./packages/shared-core/src/store.js` (63 edge(s))
 - `throws` (53 edge(s))

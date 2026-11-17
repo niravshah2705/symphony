@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 300 nodes
+Community of 301 nodes
 
-- **Size**: 300 nodes
-- **Cohesion**: 0.2351
+- **Size**: 301 nodes
+- **Cohesion**: 0.2363
 - **Dominant Language**: javascript
 
 ## Members
@@ -50,22 +50,22 @@ Community of 300 nodes
 | test:renderAgentCrd maps skills/plugins/tools onto the CRD shapes without leaking promptAppend@L135 | Test | ./packages/shared-core/src/agent/kagent.test.js | 135-144 |
 | test:renderAgentCrd uses systemPromptFrom + ConfigMap only for an over-long prompt@L146 | Test | ./packages/shared-core/src/agent/kagent.test.js | 146-158 |
 | test:renderAgentCrd reports Harness env instead of writing it into the shared Harness@L160 | Test | ./packages/shared-core/src/agent/kagent.test.js | 160-165 |
-| test:renderAgentCrd rejects a profile with no prompt to compose@L167 | Test | ./packages/shared-core/src/agent/kagent.test.js | 167-171 |
-| test:renderAgentCrd drops credential-shaped env rows and unpinned sources@L173 | Test | ./packages/shared-core/src/agent/kagent.test.js | 173-184 |
-| test:renderAgentCrd warns about git/bucket sources that never become Ready on the actor@L186 | Test | ./packages/shared-core/src/agent/kagent.test.js | 186-195 |
-| test:client reports kagent_not_configured when disabled, for every verb@L199 | Test | ./packages/shared-core/src/agent/kagent.test.js | 199-207 |
-| test:publishProfile applies the ConfigMap before the Agent it references@L209 | Test | ./packages/shared-core/src/agent/kagent.test.js | 209-216 |
-| test:publishProfile creates on 404 and refuses to apply an invalid spec@L218 | Test | ./packages/shared-core/src/agent/kagent.test.js | 218-228 |
-| test:capabilities lists live cluster objects for the palette@L230 | Test | ./packages/shared-core/src/agent/kagent.test.js | 230-243 |
-| test:get returns null on 404 and list throws with the server message on anything else@L245 | Test | ./packages/shared-core/src/agent/kagent.test.js | 245-251 |
-| test:remove distinguishes deleted from already-missing@L253 | Test | ./packages/shared-core/src/agent/kagent.test.js | 253-258 |
-| test:status surfaces an unreachable API server without throwing@L260 | Test | ./packages/shared-core/src/agent/kagent.test.js | 260-268 |
-| test:unknown kinds and cluster-scoped CRs are refused before touching the API server@L270 | Test | ./packages/shared-core/src/agent/kagent.test.js | 270-276 |
-| test:the rendered CR never carries a bearer token, kubeconfig path or secret value@L278 | Test | ./packages/shared-core/src/agent/kagent.test.js | 278-284 |
+| test:a node publish names the Agent by its graph and node, not by the bare node id@L167 | Test | ./packages/shared-core/src/agent/kagent.test.js | 167-176 |
+| test:renderAgentCrd rejects a profile with no prompt to compose@L178 | Test | ./packages/shared-core/src/agent/kagent.test.js | 178-182 |
+| test:renderAgentCrd drops credential-shaped env rows and unpinned sources@L184 | Test | ./packages/shared-core/src/agent/kagent.test.js | 184-195 |
+| test:renderAgentCrd warns about git/bucket sources that never become Ready on the actor@L197 | Test | ./packages/shared-core/src/agent/kagent.test.js | 197-206 |
+| test:client reports kagent_not_configured when disabled, for every verb@L210 | Test | ./packages/shared-core/src/agent/kagent.test.js | 210-218 |
+| test:publishProfile applies the ConfigMap before the Agent it references@L220 | Test | ./packages/shared-core/src/agent/kagent.test.js | 220-227 |
+| test:publishProfile creates on 404 and refuses to apply an invalid spec@L229 | Test | ./packages/shared-core/src/agent/kagent.test.js | 229-239 |
+| test:capabilities lists live cluster objects for the palette@L241 | Test | ./packages/shared-core/src/agent/kagent.test.js | 241-254 |
+| test:get returns null on 404 and list throws with the server message on anything else@L256 | Test | ./packages/shared-core/src/agent/kagent.test.js | 256-262 |
+| test:remove distinguishes deleted from already-missing@L264 | Test | ./packages/shared-core/src/agent/kagent.test.js | 264-269 |
+| test:status surfaces an unreachable API server without throwing@L271 | Test | ./packages/shared-core/src/agent/kagent.test.js | 271-279 |
+| test:unknown kinds and cluster-scoped CRs are refused before touching the API server@L281 | Test | ./packages/shared-core/src/agent/kagent.test.js | 281-287 |
+| test:the rendered CR never carries a bearer token, kubeconfig path or secret value@L289 | Test | ./packages/shared-core/src/agent/kagent.test.js | 289-295 |
 | isLocalInference | Function | ./packages/shared-core/src/agent/model-presets.js | 25-25 |
-| isPurposeRole | Function | ./packages/shared-core/src/agent/model-presets.js | 46-46 |
 
-*... and 250 more members.*
+*... and 251 more members.*
 
 ## Execution Flows
 
@@ -85,7 +85,7 @@ Community of 300 nodes
 
 ### Outgoing
 
-- `equal` (150 edge(s))
+- `equal` (154 edge(s))
 - `isArray` (63 edge(s))
 - `deepEqual` (61 edge(s))
 - `includes` (53 edge(s))
@@ -103,13 +103,13 @@ Community of 300 nodes
 
 ### Incoming
 
-- `equal` (150 edge(s))
+- `equal` (154 edge(s))
 - `./packages/shared-core/src/store.js` (148 edge(s))
 - `deepEqual` (61 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/workflow/store.js` (38 edge(s))
 - `./packages/shared-core/src/workflow/model.js` (37 edge(s))
-- `./packages/shared-core/src/agent/kagent.test.js` (26 edge(s))
+- `./packages/shared-core/src/agent/kagent.test.js` (27 edge(s))
 - `./packages/shared-core/src/agent/kagent.js` (25 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
 - `ok` (22 edge(s))

@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 32 nodes
+Community of 34 nodes
 
-- **Size**: 32 nodes
+- **Size**: 34 nodes
 - **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
@@ -25,7 +25,7 @@ Community of 32 nodes
 | test:Cookie Preferences reports a storage failure without changing consent or reloading@L463 | Test | ./e2e/persistent-footer.spec.js | 463-505 |
 | test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
 | test:a non-Agent hash never exposes or preloads the Agent scaffold@L107 | Test | ./e2e/route-loading.spec.js | 107-137 |
-| test:lazy Workflows route renders the selected organization and five realistic examples@L300 | Test | ./e2e/workflow-designer.spec.js | 300-356 |
+| test:lazy Workflows route renders the selected organization and five realistic examples@L340 | Test | ./e2e/workflow-designer.spec.js | 340-396 |
 | test:a stream that flaps (dies before 60s) on every open stops reconnecting after 6 failures@L163 | Test | ./e2e/workspace-stream-failure.spec.js | 163-174 |
 | test:a connection that stays open past the 60s health threshold resets the failure budget@L176 | Test | ./e2e/workspace-stream-failure.spec.js | 176-203 |
 | test:DirectStageCommandBus dispatches the contract to an injected local handler@L46 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 46-57 |
@@ -44,7 +44,9 @@ Community of 32 nodes
 | test:gateway source imports shared-core and no heavy AI workspace or agent package@L25 | Test | ./services/gateway/src/dependency-boundary.test.js | 25-44 |
 | test:settings preflight outage and non-ready decisions fail closed without orchestrator dispatch@L205 | Test | ./services/gateway/src/pipeline-admission.test.js | 205-243 |
 | test:the SDK-free billing gate uses authoritative tenant scope and blocks before external admission@L271 | Test | ./services/gateway/src/pipeline-admission.test.js | 271-287 |
-| test:a live kagent adapter receives publishes and surfaces capabilities@L195 | Test | ./services/gateway/src/routes/workflows.test.js | 195-214 |
+| test:publishing a node renders the node binding rather than a copy of the profile@L204 | Test | ./services/gateway/src/routes/workflows.test.js | 204-253 |
+| test:a substrate node publishes the profile behind it, and the persona gate still applies@L255 | Test | ./services/gateway/src/routes/workflows.test.js | 255-282 |
+| test:a live kagent adapter receives publishes and surfaces capabilities@L284 | Test | ./services/gateway/src/routes/workflows.test.js | 284-303 |
 | test:identity verification source imports shared-core and no heavy AI workspace@L25 | Test | ./services/identity-verification/src/dependency-boundary.test.js | 25-44 |
 
 ## Execution Flows
@@ -56,16 +58,16 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `expect` (133 edge(s))
+- `equal` (70 edge(s))
 - `locator` (69 edge(s))
-- `equal` (53 edge(s))
-- `push` (36 edge(s))
+- `push` (38 edge(s))
 - `toBeVisible` (30 edge(s))
 - `route` (28 edge(s))
 - `toHaveCount` (26 edge(s))
 - `getByRole` (23 edge(s))
+- `deepEqual` (19 edge(s))
 - `toEqual` (18 edge(s))
 - `./e2e/page-loading.spec.js::json` (18 edge(s))
-- `deepEqual` (18 edge(s))
 - `url` (16 edge(s))
 - `toHaveAttribute` (16 edge(s))
 - `join` (16 edge(s))
@@ -74,16 +76,16 @@ No execution flows pass through this community.
 ### Incoming
 
 - `expect` (133 edge(s))
+- `equal` (70 edge(s))
 - `locator` (69 edge(s))
-- `equal` (53 edge(s))
-- `push` (36 edge(s))
+- `push` (38 edge(s))
 - `toBeVisible` (30 edge(s))
 - `route` (28 edge(s))
 - `toHaveCount` (26 edge(s))
 - `getByRole` (23 edge(s))
+- `deepEqual` (19 edge(s))
 - `toEqual` (18 edge(s))
 - `./e2e/page-loading.spec.js::json` (18 edge(s))
-- `deepEqual` (18 edge(s))
 - `url` (16 edge(s))
 - `toHaveAttribute` (16 edge(s))
 - `join` (16 edge(s))

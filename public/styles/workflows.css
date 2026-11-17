@@ -903,6 +903,15 @@ body.workflow-dragging * { cursor: grabbing !important; }
 .workflow-connection-summary .icon { width: 13px; height: 13px; color: var(--muted); }
 .workflow-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .workflow-field-grid .workflow-field { margin-bottom: 0; }
+/* kagent surface: what the namespace answered, and what a publish did with it. */
+.workflow-kagent-caps { margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.workflow-caps-reread { justify-self: start; margin-bottom: 8px; font-size: 9px; }
+.workflow-check-list { display: grid; gap: 6px; }
+.workflow-publish-result { margin-top: 8px; font-size: 12px; }
+.workflow-publish-lines { margin: 0; padding-left: 18px; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.workflow-publish-lines--ok { color: var(--green); }
+.workflow-publish-lines--err { color: var(--red); }
+
 .workflow-env-rows { display: grid; gap: 6px; margin-bottom: 8px; }
 .workflow-env-row {
   display: grid;
