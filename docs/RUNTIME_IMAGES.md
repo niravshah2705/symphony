@@ -94,5 +94,3 @@ exit, e.g. `docker run --rm claude-runtime:local --check`.
   the other three use.
 - `npm install -g --allow-scripts=…` is kept verbatim; native-module postinstall
   steps run by default with npm.
-- The fleet's `code-review-graph` pre-commit hook indexes `.go`; committing these
-  files may ask you to `git add -A docs/code-graph` and re-commit.
