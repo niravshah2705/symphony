@@ -198,7 +198,7 @@ formatters:
       sections:
         - standard
         - default
-        - prefix(github.com/kagent-dev/kagent)
+        - prefix(github.com/niravshah2705/symphony/go)
   exclusions:
     generated: strict
     paths:
