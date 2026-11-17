@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 194 nodes
+Community of 298 nodes
 
-- **Size**: 194 nodes
-- **Cohesion**: 0.1904
+- **Size**: 298 nodes
+- **Cohesion**: 0.2603
 - **Dominant Language**: javascript
 
 ## Members
@@ -63,58 +63,58 @@ Community of 194 nodes
 | generateVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 17-19 |
 | challengeFromVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 22-24 |
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
-| sendBrowser | Function | ./packages/shared-core/src/billing/notify.js | 20-41 |
+| makeFakeStorage | Function | ./packages/shared-core/src/attachments/__fixtures__/fakes.js | 11-47 |
 
-*... and 144 more members.*
+*... and 248 more members.*
 
 ## Execution Flows
 
 - **childMain** (criticality: 0.73, depth: 9)
 - **listActors** (criticality: 0.71, depth: 8)
 - **getActorTemplate** (criticality: 0.70, depth: 8)
-- **isBillingBlocked** (criticality: 0.69, depth: 7)
 - **ensureFreshCodexTokens** (criticality: 0.68, depth: 6)
 - **ensureFreshClaudeTokens** (criticality: 0.68, depth: 6)
 - **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
 - **refreshTokens** (criticality: 0.67, depth: 2)
 - **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
 - **refreshTokens** (criticality: 0.67, depth: 2)
-- *... and 17 more flows.*
+- **getGithubToken** (criticality: 0.62, depth: 8)
+- *... and 14 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (53 edge(s))
+- `equal` (135 edge(s))
+- `String` (29 edge(s))
+- `slice` (27 edge(s))
 - `isArray` (27 edge(s))
+- `deepEqual` (26 edge(s))
+- `trim` (23 edge(s))
 - `filter` (23 edge(s))
-- `String` (22 edge(s))
+- `set` (22 edge(s))
 - `includes` (22 edge(s))
-- `slice` (21 edge(s))
-- `trim` (21 edge(s))
-- `set` (19 edge(s))
-- `deepEqual` (19 edge(s))
-- `toISOString` (16 edge(s))
+- `ok` (21 edge(s))
+- `map` (20 edge(s))
+- `push` (18 edge(s))
+- `toISOString` (18 edge(s))
 - `call` (16 edge(s))
-- `find` (15 edge(s))
-- `push` (15 edge(s))
-- `isFinite` (13 edge(s))
-- `map` (13 edge(s))
+- `isFinite` (15 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/store.js` (147 edge(s))
-- `equal` (53 edge(s))
+- `./packages/shared-core/src/store.js` (146 edge(s))
+- `equal` (135 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
+- `deepEqual` (26 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
+- `./packages/shared-core/src/attachments/store.js` (22 edge(s))
+- `ok` (21 edge(s))
 - `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
-- `deepEqual` (19 edge(s))
 - `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
 - `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
-- `push` (12 edge(s))
-- `ok` (11 edge(s))
-- `./packages/shared/src/messaging/events.test.js` (9 edge(s))
-- `./packages/shared-core/src/agent/pkce.js` (8 edge(s))
-- `./packages/shared-core/src/billing/notify.js` (8 edge(s))
-- `publishEvent` (8 edge(s))
-- `./packages/shared/src/store-workspace-isolation.test.js::inWorkspace` (8 edge(s))
+- `./packages/shared-core/src/attachments/gcs.js` (14 edge(s))
+- `./packages/shared-core/src/attachments/model.js` (14 edge(s))
+- `./packages/shared-core/src/attachments/service.js` (13 edge(s))
+- `from` (12 edge(s))
+- `./packages/shared-core/src/attachments/model.test.js` (12 edge(s))

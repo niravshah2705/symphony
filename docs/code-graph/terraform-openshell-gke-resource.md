@@ -4,20 +4,20 @@
 
 ## Overview
 
-Community of 119 nodes
+Community of 130 nodes
 
-- **Size**: 119 nodes
-- **Cohesion**: 0.6448
+- **Size**: 130 nodes
+- **Cohesion**: 0.6409
 - **Dominant Language**: hcl
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| resource.google_container_cluster.primary | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 5-95 |
-| local.system_node_selector | Function | ./deploy/gcp/terraform-openshell-gke/gke.tf | 110-112 |
-| resource.google_container_node_pool.primary_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 115-170 |
-| resource.google_container_node_pool.system_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 176-236 |
+| resource.google_container_cluster.primary | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 5-100 |
+| local.system_node_selector | Function | ./deploy/gcp/terraform-openshell-gke/gke.tf | 115-117 |
+| resource.google_container_node_pool.primary_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 120-175 |
+| resource.google_container_node_pool.system_nodes | Class | ./deploy/gcp/terraform-openshell-gke/gke.tf | 181-238 |
 | data.http.agent_sandbox_manifest | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 6-8 |
 | data.kubectl_file_documents.agent_sandbox_docs | Class | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 10-12 |
 | local.agent_sandbox_docs | Function | ./deploy/gcp/terraform-openshell-gke/helm_components.tf | 18-31 |
@@ -45,9 +45,8 @@ Community of 119 nodes
 | resource.kubernetes_namespace_v1.openshell_credentials | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 13-19 |
 | resource.kubernetes_namespace_v1.cert_manager | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 21-27 |
 | resource.kubernetes_namespace_v1.envoy_gateway_system | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 29-35 |
-| local.tenants | Function | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 46-46 |
-| resource.kubernetes_namespace_v1.tenants | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 49-74 |
-| resource.kubernetes_namespace_v1.substrate_credentials | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 83-96 |
+| resource.kubernetes_namespace_v1.tenants | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 41-59 |
+| resource.kubernetes_namespace_v1.substrate_credentials | Class | ./deploy/gcp/terraform-openshell-gke/namespaces.tf | 68-81 |
 | resource.google_project_service.required_apis | Class | ./deploy/gcp/terraform-openshell-gke/network.tf | 5-18 |
 | resource.google_compute_subnetwork.openshell_subnet | Class | ./deploy/gcp/terraform-openshell-gke/network.tf | 24-43 |
 | resource.google_compute_router.router | Class | ./deploy/gcp/terraform-openshell-gke/network.tf | 49-56 |
@@ -64,8 +63,9 @@ Community of 119 nodes
 | output.dns_setup_instructions | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 36-39 |
 | output.substrate_enabled | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 45-48 |
 | output.substrate_worker_pool | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 50-53 |
+| output.substrate_worker_pool_cr_name | Function | ./deploy/gcp/terraform-openshell-gke/outputs.tf | 59-62 |
 
-*... and 69 more members.*
+*... and 80 more members.*
 
 ## Execution Flows
 
@@ -75,12 +75,12 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform-openshell-gke/variables.tf` (35 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/substrate.tf` (20 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/outputs.tf` (16 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/variables.tf` (39 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/substrate.tf` (25 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/outputs.tf` (19 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/helm_components.tf` (15 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/main.tf` (8 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/tenant_config.tf` (8 edge(s))
-- `./deploy/gcp/terraform-openshell-gke/namespaces.tf` (7 edge(s))
+- `./deploy/gcp/terraform-openshell-gke/namespaces.tf` (6 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/network.tf` (6 edge(s))
 - `./deploy/gcp/terraform-openshell-gke/gke.tf` (4 edge(s))

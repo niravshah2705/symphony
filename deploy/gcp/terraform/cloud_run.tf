@@ -267,6 +267,13 @@ resource "google_cloud_run_v2_service_iam_member" "proxy_invokes_settings" {
 }
 
 # --- Gateway (PUBLIC) ---------------------------------------------------------
+locals {
+  # Direct VPC egress as a 0/1-element list, so the block below disappears from
+  # the template entirely when switched off rather than rendering an empty
+  # vpc_access (which the API would still record as a request for VPC config).
+  gateway_vpc_access = var.gateway_vpc_egress_enabled ? [1] : []
+}
+
 resource "google_cloud_run_v2_service" "gateway" {
   project  = var.project_id
   name     = var.gateway_service_name
@@ -285,6 +292,10 @@ resource "google_cloud_run_v2_service" "gateway" {
     precondition {
       condition     = var.container_concurrency == 1 || try(tonumber(var.cloud_run_service_cpu) >= 1, false)
       error_message = "container_concurrency values above 1 require cloud_run_service_cpu to be at least 1 vCPU."
+    }
+    precondition {
+      condition     = !var.gateway_vpc_egress_enabled || (var.vpc_network != "" && var.vpc_subnet != "")
+      error_message = "gateway_vpc_egress_enabled needs both vpc_network and vpc_subnet; with either empty the service would keep its current (no-VPC) configuration while reading as switched on."
     }
   }
 
@@ -347,6 +358,22 @@ resource "google_cloud_run_v2_service" "gateway" {
       }
     }
 
+    # Direct VPC egress — gen2's connector-less way onto a VPC. The block is
+    # `network_interfaces` (plural) in the provider; the singular
+    # `network_interface` is not a valid argument here. `connector` (a paid
+    # Serverless VPC Access connector) is deliberately unused — same
+    # destination, plus a throughput ceiling and another resource to babysit.
+    dynamic "vpc_access" {
+      for_each = local.gateway_vpc_access
+      content {
+        egress = var.vpc_egress_mode
+
+        network_interfaces {
+          network    = var.vpc_network
+          subnetwork = var.vpc_subnet
+        }
+      }
+    }
   }
 
   depends_on = [
@@ -369,10 +396,10 @@ resource "google_cloud_run_v2_service" "gateway" {
 # token validation). This lets the gateway's OIDC-authenticated reverse-proxy
 # reach the read endpoints over run.app AND lets Pub/Sub push / Cloud Scheduler
 # in — all without a VPC (no cost). For network-layer isolation instead, set
-# var.internal_ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY" and add Direct VPC egress
-# to the gateway (Cloud Run gen2, no paid connector):
-#   template { vpc_access { network_interfaces { network=... subnetwork=... }
-#                          egress = "ALL_TRAFFIC" } }
+# var.internal_ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY" and switch on the
+# gateway's Direct VPC egress (var.gateway_vpc_egress_enabled + var.vpc_network +
+# var.vpc_subnet; see the `vpc_access` block in the gateway resource above for
+# what that does and, in docs/SUBSTRATE_STATUS.md, what it does not yet reach).
 resource "google_cloud_run_v2_service" "planner" {
   project             = var.project_id
   name                = var.planner_service_name

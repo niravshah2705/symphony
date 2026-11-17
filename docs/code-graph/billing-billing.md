@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 469 nodes
+Community of 468 nodes
 
-- **Size**: 469 nodes
-- **Cohesion**: 0.2914
+- **Size**: 468 nodes
+- **Cohesion**: 0.2921
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,16 +65,21 @@ Community of 469 nodes
 | test:a failing row stays retryable, and only gives up after the ceiling@L168 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 168-178 |
 | test:enqueue never throws at a run that already happened@L180 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 180-190 |
 
-*... and 419 more members.*
+*... and 418 more members.*
 
 ## Execution Flows
 
 - **childMain** (criticality: 0.73, depth: 9)
+- **listActors** (criticality: 0.71, depth: 8)
+- **getActorTemplate** (criticality: 0.70, depth: 8)
 - **isBillingBlocked** (criticality: 0.69, depth: 7)
 - **main** (criticality: 0.68, depth: 4)
+- **ensureFreshCodexTokens** (criticality: 0.68, depth: 6)
+- **ensureFreshClaudeTokens** (criticality: 0.68, depth: 6)
 - **main** (criticality: 0.67, depth: 4)
 - **main** (criticality: 0.67, depth: 4)
-- **recordActorUsage** (criticality: 0.61, depth: 3)
+- **getGithubToken** (criticality: 0.62, depth: 8)
+- *... and 11 more flows.*
 
 ## Dependencies
 
@@ -82,7 +87,7 @@ Community of 469 nodes
 
 - `equal` (628 edge(s))
 - `deepEqual` (82 edge(s))
-- `String` (76 edge(s))
+- `String` (74 edge(s))
 - `Number` (54 edge(s))
 - `throws` (53 edge(s))
 - `map` (49 edge(s))
@@ -100,7 +105,7 @@ Community of 469 nodes
 
 - `equal` (628 edge(s))
 - `deepEqual` (82 edge(s))
-- `./packages/shared-core/src/store.js` (61 edge(s))
+- `./packages/shared-core/src/store.js` (62 edge(s))
 - `throws` (53 edge(s))
 - `expect` (43 edge(s))
 - `ok` (41 edge(s))

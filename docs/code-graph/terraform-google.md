@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 576 nodes
+Community of 581 nodes
 
-- **Size**: 576 nodes
-- **Cohesion**: 0.7416
+- **Size**: 581 nodes
+- **Cohesion**: 0.7405
 - **Dominant Language**: hcl
 
 ## Members
@@ -62,10 +62,10 @@ Community of 576 nodes
 | resource.google_secret_manager_secret_iam_member.gateway_one_tap | Class | ./deploy/gcp/terraform/cloud_run.tf | 239-245 |
 | local.proxy_sa_members | Function | ./deploy/gcp/terraform/cloud_run.tf | 254-257 |
 | resource.google_cloud_run_v2_service_iam_member.proxy_invokes_settings | Class | ./deploy/gcp/terraform/cloud_run.tf | 260-267 |
-| resource.google_cloud_run_v2_service.gateway | Class | ./deploy/gcp/terraform/cloud_run.tf | 270-363 |
-| resource.google_cloud_run_v2_service.planner | Class | ./deploy/gcp/terraform/cloud_run.tf | 376-547 |
+| local.gateway_vpc_access | Function | ./deploy/gcp/terraform/cloud_run.tf | 274-274 |
+| resource.google_cloud_run_v2_service.gateway | Class | ./deploy/gcp/terraform/cloud_run.tf | 277-390 |
 
-*... and 526 more members.*
+*... and 531 more members.*
 
 ## Execution Flows
 
@@ -75,12 +75,12 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform/variables.tf` (208 edge(s))
+- `./deploy/gcp/terraform/variables.tf` (212 edge(s))
 - `./deploy/gcp/terraform/locals.tf` (64 edge(s))
 - `./deploy/gcp/terraform/outputs.tf` (34 edge(s))
 - `./deploy/gcp/terraform/pipeline.tf` (29 edge(s))
 - `./deploy/gcp/terraform/iam.tf` (22 edge(s))
-- `./deploy/gcp/terraform/cloud_run.tf` (20 edge(s))
+- `./deploy/gcp/terraform/cloud_run.tf` (21 edge(s))
 - `./deploy/gcp/terraform/provisioner.tf` (19 edge(s))
 - `./deploy/gcp/terraform/settings_service.tf` (19 edge(s))
 - `./deploy/gcp/terraform/observability.tf` (15 edge(s))

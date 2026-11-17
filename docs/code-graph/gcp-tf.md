@@ -4,21 +4,23 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 7 nodes
 
-- **Size**: 5 nodes
-- **Cohesion**: 0.0930
+- **Size**: 7 nodes
+- **Cohesion**: 0.1429
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| tfEval | Function | ./deploy/gcp/substrate-env.test.js | 58-67 |
-| tfRender | Function | ./deploy/gcp/substrate-env.test.js | 70-74 |
-| tfProbe | Function | ./deploy/gcp/substrate-env.test.js | 76-85 |
-| tfMap | Function | ./deploy/gcp/substrate-env.test.js | 90-95 |
-| tfStr | Function | ./deploy/gcp/substrate-env.test.js | 98-102 |
+| tfFile | Function | ./deploy/gcp/gateway-vpc-egress.test.js | 26-26 |
+| test:only the gateway has egress, and enabling it requires both names@L129 | Test | ./deploy/gcp/gateway-vpc-egress.test.js | 129-152 |
+| test@L130 | Test | ./deploy/gcp/gateway-vpc-egress.test.js | 130-130 |
+| test@L136 | Test | ./deploy/gcp/gateway-vpc-egress.test.js | 136-136 |
+| test@L147 | Test | ./deploy/gcp/gateway-vpc-egress.test.js | 147-147 |
+| test@L148 | Test | ./deploy/gcp/gateway-vpc-egress.test.js | 148-148 |
+| test@L149 | Test | ./deploy/gcp/gateway-vpc-egress.test.js | 149-149 |
 
 ## Execution Flows
 
@@ -28,24 +30,34 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./deploy/gcp/substrate-env.test.js::test:the rendered substrate map is the shape the JS side parses@L389` (4 edge(s))
-- `String` (2 edge(s))
-- `match` (2 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the actor callback renders as four names or none, never a half-pair@L427` (2 edge(s))
-- `stringify` (2 edge(s))
-- `slice` (2 edge(s))
-- `entries` (1 edge(s))
-- `trim` (1 edge(s))
-- `replace` (1 edge(s))
-- `toString` (1 edge(s))
-- `execFileSync` (1 edge(s))
-- `matchAll` (1 edge(s))
-- `fromEntries` (1 edge(s))
+- `filter` (3 edge(s))
+- `join` (3 edge(s))
+- `deepEqual` (2 edge(s))
+- `ok` (2 edge(s))
 - `map` (1 edge(s))
-- `join` (1 edge(s))
+- `entries` (1 edge(s))
+- `readdirSync` (1 edge(s))
+- `endsWith` (1 edge(s))
+- `equal` (1 edge(s))
+- `match` (1 edge(s))
+- `exec` (1 edge(s))
+- `matchAll` (1 edge(s))
+- `some` (1 edge(s))
+- `readFileSync` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/substrate-env.test.js` (6 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the rendered substrate map is the shape the JS side parses@L389` (4 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the actor callback renders as four names or none, never a half-pair@L427` (2 edge(s))
+- `./deploy/gcp/gateway-vpc-egress.test.js` (4 edge(s))
+- `filter` (3 edge(s))
+- `deepEqual` (2 edge(s))
+- `join` (2 edge(s))
+- `ok` (2 edge(s))
+- `map` (1 edge(s))
+- `entries` (1 edge(s))
+- `readdirSync` (1 edge(s))
+- `endsWith` (1 edge(s))
+- `equal` (1 edge(s))
+- `match` (1 edge(s))
+- `exec` (1 edge(s))
+- `matchAll` (1 edge(s))
+- `some` (1 edge(s))

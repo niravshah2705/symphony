@@ -478,10 +478,75 @@ variable "internal_ingress" {
     the gateway reverse-proxy its read endpoints over the run.app hostname with an
     OIDC ID token (see services/gateway/src/proxy.js) without a VPC.
     For network-layer isolation instead, set INGRESS_TRAFFIC_INTERNAL_ONLY and add
-    Direct VPC egress to the gateway (see the note in cloud_run.tf) — no paid
-    connector on Cloud Run gen2, but it needs a VPC subnet.
+    Direct VPC egress to the gateway (var.gateway_vpc_egress_enabled +
+    var.vpc_network + var.vpc_subnet) — no paid connector on Cloud Run gen2, but it
+    needs a VPC subnet.
   EOT
   default     = "INGRESS_TRAFFIC_ALL"
+}
+
+# --- Direct VPC egress -------------------------------------------------------
+# The connector-less way for a gen2 service to reach what `var.internal_ingress`'s
+# alternative locks it out of: the service takes source IPs from the named
+# subnetwork's PRIMARY range and puts private traffic on the VPC. Off by default
+# because turning it on changes the SOURCE IP of everything the service sends into
+# that range — the cluster's firewall rules have to know the range, and a plan
+# that succeeds is not evidence that a packet is answered.
+
+variable "vpc_network" {
+  type        = string
+  description = <<-EOT
+    VPC that Direct VPC egress puts private traffic on — the network the
+    substrate cluster lives on (`var.vpc_name` in
+    deploy/gcp/terraform-substrate-gke, `default` on the shared deployment).
+    A bare name or a full self-link both work. Empty is inert while
+    gateway_vpc_egress_enabled is false; with it true the plan refuses, because
+    an empty network here would leave the service exactly where it was while
+    reading as switched on.
+  EOT
+  default     = ""
+}
+
+variable "vpc_subnet" {
+  type        = string
+  description = <<-EOT
+    Regional subnetwork that supplies the Cloud Run instances' source IPs, so it
+    MUST be in var.region (`substrate-subnet`, 10.10.0.0/20, which is also what
+    the substrate nodes and their pods/services ranges hang off). It needs free
+    primary-range addresses: egress IPs come from the PRIMARY range, not from the
+    `pods`/`services` secondary ranges.
+  EOT
+  default     = ""
+}
+
+variable "vpc_egress_mode" {
+  type        = string
+  description = <<-EOT
+    How much traffic goes to the VPC. PRIVATE_RANGES_ONLY (default) routes RFC1918
+    and VPC ranges into the network and leaves public destinations (GitHub, Linear,
+    LLM hosts, the egress proxy) on Cloud Run's normal path — the safe setting for
+    a service that already works. ALL_TRAFFIC sends everything through the VPC, so
+    it additionally depends on the project's Cloud NAT for third-party calls.
+  EOT
+  default     = "PRIVATE_RANGES_ONLY"
+
+  validation {
+    condition     = contains(["PRIVATE_RANGES_ONLY", "ALL_TRAFFIC"], var.vpc_egress_mode)
+    error_message = "vpc_egress_mode must be PRIVATE_RANGES_ONLY or ALL_TRAFFIC."
+  }
+}
+
+variable "gateway_vpc_egress_enabled" {
+  type        = bool
+  description = <<-EOT
+    Attach Direct VPC egress to the public gateway service. This is plumbing, not
+    a feature: it gives the gateway a route INTO the VPC. It does not create a
+    VPC-reachable endpoint for the ateapi control plane — `Service api` in
+    ate-system is headless, so a ClusterIP cannot be dialled from outside the
+    cluster, and nothing in this repo provisions an internal load balancer for
+    it. See docs/SUBSTRATE_STATUS.md pending 2 (cause 9).
+  EOT
+  default     = false
 }
 
 variable "settings_ingress" {

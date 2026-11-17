@@ -4,21 +4,23 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 7 nodes
 
-- **Size**: 5 nodes
-- **Cohesion**: 0.2927
+- **Size**: 7 nodes
+- **Cohesion**: 0.2637
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| stubSubstrate | Function | ./services/planner/src/routes/agent.substrate.test.js | 15-45 |
-| handlerFor | Function | ./services/planner/src/routes/agent.substrate.test.js | 47-51 |
-| invoke | Function | ./services/planner/src/routes/agent.substrate.test.js | 53-57 |
-| test:GET /substrate/status answers instead of throwing when the control plane is up@L59 | Test | ./services/planner/src/routes/agent.substrate.test.js | 59-67 |
-| test:GET /substrate/status skips the actor list when the control plane is unreachable@L69 | Test | ./services/planner/src/routes/agent.substrate.test.js | 69-76 |
+| stubSubstrate | Function | ./services/planner/src/routes/agent.substrate.test.js | 16-74 |
+| handlerFor | Function | ./services/planner/src/routes/agent.substrate.test.js | 76-80 |
+| invoke | Function | ./services/planner/src/routes/agent.substrate.test.js | 82-86 |
+| test:GET /substrate/status answers instead of throwing when the control plane is up@L88 | Test | ./services/planner/src/routes/agent.substrate.test.js | 88-96 |
+| test:GET /substrate/status skips the actor list when the control plane is unreachable@L98 | Test | ./services/planner/src/routes/agent.substrate.test.js | 98-105 |
+| test:GET /substrate/status reports configured:false when no credential resolves@L119 | Test | ./services/planner/src/routes/agent.substrate.test.js | 119-126 |
+| test:POST /substrate/run resolves substrateApiToken over S2S and hands it to the runner@L128 | Test | ./services/planner/src/routes/agent.substrate.test.js | 128-160 |
 
 ## Execution Flows
 
@@ -28,18 +30,31 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (5 edge(s))
-- `require` (2 edge(s))
-- `after` (2 edge(s))
+- `equal` (11 edge(s))
+- `after` (5 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status resolves the credential per request and threads it to both RPCs@L107` (3 edge(s))
+- `require` (3 edge(s))
 - `deepEqual` (2 edge(s))
 - `find` (1 edge(s))
 - `ok` (1 edge(s))
 - `toUpperCase` (1 edge(s))
 - `handler` (1 edge(s))
+- `runCapture` (1 edge(s))
+- `push` (1 edge(s))
+- `String` (1 edge(s))
+- `match` (1 edge(s))
+- `includes` (1 edge(s))
+- `stringify` (1 edge(s))
 
 ### Incoming
 
-- `./services/planner/src/routes/agent.substrate.test.js` (5 edge(s))
-- `equal` (5 edge(s))
-- `after` (2 edge(s))
+- `equal` (11 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js` (7 edge(s))
+- `after` (5 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status resolves the credential per request and threads it to both RPCs@L107` (3 edge(s))
 - `deepEqual` (2 edge(s))
+- `push` (1 edge(s))
+- `String` (1 edge(s))
+- `match` (1 edge(s))
+- `includes` (1 edge(s))
+- `stringify` (1 edge(s))
