@@ -1,8 +1,0 @@
-{
-  "name": "claude-code-poc",
-  "description": "Local Claude Code Harness proof of concept",
-  "version": "0.1.0",
-  "capabilities": {"streaming": true},
-  "defaultInputModes": ["text/plain"],
-  "defaultOutputModes": ["text/plain"]
-}

@@ -59,7 +59,7 @@ Headline invariant, enforced end to end: **a ₹500 recharge charges ₹590 (CGS
 
 1. `git switch -c feat/billing-flexprice-phase1` (we are on a detached HEAD at `e9c58a8`; a commit here lands on no branch).
 2. Commit the Phase 0 artifacts as-is: `docs/{BILLING_FLEXPRICE,FLEXPRICE_FINDINGS,FLEXPRICE_AGPL_MEMO,SUBSTRATE_METRICS}.md`, `packages/shared-core/src/billing/{gst,credits,compute-pricing,substrate-session}.js` + tests, `deploy/flexprice/`, `scripts/flexprice-*`, `scripts/kind-*`, `.gitignore`, `package.json`. `deploy/flexprice/.env` stays out — verified covered by the root `.env` ignore.
-3. New source trips the code-graph pre-commit gate: `npm run docs:code` then `git add -A docs/code-graph` before committing.
+3. `docs/code-graph/` is a generated, gitignored local artifact — regenerate with `npm run docs:code` if you want the map refreshed, but no commit is blocked on it.
 4. Commit the plan itself as `docs/BILLING_IMPLEMENTATION_PLAN.md` so the phases live in the repo, not only in `~/.qoder/plans/`.
 
 No product code changes.

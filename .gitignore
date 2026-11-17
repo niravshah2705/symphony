@@ -66,7 +66,4 @@ docs/flexprice-spike/results.json
 # subchart dependencies stripped (scripts/flexprice-helm.js). Derived from the
 # checkout on every run; committing it would fork 2000 lines of AGPL templates.
 deploy/flexprice/helm/build/
-
-# Generated code-graph map (docs:code). Local-only index output; regenerate
-# with `npm run docs:code` when you want to read it — nothing commits it.
 docs/code-graph/
